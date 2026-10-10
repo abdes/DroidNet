@@ -12,6 +12,7 @@
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/Types/VelocityPublications.h>
@@ -22,8 +23,8 @@ namespace oxygen::vortex::internal {
 struct RenderMotionIdentityKey {
   scene::NodeHandle node_handle;
   data::AssetKey geometry_asset_key;
-  std::uint32_t lod_index { 0U };
-  std::uint32_t submesh_index { 0U };
+  data::LodIndex lod_index;
+  data::SubmeshIndex submesh_index;
   VelocityProducerFamily producer_family {
     VelocityProducerFamily::kMaterialWpo,
   };

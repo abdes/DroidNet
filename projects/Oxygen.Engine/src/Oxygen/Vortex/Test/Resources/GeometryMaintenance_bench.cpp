@@ -46,8 +46,10 @@ NOLINT_TEST_F(GeometryMaintenanceBenchmark, DISABLED_LargeUnloadCpuBaseline)
   for (std::uint32_t index = 0U; index < kAssetCount; ++index) {
     keys.push_back(
       MakeGeometryAssetKey("maintenance-" + std::to_string(index)));
-    (void)geometry.GetOrAllocate(oxygen::vortex::sceneprep::GeometryRef {
-      .asset_key = keys.back(), .lod_index = 0U, .mesh = mesh });
+    (void)geometry.GetOrAllocate(
+      oxygen::vortex::sceneprep::GeometryRef { .asset_key = keys.back(),
+        .lod_index = oxygen::data::LodIndex {},
+        .mesh = mesh });
   }
   geometry.EnsureFrameResources();
   for (const auto key : keys) {

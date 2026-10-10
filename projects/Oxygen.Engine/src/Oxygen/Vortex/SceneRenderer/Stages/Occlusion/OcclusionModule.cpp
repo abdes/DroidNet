@@ -192,7 +192,7 @@ namespace {
   //! order, so a result read back frames later is matched by its source.
   struct DrawSourceKey {
     scene::NodeHandle node;
-    std::uint32_t submesh_index { 0U };
+    data::SubmeshIndex submesh_index;
 
     auto operator==(const DrawSourceKey&) const -> bool = default;
   };

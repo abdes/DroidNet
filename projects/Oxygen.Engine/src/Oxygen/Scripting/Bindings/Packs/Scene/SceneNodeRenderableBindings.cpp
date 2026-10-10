@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cctype>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -20,6 +21,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
@@ -71,7 +73,7 @@ namespace {
   {
     auto [vertices, indices] = std::move(data);
     auto default_material = data::MaterialAsset::CreateDefault();
-    auto mesh = data::MeshBuilder(0, token)
+    auto mesh = data::MeshBuilder(data::LodIndex {}, token)
                   .WithVertices(vertices)
                   .WithIndices(indices)
                   .BeginSubMesh("main", std::move(default_material))
@@ -289,17 +291,23 @@ namespace {
     return {};
   }
 
-  auto ReadPositiveLuaIndex(lua_State* state, const int index)
-    -> std::optional<std::size_t>
+  //! Reads a 1-based Lua index as a strong-typed 0-based geometry index.
+  /*!
+   Rejects non-numbers, values below 1 and values the index type cannot hold.
+  */
+  template <typename Index>
+  auto ReadLuaIndexAs(lua_State* state, const int index) -> std::optional<Index>
   {
+    using Raw = typename Index::UnderlyingType;
     if (lua_isnumber(state, index) == 0) {
       return std::nullopt;
     }
     const auto value = lua_tointeger(state, index);
-    if (value < 1) {
+    if (value < 1
+      || std::cmp_greater(value - 1, (std::numeric_limits<Raw>::max)())) {
       return std::nullopt;
     }
-    return static_cast<std::size_t>(value - 1);
+    return Index { static_cast<Raw>(value - 1) };
   }
 
   auto TryGetAssetUserdata(lua_State* state, const int index) -> AssetUserdata*
@@ -496,8 +504,8 @@ namespace {
       scene::FixedPolicy policy {};
       lua_getfield(state, 2, "index");
       if (lua_isnumber(state, -1) != 0) {
-        const auto raw = lua_tointeger(state, -1);
-        policy.index = raw < 1 ? 0U : static_cast<std::size_t>(raw - 1);
+        policy.index
+          = ReadLuaIndexAs<data::LodIndex>(state, -1).value_or(policy.index);
       }
       lua_pop(state, 1);
       renderable.SetLodPolicy(policy);
@@ -580,7 +588,7 @@ namespace {
     }
     if (const auto index = node->GetRenderable().GetActiveLodIndex();
       index.has_value()) {
-      lua_pushinteger(state, static_cast<lua_Integer>(*index + 1));
+      lua_pushinteger(state, static_cast<lua_Integer>(index->get() + 1));
       return 1;
     }
     lua_pushnil(state);
@@ -606,8 +614,8 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const auto lod = ReadPositiveLuaIndex(state, 2);
-    const auto submesh = ReadPositiveLuaIndex(state, 3);
+    const auto lod = ReadLuaIndexAs<data::LodIndex>(state, 2);
+    const auto submesh = ReadLuaIndexAs<data::SubmeshIndex>(state, 3);
     if (!lod.has_value() || !submesh.has_value()) {
       lua_pushboolean(state, 0);
       return 1;
@@ -624,8 +632,8 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const auto lod = ReadPositiveLuaIndex(state, 2);
-    const auto submesh = ReadPositiveLuaIndex(state, 3);
+    const auto lod = ReadLuaIndexAs<data::LodIndex>(state, 2);
+    const auto submesh = ReadLuaIndexAs<data::SubmeshIndex>(state, 3);
     if (lua_type(state, 4) != LUA_TBOOLEAN) {
       lua_pushboolean(state, 0);
       return 1;
@@ -664,8 +672,8 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const auto lod = ReadPositiveLuaIndex(state, 2);
-    const auto submesh = ReadPositiveLuaIndex(state, 3);
+    const auto lod = ReadLuaIndexAs<data::LodIndex>(state, 2);
+    const auto submesh = ReadLuaIndexAs<data::SubmeshIndex>(state, 3);
     if (!lod.has_value() || !submesh.has_value()) {
       lua_pushboolean(state, 0);
       return 1;
@@ -716,8 +724,8 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const auto lod = ReadPositiveLuaIndex(state, 2);
-    const auto submesh = ReadPositiveLuaIndex(state, 3);
+    const auto lod = ReadLuaIndexAs<data::LodIndex>(state, 2);
+    const auto submesh = ReadLuaIndexAs<data::SubmeshIndex>(state, 3);
     if (!lod.has_value() || !submesh.has_value()) {
       lua_pushboolean(state, 0);
       return 1;
@@ -734,8 +742,8 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    const auto lod = ReadPositiveLuaIndex(state, 2);
-    const auto submesh = ReadPositiveLuaIndex(state, 3);
+    const auto lod = ReadLuaIndexAs<data::LodIndex>(state, 2);
+    const auto submesh = ReadLuaIndexAs<data::SubmeshIndex>(state, 3);
     if (!lod.has_value() || !submesh.has_value()) {
       lua_pushnil(state);
       return 1;
@@ -781,7 +789,7 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    const auto submesh = ReadPositiveLuaIndex(state, 2);
+    const auto submesh = ReadLuaIndexAs<data::SubmeshIndex>(state, 2);
     if (!submesh.has_value()) {
       lua_pushnil(state);
       return 1;

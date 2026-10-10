@@ -141,7 +141,7 @@ NOLINT_TEST_F(
     const auto geometry = LoadGeometryAsset(context);
     ASSERT_NE(geometry, nullptr);
     ASSERT_EQ(geometry->LodCount(), 1U);
-    const auto& mesh = geometry->MeshAt(0);
+    const auto& mesh = geometry->MeshAt(oxygen::data::LodIndex {});
     ASSERT_NE(mesh, nullptr);
     EXPECT_EQ(mesh->VertexCount(), 24U);
     EXPECT_EQ(mesh->IndexCount(), 36U);

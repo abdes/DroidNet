@@ -305,7 +305,7 @@ auto DrawOf(const std::uint32_t node_index) -> PreparedSceneFrame::DrawSource
 {
   return PreparedSceneFrame::DrawSource {
     .node = oxygen::scene::NodeHandle { node_index, 1U },
-    .submesh_index = 0U,
+    .submesh_index = oxygen::data::SubmeshIndex {},
   };
 }
 

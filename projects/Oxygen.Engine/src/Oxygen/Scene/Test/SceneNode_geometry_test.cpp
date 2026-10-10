@@ -16,6 +16,7 @@
 
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
@@ -110,7 +111,8 @@ NOLINT_TEST_F(SceneNodeGeometryTest, AttachGeometry_TakesTheResolvedTransform)
   node.GetRenderable().SetGeometry(geometry);
 
   // Assert
-  const auto bounds = node.GetRenderable().GetWorldSubMeshBoundingBox(0);
+  const auto bounds = node.GetRenderable().GetWorldSubMeshBoundingBox(
+    oxygen::data::SubmeshIndex { 0 });
   if (!bounds.has_value()) {
     ADD_FAILURE() << "the renderable has no world bounds";
     return;
@@ -330,8 +332,8 @@ NOLINT_TEST_F(
     return;
   }
   const auto& active = *active_opt;
-  EXPECT_EQ(active.lod, 0U);
-  EXPECT_EQ(active.mesh, geometry->MeshAt(0));
+  EXPECT_EQ(active.lod, oxygen::data::LodIndex {});
+  EXPECT_EQ(active.mesh, geometry->MeshAt(oxygen::data::LodIndex {}));
 }
 
 //! Test that with two LODs, default policy selects LOD 0.
@@ -356,8 +358,8 @@ NOLINT_TEST_F(SceneNodeGeometryTest, GetActiveMesh_TwoLods_DefaultsToLod0)
     return;
   }
   const auto& active = *active_opt;
-  EXPECT_EQ(active.lod, 0U);
-  EXPECT_EQ(active.mesh, geometry->MeshAt(0));
+  EXPECT_EQ(active.lod, oxygen::data::LodIndex {});
+  EXPECT_EQ(active.mesh, geometry->MeshAt(oxygen::data::LodIndex {}));
 }
 
 NOLINT_TEST_F(SceneNodeGeometryTest,

@@ -80,7 +80,8 @@ using oxygen::vortex::upload::UploadError;
     1U,
     2U,
   };
-  auto builder = oxygen::data::MeshBuilder(0, name).WithVertices(vertices);
+  auto builder = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, name)
+                   .WithVertices(vertices);
   if (indexed) {
     builder.WithIndices(indices);
   }
@@ -121,7 +122,7 @@ NOLINT_TEST_F(
   const auto asset_key = MakeGeometryAssetKey("failures_not_resident_indices");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
 
@@ -207,7 +208,7 @@ NOLINT_TEST(GeometryUploaderFailuresStandaloneTest,
     = MakeGeometryAssetKey("failures_submission_failure_indices");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
 
@@ -239,7 +240,7 @@ NOLINT_TEST_F(
     = MakeGeometryAssetKey("failures_completion_failure_indices");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
 

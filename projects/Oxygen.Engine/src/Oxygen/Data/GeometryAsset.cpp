@@ -41,22 +41,6 @@ using oxygen::data::Vertex;
 using oxygen::data::detail::IndexType;
 using oxygen::data::detail::ReferencedBufferStorage;
 
-namespace {
-
-// Helper function for converting PAK name arrays to strings
-// TODO: This duplicates Asset::GetAssetName() logic - consider consolidation
-auto GetNameFromDesc(const char name[oxygen::data::pak::core::kMaxNameSize])
-  -> std::string
-{
-  std::size_t len = 0;
-  while (len < oxygen::data::pak::core::kMaxNameSize && name[len] != '\0') {
-    ++len;
-  }
-  return { name, len };
-}
-
-} // namespace
-
 namespace oxygen::data::detail {
 
 void ReferencedBufferStorage::InitializeIndexInfo() const noexcept
@@ -151,7 +135,7 @@ SubMesh::SubMesh(const Mesh& mesh, std::string name,
     material_, "SubMesh must have exactly one Material (1:1 constraint)");
 }
 
-Mesh::Mesh(uint32_t lod, std::vector<Vertex> vertices,
+Mesh::Mesh(const LodIndex lod, std::vector<Vertex> vertices,
   std::vector<std::uint32_t> indices)
   : name_(fmt::format("LOD_{}", lod))
   , buffer_storage_(detail::OwnedBufferStorage {
@@ -165,7 +149,7 @@ Mesh::Mesh(uint32_t lod, std::vector<Vertex> vertices,
   ComputeBounds();
 }
 
-Mesh::Mesh(uint32_t lod, std::shared_ptr<BufferResource> vertex_buffer,
+Mesh::Mesh(const LodIndex lod, std::shared_ptr<BufferResource> vertex_buffer,
   std::shared_ptr<BufferResource> index_buffer)
   : name_(fmt::format("LOD_{}", lod))
   , buffer_storage_(detail::ReferencedBufferStorage {
@@ -320,8 +304,8 @@ oxygen::data::GeometryAsset::GeometryAsset(AssetKey asset_key,
                               : AssetKey {});
       material_slots_.slots.at(location->second)
         .bindings.push_back(MaterialSlotBinding {
-          .lod_index = static_cast<uint32_t>(lod),
-          .submesh_index = static_cast<uint32_t>(index),
+          .lod_index = LodIndex { static_cast<uint32_t>(lod) },
+          .submesh_index = SubmeshIndex { static_cast<uint32_t>(index) },
           .default_material_key = key,
         });
     }

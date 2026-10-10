@@ -18,6 +18,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
@@ -149,8 +150,8 @@ public:
   struct VelocityPublicationSource {
     scene::NodeHandle node_handle;
     data::AssetKey geometry_asset_key;
-    std::uint32_t lod_index { 0U };
-    std::uint32_t submesh_index { 0U };
+    data::LodIndex lod_index;
+    data::SubmeshIndex submesh_index;
   };
 
   OXGN_VRTX_NDAPI auto GetVelocityPublicationSources() const noexcept

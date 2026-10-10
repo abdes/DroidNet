@@ -61,7 +61,7 @@ public:
 
     std::vector<std::uint32_t> indices = { 0, 1, 2 };
     auto material = oxygen::data::MaterialAsset::CreateDefault();
-    return MeshBuilder(0, std::move(name))
+    return MeshBuilder(oxygen::data::LodIndex {}, std::move(name))
       .WithVertices(vertices)
       .WithIndices(indices)
       .BeginSubMesh("main", material)
@@ -105,8 +105,8 @@ NOLINT_TEST(GeometryAssetBasicTest, LodAccessors_ReturnExpected)
 
   // Act
   auto lods = asset->Meshes();
-  auto lod0 = asset->MeshAt(0);
-  auto lod1 = asset->MeshAt(1);
+  auto lod0 = asset->MeshAt(oxygen::data::LodIndex {});
+  auto lod1 = asset->MeshAt(oxygen::data::LodIndex { 1U });
   size_t lod_count = asset->LodCount();
 
   // Assert
@@ -125,7 +125,8 @@ NOLINT_TEST(GeometryAssetErrorTest, MeshAt_OutOfRange_ReturnsNull)
   auto asset = GeometryAssetTestHelpers::MakeGeometryAssetWithTwoLods();
 
   // Act
-  auto out_of_range = asset->MeshAt(5); // beyond size 2
+  auto out_of_range
+    = asset->MeshAt(oxygen::data::LodIndex { 5U }); // beyond size 2
 
   // Assert
   EXPECT_EQ(out_of_range, nullptr);

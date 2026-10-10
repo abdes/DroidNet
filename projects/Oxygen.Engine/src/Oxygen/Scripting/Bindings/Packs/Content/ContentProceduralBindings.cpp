@@ -135,7 +135,7 @@ namespace {
   {
     auto [vertices, indices] = std::move(mesh_data);
     auto material = data::MaterialAsset::CreateDefault();
-    auto mesh = data::MeshBuilder(0, name)
+    auto mesh = data::MeshBuilder(data::LodIndex {}, name)
                   .WithVertices(vertices)
                   .WithIndices(indices)
                   .BeginSubMesh("main", std::move(material))

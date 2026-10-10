@@ -25,6 +25,7 @@
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialSlotInventory.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Data/api_export.h>
@@ -620,12 +621,12 @@ public:
 
   //! Set runtime-only submesh material after async publish.
   void SetSubMeshMaterial(
-    size_t submesh_index, std::shared_ptr<const MaterialAsset> material)
+    const SubmeshIndex submesh, std::shared_ptr<const MaterialAsset> material)
   {
-    if (submesh_index >= submeshes_.size()) {
-      throw std::out_of_range("submesh_index");
+    if (submesh.get() >= submeshes_.size()) {
+      throw std::out_of_range("submesh");
     }
-    submeshes_.at(submesh_index).SetMaterial(std::move(material));
+    submeshes_.at(submesh.get()).SetMaterial(std::move(material));
   }
 
   //! Returns the optional PAK descriptor used to construct this mesh.
@@ -664,11 +665,11 @@ protected:
   friend class MeshBuilder;
 
   // For builder and testing
-  OXGN_DATA_API Mesh(uint32_t lod, std::vector<Vertex> vertices,
+  OXGN_DATA_API Mesh(LodIndex lod, std::vector<Vertex> vertices,
     std::vector<std::uint32_t> indices);
 
   // For buffer resource-based meshes
-  OXGN_DATA_API Mesh(uint32_t lod,
+  OXGN_DATA_API Mesh(LodIndex lod,
     std::shared_ptr<BufferResource> vertex_buffer,
     std::shared_ptr<BufferResource> index_buffer);
 
@@ -783,12 +784,12 @@ public:
   }
 
   //! Returns the mesh for the given LOD index, or nullptr if out of range.
-  [[nodiscard]] auto MeshAt(size_t lod) const noexcept
+  [[nodiscard]] auto MeshAt(const LodIndex lod) const noexcept
     -> const std::shared_ptr<Mesh>&
   {
     static const std::shared_ptr<Mesh> null_mesh;
-    if (lod < lod_meshes_.size()) {
-      return lod_meshes_.at(lod);
+    if (lod.get() < lod_meshes_.size()) {
+      return lod_meshes_.at(lod.get());
     }
     return null_mesh;
   }
@@ -935,7 +936,7 @@ private:
 */
 class MeshBuilder {
 public:
-  explicit MeshBuilder(uint32_t lod = 0, std::string_view name = {})
+  explicit MeshBuilder(const LodIndex lod = {}, std::string_view name = {})
     : lod_(lod)
     , name_(name.empty() ? fmt::format("LOD_{}", lod) : std::string(name))
   {
@@ -1125,7 +1126,7 @@ private:
     }
   }
 
-  uint32_t lod_;
+  LodIndex lod_;
   std::string name_;
 
   // Storage type tracking

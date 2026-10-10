@@ -40,7 +40,7 @@ NOLINT_TEST(
     ASSERT_NE(geometry, nullptr);
     EXPECT_EQ(ResolveBuiltinGeometry(uri), geometry);
     ASSERT_EQ(geometry->LodCount(), 1U);
-    const auto& mesh = geometry->MeshAt(0);
+    const auto& mesh = geometry->MeshAt(oxygen::data::LodIndex {});
     ASSERT_NE(mesh, nullptr);
     ASSERT_GT(mesh->VertexCount(), 0U);
     ASSERT_GT(mesh->IndexCount(), 0U);

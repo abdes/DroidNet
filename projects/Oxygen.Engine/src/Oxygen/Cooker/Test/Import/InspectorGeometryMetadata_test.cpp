@@ -117,16 +117,16 @@ auto ExpectedLayoutRevision() -> oxygen::base::Sha256Digest
       .slot_id = SlotId(1),
       .display_name = "Surface",
       .bindings = {
-        { .lod_index = 0, .submesh_index = 0, .default_material_key = material },
-        { .lod_index = 1, .submesh_index = 0, .default_material_key = {} },
+        { .lod_index = oxygen::data::LodIndex {}, .submesh_index = oxygen::data::SubmeshIndex {}, .default_material_key = material },
+        { .lod_index = oxygen::data::LodIndex { 1U }, .submesh_index = oxygen::data::SubmeshIndex {}, .default_material_key = {} },
       },
     },
     oxygen::data::MaterialSlot {
       .slot_id = SlotId(2),
       .display_name = "Surface",
       .bindings = {
-        { .lod_index = 0, .submesh_index = 1, .default_material_key = material },
-        { .lod_index = 1, .submesh_index = 1, .default_material_key = material },
+        { .lod_index = oxygen::data::LodIndex {}, .submesh_index = oxygen::data::SubmeshIndex { 1U }, .default_material_key = material },
+        { .lod_index = oxygen::data::LodIndex { 1U }, .submesh_index = oxygen::data::SubmeshIndex { 1U }, .default_material_key = material },
       },
     },
   };

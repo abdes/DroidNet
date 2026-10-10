@@ -482,7 +482,7 @@ auto LightScene::BuildSurfaceGeometry(std::string_view generator,
   CHECK_F(surface_data.has_value());
 
   auto mesh
-    = MeshBuilder(0, name)
+    = MeshBuilder(oxygen::data::LodIndex {}, name)
         .WithVertices(surface_data->first)
         .WithIndices(surface_data->second)
         .BeginSubMesh("full", material)
@@ -525,7 +525,7 @@ auto LightScene::BuildSphereGeometry(
   CHECK_F(sphere_data.has_value());
 
   auto mesh
-    = MeshBuilder(0, name)
+    = MeshBuilder(oxygen::data::LodIndex {}, name)
         .WithVertices(sphere_data->first)
         .WithIndices(sphere_data->second)
         .BeginSubMesh("full", material)

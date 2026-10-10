@@ -18,6 +18,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Vortex/Resources/TransformUploader.h>
@@ -168,10 +169,8 @@ inline auto MeshResolver(const ScenePrepContext& ctx,
     }
   }
   // Use the selected LOD or fallback to the first mesh
-  uint32_t lod { 0 };
-  if (const auto active = item.Renderable().GetActiveLodIndex()) {
-    lod = static_cast<std::uint32_t>(*active);
-  }
+  const auto lod
+    = item.Renderable().GetActiveLodIndex().value_or(data::LodIndex {});
   try {
     item.ResolveMesh(item.Geometry()->MeshAt(lod), lod);
   } catch (...) {
@@ -215,8 +214,8 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
   const auto& frustum = ctx.GetView().GetFrustum();
   // Fast path: single pass, cached facade, reserve upper bound, push visible
   const auto& rend = item.Renderable();
-  std::vector<uint32_t> visible_submeshes;
-  std::vector<uint32_t> shadow_only_submeshes;
+  std::vector<data::SubmeshIndex> visible_submeshes;
+  std::vector<data::SubmeshIndex> shadow_only_submeshes;
   visible_submeshes.reserve(submeshes.size());
   shadow_only_submeshes.reserve(submeshes.size());
 
@@ -245,7 +244,8 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
   for (std::uint32_t i = 0, n = static_cast<std::uint32_t>(submesh_count);
     i < n; ++i) {
     // Visibility mask check first (cheap)
-    const bool rend_vis = rend.IsSubmeshVisible(lod, i);
+    const auto submesh = data::SubmeshIndex { i };
+    const bool rend_vis = rend.IsSubmeshVisible(lod, submesh);
     if (!rend_vis) {
       continue;
     }
@@ -253,7 +253,8 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
     // Frustum culling per submesh: prefer world AABB; fallback to node sphere
     bool in_frustum = true;
     if (!kDisableSubmeshFrustumCulling) {
-      if (const auto aabb = item.Renderable().GetWorldSubMeshBoundingBox(i)) {
+      if (const auto aabb
+        = item.Renderable().GetWorldSubMeshBoundingBox(submesh)) {
         // Inflate AABB slightly if requested (abs or relative)
         auto min = aabb->first;
         auto max = aabb->second;
@@ -281,12 +282,12 @@ inline auto SubMeshVisibilityFilter(const ScenePrepContext& ctx,
     }
     if (!in_frustum) {
       if (item.CastsShadows()) {
-        shadow_only_submeshes.emplace_back(i);
+        shadow_only_submeshes.push_back(submesh);
       }
       continue;
     }
 
-    visible_submeshes.emplace_back(i);
+    visible_submeshes.push_back(submesh);
   }
   item.SetVisibleSubmeshes(std::move(visible_submeshes));
   item.SetShadowOnlySubmeshes(std::move(shadow_only_submeshes));
@@ -340,8 +341,8 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
     sort_distance2 = glm::dot(d, d);
   }
 
-  const auto emit_submesh
-    = [&](const uint32_t index, const bool main_view_visible) -> void {
+  const auto emit_submesh = [&](const data::SubmeshIndex submesh,
+                              const bool main_view_visible) -> void {
     struct ResolvedMaterial {
       std::shared_ptr<const data::MaterialAsset> resolved;
       oxygen::data::AssetKey source_key;
@@ -349,14 +350,14 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
 
     // Material selection chain as a local lambda
     auto resolve_material = [&] -> ResolvedMaterial {
-      if (auto mat = item.Renderable().ResolveSubmeshMaterial(lod, index)) {
+      if (auto mat = item.Renderable().ResolveSubmeshMaterial(lod, submesh)) {
         const auto key = mat->GetAssetKey();
         return {
           .resolved = std::move(mat),
           .source_key = key,
         };
       }
-      if (auto mesh_mat = submeshes[index].Material()) {
+      if (auto mesh_mat = submeshes[submesh.get()].Material()) {
         const auto key = mesh_mat->GetAssetKey();
         return {
           .resolved = std::move(mesh_mat),
@@ -388,13 +389,13 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
 
     auto world_bound = item.Renderable().GetWorldBoundingSphere();
     if (const auto bounds
-      = item.Renderable().GetWorldSubMeshBoundingBox(index)) {
+      = item.Renderable().GetWorldSubMeshBoundingBox(submesh)) {
       const auto center = 0.5F * (bounds->first + bounds->second);
       world_bound = glm::vec4(center, glm::length(bounds->second - center));
     }
 
     state.CollectItem(RenderItemData {
-      .submesh_index = index,
+      .submesh_index = submesh,
       .node_handle = item.GetNodeHandle(),
       .geometry = std::move(geo_ref),
       .material = std::move(mat_ref),
@@ -412,11 +413,11 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
     });
   };
 
-  for (auto index : visible_submeshes) {
-    emit_submesh(index, true);
+  for (const auto submesh : visible_submeshes) {
+    emit_submesh(submesh, true);
   }
-  for (auto index : shadow_only_submeshes) {
-    emit_submesh(index, false);
+  for (const auto submesh : shadow_only_submeshes) {
+    emit_submesh(submesh, false);
   }
 }
 static_assert(RenderItemDataExtractor<decltype(EmitPerVisibleSubmesh)>);

@@ -21,6 +21,7 @@
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/SceneSync/api_export.h>
@@ -30,8 +31,8 @@ namespace oxygen::scenesync {
 struct RuntimeMaterialMotionKey {
   scene::NodeHandle node_handle {};
   data::AssetKey geometry_asset_key {};
-  std::uint32_t lod_index { 0U };
-  std::uint32_t submesh_index { 0U };
+  data::LodIndex lod_index;
+  data::SubmeshIndex submesh_index;
 
   [[nodiscard]] constexpr auto operator==(
     const RuntimeMaterialMotionKey&) const noexcept -> bool = default;

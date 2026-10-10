@@ -28,9 +28,10 @@ namespace { // anonymous to limit test symbols
 //! Test-only thin wrapper to access protected Mesh constructor without mocks.
 class TestMesh : public Mesh {
 public:
-  TestMesh(int device_id, const std::vector<Vertex>& vertices,
+  TestMesh(const oxygen::data::LodIndex lod,
+    const std::vector<Vertex>& vertices,
     const std::vector<std::uint32_t>& indices)
-    : Mesh(device_id, vertices, indices)
+    : Mesh(lod, vertices, indices)
   {
   }
 };
@@ -41,7 +42,8 @@ protected:
   void SetupMesh(const std::vector<Vertex>& vertices,
     const std::vector<std::uint32_t>& indices)
   {
-    mesh_ = std::make_unique<TestMesh>(0, vertices, indices);
+    mesh_ = std::make_unique<TestMesh>(
+      oxygen::data::LodIndex {}, vertices, indices);
   }
   std::unique_ptr<TestMesh> mesh_;
 };
@@ -52,7 +54,8 @@ protected:
   void SetupMesh(const std::vector<Vertex>& vertices,
     const std::vector<std::uint32_t>& indices)
   {
-    mesh_ = std::make_unique<TestMesh>(0, vertices, indices);
+    mesh_ = std::make_unique<TestMesh>(
+      oxygen::data::LodIndex {}, vertices, indices);
   }
   std::unique_ptr<TestMesh> mesh_;
 };
@@ -146,7 +149,7 @@ NOLINT_TEST(MeshViewBasicRealMeshTest, RealMesh_ViewValidity)
       .color = {} },
   };
   std::vector<std::uint32_t> indices { 0, 1, 2 };
-  auto mesh = oxygen::data::MeshBuilder(0, "triangle")
+  auto mesh = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, "triangle")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("main", material)
@@ -200,7 +203,7 @@ NOLINT_TEST_F(MeshViewDeathTest, OutOfBoundsCreation_Death)
       .color = {} },
   };
   std::vector<std::uint32_t> indices { 0, 1, 2 };
-  auto mesh = oxygen::data::MeshBuilder(0, "triangle")
+  auto mesh = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, "triangle")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("main", material)
@@ -659,7 +662,7 @@ NOLINT_TEST_F(MeshViewIndexTypeTest, ThirtyTwoBitIndices_WidenedMatchesAsU32)
   std::vector<Vertex> vertices = { Vertex {}, Vertex {}, Vertex {} };
   std::vector<std::uint32_t> indices { 0, 2, 1, 1, 2, 0 };
   auto material = MaterialAsset::CreateDefault();
-  auto mesh = MeshBuilder(0, "widen32")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "widen32")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("s", material)

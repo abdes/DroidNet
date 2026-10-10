@@ -18,6 +18,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -424,7 +425,9 @@ NOLINT_TEST_F(
           });
           SetSurface(domain, negative_first ? -1.0F : 1.0F);
           blocker.GetRenderable().SetMaterialOverride(
-            0, 0, mesh_node.GetRenderable().ResolveSubmeshMaterial(0, 0));
+            oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
+            mesh_node.GetRenderable().ResolveSubmeshMaterial(
+              oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 }));
           ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0));
           // Register one material first, then the other, to exercise each
           // actual material-sorted raster order; assert the resulting order.
@@ -439,11 +442,17 @@ NOLINT_TEST_F(
             // Keep the image identical while reversing which scene node owns
             // each surface; verify the renderer's resulting raster order.
             const auto negative
-              = mesh_node.GetRenderable().ResolveSubmeshMaterial(0, 0);
+              = mesh_node.GetRenderable().ResolveSubmeshMaterial(
+                oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 });
             const auto positive
-              = blocker.GetRenderable().ResolveSubmeshMaterial(0, 0);
-            mesh_node.GetRenderable().SetMaterialOverride(0, 0, positive);
-            blocker.GetRenderable().SetMaterialOverride(0, 0, negative);
+              = blocker.GetRenderable().ResolveSubmeshMaterial(
+                oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 });
+            mesh_node.GetRenderable().SetMaterialOverride(
+              oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
+              positive);
+            blocker.GetRenderable().SetMaterialOverride(
+              oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
+              negative);
             mesh_node.GetTransform().SetLocalPosition({
               0,
               0,
@@ -659,7 +668,8 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
       material.roughness = data::Unorm16 { 1.0F };
       material.ambient_occlusion = data::Unorm16 { 1.0F };
       material.normal_scale = 1.0F;
-      mesh_node.GetRenderable().SetMaterialOverride(0U, 0U,
+      mesh_node.GetRenderable().SetMaterialOverride(
+        oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U },
         std::make_shared<data::MaterialAsset>(
           data::AssetKey::FromVirtualPath(
             "/Test/IBL/Unlit-" + std::to_string(++material_sequence) + ".omat"),

@@ -16,6 +16,7 @@
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/api_export.h>
 
@@ -26,16 +27,16 @@ inline constexpr uint32_t kMaterialSlotInventorySchemaVersion = 1U;
 //! Location of one material-bearing surface in the geometry's LOD/submesh
 //! tables.
 struct MaterialSlotBindingLocation final {
-  uint32_t lod_index = 0;
-  uint32_t submesh_index = 0;
+  LodIndex lod_index;
+  SubmeshIndex submesh_index;
 
   auto operator<=>(const MaterialSlotBindingLocation&) const = default;
 };
 
 //! One existing surface and its exact mesh-assigned default material identity.
 struct MaterialSlotBinding final {
-  uint32_t lod_index = 0;
-  uint32_t submesh_index = 0;
+  LodIndex lod_index;
+  SubmeshIndex submesh_index;
 
   //! Nil retains the native omitted-reference/default-material sentinel.
   //! Validation never replaces it with a material key or resolves missing

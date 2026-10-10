@@ -14,6 +14,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -66,19 +67,19 @@ struct RenderableFacade {
   }
 
   [[nodiscard]] auto GetActiveLodIndex() const noexcept
-    -> std::optional<std::size_t>
+    -> std::optional<data::LodIndex>
   {
     return comp_->GetActiveLodIndex();
   }
 
   [[nodiscard]] auto IsSubmeshVisible(
-    std::size_t lod, std::size_t submesh) const noexcept -> bool
+    data::LodIndex lod, data::SubmeshIndex submesh) const noexcept -> bool
   {
     return comp_->IsSubmeshVisible(lod, submesh);
   }
 
   [[nodiscard]] auto ResolveSubmeshMaterial(
-    std::size_t lod, std::size_t submesh) const noexcept
+    data::LodIndex lod, data::SubmeshIndex submesh) const noexcept
     -> std::shared_ptr<const oxygen::data::MaterialAsset>
   {
     return comp_->ResolveSubmeshMaterial(lod, submesh);
@@ -99,10 +100,10 @@ struct RenderableFacade {
   // On-demand world-space AABB for a submesh of the current LOD.
   // Returns nullopt if unavailable (no geometry, unresolved LOD, or OOB).
   [[nodiscard]] auto GetWorldSubMeshBoundingBox(
-    std::size_t submesh_index) const noexcept
+    data::SubmeshIndex submesh) const noexcept
     -> std::optional<std::pair<glm::vec3, glm::vec3>>
   {
-    return comp_->GetWorldSubMeshBoundingBox(submesh_index);
+    return comp_->GetWorldSubMeshBoundingBox(submesh);
   }
 
 private:
@@ -247,21 +248,21 @@ public:
     return node_->GetFlags();
   }
 
-  void SetVisibleSubmeshes(std::vector<uint32_t> indices) noexcept
+  void SetVisibleSubmeshes(std::vector<data::SubmeshIndex> indices) noexcept
   {
     visible_submeshes_ = std::move(indices);
   }
-  void SetShadowOnlySubmeshes(std::vector<uint32_t> indices) noexcept
+  void SetShadowOnlySubmeshes(std::vector<data::SubmeshIndex> indices) noexcept
   {
     shadow_only_submeshes_ = std::move(indices);
   }
   [[nodiscard]] auto VisibleSubmeshes() const noexcept
-    -> std::span<const uint32_t>
+    -> std::span<const data::SubmeshIndex>
   {
     return visible_submeshes_;
   }
   [[nodiscard]] auto ShadowOnlySubmeshes() const noexcept
-    -> std::span<const uint32_t>
+    -> std::span<const data::SubmeshIndex>
   {
     return shadow_only_submeshes_;
   }
@@ -290,7 +291,7 @@ public:
   {
     // Only allow setting geometry if mesh is not resolved
     DCHECK_EQ_F(mesh_, nullptr);
-    DCHECK_EQ_F(mesh_lod_, 0U);
+    DCHECK_EQ_F(mesh_lod_, data::LodIndex {});
 
     geometry_ = std::move(g);
   }
@@ -311,7 +312,8 @@ public:
     return transform_handle_;
   }
 
-  void ResolveMesh(std::shared_ptr<const oxygen::data::Mesh> mesh, uint32_t lod)
+  void ResolveMesh(
+    std::shared_ptr<const oxygen::data::Mesh> mesh, const data::LodIndex lod)
   {
     mesh_ = std::move(mesh);
     mesh_lod_ = lod;
@@ -349,7 +351,7 @@ private:
 
   // Resolved mesh LOD (index into the geometry meshes). Defaults to the first
   // LOD (index 0) until resolved.
-  uint32_t mesh_lod_ { 0 };
+  data::LodIndex mesh_lod_;
 
   // Resolved mesh pointer (single canonical resolved LOD). Null until resolved.
   std::shared_ptr<const oxygen::data::Mesh> mesh_;
@@ -359,9 +361,9 @@ private:
   TransformHandle transform_handle_ { kInvalidTransformHandle };
 
   // Dense list of indices of visible submeshes in the resolved parent mesh.
-  std::vector<uint32_t> visible_submeshes_;
+  std::vector<data::SubmeshIndex> visible_submeshes_;
   // Dense list of submeshes retained only for shadow rendering.
-  std::vector<uint32_t> shadow_only_submeshes_;
+  std::vector<data::SubmeshIndex> shadow_only_submeshes_;
 
   // Internal stuff
   const scn::SceneNodeImpl* node_ { nullptr };

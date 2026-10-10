@@ -14,6 +14,7 @@
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 
@@ -25,7 +26,7 @@ struct ShadowCasterSource {
   glm::vec4 bounds { 0.0F };
   scene::NodeHandle node;
   data::AssetKey geometry_asset_key;
-  std::uint32_t lod_index { 0U };
+  data::LodIndex lod_index;
   std::uint32_t geometry_generation { 0U };
   std::uint64_t geometry_content_revision { 0U };
   std::uint32_t material_generation { 0U };
@@ -50,7 +51,7 @@ struct ShadowMaskedCasterRecord {
 struct ShadowCasterRecord {
   scene::NodeHandle node;
   data::AssetKey geometry;
-  std::uint32_t lod { 0 };
+  data::LodIndex lod;
   std::uint32_t geometry_generation { 0 };
   std::uint64_t geometry_revision { 0 };
   ShaderVisibleIndex vertices { kInvalidShaderVisibleIndex };
@@ -61,7 +62,7 @@ struct ShadowCasterRecord {
   std::uint32_t index_count { 0 };
   std::uint32_t vertex_count { 0 };
   std::uint32_t transform_generation { 0 };
-  std::uint32_t submesh { 0 };
+  data::SubmeshIndex submesh;
   std::array<float, 16> world {};
   bool double_sided { false };
   bool reverse_winding { false };

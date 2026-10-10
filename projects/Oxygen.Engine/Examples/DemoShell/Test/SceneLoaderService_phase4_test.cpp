@@ -40,6 +40,7 @@
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -1332,7 +1333,9 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   }
   auto renderable = mesh_node->GetRenderable();
   ASSERT_TRUE(renderable.HasGeometry());
-  EXPECT_EQ(renderable.ResolveSubmeshMaterial(0U, 0U), override_material);
+  EXPECT_EQ(renderable.ResolveSubmeshMaterial(
+              oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U }),
+    override_material);
 }
 
 } // namespace oxygen::examples::testing

@@ -24,6 +24,7 @@
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
@@ -373,7 +374,8 @@ namespace detail {
 
 } // namespace detail
 
-inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
+inline auto LoadMesh(LoaderContext context, const data::LodIndex lod)
+  -> std::unique_ptr<data::Mesh>
 {
   LOG_SCOPE_F(1, "Mesh");
   LOG_F(2, "offline mode    : {}", context.work_offline ? "yes" : "no");
@@ -434,7 +436,7 @@ inline auto LoadMesh(LoaderContext context) -> std::unique_ptr<data::Mesh>
   std::string name(
     desc.name, std::find(desc.name, desc.name + kMaxNameSize, '\0'));
 
-  MeshBuilder builder(/*lod=*/0, name);
+  MeshBuilder builder(lod, name);
   builder.WithDescriptor(desc);
 
   if (desc.IsProcedural()) {
@@ -538,7 +540,7 @@ inline auto LoadGeometryAsset(LoaderContext context)
   // Read LOD meshes
   std::vector<std::shared_ptr<Mesh>> lod_meshes;
   for (uint32_t i = 0; i < desc.lod_count; ++i) {
-    auto mesh = LoadMesh(context);
+    auto mesh = LoadMesh(context, data::LodIndex { i });
     lod_meshes.push_back(std::move(mesh));
   }
 

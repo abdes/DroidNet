@@ -18,6 +18,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Resources.h>
 #include <Oxygen/Core/SafeCall.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Scene/Light/LightValidation.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
@@ -735,7 +736,7 @@ public:
   OXGN_SCN_NDAPI auto GetActiveMesh() const noexcept
     -> std::optional<ActiveMesh>;
   OXGN_SCN_NDAPI auto GetActiveLodIndex() const noexcept
-    -> std::optional<std::size_t>;
+    -> std::optional<data::LodIndex>;
   OXGN_SCN_NDAPI auto EffectiveLodCount() const noexcept -> std::size_t;
 
   //=== Bounds ===============================================================//
@@ -747,27 +748,27 @@ public:
   OXGN_SCN_API void OnWorldTransformUpdated(const Mat4& world);
   //! On-demand per-submesh world AABB for current LOD.
   OXGN_SCN_NDAPI auto GetWorldSubMeshBoundingBox(
-    std::size_t submesh_index) const noexcept
+    data::SubmeshIndex submesh) const noexcept
     -> std::optional<std::pair<Vec3, Vec3>>;
 
   //=== Submesh visibility and materials ====================================//
 
   OXGN_SCN_NDAPI auto IsSubmeshVisible(
-    std::size_t lod, std::size_t submesh_index) const noexcept -> bool;
+    data::LodIndex lod, data::SubmeshIndex submesh) const noexcept -> bool;
   OXGN_SCN_API void SetSubmeshVisible(
-    std::size_t lod, std::size_t submesh_index, bool visible) noexcept;
+    data::LodIndex lod, data::SubmeshIndex submesh, bool visible) noexcept;
   OXGN_SCN_API void SetAllSubmeshesVisible(bool visible) noexcept;
 
-  OXGN_SCN_API void SetMaterialOverride(std::size_t lod,
-    std::size_t submesh_index, MaterialAssetPtr material) noexcept;
+  OXGN_SCN_API void SetMaterialOverride(data::LodIndex lod,
+    data::SubmeshIndex submesh, MaterialAssetPtr material) noexcept;
   OXGN_SCN_NDAPI auto SetMaterialOverride(
     data::MaterialSlotId slot, MaterialAssetPtr material) noexcept -> bool;
   OXGN_SCN_NDAPI auto ClearMaterialOverride(data::MaterialSlotId slot) noexcept
     -> bool;
   OXGN_SCN_API void ClearMaterialOverride(
-    std::size_t lod, std::size_t submesh_index) noexcept;
-  OXGN_SCN_NDAPI auto ResolveSubmeshMaterial(std::size_t lod,
-    std::size_t submesh_index) const noexcept -> MaterialAssetPtr;
+    data::LodIndex lod, data::SubmeshIndex submesh) noexcept;
+  OXGN_SCN_NDAPI auto ResolveSubmeshMaterial(data::LodIndex lod,
+    data::SubmeshIndex submesh) const noexcept -> MaterialAssetPtr;
 
   struct SafeCallState {
     SceneNode* node = nullptr;

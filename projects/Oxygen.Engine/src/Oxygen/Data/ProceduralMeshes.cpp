@@ -43,7 +43,7 @@ auto BuildMesh(std::string_view name,
   const auto vertex_count = static_cast<uint32_t>(vertices.size());
   const auto index_count = static_cast<uint32_t>(indices.size());
   auto mesh
-    = MeshBuilder(0, name)
+    = MeshBuilder(oxygen::data::LodIndex {}, name)
         .WithVertices(std::move(vertices))
         .WithIndices(std::move(indices))
         .BeginSubMesh("default", MaterialAsset::CreateDefault())

@@ -54,7 +54,7 @@ namespace Oxygen::Interop {
         auto item = gcnew ViewPickHitManaged();
         item->NodeId = System::Guid(bytes);
         item->Depth = hit.depth;
-        item->GeometrySlot = hit.geometry_slot;
+        item->GeometrySlot = hit.geometry_slot.get();
         item->CenterDistance = hit.center_distance;
         managed->Hits[i] = item;
       }

@@ -27,6 +27,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -126,7 +127,8 @@ namespace {
         desc.ambient_occlusion = data::Unorm16 { 1.0F };
         desc.normal_scale = 1.0F;
         desc.uv_scale[0] = desc.uv_scale[1] = 1.0F;
-        mesh_node.GetRenderable().SetMaterialOverride(0, 0,
+        mesh_node.GetRenderable().SetMaterialOverride(
+          oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
           std::make_shared<data::MaterialAsset>(
             data::AssetKey::FromVirtualPath("/Test/Lighting/Orthographic-"
               + std::to_string(++material_sequence) + ".omat"),
@@ -404,8 +406,8 @@ namespace {
     auto blocker = scene->CreateNode("Off-camera shadow blocker");
     blocker.GetRenderable().SetGeometry(
       mesh_node.GetRenderable().GetGeometry());
-    blocker.GetRenderable().SetMaterialOverride(
-      0, 0, MakeEmissiveMaterial(0.0F));
+    blocker.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+      oxygen::data::SubmeshIndex { 0 }, MakeEmissiveMaterial(0.0F));
     blocker.GetTransform().SetLocalScale(glm::vec3 { 0.1F });
     blocker.GetTransform().SetLocalPosition(glm::vec3 { 0.5F, 0.0F, -0.4F });
     expected_draws = 2U;

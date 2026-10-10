@@ -27,23 +27,23 @@ namespace {
     const std::uint32_t draw_index, const bool write_velocity) -> void
   {
     auto material_handle = metadata.material_handle;
-    auto geometry_lod_index = 0U;
+    auto geometry_lod_index = data::LodIndex {};
 
     if (draw_index < prepared_scene.render_items.size()) {
       const auto& render_item = prepared_scene.render_items[draw_index];
       if (render_item.material_handle.IsValid()) {
         material_handle = render_item.material_handle.get();
       }
-      geometry_lod_index = render_item.geometry.IsValid()
-        ? render_item.geometry.lod_index
-        : render_item.submesh_index;
+      if (render_item.geometry.IsValid()) {
+        geometry_lod_index = render_item.geometry.lod_index;
+      }
     }
 
     draw_commands.push_back(BasePassDrawCommand {
       .draw_index = draw_index,
       .material_handle = material_handle,
       .geometry_lod_index = geometry_lod_index,
-      .submesh_index = metadata.submesh_index,
+      .submesh_index = data::SubmeshIndex { metadata.submesh_index },
       .index_count = metadata.index_count,
       .vertex_count = metadata.vertex_count,
       .instance_count = (std::max)(metadata.instance_count, 1U),
@@ -81,8 +81,9 @@ namespace {
       .material_handle = render_item.material_handle.IsValid()
         ? render_item.material_handle.get()
         : 0U,
-      .geometry_lod_index
-      = render_item.geometry.IsValid() ? render_item.geometry.lod_index : 0U,
+      .geometry_lod_index = render_item.geometry.IsValid()
+        ? render_item.geometry.lod_index
+        : data::LodIndex {},
       .submesh_index = render_item.submesh_index,
       .instance_count = 1U,
       .is_indexed = render_item.geometry.IsValid(),

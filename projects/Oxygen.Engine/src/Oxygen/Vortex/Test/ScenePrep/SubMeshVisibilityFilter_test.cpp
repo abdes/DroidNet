@@ -10,6 +10,7 @@
 
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Scene/Scene.h>
@@ -33,7 +34,9 @@ using oxygen::vortex::sceneprep::ScenePrepState;
 using oxygen::vortex::sceneprep::SubMeshVisibilityFilter;
 
 using oxygen::data::GeometryAsset;
+using oxygen::data::LodIndex;
 using oxygen::data::MaterialAsset;
+using oxygen::data::SubmeshIndex;
 using oxygen::scene::FixedPolicy;
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;
@@ -135,7 +138,9 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, AllVisible_CollectsAllIndices)
   // Assert
   const auto vis = Proto().VisibleSubmeshes();
   ASSERT_EQ(vis.size(), 3U);
-  EXPECT_THAT(vis, ::testing::ElementsAre(0U, 1U, 2U));
+  EXPECT_THAT(vis,
+    ::testing::ElementsAre(
+      SubmeshIndex {}, SubmeshIndex { 1U }, SubmeshIndex { 2U }));
 }
 
 //! Some hidden -> only visible indices are collected
@@ -156,8 +161,10 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, SomeHidden_FiltersOutHidden)
 
   const auto lod = Proto().ResolvedMeshIndex();
   // Hide 1 and 3
-  Node().GetRenderable().SetSubmeshVisible(lod, 1, false);
-  Node().GetRenderable().SetSubmeshVisible(lod, 3, false);
+  Node().GetRenderable().SetSubmeshVisible(
+    lod, oxygen::data::SubmeshIndex { 1 }, false);
+  Node().GetRenderable().SetSubmeshVisible(
+    lod, oxygen::data::SubmeshIndex { 3 }, false);
 
   // Ensure scene reflects the renderable state changes before extraction
   UpdateScene();
@@ -172,7 +179,8 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, SomeHidden_FiltersOutHidden)
   // Assert
   const auto vis = Proto().VisibleSubmeshes();
   ASSERT_EQ(vis.size(), 2U);
-  EXPECT_THAT(vis, ::testing::ElementsAre(0U, 2U));
+  EXPECT_THAT(
+    vis, ::testing::ElementsAre(SubmeshIndex {}, SubmeshIndex { 2U }));
 }
 
 //! Different LODs: ensure selection uses active LOD submesh set
@@ -190,9 +198,8 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, MultiLOD_UsesActiveLODSubmeshes)
   SetGeometry(geom);
   SeedVisibilityAndTransform();
   // Force LOD1 (coarser) via fixed policy
-  Node().GetRenderable().SetLodPolicy(FixedPolicy {
-    1,
-  });
+  Node().GetRenderable().SetLodPolicy(
+    FixedPolicy { .index = oxygen::data::LodIndex { 1U } });
   // Ensure LOD policy change is applied to the scene/component state
   UpdateScene();
   ConfigurePerspectiveView(glm::vec3(0, 0, 5), glm::vec3(0, 0, 0));
@@ -200,7 +207,7 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, MultiLOD_UsesActiveLODSubmeshes)
 
   // Proto must be valid and have the resolved mesh for LOD1
   EXPECT_FALSE(Proto().IsDropped());
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 1U);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), LodIndex { 1U });
 
   // Act
   SubMeshVisibilityFilter(Context(), State(), Proto());
@@ -208,7 +215,7 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, MultiLOD_UsesActiveLODSubmeshes)
   // Assert: only submesh 0 exists at LOD1
   const auto vis = Proto().VisibleSubmeshes();
   ASSERT_EQ(vis.size(), 1U);
-  EXPECT_THAT(vis, ::testing::ElementsAre(0U));
+  EXPECT_THAT(vis, ::testing::ElementsAre(SubmeshIndex {}));
 }
 
 //! All hidden -> visible list becomes empty
@@ -334,8 +341,8 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, Frustum_PartialVisible_SelectsSubset)
       },
     },
   };
-  const auto mesh = MakeSpreadMesh(
-    0, centers, mesh_bounds_min, mesh_bounds_max, submesh_bounds);
+  const auto mesh = MakeSpreadMesh(oxygen::data::LodIndex {}, centers,
+    mesh_bounds_min, mesh_bounds_max, submesh_bounds);
   oxygen::data::pak::geometry::GeometryAssetDesc desc {};
   desc.lod_count = 1;
   const auto geom
@@ -355,7 +362,7 @@ NOLINT_TEST_F(SubMeshVisibilityFilterTest, Frustum_PartialVisible_SelectsSubset)
   // Assert: only the middle submesh (index 1) is inside the frustum
   const auto vis = Proto().VisibleSubmeshes();
   ASSERT_EQ(vis.size(), 1U);
-  EXPECT_THAT(vis, ::testing::ElementsAre(1U));
+  EXPECT_THAT(vis, ::testing::ElementsAre(SubmeshIndex { 1U }));
 }
 
 } // namespace

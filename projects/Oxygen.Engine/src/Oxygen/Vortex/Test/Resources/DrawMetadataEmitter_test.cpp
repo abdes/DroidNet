@@ -165,7 +165,7 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
   };
   const auto material = d::MaterialAsset::CreateDefault();
 
-  auto mesh = d::MeshBuilder(0U, mesh_name)
+  auto mesh = d::MeshBuilder(oxygen::data::LodIndex {}, mesh_name)
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("default", material)
@@ -180,7 +180,7 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
 
   return oxygen::vortex::sceneprep::GeometryRef {
     .asset_key = oxygen::data::AssetKey {},
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = std::shared_ptr<const oxygen::data::Mesh>(std::move(mesh)),
   };
 }
@@ -232,7 +232,7 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
   };
   const auto material = d::MaterialAsset::CreateDefault();
 
-  auto mesh = d::MeshBuilder(0U, mesh_name)
+  auto mesh = d::MeshBuilder(oxygen::data::LodIndex {}, mesh_name)
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("two-views", material)
@@ -253,7 +253,7 @@ auto ResolvedVirtualPageOverlapsBoundingSphere(
 
   return oxygen::vortex::sceneprep::GeometryRef {
     .asset_key = oxygen::data::AssetKey {},
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = std::shared_ptr<const oxygen::data::Mesh>(std::move(mesh)),
   };
 }
@@ -412,7 +412,7 @@ NOLINT_TEST_F(
 
   oxygen::vortex::sceneprep::RenderItemData item {};
   item.geometry = geometry;
-  item.submesh_index = 0U;
+  item.submesh_index = oxygen::data::SubmeshIndex {};
   item.transform_handle = oxygen::vortex::sceneprep::TransformHandle {
     oxygen::vortex::sceneprep::TransformHandle::Index {
       1U,
@@ -478,7 +478,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   oxygen::vortex::sceneprep::RenderItemData first_view_item_a {};
   first_view_item_a.geometry = multi_view_geometry;
-  first_view_item_a.submesh_index = 0U;
+  first_view_item_a.submesh_index = oxygen::data::SubmeshIndex {};
   first_view_item_a.transform_handle
     = oxygen::vortex::sceneprep::TransformHandle {
         oxygen::vortex::sceneprep::TransformHandle::Index {
@@ -507,7 +507,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   oxygen::vortex::sceneprep::RenderItemData second_view_item {};
   second_view_item.geometry = single_view_geometry;
-  second_view_item.submesh_index = 0U;
+  second_view_item.submesh_index = oxygen::data::SubmeshIndex {};
   second_view_item.transform_handle
     = oxygen::vortex::sceneprep::TransformHandle {
         oxygen::vortex::sceneprep::TransformHandle::Index {
@@ -557,7 +557,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   oxygen::vortex::sceneprep::RenderItemData item {};
   item.geometry = geometry;
-  item.submesh_index = 0U;
+  item.submesh_index = oxygen::data::SubmeshIndex {};
   item.transform_handle = oxygen::vortex::sceneprep::TransformHandle {
     oxygen::vortex::sceneprep::TransformHandle::Index {
       7U,
@@ -611,7 +611,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   oxygen::vortex::sceneprep::RenderItemData shadowed_item {};
   shadowed_item.geometry = geometry;
-  shadowed_item.submesh_index = 0U;
+  shadowed_item.submesh_index = oxygen::data::SubmeshIndex {};
   shadowed_item.transform_handle = oxygen::vortex::sceneprep::TransformHandle {
     oxygen::vortex::sceneprep::TransformHandle::Index {
       11U,
@@ -683,7 +683,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   oxygen::vortex::sceneprep::RenderItemData main_view_item {};
   main_view_item.geometry = geometry;
-  main_view_item.submesh_index = 0U;
+  main_view_item.submesh_index = oxygen::data::SubmeshIndex {};
   main_view_item.transform_handle = oxygen::vortex::sceneprep::TransformHandle {
     oxygen::vortex::sceneprep::TransformHandle::Index {
       21U,
@@ -759,7 +759,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   oxygen::vortex::sceneprep::RenderItemData shadow_only_item {};
   shadow_only_item.geometry = geometry;
-  shadow_only_item.submesh_index = 0U;
+  shadow_only_item.submesh_index = oxygen::data::SubmeshIndex {};
   shadow_only_item.transform_handle
     = oxygen::vortex::sceneprep::TransformHandle {
         oxygen::vortex::sceneprep::TransformHandle::Index {
@@ -817,7 +817,8 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   };
   const auto material = MakeAlphaTestMaterial(d::MaterialDomain::kOpaque);
 
-  auto mesh = d::MeshBuilder(0U, "DrawMetadataEmitter.AlphaTestRouting")
+  auto mesh = d::MeshBuilder(
+    oxygen::data::LodIndex {}, "DrawMetadataEmitter.AlphaTestRouting")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("default", material)
@@ -832,7 +833,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   const auto geometry = oxygen::vortex::sceneprep::GeometryRef {
     .asset_key = oxygen::data::AssetKey {},
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = std::shared_ptr<const oxygen::data::Mesh>(std::move(mesh)),
   };
 
@@ -859,7 +860,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   oxygen::vortex::sceneprep::RenderItemData item {};
   item.geometry = geometry;
-  item.submesh_index = 0U;
+  item.submesh_index = oxygen::data::SubmeshIndex {};
   item.material = oxygen::vortex::sceneprep::MaterialRef {
     .source_asset_key = material->GetAssetKey(),
     .resolved_asset_key = material->GetAssetKey(),
@@ -922,7 +923,8 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   const auto material = MakeMaterial(d::MaterialDomain::kOpaque,
     "DoubleSidedRouting", oxygen::data::pak::render::kMaterialFlag_DoubleSided);
 
-  auto mesh = d::MeshBuilder(0U, "DrawMetadataEmitter.DoubleSidedRouting")
+  auto mesh = d::MeshBuilder(
+    oxygen::data::LodIndex {}, "DrawMetadataEmitter.DoubleSidedRouting")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("default", material)
@@ -937,7 +939,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   const auto geometry = oxygen::vortex::sceneprep::GeometryRef {
     .asset_key = oxygen::data::AssetKey {},
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = std::shared_ptr<const oxygen::data::Mesh>(std::move(mesh)),
   };
 
@@ -964,7 +966,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   oxygen::vortex::sceneprep::RenderItemData item {};
   item.geometry = geometry;
-  item.submesh_index = 0U;
+  item.submesh_index = oxygen::data::SubmeshIndex {};
   item.material = oxygen::vortex::sceneprep::MaterialRef {
     .source_asset_key = material->GetAssetKey(),
     .resolved_asset_key = material->GetAssetKey(),
@@ -1029,7 +1031,8 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   const auto material
     = MakeMaterial(d::MaterialDomain::kOpaque, "OpaqueRouting");
 
-  auto mesh = d::MeshBuilder(0U, "DrawMetadataEmitter.OpaqueRouting")
+  auto mesh = d::MeshBuilder(
+    oxygen::data::LodIndex {}, "DrawMetadataEmitter.OpaqueRouting")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("default", material)
@@ -1044,7 +1047,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   const auto geometry = oxygen::vortex::sceneprep::GeometryRef {
     .asset_key = oxygen::data::AssetKey {},
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = std::shared_ptr<const oxygen::data::Mesh>(std::move(mesh)),
   };
 
@@ -1071,7 +1074,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   oxygen::vortex::sceneprep::RenderItemData item {};
   item.geometry = geometry;
-  item.submesh_index = 0U;
+  item.submesh_index = oxygen::data::SubmeshIndex {};
   item.material = oxygen::vortex::sceneprep::MaterialRef {
     .source_asset_key = material->GetAssetKey(),
     .resolved_asset_key = material->GetAssetKey(),
@@ -1136,7 +1139,8 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   const auto material
     = MakeMaterial(d::MaterialDomain::kAlphaBlended, "TransparentRouting");
 
-  auto mesh = d::MeshBuilder(0U, "DrawMetadataEmitter.TransparentRouting")
+  auto mesh = d::MeshBuilder(
+    oxygen::data::LodIndex {}, "DrawMetadataEmitter.TransparentRouting")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("default", material)
@@ -1151,7 +1155,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   const auto geometry = oxygen::vortex::sceneprep::GeometryRef {
     .asset_key = oxygen::data::AssetKey {},
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = std::shared_ptr<const oxygen::data::Mesh>(std::move(mesh)),
   };
 
@@ -1178,7 +1182,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   oxygen::vortex::sceneprep::RenderItemData item {};
   item.geometry = geometry;
-  item.submesh_index = 0U;
+  item.submesh_index = oxygen::data::SubmeshIndex {};
   item.material = oxygen::vortex::sceneprep::MaterialRef {
     .source_asset_key = material->GetAssetKey(),
     .resolved_asset_key = material->GetAssetKey(),
@@ -1245,7 +1249,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   oxygen::vortex::sceneprep::RenderItemData main_view_item {};
   main_view_item.geometry = geometry;
-  main_view_item.submesh_index = 0U;
+  main_view_item.submesh_index = oxygen::data::SubmeshIndex {};
   main_view_item.transform_handle = oxygen::vortex::sceneprep::TransformHandle {
     oxygen::vortex::sceneprep::TransformHandle::Index {
       31U,
@@ -1317,7 +1321,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
 
   oxygen::vortex::sceneprep::RenderItemData item_a {};
   item_a.geometry = geometry;
-  item_a.submesh_index = 0U;
+  item_a.submesh_index = oxygen::data::SubmeshIndex {};
   item_a.transform_handle = oxygen::vortex::sceneprep::TransformHandle {
     oxygen::vortex::sceneprep::TransformHandle::Index {
       41U,
@@ -1401,7 +1405,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   for (std::uint32_t index = 0U; index < 4U; ++index) {
     auto item = oxygen::vortex::sceneprep::RenderItemData {};
     item.geometry = geometry;
-    item.submesh_index = 0U;
+    item.submesh_index = oxygen::data::SubmeshIndex {};
     item.transform_handle = oxygen::vortex::sceneprep::TransformHandle {
       oxygen::vortex::sceneprep::TransformHandle::Index {
         index + 1U,
@@ -1457,7 +1461,7 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   for (std::uint32_t index = 0U; index < 4U; ++index) {
     auto item = oxygen::vortex::sceneprep::RenderItemData {};
     item.geometry = geometry;
-    item.submesh_index = 0U;
+    item.submesh_index = oxygen::data::SubmeshIndex {};
     item.transform_handle = oxygen::vortex::sceneprep::TransformHandle {
       oxygen::vortex::sceneprep::TransformHandle::Index {
         index + 1U,

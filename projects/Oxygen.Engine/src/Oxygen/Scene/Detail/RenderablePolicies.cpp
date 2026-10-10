@@ -5,23 +5,26 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <limits>
+#include <cstddef>
+#include <cstdint>
 #include <optional>
-#include <stdexcept>
-#include <utility>
 
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
 
+using oxygen::data::LodIndex;
 using oxygen::scene::DistancePolicy;
 using oxygen::scene::FixedPolicy;
 using oxygen::scene::ScreenSpaceErrorPolicy;
 
-auto FixedPolicy::Clamp(std::size_t lod_count) const noexcept -> std::size_t
+auto FixedPolicy::Clamp(std::size_t lod_count) const noexcept -> LodIndex
 {
   if (lod_count == 0) {
-    return 0;
+    return kFinest;
   }
-  return (index < lod_count) ? index : (lod_count - 1);
+  return (index.get() < lod_count)
+    ? index
+    : LodIndex { static_cast<std::uint32_t>(lod_count - 1) };
 }
 
 void DistancePolicy::NormalizeThresholds() noexcept
@@ -35,23 +38,23 @@ void DistancePolicy::NormalizeThresholds() noexcept
   hysteresis_ratio = (std::clamp)(hysteresis_ratio, 0.0f, 0.99f);
 }
 
-auto DistancePolicy::SelectBase(float normalized_distance,
-  std::size_t lod_count) const noexcept -> std::size_t
+auto DistancePolicy::SelectBase(
+  float normalized_distance, std::size_t lod_count) const noexcept -> LodIndex
 {
   if (thresholds.empty()) {
-    return 0;
+    return LodIndex {};
   }
-  std::size_t lod = 0;
+  std::uint32_t lod = 0;
   while (lod < lod_count - 1 && lod < thresholds.size()
     && normalized_distance >= thresholds[lod]) {
     ++lod;
   }
-  return lod;
+  return LodIndex { lod };
 }
 
-auto DistancePolicy::ApplyHysteresis(std::optional<std::size_t> current,
-  std::size_t base, float normalized_distance,
-  std::size_t lod_count) const noexcept -> std::size_t
+auto DistancePolicy::ApplyHysteresis(std::optional<LodIndex> current,
+  LodIndex base, float normalized_distance,
+  std::size_t lod_count) const noexcept -> LodIndex
 {
   (void)lod_count;
   if (!current.has_value()) {
@@ -61,7 +64,7 @@ auto DistancePolicy::ApplyHysteresis(std::optional<std::size_t> current,
   if (base == last) {
     return last;
   }
-  const auto boundary = (std::min)(last, base);
+  const auto boundary = (std::min)(last, base).get();
   if (boundary >= thresholds.size()) {
     return base;
   }
@@ -105,22 +108,21 @@ auto ScreenSpaceErrorPolicy::ValidateSizes(std::size_t lod_count) const noexcept
 }
 
 auto ScreenSpaceErrorPolicy::SelectBase(
-  float sse, std::size_t lod_count) const noexcept -> std::size_t
+  float sse, std::size_t lod_count) const noexcept -> LodIndex
 {
   if (enter_finer_sse.empty()) {
-    return 0;
+    return LodIndex {};
   }
-  std::size_t lod = 0;
+  std::uint32_t lod = 0;
   while (lod < lod_count - 1 && lod < enter_finer_sse.size()
     && sse < enter_finer_sse[lod]) {
     ++lod;
   }
-  return lod;
+  return LodIndex { lod };
 }
 
-auto ScreenSpaceErrorPolicy::ApplyHysteresis(std::optional<std::size_t> current,
-  std::size_t base, float sse, std::size_t lod_count) const noexcept
-  -> std::size_t
+auto ScreenSpaceErrorPolicy::ApplyHysteresis(std::optional<LodIndex> current,
+  LodIndex base, float sse, std::size_t lod_count) const noexcept -> LodIndex
 {
   (void)lod_count;
   if (!current.has_value()) {
@@ -130,7 +132,7 @@ auto ScreenSpaceErrorPolicy::ApplyHysteresis(std::optional<std::size_t> current,
   if (base == last) {
     return last;
   }
-  const auto boundary = (std::min)(last, base);
+  const auto boundary = (std::min)(last, base).get();
   if (boundary >= enter_finer_sse.size()
     || boundary >= exit_coarser_sse.size()) {
     return base;

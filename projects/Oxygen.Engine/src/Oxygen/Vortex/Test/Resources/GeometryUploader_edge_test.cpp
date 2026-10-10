@@ -54,7 +54,7 @@ NOLINT_TEST_F(
 
     const oxygen::vortex::sceneprep::GeometryRef geometry {
       .asset_key = key,
-      .lod_index = 0U,
+      .lod_index = oxygen::data::LodIndex {},
       .mesh = mesh,
     };
 
@@ -87,7 +87,7 @@ NOLINT_TEST_F(GeometryUploaderEdgeTest, RepeatedEnsureNoUnboundedTicketGrowth)
   const auto asset_key = MakeGeometryAssetKey("edge_repeated_ensure");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
 

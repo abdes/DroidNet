@@ -337,7 +337,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       const auto sphere_mat
         = MakeSolidColorMaterial("SphereMat", { 0.85F, 0.2F, 0.2F, 1.0F });
       auto mesh
-        = MeshBuilder(0, "SphereLOD0")
+        = MeshBuilder(oxygen::data::LodIndex {}, "SphereLOD0")
             .WithVertices(sphere_data->first)
             .WithIndices(sphere_data->second)
             .BeginSubMesh("full", sphere_mat)

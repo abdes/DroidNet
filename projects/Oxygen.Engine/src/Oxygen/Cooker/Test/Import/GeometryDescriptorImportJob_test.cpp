@@ -1478,7 +1478,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
       = content::loaders::LoadGeometryAsset(std::move(context));
     ASSERT_NE(geometry, nullptr);
     ASSERT_EQ(geometry->LodCount(), 1U);
-    const auto& mesh = geometry->MeshAt(0);
+    const auto& mesh = geometry->MeshAt(oxygen::data::LodIndex {});
     ASSERT_NE(mesh, nullptr);
     ASSERT_GT(mesh->VertexCount(), 0U);
     ASSERT_GT(mesh->IndexCount(), 0U);
@@ -1643,7 +1643,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   const auto geometry = content::loaders::LoadGeometryAsset(std::move(context));
   ASSERT_NE(geometry, nullptr);
   ASSERT_EQ(geometry->LodCount(), 1U);
-  const auto& mesh = geometry->MeshAt(0);
+  const auto& mesh = geometry->MeshAt(oxygen::data::LodIndex {});
   ASSERT_NE(mesh, nullptr);
   const auto expected = data::MakeIcoSphereMeshAsset(2);
   if (!expected.has_value()) {

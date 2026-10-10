@@ -10,6 +10,7 @@
 #include <memory>
 
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/GeometryIndices.h>
 
 namespace oxygen::data {
 class Mesh;
@@ -31,7 +32,7 @@ namespace oxygen::vortex::sceneprep {
 */
 struct GeometryRef {
   oxygen::data::AssetKey asset_key;
-  std::uint32_t lod_index { 0U };
+  data::LodIndex lod_index;
   std::shared_ptr<const oxygen::data::Mesh> mesh;
 
   [[nodiscard]] auto IsValid() const noexcept -> bool

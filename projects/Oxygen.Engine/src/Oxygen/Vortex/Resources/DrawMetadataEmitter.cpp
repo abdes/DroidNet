@@ -234,13 +234,12 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
   if (!item.geometry.IsValid()) {
     return;
   }
-  const auto submesh_index = item.submesh_index;
   const auto& lod = *item.geometry.mesh;
   const auto submeshes_span = lod.SubMeshes();
-  if (submesh_index >= submeshes_span.size()) {
+  if (item.submesh_index.get() >= submeshes_span.size()) {
     return;
   }
-  const auto& submesh = submeshes_span[submesh_index];
+  const auto& submesh = submeshes_span[item.submesh_index.get()];
   const auto views_span = submesh.MeshViews();
   if (views_span.empty()) {
     return;
@@ -303,7 +302,7 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
     dm.instance_metadata_buffer_index = 0;
     dm.instance_metadata_offset = 0;
     dm.transform_generation = item.transform_handle.GenerationValue().get();
-    dm.submesh_index = item.submesh_index;
+    dm.submesh_index = item.submesh_index.get();
     dm.primitive_flags = item.receive_shadows
       ? 0U
       : static_cast<uint32_t>(DrawPrimitiveFlagBits::kDisableShadowReception);

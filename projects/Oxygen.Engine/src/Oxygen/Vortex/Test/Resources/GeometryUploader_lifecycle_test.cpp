@@ -29,7 +29,7 @@ NOLINT_TEST_F(
   const auto asset_key = MakeGeometryAssetKey("lifecycle_idempotent_within");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
   (void)uploader.GetOrAllocate(geometry);
@@ -56,7 +56,7 @@ NOLINT_TEST_F(
   const auto asset_key = MakeGeometryAssetKey("lifecycle_auto_ensure_once");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
   const auto handle = uploader.GetOrAllocate(geometry);
@@ -83,7 +83,7 @@ NOLINT_TEST_F(
   const auto asset_key = MakeGeometryAssetKey("lifecycle_stable_no_reupload");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
 

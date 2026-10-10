@@ -87,8 +87,8 @@ auto Publish(MaterialSlotGeometryProvenance geometry)
     geometry.inventory.slots.push_back(oxygen::data::MaterialSlot {
       .slot_id = id,
       .display_name = "same-label",
-      .bindings = { { .lod_index = 0U,
-        .submesh_index = submesh++,
+      .bindings = { { .lod_index = oxygen::data::LodIndex {},
+        .submesh_index = oxygen::data::SubmeshIndex { submesh++ },
         .default_material_key = {}, }, },
     });
   }

@@ -6,18 +6,22 @@
 
 #pragma once
 
-#include <cstdint>
+#include <cstddef>
+#include <optional>
 #include <vector>
+
+#include <Oxygen/Data/GeometryIndices.h>
 
 namespace oxygen::scene {
 //! Invariant: LOD 0 is the finest quality. Index i denotes the boundary
 //! between LOD i and LOD i+1. Increasing the LOD index moves to coarser
 //! representations.
 struct FixedPolicy {
-  static constexpr std::size_t kFinest = 0;
-  std::size_t index { kFinest };
+  static constexpr data::LodIndex kFinest {};
+  data::LodIndex index { kFinest };
   // Clamp to existing LOD count
-  std::size_t Clamp(std::size_t lod_count) const noexcept;
+  [[nodiscard]] auto Clamp(std::size_t lod_count) const noexcept
+    -> data::LodIndex;
 };
 
 struct DistancePolicy {
@@ -26,12 +30,12 @@ struct DistancePolicy {
   // Ensure thresholds are non-decreasing and clamp hysteresis into [0, 0.99]
   void NormalizeThresholds() noexcept;
   // Base selection without hysteresis
-  std::size_t SelectBase(
-    float normalized_distance, std::size_t lod_count) const noexcept;
+  [[nodiscard]] auto SelectBase(float normalized_distance,
+    std::size_t lod_count) const noexcept -> data::LodIndex;
   // Apply symmetric hysteresis around the boundary between last and base
-  std::size_t ApplyHysteresis(std::optional<std::size_t> current,
-    std::size_t base, float normalized_distance,
-    std::size_t lod_count) const noexcept;
+  [[nodiscard]] auto ApplyHysteresis(std::optional<data::LodIndex> current,
+    data::LodIndex base, float normalized_distance,
+    std::size_t lod_count) const noexcept -> data::LodIndex;
 };
 
 struct ScreenSpaceErrorPolicy {
@@ -45,10 +49,12 @@ struct ScreenSpaceErrorPolicy {
   // Validate sizes: if provided, expect at least lod_count-1 boundaries
   [[nodiscard]] bool ValidateSizes(std::size_t lod_count) const noexcept;
   // Base selection without hysteresis
-  std::size_t SelectBase(float sse, std::size_t lod_count) const noexcept;
+  [[nodiscard]] auto SelectBase(float sse, std::size_t lod_count) const noexcept
+    -> data::LodIndex;
   // Apply directional hysteresis using enter/exit arrays
-  std::size_t ApplyHysteresis(std::optional<std::size_t> current,
-    std::size_t base, float sse, std::size_t lod_count) const noexcept;
+  [[nodiscard]] auto ApplyHysteresis(std::optional<data::LodIndex> current,
+    data::LodIndex base, float sse, std::size_t lod_count) const noexcept
+    -> data::LodIndex;
 };
 
 } // namespace oxygen::scene

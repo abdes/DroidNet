@@ -135,8 +135,8 @@ namespace {
       const std::array slots { data::MaterialSlot {
         .slot_id = assignment.slot_id,
         .display_name = "fixture",
-        .bindings = { { .lod_index = 0,
-          .submesh_index = 0,
+        .bindings = { { .lod_index = oxygen::data::LodIndex {},
+          .submesh_index = oxygen::data::SubmeshIndex {},
           .default_material_key = material } } } };
       const auto revision = data::ComputeMaterialSlotLayoutRevision(slots);
       if (!revision) {

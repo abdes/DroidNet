@@ -37,10 +37,13 @@
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Data/GeometryIndices.h>
 
 namespace {
 using namespace oxygen::interop::module;
 using Requests = SceneAssetRequests;
+using oxygen::data::LodIndex;
+using oxygen::data::SubmeshIndex;
 
 void Require(bool condition, const char* message)
 {
@@ -63,7 +66,7 @@ auto MakeGeometry(const std::string& name,
   oxygen::data::pak::geometry::MeshViewDesc view {};
   view.vertex_count = static_cast<uint32_t>(vertices.size());
   view.index_count = static_cast<uint32_t>(indices.size());
-  auto mesh = oxygen::data::MeshBuilder(0, name)
+  auto mesh = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, name)
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("first", material)
@@ -191,9 +194,10 @@ struct Fixture {
   {
     return node.GetRenderable().GetGeometry();
   }
-  auto CurrentMaterial(std::size_t slot = 0) const -> Requests::Material
+  auto CurrentMaterial(const SubmeshIndex slot = {}) const
+    -> Requests::Material
   {
-    return node.GetRenderable().ResolveSubmeshMaterial(0, slot);
+    return node.GetRenderable().ResolveSubmeshMaterial(LodIndex {}, slot);
   }
   void Attach()
   {
@@ -422,7 +426,8 @@ void IndependentTargetsAndSlots()
   f.Drain();
   Require(f.Geometry() == f.b, "unrelated node request blocked");
   f.node = first;
-  Require(f.CurrentMaterial(0) == f.red && f.CurrentMaterial(1) == f.blue,
+  Require(f.CurrentMaterial(SubmeshIndex { 0U }) == f.red
+      && f.CurrentMaterial(SubmeshIndex { 1U }) == f.blue,
     "unrelated slot superseded");
 }
 
@@ -436,11 +441,12 @@ void MaterialBeforeGeometry()
   Require(!f.Geometry() && f.diagnostics.empty(), "material applied too early");
   f.geometry_loads[0](f.a, {});
   f.Drain();
-  Require(f.CurrentMaterial(1) == f.red, "material lost before geometry ready");
+  Require(f.CurrentMaterial(SubmeshIndex { 1U }) == f.red,
+    "material lost before geometry ready");
   f.Geometry("B");
   f.geometry_loads[1](f.b, {});
   f.Drain();
-  Require(f.CurrentMaterial(1) != f.red,
+  Require(f.CurrentMaterial(SubmeshIndex { 1U }) != f.red,
     "unrelated geometry inherited an old override");
 }
 
@@ -451,13 +457,14 @@ void RemovedSlotDoesNotReviveOverride()
   f.material_cache["red"] = f.red;
   f.Material("red", 1);
   f.Drain();
-  Require(f.CurrentMaterial(1) == f.red, "initial slot override missing");
+  Require(f.CurrentMaterial(SubmeshIndex { 1U }) == f.red,
+    "initial slot override missing");
   f.Geometry("asset:///Engine/Generated/BasicShapes/Cube");
   f.Drain();
   f.Geometry("B");
   f.geometry_loads[0](f.b, {});
   f.Drain();
-  Require(f.CurrentMaterial(1) != f.red,
+  Require(f.CurrentMaterial(SubmeshIndex { 1U }) != f.red,
     "override from a removed slot resurfaced when the index returned");
 }
 
@@ -643,7 +650,7 @@ void RefreshDoesNotReviveClearedOrRemovedSlots()
   f.Drain();
   f.requests->Refresh(*f.scene);
   f.Drain();
-  Require(f.CurrentMaterial(1) != f.red,
+  Require(f.CurrentMaterial(SubmeshIndex { 1U }) != f.red,
     "refresh resurrected a removed slot override");
   f.Material("red");
   f.Drain();
@@ -880,7 +887,7 @@ void FailedReplacementDoesNotValidateSlotsAgainstPreviousGeometry()
   f.Drain();
   const auto previous_geometry = f.Geometry();
   Require(
-    previous_geometry && previous_geometry->MeshAt(0)->SubMeshes().size() == 1,
+    previous_geometry && previous_geometry->MeshAt(oxygen::data::LodIndex {})->SubMeshes().size() == 1,
     "replacement scenario needs a one-slot visible geometry");
   f.material_cache["red"] = f.red;
   f.Material("red");
@@ -893,7 +900,7 @@ void FailedReplacementDoesNotValidateSlotsAgainstPreviousGeometry()
   material.SetFailureCallback(
     [&](uint64_t, const std::string&) { ++failures; });
   material.SetSuccessCallback([&](uint64_t) {
-    Require(f.CurrentMaterial(1) == f.blue,
+    Require(f.CurrentMaterial(SubmeshIndex { 1U }) == f.blue,
       "replacement material acknowledged too early");
     ++successes;
   });
@@ -909,7 +916,8 @@ void FailedReplacementDoesNotValidateSlotsAgainstPreviousGeometry()
   f.material_cache["blue"] = f.blue;
   f.requests->Refresh(*f.scene);
   f.Drain();
-  Require(f.Geometry() == f.b && f.CurrentMaterial(1) == f.blue,
+  Require(f.Geometry() == f.b
+      && f.CurrentMaterial(SubmeshIndex { 1U }) == f.blue,
     "replacement publication did not apply the pending slot");
   Require(f.CurrentMaterial() != f.red && successes == 1 && failures == 0,
     "replacement recovery reused an unrelated geometry assignment");
@@ -991,11 +999,13 @@ void ConfirmedInvalidSlotRequiresNewExplicitAssignment()
   f.Drain();
   f.requests->Refresh(*f.scene);
   f.Drain();
-  Require(f.CurrentMaterial(1) != f.red && failures == 1 && successes == 0,
+  Require(f.CurrentMaterial(SubmeshIndex { 1U }) != f.red && failures == 1
+      && successes == 0,
     "publication resurrected a terminally rejected slot");
   assign();
   f.Drain();
-  Require(f.CurrentMaterial(1) == f.red && successes == 1 && failures == 1,
+  Require(f.CurrentMaterial(SubmeshIndex { 1U }) == f.red && successes == 1
+      && failures == 1,
     "explicit fresh assignment did not replace the rejected intent");
   Require(applied_generation > failed_generation,
     "explicit assignment reused the rejected request generation");
@@ -1016,7 +1026,8 @@ void StaleMaterialRevisionIsRejectedButAcceptedRefreshSurvives()
   f.geometry_cache["initial"] = replacement;
   f.requests->Refresh(*f.scene);
   f.Drain();
-  Require(f.Geometry() == replacement && f.CurrentMaterial(1U) == f.red,
+  Require(f.Geometry() == replacement
+      && f.CurrentMaterial(SubmeshIndex { 1U }) == f.red,
     "compatible refresh discarded an accepted stable slot assignment");
   int failures = 0;
   SetMaterialOverrideCommand stale(f.node.GetHandle(), old_target, "blue",
@@ -1025,7 +1036,7 @@ void StaleMaterialRevisionIsRejectedButAcceptedRefreshSurvives()
   f.Execute(stale);
   f.material_loads.back()(f.blue, {});
   f.Drain();
-  Require(failures == 1 && f.CurrentMaterial(1U) == f.red,
+  Require(failures == 1 && f.CurrentMaterial(SubmeshIndex { 1U }) == f.red,
     "new edit with stale inventory revision changed the material");
 }
 
@@ -1076,13 +1087,13 @@ void RetainedMaterialIdentitySurvivesInventoryRevisionChange()
     MaterialSlotAssignmentIntent::kRetainedAssignment);
   f.Execute(retained);
   f.Drain();
-  Require(f.CurrentMaterial(1U) == f.blue,
+  Require(f.CurrentMaterial(SubmeshIndex { 1U }) == f.blue,
     "retained stable slot was rejected after compatible inventory change");
   SetMaterialOverrideCommand clear(f.node.GetHandle(), original, std::nullopt,
     MaterialSlotAssignmentIntent::kRetainedAssignment);
   f.Execute(clear);
   f.Drain();
-  Require(f.CurrentMaterial(1U) != f.blue,
+  Require(f.CurrentMaterial(SubmeshIndex { 1U }) != f.blue,
     "retained slot clear did not restore its current geometry default");
 }
 
@@ -1100,8 +1111,8 @@ void RetainedMaterialMissingIdentityRemainsUnresolved()
     [&](uint64_t, const std::string&) { ++failures; });
   f.Execute(retained);
   f.Drain();
-  Require(failures == 1 && f.CurrentMaterial(0U) != f.blue
-      && f.CurrentMaterial(1U) != f.blue,
+  Require(failures == 1 && f.CurrentMaterial(SubmeshIndex { 0U }) != f.blue
+      && f.CurrentMaterial(SubmeshIndex { 1U }) != f.blue,
     "missing retained identity was rebound to another material slot");
 }
 
@@ -1110,21 +1121,23 @@ void MaterialRequestAppliesEveryDeclaredLodBinding()
   Fixture f;
   oxygen::data::pak::geometry::GeometryAssetDesc desc {};
   desc.lod_count = 2U;
-  std::vector<std::shared_ptr<oxygen::data::Mesh>> meshes { f.a->MeshAt(0U),
-    f.a->MeshAt(0U) };
+  std::vector<std::shared_ptr<oxygen::data::Mesh>> meshes { f.a->MeshAt(oxygen::data::LodIndex {}),
+    f.a->MeshAt(oxygen::data::LodIndex {}) };
   f.a = std::make_shared<oxygen::data::GeometryAsset>(
     f.a->GetAssetKey(), desc, std::move(meshes));
   f.Attach();
   f.material_cache["red"] = f.red;
   f.Material("red", 1U);
   f.Drain();
-  Require(f.node.GetRenderable().ResolveSubmeshMaterial(0U, 1U) == f.red
-      && f.node.GetRenderable().ResolveSubmeshMaterial(1U, 1U) == f.red,
+  const auto renderable = f.node.GetRenderable();
+  const auto slot = SubmeshIndex { 1U };
+  Require(renderable.ResolveSubmeshMaterial(LodIndex { 0U }, slot) == f.red
+      && renderable.ResolveSubmeshMaterial(LodIndex { 1U }, slot) == f.red,
     "native slot transport only applied its first LOD binding");
   f.Material(std::nullopt, 1U);
   f.Drain();
-  Require(f.node.GetRenderable().ResolveSubmeshMaterial(0U, 1U) != f.red
-      && f.node.GetRenderable().ResolveSubmeshMaterial(1U, 1U) != f.red,
+  Require(renderable.ResolveSubmeshMaterial(LodIndex { 0U }, slot) != f.red
+      && renderable.ResolveSubmeshMaterial(LodIndex { 1U }, slot) != f.red,
     "native slot clear left an LOD binding overridden");
 }
 

@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <algorithm>
 #include <cstring>
 #include <memory>
@@ -15,6 +13,7 @@
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
@@ -22,6 +21,7 @@
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {
@@ -71,7 +71,7 @@ namespace {
       return {};
     }
 
-    auto mesh = d::MeshBuilder(0, geometry_name)
+    auto mesh = d::MeshBuilder(oxygen::data::LodIndex {}, geometry_name)
                   .WithVertices(cube->first)
                   .WithIndices(cube->second)
                   .BeginSubMesh("full", std::move(material))
@@ -159,8 +159,8 @@ NOLINT_TEST(RuntimeMotionProducerModuleTest,
 
   const auto& state = snapshot->material_motion_states.front();
   EXPECT_EQ(state.key.node_handle, node.GetHandle());
-  EXPECT_EQ(state.key.lod_index, 0U);
-  EXPECT_EQ(state.key.submesh_index, 0U);
+  EXPECT_EQ(state.key.lod_index, oxygen::data::LodIndex {});
+  EXPECT_EQ(state.key.submesh_index, oxygen::data::SubmeshIndex {});
   EXPECT_EQ(state.resolved_material_asset_key, material->GetAssetKey());
   EXPECT_FALSE(state.has_runtime_wpo_input);
   EXPECT_FALSE(state.has_runtime_motion_vector_input);
@@ -205,7 +205,8 @@ NOLINT_TEST(RuntimeMotionProducerModuleTest,
   const auto before_key = before->material_motion_states.front().key;
   const auto before_hash = before->material_motion_states.front().contract_hash;
 
-  node.GetRenderable().SetMaterialOverride(0U, 0U, override_material);
+  node.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0U },
+    oxygen::data::SubmeshIndex { 0U }, override_material);
   scene->Update();
 
   PublishSnapshot(module, frame, frame::SequenceNumber { 10U });
@@ -240,8 +241,8 @@ NOLINT_TEST(RuntimeMotionProducerModuleTest,
   const auto key = RuntimeMaterialMotionKey {
     .node_handle = node.GetHandle(),
     .geometry_asset_key = node.GetRenderable().GetGeometry()->GetAssetKey(),
-    .lod_index = 0U,
-    .submesh_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
+    .submesh_index = oxygen::data::SubmeshIndex {},
   };
   module.UpsertMaterialMotionInput(observer_ptr<const scene::Scene> { scene.get() },
     RuntimeMaterialMotionInputState {

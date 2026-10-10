@@ -51,7 +51,7 @@ auto MakeUnboundedCube() -> std::shared_ptr<oxygen::data::GeometryAsset> {
   oxygen::data::pak::geometry::MeshViewDesc view {};
   view.vertex_count = static_cast<uint32_t>(vertices.size());
   view.index_count = static_cast<uint32_t>(indices.size());
-  auto mesh = oxygen::data::MeshBuilder(0, "/Cube")
+  auto mesh = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, "/Cube")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("cube", oxygen::data::MaterialAsset::CreateDefault())

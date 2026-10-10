@@ -48,7 +48,7 @@ NOLINT_TEST_F(
   const auto asset_key = MakeGeometryAssetKey("basic_valid_handle");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
 
@@ -73,7 +73,7 @@ NOLINT_TEST_F(
   const auto asset_key = MakeGeometryAssetKey("basic_same_identity");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
 
@@ -102,12 +102,12 @@ NOLINT_TEST_F(GeometryUploaderBasicTest,
   const auto asset_key_b = MakeGeometryAssetKey("basic_different_identity_b");
   const oxygen::vortex::sceneprep::GeometryRef geometry_a {
     .asset_key = asset_key_a,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh_a,
   };
   const oxygen::vortex::sceneprep::GeometryRef geometry_b {
     .asset_key = asset_key_b,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh_b,
   };
 
@@ -133,7 +133,7 @@ NOLINT_TEST_F(
   const auto asset_key = MakeGeometryAssetKey("basic_criticality_upgrade");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
 
@@ -178,7 +178,7 @@ NOLINT_TEST_F(GeometryUploaderBasicTest,
   const auto asset_key = MakeGeometryAssetKey("basic_invalid_mesh");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
 

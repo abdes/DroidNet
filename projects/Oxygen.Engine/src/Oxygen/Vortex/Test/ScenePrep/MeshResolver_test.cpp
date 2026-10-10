@@ -8,6 +8,7 @@
 
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -29,6 +30,7 @@ using oxygen::vortex::sceneprep::ScenePrepContext;
 using oxygen::vortex::sceneprep::ScenePrepState;
 
 using oxygen::data::GeometryAsset;
+using oxygen::data::LodIndex;
 using oxygen::data::MaterialAsset;
 using oxygen::data::MeshBuilder;
 using oxygen::scene::DistancePolicy;
@@ -108,15 +110,14 @@ NOLINT_TEST_F(MeshResolverTest, FixedPolicy_SelectsLOD0)
     });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  Node().GetRenderable().SetLodPolicy(FixedPolicy {
-    0,
-  });
+  Node().GetRenderable().SetLodPolicy(
+    FixedPolicy { .index = oxygen::data::LodIndex {} });
 
   // Act
   MeshResolver(Context(), State(), Proto());
 
   // Assert: index must match requested LOD
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 0U);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), LodIndex { 0U });
   EXPECT_TRUE(static_cast<bool>(Proto().ResolvedMesh()));
 }
 
@@ -137,15 +138,14 @@ NOLINT_TEST_F(MeshResolverTest, FixedPolicy_SelectsLOD2)
     });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  Node().GetRenderable().SetLodPolicy(FixedPolicy {
-    2,
-  });
+  Node().GetRenderable().SetLodPolicy(
+    FixedPolicy { .index = oxygen::data::LodIndex { 2U } });
 
   // Act
   MeshResolver(Context(), State(), Proto());
 
   // Assert
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 2U);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), LodIndex { 2U });
   EXPECT_TRUE(static_cast<bool>(Proto().ResolvedMesh()));
 }
 
@@ -183,7 +183,7 @@ NOLINT_TEST_F(MeshResolverTest, DistancePolicy_Near_SelectsFineLOD)
   MeshResolver(Context(), State(), Proto());
 
   // Assert: choose the finest LOD 0
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 0U);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), LodIndex { 0U });
 }
 
 //! DistancePolicy chooses coarser LOD when camera is far from the object.
@@ -217,7 +217,7 @@ NOLINT_TEST_F(MeshResolverTest, DistancePolicy_Far_SelectsCoarseLOD)
   MeshResolver(Context(), State(), Proto());
 
   // Assert: choose coarsest LOD 2
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 2U);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), LodIndex { 2U });
 }
 
 //=== Screen-space error policy: selection via sse = f * r / z ========--=====//
@@ -253,7 +253,7 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_NearHighSSE_SelectsFine)
   MeshResolver(Context(), State(), Proto());
 
   // Assert: select finest LOD 0
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 0U);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), LodIndex { 0U });
 }
 
 //! ScreenSpaceErrorPolicy selects coarser LOD when SSE is low (far camera).
@@ -288,7 +288,7 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_FarLowSSE_SelectsCoarse)
   MeshResolver(Context(), State(), Proto());
 
   // Assert: coarsest LOD 2
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 2U);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), LodIndex { 2U });
 }
 
 //! If focal length cannot be computed (viewport height zero) SSE is skipped.
@@ -325,7 +325,7 @@ NOLINT_TEST_F(MeshResolverTest, ScreenSpaceErrorPolicy_NoFocal_FallbackLOD0)
   MeshResolver(Context(), State(), Proto());
 
   // Assert: no SSE selection performed -> default/fallback LOD 0
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 0U);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), LodIndex { 0U });
 }
 
 //=== Negative: Fixed policy index beyond LOD count clamps to last =========//
@@ -348,15 +348,14 @@ NOLINT_TEST_F(MeshResolverTest, FixedPolicy_IndexBeyondRange_ClampsToLast)
     });
   SetGeometry(geom);
   SeedVisibilityAndTransform();
-  Node().GetRenderable().SetLodPolicy(FixedPolicy {
-    10,
-  });
+  Node().GetRenderable().SetLodPolicy(
+    FixedPolicy { .index = oxygen::data::LodIndex { 10U } });
 
   // Act
   MeshResolver(Context(), State(), Proto());
 
   // Assert: clamped to last LOD (index 1)
-  EXPECT_EQ(Proto().ResolvedMeshIndex(), 1U);
+  EXPECT_EQ(Proto().ResolvedMeshIndex(), LodIndex { 1U });
   EXPECT_TRUE(static_cast<bool>(Proto().ResolvedMesh()));
 }
 

@@ -432,7 +432,8 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
     material_description);
   material->SetTextureResourceKeys({ texture_key });
   const std::shared_ptr<oxygen::data::Mesh> mesh
-    = oxygen::data::MeshBuilder(0U, "Maintenance triangle")
+    = oxygen::data::MeshBuilder(
+      oxygen::data::LodIndex {}, "Maintenance triangle")
         .WithVertices(vertices)
         .WithIndices(std::vector<std::uint32_t> { 0U, 1U, 2U })
         .BeginSubMesh("Surface", material)

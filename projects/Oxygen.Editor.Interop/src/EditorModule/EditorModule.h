@@ -24,6 +24,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/ResidentContentRevision.h>
 #include <Oxygen/Vortex/Types/ViewOutline.h>
@@ -87,7 +88,7 @@ namespace oxygen::interop::module {
     //! Device depth of the node's nearest pixel.
     float depth { 0.0F };
     //! Geometry slot (submesh) under the pixel closest to the centre.
-    std::uint32_t geometry_slot { 0U };
+    data::SubmeshIndex geometry_slot;
     //! Pixels from the rectangle centre to the node's closest pixel.
     float center_distance { 0.0F };
   };

@@ -279,7 +279,7 @@ auto BuildPrimitiveGeometry(const char* geometry_name,
 
   const auto vertex_count = static_cast<uint32_t>(vertices.size());
   const auto index_count = static_cast<uint32_t>(indices.size());
-  auto mesh = d::MeshBuilder(0, geometry_name)
+  auto mesh = d::MeshBuilder(oxygen::data::LodIndex {}, geometry_name)
                 .WithVertices(std::move(vertices))
                 .WithIndices(std::move(indices))
                 .BeginSubMesh("full", material)

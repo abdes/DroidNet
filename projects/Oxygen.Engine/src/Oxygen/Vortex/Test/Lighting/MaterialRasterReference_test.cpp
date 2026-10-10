@@ -26,6 +26,7 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -333,7 +334,8 @@ namespace {
           }
           keys.at(static_cast<std::size_t>(MaterialSlot::kEmissive))
             = emission_key;
-          mesh_node.GetRenderable().SetMaterialOverride(0U, 0U,
+          mesh_node.GetRenderable().SetMaterialOverride(
+            oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U },
             std::make_shared<data::MaterialAsset>(
               data::AssetKey::FromVirtualPath("/Test/Lighting/Material-"
                 + std::to_string(++material_sequence) + ".omat"),
@@ -609,7 +611,8 @@ namespace {
             keys.at(static_cast<std::size_t>(MaterialSlot::kBaseColor)) = color;
             keys.at(static_cast<std::size_t>(MaterialSlot::kNormal)) = normal;
             keys.at(static_cast<std::size_t>(MaterialSlot::kEmissive)) = color;
-            mesh_node.GetRenderable().SetMaterialOverride(0U, 0U,
+            mesh_node.GetRenderable().SetMaterialOverride(
+              oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U },
               std::make_shared<data::MaterialAsset>(
                 data::AssetKey::FromVirtualPath("/Test/Lighting/Filtered-"
                   + std::to_string(++material_sequence) + ".omat"),
@@ -807,7 +810,8 @@ namespace {
             static_cast<std::size_t>(MaterialSlot::kCount));
           keys.at(static_cast<std::size_t>(MaterialSlot::kBaseColor)) = key;
           keys.at(static_cast<std::size_t>(MaterialSlot::kEmissive)) = key;
-          mesh_node.GetRenderable().SetMaterialOverride(0U, 0U,
+          mesh_node.GetRenderable().SetMaterialOverride(
+            oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U },
             std::make_shared<data::MaterialAsset>(
               data::AssetKey::FromVirtualPath("/Test/Lighting/Mip-"
                 + std::to_string(++material_sequence) + ".omat"),

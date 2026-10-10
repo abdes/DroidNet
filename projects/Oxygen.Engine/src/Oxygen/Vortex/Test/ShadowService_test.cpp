@@ -2008,12 +2008,12 @@ NOLINT_TEST_F(ShadowSharingTest, ExpiredFrameReadSetRejectsNewAttachment)
 }
 NOLINT_TEST_F(ShadowSharingTest, DifferentLodsRemainSeparateWhileEqualLodsShare)
 {
-  sources[1].lod_index = 1;
+  sources[1].lod_index = oxygen::data::LodIndex { 1U };
   Render(1);
   EXPECT_EQ(service->GetLastRenderState().rendered_point_shadow_count, 2U);
   EXPECT_TRUE(Record(0).surface_srv != Record(1).surface_srv
     || Record(0).first_array_layer != Record(1).first_array_layer);
-  sources[1].lod_index = 0;
+  sources[1].lod_index = oxygen::data::LodIndex {};
   scenes[1].preparation_revision += 2;
   Render(2);
   EXPECT_EQ(service->GetLastRenderState().rendered_point_shadow_count, 0U);

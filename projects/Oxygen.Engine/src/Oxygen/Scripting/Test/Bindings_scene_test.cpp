@@ -48,7 +48,7 @@ namespace {
     const std::pair<std::vector<data::Vertex>, std::vector<uint32_t>>& expected)
     -> void
   {
-    const auto& mesh = geometry.MeshAt(0);
+    const auto& mesh = geometry.MeshAt(oxygen::data::LodIndex {});
     ASSERT_NE(mesh, nullptr);
     const auto vertices = mesh->Vertices();
     ASSERT_EQ(vertices.size(), expected.first.size());

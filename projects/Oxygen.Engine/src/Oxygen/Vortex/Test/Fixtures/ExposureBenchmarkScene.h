@@ -25,6 +25,7 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
@@ -132,8 +133,8 @@ struct MixedExposureBenchmarkScene {
     CHECK_F(
       mesh_data.has_value(), "Cannot create mixed benchmark mesh {}", name);
     auto mesh
-      = data::MeshBuilder(
-        0, name == "GroundPlane" ? "Ground" : std::string { name, })
+      = data::MeshBuilder(data::LodIndex {},
+        name == "GroundPlane" ? "Ground" : std::string { name, })
           .WithVertices(mesh_data->first)
           .WithIndices(mesh_data->second)
           .BeginSubMesh("full", std::move(base))
@@ -257,7 +258,8 @@ struct MixedExposureBenchmarkScene {
     2000.0F,
     .1F,
   });
-  result.surfaces.at(1).GetRenderable().SetMaterialOverride(0, 0,
+  result.surfaces.at(1).GetRenderable().SetMaterialOverride(
+    oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
     material("MixedExposureEmissive",
       {
         .7F,
@@ -266,7 +268,8 @@ struct MixedExposureBenchmarkScene {
         1.0F,
       },
       data::MaterialDomain::kOpaque, true, 4096.0F));
-  result.surfaces.at(2).GetRenderable().SetMaterialOverride(0, 0,
+  result.surfaces.at(2).GetRenderable().SetMaterialOverride(
+    oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
     material("MixedExposureTranslucent",
       {
         .3F,
@@ -275,7 +278,8 @@ struct MixedExposureBenchmarkScene {
         .5F,
       },
       data::MaterialDomain::kAlphaBlended));
-  result.surfaces.at(3).GetRenderable().SetMaterialOverride(0, 0,
+  result.surfaces.at(3).GetRenderable().SetMaterialOverride(
+    oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
     material("MixedExposureMasked",
       {
         .9F,

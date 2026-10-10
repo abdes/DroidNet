@@ -33,8 +33,8 @@ auto MakeIdentity(const NodeHandle node_handle, const AssetKey geometry_key,
   return RenderMotionIdentityKey {
     .node_handle = node_handle,
     .geometry_asset_key = geometry_key,
-    .lod_index = 0U,
-    .submesh_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
+    .submesh_index = oxygen::data::SubmeshIndex {},
     .producer_family = family,
     .contract_hash = contract_hash,
   };

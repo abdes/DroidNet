@@ -135,7 +135,7 @@ auto BuildGeometryAsset(const char* mesh_name,
   using oxygen::data::pak::geometry::GeometryAssetDesc;
   using oxygen::data::pak::geometry::MeshViewDesc;
 
-  auto mesh = MeshBuilder(0, mesh_name)
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, mesh_name)
                 .WithVertices(mesh_data.first)
                 .WithIndices(mesh_data.second)
                 .BeginSubMesh("full", material)

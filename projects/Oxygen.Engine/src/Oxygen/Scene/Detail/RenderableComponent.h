@@ -15,6 +15,7 @@
 
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Types/ActiveMesh.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
@@ -78,7 +79,7 @@ public:
 
   // Utilities
   OXGN_SCN_NDAPI auto GetActiveLodIndex() const noexcept
-    -> std::optional<std::size_t>;
+    -> std::optional<data::LodIndex>;
   OXGN_SCN_NDAPI auto EffectiveLodCount() const noexcept -> std::size_t;
 
   // Bounds and transform hook
@@ -94,18 +95,18 @@ public:
   // On-demand per-submesh world AABB for the current LOD.
   // Returns nullopt if unavailable (no geometry, LOD unresolved, or index OOB).
   OXGN_SCN_NDAPI auto GetWorldSubMeshBoundingBox(
-    std::size_t submesh_index) const noexcept
+    data::SubmeshIndex submesh) const noexcept
     -> std::optional<std::pair<Vec3, Vec3>>;
 
   //=== Submesh visibility and material overrides ========================//
 
   //! Returns whether the given submesh (by LOD and index) is visible.
   OXGN_SCN_NDAPI auto IsSubmeshVisible(
-    std::size_t lod, std::size_t submesh_index) const noexcept -> bool;
+    data::LodIndex lod, data::SubmeshIndex submesh) const noexcept -> bool;
 
   //! Sets visibility for the given submesh (by LOD and index).
   OXGN_SCN_API void SetSubmeshVisible(
-    std::size_t lod, std::size_t submesh_index, bool visible) noexcept;
+    data::LodIndex lod, data::SubmeshIndex submesh, bool visible) noexcept;
 
   //! Sets visibility for all submeshes across all LODs.
   OXGN_SCN_API void SetAllSubmeshesVisible(bool visible) noexcept;
@@ -114,8 +115,8 @@ public:
   //! to clear the override and fall back to the submesh material.
   //! This binding override is transient across geometry replacement; use a
   //! SlotId assignment when authoring intent must survive replacement.
-  OXGN_SCN_API void SetMaterialOverride(std::size_t lod,
-    std::size_t submesh_index,
+  OXGN_SCN_API void SetMaterialOverride(data::LodIndex lod,
+    data::SubmeshIndex submesh,
     std::shared_ptr<const data::MaterialAsset> material) noexcept;
 
   //! Applies one authored assignment to every declared binding atomically.
@@ -126,11 +127,11 @@ public:
 
   //! Clears the material override for the given submesh.
   OXGN_SCN_API void ClearMaterialOverride(
-    std::size_t lod, std::size_t submesh_index) noexcept;
+    data::LodIndex lod, data::SubmeshIndex submesh) noexcept;
 
   //! Resolves the effective material applying override → submesh → default.
   OXGN_SCN_NDAPI auto ResolveSubmeshMaterial(
-    std::size_t lod, std::size_t submesh_index) const noexcept
+    data::LodIndex lod, data::SubmeshIndex submesh) const noexcept
     -> std::shared_ptr<const data::MaterialAsset>;
 
   [[nodiscard]] auto IsCloneable() const noexcept -> bool override
@@ -154,7 +155,7 @@ protected:
 
 private:
   [[nodiscard]] auto ResolveEffectiveLod(std::size_t lod_count) const noexcept
-    -> std::optional<std::size_t>;
+    -> std::optional<data::LodIndex>;
   struct LodBounds {
     Vec3 mesh_bbox_min { 0.0F, 0.0F, 0.0F };
     Vec3 mesh_bbox_max { 0.0F, 0.0F, 0.0F };
@@ -180,7 +181,7 @@ private:
   LodPolicy policy_ { FixedPolicy {} };
 
   // Cached dynamic LOD result (updated during updates/submission)
-  mutable std::optional<std::size_t> current_lod_;
+  mutable std::optional<data::LodIndex> current_lod_;
 
   // Per-LOD and per-submesh local bounds cache (rebuilt on SetGeometry)
   std::vector<LodBounds> lod_bounds_;

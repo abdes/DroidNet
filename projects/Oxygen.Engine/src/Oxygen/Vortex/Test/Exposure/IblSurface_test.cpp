@@ -28,6 +28,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -229,7 +230,8 @@ namespace {
       desc.uv_scale[0] = desc.uv_scale[1] = 1.0F;
       std::vector<content::ResourceKey> keys(6);
       keys[1] = normal;
-      mesh_node.GetRenderable().SetMaterialOverride(0U, 0U,
+      mesh_node.GetRenderable().SetMaterialOverride(
+        oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U },
         std::make_shared<data::MaterialAsset>(
           data::AssetKey::FromVirtualPath("/Test/IBL/Material-"
             + std::to_string(++material_sequence) + ".omat"),

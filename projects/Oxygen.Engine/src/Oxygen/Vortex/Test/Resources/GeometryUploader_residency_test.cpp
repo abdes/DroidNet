@@ -33,7 +33,7 @@ NOLINT_TEST_F(GeometryUploaderResidencyTest,
   const auto asset_key = MakeGeometryAssetKey("residency_publish_after_upload");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
 

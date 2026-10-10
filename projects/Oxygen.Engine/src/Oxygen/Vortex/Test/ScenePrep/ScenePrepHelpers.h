@@ -14,6 +14,7 @@
 #include <glm/glm.hpp>
 
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 
@@ -59,8 +60,8 @@ namespace pak = oxygen::data::pak;
 }
 
 //! Create a simple triangle mesh for tests.
-inline auto MakeSimpleMesh(const uint32_t lod, const std::string_view name = {})
-  -> std::shared_ptr<oxygen::data::Mesh>
+inline auto MakeSimpleMesh(const data::LodIndex lod,
+  const std::string_view name = {}) -> std::shared_ptr<oxygen::data::Mesh>
 {
   std::vector<Vertex> vertices(3);
   vertices.at(0).position = {
@@ -107,7 +108,7 @@ inline auto MakeSimpleMesh(const uint32_t lod, const std::string_view name = {})
 }
 
 struct MeshLayout {
-  uint32_t lod;
+  data::LodIndex lod;
   std::size_t submesh_count;
 };
 
@@ -170,8 +171,9 @@ inline auto MakeMeshWithSubmeshes(const MeshLayout layout)
 }
 
 //! Create a mesh with submeshes placed at provided centers (spread test mesh).
-inline auto MakeSpreadMesh(uint32_t lod, const std::vector<glm::vec3>& centers,
-  const glm::vec3 mesh_bounds_min, const glm::vec3 mesh_bounds_max,
+inline auto MakeSpreadMesh(const data::LodIndex lod,
+  const std::vector<glm::vec3>& centers, const glm::vec3 mesh_bounds_min,
+  const glm::vec3 mesh_bounds_max,
   const std::vector<std::pair<glm::vec3, glm::vec3>>& submesh_bounds)
   -> std::shared_ptr<oxygen::data::Mesh>
 {
@@ -244,8 +246,8 @@ inline auto MakeGeometryWithLods(const size_t lod_count, const glm::vec3 bb_min,
 
   std::vector<std::shared_ptr<data::Mesh>> lods;
   lods.reserve(lod_count);
-  for (size_t i = 0; i < lod_count; ++i) {
-    lods.emplace_back(MakeSimpleMesh(static_cast<uint32_t>(i)));
+  for (std::uint32_t i = 0; i < lod_count; ++i) {
+    lods.emplace_back(MakeSimpleMesh(data::LodIndex { i }));
   }
   return std::make_shared<data::GeometryAsset>(
     AssetKey {}, desc, std::move(lods));
@@ -267,10 +269,10 @@ inline auto MakeGeometryWithLODSubmeshes(
 
   std::vector<std::shared_ptr<data::Mesh>> lods;
   lods.reserve(per_lod_counts.size());
-  uint32_t lod = 0;
+  std::uint32_t lod = 0;
   for (const auto count : per_lod_counts) {
     lods.emplace_back(MakeMeshWithSubmeshes({
-      .lod = lod++,
+      .lod = data::LodIndex { lod++ },
       .submesh_count = count,
     }));
   }

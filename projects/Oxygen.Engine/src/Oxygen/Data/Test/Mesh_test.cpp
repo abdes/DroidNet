@@ -83,7 +83,7 @@ protected:
     desc.info.standard.bounding_box_max[1] = bounds_max.y;
     desc.info.standard.bounding_box_max[2] = bounds_max.z;
 
-    return oxygen::data::MeshBuilder(0, "triangle")
+    return oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, "triangle")
       .WithVertices(vertices)
       .WithIndices(indices)
       .WithDescriptor(desc)
@@ -167,7 +167,7 @@ NOLINT_TEST_F(
 
   for (const auto with_descriptor : { false, true }) {
     SCOPED_TRACE(with_descriptor);
-    auto builder = MeshBuilder(0, "procedural");
+    auto builder = MeshBuilder(oxygen::data::LodIndex {}, "procedural");
     builder.WithVertices(vertices).WithIndices(indices);
     if (with_descriptor) {
       auto desc = oxygen::data::pak::geometry::MeshDesc {};
@@ -265,7 +265,7 @@ protected:
     };
     std::vector<std::uint32_t> indices = { 0, 1, 2 };
     auto material = MaterialAsset::CreateDefault();
-    return oxygen::data::MeshBuilder(0, "triangle")
+    return oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, "triangle")
       .WithVertices(vertices)
       .WithIndices(indices)
       .BeginSubMesh("main", material)
@@ -300,7 +300,7 @@ NOLINT_TEST(MeshBasicTest, IsValidReflectsSubMeshPresence)
   auto material = MaterialAsset::CreateDefault();
 
   // Act
-  auto mesh = MeshBuilder(0, "valid")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "valid")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("sm", material)

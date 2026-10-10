@@ -16,6 +16,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -134,7 +135,8 @@ auto MakeContractTestPipeline() -> std::unique_ptr<sceneprep::ScenePrepPipeline>
                    sceneprep::ScenePrepState& /*st*/,
                    sceneprep::RenderItemProto& it) -> void {
     if (const auto g = it.Geometry()) {
-      it.ResolveMesh(g->MeshAt(0), 0);
+      it.ResolveMesh(
+        g->MeshAt(oxygen::data::LodIndex {}), oxygen::data::LodIndex {});
     } else {
       it.MarkDropped();
     }
@@ -146,9 +148,7 @@ auto MakeContractTestPipeline() -> std::unique_ptr<sceneprep::ScenePrepPipeline>
       it.MarkDropped();
       return;
     }
-    it.SetVisibleSubmeshes({
-      0U,
-    });
+    it.SetVisibleSubmeshes({ oxygen::data::SubmeshIndex {} });
   };
   auto prod
     = [](const sceneprep::ScenePrepContext& /*ctx*/,
@@ -160,10 +160,10 @@ auto MakeContractTestPipeline() -> std::unique_ptr<sceneprep::ScenePrepPipeline>
         : oxygen::data::AssetKey {};
 
       auto item = sceneprep::RenderItemData {};
-      item.submesh_index = static_cast<std::uint32_t>(sm);
+      item.submesh_index = sm;
       item.geometry = sceneprep::GeometryRef {
         .asset_key = it.Geometry()->GetAssetKey(),
-        .lod_index = static_cast<std::uint32_t>(it.ResolvedMeshIndex()),
+        .lod_index = it.ResolvedMeshIndex(),
         .mesh = it.ResolvedMesh(),
       };
       item.material = sceneprep::MaterialRef {
@@ -208,7 +208,8 @@ NOLINT_TEST_F(
                    sceneprep::ScenePrepState& /*st*/,
                    sceneprep::RenderItemProto& it) -> void {
     if (const auto g = it.Geometry()) {
-      it.ResolveMesh(g->MeshAt(0), 0);
+      it.ResolveMesh(
+        g->MeshAt(oxygen::data::LodIndex {}), oxygen::data::LodIndex {});
     } else {
       it.MarkDropped();
     }
@@ -220,9 +221,7 @@ NOLINT_TEST_F(
       it.MarkDropped();
       return;
     }
-    it.SetVisibleSubmeshes({
-      0U,
-    });
+    it.SetVisibleSubmeshes({ oxygen::data::SubmeshIndex {} });
   };
   auto prod
     = [](const sceneprep::ScenePrepContext& /*ctx*/,
@@ -234,10 +233,10 @@ NOLINT_TEST_F(
         : oxygen::data::AssetKey {};
 
       auto item = sceneprep::RenderItemData {};
-      item.submesh_index = static_cast<std::uint32_t>(sm);
+      item.submesh_index = sm;
       item.geometry = sceneprep::GeometryRef {
         .asset_key = it.Geometry()->GetAssetKey(),
-        .lod_index = static_cast<std::uint32_t>(it.ResolvedMeshIndex()),
+        .lod_index = it.ResolvedMeshIndex(),
         .mesh = it.ResolvedMesh(),
       };
       item.material = sceneprep::MaterialRef {
@@ -283,8 +282,8 @@ NOLINT_TEST_F(
 
   ASSERT_EQ(StateRef().CollectedCount(), ScenePrepPipelineTest::kNodeCount);
   for (const auto& item : StateRef().CollectedItems()) {
-    EXPECT_EQ(item.geometry.lod_index, 0U);
-    EXPECT_EQ(item.submesh_index, 0U);
+    EXPECT_EQ(item.geometry.lod_index, oxygen::data::LodIndex {});
+    EXPECT_EQ(item.submesh_index, oxygen::data::SubmeshIndex {});
     EXPECT_TRUE(item.geometry.IsValid());
   }
 }
@@ -303,7 +302,8 @@ NOLINT_TEST_F(
                    sceneprep::ScenePrepState& /*st*/,
                    sceneprep::RenderItemProto& it) -> void {
     if (const auto g = it.Geometry()) {
-      it.ResolveMesh(g->MeshAt(0), 0);
+      it.ResolveMesh(
+        g->MeshAt(oxygen::data::LodIndex {}), oxygen::data::LodIndex {});
     } else {
       it.MarkDropped();
     }
@@ -315,9 +315,7 @@ NOLINT_TEST_F(
       it.MarkDropped();
       return;
     }
-    it.SetVisibleSubmeshes({
-      0U,
-    });
+    it.SetVisibleSubmeshes({ oxygen::data::SubmeshIndex {} });
   };
   auto prod
     = [](const sceneprep::ScenePrepContext& /*ctx*/,
@@ -328,10 +326,10 @@ NOLINT_TEST_F(
       : oxygen::data::AssetKey {};
 
     auto item = sceneprep::RenderItemData {};
-    item.submesh_index = 0U;
+    item.submesh_index = oxygen::data::SubmeshIndex {};
     item.geometry = sceneprep::GeometryRef {
       .asset_key = it.Geometry()->GetAssetKey(),
-      .lod_index = static_cast<std::uint32_t>(it.ResolvedMeshIndex()),
+      .lod_index = it.ResolvedMeshIndex(),
       .mesh = it.ResolvedMesh(),
     };
     item.material = sceneprep::MaterialRef {
@@ -396,7 +394,8 @@ NOLINT_TEST_F(ScenePrepPipelineTest,
     = [](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
         sceneprep::RenderItemProto& it) -> void {
     if (const auto g = it.Geometry()) {
-      it.ResolveMesh(g->MeshAt(0), 0);
+      it.ResolveMesh(
+        g->MeshAt(oxygen::data::LodIndex {}), oxygen::data::LodIndex {});
     } else {
       it.MarkDropped();
     }
@@ -407,9 +406,7 @@ NOLINT_TEST_F(ScenePrepPipelineTest,
       it.MarkDropped();
       return;
     }
-    it.SetVisibleSubmeshes({
-      0U,
-    });
+    it.SetVisibleSubmeshes({ oxygen::data::SubmeshIndex {} });
   };
   auto prod
     = [](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState& st,
@@ -420,10 +417,10 @@ NOLINT_TEST_F(ScenePrepPipelineTest,
       : oxygen::data::AssetKey {};
 
     auto item = sceneprep::RenderItemData {};
-    item.submesh_index = 0U;
+    item.submesh_index = oxygen::data::SubmeshIndex {};
     item.geometry = sceneprep::GeometryRef {
       .asset_key = it.Geometry()->GetAssetKey(),
-      .lod_index = static_cast<std::uint32_t>(it.ResolvedMeshIndex()),
+      .lod_index = it.ResolvedMeshIndex(),
       .mesh = it.ResolvedMesh(),
     };
     item.material = sceneprep::MaterialRef {
@@ -632,7 +629,8 @@ NOLINT_TEST_F(
     = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
         sceneprep::RenderItemProto& it) -> void {
     ++res_called;
-    it.ResolveMesh(it.Geometry()->MeshAt(0), 0);
+    it.ResolveMesh(it.Geometry()->MeshAt(oxygen::data::LodIndex {}),
+      oxygen::data::LodIndex {});
   };
   auto vis = [&](const sceneprep::ScenePrepContext&, sceneprep::ScenePrepState&,
                sceneprep::RenderItemProto& it) -> void {

@@ -26,6 +26,7 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -449,7 +450,8 @@ auto ExposureLightingGpuTest::SetSurface(
     1,
   };
   desc.uv_scale[0] = desc.uv_scale[1] = 1;
-  mesh_node.GetRenderable().SetMaterialOverride(0, 0,
+  mesh_node.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+    oxygen::data::SubmeshIndex { 0 },
     std::make_shared<data::MaterialAsset>(
       data::AssetKey::FromVirtualPath("/Test/Exposure/Lit"
         + std::to_string(static_cast<int>(domain)) + "-"

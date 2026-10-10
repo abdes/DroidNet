@@ -25,6 +25,7 @@
 #include <EditorModule/NodeRegistry.h>
 #include <glm/gtc/quaternion.hpp>
 
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
@@ -277,11 +278,15 @@ private:
     }
     result.geometry_key = data::to_string(geometry->GetAssetKey());
     result.geometry_name = geometry->GetAssetName();
-    if (const auto mesh = geometry->MeshAt(0)) {
+    constexpr auto lod = data::LodIndex {};
+    if (const auto mesh = geometry->MeshAt(lod)) {
       result.vertex_count = mesh->VertexCount();
       result.index_count = mesh->IndexCount();
-      for (std::size_t slot = 0; slot < mesh->SubMeshes().size(); ++slot) {
-        const auto material = renderable.ResolveSubmeshMaterial(0, slot);
+      const auto slot_count
+        = static_cast<std::uint32_t>(mesh->SubMeshes().size());
+      for (std::uint32_t slot = 0; slot < slot_count; ++slot) {
+        const auto material = renderable.ResolveSubmeshMaterial(
+          lod, data::SubmeshIndex { slot });
         result.material_keys.push_back(
           material ? data::to_string(material->GetAssetKey()) : std::string {});
         const auto color = material

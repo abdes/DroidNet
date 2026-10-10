@@ -69,7 +69,7 @@ auto ShadowCasterDependencies::Build(const PreparedSceneFrame& scene,
       .index_count = draw.index_count,
       .vertex_count = draw.vertex_count,
       .transform_generation = draw.transform_generation,
-      .submesh = draw.submesh_index,
+      .submesh = data::SubmeshIndex { draw.submesh_index },
     };
     std::copy_n(
       scene.world_matrices.data() + transform_offset, 16, record.world.begin());
@@ -91,7 +91,7 @@ auto ShadowCasterDependencies::Build(const PreparedSceneFrame& scene,
     HashCombine(hash, draw.index_count);
     HashCombine(hash, draw.vertex_count);
     HashCombine(hash, draw.transform_generation);
-    HashCombine(hash, draw.submesh_index);
+    HashCombine(hash, record.submesh);
     HashCombine(hash,
       ComputeFNV1a64(
         scene.world_matrices.data() + transform_offset, 16U * sizeof(float)));

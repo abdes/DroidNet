@@ -209,7 +209,7 @@ private:
   };
 
   using LodHandles
-    = std::unordered_map<std::uint32_t, vortex::sceneprep::GeometryHandle>;
+    = std::unordered_map<data::LodIndex, vortex::sceneprep::GeometryHandle>;
   using AssetHandles = std::unordered_map<data::AssetKey, LodHandles>;
 
   struct PendingAssetEviction {
@@ -230,7 +230,7 @@ private:
 
   struct GeometryEntry {
     data::AssetKey asset_key;
-    std::uint32_t lod_index { 0U };
+    data::LodIndex lod_index;
     std::shared_ptr<const data::Mesh> mesh;
 
     bool is_dirty { true };

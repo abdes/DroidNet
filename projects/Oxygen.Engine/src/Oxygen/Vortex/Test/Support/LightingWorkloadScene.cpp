@@ -13,6 +13,7 @@
 
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
@@ -102,7 +103,8 @@ auto CreateLightingWorkloadScene(const LightingWorkload& workload)
   result.floor = result.scene->CreateNode("Neutral receiver floor");
   result.floor.GetRenderable().SetGeometry(
     MakePlane(workload.floor_half_extent_m, "WorkloadFloor"));
-  result.floor.GetRenderable().SetMaterialOverride(0, 0, material);
+  result.floor.GetRenderable().SetMaterialOverride(
+    oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 }, material);
   const auto caster_geometry = MakePlane(0.2F, "WorkloadOccluder");
   for (const auto& source : workload.lights) {
     auto node
@@ -140,7 +142,8 @@ auto CreateLightingWorkloadScene(const LightingWorkload& workload)
       auto caster = result.scene->CreateNode(
         "Occluder " + std::to_string(source.id.get()));
       caster.GetRenderable().SetGeometry(caster_geometry);
-      caster.GetRenderable().SetMaterialOverride(0, 0, material);
+      caster.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+        oxygen::data::SubmeshIndex { 0 }, material);
       caster.GetTransform().SetLocalPosition(
         { source.position_ws.at(0) + 0.25F, source.position_ws.at(1), 0.5F });
       result.casters.push_back(caster);

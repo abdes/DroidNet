@@ -6,10 +6,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <iterator>
 #include <limits>
 #include <string_view>
 
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialSlotInventory.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -33,11 +35,29 @@ auto MaterialB() -> AssetKey
   return AssetKey::FromString("01234567-89ab-cdef-0123-456789abcdef").value();
 }
 
+auto Binding(const std::uint32_t lod, const std::uint32_t submesh,
+  const AssetKey default_material = {}) -> MaterialSlotBinding
+{
+  return {
+    .lod_index = LodIndex { lod },
+    .submesh_index = SubmeshIndex { submesh },
+    .default_material_key = default_material,
+  };
+}
+
+auto Location(const std::uint32_t lod, const std::uint32_t submesh)
+  -> MaterialSlotBindingLocation
+{
+  return {
+    .lod_index = LodIndex { lod },
+    .submesh_index = SubmeshIndex { submesh },
+  };
+}
+
 auto GeometryBindings() -> std::array<MaterialSlotBinding, 4>
 {
-  return { MaterialSlotBinding { 0, 0, MaterialA() },
-    MaterialSlotBinding { 0, 1, {} }, MaterialSlotBinding { 0, 2, MaterialA() },
-    MaterialSlotBinding { 1, 0, MaterialB() } };
+  return { Binding(0, 0, MaterialA()), Binding(0, 1),
+    Binding(0, 2, MaterialA()), Binding(1, 0, MaterialB()) };
 }
 
 auto MakeInventory() -> MaterialSlotInventory
@@ -49,13 +69,13 @@ auto MakeInventory() -> MaterialSlotInventory
         .slot_id = MaterialSlotId::FromString(
           "ffeeddcc-bbaa-9988-7766-554433221100").value(),
         .display_name = "Surface",
-        .bindings = { { 1, 0, MaterialB() }, { 0, 2, MaterialA() } },
+        .bindings = { Binding(1, 0, MaterialB()), Binding(0, 2, MaterialA()) },
       },
       {
         .slot_id = MaterialSlotId::FromString(
           "00112233-4455-6677-8899-aabbccddeeff").value(),
         .display_name = "Surface",
-        .bindings = { { 0, 1, {} }, { 0, 0, MaterialA() } },
+        .bindings = { Binding(0, 1), Binding(0, 0, MaterialA()) },
       },
     },
   };
@@ -147,10 +167,14 @@ NOLINT_TEST(MaterialSlotInventoryTest, EveryLayoutIdentityFieldAffectsRevision)
         value.slots.front().bindings.front().default_material_key = MaterialA();
       } },
     Mutation { "LOD",
-      [](auto& value) { value.slots.front().bindings.front().lod_index = 2; } },
+      [](auto& value) {
+        value.slots.front().bindings.front().lod_index
+          = oxygen::data::LodIndex { 2U };
+      } },
     Mutation { "submesh",
       [](auto& value) {
-        value.slots.front().bindings.back().submesh_index = 3;
+        value.slots.front().bindings.back().submesh_index
+          = oxygen::data::SubmeshIndex { 3U };
       } },
     Mutation { "slot ID",
       [](auto& value) {
@@ -283,15 +307,14 @@ NOLINT_TEST(MaterialSlotInventoryTest, RejectsMissingAndOutOfRangeSurfaces)
   ASSERT_FALSE(result.has_value());
   EXPECT_EQ(result.error().code, ErrorCode::kMissingBinding);
   ASSERT_TRUE(result.error().binding.has_value());
-  EXPECT_EQ(
-    result.error().binding.value(), (MaterialSlotBindingLocation { 0, 2 }));
+  EXPECT_EQ(result.error().binding.value(), Location(0, 2));
   for (const auto bad_lod : { false, true }) {
     inventory = MakeInventory();
     auto& binding = inventory.slots.front().bindings.front();
     if (bad_lod) {
-      binding.lod_index = 2;
+      binding.lod_index = oxygen::data::LodIndex { 2U };
     } else {
-      binding.submesh_index = 1;
+      binding.submesh_index = oxygen::data::SubmeshIndex { 1U };
     }
     result = ValidateMaterialSlotInventory(
       inventory, GeometryKey(), GeometryBindings());
@@ -313,14 +336,14 @@ NOLINT_TEST(MaterialSlotInventoryTest, RejectsAmbiguousGeometryAndWrongDefaults)
     = ValidateMaterialSlotInventory(inventory, GeometryKey(), bindings);
   ASSERT_FALSE(result.has_value());
   EXPECT_EQ(result.error().code, ErrorCode::kDuplicateGeometryBinding);
-  EXPECT_EQ(result.error().binding, (MaterialSlotBindingLocation { 0, 0 }));
+  EXPECT_EQ(result.error().binding, Location(0, 0));
 
   inventory.slots.front().bindings.front().default_material_key = {};
   result = ValidateMaterialSlotInventory(
     inventory, GeometryKey(), GeometryBindings());
   ASSERT_FALSE(result.has_value());
   EXPECT_EQ(result.error().code, ErrorCode::kDefaultMaterialMismatch);
-  EXPECT_EQ(result.error().binding, (MaterialSlotBindingLocation { 1, 0 }));
+  EXPECT_EQ(result.error().binding, Location(1, 0));
 }
 
 NOLINT_TEST(MaterialSlotInventoryTest, RejectsStaleRecordedRevision)
@@ -357,9 +380,9 @@ NOLINT_TEST(
 {
   auto inventory = MakeInventory();
   inventory.slots.resize(1);
-  inventory.slots.front().bindings = { { 1, 10, {} }, { 1, 2, {} },
-    { std::numeric_limits<uint32_t>::max(),
-      std::numeric_limits<uint32_t>::max(), {} } };
+  inventory.slots.front().bindings = { Binding(1, 10), Binding(1, 2),
+    Binding((std::numeric_limits<std::uint32_t>::max)(),
+      (std::numeric_limits<std::uint32_t>::max)()) };
   const auto canonical = WriteCanonicalMaterialSlotLayout(inventory.slots);
   ASSERT_TRUE(canonical.has_value());
   const auto index_two = canonical.value().find("\"submesh_index\":2,");

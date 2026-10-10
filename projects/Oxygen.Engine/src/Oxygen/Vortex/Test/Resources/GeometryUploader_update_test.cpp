@@ -34,7 +34,7 @@ NOLINT_TEST_F(GeometryUploaderUpdateTest,
   const auto asset_key = MakeGeometryAssetKey("update_dirty_reschedules");
   const oxygen::vortex::sceneprep::GeometryRef geometry_v1 {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh_v1,
   };
   const auto handle = uploader.GetOrAllocate(geometry_v1);
@@ -52,7 +52,7 @@ NOLINT_TEST_F(GeometryUploaderUpdateTest,
   const auto mesh_v2 = MakeValidTriangleMesh("Tri", true);
   const oxygen::vortex::sceneprep::GeometryRef geometry_v2 {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh_v2,
   };
   uploader.Update(handle, geometry_v2);
@@ -96,7 +96,7 @@ NOLINT_TEST_F(
       = std::vector<oxygen::data::Vertex>(vertices.begin(), vertices.end());
     moved[0].position.x += 0.25F;
     geometry.mesh
-      = oxygen::data::MeshBuilder(0, "Reloaded")
+      = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, "Reloaded")
           .WithVertices(moved)
           .WithIndices(std::vector<std::uint32_t> { 0U, 1U, 2U })
           .BeginSubMesh("default", oxygen::data::MaterialAsset::CreateDefault())
@@ -137,12 +137,12 @@ NOLINT_TEST_F(
   const auto asset_key_b = MakeGeometryAssetKey("update_debug_assert_b");
   const oxygen::vortex::sceneprep::GeometryRef geometry_a {
     .asset_key = asset_key_a,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh_a,
   };
   const oxygen::vortex::sceneprep::GeometryRef geometry_b {
     .asset_key = asset_key_b,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh_b,
   };
   const auto handle = uploader.GetOrAllocate(geometry_a);
@@ -167,7 +167,7 @@ NOLINT_TEST_F(GeometryUploaderUpdateTest, UpdateStaleHandleIsRejected)
   const auto asset_key = MakeGeometryAssetKey("update_stale_handle_rejected");
   const oxygen::vortex::sceneprep::GeometryRef geometry_v1 {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh_v1,
   };
   const auto stale_handle = uploader.GetOrAllocate(geometry_v1);
@@ -180,7 +180,7 @@ NOLINT_TEST_F(GeometryUploaderUpdateTest, UpdateStaleHandleIsRejected)
   const auto mesh_v2 = MakeValidTriangleMesh("TriV2", true);
   const oxygen::vortex::sceneprep::GeometryRef geometry_v2 {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh_v2,
   };
   const auto current_handle = uploader.GetOrAllocate(geometry_v2);

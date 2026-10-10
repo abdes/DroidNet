@@ -26,6 +26,7 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -234,13 +235,16 @@ auto SceneBootstrapper::ApplyMixedExposureProof() -> void
   ApplyConsumerVisualProof(VisualFogMode::kVolumetric);
   // The original sphere remains opaque and lit. The other existing shapes
   // exercise material domains together at comparable daylight radiance.
-  cube_node_.GetRenderable().SetMaterialOverride(0, 0,
+  cube_node_.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+    oxygen::data::SubmeshIndex { 0 },
     MakeSolidColorMaterial("MixedExposureEmissive", { .7F, .65F, .5F, 1 },
       data::MaterialDomain::kOpaque, true, 4096));
-  cylinder_node_.GetRenderable().SetMaterialOverride(0, 0,
+  cylinder_node_.GetRenderable().SetMaterialOverride(
+    oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
     MakeSolidColorMaterial("MixedExposureTranslucent", { .3F, .4F, .9F, .5F },
       data::MaterialDomain::kAlphaBlended));
-  cone_node_.GetRenderable().SetMaterialOverride(0, 0,
+  cone_node_.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+    oxygen::data::SubmeshIndex { 0 },
     MakeSolidColorMaterial("MixedExposureMasked", { .9F, .4F, .4F, .8F },
       data::MaterialDomain::kMasked));
 }
@@ -327,7 +331,7 @@ auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
     auto quad = data::MakeQuadMeshAsset(1.5F, 2.0F);
     CHECK_F(quad.has_value());
     auto mesh
-      = data::MeshBuilder(0, "Atmosphere proof card")
+      = data::MeshBuilder(oxygen::data::LodIndex {}, "Atmosphere proof card")
           .WithVertices(quad->first)
           .WithIndices(quad->second)
           .BeginSubMesh("card",
@@ -381,7 +385,8 @@ auto SceneBootstrapper::ApplyAtmosphereProof(const std::uint64_t frame) -> void
       forward ? data::MaterialDomain::kAlphaBlended
               : data::MaterialDomain::kOpaque,
       true);
-    node.GetRenderable().SetMaterialOverride(0U, 0U, std::move(material));
+    node.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0U },
+      oxygen::data::SubmeshIndex { 0U }, std::move(material));
     SetShadowParticipation(node, false, false);
   }
   atmosphere_proof_phase_ = phase;
@@ -437,7 +442,7 @@ auto SceneBootstrapper::EnsureSphere(scene::Scene& scene) -> void
   using data::pak::geometry::MeshViewDesc;
 
   auto mesh
-    = MeshBuilder(0, "Sphere")
+    = MeshBuilder(oxygen::data::LodIndex {}, "Sphere")
         .WithVertices(sphere_geom_data->first)
         .WithIndices(sphere_geom_data->second)
         .BeginSubMesh("full", material)
@@ -499,7 +504,7 @@ auto SceneBootstrapper::EnsureCube(scene::Scene& scene) -> void
   using data::pak::geometry::MeshViewDesc;
 
   auto mesh
-    = MeshBuilder(0, "Cube")
+    = MeshBuilder(oxygen::data::LodIndex {}, "Cube")
         .WithVertices(cube_geom_data->first)
         .WithIndices(cube_geom_data->second)
         .BeginSubMesh("full", material)
@@ -560,7 +565,7 @@ auto SceneBootstrapper::EnsureCylinder(scene::Scene& scene) -> void
   using data::pak::geometry::GeometryAssetDesc;
   using data::pak::geometry::MeshViewDesc;
 
-  auto mesh = MeshBuilder(0, "Cylinder")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "Cylinder")
                 .WithVertices(cyl_data->first)
                 .WithIndices(cyl_data->second)
                 .BeginSubMesh("full", material)
@@ -630,7 +635,7 @@ auto SceneBootstrapper::EnsureCone(scene::Scene& scene) -> void
   using data::pak::geometry::MeshViewDesc;
 
   auto mesh
-    = MeshBuilder(0, "Cone")
+    = MeshBuilder(oxygen::data::LodIndex {}, "Cone")
         .WithVertices(cone_data->first)
         .WithIndices(cone_data->second)
         .BeginSubMesh("full", material)
@@ -697,7 +702,7 @@ auto SceneBootstrapper::EnsureGroundPlane(scene::Scene& scene) -> void
   using data::pak::geometry::MeshViewDesc;
 
   auto mesh
-    = MeshBuilder(0, "Ground")
+    = MeshBuilder(oxygen::data::LodIndex {}, "Ground")
         .WithVertices(cube_geom_data->first)
         .WithIndices(cube_geom_data->second)
         .BeginSubMesh("full", material)

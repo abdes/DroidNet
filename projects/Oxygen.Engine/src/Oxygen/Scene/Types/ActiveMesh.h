@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <memory>
 
+#include <Oxygen/Data/GeometryIndices.h>
+
 namespace oxygen::data {
 class Mesh;
 } // namespace oxygen::data
@@ -35,7 +37,7 @@ namespace oxygen::scene {
 */
 struct ActiveMesh {
   std::shared_ptr<const data::Mesh> mesh; //!< Selected LOD mesh
-  std::size_t lod { 0 }; //!< LOD index within asset
+  data::LodIndex lod; //!< LOD index within asset
 };
 
 } // namespace oxygen::scene

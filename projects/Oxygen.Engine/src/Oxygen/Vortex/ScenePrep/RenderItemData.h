@@ -10,6 +10,7 @@
 
 #include <glm/vec4.hpp>
 
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/ScenePrep/GeometryRef.h>
 #include <Oxygen/Vortex/ScenePrep/Handles.h>
@@ -18,7 +19,7 @@
 namespace oxygen::vortex::sceneprep {
 
 struct RenderItemData {
-  std::uint32_t submesh_index = 0;
+  data::SubmeshIndex submesh_index;
 
   // Source scene-node identity retained for the frame so downstream VSM
   // invalidation/history publication can map rendered primitives back to scene

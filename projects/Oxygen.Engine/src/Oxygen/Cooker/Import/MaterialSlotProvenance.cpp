@@ -92,8 +92,10 @@ namespace {
       };
       for (const auto& binding : slot_json.at("bindings")) {
         slot.bindings.push_back(data::MaterialSlotBinding {
-          .lod_index = binding.at("lod_index").get<uint32_t>(),
-          .submesh_index = binding.at("submesh_index").get<uint32_t>(),
+          .lod_index
+          = data::LodIndex { binding.at("lod_index").get<uint32_t>() },
+          .submesh_index
+          = data::SubmeshIndex { binding.at("submesh_index").get<uint32_t>() },
           .default_material_key = data::AssetKey::FromString(
             binding.at("default_material_key").get<std::string>())
             .value(),
@@ -118,8 +120,8 @@ namespace {
       auto bindings = json::array();
       for (const auto& binding : slot.bindings) {
         bindings.push_back({
-          { "lod_index", binding.lod_index },
-          { "submesh_index", binding.submesh_index },
+          { "lod_index", binding.lod_index.get() },
+          { "submesh_index", binding.submesh_index.get() },
           {
             "default_material_key",
             to_string(binding.default_material_key),

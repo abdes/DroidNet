@@ -79,7 +79,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, ConstructAndAccess)
   auto material = MakeMaterial();
 
   // Act
-  auto mesh = MeshBuilder(0, "test_mesh")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "test_mesh")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("test_submesh", material)
@@ -119,7 +119,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, MultipleMeshViews)
   auto material = MakeMaterial();
 
   // Act
-  auto mesh = MeshBuilder(0, "mv_mesh")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "mv_mesh")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("multi_view_submesh", material)
@@ -191,7 +191,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, MultipleMeshViews_AggregatedCorrectly)
   auto material = MakeMaterial();
 
   // Act
-  auto mesh = MeshBuilder(0, "agg_mesh")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "agg_mesh")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("agg", material)
@@ -254,7 +254,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsUsed)
   };
 
   // Act
-  auto mesh = MeshBuilder(0, "desc_bounds")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "desc_bounds")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("sm", material)
@@ -317,7 +317,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsMatchExpected)
   };
 
   // Act
-  auto mesh = MeshBuilder(0, "comp_bounds")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "comp_bounds")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("sm", material)
@@ -370,7 +370,7 @@ NOLINT_TEST_F(
   std::vector<std::uint32_t> indices = { 0, 1, 2 };
   auto material = MakeMaterial();
 
-  auto mesh = MeshBuilder(0, "procedural_submesh")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "procedural_submesh")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("sm", material)
@@ -395,7 +395,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, EmptyMeshViews_Throws)
   std::vector<Vertex> vertices(1);
   std::vector<std::uint32_t> indices { 0 };
   auto material = MakeMaterial();
-  MeshBuilder builder(0, "empty_views");
+  MeshBuilder builder(oxygen::data::LodIndex {}, "empty_views");
   builder.WithVertices(vertices).WithIndices(indices);
 
   // Act
@@ -413,7 +413,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, NullMaterial_Throws)
   // Arrange
   std::vector<Vertex> vertices(2);
   std::vector<std::uint32_t> indices { 0, 1 };
-  MeshBuilder builder(0, "null_mat");
+  MeshBuilder builder(oxygen::data::LodIndex {}, "null_mat");
   builder.WithVertices(vertices).WithIndices(indices);
 
   // Act
@@ -434,7 +434,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, Move)
   auto material = MakeMaterial();
 
   // Act
-  auto mesh = MeshBuilder(0, "movable")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "movable")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("movable_submesh", material)
@@ -463,7 +463,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, EmptyName)
   auto material = MakeMaterial();
 
   // Act
-  auto mesh = MeshBuilder(0, "empty_name_mesh")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "empty_name_mesh")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("", material)
@@ -492,7 +492,7 @@ NOLINT_TEST_F(SubMeshBuilderFixture, LongName)
   auto material = MakeMaterial();
 
   // Act
-  auto mesh = MeshBuilder(0, "long_name_mesh")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "long_name_mesh")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh(long_name, material)

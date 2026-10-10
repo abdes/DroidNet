@@ -95,7 +95,7 @@ NOLINT_TEST_F(
   CanonicalShadowRequestTest, RelevantCasterSetIsIndependentOfSelectionOrder)
 {
   auto second = *dependencies[0].record;
-  second.submesh = 1;
+  second.submesh = oxygen::data::SubmeshIndex { 1U };
   auto dependency = dependencies[0];
   dependency.record
     = pool.Intern(second, dependencies[0].fingerprint); // forced collision
@@ -139,10 +139,10 @@ NOLINT_TEST_F(
   CanonicalShadowRequestTest, GeometryLodAndRasterChangesInvalidateContent)
 {
   const auto original = Request();
-  sources[0].lod_index = 1;
+  sources[0].lod_index = oxygen::data::LodIndex { 1U };
   pool.Build(scene, dependencies);
   EXPECT_NE(original.content, Request().content);
-  sources[0].lod_index = 0;
+  sources[0].lod_index = oxygen::data::LodIndex {};
   sources[0].draw.flags.Set(PassMaskBit::kDoubleSided);
   pool.Build(scene, dependencies);
   EXPECT_NE(original.content, Request().content);

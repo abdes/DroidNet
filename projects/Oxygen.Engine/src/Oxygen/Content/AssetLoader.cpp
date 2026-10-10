@@ -2480,7 +2480,8 @@ auto AssetLoader::BindGeometryRuntimePointers(data::GeometryAsset& asset,
           asset.GetAssetKey()));
       }
 
-      mesh.SetSubMeshMaterial(i, mat_it->second);
+      mesh.SetSubMeshMaterial(
+        data::SubmeshIndex { static_cast<std::uint32_t>(i) }, mat_it->second);
     }
   }
 }

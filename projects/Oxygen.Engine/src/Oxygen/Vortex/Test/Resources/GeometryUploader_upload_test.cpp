@@ -29,7 +29,7 @@ NOLINT_TEST_F(
   const auto asset_key = MakeGeometryAssetKey("upload_first_use_schedules");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
   (void)uploader.GetOrAllocate(geometry);
@@ -58,7 +58,7 @@ NOLINT_TEST_F(
   const auto mesh_indexed = MakeValidTriangleMesh("Indexed", true);
   const oxygen::vortex::sceneprep::GeometryRef geometry_indexed {
     .asset_key = asset_key_a,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh_indexed,
   };
 
@@ -78,7 +78,7 @@ NOLINT_TEST_F(
   const auto mesh_non_indexed = MakeValidTriangleMesh("NonIndexed", false);
   const oxygen::vortex::sceneprep::GeometryRef geometry_non_indexed {
     .asset_key = asset_key_b,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh_non_indexed,
   };
 

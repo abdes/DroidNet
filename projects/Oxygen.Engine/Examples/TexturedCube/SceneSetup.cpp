@@ -17,6 +17,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Scene/Light/PointLight.h>
@@ -111,7 +112,7 @@ auto BuildSphereGeometry(
   std::vector<d::Vertex> vertices = sphere_data->first;
 
   auto mesh
-    = d::MeshBuilder(0, "SphereLOD0")
+    = d::MeshBuilder(oxygen::data::LodIndex {}, "SphereLOD0")
         .WithVertices(vertices)
         .WithIndices(sphere_data->second)
         .BeginSubMesh("full", material)
@@ -157,7 +158,7 @@ auto BuildCubeGeometry(
   std::vector<d::Vertex> vertices = cube_data->first;
 
   auto mesh
-    = d::MeshBuilder(0, "CubeLOD0")
+    = d::MeshBuilder(oxygen::data::LodIndex {}, "CubeLOD0")
         .WithVertices(vertices)
         .WithIndices(cube_data->second)
         .BeginSubMesh("full", material)
@@ -254,7 +255,9 @@ auto SceneSetup::UpdateSphere(const ObjectTextureState& sphere_texture,
     }
 
     if (!sphere_material_ || sphere_material_.get() != custom_material.get()) {
-      sphere_node_.GetRenderable().SetMaterialOverride(0, 0, custom_material);
+      sphere_node_.GetRenderable().SetMaterialOverride(
+        oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
+        custom_material);
     }
     sphere_material_ = std::move(custom_material);
     return;
@@ -294,7 +297,9 @@ auto SceneSetup::UpdateSphere(const ObjectTextureState& sphere_texture,
   // Update material using per-submesh override (LOD 0, submesh 0)
   if (!sphere_material_
     || sphere_material_.get() != new_sphere_material.get()) {
-    sphere_node_.GetRenderable().SetMaterialOverride(0, 0, new_sphere_material);
+    sphere_node_.GetRenderable().SetMaterialOverride(
+      oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
+      new_sphere_material);
   }
 
   sphere_material_ = std::move(new_sphere_material);
@@ -315,7 +320,9 @@ auto SceneSetup::UpdateCube(const ObjectTextureState& cube_texture,
     }
 
     if (!cube_material_ || cube_material_.get() != custom_material.get()) {
-      cube_node_.GetRenderable().SetMaterialOverride(0, 0, custom_material);
+      cube_node_.GetRenderable().SetMaterialOverride(
+        oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
+        custom_material);
     }
     cube_material_ = std::move(custom_material);
     return;
@@ -351,7 +358,8 @@ auto SceneSetup::UpdateCube(const ObjectTextureState& cube_texture,
   }
 
   if (!cube_material_ || cube_material_.get() != new_cube_material.get()) {
-    cube_node_.GetRenderable().SetMaterialOverride(0, 0, new_cube_material);
+    cube_node_.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+      oxygen::data::SubmeshIndex { 0 }, new_cube_material);
   }
 
   cube_material_ = std::move(new_cube_material);

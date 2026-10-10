@@ -132,8 +132,8 @@ auto MaterialInventory(const oxygen::data::GeometryAsset& geometry) -> json
     auto bindings = json::array();
     for (const auto& binding : slot.bindings) {
       bindings.push_back({
-        { "lod_index", binding.lod_index },
-        { "submesh_index", binding.submesh_index },
+        { "lod_index", binding.lod_index.get() },
+        { "submesh_index", binding.submesh_index.get() },
         { "default_material_key", to_string(binding.default_material_key) },
       });
     }

@@ -18,6 +18,7 @@
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/Vertex.h>
@@ -239,8 +240,8 @@ namespace {
       data::AssetKey::FromVirtualPath("/Test/PointPcf/Box.ogeo"), desc,
       std::vector<std::shared_ptr<data::Mesh>> { mesh }));
     // Exercise ordinary one-sided winding as well as the cube orientation.
-    mesh_node.GetRenderable().SetMaterialOverride(
-      0, 0, data::MaterialAsset::CreateDefault());
+    mesh_node.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+      oxygen::data::SubmeshIndex { 0 }, data::MaterialAsset::CreateDefault());
     auto records = std::vector<CubeLocalShadowRecord> {};
     std::vector<ShadowContentLease> retained_maps;
     probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
@@ -604,8 +605,8 @@ namespace {
     auto blocker = scene->CreateNode("Contact blocker");
     blocker.GetRenderable().SetGeometry(
       mesh_node.GetRenderable().GetGeometry());
-    blocker.GetRenderable().SetMaterialOverride(
-      0, 0, MakeEmissiveMaterial(0.0F));
+    blocker.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+      oxygen::data::SubmeshIndex { 0 }, MakeEmissiveMaterial(0.0F));
     ASSERT_TRUE(blocker.GetTransform().SetLocalScale({ 0.05F, 0.05F, 0.05F }));
     ASSERT_TRUE(
       blocker.GetTransform().SetLocalPosition({ 0.09F, 0.0F, -0.8606F }));
@@ -681,8 +682,8 @@ namespace {
     auto blocker = scene->CreateNode("Offscreen shadow caster");
     blocker.GetRenderable().SetGeometry(
       mesh_node.GetRenderable().GetGeometry());
-    blocker.GetRenderable().SetMaterialOverride(
-      0, 0, MakeEmissiveMaterial(0.0F));
+    blocker.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+      oxygen::data::SubmeshIndex { 0 }, MakeEmissiveMaterial(0.0F));
     ASSERT_TRUE(blocker.GetTransform().SetLocalScale({ 0.2F, 0.2F, 0.2F }));
     ASSERT_TRUE(blocker.GetTransform().SetLocalPosition({ 1.0F, 0.0F, -0.3F }));
     mesh_node.GetFlags()->get().SetLocalValue(

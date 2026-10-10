@@ -12,6 +12,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Scene/Scene.h>
@@ -99,8 +100,8 @@ namespace {
   }
 
   auto BuildMaterialMotionState(const scene::NodeHandle node_handle,
-    const data::GeometryAsset& geometry, const std::uint32_t lod_index,
-    const std::uint32_t submesh_index,
+    const data::GeometryAsset& geometry, const data::LodIndex lod,
+    const data::SubmeshIndex submesh,
     const std::shared_ptr<const data::MaterialAsset>& material)
     -> PublishedRuntimeMaterialMotionState
   {
@@ -108,8 +109,8 @@ namespace {
       .key = RuntimeMaterialMotionKey {
         .node_handle = node_handle,
         .geometry_asset_key = geometry.GetAssetKey(),
-        .lod_index = lod_index,
-        .submesh_index = submesh_index,
+        .lod_index = lod,
+        .submesh_index = submesh,
       },
     };
 
@@ -270,7 +271,8 @@ auto RuntimeMotionProducerModule::PublishSnapshotForScene(
     const auto lod_count = geometry->LodCount();
     for (std::uint32_t lod_index = 0U;
       lod_index < static_cast<std::uint32_t>(lod_count); ++lod_index) {
-      const auto& mesh = geometry->MeshAt(lod_index);
+      const auto lod = data::LodIndex { lod_index };
+      const auto& mesh = geometry->MeshAt(lod);
       if (!mesh) {
         continue;
       }
@@ -307,10 +309,10 @@ auto RuntimeMotionProducerModule::PublishSnapshotForScene(
         // deformation runtime payload here once the engine exposes it. Phase 3
         // closure is scoped to current engine features, so only the existing
         // material-motion families are frozen today.
-        const auto material
-          = renderable.ResolveSubmeshMaterial(lod_index, submesh_index);
+        const auto submesh = data::SubmeshIndex { submesh_index };
+        const auto material = renderable.ResolveSubmeshMaterial(lod, submesh);
         auto state = BuildMaterialMotionState(
-          node.GetHandle(), *geometry, lod_index, submesh_index, material);
+          node.GetHandle(), *geometry, lod, submesh, material);
         if (const auto input = FindMaterialMotionInput(
               observer_ptr<const scene::Scene> { &scene }, state.key);
           input.has_value()) {

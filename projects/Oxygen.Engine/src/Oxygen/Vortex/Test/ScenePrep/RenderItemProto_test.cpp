@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Testing/GTest.h>
@@ -87,9 +88,9 @@ NOLINT_TEST(RenderItemProtoTest, VisibleSubmeshes_Roundtrip)
   const NodeWithRenderable node("WithRenderable");
   RenderItemProto proto(node);
   const std::vector visible {
-    2U,
-    5U,
-    7U,
+    oxygen::data::SubmeshIndex { 2U },
+    oxygen::data::SubmeshIndex { 5U },
+    oxygen::data::SubmeshIndex { 7U },
   };
 
   // Act
@@ -115,14 +116,15 @@ NOLINT_TEST(RenderItemProtoTest, ResolvedMeshIndex_DefaultAndUpdated)
   RenderItemProto proto(node);
 
   // Assert default
-  EXPECT_EQ(proto.ResolvedMeshIndex(), 0U);
+  EXPECT_EQ(proto.ResolvedMeshIndex(), oxygen::data::LodIndex { 0U });
   EXPECT_FALSE(static_cast<bool>(proto.ResolvedMesh()));
 
   // Act: set a new lod with a null mesh pointer (allowed for proto state)
-  proto.ResolveMesh(std::shared_ptr<const oxygen::data::Mesh> {}, 3U);
+  proto.ResolveMesh(std::shared_ptr<const oxygen::data::Mesh> {},
+    oxygen::data::LodIndex { 3U });
 
   // Assert updated
-  EXPECT_EQ(proto.ResolvedMeshIndex(), 3U);
+  EXPECT_EQ(proto.ResolvedMeshIndex(), oxygen::data::LodIndex { 3U });
   EXPECT_FALSE(static_cast<bool>(proto.ResolvedMesh()));
 }
 

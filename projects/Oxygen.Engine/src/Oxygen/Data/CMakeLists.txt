@@ -59,6 +59,7 @@ set(
   "BuiltinGeometry.h"
   "ComponentType.h"
   "GeometryAsset.h"
+  "GeometryIndices.h"
   "HalfFloat.h"
   "InputActionAsset.h"
   "InputMappingContextAsset.h"

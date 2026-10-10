@@ -15,6 +15,7 @@
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::vortex {
@@ -33,7 +34,7 @@ struct ViewPickHit {
   //! Device depth of the node's nearest pixel in the rectangle.
   float depth { 0.0F };
   //! Geometry slot (submesh) of that pixel.
-  std::uint32_t submesh_index { 0U };
+  data::SubmeshIndex submesh_index;
   //! Distance, in pixels, from the rectangle centre to the node's closest
   //! pixel.
   float center_distance { 0.0F };

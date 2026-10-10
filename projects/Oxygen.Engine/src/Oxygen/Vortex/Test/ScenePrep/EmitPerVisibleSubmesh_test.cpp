@@ -13,6 +13,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -308,10 +309,9 @@ NOLINT_TEST_F(EmitPerVisibleSubmeshTest,
     auto item = RenderItemProto(child_impl->get());
     oxygen::vortex::sceneprep::ExtractionPreFilter(Context(), State(), item);
     ASSERT_FALSE(item.IsDropped());
-    item.ResolveMesh(geometry->MeshAt(0U), 0U);
-    item.SetVisibleSubmeshes({
-      0U,
-    });
+    item.ResolveMesh(
+      geometry->MeshAt(oxygen::data::LodIndex {}), oxygen::data::LodIndex {});
+    item.SetVisibleSubmeshes({ oxygen::data::SubmeshIndex {} });
     const auto before = State().CollectedCount();
     EmitPerVisibleSubmesh(Context(), State(), item);
     ASSERT_EQ(State().CollectedCount(), before + 1U);

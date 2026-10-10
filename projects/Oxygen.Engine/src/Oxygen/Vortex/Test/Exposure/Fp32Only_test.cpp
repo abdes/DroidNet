@@ -11,6 +11,7 @@
 #include <Oxygen/Console/Command.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
@@ -386,8 +387,9 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 4));
   EXPECT_TRUE(history_reprojected);
 
-  mesh_node.GetRenderable().SetMaterialOverride(
-    0, 0, MakeEmissiveMaterial(std::numeric_limits<float>::infinity()));
+  mesh_node.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+    oxygen::data::SubmeshIndex { 0 },
+    MakeEmissiveMaterial(std::numeric_limits<float>::infinity()));
   ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 4));
   const auto failed = Read<ExposureStatusStorage>(
     *probe->exposure->current_state->status_buffer,
@@ -396,8 +398,8 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   const auto held = Read<ExposureStateData>(
     *probe->exposure->current_state->buffer, ResourceStates::kShaderResource);
   EXPECT_EQ(held.flags & 12U, 0U);
-  mesh_node.GetRenderable().SetMaterialOverride(
-    0, 0, MakeEmissiveMaterial(.25F));
+  mesh_node.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+    oxygen::data::SubmeshIndex { 0 }, MakeEmissiveMaterial(.25F));
   ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 5));
   const auto recovered = Read<ExposureStatusStorage>(
     *probe->exposure->current_state->status_buffer,

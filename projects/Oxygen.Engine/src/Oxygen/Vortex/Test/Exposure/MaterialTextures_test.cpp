@@ -33,6 +33,7 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
@@ -463,7 +464,9 @@ NOLINT_TEST_F(
               data::AssetKey::FromVirtualPath(
                 "/Test/Exposure/Domain" + std::to_string(case_count) + ".omat"),
               material_desc, std::vector<data::ShaderReference> {}, keys);
-            mesh_node.GetRenderable().SetMaterialOverride(0, 0, material);
+            mesh_node.GetRenderable().SetMaterialOverride(
+              oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
+              material);
             settings.manual_ev = ev;
             post.SetExposureSettings(settings);
             scene->Update();

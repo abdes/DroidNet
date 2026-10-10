@@ -178,7 +178,8 @@ auto GeometryUploaderTest::MakeValidTriangleMesh(std::string_view name,
     2U,
   };
 
-  auto builder = data::MeshBuilder(0, name).WithVertices(vertices);
+  auto builder
+    = data::MeshBuilder(oxygen::data::LodIndex {}, name).WithVertices(vertices);
   if (indexed) {
     builder.WithIndices(indices);
   }
@@ -242,8 +243,9 @@ auto GeometryUploaderTest::MakeInvalidMesh_NonFiniteVertex(
     2U,
   };
 
-  auto builder
-    = data::MeshBuilder(0, name).WithVertices(vertices).WithIndices(indices);
+  auto builder = data::MeshBuilder(oxygen::data::LodIndex {}, name)
+                   .WithVertices(vertices)
+                   .WithIndices(indices);
 
   data::pak::geometry::MeshViewDesc view_desc {
     .first_index = 0,

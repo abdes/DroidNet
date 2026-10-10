@@ -84,7 +84,7 @@ NOLINT_TEST(ViewPickPassTest, EmptyImageCompletesWithoutHits)
 {
   const auto image = PickImage(3U, 3U);
   const auto sources = std::vector<DrawSource> {
-    { .node = NodeHandle(1U), .submesh_index = 0U },
+    { .node = NodeHandle(1U), .submesh_index = oxygen::data::SubmeshIndex {} },
   };
 
   const auto result = ViewPickPass::ResolveHits(image.View(), sources,
@@ -102,8 +102,8 @@ NOLINT_TEST(ViewPickPassTest, HitsOrderByCentreDistanceThenDepth)
   image.Set(2U, 2U, 0U, 0.2F);
   image.Set(0U, 0U, 1U, 0.9F);
   const auto sources = std::vector<DrawSource> {
-    { .node = NodeHandle(1U), .submesh_index = 0U },
-    { .node = NodeHandle(2U), .submesh_index = 0U },
+    { .node = NodeHandle(1U), .submesh_index = oxygen::data::SubmeshIndex {} },
+    { .node = NodeHandle(2U), .submesh_index = oxygen::data::SubmeshIndex {} },
   };
 
   const auto result = ViewPickPass::ResolveHits(image.View(), sources,
@@ -122,8 +122,8 @@ NOLINT_TEST(ViewPickPassTest, EqualDistanceHitsPreferTheNearerSurface)
   image.Set(0U, 0U, 0U, 0.3F);
   image.Set(2U, 0U, 1U, 0.6F);
   const auto sources = std::vector<DrawSource> {
-    { .node = NodeHandle(1U), .submesh_index = 0U },
-    { .node = NodeHandle(2U), .submesh_index = 0U },
+    { .node = NodeHandle(1U), .submesh_index = oxygen::data::SubmeshIndex {} },
+    { .node = NodeHandle(2U), .submesh_index = oxygen::data::SubmeshIndex {} },
   };
 
   const auto result = ViewPickPass::ResolveHits(image.View(), sources,
@@ -141,15 +141,17 @@ NOLINT_TEST(ViewPickPassTest, NodeDrawsMergeIntoOneHitWithClosestSlot)
   image.Set(1U, 1U, 0U, 0.4F);
   image.Set(0U, 0U, 1U, 0.8F);
   const auto sources = std::vector<DrawSource> {
-    { .node = NodeHandle(7U), .submesh_index = 3U },
-    { .node = NodeHandle(7U), .submesh_index = 5U },
+    { .node = NodeHandle(7U),
+      .submesh_index = oxygen::data::SubmeshIndex { 3U } },
+    { .node = NodeHandle(7U),
+      .submesh_index = oxygen::data::SubmeshIndex { 5U } },
   };
 
   const auto result = ViewPickPass::ResolveHits(image.View(), sources,
     Geometry({ .x = 0U, .y = 0U, .width = 3U, .height = 3U }));
 
   ASSERT_EQ(result.hits.size(), 1U);
-  EXPECT_EQ(result.hits[0].submesh_index, 3U);
+  EXPECT_EQ(result.hits[0].submesh_index, oxygen::data::SubmeshIndex { 3U });
   EXPECT_FLOAT_EQ(result.hits[0].depth, 0.8F);
 }
 
@@ -159,7 +161,7 @@ NOLINT_TEST(ViewPickPassTest, UnknownDrawIndicesAndRowPaddingAreIgnored)
   image.Set(1U, 1U, 0U, 0.5F);
   image.Set(0U, 1U, 42U, 0.9F);
   const auto sources = std::vector<DrawSource> {
-    { .node = NodeHandle(3U), .submesh_index = 0U },
+    { .node = NodeHandle(3U), .submesh_index = oxygen::data::SubmeshIndex {} },
   };
 
   const auto result = ViewPickPass::ResolveHits(image.View(), sources,
@@ -176,7 +178,7 @@ NOLINT_TEST(ViewPickPassTest, WorldPositionUnprojectsTheFirstHitPixel)
   auto image = PickImage(1U, 1U);
   image.Set(0U, 0U, 0U, 0.25F);
   const auto sources = std::vector<DrawSource> {
-    { .node = NodeHandle(1U), .submesh_index = 0U },
+    { .node = NodeHandle(1U), .submesh_index = oxygen::data::SubmeshIndex {} },
   };
 
   const auto result = ViewPickPass::ResolveHits(image.View(), sources,

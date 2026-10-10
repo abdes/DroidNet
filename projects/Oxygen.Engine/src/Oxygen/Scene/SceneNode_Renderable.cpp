@@ -17,6 +17,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -326,10 +327,10 @@ auto SceneNode::Renderable::GetActiveMesh() const noexcept
 }
 
 auto SceneNode::Renderable::GetActiveLodIndex() const noexcept
-  -> std::optional<std::size_t>
+  -> std::optional<data::LodIndex>
 {
   return SafeCall(RequiresRenderable(),
-    [&](const SafeCallState& state) noexcept -> std::optional<std::size_t> {
+    [&](const SafeCallState& state) noexcept -> std::optional<data::LodIndex> {
       return state.renderable->GetActiveLodIndex();
     });
 }
@@ -359,31 +360,31 @@ auto SceneNode::Renderable::OnWorldTransformUpdated(const Mat4& world) -> void
 }
 
 auto SceneNode::Renderable::GetWorldSubMeshBoundingBox(
-  const std::size_t submesh_index) const noexcept
+  const data::SubmeshIndex submesh) const noexcept
   -> std::optional<std::pair<Vec3, Vec3>>
 {
   return SafeCall(RequiresRenderable(),
     [&](const SafeCallState& state) noexcept
       -> std::optional<std::pair<Vec3, Vec3>> {
-      return state.renderable->GetWorldSubMeshBoundingBox(submesh_index);
+      return state.renderable->GetWorldSubMeshBoundingBox(submesh);
     });
 }
 
-auto SceneNode::Renderable::IsSubmeshVisible(
-  const std::size_t lod, const std::size_t submesh_index) const noexcept -> bool
+auto SceneNode::Renderable::IsSubmeshVisible(const data::LodIndex lod,
+  const data::SubmeshIndex submesh) const noexcept -> bool
 {
   return SafeCall(
     RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
-      return state.renderable->IsSubmeshVisible(lod, submesh_index);
+      return state.renderable->IsSubmeshVisible(lod, submesh);
     });
 }
 
-auto SceneNode::Renderable::SetSubmeshVisible(const std::size_t lod,
-  const std::size_t submesh_index, const bool visible) noexcept -> void
+auto SceneNode::Renderable::SetSubmeshVisible(const data::LodIndex lod,
+  const data::SubmeshIndex submesh, const bool visible) noexcept -> void
 {
   SafeCall(
     RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
-      state.renderable->SetSubmeshVisible(lod, submesh_index, visible);
+      state.renderable->SetSubmeshVisible(lod, submesh, visible);
     });
 }
 
@@ -411,31 +412,30 @@ auto SceneNode::Renderable::ClearMaterialOverride(
   return SetMaterialOverride(slot, nullptr);
 }
 
-auto SceneNode::Renderable::SetMaterialOverride(const std::size_t lod,
-  const std::size_t submesh_index, MaterialAssetPtr material) noexcept -> void
+auto SceneNode::Renderable::SetMaterialOverride(const data::LodIndex lod,
+  const data::SubmeshIndex submesh, MaterialAssetPtr material) noexcept -> void
 {
   SafeCall(
     RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
-      state.renderable->SetMaterialOverride(
-        lod, submesh_index, std::move(material));
+      state.renderable->SetMaterialOverride(lod, submesh, std::move(material));
     });
 }
 
 auto SceneNode::Renderable::ClearMaterialOverride(
-  const std::size_t lod, const std::size_t submesh_index) noexcept -> void
+  const data::LodIndex lod, const data::SubmeshIndex submesh) noexcept -> void
 {
   SafeCall(
     RequiresRenderable(), [&](const SafeCallState& state) noexcept -> void {
-      state.renderable->ClearMaterialOverride(lod, submesh_index);
+      state.renderable->ClearMaterialOverride(lod, submesh);
     });
 }
 
-auto SceneNode::Renderable::ResolveSubmeshMaterial(const std::size_t lod,
-  const std::size_t submesh_index) const noexcept -> MaterialAssetPtr
+auto SceneNode::Renderable::ResolveSubmeshMaterial(const data::LodIndex lod,
+  const data::SubmeshIndex submesh) const noexcept -> MaterialAssetPtr
 {
   return SafeCall(RequiresRenderable(),
     [&](const SafeCallState& state) noexcept
       -> std::shared_ptr<const data::MaterialAsset> {
-      return state.renderable->ResolveSubmeshMaterial(lod, submesh_index);
+      return state.renderable->ResolveSubmeshMaterial(lod, submesh);
     });
 }

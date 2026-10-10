@@ -31,7 +31,7 @@ NOLINT_TEST_F(GeometryUploaderRetireTest, RetireKeepsTicketsWhileIncomplete)
   const auto asset_key = MakeGeometryAssetKey("retire_keeps_incomplete");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
   (void)geo_uploader.GetOrAllocate(geometry);
@@ -63,7 +63,7 @@ NOLINT_TEST_F(GeometryUploaderRetireTest, RetireRemovesTicketsWhenComplete)
   const auto asset_key = MakeGeometryAssetKey("retire_removes_complete");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
   (void)geo_uploader.GetOrAllocate(geometry);
@@ -94,7 +94,7 @@ NOLINT_TEST_F(
   const auto asset_key = MakeGeometryAssetKey("delayed_consumer");
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = asset_key,
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = mesh,
   };
   const auto handle = geo_uploader.GetOrAllocate(geometry);
@@ -121,7 +121,7 @@ NOLINT_TEST_F(GeometryUploaderRetireTest, RecycledSlotPublishesCompletedBuffers)
   auto& geometry_uploader = GeoUploader();
   const oxygen::vortex::sceneprep::GeometryRef geometry {
     .asset_key = MakeGeometryAssetKey("completion_at_slot_reuse"),
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = MakeValidTriangleMesh("Recycled slot", true),
   };
   const auto handle = geometry_uploader.GetOrAllocate(geometry);
@@ -153,7 +153,7 @@ NOLINT_TEST_F(GeometryUploaderBudgetTest, CompletionBudgetCountsUnreadyVisits)
   auto& geometry = GeoUploader();
   for (const auto* name : { "waiting", "canceled" }) {
     (void)geometry.GetOrAllocate({ .asset_key = MakeGeometryAssetKey(name),
-      .lod_index = 0U,
+      .lod_index = oxygen::data::LodIndex {},
       .mesh = MakeValidTriangleMesh(name, false) });
   }
   geometry.EnsureFrameResources();
@@ -176,7 +176,7 @@ NOLINT_TEST_F(GeometryUploaderBudgetTest, StaleWorkCannotClearReplacementTicket)
   auto& geometry = GeoUploader();
   auto reference = oxygen::vortex::sceneprep::GeometryRef {
     .asset_key = MakeGeometryAssetKey("budgeted replacement"),
-    .lod_index = 0U,
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = MakeValidTriangleMesh("Old", false),
   };
   const auto handle = geometry.GetOrAllocate(reference);

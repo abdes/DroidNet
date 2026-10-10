@@ -1208,7 +1208,7 @@ namespace oxygen::interop::module {
           picked.hits.push_back(EditorPickHit {
             .node = icon.id,
             .depth = icon.depth,
-            .geometry_slot = 0U,
+            .geometry_slot = {},
             .center_distance = icon.center_distance,
           });
         }

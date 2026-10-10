@@ -10,6 +10,7 @@
 #include <span>
 #include <vector>
 
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -22,8 +23,8 @@ class Renderer;
 struct BasePassDrawCommand {
   std::uint32_t draw_index { 0U };
   std::uint32_t material_handle { 0U };
-  std::uint32_t geometry_lod_index { 0U };
-  std::uint32_t submesh_index { 0U };
+  data::LodIndex geometry_lod_index;
+  data::SubmeshIndex submesh_index;
   std::uint32_t index_count { 0U };
   std::uint32_t vertex_count { 0U };
   std::uint32_t instance_count { 0U };

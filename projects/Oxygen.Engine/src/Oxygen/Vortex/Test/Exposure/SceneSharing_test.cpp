@@ -10,6 +10,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
@@ -96,8 +97,10 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   const auto ordinary = MakeEmissiveMaterial(.25F);
   const auto set_pair = [&](const auto& primary_material,
                           const auto& secondary_material) -> void {
-    mesh_node.GetRenderable().SetMaterialOverride(0, 0, primary_material);
-    dim.GetRenderable().SetMaterialOverride(0, 0, secondary_material);
+    mesh_node.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+      oxygen::data::SubmeshIndex { 0 }, primary_material);
+    dim.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+      oxygen::data::SubmeshIndex { 0 }, secondary_material);
   };
   SceneTextureExtractRef current;
   probe->inspect = [&](const RenderContext& ctx,

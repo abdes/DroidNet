@@ -33,6 +33,7 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
@@ -138,7 +139,7 @@ auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   auto lod0_data = oxygen::data::MakeSphereMeshAsset(64, 64);
   CHECK_F(lod0_data.has_value());
   auto mesh0
-    = MeshBuilder(0, "SphereLOD0")
+    = MeshBuilder(oxygen::data::LodIndex {}, "SphereLOD0")
         .WithVertices(lod0_data->first)
         .WithIndices(lod0_data->second)
         .BeginSubMesh("full", glass)
@@ -155,7 +156,7 @@ auto BuildSphereLodAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   {
     auto lod1_data = oxygen::data::MakeSphereMeshAsset(24, 24);
     CHECK_F(lod1_data.has_value());
-    mesh1 = MeshBuilder(1, "SphereLOD1")
+    mesh1 = MeshBuilder(oxygen::data::LodIndex { 1U }, "SphereLOD1")
               .WithVertices(lod1_data->first)
               .WithIndices(lod1_data->second)
               .BeginSubMesh("full", glass)
@@ -242,7 +243,7 @@ auto BuildTwoSubmeshQuadAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
   const auto green = MakeSolidColorMaterial("Green", { 0.1F, 1.0F, 0.1F, 1.0F },
     oxygen::data::MaterialDomain::kOpaque, true);
 
-  auto mesh = MeshBuilder(0, "Quad2SM")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "Quad2SM")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 // Submesh 0: first triangle (opaque red)
@@ -329,7 +330,7 @@ auto BuildGroundPlaneAsset() -> std::shared_ptr<oxygen::data::GeometryAsset>
     = MakeSolidColorMaterial("GroundMat", { 0.48F, 0.50F, 0.46F, 1.0F },
       oxygen::data::MaterialDomain::kOpaque, true, { .roughness = 0.92F });
 
-  auto mesh = MeshBuilder(0, "GroundPlane")
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, "GroundPlane")
                 .WithVertices(vertices)
                 .WithIndices(indices)
                 .BeginSubMesh("surface", material)
@@ -367,7 +368,7 @@ auto BuildPrimitive(const std::string& name, MeshBuffers buffers,
 {
   using oxygen::data::pak::geometry::MeshViewDesc;
   auto mesh
-    = oxygen::data::MeshBuilder(0U, name)
+    = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, name)
         .WithVertices(buffers.first)
         .WithIndices(buffers.second)
         .BeginSubMesh("surface", material)
@@ -530,9 +531,10 @@ auto AsyncScene::Populate(scene::Scene& scene) -> void
       false, { .metalness = metalness, .roughness = roughness });
     // Apply override for submesh index 0 across all LODs so switching LOD
     // retains the material override. Use EffectiveLodCount() to iterate.
-    const auto lod_count = static_cast<std::size_t>(r.EffectiveLodCount());
-    for (std::size_t lod = 0; lod < lod_count; ++lod) {
-      r.SetMaterialOverride(lod, 0, mat);
+    const auto lod_count = static_cast<std::uint32_t>(r.EffectiveLodCount());
+    for (std::uint32_t lod = 0; lod < lod_count; ++lod) {
+      r.SetMaterialOverride(
+        oxygen::data::LodIndex { lod }, oxygen::data::SubmeshIndex {}, mat);
     }
 
     SphereState s;
@@ -716,7 +718,8 @@ auto AsyncScene::UpdateMaterials(const double elapsed_seconds) -> void
     if (vis_phase != last_vis_toggle_) {
       last_vis_toggle_ = vis_phase;
       const bool visible = (vis_phase % 2) == 0;
-      r.SetSubmeshVisible(lod, 0, visible);
+      r.SetSubmeshVisible(oxygen::data::LodIndex { lod },
+        oxygen::data::SubmeshIndex { 0 }, visible);
       LOG_F(2, "[MultiSubmesh] Submesh 0 visibility -> {}", visible);
     }
 
@@ -727,9 +730,11 @@ auto AsyncScene::UpdateMaterials(const double elapsed_seconds) -> void
       last_ovr_toggle_ = ovr_phase;
       const bool apply_override = (ovr_phase % 2) == 1;
       if (apply_override) {
-        r.SetMaterialOverride(lod, 1, blue_override_);
+        r.SetMaterialOverride(oxygen::data::LodIndex { lod },
+          oxygen::data::SubmeshIndex { 1 }, blue_override_);
       } else {
-        r.ClearMaterialOverride(lod, 1);
+        r.ClearMaterialOverride(
+          oxygen::data::LodIndex { lod }, oxygen::data::SubmeshIndex { 1 });
       }
       LOG_F(2, "[MultiSubmesh] Submesh 1 override -> {}",
         apply_override ? "blue" : "clear");

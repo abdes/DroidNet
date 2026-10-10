@@ -13,6 +13,7 @@
 
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
@@ -39,7 +40,8 @@ auto MakeGeometry(
     vertices.at(0).position = { 0.0F, 0.0F, 0.0F };
     vertices.at(1).position = { 1.0F, 0.0F, 0.0F };
     vertices.at(2).position = { 0.0F, 1.0F, 0.0F };
-    oxygen::data::MeshBuilder builder(lod, "same-name");
+    oxygen::data::MeshBuilder builder(
+      oxygen::data::LodIndex { lod }, "same-name");
     constexpr auto kIndices
       = std::array<uint32_t, kTriangleSize> { 0U, 1U, 2U };
     builder.WithVertices(std::move(vertices)).WithIndices(kIndices);
@@ -83,14 +85,23 @@ NOLINT_TEST(MaterialSlotTest, IndependentInstancesAndNonzeroSlotAcrossLods)
     = MakeGeometry(AssetKey::FromVirtualPath("/mesh.ogeo"), ids);
   first.GetRenderable().SetGeometry(geometry);
   second.GetRenderable().SetGeometry(geometry);
-  const auto original = second.GetRenderable().ResolveSubmeshMaterial(0U, 1U);
+  const auto original = second.GetRenderable().ResolveSubmeshMaterial(
+    oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 1U });
   const auto replacement = MaterialAsset::CreateDebug();
   ASSERT_TRUE(
     first.GetRenderable().SetMaterialOverride(ids.at(1), replacement));
-  EXPECT_EQ(first.GetRenderable().ResolveSubmeshMaterial(0U, 1U), replacement);
-  EXPECT_EQ(first.GetRenderable().ResolveSubmeshMaterial(1U, 1U), replacement);
-  EXPECT_EQ(first.GetRenderable().ResolveSubmeshMaterial(0U, 0U), original);
-  EXPECT_EQ(second.GetRenderable().ResolveSubmeshMaterial(0U, 1U), original);
+  EXPECT_EQ(first.GetRenderable().ResolveSubmeshMaterial(
+              oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 1U }),
+    replacement);
+  EXPECT_EQ(first.GetRenderable().ResolveSubmeshMaterial(
+              oxygen::data::LodIndex { 1U }, oxygen::data::SubmeshIndex { 1U }),
+    replacement);
+  EXPECT_EQ(first.GetRenderable().ResolveSubmeshMaterial(
+              oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U }),
+    original);
+  EXPECT_EQ(second.GetRenderable().ResolveSubmeshMaterial(
+              oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 1U }),
+    original);
   EXPECT_EQ(geometry->MaterialSlots().slots.size(), 2U);
 }
 
@@ -101,12 +112,18 @@ NOLINT_TEST(MaterialSlotTest, ClearRestoresEachLodDefault)
   const auto ids = Slots();
   node.GetRenderable().SetGeometry(
     MakeGeometry(AssetKey::FromVirtualPath("/mesh.ogeo"), ids));
-  const auto lod0 = node.GetRenderable().ResolveSubmeshMaterial(0U, 1U);
-  const auto lod1 = node.GetRenderable().ResolveSubmeshMaterial(1U, 1U);
+  const auto lod0 = node.GetRenderable().ResolveSubmeshMaterial(
+    oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 1U });
+  const auto lod1 = node.GetRenderable().ResolveSubmeshMaterial(
+    oxygen::data::LodIndex { 1U }, oxygen::data::SubmeshIndex { 1U });
   ASSERT_TRUE(node.GetRenderable().SetMaterialOverride(ids.at(1), lod1));
   ASSERT_TRUE(node.GetRenderable().ClearMaterialOverride(ids.at(1)));
-  EXPECT_EQ(node.GetRenderable().ResolveSubmeshMaterial(0U, 1U), lod0);
-  EXPECT_EQ(node.GetRenderable().ResolveSubmeshMaterial(1U, 1U), lod1);
+  EXPECT_EQ(node.GetRenderable().ResolveSubmeshMaterial(
+              oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 1U }),
+    lod0);
+  EXPECT_EQ(node.GetRenderable().ResolveSubmeshMaterial(
+              oxygen::data::LodIndex { 1U }, oxygen::data::SubmeshIndex { 1U }),
+    lod1);
 }
 
 NOLINT_TEST(MaterialSlotTest, ReorderPreservesIdentityInsteadOfOrdinal)
@@ -120,8 +137,11 @@ NOLINT_TEST(MaterialSlotTest, ReorderPreservesIdentityInsteadOfOrdinal)
   ASSERT_TRUE(node.GetRenderable().SetMaterialOverride(ids.at(1), replacement));
   const std::array reordered { ids.at(1), ids.at(0) };
   node.GetRenderable().SetGeometry(MakeGeometry(key, reordered));
-  EXPECT_EQ(node.GetRenderable().ResolveSubmeshMaterial(0U, 0U), replacement);
-  EXPECT_EQ(node.GetRenderable().ResolveSubmeshMaterial(0U, 1U),
+  EXPECT_EQ(node.GetRenderable().ResolveSubmeshMaterial(
+              oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 0U }),
+    replacement);
+  EXPECT_EQ(node.GetRenderable().ResolveSubmeshMaterial(
+              oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 1U }),
     MaterialAsset::CreateDefault());
 }
 
@@ -141,7 +161,8 @@ NOLINT_TEST(
     ids.at(1), MaterialAsset::CreateDebug()));
   node.GetRenderable().SetGeometry(
     MakeGeometry(AssetKey::FromVirtualPath("/other.ogeo"), ids));
-  EXPECT_EQ(node.GetRenderable().ResolveSubmeshMaterial(0U, 1U),
+  EXPECT_EQ(node.GetRenderable().ResolveSubmeshMaterial(
+              oxygen::data::LodIndex { 0U }, oxygen::data::SubmeshIndex { 1U }),
     MaterialAsset::CreateDefault());
 }
 

@@ -12,6 +12,7 @@
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/MaterialShadingConstants.h>
@@ -70,7 +71,7 @@ struct PreparedSceneFrame {
   //! batch only one node's instances, so every draw has exactly one source.
   struct DrawSource {
     scene::NodeHandle node {};
-    std::uint32_t submesh_index { 0U };
+    data::SubmeshIndex submesh_index;
   };
   //! One per draw metadata record, in draw order.
   std::span<const DrawSource> draw_sources;

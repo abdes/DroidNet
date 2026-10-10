@@ -121,8 +121,8 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
           auto bindings = json::array();
           for (const auto& binding : slot.bindings) {
             bindings.push_back({
-              { "lod_index", binding.lod_index },
-              { "submesh_index", binding.submesh_index },
+              { "lod_index", binding.lod_index.get() },
+              { "submesh_index", binding.submesh_index.get() },
               {
                 "default_material_key",
                 nostd::to_string(binding.default_material_key),
