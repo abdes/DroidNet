@@ -49,13 +49,13 @@ namespace data = oxygen::data;
 namespace lc = oxygen::data::loose_cooked;
 
 struct AssetSpec final {
-  data::AssetKey key {};
+  data::AssetKey key;
   data::AssetType asset_type = data::AssetType::kUnknown;
   std::string descriptor_relpath;
   std::string virtual_path;
   uint64_t descriptor_size = 0U;
   std::array<uint8_t, lc::kSha256Size> descriptor_sha {};
-  std::vector<std::byte> descriptor_payload {};
+  std::vector<std::byte> descriptor_payload;
   data::AssetReferences references;
 };
 
@@ -105,9 +105,10 @@ using oxygen::cooker::test::MakeAssetKey;
 [[nodiscard]] inline auto HasError(std::span<const PakDiagnostic> diagnostics)
   -> bool
 {
-  return std::ranges::any_of(diagnostics, [](const PakDiagnostic& diagnostic) {
-    return diagnostic.severity == PakDiagnosticSeverity::kError;
-  });
+  return std::ranges::any_of(
+    diagnostics, [](const PakDiagnostic& diagnostic) -> bool {
+      return diagnostic.severity == PakDiagnosticSeverity::kError;
+    });
 }
 
 //! A base catalog with the given entries and a valid digest.
@@ -192,7 +193,9 @@ inline auto EnableDescriptorHash(std::vector<std::byte>& bytes) -> void
     writer.WriteAssetDescriptor(asset.key, asset.asset_type, asset.virtual_path,
       asset.descriptor_relpath, asset.descriptor_payload, asset.references,
       content::testing::DescriptorRecordOverride {
-        .size = asset.descriptor_size, .sha256 = asset.descriptor_sha });
+        .size = asset.descriptor_size,
+        .sha256 = asset.descriptor_sha,
+      });
   }
   static_cast<void>(writer.Finish());
   return true;
@@ -200,7 +203,7 @@ inline auto EnableDescriptorHash(std::vector<std::byte>& bytes) -> void
 
 //! Options for `MakeFullRequest` / `MakePatchRequest`.
 struct FullRequestOptions final {
-  std::vector<data::CookedSource> sources {};
+  std::vector<data::CookedSource> sources;
   uint16_t content_version = 1U;
   data::SourceKey source_key = MakeSourceKey(0x7DU);
   bool embed_browse_index = false;

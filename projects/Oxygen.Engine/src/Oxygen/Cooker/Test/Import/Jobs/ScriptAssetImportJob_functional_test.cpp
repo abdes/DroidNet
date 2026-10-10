@@ -29,10 +29,7 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/Test/Support/FileIo.h>
-#include <Oxygen/Cooker/Test/Support/TempDir.h>
-#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Testing/GTest.h>
@@ -94,7 +91,7 @@ namespace {
     const auto invalid_submit
       = Service().SubmitImport(std::move(invalid_request),
         [&invalid_callback_invoked](
-          const auto /*job_id*/, const ImportReport& /*report*/) {
+          const auto /*job_id*/, const ImportReport& /*report*/) -> auto {
           invalid_callback_invoked.store(true, std::memory_order_release);
         });
     EXPECT_FALSE(invalid_submit.has_value());
@@ -107,7 +104,7 @@ namespace {
       MakeScriptRequest(cooked_root / "input" / "shutdown.luau", cooked_root,
         ScriptStorageMode::kExternal, false),
       [&shutdown_callback_invoked](
-        const auto /*job_id*/, const ImportReport& /*report*/) {
+        const auto /*job_id*/, const ImportReport& /*report*/) -> auto {
         shutdown_callback_invoked.store(true, std::memory_order_release);
       });
     EXPECT_FALSE(shutdown_submit.has_value());
@@ -126,7 +123,7 @@ namespace {
     const auto capture = SubmitAndCaptureCallbacks(Service(),
       MakeScriptRequest(
         source_path, cooked_root, ScriptStorageMode::kExternal, false));
-    ASSERT_TRUE(capture.has_value()) << "Expected capture to be present";
+    ASSERT_HAS_VALUE(capture) << "Expected capture to be present";
     EXPECT_EQ(capture->completion_calls, 1U);
     EXPECT_TRUE(capture->report.success);
     EXPECT_TRUE(ContainsPhase(capture->phases, ImportPhase::kLoading));
@@ -174,10 +171,12 @@ namespace {
     const auto inspection = LoadInspection(cooked_root);
 
     const auto files = inspection.Files();
-    EXPECT_TRUE(std::ranges::any_of(files,
-      [](const auto& file) { return file.kind == FileKind::kScriptsTable; }));
-    EXPECT_TRUE(std::ranges::any_of(files,
-      [](const auto& file) { return file.kind == FileKind::kScriptsData; }));
+    EXPECT_TRUE(std::ranges::any_of(files, [](const auto& file) -> auto {
+      return file.kind == FileKind::kScriptsTable;
+    }));
+    EXPECT_TRUE(std::ranges::any_of(files, [](const auto& file) -> auto {
+      return file.kind == FileKind::kScriptsData;
+    }));
 
     const auto assets = inspection.Assets();
     ASSERT_EQ(assets.size(), 1U);
@@ -214,10 +213,12 @@ namespace {
     const auto inspection = LoadInspection(cooked_root);
 
     const auto files = inspection.Files();
-    EXPECT_FALSE(std::ranges::any_of(files,
-      [](const auto& file) { return file.kind == FileKind::kScriptsTable; }));
-    EXPECT_FALSE(std::ranges::any_of(files,
-      [](const auto& file) { return file.kind == FileKind::kScriptsData; }));
+    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) -> auto {
+      return file.kind == FileKind::kScriptsTable;
+    }));
+    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) -> auto {
+      return file.kind == FileKind::kScriptsData;
+    }));
 
     const auto desc = ReadScriptDescriptor(descriptor_path);
     EXPECT_EQ(desc.source_resource_index, kNoResourceReference);
@@ -356,7 +357,8 @@ namespace {
     const auto report = SubmitAndWait(service.Service(),
       MakeScriptRequest(
         source_path, cooked_root, ScriptStorageMode::kEmbedded, true));
-    ASSERT_TRUE(report.success);
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success);
 
     const auto descriptor_path = cooked_root / "Scripts" / "compile_ok.oscript";
     ASSERT_TRUE(std::filesystem::exists(descriptor_path));
@@ -367,8 +369,7 @@ namespace {
     const auto inspection = LoadInspection(cooked_root);
     const auto table_relpath
       = FindFileRelPathByKind(inspection, FileKind::kScriptsTable);
-    ASSERT_TRUE(table_relpath.has_value())
-      << "Expected table relpath to be present";
+    ASSERT_HAS_VALUE(table_relpath) << "Expected table relpath to be present";
     const auto resources
       = ReadPackedRecords<ScriptResourceDesc>(cooked_root / *table_relpath);
 
@@ -377,10 +378,10 @@ namespace {
       desc.source_resource_index, data::ResourceKind::kScript);
     const auto bytecode_binding = references.ResolveResource(
       desc.bytecode_resource_index, data::ResourceKind::kScript);
-    ASSERT_TRUE(source_binding.has_value());
-    ASSERT_TRUE(source_binding->has_value());
-    ASSERT_TRUE(bytecode_binding.has_value());
-    ASSERT_TRUE(bytecode_binding->has_value());
+    ASSERT_HAS_VALUE(source_binding);
+    ASSERT_HAS_VALUE(*source_binding);
+    ASSERT_HAS_VALUE(bytecode_binding);
+    ASSERT_HAS_VALUE(*bytecode_binding);
     const auto source_index = (**source_binding).get();
     const auto bytecode_index = (**bytecode_binding).get();
     ASSERT_LT(source_index, resources.size());
@@ -413,9 +414,10 @@ namespace {
     const auto report = SubmitAndWait(service.Service(),
       MakeScriptRequest(
         source_path, cooked_root, ScriptStorageMode::kEmbedded, true));
-    EXPECT_FALSE(report.success);
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
     EXPECT_TRUE(
-      HasDiagnosticCode(report.diagnostics, "script.asset.compile_failed"));
+      HasDiagnosticCode(report->diagnostics, "script.asset.compile_failed"));
 
     const auto descriptor_path
       = cooked_root / "Scripts" / "compile_fail.oscript";

@@ -6,7 +6,6 @@
 
 // Covers: Import/Internal/BufferSource.cpp
 
-#include <algorithm>
 #include <filesystem>
 #include <string_view>
 #include <vector>
@@ -36,7 +35,7 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto sources = BufferSource::FromDeclarations(
       declarations, "authored/geometry.json", diagnostics);
-    ASSERT_TRUE(sources.has_value()) << "Expected sources to contain a value";
+    ASSERT_HAS_VALUE(sources) << "Expected sources to contain a value";
     ASSERT_EQ(sources->size(), 1U);
     EXPECT_TRUE(diagnostics.empty());
     const auto& source = sources->front();
@@ -90,7 +89,7 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto sources = BufferSource::FromDeclarations(
       declarations, "geometry.json", diagnostics);
-    ASSERT_TRUE(sources.has_value()) << "Expected sources to contain a value";
+    ASSERT_HAS_VALUE(sources) << "Expected sources to contain a value";
     ASSERT_EQ(sources->size(), 1U);
     EXPECT_EQ(sources->front().element_stride, 0U);
     EXPECT_EQ(sources->front().element_format, 1U);

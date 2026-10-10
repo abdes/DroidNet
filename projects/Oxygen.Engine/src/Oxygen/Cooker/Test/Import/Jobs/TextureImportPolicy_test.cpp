@@ -6,7 +6,9 @@
 
 // Covers: Import/Internal/Jobs/TextureImportPolicy.h
 
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Jobs/TextureImportPolicy.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::content::import::ImportOptions;

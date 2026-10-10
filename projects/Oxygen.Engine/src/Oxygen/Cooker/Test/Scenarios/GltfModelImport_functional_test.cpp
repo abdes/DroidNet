@@ -16,7 +16,6 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
-#include <latch>
 #include <memory>
 #include <numbers>
 #include <optional>
@@ -38,15 +37,20 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Span.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
+#include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/Test/Support/ModelImportTestBase.h>
+#include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Cooker/Test/Support/TestValues.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Data/AssetKey.h>
@@ -174,20 +178,14 @@ protected:
     }
     oxygen::content::import::AsyncImportService service(
       MakeMaxConcurrencyConfig());
-    std::latch done(1);
-    const auto job_id = service.SubmitImport(std::move(request),
-      [&](oxygen::content::import::ImportJobId id,
-        const oxygen::content::import::ImportReport& completed) -> void {
-        result.finished_id = id;
-        result.report = completed;
-        done.count_down();
-      });
-    if (!job_id) {
+    const auto report
+      = oxygen::cooker::test::SubmitAndWait(service, std::move(request));
+    if (!report.has_value()) {
+      ADD_FAILURE() << "Import did not complete";
       service.Stop();
       return result;
     }
-    result.job_id = *job_id;
-    done.wait();
+    result.report = *report;
     service.Stop();
     if (result.report.success
       && !result.report.material_slot_provenance_json.empty()) {
@@ -259,8 +257,8 @@ protected:
         const auto imported = RunImportOnce(std::move(request), provenance);
         if (!imported.report.success) {
           error_ = "Camera attachment import failed (keep_empty="
-            + std::to_string(keep_empty) + ", pass=" + std::to_string(pass)
-            + ")";
+            + std::to_string(static_cast<int>(keep_empty))
+            + ", pass=" + std::to_string(pass) + ")";
           return;
         }
 
@@ -283,10 +281,10 @@ protected:
           "Mixed_Light",
         };
         if (keep_empty) {
-          item.names.push_back("Empty");
+          item.names.emplace_back("Empty");
         }
-        item.names.push_back("IdentitySpot");
-        item.names.push_back("Identity");
+        item.names.emplace_back("IdentitySpot");
+        item.names.emplace_back("Identity");
         item.source_count = static_cast<uint32_t>(item.names.size());
         item.names.insert(item.names.end(),
           {
@@ -883,7 +881,7 @@ NOLINT_TEST_F(
     request.cooked_root = root / "cooked";
     const auto imported = RunImport(std::move(request));
     EXPECT_FALSE(imported.report.success);
-    const auto expected_code
+    const auto* const expected_code
       = nlohmann::json::parse(invalid_lights.at(index)).contains("range")
       ? "scene.light.range_invalid"
       : "scene.light.photometry_invalid";
@@ -894,24 +892,27 @@ NOLINT_TEST_F(
   }
 }
 
+// Namespace scope, not nested in the fixture: the fixture's inline static
+// `imported_` needs these default member initializers before the fixture is
+// complete.
+struct SlotBinding {
+  oxygen::data::pak::geometry::SubMeshDesc submesh {};
+  oxygen::data::pak::geometry::MeshViewDesc view {};
+};
+
+struct ImportedMaterials {
+  std::filesystem::path cooked_root;
+  oxygen::content::import::ImportJobId finished_id
+    = oxygen::content::import::kInvalidJobId;
+  oxygen::content::import::ImportJobId job_id
+    = oxygen::content::import::kInvalidJobId;
+  std::vector<oxygen::content::lc::Inspection::AssetEntry> materials;
+  std::array<SlotBinding, 2> slots {};
+};
+
 class CaseOnlyMaterialsTest : public AsyncGltfImporterFullTest {
 protected:
   using Inspection = oxygen::content::lc::Inspection;
-
-  struct SlotBinding {
-    oxygen::data::pak::geometry::SubMeshDesc submesh {};
-    oxygen::data::pak::geometry::MeshViewDesc view {};
-  };
-
-  using ImportJobId = oxygen::content::import::ImportJobId;
-
-  struct ImportedMaterials {
-    std::filesystem::path cooked_root;
-    ImportJobId finished_id = oxygen::content::import::kInvalidJobId;
-    ImportJobId job_id = oxygen::content::import::kInvalidJobId;
-    std::vector<Inspection::AssetEntry> materials;
-    std::array<SlotBinding, 2> slots {};
-  };
 
   static auto SetUpTestSuite() -> void
   {

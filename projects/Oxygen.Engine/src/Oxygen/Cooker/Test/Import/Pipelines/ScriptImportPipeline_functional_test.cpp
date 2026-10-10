@@ -9,11 +9,11 @@
 
 #include <cstddef>
 #include <string>
-#include <vector>
 
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptAssetImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptingSidecarImportPipeline.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
@@ -33,10 +33,12 @@ namespace {
   {
     auto result = ScriptAssetImportPipeline::WorkResult {};
 
-    co::Run(loop_, [&]() -> co::Co<> {
+    co::Run(loop_, [&] -> co::Co<> {
       auto pipeline
         = ScriptAssetImportPipeline(ScriptAssetImportPipeline::Config {
-          .queue_capacity = 8, .worker_count = 1 });
+          .queue_capacity = 8,
+          .worker_count = 1,
+        });
 
       OXCO_WITH_NURSERY(n)
       {
@@ -65,7 +67,7 @@ namespace {
   {
     auto result = ScriptingSidecarImportPipeline::WorkResult {};
 
-    co::Run(loop_, [&]() -> co::Co<> {
+    co::Run(loop_, [&] -> co::Co<> {
       auto pipeline = ScriptingSidecarImportPipeline(
         ScriptingSidecarImportPipeline::Config {
           .queue_capacity = 8,

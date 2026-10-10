@@ -7,6 +7,8 @@
 #pragma once
 
 #include <chrono>
+#include <latch>
+#include <memory>
 
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/TypedObject.h>
@@ -34,6 +36,10 @@ public:
 
     //! Emit progress updates between steps.
     bool report_progress = true;
+
+    //! Optional gate the job waits on before completing. Tests release it to
+    //! let the job finish, replacing sleep-based synchronisation.
+    std::shared_ptr<std::latch> finish_gate;
   };
 
   //! Construct a test job.

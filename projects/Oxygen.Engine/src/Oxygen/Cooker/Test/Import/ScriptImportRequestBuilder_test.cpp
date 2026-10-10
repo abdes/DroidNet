@@ -83,7 +83,7 @@ NOLINT_TEST(ScriptImportRequestBuilderTest, BuildScriptAssetRequestValidInput)
 
   const auto request = BuildScriptAssetRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << "Expected request to be present";
+  ASSERT_HAS_VALUE(request) << "Expected request to be present";
   EXPECT_TRUE(errors.str().empty());
   EXPECT_EQ(
     request->options.scripting.import_kind, ScriptingImportKind::kScriptAsset);
@@ -92,7 +92,7 @@ NOLINT_TEST(ScriptImportRequestBuilderTest, BuildScriptAssetRequestValidInput)
     request->options.scripting.compile_mode, ScriptCompileMode::kOptimized);
   EXPECT_EQ(
     request->options.scripting.script_storage, ScriptStorageMode::kEmbedded);
-  ASSERT_TRUE(request->cooked_root.has_value())
+  ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected cooked root to be present";
   EXPECT_TRUE(request->cooked_root->is_absolute());
 }
@@ -138,10 +138,9 @@ NOLINT_TEST(
 
   const auto request = BuildScriptAssetRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_EQ(request->options.scripting.source_root, authoring_root);
-  ASSERT_TRUE(request->cooked_root.has_value())
-    << "Expected an explicit cooked root";
+  ASSERT_HAS_VALUE(request->cooked_root) << "Expected an explicit cooked root";
   EXPECT_NE(request->cooked_root->parent_path(), authoring_root);
 }
 
@@ -211,13 +210,13 @@ NOLINT_TEST(
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << "Expected request to be present";
+  ASSERT_HAS_VALUE(request) << "Expected request to be present";
   EXPECT_TRUE(errors.str().empty());
   EXPECT_EQ(request->options.scripting.import_kind,
     ScriptingImportKind::kScriptingSidecar);
   EXPECT_EQ(request->options.scripting.target_scene_virtual_path,
     settings.target_scene_virtual_path);
-  ASSERT_TRUE(request->cooked_root.has_value())
+  ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected cooked root to be present";
   EXPECT_TRUE(request->cooked_root->is_absolute());
 }
@@ -230,7 +229,7 @@ NOLINT_TEST(
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << "Expected request to be present";
+  ASSERT_HAS_VALUE(request) << "Expected request to be present";
   EXPECT_TRUE(errors.str().empty());
   EXPECT_EQ(request->options.scripting.import_kind,
     ScriptingImportKind::kScriptingSidecar);
@@ -240,7 +239,7 @@ NOLINT_TEST(
     ::testing::HasSubstr("\"bindings\""));
   EXPECT_THAT(request->options.scripting.inline_bindings_json,
     ::testing::HasSubstr("script_virtual_path"));
-  ASSERT_TRUE(request->cooked_root.has_value())
+  ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected cooked root to be present";
   EXPECT_TRUE(request->cooked_root->is_absolute());
 }
@@ -256,7 +255,7 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << "Expected request to be present";
+  ASSERT_HAS_VALUE(request) << "Expected request to be present";
   EXPECT_TRUE(errors.str().empty());
   EXPECT_THAT(request->options.scripting.inline_bindings_json,
     ::testing::HasSubstr("\"bindings\""));

@@ -60,7 +60,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, AcceptsInlineBindingsForSidecarJob)
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
   EXPECT_TRUE(manifest->jobs.at(0).scripting_sidecar.source_path.empty());
   EXPECT_FALSE(
@@ -68,7 +68,7 @@ NOLINT_TEST(ImportManifestScriptSidecarTest, AcceptsInlineBindingsForSidecarJob)
 
   std::ostringstream request_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
+  ASSERT_HAS_VALUE(request) << request_errors.str();
   EXPECT_EQ(request->options.scripting.import_kind,
     ScriptingImportKind::kScriptingSidecar);
   EXPECT_FALSE(request->options.scripting.inline_bindings_json.empty());
@@ -101,12 +101,12 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
   for (const auto& job : manifest->jobs) {
     std::ostringstream request_errors;
     const auto request = job.BuildRequest(request_errors);
-    ASSERT_TRUE(request.has_value()) << request_errors.str();
+    ASSERT_HAS_VALUE(request) << request_errors.str();
     EXPECT_EQ(request->options.scripting.source_root,
       request->source_path.parent_path());
     EXPECT_NE(request->options.scripting.source_root, output.parent_path());
@@ -224,21 +224,21 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
 
   std::ostringstream request_errors_0;
   const auto request_0 = manifest->jobs.at(0).BuildRequest(request_errors_0);
-  ASSERT_TRUE(request_0.has_value()) << request_errors_0.str();
-  ASSERT_TRUE(request_0->cooked_root.has_value())
+  ASSERT_HAS_VALUE(request_0) << request_errors_0.str();
+  ASSERT_HAS_VALUE(request_0->cooked_root)
     << "Expected cooked root to be present";
   EXPECT_EQ(
     request_0->cooked_root->lexically_normal(), cooked_root.lexically_normal());
 
   std::ostringstream request_errors_1;
   const auto request_1 = manifest->jobs.at(1).BuildRequest(request_errors_1);
-  ASSERT_TRUE(request_1.has_value()) << request_errors_1.str();
-  ASSERT_TRUE(request_1->cooked_root.has_value())
+  ASSERT_HAS_VALUE(request_1) << request_errors_1.str();
+  ASSERT_HAS_VALUE(request_1->cooked_root)
     << "Expected cooked root to be present";
   EXPECT_EQ(
     request_1->cooked_root->lexically_normal(), cooked_root.lexically_normal());
@@ -282,13 +282,13 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   std::ostringstream request_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value())
+  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected cooked root to be present";
   EXPECT_EQ(request->cooked_root->lexically_normal(),
     defaults_output.lexically_normal());
@@ -335,13 +335,13 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   std::ostringstream request_errors;
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value())
+  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected cooked root to be present";
   EXPECT_EQ(
     request->cooked_root->lexically_normal(), job_output.lexically_normal());

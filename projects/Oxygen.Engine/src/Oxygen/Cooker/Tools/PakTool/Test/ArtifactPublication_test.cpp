@@ -6,7 +6,6 @@
 
 // Covers: Tools/PakTool/ArtifactPublication.cpp
 
-#include <cstdlib>
 #include <filesystem>
 #include <string>
 
@@ -34,10 +33,10 @@ NOLINT_TEST_F(PakToolArtifactPublicationTest,
 
   EXPECT_EQ(plan.pak.staged_path, TempDir() / "release" / "game.pak.staged");
   EXPECT_EQ(plan.pak.backup_path, TempDir() / "release" / "game.pak.previous");
-  ASSERT_TRUE(plan.manifest.has_value());
+  ASSERT_HAS_VALUE(plan.manifest);
   EXPECT_EQ(plan.manifest->staged_path,
     TempDir() / "release" / "game.manifest.json.staged");
-  ASSERT_TRUE(plan.report.has_value());
+  ASSERT_HAS_VALUE(plan.report);
   EXPECT_EQ(plan.report->backup_path,
     TempDir() / "release" / "game.report.json.previous");
 }

@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -103,7 +104,7 @@ public:
     co_return first ? rest : first;
   }
   auto CancelAll() -> void override { writer_->CancelAll(); }
-  auto PendingCount() const -> size_t override
+  [[nodiscard]] auto PendingCount() const -> size_t override
   {
     return writer_->PendingCount() + (pending_ ? 1U : 0U);
   }
@@ -118,7 +119,7 @@ private:
     -> imp::WriteCompletionCallback
   {
     return [this, callback = std::move(callback)](
-             const imp::FileErrorInfo& error, uint64_t bytes) {
+             const imp::FileErrorInfo& error, uint64_t bytes) -> void {
       if (hold_) {
         CHECK_F(!pending_);
         pending_.emplace(
@@ -148,37 +149,42 @@ NOLINT_TEST(ResourceTableRegistryTest, TableAdmissionWaitsForCompletedOverwrite)
   const imp::LooseCookedLayout layout;
   auto first = tables.BeginSession(root);
   const auto inserted
-    = tables.BufferAggregator(root, layout).AcquireOrInsert("first", [] {
-        return std::pair { oxygen::data::pak::core::BufferResourceDesc {},
-          imp::WriteReservation {} };
-      });
+    = tables.BufferAggregator(root, layout)
+        .AcquireOrInsert("first",
+          [] -> std::pair<oxygen::data::pak::core::BufferResourceDesc,
+               oxygen::content::import::WriteReservation> {
+            return std::pair { oxygen::data::pak::core::BufferResourceDesc {},
+              imp::WriteReservation {} };
+          });
   uint32_t second_index = 0;
   bool admitted = false;
   co::Event attempting;
   co::Event finished;
-  co::Run(loop, [&]() -> co::Co<> {
+  co::Run(loop, [&] -> co::Co<> {
     OXCO_WITH_NURSERY(tasks)
     {
       tasks.Start(
-        [&]() -> co::Co<> { EXPECT_TRUE(co_await tables.EndSession(first)); });
+        [&] -> co::Co<> { EXPECT_TRUE(co_await tables.EndSession(first)); });
       co_await writer.table_write_held;
       EXPECT_FALSE(first.IsActive());
       EXPECT_THROW(
         static_cast<void>(tables.BeginSession(root)), std::logic_error);
-      tasks.Start([&]() -> co::Co<> {
+      tasks.Start([&] -> co::Co<> {
         attempting.Trigger();
         co_await tables.WaitForFinalization(root);
         admitted = true;
         auto second = tables.BeginSession(root);
-        second_index = tables.BufferAggregator(root, layout)
-                         .AcquireOrInsert("second",
-                           [] {
-                             return std::pair {
-                               oxygen::data::pak::core::BufferResourceDesc {},
-                               imp::WriteReservation {}
-                             };
-                           })
-                         .index;
+        second_index
+          = tables.BufferAggregator(root, layout)
+              .AcquireOrInsert("second",
+                [] -> std::pair<oxygen::data::pak::core::BufferResourceDesc,
+                     oxygen::content::import::WriteReservation> {
+                  return std::pair {
+                    oxygen::data::pak::core::BufferResourceDesc {},
+                    imp::WriteReservation {}
+                  };
+                })
+              .index;
         EXPECT_TRUE(co_await tables.EndSession(second));
         finished.Trigger();
       });

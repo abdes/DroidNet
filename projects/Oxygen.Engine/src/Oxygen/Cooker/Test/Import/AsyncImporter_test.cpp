@@ -6,10 +6,14 @@
 
 // Covers: Import/Internal/AsyncImporter.cpp
 
+#include <cstdint>
 #include <utility>
 
 #include <Oxygen/Cooker/Import/Internal/AsyncImporter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Cooker/Import/Internal/JobEntry.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -58,7 +62,7 @@ NOLINT_TEST_F(AsyncImporterLifecycleTest, ActivateRunStopFullLifecycleSucceeds)
 {
   AsyncImporter importer(config_);
 
-  oxygen::co::Run(loop_, [&]() -> Co<> {
+  oxygen::co::Run(loop_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       // Activate the importer
@@ -82,7 +86,7 @@ NOLINT_TEST_F(AsyncImporterLifecycleTest, StopClosesJobChannel)
 {
   AsyncImporter importer(config_);
 
-  oxygen::co::Run(loop_, [&]() -> Co<> {
+  oxygen::co::Run(loop_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&AsyncImporter::ActivateAsync, &importer);

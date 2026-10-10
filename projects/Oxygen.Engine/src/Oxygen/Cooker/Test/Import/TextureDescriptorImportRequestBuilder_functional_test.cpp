@@ -96,11 +96,11 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
 
   const auto request = BuildTextureDescriptorRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_TRUE(errors.str().empty());
   EXPECT_EQ(
     request.value().texture_virtual_path, "/Content/Textures/brick.otex");
-  ASSERT_TRUE(request->cooked_root.has_value())
+  ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected cooked root to be present";
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path,
@@ -169,7 +169,7 @@ NOLINT_TEST(
     "decode":{"flip_y":false},"mips":{"policy":"none"}
   })",
     diagnostics);
-  ASSERT_TRUE(prepared.has_value()) << "Expected prepared to contain a value";
+  ASSERT_HAS_VALUE(prepared) << "Expected prepared to contain a value";
   EXPECT_TRUE(diagnostics.empty());
   EXPECT_TRUE(prepared->cooked_root.empty());
   EXPECT_EQ(prepared->job_name, "Layers");
@@ -198,7 +198,7 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
     = { { .file = "layer.png", .layer = 1, .mip = 0, .slice = 0 } };
   std::ostringstream errors;
   const auto request = settings.Prepare(errors);
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_FALSE(request->cooked_root.has_value());
   ASSERT_EQ(request->additional_sources.size(), 1U);
   EXPECT_EQ(request->additional_sources.front().path,

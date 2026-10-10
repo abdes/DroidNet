@@ -7,7 +7,6 @@
 // Covers: Import/Internal/Pipelines/GeometryPipeline.cpp,
 //   Import/Internal/Pipelines/MeshBuildPipeline.cpp
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -331,7 +330,7 @@ namespace {
         });
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(result.cooked.has_value())
+    ASSERT_HAS_VALUE(result.cooked)
       << "Expected result.cooked to contain a value";
     EXPECT_TRUE(result.diagnostics.empty());
 
@@ -423,7 +422,7 @@ namespace {
       });
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(result.cooked.has_value())
+    ASSERT_HAS_VALUE(result.cooked)
       << "Expected result.cooked to contain a value";
     EXPECT_TRUE(result.diagnostics.empty());
 
@@ -538,8 +537,7 @@ namespace {
       };
     });
 
-    ASSERT_TRUE(finalized.has_value())
-      << "Expected finalized to contain a value";
+    ASSERT_HAS_VALUE(finalized) << "Expected finalized to contain a value";
     ASSERT_TRUE(diagnostics.empty());
 
     const auto& bytes = finalized->bytes;
@@ -554,8 +552,8 @@ namespace {
       mesh_desc.info.standard.vertex_buffer, data::ResourceKind::kBuffer);
     const auto index = finalized->references.ResolveResource(
       mesh_desc.info.standard.index_buffer, data::ResourceKind::kBuffer);
-    ASSERT_TRUE(vertex.has_value());
-    ASSERT_TRUE(index.has_value());
+    ASSERT_HAS_VALUE(vertex);
+    ASSERT_HAS_VALUE(index);
     EXPECT_EQ(
       *vertex, std::optional { data::pak::core::ResourceIndexT { 11U } });
     EXPECT_EQ(
@@ -769,7 +767,9 @@ namespace {
 
     ASSERT_TRUE(first.success);
     ASSERT_TRUE(second.success);
-    ASSERT_TRUE(first.cooked.has_value() && second.cooked.has_value())
+    ASSERT_HAS_VALUE(first.cooked)
+      << "Expected both imports to produce cooked geometry";
+    ASSERT_HAS_VALUE(second.cooked)
       << "Expected both imports to produce cooked geometry";
     const auto& cooked = first.cooked.value();
     EXPECT_EQ(cooked.descriptor_bytes, second.cooked.value().descriptor_bytes);
@@ -822,7 +822,7 @@ namespace {
     const auto result = Cook(MakeWorkItem(MakeGridMeshBuffers(4U, 2U)));
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(result.cooked.has_value()) << "Expected cooked geometry";
+    ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
     const auto views = ReadCookedViews(result.cooked.value());
     ASSERT_EQ(views.views.size(), 1U);
     const auto& view = views.views.front();
@@ -841,7 +841,7 @@ namespace {
     const auto result = Cook(MakeSkinnedWorkItem(buffers));
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(result.cooked.has_value()) << "Expected cooked geometry";
+    ASSERT_HAS_VALUE(result.cooked) << "Expected cooked geometry";
     const auto views = ReadCookedViews(result.cooked.value());
     ASSERT_EQ(views.views.size(), 1U);
     EXPECT_EQ(views.views.front().index_count, buffers->indices.size());

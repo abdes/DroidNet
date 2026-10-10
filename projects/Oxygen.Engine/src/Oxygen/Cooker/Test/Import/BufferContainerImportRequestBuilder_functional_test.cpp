@@ -12,6 +12,7 @@
 #include <string>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/BufferContainerImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/BufferContainerImportSettings.h>
@@ -69,23 +70,24 @@ NOLINT_TEST(BufferContainerImportRequestBuilderTest,
 
   const auto request = BuildBufferContainerRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_TRUE(errors.str().empty());
-  ASSERT_TRUE(request->cooked_root.has_value());
+  ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name,
     std::optional<std::string> { "manifest-buffer-container" });
   // Release must hash authored content even when the descriptor opts out.
   EXPECT_EQ(request->options.with_content_hashing, kContentHashingDefault);
-  ASSERT_TRUE(request->buffer_container.has_value());
+  ASSERT_HAS_VALUE(request->buffer_container);
 
   const auto normalized
     = json::parse(request->buffer_container->normalized_descriptor_json);
   EXPECT_EQ(normalized.at("name").get<std::string>(), "CharacterBuffers");
   ASSERT_TRUE(normalized.at("buffers").is_array());
   ASSERT_EQ(normalized.at("buffers").size(), 1U);
-  EXPECT_EQ(normalized.at("buffers")[0].at("virtual_path").get<std::string>(),
+  EXPECT_EQ(
+    normalized.at("buffers").at(0).at("virtual_path").get<std::string>(),
     "/.cooked/Resources/Buffers/character_vertices.obuf");
 }
 
@@ -218,7 +220,7 @@ NOLINT_TEST(
 
   const auto request = BuildBufferContainerRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_TRUE(errors.str().empty());
 }
 

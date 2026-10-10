@@ -221,9 +221,9 @@ struct CanonicalPlanSpec final {
   uint16_t content_version = 1U;
   uint64_t base_offset = 256U;
   uint64_t texture_region_size = 0U;
-  std::optional<uint64_t> tables_offset {};
-  std::optional<uint64_t> directory_offset {};
-  std::optional<uint64_t> footer_offset {};
+  std::optional<uint64_t> tables_offset;
+  std::optional<uint64_t> directory_offset;
+  std::optional<uint64_t> footer_offset;
   uint32_t texture_count = 0U;
   uint64_t texture_table_size = 0U;
 };

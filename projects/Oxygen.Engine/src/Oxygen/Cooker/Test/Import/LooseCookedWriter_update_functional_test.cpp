@@ -23,6 +23,7 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
 
 // NOLINTBEGIN(*-magic-numbers)
@@ -81,8 +82,8 @@ namespace {
     inspection.LoadFromFile(cooked_root / "container.index.bin");
 
     const auto assets = inspection.Assets();
-    const auto it = std::ranges::find_if(
-      assets, [&](const Inspection::AssetEntry& e) { return e.key == key; });
+    const auto it = std::ranges::find_if(assets,
+      [&](const Inspection::AssetEntry& e) -> bool { return e.key == key; });
 
     EXPECT_EQ(assets.size(), 1U);
     ASSERT_NE(it, assets.end());
@@ -218,10 +219,10 @@ namespace {
     inspection.LoadFromFile(cooked_root / "container.index.bin");
 
     const auto files = inspection.Files();
-    const auto it = std::find_if(
-      files.begin(), files.end(), [](const Inspection::FileEntry& e) {
-        return e.kind == FileKind::kBuffersData;
-      });
+    const auto it
+      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) -> bool {
+          return e.kind == FileKind::kBuffersData;
+        });
 
     EXPECT_EQ(files.size(), 2U);
     ASSERT_NE(it, files.end());
@@ -291,7 +292,7 @@ namespace {
     const auto files = inspection.Files();
     ASSERT_EQ(files.size(), 2U);
     const auto it
-      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) {
+      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) -> bool {
           return e.kind == FileKind::kBuffersData;
         });
     ASSERT_NE(it, files.end());
@@ -354,7 +355,7 @@ namespace {
     inspection.LoadFromFile(cooked_root / "container.index.bin");
     const auto files = inspection.Files();
     const auto it
-      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) {
+      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) -> bool {
           return e.kind == FileKind::kBuffersData;
         });
     ASSERT_NE(it, files.end());
@@ -391,7 +392,7 @@ namespace {
     inspection.LoadFromFile(cooked_root / "container.index.bin");
     const auto files = inspection.Files();
     const auto it
-      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) {
+      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) -> bool {
           return e.kind == FileKind::kBuffersData;
         });
     ASSERT_NE(it, files.end());
@@ -464,7 +465,7 @@ namespace {
 
     ASSERT_EQ(inspection.Assets().size(), 1U);
     const auto& asset = inspection.Assets().front();
-    ASSERT_TRUE(asset.descriptor_sha256.has_value())
+    ASSERT_HAS_VALUE(asset.descriptor_sha256)
       << "Expected descriptor sha256 to be present";
     EXPECT_EQ(*asset.descriptor_sha256, oxygen::base::ComputeSha256(bytes));
   }

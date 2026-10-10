@@ -6,20 +6,27 @@
 
 // Covers: Pak/PakManifestWriter.cpp
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "PakTestSupport.h"
 
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/Pak/PakManifestWriter.h>
+#include <Oxygen/Cooker/Pak/PakPlan.h>
+#include <Oxygen/Cooker/Test/Support/FileIo.h>
+#include <Oxygen/Cooker/Test/Support/TestValues.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -43,8 +50,8 @@ using paktest::HasDiagnosticCode;
 
 class PakManifestTest : public paktest::TempDirFixture {
 protected:
-  auto MakeBaseCatalog(std::span<const data::PakCatalogEntry> entries) const
-    -> data::PakCatalog
+  [[nodiscard]] auto MakeBaseCatalog(
+    std::span<const data::PakCatalogEntry> entries) const -> data::PakCatalog
   {
     auto catalog = data::PakCatalog {
       .source_key = MakeSourceKey(static_cast<uint8_t>(0xB1U)),
@@ -106,13 +113,13 @@ NOLINT_TEST_F(
 
   PakBuilder builder;
   const auto build_result = builder.Build(request);
-  ASSERT_TRUE(build_result.has_value());
+  ASSERT_HAS_VALUE(build_result);
   const auto& result = build_result.value();
 
   EXPECT_EQ(result.summary.diagnostics_error, 0U);
-  ASSERT_TRUE(result.patch_manifest.has_value());
+  ASSERT_HAS_VALUE(result.patch_manifest);
   ASSERT_TRUE(std::filesystem::exists(request.output_manifest_path));
-  ASSERT_TRUE(result.telemetry.manifest_duration.has_value());
+  ASSERT_HAS_VALUE(result.telemetry.manifest_duration);
 
   const auto& manifest = *result.patch_manifest;
   EXPECT_TRUE(manifest.created.empty());
@@ -133,7 +140,7 @@ NOLINT_TEST_F(
       request.base_catalogs.at(index).catalog_digest);
   }
   EXPECT_TRUE(manifest.patch_pak_digest.has_value());
-  ASSERT_TRUE(manifest.patch_pak_crc32.has_value());
+  ASSERT_HAS_VALUE(manifest.patch_pak_crc32);
   EXPECT_EQ(*manifest.patch_pak_crc32, result.pak_crc32);
 }
 
@@ -165,13 +172,13 @@ NOLINT_TEST_F(
 
   PakBuilder builder;
   const auto build_result = builder.Build(request);
-  ASSERT_TRUE(build_result.has_value());
+  ASSERT_HAS_VALUE(build_result);
   const auto& result = build_result.value();
 
   EXPECT_EQ(result.summary.diagnostics_error, 0U);
-  ASSERT_TRUE(result.patch_manifest.has_value());
+  ASSERT_HAS_VALUE(result.patch_manifest);
   ASSERT_TRUE(std::filesystem::exists(request.output_manifest_path));
-  ASSERT_TRUE(result.telemetry.manifest_duration.has_value());
+  ASSERT_HAS_VALUE(result.telemetry.manifest_duration);
 
   const auto& manifest = *result.patch_manifest;
   EXPECT_TRUE(manifest.created.empty());
@@ -224,7 +231,7 @@ NOLINT_TEST_F(PakManifestTest, PatchModeFailsWhenManifestCannotBeWritten)
 
   PakBuilder builder;
   const auto build_result = builder.Build(request);
-  ASSERT_TRUE(build_result.has_value());
+  ASSERT_HAS_VALUE(build_result);
   const auto& result = build_result.value();
 
   EXPECT_GT(result.summary.diagnostics_error, 0U);
@@ -263,7 +270,7 @@ NOLINT_TEST_F(PakManifestTest, FullModeFailsWhenManifestCannotBeWritten)
 
   PakBuilder builder;
   const auto build_result = builder.Build(request);
-  ASSERT_TRUE(build_result.has_value());
+  ASSERT_HAS_VALUE(build_result);
   const auto& result = build_result.value();
 
   EXPECT_GT(result.summary.diagnostics_error, 0U);
@@ -351,13 +358,13 @@ NOLINT_TEST_F(PakManifestTest, FullModeManifestEmissionIsBitExactDeterministic)
 
   PakBuilder builder;
   const auto first_result = builder.Build(request);
-  ASSERT_TRUE(first_result.has_value());
+  ASSERT_HAS_VALUE(first_result);
   ASSERT_EQ(first_result.value().summary.diagnostics_error, 0U);
   const auto first_bytes = cooktest::ReadBytes(manifest_path);
   ASSERT_FALSE(first_bytes.empty());
 
   const auto second_result = builder.Build(request);
-  ASSERT_TRUE(second_result.has_value());
+  ASSERT_HAS_VALUE(second_result);
   ASSERT_EQ(second_result.value().summary.diagnostics_error, 0U);
   const auto second_bytes = cooktest::ReadBytes(manifest_path);
 

@@ -6,7 +6,6 @@
 
 // Covers: Import/Internal/SceneSource.cpp
 
-#include <algorithm>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -52,14 +51,14 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source
       = SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics);
-    ASSERT_TRUE(source.has_value()) << "Expected source to contain a value";
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     EXPECT_TRUE(diagnostics.empty());
     EXPECT_EQ(source->name, "Scene.v2");
     EXPECT_TRUE(source->build.nodes.empty());
-    ASSERT_TRUE(source->background.has_value())
+    ASSERT_HAS_VALUE(source->background)
       << "Expected source->background to contain a value";
     EXPECT_EQ(source->background->enabled, 0U);
-    ASSERT_TRUE(source->post_process.has_value())
+    ASSERT_HAS_VALUE(source->post_process)
       << "Expected source->post_process to contain a value";
     EXPECT_EQ(
       source->post_process->metering_mask, "/Content/Textures/mask.otex");
@@ -91,7 +90,7 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source
       = SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics);
-    ASSERT_TRUE(source.has_value()) << "Expected source to contain a value";
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
     EXPECT_TRUE(diagnostics.empty());
     ASSERT_EQ(source->renderables.size(), 1U);
     const auto& renderable = source->renderables.front();
@@ -122,8 +121,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source
       = SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics);
-    ASSERT_TRUE(source.has_value()) << "Expected source to contain a value";
-    ASSERT_TRUE(source->sky_light.has_value())
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
+    ASSERT_HAS_VALUE(source->sky_light)
       << "Expected source->sky_light to contain a value";
     EXPECT_EQ(source->sky_light->record.enabled, 0U);
     EXPECT_EQ(source->sky_light->cubemap, "/Content/Textures/sky.otex");
@@ -157,7 +156,7 @@ namespace {
 
   NOLINT_TEST(SceneSourceTest, NonObjectInputIsNotAFormatUpgradeError)
   {
-    for (const auto text : { "[]", "null", "1", "\"scene\"" }) {
+    for (const auto* const text : { "[]", "null", "1", "\"scene\"" }) {
       auto diagnostics = std::vector<ImportDiagnostic> {};
       EXPECT_FALSE(
         SceneSource::FromDescriptor(text, "scene.json", diagnostics));

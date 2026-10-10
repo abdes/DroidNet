@@ -52,8 +52,8 @@ namespace {
     std::size_t presence_reads = 0U;
     std::filesystem::path last_read_path;
     std::filesystem::path last_info_path;
-    co::Event release_reads {};
-    co::Event operation_started {};
+    co::Event release_reads;
+    co::Event operation_started;
 
     auto ReadFile(const std::filesystem::path& path, const ReadOptions options)
       -> co::Co<Result<std::vector<std::byte>, FileErrorInfo>> override
@@ -139,7 +139,7 @@ namespace {
         .logical_path = std::filesystem::absolute(source_).lexically_normal(),
         .exists = true,
         .metadata = FileInfo { .size = content.size(), .last_modified = {},
-          .is_directory = false, .is_symlink = false },
+          .is_directory = false, .is_symlink = false, },
         .file = CapturedInputFile {
           .path = std::filesystem::absolute("captured.bin").lexically_normal(),
           .size = content.size(), .digest = base::ComputeSha256(std::as_bytes(std::span(content))),
@@ -616,8 +616,7 @@ namespace {
   NOLINT_TEST_F(ImportSourceSnapshotTest, CapturedReadsPreserveLogicalIdentity)
   {
     const auto input = CapturedFile();
-    ASSERT_TRUE(input.file.has_value())
-      << "Expected input.file to contain a value";
+    ASSERT_HAS_VALUE(input.file) << "Expected input.file to contain a value";
     auto mapped
       = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
     co::Run(loop_, [&] -> co::Co<> {
@@ -634,11 +633,12 @@ namespace {
   NOLINT_TEST_F(
     ImportSourceSnapshotTest, CapturedAbsenceDoesNotConsultTheLiveSource)
   {
-    const auto input
-      = CapturedInput { .logical_path = std::filesystem::absolute(source_),
-          .exists = false,
-          .metadata = {},
-          .file = {} };
+    const auto input = CapturedInput {
+      .logical_path = std::filesystem::absolute(source_),
+      .exists = false,
+      .metadata = {},
+      .file = {},
+    };
     auto mapped
       = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
     reader_.present = true;
@@ -660,8 +660,7 @@ namespace {
     ImportSourceSnapshotTest, UndeclaredReadRemainsFatalWhenItsErrorIsIgnored)
   {
     const auto input = CapturedFile();
-    ASSERT_TRUE(input.file.has_value())
-      << "Expected input.file to contain a value";
+    ASSERT_HAS_VALUE(input.file) << "Expected input.file to contain a value";
     auto mapped
       = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
     co::Run(loop_, [&] -> co::Co<> {
@@ -721,8 +720,7 @@ namespace {
     ImportSourceSnapshotTest, BoundedWholeReadRejectsAppendedCapturedBytes)
   {
     const auto input = CapturedFile();
-    ASSERT_TRUE(input.file.has_value())
-      << "Expected input.file to contain a value";
+    ASSERT_HAS_VALUE(input.file) << "Expected input.file to contain a value";
     auto mapped
       = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
     co::Run(loop_, [&] -> co::Co<> {
@@ -743,8 +741,7 @@ namespace {
     const auto input = CapturedFile();
     auto unused = CapturedFile("a different larger file");
     unused.logical_path = std::filesystem::absolute("unused.bin");
-    ASSERT_TRUE(unused.file.has_value())
-      << "Expected unused.file to contain a value";
+    ASSERT_HAS_VALUE(unused.file) << "Expected unused.file to contain a value";
     unused.file.value().path = std::filesystem::absolute("unused-copy.bin");
     const auto entries = std::array { input, unused };
     auto mapped = detail::ImportSourceSnapshot(reader_, pool_,
@@ -761,10 +758,12 @@ namespace {
     ImportSourceSnapshotTest, CapturedMetadataUsesOriginalSourceFacts)
   {
     auto input = CapturedFile();
-    input.metadata = FileInfo { .size = reader_.content.size(),
+    input.metadata = FileInfo {
+      .size = reader_.content.size(),
       .last_modified = {},
       .is_directory = false,
-      .is_symlink = true };
+      .is_symlink = true,
+    };
     reader_.metadata.is_directory = true;
     auto mapped
       = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
@@ -784,7 +783,10 @@ namespace {
     auto input = CapturedFile();
     input.file.reset();
     input.metadata = FileInfo {
-      .size = 0U, .last_modified = {}, .is_directory = true, .is_symlink = false
+      .size = 0U,
+      .last_modified = {},
+      .is_directory = true,
+      .is_symlink = false,
     };
     auto mapped
       = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
@@ -842,8 +844,7 @@ namespace {
   NOLINT_TEST_F(ImportSourceSnapshotTest, ParserReadsPreserveLogicalIdentity)
   {
     const auto input = CapturedFile();
-    ASSERT_TRUE(input.file.has_value())
-      << "Expected input.file to contain a value";
+    ASSERT_HAS_VALUE(input.file) << "Expected input.file to contain a value";
     const auto physical_path = input.file.value().path;
     auto mapped
       = detail::ImportSourceSnapshot(reader_, pool_, CaptureMap(input));
@@ -903,7 +904,7 @@ namespace {
       .reads = { ImportSourceReadProof { .offset = 0U,
         .max_bytes = 0U,
         .digest
-        = base::ComputeSha256(std::as_bytes(std::span(reader_.content))) } },
+        = base::ComputeSha256(std::as_bytes(std::span(reader_.content))), }, },
     };
     snapshot_.RecordPreparation(std::span(&proof, 1));
     EXPECT_THROW(static_cast<void>(snapshot_.Observations()), std::logic_error);
@@ -922,7 +923,7 @@ namespace {
       .reads = { ImportSourceReadProof { .offset = 0U,
         .max_bytes = 0U,
         .digest
-        = base::ComputeSha256(std::as_bytes(std::span(reader_.content))) } },
+        = base::ComputeSha256(std::as_bytes(std::span(reader_.content))), }, },
     };
     snapshot_.RecordPreparation(std::span(&proof, 1));
     reader_.content.at(0) = 'z';
@@ -940,7 +941,7 @@ namespace {
       .reads = { ImportSourceReadProof { .offset = 0U,
         .max_bytes = 0U,
         .digest
-        = base::ComputeSha256(std::as_bytes(std::span(reader_.content))) } },
+        = base::ComputeSha256(std::as_bytes(std::span(reader_.content))), }, },
     };
     snapshot_.RecordPreparation(std::span(&proof, 1));
     reader_.content.at(0) = 'z';

@@ -8,10 +8,16 @@
 
 #include <filesystem>
 
+#include "ArtifactPublication.h"
+#include "PakToolOptions.h"
+#include "RequestPreparation.h"
+
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Cooker/Tools/PakTool/CommandExecution.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -64,7 +70,7 @@ NOLINT_TEST_F(
     std::filesystem::exists(TempDir() / "release" / "game_full.manifest.json"));
 
   const auto catalog = PakCatalogIo::Read(options.request.catalog_output);
-  ASSERT_TRUE(catalog.has_value());
+  ASSERT_HAS_VALUE(catalog);
   EXPECT_EQ(catalog->content_version, options.request.content_version);
   EXPECT_EQ(catalog->source_key, result.build_result.output_catalog.source_key);
 }

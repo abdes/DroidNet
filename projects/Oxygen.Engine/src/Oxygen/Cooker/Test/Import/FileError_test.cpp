@@ -6,6 +6,9 @@
 
 // Covers: Import/FileError.cpp
 
+#include <cstdint>
+#include <filesystem>
+#include <set>
 #include <string>
 #include <system_error>
 
@@ -21,14 +24,14 @@ namespace {
 
 NOLINT_TEST(FileErrorTest, kOkIsZero)
 {
-  EXPECT_EQ(static_cast<uint32_t>(FileError::kOk), 0u);
+  EXPECT_EQ(static_cast<uint32_t>(FileError::kOk), 0U);
 }
 
 NOLINT_TEST(FileErrorTest, AllCodesAreDistinct)
 {
   std::set<uint32_t> values;
 
-  const auto insert_check = [&values](FileError code) {
+  const auto insert_check = [&values](FileError code) -> void {
     auto [_, inserted] = values.insert(static_cast<uint32_t>(code));
     EXPECT_TRUE(inserted) << "Duplicate value for code "
                           << static_cast<uint32_t>(code);
@@ -155,7 +158,7 @@ INSTANTIATE_TEST_SUITE_P(KnownCodes, MapSystemErrorTest,
     // An uncommon error without an explicit mapping.
     MapSystemErrorCase { "UnknownErrorMapsToUnknown",
       std::make_error_code(std::errc::address_in_use), FileError::kUnknown }),
-  [](const ::testing::TestParamInfo<MapSystemErrorCase>& info) {
+  [](const ::testing::TestParamInfo<MapSystemErrorCase>& info) -> std::string {
     return std::string(info.param.name);
   });
 

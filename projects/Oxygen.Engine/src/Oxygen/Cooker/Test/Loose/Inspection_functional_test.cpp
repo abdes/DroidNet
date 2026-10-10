@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/NoStd.h>
@@ -79,7 +80,7 @@ NOLINT_TEST_F(InspectionTest, LoadFromRootExposesAssetsFilesAndGuidFromIndex)
   EXPECT_EQ(assets[0].descriptor_relpath, "MyAsset.bin");
   EXPECT_EQ(assets[0].descriptor_size, 42);
   EXPECT_EQ(assets[0].asset_type, 12);
-  ASSERT_TRUE(assets[0].descriptor_sha256.has_value());
+  ASSERT_HAS_VALUE(assets[0].descriptor_sha256);
   EXPECT_EQ(assets[0].descriptor_sha256->at(0), 0x01);
   EXPECT_EQ(
     assets[0].descriptor_sha256->at(31), 0x11); // 31 is sha256 last byte

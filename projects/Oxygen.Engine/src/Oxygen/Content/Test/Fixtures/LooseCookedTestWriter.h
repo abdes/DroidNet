@@ -197,7 +197,7 @@ public:
 
     std::vector<std::byte> reference_bytes;
     const auto references_offset
-      = header.file_records_offset + file_records.size() * sizeof(FileRecord);
+      = header.file_records_offset + (file_records.size() * sizeof(FileRecord));
     for (size_t i = 0; i < assets_.size(); ++i) {
       const auto& references = assets_.at(i).references;
       const auto encoded = references.Encode();

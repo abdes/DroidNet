@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/Test/Support/SceneDescriptorTestData.h>
@@ -33,13 +34,13 @@ auto Schema() -> const json&
   return schema;
 }
 
-// The documents in the table below spell out `"version": 10`; this test fails
+// The documents in the table below spell out `"version": 12`; this test fails
 // loudly when the schema and the scene asset version drift apart.
 NOLINT_TEST(SceneDescriptorSchemaTest, SchemaVersionMatchesSceneAssetVersion)
 {
   EXPECT_EQ(Schema().at("properties").at("version").at("const"),
     MakeCurrentSceneDescriptor("{}").at("version"));
-  EXPECT_EQ(Schema().at("properties").at("version").at("const"), 10);
+  EXPECT_EQ(Schema().at("properties").at("version").at("const"), 12);
 }
 
 class SceneDescriptorSchemaCaseTest
@@ -54,7 +55,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
   ::testing::Values(
     SchemaCase {
       "AcceptsCanonicalDocument",
-      R"({ "version": 10,
+      R"({ "version": 12,
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
     "name": "DemoScene",
     "nodes": [
@@ -92,7 +93,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     },
     SchemaCase {
       "RejectsUnknownNestedFields",
-      R"({ "version": 10,
+      R"({ "version": 12,
     "name": "BadScene",
     "nodes": [ { "name": "Root", "unknown_field": true } ]
   })",
@@ -101,7 +102,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     },
     SchemaCase {
       "AcceptsDirectionalShadowTuningFields",
-      R"({ "version": 10,
+      R"({ "version": 12,
     "name": "TunedScene",
     "nodes": [
       { "name": "Root" }
@@ -127,7 +128,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     },
     SchemaCase {
       "AcceptsCurrentEnvironmentAndLocalFogShape",
-      R"({ "version": 10,
+      R"({ "version": 12,
     "name": "FogScene",
     "nodes": [
       { "name": "Root" },
@@ -252,13 +253,17 @@ NOLINT_TEST(SceneDescriptorSchemaTest, NodeFlagSourceModesAreCanonical)
     = MakeCurrentSceneDescriptor(R"({"name":"Flags","nodes":[{"flags":{}}]})");
   for (const auto& visibility : { "inherit", "shown", "hidden" }) {
     for (const auto& shadow : { "inherit", "on", "off" }) {
-      document.at("nodes").at(0).update({ { "flags",
+      document.at("nodes").at(0).update({
         {
-          { "visible", visibility },
-          { "casts_shadows", shadow },
-          { "receives_shadows", shadow },
-          { "static", false },
-        } } });
+          "flags",
+          {
+            { "visible", visibility },
+            { "casts_shadows", shadow },
+            { "receives_shadows", shadow },
+            { "static", false },
+          },
+        },
+      });
       EXPECT_THAT(ValidateJson(Schema(), document), IsEmpty());
     }
   }
@@ -266,15 +271,32 @@ NOLINT_TEST(SceneDescriptorSchemaTest, NodeFlagSourceModesAreCanonical)
     json flags;
     std::string error_substr;
   };
-  for (const auto& invalid :
-    std::vector<Invalid> {
-      { { { "visible", true } }, "/nodes/0/flags/visible: " },
-      { { { "casts_shadows", false } }, "/nodes/0/flags/casts_shadows: " },
-      { { { "receives_shadows", true } }, "/nodes/0/flags/receives_shadows: " },
-      { { { "visible", "on" } }, "/nodes/0/flags/visible: " },
-      { { { "casts_shadows", "shown" } }, "/nodes/0/flags/casts_shadows: " },
-      { { { "visible", "local" } }, "/nodes/0/flags/visible: " },
-    }) {
+  for (const auto& invalid : std::vector<Invalid> {
+         {
+           .flags = { { "visible", true } },
+           .error_substr = "/nodes/0/flags/visible: ",
+         },
+         {
+           .flags = { { "casts_shadows", false } },
+           .error_substr = "/nodes/0/flags/casts_shadows: ",
+         },
+         {
+           .flags = { { "receives_shadows", true } },
+           .error_substr = "/nodes/0/flags/receives_shadows: ",
+         },
+         {
+           .flags = { { "visible", "on" } },
+           .error_substr = "/nodes/0/flags/visible: ",
+         },
+         {
+           .flags = { { "casts_shadows", "shown" } },
+           .error_substr = "/nodes/0/flags/casts_shadows: ",
+         },
+         {
+           .flags = { { "visible", "local" } },
+           .error_substr = "/nodes/0/flags/visible: ",
+         },
+       }) {
     document.at("nodes").at(0).update({ { "flags", invalid.flags } });
     EXPECT_THAT(ValidateJson(Schema(), document),
       Contains(HasSubstr(invalid.error_substr)))

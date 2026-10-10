@@ -7,9 +7,13 @@
 // Covers: Import/ScratchImage.cpp
 
 #include <cstddef>
+#include <cstdint>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -29,38 +33,38 @@ NOLINT_TEST(ScratchImageBasicTest, DefaultConstructionCreatesInvalidImage)
   const ScratchImage image;
 
   EXPECT_FALSE(image.IsValid());
-  EXPECT_EQ(image.GetTotalSizeBytes(), 0u);
-  EXPECT_EQ(image.GetSubresourceCount(), 0u);
+  EXPECT_EQ(image.GetTotalSizeBytes(), 0U);
+  EXPECT_EQ(image.GetSubresourceCount(), 0U);
 }
 
 //! ComputeMipCount returns correct values for various dimensions.
 NOLINT_TEST(ScratchImageBasicTest, ComputeMipCountReturnsCorrectValues)
 {
-  EXPECT_EQ(ScratchImage::ComputeMipCount(1, 1), 1u);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(2, 2), 2u);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(4, 4), 3u);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(8, 8), 4u);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(16, 16), 5u);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(256, 256), 9u);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(1024, 1024), 11u);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(2048, 2048), 12u);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(1, 1), 1U);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(2, 2), 2U);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(4, 4), 3U);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(8, 8), 4U);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(16, 16), 5U);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(256, 256), 9U);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(1024, 1024), 11U);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(2048, 2048), 12U);
 }
 
 //! ComputeMipCount handles non-square textures correctly.
 NOLINT_TEST(ScratchImageBasicTest, ComputeMipCountNonSquareTextures)
 {
-  EXPECT_EQ(ScratchImage::ComputeMipCount(1024, 512), 11u);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(512, 1024), 11u);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(4, 1), 3u);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(1, 4), 3u);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(1024, 512), 11U);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(512, 1024), 11U);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(4, 1), 3U);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(1, 4), 3U);
 }
 
 //! ComputeMipCount returns 0 for zero dimensions.
 NOLINT_TEST(ScratchImageBasicTest, ComputeMipCountZeroDimensions)
 {
-  EXPECT_EQ(ScratchImage::ComputeMipCount(0, 0), 0u);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(0, 100), 0u);
-  EXPECT_EQ(ScratchImage::ComputeMipCount(100, 0), 0u);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(0, 0), 0U);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(0, 100), 0U);
+  EXPECT_EQ(ScratchImage::ComputeMipCount(100, 0), 0U);
 }
 
 //! ComputeSubresourceIndex follows layer-major ordering.
@@ -69,26 +73,26 @@ NOLINT_TEST(ScratchImageBasicTest, ComputeSubresourceIndexLayerMajorOrdering)
   constexpr uint16_t kMipLevels = 4;
 
   // Layer 0: mips 0-3
-  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(0, 0, kMipLevels), 0u);
-  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(0, 1, kMipLevels), 1u);
-  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(0, 2, kMipLevels), 2u);
-  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(0, 3, kMipLevels), 3u);
+  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(0, 0, kMipLevels), 0U);
+  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(0, 1, kMipLevels), 1U);
+  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(0, 2, kMipLevels), 2U);
+  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(0, 3, kMipLevels), 3U);
 
   // Layer 1: mips 0-3
-  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(1, 0, kMipLevels), 4u);
-  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(1, 1, kMipLevels), 5u);
-  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(1, 2, kMipLevels), 6u);
-  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(1, 3, kMipLevels), 7u);
+  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(1, 0, kMipLevels), 4U);
+  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(1, 1, kMipLevels), 5U);
+  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(1, 2, kMipLevels), 6U);
+  EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(1, 3, kMipLevels), 7U);
 }
 
 //! ComputeMipDimension halves correctly with minimum of 1.
 NOLINT_TEST(ScratchImageBasicTest, ComputeMipDimensionHalvesCorrectly)
 {
-  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 0), 1024u);
-  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 1), 512u);
-  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 2), 256u);
-  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 10), 1u);
-  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 11), 1u); // Clamped to 1
+  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 0), 1024U);
+  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 1), 512U);
+  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 2), 256U);
+  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 10), 1U);
+  EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 11), 1U); // Clamped to 1
 }
 
 //=== ScratchImage Create Tests ===------------------------------------------//
@@ -110,13 +114,13 @@ NOLINT_TEST(ScratchImageCreateTest, ValidMetadataCreatesValidImage)
   auto image = ScratchImage::Create(meta);
 
   EXPECT_TRUE(image.IsValid());
-  EXPECT_EQ(image.Meta().width, 256u);
-  EXPECT_EQ(image.Meta().height, 256u);
+  EXPECT_EQ(image.Meta().width, 256U);
+  EXPECT_EQ(image.Meta().height, 256U);
   EXPECT_EQ(image.Meta().format, Format::kRGBA8UNorm);
-  EXPECT_EQ(image.GetSubresourceCount(), 1u);
+  EXPECT_EQ(image.GetSubresourceCount(), 1U);
 
   // RGBA8 = 4 bytes per pixel, 256x256 = 262144 bytes
-  EXPECT_EQ(image.GetTotalSizeBytes(), 256u * 256u * 4u);
+  EXPECT_EQ(image.GetTotalSizeBytes(), 256U * 256U * 4U);
 }
 
 //! Create with multiple mip levels allocates correct storage.
@@ -135,11 +139,11 @@ NOLINT_TEST(ScratchImageCreateTest, MultipleMipsAllocatesCorrectStorage)
   auto image = ScratchImage::Create(meta);
 
   EXPECT_TRUE(image.IsValid());
-  EXPECT_EQ(image.GetSubresourceCount(), 4u);
+  EXPECT_EQ(image.GetSubresourceCount(), 4U);
 
   // Total size = 64*64*4 + 32*32*4 + 16*16*4 + 8*8*4
   //            = 16384 + 4096 + 1024 + 256 = 21760
-  EXPECT_EQ(image.GetTotalSizeBytes(), 21760u);
+  EXPECT_EQ(image.GetTotalSizeBytes(), 21760U);
 }
 
 //! Create with array layers allocates correct storage.
@@ -158,8 +162,8 @@ NOLINT_TEST(ScratchImageCreateTest, ArrayTextureAllocatesCorrectStorage)
   auto image = ScratchImage::Create(meta);
 
   EXPECT_TRUE(image.IsValid());
-  EXPECT_EQ(image.GetSubresourceCount(), 4u);
-  EXPECT_EQ(image.GetTotalSizeBytes(), 32u * 32u * 4u * 4u); // 16384 bytes
+  EXPECT_EQ(image.GetSubresourceCount(), 4U);
+  EXPECT_EQ(image.GetTotalSizeBytes(), 32U * 32U * 4U * 4U); // 16384 bytes
 }
 
 //! Create with zero dimensions returns invalid image.
@@ -194,7 +198,7 @@ NOLINT_TEST(ScratchImageCreateFromDataTest, ValidDataCreatesImageWithData)
   std::vector<std::byte> pixels(kWidth * kHeight * kBpp);
   // Fill with test pattern: each pixel has its index as value
   for (size_t i = 0; i < pixels.size(); ++i) {
-    pixels[i] = static_cast<std::byte>(i & 0xFF);
+    pixels.at(i) = static_cast<std::byte>(i & 0xFF);
   }
 
   auto image = ScratchImage::CreateFromData(
@@ -203,8 +207,8 @@ NOLINT_TEST(ScratchImageCreateFromDataTest, ValidDataCreatesImageWithData)
   EXPECT_TRUE(image.IsValid());
   EXPECT_EQ(image.Meta().width, kWidth);
   EXPECT_EQ(image.Meta().height, kHeight);
-  EXPECT_EQ(image.Meta().mip_levels, 1u);
-  EXPECT_EQ(image.Meta().array_layers, 1u);
+  EXPECT_EQ(image.Meta().mip_levels, 1U);
+  EXPECT_EQ(image.Meta().array_layers, 1U);
   EXPECT_EQ(image.GetTotalSizeBytes(), kWidth * kHeight * kBpp);
 }
 
@@ -227,11 +231,11 @@ NOLINT_TEST(ScratchImageGetImageTest, Mip0ReturnsCorrectView)
 
   const ImageView view = image.GetImage(0, 0);
 
-  EXPECT_EQ(view.width, 128u);
-  EXPECT_EQ(view.height, 64u);
+  EXPECT_EQ(view.width, 128U);
+  EXPECT_EQ(view.height, 64U);
   EXPECT_EQ(view.format, Format::kRGBA8UNorm);
-  EXPECT_EQ(view.row_pitch_bytes, 128u * 4u); // 512 bytes per row
-  EXPECT_EQ(view.pixels.size(), 128u * 64u * 4u); // 32768 bytes total
+  EXPECT_EQ(view.row_pitch_bytes, 128U * 4U); // 512 bytes per row
+  EXPECT_EQ(view.pixels.size(), 128U * 64U * 4U); // 32768 bytes total
 }
 
 //! GetImage returns correct dimensions for different mip levels.
@@ -249,20 +253,20 @@ NOLINT_TEST(ScratchImageGetImageTest, DifferentMipsReturnsCorrectDimensions)
   auto image = ScratchImage::Create(meta);
 
   const auto view0 = image.GetImage(0, 0);
-  EXPECT_EQ(view0.width, 64u);
-  EXPECT_EQ(view0.height, 64u);
+  EXPECT_EQ(view0.width, 64U);
+  EXPECT_EQ(view0.height, 64U);
 
   const auto view1 = image.GetImage(0, 1);
-  EXPECT_EQ(view1.width, 32u);
-  EXPECT_EQ(view1.height, 32u);
+  EXPECT_EQ(view1.width, 32U);
+  EXPECT_EQ(view1.height, 32U);
 
   const auto view2 = image.GetImage(0, 2);
-  EXPECT_EQ(view2.width, 16u);
-  EXPECT_EQ(view2.height, 16u);
+  EXPECT_EQ(view2.width, 16U);
+  EXPECT_EQ(view2.height, 16U);
 
   const auto view3 = image.GetImage(0, 3);
-  EXPECT_EQ(view3.width, 8u);
-  EXPECT_EQ(view3.height, 8u);
+  EXPECT_EQ(view3.width, 8U);
+  EXPECT_EQ(view3.height, 8U);
 }
 
 //! GetImage returns correct views for array layers.
@@ -284,9 +288,9 @@ NOLINT_TEST(ScratchImageGetImageTest, ArrayLayersReturnsDistinctViews)
   const auto view2 = image.GetImage(2, 0);
 
   // Each view should have same dimensions but different pixel spans
-  EXPECT_EQ(view0.width, 16u);
-  EXPECT_EQ(view1.width, 16u);
-  EXPECT_EQ(view2.width, 16u);
+  EXPECT_EQ(view0.width, 16U);
+  EXPECT_EQ(view1.width, 16U);
+  EXPECT_EQ(view2.width, 16U);
 
   // Pixel spans should point to different memory locations
   EXPECT_NE(view0.pixels.data(), view1.pixels.data());
@@ -343,7 +347,7 @@ NOLINT_TEST(ScratchImageFormatTest, R8FormatAllocatesCorrectSize)
 
   auto image = ScratchImage::Create(meta);
 
-  EXPECT_EQ(image.GetTotalSizeBytes(), 64u * 64u * 1u); // 4096 bytes
+  EXPECT_EQ(image.GetTotalSizeBytes(), 64U * 64U * 1U); // 4096 bytes
 }
 
 //! RGBA16F format allocates correct size (8 bytes per pixel).
@@ -361,7 +365,7 @@ NOLINT_TEST(ScratchImageFormatTest, RGBA16FFormatAllocatesCorrectSize)
 
   auto image = ScratchImage::Create(meta);
 
-  EXPECT_EQ(image.GetTotalSizeBytes(), 32u * 32u * 8u); // 8192 bytes
+  EXPECT_EQ(image.GetTotalSizeBytes(), 32U * 32U * 8U); // 8192 bytes
 }
 
 //! RGBA32F format allocates correct size (16 bytes per pixel).
@@ -379,7 +383,7 @@ NOLINT_TEST(ScratchImageFormatTest, RGBA32FFormatAllocatesCorrectSize)
 
   auto image = ScratchImage::Create(meta);
 
-  EXPECT_EQ(image.GetTotalSizeBytes(), 16u * 16u * 16u); // 4096 bytes
+  EXPECT_EQ(image.GetTotalSizeBytes(), 16U * 16U * 16U); // 4096 bytes
 }
 
 } // namespace

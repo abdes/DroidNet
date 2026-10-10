@@ -18,6 +18,8 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <vector>
 
 #include <errhandlingapi.h>
@@ -26,7 +28,6 @@
 #include <winerror.h>
 #include <winnt.h>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/FileError.h>
@@ -122,7 +123,7 @@ NOLINT_TEST_F(
   {
     oxygen::serio::FileStream<> stream(path, std::ios::in);
     const auto size = stream.Size();
-    ASSERT_TRUE(size.has_value());
+    ASSERT_HAS_VALUE(size);
     EXPECT_EQ(size.value(), replacement.size());
   }
   const auto lock_path = path.parent_path() / "generation.lock";
@@ -130,7 +131,7 @@ NOLINT_TEST_F(
     const auto lock = oxygen::serio::FileLock::TryAcquire(lock_path,
       oxygen::serio::FileLockMode::kExclusive,
       oxygen::serio::FileLockOpenMode::kOpenOrCreate);
-    ASSERT_TRUE(lock.has_value());
+    ASSERT_HAS_VALUE(lock);
     const auto competing = oxygen::serio::FileLock::TryAcquire(
       lock_path, oxygen::serio::FileLockMode::kShared);
     ASSERT_FALSE(competing.has_value());
@@ -152,7 +153,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteSmallFileWritesContent)
       write_outcome = result.value();
     }
   });
-  ASSERT_TRUE(write_outcome.has_value());
+  ASSERT_HAS_VALUE(write_outcome);
   const auto bytes_written = *write_outcome;
 
   EXPECT_EQ(bytes_written, content.size());
@@ -175,7 +176,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteLargerFileWritesContent)
       write_outcome = result.value();
     }
   });
-  ASSERT_TRUE(write_outcome.has_value());
+  ASSERT_HAS_VALUE(write_outcome);
   const auto bytes_written = *write_outcome;
 
   EXPECT_EQ(bytes_written, content.size());
@@ -193,7 +194,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteEmptyDataCreatesEmptyFile)
       write_outcome = result.value();
     }
   });
-  ASSERT_TRUE(write_outcome.has_value());
+  ASSERT_HAS_VALUE(write_outcome);
   const auto bytes_written = *write_outcome;
 
   EXPECT_EQ(bytes_written, 0U);
@@ -297,7 +298,7 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAtNewFileCreatesFile)
       write_outcome = result.value();
     }
   });
-  ASSERT_TRUE(write_outcome.has_value());
+  ASSERT_HAS_VALUE(write_outcome);
   const auto bytes_written = *write_outcome;
 
   EXPECT_EQ(bytes_written, content.size());
@@ -575,11 +576,11 @@ NOLINT_TEST_F(WindowsFileWriterTest, FlushWaitsForAllPending)
   int completed_count = 0;
 
   writer_->WriteAsync(path1, ToBytes(content), {},
-    [&](auto, auto) -> auto { ++completed_count; });
+    [&](const auto&, auto) -> auto { ++completed_count; });
   writer_->WriteAsync(path2, ToBytes(content), {},
-    [&](auto, auto) -> auto { ++completed_count; });
+    [&](const auto&, auto) -> auto { ++completed_count; });
   writer_->WriteAsync(path3, ToBytes(content), {},
-    [&](auto, auto) -> auto { ++completed_count; });
+    [&](const auto&, auto) -> auto { ++completed_count; });
 
   co::Run(*loop_, [&] -> Co<> {
     auto result = co_await writer_->Flush();

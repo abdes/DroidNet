@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <iterator>
 #include <memory>
@@ -14,18 +15,29 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include "AssetLoader_test.h"
 #include "Fixtures/LooseCookedTestWriter.h"
+#include "Fixtures/PakTestWriter.h"
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Loaders/PhysicsResourceLoader.h>
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
+#include <Oxygen/Content/ResidencyPolicy.h>
+#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
+#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/OxCo/ThreadPool.h>
@@ -63,7 +75,7 @@ namespace {
     body.shape_asset_key = kShape;
     body.material_asset_key = kMaterial;
     std::vector<std::byte> bytes;
-    const auto append = [&bytes](const auto& record) {
+    const auto append = [&bytes](const auto& record) -> auto {
       const auto chunk = std::as_bytes(std::span(&record, 1U));
       bytes.insert(bytes.end(), chunk.begin(), chunk.end());
     };
@@ -75,15 +87,23 @@ namespace {
     writer.WriteAssetDescriptor(kSidecar, data::AssetType::kPhysicsScene,
       "/Test/scene.opscene", "scene.opscene", bytes,
       data::AssetReferences::Create({},
-        { { .key = kScene,
+        {
+          {
+            .key = kScene,
             .kind = data::KeyReferenceKind::kLogical,
-            .expected_type = data::AssetType::kScene },
-          { .key = kShape,
+            .expected_type = data::AssetType::kScene,
+          },
+          {
+            .key = kShape,
             .kind = data::KeyReferenceKind::kAsset,
-            .expected_type = data::AssetType::kCollisionShape },
-          { .key = kMaterial,
+            .expected_type = data::AssetType::kCollisionShape,
+          },
+          {
+            .key = kMaterial,
             .kind = data::KeyReferenceKind::kAsset,
-            .expected_type = data::AssetType::kPhysicsMaterial } })
+            .expected_type = data::AssetType::kPhysicsMaterial,
+          },
+        })
         .value());
     static_cast<void>(writer.Finish());
     const auto lease = serio::FileLock::TryAcquire(
@@ -97,7 +117,7 @@ namespace {
   enum class DependencyCase : uint8_t {
     kValid,
     kMissingMaterial,
-    kWrongShapeVersion
+    kWrongShapeVersion,
   };
 
   auto WriteDependencies(const std::filesystem::path& root,
@@ -113,18 +133,26 @@ namespace {
       : physics::kCollisionShapeAssetVersion;
     shape.shape_type = physics::ShapeType::kConvexHull;
     shape.material_asset_key = kMaterial;
-    shape.cooked_shape_ref = { .payload_asset_key = kPayload,
-      .payload_type = physics::ShapePayloadType::kConvex };
+    shape.cooked_shape_ref = {
+      .payload_asset_key = kPayload,
+      .payload_type = physics::ShapePayloadType::kConvex,
+    };
     writer.WriteAssetDescriptor(kShape, data::AssetType::kCollisionShape,
       "/Test/shape.oshape", "shape.oshape",
       std::as_bytes(std::span(&shape, 1U)),
       data::AssetReferences::Create({},
-        { { .key = kMaterial,
+        {
+          {
+            .key = kMaterial,
             .kind = data::KeyReferenceKind::kAsset,
-            .expected_type = data::AssetType::kPhysicsMaterial },
-          { .key = kPayload,
+            .expected_type = data::AssetType::kPhysicsMaterial,
+          },
+          {
+            .key = kPayload,
             .kind = data::KeyReferenceKind::kPhysicsResource,
-            .expected_type = data::AssetType::kUnknown } })
+            .expected_type = data::AssetType::kUnknown,
+          },
+        })
         .value());
     if (scenario != DependencyCase::kMissingMaterial) {
       physics::PhysicsMaterialAssetDesc material {};
@@ -310,6 +338,59 @@ namespace {
     co::Run(loop,
       ExercisePhysicsBindings(
         &loop, temp_dir_, DependencyCase::kWrongShapeVersion));
+  }
+  //! Mounts a pak whose physics table holds the reserved entry 0 and a 4-byte
+  //! payload at entry 1, then loads entry 1 through the pak's source key.
+  auto LoadPhysicsPayloadFromPak(
+    TestEventLoop* loop, const std::filesystem::path pak_path) -> co::Co<>
+  {
+    const auto payload = std::vector<std::byte>(4U, std::byte { 2 });
+    auto config = PakTestWriter::Config {};
+    auto entry = PakTestWriter::Config::PhysicsEntry {};
+    entry.desc.resource_asset_key = kPayload;
+    const auto hash = base::ComputeSha256(payload);
+    std::ranges::copy(hash, std::begin(entry.desc.content_hash));
+    entry.payload = payload;
+    config.physics_resources
+      = { PakTestWriter::Config::PhysicsEntry {}, std::move(entry) };
+    PakTestWriter(pak_path).Write(config);
+    const auto source_key
+      = data::SourceKey::FromBytes(config.header.source_identity).value();
+
+    co::ThreadPool pool(*loop, 2);
+    AssetLoaderConfig loader_config {};
+    loader_config.thread_pool = observer_ptr(&pool);
+    loader_config.verify_content_hashes = true;
+    AssetLoader loader(
+      engine::internal::EngineTagFactory::Get(), loader_config);
+    loader.RegisterLoader(loaders::LoadPhysicsResource);
+    OXCO_WITH_NURSERY(nursery)
+    {
+      co_await nursery.Start(&AssetLoader::ActivateAsync, &loader);
+      loader.Run();
+      loader.AddPakFile(pak_path);
+      const auto key = loader.MakePhysicsResourceKey(
+        source_key, data::pak::core::ResourceIndexT { 1U });
+      if (!key) {
+        ADD_FAILURE() << "The pak's physics resource 1 has no locator";
+        loader.Stop();
+        co_return co::kJoin;
+      }
+      const auto loaded = co_await loader.LoadPhysicsResourceAsync(*key);
+      if (!loaded) {
+        ADD_FAILURE() << "The pak's physics resource 1 did not load";
+      } else {
+        EXPECT_THAT(loaded->GetData(), ::testing::ElementsAre(2U, 2U, 2U, 2U));
+      }
+      loader.Stop();
+      co_return co::kJoin;
+    };
+  }
+
+  NOLINT_TEST_F(AssetLoaderBasicTest, LoadsPhysicsResourcePayloadFromPak)
+  {
+    TestEventLoop loop;
+    co::Run(loop, LoadPhysicsPayloadFromPak(&loop, temp_dir_ / "physics.pak"));
   }
 } // namespace
 } // namespace oxygen::content::testing

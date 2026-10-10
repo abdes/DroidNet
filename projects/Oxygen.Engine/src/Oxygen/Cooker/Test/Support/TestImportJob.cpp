@@ -5,11 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <chrono>
 #include <exception>
 #include <thread>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/Internal/ImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/ImportJobParams.h>
 #include <Oxygen/Cooker/Test/Support/TestImportJob.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 
 using namespace std::chrono_literals;
@@ -25,13 +33,13 @@ TestImportJob::TestImportJob(detail::ImportJobParams params)
 
 TestImportJob::TestImportJob(detail::ImportJobParams params, Config config)
   : detail::ImportJob(std::move(params))
-  , config_(config)
+  , config_(std::move(config))
 {
 }
 
 auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
 {
-  auto make_canceled_report = [&]() -> ImportReport {
+  auto make_canceled_report = [&] -> ImportReport {
     auto report = ImportReport {};
     report.cooked_root
       = Request().cooked_root.value_or(Request().source_path.parent_path());
@@ -74,7 +82,7 @@ auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
     try {
       co_await thread_pool->Run(
-        [step_delay](co::ThreadPool::CancelToken canceled) {
+        [step_delay](co::ThreadPool::CancelToken canceled) -> void {
           if (canceled) {
             return;
           }
@@ -96,6 +104,13 @@ auto TestImportJob::ExecuteAsync() -> co::Co<ImportReport>
       const auto progress
         = static_cast<float>(step + 1) / static_cast<float>(step_count);
       ReportPhaseProgress(ImportPhase::kWorking, progress, "Test job running");
+    }
+  }
+
+  if (config_.finish_gate != nullptr) {
+    config_.finish_gate->wait();
+    if (stop_token.stop_requested()) {
+      co_return make_canceled_report();
     }
   }
 

@@ -12,6 +12,7 @@
 #include <string>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -75,17 +76,17 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(
     request->job_name, std::optional<std::string> { "ground_material_job" });
-  ASSERT_TRUE(request->physics_material_descriptor.has_value());
+  ASSERT_HAS_VALUE(request->physics_material_descriptor);
 
   // Descriptor-level content_hashing overrides manifest defaults/job settings.
   // Release must hash authored content even when the descriptor opts out.
@@ -140,19 +141,19 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
-  EXPECT_EQ(manifest->jobs[1].id, "physics.material.ground");
-  ASSERT_EQ(manifest->jobs[1].depends_on.size(), 1U);
-  EXPECT_EQ(manifest->jobs[1].depends_on[0], "buffers.shared");
+  EXPECT_EQ(manifest->jobs.at(1).id, "physics.material.ground");
+  ASSERT_EQ(manifest->jobs.at(1).depends_on.size(), 1U);
+  EXPECT_EQ(manifest->jobs.at(1).depends_on.at(0), "buffers.shared");
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[1].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->orchestration.has_value());
+  const auto request = manifest->jobs.at(1).BuildRequest(request_errors);
+  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request->orchestration);
   EXPECT_EQ(request->orchestration->job_id, "physics.material.ground");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);
-  EXPECT_EQ(request->orchestration->depends_on[0], "buffers.shared");
+  EXPECT_EQ(request->orchestration->depends_on.at(0), "buffers.shared");
 }
 
 NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
@@ -214,11 +215,11 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(request_errors.str(),
     ::testing::HasSubstr(

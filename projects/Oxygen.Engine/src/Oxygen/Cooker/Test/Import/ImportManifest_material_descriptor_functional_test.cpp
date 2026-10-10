@@ -12,6 +12,7 @@
 #include <string>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -73,16 +74,16 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "wood-job" });
-  ASSERT_TRUE(request->material_descriptor.has_value());
+  ASSERT_HAS_VALUE(request->material_descriptor);
 
   // Descriptor intent overrides defaults; Release enforces content hashing.
   EXPECT_EQ(request->options.with_content_hashing, kContentHashingDefault);
@@ -132,12 +133,12 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+  ASSERT_HAS_VALUE(request) << request_errors.str();
   EXPECT_EQ(request->loose_cooked_layout.materials_subdir,
     "DescriptorMaterialsDefault");
 }
@@ -181,19 +182,19 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
-  EXPECT_EQ(manifest->jobs[1].id, "wood.material");
-  ASSERT_EQ(manifest->jobs[1].depends_on.size(), 1U);
-  EXPECT_EQ(manifest->jobs[1].depends_on[0], "wood.color");
+  EXPECT_EQ(manifest->jobs.at(1).id, "wood.material");
+  ASSERT_EQ(manifest->jobs.at(1).depends_on.size(), 1U);
+  EXPECT_EQ(manifest->jobs.at(1).depends_on.at(0), "wood.color");
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[1].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->orchestration.has_value());
+  const auto request = manifest->jobs.at(1).BuildRequest(request_errors);
+  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request->orchestration);
   EXPECT_EQ(request->orchestration->job_id, "wood.material");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);
-  EXPECT_EQ(request->orchestration->depends_on[0], "wood.color");
+  EXPECT_EQ(request->orchestration->depends_on.at(0), "wood.color");
 }
 
 NOLINT_TEST(ImportManifestMaterialDescriptorTest,
@@ -258,11 +259,11 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
   EXPECT_FALSE(request.has_value());
   EXPECT_THAT(request_errors.str(),
     ::testing::HasSubstr("material.descriptor.schema_validation_failed"));
@@ -278,40 +279,64 @@ NOLINT_TEST(
     = temp.Path() / "job_layout_overrides" / "import_manifest.json";
   WriteText(
     path.parent_path() / "shared.material.json", R"({"name":"Shared"})");
-  const json document = { { "version", 1 },
+  const json document = {
+    { "version", 1 },
     { "output", (path.parent_path() / ".cooked").generic_string() },
-    { "layout",
-      { { "virtual_mount_root", "/Content" },
+    {
+      "layout",
+      {
+        { "virtual_mount_root", "/Content" },
         { "descriptors_dir", "Descriptors" },
-        { "materials_subdir", "Common" } } },
-    { "jobs",
-      json::array({ { { "type", "material-descriptor" },
-                      { "source", "shared.material.json" },
-                      { "layout",
-                        { { "descriptors_dir", "" },
-                          { "materials_subdir", "Materials/A" } } } },
-        { { "type", "material-descriptor" },
+        { "materials_subdir", "Common" },
+      },
+    },
+    {
+      "jobs",
+      json::array({
+        {
+          { "type", "material-descriptor" },
           { "source", "shared.material.json" },
-          { "layout",
-            { { "descriptors_dir", "" },
-              { "materials_subdir", "Materials/B" } } } },
-        { { "type", "material-descriptor" },
-          { "source", "shared.material.json" } } }) } };
+          {
+            "layout",
+            {
+              { "descriptors_dir", "" },
+              { "materials_subdir", "Materials/A" },
+            },
+          },
+        },
+        {
+          { "type", "material-descriptor" },
+          { "source", "shared.material.json" },
+          {
+            "layout",
+            {
+              { "descriptors_dir", "" },
+              { "materials_subdir", "Materials/B" },
+            },
+          },
+        },
+        {
+          { "type", "material-descriptor" },
+          { "source", "shared.material.json" },
+        },
+      }),
+    },
+  };
   WriteText(path, document.dump());
   std::ostringstream errors;
   const auto manifest = ImportManifest::Load(path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   const auto requests = manifest->BuildRequests(errors);
   ASSERT_EQ(requests.size(), 3U) << errors.str();
-  EXPECT_EQ(requests[0].loose_cooked_layout.MaterialVirtualPath("Shared"),
+  EXPECT_EQ(requests.at(0).loose_cooked_layout.MaterialVirtualPath("Shared"),
     "/Content/Materials/A/Shared.omat");
-  EXPECT_EQ(requests[1].loose_cooked_layout.MaterialVirtualPath("Shared"),
+  EXPECT_EQ(requests.at(1).loose_cooked_layout.MaterialVirtualPath("Shared"),
     "/Content/Materials/B/Shared.omat");
-  EXPECT_EQ(requests[2].loose_cooked_layout.MaterialVirtualPath("Shared"),
+  EXPECT_EQ(requests.at(2).loose_cooked_layout.MaterialVirtualPath("Shared"),
     "/Content/Descriptors/Common/Shared.omat");
-  EXPECT_EQ(requests[0].cooked_root, requests[1].cooked_root);
-  EXPECT_EQ(requests[0].loose_cooked_layout.resources_dir,
-    requests[2].loose_cooked_layout.resources_dir);
+  EXPECT_EQ(requests.at(0).cooked_root, requests.at(1).cooked_root);
+  EXPECT_EQ(requests.at(0).loose_cooked_layout.resources_dir,
+    requests.at(2).loose_cooked_layout.resources_dir);
 }
 
 //! Malformed job overrides are rejected before job construction.
@@ -322,11 +347,20 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, RejectsMalformedJobLayout)
   for (const auto& layout :
     { json("invalid"), json { { "materials_subdir", 12 } } }) {
     WriteText(path,
-      json { { "version", 1 },
+      json {
+        { "version", 1 },
         { "output", (path.parent_path() / ".cooked").generic_string() },
-        { "jobs",
-          json::array({ { { "type", "material-descriptor" },
-            { "source", "shared.material.json" }, { "layout", layout } } }) } }
+        {
+          "jobs",
+          json::array({
+            {
+              { "type", "material-descriptor" },
+              { "source", "shared.material.json" },
+              { "layout", layout },
+            },
+          }),
+        },
+      }
         .dump());
     std::ostringstream errors;
     EXPECT_FALSE(ImportManifest::Load(path, std::nullopt, errors).has_value());

@@ -8,11 +8,13 @@
 
 #include <array>
 #include <cstddef>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/Internal/bc7/Bc7Encoder.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -32,8 +34,8 @@ NOLINT_TEST(Bc7EncoderParamsTest, FastHasExpectedValues)
 {
   const auto params = bc7::Bc7EncoderParams::Fast();
 
-  EXPECT_EQ(params.max_partitions, 16u);
-  EXPECT_EQ(params.uber_level, 0u);
+  EXPECT_EQ(params.max_partitions, 16U);
+  EXPECT_EQ(params.uber_level, 0U);
   EXPECT_FALSE(params.try_least_squares);
 }
 
@@ -41,8 +43,8 @@ NOLINT_TEST(Bc7EncoderParamsTest, DefaultHasBalancedValues)
 {
   const auto params = bc7::Bc7EncoderParams::Default();
 
-  EXPECT_EQ(params.max_partitions, 64u);
-  EXPECT_EQ(params.uber_level, 1u);
+  EXPECT_EQ(params.max_partitions, 64U);
+  EXPECT_EQ(params.uber_level, 1U);
   EXPECT_TRUE(params.try_least_squares);
 }
 
@@ -50,8 +52,8 @@ NOLINT_TEST(Bc7EncoderParamsTest, HighHasQualityValues)
 {
   const auto params = bc7::Bc7EncoderParams::High();
 
-  EXPECT_EQ(params.max_partitions, 64u);
-  EXPECT_EQ(params.uber_level, 4u);
+  EXPECT_EQ(params.max_partitions, 64U);
+  EXPECT_EQ(params.uber_level, 4U);
   EXPECT_TRUE(params.try_least_squares);
   EXPECT_FALSE(params.use_partition_filterbank);
 }
@@ -73,36 +75,36 @@ NOLINT_TEST(Bc7EncoderParamsTest, FromQualityMapsCorrectly)
 
 NOLINT_TEST(Bc7BlockCountTest, ComputeBlockCountExactMultiples)
 {
-  EXPECT_EQ(bc7::ComputeBlockCount(4), 1u);
-  EXPECT_EQ(bc7::ComputeBlockCount(8), 2u);
-  EXPECT_EQ(bc7::ComputeBlockCount(16), 4u);
-  EXPECT_EQ(bc7::ComputeBlockCount(256), 64u);
+  EXPECT_EQ(bc7::ComputeBlockCount(4), 1U);
+  EXPECT_EQ(bc7::ComputeBlockCount(8), 2U);
+  EXPECT_EQ(bc7::ComputeBlockCount(16), 4U);
+  EXPECT_EQ(bc7::ComputeBlockCount(256), 64U);
 }
 
 NOLINT_TEST(Bc7BlockCountTest, ComputeBlockCountRoundsUp)
 {
-  EXPECT_EQ(bc7::ComputeBlockCount(1), 1u);
-  EXPECT_EQ(bc7::ComputeBlockCount(2), 1u);
-  EXPECT_EQ(bc7::ComputeBlockCount(3), 1u);
-  EXPECT_EQ(bc7::ComputeBlockCount(5), 2u);
-  EXPECT_EQ(bc7::ComputeBlockCount(7), 2u);
-  EXPECT_EQ(bc7::ComputeBlockCount(9), 3u);
+  EXPECT_EQ(bc7::ComputeBlockCount(1), 1U);
+  EXPECT_EQ(bc7::ComputeBlockCount(2), 1U);
+  EXPECT_EQ(bc7::ComputeBlockCount(3), 1U);
+  EXPECT_EQ(bc7::ComputeBlockCount(5), 2U);
+  EXPECT_EQ(bc7::ComputeBlockCount(7), 2U);
+  EXPECT_EQ(bc7::ComputeBlockCount(9), 3U);
 }
 
 NOLINT_TEST(Bc7BlockCountTest, ComputeBc7RowPitchReturnsCorrectPitch)
 {
-  EXPECT_EQ(bc7::ComputeBc7RowPitch(4), 16u); // 1 block
-  EXPECT_EQ(bc7::ComputeBc7RowPitch(8), 32u); // 2 blocks
-  EXPECT_EQ(bc7::ComputeBc7RowPitch(16), 64u); // 4 blocks
-  EXPECT_EQ(bc7::ComputeBc7RowPitch(5), 32u); // 2 blocks (rounded up)
+  EXPECT_EQ(bc7::ComputeBc7RowPitch(4), 16U); // 1 block
+  EXPECT_EQ(bc7::ComputeBc7RowPitch(8), 32U); // 2 blocks
+  EXPECT_EQ(bc7::ComputeBc7RowPitch(16), 64U); // 4 blocks
+  EXPECT_EQ(bc7::ComputeBc7RowPitch(5), 32U); // 2 blocks (rounded up)
 }
 
 NOLINT_TEST(Bc7BlockCountTest, ComputeBc7SurfaceSizeReturnsCorrectSize)
 {
-  EXPECT_EQ(bc7::ComputeBc7SurfaceSize(4, 4), 16u); // 1x1 blocks
-  EXPECT_EQ(bc7::ComputeBc7SurfaceSize(8, 8), 64u); // 2x2 blocks
-  EXPECT_EQ(bc7::ComputeBc7SurfaceSize(16, 16), 256u); // 4x4 blocks
-  EXPECT_EQ(bc7::ComputeBc7SurfaceSize(5, 5), 64u); // 2x2 blocks (rounded)
+  EXPECT_EQ(bc7::ComputeBc7SurfaceSize(4, 4), 16U); // 1x1 blocks
+  EXPECT_EQ(bc7::ComputeBc7SurfaceSize(8, 8), 64U); // 2x2 blocks
+  EXPECT_EQ(bc7::ComputeBc7SurfaceSize(16, 16), 256U); // 4x4 blocks
+  EXPECT_EQ(bc7::ComputeBc7SurfaceSize(5, 5), 64U); // 2x2 blocks (rounded)
 }
 
 //===----------------------------------------------------------------------===//
@@ -120,10 +122,10 @@ NOLINT_TEST_F(Bc7EncodeBlockTest, EncodeBlockProducesOutput)
   std::array<std::byte, 64> pixels {};
   for (size_t i = 0; i < 16; ++i) {
     const size_t offset = i * 4;
-    pixels[offset + 0] = std::byte { 255 }; // R
-    pixels[offset + 1] = std::byte { 0 }; // G
-    pixels[offset + 2] = std::byte { 0 }; // B
-    pixels[offset + 3] = std::byte { 255 }; // A
+    pixels.at(offset + 0) = std::byte { 255 }; // R
+    pixels.at(offset + 1) = std::byte { 0 }; // G
+    pixels.at(offset + 2) = std::byte { 0 }; // B
+    pixels.at(offset + 3) = std::byte { 255 }; // A
   }
 
   std::array<std::byte, bc7::kBc7BlockSizeBytes> output {};
@@ -150,10 +152,10 @@ NOLINT_TEST_F(Bc7EncodeBlockTest, EncodeBlockDetectsAlpha)
   std::array<std::byte, 64> pixels {};
   for (size_t i = 0; i < 16; ++i) {
     const size_t offset = i * 4;
-    pixels[offset + 0] = std::byte { 128 };
-    pixels[offset + 1] = std::byte { 128 };
-    pixels[offset + 2] = std::byte { 128 };
-    pixels[offset + 3] = std::byte { 128 }; // 50% alpha
+    pixels.at(offset + 0) = std::byte { 128 };
+    pixels.at(offset + 1) = std::byte { 128 };
+    pixels.at(offset + 2) = std::byte { 128 };
+    pixels.at(offset + 3) = std::byte { 128 }; // 50% alpha
   }
 
   std::array<std::byte, bc7::kBc7BlockSizeBytes> output {};
@@ -178,10 +180,10 @@ NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurface4x4ProducesValidOutput)
   // Create a 4x4 RGBA8 image
   std::vector<std::byte> pixels(4 * 4 * 4);
   for (size_t i = 0; i < pixels.size(); i += 4) {
-    pixels[i + 0] = std::byte { 200 }; // R
-    pixels[i + 1] = std::byte { 100 }; // G
-    pixels[i + 2] = std::byte { 50 }; // B
-    pixels[i + 3] = std::byte { 255 }; // A
+    pixels.at(i + 0) = std::byte { 200 }; // R
+    pixels.at(i + 1) = std::byte { 100 }; // G
+    pixels.at(i + 2) = std::byte { 50 }; // B
+    pixels.at(i + 3) = std::byte { 255 }; // A
   }
 
   auto source = ScratchImage::CreateFromData(
@@ -194,8 +196,8 @@ NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurface4x4ProducesValidOutput)
   auto result = bc7::EncodeSurface(source_view, params);
 
   ASSERT_TRUE(result.IsValid());
-  EXPECT_EQ(result.Meta().width, 4u);
-  EXPECT_EQ(result.Meta().height, 4u);
+  EXPECT_EQ(result.Meta().width, 4U);
+  EXPECT_EQ(result.Meta().height, 4U);
   EXPECT_EQ(result.Meta().format, Format::kBC7UNorm);
   EXPECT_EQ(result.GetTotalSizeBytes(), bc7::kBc7BlockSizeBytes);
 }
@@ -205,10 +207,10 @@ NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurfaceNonMultiple4HandlesEdges)
   // Create a 5x5 RGBA8 image
   std::vector<std::byte> pixels(5 * 5 * 4);
   for (size_t i = 0; i < pixels.size(); i += 4) {
-    pixels[i + 0] = std::byte { 128 };
-    pixels[i + 1] = std::byte { 128 };
-    pixels[i + 2] = std::byte { 128 };
-    pixels[i + 3] = std::byte { 255 };
+    pixels.at(i + 0) = std::byte { 128 };
+    pixels.at(i + 1) = std::byte { 128 };
+    pixels.at(i + 2) = std::byte { 128 };
+    pixels.at(i + 3) = std::byte { 255 };
   }
 
   auto source = ScratchImage::CreateFromData(
@@ -221,12 +223,12 @@ NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurfaceNonMultiple4HandlesEdges)
   auto result = bc7::EncodeSurface(source_view, params);
 
   ASSERT_TRUE(result.IsValid());
-  EXPECT_EQ(result.Meta().width, 5u);
-  EXPECT_EQ(result.Meta().height, 5u);
+  EXPECT_EQ(result.Meta().width, 5U);
+  EXPECT_EQ(result.Meta().height, 5U);
   EXPECT_EQ(result.Meta().format, Format::kBC7UNorm);
 
   // 5x5 requires 2x2 blocks = 4 blocks * 16 bytes = 64 bytes
-  EXPECT_EQ(result.GetTotalSizeBytes(), 64u);
+  EXPECT_EQ(result.GetTotalSizeBytes(), 64U);
 }
 
 NOLINT_TEST_F(Bc7EncodeSurfaceTest, EncodeSurfaceInvalidFormatReturnsEmpty)
@@ -268,10 +270,10 @@ NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTextureSingleMipSucceeds)
   auto result = bc7::EncodeTexture(source, bc7::Bc7EncoderParams::Fast());
 
   ASSERT_TRUE(result.IsValid());
-  EXPECT_EQ(result.Meta().width, 8u);
-  EXPECT_EQ(result.Meta().height, 8u);
+  EXPECT_EQ(result.Meta().width, 8U);
+  EXPECT_EQ(result.Meta().height, 8U);
   EXPECT_EQ(result.Meta().format, Format::kBC7UNorm);
-  EXPECT_EQ(result.Meta().mip_levels, 1u);
+  EXPECT_EQ(result.Meta().mip_levels, 1U);
 }
 
 NOLINT_TEST_F(Bc7EncodeTextureTest, EncodeTextureQualityPresetWorks)

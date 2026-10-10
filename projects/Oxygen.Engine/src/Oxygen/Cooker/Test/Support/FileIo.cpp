@@ -4,9 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <filesystem>
 #include <fstream>
+#include <ios>
 #include <iterator>
+#include <span>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
@@ -48,7 +55,7 @@ auto ReadBytes(const std::filesystem::path& path) -> std::vector<std::byte>
     std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
   auto bytes = std::vector<std::byte>(chars.size());
   for (size_t i = 0; i < chars.size(); ++i) {
-    bytes[i] = static_cast<std::byte>(chars[i]);
+    bytes.at(i) = static_cast<std::byte>(chars.at(i));
   }
   return bytes;
 }

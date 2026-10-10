@@ -25,8 +25,6 @@
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/Test/Support/FileIo.h>
-#include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Data/BuiltinGeometry.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -149,13 +147,14 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
-  ASSERT_TRUE(report.success)
-    << oxygen::cooker::test::DiagnosticSummary(report.diagnostics);
-  EXPECT_EQ(report.geometry_written, 1U)
-    << DiagnosticSummary(report.diagnostics);
+  ASSERT_HAS_VALUE(report);
+  ASSERT_TRUE(report->success)
+    << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
+  EXPECT_EQ(report->geometry_written, 1U)
+    << DiagnosticSummary(report->diagnostics);
 
-  const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value())
+  const auto geometry_relpath = FindOutputByExtension(*report, ".ogeo");
+  ASSERT_HAS_VALUE(geometry_relpath)
     << "Expected geometry_relpath to contain a value";
 
   const auto descriptor_bytes
@@ -232,13 +231,14 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
-  ASSERT_TRUE(report.success)
-    << oxygen::cooker::test::DiagnosticSummary(report.diagnostics);
-  EXPECT_EQ(report.geometry_written, 1U)
-    << DiagnosticSummary(report.diagnostics);
+  ASSERT_HAS_VALUE(report);
+  ASSERT_TRUE(report->success)
+    << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
+  EXPECT_EQ(report->geometry_written, 1U)
+    << DiagnosticSummary(report->diagnostics);
 
-  const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value())
+  const auto geometry_relpath = FindOutputByExtension(*report, ".ogeo");
+  ASSERT_HAS_VALUE(geometry_relpath)
     << "Expected geometry_relpath to contain a value";
 
   const auto descriptor_bytes
@@ -270,21 +270,21 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     float radius;
   };
   const auto cases = std::vector<Case> {
-    { "capsule_defaults", nullptr, 8U, 32U, 2.0F, 0.5F },
+    { .name="capsule_defaults", .params=nullptr, .hemisphere_segments=8U, .radial_segments=32U, .height=2.0F, .radius=0.5F },
     {
-      "capsule_custom",
-      {
+      .name="capsule_custom",
+      .params={
         { "hemisphere_segments", 4 },
         { "radial_segments", 16 },
         { "height", 3.0 },
         { "radius", 0.75 },
       },
-      4U,
-      16U,
-      3.0F,
-      0.75F,
+      .hemisphere_segments=4U,
+      .radial_segments=16U,
+      .height=3.0F,
+      .radius=0.75F,
     },
-    { "capsule_sphere", { { "height", 1.0 } }, 8U, 32U, 1.0F, 0.5F },
+    { .name="capsule_sphere", .params={ { "height", 1.0 } }, .hemisphere_segments=8U, .radial_segments=32U, .height=1.0F, .radius=0.5F },
   };
   auto service = AsyncImportService(AsyncImportService::Config {
     .thread_pool_size = 2U,
@@ -305,10 +305,11 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     WriteText(source_path, doc.dump(2));
     const auto report = SubmitAndWait(
       service, MakeGeometryRequest(source_path, cooked_root, doc));
-    ASSERT_TRUE(report.success) << DiagnosticSummary(report.diagnostics);
-    ASSERT_EQ(report.geometry_written, 1U);
-    const auto output = FindOutputByExtension(report, ".ogeo");
-    ASSERT_TRUE(output.has_value()) << "Expected output to contain a value";
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
+    ASSERT_EQ(report->geometry_written, 1U);
+    const auto output = FindOutputByExtension(*report, ".ogeo");
+    ASSERT_HAS_VALUE(output) << "Expected output to contain a value";
     auto bytes = ReadBytes(cooked_root / *output);
 
     constexpr auto mesh_offset = sizeof(data::pak::geometry::GeometryAssetDesc);
@@ -345,7 +346,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     const auto expected
       = data::MakeCapsuleMeshAsset(test_case.hemisphere_segments,
         test_case.radial_segments, test_case.height, test_case.radius);
-    ASSERT_TRUE(expected.has_value()) << "Expected expected to contain a value";
+    ASSERT_HAS_VALUE(expected) << "Expected expected to contain a value";
     const auto loaded_vertices = mesh->Vertices();
     ASSERT_EQ(loaded_vertices.size(), expected->first.size());
     for (size_t vertex_index = 0; vertex_index < loaded_vertices.size();
@@ -406,12 +407,13 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
     WriteText(source_path, doc.dump(2));
     const auto report = SubmitAndWait(
       service, MakeGeometryRequest(source_path, cooked_root, doc));
-    EXPECT_FALSE(report.success);
-    EXPECT_EQ(report.geometry_written, 0U);
-    EXPECT_FALSE(FindOutputByExtension(report, ".ogeo").has_value());
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
+    EXPECT_EQ(report->geometry_written, 0U);
+    EXPECT_FALSE(FindOutputByExtension(*report, ".ogeo").has_value());
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "geometry.procedural.generation_failed"))
-      << DiagnosticSummary(report.diagnostics);
+      report->diagnostics, "geometry.procedural.generation_failed"))
+      << DiagnosticSummary(report->diagnostics);
   }
 }
 
@@ -474,13 +476,14 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
-  ASSERT_TRUE(report.success)
-    << oxygen::cooker::test::DiagnosticSummary(report.diagnostics);
-  EXPECT_EQ(report.geometry_written, 1U)
-    << DiagnosticSummary(report.diagnostics);
+  ASSERT_HAS_VALUE(report);
+  ASSERT_TRUE(report->success)
+    << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
+  EXPECT_EQ(report->geometry_written, 1U)
+    << DiagnosticSummary(report->diagnostics);
 
-  const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value())
+  const auto geometry_relpath = FindOutputByExtension(*report, ".ogeo");
+  ASSERT_HAS_VALUE(geometry_relpath)
     << "Expected geometry_relpath to contain a value";
 
   auto descriptor_bytes
@@ -507,7 +510,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
   const auto& mesh = geometry->MeshAt(oxygen::data::LodIndex {});
   ASSERT_NE(mesh, nullptr);
   const auto expected = data::MakeIcoSphereMeshAsset(2);
-  ASSERT_TRUE(expected.has_value()) << "Expected expected to contain a value";
+  ASSERT_HAS_VALUE(expected) << "Expected expected to contain a value";
   const auto vertices = mesh->Vertices();
   ASSERT_EQ(vertices.size(), expected->first.size());
   for (size_t index = 0; index < vertices.size(); ++index) {
@@ -582,13 +585,14 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
-  ASSERT_TRUE(report.success)
-    << oxygen::cooker::test::DiagnosticSummary(report.diagnostics);
-  EXPECT_EQ(report.geometry_written, 1U)
-    << DiagnosticSummary(report.diagnostics);
+  ASSERT_HAS_VALUE(report);
+  ASSERT_TRUE(report->success)
+    << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
+  EXPECT_EQ(report->geometry_written, 1U)
+    << DiagnosticSummary(report->diagnostics);
 
-  const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value())
+  const auto geometry_relpath = FindOutputByExtension(*report, ".ogeo");
+  ASSERT_HAS_VALUE(geometry_relpath)
     << "Expected geometry_relpath to contain a value";
 
   const auto descriptor_bytes

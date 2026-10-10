@@ -26,6 +26,7 @@
 
 #include "AssetLoader_test.h"
 #include "Fixtures/LooseCookedTestWriter.h"
+#include "Fixtures/PakTestWriter.h"
 
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Base/Uuid.h>
@@ -39,6 +40,7 @@
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Content/OperationCancelledException.h>
+#include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -76,11 +78,11 @@ namespace {
   using co::testing::TestEventLoop;
 
   struct GenerationRecipe {
-    data::AssetKey material {};
+    data::AssetKey material;
     float emission = 0.0F;
     std::uint8_t payload = 0;
-    data::AssetKey scene_material {};
-    data::AssetKey script {};
+    data::AssetKey scene_material;
+    data::AssetKey script;
   };
 
   auto SceneKey() -> data::AssetKey
@@ -137,7 +139,7 @@ namespace {
         .display_name = "fixture",
         .bindings = { { .lod_index = oxygen::data::LodIndex {},
           .submesh_index = oxygen::data::SubmeshIndex {},
-          .default_material_key = material } } } };
+          .default_material_key = material, }, }, }, };
       const auto revision = data::ComputeMaterialSlotLayoutRevision(slots);
       if (!revision) {
         throw std::logic_error("Invalid fixture material slot layout");
@@ -273,8 +275,10 @@ namespace {
         std::as_bytes(std::span { &descriptor, 1U }),
         data::AssetReferences::Create(
           {
-            { .kind = data::ResourceKind::kScript,
-              .index = ResourceIndexT { 1U } },
+            {
+              .kind = data::ResourceKind::kScript,
+              .index = ResourceIndexT { 1U },
+            },
           },
           {})
           .value());
@@ -525,7 +529,9 @@ namespace {
       const auto synthetic_key = loader.MintSyntheticScriptKey();
       auto synthetic = co_await loader.LoadResourceAsync<data::ScriptResource>(
         CookedResourceData<data::ScriptResource> {
-          .key = synthetic_key, .bytes = injected });
+          .key = synthetic_key,
+          .bytes = injected,
+        });
       if (!synthetic) {
         ADD_FAILURE() << "Synthetic script bytes must load";
         loader.Stop();
@@ -536,7 +542,9 @@ namespace {
       loader.TrimCache();
       synthetic = co_await loader.LoadResourceAsync<data::ScriptResource>(
         CookedResourceData<data::ScriptResource> {
-          .key = synthetic_key, .bytes = injected });
+          .key = synthetic_key,
+          .bytes = injected,
+        });
       EXPECT_TRUE(synthetic);
 
       auto new_script = co_await loader.LoadAssetAsync<data::ScriptAsset>(
@@ -675,29 +683,35 @@ namespace {
     config.thread_pool = observer_ptr { &pool };
     AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
     const auto pause = std::make_shared<DecodePause>();
-    loader.RegisterLoader([geometry_desc](LoaderContext context) {
+    loader.RegisterLoader([geometry_desc](const LoaderContext& context)
+                            -> std::unique_ptr<oxygen::data::GeometryAsset> {
       context.dependency_collector->AddAssetDependency(MaterialKey());
       return std::make_unique<data::GeometryAsset>(context.current_asset_key,
         geometry_desc, std::vector<std::shared_ptr<data::Mesh>> {},
-        data::SourceOrigin { context.source_key, context.source_instance });
+        data::SourceOrigin {
+          .key = context.source_key,
+          .instance = context.source_instance,
+        });
     });
-    loader.RegisterLoader([loop, pause](LoaderContext context) {
-      loop->Schedule(std::chrono::milliseconds::zero(),
-        [pause] { pause->entered.Trigger(); });
-      pause->resumed.wait();
-      return loaders::LoadMaterialAsset(std::move(context));
-    });
+    loader.RegisterLoader(
+      [loop, pause](
+        LoaderContext context) -> std::unique_ptr<data::MaterialAsset> {
+        loop->Schedule(std::chrono::milliseconds::zero(),
+          [pause] -> void { pause->entered.Trigger(); });
+        pause->resumed.wait();
+        return loaders::LoadMaterialAsset(std::move(context));
+      });
     OXCO_WITH_NURSERY(nursery)
     {
       const auto release_guard
-        = ScopeGuard([pause]() noexcept { pause->Release(); });
+        = ScopeGuard([pause] noexcept -> void { pause->Release(); });
       co_await nursery.Start(&AssetLoader::ActivateAsync, &loader);
       loader.Run();
       static_cast<void>(loader.MountLooseCookedGeneration(material_root));
       loader.AddLooseCookedRoot(geometry_root);
       std::shared_ptr<data::GeometryAsset> result;
       loader.StartLoadGeometryAsset(
-        geometry_key, [&result, pause](auto geometry) {
+        geometry_key, [&result, pause](auto geometry) -> auto {
           result = std::move(geometry);
           pause->completed.Trigger();
         });
@@ -794,7 +808,8 @@ namespace {
     const auto pause = std::make_shared<DecodePause>();
     OXCO_WITH_NURSERY(nursery)
     {
-      const auto unblock = ScopeGuard([pause]() noexcept { pause->Release(); });
+      const auto unblock
+        = ScopeGuard([pause] noexcept -> void { pause->Release(); });
       co_await nursery.Start(&AssetLoader::ActivateAsync, &loader);
       loader.Run();
       static_cast<void>(loader.MountLooseCookedGeneration(old_root));
@@ -805,18 +820,20 @@ namespace {
         loader.Stop();
         co_return co::kJoin;
       }
-      loader.RegisterLoader([loop, pause, old_source](LoaderContext context) {
-        if (context.source_key == old_source) {
-          loop->Schedule(std::chrono::milliseconds::zero(),
-            [pause] { pause->entered.Trigger(); });
-          pause->resumed.wait();
-        }
-        return loaders::LoadScriptAsset(context);
-      });
+      loader.RegisterLoader(
+        [loop, pause, old_source](
+          const LoaderContext& context) -> std::unique_ptr<data::ScriptAsset> {
+          if (context.source_key == old_source) {
+            loop->Schedule(std::chrono::milliseconds::zero(),
+              [pause] -> void { pause->entered.Trigger(); });
+            pause->resumed.wait();
+          }
+          return loaders::LoadScriptAsset(context);
+        });
       std::shared_ptr<const data::ScriptResource> notified;
       auto subscription = loader.SubscribeScriptReload(
         [&notified](const data::AssetKey&,
-          std::shared_ptr<const data::ScriptResource> bytes) {
+          std::shared_ptr<const data::ScriptResource> bytes) -> void {
           notified = std::move(bytes);
         });
       loader.ReloadAllScripts();
@@ -900,7 +917,8 @@ namespace {
       auto canceled_notifications = 0;
       IAssetLoader::EvictionSubscription canceled;
       auto observer = loader.SubscribeResourceEvictions(
-        data::MaterialAsset::ClassTypeId(), [&](const EvictionEvent& event) {
+        data::MaterialAsset::ClassTypeId(),
+        [&](const EvictionEvent& event) -> void {
           if (event.reason != EvictionReason::kClear) {
             return;
           }
@@ -908,11 +926,11 @@ namespace {
           EXPECT_EQ(resolver.ResolveAssetKey("/Test/material.omat"), new_key);
           canceled.Cancel();
           loader.StartLoadMaterialAsset(new_key,
-            [&reloaded](auto loaded) { reloaded = std::move(loaded); });
+            [&reloaded](auto loaded) -> auto { reloaded = std::move(loaded); });
         });
       canceled
         = loader.SubscribeResourceEvictions(data::MaterialAsset::ClassTypeId(),
-          [&](const EvictionEvent&) { ++canceled_notifications; });
+          [&](const EvictionEvent&) -> void { ++canceled_notifications; });
       std::vector roots { new_root };
       auto prepared
         = co_await loader.PrepareLooseCookedRootsAsync(std::move(roots));
@@ -1022,7 +1040,7 @@ namespace {
       = co::Run(loop, PrepareIdleMountSet(loader.get(), old_root, new_root));
     unsigned notifications = 0;
     auto subscription = loader->SubscribeResourceEvictions(
-      data::MaterialAsset::ClassTypeId(), [&](const EvictionEvent&) {
+      data::MaterialAsset::ClassTypeId(), [&](const EvictionEvent&) -> void {
         ++notifications;
         loader.reset();
       });
@@ -1041,7 +1059,7 @@ namespace {
     const auto unrelated_scene
       = data::AssetKey::FromVirtualPath("/Test/other.oscene");
     const auto write_sidecar = [&](const std::filesystem::path& root,
-                                 const data::AssetKey& target) {
+                                 const data::AssetKey& target) -> void {
       LooseCookedTestWriter writer(root);
       writer.SetSourceKey(data::SourceKey { Uuid::Generate() });
       data::pak::physics::PhysicsSceneAssetDesc descriptor {};
@@ -1074,6 +1092,43 @@ namespace {
     EXPECT_THROW(static_cast<void>(
                    foreign.FindPhysicsSidecarAssetKeyForScene(scene, original)),
       std::invalid_argument);
+  }
+
+  NOLINT_TEST_F(
+    AssetLoaderBasicTest, SidecarTombstonedByPatchPakIsAbsentInNewScope)
+  {
+    const auto sidecar_key
+      = data::AssetKey::FromVirtualPath("/Test/scene.opscene");
+    const auto base = temp_dir_ / "base";
+    {
+      LooseCookedTestWriter writer(base);
+      writer.SetSourceKey(data::SourceKey { Uuid::Generate() });
+      data::pak::physics::PhysicsSceneAssetDesc descriptor {};
+      descriptor.header.asset_type
+        = static_cast<uint8_t>(data::AssetType::kPhysicsScene);
+      descriptor.header.version = data::pak::physics::kPhysicsSceneAssetVersion;
+      descriptor.target_scene_key = SceneKey();
+      writer.WriteAssetDescriptor(sidecar_key, data::AssetType::kPhysicsScene,
+        "/Test/scene.opscene", "scene.opscene",
+        std::as_bytes(std::span { &descriptor, 1U }));
+      static_cast<void>(writer.Finish());
+    }
+    // A patch pak with no assets whose catalog deletes the sidecar.
+    const auto patch = temp_dir_ / "patch.pak";
+    auto config = PakTestWriter::Config {};
+    config.deleted = { sidecar_key };
+    PakTestWriter(patch).Write(config);
+
+    AssetLoader loader(engine::internal::EngineTagFactory::Get());
+    loader.AddLooseCookedRoot(base);
+    const auto original = loader.BeginLoadScope();
+    const auto scene_bytes = SceneBytes({});
+    data::SceneAsset scene(SceneKey(), scene_bytes);
+    loader.AddPakFile(patch);
+    EXPECT_FALSE(loader.FindPhysicsSidecarAssetKeyForScene(
+      scene, loader.BeginLoadScope()));
+    EXPECT_EQ(
+      loader.FindPhysicsSidecarAssetKeyForScene(scene, original), sidecar_key);
   }
 
   NOLINT_TEST_F(AssetLoaderBasicTest,

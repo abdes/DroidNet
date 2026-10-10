@@ -9,8 +9,14 @@
 #include <filesystem>
 #include <sstream>
 #include <system_error>
+#include <utility>
 #include <vector>
 
+#include "ArtifactPublication.h"
+#include "PakToolOptions.h"
+#include "RequestPreparation.h"
+
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Cooker/Tools/PakTool/App.h>
 #include <Oxygen/Cooker/Tools/PakTool/CommandExecution.h>
@@ -119,7 +125,7 @@ protected:
   }
 
 private:
-  std::vector<std::string> storage_ {};
+  std::vector<std::string> storage_;
 };
 
 NOLINT_TEST_F(

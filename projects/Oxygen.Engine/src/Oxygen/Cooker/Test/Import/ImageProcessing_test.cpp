@@ -7,12 +7,16 @@
 // Covers: Import/Internal/ImageProcessing.cpp
 
 #include <array>
-#include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/Internal/ImageProcessing.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -80,8 +84,8 @@ NOLINT_TEST(ColorSpaceConversionTest, RgbaConversionPreservesAlpha)
   const auto linear_rgba = color::SrgbToLinear(srgb_rgba);
   const auto back_to_srgb = color::LinearToSrgb(linear_rgba);
 
-  EXPECT_EQ(linear_rgba[3], 0.75F); // Alpha unchanged
-  EXPECT_NEAR(back_to_srgb[3], 0.75F, 1e-6F);
+  EXPECT_EQ(linear_rgba.at(3), 0.75F); // Alpha unchanged
+  EXPECT_NEAR(back_to_srgb.at(3), 0.75F, 1e-6F);
 }
 
 //===----------------------------------------------------------------------===//
@@ -95,10 +99,10 @@ NOLINT_TEST(HdrProcessingTest, ApplyExposureScalesRgbCorrectly)
   // Exposure of 1.0 doubles the values
   const auto result = hdr::ApplyExposure(pixel, 1.0F);
 
-  EXPECT_NEAR(result[0], 2.0F, 1e-6F);
-  EXPECT_NEAR(result[1], 1.0F, 1e-6F);
-  EXPECT_NEAR(result[2], 0.5F, 1e-6F);
-  EXPECT_EQ(result[3], 0.8F); // Alpha unchanged
+  EXPECT_NEAR(result.at(0), 2.0F, 1e-6F);
+  EXPECT_NEAR(result.at(1), 1.0F, 1e-6F);
+  EXPECT_NEAR(result.at(2), 0.5F, 1e-6F);
+  EXPECT_EQ(result.at(3), 0.8F); // Alpha unchanged
 }
 
 NOLINT_TEST(HdrProcessingTest, ApplyExposureZeroExposureNoChange)
@@ -107,9 +111,9 @@ NOLINT_TEST(HdrProcessingTest, ApplyExposureZeroExposureNoChange)
 
   const auto result = hdr::ApplyExposure(pixel, 0.0F);
 
-  EXPECT_NEAR(result[0], 0.5F, 1e-6F);
-  EXPECT_NEAR(result[1], 0.5F, 1e-6F);
-  EXPECT_NEAR(result[2], 0.5F, 1e-6F);
+  EXPECT_NEAR(result.at(0), 0.5F, 1e-6F);
+  EXPECT_NEAR(result.at(1), 0.5F, 1e-6F);
+  EXPECT_NEAR(result.at(2), 0.5F, 1e-6F);
 }
 
 NOLINT_TEST(HdrProcessingTest, AcesTonemapCompressesHdrToLdr)
@@ -119,16 +123,16 @@ NOLINT_TEST(HdrProcessingTest, AcesTonemapCompressesHdrToLdr)
   const auto result = hdr::AcesTonemap(hdr_pixel);
 
   // All values should be in [0,1]
-  EXPECT_GE(result[0], 0.0F);
-  EXPECT_LE(result[0], 1.0F);
-  EXPECT_GE(result[1], 0.0F);
-  EXPECT_LE(result[1], 1.0F);
-  EXPECT_GE(result[2], 0.0F);
-  EXPECT_LE(result[2], 1.0F);
+  EXPECT_GE(result.at(0), 0.0F);
+  EXPECT_LE(result.at(0), 1.0F);
+  EXPECT_GE(result.at(1), 0.0F);
+  EXPECT_LE(result.at(1), 1.0F);
+  EXPECT_GE(result.at(2), 0.0F);
+  EXPECT_LE(result.at(2), 1.0F);
 
   // Higher input should result in higher output
-  EXPECT_GT(result[0], result[1]);
-  EXPECT_GT(result[1], result[2]);
+  EXPECT_GT(result.at(0), result.at(1));
+  EXPECT_GT(result.at(1), result.at(2));
 }
 
 NOLINT_TEST(HdrProcessingTest, AcesTonemapPreservesBlack)
@@ -137,9 +141,9 @@ NOLINT_TEST(HdrProcessingTest, AcesTonemapPreservesBlack)
 
   const auto result = hdr::AcesTonemap(black);
 
-  EXPECT_NEAR(result[0], 0.0F, 1e-6F);
-  EXPECT_NEAR(result[1], 0.0F, 1e-6F);
-  EXPECT_NEAR(result[2], 0.0F, 1e-6F);
+  EXPECT_NEAR(result.at(0), 0.0F, 1e-6F);
+  EXPECT_NEAR(result.at(1), 0.0F, 1e-6F);
+  EXPECT_NEAR(result.at(2), 0.0F, 1e-6F);
 }
 
 //===----------------------------------------------------------------------===//
@@ -195,26 +199,26 @@ NOLINT_TEST(MipFilterKernelTest, LanczosKernelReturnsZeroOutsideSupport)
 
 NOLINT_TEST(MipGenerationTest, ComputeMipCountReturnsCorrectValues)
 {
-  EXPECT_EQ(mip::ComputeMipCount(1, 1), 1u);
-  EXPECT_EQ(mip::ComputeMipCount(2, 2), 2u);
-  EXPECT_EQ(mip::ComputeMipCount(4, 4), 3u);
-  EXPECT_EQ(mip::ComputeMipCount(256, 256), 9u);
-  EXPECT_EQ(mip::ComputeMipCount(1024, 512), 11u); // max(1024,512) = 1024
+  EXPECT_EQ(mip::ComputeMipCount(1, 1), 1U);
+  EXPECT_EQ(mip::ComputeMipCount(2, 2), 2U);
+  EXPECT_EQ(mip::ComputeMipCount(4, 4), 3U);
+  EXPECT_EQ(mip::ComputeMipCount(256, 256), 9U);
+  EXPECT_EQ(mip::ComputeMipCount(1024, 512), 11U); // max(1024,512) = 1024
 }
 
 NOLINT_TEST(MipGenerationTest, ComputeMipCountHandlesNpot)
 {
-  EXPECT_EQ(mip::ComputeMipCount(100, 100), 7u); // floor(log2(100))+1 = 7
-  EXPECT_EQ(mip::ComputeMipCount(127, 127), 7u);
-  EXPECT_EQ(mip::ComputeMipCount(128, 128), 8u);
+  EXPECT_EQ(mip::ComputeMipCount(100, 100), 7U); // floor(log2(100))+1 = 7
+  EXPECT_EQ(mip::ComputeMipCount(127, 127), 7U);
+  EXPECT_EQ(mip::ComputeMipCount(128, 128), 8U);
 }
 
 NOLINT_TEST(MipGenerationTest, GenerateChain2DCreatesFullChain)
 {
   // Create a 4x4 RGBA8 image
   std::vector<std::byte> pixels(4 * 4 * 4);
-  for (size_t i = 0; i < pixels.size(); ++i) {
-    pixels[i] = std::byte { 128 }; // Mid-gray
+  for (auto& pixel : pixels) {
+    pixel = std::byte { 128 }; // Mid-gray
   }
 
   auto source = ScratchImage::CreateFromData(
@@ -225,19 +229,19 @@ NOLINT_TEST(MipGenerationTest, GenerateChain2DCreatesFullChain)
     = mip::GenerateChain2D(source, MipFilter::kBox, ColorSpace::kLinear);
 
   ASSERT_TRUE(result.IsValid());
-  EXPECT_EQ(result.Meta().mip_levels, 3u); // 4x4 -> 2x2 -> 1x1
-  EXPECT_EQ(result.Meta().width, 4u);
-  EXPECT_EQ(result.Meta().height, 4u);
+  EXPECT_EQ(result.Meta().mip_levels, 3U); // 4x4 -> 2x2 -> 1x1
+  EXPECT_EQ(result.Meta().width, 4U);
+  EXPECT_EQ(result.Meta().height, 4U);
 
   // Check mip 1 dimensions
   const auto mip1 = result.GetImage(0, 1);
-  EXPECT_EQ(mip1.width, 2u);
-  EXPECT_EQ(mip1.height, 2u);
+  EXPECT_EQ(mip1.width, 2U);
+  EXPECT_EQ(mip1.height, 2U);
 
   // Check mip 2 dimensions
   const auto mip2 = result.GetImage(0, 2);
-  EXPECT_EQ(mip2.width, 1u);
-  EXPECT_EQ(mip2.height, 1u);
+  EXPECT_EQ(mip2.width, 1U);
+  EXPECT_EQ(mip2.height, 1U);
 }
 
 //===----------------------------------------------------------------------===//
@@ -251,9 +255,9 @@ NOLINT_TEST(ContentProcessingTest, RenormalizeNormalPreservesUnitNormals)
 
   const auto result = content::RenormalizeNormal(up_normal);
 
-  EXPECT_NEAR(result[0], 0.5F, 0.01F);
-  EXPECT_NEAR(result[1], 0.5F, 0.01F);
-  EXPECT_NEAR(result[2], 1.0F, 0.01F);
+  EXPECT_NEAR(result.at(0), 0.5F, 0.01F);
+  EXPECT_NEAR(result.at(1), 0.5F, 0.01F);
+  EXPECT_NEAR(result.at(2), 1.0F, 0.01F);
 }
 
 NOLINT_TEST(ContentProcessingTest, RenormalizeNormalNormalizesNonUnit)
@@ -267,9 +271,9 @@ NOLINT_TEST(ContentProcessingTest, RenormalizeNormalNormalizesNonUnit)
 
   // Should be normalized +X direction
   // Unpacked: (0.5, 0, 0), normalized: (1, 0, 0), repacked: (1, 0.5, 0.5)
-  EXPECT_NEAR(result[0], 1.0F, 0.01F);
-  EXPECT_NEAR(result[1], 0.5F, 0.01F);
-  EXPECT_NEAR(result[2], 0.5F, 0.01F);
+  EXPECT_NEAR(result.at(0), 1.0F, 0.01F);
+  EXPECT_NEAR(result.at(1), 0.5F, 0.01F);
+  EXPECT_NEAR(result.at(2), 0.5F, 0.01F);
 }
 
 NOLINT_TEST(ContentProcessingTest, FlipNormalGreenInvertsGreenChannel)
@@ -278,10 +282,10 @@ NOLINT_TEST(ContentProcessingTest, FlipNormalGreenInvertsGreenChannel)
   std::vector<std::byte> pixels(2 * 2 * 4);
   for (size_t i = 0; i < 4; ++i) {
     const size_t offset = i * 4;
-    pixels[offset + 0] = std::byte { 128 }; // R
-    pixels[offset + 1] = std::byte { 64 }; // G = 64
-    pixels[offset + 2] = std::byte { 255 }; // B
-    pixels[offset + 3] = std::byte { 255 }; // A
+    pixels.at(offset + 0) = std::byte { 128 }; // R
+    pixels.at(offset + 1) = std::byte { 64 }; // G = 64
+    pixels.at(offset + 2) = std::byte { 255 }; // B
+    pixels.at(offset + 3) = std::byte { 255 }; // A
   }
 
   auto image = ScratchImage::CreateFromData(
@@ -295,10 +299,10 @@ NOLINT_TEST(ContentProcessingTest, FlipNormalGreenInvertsGreenChannel)
 
   for (size_t i = 0; i < 4; ++i) {
     const size_t offset = i * 4;
-    EXPECT_EQ(data[offset + 0], 128u); // R unchanged
-    EXPECT_EQ(data[offset + 1], 191u); // G flipped: 255 - 64 = 191
-    EXPECT_EQ(data[offset + 2], 255u); // B unchanged
-    EXPECT_EQ(data[offset + 3], 255u); // A unchanged
+    EXPECT_EQ(data[offset + 0], 128U); // R unchanged
+    EXPECT_EQ(data[offset + 1], 191U); // G flipped: 255 - 64 = 191
+    EXPECT_EQ(data[offset + 2], 255U); // B unchanged
+    EXPECT_EQ(data[offset + 3], 255U); // A unchanged
   }
 }
 

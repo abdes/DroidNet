@@ -7,7 +7,6 @@
 // Covers: Import/Internal/Pipelines/ScenePipeline.cpp
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -25,8 +24,8 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Naming.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
@@ -192,7 +191,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectMinimalSceneBuildsDescriptor)
   });
 
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value())
+  ASSERT_HAS_VALUE(result.cooked)
     << "Expected result.cooked to contain a value";
   const auto& bytes = result.cooked->descriptor_bytes;
   const auto desc = ReadSceneDesc(bytes);
@@ -282,7 +281,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
   });
 
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value())
+  ASSERT_HAS_VALUE(result.cooked)
     << "Expected result.cooked to contain a value";
   const auto& bytes = result.cooked->descriptor_bytes;
   const auto desc = ReadSceneDesc(bytes);
@@ -352,7 +351,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectWithEnvironmentBlockAppendsBlock)
   });
 
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value())
+  ASSERT_HAS_VALUE(result.cooked)
     << "Expected result.cooked to contain a value";
 
   const auto& bytes = result.cooked->descriptor_bytes;

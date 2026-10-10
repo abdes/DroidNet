@@ -70,17 +70,17 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
 
   const auto request = BuildSceneDescriptorRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value())
+  ASSERT_HAS_VALUE(request)
     << "Expected request to contain a value" << errors.str();
   EXPECT_TRUE(errors.str().empty());
-  ASSERT_TRUE(request->cooked_root.has_value())
+  ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected request->cooked_root to contain a value";
   EXPECT_TRUE(request->cooked_root->is_absolute());
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "manifest-scene" });
   EXPECT_EQ(request->options.with_content_hashing,
     EffectiveContentHashingEnabled(false));
-  ASSERT_TRUE(request->scene_descriptor.has_value())
+  ASSERT_HAS_VALUE(request->scene_descriptor)
     << "Expected request->scene_descriptor to contain a value";
 
   const auto normalized
@@ -104,7 +104,7 @@ NOLINT_TEST(SceneDescriptorImportRequestBuilderTest,
   const auto library = dir / "library";
   settings.cooked_context_roots = { library.string(), settings.cooked_root };
   const auto request = BuildSceneDescriptorRequest(settings, errors);
-  ASSERT_TRUE(request.has_value())
+  ASSERT_HAS_VALUE(request)
     << "Expected request to contain a value" << errors.str();
   const auto roots
     = oxygen::content::import::internal::BuildUniqueMountedCookedRoots(

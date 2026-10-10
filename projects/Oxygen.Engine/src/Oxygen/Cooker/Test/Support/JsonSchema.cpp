@@ -5,11 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
+#include "gmock/gmock.h"
+#include "gtest/gtest.h"
 #include <nlohmann/json-schema.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Cooker/Test/Support/JsonSchema.h>

@@ -12,21 +12,21 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <latch>
-#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
-#include <Oxygen/Base/Finally.h>
-#include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
-#include <Oxygen/Cooker/Test/Support/TempDir.h>
+#include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -35,8 +35,8 @@ namespace oxygen::content::import::test {
 namespace {
 
   using nlohmann::json;
+  using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::ReadBytes;
-  using oxygen::cooker::test::ScopedTempDir;
   using oxygen::cooker::test::WriteBytes;
   constexpr uint16_t kBufferSidecarVersion = 2;
 
@@ -67,31 +67,15 @@ namespace {
     while (len < data::pak::core::kMaxNameSize && raw_name[len] != '\0') {
       ++len;
     }
-    return std::string(raw_name, len);
+    return { raw_name, len };
   }
 
-  auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
-    -> ImportReport
-  {
-    auto report = ImportReport {};
-    std::latch done(1);
-    const auto submitted = service.SubmitImport(
-      std::move(request),
-      [&report, &done](
-        const ImportJobId /*job_id*/, const ImportReport& completed) {
-        report = completed;
-        done.count_down();
-      },
-      nullptr);
-    EXPECT_TRUE(submitted.has_value());
-    done.wait();
-    return report;
-  }
+  class BufferContainerImportJobTest : public ImportServiceTest { };
 
-  NOLINT_TEST(BufferContainerImportJobTest, SuccessfulJobEmitsExpectedArtifacts)
+  NOLINT_TEST_F(
+    BufferContainerImportJobTest, SuccessfulJobEmitsExpectedArtifacts)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "emits_expected_artifacts";
+    const auto cooked_root = TempDir() / "emits_expected_artifacts";
     std::filesystem::create_directories(cooked_root);
     const auto source_root = cooked_root.parent_path() / "source_data";
     const auto buffer_source = source_root / "character_vertices.buffer.bin";
@@ -133,17 +117,21 @@ namespace {
 
     auto descriptor_json = json {
       { "name", "CharacterBuffers" },
-      { "buffers",
+      {
+        "buffers",
         json::array({
           json {
             { "source", buffer_source.generic_string() },
-            { "virtual_path",
-              "/.cooked/Resources/Buffers/character_vertices.obuf" },
+            {
+              "virtual_path",
+              "/.cooked/Resources/Buffers/character_vertices.obuf",
+            },
             { "usage_flags", 3U },
             { "element_stride", 16U },
             { "alignment", 16U },
           },
-        }) },
+        }),
+      },
     };
 
     auto request = ImportRequest {};
@@ -154,20 +142,15 @@ namespace {
       .normalized_descriptor_json = descriptor_json.dump(),
     };
 
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    [[maybe_unused]] auto stop_service
-      = oxygen::Finally([&service]() { service.Stop(); });
+    const auto report = Import(std::move(request));
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success)
+      << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
 
-    const auto report = SubmitAndWait(service, std::move(request));
-    ASSERT_TRUE(report.success)
-      << oxygen::cooker::test::DiagnosticSummary(report.diagnostics);
-
-    const auto has_error_diagnostic
-      = std::ranges::any_of(report.diagnostics, [](const ImportDiagnostic& d) {
-          return d.severity == ImportSeverity::kError;
-        });
+    const auto has_error_diagnostic = std::ranges::any_of(
+      report->diagnostics, [](const ImportDiagnostic& d) -> bool {
+        return d.severity == ImportSeverity::kError;
+      });
     EXPECT_FALSE(has_error_diagnostic);
 
     constexpr auto kSidecarRelPath
@@ -177,9 +160,9 @@ namespace {
     constexpr auto kBuffersTableRelPath
       = std::string_view { "Resources/buffers.table" };
 
-    const auto has_output = [&](const std::string_view relpath) {
+    const auto has_output = [&](const std::string_view relpath) -> bool {
       return std::ranges::any_of(
-        report.outputs, [&](const ImportOutputRecord& output) {
+        report->outputs, [&](const ImportOutputRecord& output) -> bool {
           return output.path == relpath;
         });
     };
@@ -225,11 +208,10 @@ namespace {
     EXPECT_EQ(view0.element_count, buffer_bytes.size() / 16U);
   }
 
-  NOLINT_TEST(
+  NOLINT_TEST_F(
     BufferContainerImportJobTest, ExplicitViewsArePreservedAlongsideImplicitAll)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "preserves_explicit_views";
+    const auto cooked_root = TempDir() / "preserves_explicit_views";
     std::filesystem::create_directories(cooked_root);
     const auto source_root = cooked_root.parent_path() / "source_data";
     const auto buffer_source = source_root / "mesh_indices.buffer.bin";
@@ -271,23 +253,27 @@ namespace {
 
     auto descriptor_json = json {
       { "name", "MeshIndexBuffers" },
-      { "buffers",
+      {
+        "buffers",
         json::array({
           json {
             { "source", buffer_source.generic_string() },
             { "virtual_path", "/.cooked/Resources/Buffers/mesh_indices.obuf" },
             { "usage_flags", 2U },
             { "element_format", 10U },
-            { "views",
+            {
+              "views",
               json::array({
                 json {
                   { "name", "lod0" },
                   { "element_offset", 0U },
                   { "element_count", 4U },
                 },
-              }) },
+              }),
+            },
           },
-        }) },
+        }),
+      },
     };
 
     auto request = ImportRequest {};
@@ -298,14 +284,10 @@ namespace {
       .normalized_descriptor_json = descriptor_json.dump(),
     };
 
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    [[maybe_unused]] auto stop_service
-      = oxygen::Finally([&service]() { service.Stop(); });
-    const auto report = SubmitAndWait(service, std::move(request));
-    ASSERT_TRUE(report.success)
-      << oxygen::cooker::test::DiagnosticSummary(report.diagnostics);
+    const auto report = Import(std::move(request));
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success)
+      << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
 
     constexpr auto kSidecarRelPath
       = std::string_view { "Resources/Buffers/mesh_indices.obuf" };

@@ -14,11 +14,6 @@
 #include "ScriptImportTestSupport.h"
 
 #include <Oxygen/Cooker/Import/ImportOptions.h>
-#include <Oxygen/Cooker/Test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/Test/Support/FileIo.h>
-#include <Oxygen/Cooker/Test/Support/TempDir.h>
-#include <Oxygen/Cooker/Test/Support/TestPaths.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -57,10 +52,8 @@ namespace {
       = FindFirstAssetByType(inflight_inspection, AssetType::kScene);
     const auto script_asset
       = FindFirstAssetByType(LoadInspection(cooked_root), AssetType::kScript);
-    ASSERT_TRUE(inflight_scene.has_value())
-      << "Expected inflight scene to be present";
-    ASSERT_TRUE(script_asset.has_value())
-      << "Expected script asset to be present";
+    ASSERT_HAS_VALUE(inflight_scene) << "Expected inflight scene to be present";
+    ASSERT_HAS_VALUE(script_asset) << "Expected script asset to be present";
 
     const auto sidecar_source = cooked_root / "input" / "scene.sidescript.json";
     WriteText(sidecar_source,
@@ -77,12 +70,11 @@ namespace {
     const auto inspection_after = LoadInspection(cooked_root);
     const auto patched_scene
       = FindFirstAssetByType(inspection_after, AssetType::kScene);
-    ASSERT_TRUE(patched_scene.has_value())
-      << "Expected patched scene to be present";
+    ASSERT_HAS_VALUE(patched_scene) << "Expected patched scene to be present";
     EXPECT_EQ(patched_scene->key, inflight_scene->key);
 
     const auto files = inspection_after.Files();
-    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) {
+    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) -> auto {
       return file.relpath.ends_with("script-bindings.table")
         || file.relpath.ends_with("script-bindings.data");
     }));
@@ -123,8 +115,8 @@ namespace {
     const auto inspection_b = LoadInspection(inflight_scene_root_b);
     const auto scene_a = FindFirstAssetByType(inspection_a, AssetType::kScene);
     const auto scene_b = FindFirstAssetByType(inspection_b, AssetType::kScene);
-    ASSERT_TRUE(scene_a.has_value()) << "Expected scene a to be present";
-    ASSERT_TRUE(scene_b.has_value()) << "Expected scene b to be present";
+    ASSERT_HAS_VALUE(scene_a) << "Expected scene a to be present";
+    ASSERT_HAS_VALUE(scene_b) << "Expected scene b to be present";
     ASSERT_EQ(scene_a->virtual_path, scene_b->virtual_path);
     ASSERT_EQ(scene_a->key, scene_b->key);
 
@@ -171,10 +163,9 @@ namespace {
     const auto scene_b = FindFirstAssetByType(inspection_b, AssetType::kScene);
     const auto script_asset
       = FindFirstAssetByType(LoadInspection(cooked_root), AssetType::kScript);
-    ASSERT_TRUE(scene_a.has_value()) << "Expected scene a to be present";
-    ASSERT_TRUE(scene_b.has_value()) << "Expected scene b to be present";
-    ASSERT_TRUE(script_asset.has_value())
-      << "Expected script asset to be present";
+    ASSERT_HAS_VALUE(scene_a) << "Expected scene a to be present";
+    ASSERT_HAS_VALUE(scene_b) << "Expected scene b to be present";
+    ASSERT_HAS_VALUE(script_asset) << "Expected script asset to be present";
     ASSERT_EQ(scene_a->virtual_path, scene_b->virtual_path);
     ASSERT_EQ(scene_a->key, scene_b->key);
 
@@ -193,8 +184,7 @@ namespace {
     const auto inspection_after = LoadInspection(cooked_root);
     const auto resolved_scene
       = FindFirstAssetByType(inspection_after, AssetType::kScene);
-    ASSERT_TRUE(resolved_scene.has_value())
-      << "Expected resolved scene to be present";
+    ASSERT_HAS_VALUE(resolved_scene) << "Expected resolved scene to be present";
     EXPECT_EQ(resolved_scene->key, scene_b->key);
   }
 
@@ -225,10 +215,8 @@ namespace {
       = FindFirstAssetByType(context_inspection_before, AssetType::kScene);
     const auto context_script
       = FindFirstAssetByType(context_inspection_before, AssetType::kScript);
-    ASSERT_TRUE(context_scene.has_value())
-      << "Expected context scene to be present";
-    ASSERT_TRUE(context_script.has_value())
-      << "Expected context script to be present";
+    ASSERT_HAS_VALUE(context_scene) << "Expected context scene to be present";
+    ASSERT_HAS_VALUE(context_script) << "Expected context script to be present";
 
     const auto context_sidecar_source
       = context_root / "input" / "seed_context_sidecar.json";
@@ -248,8 +236,7 @@ namespace {
     const auto request_inspection_before = LoadInspection(request_root);
     const auto request_script
       = FindFirstAssetByType(request_inspection_before, AssetType::kScript);
-    ASSERT_TRUE(request_script.has_value())
-      << "Expected request script to be present";
+    ASSERT_HAS_VALUE(request_script) << "Expected request script to be present";
 
     const auto request_sidecar_source
       = request_root / "input" / "context_resolve_sidecar.json";
@@ -265,12 +252,11 @@ namespace {
     const auto request_inspection_after = LoadInspection(request_root);
     const auto patched_scene
       = FindFirstAssetByType(request_inspection_after, AssetType::kScene);
-    ASSERT_TRUE(patched_scene.has_value())
-      << "Expected patched scene to be present";
+    ASSERT_HAS_VALUE(patched_scene) << "Expected patched scene to be present";
     EXPECT_EQ(patched_scene->key, context_scene->key);
 
     const auto files = request_inspection_after.Files();
-    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) {
+    EXPECT_FALSE(std::ranges::any_of(files, [](const auto& file) -> auto {
       return file.relpath.ends_with("script-bindings.table")
         || file.relpath.ends_with("script-bindings.data");
     }));
@@ -315,15 +301,14 @@ namespace {
     const auto inflight_inspection = LoadInspection(inflight_scene_root);
     const auto inflight_scene
       = FindFirstAssetByType(inflight_inspection, AssetType::kScene);
-    ASSERT_TRUE(inflight_scene.has_value())
-      << "Expected inflight scene to be present";
+    ASSERT_HAS_VALUE(inflight_scene) << "Expected inflight scene to be present";
 
     const auto script_a = FindFirstAssetByType(
       LoadInspection(concurrent_root), AssetType::kScript);
     const auto script_b = FindFirstAssetByType(
       LoadInspection(standalone_root), AssetType::kScript);
-    ASSERT_TRUE(script_a.has_value()) << "Expected script a to be present";
-    ASSERT_TRUE(script_b.has_value()) << "Expected script b to be present";
+    ASSERT_HAS_VALUE(script_a) << "Expected script a to be present";
+    ASSERT_HAS_VALUE(script_b) << "Expected script b to be present";
 
     const auto sidecar_source_a
       = concurrent_root / "input" / "parity_sidecar.json";
@@ -342,7 +327,7 @@ namespace {
 
     const auto standalone_scene_before = FindFirstAssetByType(
       LoadInspection(standalone_root), AssetType::kScene);
-    ASSERT_TRUE(standalone_scene_before.has_value())
+    ASSERT_HAS_VALUE(standalone_scene_before)
       << "Expected standalone scene before to be present";
     ASSERT_TRUE(Submit(MakeSidecarRequest(sidecar_source_b, standalone_root,
                          standalone_scene_before->virtual_path))
@@ -355,9 +340,9 @@ namespace {
       = FindFirstAssetByType(concurrent_inspection, AssetType::kScene);
     const auto standalone_scene
       = FindFirstAssetByType(standalone_inspection, AssetType::kScene);
-    ASSERT_TRUE(concurrent_scene.has_value())
+    ASSERT_HAS_VALUE(concurrent_scene)
       << "Expected concurrent scene to be present";
-    ASSERT_TRUE(standalone_scene.has_value())
+    ASSERT_HAS_VALUE(standalone_scene)
       << "Expected standalone scene to be present";
 
     const auto concurrent_scene_bytes

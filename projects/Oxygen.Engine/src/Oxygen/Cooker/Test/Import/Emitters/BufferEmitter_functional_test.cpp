@@ -78,8 +78,7 @@ auto MakeTestBuffer(size_t size_bytes, uint32_t usage_flags = 0x01,
   // buffers/indices without requiring SHA-256 hashing.
   const auto fill_u8 = static_cast<uint8_t>(fill_byte);
   payload.content_hash = (static_cast<uint64_t>(fill_u8) << 56)
-    ^ (static_cast<uint64_t>(alignment) << 24)
-    ^ (static_cast<uint64_t>(usage_flags) << 12)
+    ^ (alignment << 24) ^ (static_cast<uint64_t>(usage_flags) << 12)
     ^ (static_cast<uint64_t>(element_stride) << 4)
     ^ static_cast<uint64_t>(size_bytes);
 
@@ -142,7 +141,10 @@ protected:
     loop_.reset();
   }
 
-  auto Layout() const -> const LooseCookedLayout& { return layout_; }
+  [[nodiscard]] auto Layout() const -> const LooseCookedLayout&
+  {
+    return layout_;
+  }
 
   auto BufferAggregator() -> BufferTableAggregator&
   {
@@ -657,13 +659,13 @@ NOLINT_TEST_F(BufferEmitterTest, FinalizeDataFileContainsCorrectContent)
   // Create two buffers with distinct content
   CookedBufferPayload buf0;
   buf0.data.resize(100);
-  std::fill(buf0.data.begin(), buf0.data.end(), std::byte { 0xAA });
+  std::ranges::fill(buf0.data, std::byte { 0xAA });
   buf0.alignment = 16;
   buf0.usage_flags = 0x01;
 
   CookedBufferPayload buf1;
   buf1.data.resize(200);
-  std::fill(buf1.data.begin(), buf1.data.end(), std::byte { 0xBB });
+  std::ranges::fill(buf1.data, std::byte { 0xBB });
   buf1.alignment = 16;
   buf1.usage_flags = 0x01;
 

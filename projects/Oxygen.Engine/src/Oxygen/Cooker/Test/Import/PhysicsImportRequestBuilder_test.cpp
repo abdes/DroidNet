@@ -53,13 +53,13 @@ NOLINT_TEST(
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_TRUE(errors.str().empty());
-  ASSERT_TRUE(request->physics.has_value());
+  ASSERT_HAS_VALUE(request->physics);
   EXPECT_EQ(request->physics->target_scene_virtual_path,
     settings.target_scene_virtual_path);
   EXPECT_TRUE(request->physics->inline_bindings_json.empty());
-  ASSERT_TRUE(request->cooked_root.has_value());
+  ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_TRUE(request->cooked_root->is_absolute());
 }
 
@@ -71,9 +71,9 @@ NOLINT_TEST(
 
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
-  ASSERT_TRUE(request.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_TRUE(errors.str().empty());
-  ASSERT_TRUE(request->physics.has_value());
+  ASSERT_HAS_VALUE(request->physics);
   EXPECT_EQ(request->physics->target_scene_virtual_path,
     settings.target_scene_virtual_path);
   EXPECT_THAT(request->physics->inline_bindings_json,

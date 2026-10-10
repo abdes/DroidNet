@@ -14,7 +14,7 @@ import zlib
 
 
 IMPORT_TOOL = Path(sys.argv.pop(1)).resolve()
-_VERSIONS = Path(__file__).resolve().parents[3] / "Data" / "PakFormatVersions.inc"
+_VERSIONS = Path(__file__).resolve().parents[4] / "Data" / "PakFormatVersions.inc"
 SCENE_VERSION = int(re.search(
     r"OXDAT_ASSET_VERSION\(kSceneAssetVersion,\s*\w+,\s*\w+,\s*(\d+)\)",
     _VERSIONS.read_text(encoding="utf-8")).group(1))

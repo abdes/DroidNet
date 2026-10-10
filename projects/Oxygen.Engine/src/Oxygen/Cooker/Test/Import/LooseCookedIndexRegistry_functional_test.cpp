@@ -43,10 +43,10 @@ NOLINT_TEST(
   oxygen::data::SourceKey first_key {};
   oxygen::data::SourceKey last_key {};
   co::Event next_turn;
-  co::Run(loop, [&]() -> co::Co<> {
+  co::Run(loop, [&] -> co::Co<> {
     OXCO_WITH_NURSERY(tasks)
     {
-      tasks.Start([&]() -> co::Co<> {
+      tasks.Start([&] -> co::Co<> {
         const auto publication = co_await indexes.EndSession(first);
         first_completed = true;
         first_key = publication.source_key;
@@ -58,7 +58,7 @@ NOLINT_TEST(
         const auto next_publication = co_await indexes.EndSession(next);
         EXPECT_TRUE(next_publication.write_result.has_value());
       });
-      loop.Post([&] { next_turn.Trigger(); });
+      loop.Post([&] -> void { next_turn.Trigger(); });
       co_await next_turn;
       EXPECT_FALSE(first.IsActive());
       EXPECT_FALSE(first_completed);
@@ -106,10 +106,10 @@ NOLINT_TEST(
   std::filesystem::create_directories(root / "container.index.bin");
   uint32_t failures = 0;
   co::Event next_turn;
-  co::Run(loop, [&]() -> co::Co<> {
+  co::Run(loop, [&] -> co::Co<> {
     OXCO_WITH_NURSERY(tasks)
     {
-      tasks.Start([&]() -> co::Co<> {
+      tasks.Start([&] -> co::Co<> {
         try {
           static_cast<void>(co_await indexes.EndSession(first));
           ADD_FAILURE() << "A failed publication reached a waiting participant";
@@ -117,7 +117,7 @@ NOLINT_TEST(
           ++failures;
         }
       });
-      loop.Post([&] { next_turn.Trigger(); });
+      loop.Post([&] -> void { next_turn.Trigger(); });
       co_await next_turn;
       EXPECT_FALSE(first.IsActive());
       EXPECT_EQ(failures, 0U);
@@ -147,10 +147,10 @@ NOLINT_TEST(
   auto last = indexes.BeginSession(root, std::nullopt);
   bool rejected = false;
   co::Event next_turn;
-  co::Run(loop, [&]() -> co::Co<> {
+  co::Run(loop, [&] -> co::Co<> {
     OXCO_WITH_NURSERY(tasks)
     {
-      tasks.Start([&]() -> co::Co<> {
+      tasks.Start([&] -> co::Co<> {
         try {
           static_cast<void>(co_await indexes.EndSession(first));
           ADD_FAILURE() << "An aborted publication cannot succeed";
@@ -158,7 +158,7 @@ NOLINT_TEST(
           rejected = true;
         }
       });
-      loop.Post([&] { next_turn.Trigger(); });
+      loop.Post([&] -> void { next_turn.Trigger(); });
       co_await next_turn;
       EXPECT_FALSE(first.IsActive());
       EXPECT_FALSE(rejected);
@@ -187,15 +187,15 @@ NOLINT_TEST(
   co::Event cancel;
   co::Event cancelled;
   co::Event next_turn;
-  co::Run(loop, [&]() -> co::Co<> {
+  co::Run(loop, [&] -> co::Co<> {
     OXCO_WITH_NURSERY(tasks)
     {
-      tasks.Start([&]() -> co::Co<> {
+      tasks.Start([&] -> co::Co<> {
         static_cast<void>(
           co_await co::AnyOf(indexes.EndSession(first), cancel));
         cancelled.Trigger();
       });
-      loop.Post([&] { next_turn.Trigger(); });
+      loop.Post([&] -> void { next_turn.Trigger(); });
       co_await next_turn;
       EXPECT_FALSE(first.IsActive());
       cancel.Trigger();

@@ -94,7 +94,12 @@ oxygen_embed_json_schemas(
 # Convenience build target: allow building by module name (matches OUTPUT_NAME)
 # in addition to the generated target name.
 add_custom_target(${META_MODULE_NAME} DEPENDS ${META_MODULE_TARGET})
-arrange_target_files_for_ide(${META_MODULE_TARGET})
+arrange_target_files_for_ide(
+  oxygen-cooker-paktool-core
+  EXCLUDE_PATTERNS
+    "main\\.cpp"
+)
+arrange_target_files_for_ide(${META_MODULE_TARGET} EXCLUDE_PATTERNS ".*")
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES

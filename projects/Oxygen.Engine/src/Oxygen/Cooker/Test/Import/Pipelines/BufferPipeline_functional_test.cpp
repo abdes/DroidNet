@@ -6,6 +6,10 @@
 
 // Covers: Import/Internal/Pipelines/BufferPipeline.cpp
 
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <span>
 #include <stop_token>
 #include <string>
@@ -13,12 +17,15 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Cooker/Import/BufferImportTypes.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Test/Support/PipelineHarness.h>
 #include <Oxygen/Cooker/Test/Support/TestValues.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/OxCo/asio.h>
@@ -55,7 +62,7 @@ auto MakeWorkItem(std::string source_id, CookedBufferPayload cooked,
   return BufferPipeline::WorkItem {
     .source_id = std::move(source_id),
     .cooked = std::move(cooked),
-    .stop_token = stop_token,
+    .stop_token = std::move(stop_token),
   };
 }
 
@@ -77,8 +84,12 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(BufferPipelineTest, CollectWithHashingEnabledComputesHash)
 {
-  std::vector<std::byte> bytes { std::byte { 0x10 }, std::byte { 0x20 },
-    std::byte { 0x30 }, std::byte { 0x40 } };
+  std::vector<std::byte> bytes {
+    std::byte { 0x10 },
+    std::byte { 0x20 },
+    std::byte { 0x30 },
+    std::byte { 0x40 },
+  };
   const std::span<const std::byte> span(bytes.data(), bytes.size());
   const auto expected_hash = util::ComputeContentHash(span);
 
@@ -165,7 +176,7 @@ NOLINT_TEST_F(BufferPipelineTest, CollectWhenCancelledAfterSubmitFails)
   std::vector<std::byte> bytes(2 * 1024 * 1024, std::byte { 0x77 });
   BufferPipeline::WorkResult result;
 
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     BufferPipeline pipeline(pool_,
       BufferPipeline::Config {
         .queue_capacity = 4,
@@ -202,7 +213,7 @@ NOLINT_TEST_F(BufferPipelineTest, CollectMixedCancellationReturnsMixedResults)
   BufferPipeline::WorkResult canceled_result;
   BufferPipeline::WorkResult ok_result;
 
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     BufferPipeline pipeline(pool_,
       BufferPipeline::Config {
         .queue_capacity = 4,
@@ -299,7 +310,7 @@ NOLINT_TEST_F(
   std::atomic<bool> posted_ran { false };
   BufferPipeline::WorkResult result;
 
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     BufferPipeline pipeline(pool_,
       BufferPipeline::Config {
         .queue_capacity = 4,
@@ -315,7 +326,7 @@ NOLINT_TEST_F(
       co_await pipeline.Submit(
         MakeWorkItem("buffer0", MakePayload(std::move(bytes), 0)));
 
-      loop_.Post([&posted_ran]() { posted_ran.store(true); });
+      loop_.Post([&posted_ran] -> void { posted_ran.store(true); });
 
       EXPECT_TRUE(pipeline.HasPending());
       co_await SleepFor(loop_.IoContext(), std::chrono::milliseconds(1));

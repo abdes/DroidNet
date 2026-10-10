@@ -13,9 +13,15 @@
 #include <filesystem>
 #include <latch>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Testing/GTest.h>
@@ -53,18 +59,18 @@ NOLINT_TEST_F(
   ImportReport report {};
   const auto job_id = service.SubmitImport(
     std::move(request),
-    [&report, &done](ImportJobId, const ImportReport& completed) {
+    [&report, &done](ImportJobId, const ImportReport& completed) -> void {
       report = completed;
       done.count_down();
     },
     nullptr);
 
-  ASSERT_TRUE(job_id.has_value());
+  ASSERT_HAS_VALUE(job_id);
   done.wait();
 
   EXPECT_FALSE(report.success);
-  EXPECT_TRUE(std::any_of(report.diagnostics.begin(), report.diagnostics.end(),
-    [](const ImportDiagnostic& diagnostic) {
+  EXPECT_TRUE(std::ranges::any_of(
+    report.diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
       return diagnostic.code.starts_with("physics.sidecar.");
     }));
 
@@ -90,18 +96,18 @@ NOLINT_TEST_F(AsyncImportServiceRoutingTest,
   ImportReport report {};
   const auto job_id = service.SubmitImport(
     std::move(request),
-    [&report, &done](ImportJobId, const ImportReport& completed) {
+    [&report, &done](ImportJobId, const ImportReport& completed) -> void {
       report = completed;
       done.count_down();
     },
     nullptr);
 
-  ASSERT_TRUE(job_id.has_value());
+  ASSERT_HAS_VALUE(job_id);
   done.wait();
 
   EXPECT_FALSE(report.success);
-  EXPECT_TRUE(std::any_of(report.diagnostics.begin(), report.diagnostics.end(),
-    [](const ImportDiagnostic& diagnostic) {
+  EXPECT_TRUE(std::ranges::any_of(
+    report.diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
       return diagnostic.code.starts_with("material.descriptor.");
     }));
 
@@ -127,13 +133,13 @@ NOLINT_TEST_F(AsyncImportServiceRoutingTest,
   ImportReport report {};
   const auto job_id = service.SubmitImport(
     std::move(request),
-    [&report, &done](ImportJobId, const ImportReport& completed) {
+    [&report, &done](ImportJobId, const ImportReport& completed) -> void {
       report = completed;
       done.count_down();
     },
     nullptr);
 
-  ASSERT_TRUE(job_id.has_value());
+  ASSERT_HAS_VALUE(job_id);
   done.wait();
 
   EXPECT_FALSE(report.success);
@@ -162,18 +168,18 @@ NOLINT_TEST_F(
   ImportReport report {};
   const auto job_id = service.SubmitImport(
     std::move(request),
-    [&report, &done](ImportJobId, const ImportReport& completed) {
+    [&report, &done](ImportJobId, const ImportReport& completed) -> void {
       report = completed;
       done.count_down();
     },
     nullptr);
 
-  ASSERT_TRUE(job_id.has_value());
+  ASSERT_HAS_VALUE(job_id);
   done.wait();
 
   EXPECT_FALSE(report.success);
-  EXPECT_TRUE(std::any_of(report.diagnostics.begin(), report.diagnostics.end(),
-    [](const ImportDiagnostic& diagnostic) {
+  EXPECT_TRUE(std::ranges::any_of(
+    report.diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
       return diagnostic.code.starts_with("buffer.container.");
     }));
 
@@ -199,18 +205,18 @@ NOLINT_TEST_F(
   ImportReport report {};
   const auto job_id = service.SubmitImport(
     std::move(request),
-    [&report, &done](ImportJobId, const ImportReport& completed) {
+    [&report, &done](ImportJobId, const ImportReport& completed) -> void {
       report = completed;
       done.count_down();
     },
     nullptr);
 
-  ASSERT_TRUE(job_id.has_value());
+  ASSERT_HAS_VALUE(job_id);
   done.wait();
 
   EXPECT_FALSE(report.success);
-  EXPECT_TRUE(std::any_of(report.diagnostics.begin(), report.diagnostics.end(),
-    [](const ImportDiagnostic& diagnostic) {
+  EXPECT_TRUE(std::ranges::any_of(
+    report.diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
       return diagnostic.code.starts_with("scene.descriptor.");
     }));
 

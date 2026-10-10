@@ -6,20 +6,26 @@
 
 // Covers: Import/AsyncImportService.cpp
 
-#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <filesystem>
 #include <future>
 #include <latch>
+#include <memory>
 #include <mutex>
 #include <thread>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/Test/Support/TestImportJob.h>
 #include <Oxygen/Testing/GTest.h>
@@ -32,7 +38,7 @@ namespace {
 
 using oxygen::cooker::test::HasDiagnosticCode;
 
-[[nodiscard]] auto MakeTestJobFactory(test::TestImportJob::Config config)
+[[nodiscard]] auto MakeTestJobFactory(const test::TestImportJob::Config& config)
   -> ImportJobFactory
 {
   return
@@ -43,12 +49,12 @@ using oxygen::cooker::test::HasDiagnosticCode;
 }
 
 [[nodiscard]] auto SubmitTestJob(AsyncImportService& service,
-  ImportRequest request, ImportCompletionCallback on_complete,
-  ProgressEventCallback on_progress = nullptr,
+  ImportRequest request, const ImportCompletionCallback& on_complete,
+  const ProgressEventCallback& on_progress = nullptr,
   test::TestImportJob::Config config = {}) -> ImportJobId
 {
-  auto result = service.SubmitImport(std::move(request), std::move(on_complete),
-    std::move(on_progress), MakeTestJobFactory(config));
+  auto result = service.SubmitImport(std::move(request), on_complete,
+    on_progress, MakeTestJobFactory(std::move(config)));
   EXPECT_TRUE(result);
   return result.value_or(kInvalidJobId);
 }
@@ -67,8 +73,6 @@ NOLINT_TEST_F(AsyncImportServiceTest, ConstructDestructNoJobsSucceeds)
 {
   {
     AsyncImportService service(config_);
-    // Allow thread to start
-    std::this_thread::sleep_for(50ms);
     StopService(service);
   }
 
@@ -80,7 +84,6 @@ NOLINT_TEST_F(AsyncImportServiceTest, MultipleConstructDestructSucceeds)
 {
   for (int i = 0; i < 3; ++i) {
     AsyncImportService service(config_);
-    std::this_thread::sleep_for(20ms);
     StopService(service);
   }
 
@@ -115,14 +118,16 @@ NOLINT_TEST_F(AsyncImportServiceTest, JobCountsAfterConstructionAreZero)
 NOLINT_TEST_F(AsyncImportServiceTest, PostedJobsReserveQueueCapacity)
 {
   AsyncImportService service(AsyncImportService::Config {
-    .thread_pool_size = 2, .max_in_flight_jobs = 1 });
+    .thread_pool_size = 2,
+    .max_in_flight_jobs = 1,
+  });
   std::promise<void> entered;
   auto entered_future = entered.get_future();
   std::promise<void> release;
   auto resume = release.get_future().share();
   const auto blocker
     = SubmitTestJob(service, ImportRequest { .source_path = "barrier.asset" },
-      [&](ImportJobId, const ImportReport&) {
+      [&](ImportJobId, const ImportReport&) -> void {
         entered.set_value();
         resume.wait();
       });
@@ -142,21 +147,24 @@ NOLINT_TEST_F(AsyncImportServiceTest, PostedJobsReserveQueueCapacity)
   size_t failed = 0;
   {
     std::vector<std::jthread> producers;
+    producers.reserve(4);
     for (size_t producer = 0; producer < 4; ++producer) {
-      producers.emplace_back([&] {
+      producers.emplace_back([&] -> void {
         for (size_t job = 0; job < 64; ++job) {
           const auto id = service.SubmitImport(
             ImportRequest { .source_path = "queued.asset" },
-            [&](ImportJobId, const ImportReport& report) {
+            [&](ImportJobId, const ImportReport& report) -> void {
               std::scoped_lock lock(mutex);
               ++callbacks;
               failed += report.success ? 0U : 1U;
               completed.notify_one();
             },
             nullptr,
-            MakeTestJobFactory({ .total_delay = 1ms,
+            MakeTestJobFactory({
+              .total_delay = 1ms,
               .step_delay = 1ms,
-              .report_progress = false }));
+              .report_progress = false,
+            }));
           if (id) {
             std::scoped_lock lock(mutex);
             ++accepted;
@@ -170,8 +178,8 @@ NOLINT_TEST_F(AsyncImportServiceTest, PostedJobsReserveQueueCapacity)
   release.set_value();
   {
     std::unique_lock lock(mutex);
-    EXPECT_TRUE(
-      completed.wait_for(lock, 10s, [&] { return callbacks == accepted; }));
+    EXPECT_TRUE(completed.wait_for(
+      lock, 10s, [&] -> bool { return callbacks == accepted; }));
   }
   StopService(service);
   EXPECT_EQ(callbacks, accepted);
@@ -187,7 +195,8 @@ NOLINT_TEST_F(AsyncImportServiceTest, RejectedFactoriesReleaseAdmission)
   for (size_t attempt = 0; attempt < 256; ++attempt) {
     const auto id = service.SubmitImport(
       ImportRequest { .source_path = "rejected.asset" },
-      [&](ImportJobId, const ImportReport&) { ++rejected_callbacks; }, nullptr,
+      [&](ImportJobId, const ImportReport&) -> void { ++rejected_callbacks; },
+      nullptr,
       [](detail::ImportJobParams) -> std::shared_ptr<detail::ImportJob> {
         return nullptr;
       });
@@ -197,7 +206,7 @@ NOLINT_TEST_F(AsyncImportServiceTest, RejectedFactoriesReleaseAdmission)
   auto done = finished.get_future();
   const auto id
     = SubmitTestJob(service, ImportRequest { .source_path = "accepted.asset" },
-      [&](ImportJobId, const ImportReport&) { finished.set_value(); });
+      [&](ImportJobId, const ImportReport&) -> void { finished.set_value(); });
   EXPECT_NE(id, kInvalidJobId);
   EXPECT_EQ(done.wait_for(5s), std::future_status::ready);
   StopService(service);
@@ -211,7 +220,7 @@ NOLINT_TEST_F(AsyncImportServiceTest, SubmitImportReturnsValidJobId)
 
   auto job_id
     = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
-      [&done](ImportJobId, ImportReport) { done.count_down(); });
+      [&done](ImportJobId, const ImportReport&) -> void { done.count_down(); });
 
   EXPECT_NE(job_id, kInvalidJobId);
 
@@ -230,7 +239,7 @@ NOLINT_TEST_F(AsyncImportServiceTest, SubmitImportCompletionCallbackIsInvoked)
 
   auto job_id
     = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
-      [&](ImportJobId id, ImportReport) {
+      [&](ImportJobId id, const ImportReport&) -> void {
         callback_invoked = true;
         received_id = id;
         done.count_down();
@@ -259,10 +268,10 @@ NOLINT_TEST_F(AsyncImportServiceTest, SubmitImportCustomJobFactoryAllowsUnknown)
 
   auto job_result = service.SubmitImport(
     ImportRequest { .source_path = "custom.asset" },
-    [&done](ImportJobId, ImportReport) { done.count_down(); }, nullptr,
-    job_factory);
+    [&done](ImportJobId, const ImportReport&) -> void { done.count_down(); },
+    nullptr, job_factory);
 
-  ASSERT_TRUE(job_result.has_value());
+  ASSERT_HAS_VALUE(job_result);
   EXPECT_NE(*job_result, kInvalidJobId);
   done.wait();
 
@@ -279,7 +288,7 @@ NOLINT_TEST_F(AsyncImportServiceTest, SubmitImportCustomJobCompletes)
 
   [[maybe_unused]] auto job_id
     = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
-      [&](ImportJobId, ImportReport report) {
+      [&](ImportJobId, ImportReport report) -> void {
         callback_invoked = true;
         received_report = std::move(report);
         done.count_down();
@@ -303,8 +312,8 @@ NOLINT_TEST_F(AsyncImportServiceTest, SubmitImportProgressCallbackIsInvoked)
 
   [[maybe_unused]] auto job_id = SubmitTestJob(
     service, ImportRequest { .source_path = "custom.asset" },
-    [&done](ImportJobId, ImportReport) { done.count_down(); },
-    [&progress_invoked](const ProgressEvent& progress) {
+    [&done](ImportJobId, const ImportReport&) -> void { done.count_down(); },
+    [&progress_invoked](const ProgressEvent& progress) -> void {
       if (progress.header.phase == ImportPhase::kWorking) {
         progress_invoked = true;
       }
@@ -331,15 +340,15 @@ NOLINT_TEST_F(AsyncImportServiceTest, SubmitImportMultipleJobsUniqueIds)
 
   auto id1
     = SubmitTestJob(service, ImportRequest { .source_path = "custom1.asset" },
-      [&done](ImportJobId, ImportReport) { done.count_down(); });
+      [&done](ImportJobId, const ImportReport&) -> void { done.count_down(); });
 
   auto id2
     = SubmitTestJob(service, ImportRequest { .source_path = "custom2.asset" },
-      [&done](ImportJobId, ImportReport) { done.count_down(); });
+      [&done](ImportJobId, const ImportReport&) -> void { done.count_down(); });
 
   auto id3
     = SubmitTestJob(service, ImportRequest { .source_path = "custom3.asset" },
-      [&done](ImportJobId, ImportReport) { done.count_down(); });
+      [&done](ImportJobId, const ImportReport&) -> void { done.count_down(); });
 
   EXPECT_NE(id1, kInvalidJobId);
   EXPECT_NE(id2, kInvalidJobId);
@@ -402,7 +411,7 @@ NOLINT_TEST_F(AsyncImportServiceTest, CancelJobCompletedJobReturnsFalse)
 
   auto job_id
     = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
-      [&done](ImportJobId, ImportReport) { done.count_down(); });
+      [&done](ImportJobId, const ImportReport&) -> void { done.count_down(); });
 
   EXPECT_NE(job_id, kInvalidJobId);
 
@@ -428,15 +437,18 @@ NOLINT_TEST_F(AsyncImportServiceTest, CancelJobDuringExecutionCancelsJob)
 {
   AsyncImportService service(config_);
   std::latch job_started(1);
-  std::latch cancel_attempted(1);
+  std::latch job_done(1);
   std::atomic<bool> job_completed { false };
   std::atomic<bool> job_started_signaled { false };
 
   // Submit a job that signals when it starts
   auto job_id = SubmitTestJob(
     service, ImportRequest { .source_path = "custom.asset" },
-    [&](ImportJobId, ImportReport) { job_completed = true; },
-    [&](const ProgressEvent& progress) {
+    [&](ImportJobId, const ImportReport&) -> void {
+      job_completed = true;
+      job_done.count_down();
+    },
+    [&](const ProgressEvent& progress) -> void {
       if (progress.header.phase == ImportPhase::kWorking) {
         bool expected = false;
         if (job_started_signaled.compare_exchange_strong(expected, true)) {
@@ -454,11 +466,10 @@ NOLINT_TEST_F(AsyncImportServiceTest, CancelJobDuringExecutionCancelsJob)
 
   // Wait for job to start, then cancel it
   job_started.wait();
-  bool cancel_result = service.CancelJob(job_id);
-  cancel_attempted.count_down();
+  const bool cancel_result = service.CancelJob(job_id);
 
-  // Wait a bit to see if job completes (it shouldn't if canceled properly)
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  // Wait for the job to finish or be cancelled rather than sleeping.
+  job_done.wait();
 
   // Note: The cancel may succeed or fail depending on timing, but we shouldn't
   // crash The important thing is that the system remains in a consistent state
@@ -477,27 +488,30 @@ NOLINT_TEST_F(AsyncImportServiceTest, CancelJobBeforeExecutionPreventsStart)
   AsyncImportService service(blocking_config);
 
   std::latch first_job_started(1);
+  std::latch first_job_done(1);
   std::atomic<bool> second_job_executed { false };
   std::atomic<bool> first_job_signaled { false };
+  auto first_finish_gate = std::make_shared<std::latch>(1);
 
-  // Submit first job that blocks
+  // Submit first job that blocks on a gate, keeping the single worker busy.
   [[maybe_unused]] auto blocking_job = SubmitTestJob(
     service, ImportRequest { .source_path = "custom.asset" },
-    [](ImportJobId, ImportReport) { },
-    [&](const ProgressEvent& progress) {
+    [&](ImportJobId, const ImportReport&) -> void {
+      first_job_done.count_down();
+    },
+    [&](const ProgressEvent& progress) -> void {
       if (progress.header.phase == ImportPhase::kWorking) {
         bool expected = false;
         if (first_job_signaled.compare_exchange_strong(expected, true)) {
           first_job_started.count_down();
         }
-        // Keep this job running for a bit
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
     },
     test::TestImportJob::Config {
       .total_delay = 50ms,
       .step_delay = 5ms,
       .report_progress = true,
+      .finish_gate = first_finish_gate,
     });
 
   EXPECT_NE(blocking_job, kInvalidJobId);
@@ -508,15 +522,18 @@ NOLINT_TEST_F(AsyncImportServiceTest, CancelJobBeforeExecutionPreventsStart)
   // Submit second job - it should queue since worker is busy
   auto second_job
     = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
-      [&](ImportJobId, ImportReport) { second_job_executed = true; });
+      [&](ImportJobId, const ImportReport&) -> void {
+        second_job_executed = true;
+      });
 
   EXPECT_NE(second_job, kInvalidJobId);
 
   // Immediately cancel the second job before it executes
-  bool cancel_result = service.CancelJob(second_job);
+  const bool cancel_result = service.CancelJob(second_job);
 
-  // Wait for first job to finish
-  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  // Release the first job and wait for it to drain.
+  first_finish_gate->count_down();
+  first_job_done.wait();
 
   // The second job should have been canceled before execution
   EXPECT_TRUE(cancel_result);
@@ -553,7 +570,7 @@ NOLINT_TEST_F(AsyncImportServiceTest, CancelAllMultipleJobsCancelsAll)
   for (int i = 0; i < kJobCount; ++i) {
     auto job_id = service.SubmitImport(
       ImportRequest { .source_path = "custom.asset" },
-      [state](ImportJobId, ImportReport report) {
+      [state](ImportJobId, const ImportReport& report) -> void {
         if (!state->active.load(std::memory_order_acquire)) {
           return;
         }
@@ -567,7 +584,7 @@ NOLINT_TEST_F(AsyncImportServiceTest, CancelAllMultipleJobsCancelsAll)
         }
         state->cv.notify_all();
       },
-      [state](const ProgressEvent& progress) {
+      [state](const ProgressEvent& progress) -> void {
         if (!state->active.load(std::memory_order_acquire)) {
           return;
         }
@@ -589,7 +606,7 @@ NOLINT_TEST_F(AsyncImportServiceTest, CancelAllMultipleJobsCancelsAll)
   // Wait for jobs to start, then cancel all.
   {
     std::unique_lock lock(state->mutex);
-    state->cv.wait_for(lock, 2s, [&]() {
+    state->cv.wait_for(lock, 2s, [&] -> bool {
       return state->jobs_started.load(std::memory_order_relaxed) >= kJobCount;
     });
   }
@@ -599,7 +616,7 @@ NOLINT_TEST_F(AsyncImportServiceTest, CancelAllMultipleJobsCancelsAll)
   const auto deadline = std::chrono::steady_clock::now() + 2s;
   {
     std::unique_lock lock(state->mutex);
-    state->cv.wait_until(lock, deadline, [&]() {
+    state->cv.wait_until(lock, deadline, [&] -> bool {
       return state->jobs_completed.load(std::memory_order_relaxed) >= kJobCount;
     });
   }
@@ -631,7 +648,7 @@ NOLINT_TEST_F(
   const auto deadline = std::chrono::steady_clock::now() + 200ms;
   while (
     service.IsAcceptingJobs() && std::chrono::steady_clock::now() < deadline) {
-    std::this_thread::sleep_for(1ms);
+    std::this_thread::yield();
   }
 
   EXPECT_FALSE(service.IsAcceptingJobs());
@@ -646,14 +663,14 @@ protected:
 
 NOLINT_TEST_F(AsyncImportServiceShutdownDeathTest, DestructorWithoutStopAborts)
 {
-  const auto exercise = [this]() {
+  const auto exercise = [this] -> void {
     AsyncImportService service(config_);
 
     // Submit several jobs
     for (int i = 0; i < 5; ++i) {
       [[maybe_unused]] auto job_id = SubmitTestJob(service,
         ImportRequest { .source_path = "custom.asset" },
-        [](ImportJobId, ImportReport) { });
+        [](ImportJobId, const ImportReport&) -> void { });
     }
   };
 
@@ -667,7 +684,7 @@ NOLINT_TEST_F(AsyncImportServiceTest, StopWithPendingJobsCompletes)
   for (int i = 0; i < 5; ++i) {
     [[maybe_unused]] auto job_id
       = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
-        [](ImportJobId, ImportReport) { });
+        [](ImportJobId, const ImportReport&) -> void { });
     EXPECT_NE(job_id, kInvalidJobId);
   }
 
@@ -697,12 +714,13 @@ NOLINT_TEST_F(AsyncImportServiceConcurrencyTest,
 
   // Submit from multiple threads
   std::vector<std::thread> threads;
+  threads.reserve(kThreadCount);
   for (int t = 0; t < kThreadCount; ++t) {
-    threads.emplace_back([&, t]() {
+    threads.emplace_back([&, t] -> void {
       for (int i = 0; i < kJobsPerThread; ++i) {
         [[maybe_unused]] auto job_id = SubmitTestJob(service,
           ImportRequest { .source_path = "custom.asset" },
-          [&](ImportJobId, ImportReport) {
+          [&](ImportJobId, const ImportReport&) -> void {
             completed_count.fetch_add(1, std::memory_order_relaxed);
             done.count_down();
           });
@@ -737,7 +755,7 @@ NOLINT_TEST_F(AsyncImportServiceConcurrencyTest, RapidSubmitAndCancelNoDeadlock)
   for (int i = 0; i < kIterations; ++i) {
     auto job_id
       = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
-        [&](ImportJobId, ImportReport) {
+        [&](ImportJobId, const ImportReport&) -> void {
           completed_count.fetch_add(1, std::memory_order_relaxed);
         });
 
@@ -754,10 +772,8 @@ NOLINT_TEST_F(AsyncImportServiceConcurrencyTest, RapidSubmitAndCancelNoDeadlock)
     }
   }
 
-  // Wait for any remaining jobs to complete
-  std::this_thread::sleep_for(std::chrono::milliseconds(500));
-
-  // We completed without deadlock
+  // We completed without deadlock; Stop() cancels and drains any remaining
+  // jobs.
   SUCCEED();
   // Note: We don't assert exact completion count because cancellations are
   // timing-dependent
@@ -785,7 +801,7 @@ NOLINT_TEST_F(AsyncImportServiceTest, IsJobActiveCompletedJobReturnsFalse)
 
   auto job_id
     = SubmitTestJob(service, ImportRequest { .source_path = "custom.asset" },
-      [&done](ImportJobId, ImportReport) { done.count_down(); });
+      [&done](ImportJobId, const ImportReport&) -> void { done.count_down(); });
 
   EXPECT_NE(job_id, kInvalidJobId);
 

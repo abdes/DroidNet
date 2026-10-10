@@ -84,19 +84,19 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value())
+  ASSERT_HAS_VALUE(manifest)
     << "Expected manifest to contain a value" << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   auto request_errors = std::ostringstream {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value())
+  ASSERT_HAS_VALUE(request)
     << "Expected request to contain a value" << request_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value())
+  ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected request->cooked_root to contain a value";
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "cube-job" });
-  ASSERT_TRUE(request->geometry_descriptor.has_value())
+  ASSERT_HAS_VALUE(request->geometry_descriptor)
     << "Expected request->geometry_descriptor to contain a value";
   ASSERT_EQ(request->cooked_context_roots.size(), 1U);
   EXPECT_EQ(request->cooked_context_roots.at(0), root / "Libraries/Materials");
@@ -162,7 +162,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value())
+  ASSERT_HAS_VALUE(manifest)
     << "Expected manifest to contain a value" << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
   EXPECT_EQ(manifest->jobs.at(1).id, "proc.cube");
@@ -171,9 +171,9 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
 
   auto request_errors = std::ostringstream {};
   const auto request = manifest->jobs.at(1).BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value())
+  ASSERT_HAS_VALUE(request)
     << "Expected request to contain a value" << request_errors.str();
-  ASSERT_TRUE(request->orchestration.has_value())
+  ASSERT_HAS_VALUE(request->orchestration)
     << "Expected request->orchestration to contain a value";
   EXPECT_EQ(request->orchestration->job_id, "proc.cube");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);

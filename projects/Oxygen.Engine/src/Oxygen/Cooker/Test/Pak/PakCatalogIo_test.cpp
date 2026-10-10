@@ -8,12 +8,16 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 
 #include "PakTestSupport.h"
 
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
+#include <Oxygen/Cooker/Test/Support/TestValues.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -50,9 +54,13 @@ auto MakeCatalog() -> data::PakCatalog
     },
   };
   catalog.deleted = { MakeAssetKey(0xC0U) };
-  catalog.bases = { { .source_key = MakeSourceKey(0x51U),
-    .content_version = 1U,
-    .catalog_digest = MakeDigest(0x61U) } };
+  catalog.bases = {
+    {
+      .source_key = MakeSourceKey(0x51U),
+      .content_version = 1U,
+      .catalog_digest = MakeDigest(0x61U),
+    },
+  };
   catalog.catalog_digest = catalog.ComputeDigest().value();
   return catalog;
 }
@@ -67,12 +75,12 @@ auto ExpectCatalogEqual(
   EXPECT_EQ(lhs.bases, rhs.bases);
   ASSERT_EQ(lhs.entries.size(), rhs.entries.size());
   for (size_t i = 0; i < lhs.entries.size(); ++i) {
-    EXPECT_EQ(lhs.entries[i].asset_key, rhs.entries[i].asset_key);
-    EXPECT_EQ(lhs.entries[i].asset_type, rhs.entries[i].asset_type);
+    EXPECT_EQ(lhs.entries.at(i).asset_key, rhs.entries.at(i).asset_key);
+    EXPECT_EQ(lhs.entries.at(i).asset_type, rhs.entries.at(i).asset_type);
     EXPECT_EQ(
-      lhs.entries[i].descriptor_digest, rhs.entries[i].descriptor_digest);
-    EXPECT_EQ(lhs.entries[i].transitive_resource_digest,
-      rhs.entries[i].transitive_resource_digest);
+      lhs.entries.at(i).descriptor_digest, rhs.entries.at(i).descriptor_digest);
+    EXPECT_EQ(lhs.entries.at(i).transitive_resource_digest,
+      rhs.entries.at(i).transitive_resource_digest);
   }
 }
 
@@ -84,10 +92,10 @@ NOLINT_TEST(
   const auto text = pak::PakCatalogIo::ToCanonicalJsonString(catalog);
   const auto parsed = pak::PakCatalogIo::Parse(text);
 
-  ASSERT_TRUE(parsed.has_value());
+  ASSERT_HAS_VALUE(parsed);
   EXPECT_EQ(parsed.value().entries.size(), 2U);
-  EXPECT_LT(
-    parsed.value().entries[0].asset_key, parsed.value().entries[1].asset_key);
+  EXPECT_LT(parsed.value().entries.at(0).asset_key,
+    parsed.value().entries.at(1).asset_key);
   ExpectCatalogEqual(parsed.value(), parsed.value());
   EXPECT_EQ(text, pak::PakCatalogIo::ToCanonicalJsonString(parsed.value()));
 }

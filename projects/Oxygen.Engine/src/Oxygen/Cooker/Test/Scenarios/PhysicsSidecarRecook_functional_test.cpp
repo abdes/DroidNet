@@ -14,7 +14,6 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include <latch>
 #include <memory>
 #include <optional>
 #include <span>
@@ -30,17 +29,18 @@
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
-#include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
+#include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
@@ -54,6 +54,7 @@ namespace {
 
   using nlohmann::json;
   namespace phys = oxygen::data::pak::physics;
+  using oxygen::cooker::test::SubmitAndWait;
 
   constexpr auto kSceneName = std::string_view { "ComplexScene" };
   constexpr auto kSceneVirtualPath
@@ -174,8 +175,8 @@ namespace {
     const std::vector<phys::PhysicsResourceDesc>& table,
     const data::AssetKey& asset_key) -> const phys::PhysicsResourceDesc*
   {
-    const auto it = std::find_if(table.begin(), table.end(),
-      [&](const phys::PhysicsResourceDesc& desc) -> bool {
+    const auto it = std::ranges::find_if(
+      table, [&](const phys::PhysicsResourceDesc& desc) -> bool {
         return desc.resource_asset_key == asset_key;
       });
     return it != table.end() ? &(*it) : nullptr;
@@ -208,24 +209,6 @@ namespace {
   {
     return std::ranges::any_of(report.outputs,
       [&](const ImportOutputRecord& o) -> bool { return o.path == relpath; });
-  }
-
-  auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
-    -> ImportReport
-  {
-    auto report = ImportReport {};
-    std::latch done(1);
-    const auto submitted = service.SubmitImport(
-      std::move(request),
-      [&report, &done](
-        const ImportJobId /*job_id*/, const ImportReport& completed) -> void {
-        report = completed;
-        done.count_down();
-      },
-      nullptr);
-    EXPECT_TRUE(submitted.has_value());
-    done.wait();
-    return report;
   }
 
   auto MakeSceneDescriptorRequest(const std::filesystem::path& cooked_root,
@@ -560,13 +543,13 @@ namespace {
     static_assert(sizeof(VertexPosition) == sizeof(float) * 3U);
 
     const auto vertices = std::array<VertexPosition, 7> {
-      VertexPosition { 0.0F, 0.15F, 0.0F },
-      VertexPosition { -0.12F, -0.10F, -0.12F },
-      VertexPosition { 0.12F, -0.10F, -0.12F },
-      VertexPosition { 0.0F, -0.10F, 0.14F },
-      VertexPosition { -0.06F, 0.02F, 0.08F },
-      VertexPosition { 0.06F, 0.02F, 0.08F },
-      VertexPosition { 0.0F, -0.02F, -0.04F },
+      VertexPosition { .x = 0.0F, .y = 0.15F, .z = 0.0F },
+      VertexPosition { .x = -0.12F, .y = -0.10F, .z = -0.12F },
+      VertexPosition { .x = 0.12F, .y = -0.10F, .z = -0.12F },
+      VertexPosition { .x = 0.0F, .y = -0.10F, .z = 0.14F },
+      VertexPosition { .x = -0.06F, .y = 0.02F, .z = 0.08F },
+      VertexPosition { .x = 0.06F, .y = 0.02F, .z = 0.08F },
+      VertexPosition { .x = 0.0F, .y = -0.02F, .z = -0.04F },
     };
     const auto indices = std::array<uint32_t, 12> {
       0U,
@@ -681,10 +664,14 @@ namespace {
       relpath, std::span<const std::byte>(descriptor_bytes),
       data::AssetReferences::Create(
         {
-          { .kind = data::ResourceKind::kBuffer,
-            .index = oxygen::ResourceIndexT { 1U } },
-          { .kind = data::ResourceKind::kBuffer,
-            .index = oxygen::ResourceIndexT { 2U } },
+          {
+            .kind = data::ResourceKind::kBuffer,
+            .index = oxygen::ResourceIndexT { 1U },
+          },
+          {
+            .kind = data::ResourceKind::kBuffer,
+            .index = oxygen::ResourceIndexT { 2U },
+          },
         },
         {})
         .value());
@@ -724,17 +711,19 @@ namespace {
     RegisterStubGeometryAsset(
       cooked_root, kGeometryVirtualPath, "Geometry/cloth.ogeo");
 
-    if (!SubmitAndWait(
-          service, MakeSceneDescriptorRequest(cooked_root, kSceneName, 10U))
-          .success) {
+    const auto scene_report = SubmitAndWait(
+      service, MakeSceneDescriptorRequest(cooked_root, kSceneName, 10U));
+    if (!scene_report.has_value() || !scene_report->success) {
       return "Scene descriptor cook failed";
     }
-    if (!SubmitAndWait(service, MakePhysicsMaterialRequest(cooked_root))
-          .success) {
+    const auto material_report
+      = SubmitAndWait(service, MakePhysicsMaterialRequest(cooked_root));
+    if (!material_report.has_value() || !material_report->success) {
       return "Physics material cook failed";
     }
-    if (!SubmitAndWait(service, MakeCompoundShapeRequest(cooked_root))
-          .success) {
+    const auto shape_report
+      = SubmitAndWait(service, MakeCompoundShapeRequest(cooked_root));
+    if (!shape_report.has_value() || !shape_report->success) {
       return "Compound shape cook failed";
     }
     return {};
@@ -752,9 +741,9 @@ namespace {
       = BuildComplexSidecarBindings(pinned_vertices, kinematic_vertices);
     auto report = SubmitAndWait(service,
       MakePhysicsSidecarRequest(cooked_root, kSceneVirtualPath, bindings));
-    const auto success = report.success;
-    if (report_out != nullptr) {
-      *report_out = std::move(report);
+    const auto success = report.has_value() && report->success;
+    if (report_out != nullptr && report.has_value()) {
+      *report_out = std::move(*report);
     }
     return success ? std::string {} : std::string { "Sidecar cook failed" };
   }
@@ -763,7 +752,8 @@ namespace {
   auto TakeCookedSnapshot(const std::filesystem::path& cooked_root,
     CookedSnapshot& snapshot) -> std::string
   {
-    const auto path = [&](const std::string_view relpath) {
+    const auto path
+      = [&](const std::string_view relpath) -> std::filesystem::path {
       return cooked_root / std::filesystem::path(relpath);
     };
     snapshot.scene_digest
@@ -887,9 +877,9 @@ namespace {
         phys::PhysicsBindingType::kJoint);
       const auto vehicle_record = ReadFirstRecord<phys::VehicleBindingRecord>(
         phys::PhysicsBindingType::kVehicle);
-      ASSERT_TRUE(soft_record.has_value());
-      ASSERT_TRUE(joint_record.has_value());
-      ASSERT_TRUE(vehicle_record.has_value());
+      ASSERT_HAS_VALUE(soft_record);
+      ASSERT_HAS_VALUE(joint_record);
+      ASSERT_HAS_VALUE(vehicle_record);
 
       const auto physics_table
         = ParsePhysicsResourceTable(Path("Physics/Resources/physics.table"));
@@ -998,8 +988,7 @@ NOLINT_TEST_F(
     Path("Physics/Shapes/chassis_compound.ocshape"));
   const auto shape_desc
     = ReadStructAt<phys::CollisionShapeAssetDesc>(shape_bytes, 0);
-  ASSERT_TRUE(shape_desc.has_value())
-    << "Expected shape_desc to contain a value";
+  ASSERT_HAS_VALUE(shape_desc) << "Expected shape_desc to contain a value";
   EXPECT_EQ(shape_desc->shape_type, phys::ShapeType::kCompound);
   EXPECT_EQ(shape_desc->shape_params.compound.child_count, 2U);
 
@@ -1008,8 +997,8 @@ NOLINT_TEST_F(
   const auto child1 = ReadStructAt<phys::CompoundShapeChildDesc>(shape_bytes,
     static_cast<size_t>(shape_desc->shape_params.compound.child_byte_offset)
       + sizeof(phys::CompoundShapeChildDesc));
-  ASSERT_TRUE(child0.has_value()) << "Expected child0 to contain a value";
-  ASSERT_TRUE(child1.has_value()) << "Expected child1 to contain a value";
+  ASSERT_HAS_VALUE(child0) << "Expected child0 to contain a value";
+  ASSERT_HAS_VALUE(child1) << "Expected child1 to contain a value";
   EXPECT_EQ(
     static_cast<phys::ShapeType>(child0->shape_type), phys::ShapeType::kBox);
   EXPECT_EQ(
@@ -1055,8 +1044,7 @@ NOLINT_TEST_F(
 
   const auto rigid_record = ReadFirstRecord<phys::RigidBodyBindingRecord>(
     phys::PhysicsBindingType::kRigidBody);
-  ASSERT_TRUE(rigid_record.has_value())
-    << "Expected rigid_record to contain a value";
+  ASSERT_HAS_VALUE(rigid_record) << "Expected rigid_record to contain a value";
   EXPECT_EQ(rigid_record->shape_asset_key,
     data::AssetKey::FromVirtualPath(kShapeVirtualPath));
   EXPECT_EQ(rigid_record->material_asset_key,
@@ -1071,8 +1059,7 @@ NOLINT_TEST_F(
   auto soft_record_offset = size_t { 0U };
   const auto soft_record = ReadFirstRecord<phys::SoftBodyBindingRecord>(
     phys::PhysicsBindingType::kSoftBody, &soft_record_offset);
-  ASSERT_TRUE(soft_record.has_value())
-    << "Expected soft_record to contain a value";
+  ASSERT_HAS_VALUE(soft_record) << "Expected soft_record to contain a value";
   EXPECT_EQ(soft_record->collision_layer, 2U);
   EXPECT_EQ(soft_record->collision_mask, 0xFFFFFFFFU);
   EXPECT_EQ(soft_record->pinned_vertex_count, 3U);
@@ -1100,8 +1087,7 @@ NOLINT_TEST_F(PhysicsComplexSceneTest, JointRecordReferencesConstraintAsset)
 
   const auto joint_record = ReadFirstRecord<phys::JointBindingRecord>(
     phys::PhysicsBindingType::kJoint);
-  ASSERT_TRUE(joint_record.has_value())
-    << "Expected joint_record to contain a value";
+  ASSERT_HAS_VALUE(joint_record) << "Expected joint_record to contain a value";
   EXPECT_FALSE(joint_record->constraint_asset_key.IsNil());
 }
 
@@ -1112,7 +1098,7 @@ NOLINT_TEST_F(
 
   const auto vehicle_record = ReadFirstRecord<phys::VehicleBindingRecord>(
     phys::PhysicsBindingType::kVehicle);
-  ASSERT_TRUE(vehicle_record.has_value())
+  ASSERT_HAS_VALUE(vehicle_record)
     << "Expected vehicle_record to contain a value";
   EXPECT_EQ(vehicle_record->wheel_slice_offset, 0U);
   EXPECT_EQ(vehicle_record->wheel_slice_count, 4U);
@@ -1126,8 +1112,7 @@ NOLINT_TEST_F(
 
   const auto wheel_table
     = FindTable(*parsed_sidecar_, phys::PhysicsBindingType::kVehicleWheel);
-  ASSERT_TRUE(wheel_table.has_value())
-    << "Expected wheel_table to contain a value";
+  ASSERT_HAS_VALUE(wheel_table) << "Expected wheel_table to contain a value";
   const auto wheel_records = ReadStructArrayAt<phys::VehicleWheelBindingRecord>(
     sidecar_bytes_, static_cast<size_t>(wheel_table->table.offset),
     wheel_table->table.count, wheel_table->table.entry_size);
@@ -1209,19 +1194,25 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   RegisterStubGeometryAsset(
     cooked_root, kGeometryVirtualPath, "Geometry/cloth.ogeo");
 
-  ASSERT_TRUE(SubmitAndWait(
-    service, MakeSceneDescriptorRequest(cooked_root, kSceneName, 10U))
-      .success);
-  ASSERT_TRUE(
-    SubmitAndWait(service, MakePhysicsMaterialRequest(cooked_root)).success);
-  ASSERT_TRUE(
-    SubmitAndWait(service, MakeCompoundShapeRequest(cooked_root)).success);
+  const auto scene_report = SubmitAndWait(
+    service, MakeSceneDescriptorRequest(cooked_root, kSceneName, 10U));
+  ASSERT_HAS_VALUE(scene_report);
+  ASSERT_TRUE(scene_report->success);
+  const auto material_report
+    = SubmitAndWait(service, MakePhysicsMaterialRequest(cooked_root));
+  ASSERT_HAS_VALUE(material_report);
+  ASSERT_TRUE(material_report->success);
+  const auto shape_report
+    = SubmitAndWait(service, MakeCompoundShapeRequest(cooked_root));
+  ASSERT_HAS_VALUE(shape_report);
+  ASSERT_TRUE(shape_report->success);
 
   const auto first_bindings
     = BuildComplexSidecarBindings({ 0U, 2U, 4U }, { 1U, 3U });
-  ASSERT_TRUE(SubmitAndWait(service,
-    MakePhysicsSidecarRequest(cooked_root, kSceneVirtualPath, first_bindings))
-      .success);
+  const auto first_sidecar_report = SubmitAndWait(service,
+    MakePhysicsSidecarRequest(cooked_root, kSceneVirtualPath, first_bindings));
+  ASSERT_HAS_VALUE(first_sidecar_report);
+  ASSERT_TRUE(first_sidecar_report->success);
 
   const auto scene_path
     = cooked_root / std::filesystem::path("Scenes/ComplexScene.oscene");
@@ -1250,20 +1241,21 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     before_inspection, data::AssetKey::FromVirtualPath(kShapeVirtualPath));
   const auto geometry_asset_before = FindInspectionAsset(
     before_inspection, data::AssetKey::FromVirtualPath(kGeometryVirtualPath));
-  ASSERT_TRUE(scene_asset_before.has_value())
+  ASSERT_HAS_VALUE(scene_asset_before)
     << "Expected scene_asset_before to contain a value";
-  ASSERT_TRUE(material_asset_before.has_value())
+  ASSERT_HAS_VALUE(material_asset_before)
     << "Expected material_asset_before to contain a value";
-  ASSERT_TRUE(shape_asset_before.has_value())
+  ASSERT_HAS_VALUE(shape_asset_before)
     << "Expected shape_asset_before to contain a value";
-  ASSERT_TRUE(geometry_asset_before.has_value())
+  ASSERT_HAS_VALUE(geometry_asset_before)
     << "Expected geometry_asset_before to contain a value";
 
   const auto second_bindings
     = BuildComplexSidecarBindings({ 1U, 4U, 6U }, { 2U, 3U });
-  ASSERT_TRUE(SubmitAndWait(service,
-    MakePhysicsSidecarRequest(cooked_root, kSceneVirtualPath, second_bindings))
-      .success);
+  const auto second_sidecar_report = SubmitAndWait(service,
+    MakePhysicsSidecarRequest(cooked_root, kSceneVirtualPath, second_bindings));
+  ASSERT_HAS_VALUE(second_sidecar_report);
+  ASSERT_TRUE(second_sidecar_report->success);
 
   const auto scene_digest_after = ComputeFileDigest(scene_path);
   const auto sidecar_digest_after = ComputeFileDigest(sidecar_path);
@@ -1287,13 +1279,13 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
     after_inspection, data::AssetKey::FromVirtualPath(kShapeVirtualPath));
   const auto geometry_asset_after = FindInspectionAsset(
     after_inspection, data::AssetKey::FromVirtualPath(kGeometryVirtualPath));
-  ASSERT_TRUE(scene_asset_after.has_value())
+  ASSERT_HAS_VALUE(scene_asset_after)
     << "Expected scene_asset_after to contain a value";
-  ASSERT_TRUE(material_asset_after.has_value())
+  ASSERT_HAS_VALUE(material_asset_after)
     << "Expected material_asset_after to contain a value";
-  ASSERT_TRUE(shape_asset_after.has_value())
+  ASSERT_HAS_VALUE(shape_asset_after)
     << "Expected shape_asset_after to contain a value";
-  ASSERT_TRUE(geometry_asset_after.has_value())
+  ASSERT_HAS_VALUE(geometry_asset_after)
     << "Expected geometry_asset_after to contain a value";
 
   EXPECT_EQ(scene_asset_before->descriptor_sha256,
@@ -1388,22 +1380,28 @@ NOLINT_TEST(PhysicsPhase3ClosureTest,
   RegisterStubGeometryAsset(
     cooked_root, kGeometryVirtualPath, "Geometry/cloth.ogeo");
 
-  ASSERT_TRUE(SubmitAndWait(
-    service, MakeSceneDescriptorRequest(cooked_root, kSceneName, 10U))
-      .success);
-  ASSERT_TRUE(
-    SubmitAndWait(service, MakePhysicsMaterialRequest(cooked_root)).success);
-  ASSERT_TRUE(
-    SubmitAndWait(service, MakeCompoundShapeRequest(cooked_root)).success);
+  const auto scene_report = SubmitAndWait(
+    service, MakeSceneDescriptorRequest(cooked_root, kSceneName, 10U));
+  ASSERT_HAS_VALUE(scene_report);
+  ASSERT_TRUE(scene_report->success);
+  const auto material_report
+    = SubmitAndWait(service, MakePhysicsMaterialRequest(cooked_root));
+  ASSERT_HAS_VALUE(material_report);
+  ASSERT_TRUE(material_report->success);
+  const auto shape_report
+    = SubmitAndWait(service, MakeCompoundShapeRequest(cooked_root));
+  ASSERT_HAS_VALUE(shape_report);
+  ASSERT_TRUE(shape_report->success);
 
   auto request = MakePhysicsSidecarRequest(cooked_root, kSceneVirtualPath,
     BuildComplexSidecarBindings({ 0U, 2U, 4U }, { 1U, 3U }));
   request.options.physics.backend = core::meta::physics::PhysicsBackend::kPhysX;
   const auto report = SubmitAndWait(service, std::move(request));
-  EXPECT_FALSE(report.success);
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
 
   const auto has_backend_mismatch = std::ranges::any_of(
-    report.diagnostics, [](const auto& diagnostic) -> auto {
+    report->diagnostics, [](const auto& diagnostic) -> auto {
       return diagnostic.code == "physics.sidecar.backend_mismatch";
     });
   EXPECT_TRUE(has_backend_mismatch);

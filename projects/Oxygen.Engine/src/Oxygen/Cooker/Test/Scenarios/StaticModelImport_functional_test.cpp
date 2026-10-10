@@ -26,6 +26,7 @@
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Test/Support/ModelImportTestBase.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -82,8 +83,8 @@ NOLINT_TEST_F(StaticImportTest, NativeImportPreservesCoreTextureBindings)
     ASSERT_NE(material.base_color_texture, oxygen::data::kNoResourceReference);
     const auto resolved = material_entry->references.ResolveResource(
       material.base_color_texture, oxygen::data::ResourceKind::kTexture);
-    ASSERT_TRUE(resolved.has_value());
-    ASSERT_TRUE(resolved->has_value());
+    ASSERT_HAS_VALUE(resolved);
+    ASSERT_HAS_VALUE(*resolved);
 
     const auto table_path = result.report.cooked_root
       / std::filesystem::path(
@@ -130,6 +131,58 @@ NOLINT_TEST_F(StaticImportTest, NativeImportAcceptsStaticGltfAndFbx)
     EXPECT_EQ(result.report.geometry_written, 1U);
     EXPECT_EQ(result.report.scenes_written, 1U);
     EXPECT_FALSE(LoadSceneReadback(result.report).renderables.empty());
+  }
+}
+
+NOLINT_TEST_F(
+  StaticImportTest, NativeImportPreservesPerspectiveCameraAndDirectionalLight)
+{
+  for (const auto* extension : { "gltf", "fbx" }) {
+    SCOPED_TRACE(extension);
+    ImportRequest request {};
+    request.source_path = TestModelsDirFromFile()
+      / (std::string("static_scalar_camera_sun.") + extension);
+    ASSERT_TRUE(std::filesystem::exists(request.source_path));
+    request.cooked_root
+      = MakeTempDir(std::string("static_scalar_camera_sun_") + extension);
+    request.options.scene_content_policy = SceneContentPolicy::kStatic;
+    request.options.coordinate.bake_transforms_into_meshes = false;
+    const auto result = RunImport(std::move(request));
+    ASSERT_TRUE(result.report.success);
+    const auto scene = LoadSceneReadback(result.report);
+    EXPECT_EQ(scene.directional_lights.size(), 1U);
+    EXPECT_TRUE(std::ranges::any_of(
+      scene.component_entries, [](const auto& entry) -> bool {
+        return static_cast<oxygen::data::ComponentType>(entry.component_type)
+          == oxygen::data::ComponentType::kPerspectiveCamera
+          && entry.table.count == 1U;
+      }));
+  }
+}
+
+NOLINT_TEST_F(
+  StaticImportTest, NativeImportRejectsUnsupportedComponentsBeforeEmission)
+{
+  for (const auto* extension : { "gltf", "fbx" }) {
+    SCOPED_TRACE(extension);
+    const auto source
+      = TestModelsDirFromFile() / (std::string("light_overrides.") + extension);
+    ASSERT_TRUE(std::filesystem::exists(source));
+    ImportRequest request {};
+    request.source_path = source;
+    request.cooked_root
+      = MakeTempDir(std::string("static_scalar_reject_") + extension);
+    request.options.scene_content_policy = SceneContentPolicy::kStatic;
+    const auto result = RunImport(std::move(request));
+    EXPECT_FALSE(result.report.success);
+    EXPECT_EQ(result.report.geometry_written, 0U);
+    EXPECT_EQ(result.report.materials_written, 0U);
+    EXPECT_EQ(result.report.scenes_written, 0U);
+    EXPECT_TRUE(std::ranges::any_of(
+      result.report.diagnostics, [](const auto& diagnostic) -> bool {
+        return diagnostic.code == "import.static.unsupported"
+          && diagnostic.message.find("light components") != std::string::npos;
+      }));
   }
 }
 

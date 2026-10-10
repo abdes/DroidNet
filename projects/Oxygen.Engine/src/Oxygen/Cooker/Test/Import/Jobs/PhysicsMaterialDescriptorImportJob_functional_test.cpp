@@ -6,20 +6,21 @@
 
 // Covers: Import/Internal/Jobs/PhysicsMaterialDescriptorImportJob.cpp
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <latch>
-#include <ranges>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Finally.h>
-#include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
-#include <Oxygen/Cooker/Test/Support/TempDir.h>
+#include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Testing/GTest.h>
@@ -28,8 +29,8 @@ namespace oxygen::content::import::test {
 
 namespace {
 
+  using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::ReadBytes;
-  using oxygen::cooker::test::ScopedTempDir;
 
   using oxygen::cooker::test::HasDiagnosticCode;
 
@@ -44,29 +45,12 @@ namespace {
     return desc;
   }
 
-  auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
-    -> ImportReport
-  {
-    auto report = ImportReport {};
-    std::latch done(1);
-    const auto submitted = service.SubmitImport(
-      std::move(request),
-      [&report, &done](
-        const ImportJobId /*job_id*/, const ImportReport& completed) {
-        report = completed;
-        done.count_down();
-      },
-      nullptr);
-    EXPECT_TRUE(submitted.has_value());
-    done.wait();
-    return report;
-  }
+  class PhysicsMaterialDescriptorImportJobTest : public ImportServiceTest { };
 
-  NOLINT_TEST(
+  NOLINT_TEST_F(
     PhysicsMaterialDescriptorImportJobTest, SuccessfulJobEmitsMaterialAsset)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "emits_material";
+    const auto cooked_root = TempDir() / "emits_material";
     std::filesystem::create_directories(cooked_root);
     const auto source_root = cooked_root.parent_path() / "source_data";
 
@@ -88,20 +72,15 @@ namespace {
           })",
         };
 
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    [[maybe_unused]] auto stop_service
-      = oxygen::Finally([&service]() { service.Stop(); });
-
-    const auto report = SubmitAndWait(service, std::move(request));
-    EXPECT_TRUE(report.success);
+    const auto report = Import(std::move(request));
+    ASSERT_HAS_VALUE(report);
+    EXPECT_TRUE(report->success);
 
     constexpr auto kRelPath
       = std::string_view { "Physics/Materials/ground.opmat" };
-    const auto has_output = [&](const std::string_view relpath) {
+    const auto has_output = [&](const std::string_view relpath) -> bool {
       return std::ranges::any_of(
-        report.outputs, [&](const ImportOutputRecord& output) {
+        report->outputs, [&](const ImportOutputRecord& output) -> bool {
           return output.path == relpath;
         });
     };
@@ -126,11 +105,10 @@ namespace {
       data::pak::physics::PhysicsCombineMode::kAverage);
   }
 
-  NOLINT_TEST(PhysicsMaterialDescriptorImportJobTest,
+  NOLINT_TEST_F(PhysicsMaterialDescriptorImportJobTest,
     InvalidSchemaPayloadProducesDiagnostic)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "invalid_schema_payload";
+    const auto cooked_root = TempDir() / "invalid_schema_payload";
     std::filesystem::create_directories(cooked_root);
     const auto source_root = cooked_root.parent_path() / "source_data";
 
@@ -147,16 +125,11 @@ namespace {
           })",
         };
 
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    [[maybe_unused]] auto stop_service
-      = oxygen::Finally([&service]() { service.Stop(); });
-
-    const auto report = SubmitAndWait(service, std::move(request));
-    EXPECT_FALSE(report.success);
+    const auto report = Import(std::move(request));
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "physics.material.schema_validation_failed"));
+      report->diagnostics, "physics.material.schema_validation_failed"));
   }
 
 } // namespace

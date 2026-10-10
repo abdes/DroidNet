@@ -8,7 +8,10 @@
 
 #include <atomic>
 #include <chrono>
+#include <latch>
+#include <memory>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
@@ -36,7 +39,7 @@ NOLINT_TEST_F(ImportEventLoopBasicTest, RunAndStopViaPostSucceeds)
 {
   std::atomic<bool> callback_ran { false };
 
-  loop_.Post([&]() {
+  loop_.Post([&] -> void {
     callback_ran = true;
     loop_.Stop();
   });
@@ -49,9 +52,9 @@ NOLINT_TEST_F(ImportEventLoopBasicTest, PostMultipleCallbacksExecuteInOrder)
 {
   std::vector<int> order;
 
-  loop_.Post([&]() { order.push_back(1); });
-  loop_.Post([&]() { order.push_back(2); });
-  loop_.Post([&]() {
+  loop_.Post([&] -> void { order.push_back(1); });
+  loop_.Post([&] -> void { order.push_back(2); });
+  loop_.Post([&] -> void {
     order.push_back(3);
     loop_.Stop();
   });
@@ -63,8 +66,11 @@ NOLINT_TEST_F(ImportEventLoopBasicTest, PostMultipleCallbacksExecuteInOrder)
 
 NOLINT_TEST_F(ImportEventLoopBasicTest, StopFromOtherThreadSucceeds)
 {
-  std::thread stopper([&]() {
-    std::this_thread::sleep_for(50ms);
+  std::latch running(1);
+  loop_.Post([&] -> void { running.count_down(); });
+
+  std::thread stopper([&] -> void {
+    running.wait();
     loop_.Stop();
   });
 
@@ -79,7 +85,7 @@ NOLINT_TEST_F(ImportEventLoopBasicTest, IsRunningReturnsCorrectState)
 
   EXPECT_FALSE(loop_.IsRunning());
 
-  loop_.Post([&]() {
+  loop_.Post([&] -> void {
     was_running_inside = loop_.IsRunning();
     loop_.Stop();
   });
@@ -108,7 +114,7 @@ NOLINT_TEST_F(ImportEventLoopTraitsTest, RunWithCoRunWorks)
 {
   std::atomic<bool> coroutine_ran { false };
 
-  co::Run(loop_, [&]() -> Co<> {
+  co::Run(loop_, [&] -> Co<> {
     coroutine_ran = true;
     co_return;
   });
@@ -131,33 +137,33 @@ NOLINT_TEST_F(ImportEventLoopThreadNotificationTest,
   std::thread::id callback_thread_id {};
   std::thread::id main_thread_id {};
 
-  std::thread worker([&]() {
+  std::thread worker([&] -> void {
     // Create notification (normally done by ThreadPool)
     ThreadNotification<ImportEventLoop> notification(loop_, nullptr, nullptr);
 
-    // Post from worker thread
+    // Post from worker thread. The callback owns the argument and frees it.
+    auto arg
+      = std::make_unique<std::pair<std::atomic<bool>*, std::thread::id*>>(
+        &callback_ran, &callback_thread_id);
     notification.Post(
       loop_,
-      [](void* arg) {
-        auto& data
-          = *static_cast<std::pair<std::atomic<bool>*, std::thread::id*>*>(arg);
-        *data.first = true;
-        *data.second = std::this_thread::get_id();
+      [](void* data) -> void {
+        auto owned
+          = std::unique_ptr<std::pair<std::atomic<bool>*, std::thread::id*>>(
+            static_cast<std::pair<std::atomic<bool>*, std::thread::id*>*>(
+              data));
+        *owned->first = true;
+        *owned->second = std::this_thread::get_id();
       },
-      new std::pair<std::atomic<bool>*, std::thread::id*>(
-        &callback_ran, &callback_thread_id));
+      arg.release());
   });
+  // Drain the worker so its notification is queued before the loop runs.
+  worker.join();
 
-  loop_.Post([&]() { main_thread_id = std::this_thread::get_id(); });
-
-  // Let worker post, then stop
-  loop_.Post([&]() {
-    std::this_thread::sleep_for(50ms);
-    loop_.Stop();
-  });
+  loop_.Post([&] -> void { main_thread_id = std::this_thread::get_id(); });
+  loop_.Post([&] -> void { loop_.Stop(); });
 
   loop_.Run();
-  worker.join();
 
   EXPECT_TRUE(callback_ran);
   EXPECT_EQ(callback_thread_id, main_thread_id);
@@ -189,7 +195,7 @@ NOLINT_TEST_F(ImportEventLoopThreadPoolTest, RunCpuBoundTaskReturnsResult)
   int result = 0;
 
   co::Run(*loop_,
-    [&]() -> Co<> { result = co_await pool_->Run([]() { return 42; }); });
+    [&] -> Co<> { result = co_await pool_->Run([] -> int { return 42; }); });
 
   EXPECT_EQ(result, 42);
 }
@@ -200,8 +206,8 @@ NOLINT_TEST_F(
 {
   for (int cycle = 0; cycle < 3; ++cycle) {
     int result = -1;
-    co::Run(*loop_, [&]() -> Co<> {
-      result = co_await pool_->Run([cycle]() {
+    co::Run(*loop_, [&] -> Co<> {
+      result = co_await pool_->Run([cycle] -> int {
         std::this_thread::sleep_for(10ms);
         return cycle;
       });
@@ -217,11 +223,11 @@ NOLINT_TEST_F(
   std::thread::id event_loop_thread_id {};
   std::thread::id worker_thread_id {};
 
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     event_loop_thread_id = std::this_thread::get_id();
 
-    worker_thread_id
-      = co_await pool_->Run([]() { return std::this_thread::get_id(); });
+    worker_thread_id = co_await pool_->Run(
+      [] -> std::thread::id { return std::this_thread::get_id(); });
   });
 
   EXPECT_NE(event_loop_thread_id, std::thread::id {});
@@ -235,9 +241,9 @@ NOLINT_TEST_F(
   std::thread::id before_thread_id {};
   std::thread::id after_thread_id {};
 
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     before_thread_id = std::this_thread::get_id();
-    co_await pool_->Run([]() { return 0; });
+    co_await pool_->Run([] -> int { return 0; });
     after_thread_id = std::this_thread::get_id();
   });
 
@@ -249,8 +255,8 @@ NOLINT_TEST_F(ImportEventLoopThreadPoolTest, RunWithCancelTokenCompletes)
   std::atomic<bool> task_started { false };
 
   int result = 0;
-  co::Run(*loop_, [&]() -> Co<> {
-    result = co_await pool_->Run([&](ThreadPool::CancelToken canceled) {
+  co::Run(*loop_, [&] -> Co<> {
+    result = co_await pool_->Run([&](ThreadPool::CancelToken canceled) -> int {
       task_started = true;
       // Short task that doesn't actually get canceled
       if (canceled) {
@@ -269,9 +275,9 @@ NOLINT_TEST_F(ImportEventLoopThreadPoolTest, RunMultipleTasksAllComplete)
   constexpr int kTaskCount = 10;
   std::atomic<int> completed_count { 0 };
 
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     for (int i = 0; i < kTaskCount; ++i) {
-      auto result = co_await pool_->Run([i]() { return i * i; });
+      auto result = co_await pool_->Run([i] -> int { return i * i; });
       EXPECT_EQ(result, i * i);
       ++completed_count;
     }

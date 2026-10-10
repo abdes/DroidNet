@@ -29,29 +29,39 @@ namespace {
   {
     return {
       { "schema_version", 1 },
-      { "inputs",
+      {
+        "inputs",
         nlohmann::json::array({
           {
-            { "logical_path",
-              PathText(std::filesystem::absolute("model.gltf")) },
+            {
+              "logical_path",
+              PathText(std::filesystem::absolute("model.gltf")),
+            },
             { "exists", true },
-            { "metadata",
+            {
+              "metadata",
               {
                 { "size", 6 },
                 { "is_directory", false },
                 { "is_symlink", true },
                 { "last_modified_seconds", -1 },
                 { "last_modified_nanoseconds", 123456700 },
-              } },
-            { "file",
+              },
+            },
+            {
+              "file",
               {
-                { "path",
-                  PathText(std::filesystem::absolute("model.capture")) },
+                {
+                  "path",
+                  PathText(std::filesystem::absolute("model.capture")),
+                },
                 { "size", 6 },
                 { "sha256", std::string(64, '0') },
-              } },
+              },
+            },
           },
-        }) },
+        }),
+      },
     };
   }
 
@@ -110,46 +120,49 @@ namespace {
   }
 
   INSTANTIATE_TEST_SUITE_P(Corruptions, CapturedInputSetRejectionTest,
-    ::testing::Values(
-      RejectionCase { "UnsupportedSchemaVersion",
-        [](nlohmann::json& document) { document.at("schema_version") = 2; } },
+    ::testing::Values(RejectionCase { "UnsupportedSchemaVersion",
+                        [](nlohmann::json& document) -> void {
+                          document.at("schema_version") = 2;
+                        } },
       RejectionCase { "MalformedDigest",
-        [](nlohmann::json& document) {
+        [](nlohmann::json& document) -> void {
           document.at("inputs").at(0).at("file").at("sha256") = "0";
         } },
       RejectionCase { "UnknownTopLevelProperty",
-        [](nlohmann::json& document) { document.emplace("unknown", true); } },
+        [](nlohmann::json& document) -> void {
+          document.emplace("unknown", true);
+        } },
       RejectionCase { "ExistsFalseWithCapturedBytes",
-        [](nlohmann::json& document) {
+        [](nlohmann::json& document) -> void {
           document.at("inputs").at(0).at("exists") = false;
         } },
       RejectionCase { "DuplicateInputs",
-        [](nlohmann::json& document) {
+        [](nlohmann::json& document) -> void {
           document.at("inputs").push_back(document.at("inputs").front());
         } },
       RejectionCase { "MetadataSizeDiffersFromFileSize",
-        [](nlohmann::json& document) {
+        [](nlohmann::json& document) -> void {
           document.at("inputs").at(0).at("metadata").at("size") = 7;
         } },
       RejectionCase { "RelativeLogicalPath",
-        [](nlohmann::json& document) {
+        [](nlohmann::json& document) -> void {
           document.at("inputs").at(0).at("logical_path") = "relative.gltf";
         } },
       RejectionCase { "NullTerminatedFilePath",
-        [](nlohmann::json& document) {
+        [](nlohmann::json& document) -> void {
           document.at("inputs").at(0).at("file").at("path")
             = std::string("capture\0suffix", 14);
         } },
       RejectionCase { "FileSizeOverflow",
-        [](nlohmann::json& document) {
+        [](nlohmann::json& document) -> void {
           document.at("inputs").at(0).at("file").at("size") = 1.0e30;
         } },
       RejectionCase { "TimestampSecondsOverflow",
-        [](nlohmann::json& document) {
+        [](nlohmann::json& document) -> void {
           document.at("inputs").at(0).at("metadata").at("last_modified_seconds")
             = 1.0e30;
         } }),
-    [](const ::testing::TestParamInfo<RejectionCase>& info) {
+    [](const ::testing::TestParamInfo<RejectionCase>& info) -> std::string {
       return std::string(info.param.name);
     });
 } // namespace

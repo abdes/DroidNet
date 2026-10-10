@@ -14,16 +14,11 @@
 #include <string>
 
 #include "ScriptImportTestSupport.h"
-#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
-#include <Oxygen/Cooker/Test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/Test/Support/FileIo.h>
-#include <Oxygen/Cooker/Test/Support/TempDir.h>
-#include <Oxygen/Cooker/Test/Support/TestPaths.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
@@ -69,8 +64,7 @@ namespace {
     const auto inspection_before = LoadInspection(cooked_root);
     const auto script_asset = FindScriptAssetByDescriptorName(
       inspection_before, "rotate_shared.oscript");
-    ASSERT_TRUE(script_asset.has_value())
-      << "Expected script asset to be present";
+    ASSERT_HAS_VALUE(script_asset) << "Expected script asset to be present";
 
     auto scene_a = std::optional<AssetRef> {};
     auto scene_b = std::optional<AssetRef> {};
@@ -98,8 +92,8 @@ namespace {
         };
       }
     }
-    ASSERT_TRUE(scene_a.has_value()) << "Expected scene a to be present";
-    ASSERT_TRUE(scene_b.has_value()) << "Expected scene b to be present";
+    ASSERT_HAS_VALUE(scene_a) << "Expected scene a to be present";
+    ASSERT_HAS_VALUE(scene_b) << "Expected scene b to be present";
 
     const auto sidecar_a = input_dir / "scene_a.sidescript.json";
     const auto sidecar_b = input_dir / "scene_b.sidescript.json";
@@ -117,7 +111,7 @@ namespace {
 
     const auto inspection_after = LoadInspection(cooked_root);
 
-    const auto ReadSpeedForScene = [&](const AssetRef& scene_ref) {
+    const auto ReadSpeedForScene = [&](const AssetRef& scene_ref) -> float {
       const auto script_state = ReadSceneScriptState(cooked_root, scene_ref);
       const auto& slots = script_state.slots;
       const auto& params = script_state.params;
@@ -133,8 +127,10 @@ namespace {
       }
       auto scene = data::SceneAsset(scene_ref.key, scene_bytes);
       const auto components = scene.GetComponents<ScriptingComponentRecord>();
-      const auto component = std::find_if(components.begin(), components.end(),
-        [](const auto& candidate) { return candidate.node_index == 0U; });
+      const auto component
+        = std::ranges::find_if(components, [](const auto& candidate) -> auto {
+            return candidate.node_index == 0U;
+          });
       EXPECT_NE(component, components.end());
       if (component == components.end()) {
         return 0.0F;
@@ -192,22 +188,24 @@ namespace {
     const auto script_source = input_dir / "rotate_shared.luau";
     WriteText(script_source, "return 1");
 
-    ASSERT_TRUE(SubmitAndWait(
-      service.Service(), MakeSceneRequest(scene_a_source, cooked_root))
-        .success);
-    ASSERT_TRUE(SubmitAndWait(
-      service.Service(), MakeSceneRequest(scene_b_source, cooked_root))
-        .success);
-    ASSERT_TRUE(SubmitAndWait(service.Service(),
+    const auto scene_a_report = SubmitAndWait(
+      service.Service(), MakeSceneRequest(scene_a_source, cooked_root));
+    ASSERT_HAS_VALUE(scene_a_report);
+    ASSERT_TRUE(scene_a_report->success);
+    const auto scene_b_report = SubmitAndWait(
+      service.Service(), MakeSceneRequest(scene_b_source, cooked_root));
+    ASSERT_HAS_VALUE(scene_b_report);
+    ASSERT_TRUE(scene_b_report->success);
+    const auto script_report = SubmitAndWait(service.Service(),
       MakeScriptRequest(
-        script_source, cooked_root, ScriptStorageMode::kExternal, false))
-        .success);
+        script_source, cooked_root, ScriptStorageMode::kExternal, false));
+    ASSERT_HAS_VALUE(script_report);
+    ASSERT_TRUE(script_report->success);
 
     const auto inspection_before = LoadInspection(cooked_root);
     const auto script_asset = FindScriptAssetByDescriptorName(
       inspection_before, "rotate_shared.oscript");
-    ASSERT_TRUE(script_asset.has_value())
-      << "Expected script asset to be present";
+    ASSERT_HAS_VALUE(script_asset) << "Expected script asset to be present";
 
     auto scene_a = std::optional<AssetRef> {};
     auto scene_b = std::optional<AssetRef> {};
@@ -235,8 +233,8 @@ namespace {
         };
       }
     }
-    ASSERT_TRUE(scene_a.has_value()) << "Expected scene a to be present";
-    ASSERT_TRUE(scene_b.has_value()) << "Expected scene b to be present";
+    ASSERT_HAS_VALUE(scene_a) << "Expected scene a to be present";
+    ASSERT_HAS_VALUE(scene_b) << "Expected scene b to be present";
 
     const auto sidecar_a = input_dir / "scene_a_parallel.sidescript.json";
     const auto sidecar_b = input_dir / "scene_b_parallel.sidescript.json";
@@ -251,7 +249,8 @@ namespace {
 
     const auto submit_a = service.Service().SubmitImport(
       MakeSidecarRequest(sidecar_a, cooked_root, scene_a->virtual_path),
-      [&report_a, &done](const auto /*job_id*/, const ImportReport& report) {
+      [&report_a, &done](
+        const auto /*job_id*/, const ImportReport& report) -> auto {
         report_a = report;
         done.count_down();
       });
@@ -261,7 +260,8 @@ namespace {
 
     const auto submit_b = service.Service().SubmitImport(
       MakeSidecarRequest(sidecar_b, cooked_root, scene_b->virtual_path),
-      [&report_b, &done](const auto /*job_id*/, const ImportReport& report) {
+      [&report_b, &done](
+        const auto /*job_id*/, const ImportReport& report) -> auto {
         report_b = report;
         done.count_down();
       });
@@ -275,7 +275,7 @@ namespace {
 
     const auto inspection_after = LoadInspection(cooked_root);
 
-    const auto ReadSpeedForScene = [&](const AssetRef& scene_ref) {
+    const auto ReadSpeedForScene = [&](const AssetRef& scene_ref) -> float {
       const auto script_state = ReadSceneScriptState(cooked_root, scene_ref);
       const auto& slots = script_state.slots;
       const auto& params = script_state.params;
@@ -291,8 +291,10 @@ namespace {
       }
       auto scene = data::SceneAsset(scene_ref.key, scene_bytes);
       const auto components = scene.GetComponents<ScriptingComponentRecord>();
-      const auto component = std::find_if(components.begin(), components.end(),
-        [](const auto& candidate) { return candidate.node_index == 0U; });
+      const auto component
+        = std::ranges::find_if(components, [](const auto& candidate) -> auto {
+            return candidate.node_index == 0U;
+          });
       EXPECT_NE(component, components.end());
       if (component == components.end()) {
         return 0.0F;
@@ -335,10 +337,8 @@ namespace {
       = CookSceneWithScript(cooked_root, "return 123", "param_types.luau");
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
-    ASSERT_TRUE(scene_asset.has_value())
-      << "Expected scene asset to be present";
-    ASSERT_TRUE(script_asset.has_value())
-      << "Expected script asset to be present";
+    ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
+    ASSERT_HAS_VALUE(script_asset) << "Expected script asset to be present";
 
     constexpr auto kParamsJson = R"([
         { "key": "enabled", "type": "bool", "value": true },
@@ -352,10 +352,11 @@ namespace {
 
     const auto sidecar_source = cooked_root / "input" / "params_ok.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(
-        SidecarBindingSpec { .script_virtual_path = script_asset->virtual_path,
-          .execution_order = 2,
-          .params = nlohmann::json::parse(kParamsJson) }));
+      MakeSidecarPayload(SidecarBindingSpec {
+        .script_virtual_path = script_asset->virtual_path,
+        .execution_order = 2,
+        .params = nlohmann::json::parse(kParamsJson),
+      }));
 
     const auto report = Submit(MakeSidecarRequest(
       sidecar_source, cooked_root, scene_asset->virtual_path));
@@ -422,18 +423,17 @@ namespace {
       cooked_root, "return 123", std::string(param.script_stem) + ".luau");
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
-    ASSERT_TRUE(scene_asset.has_value())
-      << "Expected scene asset to be present";
-    ASSERT_TRUE(script_asset.has_value())
-      << "Expected script asset to be present";
+    ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
+    ASSERT_HAS_VALUE(script_asset) << "Expected script asset to be present";
 
     const auto sidecar_source
       = cooked_root / "input" / (std::string(param.script_stem) + ".json");
     WriteText(sidecar_source,
-      MakeSidecarPayload(
-        SidecarBindingSpec { .script_virtual_path = script_asset->virtual_path,
-          .execution_order = 2,
-          .params = nlohmann::json::parse(param.params_json) }));
+      MakeSidecarPayload(SidecarBindingSpec {
+        .script_virtual_path = script_asset->virtual_path,
+        .execution_order = 2,
+        .params = nlohmann::json::parse(param.params_json),
+      }));
 
     const auto report = Submit(MakeSidecarRequest(
       sidecar_source, cooked_root, scene_asset->virtual_path));
@@ -454,7 +454,7 @@ namespace {
         std::string(
           "[ { \"key\": \"name\", \"type\": \"string\", \"value\": \"")
           + std::string(60U, 'x') + "\" } ]" }),
-    [](const ::testing::TestParamInfo<RejectedParamCase>& info) {
+    [](const ::testing::TestParamInfo<RejectedParamCase>& info) -> std::string {
       return std::string(info.param.name);
     });
 

@@ -7,21 +7,29 @@
 // Covers: Import/Internal/ImportJob.cpp
 
 #include <atomic>
-#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <stop_token>
 #include <string>
+#include <utility>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
+#include <Oxygen/Cooker/Import/ImportConcurrency.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJob.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJobParams.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Testing/GTest.h>
@@ -102,7 +110,7 @@ private:
     waiting.Trigger();
 
     co_await oxygen::co::AnyOf(oxygen::co::kSuspendForever,
-      oxygen::co::UntilCancelledAnd([this]() -> Co<> {
+      oxygen::co::UntilCancelledAnd([this] -> Co<> {
         canceled_cleanup_ran = true;
         co_return;
       }));
@@ -123,7 +131,7 @@ public:
 private:
   [[nodiscard]] auto ExecuteAsync() -> Co<ImportReport> override
   {
-    StartTask([this]() -> Co<> {
+    StartTask([this] -> Co<> {
       task_started.Trigger();
       co_return;
     });
@@ -139,7 +147,7 @@ struct FakePipeline {
   auto Start(oxygen::co::Nursery& nursery) -> void
   {
     started = true;
-    nursery.Start([&]() -> Co<> { co_return; });
+    nursery.Start([&] -> Co<> { co_return; });
   }
 };
 
@@ -169,7 +177,7 @@ NOLINT_TEST_F(ImportJobTest, RunCompletesAndCallsOnCompleteOnce)
   request.source_path = "test.txt";
 
   auto cancel_event = std::make_shared<Event>();
-  auto on_complete = [&](ImportJobId, const ImportReport& report) {
+  auto on_complete = [&](ImportJobId, const ImportReport& report) -> void {
     reported_success = report.success;
     ++complete_calls;
     done.Trigger();
@@ -191,7 +199,7 @@ NOLINT_TEST_F(ImportJobTest, RunCompletesAndCallsOnCompleteOnce)
     .stop_token = {},
   });
 
-  oxygen::co::Run(loop_, [&]() -> Co<> {
+  oxygen::co::Run(loop_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ImportJob::ActivateAsync, &job);
@@ -217,7 +225,7 @@ NOLINT_TEST_F(ImportJobTest, StopCompletesWithCancelledDiagnostic)
   request.source_path = "test.txt";
 
   auto cancel_event = std::make_shared<Event>();
-  auto on_complete = [&](ImportJobId, const ImportReport& report) {
+  auto on_complete = [&](ImportJobId, const ImportReport& report) -> void {
     reported_success = report.success;
     if (!report.diagnostics.empty()) {
       canceled_code = report.diagnostics.front().code;
@@ -242,7 +250,7 @@ NOLINT_TEST_F(ImportJobTest, StopCompletesWithCancelledDiagnostic)
     .stop_token = {},
   });
 
-  oxygen::co::Run(loop_, [&]() -> Co<> {
+  oxygen::co::Run(loop_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ImportJob::ActivateAsync, &job);
@@ -275,7 +283,7 @@ NOLINT_TEST_F(ImportJobTest, CancelEventPreTriggeredAvoidsExecution)
   auto cancel_event = std::make_shared<Event>();
   cancel_event->Trigger();
 
-  auto on_complete = [&](ImportJobId, const ImportReport& report) {
+  auto on_complete = [&](ImportJobId, const ImportReport& report) -> void {
     reported_success = report.success;
     if (!report.diagnostics.empty()) {
       canceled_code = report.diagnostics.front().code;
@@ -300,7 +308,7 @@ NOLINT_TEST_F(ImportJobTest, CancelEventPreTriggeredAvoidsExecution)
     .stop_token = {},
   });
 
-  oxygen::co::Run(loop_, [&]() -> Co<> {
+  oxygen::co::Run(loop_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ImportJob::ActivateAsync, &job);
@@ -327,7 +335,7 @@ NOLINT_TEST_F(ImportJobTest, StartTaskExecutesTask)
   request.source_path = "test.txt";
 
   auto cancel_event = std::make_shared<Event>();
-  auto on_complete = [&](ImportJobId, const ImportReport&) {
+  auto on_complete = [&](ImportJobId, const ImportReport&) -> void {
     ++complete_calls;
     done.Trigger();
   };
@@ -348,7 +356,7 @@ NOLINT_TEST_F(ImportJobTest, StartTaskExecutesTask)
     .stop_token = {},
   });
 
-  oxygen::co::Run(loop_, [&]() -> Co<> {
+  oxygen::co::Run(loop_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ImportJob::ActivateAsync, &job);
@@ -373,7 +381,7 @@ NOLINT_TEST_F(ImportJobTest, StartPipelineStartsWorkers)
   request.source_path = "test.txt";
 
   auto cancel_event = std::make_shared<Event>();
-  auto on_complete = [&](ImportJobId, const ImportReport&) {
+  auto on_complete = [&](ImportJobId, const ImportReport&) -> void {
     ++complete_calls;
     done.Trigger();
   };
@@ -395,7 +403,7 @@ NOLINT_TEST_F(ImportJobTest, StartPipelineStartsWorkers)
   });
   job.pipeline = &pipeline;
 
-  oxygen::co::Run(loop_, [&]() -> Co<> {
+  oxygen::co::Run(loop_, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ImportJob::ActivateAsync, &job);

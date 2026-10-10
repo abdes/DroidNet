@@ -34,7 +34,7 @@ auto RunPipeline(content::import::ImportEventLoop& loop,
   std::vector<typename Pipeline::WorkResult> results;
   results.reserve(items.size());
 
-  co::Run(loop, [&]() -> co::Co<> {
+  co::Run(loop, [&] -> co::Co<> {
     Pipeline pipeline(std::forward<Args>(ctor_args)...);
 
     OXCO_WITH_NURSERY(n)
@@ -58,8 +58,7 @@ auto RunPipeline(content::import::ImportEventLoop& loop,
 //! Runs a single work item through `RunPipeline` and returns its result.
 template <class Pipeline, class... Args>
 auto RunPipelineOnce(content::import::ImportEventLoop& loop,
-  typename Pipeline::WorkItem item, Args&&... ctor_args) ->
-  typename Pipeline::WorkResult
+  typename Pipeline::WorkItem item, Args&&... ctor_args) -> Pipeline::WorkResult
 {
   std::vector<typename Pipeline::WorkItem> items;
   items.push_back(std::move(item));

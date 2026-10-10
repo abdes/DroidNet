@@ -20,6 +20,7 @@
 #include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
+#include <Oxygen/Cooker/Test/Support/TestValues.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
@@ -41,31 +42,37 @@ constexpr auto kTextureDataSize = uint64_t { 32U };
 
 auto AddCatalog(pak::PakPlan::Data& plan) -> void
 {
-  data::PakCatalog catalog { .source_key = plan.header.source_key,
+  data::PakCatalog catalog {
+    .source_key = plan.header.source_key,
     .content_version = plan.header.content_version,
     .catalog_digest = {},
     .entries = {},
     .deleted = {},
-    .bases = {} };
+    .bases = {},
+  };
   for (size_t index = 0; index < plan.assets.size(); ++index) {
     const auto& asset = plan.assets.at(index);
-    catalog.entries.push_back({ .asset_key = asset.asset_key,
+    catalog.entries.push_back({
+      .asset_key = asset.asset_key,
       .asset_type = asset.asset_type,
       .descriptor_digest = oxygen::base::ComputeFileSha256(
         plan.asset_payload_sources.at(index).source_path),
-      .transitive_resource_digest = {} });
+      .transitive_resource_digest = {},
+    });
   }
   catalog.catalog_digest = catalog.ComputeDigest().value();
-  plan.catalog = { .offset = plan.directory.offset + plan.directory.size_bytes,
-    .bytes = catalog.Encode().value() };
+  plan.catalog = {
+    .offset = plan.directory.offset + plan.directory.size_bytes,
+    .bytes = catalog.Encode().value(),
+  };
   ASSERT_LE(
     plan.catalog.offset + plan.catalog.bytes.size(), plan.footer.offset);
 }
 
 auto IsAllZero(std::span<const std::byte> bytes) -> bool
 {
-  return std::ranges::all_of(
-    bytes, [](const std::byte byte) { return byte == std::byte { 0 }; });
+  return std::ranges::all_of(bytes,
+    [](const std::byte byte) -> bool { return byte == std::byte { 0 }; });
 }
 
 //! The writer copies payload bytes verbatim and zero-fills everything the plan
@@ -110,8 +117,9 @@ NOLINT_TEST_F(PakWriterPayloadLayoutTest,
     .texture_count = 1U,
     .texture_table_size = sizeof(core::TextureResourceDesc),
   });
-  plan_data.resources = { paktest::MakeTexturePlacement(
-    kTextureRegionOffset, kTexturePayloadSize) };
+  plan_data.resources = {
+    paktest::MakeTexturePlacement(kTextureRegionOffset, kTexturePayloadSize),
+  };
   plan_data.resource_payload_sources = {
     pak::PakPayloadSourceSlicePlan {
       .source_path = texture_source_path,

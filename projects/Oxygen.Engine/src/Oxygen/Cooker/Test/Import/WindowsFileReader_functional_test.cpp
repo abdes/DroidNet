@@ -6,13 +6,23 @@
 
 // Covers: Import/Internal/WindowsFileReader.cpp
 
+#include <cstddef>
 #include <filesystem>
+#include <memory>
 #include <optional>
+#include <span>
+#include <string_view>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/FileError.h>
+#include <Oxygen/Cooker/Import/FileInfo.h>
+#include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileReader.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -67,13 +77,13 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFileSmallFileReadsAllContent)
   auto path = CreateTestFile("small.txt", content);
 
   std::optional<std::vector<std::byte>> result_outcome;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto read_result = co_await reader_->ReadFile(path);
     if (read_result.has_value()) {
       result_outcome = std::move(read_result).value();
     }
   });
-  ASSERT_TRUE(result_outcome.has_value());
+  ASSERT_HAS_VALUE(result_outcome);
   const auto& result = *result_outcome;
 
   EXPECT_EQ(result.size(), content.size());
@@ -86,18 +96,18 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFileLargerFileReadsAllContent)
 {
   std::string content(64 * 1024, 'X'); // 64KB
   for (size_t i = 0; i < content.size(); ++i) {
-    content[i] = static_cast<char>('A' + (i % 26));
+    content.at(i) = static_cast<char>('A' + (i % 26));
   }
   auto path = CreateTestFile("larger.bin", content);
 
   std::optional<std::vector<std::byte>> result_outcome;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto read_result = co_await reader_->ReadFile(path);
     if (read_result.has_value()) {
       result_outcome = std::move(read_result).value();
     }
   });
-  ASSERT_TRUE(result_outcome.has_value());
+  ASSERT_HAS_VALUE(result_outcome);
   const auto& result = *result_outcome;
 
   EXPECT_EQ(result.size(), content.size());
@@ -112,7 +122,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFileWithOffsetReadsFromOffset)
   auto path = CreateTestFile("offset.txt", content);
 
   std::optional<std::vector<std::byte>> result_outcome;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     ReadOptions options;
     options.offset = 7; // Skip "Hello, "
     auto read_result = co_await reader_->ReadFile(path, options);
@@ -120,10 +130,10 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFileWithOffsetReadsFromOffset)
       result_outcome = std::move(read_result).value();
     }
   });
-  ASSERT_TRUE(result_outcome.has_value());
+  ASSERT_HAS_VALUE(result_outcome);
   const auto& result = *result_outcome;
 
-  EXPECT_EQ(result.size(), 6u); // "World!"
+  EXPECT_EQ(result.size(), 6U); // "World!"
   std::string result_str(
     reinterpret_cast<const char*>(result.data()), result.size());
   EXPECT_EQ(result_str, "World!");
@@ -135,7 +145,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFileWithMaxBytesLimitsRead)
   auto path = CreateTestFile("limited.txt", content);
 
   std::optional<std::vector<std::byte>> result_outcome;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     ReadOptions options;
     options.max_bytes = 5; // Only read "Hello"
     auto read_result = co_await reader_->ReadFile(path, options);
@@ -143,10 +153,10 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFileWithMaxBytesLimitsRead)
       result_outcome = std::move(read_result).value();
     }
   });
-  ASSERT_TRUE(result_outcome.has_value());
+  ASSERT_HAS_VALUE(result_outcome);
   const auto& result = *result_outcome;
 
-  EXPECT_EQ(result.size(), 5u);
+  EXPECT_EQ(result.size(), 5U);
   std::string result_str(
     reinterpret_cast<const char*>(result.data()), result.size());
   EXPECT_EQ(result_str, "Hello");
@@ -158,7 +168,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFileWithOffsetAndMaxBytesWorks)
   auto path = CreateTestFile("combo.txt", content);
 
   std::optional<std::vector<std::byte>> result_outcome;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     ReadOptions options;
     options.offset = 7;
     options.max_bytes = 5; // "World" without "!"
@@ -167,10 +177,10 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFileWithOffsetAndMaxBytesWorks)
       result_outcome = std::move(read_result).value();
     }
   });
-  ASSERT_TRUE(result_outcome.has_value());
+  ASSERT_HAS_VALUE(result_outcome);
   const auto& result = *result_outcome;
 
-  EXPECT_EQ(result.size(), 5u);
+  EXPECT_EQ(result.size(), 5U);
   std::string result_str(
     reinterpret_cast<const char*>(result.data()), result.size());
   EXPECT_EQ(result_str, "World");
@@ -181,7 +191,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFileNonExistentReturnsError)
   auto path = TempDir() / "nonexistent.txt";
 
   FileError error = FileError::kOk;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto read_result = co_await reader_->ReadFile(path);
     EXPECT_TRUE(read_result.has_error());
     error = read_result.error().code;
@@ -196,7 +206,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFileOffsetPastEOFReturnsEmpty)
   auto path = CreateTestFile("short.txt", content);
 
   std::optional<std::vector<std::byte>> result_outcome;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     ReadOptions options;
     options.offset = 100; // Past EOF
     auto read_result = co_await reader_->ReadFile(path, options);
@@ -204,7 +214,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, ReadFileOffsetPastEOFReturnsEmpty)
       result_outcome = std::move(read_result).value();
     }
   });
-  ASSERT_TRUE(result_outcome.has_value());
+  ASSERT_HAS_VALUE(result_outcome);
   const auto& result = *result_outcome;
 
   EXPECT_TRUE(result.empty());
@@ -218,13 +228,13 @@ NOLINT_TEST_F(WindowsFileReaderTest, GetFileInfoExistingFileReturnsInfo)
   auto path = CreateTestFile("info.txt", content);
 
   std::optional<FileInfo> info_outcome;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await reader_->GetFileInfo(path);
     if (result.has_value()) {
       info_outcome = result.value();
     }
   });
-  ASSERT_TRUE(info_outcome.has_value());
+  ASSERT_HAS_VALUE(info_outcome);
   const auto& info = *info_outcome;
 
   EXPECT_EQ(info.size, content.size());
@@ -237,13 +247,13 @@ NOLINT_TEST_F(WindowsFileReaderTest, GetFileInfoDirectoryReturnsInfo)
   // Use TempDir() which already exists
 
   std::optional<FileInfo> info_outcome;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await reader_->GetFileInfo(TempDir());
     if (result.has_value()) {
       info_outcome = result.value();
     }
   });
-  ASSERT_TRUE(info_outcome.has_value());
+  ASSERT_HAS_VALUE(info_outcome);
   const auto& info = *info_outcome;
 
   EXPECT_TRUE(info.is_directory);
@@ -254,7 +264,7 @@ NOLINT_TEST_F(WindowsFileReaderTest, GetFileInfoNonExistentReturnsError)
   auto path = TempDir() / "nonexistent.txt";
 
   FileError error = FileError::kOk;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await reader_->GetFileInfo(path);
     EXPECT_TRUE(result.has_error());
     error = result.error().code;
@@ -270,13 +280,13 @@ NOLINT_TEST_F(WindowsFileReaderTest, ExistsExistingFileReturnsTrue)
   auto path = CreateTestFile("exists.txt", "content");
 
   std::optional<bool> exists_outcome;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await reader_->Exists(path);
     if (result.has_value()) {
       exists_outcome = result.value();
     }
   });
-  ASSERT_TRUE(exists_outcome.has_value());
+  ASSERT_HAS_VALUE(exists_outcome);
   const auto& exists = *exists_outcome;
 
   EXPECT_TRUE(exists);
@@ -287,13 +297,13 @@ NOLINT_TEST_F(WindowsFileReaderTest, ExistsNonExistentReturnsFalse)
   auto path = TempDir() / "nonexistent.txt";
 
   std::optional<bool> exists_outcome;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await reader_->Exists(path);
     if (result.has_value()) {
       exists_outcome = result.value();
     }
   });
-  ASSERT_TRUE(exists_outcome.has_value());
+  ASSERT_HAS_VALUE(exists_outcome);
   const auto& exists = *exists_outcome;
 
   EXPECT_FALSE(exists);
@@ -304,13 +314,13 @@ NOLINT_TEST_F(WindowsFileReaderTest, ExistsDirectoryReturnsTrue)
   // Use TempDir()
 
   std::optional<bool> exists_outcome;
-  co::Run(*loop_, [&]() -> Co<> {
+  co::Run(*loop_, [&] -> Co<> {
     auto result = co_await reader_->Exists(TempDir());
     if (result.has_value()) {
       exists_outcome = result.value();
     }
   });
-  ASSERT_TRUE(exists_outcome.has_value());
+  ASSERT_HAS_VALUE(exists_outcome);
   const auto& exists = *exists_outcome;
 
   EXPECT_TRUE(exists);

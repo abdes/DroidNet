@@ -11,7 +11,6 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <latch>
 #include <optional>
 #include <span>
 #include <string>
@@ -20,16 +19,13 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Finally.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
-#include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
-#include <Oxygen/Cooker/Test/Support/TempDir.h>
+#include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Testing/GTest.h>
@@ -41,8 +37,8 @@ namespace {
   using data::pak::core::kNoResourceIndex;
   using data::pak::core::ResourceIndexT;
   using data::pak::core::TextureResourceDesc;
+  using oxygen::cooker::test::ImportServiceTest;
   using oxygen::cooker::test::ReadBytes;
-  using oxygen::cooker::test::ScopedTempDir;
   using oxygen::cooker::test::WriteBytes;
 
 #pragma pack(push, 1)
@@ -80,28 +76,7 @@ namespace {
 
   using oxygen::cooker::test::HasDiagnosticCode;
 
-  auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
-    -> ImportReport
-  {
-    auto report = ImportReport {};
-    std::latch done(1);
-    const auto submitted = service.SubmitImport(
-      std::move(request),
-      [&report, &done](
-        const ImportJobId /*job_id*/, const ImportReport& completed) -> void {
-        report = completed;
-        done.count_down();
-      },
-      nullptr);
-    if (!submitted.has_value()) {
-      ADD_FAILURE() << "Material import submission failed";
-      return report;
-    }
-    done.wait();
-    return report;
-  }
-
-  class MaterialDescriptorImportJobTest : public testing::Test {
+  class MaterialDescriptorImportJobTest : public ImportServiceTest {
   protected:
     auto MakeRequest(const std::filesystem::path& cooked_root,
       std::string descriptor_json, std::string_view job_name = "woodfloor007")
@@ -122,24 +97,18 @@ namespace {
   NOLINT_TEST_F(MaterialDescriptorImportJobTest,
     CompilesEmissionColorAndIntensityWithoutBinary16Rounding)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "float32_emission";
+    const auto cooked_root = TempDir() / "float32_emission";
     std::filesystem::create_directories(cooked_root);
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-    const auto report = SubmitAndWait(service,
-      MakeRequest(cooked_root, R"({
+    const auto report = Import(MakeRequest(cooked_root, R"({
       "name": "HdrEmission",
       "parameters": {
         "emissive_color": [1.0, 0.25, 0.0],
         "emissive_intensity": 9.7
       }
     })",
-        "HdrEmission"));
-    ASSERT_TRUE(report.success);
+      "HdrEmission"));
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success);
     const auto bytes
       = ReadBytes(cooked_root / "Materials" / "HdrEmission.omat");
     ASSERT_GE(bytes.size(), sizeof(data::pak::render::MaterialAssetDesc));
@@ -153,22 +122,14 @@ namespace {
   NOLINT_TEST_F(MaterialDescriptorImportJobTest,
     ResolvesHashedTextureDescriptorVirtualPathAndEmitsMaterial)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root
-      = temp.Path() / "resolve_hashed_texture_virtual_path";
+    const auto cooked_root = TempDir() / "resolve_hashed_texture_virtual_path";
     std::filesystem::create_directories(cooked_root);
     const auto sidecar_path = cooked_root / "Resources" / "Textures"
       / "woodfloor007_color_1234567890abcdef.otex";
     constexpr auto kTextureIndex = ResourceIndexT { 7U };
     WriteTextureSidecar(sidecar_path, kTextureIndex);
 
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-
-    const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
+    const auto report = Import(MakeRequest(cooked_root, R"({
       "name": "woodfloor007",
       "domain": "opaque",
       "textures": {
@@ -178,10 +139,11 @@ namespace {
       }
     })"));
 
-    EXPECT_TRUE(report.success);
-    EXPECT_EQ(report.materials_written, 1U);
+    ASSERT_HAS_VALUE(report);
+    EXPECT_TRUE(report->success);
+    EXPECT_EQ(report->materials_written, 1U);
     EXPECT_FALSE(HasDiagnosticCode(
-      report.diagnostics, "material.descriptor.texture_descriptor_missing"));
+      report->diagnostics, "material.descriptor.texture_descriptor_missing"));
 
     const auto material_path = cooked_root / "Materials" / "woodfloor007.omat";
     ASSERT_TRUE(std::filesystem::exists(material_path));
@@ -192,10 +154,10 @@ namespace {
     const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
     const auto key
       = index.FindAssetKeyByVirtualPath("/.cooked/Materials/woodfloor007.omat");
-    ASSERT_TRUE(key.has_value());
+    ASSERT_HAS_VALUE(key);
     // NOLINTBEGIN(bugprone-unchecked-optional-access) - asserted above
     const auto references = index.FindAssetReferences(key.value());
-    ASSERT_TRUE(references.has_value());
+    ASSERT_HAS_VALUE(references);
     EXPECT_THAT(references.value().Resources(),
       ::testing::ElementsAre(data::ResourceBinding {
         .kind = data::ResourceKind::kTexture,
@@ -209,16 +171,9 @@ namespace {
   NOLINT_TEST_F(MaterialDescriptorImportJobTest,
     MissingTextureDescriptorCooksMaterialWithoutTextureAndWarns)
   {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "missing_texture_descriptor";
+    const auto cooked_root = TempDir() / "missing_texture_descriptor";
     std::filesystem::create_directories(cooked_root);
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    const auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-
-    const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
+    const auto report = Import(MakeRequest(cooked_root, R"({
       "name": "woodfloor007",
       "domain": "opaque",
       "textures": {
@@ -228,14 +183,15 @@ namespace {
       }
     })"));
 
-    EXPECT_TRUE(report.success);
-    EXPECT_EQ(report.materials_written, 1U);
+    ASSERT_HAS_VALUE(report);
+    EXPECT_TRUE(report->success);
+    EXPECT_EQ(report->materials_written, 1U);
     const auto missing = std::ranges::find_if(
-      report.diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
+      report->diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
         return diagnostic.code
           == "material.descriptor.texture_descriptor_missing";
       });
-    ASSERT_NE(missing, report.diagnostics.end());
+    ASSERT_NE(missing, report->diagnostics.end());
     EXPECT_EQ(missing->severity, ImportSeverity::kWarning);
 
     const auto bytes

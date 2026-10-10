@@ -19,7 +19,11 @@
 
 #include "PakTestSupport.h"
 
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
+#include <Oxygen/Cooker/Test/Support/FileIo.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -101,9 +105,11 @@ protected:
     -> pak::PakBuildRequest
   {
     return paktest::MakeFullRequest(output_path,
-      { .content_version = kContentVersion,
+      {
+        .content_version = kContentVersion,
         .source_key = paktest::MakeSourceKey(kSourceKeySeed),
-        .compute_crc32 = crc });
+        .compute_crc32 = crc,
+      });
   }
 };
 
@@ -112,7 +118,7 @@ NOLINT_TEST_F(PakBinaryConformanceTest,
 {
   const auto request = MakeRequest(Path("empty_conformance.pak"), true);
   const auto result_or = pak::PakBuilder {}.Build(request);
-  ASSERT_TRUE(result_or.has_value());
+  ASSERT_HAS_VALUE(result_or);
   const auto& result = result_or.value();
   ASSERT_FALSE(paktest::HasError(result.diagnostics));
 
@@ -121,10 +127,10 @@ NOLINT_TEST_F(PakBinaryConformanceTest,
   ASSERT_GE(bytes.size(), sizeof(core::PakHeader) + sizeof(core::PakFooter));
 
   const auto header = TryReadStructAt<core::PakHeader>(bytes, 0U);
-  ASSERT_TRUE(header.has_value());
+  ASSERT_HAS_VALUE(header);
   const auto footer_offset = bytes.size() - sizeof(core::PakFooter);
   const auto footer = TryReadStructAt<core::PakFooter>(bytes, footer_offset);
-  ASSERT_TRUE(footer.has_value());
+  ASSERT_HAS_VALUE(footer);
 
   EXPECT_TRUE(std::equal(std::begin(header->magic), std::end(header->magic),
     core::kPakHeaderMagic.begin()));
@@ -143,7 +149,7 @@ NOLINT_TEST_F(PakBinaryConformanceTest, CrcSkipFieldMatchesFooterValue)
 {
   const auto request = MakeRequest(Path("crc_skip.pak"), true);
   const auto result_or = pak::PakBuilder {}.Build(request);
-  ASSERT_TRUE(result_or.has_value());
+  ASSERT_HAS_VALUE(result_or);
   const auto& result = result_or.value();
   ASSERT_FALSE(paktest::HasError(result.diagnostics));
 
@@ -151,7 +157,7 @@ NOLINT_TEST_F(PakBinaryConformanceTest, CrcSkipFieldMatchesFooterValue)
   ASSERT_GE(bytes.size(), sizeof(core::PakFooter));
   const auto footer_offset = bytes.size() - sizeof(core::PakFooter);
   const auto footer = TryReadStructAt<core::PakFooter>(bytes, footer_offset);
-  ASSERT_TRUE(footer.has_value());
+  ASSERT_HAS_VALUE(footer);
 
   const auto crc_offset = footer_offset + offsetof(core::PakFooter, pak_crc32);
   const auto computed_crc
@@ -192,7 +198,7 @@ NOLINT_TEST_F(
   };
 
   const auto result_or = pak::PakBuilder {}.Build(request);
-  ASSERT_TRUE(result_or.has_value());
+  ASSERT_HAS_VALUE(result_or);
   const auto& result = result_or.value();
   ASSERT_FALSE(paktest::HasError(result.diagnostics));
   ASSERT_EQ(result.summary.assets_processed, 1U);
@@ -201,13 +207,13 @@ NOLINT_TEST_F(
   ASSERT_GE(bytes.size(), sizeof(core::PakFooter));
   const auto footer_offset = bytes.size() - sizeof(core::PakFooter);
   const auto footer = TryReadStructAt<core::PakFooter>(bytes, footer_offset);
-  ASSERT_TRUE(footer.has_value());
+  ASSERT_HAS_VALUE(footer);
   ASSERT_EQ(footer->asset_count, 1U);
   ASSERT_EQ(footer->directory_size, sizeof(core::AssetDirectoryEntry));
 
   const auto directory_entry = TryReadStructAt<core::AssetDirectoryEntry>(
     bytes, static_cast<size_t>(footer->directory_offset));
-  ASSERT_TRUE(directory_entry.has_value());
+  ASSERT_HAS_VALUE(directory_entry);
   EXPECT_EQ(directory_entry->asset_key, asset.key);
   EXPECT_EQ(directory_entry->desc_size, descriptor.size());
   EXPECT_LE(
@@ -224,7 +230,7 @@ NOLINT_TEST_F(PakBinaryConformanceTest, CrcDisabledBuildLeavesFooterCrcZero)
 {
   const auto request = MakeRequest(Path("crc_disabled.pak"), false);
   const auto result_or = pak::PakBuilder {}.Build(request);
-  ASSERT_TRUE(result_or.has_value());
+  ASSERT_HAS_VALUE(result_or);
   const auto& result = result_or.value();
   ASSERT_FALSE(paktest::HasError(result.diagnostics));
 
@@ -232,7 +238,7 @@ NOLINT_TEST_F(PakBinaryConformanceTest, CrcDisabledBuildLeavesFooterCrcZero)
   ASSERT_GE(bytes.size(), sizeof(core::PakFooter));
   const auto footer_offset = bytes.size() - sizeof(core::PakFooter);
   const auto footer = TryReadStructAt<core::PakFooter>(bytes, footer_offset);
-  ASSERT_TRUE(footer.has_value());
+  ASSERT_HAS_VALUE(footer);
 
   EXPECT_EQ(footer->pak_crc32, 0U);
   EXPECT_EQ(result.pak_crc32, 0U);

@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPlanner.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -384,9 +386,20 @@ NOLINT_TEST_F(ImportPlannerPlanTest, MakePlanComplexScene)
     order.push_back(step.item_id);
   }
 
-  const std::vector<PlanItemId> expected
-    = { albedo, normal, roughness, metalness, vertex_buffer, index_buffer,
-        data_buffer, material_a, material_b, lod0, lod1, scene };
+  const std::vector<PlanItemId> expected = {
+    albedo,
+    normal,
+    roughness,
+    metalness,
+    vertex_buffer,
+    index_buffer,
+    data_buffer,
+    material_a,
+    material_b,
+    lod0,
+    lod1,
+    scene,
+  };
   EXPECT_EQ(order, expected);
 }
 

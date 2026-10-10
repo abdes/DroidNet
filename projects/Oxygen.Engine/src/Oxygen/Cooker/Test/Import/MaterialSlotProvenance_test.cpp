@@ -63,7 +63,7 @@ struct Source final {
     },
   };
 
-  auto MakeRequest() const -> MeshBuildPipeline::WorkItem
+  [[nodiscard]] auto MakeRequest() const -> MeshBuildPipeline::WorkItem
   {
     auto item = MeshBuildPipeline::WorkItem {};
     item.storage_mesh_name = "retained-mesh";

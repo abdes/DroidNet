@@ -9,7 +9,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -35,14 +34,11 @@
 #include <Oxygen/Cooker/Import/Internal/ImportJobParams.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
-#include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -122,7 +118,7 @@ public:
     co_return first ? rest : first;
   }
   auto CancelAll() -> void override { writer_->CancelAll(); }
-  auto PendingCount() const -> size_t override
+  [[nodiscard]] auto PendingCount() const -> size_t override
   {
     return writer_->PendingCount() + (pending_ ? 1U : 0U);
   }
@@ -137,7 +133,7 @@ private:
     -> imp::WriteCompletionCallback
   {
     return [this, callback = std::move(callback)](
-             const imp::FileErrorInfo& error, uint64_t bytes) {
+             const imp::FileErrorInfo& error, uint64_t bytes) -> void {
       if (hold_) {
         CHECK_F(!pending_);
         pending_.emplace(
@@ -189,7 +185,7 @@ private:
   }
   auto Run() -> co::Co<>
   {
-    co_await co::UntilCancelledAnd([this] { return Exit(); });
+    co_await co::UntilCancelledAnd([this] -> co::Co<> { return Exit(); });
   }
   ProducerState& state_;
 };
@@ -278,7 +274,7 @@ NOLINT_TEST(ImportJobLifetimeTest, ExceptionPreservesDrainedSessionTelemetry)
   auto job = FinalizedFailureJob(imp::detail::ImportJobParams {
     .id = imp::ImportJobId { 1 },
     .request = request,
-    .on_complete = [&](auto, const auto& report) { result = report; },
+    .on_complete = [&](auto, const auto& report) -> auto { result = report; },
     .on_progress = {},
     .cancel_event = {},
     .reader = oxygen::make_observer(reader.get()),
@@ -326,7 +322,8 @@ NOLINT_TEST(
   imp::ImportReport retry_report;
   ProducerState first_state;
   ProducerState retry_state;
-  const auto params = [&](imp::ImportCompletionCallback completion) {
+  const auto params = [&](imp::ImportCompletionCallback completion)
+    -> imp::detail::ImportJobParams {
     return imp::detail::ImportJobParams {
       .id = imp::ImportJobId { 1 },
       .request = request,
@@ -345,17 +342,17 @@ NOLINT_TEST(
       .generation_writer = {},
     };
   };
-  EmittingJob first(params([&](auto, const auto& report) {
+  EmittingJob first(params([&](auto, const auto& report) -> auto {
     ++completions;
     first_report = report;
   }),
     first_state);
-  EmittingJob retry(params([&](auto, const auto& report) {
+  EmittingJob retry(params([&](auto, const auto& report) -> auto {
     ++completions;
     retry_report = report;
   }),
     retry_state);
-  co::Run(loop, [&]() -> co::Co<> {
+  co::Run(loop, [&] -> co::Co<> {
     OXCO_WITH_NURSERY(jobs)
     {
       co_await jobs.Start(&EmittingJob::ActivateAsync, &first);

@@ -8,21 +8,27 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <memory>
+#include <filesystem>
 #include <span>
 #include <string>
 #include <string_view>
 
 #include "PakTestSupport.h"
 
-#include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/Test/Fixtures/LooseCookedTestWriter.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/Pak/PakBuildReport.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
+#include <Oxygen/Cooker/Test/Support/TestValues.h>
 #include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -69,11 +75,13 @@ NOLINT_TEST_P(PakBuilderReferenceGraphTest, RejectsInvalidAssetReferenceGraph)
   const auto script_bytes = std::as_bytes(std::span(&script_descriptor, 1U));
   const auto owner_references = data::AssetReferences::Create({},
     {
-      { .key = target_key,
+      {
+        .key = target_key,
         .kind = data::KeyReferenceKind::kAsset,
-        .expected_type = data::AssetType::kMaterial },
+        .expected_type = data::AssetType::kMaterial,
+      },
     });
-  ASSERT_TRUE(owner_references.has_value());
+  ASSERT_HAS_VALUE(owner_references);
 
   {
     const auto* const code = GetParam().code;
@@ -88,12 +96,14 @@ NOLINT_TEST_P(PakBuilderReferenceGraphTest, RejectsInvalidAssetReferenceGraph)
       const auto references = cycle
         ? data::AssetReferences::Create({},
             {
-              { .key = owner_key,
+              {
+                .key = owner_key,
                 .kind = data::KeyReferenceKind::kAsset,
-                .expected_type = data::AssetType::kMaterial },
+                .expected_type = data::AssetType::kMaterial,
+              },
             })
         : data::AssetReferences::Create({}, {});
-      ASSERT_TRUE(references.has_value());
+      ASSERT_HAS_VALUE(references);
       writer.WriteAssetDescriptor(target_key,
         cycle ? data::AssetType::kMaterial : data::AssetType::kScript,
         cycle ? "/Game/Target.omat" : "/Game/Target.oscript",
@@ -109,7 +119,7 @@ NOLINT_TEST_P(PakBuilderReferenceGraphTest, RejectsInvalidAssetReferenceGraph)
     request.content_version = 1U;
     request.source_key = MakeNonZeroSourceKey();
     const auto result = pak::PakBuilder {}.Build(request);
-    ASSERT_TRUE(result.has_value());
+    ASSERT_HAS_VALUE(result);
     EXPECT_TRUE(HasDiagnosticCode(result->diagnostics, code));
     EXPECT_FALSE(std::filesystem::exists(request.output_pak_path));
   }
@@ -121,7 +131,7 @@ INSTANTIATE_TEST_SUITE_P(InvalidGraphs, PakBuilderReferenceGraphTest,
     ReferenceGraphCase {
       "TypeMismatch", "pak.plan.asset_reference_type_mismatch" },
     ReferenceGraphCase { "Cycle", "pak.plan.asset_reference_cycle" }),
-  [](const ::testing::TestParamInfo<ReferenceGraphCase>& info) {
+  [](const ::testing::TestParamInfo<ReferenceGraphCase>& info) -> std::string {
     return std::string(info.param.name);
   });
 
@@ -132,13 +142,17 @@ NOLINT_TEST_F(PakBuilderTest, SentinelTextureReferencesSurvivePackAndRepack)
   const auto key = MakeAssetKey(42U);
   const auto references = data::AssetReferences::Create(
     {
-      { .kind = data::ResourceKind::kTexture,
-        .index = data::pak::core::kErrorTextureResourceIndex },
-      { .kind = data::ResourceKind::kTexture,
-        .index = data::pak::core::kNoResourceIndex },
+      {
+        .kind = data::ResourceKind::kTexture,
+        .index = data::pak::core::kErrorTextureResourceIndex,
+      },
+      {
+        .kind = data::ResourceKind::kTexture,
+        .index = data::pak::core::kNoResourceIndex,
+      },
     },
     {});
-  ASSERT_TRUE(references.has_value());
+  ASSERT_HAS_VALUE(references);
 
   auto descriptor = render::MaterialAssetDesc {};
   descriptor.header.asset_type
@@ -161,10 +175,10 @@ NOLINT_TEST_F(PakBuilderTest, SentinelTextureReferencesSurvivePackAndRepack)
   };
   request.content_version = 1U;
   request.source_key = MakeSourceKey(2U);
-  for (const auto filename : { "packed.pak", "repacked.pak" }) {
+  for (const auto* const filename : { "packed.pak", "repacked.pak" }) {
     request.output_pak_path = Path(filename);
     const auto built = pak::PakBuilder {}.Build(request);
-    ASSERT_TRUE(built.has_value());
+    ASSERT_HAS_VALUE(built);
     for (const auto& diagnostic : built->diagnostics) {
       EXPECT_NE(diagnostic.severity, pak::PakDiagnosticSeverity::kError)
         << diagnostic.message;
@@ -174,12 +188,12 @@ NOLINT_TEST_F(PakBuilderTest, SentinelTextureReferencesSurvivePackAndRepack)
     auto archive = content::PakFile(request.output_pak_path);
     archive.ValidateCrc32Integrity();
     const auto entry = archive.FindEntry(key);
-    ASSERT_TRUE(entry.has_value());
+    ASSERT_HAS_VALUE(entry);
     const auto loaded_references = archive.ReadAssetReferences(key);
     EXPECT_EQ(loaded_references, *references);
     auto bytes_reader = archive.CreateReader(*entry);
     const auto bytes = bytes_reader.ReadBlob(entry->desc_size);
-    ASSERT_TRUE(bytes.has_value());
+    ASSERT_HAS_VALUE(bytes);
     EXPECT_TRUE(std::ranges::equal(*bytes, descriptor_bytes));
 
     request.sources = {
@@ -209,7 +223,7 @@ NOLINT_TEST_F(PakBuilderTest, PatchRequestValidationEmitsAllModeErrors)
   PakBuilder builder;
   const auto result_or_error = builder.Build(request);
 
-  ASSERT_TRUE(result_or_error.has_value());
+  ASSERT_HAS_VALUE(result_or_error);
   const auto& result = result_or_error.value();
 
   EXPECT_EQ(result.summary.diagnostics_error, 3U);
@@ -218,7 +232,7 @@ NOLINT_TEST_F(PakBuilderTest, PatchRequestValidationEmitsAllModeErrors)
   EXPECT_TRUE(HasDiagnosticCode(
     result.diagnostics, "pak.request.patch_requires_base_catalogs"));
   EXPECT_TRUE(HasDiagnosticCode(
-    result, "pak.request.patch_requires_output_manifest_path"));
+    result.diagnostics, "pak.request.patch_requires_output_manifest_path"));
 }
 
 NOLINT_TEST_F(PakBuilderTest, FullManifestOptionRequiresOutputManifestPath)
@@ -249,12 +263,12 @@ NOLINT_TEST_F(PakBuilderTest, FullManifestOptionRequiresOutputManifestPath)
   PakBuilder builder;
   const auto result_or_error = builder.Build(request);
 
-  ASSERT_TRUE(result_or_error.has_value());
+  ASSERT_HAS_VALUE(result_or_error);
   const auto& result = result_or_error.value();
 
   EXPECT_EQ(result.summary.diagnostics_error, 1U);
-  EXPECT_TRUE(HasDiagnosticCode(
-    result, "pak.request.full_manifest_requires_output_manifest_path"));
+  EXPECT_TRUE(HasDiagnosticCode(result.diagnostics,
+    "pak.request.full_manifest_requires_output_manifest_path"));
 }
 
 NOLINT_TEST_F(PakBuilderTest, ValidRequestWritesPakAndReportsTelemetry)
@@ -278,7 +292,7 @@ NOLINT_TEST_F(PakBuilderTest, ValidRequestWritesPakAndReportsTelemetry)
   PakBuilder builder;
   const auto result_or_error = builder.Build(request);
 
-  ASSERT_TRUE(result_or_error.has_value());
+  ASSERT_HAS_VALUE(result_or_error);
   const auto& result = result_or_error.value();
 
   EXPECT_EQ(result.summary.diagnostics_error, 0U);
@@ -327,7 +341,7 @@ NOLINT_TEST_F(
   PakBuilder builder;
   const auto result_or_error = builder.Build(request);
 
-  ASSERT_TRUE(result_or_error.has_value());
+  ASSERT_HAS_VALUE(result_or_error);
   const auto& result = result_or_error.value();
   EXPECT_EQ(result.summary.diagnostics_error, 0U);
   EXPECT_TRUE(result.patch_manifest.has_value());
@@ -359,7 +373,7 @@ NOLINT_TEST_F(
   const PakBuildRequest request {
     .mode = BuildMode::kFull,
     .sources = { CookedSource {
-      .kind = CookedSourceKind::kLooseCooked, .path = source } },
+      .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
     .output_pak_path = Path("full_catalog_output.pak"),
     .output_manifest_path = {},
     .content_version = 7,
@@ -372,18 +386,18 @@ NOLINT_TEST_F(
   PakBuilder builder;
   const auto result_or_error = builder.Build(request);
 
-  ASSERT_TRUE(result_or_error.has_value());
+  ASSERT_HAS_VALUE(result_or_error);
   const auto& result = result_or_error.value();
   EXPECT_EQ(result.summary.diagnostics_error, 0U);
   ASSERT_EQ(result.output_catalog.entries.size(), 1U);
   EXPECT_EQ(result.output_catalog.source_key, request.source_key);
   EXPECT_EQ(result.output_catalog.content_version, request.content_version);
-  EXPECT_EQ(result.output_catalog.entries[0].asset_key, asset.key);
-  EXPECT_EQ(result.output_catalog.entries[0].asset_type, asset.asset_type);
-  EXPECT_EQ(
-    result.output_catalog.entries[0].descriptor_digest, asset.descriptor_sha);
+  EXPECT_EQ(result.output_catalog.entries.at(0).asset_key, asset.key);
+  EXPECT_EQ(result.output_catalog.entries.at(0).asset_type, asset.asset_type);
+  EXPECT_EQ(result.output_catalog.entries.at(0).descriptor_digest,
+    asset.descriptor_sha);
   const auto expected_transitive_digest = asset.descriptor_sha;
-  EXPECT_EQ(result.output_catalog.entries[0].transitive_resource_digest,
+  EXPECT_EQ(result.output_catalog.entries.at(0).transitive_resource_digest,
     expected_transitive_digest);
   EXPECT_NE(
     result.output_catalog.catalog_digest, data::PakCatalog {}.catalog_digest);
@@ -430,7 +444,7 @@ NOLINT_TEST_F(
   const PakBuildRequest request {
     .mode = BuildMode::kPatch,
     .sources = { CookedSource {
-      .kind = CookedSourceKind::kLooseCooked, .path = source } },
+      .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
     .output_pak_path = Path("patch_catalog_output.pak"),
     .output_manifest_path = Path("patch_catalog_output.manifest"),
     .content_version = 5U,
@@ -443,19 +457,19 @@ NOLINT_TEST_F(
   PakBuilder builder;
   const auto result_or_error = builder.Build(request);
 
-  ASSERT_TRUE(result_or_error.has_value());
+  ASSERT_HAS_VALUE(result_or_error);
   const auto& result = result_or_error.value();
   EXPECT_EQ(result.summary.diagnostics_error, 0U);
   EXPECT_EQ(result.summary.patch_replaced, 1U);
   ASSERT_EQ(result.output_catalog.entries.size(), 1U);
   EXPECT_EQ(result.output_catalog.source_key, request.source_key);
   EXPECT_EQ(result.output_catalog.content_version, request.content_version);
-  EXPECT_EQ(result.output_catalog.entries[0].asset_key, asset.key);
-  EXPECT_EQ(result.output_catalog.entries[0].asset_type, asset.asset_type);
-  EXPECT_EQ(
-    result.output_catalog.entries[0].descriptor_digest, asset.descriptor_sha);
+  EXPECT_EQ(result.output_catalog.entries.at(0).asset_key, asset.key);
+  EXPECT_EQ(result.output_catalog.entries.at(0).asset_type, asset.asset_type);
+  EXPECT_EQ(result.output_catalog.entries.at(0).descriptor_digest,
+    asset.descriptor_sha);
   const auto expected_transitive_digest = asset.descriptor_sha;
-  EXPECT_EQ(result.output_catalog.entries[0].transitive_resource_digest,
+  EXPECT_EQ(result.output_catalog.entries.at(0).transitive_resource_digest,
     expected_transitive_digest);
   EXPECT_NE(
     result.output_catalog.catalog_digest, data::PakCatalog {}.catalog_digest);
@@ -487,7 +501,7 @@ NOLINT_TEST_F(
 
   PakBuilder builder;
   const auto seed_result_or_error = builder.Build(seed_request);
-  ASSERT_TRUE(seed_result_or_error.has_value());
+  ASSERT_HAS_VALUE(seed_result_or_error);
   ASSERT_EQ(seed_result_or_error.value().summary.diagnostics_error, 0U);
 
   const PakBuildRequest request {
@@ -510,7 +524,7 @@ NOLINT_TEST_F(
   };
 
   const auto result_or_error = builder.Build(request);
-  ASSERT_TRUE(result_or_error.has_value());
+  ASSERT_HAS_VALUE(result_or_error);
   const auto& result = result_or_error.value();
 
   EXPECT_EQ(result.summary.diagnostics_warning, 0U);
@@ -566,7 +580,7 @@ NOLINT_TEST_F(PakBuilderTest, PlannerRejectsBaseCatalogTypeMismatch)
   PakBuilder builder;
   const auto result_or_error = builder.Build(request);
 
-  ASSERT_TRUE(result_or_error.has_value());
+  ASSERT_HAS_VALUE(result_or_error);
   const auto& result = result_or_error.value();
   EXPECT_TRUE(HasDiagnosticCode(
     result.diagnostics, "pak.plan.base_catalog_type_mismatch"));
@@ -618,7 +632,7 @@ NOLINT_TEST_F(PakBuilderTest, PatchModeClassifiesMissingSourceAsDelete)
   PakBuilder builder;
   const auto result_or_error = builder.Build(request);
 
-  ASSERT_TRUE(result_or_error.has_value());
+  ASSERT_HAS_VALUE(result_or_error);
   const auto& result = result_or_error.value();
   EXPECT_EQ(result.summary.patch_created, 0U);
   EXPECT_EQ(result.summary.patch_replaced, 0U);

@@ -28,6 +28,7 @@
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/Test/Support/PipelineHarness.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -184,7 +185,7 @@ NOLINT_TEST_F(
       });
 
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value())
+  ASSERT_HAS_VALUE(result.cooked)
     << "Expected result.cooked to contain a value";
 
   const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
@@ -234,7 +235,10 @@ NOLINT_TEST_F(MaterialPipelineTest, RejectsInvalidCompiledEmission)
 NOLINT_TEST_F(MaterialPipelineTest, CollectAutoOrmPackedSetsFlags)
 {
   for (const auto ao_index : std::array<uint32_t, 3> {
-         data::pak::core::kNoResourceIndex.get(), 7U, 9U }) {
+         data::pak::core::kNoResourceIndex.get(),
+         7U,
+         9U,
+       }) {
     auto item = MakeBaseItem();
     item.material.orm_policy = OrmPolicy::kAuto;
     item.material.textures.metallic = MaterialTextureBinding {
@@ -264,7 +268,7 @@ NOLINT_TEST_F(MaterialPipelineTest, CollectAutoOrmPackedSetsFlags)
         });
 
     ASSERT_TRUE(result.success);
-    ASSERT_TRUE(result.cooked.has_value())
+    ASSERT_HAS_VALUE(result.cooked)
       << "Expected result.cooked to contain a value";
     const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
 
@@ -276,12 +280,12 @@ NOLINT_TEST_F(MaterialPipelineTest, CollectAutoOrmPackedSetsFlags)
       { desc.metallic_texture, desc.roughness_texture }) {
       const auto resolved
         = references.ResolveResource(reference, data::ResourceKind::kTexture);
-      ASSERT_TRUE(resolved.has_value());
+      ASSERT_HAS_VALUE(resolved);
       EXPECT_EQ(*resolved, std::optional { oxygen::ResourceIndexT { 7U } });
     }
     const auto resolved_ao = references.ResolveResource(
       desc.ambient_occlusion_texture, data::ResourceKind::kTexture);
-    ASSERT_TRUE(resolved_ao.has_value());
+    ASSERT_HAS_VALUE(resolved_ao);
     if (ao_index == data::pak::core::kNoResourceIndex.get()) {
       EXPECT_FALSE(resolved_ao->has_value());
     } else {
@@ -338,7 +342,9 @@ NOLINT_TEST_F(MaterialPipelineTest, CollectSharedTransformWritesExtension)
     .assigned = true,
     .source_id = "base",
     .uv_set = 2,
-    .uv_transform = { { 2.0F, 2.0F }, { 0.25F, 0.5F }, 0.1F },
+    .uv_transform = { .scale = { 2.0F, 2.0F },
+      .offset = { 0.25F, 0.5F },
+      .rotation_radians = 0.1F, },
   };
 
   const auto result
@@ -350,7 +356,7 @@ NOLINT_TEST_F(MaterialPipelineTest, CollectSharedTransformWritesExtension)
       });
 
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value())
+  ASSERT_HAS_VALUE(result.cooked)
     << "Expected result.cooked to contain a value";
   const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
   const auto uv = ReadUvTransform(desc);
@@ -371,7 +377,9 @@ NOLINT_TEST_F(MaterialPipelineTest, CollectMismatchedTransformsUsesFirst)
     .assigned = true,
     .source_id = "base",
     .uv_set = 0,
-    .uv_transform = { { 2.0F, 2.0F }, { 0.0F, 0.0F }, 0.0F },
+    .uv_transform = { .scale = { 2.0F, 2.0F },
+      .offset = { 0.0F, 0.0F },
+      .rotation_radians = 0.0F, },
   };
   item.material.textures.normal = MaterialTextureBinding {
     .index = 3,
@@ -390,7 +398,7 @@ NOLINT_TEST_F(MaterialPipelineTest, CollectMismatchedTransformsUsesFirst)
       });
 
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value())
+  ASSERT_HAS_VALUE(result.cooked)
     << "Expected result.cooked to contain a value";
   const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);
   const auto uv = ReadUvTransform(desc);
@@ -427,7 +435,7 @@ NOLINT_TEST_F(MaterialPipelineTest, CollectShaderStagesOrderedByBitIndex)
       });
 
   ASSERT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value())
+  ASSERT_HAS_VALUE(result.cooked)
     << "Expected result.cooked to contain a value";
 
   const auto desc = ReadMaterialDesc(result.cooked->descriptor_bytes);

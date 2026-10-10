@@ -24,9 +24,8 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/Test/Support/FileIo.h>
-#include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Testing/GTest.h>
@@ -198,8 +197,10 @@ namespace {
         json::array({
           json {
             { "source", vb_source.generic_string() },
-            { "virtual_path",
-              "/.cooked/Resources/Buffers/shared_vertices.obuf" },
+            {
+              "virtual_path",
+              "/.cooked/Resources/Buffers/shared_vertices.obuf",
+            },
             { "usage_flags", 1U },
             { "element_stride", 32U },
             {
@@ -215,8 +216,10 @@ namespace {
           },
           json {
             { "source", ib_source.generic_string() },
-            { "virtual_path",
-              "/.cooked/Resources/Buffers/shared_indices.obuf" },
+            {
+              "virtual_path",
+              "/.cooked/Resources/Buffers/shared_indices.obuf",
+            },
             { "usage_flags", 2U },
             { "element_stride", 4U },
             {
@@ -258,9 +261,13 @@ namespace {
     const LocalBufferSources& sources, const std::filesystem::path& cooked_root,
     const json& descriptor) -> ImportReport
   {
-    return SubmitAndWait(service,
+    const auto report = SubmitAndWait(service,
       MakeBufferContainerRequest(
         sources.buffer_manifest_path, cooked_root, descriptor));
+    if (!report.has_value()) {
+      return ImportReport {};
+    }
+    return *report;
   }
 
 } // namespace
@@ -443,22 +450,23 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
-  ASSERT_TRUE(report.success)
-    << oxygen::cooker::test::DiagnosticSummary(report.diagnostics);
-  EXPECT_EQ(report.geometry_written, 1U)
-    << DiagnosticSummary(report.diagnostics);
+  ASSERT_HAS_VALUE(report);
+  ASSERT_TRUE(report->success)
+    << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
+  EXPECT_EQ(report->geometry_written, 1U)
+    << DiagnosticSummary(report->diagnostics);
   EXPECT_FALSE(
-    HasDiagnosticCode(report.diagnostics, "geometry.material.missing"));
+    HasDiagnosticCode(report->diagnostics, "geometry.material.missing"));
 
-  const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value())
+  const auto geometry_relpath = FindOutputByExtension(*report, ".ogeo");
+  ASSERT_HAS_VALUE(geometry_relpath)
     << "Expected geometry_relpath to contain a value";
   ASSERT_TRUE(std::filesystem::exists(
     cooked_root / std::filesystem::path(*geometry_relpath)));
 
   const auto has_output = [&](const std::string_view relpath) -> bool {
     return std::ranges::any_of(
-      report.outputs, [&](const ImportOutputRecord& output) -> bool {
+      report->outputs, [&](const ImportOutputRecord& output) -> bool {
         return output.path == relpath;
       });
   };
@@ -514,14 +522,16 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest, ResolvesLocalBufferSidecars)
 
   const auto geometry_report = SubmitAndWait(service,
     MakeGeometryRequest(geometry_path, cooked_root, geometry_descriptor));
-  ASSERT_TRUE(geometry_report.success)
-    << oxygen::cooker::test::DiagnosticSummary(geometry_report.diagnostics);
-  EXPECT_EQ(geometry_report.geometry_written, 1U);
+  ASSERT_HAS_VALUE(geometry_report);
+  ASSERT_TRUE(geometry_report->success)
+    << oxygen::cooker::test::DiagnosticSummary(geometry_report->diagnostics);
+  EXPECT_EQ(geometry_report->geometry_written, 1U);
   EXPECT_FALSE(HasDiagnosticCode(
-    geometry_report.diagnostics, "geometry.buffer.sidecar_missing"));
+    geometry_report->diagnostics, "geometry.buffer.sidecar_missing"));
 
-  const auto geometry_relpath = FindOutputByExtension(geometry_report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value())
+  const auto geometry_relpath
+    = FindOutputByExtension(*geometry_report, ".ogeo");
+  ASSERT_HAS_VALUE(geometry_relpath)
     << "Expected geometry_relpath to contain a value";
   ASSERT_TRUE(std::filesystem::exists(
     cooked_root / std::filesystem::path(*geometry_relpath)));
@@ -568,10 +578,11 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   const auto rejected = SubmitAndWait(service,
     MakeGeometryRequest(
       geometry_path, other_root, geometry_descriptor, { cooked_root }));
-  EXPECT_FALSE(rejected.success);
-  EXPECT_EQ(rejected.geometry_written, 0U);
+  ASSERT_HAS_VALUE(rejected);
+  EXPECT_FALSE(rejected->success);
+  EXPECT_EQ(rejected->geometry_written, 0U);
   EXPECT_TRUE(
-    HasDiagnosticCode(rejected.diagnostics, "geometry.buffer.foreign_root"));
+    HasDiagnosticCode(rejected->diagnostics, "geometry.buffer.foreign_root"));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
@@ -658,15 +669,17 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   const auto buffer_report = SubmitAndWait(service,
     MakeBufferContainerRequest(
       buffer_manifest_path, context_cooked_root, buffer_descriptor));
-  ASSERT_TRUE(buffer_report.success);
+  ASSERT_HAS_VALUE(buffer_report);
+  ASSERT_TRUE(buffer_report->success);
 
   const auto geometry_report = SubmitAndWait(service,
     MakeGeometryRequest(geometry_path, cooked_root, geometry_descriptor,
       { context_cooked_root }));
-  EXPECT_FALSE(geometry_report.success);
-  EXPECT_EQ(geometry_report.geometry_written, 0U);
+  ASSERT_HAS_VALUE(geometry_report);
+  EXPECT_FALSE(geometry_report->success);
+  EXPECT_EQ(geometry_report->geometry_written, 0U);
   EXPECT_TRUE(HasDiagnosticCode(
-    geometry_report.diagnostics, "geometry.buffer.foreign_root"));
+    geometry_report->diagnostics, "geometry.buffer.foreign_root"));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
@@ -756,18 +769,21 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
   const auto main_report = SubmitAndWait(service,
     MakeBufferContainerRequest(
       buffer_manifest_path, cooked_root, buffer_descriptor));
-  ASSERT_TRUE(main_report.success);
+  ASSERT_HAS_VALUE(main_report);
+  ASSERT_TRUE(main_report->success);
   const auto context_report = SubmitAndWait(service,
     MakeBufferContainerRequest(
       buffer_manifest_path, context_cooked_root, buffer_descriptor));
-  ASSERT_TRUE(context_report.success);
+  ASSERT_HAS_VALUE(context_report);
+  ASSERT_TRUE(context_report->success);
 
   const auto geometry_report = SubmitAndWait(service,
     MakeGeometryRequest(geometry_path, cooked_root, geometry_descriptor,
       { context_cooked_root }));
-  EXPECT_FALSE(geometry_report.success);
+  ASSERT_HAS_VALUE(geometry_report);
+  EXPECT_FALSE(geometry_report->success);
   EXPECT_TRUE(HasDiagnosticCode(
-    geometry_report.diagnostics, "geometry.buffer.sidecar_ambiguous"));
+    geometry_report->diagnostics, "geometry.buffer.sidecar_ambiguous"));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
@@ -797,9 +813,10 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
-  EXPECT_FALSE(report.success);
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
   EXPECT_TRUE(HasDiagnosticCode(
-    report.diagnostics, "geometry.buffer.virtual_path_unmounted"));
+    report->diagnostics, "geometry.buffer.virtual_path_unmounted"));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
@@ -870,9 +887,10 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
-  EXPECT_FALSE(report.success);
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
   EXPECT_TRUE(
-    HasDiagnosticCode(report.diagnostics, "geometry.buffer.view_missing"));
+    HasDiagnosticCode(report->diagnostics, "geometry.buffer.view_missing"));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
@@ -997,13 +1015,15 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
 
   const auto report_a = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_a_path, cooked_root, descriptor_a));
-  ASSERT_TRUE(report_a.success);
+  ASSERT_HAS_VALUE(report_a);
+  ASSERT_TRUE(report_a->success);
 
   const auto report_b = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_b_path, cooked_root, descriptor_b));
-  EXPECT_FALSE(report_b.success);
+  ASSERT_HAS_VALUE(report_b);
+  EXPECT_FALSE(report_b->success);
   EXPECT_TRUE(HasDiagnosticCode(
-    report_b.diagnostics, "buffer.container.dedup_virtual_path_conflict"));
+    report_b->diagnostics, "buffer.container.dedup_virtual_path_conflict"));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
@@ -1084,9 +1104,10 @@ NOLINT_TEST(GeometryDescriptorImportJobBuffersTest,
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
-  EXPECT_FALSE(report.success);
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
   EXPECT_TRUE(HasDiagnosticCode(
-    report.diagnostics, "buffer.container.dedup_virtual_path_conflict"));
+    report->diagnostics, "buffer.container.dedup_virtual_path_conflict"));
 }
 
 } // namespace oxygen::content::import::test

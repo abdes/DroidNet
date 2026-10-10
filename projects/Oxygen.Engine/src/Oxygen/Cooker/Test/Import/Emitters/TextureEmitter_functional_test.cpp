@@ -11,7 +11,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <istream>
 #include <limits>
 #include <memory>
 #include <span>
@@ -459,8 +458,8 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWithoutUserTexturesWritesFallback)
     EXPECT_EQ(data_file_size, table.at(0).size_bytes);
 
     std::vector<uint8_t> payload(data_bytes.size());
-    std::transform(data_bytes.begin(), data_bytes.end(), payload.begin(),
-      [](const std::byte value) -> uint8_t {
+    std::ranges::transform(
+      data_bytes, payload.begin(), [](const std::byte value) -> uint8_t {
         return static_cast<uint8_t>(std::to_integer<uint8_t>(value));
       });
 

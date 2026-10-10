@@ -17,11 +17,6 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
-#include <Oxygen/Cooker/Test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/Test/Support/FileIo.h>
-#include <Oxygen/Cooker/Test/Support/TempDir.h>
-#include <Oxygen/Cooker/Test/Support/TestPaths.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -32,7 +27,7 @@ namespace {
     -> bool
   {
     return std::ranges::any_of(
-      diagnostics, [](const ImportDiagnostic& diagnostic) {
+      diagnostics, [](const ImportDiagnostic& diagnostic) -> bool {
         return !diagnostic.object_path.empty();
       });
   }
@@ -53,8 +48,7 @@ namespace {
     const auto inspection = LoadInspection(cooked_root);
     const auto scene_asset
       = FindFirstAssetByType(inspection, AssetType::kScene);
-    ASSERT_TRUE(scene_asset.has_value())
-      << "Expected scene asset to be present";
+    ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
 
     const auto sidecar_source
       = cooked_root / "input" / "diagnostics_fields_sidecar.json";
@@ -82,8 +76,7 @@ namespace {
     const auto inspection = LoadInspection(cooked_root);
     const auto scene_asset
       = FindFirstAssetByType(inspection, AssetType::kScene);
-    ASSERT_TRUE(scene_asset.has_value())
-      << "Expected scene asset to be present";
+    ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
 
     const auto sidecar_source
       = cooked_root / "input" / "summary_sidecar_failure.json";
@@ -109,8 +102,7 @@ namespace {
     const auto inspection = LoadInspection(cooked_root);
     const auto scene_asset
       = FindFirstAssetByType(inspection, AssetType::kScene);
-    ASSERT_TRUE(scene_asset.has_value())
-      << "Expected scene asset to be present";
+    ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
 
     const auto sidecar_source = cooked_root / "input" / "cycle_reject.json";
     WriteText(sidecar_source,
@@ -136,21 +128,24 @@ namespace {
     const auto inspection = LoadInspection(cooked_root);
     const auto scene_asset
       = FindFirstAssetByType(inspection, AssetType::kScene);
-    ASSERT_TRUE(scene_asset.has_value())
-      << "Expected scene asset to be present";
+    ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
 
     const auto sidecar_source
       = cooked_root / "input" / "diagnostics_ordering.json";
     WriteText(sidecar_source,
       MakeSidecarPayload(std::vector {
-        SidecarBindingSpec { .node_index = 99999U,
+        SidecarBindingSpec {
+          .node_index = 99999U,
           .slot_id = "oob",
           .script_virtual_path = CanonicalScriptVirtualPath("missing"),
-          .execution_order = 1 },
-        SidecarBindingSpec { .node_index = 0U,
+          .execution_order = 1,
+        },
+        SidecarBindingSpec {
+          .node_index = 0U,
           .slot_id = "bad_path",
           .script_virtual_path = "Scripts/not_canonical.oscript",
-          .execution_order = 2 },
+          .execution_order = 2,
+        },
       }));
 
     const auto first_report = Submit(MakeSidecarRequest(
@@ -228,8 +223,7 @@ namespace {
     const auto inspection = LoadInspection(cooked_root);
     const auto scene_asset
       = FindFirstAssetByType(inspection, AssetType::kScene);
-    ASSERT_TRUE(scene_asset.has_value())
-      << "Expected scene asset to be present";
+    ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
 
     const auto sidecar_source = cooked_root / "input" / "scene.sidescript.json";
     WriteText(sidecar_source,
@@ -305,18 +299,18 @@ namespace {
     const auto cooked = CookSceneWithScript(cooked_root, "return 123");
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
-    ASSERT_TRUE(scene_asset.has_value())
-      << "Expected scene asset to be present";
-    ASSERT_TRUE(script_asset.has_value())
-      << "Expected script asset to be present";
+    ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
+    ASSERT_HAS_VALUE(script_asset) << "Expected script asset to be present";
 
     const auto sidecar_source = cooked_root / "input" / "dup.sidescript.json";
     WriteText(sidecar_source,
       MakeSidecarPayload(std::vector {
         SidecarBindingSpec {
-          .script_virtual_path = script_asset->virtual_path },
+          .script_virtual_path = script_asset->virtual_path,
+        },
         SidecarBindingSpec {
-          .script_virtual_path = script_asset->virtual_path },
+          .script_virtual_path = script_asset->virtual_path,
+        },
       }));
 
     const auto report = Submit(MakeSidecarRequest(
@@ -335,15 +329,15 @@ namespace {
     const auto cooked = CookSceneWithScript(cooked_root, "return 123");
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
-    ASSERT_TRUE(scene_asset.has_value())
-      << "Expected scene asset to be present";
-    ASSERT_TRUE(script_asset.has_value())
-      << "Expected script asset to be present";
+    ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
+    ASSERT_HAS_VALUE(script_asset) << "Expected script asset to be present";
 
     const auto sidecar_source = cooked_root / "input" / "oob.sidescript.json";
     WriteText(sidecar_source,
-      MakeSidecarPayload(SidecarBindingSpec { .node_index = 99999U,
-        .script_virtual_path = script_asset->virtual_path }));
+      MakeSidecarPayload(SidecarBindingSpec {
+        .node_index = 99999U,
+        .script_virtual_path = script_asset->virtual_path,
+      }));
 
     const auto report = Submit(MakeSidecarRequest(
       sidecar_source, cooked_root, scene_asset->virtual_path));
@@ -366,8 +360,7 @@ namespace {
     const auto inspection = LoadInspection(cooked_root);
     const auto scene_asset
       = FindFirstAssetByType(inspection, AssetType::kScene);
-    ASSERT_TRUE(scene_asset.has_value())
-      << "Expected scene asset to be present";
+    ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
 
     const auto sidecar_source = cooked_root / "input" / "invalid_path.json";
     WriteText(sidecar_source,

@@ -6,7 +6,9 @@
 
 // Covers: Import/TextureImportPresets.cpp
 
+#include <Oxygen/Cooker/Import/TextureImportDesc.h>
 #include <Oxygen/Cooker/Import/TextureImportPresets.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -171,8 +173,8 @@ NOLINT_TEST(
 
   // Identity fields should be defaults
   EXPECT_TRUE(desc.source_id.empty());
-  EXPECT_EQ(desc.width, 0u);
-  EXPECT_EQ(desc.height, 0u);
+  EXPECT_EQ(desc.width, 0U);
+  EXPECT_EQ(desc.height, 0U);
 }
 
 } // namespace

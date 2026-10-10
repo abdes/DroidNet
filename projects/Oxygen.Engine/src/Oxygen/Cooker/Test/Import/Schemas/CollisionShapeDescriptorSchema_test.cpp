@@ -7,9 +7,9 @@
 // Covers: Import/Schemas/oxygen.collision-shape-descriptor.schema.json
 
 #include <string>
-#include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Test/Support/JsonSchema.h>
 #include <Oxygen/Testing/GTest.h>

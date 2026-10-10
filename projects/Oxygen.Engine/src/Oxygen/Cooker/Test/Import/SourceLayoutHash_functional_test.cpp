@@ -52,7 +52,7 @@ protected:
       "static_scalar_triangle." + extension);
   }
 
-  auto ChangedSourcePath(const std::string& extension) const
+  [[nodiscard]] auto ChangedSourcePath(const std::string& extension) const
     -> std::filesystem::path
   {
     return MakeTempDir("source_witness_edit_" + TestName())

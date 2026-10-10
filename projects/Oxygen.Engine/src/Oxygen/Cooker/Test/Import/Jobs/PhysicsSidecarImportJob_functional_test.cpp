@@ -6,23 +6,16 @@
 
 // Covers: Import/Internal/Jobs/PhysicsSidecarImportJob.cpp
 
-#include <algorithm>
 #include <filesystem>
-#include <latch>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
-#include <Oxygen/Base/Finally.h>
-#include <Oxygen/Cooker/Import/AsyncImportService.h>
-#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
-#include <Oxygen/Cooker/Import/ImportJobId.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/Test/Support/TempDir.h>
+#include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -30,28 +23,9 @@ namespace oxygen::content::import::test {
 
 namespace {
 
-  using oxygen::cooker::test::ScopedTempDir;
+  using oxygen::cooker::test::ImportServiceTest;
 
   using oxygen::cooker::test::HasDiagnosticCode;
-
-  auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
-    -> ImportReport
-  {
-    auto report = ImportReport {};
-    std::latch done(1);
-
-    const auto submitted = service.SubmitImport(
-      std::move(request),
-      [&report, &done](
-        const ImportJobId /*job_id*/, const ImportReport& completed) -> void {
-        report = completed;
-        done.count_down();
-      },
-      nullptr);
-    EXPECT_TRUE(submitted.has_value());
-    done.wait();
-    return report;
-  }
 
   auto MakeSceneDescriptorRequest(const std::filesystem::path& cooked_root)
     -> ImportRequest
@@ -84,86 +58,64 @@ namespace {
     return request;
   }
 
-  NOLINT_TEST(PhysicsImportJobTest,
+  class PhysicsImportJobTest : public ImportServiceTest { };
+
+  NOLINT_TEST_F(PhysicsImportJobTest,
     InlineSidecarWithExistingTargetSceneImportsSuccessfullyAndEmitsOpscene)
   {
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    [[maybe_unused]] auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "inline_sidecar_success";
+    const auto cooked_root = TempDir() / "inline_sidecar_success";
     std::filesystem::create_directories(cooked_root);
 
-    const auto scene_report
-      = SubmitAndWait(service, MakeSceneDescriptorRequest(cooked_root));
-    ASSERT_TRUE(scene_report.success);
+    const auto scene_report = Import(MakeSceneDescriptorRequest(cooked_root));
+    ASSERT_HAS_VALUE(scene_report);
+    ASSERT_TRUE(scene_report->success);
 
-    const auto physics_report
-      = SubmitAndWait(service, MakePhysicsSidecarRequest(cooked_root));
-    EXPECT_TRUE(physics_report.success);
+    const auto physics_report = Import(MakePhysicsSidecarRequest(cooked_root));
+    ASSERT_HAS_VALUE(physics_report);
+    EXPECT_TRUE(physics_report->success);
     EXPECT_FALSE(HasDiagnosticCode(
-      physics_report.diagnostics, "physics.sidecar.target_scene_missing"));
+      physics_report->diagnostics, "physics.sidecar.target_scene_missing"));
     EXPECT_FALSE(HasDiagnosticCode(
-      physics_report.diagnostics, "physics.sidecar.payload_parse_failed"));
+      physics_report->diagnostics, "physics.sidecar.payload_parse_failed"));
     EXPECT_TRUE(std::filesystem::exists(
       cooked_root / std::filesystem::path("Scenes/DemoScene.opscene")));
-
-    service.Stop();
   }
 
-  NOLINT_TEST(PhysicsImportJobTest, InvalidTargetSceneVirtualPathFailsRequest)
+  NOLINT_TEST_F(PhysicsImportJobTest, InvalidTargetSceneVirtualPathFailsRequest)
   {
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    [[maybe_unused]] auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-
     auto request = ImportRequest {};
     request.source_path = "inline://physics-sidecar";
-    const ScopedTempDir temp;
-    request.cooked_root = temp.Path() / "invalid_target_scene_path";
+    request.cooked_root = TempDir() / "invalid_target_scene_path";
     std::filesystem::create_directories(*request.cooked_root);
     request.physics = PhysicsImportSettings {
       .target_scene_virtual_path = "Scenes/NotCanonical.oscene",
       .inline_bindings_json = R"({"bindings":{"rigid_bodies":[]}})",
     };
 
-    const auto report = SubmitAndWait(service, std::move(request));
-    EXPECT_FALSE(report.success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "physics.sidecar.target_scene_virtual_path_invalid"));
-
-    service.Stop();
+    const auto report = Import(std::move(request));
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
+    EXPECT_TRUE(HasDiagnosticCode(report->diagnostics,
+      "physics.sidecar.target_scene_virtual_path_invalid"));
   }
 
-  NOLINT_TEST(
+  NOLINT_TEST_F(
     PhysicsImportJobTest, InvalidInlinePayloadFailsWithParseDiagnostic)
   {
-    auto service = AsyncImportService(AsyncImportService::Config {
-      .thread_pool_size = 2U,
-    });
-    [[maybe_unused]] auto stop_service
-      = oxygen::Finally([&service] -> void { service.Stop(); });
-
     auto request = ImportRequest {};
     request.source_path = "inline://physics-sidecar";
-    const ScopedTempDir temp;
-    request.cooked_root = temp.Path() / "invalid_inline_payload";
+    request.cooked_root = TempDir() / "invalid_inline_payload";
     std::filesystem::create_directories(*request.cooked_root);
     request.physics = PhysicsImportSettings {
       .target_scene_virtual_path = "/Scenes/TestScene.oscene",
       .inline_bindings_json = R"({ invalid payload })",
     };
 
-    const auto report = SubmitAndWait(service, std::move(request));
-    EXPECT_FALSE(report.success);
+    const auto report = Import(std::move(request));
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "physics.sidecar.payload_parse_failed"));
-
-    service.Stop();
+      report->diagnostics, "physics.sidecar.payload_parse_failed"));
   }
 
 } // namespace

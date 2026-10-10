@@ -10,11 +10,18 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <system_error>
+#include <utility>
 
+#include "PakToolOptions.h"
+
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Cooker/Tools/PakTool/RequestPreparation.h>
+#include <Oxygen/Data/CookedSource.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -83,7 +90,7 @@ protected:
     identity.at(6) = 0x70U;
     identity.at(8) = 0x80U;
     const auto key = oxygen::data::SourceKey::FromBytes(identity);
-    ASSERT_TRUE(key.has_value());
+    ASSERT_HAS_VALUE(key);
     const auto result = oxygen::content::pak::PakBuilder {}.Build({
       .mode = BuildMode::kFull,
       .sources = {},
@@ -91,7 +98,7 @@ protected:
       .content_version = content_version,
       .source_key = *key,
     });
-    ASSERT_TRUE(result.has_value());
+    ASSERT_HAS_VALUE(result);
     ASSERT_EQ(result->summary.diagnostics_error, 0U);
   }
 
@@ -145,18 +152,18 @@ NOLINT_TEST_F(PakToolRequestPreparationTest,
   auto fs = RealRequestPreparationFileSystem {};
   const auto prepared = PreparePakToolRequest(BuildMode::kFull, options, fs);
 
-  ASSERT_TRUE(prepared.has_value())
+  ASSERT_HAS_VALUE(prepared)
     << prepared.error().error_code << ": " << prepared.error().error_message;
   ASSERT_EQ(prepared->build_request.sources.size(), 3U);
-  EXPECT_EQ(prepared->build_request.sources[0].kind,
+  EXPECT_EQ(prepared->build_request.sources.at(0).kind,
     oxygen::data::CookedSourceKind::kLooseCooked);
-  EXPECT_EQ(prepared->build_request.sources[1].kind,
+  EXPECT_EQ(prepared->build_request.sources.at(1).kind,
     oxygen::data::CookedSourceKind::kPak);
-  EXPECT_EQ(prepared->build_request.sources[2].kind,
+  EXPECT_EQ(prepared->build_request.sources.at(2).kind,
     oxygen::data::CookedSourceKind::kLooseCooked);
   EXPECT_EQ(prepared->build_request.output_pak_path,
     prepared->publication_plan.pak.staged_path);
-  ASSERT_TRUE(prepared->publication_plan.manifest.has_value());
+  ASSERT_HAS_VALUE(prepared->publication_plan.manifest);
   EXPECT_EQ(prepared->build_request.output_manifest_path,
     prepared->publication_plan.manifest->staged_path);
   EXPECT_TRUE(prepared->build_request.options.emit_manifest_in_full);
@@ -262,12 +269,12 @@ NOLINT_TEST_F(
   auto fs = RealRequestPreparationFileSystem {};
   const auto prepared = PreparePakToolRequest(BuildMode::kPatch, options, fs);
 
-  ASSERT_TRUE(prepared.has_value())
+  ASSERT_HAS_VALUE(prepared)
     << prepared.error().error_code << ": " << prepared.error().error_message;
   ASSERT_EQ(prepared->build_request.base_catalogs.size(), 2U);
   ASSERT_EQ(prepared->request_snapshot.base_pak_paths.size(), 2U);
-  EXPECT_EQ(prepared->request_snapshot.base_pak_paths[0], base_a);
-  EXPECT_EQ(prepared->request_snapshot.base_pak_paths[1], base_b);
+  EXPECT_EQ(prepared->request_snapshot.base_pak_paths.at(0), base_a);
+  EXPECT_EQ(prepared->request_snapshot.base_pak_paths.at(1), base_b);
 }
 
 NOLINT_TEST_F(PakToolRequestPreparationTest, RejectsConflictingToolPaths)

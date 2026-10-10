@@ -61,16 +61,17 @@ NOLINT_TEST(
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
-  EXPECT_TRUE(manifest->jobs[0].physics_sidecar.source_path.empty());
-  EXPECT_FALSE(manifest->jobs[0].physics_sidecar.inline_bindings_json.empty());
+  EXPECT_TRUE(manifest->jobs.at(0).physics_sidecar.source_path.empty());
+  EXPECT_FALSE(
+    manifest->jobs.at(0).physics_sidecar.inline_bindings_json.empty());
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->physics.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request->physics);
   EXPECT_FALSE(request->physics->inline_bindings_json.empty());
 }
 
@@ -161,16 +162,16 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->orchestration.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request->orchestration);
   EXPECT_EQ(request->orchestration->job_id, "physics.main");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);
-  EXPECT_EQ(request->orchestration->depends_on[0], "scene.main");
+  EXPECT_EQ(request->orchestration->depends_on.at(0), "scene.main");
 }
 
 NOLINT_TEST(ImportManifestPhysicsSidecarTest,
@@ -207,13 +208,13 @@ NOLINT_TEST(ImportManifestPhysicsSidecarTest,
   auto errors = std::ostringstream {};
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   auto request_errors = std::ostringstream {};
-  const auto request = manifest->jobs[0].BuildRequest(request_errors);
-  ASSERT_TRUE(request.has_value()) << request_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
+  ASSERT_HAS_VALUE(request) << request_errors.str();
+  ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->cooked_root->lexically_normal(),
     defaults_output.lexically_normal());
 }

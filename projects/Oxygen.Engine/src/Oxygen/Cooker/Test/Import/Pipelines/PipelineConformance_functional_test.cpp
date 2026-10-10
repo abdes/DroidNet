@@ -10,7 +10,6 @@
 //   Import/Internal/Pipelines/ScenePipeline.cpp,
 //   Import/Internal/Pipelines/TexturePipeline.cpp
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -28,7 +27,6 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/BufferImportTypes.h>
-#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
@@ -52,8 +50,6 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MeshType.h>
-#include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
@@ -208,7 +204,7 @@ auto MakeGeometryWorkItem() -> MeshBuildPipeline::WorkItem
   item.lods = {
     MeshLod {
       .lod_name = "LOD0",
-      .source = std::move(triangle_mesh),
+      .source = triangle_mesh,
       .source_owner = std::move(owner),
     },
   };

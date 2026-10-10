@@ -7,20 +7,23 @@
 // Covers: Import/Internal/Pipelines/TexturePipeline.cpp,
 //   Import/Internal/TextureCooker.cpp
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <span>
-#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
+#include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
+#include <Oxygen/Cooker/Import/TextureImportError.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
@@ -30,7 +33,6 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
@@ -108,9 +110,9 @@ using oxygen::cooker::test::MakeBmp;
   }
 
   for (uint16_t slice = 0; slice < depth; ++slice) {
-    const auto src_view = slices[slice].GetImage(0, 0);
-    std::copy(src_view.pixels.begin(), src_view.pixels.end(),
-      dst_pixels.data() + slice_size_bytes * slice);
+    const auto src_view = slices.at(slice).GetImage(0, 0);
+    std::ranges::copy(
+      src_view.pixels, dst_pixels.data() + (slice_size_bytes * slice));
   }
 
   return oxygen::Ok(std::move(volume));
@@ -162,7 +164,7 @@ NOLINT_TEST_F(TexturePipelineNonRegTest, CollectParityWithSyncCookerMatches)
 
   const auto bytes = GetTestImageBytes();
   const auto sync = CookTexture(bytes, desc, TightPackedPolicy::Instance());
-  ASSERT_TRUE(sync.has_value());
+  ASSERT_HAS_VALUE(sync);
 
   auto source_bytes
     = MakeSourceBytes(std::vector<std::byte>(bytes.begin(), bytes.end()));
@@ -175,7 +177,7 @@ NOLINT_TEST_F(TexturePipelineNonRegTest, CollectParityWithSyncCookerMatches)
     });
 
   EXPECT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value());
+  ASSERT_HAS_VALUE(result.cooked);
   EXPECT_TRUE(result.diagnostics.empty());
   EXPECT_EQ(result.cooked->payload, sync->payload);
   EXPECT_EQ(result.cooked->desc.width, sync->desc.width);
@@ -197,11 +199,11 @@ NOLINT_TEST_F(TexturePipelineNonRegTest, CollectDepthSlicesParityMatches)
   constexpr uint16_t kDepth = 2;
   const auto bytes = GetTestImageBytes();
   auto assembled = AssembleVolumeForTest(bytes, kDepth);
-  ASSERT_TRUE(assembled.has_value());
+  ASSERT_HAS_VALUE(assembled);
 
   auto expected
     = CookTexture(std::move(*assembled), desc, TightPackedPolicy::Instance());
-  ASSERT_TRUE(expected.has_value());
+  ASSERT_HAS_VALUE(expected);
 
   TextureSourceSet sources;
   for (uint16_t slice = 0; slice < kDepth; ++slice) {
@@ -217,7 +219,7 @@ NOLINT_TEST_F(TexturePipelineNonRegTest, CollectDepthSlicesParityMatches)
     });
 
   EXPECT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value());
+  ASSERT_HAS_VALUE(result.cooked);
   EXPECT_TRUE(result.diagnostics.empty());
   EXPECT_EQ(result.cooked->payload, expected->payload);
   EXPECT_EQ(result.cooked->desc.depth, kDepth);
@@ -251,7 +253,7 @@ NOLINT_TEST_F(
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics[0].code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
 }
 
 } // namespace

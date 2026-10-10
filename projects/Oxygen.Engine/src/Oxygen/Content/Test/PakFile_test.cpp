@@ -8,24 +8,21 @@
 #include <array>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
 #include <ios>
-#include <iterator>
 #include <span>
 #include <stdexcept>
 #include <system_error>
 #include <tuple>
 #include <vector>
 
+#include "Fixtures/PakTestWriter.h"
 #include <gtest/gtest.h>
 
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Data/BufferResource.h>
-#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
-#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Writer.h>
@@ -50,78 +47,11 @@ protected:
   }
 
   // Minimal native envelope for header/footer validation.
-  struct PakConfig {
-    data::pak::core::PakHeader header {};
-    data::pak::core::PakFooter footer {};
-    std::vector<data::pak::core::BufferResourceDesc> buffers {};
-
-    PakConfig()
-    {
-      const std::span<const char> header_magic(
-        data::pak::core::kPakHeaderMagic);
-      std::ranges::copy(header_magic, std::ranges::begin(header.magic));
-      header.version = data::pak::core::kCurrentPakFormatVersion;
-      constexpr std::array<uint8_t, 16> kSourceIdentity {
-        0x41U,
-        0x42U,
-        0x43U,
-        0x44U,
-        0x45U,
-        0x46U,
-        0x77U,
-        0x48U,
-        0x89U,
-        0x4AU,
-        0x4BU,
-        0x4CU,
-        0x4DU,
-        0x4EU,
-        0x4FU,
-        0x50U,
-      };
-      header.source_identity = kSourceIdentity;
-
-      const std::span<const char> footer_magic(
-        data::pak::core::kPakFooterMagic);
-      std::ranges::copy(footer_magic, std::ranges::begin(footer.footer_magic));
-    }
-  };
+  using PakConfig = PakTestWriter::Config;
 
   auto WritePak(const PakConfig& config) -> void
   {
-    auto catalog = data::PakCatalog {
-      .source_key
-      = data::SourceKey::FromBytes(PakConfig {}.header.source_identity).value(),
-      .content_version = config.header.content_version,
-      .catalog_digest = {},
-      .entries = {},
-      .deleted = {},
-      .bases = {},
-    };
-    catalog.catalog_digest = catalog.ComputeDigest().value();
-    const auto bytes = catalog.Encode().value();
-    serio::FileStream<> stream(test_pak_path_, std::ios::out | std::ios::trunc);
-    serio::Writer writer(stream);
-    const auto packed = writer.ScopedAlignment(1U);
-    ASSERT_TRUE(
-      writer.WriteBlob(std::as_bytes(std::span { &config.header, 1U })));
-    auto footer = config.footer;
-    auto offset = uint64_t { sizeof(config.header) };
-    if (!config.buffers.empty()) {
-      footer.buffer_table = { .offset = offset,
-        .count = static_cast<uint32_t>(config.buffers.size()),
-        .entry_size = sizeof(data::pak::core::BufferResourceDesc) };
-      const auto buffer_bytes = std::as_bytes(std::span(config.buffers));
-      ASSERT_TRUE(writer.WriteBlob(buffer_bytes));
-      offset += buffer_bytes.size();
-    }
-    ASSERT_TRUE(writer.WriteBlob(bytes));
-    footer.directory_offset = offset;
-    footer.directory_size = 0U;
-    footer.asset_count = 0U;
-    footer.catalog_offset = offset;
-    footer.catalog_size = bytes.size();
-    ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span { &footer, 1U })));
+    PakTestWriter(test_pak_path_).Write(config);
   }
 
   // NOLINTBEGIN(*-non-private-member-variables-in-classes)

@@ -8,8 +8,16 @@
 
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Cooker/Import/TextureImportError.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -69,13 +77,19 @@ NOLINT_TEST(TextureSourceAssemblyTest, DefaultConstructionAllFieldsZero)
 NOLINT_TEST(TextureSourceAssemblyTest, EqualityComparesAllFields)
 {
   const SubresourceId id1 {
-    .array_layer = 1, .mip_level = 2, .depth_slice = 3
+    .array_layer = 1,
+    .mip_level = 2,
+    .depth_slice = 3,
   };
   const SubresourceId id2 {
-    .array_layer = 1, .mip_level = 2, .depth_slice = 3
+    .array_layer = 1,
+    .mip_level = 2,
+    .depth_slice = 3,
   };
   const SubresourceId id3 {
-    .array_layer = 0, .mip_level = 2, .depth_slice = 3
+    .array_layer = 0,
+    .mip_level = 2,
+    .depth_slice = 3,
   };
 
   EXPECT_EQ(id1, id2);
@@ -399,7 +413,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, ReturnsNormalizedVectors)
 
   // Compute magnitude
   const float magnitude
-    = std::sqrt(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z);
+    = std::sqrt((dir.x * dir.x) + (dir.y * dir.y) + (dir.z * dir.z));
 
   // Should be 1.0 (normalized)
   EXPECT_NEAR(magnitude, 1.0F, 1e-6F);
@@ -450,7 +464,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, ValidFacesCreatesCubeMap)
 
   auto result = AssembleCubeFromFaces(faces);
 
-  ASSERT_TRUE(result.has_value());
+  ASSERT_HAS_VALUE(result);
   EXPECT_TRUE(result->IsValid());
   const auto& meta = result->Meta();
   EXPECT_EQ(meta.width, 2);
@@ -473,12 +487,12 @@ NOLINT_TEST(TextureSourceAssemblyTest, CopiesFaceDataCorrectly)
   };
 
   auto result = AssembleCubeFromFaces(faces);
-  ASSERT_TRUE(result.has_value());
+  ASSERT_HAS_VALUE(result);
 
   // Verify each face has the expected data
   for (uint16_t i = 0; i < 6; ++i) {
     const auto image = result->GetImage(i, 0);
-    const uint8_t expected = static_cast<uint8_t>((i + 1) * 0x10);
+    const auto expected = static_cast<uint8_t>((i + 1) * 0x10);
     EXPECT_EQ(static_cast<uint8_t>(image.pixels[0]), expected);
   }
 }
@@ -568,10 +582,10 @@ auto MakeEquirect(const uint32_t width, const uint32_t height,
   std::vector<std::byte> data(pixel_count * 16); // 4 floats per pixel
   auto* floats = reinterpret_cast<float*>(data.data());
   for (uint32_t i = 0; i < pixel_count; ++i) {
-    floats[i * 4 + 0] = r;
-    floats[i * 4 + 1] = g;
-    floats[i * 4 + 2] = b;
-    floats[i * 4 + 3] = a;
+    floats[(i * 4) + 0] = r;
+    floats[(i * 4) + 1] = g;
+    floats[(i * 4) + 2] = b;
+    floats[(i * 4) + 3] = a;
   }
   return ScratchImage::CreateFromData(
     width, height, Format::kRGBA32Float, width * 16, std::move(data));
@@ -585,7 +599,7 @@ auto MakeGradientEquirect(const uint32_t width, const uint32_t height)
   auto* floats = reinterpret_cast<float*>(data.data());
   for (uint32_t y = 0; y < height; ++y) {
     for (uint32_t x = 0; x < width; ++x) {
-      const size_t idx = (static_cast<size_t>(y) * width + x) * 4;
+      const size_t idx = ((static_cast<size_t>(y) * width) + x) * 4;
       // R = horizontal position (longitude)
       floats[idx + 0] = static_cast<float>(x) / static_cast<float>(width - 1);
       // G = vertical position (latitude)
@@ -606,7 +620,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, ValidInputCreatesCubeMap)
 
   auto result = ConvertEquirectangularToCube(equirect, options);
 
-  ASSERT_TRUE(result.has_value());
+  ASSERT_HAS_VALUE(result);
   const auto& cube = result.value();
   EXPECT_TRUE(cube.IsValid());
   EXPECT_EQ(cube.Meta().texture_type, TextureType::kTextureCube);
@@ -677,14 +691,14 @@ NOLINT_TEST(TextureSourceAssemblyTest, SolidColorPreservesColor)
 
   auto result = ConvertEquirectangularToCube(equirect, options);
 
-  ASSERT_TRUE(result.has_value());
+  ASSERT_HAS_VALUE(result);
   const auto& cube = result.value();
 
   // Check center pixel of +X face
   const auto face_view = cube.GetImage(0, 0); // face 0, mip 0
   const auto* pixels = reinterpret_cast<const float*>(face_view.pixels.data());
   // Center pixel at (2, 2) in 4x4 face
-  const size_t center_idx = (2 * 4 + 2) * 4;
+  const size_t center_idx = ((2 * 4) + 2) * 4;
   EXPECT_NEAR(pixels[center_idx + 0], 1.0F, 0.1F); // R
   EXPECT_NEAR(pixels[center_idx + 1], 0.5F, 0.1F); // G
   EXPECT_NEAR(pixels[center_idx + 2], 0.0F, 0.1F); // B
@@ -702,7 +716,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, BoxFilterWorks)
 
   auto result = ConvertEquirectangularToCube(equirect, options);
 
-  ASSERT_TRUE(result.has_value());
+  ASSERT_HAS_VALUE(result);
   EXPECT_EQ(result.value().Meta().width, 8);
 }
 
@@ -717,7 +731,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, KaiserFilterWorks)
 
   auto result = ConvertEquirectangularToCube(equirect, options);
 
-  ASSERT_TRUE(result.has_value());
+  ASSERT_HAS_VALUE(result);
   EXPECT_EQ(result.value().Meta().width, 8);
 }
 
@@ -732,7 +746,7 @@ NOLINT_TEST(TextureSourceAssemblyTest, LanczosFilterWorks)
 
   auto result = ConvertEquirectangularToCube(equirect, options);
 
-  ASSERT_TRUE(result.has_value());
+  ASSERT_HAS_VALUE(result);
   EXPECT_EQ(result.value().Meta().width, 8);
 }
 

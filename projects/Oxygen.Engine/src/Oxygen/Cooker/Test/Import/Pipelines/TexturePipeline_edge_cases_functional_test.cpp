@@ -9,7 +9,6 @@
 
 #include <array>
 #include <cstddef>
-#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <span>
@@ -19,6 +18,7 @@
 
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
+#include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
 #include <Oxygen/Cooker/Import/TextureImportPresets.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
@@ -26,11 +26,11 @@
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/Test/Support/PipelineHarness.h>
 #include <Oxygen/Cooker/Test/Support/TestImages.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::content::import;
@@ -122,9 +122,10 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   TexturePipelineEdgeTest, SourceAndExplicitPoliciesRetainTheirStorageIntent)
 {
-  for (const auto policy :
-    { TexturePipeline::OutputFormatPolicy::kPreserveSource,
-      TexturePipeline::OutputFormatPolicy::kExplicit }) {
+  for (const auto policy : {
+         TexturePipeline::OutputFormatPolicy::kPreserveSource,
+         TexturePipeline::OutputFormatPolicy::kExplicit,
+       }) {
     auto desc = MakeDescFromPreset(TexturePreset::kAlbedo);
     if (policy == TexturePipeline::OutputFormatPolicy::kExplicit) {
       desc.output_format = Format::kRGBA8UNorm;
@@ -189,7 +190,7 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, CollectEmptySourceBytesFails)
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics[0].code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
 }
 
 //! Empty source sets should fail with a cook diagnostic.
@@ -210,7 +211,7 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, CollectEmptySourceSetFails)
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics[0].code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
 }
 
 //! Nonzero depth slices with a non-3D target should fail.
@@ -236,7 +237,7 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, CollectDepthSliceNon3DFails)
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics[0].code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
 }
 
 //! Duplicate array layers should fail assembly.
@@ -264,7 +265,7 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, CollectDuplicateArrayLayerFails)
   EXPECT_FALSE(result.success);
   EXPECT_FALSE(result.cooked.has_value());
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics[0].code, "texture.cook_failed");
+  EXPECT_EQ(result.diagnostics.at(0).code, "texture.cook_failed");
 }
 
 //! Unknown packing policy should emit a warning but still succeed.
@@ -286,10 +287,10 @@ NOLINT_TEST_F(TexturePipelineEdgeTest, CollectUnknownPackingPolicyWarns)
   const auto result = RunOnce(std::move(item));
 
   EXPECT_TRUE(result.success);
-  ASSERT_TRUE(result.cooked.has_value());
+  ASSERT_HAS_VALUE(result.cooked);
   EXPECT_FALSE(result.used_placeholder);
   ASSERT_EQ(result.diagnostics.size(), 1U);
-  EXPECT_EQ(result.diagnostics[0].code, "texture.packing_policy_unknown");
+  EXPECT_EQ(result.diagnostics.at(0).code, "texture.packing_policy_unknown");
 }
 
 } // namespace

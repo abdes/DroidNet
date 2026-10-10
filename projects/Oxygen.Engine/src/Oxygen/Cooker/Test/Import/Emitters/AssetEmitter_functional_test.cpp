@@ -28,6 +28,7 @@
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
@@ -75,7 +76,10 @@ protected:
     loop_.reset();
   }
 
-  auto Layout() const -> const LooseCookedLayout& { return layout_; }
+  [[nodiscard]] auto Layout() const -> const LooseCookedLayout&
+  {
+    return layout_;
+  }
 
   std::unique_ptr<ImportEventLoop> loop_;
   std::unique_ptr<WindowsFileWriter> writer_;
@@ -549,7 +553,7 @@ INSTANTIATE_TEST_SUITE_P(InvalidPaths, AssetEmitterPathRejectionTest,
     PathRejectionCase {
       "EmptyRelativePath", "/.cooked/Materials/Wood.omat", "" },
     PathRejectionCase { "EmptyVirtualPath", "", "Materials/Wood.omat" }),
-  [](const ::testing::TestParamInfo<PathRejectionCase>& info) {
+  [](const ::testing::TestParamInfo<PathRejectionCase>& info) -> std::string {
     return std::string(info.param.name);
   });
 

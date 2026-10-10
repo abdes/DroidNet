@@ -49,17 +49,17 @@ NOLINT_TEST(ImportManifestInputTest, AcceptsInputJobWithDependencies)
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 2U);
 
   std::ostringstream req_errors;
-  const auto request = manifest->jobs[1].BuildRequest(req_errors);
-  ASSERT_TRUE(request.has_value()) << req_errors.str();
+  const auto request = manifest->jobs.at(1).BuildRequest(req_errors);
+  ASSERT_HAS_VALUE(request) << req_errors.str();
   EXPECT_TRUE(request->input.has_value());
-  ASSERT_TRUE(request->orchestration.has_value());
+  ASSERT_HAS_VALUE(request->orchestration);
   EXPECT_EQ(request->orchestration->job_id, "vehicle.contexts");
   ASSERT_EQ(request->orchestration->depends_on.size(), 1U);
-  EXPECT_EQ(request->orchestration->depends_on[0], "core.actions");
+  EXPECT_EQ(request->orchestration->depends_on.at(0), "core.actions");
 }
 
 NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithDisallowedKeys)
@@ -124,13 +124,13 @@ NOLINT_TEST(ImportManifestInputTest, InputOutputPrecedenceIsConsistent)
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   std::ostringstream req_errors;
-  const auto request = manifest->jobs[0].BuildRequest(req_errors);
-  ASSERT_TRUE(request.has_value()) << req_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
+  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(*request->cooked_root, job_input);
 }
 
@@ -166,13 +166,13 @@ NOLINT_TEST(ImportManifestInputTest, InputDefaultsOverrideTopLevelOutput)
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   std::ostringstream req_errors;
-  const auto request = manifest->jobs[0].BuildRequest(req_errors);
-  ASSERT_TRUE(request.has_value()) << req_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
+  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(*request->cooked_root, default_input);
 }
 
@@ -201,13 +201,13 @@ NOLINT_TEST(ImportManifestInputTest, InputFallsBackToTopLevelOutput)
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   std::ostringstream req_errors;
-  const auto request = manifest->jobs[0].BuildRequest(req_errors);
-  ASSERT_TRUE(request.has_value()) << req_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
+  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(*request->cooked_root, top_level);
 }
 
@@ -237,12 +237,12 @@ NOLINT_TEST(
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
 
   std::ostringstream req_errors;
-  const auto request = manifest->jobs[0].BuildRequest(req_errors);
-  ASSERT_TRUE(request.has_value()) << req_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
+  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->cooked_root->lexically_normal(), expected_cooked_root);
 }
 
@@ -277,12 +277,12 @@ NOLINT_TEST(ImportManifestInputTest, ResolvesRelativeJobOutputAgainstManifest)
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
 
   std::ostringstream req_errors;
-  const auto request = manifest->jobs[0].BuildRequest(req_errors);
-  ASSERT_TRUE(request.has_value()) << req_errors.str();
-  ASSERT_TRUE(request->cooked_root.has_value());
+  const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
+  ASSERT_HAS_VALUE(request) << req_errors.str();
+  ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->cooked_root->lexically_normal(), expected_cooked_root);
 }
 
@@ -307,12 +307,12 @@ NOLINT_TEST(ImportManifestInputTest, InputUsesSharedLayoutDefaultsByDefault)
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   std::ostringstream req_errors;
-  const auto request = manifest->jobs[0].BuildRequest(req_errors);
-  ASSERT_TRUE(request.has_value()) << req_errors.str();
+  const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
+  ASSERT_HAS_VALUE(request) << req_errors.str();
   EXPECT_EQ(request->loose_cooked_layout.input_subdir, "Input");
 }
 
@@ -345,12 +345,12 @@ NOLINT_TEST(ImportManifestInputTest, InputHonorsManifestLayoutOverrides)
   std::ostringstream errors;
   const auto manifest
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
-  ASSERT_TRUE(manifest.has_value()) << errors.str();
+  ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
 
   std::ostringstream req_errors;
-  const auto request = manifest->jobs[0].BuildRequest(req_errors);
-  ASSERT_TRUE(request.has_value()) << req_errors.str();
+  const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
+  ASSERT_HAS_VALUE(request) << req_errors.str();
   EXPECT_EQ(request->loose_cooked_layout.input_subdir, "InputOverride");
 }
 

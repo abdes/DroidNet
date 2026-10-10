@@ -9,6 +9,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <span>
 #include <utility>
@@ -21,8 +22,6 @@
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
-#include <Oxygen/Cooker/Test/Support/FileIo.h>
-#include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -96,9 +95,10 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
-  EXPECT_FALSE(report.success);
+  ASSERT_HAS_VALUE(report);
+  EXPECT_FALSE(report->success);
   EXPECT_TRUE(
-    HasDiagnosticCode(report.diagnostics, "geometry.material.missing"));
+    HasDiagnosticCode(report->diagnostics, "geometry.material.missing"));
 }
 
 NOLINT_TEST(GeometryDescriptorImportJobTest,
@@ -183,7 +183,8 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
       ? std::vector<std::filesystem::path> { library, cooked_root }
       : std::vector<std::filesystem::path> { cooked_root, library };
     const auto report = SubmitAndWait(service, std::move(request));
-    ASSERT_TRUE(report.success) << DiagnosticSummary(report.diagnostics);
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success) << DiagnosticSummary(report->diagnostics);
     const auto descriptor_bytes
       = ReadBytes(cooked_root / "Geometry/NewMaterialPriority.ogeo");
     const auto offset = sizeof(data::pak::geometry::GeometryAssetDesc)
@@ -389,13 +390,14 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
 
   const auto report = SubmitAndWait(
     service, MakeGeometryRequest(descriptor_path, cooked_root, descriptor_doc));
-  ASSERT_TRUE(report.success)
-    << oxygen::cooker::test::DiagnosticSummary(report.diagnostics);
-  EXPECT_EQ(report.geometry_written, 1U)
-    << DiagnosticSummary(report.diagnostics);
+  ASSERT_HAS_VALUE(report);
+  ASSERT_TRUE(report->success)
+    << oxygen::cooker::test::DiagnosticSummary(report->diagnostics);
+  EXPECT_EQ(report->geometry_written, 1U)
+    << DiagnosticSummary(report->diagnostics);
 
-  const auto geometry_relpath = FindOutputByExtension(report, ".ogeo");
-  ASSERT_TRUE(geometry_relpath.has_value())
+  const auto geometry_relpath = FindOutputByExtension(*report, ".ogeo");
+  ASSERT_HAS_VALUE(geometry_relpath)
     << "Expected geometry_relpath to contain a value";
 
   const auto descriptor_bytes
