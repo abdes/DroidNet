@@ -65,9 +65,12 @@ struct OcclusionCullPassConstants
     float4 viewport;
     // Rasterized pixel rect: min x, min y, max x, max y (exclusive).
     float4 clip_rect;
-    // Projection terms that turn device depth into view depth:
-    // P[2][2], P[3][2], P[2][3], P[3][3] (column, row).
-    float4 depth_terms;
+    // How the view's depth target encodes a clip-space point:
+    // x * z / w + y * w + z.
+    float4 depth_encoding;
+    // Turns an encoded depth e into a linear depth:
+    // |(x + y * e) / (z + w * e)|.
+    float4 depth_linearize;
     // The pyramid's source rect in pixels: origin x, origin y, width, height.
     uint4 pyramid_source;
     uint draw_metadata_srv;
@@ -139,6 +142,13 @@ struct ScreenBox
     float nearest_depth;
 };
 
+// The depth the view's depth target holds for clip-space point `p`.
+float EncodeDepth(OcclusionCullPassConstants c, float4 p)
+{
+    const float4 e = c.depth_encoding;
+    return e.x * (p.z / p.w) + e.y * p.w + e.z;
+}
+
 ScreenBox ProjectBox(OcclusionCullPassConstants c, ClipBox box)
 {
     // Outside when all corners are beyond the same clip plane.
@@ -146,7 +156,7 @@ ScreenBox ProjectBox(OcclusionCullPassConstants c, ClipBox box)
     bool crosses_near = false;
     float2 ndc_min = float2(1.0e30f, 1.0e30f);
     float2 ndc_max = float2(-1.0e30f, -1.0e30f);
-    float nearest_depth = 0.0f;
+    float nearest_depth = -1.0e30f;
     [unroll]
     for (uint corner = 0u; corner < 8u; ++corner)
     {
@@ -170,7 +180,7 @@ ScreenBox ProjectBox(OcclusionCullPassConstants c, ClipBox box)
             const float2 ndc = p.xy / p.w;
             ndc_min = min(ndc_min, ndc);
             ndc_max = max(ndc_max, ndc);
-            nearest_depth = max(nearest_depth, p.z / p.w);
+            nearest_depth = max(nearest_depth, EncodeDepth(c, p));
         }
     }
 
@@ -208,11 +218,11 @@ bool CoversPixelCenter(OcclusionCullPassConstants c, ScreenBox screen)
     return x.x <= x.y && y.x <= y.y;
 }
 
-// View depth of a device depth: the inverse of the projection's z and w rows.
-float ViewDepth(OcclusionCullPassConstants c, float device_depth)
+// Linear depth of an encoded depth.
+float ViewDepth(OcclusionCullPassConstants c, float encoded_depth)
 {
-    const float4 t = c.depth_terms;
-    return abs((t.y - device_depth * t.w) / (device_depth * t.z - t.x));
+    const float4 t = c.depth_linearize;
+    return abs((t.x + t.y * encoded_depth) / (t.z + t.w * encoded_depth));
 }
 
 // True when every pixel center the box covers lies behind the furthest

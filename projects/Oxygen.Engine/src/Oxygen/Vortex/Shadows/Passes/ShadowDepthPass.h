@@ -15,6 +15,7 @@
 #include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -26,9 +27,14 @@
 
 namespace oxygen::graphics {
 class Buffer;
+class CommandRecorder;
 class Framebuffer;
 class Texture;
 } // namespace oxygen::graphics
+
+namespace oxygen::vortex::occlusion::internal {
+struct IndirectDrawCandidate;
+} // namespace oxygen::vortex::occlusion::internal
 
 namespace oxygen::vortex {
 
@@ -43,7 +49,9 @@ namespace shadows {
   public:
     struct RenderState {
       std::uint32_t rendered_cascade_count { 0U };
-      std::uint32_t rendered_draw_count { 0U };
+      //! Caster draws submitted to the slices' indirect lists; the GPU culls
+      //! some of them.
+      std::uint32_t submitted_draw_count { 0U };
       std::uint32_t shadow_caster_draw_count { 0U };
       bool recording_succeeded { false };
       bool reused_depths { false };
@@ -55,6 +63,8 @@ namespace shadows {
       glm::vec4 light_direction_to_source { 0.0F, -1.0F, 0.0F, 0.0F };
       glm::vec4 light_position_and_inv_range { 0.0F };
       std::uint32_t target_slice { 0U };
+      //! With the surface and target slice, the slice's culling identity:
+      //! the light, and the generation of its map allocation.
       scene::NodeHandle light_source;
       std::uint32_t slot_generation { 0U };
     };
@@ -72,8 +82,8 @@ namespace shadows {
     [[nodiscard]] OXGN_VRTX_API auto Record(
       const PreparedViewShadowInput& view_input,
       const std::shared_ptr<graphics::Texture>& shadow_surface,
-      const ShadowFrameData& frame_data, const glm::vec3& light_direction)
-      -> RenderState;
+      const ShadowFrameData& frame_data, const glm::vec3& light_direction,
+      scene::NodeHandle light_source) -> RenderState;
     [[nodiscard]] OXGN_VRTX_API auto RecordSlices(
       const PreparedViewShadowInput& view_input,
       const std::shared_ptr<graphics::Texture>& shadow_surface,
@@ -88,6 +98,22 @@ namespace shadows {
 
   private:
     struct SurfaceViews;
+    struct Culling;
+    //! Where one slice draws.
+    struct SliceTarget {
+      observer_ptr<const graphics::Texture> surface;
+      graphics::NativeView dsv;
+      ShaderVisibleIndex pass_constants { kInvalidShaderVisibleIndex };
+    };
+
+    auto PublishPassConstants(const PreparedSceneFrame& prepared_scene,
+      const DepthSlice& slice) -> ShaderVisibleIndex;
+    //! Draws a slice in two culled phases, or one without occlusion.
+    auto RecordSliceDraws(graphics::CommandRecorder& recorder,
+      const PreparedViewShadowInput& view_input, const DepthSlice& slice,
+      const SliceTarget& target,
+      std::span<const occlusion::internal::IndirectDrawCandidate> candidates,
+      bool occlusion) -> void;
     Renderer& renderer_;
     frame::SequenceNumber current_sequence_ { 0U };
     frame::Slot current_slot_ { frame::kInvalidSlot };
@@ -96,6 +122,7 @@ namespace shadows {
     std::map<std::pair<const graphics::Texture*, std::uint32_t>,
       std::shared_ptr<SurfaceViews>>
       surface_views_;
+    std::unique_ptr<Culling> culling_;
   };
 
 } // namespace shadows

@@ -456,7 +456,13 @@ auto ScreenHzbModule::BuildOcclusionPyramid(RenderContext& ctx,
   graphics::GpuEventScope pass_scope(recorder, "Vortex.Occlusion.PyramidBuild",
     profiling::ProfileGranularity::kDiagnostic,
     profiling::ProfileCategory::kPass);
-  if (!impl_->builder.Build(ctx, recorder, source,
+  if (!impl_->builder.Build(
+        HzbPyramidBuilder::BuildFrame {
+          .sequence = ctx.frame_sequence,
+          .slot = ctx.frame_slot,
+          .view_id = ctx.current_view.view_id,
+        },
+        recorder, source,
         HzbPyramidBuilder::Targets {
           .closest = nullptr,
           .furthest = observer_ptr { occlusion.texture.get() },
@@ -472,6 +478,7 @@ auto ScreenHzbModule::BuildOcclusionPyramid(RenderContext& ctx,
     .mip_count = desc.mip_levels,
     .source = HzbPyramidBuilder::Source {
       .depth = nullptr,
+      .array_slice = source.array_slice,
       .origin_x = source.origin_x,
       .origin_y = source.origin_y,
       .width = source.width,
@@ -556,7 +563,13 @@ void ScreenHzbModule::Execute(RenderContext& ctx,
     graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage5.ScreenHzbBuild",
       profiling::ProfileGranularity::kDiagnostic,
       profiling::ProfileCategory::kPass);
-    if (!impl_->builder.Build(ctx, recorder, source,
+    if (!impl_->builder.Build(
+          HzbPyramidBuilder::BuildFrame {
+            .sequence = ctx.frame_sequence,
+            .slot = ctx.frame_slot,
+            .view_id = ctx.current_view.view_id,
+          },
+          recorder, source,
           HzbPyramidBuilder::Targets {
             .closest = write_target(state.closest, build_closest),
             .furthest = write_target(state.furthest, build_furthest),

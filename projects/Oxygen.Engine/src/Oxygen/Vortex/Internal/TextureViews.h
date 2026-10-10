@@ -35,6 +35,26 @@ namespace oxygen::vortex::internal {
   };
 }
 
+//! Shader-visible SRV of mip 0 of one array slice of `texture`, as a
+//! one-slice 2D array. Plain 2D textures take slice 0.
+[[nodiscard]] inline auto ArraySliceSrvDesc(const graphics::Texture& texture,
+  const std::uint32_t array_slice) -> graphics::TextureViewDescription
+{
+  return graphics::TextureViewDescription {
+    .view_type = graphics::ResourceViewType::kTexture_SRV,
+    .visibility = graphics::DescriptorVisibility::kShaderVisible,
+    .format = texture.GetDescriptor().format,
+    .dimension = oxygen::TextureType::kTexture2DArray,
+    .sub_resources = {
+      .base_mip_level = 0U,
+      .num_mip_levels = 1U,
+      .base_array_slice = array_slice,
+      .num_array_slices = 1U,
+    },
+    .is_read_only_dsv = false,
+  };
+}
+
 //! Shader-visible UAV of one mip of a 2D `texture`.
 [[nodiscard]] inline auto MipUavDesc(const graphics::Texture& texture,
   const std::uint32_t mip_level) -> graphics::TextureViewDescription
@@ -72,10 +92,7 @@ namespace oxygen::vortex::internal {
     return kInvalidShaderVisibleIndex;
   }
   const auto index = allocator.GetShaderVisibleIndex(handle);
-  // The registry tracks views by resource identity; registering one does not
-  // modify the texture.
-  const auto view = registry.RegisterView(
-    const_cast<graphics::Texture&>(texture), std::move(handle), desc);
+  const auto view = registry.RegisterView(texture, std::move(handle), desc);
   return view->IsValid() ? index : kInvalidShaderVisibleIndex;
 }
 

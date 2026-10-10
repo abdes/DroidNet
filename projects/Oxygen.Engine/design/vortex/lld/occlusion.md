@@ -412,7 +412,9 @@ own:
 
 Views never share visibility. `SceneRenderer::RemoveViewState` releases a
 camera view's occlusion state; a shadow view's state is released with its
-shadow map.
+shadow map. A camera view without a view-state handle keeps nothing across
+frames: it has no history, so it culls by frustum only, records no counters
+and leaves no state behind.
 
 ### 6.4 Shadow Views
 
@@ -430,19 +432,31 @@ changes no shadow-map texel.
 
 Differences from the camera view:
 
-- **Identity.** History is keyed by the shadow view's identity: light,
-  cascade or face, and the shadow map's allocation generation. The view's
-  projection change resets it, as in §4.2.
-- **Candidates.** Candidates are the casters in the light view's frustum.
-  This replaces the CPU sphere tests of `ShadowCasterCulling`.
-- **Pyramid.** The occlusion pyramid is built from phase 1 shadow depth
-  through the same [hzb.md](hzb.md#45-occlusion-pyramid) entry point. Shadow
-  maps keep the D32 reversed-Z convention. Directional cascades are
-  orthographic, so "linear view depth" is device depth rescaled by the
-  cascade's depth range.
-- **Bias.** In shadow views, `occlusion_depth_bias` must exceed the shadow
-  pass's largest rasterization depth bias. Otherwise a caster with a larger
-  slope bias could have written a nearer texel than its occluder.
+- **Identity.** History is keyed by the shadow view's identity: its
+  surface and slice, the light, and the generation of the map allocation. It
+  is not reset when the light's projection moves: cascades follow the camera
+  every frame, and a stale history only moves work between phases.
+- **Candidates.** Candidates are every shadow caster; the GPU frustum and
+  coverage test of phase 1 removes those outside the light view. This
+  replaces the CPU sphere tests of `ShadowCasterCulling`.
+- **Pyramid.** The occlusion pyramid is built from the slice of phase 1
+  shadow depth through the same `HzbPyramidBuilder`, which reads one array
+  slice. Pyramids are transient: the shadow depth pass keeps one per extent
+  and reuses it slice after slice.
+- **Depth encodings.** The box test compares depths in the target's
+  encoding (`DrawCullDepth`):
+  - Cascades store orthographic reversed-Z device depth; linear depth is the
+    distance from the near plane, `1 - z`.
+  - Projected local maps store `1 - axial distance / range`, written by the
+    shadow depth shader. A box's nearest depth comes from its clip `w`, the
+    axial distance.
+  - Cube faces rasterize perspective reversed-Z depth, linearized like the
+    camera's.
+- **Bias.** The shadow depth shader only moves written depth away from the
+  light (constant and slope bias). A caster culled because its nearest depth
+  lies behind the furthest written occluder depth would have written depth
+  further still, so culling it changes no texel; the camera's relative bias
+  suffices.
 - **Caching.** A cached local map that is reused without re-rendering runs no
   culling. A map's cache dependency set remains every caster in the light's
   frustum, not only the drawn ones. A moving occluded caster therefore still
@@ -459,7 +473,8 @@ buffer:
 
 The stats are read back asynchronously for `DiagnosticsService` and capture
 manifests (`Vortex.OcclusionFrameResults`). They are diagnostics only:
-rendering never reads them back.
+rendering never reads them back. Camera views count; shadow slices do not
+count yet.
 
 Pass markers, inside `Vortex.Stage3.DepthPrepass`:
 
@@ -468,7 +483,8 @@ Pass markers, inside `Vortex.Stage3.DepthPrepass`:
 - `Vortex.Occlusion.PyramidBuild`
 - `Vortex.Stage3.Occlusion.Phase2`
 - `Vortex.Stage3.DepthPrepass.Phase2`
-- `Vortex.Shadow.<View>.Occlusion.Phase1` / `Phase2`
+- `Vortex.Stage8.ShadowDepths.Occlusion.Phase1` / `Phase2`, per shadow
+  slice
 - `<Pass>.Lists`, one per list build, such as
   `Vortex.Stage9.BasePass.Lists`
 

@@ -319,7 +319,7 @@ protected:
             = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
                 &frame,
               },
-            .projection_matrix = view_projection,
+            .view_projection = view_projection,
             .viewport = {
               .top_left_x = 0.0F,
               .top_left_y = 0.0F,

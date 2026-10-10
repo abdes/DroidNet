@@ -15,9 +15,12 @@
 #include <string_view>
 #include <vector>
 
+#include <glm/common.hpp>
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/vector_float4.hpp>
 #include <glm/gtc/matrix_access.hpp>
+#include <glm/matrix.hpp>
+#include <glm/vector_relational.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -100,26 +103,16 @@ namespace {
       buffer, graphics::ResourceStates::kCommon, true);
   }
 
-  //! Projection terms P[2][2], P[3][2], P[2][3], P[3][3] (column, row) that
-  //! turn device depth back into view depth.
-  auto DepthTerms(const glm::mat4& projection) -> glm::vec4
-  {
-    const auto z_column = glm::column(projection, 2);
-    const auto w_column = glm::column(projection, 3);
-    return glm::vec4 { z_column.z, w_column.z, z_column.w, w_column.w };
-  }
-
   auto MakePassConstants(const DrawCullInputs& inputs,
     const ShaderVisibleIndex visibility_uav, const std::uint32_t draw_count)
     -> OcclusionCullPassConstants
   {
     const auto& frame = *inputs.prepared_frame;
-    const auto& projection = inputs.projection_matrix;
     auto flags = std::uint32_t { 0U };
     flags |= inputs.occlusion_enabled ? kOcclusionEnabledFlag : 0U;
     flags |= inputs.history.valid ? kHistoryValidFlag : 0U;
     return OcclusionCullPassConstants {
-      .view_projection = projection * inputs.view_matrix,
+      .view_projection = inputs.view_projection,
       .viewport
       = glm::vec4 { inputs.viewport.top_left_x, inputs.viewport.top_left_y,
         inputs.viewport.width, inputs.viewport.height },
@@ -127,7 +120,8 @@ namespace {
         static_cast<float>(inputs.scissors.top),
         static_cast<float>(inputs.scissors.right),
         static_cast<float>(inputs.scissors.bottom) },
-      .depth_terms = DepthTerms(projection),
+      .depth_encoding = inputs.depth.encoding,
+      .depth_linearize = inputs.depth.linearize,
       .draw_metadata_srv = frame.bindless_draw_metadata_slot,
       .cull_records_srv = frame.bindless_draw_cull_records_slot,
       .worlds_srv = frame.bindless_worlds_slot,
@@ -147,6 +141,34 @@ namespace {
   }
 
 } // namespace
+
+auto DrawCullDepth::ForProjection(const glm::mat4& view_projection)
+  -> DrawCullDepth
+{
+  // An orthographic projection has the clip w row (0, 0, 0, 1); its linear
+  // depth is the distance from the near plane, 1 - z under reversed-Z.
+  const auto w_row = glm::row(view_projection, 3);
+  constexpr auto kEpsilon = 1.0e-6F;
+  const auto deviation = glm::abs(w_row - glm::vec4 { 0.0F, 0.0F, 0.0F, 1.0F });
+  if (glm::all(glm::lessThan(deviation, glm::vec4 { kEpsilon }))) {
+    return DrawCullDepth {};
+  }
+  // A perspective view's clip w is its linear depth. Unprojecting (x, y, z, 1)
+  // gives 1 / w in the w row of the inverse, independent of x and y.
+  const auto inverse_w_row = glm::row(glm::inverse(view_projection), 3);
+  return DrawCullDepth {
+    .encoding = { 1.0F, 0.0F, 0.0F, 0.0F },
+    .linearize = { 1.0F, 0.0F, inverse_w_row.w, inverse_w_row.z },
+  };
+}
+
+auto DrawCullDepth::AxialLinear(const float inverse_range) -> DrawCullDepth
+{
+  return DrawCullDepth {
+    .encoding = { 0.0F, -inverse_range, 1.0F, 0.0F },
+    .linearize = { 1.0F, -1.0F, 1.0F, 0.0F },
+  };
+}
 
 struct DrawCullPass::Impl {
   Impl(Renderer& renderer_in, const std::string_view debug_name_in)

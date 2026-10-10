@@ -4,18 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <bit>
 #include <cstdint>
 #include <cstring>
 #include <memory>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <string>
 #include <unordered_map>
-#include <utility>
-#include <vector>
 
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/vector_float4.hpp>
@@ -34,7 +29,7 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/ReadbackTypes.h>
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Internal/StructuredGpuBuffer.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
@@ -42,8 +37,8 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/CullingViewHistory.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/DrawCullPass.h>
-#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/HistorySlotAllocator.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionConfig.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
@@ -54,9 +49,9 @@ namespace oxygen::vortex {
 
 namespace {
 
+  using occlusion::internal::CullingViewHistory;
   using occlusion::internal::DrawCullInputs;
   using occlusion::internal::DrawCullPass;
-  using occlusion::internal::HistorySlotAllocator;
   using vortex::internal::StructuredGpuBuffer;
 
   constexpr auto kDebugName = "Vortex.Stage3.Occlusion";
@@ -89,25 +84,12 @@ namespace {
     };
   }
 
-  auto TrackFromKnownOrCommon(
-    graphics::CommandRecorder& recorder, const graphics::Buffer& buffer) -> void
-  {
-    if (recorder.IsResourceTracked(buffer)
-      || recorder.AdoptKnownResourceState(buffer)) {
-      return;
-    }
-    recorder.BeginTrackingResourceState(
-      buffer, graphics::ResourceStates::kCommon, true);
-  }
-
 } // namespace
 
 struct OcclusionModule::Impl {
   //! One camera view's culling state.
   struct ViewState {
-    HistorySlotAllocator slots;
-    //! One `uint` per slot; replaced, with its contents copied, on growth.
-    std::unique_ptr<StructuredGpuBuffer> history;
+    CullingViewHistory history { std::string { kDebugName } };
     StructuredGpuBuffer counters {
       std::string { kDebugName } + ".Counters",
       kSlotStride,
@@ -118,8 +100,6 @@ struct OcclusionModule::Impl {
     bool counters_occlusion_enabled { false };
     std::optional<OcclusionStats> stats;
     std::optional<HistoryKey> history_key;
-    //! The last phase 2 wrote the history for `history_key`.
-    bool history_written { false };
 
     //! This frame's phase 1, kept for phase 2.
     DrawCullInputs inputs {};
@@ -137,12 +117,10 @@ struct OcclusionModule::Impl {
   DrawCullPass cull;
   std::optional<upload::TransientStructuredBuffer> slot_words;
   std::unordered_map<ViewId, ViewState> views;
-  std::vector<std::uint32_t> slot_word_storage;
 
-  //! Uploads this frame's slot word per draw; invalid when the upload fails.
-  auto UploadSlotWords(const RenderContext& ctx,
-    const std::span<const HistorySlotAllocator::Assignment> assignments,
-    const std::uint32_t draw_count) -> ShaderVisibleIndex
+  //! Starts this frame's slot upload buffer.
+  auto BeginSlotWords(const RenderContext& ctx)
+    -> upload::TransientStructuredBuffer&
   {
     if (!slot_words.has_value()) {
       auto gfx = renderer->GetGraphics();
@@ -151,51 +129,8 @@ struct OcclusionModule::Impl {
         observer_ptr { &renderer->GetInlineTransfersCoordinator() },
         std::string { kDebugName } + ".HistorySlots");
     }
-    slot_word_storage.assign(draw_count, occlusion::internal::kNoHistorySlot);
-    for (const auto& [word, assignment] :
-      std::views::zip(slot_word_storage, assignments)) {
-      word = assignment.ToSlotWord();
-    }
     slot_words->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
-    const auto allocation = slot_words->Allocate(draw_count);
-    if (!allocation.has_value()
-      || !allocation->TryWriteRange(
-        std::span<const std::uint32_t>(slot_word_storage))) {
-      LOG_F(ERROR, "{}: failed to upload the history slots", kDebugName);
-      return kInvalidShaderVisibleIndex;
-    }
-    return allocation->srv;
-  }
-
-  //! Grows the view's history to the slot capacity, copying its contents.
-  auto EnsureHistory(graphics::CommandRecorder& recorder, ViewState& view) const
-    -> bool
-  {
-    const auto capacity = view.slots.Capacity();
-    if (view.history != nullptr && view.history->GetCapacity() >= capacity) {
-      return true;
-    }
-    auto gfx = renderer->GetGraphics();
-    auto grown = std::make_unique<StructuredGpuBuffer>(
-      std::string { kDebugName } + ".History", kSlotStride);
-    if (!grown->Ensure(gfx, std::bit_ceil((std::max)(capacity, 64U)))) {
-      return false;
-    }
-    if (view.history != nullptr) {
-      const auto& source = *view.history->GetBuffer();
-      auto& target = *grown->GetBuffer();
-      TrackFromKnownOrCommon(recorder, source);
-      TrackFromKnownOrCommon(recorder, target);
-      recorder.RequireResourceState(
-        source, graphics::ResourceStates::kCopySource);
-      recorder.RequireResourceState(
-        target, graphics::ResourceStates::kCopyDest);
-      recorder.FlushBarriers();
-      recorder.CopyBuffer(target, 0U, source, 0U,
-        static_cast<std::size_t>(view.history->GetCapacity()) * kSlotStride);
-    }
-    view.history = std::move(grown);
-    return true;
+    return *slot_words;
   }
 
   //! Takes the counters of an earlier frame when their readback is done.
@@ -295,53 +230,54 @@ void OcclusionModule::BuildPhase1(RenderContext& ctx,
     return;
   }
 
-  auto& view = impl_->views[ctx.current_view.view_id];
+  // A stateless view keeps nothing across frames: without history it culls by
+  // frustum only and counts nothing.
+  const auto view_id = ctx.current_view.view_id;
+  const bool stateless = ctx.current_view.view_state_handle
+    == CompositionView::kInvalidViewStateHandle;
+  auto& view = impl_->views[view_id];
   const auto extent = scene_textures.GetExtent();
   const auto clamped = vortex::internal::ResolveClampedViewportState(
     resolved_view->Viewport(), resolved_view->Scissor(), extent.x, extent.y);
+  const auto view_projection
+    = resolved_view->ProjectionMatrix() * resolved_view->ViewMatrix();
   view.inputs = DrawCullInputs {
     .frame_sequence = ctx.frame_sequence,
     .frame_slot = ctx.frame_slot,
     .prepared_frame = ctx.current_view.prepared_frame,
-    .view_matrix = resolved_view->ViewMatrix(),
-    .projection_matrix = resolved_view->ProjectionMatrix(),
+    .view_projection = view_projection,
+    .depth = occlusion::internal::DrawCullDepth::ForProjection(view_projection),
     .viewport = clamped.viewport,
     .scissors = clamped.scissors,
     // The box test assumes reversed-Z depth.
-    .occlusion_enabled = config_.enabled && resolved_view->ReverseZ(),
+    .occlusion_enabled
+    = config_.enabled && resolved_view->ReverseZ() && !stateless,
     .depth_bias = config_.depth_bias,
   };
 
   const auto key = MakeHistoryKey(resolved_view->StableProjectionMatrix(),
     clamped.viewport, clamped.scissors);
-  const auto history_valid = view.history_written && view.history_key == key
-    && !ctx.current_view.history_discontinuity;
+  const auto reset
+    = view.history_key != key || ctx.current_view.history_discontinuity;
   view.history_key = key;
-  view.history_written = false;
 
   if (view.inputs.occlusion_enabled) {
     const auto draw_count
       = static_cast<std::uint32_t>(prepared_frame->GetDrawMetadata().size());
-    const auto assignments = view.slots.Update(prepared_frame->draw_sources);
-    const auto slots_srv = impl_->UploadSlotWords(ctx, assignments, draw_count);
-    if (slots_srv.IsValid() && impl_->EnsureHistory(recorder, view)) {
-      view.inputs.history = occlusion::internal::DrawCullHistory {
-        .slots_srv = slots_srv,
-        .history = observer_ptr<const graphics::Buffer> {
-          view.history->GetBuffer(),
-        },
-        .history_uav = view.history->GetUav(),
-        .valid = history_valid,
-        .stats = nullptr,
-        .stats_uav = kInvalidShaderVisibleIndex,
-      };
+    const auto history = view.history.Prepare(recorder,
+      impl_->renderer->GetGraphics(), impl_->BeginSlotWords(ctx),
+      prepared_frame->draw_sources, draw_count, reset);
+    if (history.has_value()) {
+      view.inputs.history = *history;
     } else {
       // Without history the view culls by frustum only this frame.
       view.inputs.occlusion_enabled = false;
     }
+  } else {
+    view.history.SetWritten(false);
   }
 
-  view.counting = impl_->PrepareCounters(view);
+  view.counting = !stateless && impl_->PrepareCounters(view);
   if (view.counting) {
     view.inputs.history.stats = observer_ptr<const graphics::Buffer> {
       view.counters.GetBuffer(),
@@ -351,6 +287,10 @@ void OcclusionModule::BuildPhase1(RenderContext& ctx,
 
   view.phase1 = impl_->cull.RunPhase1(recorder, view.inputs);
   ctx.current_view.draw_visibility = view.phase1;
+  if (stateless) {
+    impl_->views.erase(view_id);
+    return;
+  }
   if (!view.phase1.IsValid()) {
     view.counting = false;
     return;
@@ -390,7 +330,7 @@ void OcclusionModule::BuildPhase2(RenderContext& ctx,
   const auto products
     = impl_->cull.RunPhase2(recorder, view.inputs, view.phase1, binding);
   ctx.current_view.draw_visibility = products;
-  view.history_written = products.phase2;
+  view.history.SetWritten(products.phase2);
   Impl::EnqueueCounters(recorder, view, ctx);
 }
 

@@ -167,6 +167,7 @@ protected:
       .debug_name = "Indirect reference target",
       .is_render_target = true,
       .clear_value = {},
+      .use_clear_value = true,
       .initial_state = ResourceStates::kCommon,
     });
     framebuffer_ = Backend().CreateFramebuffer(

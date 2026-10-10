@@ -6,8 +6,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <cstdint>
-#include <map>
 #include <memory>
 #include <ranges>
 #include <span>
@@ -15,23 +15,25 @@
 #include <unordered_set>
 #include <vector>
 
-#include <glm/gtc/matrix_access.hpp>
-
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Shadows/Internal/CascadeShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
 #include <Oxygen/Vortex/Shadows/Internal/LocalShadowProjection.h>
 #include <Oxygen/Vortex/Shadows/Internal/LocalShadowQuality.h>
+#include <Oxygen/Vortex/Shadows/Internal/LocalShadowRequest.h>
 #include <Oxygen/Vortex/Shadows/Internal/PointShadowSetup.h>
+#include <Oxygen/Vortex/Shadows/Internal/ShadowEligibility.h>
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Passes/CascadeShadowPass.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 #include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowSharingDiagnostics.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
+#include <Oxygen/Vortex/Types/ShadowCasterSource.h>
 
 namespace oxygen::vortex::shadows {
 
@@ -39,18 +41,24 @@ namespace {
 
   using internal::kLocalShadowSlopeDepthBiasScale;
 
+  constexpr std::uint32_t kCubeFaceCount = 6U;
+  //! PCF taps per point-shadow lookup at each quality tier.
+  constexpr std::uint32_t kLowPointPcfSamples = 1U;
+  constexpr std::uint32_t kMediumPointPcfSamples = 5U;
+  constexpr std::uint32_t kHighPointPcfSamples = 29U;
+
   auto PointPcfSampleCount(const ShadowQualityTier tier) -> std::uint32_t
   {
     switch (tier) {
     case ShadowQualityTier::kLow:
-      return 1U;
+      return kLowPointPcfSamples;
     case ShadowQualityTier::kMedium:
-      return 5U;
+      return kMediumPointPcfSamples;
     case ShadowQualityTier::kHigh:
     case ShadowQualityTier::kUltra:
-      return 29U;
+      return kHighPointPcfSamples;
     }
-    return 29U;
+    return kHighPointPcfSamples;
   }
 
 } // namespace
@@ -75,9 +83,10 @@ auto CascadeShadowPass::InspectLocalSharing() const -> ShadowSharingDiagnostics
     result.prepared_request_bytes
       += prepared.requests.capacity() * sizeof(internal::LocalShadowRequest);
     for (const auto& request : prepared.requests) {
-      result.prepared_request_bytes += request.content.casters.capacity()
-          * sizeof(std::shared_ptr<const ShadowCasterRecord>)
-        + request.caster_hash_scratch.capacity() * sizeof(std::uint64_t);
+      result.prepared_request_bytes
+        += (request.content.casters.capacity()
+             * sizeof(std::shared_ptr<const ShadowCasterRecord>))
+        + (request.caster_hash_scratch.capacity() * sizeof(std::uint64_t));
     }
   }
   return result;
@@ -86,11 +95,12 @@ auto CascadeShadowPass::InspectLocalSharing() const -> ShadowSharingDiagnostics
 auto CascadeShadowPass::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
-  std::erase_if(prepared_locals_,
-    [&](const auto& entry) { return entry.second.frame != current_sequence_; });
+  std::erase_if(prepared_locals_, [&](const auto& entry) -> auto {
+    return entry.second.frame != current_sequence_;
+  });
   allocator_->OnFrameStart(sequence, slot);
   depth_pass_->OnFrameStart(sequence, slot);
-  std::erase_if(quality_history_, [this](const auto& entry) {
+  std::erase_if(quality_history_, [this](const auto& entry) -> auto {
     return entry.second.last_used != current_sequence_;
   });
   current_sequence_ = sequence;
@@ -131,8 +141,7 @@ auto CascadeShadowPass::PrepareLocalRequests(
     }
     auto& history = PrepareQualityHistory(view, lights);
     size_t count = 0;
-    for (size_t index = 0; index < lights.size(); ++index) {
-      const auto& light = lights[index];
+    for (const auto& [index, light] : std::views::enumerate(lights)) {
       if (!internal::HasLocalShadowInfluence(light, view.resolved_view.get())) {
         continue;
       }
@@ -148,7 +157,7 @@ auto CascadeShadowPass::PrepareLocalRequests(
       if (count == prepared.requests.size()) {
         prepared.requests.emplace_back();
       }
-      auto& request = prepared.requests[count++];
+      auto& request = prepared.requests.at(count++);
       if (quality.resolution != 0) {
         internal::PrepareLocalShadowRequest(view, light,
           LightSelectionIndex { static_cast<uint32_t>(index) },
@@ -187,7 +196,7 @@ auto CascadeShadowPass::PrepareQualityHistory(
     active.insert(light.source_node);
   }
   std::erase_if(history.resolutions,
-    [&](const auto& entry) { return !active.contains(entry.first); });
+    [&](const auto& entry) -> auto { return !active.contains(entry.first); });
   return history;
 }
 
@@ -225,14 +234,14 @@ auto CascadeShadowPass::RenderDirectionalView(
 
   const auto render_state = allocation.surface != nullptr
     ? depth_pass_->Record(view_input, allocation.surface, state.frame_data,
-        directional_light.direction)
+        directional_light.direction, directional_light.source_node)
     : ShadowDepthPass::RenderState {};
   state.shadow_caster_draw_count = render_state.shadow_caster_draw_count;
   if (allocation.surface && !render_state.recording_succeeded) {
     throw std::runtime_error("Directional shadow submission failed");
   }
   state.rendered_cascade_count = render_state.rendered_cascade_count;
-  state.rendered_draw_count = render_state.rendered_draw_count;
+  state.submitted_draw_count = render_state.submitted_draw_count;
   return state;
 }
 
@@ -254,19 +263,24 @@ auto CascadeShadowPass::RenderSpotView(
     const auto& slot = *acquired.owner->version->slot;
     if (!acquired.reused) {
       const auto& key = request.content;
-      const std::array slices { ShadowDepthPass::DepthSlice {
-        .light_view_projection = key.matrices[0],
-        .shadow_bias_parameters = key.bias,
-        .light_direction_to_source = key.direction,
-        .light_position_and_inv_range = key.position_and_inverse_range,
-        .target_slice = slot.offset } };
+      const std::array slices {
+        ShadowDepthPass::DepthSlice {
+          .light_view_projection = key.matrices.at(0),
+          .shadow_bias_parameters = key.bias,
+          .light_direction_to_source = key.direction,
+          .light_position_and_inv_range = key.position_and_inverse_range,
+          .target_slice = slot.offset,
+          .light_source = {},
+          .slot_generation = slot.handle.generation.get(),
+        },
+      };
       const auto rendered = depth_pass_->RecordSlices(
         view_input, slot.backing->texture, slices, acquired.owner->version);
       if (!rendered.recording_succeeded) {
         throw std::runtime_error("Spot shadow submission failed");
       }
       state.rendered_shadow_count += rendered.rendered_cascade_count;
-      state.rendered_draw_count += rendered.rendered_draw_count;
+      state.submitted_draw_count += rendered.submitted_draw_count;
       state.shadow_caster_draw_count = rendered.shadow_caster_draw_count;
     }
     acquired.Commit();
@@ -302,27 +316,32 @@ auto CascadeShadowPass::RenderPointView(
     auto acquired = allocator_->AcquireLocalMap(view_input.view_id, request);
     const auto& slot = *acquired.owner->version->slot;
     if (!acquired.reused) {
-      std::array<ShadowDepthPass::DepthSlice, 6> slices;
-      for (uint32_t face = 0; face < 6; ++face) {
-        slices[face]
-          = { .light_view_projection = request.content.matrices[face],
-              .light_position_and_inv_range
-              = request.content.position_and_inverse_range,
-              .target_slice = slot.offset * 6U + face };
+      std::array<ShadowDepthPass::DepthSlice, kCubeFaceCount> slices;
+      for (uint32_t face = 0; face < kCubeFaceCount; ++face) {
+        slices.at(face) = {
+          .light_view_projection = request.content.matrices.at(face),
+          .light_position_and_inv_range
+          = request.content.position_and_inverse_range,
+          .target_slice = (slot.offset * kCubeFaceCount) + face,
+          .light_source = {},
+          .slot_generation = slot.handle.generation.get(),
+        };
       }
       const auto rendered = depth_pass_->RecordSlices(
         view_input, slot.backing->texture, slices, acquired.owner->version);
       if (!rendered.recording_succeeded) {
         throw std::runtime_error("Point shadow submission failed");
       }
-      state.rendered_shadow_count += rendered.rendered_cascade_count / 6U;
-      state.rendered_draw_count += rendered.rendered_draw_count;
+      state.rendered_shadow_count
+        += rendered.rendered_cascade_count / kCubeFaceCount;
+      state.submitted_draw_count += rendered.submitted_draw_count;
       state.shadow_caster_draw_count = rendered.shadow_caster_draw_count;
     }
     acquired.Commit();
     auto record = std::get<CubeLocalShadowRecord>(request.projection);
     record.surface_srv = slot.backing->srv;
-    record.first_array_layer = ShadowArrayLayer { slot.offset * 6U };
+    record.first_array_layer
+      = ShadowArrayLayer { slot.offset * kCubeFaceCount };
     record.selection_index = request.selection;
     record.shadow_strength = request.strength;
     record.pcf_sample_count

@@ -60,11 +60,13 @@ float2 LoadInput(HzbBuildPassConstants c, uint level, uint2 coord)
 {
     if (level == 0u)
     {
-        Texture2D<float> source = ResourceDescriptorHeap[c.source_depth_srv];
+        // A one-slice array view of the source's slice.
+        Texture2DArray<float> source
+            = ResourceDescriptorHeap[c.source_depth_srv];
         const uint2 extent = uint2(c.source_width, c.source_height);
         const uint2 texel = uint2(c.source_origin_x, c.source_origin_y)
             + min(coord, extent - 1u);
-        const float depth = source.Load(int3(texel, 0));
+        const float depth = source.Load(int4(texel, 0, 0));
         return float2(depth, depth);
     }
 

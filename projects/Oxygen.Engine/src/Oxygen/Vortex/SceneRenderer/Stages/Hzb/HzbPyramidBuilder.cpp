@@ -33,7 +33,6 @@
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/TextureViews.h>
-#include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/HzbPyramidBuilder.h>
 
@@ -184,7 +183,7 @@ HzbPyramidBuilder::HzbPyramidBuilder(
 
 HzbPyramidBuilder::~HzbPyramidBuilder() = default;
 
-auto HzbPyramidBuilder::Build(RenderContext& ctx,
+auto HzbPyramidBuilder::Build(const BuildFrame& frame,
   graphics::CommandRecorder& recorder, const Source& source,
   const Targets& targets) -> bool
 {
@@ -203,8 +202,8 @@ auto HzbPyramidBuilder::Build(RenderContext& ctx,
   CHECK_LE_F(mip_count, kMaxMipCount, "HZB source rect is too large");
 
   auto constants = HzbBuildPassConstants {
-    .source_depth_srv = internal::EnsureTextureView(
-      *gfx, *source.depth, internal::WholeTextureSrvDesc(*source.depth)),
+    .source_depth_srv = internal::EnsureTextureView(*gfx, *source.depth,
+      internal::ArraySliceSrvDesc(*source.depth, source.array_slice)),
     .source_origin_x = source.origin_x,
     .source_origin_y = source.origin_y,
     .source_width = source.width,
@@ -240,11 +239,11 @@ auto HzbPyramidBuilder::Build(RenderContext& ctx,
     }
   }
 
-  if (impl_->constants_frame != ctx.frame_sequence) {
-    impl_->pass_constants.OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
-    impl_->constants_frame = ctx.frame_sequence;
+  if (impl_->constants_frame != frame.sequence) {
+    impl_->pass_constants.OnFrameStart(frame.sequence, frame.slot);
+    impl_->constants_frame = frame.sequence;
   }
-  const auto view_id = ctx.current_view.view_id;
+  const auto view_id = frame.view_id;
   const auto tile_constants = impl_->pass_constants.Publish(view_id, constants);
   const auto has_tail = mip_count > kLevelsPerDispatch;
   auto tail_constants = ShaderVisibleIndex { kInvalidShaderVisibleIndex };
@@ -280,11 +279,6 @@ auto HzbPyramidBuilder::Build(RenderContext& ctx,
   recorder.FlushBarriers();
 
   recorder.SetPipelineState(*impl_->pipeline_desc);
-  if (ctx.view_constants != nullptr) {
-    recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-      ctx.view_constants->GetGPUVirtualAddress());
-  }
   const auto root_constants
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
   recorder.SetComputeRoot32BitConstant(root_constants, 0U, 0U);

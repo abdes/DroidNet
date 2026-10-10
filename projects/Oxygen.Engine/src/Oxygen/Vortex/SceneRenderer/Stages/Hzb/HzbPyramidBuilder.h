@@ -13,6 +13,8 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -22,7 +24,6 @@ class CommandRecorder;
 
 namespace oxygen::vortex {
 
-struct RenderContext;
 class Renderer;
 
 //! Records the reduction of a depth rect into reversed-Z HZB pyramids.
@@ -41,9 +42,12 @@ public:
   //! Largest mip count: an 8192 root, from D3D12's 16384 texture limit.
   static constexpr std::uint32_t kMaxMipCount = 13U;
 
-  //! The depth rect to reduce, in texels of mip 0 of `depth`.
+  //! The depth rect to reduce, in texels of mip 0 of one array slice of
+  //! `depth`.
   struct Source {
     observer_ptr<const graphics::Texture> depth;
+    //! The slice of an array or cube texture; 0 for a plain 2D texture.
+    std::uint32_t array_slice { 0U };
     std::uint32_t origin_x { 0U };
     std::uint32_t origin_y { 0U };
     std::uint32_t width { 0U };
@@ -77,14 +81,21 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(HzbPyramidBuilder)
   OXYGEN_MAKE_NON_MOVABLE(HzbPyramidBuilder)
 
-  //! Records the build for the current view of `ctx`.
+  //! The frame a build records in, and the view it publishes constants for.
+  struct BuildFrame {
+    frame::SequenceNumber sequence { 0U };
+    frame::Slot slot { frame::kInvalidSlot };
+    ViewId view_id { kInvalidViewId };
+  };
+
+  //! Records the build.
   /*!
    Leaves the source depth and the targets in `kShaderResource`.
 
    @return False when a view or the constants could not be published; nothing
    is recorded then.
   */
-  OXGN_VRTX_API auto Build(RenderContext& ctx,
+  OXGN_VRTX_API auto Build(const BuildFrame& frame,
     graphics::CommandRecorder& recorder, const Source& source,
     const Targets& targets) -> bool;
 

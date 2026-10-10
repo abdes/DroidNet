@@ -43,8 +43,8 @@ struct alignas(16) OcclusionCullPassConstants {
   glm::vec4 viewport { 0.0F };
   //! Rasterized pixel rect: min x, min y, max x, max y (exclusive).
   glm::vec4 clip_rect { 0.0F };
-  //! Projection terms P[2][2], P[3][2], P[2][3], P[3][3] (column, row).
-  glm::vec4 depth_terms { 0.0F };
+  glm::vec4 depth_encoding { 0.0F };
+  glm::vec4 depth_linearize { 0.0F };
   //! The pyramid's source rect: origin x, origin y, width, height.
   glm::uvec4 pyramid_source { 0U };
   ShaderVisibleIndex draw_metadata_srv { kInvalidShaderVisibleIndex };
@@ -61,7 +61,28 @@ struct alignas(16) OcclusionCullPassConstants {
   std::uint32_t _pad0 { 0U };
 };
 static_assert(
-  sizeof(OcclusionCullPassConstants) == 176U); // NOLINT(*-magic-numbers)
+  sizeof(OcclusionCullPassConstants) == 192U); // NOLINT(*-magic-numbers)
+
+//! How a culling view's depth target stores depth, for the occlusion test.
+/*!
+ The test compares a box's nearest depth with the furthest depth of the
+ occlusion pyramid, both in the target's encoding, and applies its bias in
+ linear depth.
+*/
+struct DrawCullDepth {
+  //! A clip-space point encodes as x * z / w + y * w + z.
+  glm::vec4 encoding { 1.0F, 0.0F, 0.0F, 0.0F };
+  //! An encoded depth e linearizes as |(x + y * e) / (z + w * e)|.
+  glm::vec4 linearize { 1.0F, -1.0F, 1.0F, 0.0F };
+
+  //! Rasterized reversed-Z depth of `view_projection`, perspective or
+  //! orthographic.
+  OXGN_VRTX_NDAPI static auto ForProjection(const glm::mat4& view_projection)
+    -> DrawCullDepth;
+  //! Linear depth along the light axis, `1 - distance * inverse_range`, as
+  //! spot shadow maps store it.
+  OXGN_VRTX_NDAPI static auto AxialLinear(float inverse_range) -> DrawCullDepth;
+};
 
 //! A culling view's visibility history and counters, owned by the caller.
 struct DrawCullHistory {
@@ -83,10 +104,10 @@ struct DrawCullInputs {
   frame::SequenceNumber frame_sequence { 0U };
   frame::Slot frame_slot { frame::kInvalidSlot };
   observer_ptr<const PreparedSceneFrame> prepared_frame;
-  glm::mat4 view_matrix { 1.0F };
-  //! The projection the rasterizer uses, jitter included. Occlusion requires
+  //! The matrix the rasterizer uses, jitter included. Occlusion requires
   //! reversed-Z.
-  glm::mat4 projection_matrix { 1.0F };
+  glm::mat4 view_projection { 1.0F };
+  DrawCullDepth depth {};
   //! The viewport and scissors the passes rasterize with, already clamped.
   ViewPort viewport {};
   Scissors scissors {};

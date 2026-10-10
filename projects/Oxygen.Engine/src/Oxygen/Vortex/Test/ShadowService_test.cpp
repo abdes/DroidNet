@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -13,6 +14,7 @@
 #include <iterator>
 #include <memory>
 #include <numbers>
+#include <ranges>
 #include <regex>
 #include <span>
 #include <stdexcept>
@@ -20,7 +22,9 @@
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
+#include <glm/ext/matrix_transform.hpp>
 #include <glm/ext/scalar_constants.hpp>
 #include <glm/geometric.hpp>
 
@@ -32,25 +36,31 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Submission.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Light/LightCommon.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/DepthPrepass/DepthPrepassMeshProcessor.h>
 #include <Oxygen/Vortex/Shadows/Internal/CascadeShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
 #include <Oxygen/Vortex/Shadows/Internal/LocalShadowProjection.h>
 #include <Oxygen/Vortex/Shadows/Internal/LocalShadowQuality.h>
+#include <Oxygen/Vortex/Shadows/Internal/LocalShadowRequest.h>
 #include <Oxygen/Vortex/Shadows/Internal/PointShadowSetup.h>
-#include <Oxygen/Vortex/Shadows/Internal/ShadowCasterCulling.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowEligibility.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowReferenceBuilder.h>
+#include <Oxygen/Vortex/Shadows/Internal/SharedShadowMap.h>
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
@@ -60,12 +70,15 @@
 #include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowUseError.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/MeshRasterStateTest.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
+#include <Oxygen/Vortex/Types/MaterialShadingConstants.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
+#include <Oxygen/Vortex/Types/ShadowCasterSource.h>
 #include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
 namespace {
@@ -384,13 +397,16 @@ auto AllLightIndices(std::span<const FrameLocalLightSelection> lights)
   auto indices
     = std::vector<ConventionalShadowTargetAllocator::LocalSelection> {};
   auto offsets = std::array<std::uint32_t, 2> {};
-  for (std::uint32_t index = 0U; index < lights.size(); ++index) {
-    if (oxygen::vortex::shadows::internal::HasLocalShadowInfluence(
-          lights[index])) {
+  for (const auto& [position, light] : std::views::enumerate(lights)) {
+    if (oxygen::vortex::shadows::internal::HasLocalShadowInfluence(light)) {
       const auto cube
-        = oxygen::vortex::shadows::internal::UsesCubeLocalShadow(lights[index]);
-      indices.push_back(
-        { LightSelectionIndex { index }, { .offset = offsets[cube]++ } });
+        = oxygen::vortex::shadows::internal::UsesCubeLocalShadow(light);
+      const auto index = static_cast<std::uint32_t>(position);
+      indices.push_back({ .selection_index = LightSelectionIndex { index },
+        .slot = {
+          .handle = {},
+          .offset = offsets.at(cube ? 1U : 0U)++,
+        }, });
     }
   }
   return indices;
@@ -408,17 +424,17 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
     &resolved_view,
   };
   const auto allocation = ConventionalShadowTargetAllocator::PointAllocation {
-    .surface_srv = oxygen::ShaderVisibleIndex { 13U, },
+    .surface = {}, .surface_srv = oxygen::ShaderVisibleIndex { 13U, },
     .resolution = glm::uvec2 { 1024U, 1024U, },
     .shadow_count = 2U,
   };
   const auto local_lights = std::array {
     FrameLocalLightSelection {
-      .kind = oxygen::vortex::LocalLightKind::kSpot,
+      .source_node = {}, .kind = oxygen::vortex::LocalLightKind::kSpot,
       .flags = kLocalLightFlagCastsShadows,
     },
     FrameLocalLightSelection {
-      .kind = oxygen::vortex::LocalLightKind::kPoint,
+      .source_node = {}, .kind = oxygen::vortex::LocalLightKind::kPoint,
       .position = glm::vec3 { 0.0F, 3.0F, 2.0F, },
       .range = 10.0F,
       .luminous_flux_lm = 100.0F,
@@ -427,7 +443,7 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
       .shadow_normal_bias = 0.04F,
     },
     FrameLocalLightSelection {
-      .kind = oxygen::vortex::LocalLightKind::kPoint,
+      .source_node = {}, .kind = oxygen::vortex::LocalLightKind::kPoint,
       .position = glm::vec3 { 2.0F, 0.0F, 3.0F, },
       .range = 8.0F,
       .flags = 0U,
@@ -555,19 +571,25 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   input.resolved_view
     = oxygen::observer_ptr<const oxygen::ResolvedView> { &resolved_view };
   for (const float range : { 0.05F, 3.0F, 4096.0F }) {
-    const auto lights = std::array { FrameLocalLightSelection {
-      .kind = LocalLightKind::kPoint,
-      .position = { 0, 0, 0 },
-      .range = range,
-      .luminous_flux_lm = 100.0F,
-      .flags = kLocalLightFlagCastsShadows,
-      .shadow_bias = 0.5F,
-    } };
+    const auto lights = std::array {
+      FrameLocalLightSelection {
+        .source_node = {},
+        .kind = LocalLightKind::kPoint,
+        .position = { 0, 0, 0 },
+        .range = range,
+        .luminous_flux_lm = 100.0F,
+        .flags = kLocalLightFlagCastsShadows,
+        .shadow_bias = 0.5F,
+      },
+    };
     const auto records = PointShadowSetup {}.BuildPointRecords(input, lights,
       AllLightIndices(lights),
-      { .surface_srv = oxygen::ShaderVisibleIndex { 13U },
+      {
+        .surface = {},
+        .surface_srv = oxygen::ShaderVisibleIndex { 13U },
         .resolution = { 1024U, 1024U },
-        .shadow_count = 1U });
+        .shadow_count = 1U,
+      });
     ASSERT_EQ(records.size(), 1U);
     const auto& record = records.front();
     // Hardware cube convention expressed independently as sample directions
@@ -584,8 +606,8 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
     };
     for (unsigned face = 0; face < 6U; ++face) {
       for (const float axial : { record.near_plane_m, range * 0.25F, range }) {
-        const auto clip = record.face_light_view_projection[face]
-          * glm::vec4(-directions[face] * axial, 1);
+        const auto clip = record.face_light_view_projection.at(face)
+          * glm::vec4(-directions.at(face) * axial, 1);
         ASSERT_GT(clip.w, 0.0F);
         EXPECT_NEAR(clip.x / clip.w, s, 1.0e-6F);
         EXPECT_NEAR(-clip.y / clip.w, t, 1.0e-6F);
@@ -652,7 +674,7 @@ protected:
     renderer_ = MakeRenderer(graphics_);
   }
 
-  virtual auto MakeQueueStrategy() const
+  [[nodiscard]] virtual auto MakeQueueStrategy() const
     -> std::unique_ptr<oxygen::graphics::QueuesStrategy>
   {
     return std::make_unique<oxygen::graphics::SingleQueueStrategy>();
@@ -662,14 +684,26 @@ protected:
     oxygen::ViewId view, oxygen::scene::NodeHandle source, uint32_t resolution)
     -> std::shared_ptr<oxygen::vortex::shadows::internal::ShadowMapOwner>
   {
-    using namespace oxygen::vortex::shadows::internal;
-    auto light = FrameLocalLightSelection { .source_node = source,
+    using oxygen::vortex::shadows::internal::AttachShadowUse;
+    using oxygen::vortex::shadows::internal::LocalShadowRequest;
+    using oxygen::vortex::shadows::internal::PrepareLocalShadowRequest;
+    using oxygen::vortex::shadows::internal::ShadowUseMode;
+    auto light = FrameLocalLightSelection {
+      .source_node = source,
       .range = 5,
       .luminous_flux_lm = 100,
-      .flags = kLocalLightFlagCastsShadows };
-    oxygen::vortex::PreparedViewShadowInput input { .view_id = view,
+      .flags = kLocalLightFlagCastsShadows,
+    };
+    oxygen::vortex::PreparedViewShadowInput input {
+      .view_id = view,
       .scene_generation = 1,
-      .shadow_dependencies_available = true };
+      .shadow_caster_dependencies = {},
+      .shadow_dependencies_available = true,
+      .prepared_scene = {},
+      .resolved_view = {},
+      .view_constants = {},
+      .composition_view = {},
+    };
     LocalShadowRequest request;
     PrepareLocalShadowRequest(
       input, light, LightSelectionIndex { 0 }, resolution, 1, request);
@@ -724,20 +758,24 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
   selection.directional_lights.front().illuminance_lux = 100.0F;
   selection.local_lights = {
     FrameLocalLightSelection {
+      .source_node = {},
       .kind = oxygen::vortex::LocalLightKind::kSpot,
       .range = 12.0F,
       .luminous_flux_lm = 100.0F,
       .flags = kLocalLightFlagCastsShadows,
     },
     FrameLocalLightSelection {
+      .source_node = {},
       .kind = oxygen::vortex::LocalLightKind::kPoint,
       .range = 10.0F,
       .luminous_flux_lm = 100.0F,
       .flags = kLocalLightFlagCastsShadows,
     },
   };
-  selection.local_lights[0].source_node = oxygen::scene::NodeHandle { 1U, 1U };
-  selection.local_lights[1].source_node = oxygen::scene::NodeHandle { 2U, 1U };
+  selection.local_lights.at(0).source_node
+    = oxygen::scene::NodeHandle { 1U, 1U };
+  selection.local_lights.at(1).source_node
+    = oxygen::scene::NodeHandle { 2U, 1U };
   const auto lighting = oxygen::vortex::LightingFrameBindings {
     .build_status_srv = oxygen::ShaderVisibleIndex { 19U },
     .view_generation = { 11U, 4U },
@@ -745,6 +783,7 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
   const auto views = std::array {
     oxygen::vortex::PreparedViewShadowInput {
       .view_id = oxygen::ViewId { 17U },
+      .shadow_caster_dependencies = {},
       .lighting_bindings = &lighting,
       .prepared_scene = {},
       .resolved_view = oxygen::observer_ptr { &resolved_view },
@@ -752,8 +791,11 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
       .composition_view = {},
     },
   };
-  service.RenderShadowDepths(
-    { .frame_light_set = &selection, .active_views = views });
+  service.RenderShadowDepths({
+    .frame_light_set = &selection,
+    .active_views = views,
+    .preparation_views = {},
+  });
   const auto* data = service.InspectShadowData(views.front().view_id);
   ASSERT_NE(data, nullptr);
   EXPECT_TRUE(service.ResolveShadowFrameSlot(views.front().view_id).IsValid());
@@ -814,8 +856,11 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
   input.view_id = oxygen::ViewId { 17U };
   input.resolved_view = oxygen::observer_ptr { &resolved_view };
   const auto views = std::array { input };
-  service.RenderShadowDepths(
-    { .frame_light_set = &selection, .active_views = views });
+  service.RenderShadowDepths({
+    .frame_light_set = &selection,
+    .active_views = views,
+    .preparation_views = {},
+  });
   const auto* data = service.InspectShadowData(input.view_id);
   ASSERT_NE(data, nullptr);
   ASSERT_EQ(data->directional_records.size(), 2U);
@@ -855,14 +900,18 @@ NOLINT_TEST_F(
   const auto views = std::array {
     oxygen::vortex::PreparedViewShadowInput {
       .view_id = oxygen::ViewId { 17U },
+      .shadow_caster_dependencies = {},
       .prepared_scene = {},
       .resolved_view = oxygen::observer_ptr { &resolved_view },
       .view_constants = {},
       .composition_view = {},
     },
   };
-  service.RenderShadowDepths(
-    { .frame_light_set = &selection, .active_views = views });
+  service.RenderShadowDepths({
+    .frame_light_set = &selection,
+    .active_views = views,
+    .preparation_views = {},
+  });
   EXPECT_EQ(service.InspectShadowData(views.front().view_id), nullptr);
   EXPECT_EQ(service.ResolveShadowFrameSlot(views.front().view_id),
     kInvalidShaderVisibleIndex);
@@ -902,9 +951,11 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
   const auto slices = std::array {
     ShadowDepthPass::DepthSlice {
       .target_slice = 0U,
+      .light_source = {},
     },
     ShadowDepthPass::DepthSlice {
       .target_slice = 1U,
+      .light_source = {},
     },
   };
   for (const auto kind : {
@@ -930,15 +981,18 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
           view_constants.get(),
         };
     graphics_->draw_log_.draws.clear();
+    graphics_->indirect_log_.draws.clear();
     const auto result = pass.RecordSlices(input, texture, slices);
     ASSERT_EQ(result.rendered_cascade_count, 2U);
-    ASSERT_EQ(result.rendered_draw_count, 10U);
-    ASSERT_EQ(graphics_->draw_log_.draws.size(), 10U);
+    ASSERT_EQ(result.submitted_draw_count, 10U);
+    // Each slice issues one indirect draw per raster-state run.
+    EXPECT_TRUE(graphics_->draw_log_.draws.empty());
+    const auto indirect = std::span(graphics_->indirect_log_.draws);
+    ASSERT_EQ(indirect.size() % slices.size(), 0U);
+    const auto per_slice = indirect.size() / slices.size();
     for (std::size_t slice = 0U; slice < slices.size(); ++slice) {
-      oxygen::vortex::testing::ExpectRasterStateDraws(
-        std::span(graphics_->draw_log_.draws)
-          .subspan(slice * metadata.size(), metadata.size()),
-        "Vortex.ShadowDepth.");
+      oxygen::vortex::testing::ExpectRasterStateIndirectDraws(
+        indirect.subspan(slice * per_slice, per_slice), "Vortex.ShadowDepth.");
     }
   }
 }
@@ -955,17 +1009,17 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
     &resolved_view,
   };
   const auto allocation = ConventionalShadowTargetAllocator::SpotAllocation {
-    .surface_srv = oxygen::ShaderVisibleIndex { 9U, },
+    .surface = {}, .surface_srv = oxygen::ShaderVisibleIndex { 9U, },
     .resolution = glm::uvec2 { 1024U, 1024U, },
     .shadow_count = 2U,
   };
   const auto local_lights = std::array {
     FrameLocalLightSelection {
-      .kind = oxygen::vortex::LocalLightKind::kPoint,
+      .source_node = {}, .kind = oxygen::vortex::LocalLightKind::kPoint,
       .flags = kLocalLightFlagCastsShadows,
     },
     FrameLocalLightSelection {
-      .kind = oxygen::vortex::LocalLightKind::kSpot,
+      .source_node = {}, .kind = oxygen::vortex::LocalLightKind::kSpot,
       .position = glm::vec3 { 0.0F, 4.0F, 3.0F, },
       .range = 12.0F,
       .luminous_flux_lm = 100.0F,
@@ -976,7 +1030,7 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
       .shadow_normal_bias = 0.03F,
     },
     FrameLocalLightSelection {
-      .kind = oxygen::vortex::LocalLightKind::kSpot,
+      .source_node = {}, .kind = oxygen::vortex::LocalLightKind::kSpot,
       .position = glm::vec3 { 2.0F, 0.0F, 5.0F, },
       .range = 8.0F,
       .direction = glm::vec3 { -1.0F, 0.0F, -0.25F, },
@@ -1011,7 +1065,7 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
     &resolved_view,
   };
   const auto allocation = ConventionalShadowTargetAllocator::SpotAllocation {
-    .surface_srv = oxygen::ShaderVisibleIndex { 11U, },
+    .surface = {}, .surface_srv = oxygen::ShaderVisibleIndex { 11U, },
     .resolution = glm::uvec2 { 2048U, 2048U, },
     .shadow_count = 1U,
   };
@@ -1022,7 +1076,7 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   });
   const auto local_lights = std::array {
     FrameLocalLightSelection {
-      .kind = oxygen::vortex::LocalLightKind::kSpot,
+      .source_node = {}, .kind = oxygen::vortex::LocalLightKind::kSpot,
       .position = glm::vec3 { -2.8F, -3.2F, 4.2F, },
       .range = 9.0F,
       .luminous_flux_lm = 100.0F,
@@ -1068,7 +1122,7 @@ NOLINT_TEST(ShadowServiceSurfaceTest,
   };
   const auto allocation
     = ConventionalShadowTargetAllocator::DirectionalAllocation {
-        .surface_srv = oxygen::ShaderVisibleIndex { 7U, },
+        .surface = {}, .surface_srv = oxygen::ShaderVisibleIndex { 7U, },
         .resolution = glm::uvec2 { 2048U, 2048U, },
         .cascade_count = 3U,
       };
@@ -1104,6 +1158,7 @@ NOLINT_TEST(
   auto selection = FrameLightSelection {};
   selection.local_lights = {
     FrameLocalLightSelection {
+      .source_node = {},
       .kind = LocalLightKind::kSpot,
       .range = 10.0F,
       .luminous_flux_lm = 100.0F,
@@ -1111,12 +1166,14 @@ NOLINT_TEST(
     },
     FrameLocalLightSelection {},
     FrameLocalLightSelection {
+      .source_node = {},
       .kind = LocalLightKind::kPoint,
       .range = 10.0F,
       .luminous_flux_lm = 100.0F,
       .flags = kLocalLightFlagCastsShadows,
     },
     FrameLocalLightSelection {
+      .source_node = {},
       .kind = LocalLightKind::kSpot,
       .range = 10.0F,
       .luminous_flux_lm = 100.0F,
@@ -1180,6 +1237,7 @@ NOLINT_TEST(
   auto selection = FrameLightSelection {};
   selection.local_lights = {
     FrameLocalLightSelection {
+      .source_node = {},
       .range = 10.0F,
       .luminous_flux_lm = 100.0F,
       .flags = kLocalLightFlagCastsShadows,
@@ -1217,20 +1275,24 @@ NOLINT_TEST_F(
   auto selection = FrameLightSelection {};
   selection.local_lights.resize(5U,
     FrameLocalLightSelection {
+      .source_node = {},
       .range = 10.0F,
       .luminous_flux_lm = 100.0F,
       .flags = kLocalLightFlagCastsShadows,
     });
   for (unsigned i = 0U; i < selection.local_lights.size(); ++i) {
-    selection.local_lights[i].source_node
+    selection.local_lights.at(i).source_node
       = oxygen::scene::NodeHandle { i + 1U, 1U };
   }
   auto input = oxygen::vortex::PreparedViewShadowInput {};
   input.view_id = oxygen::ViewId { 17U };
   input.resolved_view = oxygen::observer_ptr { &resolved_view };
   const auto views = std::array { input };
-  service.RenderShadowDepths(
-    { .frame_light_set = &selection, .active_views = views });
+  service.RenderShadowDepths({
+    .frame_light_set = &selection,
+    .active_views = views,
+    .preparation_views = {},
+  });
   const auto* data = service.InspectShadowData(input.view_id);
   ASSERT_NE(data, nullptr);
   EXPECT_EQ(data->cube_local_records.size(), 5U);
@@ -1239,74 +1301,27 @@ NOLINT_TEST_F(
   EXPECT_EQ(service.GetLastRenderState().published_view_count, 1U);
 }
 
-NOLINT_TEST(ShadowCasterCullingTest, ProjectionRejectsUnrelatedCasters)
-{
-  auto metadata = std::array<oxygen::vortex::DrawMetadata, 4> {};
-  for (auto& draw : metadata) {
-    draw.flags.Set(oxygen::vortex::PassMaskBit::kShadowCaster);
-    draw.vertex_count = 3U;
-    draw.instance_count = 1U;
-  }
-  const auto bounds = std::array {
-    glm::vec4 { 0.0F, 0.0F, -2.0F, 0.25F },
-    glm::vec4 { 0.0F, 0.0F, 2.0F, 0.25F },
-    glm::vec4 { 20.0F, 0.0F, -2.0F, 0.25F },
-    glm::vec4 { 0.0F, 0.0F, -8.0F, 0.25F },
-  };
-  auto frame = oxygen::vortex::PreparedSceneFrame {};
-  frame.draw_metadata_bytes = std::as_bytes(std::span(metadata));
-  frame.draw_bounding_spheres = bounds;
-  const auto projection = oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
-    glm::half_pi<float>(), 1.0F, 0.1F, 10.0F);
-  auto culling = oxygen::vortex::shadows::internal::ShadowCasterCulling {};
-  culling.BuildDrawCommands(
-    frame, projection, glm::vec4 { 0.0F, 0.0F, 0.0F, 1.0F / 5.0F });
-  ASSERT_EQ(culling.GetDrawCommands().size(), 1U);
-  EXPECT_EQ(culling.GetDrawCommands().front().draw_index, 0U);
-  EXPECT_EQ(culling.GetCandidateCount(), 4U);
-}
-
-NOLINT_TEST(ShadowCasterCullingTest, KeepsShadowOnlyAndUnknownBounds)
-{
-  auto metadata = std::array<oxygen::vortex::DrawMetadata, 3> {};
-  for (auto& draw : metadata) {
-    draw.flags.Set(oxygen::vortex::PassMaskBit::kShadowCaster);
-    draw.vertex_count = 3U;
-  }
-  metadata.back().flags.Unset(oxygen::vortex::PassMaskBit::kShadowCaster);
-  const auto bounds = std::array {
-    glm::vec4 { 0.0F, 0.0F, -2.0F, 0.25F },
-  };
-  auto frame = oxygen::vortex::PreparedSceneFrame {};
-  frame.draw_metadata_bytes = std::as_bytes(std::span(metadata));
-  frame.draw_bounding_spheres = bounds;
-  auto culling = oxygen::vortex::shadows::internal::ShadowCasterCulling {};
-  culling.BuildDrawCommands(frame,
-    oxygen::MakeReversedZPerspectiveProjectionRH_ZO(
-      glm::half_pi<float>(), 1.0F, 0.1F, 10.0F));
-  ASSERT_EQ(culling.GetDrawCommands().size(), 2U);
-  EXPECT_EQ(culling.GetDrawCommands()[0].draw_index, 0U);
-  EXPECT_EQ(culling.GetDrawCommands()[1].draw_index, 1U);
-}
-
 NOLINT_TEST(ShadowServiceSurfaceTest, EligibilityAndReferencesAgreeForView)
 {
   auto view = MakePerspectiveResolvedView();
   auto selection = FrameLightSelection {};
   selection.local_lights = {
     FrameLocalLightSelection {
+      .source_node = {},
       .position = { 100.0F, 0.0F, -2.0F },
       .range = 1.0F,
       .luminous_flux_lm = 100.0F,
       .flags = kLocalLightFlagCastsShadows,
     },
     FrameLocalLightSelection {
+      .source_node = {},
       .range = 10.0F,
       .color = glm::vec3 { 0.0F },
       .luminous_flux_lm = 100.0F,
       .flags = kLocalLightFlagCastsShadows,
     },
     FrameLocalLightSelection {
+      .source_node = {},
       .range = 10.0F,
       .flags = kLocalLightFlagCastsShadows,
     },
@@ -1316,8 +1331,8 @@ NOLINT_TEST(ShadowServiceSurfaceTest, EligibilityAndReferencesAgreeForView)
     selection, data, &view));
   for (std::size_t i = 0; i < selection.local_lights.size(); ++i) {
     EXPECT_FALSE(oxygen::vortex::shadows::internal::HasLocalShadowInfluence(
-      selection.local_lights[i], &view));
-    EXPECT_EQ(data.local_shadow_references[i].coverage_state,
+      selection.local_lights.at(i), &view));
+    EXPECT_EQ(data.local_shadow_references.at(i).coverage_state,
       kShadowCoverageNoInfluence);
   }
   // The source is behind the eye, but its influence reaches visible receivers.
@@ -1357,28 +1372,34 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
   const auto inputs = std::array { input };
   service.OnFrameStart(
     oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
-  service.RenderShadowDepths(
-    { .frame_light_set = &selection, .active_views = inputs });
+  service.RenderShadowDepths({
+    .frame_light_set = &selection,
+    .active_views = inputs,
+    .preparation_views = {},
+  });
   auto surfaces = service.InspectPointShadowSurfaces(input.view_id);
   ASSERT_EQ(surfaces.size(), 2U);
-  EXPECT_EQ(surfaces[0]->GetDescriptor().width, 512U);
-  EXPECT_EQ(surfaces[1]->GetDescriptor().width, 2048U);
-  EXPECT_EQ(surfaces[0]->GetDescriptor().format, oxygen::Format::kDepth32);
-  EXPECT_EQ(surfaces[1]->GetDescriptor().format, oxygen::Format::kDepth32);
+  EXPECT_EQ(surfaces.front()->GetDescriptor().width, 512U);
+  EXPECT_EQ(surfaces.back()->GetDescriptor().width, 2048U);
+  EXPECT_EQ(surfaces.front()->GetDescriptor().format, oxygen::Format::kDepth32);
+  EXPECT_EQ(surfaces.back()->GetDescriptor().format, oxygen::Format::kDepth32);
   const auto first
     = service.InspectShadowData(input.view_id)->cube_local_records;
-  std::swap(selection.local_lights[0], selection.local_lights[1]);
+  std::swap(selection.local_lights.at(0), selection.local_lights.at(1));
   service.OnFrameStart(
     oxygen::frame::SequenceNumber { 2U }, oxygen::frame::Slot { 1U });
-  service.RenderShadowDepths(
-    { .frame_light_set = &selection, .active_views = inputs });
+  service.RenderShadowDepths({
+    .frame_light_set = &selection,
+    .active_views = inputs,
+    .preparation_views = {},
+  });
   const auto& second
     = service.InspectShadowData(input.view_id)->cube_local_records;
   ASSERT_EQ(second.size(), 2U);
-  EXPECT_EQ(second[0].surface_srv, first[1].surface_srv);
-  EXPECT_EQ(second[1].surface_srv, first[0].surface_srv);
-  EXPECT_EQ(second[0].selection_index, LightSelectionIndex { 0U });
-  EXPECT_EQ(second[1].selection_index, LightSelectionIndex { 1U });
+  EXPECT_EQ(second.at(0).surface_srv, first.at(1).surface_srv);
+  EXPECT_EQ(second.at(1).surface_srv, first.at(0).surface_srv);
+  EXPECT_EQ(second.at(0).selection_index, LightSelectionIndex { 0U });
+  EXPECT_EQ(second.at(1).selection_index, LightSelectionIndex { 1U });
 }
 
 NOLINT_TEST_F(
@@ -1388,42 +1409,49 @@ NOLINT_TEST_F(
   auto view = MakePerspectiveResolvedView();
   auto selection = FrameLightSelection {};
   selection.scene_generation = 19U;
-  selection.local_lights = { FrameLocalLightSelection {
-    .source_node = oxygen::scene::NodeHandle { 3U, 1U },
-    .range = 5.0F,
-    .luminous_flux_lm = 100.0F,
-    .flags = kLocalLightFlagCastsShadows,
-  } };
+  selection.local_lights = {
+    FrameLocalLightSelection {
+      .source_node = oxygen::scene::NodeHandle { 3U, 1U },
+      .range = 5.0F,
+      .luminous_flux_lm = 100.0F,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+  };
   selection.local_lights.push_back(selection.local_lights.front());
   selection.local_lights.back().source_node
     = oxygen::scene::NodeHandle { 4U, 1U };
   selection.local_lights.back().position.x = 5.0F;
   auto metadata = std::array<oxygen::vortex::DrawMetadata, 1> {};
-  metadata[0].flags.Set(oxygen::vortex::PassMaskBit::kShadowCaster);
-  metadata[0].flags.Set(oxygen::vortex::PassMaskBit::kMasked);
-  metadata[0].vertex_count = 3U;
+  metadata.at(0).flags.Set(oxygen::vortex::PassMaskBit::kShadowCaster);
+  metadata.at(0).flags.Set(oxygen::vortex::PassMaskBit::kMasked);
+  metadata.at(0).vertex_count = 3U;
   auto bounds = std::array { glm::vec4 { -4.0F, 0.0F, -20.0F, 0.25F } };
   auto world = std::array<float, 32> {};
-  world[0] = world[5] = world[10] = world[15] = 1.0F;
-  world[12] = -4.0F;
-  world[14] = -20.0F;
+  world.at(0) = world.at(5) = world.at(10) = world.at(15) = 1.0F;
+  world.at(12) = -4.0F;
+  world.at(14) = -20.0F;
   auto items = std::array<oxygen::vortex::sceneprep::RenderItemData, 1> {};
-  items[0].node_handle = oxygen::scene::NodeHandle { 7U, 1U };
+  items.at(0).node_handle = oxygen::scene::NodeHandle { 7U, 1U };
   auto frame = oxygen::vortex::PreparedSceneFrame {};
   frame.draw_metadata_bytes = std::as_bytes(std::span(metadata));
   frame.draw_bounding_spheres = bounds;
   frame.world_matrices = world;
   frame.render_items = items;
-  auto sources
-    = std::array { oxygen::vortex::ShadowCasterSource { .draw = metadata[0],
-      .bounds = bounds[0],
-      .node = items[0].node_handle,
-      .geometry_content_revision = 1U } };
+  auto sources = std::array {
+    oxygen::vortex::ShadowCasterSource {
+      .draw = metadata.at(0),
+      .bounds = bounds.at(0),
+      .node = items.at(0).node_handle,
+      .geometry_asset_key = {},
+      .lod_index = {},
+      .geometry_content_revision = 1U,
+    },
+  };
   frame.shadow_caster_sources = sources;
   auto materials = std::array<oxygen::vortex::MaterialShadingConstants, 2> {};
   auto texture_revisions = std::array<std::uint64_t, 2> {};
-  materials[0].base_color_texture_index = oxygen::ShaderVisibleIndex { 5U };
-  texture_revisions[0] = 1U; // This fixture samples a known masked texture.
+  materials.at(0).base_color_texture_index = oxygen::ShaderVisibleIndex { 5U };
+  texture_revisions.at(0) = 1U; // This fixture samples a known masked texture.
   frame.shadow_materials = materials;
   frame.shadow_texture_revisions = texture_revisions;
   const auto constants = graphics_->CreateBuffer({
@@ -1431,24 +1459,34 @@ NOLINT_TEST_F(
     .usage = oxygen::graphics::BufferUsage::kConstant,
     .memory = oxygen::graphics::BufferMemory::kUpload,
   });
-  const auto inputs = std::array { oxygen::vortex::PreparedViewShadowInput {
-    .view_id = oxygen::ViewId { 24U },
-    .prepared_scene = oxygen::observer_ptr { &frame },
-    .resolved_view = oxygen::observer_ptr { &view },
-    .view_constants = oxygen::observer_ptr { constants.get() },
-  } };
+  const auto inputs = std::array {
+    oxygen::vortex::PreparedViewShadowInput {
+      .view_id = oxygen::ViewId { 24U },
+      .shadow_caster_dependencies = {},
+      .prepared_scene = oxygen::observer_ptr { &frame },
+      .resolved_view = oxygen::observer_ptr { &view },
+      .view_constants = oxygen::observer_ptr { constants.get() },
+      .composition_view = {},
+    },
+  };
+  // The fake graphics creates fake queues.
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* queue = static_cast<oxygen::vortex::testing::FakeCommandQueue*>(
     graphics_->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics).get());
   queue->SetAutoComplete(false);
-  const auto render = [&](const std::uint32_t number) {
+  const auto render = [&](const std::uint32_t number) -> void {
     service.OnFrameStart(oxygen::frame::SequenceNumber { number },
       oxygen::frame::Slot { number % 3U });
-    service.RenderShadowDepths(
-      { .frame_light_set = &selection, .active_views = inputs });
+    service.RenderShadowDepths({
+      .frame_light_set = &selection,
+      .active_views = inputs,
+      .preparation_views = {},
+    });
   };
   render(1U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 2U);
-  EXPECT_EQ(service.GetLastRenderState().rendered_draw_count, 0U);
+  // Each face submits every caster to its GPU culling, out of range or not.
+  EXPECT_EQ(service.GetLastRenderState().submitted_draw_count, 12U);
   const auto submitted = queue->submitted_batches;
   EXPECT_EQ(submitted, 2U);
   {
@@ -1468,27 +1506,27 @@ NOLINT_TEST_F(
   EXPECT_EQ(queue->InspectSubmissionCounters().dependency_waits, 0U);
   EXPECT_TRUE(queue->submitted_actions
       .empty()); // no shadow self-waits or reserved signals
-  sources[0].bounds.z = bounds[0].z = world[14] = -2.0F;
+  sources.at(0).bounds.z = bounds.at(0).z = world.at(14) = -2.0F;
   render(3U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 1U);
-  EXPECT_GT(service.GetLastRenderState().rendered_draw_count, 0U);
+  EXPECT_GT(service.GetLastRenderState().submitted_draw_count, 0U);
   // Non-caster transforms, unrelated materials/textures and source ordering
   // must not invalidate either map, including maps sharing one surface.
-  world[28] = 100.0F;
-  materials[1].alpha_cutoff = 0.8F;
-  texture_revisions[1] = 1U;
-  std::swap(selection.local_lights[0], selection.local_lights[1]);
+  world.at(28) = 100.0F;
+  materials.at(1).alpha_cutoff = 0.8F;
+  texture_revisions.at(1) = 1U;
+  std::swap(selection.local_lights.at(0), selection.local_lights.at(1));
   render(4U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 0U);
-  texture_revisions[0] = 2U;
+  texture_revisions.at(0) = 2U;
   graphics_->SetFailSubmission(true);
   render(5U);
-  EXPECT_EQ(service.InspectShadowData(inputs[0].view_id), nullptr);
+  EXPECT_EQ(service.InspectShadowData(inputs.at(0).view_id), nullptr);
   graphics_->SetFailSubmission(false);
   render(6U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 1U);
-  EXPECT_NE(service.InspectShadowData(inputs[0].view_id), nullptr);
-  sources[0].bounds.z = bounds[0].z = world[14] = -20.0F;
+  EXPECT_NE(service.InspectShadowData(inputs.at(0).view_id), nullptr);
+  sources.at(0).bounds.z = bounds.at(0).z = world.at(14) = -20.0F;
   render(7U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 1U);
   render(8U);
@@ -1508,7 +1546,7 @@ NOLINT_TEST_F(
   render(12U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 0U);
   // Both maps leave camera coverage while caster content is replaced in place.
-  sources[0].bounds.z = bounds[0].z = world[14] = -2.0F;
+  sources.at(0).bounds.z = bounds.at(0).z = world.at(14) = -2.0F;
   render(13U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 1U);
   render(14U);
@@ -1516,32 +1554,33 @@ NOLINT_TEST_F(
   auto away_params = oxygen::ResolvedView::Params {};
   away_params.view_config.viewport = view.Viewport();
   away_params.proj_matrix = view.StableProjectionMatrix();
-  away_params.view_matrix[3][0] = -10000.0F;
+  away_params.view_matrix
+    = glm::translate(glm::mat4 { 1.0F }, glm::vec3 { -10000.0F, 0.0F, 0.0F });
   away_params.near_plane = 0.1F;
   away_params.far_plane = 100.0F;
   view = oxygen::ResolvedView(away_params);
   render(15U);
-  EXPECT_TRUE(service.InspectPointShadowSurfaces(inputs[0].view_id).empty());
-  ++sources[0].geometry_content_revision;
+  EXPECT_TRUE(service.InspectPointShadowSurfaces(inputs.at(0).view_id).empty());
+  ++sources.at(0).geometry_content_revision;
   render(16U);
   view = MakePerspectiveResolvedView();
   render(17U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 1U);
   render(18U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 0U);
-  sources[0].geometry_content_revision = 0U;
+  sources.at(0).geometry_content_revision = 0U;
   render(19U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 1U);
   render(20U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 1U);
-  sources[0].geometry_content_revision = 2U;
+  sources.at(0).geometry_content_revision = 2U;
   frame.preparation_revision = 1U;
   selection.selection_epoch = 1U;
   render(21U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 1U);
   render(21U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 0U);
-  world[12] -= 0.01F;
+  world.at(12) -= 0.01F;
   ++frame.preparation_revision; // Same frame, rebuilt offscreen snapshot.
   render(21U);
   EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count, 1U);
@@ -1563,19 +1602,22 @@ NOLINT_TEST(ShadowQualityTest, BucketsHysteresisAndFadeFollowProjectedSize)
 NOLINT_TEST(ShadowQualityTest, QualityOmissionDoesNotBecomeMissingShadow)
 {
   auto selection = FrameLightSelection {};
-  selection.local_lights = { FrameLocalLightSelection {
-    .range = 10.0F,
-    .luminous_flux_lm = 100.0F,
-    .flags = kLocalLightFlagCastsShadows,
-  } };
+  selection.local_lights = {
+    FrameLocalLightSelection {
+      .source_node = {},
+      .range = 10.0F,
+      .luminous_flux_lm = 100.0F,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+  };
   auto data = ShadowFrameData {};
   data.local_quality_omissions = { LightSelectionIndex { 0U } };
   ASSERT_TRUE(
     oxygen::vortex::shadows::internal::BuildShadowReferences(selection, data));
-  EXPECT_EQ(data.local_shadow_references[0].coverage_state,
+  EXPECT_EQ(data.local_shadow_references.at(0).coverage_state,
     oxygen::vortex::kShadowCoverageQualityOmitted);
   EXPECT_EQ(
-    data.local_shadow_references[0].record_index, kInvalidShadowRecordIndex);
+    data.local_shadow_references.at(0).record_index, kInvalidShadowRecordIndex);
   data.local_quality_omissions.clear();
   EXPECT_FALSE(
     oxygen::vortex::shadows::internal::BuildShadowReferences(selection, data));
@@ -1610,6 +1652,8 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
 {
   auto allocator = ConventionalShadowTargetAllocator(*renderer_);
   const auto view = oxygen::ViewId { 71 };
+  // The fake graphics creates fake queues.
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* queue = static_cast<oxygen::vortex::testing::FakeCommandQueue*>(
     graphics_->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics).get());
   queue->SetAutoComplete(false);
@@ -1621,14 +1665,20 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
     = ProduceMap(allocator, view, oxygen::scene::NodeHandle { 11, 1 }, 512);
   const auto first_handle = first->version->slot->handle;
   const auto first_offset = first->version->slot->offset;
+  if (!first->version->producer.has_value()) {
+    FAIL() << "Expected the first map's producer receipt";
+  }
   const auto receipt = *first->version->producer;
   const auto pool = first->version->slot->pool.lock();
   const auto backing = first->version->slot->backing;
-  std::array lights { FrameLocalLightSelection {
-    .source_node = oxygen::scene::NodeHandle { 11, 1 },
-    .range = 5,
-    .luminous_flux_lm = 100,
-    .flags = kLocalLightFlagCastsShadows } };
+  std::array lights {
+    FrameLocalLightSelection {
+      .source_node = oxygen::scene::NodeHandle { 11, 1 },
+      .range = 5,
+      .luminous_flux_lm = 100,
+      .flags = kLocalLightFlagCastsShadows,
+    },
+  };
   allocator.RetainLocalSources(view, 1, lights);
   first.reset();
   EXPECT_FALSE(pool->reuse.IsHandleCurrent(first_handle));
@@ -1666,7 +1716,8 @@ NOLINT_TEST(ShadowQualityTest, OrthographicAxisMotionPreservesResolutionAndFade)
   params.camera_position = glm::vec3 { 0.0F };
   const auto inside = oxygen::ResolvedView(params);
   params.camera_position = glm::vec3 { 0.0F, 0.0F, 20.0F };
-  params.view_matrix[3][2] = -20.0F;
+  params.view_matrix
+    = glm::translate(glm::mat4 { 1.0F }, glm::vec3 { 0.0F, 0.0F, -20.0F });
   const auto outside = oxygen::ResolvedView(params);
   const auto a = oxygen::vortex::shadows::internal::EvaluateLocalShadowQuality(
     light, &inside, 1024U);
@@ -1686,45 +1737,61 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
   auto view = MakePerspectiveResolvedView();
   auto selection = FrameLightSelection {};
   selection.scene_generation = 41U;
-  selection.directional_lights
-    = { FrameDirectionalLightSelection { .illuminance_lux = 100.0F,
+  selection.directional_lights = {
+    FrameDirectionalLightSelection {
+      .source_node = {},
+      .illuminance_lux = 100.0F,
       .shadow_flags = kDirectionalLightShadowFlagCastsShadows,
       .cascade_count = 1U,
-      .shadow_resolution_hint = oxygen::scene::ShadowResolutionHint::kLow } };
+      .shadow_resolution_hint = oxygen::scene::ShadowResolutionHint::kLow,
+    },
+  };
   selection.local_lights = {
     FrameLocalLightSelection {
       .source_node = oxygen::scene::NodeHandle { 1U, 1U },
       .range = 5.0F,
       .luminous_flux_lm = 100.0F,
-      .flags = kLocalLightFlagCastsShadows },
+      .flags = kLocalLightFlagCastsShadows,
+    },
     FrameLocalLightSelection {
       .source_node = oxygen::scene::NodeHandle { 2U, 1U },
       .kind = LocalLightKind::kSpot,
       .range = 5.0F,
       .luminous_flux_lm = 100.0F,
-      .flags = kLocalLightFlagCastsShadows },
+      .flags = kLocalLightFlagCastsShadows,
+    },
   };
-  const auto views = std::array { oxygen::vortex::PreparedViewShadowInput {
-    .view_id = oxygen::ViewId { 92U },
-    .resolved_view = oxygen::observer_ptr { &view } } };
-  const auto render = [&](unsigned number) {
+  const auto views = std::array {
+    oxygen::vortex::PreparedViewShadowInput {
+      .view_id = oxygen::ViewId { 92U },
+      .shadow_caster_dependencies = {},
+      .prepared_scene = {},
+      .resolved_view = oxygen::observer_ptr { &view },
+      .view_constants = {},
+      .composition_view = {},
+    },
+  };
+  const auto render = [&](unsigned number) -> void {
     const auto slot = oxygen::frame::Slot { (number - 1U) % 3U };
     graphics_->PollCompletedUses();
     graphics_->GetDeferredReclaimer().OnBeginFrame(slot);
     service.OnFrameStart(oxygen::frame::SequenceNumber { number }, slot);
-    service.RenderShadowDepths(
-      { .frame_light_set = &selection, .active_views = views });
-    EXPECT_NE(service.InspectShadowData(views[0].view_id), nullptr);
+    service.RenderShadowDepths({
+      .frame_light_set = &selection,
+      .active_views = views,
+      .preparation_views = {},
+    });
+    EXPECT_NE(service.InspectShadowData(views.at(0).view_id), nullptr);
   };
   render(1U);
-  ASSERT_EQ(service.InspectPointShadowSurfaces(views[0].view_id).size(), 1U);
-  ASSERT_EQ(service.InspectSpotShadowSurfaces(views[0].view_id).size(), 1U);
+  ASSERT_EQ(service.InspectPointShadowSurfaces(views.at(0).view_id).size(), 1U);
+  ASSERT_EQ(service.InspectSpotShadowSurfaces(views.at(0).view_id).size(), 1U);
   const auto point = std::weak_ptr(
-    service.InspectPointShadowSurfaces(views[0].view_id).front());
+    service.InspectPointShadowSurfaces(views.at(0).view_id).front());
   const auto spot = std::weak_ptr(
-    service.InspectSpotShadowSurfaces(views[0].view_id).front());
+    service.InspectSpotShadowSurfaces(views.at(0).view_id).front());
   const auto sun = std::weak_ptr(
-    service.InspectDirectionalShadowSurfaces(views[0].view_id).front());
+    service.InspectDirectionalShadowSurfaces(views.at(0).view_id).front());
   selection.local_lights.clear();
   render(2U);
   EXPECT_FALSE(point.expired());
@@ -1751,42 +1818,59 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
       .source_node = oxygen::scene::NodeHandle { 1U, 1U },
       .range = 5.0F,
       .luminous_flux_lm = 100.0F,
-      .flags = kLocalLightFlagCastsShadows },
+      .flags = kLocalLightFlagCastsShadows,
+    },
     FrameLocalLightSelection {
       .source_node = oxygen::scene::NodeHandle { 2U, 1U },
       .kind = LocalLightKind::kSpot,
       .range = 5.0F,
       .luminous_flux_lm = 100.0F,
-      .flags = kLocalLightFlagCastsShadows },
+      .flags = kLocalLightFlagCastsShadows,
+    },
   };
-  selection.local_lights[1].direction = { 0.0F, 0.0F, -1.0F };
+  selection.local_lights.at(1).direction = { 0.0F, 0.0F, -1.0F };
   auto metadata = std::array<oxygen::vortex::DrawMetadata, 1> {};
-  metadata[0].flags.Set(oxygen::vortex::PassMaskBit::kShadowCaster);
-  metadata[0].vertex_count = 3U;
+  metadata.at(0).flags.Set(oxygen::vortex::PassMaskBit::kShadowCaster);
+  metadata.at(0).vertex_count = 3U;
   auto bounds = std::array { glm::vec4 { 0.0F, 0.0F, -1.0F, 0.1F } };
   auto world = std::array<float, 16> {};
-  world[0] = world[5] = world[10] = world[15] = 1.0F;
-  world[14] = -1.0F;
-  auto sources
-    = std::array { oxygen::vortex::ShadowCasterSource { .draw = metadata[0],
-      .bounds = bounds[0],
-      .geometry_content_revision = 1U } };
+  world.at(0) = world.at(5) = world.at(10) = world.at(15) = 1.0F;
+  world.at(14) = -1.0F;
+  auto sources = std::array {
+    oxygen::vortex::ShadowCasterSource {
+      .draw = metadata.at(0),
+      .bounds = bounds.at(0),
+      .node = {},
+      .geometry_asset_key = {},
+      .lod_index = {},
+      .geometry_content_revision = 1U,
+    },
+  };
   scene.draw_metadata_bytes = std::as_bytes(std::span(metadata));
   scene.draw_bounding_spheres = bounds;
   scene.shadow_caster_sources = sources;
   scene.world_matrices = world;
-  const auto constants = graphics_->CreateBuffer({ .size_bytes = 1024U,
+  const auto constants = graphics_->CreateBuffer({
+    .size_bytes = 1024U,
     .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload });
-  const auto views = std::array { oxygen::vortex::PreparedViewShadowInput {
-    .view_id = oxygen::ViewId { 93U },
-    .prepared_scene = oxygen::observer_ptr { &scene },
-    .resolved_view = oxygen::observer_ptr { &view },
-    .view_constants = oxygen::observer_ptr { constants.get() } } };
+    .memory = oxygen::graphics::BufferMemory::kUpload,
+  });
+  const auto views = std::array {
+    oxygen::vortex::PreparedViewShadowInput {
+      .view_id = oxygen::ViewId { 93U },
+      .shadow_caster_dependencies = {},
+      .prepared_scene = oxygen::observer_ptr { &scene },
+      .resolved_view = oxygen::observer_ptr { &view },
+      .view_constants = oxygen::observer_ptr { constants.get() },
+      .composition_view = {},
+    },
+  };
   auto frame = 0U;
-  for (auto hint : { oxygen::scene::ShadowResolutionHint::kMedium,
+  for (auto hint : {
+         oxygen::scene::ShadowResolutionHint::kMedium,
          oxygen::scene::ShadowResolutionHint::kLow,
-         oxygen::scene::ShadowResolutionHint::kMedium }) {
+         oxygen::scene::ShadowResolutionHint::kMedium,
+       }) {
     for (auto& light : selection.local_lights) {
       light.shadow_resolution_hint = hint;
     }
@@ -1795,36 +1879,39 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
       graphics_->PollCompletedUses();
       graphics_->GetDeferredReclaimer().OnBeginFrame(slot);
       service.OnFrameStart(oxygen::frame::SequenceNumber { ++frame }, slot);
-      service.RenderShadowDepths(
-        { .frame_light_set = &selection, .active_views = views });
-      const auto* data = service.InspectShadowData(views[0].view_id);
+      service.RenderShadowDepths({
+        .frame_light_set = &selection,
+        .active_views = views,
+        .preparation_views = {},
+      });
+      const auto* data = service.InspectShadowData(views.at(0).view_id);
       ASSERT_NE(data, nullptr);
       ASSERT_EQ(data->cube_local_records.size(), 1U);
       ASSERT_EQ(data->projected_local_records.size(), 1U);
       const auto resolution
         = hint == oxygen::scene::ShadowResolutionHint::kLow ? 512U : 1024U;
       EXPECT_FLOAT_EQ(
-        data->cube_local_records[0].inverse_resolution.x, 1.0F / resolution);
-      EXPECT_FLOAT_EQ(data->projected_local_records[0].inverse_resolution.x,
+        data->cube_local_records.at(0).inverse_resolution.x, 1.0F / resolution);
+      EXPECT_FLOAT_EQ(data->projected_local_records.at(0).inverse_resolution.x,
         1.0F / resolution);
       EXPECT_EQ(service.GetLastRenderState().rendered_point_shadow_count,
         repeat == 0U ? 1U : 0U);
       EXPECT_EQ(service.GetLastRenderState().rendered_spot_shadow_count,
         repeat == 0U ? 1U : 0U);
       EXPECT_EQ(
-        service.GetLastRenderState().rendered_draw_count > 0U, repeat == 0U);
+        service.GetLastRenderState().submitted_draw_count > 0U, repeat == 0U);
     }
   }
 }
 
 class ShadowTestQueues final : public oxygen::graphics::QueuesStrategy {
 public:
-  auto Clone() const
+  [[nodiscard]] auto Clone() const
     -> std::unique_ptr<oxygen::graphics::QueuesStrategy> override
   {
     return std::make_unique<ShadowTestQueues>();
   }
-  auto KeyFor(oxygen::graphics::QueueRole role) const
+  [[nodiscard]] auto KeyFor(oxygen::graphics::QueueRole role) const
     -> oxygen::graphics::QueueKey override
   {
     return oxygen::graphics::QueueKey {
@@ -1832,22 +1919,32 @@ public:
                                                     : "universal"
     };
   }
-  auto Specifications() const
+  [[nodiscard]] auto Specifications() const
     -> std::vector<oxygen::graphics::QueueSpecification> override
   {
-    using namespace oxygen::graphics;
-    return { { KeyFor(QueueRole::kGraphics), QueueRole::kGraphics,
-               QueueAllocationPreference::kDedicated,
-               QueueSharingPreference::kShared },
-      { KeyFor(QueueRole::kCompute), QueueRole::kCompute,
-        QueueAllocationPreference::kDedicated,
-        QueueSharingPreference::kShared } };
+    using oxygen::graphics::QueueAllocationPreference;
+    using oxygen::graphics::QueueRole;
+    using oxygen::graphics::QueueSharingPreference;
+    return {
+      {
+        .key = KeyFor(QueueRole::kGraphics),
+        .role = QueueRole::kGraphics,
+        .allocation_preference = QueueAllocationPreference::kDedicated,
+        .sharing_preference = QueueSharingPreference::kShared,
+      },
+      {
+        .key = KeyFor(QueueRole::kCompute),
+        .role = QueueRole::kCompute,
+        .allocation_preference = QueueAllocationPreference::kDedicated,
+        .sharing_preference = QueueSharingPreference::kShared,
+      },
+    };
   }
 };
 
 class ShadowSharingTest : public ShadowServiceBehaviorTest {
 protected:
-  auto MakeQueueStrategy() const
+  [[nodiscard]] auto MakeQueueStrategy() const
     -> std::unique_ptr<oxygen::graphics::QueuesStrategy> override
   {
     return std::make_unique<ShadowTestQueues>();
@@ -1857,23 +1954,30 @@ protected:
     ShadowServiceBehaviorTest::SetUp();
     selection.scene_generation = 77;
     selection.selection_epoch = 1;
-    selection.local_lights = { FrameLocalLightSelection {
-      .source_node = oxygen::scene::NodeHandle { 9, 1 },
-      .range = 5,
-      .luminous_flux_lm = 100,
-      .flags = kLocalLightFlagCastsShadows,
-      .shadow_resolution_hint = oxygen::scene::ShadowResolutionHint::kLow } };
+    selection.local_lights = {
+      FrameLocalLightSelection {
+        .source_node = oxygen::scene::NodeHandle { 9, 1 },
+        .range = 5,
+        .luminous_flux_lm = 100,
+        .flags = kLocalLightFlagCastsShadows,
+        .shadow_resolution_hint = oxygen::scene::ShadowResolutionHint::kLow,
+      },
+    };
     for (size_t i = 0; i < scenes.size(); ++i) {
-      sources[i].node = oxygen::scene::NodeHandle { 7, 1 };
-      sources[i].geometry_content_revision = 1;
-      sources[i].bounds = glm::vec4(0, 0, -1, 0.1F);
-      scenes[i].preparation_revision = i + 1;
-      scenes[i].world_matrices = world;
-      scenes[i].shadow_caster_sources = { &sources[i], 1 };
-      inputs[i]
-        = { .view_id = oxygen::ViewId { static_cast<uint32_t>(101 + i) },
-            .prepared_scene = oxygen::observer_ptr { &scenes[i] },
-            .resolved_view = oxygen::observer_ptr { &view } };
+      sources.at(i).node = oxygen::scene::NodeHandle { 7, 1 };
+      sources.at(i).geometry_content_revision = 1;
+      sources.at(i).bounds = glm::vec4(0, 0, -1, 0.1F);
+      scenes.at(i).preparation_revision = i + 1;
+      scenes.at(i).world_matrices = world;
+      scenes.at(i).shadow_caster_sources = { &sources.at(i), 1 };
+      inputs.at(i) = {
+        .view_id = oxygen::ViewId { static_cast<uint32_t>(101 + i) },
+        .shadow_caster_dependencies = {},
+        .prepared_scene = oxygen::observer_ptr { &scenes.at(i) },
+        .resolved_view = oxygen::observer_ptr { &view },
+        .view_constants = {},
+        .composition_view = {},
+      };
     }
     service = std::make_unique<ShadowService>(*renderer_);
   }
@@ -1886,13 +1990,16 @@ protected:
         oxygen::frame::Slot { static_cast<uint32_t>(number % 3) });
       frame = number;
     }
-    service->RenderShadowDepths({ .frame_light_set = &selection,
+    service->RenderShadowDepths({
+      .frame_light_set = &selection,
       .active_views = active.empty() ? std::span(inputs) : active,
-      .preparation_views = inputs });
+      .preparation_views = inputs,
+    });
   }
-  auto Record(size_t view_index) const -> CubeLocalShadowRecord
+  [[nodiscard]] auto Record(size_t view_index) const -> CubeLocalShadowRecord
   {
-    const auto* data = service->InspectShadowData(inputs[view_index].view_id);
+    const auto* data
+      = service->InspectShadowData(inputs.at(view_index).view_id);
     if (!data || data->cube_local_records.empty()) {
       throw std::runtime_error("Missing test publication");
     }
@@ -1901,13 +2008,29 @@ protected:
   void MutateCasters()
   {
     for (size_t i = 0; i < scenes.size(); ++i) {
-      ++sources[i].geometry_content_revision;
-      scenes[i].preparation_revision += 2;
+      ++sources.at(i).geometry_content_revision;
+      scenes.at(i).preparation_revision += 2;
     }
   }
   oxygen::ResolvedView view = MakePerspectiveResolvedView();
-  std::array<float, 16> world { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-    1 };
+  std::array<float, 16> world {
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+  };
   std::array<oxygen::vortex::ShadowCasterSource, 2> sources;
   std::array<oxygen::vortex::PreparedSceneFrame, 2> scenes;
   std::array<oxygen::vortex::PreparedViewShadowInput, 2> inputs;
@@ -1923,6 +2046,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(service->GetLastRenderState().rendered_point_shadow_count, 1U);
   EXPECT_EQ(Record(0).surface_srv, Record(1).surface_srv);
   EXPECT_EQ(Record(0).first_array_layer, Record(1).first_array_layer);
+  // The fake graphics creates fake queues.
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* queue = static_cast<oxygen::vortex::testing::FakeCommandQueue*>(
     graphics_->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics).get());
   const auto submissions = queue->submitted_batches;
@@ -1944,21 +2069,21 @@ NOLINT_TEST_F(
   EXPECT_EQ(service->GetLastRenderState().rendered_point_shadow_count, 0U);
   EXPECT_EQ(Record(0).surface_srv, Record(1).surface_srv);
   EXPECT_EQ(Record(0).first_array_layer, Record(1).first_array_layer);
-  EXPECT_NE(service->InspectReadSet(inputs[0].view_id), nullptr);
+  EXPECT_NE(service->InspectReadSet(inputs.at(0).view_id), nullptr);
 }
 NOLINT_TEST_F(ShadowSharingTest,
   RetainedContentForcesCopyOnWriteAndSurvivesPublicationExpiry)
 {
   Render(1);
   auto retained = service->RetainLocalContent(
-    inputs[0].view_id, selection.local_lights[0].source_node);
+    inputs.at(0).view_id, selection.local_lights.at(0).source_node);
   ASSERT_TRUE(retained);
   const auto original_layer = retained.FirstLayer();
   const auto original_texture = retained.Texture();
   MutateCasters();
   Render(2);
   const auto current = service->RetainLocalContent(
-    inputs[0].view_id, selection.local_lights[0].source_node);
+    inputs.at(0).view_id, selection.local_lights.at(0).source_node);
   ASSERT_TRUE(current);
   EXPECT_TRUE(current.Texture() != original_texture
     || current.FirstLayer() != original_layer);
@@ -1974,16 +2099,16 @@ NOLINT_TEST_F(
 {
   Render(1);
   const auto old_texture
-    = service->InspectPointShadowSurfaces(inputs[0].view_id).front();
+    = service->InspectPointShadowSurfaces(inputs.at(0).view_id).front();
   auto recording = graphics_->AcquireCommandRecorder(
     graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
     "Delayed reader", oxygen::graphics::SubmissionPolicy::kExplicit);
-  service->AttachLocalReads(inputs[0].view_id,
-    oxygen::frame::SequenceNumber { 1 }, scenes[0].preparation_revision,
+  service->AttachLocalReads(inputs.at(0).view_id,
+    oxygen::frame::SequenceNumber { 1 }, scenes.at(0).preparation_revision,
     *recording);
   MutateCasters();
   Render(2);
-  EXPECT_NE(service->InspectPointShadowSurfaces(inputs[0].view_id).front(),
+  EXPECT_NE(service->InspectPointShadowSurfaces(inputs.at(0).view_id).front(),
     old_texture);
   EXPECT_FALSE(recording.Submit()); // frame publication expired;
                                     // retained-content captures use a lease
@@ -1992,7 +2117,7 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(ShadowSharingTest, ExpiredFrameReadSetRejectsNewAttachment)
 {
   Render(1);
-  const auto expired = service->InspectReadSet(inputs[0].view_id);
+  const auto expired = service->InspectReadSet(inputs.at(0).view_id);
   ASSERT_NE(expired, nullptr);
   Render(2);
   auto recording = graphics_->AcquireCommandRecorder(
@@ -2000,7 +2125,7 @@ NOLINT_TEST_F(ShadowSharingTest, ExpiredFrameReadSetRejectsNewAttachment)
     "Expired frame", oxygen::graphics::SubmissionPolicy::kExplicit);
   EXPECT_EQ(expired
               ->Attach(oxygen::frame::SequenceNumber { 1 },
-                scenes[0].preparation_revision, *recording,
+                scenes.at(0).preparation_revision, *recording,
                 graphics_->GetResourceRegistry())
               .error(),
     oxygen::vortex::ShadowUseError::kClosed);
@@ -2008,13 +2133,13 @@ NOLINT_TEST_F(ShadowSharingTest, ExpiredFrameReadSetRejectsNewAttachment)
 }
 NOLINT_TEST_F(ShadowSharingTest, DifferentLodsRemainSeparateWhileEqualLodsShare)
 {
-  sources[1].lod_index = oxygen::data::LodIndex { 1U };
+  sources.at(1).lod_index = oxygen::data::LodIndex { 1U };
   Render(1);
   EXPECT_EQ(service->GetLastRenderState().rendered_point_shadow_count, 2U);
   EXPECT_TRUE(Record(0).surface_srv != Record(1).surface_srv
     || Record(0).first_array_layer != Record(1).first_array_layer);
-  sources[1].lod_index = oxygen::data::LodIndex {};
-  scenes[1].preparation_revision += 2;
+  sources.at(1).lod_index = oxygen::data::LodIndex {};
+  scenes.at(1).preparation_revision += 2;
   Render(2);
   EXPECT_EQ(service->GetLastRenderState().rendered_point_shadow_count, 0U);
   EXPECT_EQ(Record(0).surface_srv, Record(1).surface_srv);
@@ -2025,10 +2150,10 @@ NOLINT_TEST_F(
 {
   graphics_->SetFailSubmission(true);
   Render(1, std::span(inputs).first(1));
-  EXPECT_EQ(service->InspectShadowData(inputs[0].view_id), nullptr);
+  EXPECT_EQ(service->InspectShadowData(inputs.at(0).view_id), nullptr);
   graphics_->SetFailSubmission(false);
   Render(1, std::span(inputs).subspan(1));
-  EXPECT_NE(service->InspectShadowData(inputs[1].view_id), nullptr);
+  EXPECT_NE(service->InspectShadowData(inputs.at(1).view_id), nullptr);
   EXPECT_EQ(service->GetLastRenderState().rendered_point_shadow_count, 1U);
 }
 NOLINT_TEST_F(ShadowSharingTest,
@@ -2036,7 +2161,7 @@ NOLINT_TEST_F(ShadowSharingTest,
 {
   Render(1);
   auto retained = service->RetainLocalContent(
-    inputs[0].view_id, selection.local_lights[0].source_node);
+    inputs.at(0).view_id, selection.local_lights.at(0).source_node);
   ASSERT_TRUE(retained);
   const auto key
     = graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics);
@@ -2049,7 +2174,9 @@ NOLINT_TEST_F(ShadowSharingTest,
     oxygen::vortex::ShadowUseError::kNotReady);
   blocked.Discard();
   const auto result = copy.SubmitWithReceipt();
-  ASSERT_TRUE(result.receipt);
+  if (!result.receipt.has_value()) {
+    FAIL() << "Expected a submission receipt";
+  }
   auto reader = graphics_->AcquireCommandRecorder(
     key, "Ordered reader", oxygen::graphics::SubmissionPolicy::kExplicit);
   ASSERT_TRUE(retained.Attach(*reader, graphics_->GetResourceRegistry()));
@@ -2066,9 +2193,13 @@ NOLINT_TEST_F(
   Render(1);
   const auto original = Record(0);
   auto lease = service->RetainLocalContent(
-    inputs[0].view_id, selection.local_lights[0].source_node);
+    inputs.at(0).view_id, selection.local_lights.at(0).source_node);
+  // The fake graphics creates fake queues.
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* compute = static_cast<oxygen::vortex::testing::FakeCommandQueue*>(
     graphics_->GetCommandQueue(oxygen::graphics::QueueRole::kCompute).get());
+  // The fake graphics creates fake queues.
+  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* graphics = static_cast<oxygen::vortex::testing::FakeCommandQueue*>(
     graphics_->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics).get());
   compute->SetAutoComplete(false);
@@ -2077,7 +2208,9 @@ NOLINT_TEST_F(
     "Cross-queue reader", oxygen::graphics::SubmissionPolicy::kExplicit);
   ASSERT_TRUE(lease.Attach(*reader, graphics_->GetResourceRegistry()));
   const auto result = reader.SubmitWithReceipt();
-  ASSERT_TRUE(result.receipt);
+  if (!result.receipt.has_value()) {
+    FAIL() << "Expected a submission receipt";
+  }
   lease = {};
   graphics->waited_dependencies.clear();
   MutateCasters();
@@ -2102,25 +2235,26 @@ NOLINT_TEST_F(ShadowSharingTest,
     params.proj_matrix = oxygen::MakeReversedZOrthographicProjectionRH_ZO(
       -1, 1, -1, 1, 0.1F, 100);
     const auto x = i == 0 ? -1.0F : 1.0F;
-    params.view_matrix[3][0] = -x;
+    params.view_matrix
+      = glm::translate(glm::mat4 { 1.0F }, glm::vec3 { -x, 0.0F, 0.0F });
     params.camera_position = glm::vec3(x, 0, 0);
     params.near_plane = 0.1F;
     params.far_plane = 100;
-    resolved[i] = oxygen::ResolvedView(params);
-    inputs[i].resolved_view = oxygen::observer_ptr { &resolved[i] };
+    resolved.at(i) = oxygen::ResolvedView(params);
+    inputs.at(i).resolved_view = oxygen::observer_ptr { &resolved.at(i) };
   }
   const auto prototype = selection.local_lights.front();
   selection.local_lights.assign(3, prototype);
   for (uint32_t i = 0; i < 3; ++i) {
-    auto& light = selection.local_lights[i];
+    auto& light = selection.local_lights.at(i);
     light.source_node = oxygen::scene::NodeHandle { 20 + i, 1 };
-    light.position = glm::vec3(-2.0F + 2.0F * i, 0, -3);
+    light.position = glm::vec3(-2.0F + (2.0F * static_cast<float>(i)), 0, -3);
     light.range = 0.75F;
   }
   Render(1);
   EXPECT_EQ(service->GetLastRenderState().rendered_point_shadow_count, 3U);
-  const auto& a = *service->InspectShadowData(inputs[0].view_id);
-  const auto& b = *service->InspectShadowData(inputs[1].view_id);
+  const auto& a = *service->InspectShadowData(inputs.at(0).view_id);
+  const auto& b = *service->InspectShadowData(inputs.at(1).view_id);
   ASSERT_EQ(a.cube_local_records.size(), 2U);
   ASSERT_EQ(b.cube_local_records.size(), 2U);
   const auto find_shared
@@ -2130,15 +2264,15 @@ NOLINT_TEST_F(ShadowSharingTest,
   };
   EXPECT_EQ(find_shared(a).surface_srv, find_shared(b).surface_srv);
   EXPECT_EQ(find_shared(a).first_array_layer, find_shared(b).first_array_layer);
-  EXPECT_EQ(a.local_shadow_references[2].coverage_state,
+  EXPECT_EQ(a.local_shadow_references.at(2).coverage_state,
     oxygen::vortex::kShadowCoverageNoInfluence);
-  EXPECT_EQ(b.local_shadow_references[0].coverage_state,
+  EXPECT_EQ(b.local_shadow_references.at(0).coverage_state,
     oxygen::vortex::kShadowCoverageNoInfluence);
 }
 NOLINT_TEST_F(
   ShadowSharingTest, UnknownCasterContinuityRemainsIndependentAndRedraws)
 {
-  sources[1].geometry_content_revision = 0;
+  sources.at(1).geometry_content_revision = 0;
   Render(1);
   EXPECT_EQ(service->GetLastRenderState().rendered_point_shadow_count, 2U);
   EXPECT_TRUE(Record(0).surface_srv != Record(1).surface_srv
@@ -2154,8 +2288,8 @@ NOLINT_TEST_F(
   auto recording = graphics_->AcquireCommandRecorder(
     graphics_->QueueKeyFor(oxygen::graphics::QueueRole::kGraphics),
     "Late frame-ring reader", oxygen::graphics::SubmissionPolicy::kExplicit);
-  service->AttachLocalReads(inputs[0].view_id,
-    oxygen::frame::SequenceNumber { 1 }, scenes[0].preparation_revision,
+  service->AttachLocalReads(inputs.at(0).view_id,
+    oxygen::frame::SequenceNumber { 1 }, scenes.at(0).preparation_revision,
     *recording);
   service->CloseFramePublications();
   EXPECT_FALSE(recording.Submit());

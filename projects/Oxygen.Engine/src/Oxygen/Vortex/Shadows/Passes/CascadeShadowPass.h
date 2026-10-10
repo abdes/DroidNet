@@ -43,7 +43,7 @@ namespace shadows {
       std::shared_ptr<graphics::Texture> shadow_surface;
       std::uint32_t shadow_caster_draw_count { 0U };
       std::uint32_t rendered_cascade_count { 0U };
-      std::uint32_t rendered_draw_count { 0U };
+      std::uint32_t submitted_draw_count { 0U };
     };
 
     struct ViewSpotShadowPassState {
@@ -53,7 +53,7 @@ namespace shadows {
       std::vector<std::shared_ptr<graphics::Texture>> shadow_surfaces;
       std::uint32_t shadow_caster_draw_count { 0U };
       std::uint32_t rendered_shadow_count { 0U };
-      std::uint32_t rendered_draw_count { 0U };
+      std::uint32_t submitted_draw_count { 0U };
     };
 
     struct ViewPointShadowPassState {
@@ -63,7 +63,7 @@ namespace shadows {
       std::vector<std::shared_ptr<graphics::Texture>> shadow_surfaces;
       std::uint32_t shadow_caster_draw_count { 0U };
       std::uint32_t rendered_shadow_count { 0U };
-      std::uint32_t rendered_draw_count { 0U };
+      std::uint32_t submitted_draw_count { 0U };
     };
 
     OXGN_VRTX_API explicit CascadeShadowPass(Renderer& renderer);

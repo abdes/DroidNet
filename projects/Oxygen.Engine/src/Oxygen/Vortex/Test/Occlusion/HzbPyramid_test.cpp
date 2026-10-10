@@ -188,7 +188,13 @@ protected:
     NextFrame();
     return SubmitCommands(
       "HZB test build", [&](CommandRecorder& recorder) -> bool {
-        return builder.Build(ctx_, recorder, rect, targets);
+        return builder.Build(
+          HzbPyramidBuilder::BuildFrame {
+            .sequence = ctx_.frame_sequence,
+            .slot = ctx_.frame_slot,
+            .view_id = ctx_.current_view.view_id,
+          },
+          recorder, rect, targets);
       });
   }
 

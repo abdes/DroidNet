@@ -49,7 +49,7 @@ public:
     std::uint32_t rendered_cascade_count { 0U };
     std::uint32_t rendered_spot_shadow_count { 0U };
     std::uint32_t rendered_point_shadow_count { 0U };
-    std::uint32_t rendered_draw_count { 0U };
+    std::uint32_t submitted_draw_count { 0U };
     std::uint32_t shadow_caster_draw_count { 0U };
     std::uint64_t selection_epoch { 0U };
     std::uint32_t attached_map_uses { 0 };

@@ -33,7 +33,10 @@
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/HzbPyramidBuilder.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/HzbPyramidTexture.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/ScreenHzbModule.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/CullingViewHistory.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/DrawCullPass.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/IndirectListBuilder.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionConfig.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.h>
@@ -41,6 +44,7 @@
 #include <Oxygen/Vortex/Test/Occlusion/OcclusionGpuTest.h>
 #include <Oxygen/Vortex/Types/DrawCullRecord.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace {
 
@@ -54,7 +58,9 @@ using oxygen::vortex::DrawCullRecord;
 using oxygen::vortex::DrawMetadata;
 using oxygen::vortex::DrawVisibilityBit;
 using oxygen::vortex::DrawVisibilityPredicate;
+using oxygen::vortex::DrawVisibilityProducts;
 using oxygen::vortex::HzbPyramidBuilder;
+using oxygen::vortex::HzbPyramidTexture;
 using oxygen::vortex::OcclusionConfig;
 using oxygen::vortex::OcclusionModule;
 using oxygen::vortex::PreparedSceneFrame;
@@ -62,10 +68,16 @@ using oxygen::vortex::SceneTextures;
 using oxygen::vortex::SceneTexturesConfig;
 using oxygen::vortex::ScreenHzbModule;
 using oxygen::vortex::ToUnderlying;
+using oxygen::vortex::occlusion::internal::CullingViewHistory;
+using oxygen::vortex::occlusion::internal::DrawCullDepth;
+using oxygen::vortex::occlusion::internal::DrawCullHistory;
+using oxygen::vortex::occlusion::internal::DrawCullInputs;
+using oxygen::vortex::occlusion::internal::DrawCullPass;
 using oxygen::vortex::occlusion::internal::IndirectDrawCandidate;
 using oxygen::vortex::occlusion::internal::IndirectDrawCommand;
 using oxygen::vortex::occlusion::internal::IndirectDrawList;
 using oxygen::vortex::occlusion::internal::IndirectListBuilder;
+using oxygen::vortex::occlusion::internal::OcclusionPyramidBinding;
 
 constexpr std::uint32_t kExtent = 64U;
 constexpr auto kCommandUints
@@ -131,6 +143,25 @@ struct DepthRect {
   float distance { 1.0F };
 };
 
+//! The test camera's infinite reversed-Z depth of a view distance.
+auto CameraDepth(const float distance) -> float { return kNear / distance; }
+
+//! The test cascade spans view distances 0 to 10, stored as 1 to 0.
+constexpr float kCascadeDepthRange = 10.0F;
+
+auto CascadeDepth(const float distance) -> float
+{
+  return 1.0F - (distance / kCascadeDepthRange);
+}
+
+//! The test spot light stores 1 - distance / range.
+constexpr float kSpotInverseRange = 1.0F / 20.0F;
+
+auto SpotDepth(const float distance) -> float
+{
+  return 1.0F - (distance * kSpotInverseRange);
+}
+
 class TwoPhaseOcclusionGpuTest
   : public oxygen::vortex::testing::occlusion::OcclusionGpuTest {
 protected:
@@ -168,18 +199,32 @@ protected:
       });
     hzb_
       = std::make_unique<ScreenHzbModule>(*renderer_, SceneTexturesConfig {});
+    cull_ = std::make_unique<DrawCullPass>(*renderer_, "Culling view test");
+    pyramid_builder_ = std::make_unique<HzbPyramidBuilder>(
+      *renderer_, "Culling view test pyramid");
+    pyramid_ = std::make_unique<HzbPyramidTexture>("Culling view test pyramid");
+    slot_words_.emplace(oxygen::observer_ptr { renderer_->GetGraphics().get() },
+      renderer_->GetStagingProvider(),
+      static_cast<std::uint32_t>(sizeof(std::uint32_t)),
+      oxygen::observer_ptr { &renderer_->GetInlineTransfersCoordinator() },
+      "Culling view test slots");
   }
 
   auto TearDown() -> void override
   {
+    slot_words_.reset();
+    pyramid_.reset();
+    pyramid_builder_.reset();
+    cull_.reset();
     hzb_.reset();
     scene_textures_.reset();
     OcclusionGpuTest::TearDown();
   }
 
-  //! Phase 1 depth: `rects` at their distances, nothing elsewhere.
-  auto MakeDepth(const std::span<const DepthRect> rects)
-    -> std::shared_ptr<Texture>
+  //! Phase 1 depth: `rects` at their distances, encoded by `encode`, and
+  //! nothing elsewhere.
+  auto MakeDepth(const std::span<const DepthRect> rects,
+    float (*encode)(float distance) = &CameraDepth) -> std::shared_ptr<Texture>
   {
     auto texels
       = std::vector<float>(static_cast<std::size_t>(kExtent) * kExtent, 0.0F);
@@ -189,7 +234,7 @@ protected:
         for (auto x = static_cast<std::uint32_t>(rect.x);
           x < static_cast<std::uint32_t>(rect.y); ++x) {
           texels.at((static_cast<std::size_t>(y) * kExtent) + x)
-            = kNear / distance;
+            = encode(distance);
         }
       }
     }
@@ -284,9 +329,84 @@ protected:
     return OcclusionConfig { .enabled = true };
   }
 
+  //! Culls a shadow-like view in both phases, as the shadow depth pass does,
+  //! with `depth` as its phase 1 depth.
+  auto RunCullingView(CullingViewHistory& history,
+    const glm::mat4& view_projection, const DrawCullDepth& depth_encoding,
+    const Texture& depth) -> std::vector<std::uint32_t>
+  {
+    NextFrame();
+    auto inputs = DrawCullInputs {
+      .frame_sequence = ctx_.frame_sequence,
+      .frame_slot = ctx_.frame_slot,
+      .prepared_frame
+      = oxygen::observer_ptr<const PreparedSceneFrame> { &frame_ },
+      .view_projection = view_projection,
+      .depth = depth_encoding,
+      .viewport = view_->Viewport(),
+      .scissors = view_->Scissor(),
+      .occlusion_enabled = true,
+      .depth_bias = oxygen::vortex::kDefaultOcclusionDepthBias,
+    };
+    auto visibility = DrawVisibilityProducts {};
+    SubmitCommands(
+      "Culling view frame", [&](CommandRecorder& recorder) -> void {
+        slot_words_->OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+        const auto binding
+          = history.Prepare(recorder, renderer_->GetGraphics(), *slot_words_,
+            sources_, static_cast<std::uint32_t>(sources_.size()), false);
+        ASSERT_TRUE(binding.has_value());
+        inputs.history = binding.value_or(DrawCullHistory {});
+        const auto phase1 = cull_->RunPhase1(recorder, inputs);
+        ASSERT_TRUE(
+          pyramid_->Ensure(renderer_->GetGraphics(), kExtent, kExtent));
+        ASSERT_TRUE(pyramid_builder_->Build(
+          HzbPyramidBuilder::BuildFrame {
+            .sequence = ctx_.frame_sequence,
+            .slot = ctx_.frame_slot,
+            .view_id = ViewId { 77U },
+          },
+          recorder,
+          HzbPyramidBuilder::Source {
+            .depth = oxygen::observer_ptr { &depth },
+            .array_slice = 0U,
+            .origin_x = 0U,
+            .origin_y = 0U,
+            .width = kExtent,
+            .height = kExtent,
+          },
+          HzbPyramidBuilder::Targets {
+            .closest = nullptr,
+            .furthest = oxygen::observer_ptr { pyramid_->GetTexture().get() },
+          }));
+        visibility = cull_->RunPhase2(recorder, inputs, phase1,
+        OcclusionPyramidBinding {
+          .texture = oxygen::observer_ptr<const Texture> {
+            pyramid_->GetTexture().get(),
+          },
+          .srv = pyramid_->GetSrv(),
+          .origin_x = 0U,
+          .origin_y = 0U,
+          .width = kExtent,
+          .height = kExtent,
+        });
+        history.SetWritten(visibility.phase2);
+      });
+    WaitForQueueIdle();
+    EXPECT_TRUE(visibility.phase2);
+    if (!visibility.IsValid()) {
+      return {};
+    }
+    return ReadUints(*visibility.buffer, 0U, metadata_.size());
+  }
+
   std::unique_ptr<ResolvedView> view_;
   std::unique_ptr<SceneTextures> scene_textures_;
   std::unique_ptr<ScreenHzbModule> hzb_;
+  std::unique_ptr<DrawCullPass> cull_;
+  std::unique_ptr<HzbPyramidBuilder> pyramid_builder_;
+  std::unique_ptr<HzbPyramidTexture> pyramid_;
+  std::optional<oxygen::vortex::upload::TransientStructuredBuffer> slot_words_;
   std::vector<DrawMetadata> metadata_;
   std::vector<DrawCullRecord> records_;
   std::vector<PreparedSceneFrame::DrawSource> sources_;
@@ -558,6 +678,72 @@ NOLINT_TEST_F(TwoPhaseOcclusionGpuTest, DrawnListsHoldExactlyTheFinalSet)
   const auto count = ReadUints(*list.counts, 0U, 1U).front();
   ASSERT_EQ(count * kCommandUints, expected.size());
   EXPECT_EQ(ReadUints(*list.arguments, 0U, expected.size()), expected);
+}
+
+//! Shadow views store depth differently: an orthographic cascade stores
+//! device depth, a spot map linear distance along the light axis. Each culls a
+//! box hidden behind a wall in its own encoding, and keeps one beside it.
+NOLINT_TEST_F(TwoPhaseOcclusionGpuTest, ShadowEncodingsCullHiddenBoxes)
+{
+  // View x and y in [-1, 1], distance 0 to 10 stored as 1 to 0.
+  const auto cascade = glm::mat4 {
+    glm::vec4 { 1.0F, 0.0F, 0.0F, 0.0F },
+    glm::vec4 { 0.0F, 1.0F, 0.0F, 0.0F },
+    glm::vec4 { 0.0F, 0.0F, 1.0F / kCascadeDepthRange, 0.0F },
+    glm::vec4 { 0.0F, 0.0F, 1.0F, 1.0F },
+  };
+  // Orthographic boxes span their pixel rect at every distance.
+  const auto cascade_box = [](const glm::vec4& rect, const float front,
+                             const float back) -> DrawCullRecord {
+    auto box = PixelBox(rect, 1.0F, 1.0F);
+    box.box_center.z = -(front + back) * 0.5F;
+    box.box_extent.z = (back - front) * 0.5F;
+    return box;
+  };
+  struct Case {
+    const char* name {};
+    glm::mat4 view_projection {};
+    DrawCullDepth depth;
+    float (*encode)(float) {};
+    DrawCullRecord hidden;
+    DrawCullRecord beside;
+  };
+  const auto cases = std::array {
+    Case {
+      .name = "cascade",
+      .view_projection = cascade,
+      .depth = DrawCullDepth::ForProjection(cascade),
+      .encode = &CascadeDepth,
+      .hidden = cascade_box({ 20.0F, 40.0F, 20.0F, 40.0F }, 5.0F, 6.0F),
+      .beside = cascade_box({ 57.0F, 63.0F, 20.0F, 40.0F }, 5.0F, 6.0F),
+    },
+    Case {
+      .name = "spot",
+      .view_projection = Projection(),
+      .depth = DrawCullDepth::AxialLinear(kSpotInverseRange),
+      .encode = &SpotDepth,
+      .hidden = BehindWall(),
+      .beside = BesideWall(),
+    },
+  };
+  for (const auto& test_case : cases) {
+    SCOPED_TRACE(test_case.name);
+    auto history = CullingViewHistory { "Culling view test" };
+    const auto walled = MakeDepth(std::array { kWall }, test_case.encode);
+    const auto anchor
+      = TestDraw { .record = test_case.beside, .source = Source(1U) };
+    PrepareScene(std::array { anchor });
+    (void)RunCullingView(
+      history, test_case.view_projection, test_case.depth, *walled);
+
+    PrepareScene(std::array {
+      anchor,
+      TestDraw { .record = test_case.hidden, .source = Source(2U) },
+    });
+    EXPECT_EQ(RunCullingView(
+                history, test_case.view_projection, test_case.depth, *walled),
+      (std::vector { kDrawnInPhase1, kOccluded }));
+  }
 }
 
 } // namespace

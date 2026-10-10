@@ -85,7 +85,7 @@ If a build reports a missing `impl-*.ninja`, reconfigure the tree with
 | S3  | Culling records, history keys and slot allocator             | S1      | `validated` | see git log |
 | S4  | GPU indirect lists for camera passes, occlusion off          | S3      | `validated` | see git log |
 | S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `validated` | see git log |
-| S6  | Shadow-view lists and two-phase occlusion                    | S5      | `planned`   |             |
+| S6  | Shadow-view lists and two-phase occlusion                    | S5      | `validated` | see git log |
 | S7  | Default on, capture gate, closeout                           | S6      | `planned`   |             |
 
 S1 and S2 are independent; either may go first.
@@ -320,31 +320,53 @@ Design: [occlusion.md §4](../../lld/occlusion.md#4-two-phase-algorithm),
 
 Design: [occlusion.md §6.4](../../lld/occlusion.md#64-shadow-views).
 
-- [ ] **Caster culling.** `Vortex/Shadows/ShadowService.cpp` builds per shadow
-      view lists (cascade, projected local map, cube face). They replace
+- [x] **Caster culling.** `Shadows/Passes/ShadowDepthPass.cpp` culls every
+      shadow slice (cascade, projected local map, cube face) on the GPU and
+      draws indirect lists. They replace
       `Shadows/Internal/ShadowCasterCulling.{h,cpp}`.
-- [ ] **Passes.** `Shadows/Passes/{ShadowDepthPass,CascadeShadowPass}.cpp`
-      draw phase 1, build the occlusion pyramid from shadow depth, draw phase 2.
-- [ ] **History.** Keyed by light, cascade or face, and allocation
-      generation. Reset on projection change. The occlusion pyramid storage in
-      `ScreenHzbModule` takes the same key.
-- [ ] **Bias.** The shadow-view bias exceeds the pass's largest
-      rasterization depth bias.
-- [ ] **Cache.** Cached local maps that are reused skip culling.
-      `Shadows/Internal/ShadowCasterDependencies.cpp` keeps all light-frustum
-      casters as dependencies.
-- [ ] **Remove** the unused `Services/Shadows/Vsm/VsmInstanceCulling.hlsl` and
-      `Services/Shadows/Conventional/ConventionalShadowCasterCulling.hlsl`.
-- [ ] **New GPU tests.** [occlusion.md §8](../../lld/occlusion.md#8-validation-gates)
+- [x] **Passes.** `ShadowDepthPass` draws phase 1, builds the occlusion
+      pyramid from the slice's shadow depth, and draws phase 2.
+      `CascadeShadowPass` passes each slice's light and allocation generation.
+- [x] **History.** Keyed by surface and slice, light, and allocation
+      generation, in `Occlusion/Internal/CullingViewHistory` (shared with
+      camera views). Not reset on projection change: cascades move every
+      frame, and history is advisory. Pyramids are transient, one per extent
+      in the shadow pass (`Hzb/HzbPyramidTexture`), not in `ScreenHzbModule`.
+- [x] **Bias.** The shadow depth shader only pushes depth away from the
+      light, so culling against written depth changes no texel; the shared
+      relative bias suffices ([occlusion.md §6.4](../../lld/occlusion.md#64-shadow-views)).
+- [x] **Cache.** Cached local maps that are reused are not recorded, so they
+      skip culling. `Shadows/Internal/ShadowCasterDependencies.cpp` keeps all
+      light-frustum casters as dependencies; it never saw culling.
+- [x] **Remove** the unused `Services/Shadows/Vsm/VsmInstanceCulling.hlsl` and
+      `Services/Shadows/Conventional/ConventionalShadowCasterCulling.hlsl`
+      (with its partition include).
+- [x] **New GPU tests.** [occlusion.md §8](../../lld/occlusion.md#8-validation-gates)
       gate 5:
-  - shadow maps are texel-identical with occlusion on and off
-  - a moving occluded caster invalidates a cached map
-  - camera occlusion never removes a caster
-- [ ] **Verify.** `Oxygen.Vortex.ShadowService.Tests`; the shadow cases of
+  - shadowed images are bit-identical with occlusion on and off, with a
+    caster hidden from the camera and one hidden from the sun
+    (`LightingImageReference`, `OcclusionLeavesShadowsUnchanged`)
+  - cascade and spot encodings cull a hidden box (`Occlusion`,
+    `ShadowEncodingsCullHiddenBoxes`)
+  - a moving occluded caster invalidating a cached map is CPU dependency
+    tracking, unchanged and covered by `ShadowService` cache tests
+- [x] **Verify.** `Oxygen.Vortex.ShadowService.Tests`; the shadow cases of
       `Oxygen.Vortex.Exposure.Tests` and
       `Oxygen.Vortex.LightingImageReference.Tests`, one at a time.
-- [ ] **Docs.** [shadow-service.md](../../lld/shadow-service.md) and
+  - CPU suites pass (`ShadowService`, `OcclusionModule`, `SceneRenderer*`).
+  - GPU suites `Occlusion`, `LightingImageReference` and `Exposure` pass
+    under a debugger with no D3D12 debug-layer messages.
+- [x] **Docs.** [shadow-service.md](../../lld/shadow-service.md) and
       ARCHITECTURE row 8.
+- [x] Notes from implementation:
+  - `HzbPyramidBuilder::Build` takes the frame and view directly; its shader
+    never read view constants. Sources are one array slice.
+  - The cull kernel takes the target's depth encoding (`DrawCullDepth`):
+    camera and cube faces use perspective depth linearized through the
+    inverse view-projection; cascades orthographic; spot maps linear axial.
+  - `ShadowDepthPass::RenderState::submitted_draw_count` counts candidates
+    submitted per slice; the GPU culls some of them.
+  - Shadow slices keep no counters yet.
 
 ## S7 — Closeout
 

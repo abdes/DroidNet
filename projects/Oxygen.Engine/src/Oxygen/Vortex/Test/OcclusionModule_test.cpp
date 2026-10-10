@@ -34,6 +34,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -52,6 +53,7 @@ using oxygen::RendererConfig;
 using oxygen::ResolvedView;
 using oxygen::ViewId;
 using oxygen::graphics::QueueRole;
+using oxygen::vortex::CompositionView;
 using oxygen::vortex::OcclusionConfig;
 using oxygen::vortex::OcclusionModule;
 using oxygen::vortex::PreparedSceneFrame;
@@ -330,13 +332,17 @@ struct OcclusionFrameDriver {
         };
   }
 
-  //! Records phase 1 and, when needed, phase 2 without a pyramid.
-  auto Render(const ViewId view_id) -> RenderContext
+  //! Records phase 1 and, when needed, phase 2 without a pyramid. A stateful
+  //! view's state handle is its id.
+  auto Render(const ViewId view_id, const bool stateful = true) -> RenderContext
   {
     auto ctx = RenderContext {};
     ctx.frame_sequence = oxygen::frame::SequenceNumber { ++frame_sequence };
     ctx.frame_slot = oxygen::frame::Slot { 0U };
     ctx.current_view.view_id = view_id;
+    ctx.current_view.view_state_handle = stateful
+      ? CompositionView::ViewStateHandle { view_id.get() }
+      : CompositionView::kInvalidViewStateHandle;
     ctx.current_view.prepared_frame
       = oxygen::observer_ptr<const PreparedSceneFrame> { &scene.frame };
     ctx.current_view.resolved_view
@@ -415,6 +421,23 @@ NOLINT_TEST(OcclusionModuleTest, FrustumOnlyViewsSkipPhase2)
       (std::vector<std::string> {
         "VortexOcclusionStatsClearCS", "VortexOcclusionPhase1CS" }));
   }
+}
+
+//! A stateless view keeps no history, so it culls by frustum only, counts
+//! nothing and leaves no state behind.
+NOLINT_TEST(OcclusionModuleTest, StatelessViewsCullByFrustumOnly)
+{
+  auto driver = OcclusionFrameDriver {};
+
+  const auto ctx = driver.Render(ViewId { 1U }, false);
+
+  EXPECT_TRUE(ctx.current_view.draw_visibility.IsValid());
+  EXPECT_FALSE(ctx.current_view.draw_visibility.phase2);
+  EXPECT_FALSE(driver.module.NeedsPhase2(ctx));
+  EXPECT_EQ(driver.DispatchedEntryPoints(),
+    (std::vector<std::string> { "VortexOcclusionPhase1CS" }));
+  EXPECT_TRUE(driver.readbacks.buffer_readbacks.empty());
+  EXPECT_FALSE(driver.module.GetStats(ViewId { 1U }).has_value());
 }
 
 //! Counters read back frames later reach the view they were counted for,

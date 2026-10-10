@@ -286,7 +286,7 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
   last_render_state_.rendered_cascade_count = 0U;
   last_render_state_.rendered_spot_shadow_count = 0U;
   last_render_state_.rendered_point_shadow_count = 0U;
-  last_render_state_.rendered_draw_count = 0U;
+  last_render_state_.submitted_draw_count = 0U;
   last_render_state_.shadow_caster_draw_count = 0U;
   last_render_state_.selection_epoch = inputs.frame_light_set != nullptr
     ? inputs.frame_light_set->selection_epoch
@@ -334,7 +334,7 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
       auto rendered_cascade_count = 0U;
       auto rendered_spot_shadow_count = 0U;
       auto rendered_point_shadow_count = 0U;
-      auto rendered_draw_count = 0U;
+      auto submitted_draw_count = 0U;
       auto shadow_caster_draw_count = 0U;
 
       for (const auto& [index, light] :
@@ -360,7 +360,7 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
           view_state.frame_data.cascades.end());
         directional_surfaces.push_back(std::move(view_state.shadow_surface));
         rendered_cascade_count += view_state.rendered_cascade_count;
-        rendered_draw_count += view_state.rendered_draw_count;
+        submitted_draw_count += view_state.submitted_draw_count;
         shadow_caster_draw_count = (std::max)(shadow_caster_draw_count,
           view_state.shadow_caster_draw_count);
       }
@@ -376,7 +376,7 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
           spot_state.local_maps.end());
         spot_shadow_surfaces = std::move(spot_state.shadow_surfaces);
         rendered_spot_shadow_count = spot_state.rendered_shadow_count;
-        rendered_draw_count += spot_state.rendered_draw_count;
+        submitted_draw_count += spot_state.submitted_draw_count;
         shadow_caster_draw_count = (std::max)(shadow_caster_draw_count,
           spot_state.shadow_caster_draw_count);
 
@@ -391,7 +391,7 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
           point_state.local_maps.end());
         point_shadow_surfaces = std::move(point_state.shadow_surfaces);
         rendered_point_shadow_count += point_state.rendered_shadow_count;
-        rendered_draw_count += point_state.rendered_draw_count;
+        submitted_draw_count += point_state.submitted_draw_count;
         shadow_caster_draw_count = (std::max)(shadow_caster_draw_count,
           point_state.shadow_caster_draw_count);
       }
@@ -481,7 +481,7 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
         += rendered_spot_shadow_count;
       last_render_state_.rendered_point_shadow_count
         += rendered_point_shadow_count;
-      last_render_state_.rendered_draw_count += rendered_draw_count;
+      last_render_state_.submitted_draw_count += submitted_draw_count;
       last_render_state_.shadow_caster_draw_count += shadow_caster_draw_count;
       if (view_data.bindings.directional_record_count > 0U) {
         last_render_state_.directional_view_count += 1U;
