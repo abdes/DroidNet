@@ -10,31 +10,6 @@
 
 find_package(GTest REQUIRED CONFIG)
 find_package(nlohmann_json_schema_validator REQUIRED)
-find_package(fmt CONFIG REQUIRED)
-find_package(ftxui REQUIRED)
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-
-add_test(
-  NAME "Oxygen.Cooker.SourceAnalysis.Cli"
-  COMMAND
-    "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/source_analysis_cli_test.py"
-    "$<TARGET_FILE:oxygen-cooker-importtool>"
-)
-set_tests_properties(
-  "Oxygen.Cooker.SourceAnalysis.Cli"
-  PROPERTIES
-    TIMEOUT
-      120
-)
-
-add_test(
-  NAME "Oxygen.Cooker.RetainedImport.Cli"
-  COMMAND
-    "${Python3_EXECUTABLE}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/retained_import_cli_test.py"
-    "$<TARGET_FILE:oxygen-cooker-importtool>"
-)
 
 # ==============================================================================
 # Build instructions
@@ -52,438 +27,255 @@ set_target_properties(
 target_link_libraries("Oxygen.Cooker.LinkTest" PRIVATE oxygen::cooker)
 add_test(NAME "Oxygen.Cooker.LinkTest" COMMAND "Oxygen.Cooker.LinkTest")
 
-# -- GTest Test Programs -------------------------------------------------------
-
 include(GTestHelpers)
 
-gtest_program(
-  "Oxygen.Cooker.InspectorMetadata.Tests"
-  SOURCES
-    "Import/InspectorAssetKeyMap_test.cpp"
-    "Import/InspectorRootValidation_test.cpp"
-    "Import/InspectorGeometryMetadata_test.cpp"
-    "../Tools/Inspector/AssetKeyMap.cpp"
-    "../Tools/Inspector/SceneMetadata.cpp"
-    "../Tools/Inspector/GeometryMetadata.cpp"
+# -- Import --------------------------------------------------------------------
+
+oxygen_cooker_test(
+  Import
+  UNIT
   DEPS
-    oxygen::cooker
-    oxygen::content
-    oxygen::data
-    oxygen::clap
-    oxygen::testing
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
-)
-target_include_directories(
-  Oxygen.Cooker.InspectorMetadata.Tests
-  PRIVATE
-    "${CMAKE_BINARY_DIR}/generated"
-)
-get_target_property(
-  _inspector_schema_targets
-  oxygen-cooker-inspector
-  OXYGEN_JSON_SCHEMA_TARGETS
-)
-add_dependencies(
-  Oxygen.Cooker.InspectorMetadata.Tests
-  ${_inspector_schema_targets}
-)
-
-m_gtest_program(
-  AsyncImportCore
   SOURCES
-    "Import/AssetEmitter_test.cpp"
-    "Fixtures/DescriptorFixtures.h"
     "Import/AsyncImporter_test.cpp"
-    "Import/AsyncImportService_test.cpp"
     "Import/Bc7Encoder_test.cpp"
+    "Import/BufferSource_test.cpp"
+    "Import/BuiltinGeometryCatalog_test.cpp"
+    "Import/CapturedInputSet_test.cpp"
+    "Import/FileError_test.cpp"
+    "Import/GeometrySource_test.cpp"
     "Import/ImageDecode_test.cpp"
     "Import/ImageProcessing_test.cpp"
-    "Import/ImportEventLoop_test.cpp"
-    "Import/ImportJob_test.cpp"
-    "Import/ImportJobLifetime_test.cpp"
-    "Import/ImportSession_test.cpp"
-    "Import/Naming_test.cpp"
-    "Import/PipelineConformance_test.cpp"
-    "Mocks/TestImportJob.cpp"
-    "Mocks/TestImportJob.h"
-)
-
-m_gtest_program(
-  AsyncImportInput
-  SOURCES
-    "Import/InputJsonSchema_test.cpp"
+    "Import/ImportPlanner_test.cpp"
+    "Import/ImportedLightSemantics_test.cpp"
     "Import/InputImportRequestBuilder_test.cpp"
-    "Import/ImportManifest_input_test.cpp"
-)
-target_link_libraries(
-  Oxygen.Cooker.AsyncImportInput.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-
-m_gtest_program(
-  AsyncImportPhysics
-  SOURCES
-    "Import/ImportManifest_physics_sidecar_test.cpp"
-    "Import/PhysicsPhase3Closure_test.cpp"
-    "Import/PhysicsImportJob_test.cpp"
-    "Import/PhysicsImportPipeline_test.cpp"
+    "Import/Jobs/TextureImportPolicy_test.cpp"
+    "Import/MaterialSlotProvenance_test.cpp"
+    "Import/MaterialSource_test.cpp"
+    "Import/MeshTransformBake_test.cpp"
+    "Import/Naming_test.cpp"
     "Import/PhysicsImportRequestBuilder_test.cpp"
-    "Import/PhysicsJsonSchema_test.cpp"
-)
-target_link_libraries(
-  Oxygen.Cooker.AsyncImportPhysics.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-
-gtest_program(
-  "Oxygen.Cooker.ImportToolBatchDag.Tests"
-  SOURCES
-    "Import/BatchCommand_physics_dag_test.cpp"
-    "../Tools/ImportTool/BatchCommand.cpp"
-    "../Tools/ImportTool/ReportJson.cpp"
-    "../Tools/ImportTool/UI/Screens/BatchImportScreen.cpp"
-    "../Tools/ImportTool/UI/Screens/ImportScreen.cpp"
-  DEPS
-    ${META_MODULE_TARGET}
-    oxygen::testing
-    oxygen::clap
-    fmt::fmt-header-only
-    ftxui::screen
-    ftxui::dom
-    ftxui::component
-    nlohmann_json::nlohmann_json
-)
-target_compile_definitions(
-  Oxygen.Cooker.ImportToolBatchDag.Tests
-  PRIVATE
-    OXYGEN_IMPORT_TOOL_VERSION="0.1"
-)
-
-m_gtest_program(
-  AsyncImportPhysicsMaterialDescriptor
-  SOURCES
-    "Import/PhysicsMaterialDescriptorImportJob_test.cpp"
-    "Import/ImportManifest_physics_material_descriptor_test.cpp"
-    "Import/PhysicsMaterialDescriptorImportRequestBuilder_test.cpp"
-    "Import/PhysicsMaterialDescriptorJsonSchema_test.cpp"
-)
-target_link_libraries(
-  Oxygen.Cooker.AsyncImportPhysicsMaterialDescriptor.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-
-m_gtest_program(
-  AsyncImportCollisionShapeDescriptor
-  SOURCES
-    "Import/CollisionShapeDescriptorImportJob_test.cpp"
-    "Import/ImportManifest_collision_shape_descriptor_test.cpp"
-    "Import/CollisionShapeDescriptorImportRequestBuilder_test.cpp"
-    "Import/CollisionShapeDescriptorJsonSchema_test.cpp"
-)
-target_link_libraries(
-  Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-
-m_gtest_program(
-  AsyncImportTextureDescriptor
-  SOURCES
-    "Import/ImportManifest_texture_descriptor_test.cpp"
-    "Import/TextureDescriptorImportRequestBuilder_test.cpp"
-    "Import/TextureDescriptorJsonSchema_test.cpp"
-)
-target_link_libraries(
-  Oxygen.Cooker.AsyncImportTextureDescriptor.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-
-m_gtest_program(
-  AsyncImportMaterialDescriptor
-  SOURCES
-    "Import/MaterialDescriptorImportJob_test.cpp"
-    "Import/ImportManifest_material_descriptor_test.cpp"
-    "Import/MaterialDescriptorImportRequestBuilder_test.cpp"
-    "Import/MaterialDescriptorJsonSchema_test.cpp"
-)
-target_link_libraries(
-  Oxygen.Cooker.AsyncImportMaterialDescriptor.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-
-m_gtest_program(
-  AsyncImportGeometryDescriptor
-  SOURCES
-    "Import/BuiltinGeometryCatalog_test.cpp"
-    "Import/GeometrySource_test.cpp"
-    "Import/GeometryDescriptorImportJob_test.cpp"
-    "Import/ImportManifest_geometry_descriptor_test.cpp"
-    "Import/GeometryDescriptorImportRequestBuilder_test.cpp"
-    "Import/GeometryDescriptorJsonSchema_test.cpp"
-)
-target_link_libraries(
-  Oxygen.Cooker.AsyncImportGeometryDescriptor.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-
-m_gtest_program(
-  AsyncImportSceneDescriptor
-  SOURCES
-    "Import/SceneImportRequestBuilder_test.cpp"
+    "Import/SceneNodeImportDefaults_test.cpp"
     "Import/SceneSource_test.cpp"
-    "Import/SceneDescriptorImportJob_test.cpp"
-    "Import/ImportManifest_scene_descriptor_test.cpp"
-    "Import/SceneDescriptorImportRequestBuilder_test.cpp"
-    "Import/SceneDescriptorJsonSchema_test.cpp"
-    "Import/SceneDescriptorTestData.h"
-)
-target_link_libraries(
-  Oxygen.Cooker.AsyncImportSceneDescriptor.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-
-m_gtest_program(
-  AsyncImportScript
-  SOURCES
-    "Import/ImportManifest_script_sidecar_test.cpp"
+    "Import/Schemas/CollisionShapeDescriptorSchema_test.cpp"
+    "Import/Schemas/GeometryDescriptorSchema_test.cpp"
+    "Import/Schemas/InputSchema_test.cpp"
+    "Import/Schemas/MaterialDescriptorSchema_test.cpp"
+    "Import/Schemas/PhysicsMaterialDescriptorSchema_test.cpp"
+    "Import/Schemas/PhysicsSidecarSchema_test.cpp"
+    "Import/Schemas/SceneDescriptorSchema_test.cpp"
+    "Import/Schemas/TextureDescriptorSchema_test.cpp"
+    "Import/ScratchImage_test.cpp"
     "Import/ScriptImportRequestBuilder_test.cpp"
-    "Import/ScriptImportJob_test.cpp"
-    "Import/ScriptImportPipeline_test.cpp"
-    "Import/ScriptCompileMode_contract_test.cpp"
+    "Import/StaticSourceValidation_test.cpp"
+    "Import/TextureCooker_test.cpp"
+    "Import/TextureImportPresets_test.cpp"
+    "Import/TexturePackingPolicy_test.cpp"
+    "Import/TextureSourceAssembly_test.cpp"
 )
-target_link_libraries(
-  Oxygen.Cooker.AsyncImportScript.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-
-m_gtest_program(
-  AsyncImportIO
-  SOURCES
-    "Import/FileError_test.cpp"
-    $<$<BOOL:${WIN32}>:Import/WindowsFileReader_test.cpp>
-    $<$<BOOL:${WIN32}>:Import/WindowsFileWriter_test.cpp>
-)
-target_link_libraries(Oxygen.Cooker.AsyncImportIO.Tests PRIVATE oxygen::serio)
-
-m_gtest_program(
-  ImportSourceAnalysis
-  SOURCES
-    "Import/ImportSourceAnalysis_test.cpp"
-)
-target_link_libraries(
-  Oxygen.Cooker.ImportSourceAnalysis.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-
-m_gtest_program(
-  ImportSourceSnapshot
-  SOURCES
-    "Import/CapturedInputSet_test.cpp"
-    "Import/ImportSourceSnapshot_test.cpp"
-)
+# TODO(CT-3.8): replaced by the OBJECT library
 target_sources(
-  Oxygen.Cooker.ImportSourceSnapshot.Tests
+  Oxygen.Cooker.Import.Unit.Tests
+  PRIVATE
+    "../Import/Internal/MaterialSlotAllocation.cpp"
+)
+# The source-validation fixtures construct ufbx values passed into Cooker.
+# Match Cooker's private vendor ABI without exposing it to engine consumers.
+set_source_files_properties(
+  "Import/StaticSourceValidation_test.cpp"
+  PROPERTIES
+    COMPILE_DEFINITIONS
+      UFBX_REAL_IS_FLOAT
+)
+
+oxygen_cooker_test(
+  Import
+  FUNCTIONAL
+  DEPS
+    oxygen::content
+    oxygen::serio
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+  SOURCES
+    "Import/AsyncImportService_functional_test.cpp"
+    "Import/AsyncImportService_routing_functional_test.cpp"
+    "Import/AsyncImporter_functional_test.cpp"
+    "Import/BufferContainerImportRequestBuilder_functional_test.cpp"
+    "Import/CollisionShapeDescriptorImportRequestBuilder_functional_test.cpp"
+    "Import/GeometryDescriptorImportRequestBuilder_functional_test.cpp"
+    "Import/ImageDecode_functional_test.cpp"
+    "Import/ImportEventLoop_functional_test.cpp"
+    "Import/ImportJob_functional_test.cpp"
+    "Import/ImportJob_lifetime_functional_test.cpp"
+    "Import/ImportManifest_buffer_container_functional_test.cpp"
+    "Import/ImportManifest_collision_shape_descriptor_functional_test.cpp"
+    "Import/ImportManifest_geometry_descriptor_functional_test.cpp"
+    "Import/ImportManifest_input_functional_test.cpp"
+    "Import/ImportManifest_material_descriptor_functional_test.cpp"
+    "Import/ImportManifest_physics_material_descriptor_functional_test.cpp"
+    "Import/ImportManifest_physics_sidecar_functional_test.cpp"
+    "Import/ImportManifest_scene_descriptor_functional_test.cpp"
+    "Import/ImportManifest_script_sidecar_functional_test.cpp"
+    "Import/ImportManifest_texture_descriptor_functional_test.cpp"
+    "Import/ImportSession_functional_test.cpp"
+    "Import/ImportSourceAnalysis_functional_test.cpp"
+    "Import/ImportSourceSnapshot_functional_test.cpp"
+    "Import/LooseCookedIndexRegistry_functional_test.cpp"
+    "Import/LooseCookedWriter_external_registration_functional_test.cpp"
+    "Import/LooseCookedWriter_file_pairs_functional_test.cpp"
+    "Import/LooseCookedWriter_identity_functional_test.cpp"
+    "Import/LooseCookedWriter_path_validation_functional_test.cpp"
+    "Import/LooseCookedWriter_update_functional_test.cpp"
+    "Import/MaterialDescriptorImportRequestBuilder_functional_test.cpp"
+    "Import/MeshTransformBake_functional_test.cpp"
+    "Import/ModelGeometrySource_functional_test.cpp"
+    "Import/ModelMaterialSource_functional_test.cpp"
+    "Import/ModelTextureSource_functional_test.cpp"
+    "Import/PhysicsMaterialDescriptorImportRequestBuilder_functional_test.cpp"
+    "Import/ResourceTableRegistry_functional_test.cpp"
+    "Import/RetainedModelImport_functional_test.cpp"
+    "Import/SceneDescriptorImportRequestBuilder_functional_test.cpp"
+    "Import/SceneImportRequestBuilder_functional_test.cpp"
+    "Import/SceneSourceInspection_functional_test.cpp"
+    "Import/SourceLayoutHash_functional_test.cpp"
+    "Import/TextureDescriptorImportRequestBuilder_functional_test.cpp"
+    "Import/TextureDescriptorImportRequestBuilder_preparation_functional_test.cpp"
+    $<$<BOOL:${WIN32}>:Import/WindowsFileReader_functional_test.cpp>
+    $<$<BOOL:${WIN32}>:Import/WindowsFileWriter_functional_test.cpp>
+)
+# TODO(CT-3.8): replaced by the OBJECT library
+target_sources(
+  Oxygen.Cooker.Import.Functional.Tests
   PRIVATE
     "../Import/Internal/ImportSourceSnapshot.cpp"
 )
 
-m_gtest_program(
-  AsyncImportBuffer
-  SOURCES
-    "Import/BufferPipeline_test.cpp"
-    "Import/BufferEmitter_test.cpp"
-)
-
-m_gtest_program(
-  AsyncImportBufferContainer
-  SOURCES
-    "Import/BufferSource_test.cpp"
-    "Import/BufferContainerImportJob_test.cpp"
-    "Import/BufferContainerImportRequestBuilder_test.cpp"
-    "Import/ImportManifest_buffer_container_test.cpp"
-)
-target_link_libraries(
-  Oxygen.Cooker.AsyncImportBufferContainer.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
-
-m_gtest_program(AsyncImportGeometry SOURCES "Import/GeometryPipeline_test.cpp")
-m_gtest_program(
-  RetainedModelImport
-  SOURCES
-    "Import/RetainedModelImport_test.cpp"
-)
-
-m_gtest_program(
-  MaterialSlotProvenance
-  SOURCES
-    "Import/MaterialSlotProvenance_test.cpp"
-)
-target_sources(
-  Oxygen.Cooker.MaterialSlotProvenance.Tests
-  PRIVATE
-    "../Import/Internal/MaterialSlotAllocation.cpp"
-)
-target_link_libraries(
-  Oxygen.Cooker.MaterialSlotProvenance.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-)
-
-m_gtest_program(
-  AsyncImportScene
-  SOURCES
-    "Import/ImportedLightSemantics_test.cpp"
-    "Import/ScenePipeline_test.cpp"
-    "Import/SceneNodeImportDefaults_test.cpp"
-)
-
-m_gtest_program(
-  AsyncImportMaterials
-  SOURCES
-    "Import/MaterialPipeline_test.cpp"
-    "Import/MaterialSource_test.cpp"
-)
-
-m_gtest_program(
-  AsyncImportTexture
-  SOURCES
-    "Import/ScratchImage_test.cpp"
-    "Import/TextureCooker_basic_test.cpp"
-    "Import/TextureImportPresets_test.cpp"
-    "Import/TexturePackingPolicy_test.cpp"
-    "Import/TextureSourceAssembly_test.cpp"
-    "Import/TexturePipeline_basic_test.cpp"
-    "Import/TexturePipeline_nonreg_test.cpp"
-    "Import/TexturePipeline_edge_test.cpp"
-    "Import/TextureImportJob_policy_test.cpp"
-    "Import/TextureEmitter_test.cpp"
-)
-
-m_gtest_program(
-  AsyncImportFbx
-  SOURCES
-    "Import/AsyncImporterFullTestBase.cpp"
-    "Import/AsyncImporterFullTestBase.h"
-    "Import/AsyncFbxImporter_test.cpp"
-)
-
-m_gtest_program(
-  AsyncImportGltf
-  SOURCES
-    "Import/AsyncImporterFullTestBase.cpp"
-    "Import/AsyncImporterFullTestBase.h"
-    "Import/AsyncGltfImporter_test.cpp"
-    "Import/StaticImport_test.cpp"
-    "Import/StaticLoadedValues_test.cpp"
-    "Import/MeshTransformBake_test.cpp"
-    "Import/SourceLayoutWitness_test.cpp"
-    "Import/SceneSourceInspection_test.cpp"
-    "Import/ModelGeometrySource_test.cpp"
-    "Import/ModelMaterialSource_test.cpp"
-    "Import/ModelTextureSource_test.cpp"
-)
-
-target_link_libraries(
-  Oxygen.Cooker.AsyncImportGltf.Tests
-  PRIVATE
+oxygen_cooker_test(
+  Import.Jobs
+  FUNCTIONAL
+  DEPS
     oxygen::content
+    oxygen::serio
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
+  SOURCES
+    "Import/Jobs/BufferContainerImportJob_functional_test.cpp"
+    "Import/Jobs/CollisionShapeDescriptorImportJob_functional_test.cpp"
+    "Import/Jobs/GeometryDescriptorImportJob_buffers_functional_test.cpp"
+    "Import/Jobs/GeometryDescriptorImportJob_functional_test.cpp"
+    "Import/Jobs/GeometryDescriptorImportJob_procedural_functional_test.cpp"
+    "Import/Jobs/MaterialDescriptorImportJob_functional_test.cpp"
+    "Import/Jobs/PhysicsMaterialDescriptorImportJob_functional_test.cpp"
+    "Import/Jobs/PhysicsSidecarImportJob_functional_test.cpp"
+    "Import/Jobs/SceneDescriptorImportJob_functional_test.cpp"
+    "Import/Jobs/ScriptAssetImportJob_functional_test.cpp"
+    "Import/Jobs/ScriptingSidecarImportJob_binding_functional_test.cpp"
+    "Import/Jobs/ScriptingSidecarImportJob_context_functional_test.cpp"
+    "Import/Jobs/ScriptingSidecarImportJob_params_functional_test.cpp"
+    "Import/Jobs/ScriptingSidecarImportJob_reimport_functional_test.cpp"
+    "Import/Jobs/ScriptingSidecarImportJob_validation_functional_test.cpp"
 )
 
-# The source-validation fixtures construct ufbx values passed into Cooker.
-# Match Cooker's private vendor ABI without exposing it to engine consumers.
-target_compile_definitions(
-  Oxygen.Cooker.AsyncImportGltf.Tests
-  PRIVATE
-    UFBX_REAL_IS_FLOAT
+oxygen_cooker_test(
+  Import.Pipelines
+  FUNCTIONAL
+  SOURCES
+    "Import/Pipelines/BufferPipeline_functional_test.cpp"
+    "Import/Pipelines/GeometryPipeline_functional_test.cpp"
+    "Import/Pipelines/MaterialPipeline_functional_test.cpp"
+    "Import/Pipelines/PhysicsSidecarImportPipeline_functional_test.cpp"
+    "Import/Pipelines/PipelineConformance_functional_test.cpp"
+    "Import/Pipelines/SceneBuildTestSupport.h"
+    "Import/Pipelines/ScenePipeline_functional_test.cpp"
+    "Import/Pipelines/ScriptImportPipeline_functional_test.cpp"
+    "Import/Pipelines/TexturePipeline_cooker_parity_functional_test.cpp"
+    "Import/Pipelines/TexturePipeline_edge_cases_functional_test.cpp"
+    "Import/Pipelines/TexturePipeline_functional_test.cpp"
 )
 
-m_gtest_program(AsyncImportPlan SOURCES "Plan/ImportPlanner_test.cpp")
+oxygen_cooker_test(
+  Import.Emitters
+  FUNCTIONAL
+  SOURCES
+    "Import/Emitters/AssetEmitter_functional_test.cpp"
+    "Import/Emitters/BufferEmitter_functional_test.cpp"
+    $<$<BOOL:${WIN32}>:Import/Emitters/ResourceDescriptorEmitter_functional_test.cpp>
+    "Import/Emitters/TextureEmitter_functional_test.cpp"
+)
 
 # -- Loose Cooked --------------------------------------------------------------
 
-m_gtest_program(
-  LooseCooked
+oxygen_cooker_test(
+  Loose
+  UNIT
   SOURCES
-    "Loose/DummyIndex.h"
-    "Loose/Inspection_test.cpp"
-    "Loose/LooseCookedWriter_test.cpp"
-    "Fixtures/DescriptorFixtures.h"
     "Loose/LooseCookedLayout_test.cpp"
-    "Loose/Validation_test.cpp"
 )
-target_compile_features(Oxygen.Cooker.LooseCooked.Tests PUBLIC cxx_std_20)
 
-# -- Pak Builder ---------------------------------------------------------------
-
-m_gtest_program(
-  PakBinaryConformance
+oxygen_cooker_test(
+  Loose
+  FUNCTIONAL
   SOURCES
-    "Pak/PakBinaryConformance_test.cpp"
-    "Pak/PakTestSupport.h"
+    "Loose/Inspection_functional_test.cpp"
+    "Loose/Validation_functional_test.cpp"
 )
 
-m_gtest_program(
-  PakDomainValidation
-  SOURCES
-    "Pak/PakDomainValidation_test.cpp"
-    "Pak/PakPlanBuilder_test.cpp"
-    "Pak/PakTestSupport.h"
-)
+# -- Pak -----------------------------------------------------------------------
 
-m_gtest_program(PakPatchPlanner SOURCES "Pak/PakPatchPlanner_test.cpp")
-
-m_gtest_program(PakWriter SOURCES "Pak/PakWriter_test.cpp")
-
-m_gtest_program(PakCatalogSchema SOURCES "Pak/PakCatalogJsonSchema_test.cpp")
-target_link_libraries(
-  Oxygen.Cooker.PakCatalogSchema.Tests
-  PRIVATE
+oxygen_cooker_test(
+  Pak
+  UNIT
+  DEPS
     nlohmann_json::nlohmann_json
     nlohmann_json_schema_validator
-)
-
-m_gtest_program(
-  PakCatalogIo
   SOURCES
+    "Pak/PakBuilder_test.cpp"
     "Pak/PakCatalogIo_test.cpp"
     "Pak/PakTestSupport.h"
-)
-target_link_libraries(
-  Oxygen.Cooker.PakCatalogIo.Tests
-  PRIVATE
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
+    "Pak/PakValidation_test.cpp"
+    "Pak/Schemas/PakCatalogSchema_test.cpp"
 )
 
-m_gtest_program(
-  PakE2E
+oxygen_cooker_test(
+  Pak
+  FUNCTIONAL
+  DEPS
+    oxygen::content
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
   SOURCES
-    "Pak/PakBuilder_api_test.cpp"
-    "Pak/PakManifest_test.cpp"
+    "Pak/PakBinaryConformance_functional_test.cpp"
+    "Pak/PakBuilder_functional_test.cpp"
+    "Pak/PakCatalogIo_functional_test.cpp"
+    "Pak/PakManifestWriter_functional_test.cpp"
+    "Pak/PakPlanBuilder_functional_test.cpp"
+    "Pak/PakPlanBuilder_patch_functional_test.cpp"
+    "Pak/PakRepack_functional_test.cpp"
+    "Pak/PakSceneTestSupport.h"
     "Pak/PakTestSupport.h"
+    "Pak/PakWriterTestSupport.h"
+    "Pak/PakWriter_functional_test.cpp"
+    "Pak/PakWriter_payload_layout_functional_test.cpp"
+    "Pak/PakWriter_plan_contract_functional_test.cpp"
+)
+
+# -- Scenarios -----------------------------------------------------------------
+
+oxygen_cooker_test(
+  Scenarios
+  FUNCTIONAL
+  TIMEOUT
+    900
+  DEPS
+    oxygen::content
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+  SOURCES
+    "Scenarios/FbxModelImport_functional_test.cpp"
+    "Scenarios/GltfModelImport_functional_test.cpp"
+    "Scenarios/ModelTextureCapture_functional_test.cpp"
+    "Scenarios/PhysicsSidecarRecook_functional_test.cpp"
+    "Scenarios/StaticModelImport_functional_test.cpp"
+    "Scenarios/StaticModelValues_functional_test.cpp"
 )

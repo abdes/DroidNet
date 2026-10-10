@@ -4,12 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Import/ScratchImage.cpp
+
 #include <cstddef>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -22,24 +23,19 @@ using oxygen::content::import::ScratchImageMeta;
 //=== ScratchImage Basic Tests ===-------------------------------------------//
 
 //! Test fixture for basic ScratchImage tests.
-class ScratchImageBasicTest : public ::testing::Test { };
-
 //! Default-constructed ScratchImage should be invalid.
-NOLINT_TEST_F(ScratchImageBasicTest, DefaultConstructionCreatesInvalidImage)
+NOLINT_TEST(ScratchImageBasicTest, DefaultConstructionCreatesInvalidImage)
 {
-  // Arrange & Act
   const ScratchImage image;
 
-  // Assert
   EXPECT_FALSE(image.IsValid());
   EXPECT_EQ(image.GetTotalSizeBytes(), 0u);
   EXPECT_EQ(image.GetSubresourceCount(), 0u);
 }
 
 //! ComputeMipCount returns correct values for various dimensions.
-NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCountReturnsCorrectValues)
+NOLINT_TEST(ScratchImageBasicTest, ComputeMipCountReturnsCorrectValues)
 {
-  // Arrange & Act & Assert
   EXPECT_EQ(ScratchImage::ComputeMipCount(1, 1), 1u);
   EXPECT_EQ(ScratchImage::ComputeMipCount(2, 2), 2u);
   EXPECT_EQ(ScratchImage::ComputeMipCount(4, 4), 3u);
@@ -51,9 +47,8 @@ NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCountReturnsCorrectValues)
 }
 
 //! ComputeMipCount handles non-square textures correctly.
-NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCountNonSquareTextures)
+NOLINT_TEST(ScratchImageBasicTest, ComputeMipCountNonSquareTextures)
 {
-  // Arrange & Act & Assert
   EXPECT_EQ(ScratchImage::ComputeMipCount(1024, 512), 11u);
   EXPECT_EQ(ScratchImage::ComputeMipCount(512, 1024), 11u);
   EXPECT_EQ(ScratchImage::ComputeMipCount(4, 1), 3u);
@@ -61,21 +56,18 @@ NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCountNonSquareTextures)
 }
 
 //! ComputeMipCount returns 0 for zero dimensions.
-NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipCountZeroDimensions)
+NOLINT_TEST(ScratchImageBasicTest, ComputeMipCountZeroDimensions)
 {
-  // Arrange & Act & Assert
   EXPECT_EQ(ScratchImage::ComputeMipCount(0, 0), 0u);
   EXPECT_EQ(ScratchImage::ComputeMipCount(0, 100), 0u);
   EXPECT_EQ(ScratchImage::ComputeMipCount(100, 0), 0u);
 }
 
 //! ComputeSubresourceIndex follows layer-major ordering.
-NOLINT_TEST_F(ScratchImageBasicTest, ComputeSubresourceIndexLayerMajorOrdering)
+NOLINT_TEST(ScratchImageBasicTest, ComputeSubresourceIndexLayerMajorOrdering)
 {
-  // Arrange
   constexpr uint16_t kMipLevels = 4;
 
-  // Act & Assert
   // Layer 0: mips 0-3
   EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(0, 0, kMipLevels), 0u);
   EXPECT_EQ(ScratchImage::ComputeSubresourceIndex(0, 1, kMipLevels), 1u);
@@ -90,9 +82,8 @@ NOLINT_TEST_F(ScratchImageBasicTest, ComputeSubresourceIndexLayerMajorOrdering)
 }
 
 //! ComputeMipDimension halves correctly with minimum of 1.
-NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipDimensionHalvesCorrectly)
+NOLINT_TEST(ScratchImageBasicTest, ComputeMipDimensionHalvesCorrectly)
 {
-  // Arrange & Act & Assert
   EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 0), 1024u);
   EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 1), 512u);
   EXPECT_EQ(ScratchImage::ComputeMipDimension(1024, 2), 256u);
@@ -103,12 +94,9 @@ NOLINT_TEST_F(ScratchImageBasicTest, ComputeMipDimensionHalvesCorrectly)
 //=== ScratchImage Create Tests ===------------------------------------------//
 
 //! Test fixture for ScratchImage::Create tests.
-class ScratchImageCreateTest : public ::testing::Test { };
-
 //! Create with valid metadata produces a valid image.
-NOLINT_TEST_F(ScratchImageCreateTest, ValidMetadataCreatesValidImage)
+NOLINT_TEST(ScratchImageCreateTest, ValidMetadataCreatesValidImage)
 {
-  // Arrange
   const ScratchImageMeta meta {
     .texture_type = TextureType::kTexture2D,
     .width = 256,
@@ -119,10 +107,8 @@ NOLINT_TEST_F(ScratchImageCreateTest, ValidMetadataCreatesValidImage)
     .format = Format::kRGBA8UNorm,
   };
 
-  // Act
   auto image = ScratchImage::Create(meta);
 
-  // Assert
   EXPECT_TRUE(image.IsValid());
   EXPECT_EQ(image.Meta().width, 256u);
   EXPECT_EQ(image.Meta().height, 256u);
@@ -134,9 +120,8 @@ NOLINT_TEST_F(ScratchImageCreateTest, ValidMetadataCreatesValidImage)
 }
 
 //! Create with multiple mip levels allocates correct storage.
-NOLINT_TEST_F(ScratchImageCreateTest, MultipleMipsAllocatesCorrectStorage)
+NOLINT_TEST(ScratchImageCreateTest, MultipleMipsAllocatesCorrectStorage)
 {
-  // Arrange
   const ScratchImageMeta meta {
     .texture_type = TextureType::kTexture2D,
     .width = 64,
@@ -147,10 +132,8 @@ NOLINT_TEST_F(ScratchImageCreateTest, MultipleMipsAllocatesCorrectStorage)
     .format = Format::kRGBA8UNorm,
   };
 
-  // Act
   auto image = ScratchImage::Create(meta);
 
-  // Assert
   EXPECT_TRUE(image.IsValid());
   EXPECT_EQ(image.GetSubresourceCount(), 4u);
 
@@ -160,9 +143,8 @@ NOLINT_TEST_F(ScratchImageCreateTest, MultipleMipsAllocatesCorrectStorage)
 }
 
 //! Create with array layers allocates correct storage.
-NOLINT_TEST_F(ScratchImageCreateTest, ArrayTextureAllocatesCorrectStorage)
+NOLINT_TEST(ScratchImageCreateTest, ArrayTextureAllocatesCorrectStorage)
 {
-  // Arrange
   const ScratchImageMeta meta {
     .texture_type = TextureType::kTexture2DArray,
     .width = 32,
@@ -173,19 +155,16 @@ NOLINT_TEST_F(ScratchImageCreateTest, ArrayTextureAllocatesCorrectStorage)
     .format = Format::kRGBA8UNorm,
   };
 
-  // Act
   auto image = ScratchImage::Create(meta);
 
-  // Assert
   EXPECT_TRUE(image.IsValid());
   EXPECT_EQ(image.GetSubresourceCount(), 4u);
   EXPECT_EQ(image.GetTotalSizeBytes(), 32u * 32u * 4u * 4u); // 16384 bytes
 }
 
 //! Create with zero dimensions returns invalid image.
-NOLINT_TEST_F(ScratchImageCreateTest, ZeroDimensionsReturnsInvalidImage)
+NOLINT_TEST(ScratchImageCreateTest, ZeroDimensionsReturnsInvalidImage)
 {
-  // Arrange
   const ScratchImageMeta meta {
     .texture_type = TextureType::kTexture2D,
     .width = 0,
@@ -196,22 +175,17 @@ NOLINT_TEST_F(ScratchImageCreateTest, ZeroDimensionsReturnsInvalidImage)
     .format = Format::kRGBA8UNorm,
   };
 
-  // Act
   auto image = ScratchImage::Create(meta);
 
-  // Assert
   EXPECT_FALSE(image.IsValid());
 }
 
 //=== ScratchImage CreateFromData Tests ===----------------------------------//
 
 //! Test fixture for ScratchImage::CreateFromData tests.
-class ScratchImageCreateFromDataTest : public ::testing::Test { };
-
 //! CreateFromData wraps existing pixel data correctly.
-NOLINT_TEST_F(ScratchImageCreateFromDataTest, ValidDataCreatesImageWithData)
+NOLINT_TEST(ScratchImageCreateFromDataTest, ValidDataCreatesImageWithData)
 {
-  // Arrange
   constexpr uint32_t kWidth = 4;
   constexpr uint32_t kHeight = 4;
   constexpr uint32_t kBpp = 4;
@@ -223,11 +197,9 @@ NOLINT_TEST_F(ScratchImageCreateFromDataTest, ValidDataCreatesImageWithData)
     pixels[i] = static_cast<std::byte>(i & 0xFF);
   }
 
-  // Act
   auto image = ScratchImage::CreateFromData(
     kWidth, kHeight, Format::kRGBA8UNorm, kRowPitch, std::move(pixels));
 
-  // Assert
   EXPECT_TRUE(image.IsValid());
   EXPECT_EQ(image.Meta().width, kWidth);
   EXPECT_EQ(image.Meta().height, kHeight);
@@ -239,12 +211,9 @@ NOLINT_TEST_F(ScratchImageCreateFromDataTest, ValidDataCreatesImageWithData)
 //=== ScratchImage GetImage Tests ===----------------------------------------//
 
 //! Test fixture for ScratchImage::GetImage tests.
-class ScratchImageGetImageTest : public ::testing::Test { };
-
 //! GetImage returns correct view for mip 0.
-NOLINT_TEST_F(ScratchImageGetImageTest, Mip0ReturnsCorrectView)
+NOLINT_TEST(ScratchImageGetImageTest, Mip0ReturnsCorrectView)
 {
-  // Arrange
   const ScratchImageMeta meta {
     .texture_type = TextureType::kTexture2D,
     .width = 128,
@@ -256,10 +225,8 @@ NOLINT_TEST_F(ScratchImageGetImageTest, Mip0ReturnsCorrectView)
   };
   auto image = ScratchImage::Create(meta);
 
-  // Act
   const ImageView view = image.GetImage(0, 0);
 
-  // Assert
   EXPECT_EQ(view.width, 128u);
   EXPECT_EQ(view.height, 64u);
   EXPECT_EQ(view.format, Format::kRGBA8UNorm);
@@ -268,9 +235,8 @@ NOLINT_TEST_F(ScratchImageGetImageTest, Mip0ReturnsCorrectView)
 }
 
 //! GetImage returns correct dimensions for different mip levels.
-NOLINT_TEST_F(ScratchImageGetImageTest, DifferentMipsReturnsCorrectDimensions)
+NOLINT_TEST(ScratchImageGetImageTest, DifferentMipsReturnsCorrectDimensions)
 {
-  // Arrange
   const ScratchImageMeta meta {
     .texture_type = TextureType::kTexture2D,
     .width = 64,
@@ -282,7 +248,6 @@ NOLINT_TEST_F(ScratchImageGetImageTest, DifferentMipsReturnsCorrectDimensions)
   };
   auto image = ScratchImage::Create(meta);
 
-  // Act & Assert
   const auto view0 = image.GetImage(0, 0);
   EXPECT_EQ(view0.width, 64u);
   EXPECT_EQ(view0.height, 64u);
@@ -301,9 +266,8 @@ NOLINT_TEST_F(ScratchImageGetImageTest, DifferentMipsReturnsCorrectDimensions)
 }
 
 //! GetImage returns correct views for array layers.
-NOLINT_TEST_F(ScratchImageGetImageTest, ArrayLayersReturnsDistinctViews)
+NOLINT_TEST(ScratchImageGetImageTest, ArrayLayersReturnsDistinctViews)
 {
-  // Arrange
   const ScratchImageMeta meta {
     .texture_type = TextureType::kTexture2DArray,
     .width = 16,
@@ -315,12 +279,11 @@ NOLINT_TEST_F(ScratchImageGetImageTest, ArrayLayersReturnsDistinctViews)
   };
   auto image = ScratchImage::Create(meta);
 
-  // Act
   const auto view0 = image.GetImage(0, 0);
   const auto view1 = image.GetImage(1, 0);
   const auto view2 = image.GetImage(2, 0);
 
-  // Assert - each view should have same dimensions but different pixel spans
+  // Each view should have same dimensions but different pixel spans
   EXPECT_EQ(view0.width, 16u);
   EXPECT_EQ(view1.width, 16u);
   EXPECT_EQ(view2.width, 16u);
@@ -334,12 +297,9 @@ NOLINT_TEST_F(ScratchImageGetImageTest, ArrayLayersReturnsDistinctViews)
 //=== ScratchImage GetMutablePixels Tests ===---------------------------------//
 
 //! Test fixture for ScratchImage::GetMutablePixels tests.
-class ScratchImageGetMutablePixelsTest : public ::testing::Test { };
-
 //! GetMutablePixels allows writing to pixel data.
-NOLINT_TEST_F(ScratchImageGetMutablePixelsTest, WritePixelsDataIsPersisted)
+NOLINT_TEST(ScratchImageGetMutablePixelsTest, WritePixelsDataIsPersisted)
 {
-  // Arrange
   const ScratchImageMeta meta {
     .texture_type = TextureType::kTexture2D,
     .width = 2,
@@ -351,13 +311,13 @@ NOLINT_TEST_F(ScratchImageGetMutablePixelsTest, WritePixelsDataIsPersisted)
   };
   auto image = ScratchImage::Create(meta);
 
-  // Act - write test pattern
+  // Write test pattern
   auto pixels = image.GetMutablePixels(0, 0);
   for (size_t i = 0; i < pixels.size(); ++i) {
     pixels[i] = static_cast<std::byte>(i);
   }
 
-  // Assert - verify via GetImage
+  // Verify via GetImage
   const ImageView view = image.GetImage(0, 0);
   EXPECT_EQ(view.pixels[0], std::byte { 0 });
   EXPECT_EQ(view.pixels[1], std::byte { 1 });
@@ -368,12 +328,9 @@ NOLINT_TEST_F(ScratchImageGetMutablePixelsTest, WritePixelsDataIsPersisted)
 //=== ScratchImage Format Tests ===------------------------------------------//
 
 //! Test fixture for ScratchImage format-specific tests.
-class ScratchImageFormatTest : public ::testing::Test { };
-
 //! Single-channel R8 format allocates correct size.
-NOLINT_TEST_F(ScratchImageFormatTest, R8FormatAllocatesCorrectSize)
+NOLINT_TEST(ScratchImageFormatTest, R8FormatAllocatesCorrectSize)
 {
-  // Arrange
   const ScratchImageMeta meta {
     .texture_type = TextureType::kTexture2D,
     .width = 64,
@@ -384,17 +341,14 @@ NOLINT_TEST_F(ScratchImageFormatTest, R8FormatAllocatesCorrectSize)
     .format = Format::kR8UNorm,
   };
 
-  // Act
   auto image = ScratchImage::Create(meta);
 
-  // Assert
   EXPECT_EQ(image.GetTotalSizeBytes(), 64u * 64u * 1u); // 4096 bytes
 }
 
 //! RGBA16F format allocates correct size (8 bytes per pixel).
-NOLINT_TEST_F(ScratchImageFormatTest, RGBA16FFormatAllocatesCorrectSize)
+NOLINT_TEST(ScratchImageFormatTest, RGBA16FFormatAllocatesCorrectSize)
 {
-  // Arrange
   const ScratchImageMeta meta {
     .texture_type = TextureType::kTexture2D,
     .width = 32,
@@ -405,17 +359,14 @@ NOLINT_TEST_F(ScratchImageFormatTest, RGBA16FFormatAllocatesCorrectSize)
     .format = Format::kRGBA16Float,
   };
 
-  // Act
   auto image = ScratchImage::Create(meta);
 
-  // Assert
   EXPECT_EQ(image.GetTotalSizeBytes(), 32u * 32u * 8u); // 8192 bytes
 }
 
 //! RGBA32F format allocates correct size (16 bytes per pixel).
-NOLINT_TEST_F(ScratchImageFormatTest, RGBA32FFormatAllocatesCorrectSize)
+NOLINT_TEST(ScratchImageFormatTest, RGBA32FFormatAllocatesCorrectSize)
 {
-  // Arrange
   const ScratchImageMeta meta {
     .texture_type = TextureType::kTexture2D,
     .width = 16,
@@ -426,10 +377,8 @@ NOLINT_TEST_F(ScratchImageFormatTest, RGBA32FFormatAllocatesCorrectSize)
     .format = Format::kRGBA32Float,
   };
 
-  // Act
   auto image = ScratchImage::Create(meta);
 
-  // Assert
   EXPECT_EQ(image.GetTotalSizeBytes(), 16u * 16u * 16u); // 4096 bytes
 }
 

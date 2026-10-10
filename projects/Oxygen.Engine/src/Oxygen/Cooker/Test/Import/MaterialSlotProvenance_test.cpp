@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Import/MaterialSlotProvenance.cpp,
+//   Import/Internal/MaterialSlotAllocation.cpp
+
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -20,7 +23,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
-#include <Oxygen/Cooker/Test/Import/SourceLayoutTestSupport.h>
+#include <Oxygen/Cooker/Test/Support/SourceLayoutTestSupport.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MaterialSlotInventory.h>

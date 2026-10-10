@@ -25,6 +25,7 @@ function(gtest_program program_name)
     multi_value_args
     SOURCES
     DEPS
+    LABELS
   )
   cmake_parse_arguments(
     x
@@ -51,12 +52,23 @@ function(gtest_program program_name)
   # through the executable's --gtest_filter option.
   if(NOT x_NO_TEST)
     add_test(NAME ${program_name} COMMAND ${program_name})
+    set(_labels ${x_LABELS})
     if(x_GPU)
       set_tests_properties(
         ${program_name}
         PROPERTIES
           RESOURCE_LOCK
             oxygen_gpu
+      )
+      list(APPEND _labels gpu)
+    endif()
+    if(_labels)
+      list(REMOVE_DUPLICATES _labels)
+      set_tests_properties(
+        ${program_name}
+        PROPERTIES
+          LABELS
+            "${_labels}"
       )
     endif()
   endif()
@@ -65,7 +77,11 @@ endfunction()
 function(m_gtest_program program_name)
   set(options GPU)
   set(oneValueArgs)
-  set(multiValueArgs SOURCES)
+  set(
+    multiValueArgs
+    SOURCES
+    LABELS
+  )
 
   cmake_parse_arguments(
     x
@@ -86,6 +102,8 @@ function(m_gtest_program program_name)
     DEPS
       ${META_MODULE_TARGET}
       oxygen::testing
+    LABELS
+      ${x_LABELS}
   )
   source_group(
     TREE ${CMAKE_CURRENT_SOURCE_DIR}

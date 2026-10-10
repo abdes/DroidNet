@@ -41,6 +41,11 @@ m_gtest_program(FrameContext SOURCES "FrameContext_test.cpp")
 m_gtest_program(TimeManager SOURCES "TimeManager_test.cpp")
 m_gtest_program(ScriptingLruEviction SOURCES "Scripting_LruEviction_test.cpp")
 m_gtest_program(
+  ScriptingContracts
+  SOURCES
+    "ScriptCompileMode_contract_test.cpp"
+)
+m_gtest_program(
   ModuleManager
   SOURCES
     "ModuleManager_helpers.h"

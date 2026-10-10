@@ -28,10 +28,10 @@
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/NativeIblImagesSupport.cs" Link="Support/NativeIblImagesSupport.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
         <None Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/tests/Fixtures/BuiltinGeometryCatalog.json" Link="Fixtures/BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_scalar_triangle.gltf" Link="Fixtures/static_scalar_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_textured_triangle.gltf" Link="Fixtures/static_textured_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_textured_triangle.fbx" Link="Fixtures/static_textured_triangle.fbx" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_textured_checker.png" Link="Fixtures/static_textured_checker.png" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Assets/Models/static_scalar_triangle.gltf" Link="Fixtures/static_scalar_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Assets/Models/static_textured_triangle.gltf" Link="Fixtures/static_textured_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Assets/Models/static_textured_triangle.fbx" Link="Fixtures/static_textured_triangle.fbx" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Assets/Models/static_textured_checker.png" Link="Fixtures/static_textured_checker.png" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <Import Project="$(ProjectsRoot)/UITests.Shared/src/UITests.Shared.projitems" Label="Shared" />
     <ItemGroup Condition="Exists('$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin')">

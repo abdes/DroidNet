@@ -30,8 +30,9 @@ find_package(Luau CONFIG REQUIRED)
 # Build instructions
 # ------------------------------------------------------------------------------
 
-add_executable(
-  ${META_MODULE_TARGET}
+add_library(
+  oxygen-cooker-importtool-core
+  STATIC
   "BatchCommand.cpp"
   "BatchCommand.h"
   "BuiltinCatalogCommand.cpp"
@@ -65,13 +66,49 @@ add_executable(
   "ScriptingSidecarCommand.h"
   "TextureCommand.cpp"
   "TextureCommand.h"
-  "main.cpp"
   "UI/BatchViewModel.h"
   "UI/JobViewModel.h"
   "UI/Screens/BatchImportScreen.h"
   "UI/Screens/BatchImportScreen.cpp"
   "UI/Screens/ImportScreen.h"
   "UI/Screens/ImportScreen.cpp"
+)
+set_target_properties(
+  oxygen-cooker-importtool-core
+  PROPERTIES
+    FOLDER
+      "Tools"
+)
+target_include_directories(
+  oxygen-cooker-importtool-core
+  PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+target_link_libraries(
+  oxygen-cooker-importtool-core
+  PUBLIC
+    oxygen::base
+    oxygen::core
+    oxygen::cooker
+    oxygen::clap
+    fmt::fmt-header-only
+    ftxui::screen
+    ftxui::dom
+    ftxui::component
+    nlohmann_json::nlohmann_json
+    Luau::Compiler
+)
+target_compile_definitions(
+  oxygen-cooker-importtool-core
+  PUBLIC
+    OXYGEN_IMPORT_TOOL_VERSION="${import_tool_version}"
+)
+
+add_executable(${META_MODULE_TARGET} "main.cpp")
+target_link_libraries(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    oxygen-cooker-importtool-core
 )
 
 add_custom_target(${META_MODULE_NAME} DEPENDS ${META_MODULE_TARGET})
@@ -84,31 +121,13 @@ set_target_properties(
     OUTPUT_NAME
       ${META_MODULE_NAME}
 )
-target_include_directories(
-  ${META_MODULE_TARGET}
-  PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-)
-target_link_libraries(
-  ${META_MODULE_TARGET}
-  PRIVATE
-    oxygen::base
-    oxygen::core
-    oxygen::cooker
-    oxygen::clap
-    fmt::fmt-header-only
-    ftxui::screen
-    ftxui::dom
-    ftxui::component
-    nlohmann_json::nlohmann_json
-    Luau::Compiler
-)
+# ------------------------------------------------------------------------------
+# Tests
+# ------------------------------------------------------------------------------
 
-target_compile_definitions(
-  ${META_MODULE_TARGET}
-  PRIVATE
-    OXYGEN_IMPORT_TOOL_VERSION="${import_tool_version}"
-)
+if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Test")
+  add_subdirectory("Test")
+endif()
 
 # ------------------------------------------------------------------------------
 # Deployment instructions

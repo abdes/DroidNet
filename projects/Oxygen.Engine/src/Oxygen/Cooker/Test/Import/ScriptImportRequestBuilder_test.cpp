@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Import/Internal/ScriptImportRequestBuilder.cpp
+
 #include <filesystem>
 #include <sstream>
 #include <string>
@@ -81,9 +83,7 @@ NOLINT_TEST(ScriptImportRequestBuilderTest, BuildScriptAssetRequestValidInput)
 
   const auto request = BuildScriptAssetRequest(settings, errors);
 
-  if (!request.has_value()) {
-    FAIL();
-  }
+  ASSERT_TRUE(request.has_value()) << "Expected request to be present";
   EXPECT_TRUE(errors.str().empty());
   EXPECT_EQ(
     request->options.scripting.import_kind, ScriptingImportKind::kScriptAsset);
@@ -92,9 +92,8 @@ NOLINT_TEST(ScriptImportRequestBuilderTest, BuildScriptAssetRequestValidInput)
     request->options.scripting.compile_mode, ScriptCompileMode::kOptimized);
   EXPECT_EQ(
     request->options.scripting.script_storage, ScriptStorageMode::kEmbedded);
-  if (!request->cooked_root.has_value()) {
-    FAIL();
-  }
+  ASSERT_TRUE(request->cooked_root.has_value())
+    << "Expected cooked root to be present";
   EXPECT_TRUE(request->cooked_root->is_absolute());
 }
 
@@ -108,9 +107,9 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   const auto request = BuildScriptAssetRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find(
-                "compile_scripts=true is invalid with script_storage=external")
-    != std::string::npos);
+  EXPECT_THAT(errors.str(),
+    ::testing::HasSubstr(
+      "compile_scripts=true is invalid with script_storage=external"));
 }
 
 NOLINT_TEST(
@@ -122,7 +121,7 @@ NOLINT_TEST(
   std::ostringstream errors;
 
   EXPECT_FALSE(BuildScriptAssetRequest(settings, errors).has_value());
-  EXPECT_NE(errors.str().find("source_root"), std::string::npos);
+  EXPECT_THAT(errors.str(), ::testing::HasSubstr("source_root"));
 }
 
 NOLINT_TEST(
@@ -139,13 +138,10 @@ NOLINT_TEST(
 
   const auto request = BuildScriptAssetRequest(settings, errors);
 
-  if (!request.has_value()) {
-    FAIL() << errors.str();
-  }
+  ASSERT_TRUE(request.has_value()) << errors.str();
   EXPECT_EQ(request->options.scripting.source_root, authoring_root);
-  if (!request->cooked_root.has_value()) {
-    FAIL() << "Expected an explicit cooked root";
-  }
+  ASSERT_TRUE(request->cooked_root.has_value())
+    << "Expected an explicit cooked root";
   EXPECT_NE(request->cooked_root->parent_path(), authoring_root);
 }
 
@@ -163,7 +159,7 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   std::ostringstream errors;
 
   EXPECT_FALSE(BuildScriptAssetRequest(settings, errors).has_value());
-  EXPECT_NE(errors.str().find("source_root"), std::string::npos);
+  EXPECT_THAT(errors.str(), ::testing::HasSubstr("source_root"));
 }
 
 NOLINT_TEST(ScriptImportRequestBuilderTest,
@@ -176,8 +172,8 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   const auto request = BuildScriptAssetRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(
-    errors.str().find("invalid script compile mode") != std::string::npos);
+  EXPECT_THAT(
+    errors.str(), ::testing::HasSubstr("invalid script compile mode"));
 }
 
 NOLINT_TEST(ScriptImportRequestBuilderTest,
@@ -190,8 +186,8 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("target_scene_virtual_path is required")
-    != std::string::npos);
+  EXPECT_THAT(errors.str(),
+    ::testing::HasSubstr("target_scene_virtual_path is required"));
 }
 
 NOLINT_TEST(ScriptImportRequestBuilderTest,
@@ -204,7 +200,7 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("canonical virtual path") != std::string::npos);
+  EXPECT_THAT(errors.str(), ::testing::HasSubstr("canonical virtual path"));
 }
 
 NOLINT_TEST(
@@ -215,17 +211,14 @@ NOLINT_TEST(
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
-  if (!request.has_value()) {
-    FAIL();
-  }
+  ASSERT_TRUE(request.has_value()) << "Expected request to be present";
   EXPECT_TRUE(errors.str().empty());
   EXPECT_EQ(request->options.scripting.import_kind,
     ScriptingImportKind::kScriptingSidecar);
   EXPECT_EQ(request->options.scripting.target_scene_virtual_path,
     settings.target_scene_virtual_path);
-  if (!request->cooked_root.has_value()) {
-    FAIL();
-  }
+  ASSERT_TRUE(request->cooked_root.has_value())
+    << "Expected cooked root to be present";
   EXPECT_TRUE(request->cooked_root->is_absolute());
 }
 
@@ -237,23 +230,18 @@ NOLINT_TEST(
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
-  if (!request.has_value()) {
-    FAIL();
-  }
+  ASSERT_TRUE(request.has_value()) << "Expected request to be present";
   EXPECT_TRUE(errors.str().empty());
   EXPECT_EQ(request->options.scripting.import_kind,
     ScriptingImportKind::kScriptingSidecar);
   EXPECT_EQ(request->options.scripting.target_scene_virtual_path,
     settings.target_scene_virtual_path);
-  EXPECT_TRUE(
-    request->options.scripting.inline_bindings_json.find("\"bindings\"")
-    != std::string::npos);
-  EXPECT_TRUE(
-    request->options.scripting.inline_bindings_json.find("script_virtual_path")
-    != std::string::npos);
-  if (!request->cooked_root.has_value()) {
-    FAIL();
-  }
+  EXPECT_THAT(request->options.scripting.inline_bindings_json,
+    ::testing::HasSubstr("\"bindings\""));
+  EXPECT_THAT(request->options.scripting.inline_bindings_json,
+    ::testing::HasSubstr("script_virtual_path"));
+  ASSERT_TRUE(request->cooked_root.has_value())
+    << "Expected cooked root to be present";
   EXPECT_TRUE(request->cooked_root->is_absolute());
 }
 
@@ -268,13 +256,10 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
 
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
-  if (!request.has_value()) {
-    FAIL();
-  }
+  ASSERT_TRUE(request.has_value()) << "Expected request to be present";
   EXPECT_TRUE(errors.str().empty());
-  EXPECT_TRUE(
-    request->options.scripting.inline_bindings_json.find("\"bindings\"")
-    != std::string::npos);
+  EXPECT_THAT(request->options.scripting.inline_bindings_json,
+    ::testing::HasSubstr("\"bindings\""));
 }
 
 NOLINT_TEST(ScriptImportRequestBuilderTest,
@@ -287,9 +272,9 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("exactly one of source_path or "
-                                "inline_bindings_json must be provided")
-    != std::string::npos);
+  EXPECT_THAT(errors.str(),
+    ::testing::HasSubstr("exactly one of source_path or "
+                         "inline_bindings_json must be provided"));
 }
 
 NOLINT_TEST(ScriptImportRequestBuilderTest,
@@ -303,9 +288,9 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("exactly one of source_path or "
-                                "inline_bindings_json must be provided")
-    != std::string::npos);
+  EXPECT_THAT(errors.str(),
+    ::testing::HasSubstr("exactly one of source_path or "
+                         "inline_bindings_json must be provided"));
 }
 
 NOLINT_TEST(ScriptImportRequestBuilderTest,
@@ -319,8 +304,8 @@ NOLINT_TEST(ScriptImportRequestBuilderTest,
   const auto request = BuildScriptingSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("inline_bindings_json is not valid JSON")
-    != std::string::npos);
+  EXPECT_THAT(errors.str(),
+    ::testing::HasSubstr("inline_bindings_json is not valid JSON"));
 }
 
 } // namespace

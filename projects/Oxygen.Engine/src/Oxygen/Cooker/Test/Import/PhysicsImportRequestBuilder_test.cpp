@@ -4,14 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Import/Internal/PhysicsImportRequestBuilder.cpp
+
 #include <filesystem>
 #include <sstream>
 #include <string>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -75,8 +76,8 @@ NOLINT_TEST(
   ASSERT_TRUE(request->physics.has_value());
   EXPECT_EQ(request->physics->target_scene_virtual_path,
     settings.target_scene_virtual_path);
-  EXPECT_TRUE(request->physics->inline_bindings_json.find("\"bindings\"")
-    != std::string::npos);
+  EXPECT_THAT(request->physics->inline_bindings_json,
+    ::testing::HasSubstr("\"bindings\""));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
@@ -91,8 +92,8 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(
-    errors.str().find("top-level 'bindings' object") != std::string::npos);
+  EXPECT_THAT(
+    errors.str(), ::testing::HasSubstr("top-level 'bindings' object"));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
@@ -105,9 +106,9 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("exactly one of source_path or "
-                                "inline_bindings_json must be provided")
-    != std::string::npos);
+  EXPECT_THAT(errors.str(),
+    ::testing::HasSubstr("exactly one of source_path or "
+                         "inline_bindings_json must be provided"));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
@@ -121,9 +122,9 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("exactly one of source_path or "
-                                "inline_bindings_json must be provided")
-    != std::string::npos);
+  EXPECT_THAT(errors.str(),
+    ::testing::HasSubstr("exactly one of source_path or "
+                         "inline_bindings_json must be provided"));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
@@ -137,8 +138,8 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("inline_bindings_json is not valid JSON")
-    != std::string::npos);
+  EXPECT_THAT(errors.str(),
+    ::testing::HasSubstr("inline_bindings_json is not valid JSON"));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
@@ -151,8 +152,8 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("target_scene_virtual_path is required")
-    != std::string::npos);
+  EXPECT_THAT(errors.str(),
+    ::testing::HasSubstr("target_scene_virtual_path is required"));
 }
 
 NOLINT_TEST(PhysicsImportRequestBuilderTest,
@@ -165,7 +166,7 @@ NOLINT_TEST(PhysicsImportRequestBuilderTest,
   const auto request = BuildPhysicsSidecarRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("canonical virtual path") != std::string::npos);
+  EXPECT_THAT(errors.str(), ::testing::HasSubstr("canonical virtual path"));
 }
 
 } // namespace

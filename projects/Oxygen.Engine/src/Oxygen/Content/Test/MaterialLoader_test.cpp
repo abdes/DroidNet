@@ -521,4 +521,44 @@ NOLINT_TEST_F(
     collector->ResourceRefDependencies(), ::testing::ElementsAre(expected));
 }
 
+//! Sentinel texture indices (error texture, no texture) are skipped by the
+//! dependency collector.
+NOLINT_TEST_F(
+  MaterialLoaderBasicTest, SentinelTextureIndicesCollectNoDependencies)
+{
+  // Arrange
+  auto desc = MakeMaterialDescriptor("Test Material");
+  desc.base_color_texture = oxygen::data::ResourceReferenceIndex { 0U };
+  desc.emissive_texture = oxygen::data::ResourceReferenceIndex { 1U };
+  WriteMaterialDescriptor(desc);
+
+  const auto references = oxygen::data::AssetReferences::Create(
+    {
+      {
+        .kind = oxygen::data::ResourceKind::kTexture,
+        .index = oxygen::data::pak::core::kErrorTextureResourceIndex,
+      },
+      {
+        .kind = oxygen::data::ResourceKind::kTexture,
+        .index = oxygen::data::pak::core::kNoResourceIndex,
+      },
+    },
+    {});
+  ASSERT_TRUE(references.has_value());
+
+  // Act
+  auto [context, collector] = CreateDecodeLoaderContext();
+  context.asset_references = oxygen::observer_ptr(&*references);
+  auto asset = LoadMaterialAsset(std::move(context));
+
+  // Assert
+  ASSERT_THAT(asset, NotNull());
+  EXPECT_EQ(
+    asset->GetBaseColorTexture(), oxygen::data::ResourceReferenceIndex { 0U });
+  EXPECT_EQ(
+    asset->GetEmissiveTexture(), oxygen::data::ResourceReferenceIndex { 1U });
+  EXPECT_EQ(asset->GetNormalTexture(), oxygen::data::kNoResourceReference);
+  EXPECT_THAT(collector->ResourceRefDependencies(), SizeIs(0));
+}
+
 } // namespace

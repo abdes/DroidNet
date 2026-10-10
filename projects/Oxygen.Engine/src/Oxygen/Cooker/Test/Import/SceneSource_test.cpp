@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Import/Internal/SceneSource.cpp
+
 #include <algorithm>
 #include <string>
 #include <string_view>
@@ -14,6 +16,7 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
+#include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Testing/GTest.h>
@@ -32,12 +35,7 @@ namespace {
     };
   }
 
-  auto HasCode(const std::vector<ImportDiagnostic>& diagnostics,
-    const std::string_view code) -> bool
-  {
-    return std::ranges::any_of(
-      diagnostics, [code](const auto& item) { return item.code == code; });
-  }
+  using oxygen::cooker::test::HasDiagnosticCode;
 
   NOLINT_TEST(SceneSourceTest, EmptyScenePreservesEnvironmentAndCurve)
   {
@@ -54,19 +52,15 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source
       = SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics);
-    if (!source.has_value()) {
-      FAIL() << "Expected source to contain a value";
-    }
+    ASSERT_TRUE(source.has_value()) << "Expected source to contain a value";
     EXPECT_TRUE(diagnostics.empty());
     EXPECT_EQ(source->name, "Scene.v2");
     EXPECT_TRUE(source->build.nodes.empty());
-    if (!source->background.has_value()) {
-      FAIL() << "Expected source->background to contain a value";
-    }
+    ASSERT_TRUE(source->background.has_value())
+      << "Expected source->background to contain a value";
     EXPECT_EQ(source->background->enabled, 0U);
-    if (!source->post_process.has_value()) {
-      FAIL() << "Expected source->post_process to contain a value";
-    }
+    ASSERT_TRUE(source->post_process.has_value())
+      << "Expected source->post_process to contain a value";
     EXPECT_EQ(
       source->post_process->metering_mask, "/Content/Textures/mask.otex");
     ASSERT_EQ(source->post_process->curve.size(), 2U);
@@ -97,9 +91,7 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source
       = SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics);
-    if (!source.has_value()) {
-      FAIL() << "Expected source to contain a value";
-    }
+    ASSERT_TRUE(source.has_value()) << "Expected source to contain a value";
     EXPECT_TRUE(diagnostics.empty());
     ASSERT_EQ(source->renderables.size(), 1U);
     const auto& renderable = source->renderables.front();
@@ -130,12 +122,9 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto source
       = SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics);
-    if (!source.has_value()) {
-      FAIL() << "Expected source to contain a value";
-    }
-    if (!source->sky_light.has_value()) {
-      FAIL() << "Expected source->sky_light to contain a value";
-    }
+    ASSERT_TRUE(source.has_value()) << "Expected source to contain a value";
+    ASSERT_TRUE(source->sky_light.has_value())
+      << "Expected source->sky_light to contain a value";
     EXPECT_EQ(source->sky_light->record.enabled, 0U);
     EXPECT_EQ(source->sky_light->cubemap, "/Content/Textures/sky.otex");
   }
@@ -149,8 +138,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(
       SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics));
-    EXPECT_TRUE(
-      HasCode(diagnostics, "scene.descriptor.camera_node_index_out_of_range"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, "scene.descriptor.camera_node_index_out_of_range"));
   }
 
   NOLINT_TEST(SceneSourceTest, RejectsInvalidExposureBeforeCookedLinking)
@@ -162,7 +151,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(
       SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics));
-    EXPECT_TRUE(HasCode(diagnostics, "scene.descriptor.exposure_invalid"));
+    EXPECT_TRUE(
+      HasDiagnosticCode(diagnostics, "scene.descriptor.exposure_invalid"));
   }
 
   NOLINT_TEST(SceneSourceTest, NonObjectInputIsNotAFormatUpgradeError)
@@ -171,9 +161,10 @@ namespace {
       auto diagnostics = std::vector<ImportDiagnostic> {};
       EXPECT_FALSE(
         SceneSource::FromDescriptor(text, "scene.json", diagnostics));
-      EXPECT_TRUE(
-        HasCode(diagnostics, "scene.descriptor.request_invalid_json"));
-      EXPECT_FALSE(HasCode(diagnostics, "scene.descriptor.recook_required"));
+      EXPECT_TRUE(HasDiagnosticCode(
+        diagnostics, "scene.descriptor.request_invalid_json"));
+      EXPECT_FALSE(
+        HasDiagnosticCode(diagnostics, "scene.descriptor.recook_required"));
     }
   }
 } // namespace

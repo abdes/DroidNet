@@ -34,6 +34,17 @@ struct LooseCookedTestWriteResult {
   uint32_t file_record_count = 0;
 };
 
+//! Forged descriptor metadata for `WriteAssetDescriptor`.
+/*!
+ A `size` of zero means "use the written byte count"; a larger `size` zero-pads
+ the descriptor file up to it. An all-zero `sha256` means "record the computed
+ digest of the written bytes".
+*/
+struct DescriptorRecordOverride {
+  uint64_t size = 0;
+  std::array<uint8_t, 32> sha256 {};
+};
+
 //! Minimal test writer for loose cooked fixtures in Content tests.
 class LooseCookedTestWriter final {
 public:
@@ -44,6 +55,12 @@ public:
   }
 
   auto SetSourceKey(const data::SourceKey key) -> void { source_key_ = key; }
+
+  //! Overrides the index header version (defaults to the current version).
+  auto SetIndexVersion(const uint16_t version) -> void
+  {
+    index_version_ = version;
+  }
 
   auto WriteFile(data::loose_cooked::FileKind kind, std::string relpath,
     std::span<const std::byte> bytes) -> void
@@ -73,6 +90,23 @@ public:
     std::string descriptor_relpath, std::span<const std::byte> bytes,
     data::AssetReferences references = {}) -> void
   {
+    WriteAssetDescriptor(asset_key, asset_type, std::move(virtual_path),
+      std::move(descriptor_relpath), bytes, std::move(references),
+      DescriptorRecordOverride {});
+  }
+
+  //! Writes a descriptor whose recorded size and/or digest may be forged.
+  auto WriteAssetDescriptor(const data::AssetKey& asset_key,
+    const data::AssetType asset_type, std::string virtual_path,
+    std::string descriptor_relpath, std::span<const std::byte> bytes,
+    data::AssetReferences references,
+    const DescriptorRecordOverride& record_override) -> void
+  {
+    auto written = std::vector<std::byte>(bytes.begin(), bytes.end());
+    if (record_override.size > written.size()) {
+      written.resize(static_cast<size_t>(record_override.size));
+    }
+
     const auto absolute_path
       = cooked_root_ / std::filesystem::path(descriptor_relpath);
     if (const auto parent = absolute_path.parent_path(); !parent.empty()) {
@@ -81,19 +115,23 @@ public:
 
     std::ofstream out(base::ToNativePath(absolute_path),
       std::ios::binary | std::ios::trunc | std::ios::out);
-    if (!bytes.empty()) {
-      out.write(reinterpret_cast<const char*>(bytes.data()),
-        static_cast<std::streamsize>(bytes.size()));
+    if (!written.empty()) {
+      out.write(reinterpret_cast<const char*>(written.data()),
+        static_cast<std::streamsize>(written.size()));
     }
 
-    const auto digest_bytes = base::ComputeSha256(bytes);
+    const auto digest_bytes = base::IsAllZero(record_override.sha256)
+      ? base::ComputeSha256(written)
+      : record_override.sha256;
 
     assets_.push_back(PendingAssetRecord {
       .asset_key = asset_key,
       .asset_type = static_cast<uint8_t>(asset_type),
       .descriptor_relpath = std::move(descriptor_relpath),
       .virtual_path = std::move(virtual_path),
-      .descriptor_size = static_cast<uint64_t>(bytes.size()),
+      .descriptor_size = record_override.size != 0
+        ? record_override.size
+        : static_cast<uint64_t>(written.size()),
       .descriptor_sha256 = digest_bytes,
       .references = std::move(references),
     });
@@ -142,7 +180,7 @@ public:
     } else {
       std::ranges::copy(source_key_.get(), std::begin(header.source_identity));
     }
-    header.version = data::loose_cooked::kIndexVersion;
+    header.version = index_version_;
     header.content_version = 0;
     header.flags = data::loose_cooked::kHasVirtualPaths
       | data::loose_cooked::kHasFileRecords;
@@ -246,6 +284,7 @@ private:
   std::filesystem::path cooked_root_;
   LooseCookedLayout layout_ {};
   data::SourceKey source_key_ {};
+  uint16_t index_version_ = data::loose_cooked::kIndexVersion;
   std::vector<PendingAssetRecord> assets_;
   std::vector<PendingFileRecord> files_;
 };

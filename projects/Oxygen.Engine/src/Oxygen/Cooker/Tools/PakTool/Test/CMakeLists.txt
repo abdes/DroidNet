@@ -14,117 +14,30 @@ find_package(nlohmann_json_schema_validator REQUIRED)
 # Build instructions
 # ==============================================================================
 
-include(GTestHelpers)
-
-gtest_program(
-  "Oxygen.Cooker.PakToolCli.Tests"
-  SOURCES
-    "PakToolCli_test.cpp"
-    "../CliBuilder.cpp"
+oxygen_cooker_test(
+  PakTool
+  UNIT
   DEPS
-    oxygen::clap
-    oxygen::testing
-)
-target_compile_definitions(
-  Oxygen.Cooker.PakToolCli.Tests
-  PRIVATE
-    OXYGEN_PAKTOOL_VERSION="0.1"
-)
-
-gtest_program(
-  "Oxygen.Cooker.PakToolRequestPreparation.Tests"
-  SOURCES
-    "PakToolRequestPreparation_test.cpp"
-    "../ArtifactPublication.cpp"
-    "../RequestPreparation.cpp"
-  DEPS
-    oxygen::cooker
-    oxygen::content
-    oxygen::testing
-)
-
-gtest_program(
-  "Oxygen.Cooker.PakToolExecution.Tests"
-  SOURCES
-    "PakToolCommandExecution_test.cpp"
-    "../ArtifactPublication.cpp"
-    "../BuildReportJson.cpp"
-    "../CommandExecution.cpp"
-    "../RequestPreparation.cpp"
-    "../ScriptSealing.cpp"
-  DEPS
-    oxygen::cooker
-    oxygen::content
-    oxygen::testing
-    nlohmann_json::nlohmann_json
-)
-
-gtest_program(
-  "Oxygen.Cooker.PakToolApp.Tests"
-  SOURCES
-    "PakToolApp_test.cpp"
-    "../App.cpp"
-    "../CliBuilder.cpp"
-    "../ArtifactPublication.cpp"
-    "../BuildReportJson.cpp"
-    "../CommandExecution.cpp"
-    "../RequestPreparation.cpp"
-    "../ScriptSealing.cpp"
-  DEPS
-    oxygen::cooker
-    oxygen::content
-    oxygen::clap
-    oxygen::testing
-    nlohmann_json::nlohmann_json
-)
-target_compile_definitions(
-  Oxygen.Cooker.PakToolApp.Tests
-  PRIVATE
-    OXYGEN_PAKTOOL_VERSION="0.1"
-)
-
-gtest_program(
-  "Oxygen.Cooker.PakBuildReportSchema.Tests"
-  SOURCES
-    "PakBuildReportJsonSchema_test.cpp"
-  DEPS
-    oxygen::testing
-    nlohmann_json::nlohmann_json
+    oxygen-cooker-paktool-core
     nlohmann_json_schema_validator
+  SOURCES
+    "ArtifactPublication_test.cpp"
+    "BuildReportJson_test.cpp"
+    "CliBuilder_test.cpp"
+    "PakBuildReportSchema_test.cpp"
 )
 
-gtest_program(
-  "Oxygen.Cooker.PakToolPublication.Tests"
-  SOURCES
-    "PakToolArtifactPublication_test.cpp"
-    "../ArtifactPublication.cpp"
+oxygen_cooker_test(
+  PakTool
+  FUNCTIONAL
   DEPS
-    oxygen::cooker
-    oxygen::content
-    oxygen::testing
-)
-
-gtest_program(
-  "Oxygen.Cooker.PakToolReport.Tests"
-  SOURCES
-    "PakToolBuildReportJson_test.cpp"
-    "../ArtifactPublication.cpp"
-    "../BuildReportJson.cpp"
-  DEPS
-    oxygen::cooker
-    oxygen::content
-    oxygen::testing
-    nlohmann_json::nlohmann_json
+    oxygen-cooker-paktool-core
     nlohmann_json_schema_validator
-)
-
-gtest_program(
-  "Oxygen.Cooker.PakToolScriptSealing.Tests"
   SOURCES
-    "PakToolScriptSealing_test.cpp"
-    "../ScriptSealing.cpp"
-  DEPS
-    oxygen::cooker
-    oxygen::content
-    oxygen::testing
+    "App_functional_test.cpp"
+    "ArtifactPublication_functional_test.cpp"
+    "BuildReportJson_functional_test.cpp"
+    "CommandExecution_functional_test.cpp"
+    "RequestPreparation_functional_test.cpp"
+    "ScriptSealing_functional_test.cpp"
 )

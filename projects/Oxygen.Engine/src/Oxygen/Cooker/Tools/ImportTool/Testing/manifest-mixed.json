@@ -88,7 +88,7 @@
     },
     {
       "type": "gltf",
-      "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Cooker/Tools/ImportTool/Testing/Models/Tabuleiro.glb",
+      "source": "F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Cooker/Test/Assets/Models/Tabuleiro.glb",
       "name": "tabuleiro-scene"
     }
   ]

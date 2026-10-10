@@ -30,8 +30,9 @@ include(JsonSchemaHelpers)
 # Build instructions
 # ------------------------------------------------------------------------------
 
-add_executable(
-  ${META_MODULE_TARGET}
+add_library(
+  oxygen-cooker-paktool-core
+  STATIC
   "App.cpp"
   "App.h"
   "ArtifactPublication.cpp"
@@ -48,11 +49,38 @@ add_executable(
   "RequestSnapshot.h"
   "ScriptSealing.cpp"
   "ScriptSealing.h"
-  "main.cpp"
+)
+set_target_properties(
+  oxygen-cooker-paktool-core
+  PROPERTIES
+    FOLDER
+      "Tools"
+)
+target_include_directories(
+  oxygen-cooker-paktool-core
+  PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}"
+)
+target_link_libraries(
+  oxygen-cooker-paktool-core
+  PUBLIC
+    oxygen::base
+    oxygen::cooker
+    oxygen::content
+    oxygen::clap
+    nlohmann_json::nlohmann_json
+)
+target_compile_definitions(
+  oxygen-cooker-paktool-core
+  PUBLIC
+    OXYGEN_PAKTOOL_VERSION="${pak_tool_version}"
 )
 
+add_executable(${META_MODULE_TARGET} "main.cpp")
+target_link_libraries(${META_MODULE_TARGET} PRIVATE oxygen-cooker-paktool-core)
+
 oxygen_embed_json_schemas(
-  TARGET ${META_MODULE_TARGET}
+  TARGET oxygen-cooker-paktool-core
   OUTPUT_HEADER
     "${CMAKE_BINARY_DIR}/generated/Oxygen/Cooker/Tools/PakTool/Internal/PakBuildReport_schema.h"
   NAMESPACE "oxygen::content::pak::tool"
@@ -74,25 +102,6 @@ set_target_properties(
       "Tools"
     OUTPUT_NAME
       ${META_MODULE_NAME}
-)
-target_include_directories(
-  ${META_MODULE_TARGET}
-  PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}"
-)
-target_link_libraries(
-  ${META_MODULE_TARGET}
-  PRIVATE
-    oxygen::base
-    oxygen::cooker
-    oxygen::content
-    oxygen::clap
-    nlohmann_json::nlohmann_json
-)
-target_compile_definitions(
-  ${META_MODULE_TARGET}
-  PRIVATE
-    OXYGEN_PAKTOOL_VERSION="${pak_tool_version}"
 )
 
 # ------------------------------------------------------------------------------

@@ -98,7 +98,7 @@ Preserve the independent GPU material layout. Existing raster tests cover scalar
 and textured emission alongside exposure and alpha modes; expected values use
 the float32 source product without binary16 quantization.
 
-For native visual checks, import `Cooker/Test/Import/Models/static_ao_grid.gltf`
+For native visual checks, import `Cooker/Test/Assets/Models/static_ao_grid.gltf`
 with the `static` policy and transform baking disabled, then load its cooked
 index or PAK in RenderScene. Use its authored camera and captured sky lighting.
 The two rows read left to right:

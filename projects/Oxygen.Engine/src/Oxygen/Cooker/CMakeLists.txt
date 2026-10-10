@@ -453,6 +453,12 @@ target_link_libraries(
 # Tools
 # ------------------------------------------------------------------------------
 
+# The test-support library defines oxygen_cooker_test(), which the tool tests
+# use, so it must be added before Tools.
+if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Test/Support")
+  add_subdirectory("Test/Support")
+endif()
+
 # All four native cooker tools are part of the engine SDK.
 add_subdirectory("Tools")
 

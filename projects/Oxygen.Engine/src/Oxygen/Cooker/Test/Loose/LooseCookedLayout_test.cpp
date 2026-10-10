@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Loose/LooseCookedLayout.cpp
+
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Testing/GTest.h>
@@ -41,7 +43,7 @@ NOLINT_TEST(LooseCookedLayoutTest, SourceSidecarsRespectConfiguredLayout)
     layout.TextureDescriptorRelPath("paint.png", "second-source"));
 }
 
-NOLINT_TEST(LooseCookedLayoutTest, DefaultSettingsAreCorrect)
+NOLINT_TEST(LooseCookedLayoutTest, DefaultsToStandardFileAndDirectoryNames)
 {
   LooseCookedLayout layout {};
   EXPECT_EQ(layout.index_file_name, "container.index.bin");
@@ -66,7 +68,7 @@ NOLINT_TEST(LooseCookedLayoutTest, DefaultSettingsAreCorrect)
   EXPECT_EQ(layout.physics_resources_subdir, "Resources");
 }
 
-NOLINT_TEST(LooseCookedLayoutTest, DescriptorFileNamesAreCorrect)
+NOLINT_TEST(LooseCookedLayoutTest, AppendsAssetExtensionToDescriptorFileNames)
 {
   EXPECT_EQ(
     LooseCookedLayout::MaterialDescriptorFileName("MyMat"), "MyMat.omat");
@@ -118,7 +120,7 @@ NOLINT_TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kMaterial), "Assets");
 }
 
-NOLINT_TEST(LooseCookedLayoutTest, VirtualLeafPathsAreCorrect)
+NOLINT_TEST(LooseCookedLayoutTest, BuildsVirtualLeafFromSubdirAndDescriptorName)
 {
   LooseCookedLayout layout {};
   EXPECT_EQ(layout.MaterialVirtualLeaf("M1"), "Materials/M1.omat");
@@ -127,7 +129,7 @@ NOLINT_TEST(LooseCookedLayoutTest, VirtualLeafPathsAreCorrect)
   EXPECT_EQ(layout.PhysicsSceneVirtualLeaf("S1"), "Scenes/S1.opscene");
 }
 
-NOLINT_TEST(LooseCookedLayoutTest, DescriptorRelPathsAreCorrect)
+NOLINT_TEST(LooseCookedLayoutTest, BuildsDescriptorRelPathFromSubdirAndFileName)
 {
   LooseCookedLayout layout {};
   EXPECT_EQ(layout.MaterialDescriptorRelPath("M1"), "Materials/M1.omat");
@@ -164,7 +166,8 @@ NOLINT_TEST(LooseCookedLayoutTest, VirtualPathsJoinCorrectly)
     "/MyMount/Physics/Resources/JointA.opres");
 }
 
-NOLINT_TEST(LooseCookedLayoutTest, ResourcePathsAreCorrect)
+NOLINT_TEST(
+  LooseCookedLayoutTest, ResolvesResourceTablesAndDataUnderResourcesDir)
 {
   LooseCookedLayout layout {};
   EXPECT_EQ(layout.BuffersTableRelPath(), "Resources/buffers.table");

@@ -11,9 +11,9 @@
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Moq" />
         <None Include="../Fixtures/BuiltinGeometryCatalog.json" Link="Fixtures/BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_scalar_triangle.*" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_textured_triangle.*" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Import/Models/static_textured_checker.png" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Assets/Models/static_scalar_triangle.*" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Assets/Models/static_textured_triangle.*" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+        <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/Test/Assets/Models/static_textured_checker.png" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/BuiltinCatalogFixture.cs" Link="Support/BuiltinCatalogFixture.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CookScenario.cs" Link="Support/CookScenario.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CookWorkspace.cs" Link="Support/CookWorkspace.cs" />
