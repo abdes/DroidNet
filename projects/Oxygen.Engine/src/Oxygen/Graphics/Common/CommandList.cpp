@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
@@ -37,14 +39,32 @@ void CommandList::SetName(const std::string_view name) noexcept
 
 auto CommandList::QueueSubmitSignal(const uint64_t value) -> void
 {
-  submit_queue_actions_.push_back(
-    { .kind = SubmitQueueActionKind::kSignal, .value = value });
+  submit_queue_actions_.push_back({
+    .kind = SubmitQueueActionKind::kSignal,
+    .value = value,
+    .assigned = {},
+  });
+}
+
+auto CommandList::QueueAssignedSubmitSignal()
+  -> std::shared_ptr<const AssignedQueueSignal>
+{
+  auto assigned = std::make_shared<AssignedQueueSignal>();
+  submit_queue_actions_.push_back({
+    .kind = SubmitQueueActionKind::kSignal,
+    .value = 0,
+    .assigned = assigned,
+  });
+  return assigned;
 }
 
 auto CommandList::QueueSubmitWait(const uint64_t value) -> void
 {
-  submit_queue_actions_.push_back(
-    { .kind = SubmitQueueActionKind::kWait, .value = value });
+  submit_queue_actions_.push_back({
+    .kind = SubmitQueueActionKind::kWait,
+    .value = value,
+    .assigned = {},
+  });
 }
 
 auto CommandList::HasSubmitQueueActions() const noexcept -> bool

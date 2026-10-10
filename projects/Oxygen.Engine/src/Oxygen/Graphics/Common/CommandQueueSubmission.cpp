@@ -13,9 +13,13 @@
 #include <atomic>
 #include <cassert>
 #include <limits>
+#include <memory>
+#include <span>
 #include <stdexcept>
+#include <string_view>
 #include <utility>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/Internal/QueueSubmission.h>
@@ -48,6 +52,34 @@ namespace {
       head = std::move(work);
     }
     tail = next_tail;
+  }
+
+  //! What the exception being handled says, for a log line.
+  auto DescribeCurrentException() noexcept -> std::string_view
+  {
+    try {
+      throw;
+    } catch (const std::exception& error) {
+      return error.what();
+    } catch (...) {
+      return "unknown exception";
+    }
+  }
+
+  //! The batch's name in log lines: its first command list.
+  auto BatchName(std::span<const std::shared_ptr<CommandList>> lists) noexcept
+    -> std::string_view
+  {
+    return lists.empty() || !lists.front() ? std::string_view { "<none>" }
+                                           : lists.front()->GetName();
+  }
+
+  //! Logs why a batch is refused before any of it is issued.
+  auto Refuse(std::span<const std::shared_ptr<CommandList>> lists,
+    const std::string_view reason) noexcept -> SubmissionResult
+  {
+    LOG_F(ERROR, "Submission of '{}' refused: {}", BatchName(lists), reason);
+    return {};
   }
 }
 
@@ -261,24 +293,41 @@ auto CommandQueue::SubmitPrepared(
       lock.lock();
 #endif
       if (lists.empty()) {
-        return result;
+        return Refuse(lists, "no command lists");
       }
       auto last_signal = submission_->last_legacy_emitted;
       for (size_t list_index = 0; list_index < lists.size(); ++list_index) {
         const auto& list = lists[list_index];
-        if (!list || !list->IsClosed() || list->GetQueueRole() != GetQueueRole()
-          || !list->RecordingIsCurrent() || !list->Uses().Validate()) {
-          return result;
+        if (!list) {
+          return Refuse(lists, "null command list");
+        }
+        if (!list->IsClosed()) {
+          return Refuse(lists, "command list is not closed");
+        }
+        if (list->GetQueueRole() != GetQueueRole()) {
+          return Refuse(lists, "command list targets another queue role");
+        }
+        if (!list->RecordingIsCurrent()) {
+          return Refuse(lists, "recording is stale");
+        }
+        if (!list->Uses().Validate()) {
+          return Refuse(lists, "recorded resource uses are invalid");
         }
         if (list->backend_bound_
           && (!submission_->lifetime
             || !list->Uses().MatchesQueue(
               submission_->lifetime->Id(), Identity()))) {
-          return result;
+          return Refuse(lists, "recorded uses belong to another queue");
         }
         for (size_t earlier = 0; earlier < list_index; ++earlier) {
           if (lists[earlier] == list) {
-            return result;
+            return Refuse(lists, "command list appears twice");
+          }
+        }
+        for (auto& action : list->submit_queue_actions_) {
+          if (action.assigned != nullptr && action.assigned->value_ == 0U) {
+            action.value = Signal();
+            action.assigned->value_ = action.value;
           }
         }
         const auto prior_signal = last_signal;
@@ -286,15 +335,15 @@ auto CommandQueue::SubmitPrepared(
         for (const auto& action : list->SubmitActions()) {
           if (action.value == 0
             || action.value == (std::numeric_limits<uint64_t>::max)()) {
-            return result;
+            return Refuse(lists, "queue action value is out of range");
           }
           if (action.kind == CommandList::SubmitQueueActionKind::kSignal) {
             if (action.value <= last_signal) {
-              return result;
+              return Refuse(lists, "queue signal does not advance");
             }
             last_signal = action.value;
           } else if (action.value > prior_signal) {
-            return result;
+            return Refuse(lists, "queue wait is never signaled");
           }
         }
       }
@@ -302,7 +351,7 @@ auto CommandQueue::SubmitPrepared(
         && (!submission_->lifetime || submission_->lifetime->Id().get() == 0
           || submission_->next_private
             == (std::numeric_limits<uint64_t>::max)())) {
-        return result;
+        return Refuse(lists, "no completion timeline");
       }
       work = lists.front()->TakeRetirementStorage();
       work->lists.assign(lists.begin(), lists.end());
@@ -356,6 +405,8 @@ auto CommandQueue::SubmitPrepared(
         accepted = progress.issued_lists == lists.size()
           && (!marker || progress.private_marker_emitted);
       } catch (...) {
+        LOG_F(ERROR, "Native execution of '{}' failed: {}", BatchName(lists),
+          DescribeCurrentException());
       }
       submission_->last_legacy_emitted = progress.last_legacy_signal;
       work->issued_lists = progress.issued_lists;
@@ -406,6 +457,8 @@ auto CommandQueue::SubmitPrepared(
       retained->published = true;
     }
   } catch (...) {
+    LOG_F(ERROR, "Submission of '{}' failed: {}", BatchName(lists),
+      DescribeCurrentException());
     // Never turn accepted/possibly issued work into a discard.
     if (retained) {
       for (const auto& list : lists) {

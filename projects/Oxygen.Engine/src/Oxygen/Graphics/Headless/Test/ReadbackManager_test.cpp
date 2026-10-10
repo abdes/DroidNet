@@ -336,7 +336,8 @@ NOLINT_TEST_F(BufferReadbackSubmissionTest, EnqueueCopyReturnsPendingTicket)
     readback, source, BufferRange { 8, 24 }, "buffer-pending");
 
   EXPECT_GT(ticket.id.get(), 0U);
-  EXPECT_EQ(ticket.fence.get(), 1U);
+  // The queue assigns the fence when the recording submits.
+  EXPECT_EQ(ticket.fence, oxygen::graphics::fence::kInvalidValue);
   EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
 }
 

@@ -7,6 +7,7 @@
 #include <chrono>
 #include <future>
 #include <limits>
+#include <optional>
 
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -259,8 +260,8 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   ReadbackTrackerTest, UnsubmittedCopyCannotCompleteFromAnotherSubmissionFence)
 {
-  const auto ticket = tracker.RegisterPendingSubmission(
-    FenceValue { 3 }, SizeBytes { 4 }, "unsubmitted");
+  const auto ticket
+    = tracker.RegisterPendingSubmission(SizeBytes { 4 }, "unsubmitted");
   tracker.MarkFenceCompleted(FenceValue { 9 });
   EXPECT_FALSE(tracker.IsComplete(ticket.id).value());
   EXPECT_FALSE(tracker.TryGetResult(ticket.id));
@@ -271,21 +272,40 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   ReadbackTrackerTest, SubmittedWitnessCompletesAlreadyObservedFence)
 {
-  const auto ticket = tracker.RegisterPendingSubmission(
-    FenceValue { 3 }, SizeBytes { 4 }, "submitted");
+  const auto ticket
+    = tracker.RegisterPendingSubmission(SizeBytes { 4 }, "submitted");
   tracker.MarkFenceCompleted(FenceValue { 3 });
-  tracker.MarkSubmitted(ticket.id);
+  tracker.MarkSubmitted(ticket.id, FenceValue { 3 });
   EXPECT_TRUE(tracker.IsComplete(ticket.id).value());
   EXPECT_EQ(tracker.TryGetResult(ticket.id)->bytes_copied, SizeBytes { 4 });
+}
+//! A pending copy has no fence until its submission assigns one; the result
+//! reports that fence.
+NOLINT_TEST_F(ReadbackTrackerTest, SubmissionAssignsTheTicketFence)
+{
+  const auto ticket
+    = tracker.RegisterPendingSubmission(SizeBytes { 4 }, "assigned");
+  const auto fence_of = [&]() -> std::optional<FenceValue> {
+    const auto found = tracker.FindTicket(ticket.id);
+    return found.has_value() ? std::optional { found->fence } : std::nullopt;
+  };
+  EXPECT_EQ(fence_of(), oxygen::graphics::fence::kInvalidValue);
+
+  tracker.MarkSubmitted(ticket.id, FenceValue { 5 });
+  EXPECT_EQ(fence_of(), FenceValue { 5 });
+  tracker.MarkFenceCompleted(FenceValue { 4 });
+  EXPECT_FALSE(tracker.IsComplete(ticket.id).value());
+  tracker.MarkFenceCompleted(FenceValue { 5 });
+  EXPECT_EQ(tracker.TryGetResult(ticket.id)->ticket.fence, FenceValue { 5 });
 }
 NOLINT_TEST_F(
   ReadbackTrackerTest, ShutdownCancelsUnsubmittedAndWaitsOnlyForIssuedCopies)
 {
-  const auto pending = tracker.RegisterPendingSubmission(
-    FenceValue { 9 }, SizeBytes { 4 }, "never issued");
-  const auto issued = tracker.RegisterPendingSubmission(
-    FenceValue { 3 }, SizeBytes { 4 }, "issued");
-  tracker.MarkSubmitted(issued.id);
+  const auto pending
+    = tracker.RegisterPendingSubmission(SizeBytes { 4 }, "never issued");
+  const auto issued
+    = tracker.RegisterPendingSubmission(SizeBytes { 4 }, "issued");
+  tracker.MarkSubmitted(issued.id, FenceValue { 3 });
   tracker.CancelPendingSubmissions();
   EXPECT_EQ(tracker.LastPendingSubmittedFence(), FenceValue { 3 });
   EXPECT_EQ(tracker.TryGetResult(pending.id)->error, ReadbackError::kCancelled);

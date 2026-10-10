@@ -7,12 +7,14 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Named.h>
+#include <Oxygen/Graphics/Common/AssignedQueueSignal.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/RecordingUseBatch.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
@@ -39,6 +41,8 @@ public:
   struct SubmitQueueAction {
     SubmitQueueActionKind kind;
     uint64_t value;
+    //! Set for a signal whose value the queue assigns on submission.
+    std::shared_ptr<AssignedQueueSignal> assigned;
   };
 
   OXGN_GFX_API CommandList(std::string_view name, QueueRole type);
@@ -100,6 +104,8 @@ public:
     return recorded_resource_states_;
   }
   OXGN_GFX_API auto QueueSubmitSignal(uint64_t value) -> void;
+  OXGN_GFX_API auto QueueAssignedSubmitSignal()
+    -> std::shared_ptr<const AssignedQueueSignal>;
   OXGN_GFX_API auto QueueSubmitWait(uint64_t value) -> void;
   [[nodiscard]] OXGN_GFX_API auto HasSubmitQueueActions() const noexcept
     -> bool;

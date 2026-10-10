@@ -15,8 +15,6 @@
 #include <string_view>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
@@ -24,6 +22,7 @@
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -158,6 +157,8 @@ protected:
     texture_desc.format = oxygen::Format::kRGBA8UNorm;
     texture_desc.texture_type = TextureType::kTexture2DMultiSample;
     texture_desc.is_render_target = true;
+    texture_desc.clear_value = clear_color;
+    texture_desc.use_clear_value = true;
     texture_desc.debug_name = std::string(debug_name);
 
     auto texture = CreateTexture(texture_desc);

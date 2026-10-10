@@ -4,11 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/OffscreenTestFixture.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -97,6 +96,30 @@ NOLINT_TEST_F(
 
   EXPECT_EQ(queue.GetCurrentValue(), 2U);
   EXPECT_EQ(queue.GetCompletedValue(), 2U);
+}
+
+//! Assigned signals follow the submission order, so a recording may submit
+//! after one recorded later.
+NOLINT_TEST_F(
+  SubmitOrderedQueueActionTest, AssignedSignalsFollowTheSubmissionOrder)
+{
+  auto& queue = GetD3D12Queue();
+  auto first = AcquireRecorder("assigned-first", QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
+  auto second = AcquireRecorder("assigned-second", QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
+  CHECK_F(static_cast<bool>(first) && static_cast<bool>(second));
+  const auto first_signal = first->RecordAssignedQueueSignal();
+  const auto second_signal = second->RecordAssignedQueueSignal();
+  EXPECT_EQ(first_signal->Value(), 0U);
+
+  ASSERT_TRUE(second.Submit());
+  ASSERT_TRUE(first.Submit());
+  queue.Wait(first_signal->Value());
+
+  EXPECT_GT(second_signal->Value(), 0U);
+  EXPECT_GT(first_signal->Value(), second_signal->Value());
+  EXPECT_EQ(queue.GetCompletedValue(), first_signal->Value());
 }
 
 NOLINT_TEST_F(

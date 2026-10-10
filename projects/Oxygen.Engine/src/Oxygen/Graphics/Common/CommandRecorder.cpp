@@ -6,6 +6,8 @@
 
 #include <algorithm>
 #include <exception>
+#include <memory>
+#include <stdexcept>
 
 #include <fmt/format.h>
 
@@ -208,6 +210,15 @@ void CommandRecorder::RecordQueueSignal(uint64_t value)
     return;
   }
   LOG_F(WARNING, "RecordQueueSignal: command list is null");
+}
+
+auto CommandRecorder::RecordAssignedQueueSignal()
+  -> std::shared_ptr<const AssignedQueueSignal>
+{
+  if (command_list_ == nullptr) {
+    throw std::logic_error("RecordAssignedQueueSignal: command list is null");
+  }
+  return command_list_->QueueAssignedSubmitSignal();
 }
 
 void CommandRecorder::RecordQueueWait(uint64_t value)

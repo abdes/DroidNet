@@ -152,6 +152,8 @@ protected:
     texture_desc.format = oxygen::Format::kRGBA8UNorm;
     texture_desc.texture_type = TextureType::kTexture2DMultiSample;
     texture_desc.is_render_target = true;
+    texture_desc.clear_value = clear_color;
+    texture_desc.use_clear_value = true;
     texture_desc.debug_name = std::string(debug_name);
 
     auto texture = CreateTexture(texture_desc);
@@ -251,8 +253,8 @@ NOLINT_TEST_F(TextureReadbackSubmissionTest, EnqueueCopyReturnsPendingTicket)
   EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
   ASSERT_TRUE(readback->Ticket().has_value());
   EXPECT_EQ(readback->Ticket()->id.get(), ticket.id.get());
-  EXPECT_EQ(readback->Ticket()->fence.get(), ticket.fence.get());
-  EXPECT_GT(ticket.fence.get(), 0U);
+  // The queue assigns the fence when the recording submits.
+  EXPECT_EQ(ticket.fence, oxygen::graphics::fence::kInvalidValue);
 }
 
 NOLINT_TEST_F(
@@ -872,7 +874,7 @@ NOLINT_TEST_F(TextureReadbackManagerTest,
   const auto result = AwaitReadback(ticket);
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result->ticket.id.get(), ticket.id.get());
-  EXPECT_EQ(result->ticket.fence.get(), ticket.fence.get());
+  EXPECT_NE(result->ticket.fence, oxygen::graphics::fence::kInvalidValue);
   EXPECT_FALSE(result->error.has_value());
 
   const auto mapped = readback->TryMap();

@@ -38,9 +38,17 @@ public:
   OXGN_GFX_API auto Register(FenceValue fence, SizeBytes bytes,
     std::string_view debug_name) -> ReadbackTicket;
   //! A recorded copy cannot complete until its owning submission is accepted.
-  OXGN_GFX_API auto RegisterPendingSubmission(FenceValue fence, SizeBytes bytes,
-    std::string_view debug_name) -> ReadbackTicket;
-  OXGN_GFX_API auto MarkSubmitted(ReadbackTicketId id) noexcept -> void;
+  /*!
+   Its fence is the signal the queue assigns on submission, so the ticket
+   carries no fence until MarkSubmitted().
+  */
+  OXGN_GFX_API auto RegisterPendingSubmission(
+    SizeBytes bytes, std::string_view debug_name) -> ReadbackTicket;
+  OXGN_GFX_API auto MarkSubmitted(
+    ReadbackTicketId id, FenceValue fence) noexcept -> void;
+  //! The tracked ticket, with its fence once the copy is submitted.
+  [[nodiscard]] OXGN_GFX_API auto FindTicket(ReadbackTicketId id) const
+    -> std::optional<ReadbackTicket>;
   [[nodiscard]] OXGN_GFX_API auto IsSubmissionPending(ReadbackTicketId id) const
     -> bool;
   OXGN_GFX_API auto CancelPendingSubmissions() noexcept -> void;

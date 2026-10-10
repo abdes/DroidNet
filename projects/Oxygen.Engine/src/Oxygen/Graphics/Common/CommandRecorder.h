@@ -30,6 +30,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Graphics/Common/AssignedQueueSignal.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
@@ -570,16 +571,26 @@ public:
 
   //! Record a submit-ordered queue signal into the recorded command stream.
   /*!
-   The signal is attached to the recorded command list and executes at
-   * submit
-   time after the recorded work for that list has been queued.
+   The signal is attached to the recorded command list and executes at submit
+   time after the recorded work for that list has been queued. The value is
+   reserved with CommandQueue::Signal(); submission refuses it once a later
+   value was emitted, so no other signal may be emitted before this recording
+   submits. Otherwise use RecordAssignedQueueSignal().
 
-
-   * @param value The fence/timeline value to signal when the recorded stream
-
-   * reaches this command during submission.
+   @param value The fence/timeline value to signal when the recorded stream
+   reaches this command during submission.
   */
   OXGN_GFX_API virtual auto RecordQueueSignal(uint64_t value) -> void;
+
+  //! Record a submit-ordered queue signal whose value the queue assigns when
+  //! it accepts this recording.
+  /*!
+   Recordings that submit after other work, such as copies recorded into a
+   long-lived view recording, signal in submission order this way. The value
+   is set once the submission is accepted, before OnSubmission callbacks run.
+  */
+  OXGN_GFX_API auto RecordAssignedQueueSignal()
+    -> std::shared_ptr<const AssignedQueueSignal>;
 
   /*! Record a submit-ordered queue wait into the recorded command stream.
  The

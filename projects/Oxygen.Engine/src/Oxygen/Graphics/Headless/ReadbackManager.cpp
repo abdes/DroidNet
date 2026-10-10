@@ -511,24 +511,23 @@ auto HeadlessBufferReadback::EnqueueCopy(
     static_cast<size_t>(resolved.offset_bytes),
     static_cast<size_t>(resolved.size_bytes));
 
-  const auto fence = manager_.AllocateFence(target_queue);
-  if (!fence.has_value()) {
-    return std::unexpected(fence.error());
-  }
-  recorder.RecordQueueSignal(fence->get());
+  // The queue assigns the signal on submission: this recording may submit
+  // after work recorded later.
+  const auto signal = recorder.RecordAssignedQueueSignal();
 
   resolved_range_ = resolved;
   ticket_ = manager_.tracker_.RegisterPendingSubmission(
-    *fence, SizeBytes { resolved.size_bytes }, debug_name_);
+    SizeBytes { resolved.size_bytes }, debug_name_);
   manager_.TrackCancellationHandler(ticket_->id, [weak = weak_from_this()]() {
     if (const auto locked = weak.lock()) {
       locked->OnManagerCancelled();
     }
   });
-  recorder.OnSubmission([manager = &manager_, ticket = *ticket_](
+  recorder.OnSubmission([manager = &manager_, ticket = *ticket_, signal](
                           graphics::SubmissionOutcome outcome) {
     if (outcome == graphics::SubmissionOutcome::kSubmitted) {
-      manager->tracker_.MarkSubmitted(ticket.id);
+      manager->tracker_.MarkSubmitted(
+        ticket.id, graphics::FenceValue { signal->Value() });
     } else {
       static_cast<void>(manager->Cancel(ticket));
     }
@@ -811,26 +810,25 @@ auto HeadlessTextureReadback::EnqueueCopy(
   recorder.FlushBarriers();
   recorder.CopyTextureToBuffer(*readback_buffer_, source, copy_region);
 
-  const auto fence = manager_.AllocateFence(target_queue);
-  if (!fence.has_value()) {
-    return std::unexpected(fence.error());
-  }
-  recorder.RecordQueueSignal(fence->get());
+  // The queue assigns the signal on submission: this recording may submit
+  // after work recorded later.
+  const auto signal = recorder.RecordAssignedQueueSignal();
 
   layout_ = BuildTextureReadbackLayout(
     source_desc, resolved_slice, copy_region, request.aspects);
   mapped_size_ = mapped_size;
-  ticket_ = manager_.tracker_.RegisterPendingSubmission(
-    *fence, mapped_size_, debug_name_);
+  ticket_
+    = manager_.tracker_.RegisterPendingSubmission(mapped_size_, debug_name_);
   manager_.TrackCancellationHandler(ticket_->id, [weak = weak_from_this()]() {
     if (const auto locked = weak.lock()) {
       locked->OnManagerCancelled();
     }
   });
-  recorder.OnSubmission([manager = &manager_, ticket = *ticket_](
+  recorder.OnSubmission([manager = &manager_, ticket = *ticket_, signal](
                           graphics::SubmissionOutcome outcome) {
     if (outcome == graphics::SubmissionOutcome::kSubmitted) {
-      manager->tracker_.MarkSubmitted(ticket.id);
+      manager->tracker_.MarkSubmitted(
+        ticket.id, graphics::FenceValue { signal->Value() });
     } else {
       static_cast<void>(manager->Cancel(ticket));
     }
@@ -1025,31 +1023,12 @@ auto HeadlessReadbackManager::EnsureTrackedQueue(
   }
   if (tracked_queue_ == nullptr) {
     tracked_queue_ = queue;
-    next_fence_ = graphics::FenceValue { (
-      std::max)(queue->GetCurrentValue(), queue->GetCompletedValue()) };
     return {};
   }
   if (tracked_queue_ != queue) {
     return std::unexpected(ReadbackError::kQueueUnavailable);
   }
   return {};
-}
-
-auto HeadlessReadbackManager::AllocateFence(
-  const observer_ptr<graphics::CommandQueue> queue)
-  -> std::expected<graphics::FenceValue, ReadbackError>
-{
-  if (const auto tracked = EnsureTrackedQueue(queue); !tracked.has_value()) {
-    return std::unexpected(tracked.error());
-  }
-
-  std::lock_guard lock(mutex_);
-  const auto current_fence = graphics::FenceValue { (
-    std::max)(queue->GetCurrentValue(), queue->GetCompletedValue()) };
-  next_fence_ = graphics::FenceValue {
-    (std::max)(next_fence_.get(), current_fence.get()) + 1
-  };
-  return next_fence_;
 }
 
 auto HeadlessReadbackManager::PumpCompletions() -> void
@@ -1111,9 +1090,12 @@ auto HeadlessReadbackManager::Await(const ReadbackTicket ticket)
     return std::unexpected(ReadbackError::kWouldDeadlock);
   }
 
-  if (const auto status = tracker_.IsComplete(ticket.id); !status) {
-    return std::unexpected(status.error());
+  const auto tracked = tracker_.FindTicket(ticket.id);
+  if (!tracked.has_value()) {
+    return std::unexpected(ReadbackError::kTicketNotFound);
   }
+  // The caller's copy predates submission; the tracker holds the fence.
+  const auto fence = tracked->fence;
 
   observer_ptr<graphics::CommandQueue> queue;
   bool shutdown = false;
@@ -1127,39 +1109,39 @@ auto HeadlessReadbackManager::Await(const ReadbackTicket ticket)
     LOG_F(WARNING,
       "Headless readback await rejected for ticket {} at fence {} because "
       "the readback manager is shutting down",
-      ticket.id.get(), ticket.fence.get());
+      ticket.id.get(), fence.get());
     return std::unexpected(ReadbackError::kShutdown);
   }
   if (queue == nullptr) {
     LOG_F(WARNING,
       "Headless readback await would deadlock for ticket {} at fence {} "
       "because no tracked queue is available",
-      ticket.id.get(), ticket.fence.get());
+      ticket.id.get(), fence.get());
     return std::unexpected(ReadbackError::kWouldDeadlock);
   }
 
   const auto current = FenceValue { queue->GetCurrentValue() };
   const auto completed = FenceValue { queue->GetCompletedValue() };
-  if (current < ticket.fence) {
+  if (current < fence) {
     LOG_F(WARNING,
       "Headless readback await would deadlock for ticket {} at fence {} on "
       "queue `{}` because the signal has not been submitted yet "
       "(queue current={} completed={}). Submit the command recorder before "
       "awaiting the ticket.",
-      ticket.id.get(), ticket.fence.get(), queue->GetName(), current.get(),
+      ticket.id.get(), fence.get(), queue->GetName(), current.get(),
       completed.get());
     return std::unexpected(ReadbackError::kWouldDeadlock);
   }
 
-  if (completed < ticket.fence) {
+  if (completed < fence) {
     try {
-      queue->Wait(ticket.fence.get());
+      queue->Wait(fence.get());
     } catch (...) {
       LOG_F(ERROR, "Headless readback await failed for ticket {} at fence {}",
-        ticket.id.get(), ticket.fence.get());
+        ticket.id.get(), fence.get());
       return std::unexpected(ReadbackError::kBackendFailure);
     }
-    tracker_.MarkFenceCompleted(ticket.fence);
+    tracker_.MarkFenceCompleted(fence);
   } else {
     // The queue may complete the fence after the initial PumpCompletions()
     // call but before we reach this branch. Mark that completion explicitly
@@ -1178,10 +1160,11 @@ auto HeadlessReadbackManager::AwaitAsync(const ReadbackTicket ticket)
     throw std::logic_error(
       "Cannot await a readback whose recording has not submitted");
   }
-  if (!tracker_.IsComplete(ticket.id)) {
+  const auto tracked = tracker_.FindTicket(ticket.id);
+  if (!tracked.has_value()) {
     throw std::logic_error("Readback ticket was released");
   }
-  co_await Until(tracker_.CompletedFenceValue() >= ticket.fence);
+  co_await Until(tracker_.CompletedFenceValue() >= tracked->fence);
   co_return;
 }
 

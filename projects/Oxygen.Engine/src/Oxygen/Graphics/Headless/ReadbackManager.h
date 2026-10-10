@@ -70,8 +70,6 @@ private:
 
   auto EnsureTrackedQueue(observer_ptr<graphics::CommandQueue> queue)
     -> std::expected<void, graphics::ReadbackError>;
-  auto AllocateFence(observer_ptr<graphics::CommandQueue> queue)
-    -> std::expected<graphics::FenceValue, graphics::ReadbackError>;
   auto PumpCompletions() -> void;
   [[nodiscard]] auto TryGetResult(graphics::ReadbackTicketId id) const
     -> std::optional<graphics::ReadbackResult>;
@@ -83,7 +81,6 @@ private:
   Graphics& graphics_;
   mutable std::mutex mutex_;
   observer_ptr<graphics::CommandQueue> tracked_queue_ {};
-  graphics::FenceValue next_fence_ { 0 };
   graphics::ReadbackTracker tracker_ {};
   bool shutdown_ { false };
   std::unordered_map<graphics::ReadbackTicketId, std::function<void()>>

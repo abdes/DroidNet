@@ -60,6 +60,9 @@ inline auto to_string(ReadbackState value) -> const char*
 
 struct ReadbackTicket {
   ReadbackTicketId id {};
+  //! The queue signal that completes the copy. The queue assigns it when the
+  //! recording submits, so an enqueued copy's ticket has none; its result
+  //! carries it.
   FenceValue fence { fence::kInvalidValue };
 };
 

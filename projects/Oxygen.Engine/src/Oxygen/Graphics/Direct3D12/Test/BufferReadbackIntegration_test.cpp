@@ -265,8 +265,41 @@ NOLINT_TEST_F(BufferReadbackSubmissionTest, EnqueueCopyReturnsPendingTicket)
   EXPECT_EQ(readback->GetState(), ReadbackState::kPending);
   ASSERT_TRUE(readback->Ticket().has_value());
   EXPECT_EQ(readback->Ticket()->id.get(), ticket.id.get());
-  EXPECT_EQ(readback->Ticket()->fence.get(), ticket.fence.get());
-  EXPECT_GT(ticket.fence.get(), 0U);
+  // The queue assigns the fence when the recording submits.
+  EXPECT_EQ(ticket.fence, oxygen::graphics::fence::kInvalidValue);
+}
+
+//! A copy recorded into a long-lived recording completes when a copy recorded
+//! later submits first, as when a view recording outlives other readbacks.
+NOLINT_TEST_F(
+  BufferReadbackSubmissionTest, CopiesCompleteWhenSubmittedOutOfRecordingOrder)
+{
+  constexpr std::size_t kSize = 32;
+  const auto early_bytes = MakePatternBytes(kSize, 0x10);
+  const auto late_bytes = MakePatternBytes(kSize, 0x40);
+  auto early_source
+    = CreateInitializedDeviceBuffer(early_bytes, "early-source");
+  auto late_source = CreateInitializedDeviceBuffer(late_bytes, "late-source");
+  auto early = CreateBufferReadback("early-readback");
+  auto late = CreateBufferReadback("late-readback");
+
+  auto long_lived = AcquireRecorder("long-lived-recording",
+    oxygen::graphics::QueueRole::kGraphics,
+    oxygen::graphics::SubmissionPolicy::kExplicit);
+  CHECK_F(static_cast<bool>(long_lived));
+  EnsureTracked(*long_lived, early_source, ResourceStates::kCopyDest);
+  ASSERT_TRUE(
+    early->EnqueueCopy(*long_lived, *early_source, BufferRange { 0, kSize })
+      .has_value());
+  EnqueueReadback(late, late_source, BufferRange { 0, kSize }, "submits-first");
+  ASSERT_TRUE(long_lived.Submit());
+
+  const auto early_mapped = early->MapNow();
+  ASSERT_TRUE(early_mapped.has_value());
+  EXPECT_EQ(CopyMappedBytes(*early_mapped), early_bytes);
+  const auto late_mapped = late->MapNow();
+  ASSERT_TRUE(late_mapped.has_value());
+  EXPECT_EQ(CopyMappedBytes(*late_mapped), late_bytes);
 }
 
 NOLINT_TEST_F(
@@ -760,7 +793,7 @@ NOLINT_TEST_F(BufferReadbackManagerTest,
   const auto result = AwaitReadback(ticket);
   ASSERT_TRUE(result.has_value());
   EXPECT_EQ(result->ticket.id.get(), ticket.id.get());
-  EXPECT_EQ(result->ticket.fence.get(), ticket.fence.get());
+  EXPECT_NE(result->ticket.fence, oxygen::graphics::fence::kInvalidValue);
   EXPECT_EQ(result->bytes_copied.get(), 18U);
   EXPECT_FALSE(result->error.has_value());
 

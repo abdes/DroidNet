@@ -21,10 +21,10 @@ auto ReadbackTracker::Register(const FenceValue fence, const SizeBytes bytes,
 {
   return RegisterImpl(fence, bytes, debug_name, false);
 }
-auto ReadbackTracker::RegisterPendingSubmission(FenceValue fence,
-  SizeBytes bytes, std::string_view debug_name) -> ReadbackTicket
+auto ReadbackTracker::RegisterPendingSubmission(
+  const SizeBytes bytes, const std::string_view debug_name) -> ReadbackTicket
 {
-  return RegisterImpl(fence, bytes, debug_name, true);
+  return RegisterImpl(fence::kInvalidValue, bytes, debug_name, true);
 }
 auto ReadbackTracker::RegisterImpl(FenceValue fence, SizeBytes bytes,
   std::string_view debug_name, bool pending) -> ReadbackTicket
@@ -43,7 +43,9 @@ auto ReadbackTracker::RegisterImpl(FenceValue fence, SizeBytes bytes,
   e.result.bytes_copied = SizeBytes { 0 };
   e.result.error = std::nullopt;
   e.creation_slot = current_slot_;
-  last_registered_fence_raw_.store(fence.get());
+  if (!pending) {
+    last_registered_fence_raw_.store(fence.get());
+  }
   return e.ticket;
 }
 
@@ -67,19 +69,33 @@ auto ReadbackTracker::RegisterFailedImmediate(const std::string_view debug_name,
   return e.ticket;
 }
 
-auto ReadbackTracker::MarkSubmitted(ReadbackTicketId id) noexcept -> void
+auto ReadbackTracker::MarkSubmitted(
+  const ReadbackTicketId id, const FenceValue fence) noexcept -> void
 {
   std::lock_guard lock(mu_);
   if (const auto found = entries_.find(id);
     found != entries_.end() && !found->second.completed) {
     auto& entry = found->second;
     entry.submission_pending = false;
+    entry.ticket.fence = fence;
+    entry.result.ticket = entry.ticket;
+    last_registered_fence_raw_.store(fence.get());
     if (entry.ticket.fence <= completed_fence_.Get()) {
       MarkEntryCompleted(entry);
     }
   }
   cv_.notify_all();
 }
+auto ReadbackTracker::FindTicket(const ReadbackTicketId id) const
+  -> std::optional<ReadbackTicket>
+{
+  std::lock_guard lock(mu_);
+  if (const auto found = entries_.find(id); found != entries_.end()) {
+    return found->second.ticket;
+  }
+  return std::nullopt;
+}
+
 auto ReadbackTracker::IsSubmissionPending(ReadbackTicketId id) const -> bool
 {
   std::lock_guard lock(mu_);

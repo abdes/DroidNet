@@ -184,9 +184,16 @@ auto CommandRecording::Finalize(bool receipt) noexcept -> SubmissionResult
       reclaimer_->CommitDeferredAction(std::move(retirement));
     }
   } catch (const SubmissionException& error) {
+    LOG_F(ERROR, "Submission of '{}' failed: {}", command_list_->GetName(),
+      error.what());
     result_ = error.Result();
-  } catch (...) {
+  } catch (const std::exception& error) {
     // End/preparation failures have not issued native commands.
+    LOG_F(ERROR, "Recording '{}' could not be finalized: {}",
+      command_list_->GetName(), error.what());
+  } catch (...) {
+    LOG_F(
+      ERROR, "Recording '{}' could not be finalized", command_list_->GetName());
   }
   if (result_.outcome == SubmissionOutcome::kDiscarded) {
     Discard();

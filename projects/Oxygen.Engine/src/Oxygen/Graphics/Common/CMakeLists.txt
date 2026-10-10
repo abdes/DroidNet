@@ -55,6 +55,7 @@ set(
   "AllocationBudget.h"
   "AllocationBudgetTag.h"
   "Buffer.h"
+  "AssignedQueueSignal.h"
   "CommandList.h"
   "CommandQueue.h"
   "CommandRecorder.h"
