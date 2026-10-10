@@ -590,14 +590,14 @@ if(WIN32)
     COMMAND
       ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
     COMMAND
-      "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -I
+      "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_8 -E CS -O3 -HV 2021 -I
       "${exposure_shader_root}" -I "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo
       "${exposure_probe_output}"
       "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/ToneBoundsProbe.hlsl"
     # DXC dependency generation is a separate preprocessing action; -MD does
     # not compile DXIL, even when -Fo is supplied.
     COMMAND
-      "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -I
+      "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_8 -E CS -O3 -HV 2021 -I
       "${exposure_shader_root}" -I "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF
       "${exposure_probe_output}.d" -Fo "${exposure_probe_output}"
       "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/ToneBoundsProbe.hlsl"
@@ -656,10 +656,10 @@ if(WIN32)
     COMMAND
       ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
     COMMAND
-      "${OXYGEN_DXC_EXECUTABLE}" -T vs_6_6 -E VS -O3 -HV 2021 -Fo
+      "${OXYGEN_DXC_EXECUTABLE}" -T vs_6_8 -E VS -O3 -HV 2021 -Fo
       "${indirect_reference_vs}" "${indirect_reference_source}"
     COMMAND
-      "${OXYGEN_DXC_EXECUTABLE}" -T ps_6_6 -E PS -O3 -HV 2021 -Fo
+      "${OXYGEN_DXC_EXECUTABLE}" -T ps_6_8 -E PS -O3 -HV 2021 -Fo
       "${indirect_reference_ps}" "${indirect_reference_source}"
     DEPENDS
       "${OXYGEN_DXC_EXECUTABLE}"

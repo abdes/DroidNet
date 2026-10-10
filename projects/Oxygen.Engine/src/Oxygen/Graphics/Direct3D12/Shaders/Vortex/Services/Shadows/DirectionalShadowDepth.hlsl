@@ -11,10 +11,12 @@
 #define BX_VERTEX_TYPE Vertex
 #include "Core/Bindless/BindlessHelpers.hlsl"
 
+// Mesh shaders take their draw index from SV_StartInstanceLocation (see
+// Vortex/Contracts/Draw/DrawHelpers.hlsli); they read only the pass constants
+// root constant.
 cbuffer RootConstants : register(b2, space0)
 {
-    uint g_DrawIndex;
-    uint g_PassConstantsIndex;
+    uint g_PassConstantsIndex : packoffset(c0.y);
 }
 
 struct ShadowPassConstants
@@ -36,6 +38,7 @@ struct ShadowDepthVSOutput
 #if !defined(CUBE_SHADOW)
     float biased_depth : TEXCOORD1;
 #endif
+    nointerpolation uint draw_index : DRAW_INDEX;
 };
 
 static inline ShadowPassConstants LoadShadowPassConstants(uint slot)
@@ -56,18 +59,20 @@ static inline ShadowPassConstants LoadShadowPassConstants(uint slot)
 }
 
 [shader("vertex")]
-ShadowDepthVSOutput VortexShadowDepthVS(
-    uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID)
+ShadowDepthVSOutput VortexShadowDepthVS(uint vertex_id : SV_VertexID,
+    uint instance_id : SV_InstanceID,
+    uint draw_index : SV_StartInstanceLocation)
 {
     ShadowDepthVSOutput output = (ShadowDepthVSOutput)0;
     output.position = float4(0.0f, 0.0f, 0.0f, 1.0f);
+    output.draw_index = draw_index;
 
     const ShadowPassConstants pass_constants =
         LoadShadowPassConstants(g_PassConstantsIndex);
 
     DrawMetadata metadata;
     if (!BX_LoadDrawMetadata(
-            pass_constants.draw_metadata_slot, g_DrawIndex, metadata)) {
+            pass_constants.draw_metadata_slot, draw_index, metadata)) {
         return output;
     }
 
@@ -139,7 +144,7 @@ void VortexShadowDepthMaskedPS(ShadowDepthVSOutput input
 #if defined(ALPHA_TEST)
     const SamplerState linear_sampler = SamplerDescriptorHeap[0];
     ApplyMaskedAlphaClip(
-        EvaluateMaskedAlphaTest(input.uv, g_DrawIndex, linear_sampler));
+        EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
 #endif
 #if !defined(CUBE_SHADOW)
     out_depth = saturate(input.biased_depth);

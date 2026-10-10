@@ -27,12 +27,13 @@ struct Vertex {
 
 #include "Core/Bindless/BindlessHelpers.hlsl"
 
-// Root constants b2 (shared root param index with engine)
+// Mesh shaders take their draw index from SV_StartInstanceLocation (see
+// Vortex/Contracts/Draw/DrawHelpers.hlsli); they read only the pass constants
+// root constant.
 cbuffer RootConstants : register(b2, space0)
 {
-  uint g_DrawIndex;
-  uint g_PassConstantsIndex;
-};
+    uint g_PassConstantsIndex : packoffset(c0.y);
+}
 
 // Vertex shader output / Pixel shader input (must match ForwardMesh_VS.hlsl)
 struct VSOutput {
@@ -43,6 +44,7 @@ struct VSOutput {
   float3 world_normal : NORMAL;
   float3 world_tangent : TANGENT;
   float3 world_bitangent : BINORMAL;
+  nointerpolation uint draw_index : DRAW_INDEX;
 };
 
 struct WireframePassConstants {
@@ -57,7 +59,7 @@ struct WireframePassConstants {
 #ifdef ALPHA_TEST
   const SamplerState linear_sampler = SamplerDescriptorHeap[0];
   ApplyMaskedAlphaClip(
-    EvaluateMaskedAlphaTest(input.uv, g_DrawIndex, linear_sampler));
+    EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
 #endif // ALPHA_TEST
 
   float4 color = float4(1.0f, 1.0f, 1.0f, 1.0f);

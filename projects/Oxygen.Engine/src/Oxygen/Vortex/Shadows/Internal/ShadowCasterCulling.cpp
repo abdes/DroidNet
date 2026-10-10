@@ -66,7 +66,6 @@ auto ShadowCasterCulling::BuildDrawCommands(
       .instance_count = (std::max)(draw.instance_count, 1U),
       .start_index = draw.first_index,
       .base_vertex = draw.base_vertex,
-      .start_instance = 0U,
       .is_indexed = draw.is_indexed != 0U,
     });
   }

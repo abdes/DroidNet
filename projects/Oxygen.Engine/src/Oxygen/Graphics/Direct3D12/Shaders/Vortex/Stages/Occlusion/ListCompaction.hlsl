@@ -29,7 +29,8 @@ cbuffer RootConstants : register(b2, space0)
 }
 
 static const uint LIST_COMPACTION_GROUP_SIZE = 256u;
-static const uint INDIRECT_DRAW_COMMAND_UINTS = 5u;
+// D3D12_DRAW_ARGUMENTS; StartInstanceLocation carries the draw index.
+static const uint INDIRECT_DRAW_COMMAND_UINTS = 4u;
 
 struct ListCompactionPassConstants
 {
@@ -200,11 +201,10 @@ void VortexListCompactionScatterCS(uint3 dispatch_id : SV_DispatchThreadID)
     {
         const uint base
             = (segment.first_candidate + rank) * INDIRECT_DRAW_COMMAND_UINTS;
-        arguments[base + 0u] = candidate.draw_index;
-        arguments[base + 1u] = candidate.vertex_count;
-        arguments[base + 2u] = candidate.instance_count;
-        arguments[base + 3u] = 0u;
-        arguments[base + 4u] = 0u;
+        arguments[base + 0u] = candidate.vertex_count;
+        arguments[base + 1u] = candidate.instance_count;
+        arguments[base + 2u] = 0u;
+        arguments[base + 3u] = candidate.draw_index;
     }
 
     if (index == segment.first_candidate + segment.candidate_count - 1u)

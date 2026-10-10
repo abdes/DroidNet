@@ -23,11 +23,8 @@
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/RenderScope.h>
 #include <Oxygen/Vortex/Passes/RenderPass.h>
-#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
-#include <Oxygen/Vortex/Types/DrawMetadata.h>
-#include <Oxygen/Vortex/Types/PassMask.h>
 
 using oxygen::graphics::CommandRecorder;
 using oxygen::vortex::RenderPass;
@@ -198,94 +195,4 @@ auto RenderPass::Context() const -> const RenderContext&
 {
   DCHECK_NOTNULL_F(context_);
   return *context_;
-}
-
-auto RenderPass::BindDrawIndexConstant(
-  CommandRecorder& recorder, const std::uint32_t draw_index) const -> void
-{
-  recorder.SetGraphicsRoot32BitConstant(
-    static_cast<uint32_t>(
-      oxygen::bindless::generated::d3d12::RootParam::kRootConstants),
-    draw_index, 0);
-}
-
-auto RenderPass::IssueDrawCallsOverPass(
-  CommandRecorder& recorder, const PassMaskBit pass_bit) const noexcept -> void
-{
-  try {
-    const auto prepared = Context().current_view.prepared_frame;
-    if (!prepared || !prepared->IsValid()
-      || prepared->draw_metadata_bytes.empty()) {
-      return;
-    }
-
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-    const auto* records = reinterpret_cast<const oxygen::vortex::DrawMetadata*>(
-      prepared->draw_metadata_bytes.data());
-
-    uint32_t emitted_count = 0;
-    uint32_t skipped_invalid = 0;
-    uint32_t draw_errors = 0;
-
-    if (prepared->partitions.empty()) {
-      const auto count = prepared->draw_metadata_bytes.size()
-        / sizeof(oxygen::vortex::DrawMetadata);
-      for (uint32_t i = 0; i < count; ++i) {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-        if (!records[i].flags.IsSet(pass_bit)) {
-          continue;
-        }
-        EmitDrawRange(recorder, records, i, i + 1, emitted_count,
-          skipped_invalid, draw_errors);
-      }
-      return;
-    }
-
-    for (const auto& partition : prepared->partitions) {
-      if (partition.pass_mask.IsSet(pass_bit)) {
-        EmitDrawRange(recorder, records, partition.begin, partition.end,
-          emitted_count, skipped_invalid, draw_errors);
-      }
-    }
-  } catch (const std::exception& ex) {
-    LOG_F(ERROR, "RenderPass '{}' IssueDrawCallsOverPass failed: {}", GetName(),
-      ex.what());
-  } catch (...) {
-    LOG_F(ERROR, "RenderPass '{}' IssueDrawCallsOverPass failed: unknown error",
-      GetName());
-  }
-}
-
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-auto RenderPass::EmitDrawRange(CommandRecorder& recorder,
-  const DrawMetadata* records, const uint32_t begin, const uint32_t end,
-  uint32_t& emitted_count, uint32_t& skipped_invalid,
-  uint32_t& draw_errors) const noexcept -> void
-{
-  for (uint32_t draw_index = begin; draw_index < end; ++draw_index) {
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-    const auto& metadata = records[draw_index];
-    if (((metadata.is_indexed != 0U) && metadata.index_count == 0)
-      || ((metadata.is_indexed == 0U) && metadata.vertex_count == 0)) {
-      ++skipped_invalid;
-      continue;
-    }
-
-    try {
-      BindDrawIndexConstant(recorder, draw_index);
-      recorder.Draw(metadata.is_indexed != 0U ? metadata.index_count
-                                              : metadata.vertex_count,
-        metadata.instance_count, 0, 0);
-      ++emitted_count;
-    } catch (const std::exception& ex) {
-      ++draw_errors;
-      LOG_F(ERROR, "RenderPass '{}' draw_index={} failed: {}. Draw dropped.",
-        GetName(), draw_index, ex.what());
-    } catch (...) {
-      ++draw_errors;
-      LOG_F(ERROR,
-        "RenderPass '{}' draw_index={} failed: unknown error. Draw dropped.",
-        GetName(), draw_index);
-    }
-  }
 }

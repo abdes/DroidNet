@@ -122,6 +122,8 @@ struct DeviceManagerDesc {
   std::optional<std::string> preferred_card_name;
   std::optional<DeviceId> preferred_card_device_id;
   D3D_FEATURE_LEVEL minFeatureLevel { D3D_FEATURE_LEVEL_12_0 };
+  //! Mesh shaders read their draw index from SV_StartInstanceLocation.
+  D3D_SHADER_MODEL min_shader_model { D3D_SHADER_MODEL_6_8 };
 };
 
 class DeviceManager final : public Component {

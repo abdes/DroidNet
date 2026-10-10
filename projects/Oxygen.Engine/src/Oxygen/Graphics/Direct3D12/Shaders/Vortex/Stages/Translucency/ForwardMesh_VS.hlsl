@@ -23,10 +23,12 @@
 #include "Core/Bindless/BindlessHelpers.hlsl"
 #include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
 
-// Root constants b2 (shared root param index with engine)
-cbuffer RootConstants : register(b2, space0) {
-    uint g_DrawIndex;
-    uint g_PassConstantsIndex;
+// Mesh shaders take their draw index from SV_StartInstanceLocation (see
+// Vortex/Contracts/Draw/DrawHelpers.hlsli); they read only the pass constants
+// root constant.
+cbuffer RootConstants : register(b2, space0)
+{
+    uint g_PassConstantsIndex : packoffset(c0.y);
 }
 
 // Vertex shader output / Pixel shader input
@@ -38,11 +40,15 @@ struct VSOutput {
     float3 world_normal : NORMAL;
     float3 world_tangent : TANGENT;
     float3 world_bitangent : BINORMAL;
+    // Mesh draws carry their draw index as StartInstanceLocation.
+    nointerpolation uint draw_index : DRAW_INDEX;
 };
 
 [shader("vertex")]
-VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
+VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID,
+    uint draw_index : SV_StartInstanceLocation) {
     VSOutput output = (VSOutput)0;
+    output.draw_index = draw_index;
     const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
 
     // Access per-draw metadata buffer through dynamic slot; skip if unavailable.
@@ -58,8 +64,7 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) {
         return output;
     }
     StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
-    // Select per-draw entry using the draw index provided via root constant
-    DrawMetadata meta = draw_meta_buffer[g_DrawIndex];
+    DrawMetadata meta = draw_meta_buffer[draw_index];
 
     uint vertex_buffer_index = meta.vertex_buffer_index;
     uint index_buffer_index = meta.index_buffer_index;

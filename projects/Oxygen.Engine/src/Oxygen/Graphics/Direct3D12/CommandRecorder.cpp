@@ -347,8 +347,6 @@ auto CommandRecorder::Begin() -> void
 {
   Base::Begin();
   binding_state_.Reset();
-  graphics_pipeline_hash_ = 0U;
-  compute_pipeline_hash_ = 0U;
 }
 
 namespace {
@@ -545,21 +543,7 @@ auto CommandRecorder::ExecuteIndirect(const graphics::Buffer& argument_buffer,
   const auto resolved_argument_range
     = execution_desc.argument_buffer_range.Resolve(buf.GetDescriptor());
 
-  ID3D12RootSignature* current_root_signature = nullptr;
-  size_t pipeline_hash = 0U;
-  switch (command_desc.kind) {
-  case IndirectCommandKind::kDraw:
-    current_root_signature = binding_state_.RootSignature(false);
-    pipeline_hash = graphics_pipeline_hash_;
-    break;
-  case IndirectCommandKind::kDispatch:
-    current_root_signature = binding_state_.RootSignature(true);
-    pipeline_hash = compute_pipeline_hash_;
-    break;
-  }
-
-  auto* signature = graphics->GetOrCreateIndirectCommandSignature(
-    command_desc, current_root_signature, pipeline_hash);
+  auto* signature = graphics->GetIndirectCommandSignature(command_desc.kind);
   DCHECK_NOTNULL_F(signature);
 
   ID3D12Resource* count_resource = nullptr;
@@ -586,10 +570,10 @@ auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
   DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
 
   const auto primitive_topology = desc.PrimitiveTopology();
-  graphics_pipeline_hash_ = std::hash<GraphicsPipelineDesc> {}(desc);
+  const auto pipeline_hash = std::hash<GraphicsPipelineDesc> {}(desc);
 
-  auto [pipeline_state, root_signature] = graphics->GetOrCreateGraphicsPipeline(
-    std::move(desc), graphics_pipeline_hash_);
+  auto [pipeline_state, root_signature]
+    = graphics->GetOrCreateGraphicsPipeline(std::move(desc), pipeline_hash);
   DCHECK_NOTNULL_F(pipeline_state);
   DCHECK_NOTNULL_F(root_signature);
 
@@ -622,10 +606,10 @@ auto CommandRecorder::SetPipelineState(ComputePipelineDesc desc) -> void
   auto graphics = graphics_weak_.lock();
   DCHECK_F(graphics != nullptr, "Graphics backend is no longer valid");
 
-  compute_pipeline_hash_ = std::hash<ComputePipelineDesc> {}(desc);
+  const auto pipeline_hash = std::hash<ComputePipelineDesc> {}(desc);
 
-  auto [pipeline_state, root_signature] = graphics->GetOrCreateComputePipeline(
-    std::move(desc), compute_pipeline_hash_);
+  auto [pipeline_state, root_signature]
+    = graphics->GetOrCreateComputePipeline(std::move(desc), pipeline_hash);
   DCHECK_NOTNULL_F(pipeline_state);
   DCHECK_NOTNULL_F(root_signature);
 

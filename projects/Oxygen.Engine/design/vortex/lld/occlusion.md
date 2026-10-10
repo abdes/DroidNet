@@ -180,19 +180,23 @@ draw exactly this set.
 
 ### 3.1 Command Layout
 
-All mesh passes use vertex pulling with non-indexed `Draw` and root constant 0
-as the draw index. One indirect command is therefore:
+All mesh passes use vertex pulling with non-indexed draws and follow the mesh
+draw index contract (ARCHITECTURE §10.3): the draw index travels in
+`StartInstanceLocation` and shaders read it as `SV_StartInstanceLocation`. One
+indirect command is therefore a plain draw record:
 
 ```cpp
-struct IndirectDrawCommand {   // 20 bytes
-  std::uint32_t draw_index;    // root constant 0
-  D3D12_DRAW_ARGUMENTS draw;   // vertex count, instance count, 0, 0
+struct IndirectDrawCommand {   // 16 bytes, D3D12_DRAW_ARGUMENTS
+  std::uint32_t vertex_count_per_instance;
+  std::uint32_t instance_count;
+  std::uint32_t start_vertex_location;    // 0
+  std::uint32_t start_instance_location;  // the draw index
 };
 ```
 
-The command signature is one 32-bit constant at root parameter
-`kRootConstants`, offset 0, followed by a draw. Root constant 1 (pass
-constants) is set by the CPU before each `ExecuteIndirect`, unchanged.
+The command signature is the backend's plain `DRAW` signature. It changes no
+root arguments, so it needs no root signature and serves every pipeline; root
+constant 1 (pass constants) is set by the CPU before each `ExecuteIndirect`.
 
 ### 3.2 Lists, Buckets and Order
 

@@ -29,10 +29,12 @@
 #include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
 
+// Mesh shaders take their draw index from SV_StartInstanceLocation (see
+// Vortex/Contracts/Draw/DrawHelpers.hlsli); they read only the pass constants
+// root constant.
 cbuffer RootConstants : register(b2, space0)
 {
-  uint g_DrawIndex;
-  uint g_PassConstantsIndex;
+    uint g_PassConstantsIndex : packoffset(c0.y);
 }
 
 struct VSOutput {
@@ -43,6 +45,7 @@ struct VSOutput {
   float3 world_normal : NORMAL;
   float3 world_tangent : TANGENT;
   float3 world_bitangent : BINORMAL;
+  nointerpolation uint draw_index : DRAW_INDEX;
   bool is_front_face : SV_IsFrontFace;
 };
 
@@ -50,7 +53,7 @@ static inline float3 ComputeSceneDebugUnderlay(VSOutput input)
 {
   MaterialSurface s = EvaluateMaterialSurface(input.world_pos,
     input.world_normal, input.world_tangent, input.world_bitangent, input.uv,
-    g_DrawIndex, input.is_front_face);
+    input.draw_index, input.is_front_face);
 
   const float3 N = SafeNormalize(s.N);
   const float3 V = ResolveSurfaceViewDirection(input.world_pos, camera_position,
@@ -176,7 +179,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
   SamplerState linear_sampler = SamplerDescriptorHeap[0];
 #if defined(ALPHA_TEST) || defined(DEBUG_MASKED_ALPHA_COVERAGE)
   const MaskedAlphaTestResult alpha_test
-    = EvaluateMaskedAlphaTest(input.uv, g_DrawIndex, linear_sampler);
+    = EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler);
 #endif
 
 #if defined(ALPHA_TEST) && !defined(DEBUG_MASKED_ALPHA_COVERAGE)
@@ -222,7 +225,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
   || defined(DEBUG_ROUGHNESS) || defined(DEBUG_METALNESS)
   MaterialSurface s = EvaluateMaterialSurface(input.world_pos,
     input.world_normal, input.world_tangent, input.world_bitangent, input.uv,
-    g_DrawIndex, input.is_front_face);
+    input.draw_index, input.is_front_face);
 #  if defined(DEBUG_BASE_COLOR)
   debug_out = s.base_rgb * input.color;
 #  elif defined(DEBUG_WORLD_NORMALS)

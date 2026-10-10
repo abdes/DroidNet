@@ -180,7 +180,6 @@ namespace {
       .instance_count = (std::max)(metadata.instance_count, 1U),
       .start_index = metadata.first_index,
       .base_vertex = metadata.base_vertex,
-      .start_instance = 0U,
       .is_indexed = metadata.is_indexed != 0U,
     };
   }

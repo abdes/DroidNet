@@ -432,10 +432,8 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
           pass_constants_bound = true;
         }
 
-        recorder->SetGraphicsRoot32BitConstant(
-          root_constants_param, draw_command.draw_index, 0U);
         recorder->Draw(draw_command.index_count, draw_command.instance_count,
-          0U, draw_command.start_instance);
+          0U, draw_command.draw_index);
         ++last_render_state_.rendered_draw_count;
       }
 

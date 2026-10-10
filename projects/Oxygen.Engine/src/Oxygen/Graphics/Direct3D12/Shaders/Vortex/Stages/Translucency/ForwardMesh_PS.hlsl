@@ -28,10 +28,12 @@
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
 #include "Vortex/Services/Lighting/ForwardDirectLighting.hlsli"
 
+// Mesh shaders take their draw index from SV_StartInstanceLocation (see
+// Vortex/Contracts/Draw/DrawHelpers.hlsli); they read only the pass constants
+// root constant.
 cbuffer RootConstants : register(b2, space0)
 {
-  uint g_DrawIndex;
-  uint g_PassConstantsIndex;
+    uint g_PassConstantsIndex : packoffset(c0.y);
 }
 
 struct ForwardEnvironmentState {
@@ -56,6 +58,7 @@ struct VSOutput {
   float3 world_normal : NORMAL;
   float3 world_tangent : TANGENT;
   float3 world_bitangent : BINORMAL;
+  nointerpolation uint draw_index : DRAW_INDEX;
   bool is_front_face : SV_IsFrontFace;
 };
 
@@ -138,11 +141,11 @@ void ValidateRadiancePS(VSOutput input)
 {
   SamplerState linear_sampler = SamplerDescriptorHeap[0];
 #ifdef ALPHA_TEST
-  ApplyMaskedAlphaClip(EvaluateMaskedAlphaTest(input.uv, g_DrawIndex, linear_sampler));
+  ApplyMaskedAlphaClip(EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
 #endif
   const MaterialSurface surf = EvaluateMaterialSurface(input.world_pos,
     input.world_normal, input.world_tangent, input.world_bitangent, input.uv,
-    g_DrawIndex, input.is_front_face);
+    input.draw_index, input.is_front_face);
   RecordForwardHdrSource(surf.emissive);
   if ((surf.flags & MATERIAL_FLAG_UNLIT) != 0u) {
     RecordForwardHdrSource(surf.base_rgb * input.color);
@@ -165,14 +168,14 @@ float4 PS(VSOutput input)
 
 #ifdef ALPHA_TEST
   ApplyMaskedAlphaClip(
-    EvaluateMaskedAlphaTest(input.uv, g_DrawIndex, linear_sampler));
+    EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
 #endif
 
 #if 1
   //=== Normal PBR Path ===
   const MaterialSurface surf = EvaluateMaterialSurface(input.world_pos,
     input.world_normal, input.world_tangent, input.world_bitangent, input.uv,
-    g_DrawIndex, input.is_front_face);
+    input.draw_index, input.is_front_face);
 
 #if !defined(OXYGEN_OPAQUE_OUTPUT)
   if (surf.base_a <= 0.0f) return 0.0f.xxxx;

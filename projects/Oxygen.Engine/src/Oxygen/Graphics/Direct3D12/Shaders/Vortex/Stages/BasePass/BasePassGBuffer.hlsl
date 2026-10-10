@@ -14,10 +14,12 @@
 #define BX_VERTEX_TYPE Vertex
 #include "Core/Bindless/BindlessHelpers.hlsl"
 
+// Mesh shaders take their draw index from SV_StartInstanceLocation (see
+// Vortex/Contracts/Draw/DrawHelpers.hlsli); they read only the pass constants
+// root constant.
 cbuffer RootConstants : register(b2, space0)
 {
-    uint g_DrawIndex;
-    uint g_PassConstantsIndex;
+    uint g_PassConstantsIndex : packoffset(c0.y);
 }
 
 struct BasePassGBufferVSOutput
@@ -31,13 +33,16 @@ struct BasePassGBufferVSOutput
     float3 world_normal : NORMAL;
     float3 world_tangent : TANGENT;
     float3 world_bitangent : BINORMAL;
+    nointerpolation uint draw_index : DRAW_INDEX;
 };
 
 [shader("vertex")]
 BasePassGBufferVSOutput BasePassGBufferVS(
-    uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID)
+    uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID,
+    uint draw_index : SV_StartInstanceLocation)
 {
     BasePassGBufferVSOutput output = (BasePassGBufferVSOutput)0;
+    output.draw_index = draw_index;
     output.position = float4(0.0f, 0.0f, 0.0f, 1.0f);
     output.world_normal = float3(0.0f, 0.0f, 1.0f);
     output.world_tangent = float3(1.0f, 0.0f, 0.0f);
@@ -48,7 +53,7 @@ BasePassGBufferVSOutput BasePassGBufferVS(
 
     DrawMetadata metadata;
     if (!BX_LoadDrawMetadata(
-            draw_bindings.draw_metadata_slot, g_DrawIndex, metadata)) {
+            draw_bindings.draw_metadata_slot, draw_index, metadata)) {
         return output;
     }
 
@@ -67,7 +72,7 @@ BasePassGBufferVSOutput BasePassGBufferVS(
         metadata, draw_bindings.instance_data_slot, instance_id);
     VelocityDrawMetadata velocity_metadata = MakeInvalidVelocityDrawMetadata();
     LoadVelocityDrawMetadata(
-        draw_bindings.velocity_draw_metadata_slot, g_DrawIndex, velocity_metadata);
+        draw_bindings.velocity_draw_metadata_slot, draw_index, velocity_metadata);
     const ViewHistoryFrameBindings view_history
         = LoadResolvedViewHistoryFrameBindings();
 
@@ -146,7 +151,7 @@ GBufferOutput BasePassGBufferPS(
     material_input.world_tangent = input.world_tangent;
     material_input.world_bitangent = input.world_bitangent;
     material_input.uv0 = input.uv;
-    material_input.draw_index = g_DrawIndex;
+    material_input.draw_index = input.draw_index;
     material_input.is_front_face = is_front_face ? 1u : 0u;
     GBufferOutput output = EvaluateBasePassMaterialOutput(material_input);
 #if defined(HAS_VELOCITY)
@@ -165,10 +170,10 @@ GBufferOutput BasePassGBufferPS(
 void BasePassValidateRadiancePS(
     BasePassGBufferVSOutput input, bool is_front_face : SV_IsFrontFace)
 {
-    ApplyBasePassAlphaClip(input.uv, g_DrawIndex);
+    ApplyBasePassAlphaClip(input.uv, input.draw_index);
     const MaterialSurface surface = EvaluateMaterialSurface(input.world_pos,
         input.world_normal, input.world_tangent, input.world_bitangent, input.uv,
-        g_DrawIndex, is_front_face);
+        input.draw_index, is_front_face);
     const ViewFrameBindings bindings = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
     CheckHdrStoreRange(float4(surface.emissive, 1.0f), 1u,
         bindings.exposure_status_uav, 0u, 1.0f);

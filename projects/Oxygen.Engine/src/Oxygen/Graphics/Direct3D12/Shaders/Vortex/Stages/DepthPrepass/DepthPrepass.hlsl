@@ -13,16 +13,21 @@
 #define BX_VERTEX_TYPE Vertex
 #include "Core/Bindless/BindlessHelpers.hlsl"
 
+// Mesh shaders take their draw index from SV_StartInstanceLocation (see
+// Vortex/Contracts/Draw/DrawHelpers.hlsli); they read only the pass constants
+// root constant.
 cbuffer RootConstants : register(b2, space0)
 {
-    uint g_DrawIndex;
-    uint g_PassConstantsIndex;
+    uint g_PassConstantsIndex : packoffset(c0.y);
 }
 
+// Mesh draws carry their draw index as StartInstanceLocation, direct or
+// indirect; the pixel stage reads the forwarded copy.
 struct DepthPrepassVSOutput
 {
     float4 position : SV_POSITION;
     float2 uv : TEXCOORD0;
+    nointerpolation uint draw_index : DRAW_INDEX;
 };
 
 float2 EncodeStaticVelocity(float4 clip_position)
@@ -33,17 +38,19 @@ float2 EncodeStaticVelocity(float4 clip_position)
 }
 
 [shader("vertex")]
-DepthPrepassVSOutput DepthPrepassVS(
-    uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID)
+DepthPrepassVSOutput DepthPrepassVS(uint vertex_id : SV_VertexID,
+    uint instance_id : SV_InstanceID,
+    uint draw_index : SV_StartInstanceLocation)
 {
     DepthPrepassVSOutput output = (DepthPrepassVSOutput)0;
     output.position = float4(0.0f, 0.0f, 0.0f, 1.0f);
+    output.draw_index = draw_index;
 
     const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
 
     DrawMetadata metadata;
     if (!BX_LoadDrawMetadata(
-            draw_bindings.draw_metadata_slot, g_DrawIndex, metadata)) {
+            draw_bindings.draw_metadata_slot, draw_index, metadata)) {
         return output;
     }
 
@@ -54,7 +61,7 @@ DepthPrepassVSOutput DepthPrepassVS(
     output.uv = vertex.texcoord;
     VelocityDrawMetadata velocity_metadata = MakeInvalidVelocityDrawMetadata();
     LoadVelocityDrawMetadata(
-        draw_bindings.velocity_draw_metadata_slot, g_DrawIndex, velocity_metadata);
+        draw_bindings.velocity_draw_metadata_slot, draw_index, velocity_metadata);
 
     const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
         draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot, metadata,
@@ -76,7 +83,7 @@ DepthPrepassPSOutput DepthPrepassPS(DepthPrepassVSOutput input)
 #if defined(ALPHA_TEST)
     const SamplerState linear_sampler = SamplerDescriptorHeap[0];
     ApplyMaskedAlphaClip(
-        EvaluateMaskedAlphaTest(input.uv, g_DrawIndex, linear_sampler));
+        EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
 #endif
 
     DepthPrepassPSOutput output;
@@ -90,7 +97,7 @@ void DepthPrepassPS(DepthPrepassVSOutput input)
 #if defined(ALPHA_TEST)
     const SamplerState linear_sampler = SamplerDescriptorHeap[0];
     ApplyMaskedAlphaClip(
-        EvaluateMaskedAlphaTest(input.uv, g_DrawIndex, linear_sampler));
+        EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
 #endif
 }
 #endif

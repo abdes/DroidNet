@@ -114,17 +114,15 @@ public:
     Printable,
     Hashable>; // clang-format on
 
-  struct IndirectPushConstantsDesc {
-    BindingSlotDesc binding_slot_desc {};
-    uint32_t dest_offset_in_32bit_values { 0U };
-    uint32_t value_count { 0U };
-
-    auto operator==(const IndirectPushConstantsDesc&) const -> bool = default;
-  };
-
+  //! The command signature of an indirect call: one draw or one dispatch.
+  /*!
+   Commands carry only the native arguments (D3D12_DRAW_ARGUMENTS or
+   D3D12_DISPATCH_ARGUMENTS) and never change root arguments. Per-draw data
+   travels in the arguments themselves: mesh draws put their draw index in
+   StartInstanceLocation, read in shaders as SV_StartInstanceLocation.
+  */
   struct IndirectCommandDesc {
     IndirectCommandKind kind { IndirectCommandKind::kDraw };
-    std::optional<IndirectPushConstantsDesc> push_constants {};
 
     auto operator==(const IndirectCommandDesc&) const -> bool = default;
   };
@@ -317,8 +315,7 @@ public:
   //! Issues one or more indirect draw or dispatch commands.
   /*!
    In D3D12, this maps to ID3D12GraphicsCommandList::ExecuteIndirect.
-   \p command_desc describes the terminal indirect operation and any inline
-   push-constant payload that should be written before executing each command.
+   \p command_desc selects the draw or dispatch command signature.
 
    When \p execution_desc.count_buffer is null, \p command_count is the fixed
    number of commands to execute. When a count buffer is provided,

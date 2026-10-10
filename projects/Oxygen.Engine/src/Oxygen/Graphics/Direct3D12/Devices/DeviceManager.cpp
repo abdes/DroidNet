@@ -128,6 +128,18 @@ auto GetMaxFeatureLevel(
   return D3D_FEATURE_LEVEL_11_0;
 }
 
+auto SupportsShaderModel(
+  const ComPtr<oxygen::graphics::d3d12::dx::IDevice>& device,
+  const D3D_SHADER_MODEL required) -> bool
+{
+  auto shader_model = D3D12_FEATURE_DATA_SHADER_MODEL {
+    .HighestShaderModel = required,
+  };
+  return SUCCEEDED(device->CheckFeatureSupport(
+           D3D12_FEATURE_SHADER_MODEL, &shader_model, sizeof(shader_model)))
+    && shader_model.HighestShaderModel >= required;
+}
+
 } // namespace
 
 auto AdapterInfo::MemoryAsString() const -> std::string
@@ -190,8 +202,14 @@ void DeviceManager::DiscoverAdapters()
         ComPtr<dx::IDevice> device;
         ThrowOnFailed(D3D12CreateDevice(
           adapter.Get(), props_.minFeatureLevel, IID_PPV_ARGS(&device)));
-        meets_feature_level = true;
         max_feature_level = GetMaxFeatureLevel(device);
+        meets_feature_level
+          = SupportsShaderModel(device, props_.min_shader_model);
+        if (!meets_feature_level) {
+          LOG_F(WARNING,
+            "adapter `{}` does not support the required shader model 0x{:X}",
+            adapter_name, static_cast<unsigned>(props_.min_shader_model));
+        }
       } catch (std::exception& ex) {
         LOG_F(ERROR, "failed to check adapter `{}` feature level: {}",
           adapter_name, ex.what());
@@ -238,8 +256,12 @@ void DeviceManager::DiscoverAdapters()
     }
   }
 
-  DCHECK_F(best_adapter_index >= 0 && best_adapter_index < contexts_.size(),
-    "Best adapter index out of bounds");
+  if (best_score < 0) {
+    throw std::runtime_error(fmt::format("No adapter supports feature level "
+                                         "0x{:X} and shader model 0x{:X}",
+      static_cast<unsigned>(props_.minFeatureLevel),
+      static_cast<unsigned>(props_.min_shader_model)));
+  }
 
   if (!contexts_.empty()) {
     contexts_.at(best_adapter_index).info.is_best = true;
@@ -258,14 +280,14 @@ void DeviceManager::DiscoverAdapters()
 
 auto DeviceManager::GetAdapterScore(AdapterInfo& adapter) const -> int
 {
-  int score = 0;
-
-  // Score based on feature level
-  if (adapter.MeetsFeatureLevel()) {
-    score += 1;
-    score += static_cast<int>(adapter.MaxFeatureLevel())
-      - static_cast<int>(props_.minFeatureLevel);
+  // An adapter without the required feature level and shader model is never
+  // selected.
+  if (!adapter.MeetsFeatureLevel()) {
+    return -1;
   }
+  int score = 1;
+  score += static_cast<int>(adapter.MaxFeatureLevel())
+    - static_cast<int>(props_.minFeatureLevel);
 
   // Score based on display connection
   if (props_.require_display && adapter.IsConnectedToDisplay()) {

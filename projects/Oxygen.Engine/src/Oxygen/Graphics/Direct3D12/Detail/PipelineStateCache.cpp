@@ -825,17 +825,3 @@ auto PipelineStateCache::GetOrCreateComputePipeline(
   compute_pipelines_.emplace(hash, std::make_tuple(std::move(desc), entry));
   return entry;
 }
-
-//! Get the cached graphics pipeline description for a given hash.
-auto PipelineStateCache::GetGraphicsPipelineDesc(const size_t hash) const
-  -> const GraphicsPipelineDesc&
-{
-  return std::get<0>(graphics_pipelines_.at(hash));
-}
-
-//! Get the cached compute pipeline description for a given hash.
-auto PipelineStateCache::GetComputePipelineDesc(const size_t hash) const
-  -> const ComputePipelineDesc&
-{
-  return std::get<0>(compute_pipelines_.at(hash));
-}

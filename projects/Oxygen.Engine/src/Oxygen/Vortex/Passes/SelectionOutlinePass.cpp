@@ -352,13 +352,12 @@ auto SelectionOutlinePass::Record(RenderContext& ctx,
       current_alpha_test = raster.alpha_test;
     }
     const auto& dm = metadata[draw.draw_index];
-    recorder.SetGraphicsRoot32BitConstant(root_constants, draw.draw_index, 0U);
     recorder.SetGraphicsRoot32BitConstant(root_constants,
       (draw.level == kActiveLevel ? active_constants : outlined_constants)
         .get(),
       1U);
     recorder.Draw(dm.is_indexed != 0U ? dm.index_count : dm.vertex_count,
-      (std::max)(dm.instance_count, 1U), 0U, 0U);
+      (std::max)(dm.instance_count, 1U), 0U, draw.draw_index);
   }
 
   // Composite: the band around the mask over the view output.

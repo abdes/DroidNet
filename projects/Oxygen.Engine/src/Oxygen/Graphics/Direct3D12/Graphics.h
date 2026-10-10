@@ -6,16 +6,15 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <string_view>
 #include <unordered_map>
 
 #include <wrl/client.h>
 
-#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -51,45 +50,6 @@ namespace oxygen::graphics::d3d12 {
 class CommandRecorder;
 struct NativeLifetime;
 struct MemoryStatistics;
-
-namespace detail {
-  struct InlineRootConstantsDesc {
-    std::uint32_t root_parameter_index { 0U };
-    std::uint32_t dest_offset_in_32bit_values { 0U };
-    std::uint32_t value_count { 0U };
-
-    auto operator==(const InlineRootConstantsDesc&) const -> bool = default;
-  };
-
-  struct IndirectCommandSignatureKey {
-    graphics::CommandRecorder::IndirectCommandKind kind {
-      graphics::CommandRecorder::IndirectCommandKind::kDraw,
-    };
-    std::optional<InlineRootConstantsDesc> inline_root_constants;
-    ID3D12RootSignature* root_signature { nullptr };
-
-    auto operator==(const IndirectCommandSignatureKey&) const -> bool = default;
-  };
-
-  struct IndirectCommandSignatureKeyHash {
-    auto operator()(const IndirectCommandSignatureKey& key) const noexcept
-      -> std::size_t
-    {
-      std::size_t seed {};
-      HashCombine(seed, key.kind);
-      HashCombine(seed, key.root_signature);
-      HashCombine(seed, key.inline_root_constants.has_value());
-      if (key.inline_root_constants.has_value()) {
-        const auto& constants = *key.inline_root_constants;
-        HashCombine(seed, constants.root_parameter_index);
-        HashCombine(seed, constants.dest_offset_in_32bit_values);
-        HashCombine(seed, constants.value_count);
-      }
-
-      return seed;
-    }
-  };
-} // namespace detail
 
 class Graphics : public oxygen::Graphics {
   using Base = oxygen::Graphics;
@@ -210,17 +170,17 @@ private:
   friend class CommandRecorder;
   mutable std::mutex resource_allocation_mutex_;
 
-  OXGN_D3D12_NDAPI auto GetOrCreateIndirectCommandSignature(
-    const graphics::CommandRecorder::IndirectCommandDesc& command_desc,
-    ID3D12RootSignature* current_root_signature, size_t pipeline_hash) const
+  //! The command signature for one indirect draw or dispatch per command.
+  [[nodiscard]] auto GetIndirectCommandSignature(
+    graphics::CommandRecorder::IndirectCommandKind kind) const
     -> ID3D12CommandSignature*;
+  auto CreateIndirectCommandSignatures() -> void;
 
   mutable std::unordered_map<DXGI_FORMAT, uint8_t>
     dxgi_format_plane_count_cache_;
   bool enable_vsync_ { true };
-  mutable std::unordered_map<detail::IndirectCommandSignatureKey,
-    Microsoft::WRL::ComPtr<ID3D12CommandSignature>,
-    detail::IndirectCommandSignatureKeyHash>
+  // Indexed by IndirectCommandKind; created with the device.
+  std::array<Microsoft::WRL::ComPtr<ID3D12CommandSignature>, 2>
     indirect_command_signatures_;
   std::unique_ptr<graphics::FrameCaptureController> frame_capture_controller_;
   std::unique_ptr<TimestampQueryBackend> timestamp_query_backend_;

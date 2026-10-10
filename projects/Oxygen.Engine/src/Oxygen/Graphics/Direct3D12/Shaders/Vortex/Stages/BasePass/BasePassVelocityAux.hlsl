@@ -13,10 +13,12 @@
 #define BX_VERTEX_TYPE Vertex
 #include "Core/Bindless/BindlessHelpers.hlsl"
 
+// Mesh shaders take their draw index from SV_StartInstanceLocation (see
+// Vortex/Contracts/Draw/DrawHelpers.hlsli); they read only the pass constants
+// root constant.
 cbuffer RootConstants : register(b2, space0)
 {
-    uint g_DrawIndex;
-    uint g_PassConstantsIndex;
+    uint g_PassConstantsIndex : packoffset(c0.y);
 }
 
 struct BasePassVelocityAuxVSOutput
@@ -27,6 +29,7 @@ struct BasePassVelocityAuxVSOutput
     float4 mv_current_clip_position : TEXCOORD2;
     float4 mv_previous_clip_position : TEXCOORD3;
     float2 uv : TEXCOORD4;
+    nointerpolation uint draw_index : DRAW_INDEX;
 };
 
 static float2 ClipToNdc(float4 clip_position)
@@ -37,16 +40,18 @@ static float2 ClipToNdc(float4 clip_position)
 
 [shader("vertex")]
 BasePassVelocityAuxVSOutput BasePassVelocityAuxVS(
-    uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID)
+    uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID,
+    uint draw_index : SV_StartInstanceLocation)
 {
     BasePassVelocityAuxVSOutput output = (BasePassVelocityAuxVSOutput)0;
+    output.draw_index = draw_index;
     output.position = float4(0.0f, 0.0f, 0.0f, 1.0f);
 
     const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
 
     DrawMetadata metadata;
     if (!BX_LoadDrawMetadata(
-            draw_bindings.draw_metadata_slot, g_DrawIndex, metadata)) {
+            draw_bindings.draw_metadata_slot, draw_index, metadata)) {
         return output;
     }
 
@@ -64,7 +69,7 @@ BasePassVelocityAuxVSOutput BasePassVelocityAuxVS(
         instance_id);
     VelocityDrawMetadata velocity_metadata = MakeInvalidVelocityDrawMetadata();
     LoadVelocityDrawMetadata(
-        draw_bindings.velocity_draw_metadata_slot, g_DrawIndex, velocity_metadata);
+        draw_bindings.velocity_draw_metadata_slot, draw_index, velocity_metadata);
     const ViewHistoryFrameBindings view_history
         = LoadResolvedViewHistoryFrameBindings();
 
@@ -110,7 +115,7 @@ float2 BasePassVelocityAuxPS(BasePassVelocityAuxVSOutput input) : SV_Target0
 #if defined(ALPHA_TEST)
     const SamplerState linear_sampler = SamplerDescriptorHeap[0];
     ApplyMaskedAlphaClip(
-        EvaluateMaskedAlphaTest(input.uv, g_DrawIndex, linear_sampler));
+        EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
 #endif
 
     const float2 base_current_ndc = ClipToNdc(input.base_current_clip_position);

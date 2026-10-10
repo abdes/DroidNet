@@ -1651,6 +1651,18 @@ infrastructure that Vortex must preserve intact:
 7. Runtime continues to load `shaders.bin` only. Vortex does not introduce
    runtime HLSL compilation, loose runtime module loading, or a second runtime
    archive format.
+8. Shaders compile as Shader Model 6.8, and the device manager selects only
+   adapters that support it.
+9. Every mesh draw, direct or indirect, carries its `DrawMetadata` index in
+   `StartInstanceLocation`: `Draw(count, instances, 0, draw_index)`, or the
+   `StartInstanceLocation` of a `D3D12_DRAW_ARGUMENTS` record. The vertex
+   shader reads it as `SV_StartInstanceLocation` and forwards it to the pixel
+   shader as a `nointerpolation` `DRAW_INDEX` attribute; `SV_InstanceID` still
+   counts from zero within a draw. Indirect draws and dispatches use plain
+   `DRAW` and `DISPATCH` command signatures that never change root arguments,
+   so one signature per kind serves every pipeline. Root constants carry pass
+   data only. The contract is restated in
+   `Vortex/Contracts/Draw/DrawHelpers.hlsli`.
 
 ### 10.4 Layered Shader Model
 

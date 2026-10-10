@@ -32,7 +32,6 @@ struct TranslucencyDrawCommand {
   std::uint32_t instance_count { 0U };
   std::uint32_t start_index { 0U };
   std::int32_t base_vertex { 0 };
-  std::uint32_t start_instance { 0U };
   bool is_indexed { false };
 
   //! Vertices per instance of the non-indexed, vertex-pulled draw.

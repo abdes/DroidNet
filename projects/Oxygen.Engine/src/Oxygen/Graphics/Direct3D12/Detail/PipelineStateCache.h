@@ -75,26 +75,6 @@ namespace detail {
       }
     }
 
-    //! Get the cached graphics pipeline description for a given hash.
-    /*!
-     \param hash The hash of the pipeline description.
-     \return Reference to the cached pipeline description.
-     \throws std::out_of_range if not found.
-    */
-    template <typename TDesc>
-    // ReSharper disable once CppNotAllPathsReturnValue
-    auto GetPipelineDesc(const size_t hash) const -> const TDesc&
-    {
-      if constexpr (std::same_as<TDesc, GraphicsPipelineDesc>) {
-        return GetGraphicsPipelineDesc(hash);
-      } else if constexpr (std::same_as<TDesc, ComputePipelineDesc>) {
-        return GetComputePipelineDesc(hash);
-      } else {
-        static_assert(
-          oxygen::always_false_v<TDesc>, "Unsupported pipeline desc type");
-      }
-    }
-
   private:
     auto InternRootSignature(ID3DBlob& serialized) -> dx::IRootSignature*;
     // Main pipeline state creation methods
@@ -102,12 +82,6 @@ namespace detail {
       GraphicsPipelineDesc desc, size_t hash) -> Entry;
     OXGN_D3D12_API auto GetOrCreateComputePipeline(
       ComputePipelineDesc desc, size_t hash) -> Entry;
-
-    // Cache access methods
-    OXGN_D3D12_API auto GetGraphicsPipelineDesc(size_t hash) const
-      -> const GraphicsPipelineDesc&;
-    OXGN_D3D12_API auto GetComputePipelineDesc(size_t hash) const
-      -> const ComputePipelineDesc&;
 
     // Pipeline cache storage
     std::unordered_map<size_t, std::tuple<GraphicsPipelineDesc, Entry>>

@@ -105,17 +105,20 @@ struct IndirectDrawList {
   }
 };
 
-//! One indirect draw command: root constant 0 (the draw index), then a draw.
+//! One indirect draw command: a D3D12_DRAW_ARGUMENTS record.
+/*!
+ Lists use the plain DRAW command signature. The draw index travels in
+ `start_instance_location`, which mesh shaders read as
+ `SV_StartInstanceLocation`; no command changes root arguments.
+*/
 struct IndirectDrawCommand {
-  std::uint32_t draw_index { 0U };
   std::uint32_t vertex_count_per_instance { 0U };
   std::uint32_t instance_count { 0U };
   std::uint32_t start_vertex_location { 0U };
   std::uint32_t start_instance_location { 0U };
 };
-// The stride the D3D12 command signature expects: one root constant, then
-// D3D12_DRAW_ARGUMENTS.
-static_assert(sizeof(IndirectDrawCommand) == 20U); // NOLINT(*-magic-numbers)
+// The stride of the DRAW command signature: sizeof(D3D12_DRAW_ARGUMENTS).
+static_assert(sizeof(IndirectDrawCommand) == 16U); // NOLINT(*-magic-numbers)
 
 //! Builds GPU-compacted indirect draw lists from CPU-ordered candidates.
 /*!

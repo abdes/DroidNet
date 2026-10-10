@@ -122,11 +122,10 @@ auto ExpectedSegmentCommands(
     }
     commands.insert(commands.end(),
       {
-        candidate.draw_index,
         candidate.vertex_count,
         candidate.instance_count,
         0U,
-        0U,
+        candidate.draw_index,
       });
   }
   return commands;

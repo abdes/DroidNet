@@ -180,8 +180,6 @@ private:
   std::weak_ptr<Graphics> graphics_weak_;
   detail::PipelineBindingState binding_state_;
 
-  size_t graphics_pipeline_hash_ = 0;
-  size_t compute_pipeline_hash_ = 0;
   std::unique_ptr<graphics::IGpuProfileCollector> tracy_gpu_collector_;
 };
 

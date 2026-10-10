@@ -224,11 +224,10 @@ auto ViewPickPass::Record(RenderContext& ctx,
             view_constants, ctx.view_constants->GetGPUVirtualAddress());
           current_alpha_test = alpha_test;
         }
-        recorder.SetGraphicsRoot32BitConstant(root_constants, draw_index, 0U);
         recorder.SetGraphicsRoot32BitConstant(root_constants, 0U, 1U);
         recorder.Draw(
           draw->is_indexed != 0U ? draw->index_count : draw->vertex_count,
-          (std::max)(draw->instance_count, 1U), 0U, 0U);
+          (std::max)(draw->instance_count, 1U), 0U, draw_index);
       }
     }
   }

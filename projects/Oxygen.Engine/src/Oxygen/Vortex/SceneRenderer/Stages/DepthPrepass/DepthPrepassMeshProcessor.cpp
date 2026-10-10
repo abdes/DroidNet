@@ -39,7 +39,6 @@ namespace {
       .instance_count = (std::max)(metadata.instance_count, 1U),
       .start_index = metadata.first_index,
       .base_vertex = metadata.base_vertex,
-      .start_instance = 0U,
       .is_indexed = metadata.is_indexed != 0U,
     };
   }
@@ -111,9 +110,8 @@ void DepthPrepassMeshProcessor::BuildDrawCommands(
 
   const auto accept_mask = shadow_casters_only
     ? PassMask { PassMaskBit::kShadowCaster }
-    : include_masked
-    ? PassMask { PassMaskBit::kOpaque, PassMaskBit::kMasked }
-    : PassMask { PassMaskBit::kOpaque };
+    : include_masked ? PassMask { PassMaskBit::kOpaque, PassMaskBit::kMasked }
+                     : PassMask { PassMaskBit::kOpaque };
   const auto accepted_draws = AcceptedDrawView(prepared_scene, accept_mask);
   if (accepted_draws.empty()) {
     return;

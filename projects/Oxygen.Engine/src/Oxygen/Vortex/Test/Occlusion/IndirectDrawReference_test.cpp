@@ -10,6 +10,7 @@
 #include <cstring>
 #include <fstream>
 #include <functional>
+#include <ios>
 #include <memory>
 #include <span>
 #include <string>
@@ -17,9 +18,10 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -35,18 +37,15 @@
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 
-// Reference draws for ExecuteIndirect against direct draws of the same work.
+// Reference draws for the mesh draw index contract on the GPU.
 //
-// Each test renders eight one-pixel columns into an R32_UINT target. Draw `i`
-// writes `i + 1` into column `i`, where `i` is the root constant the draw saw
-// (plus the quad offset its StartVertexLocation selects). The direct draws are
-// the control; each ExecuteIndirect form must produce the same columns.
-// The tests run in order of increasing indirect features, so the first one
-// that fails names the feature that breaks.
+// Every mesh draw carries its draw index in StartInstanceLocation, and shaders
+// read it as SV_StartInstanceLocation. Each test renders eight one-pixel
+// columns into an R32_UINT target: draw `i` writes `i + 1` into column `i`.
+// Direct draws are the control; each ExecuteIndirect form the indirect lists
+// use must produce the same columns.
 
 namespace {
-
-namespace root = oxygen::bindless::generated::d3d12;
 
 using oxygen::Format;
 using oxygen::Scissors;
@@ -71,27 +70,7 @@ constexpr auto kTexelBytes = sizeof(std::uint32_t);
 
 using Columns = std::array<std::uint32_t, kColumns>;
 
-const auto kVertexShader = ShaderRequest {
-  .stage = oxygen::ShaderType::kVertex,
-  .source_path = "Tests/IndirectDrawReference.hlsl",
-  .entry_point = "VS",
-};
-const auto kPixelShader = ShaderRequest {
-  .stage = oxygen::ShaderType::kPixel,
-  .source_path = "Tests/IndirectDrawReference.hlsl",
-  .entry_point = "PS",
-};
-
-//! One command of the root-constant signature: the draw index, then a draw.
-struct ConstantDrawCommand {
-  std::uint32_t draw_index { 0U };
-  std::uint32_t vertex_count_per_instance { 0U };
-  std::uint32_t instance_count { 0U };
-  std::uint32_t start_vertex_location { 0U };
-  std::uint32_t start_instance_location { 0U };
-};
-
-//! One command of the plain draw signature (D3D12_DRAW_ARGUMENTS).
+//! One indirect command: a D3D12_DRAW_ARGUMENTS record.
 struct DrawCommand {
   std::uint32_t vertex_count_per_instance { 0U };
   std::uint32_t instance_count { 0U };
@@ -99,11 +78,30 @@ struct DrawCommand {
   std::uint32_t start_instance_location { 0U };
 };
 
+auto VertexShader() -> ShaderRequest
+{
+  return ShaderRequest {
+    .stage = oxygen::ShaderType::kVertex,
+    .source_path = "Tests/IndirectDrawReference.hlsl",
+    .entry_point = "VS",
+  };
+}
+
+auto PixelShader() -> ShaderRequest
+{
+  return ShaderRequest {
+    .stage = oxygen::ShaderType::kPixel,
+    .source_path = "Tests/IndirectDrawReference.hlsl",
+    .entry_point = "PS",
+  };
+}
+
 auto LoadBytecode(const char* path)
   -> std::shared_ptr<oxygen::graphics::IShaderByteCode>
 {
-  auto file = std::ifstream(path, std::ios::binary | std::ios::ate);
+  auto file = std::ifstream(path, std::ios::binary);
   CHECK_F(file.good(), "Missing reference shader `{}`", path);
+  file.seekg(0, std::ios::end);
   const auto bytes = static_cast<std::size_t>(file.tellg());
   CHECK_F(bytes > 0U && bytes % sizeof(std::uint32_t) == 0U);
   auto code = std::vector<std::uint32_t>(bytes / sizeof(std::uint32_t));
@@ -119,31 +117,24 @@ auto LoadBytecode(const char* path)
     std::move(code));
 }
 
-auto ConstantCommands() -> std::vector<ConstantDrawCommand>
+//! One single-quad command per column; the draw index is the column.
+auto ColumnCommands() -> std::vector<DrawCommand>
 {
-  auto commands = std::vector<ConstantDrawCommand> {};
+  auto commands = std::vector<DrawCommand> {};
   for (std::uint32_t index = 0U; index < kColumns; ++index) {
-    commands.push_back(ConstantDrawCommand {
-      .draw_index = index,
+    commands.push_back(DrawCommand {
       .vertex_count_per_instance = kQuadVertices,
       .instance_count = 1U,
+      .start_instance_location = index,
     });
   }
   return commands;
 }
 
-auto RootConstantsCommand() -> CommandRecorder::IndirectCommandDesc
+auto DrawSignature() -> CommandRecorder::IndirectCommandDesc
 {
   return CommandRecorder::IndirectCommandDesc {
     .kind = CommandRecorder::IndirectCommandKind::kDraw,
-    .push_constants = CommandRecorder::IndirectPushConstantsDesc {
-      .binding_slot_desc = oxygen::graphics::BindingSlotDesc {
-        .register_index = root::kRootConstantsRegister,
-        .register_space = root::kRootConstantsSpace,
-      },
-      .dest_offset_in_32bit_values = 0U,
-      .value_count = 1U,
-    },
   };
 }
 
@@ -166,26 +157,21 @@ protected:
       return;
     }
     FailureBackend().SetShaderOverride(
-      kVertexShader, LoadBytecode(OXYGEN_INDIRECT_DRAW_REFERENCE_VS));
+      VertexShader(), LoadBytecode(OXYGEN_INDIRECT_DRAW_REFERENCE_VS));
     FailureBackend().SetShaderOverride(
-      kPixelShader, LoadBytecode(OXYGEN_INDIRECT_DRAW_REFERENCE_PS));
+      PixelShader(), LoadBytecode(OXYGEN_INDIRECT_DRAW_REFERENCE_PS));
     target_ = CreateRegisteredTexture({
       .width = kColumns,
       .height = 1U,
       .format = Format::kR32UInt,
       .debug_name = "Indirect reference target",
       .is_render_target = true,
+      .clear_value = {},
       .initial_state = ResourceStates::kCommon,
     });
     framebuffer_ = Backend().CreateFramebuffer(
       FramebufferDesc {}.AddColorAttachment(target_));
     ASSERT_NE(framebuffer_, nullptr);
-    view_constants_ = CreateRegisteredBuffer(BufferDesc {
-      .size_bytes = kConstantBufferBytes,
-      .usage = BufferUsage::kConstant,
-      .memory = BufferMemory::kUpload,
-      .debug_name = "Indirect reference view constants",
-    });
   }
 
   //! An upload-heap buffer holding `values`; always readable as arguments.
@@ -236,8 +222,6 @@ protected:
   //! returns the eight columns.
   auto Render(const std::function<void(CommandRecorder&)>& draws) -> Columns
   {
-    const auto root_constants
-      = static_cast<std::uint32_t>(root::RootParam::kRootConstants);
     {
       auto recorder = AcquireRecorder("Indirect reference draws");
       recorder->BeginTrackingResourceState(
@@ -255,11 +239,6 @@ protected:
         .bottom = 1,
       });
       recorder->SetPipelineState(Pipeline());
-      recorder->SetGraphicsRootConstantBufferView(
-        static_cast<std::uint32_t>(root::RootParam::kViewConstants),
-        view_constants_->GetGPUVirtualAddress());
-      recorder->SetGraphicsRoot32BitConstant(root_constants, 0U, 0U);
-      recorder->SetGraphicsRoot32BitConstant(root_constants, 0U, 1U);
       draws(*recorder);
       recorder->RequireResourceStateFinal(
         *target_, ResourceStates::kCopySource);
@@ -269,14 +248,12 @@ protected:
   }
 
 private:
-  static constexpr auto kConstantBufferBytes = std::uint64_t { 256U };
-
   static auto Pipeline() -> GraphicsPipelineDesc
   {
     auto root_bindings = oxygen::vortex::internal::BuildVortexRootBindings();
     return GraphicsPipelineDesc::Builder {}
-      .SetVertexShader(kVertexShader)
-      .SetPixelShader(kPixelShader)
+      .SetVertexShader(VertexShader())
+      .SetPixelShader(PixelShader())
       .SetPrimitiveTopology(oxygen::graphics::PrimitiveType::kTriangleList)
       .SetRasterizerState(oxygen::graphics::RasterizerStateDesc {
         .cull_mode = oxygen::graphics::CullMode::kNone,
@@ -312,68 +289,29 @@ private:
 
   std::shared_ptr<Texture> target_;
   std::shared_ptr<Framebuffer> framebuffer_;
-  std::shared_ptr<Buffer> view_constants_;
 };
 
-//! The control: one direct draw per column, the draw index set directly.
-NOLINT_TEST_F(IndirectDrawReferenceGpuTest, DirectDrawsFillEveryColumn)
+//! The control: one direct draw per column, the draw index as start instance.
+NOLINT_TEST_F(IndirectDrawReferenceGpuTest, DirectDrawsCarryTheDrawIndex)
 {
   const auto columns = Render([](CommandRecorder& recorder) -> void {
-    const auto root_constants
-      = static_cast<std::uint32_t>(root::RootParam::kRootConstants);
     for (std::uint32_t index = 0U; index < kColumns; ++index) {
-      recorder.SetGraphicsRoot32BitConstant(root_constants, index, 0U);
-      recorder.Draw(kQuadVertices, 1U, 0U, 0U);
+      recorder.Draw(kQuadVertices, 1U, 0U, index);
     }
   });
 
   EXPECT_EQ(columns, Ascending(kColumns));
 }
 
-//! Without a root constant in the signature, every draw inherits the root
-//! constant set before ExecuteIndirect. SV_VertexID starts at zero in every
-//! draw, so command `i` draws `i + 1` quads from that constant's column.
-NOLINT_TEST_F(IndirectDrawReferenceGpuTest, IndirectDrawsInheritRootConstants)
+//! Indirect draws deliver each command's start instance as its draw index.
+NOLINT_TEST_F(IndirectDrawReferenceGpuTest, IndirectDrawsCarryTheDrawIndex)
 {
-  constexpr auto kFirstColumn = kColumns / 2U;
-  auto commands = std::vector<DrawCommand> {};
-  for (std::uint32_t index = 0U; index < kColumns - kFirstColumn; ++index) {
-    commands.push_back(DrawCommand {
-      .vertex_count_per_instance = (index + 1U) * kQuadVertices,
-      .instance_count = 1U,
-    });
-  }
+  const auto commands = ColumnCommands();
   const auto arguments = MakeArguments(
-    std::span<const DrawCommand>(commands), "Indirect reference plain draws");
+    std::span<const DrawCommand>(commands), "Indirect reference draws");
 
   const auto columns = Render([&](CommandRecorder& recorder) -> void {
-    recorder.SetGraphicsRoot32BitConstant(
-      static_cast<std::uint32_t>(root::RootParam::kRootConstants), kFirstColumn,
-      0U);
-    recorder.ExecuteIndirect(*arguments,
-      CommandRecorder::IndirectCommandDesc {
-        .kind = CommandRecorder::IndirectCommandKind::kDraw,
-      },
-      CommandRecorder::IndirectExecutionDesc {
-        .command_count
-        = CommandRecorder::IndirectCommandCount { static_cast<std::uint32_t>(
-          commands.size()) },
-      });
-  });
-
-  EXPECT_EQ(columns, (Columns { 0U, 0U, 0U, 0U, 5U, 5U, 5U, 5U }));
-}
-
-//! Each command sets the draw index root constant, then draws.
-NOLINT_TEST_F(IndirectDrawReferenceGpuTest, IndirectDrawsSetTheRootConstant)
-{
-  const auto commands = ConstantCommands();
-  const auto arguments
-    = MakeArguments(std::span<const ConstantDrawCommand>(commands),
-      "Indirect reference constant draws");
-
-  const auto columns = Render([&](CommandRecorder& recorder) -> void {
-    recorder.ExecuteIndirect(*arguments, RootConstantsCommand(),
+    recorder.ExecuteIndirect(*arguments, DrawSignature(),
       CommandRecorder::IndirectExecutionDesc {
         .command_count = CommandRecorder::IndirectCommandCount { kColumns },
       });
@@ -385,16 +323,15 @@ NOLINT_TEST_F(IndirectDrawReferenceGpuTest, IndirectDrawsSetTheRootConstant)
 //! A count buffer below the maximum command count limits the draws.
 NOLINT_TEST_F(IndirectDrawReferenceGpuTest, CountBufferLimitsTheDraws)
 {
-  const auto commands = ConstantCommands();
-  const auto arguments
-    = MakeArguments(std::span<const ConstantDrawCommand>(commands),
-      "Indirect reference constant draws");
+  const auto commands = ColumnCommands();
+  const auto arguments = MakeArguments(
+    std::span<const DrawCommand>(commands), "Indirect reference draws");
   const auto counts = std::array { kCountLimit };
   const auto count_buffer = MakeArguments(
     std::span<const std::uint32_t>(counts), "Indirect reference count");
 
   const auto columns = Render([&](CommandRecorder& recorder) -> void {
-    recorder.ExecuteIndirect(*arguments, RootConstantsCommand(),
+    recorder.ExecuteIndirect(*arguments, DrawSignature(),
       CommandRecorder::IndirectExecutionDesc {
         .command_count = CommandRecorder::IndirectCommandCount { kColumns },
         .count_buffer
@@ -411,10 +348,9 @@ NOLINT_TEST_F(IndirectDrawReferenceGpuTest, CountBufferLimitsTheDraws)
 NOLINT_TEST_F(IndirectDrawReferenceGpuTest, DeviceLocalSegmentsAtOffsets)
 {
   constexpr auto kSegmentSize = kColumns / 2U;
-  const auto commands = ConstantCommands();
-  const auto arguments
-    = MakeDeviceArguments(std::span<const ConstantDrawCommand>(commands),
-      "Indirect reference device draws");
+  const auto commands = ColumnCommands();
+  const auto arguments = MakeDeviceArguments(
+    std::span<const DrawCommand>(commands), "Indirect reference device draws");
   const auto counts = std::array { kSegmentSize, kSegmentSize - 1U };
   const auto count_buffer = MakeDeviceArguments(
     std::span<const std::uint32_t>(counts), "Indirect reference device counts");
@@ -423,13 +359,12 @@ NOLINT_TEST_F(IndirectDrawReferenceGpuTest, DeviceLocalSegmentsAtOffsets)
     CHECK_F(recorder.AdoptKnownResourceState(*arguments));
     CHECK_F(recorder.AdoptKnownResourceState(*count_buffer));
     for (std::uint32_t segment = 0U; segment < counts.size(); ++segment) {
-      recorder.ExecuteIndirect(*arguments, RootConstantsCommand(),
+      recorder.ExecuteIndirect(*arguments, DrawSignature(),
         CommandRecorder::IndirectExecutionDesc {
           .argument_buffer_range = BufferRange {
             static_cast<std::uint64_t>(segment) * kSegmentSize
-              * sizeof(ConstantDrawCommand),
-            static_cast<std::uint64_t>(kSegmentSize)
-              * sizeof(ConstantDrawCommand),
+              * sizeof(DrawCommand),
+            static_cast<std::uint64_t>(kSegmentSize) * sizeof(DrawCommand),
           },
           .command_count
           = CommandRecorder::IndirectCommandCount { kSegmentSize },

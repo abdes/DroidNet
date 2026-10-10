@@ -93,43 +93,6 @@
 
 namespace {
 
-template <typename TDesc>
-auto ResolveIndirectRootParameterIndex(const TDesc& pipeline_desc,
-  const oxygen::graphics::CommandRecorder::IndirectPushConstantsDesc& desc,
-  std::string_view pipeline_kind) -> std::uint32_t
-{
-  if (desc.value_count == 0U) {
-    throw std::runtime_error(
-      "Indirect push constants must write at least one 32-bit value");
-  }
-
-  for (const auto& binding : pipeline_desc.RootBindings()) {
-    if (binding.binding_slot_desc != desc.binding_slot_desc) {
-      continue;
-    }
-
-    const auto* push_constants
-      = std::get_if<oxygen::graphics::PushConstantsBinding>(&binding.data);
-    if (push_constants == nullptr) {
-      throw std::runtime_error(
-        "Indirect push-constant binding must refer to a PushConstantsBinding");
-    }
-
-    const auto required_32bit_value_count
-      = desc.dest_offset_in_32bit_values + desc.value_count;
-    if (required_32bit_value_count > push_constants->size) {
-      throw std::runtime_error("Indirect push-constant write exceeds the "
-                               "pipeline push-constants range");
-    }
-
-    return binding.GetRootParameterIndex();
-  }
-
-  throw std::runtime_error(std::string("Failed to resolve ")
-    + std::string(pipeline_kind)
-    + " indirect push-constant binding slot to a root parameter index");
-}
-
 auto ParseFrameCaptureProvider(const std::string& value)
   -> oxygen::FrameCaptureProvider
 {
@@ -613,6 +576,7 @@ Graphics::Graphics(const SerializedBackendConfig& config,
     enable_vsync_ = jsonConfig.at("enable_vsync").get<bool>();
   }
   AddComponent<DeviceManager>(desc);
+  CreateIndirectCommandSignatures();
   if (frame_capture_config.provider
     == oxygen::FrameCaptureProvider::kRenderDoc) {
     frame_capture_controller_
@@ -701,99 +665,38 @@ auto Graphics::GetFormatPlaneCount(DXGI_FORMAT format) const -> uint8_t
   return plane_count;
 }
 
-auto Graphics::GetOrCreateIndirectCommandSignature(
-  const graphics::CommandRecorder::IndirectCommandDesc& command_desc,
-  ID3D12RootSignature* current_root_signature, const size_t pipeline_hash) const
+auto Graphics::CreateIndirectCommandSignatures() -> void
+{
+  using Kind = graphics::CommandRecorder::IndirectCommandKind;
+  const auto create
+    = [this](const Kind kind, const D3D12_INDIRECT_ARGUMENT_TYPE type,
+        const UINT byte_stride) -> void {
+    const auto argument = D3D12_INDIRECT_ARGUMENT_DESC { .Type = type };
+    const auto desc = D3D12_COMMAND_SIGNATURE_DESC {
+      .ByteStride = byte_stride,
+      .NumArgumentDescs = 1U,
+      .pArgumentDescs = &argument,
+      .NodeMask = 0U,
+    };
+    // No argument changes root arguments, so the signature takes no root
+    // signature and works with every pipeline.
+    auto& signature
+      = indirect_command_signatures_.at(static_cast<std::size_t>(kind));
+    oxygen::windows::ThrowOnFailed(GetCurrentDevice()->CreateCommandSignature(
+                                     &desc, nullptr, IID_PPV_ARGS(&signature)),
+      "Failed to create indirect command signature");
+  };
+  create(Kind::kDraw, D3D12_INDIRECT_ARGUMENT_TYPE_DRAW,
+    sizeof(D3D12_DRAW_ARGUMENTS));
+  create(Kind::kDispatch, D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH,
+    sizeof(D3D12_DISPATCH_ARGUMENTS));
+}
+
+auto Graphics::GetIndirectCommandSignature(
+  const graphics::CommandRecorder::IndirectCommandKind kind) const
   -> ID3D12CommandSignature*
 {
-  detail::IndirectCommandSignatureKey key {
-    .kind = command_desc.kind,
-    .inline_root_constants = std::nullopt,
-    .root_signature = nullptr,
-  };
-
-  if (command_desc.push_constants.has_value()) {
-    if (current_root_signature == nullptr) {
-      throw std::runtime_error("Indirect commands with inline push constants "
-                               "require a bound root signature");
-    }
-    if (pipeline_hash == 0U) {
-      throw std::runtime_error("Indirect commands with inline push constants "
-                               "require a bound pipeline state");
-    }
-
-    const auto& cache = GetComponent<detail::PipelineStateCache>();
-    const auto root_parameter_index = [&] -> std::uint32_t {
-      switch (command_desc.kind) {
-      case graphics::CommandRecorder::IndirectCommandKind::kDraw:
-        return ResolveIndirectRootParameterIndex(
-          cache.GetPipelineDesc<GraphicsPipelineDesc>(pipeline_hash),
-          *command_desc.push_constants, "graphics");
-      case graphics::CommandRecorder::IndirectCommandKind::kDispatch:
-        return ResolveIndirectRootParameterIndex(
-          cache.GetPipelineDesc<ComputePipelineDesc>(pipeline_hash),
-          *command_desc.push_constants, "compute");
-      }
-      throw std::runtime_error("Unsupported indirect command kind");
-    }();
-
-    key.inline_root_constants = detail::InlineRootConstantsDesc {
-      .root_parameter_index = root_parameter_index,
-      .dest_offset_in_32bit_values
-      = command_desc.push_constants->dest_offset_in_32bit_values,
-      .value_count = command_desc.push_constants->value_count,
-    };
-    key.root_signature = current_root_signature;
-  }
-
-  if (const auto it = indirect_command_signatures_.find(key);
-    it != indirect_command_signatures_.end()) {
-    return it->second.Get();
-  }
-
-  auto args = std::array<D3D12_INDIRECT_ARGUMENT_DESC, 2> {};
-  UINT arg_count = 0U;
-  UINT byte_stride = 0U;
-
-  if (key.inline_root_constants.has_value()) {
-    const auto& constants = *key.inline_root_constants;
-    args.at(arg_count).Type = D3D12_INDIRECT_ARGUMENT_TYPE_CONSTANT;
-    args.at(arg_count).Constant.RootParameterIndex
-      = constants.root_parameter_index;
-    args.at(arg_count).Constant.DestOffsetIn32BitValues
-      = constants.dest_offset_in_32bit_values;
-    args.at(arg_count).Constant.Num32BitValuesToSet = constants.value_count;
-    ++arg_count;
-    byte_stride += sizeof(std::uint32_t) * constants.value_count;
-  }
-
-  switch (key.kind) {
-  case graphics::CommandRecorder::IndirectCommandKind::kDraw:
-    args.at(arg_count).Type = D3D12_INDIRECT_ARGUMENT_TYPE_DRAW;
-    byte_stride += sizeof(D3D12_DRAW_ARGUMENTS);
-    break;
-  case graphics::CommandRecorder::IndirectCommandKind::kDispatch:
-    args.at(arg_count).Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
-    byte_stride += sizeof(D3D12_DISPATCH_ARGUMENTS);
-    break;
-  }
-  ++arg_count;
-
-  D3D12_COMMAND_SIGNATURE_DESC desc {};
-  desc.ByteStride = byte_stride;
-  desc.NumArgumentDescs = arg_count;
-  desc.pArgumentDescs = args.data();
-  desc.NodeMask = 0U;
-
-  Microsoft::WRL::ComPtr<ID3D12CommandSignature> signature;
-  if (FAILED(GetCurrentDevice()->CreateCommandSignature(
-        &desc, key.root_signature, IID_PPV_ARGS(&signature)))) {
-    throw std::runtime_error("Failed to create indirect command signature");
-  }
-
-  auto* const raw_signature = signature.Get();
-  indirect_command_signatures_.emplace(key, std::move(signature));
-  return raw_signature;
+  return indirect_command_signatures_.at(static_cast<std::size_t>(kind)).Get();
 }
 
 auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,

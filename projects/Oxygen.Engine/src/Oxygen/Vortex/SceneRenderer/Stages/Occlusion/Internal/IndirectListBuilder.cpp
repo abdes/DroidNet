@@ -410,14 +410,6 @@ auto IndirectListBuilder::Draw(graphics::CommandRecorder& recorder,
   }
   const auto command_desc = graphics::CommandRecorder::IndirectCommandDesc {
     .kind = graphics::CommandRecorder::IndirectCommandKind::kDraw,
-    .push_constants = graphics::CommandRecorder::IndirectPushConstantsDesc {
-      .binding_slot_desc = graphics::BindingSlotDesc {
-        .register_index = bindless_d3d12::kRootConstantsRegister,
-        .register_space = bindless_d3d12::kRootConstantsSpace,
-      },
-      .dest_offset_in_32bit_values = 0U,
-      .value_count = 1U,
-    },
   };
   for (const auto& [segment_index, segment] :
     std::views::enumerate(list.segments)) {

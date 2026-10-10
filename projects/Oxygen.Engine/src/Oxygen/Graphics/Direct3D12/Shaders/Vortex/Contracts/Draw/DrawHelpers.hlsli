@@ -7,6 +7,21 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_DRAWHELPERS_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_DRAWHELPERS_HLSLI
 
+// Mesh draw index contract
+//
+// Every mesh draw, direct or indirect, carries the index of its DrawMetadata
+// entry in StartInstanceLocation: DrawInstanced(count, instances, 0,
+// draw_index), or D3D12_DRAW_ARGUMENTS.StartInstanceLocation in an
+// ExecuteIndirect argument buffer with a plain DRAW command signature. The
+// vertex shader reads it as
+//
+//     uint draw_index : SV_StartInstanceLocation
+//
+// (Shader Model 6.8) and forwards it to the pixel shader as a nointerpolation
+// DRAW_INDEX attribute. SV_InstanceID still counts from zero within a draw, so
+// instanced draws index their instance data as before. Root constants carry
+// pass data only; no command signature changes root arguments.
+
 #include "Vortex/Contracts/Draw/DrawFrameBindings.hlsli"
 #include "Vortex/Contracts/Draw/VelocityPublications.hlsli"
 #include "Vortex/Contracts/View/ViewHistoryFrameBindings.hlsli"

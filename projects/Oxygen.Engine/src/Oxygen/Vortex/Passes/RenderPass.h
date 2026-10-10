@@ -16,7 +16,6 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::graphics {
@@ -26,7 +25,6 @@ class CommandRecorder;
 namespace oxygen::vortex {
 
 struct RenderContext;
-struct DrawMetadata;
 
 class RenderPass : public Composition, public Named {
 public:
@@ -73,15 +71,6 @@ protected:
     -> co::Co<> = 0;
   virtual auto OnExecute(graphics::CommandRecorder& recorder) -> void = 0;
   virtual auto DoExecute(graphics::CommandRecorder& recorder) -> co::Co<> = 0;
-
-  OXGN_VRTX_API auto BindDrawIndexConstant(graphics::CommandRecorder& recorder,
-    std::uint32_t draw_index) const -> void;
-  OXGN_VRTX_API auto EmitDrawRange(graphics::CommandRecorder& recorder,
-    const DrawMetadata* records, uint32_t begin, uint32_t end,
-    uint32_t& emitted_count, uint32_t& skipped_invalid,
-    uint32_t& draw_errors) const noexcept -> void;
-  OXGN_VRTX_API auto IssueDrawCallsOverPass(graphics::CommandRecorder& recorder,
-    PassMaskBit pass_bit) const noexcept -> void;
 
 private:
   const RenderContext* context_ { nullptr };
