@@ -161,6 +161,7 @@ m_gtest_program(
   OcclusionModule
   SOURCES
     "Fakes/Graphics.h"
+    "Occlusion/HistorySlotAllocator_test.cpp"
     "OcclusionModule_test.cpp"
 )
 

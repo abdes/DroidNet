@@ -8,6 +8,7 @@
 
 #include <cstdint>
 
+#include <glm/mat4x4.hpp>
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Data/GeometryIndices.h>
@@ -38,6 +39,8 @@ struct RenderItemData {
 
   // Cached scene state
   glm::vec4 world_bounding_sphere { 0.0F, 0.0F, 0.0F, 0.0F };
+  // Node world matrix; places the mesh views' local culling boxes.
+  glm::mat4 world_transform { 1.0F };
 
   // View-relative squared distance used for transparent sorting.
   // This is computed during ScenePrep collection when a view is available.

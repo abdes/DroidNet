@@ -99,10 +99,14 @@
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
+#include <Oxygen/Vortex/Types/ResidentContentRevision.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 #include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
+#include <Oxygen/Vortex/Types/ViewOutline.h>
+#include <Oxygen/Vortex/Types/ViewOverlay.h>
+#include <Oxygen/Vortex/Types/ViewPick.h>
 #include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Vortex/Upload/RingBufferStaging.h>
@@ -1735,6 +1739,12 @@ auto Renderer::PublishCurrentViewPreSceneFrameBindings(
       .velocity_draw_metadata_slot = BindlessVelocityDrawMetadataSlot {
         prepared_frame->bindless_velocity_draw_metadata_slot,
       },
+      .cull_records_slot = BindlessDrawCullRecordsSlot {
+        prepared_frame->bindless_draw_cull_records_slot,
+      },
+      ._pad0 = 0U,
+      ._pad1 = 0U,
+      ._pad2 = 0U,
     };
     view_bindings.draw_frame_slot
       = publication_state.draw_frame_bindings_publisher->Publish(
@@ -3090,6 +3100,7 @@ auto Renderer::PruneStalePublishedRuntimeViews(
           .published_view_id = it->second.published_view_id,
           .view_state_handle = it->second.view_state_handle,
           .source_loss = nullptr,
+          .pending_pick = nullptr,
         });
         it = published_runtime_views_by_intent_.erase(it);
       } else {

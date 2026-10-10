@@ -53,6 +53,7 @@ public:
     std::vector<PreparedSceneFrame::PartitionRange> partitions;
     std::vector<glm::vec4> draw_bounding_spheres;
     std::vector<PreparedSceneFrame::DrawSource> draw_sources;
+    std::vector<DrawCullRecord> draw_cull_records;
     std::vector<ShadowCasterSource> shadow_caster_sources;
     std::vector<MaterialShadingConstants> shadow_materials;
     std::vector<std::uint64_t> shadow_texture_revisions;

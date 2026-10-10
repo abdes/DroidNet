@@ -11,6 +11,8 @@
 #include <span>
 #include <vector>
 
+#include <glm/mat4x4.hpp>
+#include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
 
 #include <Oxygen/Base/Macros.h>
@@ -24,6 +26,7 @@
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
+#include <Oxygen/Vortex/Types/DrawCullRecord.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -39,6 +42,7 @@ class MaterialBinder; // fwd
 
 namespace oxygen::data {
 class Mesh; // fwd
+class MeshView; // fwd
 }
 
 namespace oxygen::vortex::resources {
@@ -80,8 +84,7 @@ public:
     observer_ptr<vortex::upload::StagingProvider> provider,
     observer_ptr<vortex::resources::GeometryUploader> geometry,
     observer_ptr<vortex::resources::MaterialBinder> materials,
-    observer_ptr<vortex::upload::InlineTransfersCoordinator>
-      inline_transfers) noexcept;
+    observer_ptr<vortex::upload::InlineTransfersCoordinator> inline_transfers);
 
   OXYGEN_MAKE_NON_COPYABLE(DrawMetadataEmitter)
   OXYGEN_MAKE_NON_MOVABLE(DrawMetadataEmitter)
@@ -135,6 +138,13 @@ public:
     return shadow_caster_sources_;
   }
 
+  //! Returns one culling record per draw metadata record, in draw order.
+  OXGN_VRTX_NDAPI auto GetDrawCullRecords() const noexcept
+    -> std::span<const DrawCullRecord>;
+
+  //! Shader-visible SRV index for the per-draw culling-record buffer.
+  OXGN_VRTX_NDAPI auto GetDrawCullRecordsSrvIndex() -> ShaderVisibleIndex;
+
   //! Shader-visible SRV index for the per-draw bounding-sphere buffer.
   OXGN_VRTX_NDAPI auto GetDrawBoundingSpheresSrvIndex() -> ShaderVisibleIndex;
 
@@ -152,6 +162,7 @@ public:
     data::AssetKey geometry_asset_key;
     data::LodIndex lod_index;
     data::SubmeshIndex submesh_index;
+    data::MeshViewIndex mesh_view_index;
   };
 
   OXGN_VRTX_NDAPI auto GetVelocityPublicationSources() const noexcept
@@ -204,7 +215,18 @@ private:
     return cpu_;
   }
 
+  //! World-space AABB of one draw, used to bound instanced batches.
+  struct WorldBox {
+    glm::vec3 min { 0.0F };
+    glm::vec3 max { 0.0F };
+    bool finite { false };
+  };
+
   auto BuildSortingAndPartitions() -> void;
+
+  //! Records the culling box of draw `index` from its mesh view's bounds.
+  auto EmitCullRecord(std::uint32_t index, const data::MeshView& view,
+    PassMask pass_mask, const glm::mat4& world) -> void;
 
   //! Applies GPU instancing by batching identical draws.
   /*!
@@ -235,6 +257,12 @@ private:
   std::vector<VelocityPublicationSource> velocity_publication_sources_;
   vortex::upload::TransientStructuredBuffer draw_bounds_buffer_;
   ShaderVisibleIndex draw_bounds_srv_index_ { kInvalidShaderVisibleIndex };
+  std::vector<DrawCullRecord> draw_cull_records_;
+  std::vector<WorldBox> draw_world_boxes_;
+  vortex::upload::TransientStructuredBuffer draw_cull_records_buffer_;
+  ShaderVisibleIndex draw_cull_records_srv_index_ {
+    kInvalidShaderVisibleIndex
+  };
 
   // GPU instancing: per-instance transform indices
   std::vector<std::uint32_t> instance_transform_indices_;

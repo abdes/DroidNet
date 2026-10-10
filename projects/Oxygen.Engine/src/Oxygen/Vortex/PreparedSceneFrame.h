@@ -14,6 +14,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
+#include <Oxygen/Vortex/Types/DrawCullRecord.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/MaterialShadingConstants.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
@@ -69,12 +70,17 @@ struct PreparedSceneFrame {
 
   //! The scene node and geometry slot that produced a draw. Instanced draws
   //! batch only one node's instances, so every draw has exactly one source.
+  //! A draw's identity across frames: node, LOD, submesh and mesh view.
   struct DrawSource {
     scene::NodeHandle node {};
+    data::LodIndex lod_index;
     data::SubmeshIndex submesh_index;
+    data::MeshViewIndex mesh_view_index;
   };
   //! One per draw metadata record, in draw order.
   std::span<const DrawSource> draw_sources;
+  //! One per draw metadata record, in draw order.
+  std::span<const DrawCullRecord> draw_cull_records;
   std::span<const ShadowCasterSource> shadow_caster_sources;
   std::span<const MaterialShadingConstants> shadow_materials;
   std::span<const std::uint64_t> shadow_texture_revisions;
@@ -105,6 +111,9 @@ struct PreparedSceneFrame {
     oxygen::kInvalidShaderVisibleIndex
   };
   oxygen::ShaderVisibleIndex bindless_draw_metadata_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
+  oxygen::ShaderVisibleIndex bindless_draw_cull_records_slot {
     oxygen::kInvalidShaderVisibleIndex
   };
   oxygen::ShaderVisibleIndex bindless_draw_bounds_slot {

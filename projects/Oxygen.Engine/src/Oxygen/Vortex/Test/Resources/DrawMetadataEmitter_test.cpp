@@ -9,7 +9,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <memory>
+#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string_view>
@@ -18,6 +20,7 @@
 #include <vector>
 
 #include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/matrix_transform.hpp>
 #include <glm/ext/vector_float4.hpp>
 #include <glm/geometric.hpp>
 #include <glm/gtc/matrix_access.hpp>
@@ -30,6 +33,7 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -41,6 +45,7 @@
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/Types/DrawCullRecord.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
@@ -1356,15 +1361,16 @@ NOLINT_TEST_F(DrawMetadataEmitterTest,
   const auto draw_bounds = Emitter().GetDrawBoundingSpheres();
   ASSERT_EQ(draw_bounds.size(), 1U);
 
-  const auto shadow_sources = Emitter().GetShadowCasterSources();
+  const auto shadow_sources
+    = Emitter().GetShadowCasterSources() | std::ranges::to<std::vector>();
   ASSERT_EQ(shadow_sources.size(), 2U);
-  EXPECT_EQ(shadow_sources[0].bounds, item_a.world_bounding_sphere);
-  EXPECT_EQ(shadow_sources[1].bounds, item_b.world_bounding_sphere);
-  EXPECT_EQ(shadow_sources[0].draw.transform_index, 41U);
-  EXPECT_EQ(shadow_sources[1].draw.transform_index, 42U);
-  EXPECT_GT(shadow_sources[0].geometry_content_revision, 0U);
-  EXPECT_EQ(shadow_sources[0].geometry_content_revision,
-    shadow_sources[1].geometry_content_revision);
+  EXPECT_EQ(shadow_sources.at(0).bounds, item_a.world_bounding_sphere);
+  EXPECT_EQ(shadow_sources.at(1).bounds, item_b.world_bounding_sphere);
+  EXPECT_EQ(shadow_sources.at(0).draw.transform_index, 41U);
+  EXPECT_EQ(shadow_sources.at(1).draw.transform_index, 42U);
+  EXPECT_GT(shadow_sources.at(0).geometry_content_revision, 0U);
+  EXPECT_EQ(shadow_sources.at(0).geometry_content_revision,
+    shadow_sources.at(1).geometry_content_revision);
 
   const auto& merged = draw_bounds.front();
   EXPECT_GT(merged.w, 0.0F);
@@ -1505,6 +1511,175 @@ NOLINT_TEST(DrawMetadataEmitterStandaloneTest,
   EXPECT_TRUE(ResolvedVirtualPageOverlapsBoundingSphere(page, touching_sphere));
   EXPECT_FALSE(ResolvedVirtualPageOverlapsBoundingSphere(page, outside_sphere));
   EXPECT_TRUE(ResolvedVirtualPageOverlapsBoundingSphere(page, invalid_sphere));
+}
+
+//=== Culling records ===-----------------------------------------------------//
+
+//! Two mesh views with distinct cooked bounds in one submesh.
+[[nodiscard]] auto MakeBoundedTwoViewGeometryRef()
+  -> oxygen::vortex::sceneprep::GeometryRef
+{
+  namespace d = oxygen::data;
+  auto vertices = std::vector<d::Vertex>(6);
+  vertices.at(0).position = { -1.0F, 0.0F, 0.0F };
+  vertices.at(1).position = { 0.0F, 1.0F, 0.0F };
+  vertices.at(2).position = { 1.0F, 0.0F, 0.0F };
+  vertices.at(3).position = { -1.0F, -1.0F, 0.0F };
+  vertices.at(4).position = { 0.0F, 0.0F, 0.0F };
+  vertices.at(5).position = { 1.0F, -1.0F, 0.0F };
+  const auto indices = std::vector<std::uint32_t> { 0U, 1U, 2U, 3U, 4U, 5U };
+
+  auto submesh = d::pak::geometry::SubMeshDesc {};
+  submesh.mesh_view_count = 2U;
+  submesh.bounding_box_min[0] = -1.0F;
+  submesh.bounding_box_min[1] = -1.0F;
+  submesh.bounding_box_max[0] = 1.0F;
+  submesh.bounding_box_max[1] = 1.0F;
+  auto upper = d::pak::geometry::MeshViewDesc {
+    .first_index = 0U,
+    .index_count = 3U,
+    .first_vertex = 0U,
+    .vertex_count = 3U,
+  };
+  upper.bounding_box_min[0] = -1.0F;
+  upper.bounding_box_max[0] = 1.0F;
+  upper.bounding_box_max[1] = 1.0F;
+  auto lower = d::pak::geometry::MeshViewDesc {
+    .first_index = 3U,
+    .index_count = 3U,
+    .first_vertex = 3U,
+    .vertex_count = 3U,
+  };
+  lower.bounding_box_min[0] = -1.0F;
+  lower.bounding_box_min[1] = -1.0F;
+  lower.bounding_box_max[0] = 1.0F;
+
+  auto mesh = d::MeshBuilder(d::LodIndex {}, "DrawMetadataEmitter.BoundedViews")
+                .WithVertices(vertices)
+                .WithIndices(indices)
+                .BeginSubMesh("bounded", d::MaterialAsset::CreateDefault())
+                .WithDescriptor(submesh)
+                .WithMeshView(upper)
+                .WithMeshView(lower)
+                .EndSubMesh()
+                .Build();
+  return oxygen::vortex::sceneprep::GeometryRef {
+    .asset_key = d::AssetKey {},
+    .lod_index = d::LodIndex {},
+    .mesh = std::shared_ptr<const d::Mesh>(std::move(mesh)),
+  };
+}
+
+[[nodiscard]] auto MakeCullItem(
+  const oxygen::vortex::sceneprep::GeometryRef& geometry,
+  const std::uint32_t transform_index, const glm::mat4& world)
+  -> oxygen::vortex::sceneprep::RenderItemData
+{
+  using oxygen::vortex::sceneprep::TransformHandle;
+  auto item = oxygen::vortex::sceneprep::RenderItemData {};
+  item.geometry = geometry;
+  item.submesh_index = oxygen::data::SubmeshIndex {};
+  item.transform_handle = TransformHandle {
+    TransformHandle::Index { transform_index },
+    TransformHandle::Generation { 1U },
+  };
+  item.world_transform = world;
+  item.world_bounding_sphere
+    = glm::vec4(glm::vec3(glm::column(world, 3)), 2.0F);
+  return item;
+}
+
+class DrawCullRecordTest : public DrawMetadataEmitterTest {
+protected:
+  //! Makes `geometry` resident, then starts the frame that emits draws.
+  auto PrepareGeometry(const oxygen::vortex::sceneprep::GeometryRef& geometry)
+    -> void
+  {
+    BeginFrame(SequenceNumber { 1U }, Slot { 0U });
+    const auto handle = GeoUploader().GetOrAllocate(geometry);
+    GeoUploader().EnsureFrameResources();
+    BeginFrame(SequenceNumber { 2U }, Slot { 1U });
+    ASSERT_NE(GeoUploader().GetShaderVisibleIndices(handle).vertex_srv_index,
+      oxygen::kInvalidShaderVisibleIndex);
+  }
+};
+
+//! A single draw carries its mesh view's local box; the transform stays out
+//! of the record, and each view keeps its own identity.
+NOLINT_TEST_F(DrawCullRecordTest, RecordsCarryMeshViewLocalBounds)
+{
+  using oxygen::vortex::DrawCullFlagBits;
+  using oxygen::vortex::ToUnderlying;
+  const auto geometry = MakeBoundedTwoViewGeometryRef();
+  ASSERT_NO_FATAL_FAILURE(PrepareGeometry(geometry));
+  const auto world
+    = glm::translate(glm::mat4(1.0F), glm::vec3(10.0F, 0.0F, 0.0F));
+
+  Emitter().EmitDrawMetadata(MakeCullItem(geometry, 5U, world));
+  Emitter().SortAndPartition();
+
+  const auto records
+    = Emitter().GetDrawCullRecords() | std::ranges::to<std::vector>();
+  const auto sources = Emitter().GetVelocityPublicationSources()
+    | std::ranges::to<std::vector>();
+  ASSERT_EQ(records.size(), 2U);
+  ASSERT_EQ(sources.size(), 2U);
+  for (std::size_t draw = 0; draw < records.size(); ++draw) {
+    const auto& record = records.at(draw);
+    const auto upper = sources.at(draw).mesh_view_index.get() == 0U;
+    EXPECT_EQ(record.box_center, glm::vec3(0.0F, upper ? 0.5F : -0.5F, 0.0F));
+    EXPECT_EQ(record.box_extent, glm::vec3(1.0F, 0.5F, 0.0F));
+    EXPECT_EQ(record.history_slot, oxygen::vortex::kNoHistorySlot);
+    EXPECT_EQ(record.flags,
+      ToUnderlying(DrawCullFlagBits::kOpaque)
+        | ToUnderlying(DrawCullFlagBits::kShadowCaster)
+        | ToUnderlying(DrawCullFlagBits::kMainViewVisible));
+  }
+  EXPECT_NE(sources.at(0).mesh_view_index, sources.at(1).mesh_view_index);
+  EXPECT_EQ(sources.at(0).lod_index, oxygen::data::LodIndex {});
+}
+
+//! An instanced batch is culled by the world AABB union of its instances.
+NOLINT_TEST_F(DrawCullRecordTest, InstancedBatchCarriesWorldBoxUnion)
+{
+  using oxygen::vortex::DrawCullFlagBits;
+  using oxygen::vortex::ToUnderlying;
+  const auto geometry = MakeSimpleGeometryRef("DrawMetadataEmitter.CullBatch");
+  ASSERT_NO_FATAL_FAILURE(PrepareGeometry(geometry));
+
+  Emitter().EmitDrawMetadata(MakeCullItem(geometry, 41U,
+    glm::translate(glm::mat4(1.0F), glm::vec3(-5.0F, 0.0F, 0.0F))));
+  Emitter().EmitDrawMetadata(MakeCullItem(geometry, 42U,
+    glm::translate(glm::mat4(1.0F), glm::vec3(7.0F, 0.0F, 0.0F))));
+  Emitter().SortAndPartition();
+
+  // The triangle spans [-1, 1] x [0, 1]; the instances sit at x = -5 and 7.
+  const auto records = Emitter().GetDrawCullRecords();
+  ASSERT_EQ(records.size(), 1U);
+  const auto& record = records.front();
+  EXPECT_NE(record.flags & ToUnderlying(DrawCullFlagBits::kWorldSpaceBox), 0U);
+  EXPECT_EQ(record.flags & ToUnderlying(DrawCullFlagBits::kAlwaysVisible), 0U);
+  EXPECT_EQ(record.box_center, glm::vec3(1.0F, 0.5F, 0.0F));
+  EXPECT_EQ(record.box_extent, glm::vec3(7.0F, 0.5F, 0.0F));
+}
+
+//! A draw whose bounds are not finite is never culled.
+NOLINT_TEST_F(DrawCullRecordTest, NonFiniteBoundsAreAlwaysVisible)
+{
+  using oxygen::vortex::DrawCullFlagBits;
+  using oxygen::vortex::ToUnderlying;
+  const auto geometry = MakeSimpleGeometryRef("DrawMetadataEmitter.CullNaN");
+  ASSERT_NO_FATAL_FAILURE(PrepareGeometry(geometry));
+  const auto world = glm::translate(glm::mat4(1.0F),
+    glm::vec3(std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F));
+
+  Emitter().EmitDrawMetadata(MakeCullItem(geometry, 7U, world));
+  Emitter().SortAndPartition();
+
+  const auto records = Emitter().GetDrawCullRecords();
+  ASSERT_EQ(records.size(), 1U);
+  EXPECT_NE(
+    records.front().flags & ToUnderlying(DrawCullFlagBits::kAlwaysVisible), 0U);
 }
 
 } // namespace

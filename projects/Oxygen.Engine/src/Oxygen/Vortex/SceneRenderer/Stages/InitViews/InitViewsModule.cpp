@@ -235,16 +235,19 @@ namespace {
     return publication;
   }
 
+  //! The transient buffers that receive one view's velocity publications.
+  struct VelocityPublicationBuffers {
+    upload::TransientStructuredBuffer* current_material_wpo;
+    upload::TransientStructuredBuffer* previous_material_wpo;
+    upload::TransientStructuredBuffer* current_motion_vector_status;
+    upload::TransientStructuredBuffer* previous_motion_vector_status;
+    upload::TransientStructuredBuffer* velocity_draw_metadata;
+  };
+
   auto PublishVelocityPublications(Renderer& renderer,
     const scenesync::PublishedRuntimeMotionSnapshot* const snapshot,
     const observer_ptr<resources::DrawMetadataEmitter> draw_emitter,
-    upload::TransientStructuredBuffer* const current_material_wpo_buffer,
-    upload::TransientStructuredBuffer* const previous_material_wpo_buffer,
-    upload::TransientStructuredBuffer* const
-      current_motion_vector_status_buffer,
-    upload::TransientStructuredBuffer* const
-      previous_motion_vector_status_buffer,
-    upload::TransientStructuredBuffer* const velocity_draw_metadata_buffer,
+    const VelocityPublicationBuffers& buffers,
     InitViewsModule::PreparedSceneViewStorage& storage) -> void
   {
     storage.current_skinned_pose_publications.clear();
@@ -400,31 +403,31 @@ namespace {
     prepared_frame.velocity_draw_metadata = storage.velocity_draw_metadata;
 
     prepared_frame.bindless_current_material_wpo_slot
-      = PublishTransientPayload(current_material_wpo_buffer,
+      = PublishTransientPayload(buffers.current_material_wpo,
         std::span<const MaterialWpoPublication>(
           storage.current_material_wpo_publications.data(),
           storage.current_material_wpo_publications.size()),
         "current material WPO");
     prepared_frame.bindless_previous_material_wpo_slot
-      = PublishTransientPayload(previous_material_wpo_buffer,
+      = PublishTransientPayload(buffers.previous_material_wpo,
         std::span<const MaterialWpoPublication>(
           storage.previous_material_wpo_publications.data(),
           storage.previous_material_wpo_publications.size()),
         "previous material WPO");
     prepared_frame.bindless_current_motion_vector_status_slot
-      = PublishTransientPayload(current_motion_vector_status_buffer,
+      = PublishTransientPayload(buffers.current_motion_vector_status,
         std::span<const MotionVectorStatusPublication>(
           storage.current_motion_vector_status_publications.data(),
           storage.current_motion_vector_status_publications.size()),
         "current motion-vector status");
     prepared_frame.bindless_previous_motion_vector_status_slot
-      = PublishTransientPayload(previous_motion_vector_status_buffer,
+      = PublishTransientPayload(buffers.previous_motion_vector_status,
         std::span<const MotionVectorStatusPublication>(
           storage.previous_motion_vector_status_publications.data(),
           storage.previous_motion_vector_status_publications.size()),
         "previous motion-vector status");
     prepared_frame.bindless_velocity_draw_metadata_slot
-      = PublishTransientPayload(velocity_draw_metadata_buffer,
+      = PublishTransientPayload(buffers.velocity_draw_metadata,
         std::span<const VelocityDrawMetadata>(
           storage.velocity_draw_metadata.data(),
           storage.velocity_draw_metadata.size()),
@@ -443,7 +446,8 @@ namespace {
     const auto* const source_data
       // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
       = reinterpret_cast<const float*>(source.data());
-    destination.assign(source_data, source_data + float_count);
+    const auto floats = std::span(source_data, float_count);
+    destination.assign(floats.begin(), floats.end());
     return { destination.data(), destination.size() };
   }
 
@@ -459,6 +463,7 @@ namespace {
     storage.partitions.clear();
     storage.draw_bounding_spheres.clear();
     storage.draw_sources.clear();
+    storage.draw_cull_records.clear();
 
     auto& prepared_frame = storage.prepared_frame;
     prepared_frame = {};
@@ -480,8 +485,8 @@ namespace {
         const auto* const draw_metadata
           // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
           = reinterpret_cast<const DrawMetadata*>(draw_metadata_bytes.data());
-        storage.draw_metadata.assign(
-          draw_metadata, draw_metadata + draw_metadata_count);
+        const auto records = std::span(draw_metadata, draw_metadata_count);
+        storage.draw_metadata.assign(records.begin(), records.end());
       }
       prepared_frame.draw_metadata_bytes
         = std::as_bytes(std::span(storage.draw_metadata));
@@ -499,10 +504,16 @@ namespace {
       for (const auto& source : draw_sources) {
         storage.draw_sources.push_back(PreparedSceneFrame::DrawSource {
           .node = source.node_handle,
+          .lod_index = source.lod_index,
           .submesh_index = source.submesh_index,
+          .mesh_view_index = source.mesh_view_index,
         });
       }
       prepared_frame.draw_sources = storage.draw_sources;
+      const auto cull_records = draw_emitter->GetDrawCullRecords();
+      storage.draw_cull_records.assign(
+        cull_records.begin(), cull_records.end());
+      prepared_frame.draw_cull_records = storage.draw_cull_records;
       const auto shadow_sources = draw_emitter->GetShadowCasterSources();
       storage.shadow_caster_sources.assign(
         shadow_sources.begin(), shadow_sources.end());
@@ -511,6 +522,8 @@ namespace {
         = draw_emitter->GetDrawMetadataSrvIndex();
       prepared_frame.bindless_draw_bounds_slot
         = draw_emitter->GetDrawBoundingSpheresSrvIndex();
+      prepared_frame.bindless_draw_cull_records_slot
+        = draw_emitter->GetDrawCullRecordsSrvIndex();
       prepared_frame.bindless_instance_data_slot
         = draw_emitter->GetInstanceDataSrvIndex();
     }
@@ -673,6 +686,7 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
     storage.partitions.clear();
     storage.draw_bounding_spheres.clear();
     storage.draw_sources.clear();
+    storage.draw_cull_records.clear();
     storage.prepared_frame = {};
   }
 
@@ -680,7 +694,7 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   if (scene == nullptr || scene_prep_ == nullptr) {
     return;
   }
-  if (std::ranges::none_of(ctx.frame_views, [](const auto& view) {
+  if (std::ranges::none_of(ctx.frame_views, [](const auto& view) -> auto {
         return view.is_scene_view && view.resolved_view != nullptr;
       })) {
     return;
@@ -714,7 +728,7 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
       *scene, *view_entry.resolved_view, ctx.frame_sequence, scene_prep_state_);
     scene_prep_->FinalizeView(scene_prep_state_);
     if (next_preparation_revision_
-      == (std::numeric_limits<std::uint64_t>::max)()) {
+      == std::numeric_limits<std::uint64_t>::max()) {
       throw std::overflow_error("Scene preparation revisions exhausted");
     }
     PublishPreparedSceneFrame(scene_prep_state_, storage);
@@ -732,10 +746,16 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
       = ResolvePreparedFrameExposure(*scene, view_entry, post_process_);
     PublishVelocityPublications(renderer_, runtime_motion_snapshot,
       scene_prep_state_.GetDrawMetadataEmitter(),
-      current_material_wpo_buffer_.get(), previous_material_wpo_buffer_.get(),
-      current_motion_vector_status_buffer_.get(),
-      previous_motion_vector_status_buffer_.get(),
-      velocity_draw_metadata_buffer_.get(), storage);
+      VelocityPublicationBuffers {
+        .current_material_wpo = current_material_wpo_buffer_.get(),
+        .previous_material_wpo = previous_material_wpo_buffer_.get(),
+        .current_motion_vector_status
+        = current_motion_vector_status_buffer_.get(),
+        .previous_motion_vector_status
+        = previous_motion_vector_status_buffer_.get(),
+        .velocity_draw_metadata = velocity_draw_metadata_buffer_.get(),
+      },
+      storage);
     storage.published = true;
   }
 

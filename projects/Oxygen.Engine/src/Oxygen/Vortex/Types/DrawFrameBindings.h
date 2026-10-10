@@ -48,6 +48,7 @@ OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessMaterialWpoPublicationsSlot);
 OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(
   BindlessMotionVectorStatusPublicationsSlot);
 OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessVelocityDrawMetadataSlot);
+OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessDrawCullRecordsSlot);
 
 #undef OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE
 
@@ -70,9 +71,14 @@ struct alignas(packing::kShaderDataFieldAlignment) DrawFrameBindings {
   BindlessMotionVectorStatusPublicationsSlot current_motion_vector_status_slot;
   BindlessMotionVectorStatusPublicationsSlot previous_motion_vector_status_slot;
   BindlessVelocityDrawMetadataSlot velocity_draw_metadata_slot;
+  //! One `DrawCullRecord` per draw, in draw-metadata order.
+  BindlessDrawCullRecordsSlot cull_records_slot;
+  std::uint32_t _pad0 { 0U };
+  std::uint32_t _pad1 { 0U };
+  std::uint32_t _pad2 { 0U };
 };
 
-static_assert(sizeof(DrawFrameBindings) == 64);
+static_assert(sizeof(DrawFrameBindings) == 80);
 static_assert(alignof(DrawFrameBindings) == packing::kShaderDataFieldAlignment);
 static_assert(
   sizeof(DrawFrameBindings) % packing::kShaderDataFieldAlignment == 0);

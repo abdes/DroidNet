@@ -27,6 +27,10 @@ struct DrawFrameBindings
     uint current_motion_vector_status_slot;
     uint previous_motion_vector_status_slot;
     uint velocity_draw_metadata_slot;
+    uint cull_records_slot;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
 };
 
 static DrawFrameBindings LoadDrawFrameBindings(uint slot)
@@ -48,6 +52,10 @@ static DrawFrameBindings LoadDrawFrameBindings(uint slot)
     invalid_bindings.current_motion_vector_status_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.previous_motion_vector_status_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.velocity_draw_metadata_slot = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings.cull_records_slot = K_INVALID_BINDLESS_INDEX;
+    invalid_bindings._pad0 = 0u;
+    invalid_bindings._pad1 = 0u;
+    invalid_bindings._pad2 = 0u;
 
     if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
         return invalid_bindings;

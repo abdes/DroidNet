@@ -4,7 +4,7 @@ Status: `in_progress`
 
 | Field     | Summary                                                                                                                  |
 | --------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Outcome   | S2 validated; S1 landed, owner re-cook pending. Design approved 2026-10-10.                                              |
+| Outcome   | S1-S3 validated. Design approved 2026-10-10.                                                                             |
 | Remaining | S1–S7 below; tracked as [VX-OCC-04](../../OPEN_ITEMS.md#p2--engineering-follow-ups).                                     |
 | Evidence  | Per-slice evidence in the [slice table](#slices); gates in [occlusion.md §8](../../lld/occlusion.md#8-validation-gates). |
 
@@ -78,15 +78,15 @@ If a build reports a missing `impl-*.ninja`, reconfigure the tree with
 
 ## Slices
 
-| ID  | Deliverable                                                  | Depends | State         | Commit                |
-| --- | ------------------------------------------------------------ | ------- | ------------- | --------------------- |
-| S1  | Geometry v4: mesh-view bounds, cooker split, `MeshViewIndex` | —       | `in_progress` | owner re-cook pending |
-| S2  | Tiled HZB build and occlusion pyramid                        | —       | `validated`   | see git log           |
-| S3  | Culling records, history keys and slot allocator             | S1      | `planned`     |                       |
-| S4  | GPU indirect lists for camera passes, occlusion off          | S3      | `planned`     |                       |
-| S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `planned`     |                       |
-| S6  | Shadow-view lists and two-phase occlusion                    | S5      | `planned`     |                       |
-| S7  | Default on, capture gate, closeout                           | S6      | `planned`     |                       |
+| ID  | Deliverable                                                  | Depends | State       | Commit      |
+| --- | ------------------------------------------------------------ | ------- | ----------- | ----------- |
+| S1  | Geometry v4: mesh-view bounds, cooker split, `MeshViewIndex` | —       | `validated` | see git log |
+| S2  | Tiled HZB build and occlusion pyramid                        | —       | `validated` | see git log |
+| S3  | Culling records, history keys and slot allocator             | S1      | `validated` | see git log |
+| S4  | GPU indirect lists for camera passes, occlusion off          | S3      | `planned`   |             |
+| S5  | Camera two-phase occlusion; old tester removed               | S2, S4  | `planned`   |             |
+| S6  | Shadow-view lists and two-phase occlusion                    | S5      | `planned`   |             |
+| S7  | Default on, capture gate, closeout                           | S6      | `planned`   |             |
 
 S1 and S2 are independent; either may go first.
 
@@ -142,7 +142,7 @@ Design: [geometry §9.5](../../../content-pipeline/geometry-cooking-architecture
 - [x] **Verify.** All `Oxygen.Data.*`, `Oxygen.Content.*` and `Oxygen.Cooker.*`
       suites pass, plus `Oxygen.Scene.*` and the Vortex CPU suites that load
       geometry. The FBX and glTF import suites are run by the owner only.
-- [ ] **Owner.** Re-cook editor projects and local content; confirm the editor
+- [x] **Owner.** Re-cook editor projects and local content; confirm the editor
       loads them.
 
 ## S2 — Tiled HZB Build
@@ -190,25 +190,27 @@ Design: [hzb.md §4](../../lld/hzb.md#4-build-algorithm),
 
 Design: [occlusion.md §2](../../lld/occlusion.md#2-data-model).
 
-- [ ] **Culling record.** `Vortex/Types/DrawCullRecord.h` plus the HLSL mirror
+- [x] **Culling record.** `Vortex/Types/DrawCullRecord.h` plus the HLSL mirror
       `Contracts/Draw/DrawCullRecord.hlsli`, with layout static asserts.
-- [ ] **Emitter.** `Vortex/Resources/DrawMetadataEmitter.{h,cpp}`:
+- [x] **Emitter.** `Vortex/Resources/DrawMetadataEmitter.{h,cpp}`:
   - one record per draw from the mesh view's local bounds
   - world AABB union for instanced batches
   - `kAlwaysVisible` for non-finite bounds
   - `cull_records_slot` in `DrawFrameBindings`, C++ and HLSL, filled in
     `Vortex/Renderer.cpp` (draw frame bindings)
-- [ ] **Draw sources.** `Vortex/PreparedSceneFrame.h`: `DrawSource` gains
+  - `history_slot` stays `kNoHistorySlot` until S5 assigns slots per
+    culling view
+- [x] **Draw sources.** `Vortex/PreparedSceneFrame.h`: `DrawSource` gains
       `data::LodIndex` and `data::MeshViewIndex`.
-- [ ] **Extraction.** `Vortex/ScenePrep/Extractors.h` and the emitter's view
+- [x] **Extraction.** `Vortex/ScenePrep/Extractors.h` and the emitter's view
       loop set them.
-- [ ] **Slot allocator.**
+- [x] **Slot allocator.**
       `Vortex/SceneRenderer/Stages/Occlusion/Internal/HistorySlotAllocator.{h,cpp}`
       (per culling view, CPU only).
-- [ ] **New tests.** [occlusion.md §8](../../lld/occlusion.md#8-validation-gates)
+- [x] **New tests.** [occlusion.md §8](../../lld/occlusion.md#8-validation-gates)
       gates 1–2, in `Oxygen.Vortex.OcclusionModule.Tests` and
       `Oxygen.Vortex.DrawMetadataEmitter.Tests`.
-- [ ] **Verify.** `Oxygen.Vortex.ScenePrep.Tests`,
+- [x] **Verify.** `Oxygen.Vortex.ScenePrep.Tests`,
       `Oxygen.Vortex.DrawMetadataEmitter.Tests`,
       `Oxygen.Vortex.OcclusionModule.Tests`.
 
