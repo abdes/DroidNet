@@ -15,7 +15,10 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Workspace;
 
-/// <summary>Owns the active project's embedded-engine preferences and their user-local persistence.</summary>
+/// <summary>
+///     Owns the active project's embedded-engine preferences, the user's ground grid preferences and their user-local
+///     persistence.
+/// </summary>
 /// <param name="engine">The shared embedded runtime.</param>
 /// <param name="settings">A dedicated settings manager, accessed serially by this service.</param>
 /// <param name="projects">The current project lifetime.</param>
@@ -32,13 +35,19 @@ public sealed partial class PreviewSettingsService(
 {
     /// <summary>The project-scoped preference identity in the editor database.</summary>
     internal static readonly SettingKey<Preferences> Key = new("WorldEditor", "Preview");
+
+    /// <summary>The user's ground grid preference identity, shared by every project.</summary>
+    internal static readonly SettingKey<GroundGridSettings> GroundGridKey = new("WorldEditor", "GroundGrid");
     private readonly ILogger logger = loggerFactory?.CreateLogger<PreviewSettingsService>() ?? NullLogger<PreviewSettingsService>.Instance;
 
     // Serializes database access across project switches and toolbar writes.
     private Task persistence = Task.CompletedTask;
     private Task savePump = Task.CompletedTask;
     private PendingWrite? pendingWrite;
+    private GroundGridSettings? pendingGroundGridWrite;
     private bool saveFailed;
+    private bool groundGridSaveFailed;
+    private GroundGridPreferences? groundGrid;
     private ProjectContext? activeProject;
     private ProjectContext? requestedProject;
     private long activation;
@@ -87,6 +96,9 @@ public sealed partial class PreviewSettingsService(
         set => this.Apply(this.accepted with { LoggingVerbosity = value }, nameof(this.LoggingVerbosity));
     }
 
+    /// <summary>Gets the user's ground grid preferences, applied to every viewport pane.</summary>
+    public GroundGridPreferences GroundGrid => this.groundGrid ??= new(this);
+
     /// <summary>Restores project preferences before starting or resuming its preview.</summary>
     /// <param name="project">The workspace's project.</param>
     /// <returns>The restoration task.</returns>
@@ -120,6 +132,45 @@ public sealed partial class PreviewSettingsService(
     /// <summary>Waits for accepted preference writes before closing the workspace.</summary>
     /// <returns>The pending persistence task.</returns>
     public Task FlushAsync() => this.persistence;
+
+    /// <summary>Applies an edited ground grid to every pane and saves it for the user.</summary>
+    /// <param name="requested">The edited grid; values outside the engine's ranges are clamped.</param>
+    internal void ApplyGroundGrid(GroundGridSettings requested)
+    {
+        var next = GroundGridRanges.Clamp(requested, this.GroundGrid.Value);
+        if (next == this.GroundGrid.Value && !this.groundGridSaveFailed)
+        {
+            if (next != requested)
+            {
+                this.GroundGrid.Refresh();
+            }
+
+            return;
+        }
+
+        try
+        {
+            engine.SetGroundGrid(next);
+        }
+        catch (InvalidOperationException failure)
+        {
+            this.GroundGrid.Refresh();
+            this.ReportFailure(
+                projects.ActiveProject,
+                "GROUND_GRID_REJECTED",
+                "Ground grid setting was not applied",
+                "The runtime rejected the ground grid setting.",
+                failure);
+            return;
+        }
+
+        this.GroundGrid.Accept(next);
+        this.pendingGroundGridWrite = next;
+        if (this.savePump.IsCompleted)
+        {
+            this.persistence = this.savePump = this.SavePendingAfterAsync(this.persistence);
+        }
+    }
 
     private static SettingContext Context(ProjectContext project)
         => SettingContext.Project(Path.TrimEndingDirectorySeparator(Path.GetFullPath(project.ProjectRoot)).ToUpperInvariant());
@@ -162,6 +213,7 @@ public sealed partial class PreviewSettingsService(
                 failure);
         }
 
+        var grid = await this.LoadGroundGridAsync(project).ConfigureAwait(true);
         if (activation != this.activation || !ReferenceEquals(project, projects.ActiveProject))
         {
             return;
@@ -169,9 +221,32 @@ public sealed partial class PreviewSettingsService(
 
         this.MaxFrameRateCap = maxCap;
         this.ApplyToEngine(previous: null, value);
+        engine.SetGroundGrid(grid);
         this.activeProject = project;
         this.saveFailed = false;
+        this.groundGridSaveFailed = false;
         this.SetAccepted(value);
+        this.GroundGrid.Accept(grid);
+    }
+
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A preference-store failure is reported and uses the default grid without preventing project authoring.")]
+    private async Task<GroundGridSettings> LoadGroundGridAsync(ProjectContext project)
+    {
+        try
+        {
+            var stored = await settings.LoadSettingAsync(GroundGridKey, SettingContext.Application()).ConfigureAwait(true);
+            return stored is null ? new GroundGridSettings() : GroundGridRanges.Restore(stored);
+        }
+        catch (Exception failure)
+        {
+            this.ReportFailure(
+                project,
+                "GROUND_GRID_LOAD_FAILED",
+                "Ground grid preferences could not be restored",
+                "Using the default ground grid. See Details for the storage error.",
+                failure);
+            return new GroundGridSettings();
+        }
     }
 
     private void Apply(Preferences requested, string property)
@@ -243,23 +318,46 @@ public sealed partial class PreviewSettingsService(
     private async Task SavePendingAfterAsync(Task previous)
     {
         await previous.ConfigureAwait(true);
-        while (this.pendingWrite is { } write)
+        while (this.pendingWrite is not null || this.pendingGroundGridWrite is not null)
         {
-            this.pendingWrite = null;
-            try
+            if (this.pendingWrite is { } write)
             {
-                await settings.SaveSettingAsync(Key, write.Value, Context(write.Project)).ConfigureAwait(true);
-                this.saveFailed = false;
+                this.pendingWrite = null;
+                try
+                {
+                    await settings.SaveSettingAsync(Key, write.Value, Context(write.Project)).ConfigureAwait(true);
+                    this.saveFailed = false;
+                }
+                catch (Exception failure)
+                {
+                    this.saveFailed = true;
+                    this.ReportFailure(
+                        write.Project,
+                        "SAVE_FAILED",
+                        "Preview preferences were not saved",
+                        "Applied for this session, but could not save. Change the setting again to retry.",
+                        failure);
+                }
             }
-            catch (Exception failure)
+
+            if (this.pendingGroundGridWrite is { } grid)
             {
-                this.saveFailed = true;
-                this.ReportFailure(
-                    write.Project,
-                    "SAVE_FAILED",
-                    "Preview preferences were not saved",
-                    "Applied for this session, but could not save. Change the setting again to retry.",
-                    failure);
+                this.pendingGroundGridWrite = null;
+                try
+                {
+                    await settings.SaveSettingAsync(GroundGridKey, grid, SettingContext.Application()).ConfigureAwait(true);
+                    this.groundGridSaveFailed = false;
+                }
+                catch (Exception failure)
+                {
+                    this.groundGridSaveFailed = true;
+                    this.ReportFailure(
+                        projects.ActiveProject,
+                        "GROUND_GRID_SAVE_FAILED",
+                        "Ground grid preferences were not saved",
+                        "Applied for this session, but could not save. Change the setting again to retry.",
+                        failure);
+                }
             }
         }
     }

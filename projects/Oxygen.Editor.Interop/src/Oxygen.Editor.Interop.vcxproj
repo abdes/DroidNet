@@ -199,6 +199,7 @@
     <ClInclude Include="Commands\SetMaterialOverrideCommand.h" />
     <ClInclude Include="Commands\SetViewCameraControlModeCommand.h" />
     <ClInclude Include="Commands\SetViewCameraMovementSpeedCommand.h" />
+    <ClInclude Include="Commands\SetGroundGridConfigCommand.h" />
     <ClInclude Include="Commands\SetViewRenderOptionsCommand.h" />
     <ClInclude Include="Commands\FrameViewCommand.h" />
     <ClInclude Include="EditorModule\ViewFraming.h" />
@@ -263,6 +264,7 @@
     <ClInclude Include="Utils\TokenHelpers.h" />
     <ClInclude Include="Views\ViewIdManaged.h" />
     <ClInclude Include="Views\ColorManaged.h" />
+    <ClInclude Include="Views\GroundGridConfigManaged.h" />
     <ClInclude Include="Views\CameraControlModeManaged.h" />
     <ClInclude Include="Views\CameraViewPresetManaged.h" />
     <ClInclude Include="Views\ViewModeManaged.h" />

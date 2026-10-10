@@ -20,4 +20,12 @@ public sealed partial class EngineService
         this.EnsureIsReadyOrRunning().SetAlwaysRenderPanes(alwaysRender);
         this.LogAlwaysRenderPanesSet(alwaysRender);
     }
+
+    /// <inheritdoc/>
+    public void SetGroundGrid(GroundGridSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        this.EnsureIsReadyOrRunning().SetGroundGrid(settings);
+        this.LogGroundGridSet(settings);
+    }
 }

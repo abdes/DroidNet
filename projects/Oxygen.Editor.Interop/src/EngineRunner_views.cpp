@@ -32,6 +32,7 @@
 #include <Views/CameraViewPresetManaged.h>
 #include <Views/ViewModeManaged.h>
 #include <Views/EditorCameraStateManaged.h>
+#include <Views/GroundGridConfigManaged.h>
 #include <Views/ViewConfigManaged.h>
 #include <Views/ViewIdManaged.h>
 
@@ -902,6 +903,38 @@ namespace Oxygen::Interop {
 
     editor_module_opt->get().SetAlwaysRenderPanes(alwaysRender);
     return true;
+  }
+
+  auto EngineRunner::TrySetGroundGridConfig(EngineContext^ ctx,
+    GroundGridConfigManaged^ config) -> bool
+  {
+    if (ctx == nullptr) {
+      throw gcnew ArgumentNullException("ctx");
+    }
+    if (config == nullptr) {
+      throw gcnew ArgumentNullException("config");
+    }
+    if (disposed_) {
+      return false;
+    }
+
+    auto native_ctx = ctx->NativePtr();
+    if (!native_ctx || !native_ctx->engine) {
+      return false;
+    }
+    auto editor_module_opt =
+      native_ctx->engine->GetModule<oxygen::interop::module::EditorModule>();
+    if (!editor_module_opt) {
+      return false;
+    }
+
+    try {
+      editor_module_opt->get().SetGroundGridConfig(config->ToNative());
+      return true;
+    }
+    catch (...) {
+      return false;
+    }
   }
 
   auto EngineRunner::TrySetTransformGizmo(EngineContext^ ctx,

@@ -19,6 +19,7 @@
 #include <Views/CameraViewPresetManaged.h>
 #include <Views/ViewModeManaged.h>
 #include <Views/EditorCameraStateManaged.h>
+#include <Views/GroundGridConfigManaged.h>
 #include <Views/ViewCameraPoseManaged.h>
 #include <Views/ViewIdManaged.h>
 #include <Views/ViewPickManaged.h>
@@ -356,6 +357,14 @@ namespace Oxygen::Interop {
     /// pane renders only when what it shows may have changed.
     /// </summary>
     auto TrySetAlwaysRenderPanes(EngineContext^ ctx, bool alwaysRender) -> bool;
+
+    /// <summary>
+    /// Sets how every view draws the ground grid. The engine applies it at its
+    /// next frame and every pane renders again; a view's own grid toggle still
+    /// hides it in that view.
+    /// </summary>
+    auto TrySetGroundGridConfig(EngineContext^ ctx,
+      GroundGridConfigManaged^ config) -> bool;
 
     /// <summary>
     /// Shows the transform gizmo of <paramref name="targets"/> in every editing

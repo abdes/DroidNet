@@ -228,6 +228,9 @@
     <ClInclude Include="Views\ColorManaged.h">
       <Filter>Views</Filter>
     </ClInclude>
+    <ClInclude Include="Views\GroundGridConfigManaged.h">
+      <Filter>Views</Filter>
+    </ClInclude>
     <ClInclude Include="EditorModule\SurfaceFramebuffers.h">
       <Filter>EditorModule</Filter>
     </ClInclude>
@@ -328,6 +331,9 @@
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Commands\SetViewCameraMovementSpeedCommand.h">
+      <Filter>Commands</Filter>
+    </ClInclude>
+    <ClInclude Include="Commands\SetGroundGridConfigCommand.h">
       <Filter>Commands</Filter>
     </ClInclude>
     <ClInclude Include="Commands\SetViewRenderOptionsCommand.h">

@@ -133,6 +133,23 @@ an unknown version is discarded and the defaults apply. The active tool is
 per scene and not persisted. Nothing is written to scene documents, history
 or cooked output.
 
+### 5.4 Ground grid preferences
+
+`PreviewSettingsService` owns the typed `WorldEditor/GroundGrid` setting with
+`SettingScope.Application`, so the grid follows the user across projects. It
+holds every `GroundGridConfig` field the engine renders: enabled, spacing,
+major lines every N, line, major and axis thickness, fade start and power,
+horizon boost, origin, smooth motion and its time, and the minor, major, X
+axis, Y axis and origin colors. Each edit applies to every viewport pane
+through `IEngineService.SetGroundGrid`, which reaches
+`Renderer::SetGroundGridConfig` as an editor command that re-renders every
+pane. The setting is restored and applied with the project preview
+preferences whenever the workspace starts or resumes the engine. An edit
+outside the engine's range is clamped, and one that is not a number keeps the
+current value; a stored value outside its range restores its default. A
+pane's own grid toggle is viewport state (§5.2) and still hides the grid in
+that pane. Nothing is written to scene documents, history or cooked output.
+
 ## 6. Mutation Path Rules
 
 ### 6.1 Scene-scope settings
@@ -216,7 +233,8 @@ Settings reach the user through these surfaces:
 - Inspector Environment section — scene-scope per
   [environment-authoring.md](./environment-authoring.md).
 - Scene editor toolbar Settings flyout — VSync, frame-rate cap, idle
-  viewports and `EngineLoggingVerbosity` (writes per §6.2).
+  viewports and `EngineLoggingVerbosity` (writes per §6.2), and the ground
+  grid (§5.4), with a reset to the engine defaults.
 - Output/log panel + inline error placement — for `Settings`-domain
   diagnostics.
 
@@ -235,6 +253,7 @@ V0.1 does not introduce a generic Settings panel.
 | Workspace Hide                        | yes        | through the project-scoped typed setting in §5.1 |
 | Viewport layout and camera state      | yes        | through the project-scoped typed setting in §5.2 |
 | Transform tool space and snapping     | yes        | through the application-scoped setting in §5.3   |
+| Ground grid                           | yes        | through the application-scoped setting in §5.4   |
 
 Scene round trips preserve typed values, identities and source modes through
 `SceneJsonContext`. Text formatting need not match input bytes. The property

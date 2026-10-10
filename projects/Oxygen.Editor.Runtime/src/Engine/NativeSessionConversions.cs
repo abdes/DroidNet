@@ -63,6 +63,31 @@ internal static class NativeSessionConversions
             (RuntimeHelperHandle)(int)gizmoEvent.HelperHandle,
             gizmoEvent.Value);
 
+    /// <summary>Creates the native ground grid config.</summary>
+    /// <param name="settings">The editor's grid settings.</param>
+    /// <returns>The native configuration.</returns>
+    public static GroundGridConfigManaged ToNative(GroundGridSettings settings) => new()
+    {
+        Enabled = settings.Enabled,
+        Spacing = settings.Spacing,
+        MajorEvery = (uint)Math.Max(settings.MajorEvery, 1),
+        LineThickness = settings.LineThickness,
+        MajorThickness = settings.MajorThickness,
+        AxisThickness = settings.AxisThickness,
+        FadeStart = settings.FadeStart,
+        FadePower = settings.FadePower,
+        HorizonBoost = settings.HorizonBoost,
+        OriginX = settings.OriginX,
+        OriginY = settings.OriginY,
+        SmoothMotion = settings.SmoothMotion,
+        SmoothTime = settings.SmoothTime,
+        MinorColor = ToNative(settings.MinorColor),
+        MajorColor = ToNative(settings.MajorColor),
+        AxisColorX = ToNative(settings.AxisColorX),
+        AxisColorY = ToNative(settings.AxisColorY),
+        OriginColor = ToNative(settings.OriginColor),
+    };
+
     /// <summary>Creates the native view config while preserving omitted native defaults.</summary>
     /// <param name="config">The editor's managed view request.</param>
     /// <returns>The native configuration.</returns>
@@ -109,4 +134,6 @@ internal static class NativeSessionConversions
 
         return native;
     }
+
+    private static ColorManaged ToNative(RuntimeColor color) => new(color.R, color.G, color.B, color.A);
 }

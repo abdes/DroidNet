@@ -131,6 +131,11 @@ public interface IEngineService : IAsyncDisposable
     /// <throws cref="InvalidOperationException">If the service is neither ready nor running.</throws>
     public void SetAlwaysRenderPanes(bool alwaysRender);
 
+    /// <summary>Sets how every viewport draws the ground grid; a viewport's own grid toggle still hides it there.</summary>
+    /// <param name="settings">The grid settings, within the ranges the engine accepts.</param>
+    /// <throws cref="InvalidOperationException">If the service is neither ready nor running.</throws>
+    public void SetGroundGrid(GroundGridSettings settings);
+
     /// <summary>Suspends preview and drains native I/O while retaining accepted immutable roots and their readers.</summary>
     /// <returns>The native suspension acknowledgement.</returns>
     public Task SuspendCookedContentAsync();

@@ -271,6 +271,118 @@ public sealed class PreviewSettingsTests
         _ = service.FrameRateCap.Should().Be(45);
     }
 
+    /// <summary>
+    ///     The ground grid starts at the engine defaults, every edit reaches the engine, and the grid is the user's:
+    ///     another project restores it too.
+    /// </summary>
+    /// <returns>The verification task.</returns>
+    [TestMethod]
+    public async Task GroundGridIsSavedForTheUserAcrossProjects()
+    {
+        var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
+        await using var lifetime = fixture.ConfigureAwait(false);
+        var service = fixture.CreateService();
+        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        fixture.Engine.Verify(value => value.SetGroundGrid(new GroundGridSettings()), Times.Once());
+
+        service.GroundGrid.Spacing = 2.5f;
+        service.GroundGrid.MajorEvery = 4;
+        service.GroundGrid.SmoothMotion = false;
+        service.GroundGrid.MinorColor = Windows.UI.Color.FromArgb(255, 255, 0, 0);
+        await service.FlushAsync().ConfigureAwait(false);
+        var edited = new GroundGridSettings
+        {
+            Spacing = 2.5f,
+            MajorEvery = 4,
+            SmoothMotion = false,
+            MinorColor = new(1f, 0f, 0f, 1f),
+        };
+        fixture.Engine.Verify(value => value.SetGroundGrid(edited), Times.Once());
+
+        var second = Fixture.ProjectAt("Second");
+        fixture.Projects.Activate(second);
+        var reopened = fixture.CreateService();
+        await reopened.RestoreAsync(second).ConfigureAwait(false);
+        _ = reopened.GroundGrid.Spacing.Should().Be(2.5f);
+        _ = reopened.GroundGrid.MajorEvery.Should().Be(4);
+        _ = reopened.GroundGrid.SmoothMotion.Should().BeFalse();
+        _ = reopened.GroundGrid.MinorColor.Should().Be(Windows.UI.Color.FromArgb(255, 255, 0, 0));
+        fixture.Engine.Verify(value => value.SetGroundGrid(edited), Times.Exactly(2));
+
+        reopened.GroundGrid.ResetToDefaultsCommand.Execute(parameter: null);
+        _ = reopened.GroundGrid.Spacing.Should().Be(1f);
+        fixture.Engine.Verify(value => value.SetGroundGrid(new GroundGridSettings()), Times.Exactly(2));
+        _ = fixture.Results.Should().BeEmpty();
+    }
+
+    /// <summary>An edit outside the engine's range is clamped; one that is not a number keeps the current value.</summary>
+    /// <returns>The verification task.</returns>
+    [TestMethod]
+    public async Task GroundGridEditsAreClampedToTheEngineRanges()
+    {
+        var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
+        await using var lifetime = fixture.ConfigureAwait(false);
+        var service = fixture.CreateService();
+        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+
+        service.GroundGrid.Spacing = -3f;
+        service.GroundGrid.MajorEvery = 0;
+        service.GroundGrid.LineThickness = -0.5f;
+        service.GroundGrid.SmoothTime = 0f;
+        service.GroundGrid.FadePower = float.NaN;
+
+        _ = service.GroundGrid.Spacing.Should().Be(GroundGridRanges.MinSpacing);
+        _ = service.GroundGrid.MajorEvery.Should().Be(1);
+        _ = service.GroundGrid.LineThickness.Should().Be(0f);
+        _ = service.GroundGrid.SmoothTime.Should().Be(GroundGridRanges.MinSmoothTime);
+        _ = service.GroundGrid.FadePower.Should().Be(2f);
+    }
+
+    /// <summary>A stored grid value outside its range restores its default; the valid ones are kept.</summary>
+    /// <returns>The verification task.</returns>
+    [TestMethod]
+    public async Task UnusableStoredGroundGridValuesRestoreDefaults()
+    {
+        var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
+        await using var lifetime = fixture.ConfigureAwait(false);
+        var store = new EditorSettingsManager(fixture.Database);
+        await store.SaveSettingAsync(
+            PreviewSettingsService.GroundGridKey,
+            new GroundGridSettings { Spacing = -1f, MajorEvery = 0, HorizonBoost = 0.8f, AxisColorX = new(2f, 0f, 0f, 1f) },
+            SettingContext.Application()).ConfigureAwait(false);
+
+        var service = fixture.CreateService();
+        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+
+        var restored = new GroundGridSettings { HorizonBoost = 0.8f };
+        fixture.Engine.Verify(value => value.SetGroundGrid(restored), Times.Once());
+        _ = service.GroundGrid.Spacing.Should().Be(1f);
+        _ = service.GroundGrid.HorizonBoost.Should().Be(0.8f);
+        _ = fixture.Results.Should().BeEmpty();
+    }
+
+    /// <summary>
+    ///     A color picker showing the stored color as 8-bit channels writes it back unchanged, which keeps the precise
+    ///     stored channels and saves nothing.
+    /// </summary>
+    /// <returns>The verification task.</returns>
+    [TestMethod]
+    public async Task UnchangedPickerColorKeepsTheStoredChannels()
+    {
+        var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
+        await using var lifetime = fixture.ConfigureAwait(false);
+        var service = fixture.CreateService();
+        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+
+        service.GroundGrid.MinorColor = service.GroundGrid.MinorColor;
+        await service.FlushAsync().ConfigureAwait(false);
+
+        fixture.Engine.Verify(value => value.SetGroundGrid(It.IsAny<GroundGridSettings>()), Times.Once());
+        var reopened = fixture.CreateService();
+        await reopened.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        fixture.Engine.Verify(value => value.SetGroundGrid(new GroundGridSettings()), Times.Exactly(2));
+    }
+
     /// <summary>The stored shape before vsync, the frame-rate cap and pane rendering were preferences.</summary>
     private sealed record EarlierPreferences(Guid ProjectId, int TargetFps, int LoggingVerbosity);
 

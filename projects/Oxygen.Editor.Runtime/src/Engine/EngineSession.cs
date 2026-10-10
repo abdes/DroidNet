@@ -53,6 +53,10 @@ internal abstract class EngineSession
     /// <param name="alwaysRender">Whether idle panes render too.</param>
     public abstract void SetAlwaysRenderPanes(bool alwaysRender);
 
+    /// <summary>Sets how every viewport draws the ground grid.</summary>
+    /// <param name="settings">The grid settings.</param>
+    public abstract void SetGroundGrid(GroundGridSettings settings);
+
     /// <summary>Waits for native loop exit cleanup, including dispatcher work.</summary>
     /// <returns>The operation completion task.</returns>
     public abstract Task CompleteLoopCleanupAsync();

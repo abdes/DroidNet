@@ -23,6 +23,8 @@ internal sealed class FakeEngineSession : EngineSession
 
     public bool AlwaysRenderPanes { get; private set; }
 
+    public GroundGridSettings? GroundGrid { get; private set; }
+
     public override IRuntimeCommandTransport Commands { get; } = Moq.Mock.Of<IRuntimeCommandTransport>();
 
     public override bool HasRunner => this.hasRunner;
@@ -73,6 +75,8 @@ internal sealed class FakeEngineSession : EngineSession
     public override void SetVSyncEnabled(bool enabled) => this.VSyncEnabled = enabled;
 
     public override void SetAlwaysRenderPanes(bool alwaysRender) => this.AlwaysRenderPanes = alwaysRender;
+
+    public override void SetGroundGrid(GroundGridSettings settings) => this.GroundGrid = settings;
 
     public override Task CompleteLoopCleanupAsync()
     {

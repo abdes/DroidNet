@@ -20,6 +20,7 @@
 #include <Commands/DestroyViewCommand.h>
 #include <Commands/FrameViewCommand.h>
 #include <Commands/HideViewCommand.h>
+#include <Commands/SetGroundGridConfigCommand.h>
 #include <Commands/SetViewCameraControlModeCommand.h>
 #include <Commands/SetViewCameraMovementSpeedCommand.h>
 #include <Commands/SetViewCameraPresetCommand.h>
@@ -1288,6 +1289,11 @@ namespace oxygen::interop::module {
 
   void EditorModule::SetAlwaysRenderPanes(const bool always_render) noexcept {
     always_render_panes_.store(always_render, std::memory_order_relaxed);
+  }
+
+  void EditorModule::SetGroundGridConfig(
+    const vortex::GroundGridConfig& config) {
+    command_queue_.Enqueue(std::make_unique<SetGroundGridConfigCommand>(config));
   }
 
   auto EditorModule::OnPreRender(observer_ptr<engine::FrameContext> context) -> co::Co<> {

@@ -24,6 +24,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/ResidentContentRevision.h>
 #include <Oxygen/Vortex/Types/ViewOutline.h>
 #include <Oxygen/Vortex/Types/ViewPick.h>
@@ -258,6 +259,10 @@ namespace oxygen::interop::module {
     //! Renders every visible pane each frame instead of only the panes whose
     //! content may have changed. Callable from any thread.
     void SetAlwaysRenderPanes(bool always_render) noexcept;
+
+    //! Sets how every view draws the ground grid; applied at the next scene
+    //! mutation phase, and every pane renders again.
+    void SetGroundGridConfig(const vortex::GroundGridConfig& config);
 
     //! The selection's transform gizmo: its settings and event listener are
     //! callable from any thread.

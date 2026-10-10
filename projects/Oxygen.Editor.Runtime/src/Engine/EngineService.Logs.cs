@@ -82,6 +82,12 @@ public sealed partial class EngineService
     [LoggerMessage(Level = LogLevel.Information, Message = "Viewport panes always render: {AlwaysRender}.")]
     private partial void LogAlwaysRenderPanesSet(bool alwaysRender);
 
+    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Ground grid set: {Settings}.")]
+    private static partial void LogGroundGridSet(ILogger logger, GroundGridSettings settings);
+
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void LogGroundGridSet(GroundGridSettings settings) => LogGroundGridSet(this.logger, settings);
+
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,

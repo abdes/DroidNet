@@ -179,6 +179,338 @@
                                         NumberValue="{x:Bind ViewModel.PreviewSettings.LoggingVerbosity, Mode=TwoWay, Converter={StaticResource IntFloatConverter}}"
                                         WithPadding="False" />
                                 </Grid>
+                                <TextBlock
+                                    Margin="0,16,0,4"
+                                    Style="{StaticResource BodyStrongTextBlockStyle}"
+                                    Text="Ground grid" />
+                                <ToggleSwitch
+                                    Header="Show grid"
+                                    IsOn="{x:Bind ViewModel.PreviewSettings.GroundGrid.Enabled, Mode=TwoWay}"
+                                    ToolTipService.ToolTip="Show the ground grid in every viewport. A viewport's own grid toggle still hides it there." />
+                                <ToggleSwitch
+                                    Header="Smooth motion"
+                                    IsOn="{x:Bind ViewModel.PreviewSettings.GroundGrid.SmoothMotion, Mode=TwoWay}"
+                                    ToolTipService.ToolTip="Ease the grid after the camera instead of snapping cell by cell." />
+                                <Grid ColumnSpacing="8" RowSpacing="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="88" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock
+                                        VerticalAlignment="Center"
+                                        Text="Spacing"
+                                        ToolTipService.ToolTip="Distance between adjacent grid lines, in world units." />
+                                    <dnc:NumberBox
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Spacing"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="~.###"
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.GroundGrid.Spacing, Mode=TwoWay}"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Row="1"
+                                        VerticalAlignment="Center"
+                                        Text="Major lines every"
+                                        ToolTipService.ToolTip="How many cells lie between major lines." />
+                                    <dnc:NumberBox
+                                        Grid.Row="1"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Major lines every"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="~."
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.GroundGrid.MajorEvery, Mode=TwoWay, Converter={StaticResource IntFloatConverter}}"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Row="2"
+                                        VerticalAlignment="Center"
+                                        Text="Line thickness"
+                                        ToolTipService.ToolTip="Minor line thickness, as a fraction of a cell." />
+                                    <dnc:NumberBox
+                                        Grid.Row="2"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Line thickness"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="~.###"
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.GroundGrid.LineThickness, Mode=TwoWay}"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Row="3"
+                                        VerticalAlignment="Center"
+                                        Text="Major thickness"
+                                        ToolTipService.ToolTip="Major line thickness, as a fraction of a cell." />
+                                    <dnc:NumberBox
+                                        Grid.Row="3"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Major thickness"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="~.###"
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.GroundGrid.MajorThickness, Mode=TwoWay}"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Row="4"
+                                        VerticalAlignment="Center"
+                                        Text="Axis thickness"
+                                        ToolTipService.ToolTip="Axis line thickness, as a fraction of a cell." />
+                                    <dnc:NumberBox
+                                        Grid.Row="4"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Axis thickness"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="~.###"
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.GroundGrid.AxisThickness, Mode=TwoWay}"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Row="5"
+                                        VerticalAlignment="Center"
+                                        Text="Fade start"
+                                        ToolTipService.ToolTip="Distance from the camera at which the grid starts to fade, in world units." />
+                                    <dnc:NumberBox
+                                        Grid.Row="5"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Fade start"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="~.#"
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.GroundGrid.FadeStart, Mode=TwoWay}"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Row="6"
+                                        VerticalAlignment="Center"
+                                        Text="Fade power"
+                                        ToolTipService.ToolTip="How sharply the grid fades with distance." />
+                                    <dnc:NumberBox
+                                        Grid.Row="6"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Fade power"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="~.##"
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.GroundGrid.FadePower, Mode=TwoWay}"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Row="7"
+                                        VerticalAlignment="Center"
+                                        Text="Horizon boost"
+                                        ToolTipService.ToolTip="How much the lines brighten toward the horizon." />
+                                    <dnc:NumberBox
+                                        Grid.Row="7"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Horizon boost"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="~.##"
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.GroundGrid.HorizonBoost, Mode=TwoWay}"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Row="8"
+                                        VerticalAlignment="Center"
+                                        Text="Origin X"
+                                        ToolTipService.ToolTip="X coordinate of the grid origin on the ground plane." />
+                                    <dnc:NumberBox
+                                        Grid.Row="8"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Origin X"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="~.##"
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.GroundGrid.OriginX, Mode=TwoWay}"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Row="9"
+                                        VerticalAlignment="Center"
+                                        Text="Origin Y"
+                                        ToolTipService.ToolTip="Y coordinate of the grid origin on the ground plane." />
+                                    <dnc:NumberBox
+                                        Grid.Row="9"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Origin Y"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="~.##"
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.GroundGrid.OriginY, Mode=TwoWay}"
+                                        WithPadding="False" />
+                                    <TextBlock
+                                        Grid.Row="10"
+                                        VerticalAlignment="Center"
+                                        Text="Smooth motion time"
+                                        ToolTipService.ToolTip="How long the grid takes to ease after the camera, in seconds." />
+                                    <dnc:NumberBox
+                                        Grid.Row="10"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        AutomationProperties.Name="Smooth motion time"
+                                        HorizontalValueAlignment="Right"
+                                        Mask="~.##"
+                                        NumberValue="{x:Bind ViewModel.PreviewSettings.GroundGrid.SmoothTime, Mode=TwoWay}"
+                                        WithPadding="False" />
+                                </Grid>
+                                <TextBlock Margin="0,10,0,4" Text="Colors" />
+                                <Grid ColumnSpacing="8" RowSpacing="4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="88" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <TextBlock VerticalAlignment="Center" Text="Minor lines" />
+                                    <Button
+                                        Grid.Column="1"
+                                        Height="24"
+                                        Padding="2"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Stretch"
+                                        VerticalContentAlignment="Stretch"
+                                        AutomationProperties.Name="Minor lines color">
+                                        <Border CornerRadius="2">
+                                            <Border.Background>
+                                                <SolidColorBrush Color="{x:Bind ViewModel.PreviewSettings.GroundGrid.MinorColor, Mode=OneWay}" />
+                                            </Border.Background>
+                                        </Border>
+                                        <Button.Flyout>
+                                            <Flyout>
+                                                <ColorPicker
+                                                    IsAlphaEnabled="True"
+                                                    IsMoreButtonVisible="False"
+                                                    Color="{x:Bind ViewModel.PreviewSettings.GroundGrid.MinorColor, Mode=TwoWay}" />
+                                            </Flyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                    <TextBlock
+                                        Grid.Row="1"
+                                        VerticalAlignment="Center"
+                                        Text="Major lines" />
+                                    <Button
+                                        Grid.Row="1"
+                                        Grid.Column="1"
+                                        Height="24"
+                                        Padding="2"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Stretch"
+                                        VerticalContentAlignment="Stretch"
+                                        AutomationProperties.Name="Major lines color">
+                                        <Border CornerRadius="2">
+                                            <Border.Background>
+                                                <SolidColorBrush Color="{x:Bind ViewModel.PreviewSettings.GroundGrid.MajorColor, Mode=OneWay}" />
+                                            </Border.Background>
+                                        </Border>
+                                        <Button.Flyout>
+                                            <Flyout>
+                                                <ColorPicker
+                                                    IsAlphaEnabled="True"
+                                                    IsMoreButtonVisible="False"
+                                                    Color="{x:Bind ViewModel.PreviewSettings.GroundGrid.MajorColor, Mode=TwoWay}" />
+                                            </Flyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                    <TextBlock
+                                        Grid.Row="2"
+                                        VerticalAlignment="Center"
+                                        Text="X axis" />
+                                    <Button
+                                        Grid.Row="2"
+                                        Grid.Column="1"
+                                        Height="24"
+                                        Padding="2"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Stretch"
+                                        VerticalContentAlignment="Stretch"
+                                        AutomationProperties.Name="X axis color">
+                                        <Border CornerRadius="2">
+                                            <Border.Background>
+                                                <SolidColorBrush Color="{x:Bind ViewModel.PreviewSettings.GroundGrid.AxisColorX, Mode=OneWay}" />
+                                            </Border.Background>
+                                        </Border>
+                                        <Button.Flyout>
+                                            <Flyout>
+                                                <ColorPicker
+                                                    IsAlphaEnabled="True"
+                                                    IsMoreButtonVisible="False"
+                                                    Color="{x:Bind ViewModel.PreviewSettings.GroundGrid.AxisColorX, Mode=TwoWay}" />
+                                            </Flyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                    <TextBlock
+                                        Grid.Row="3"
+                                        VerticalAlignment="Center"
+                                        Text="Y axis" />
+                                    <Button
+                                        Grid.Row="3"
+                                        Grid.Column="1"
+                                        Height="24"
+                                        Padding="2"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Stretch"
+                                        VerticalContentAlignment="Stretch"
+                                        AutomationProperties.Name="Y axis color">
+                                        <Border CornerRadius="2">
+                                            <Border.Background>
+                                                <SolidColorBrush Color="{x:Bind ViewModel.PreviewSettings.GroundGrid.AxisColorY, Mode=OneWay}" />
+                                            </Border.Background>
+                                        </Border>
+                                        <Button.Flyout>
+                                            <Flyout>
+                                                <ColorPicker
+                                                    IsAlphaEnabled="True"
+                                                    IsMoreButtonVisible="False"
+                                                    Color="{x:Bind ViewModel.PreviewSettings.GroundGrid.AxisColorY, Mode=TwoWay}" />
+                                            </Flyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                    <TextBlock
+                                        Grid.Row="4"
+                                        VerticalAlignment="Center"
+                                        Text="Origin" />
+                                    <Button
+                                        Grid.Row="4"
+                                        Grid.Column="1"
+                                        Height="24"
+                                        Padding="2"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Stretch"
+                                        VerticalContentAlignment="Stretch"
+                                        AutomationProperties.Name="Origin color">
+                                        <Border CornerRadius="2">
+                                            <Border.Background>
+                                                <SolidColorBrush Color="{x:Bind ViewModel.PreviewSettings.GroundGrid.OriginColor, Mode=OneWay}" />
+                                            </Border.Background>
+                                        </Border>
+                                        <Button.Flyout>
+                                            <Flyout>
+                                                <ColorPicker
+                                                    IsAlphaEnabled="True"
+                                                    IsMoreButtonVisible="False"
+                                                    Color="{x:Bind ViewModel.PreviewSettings.GroundGrid.OriginColor, Mode=TwoWay}" />
+                                            </Flyout>
+                                        </Button.Flyout>
+                                    </Button>
+                                </Grid>
+                                <Button
+                                    Margin="0,12,0,0"
+                                    Command="{x:Bind ViewModel.PreviewSettings.GroundGrid.ResetToDefaultsCommand}"
+                                    Content="Reset grid to defaults" />
                             </StackPanel>
                         </Flyout>
                     </dnc:ToolBarButton.Flyout>

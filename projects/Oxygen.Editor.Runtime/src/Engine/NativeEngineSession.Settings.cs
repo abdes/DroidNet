@@ -47,6 +47,15 @@ internal sealed partial class NativeEngineSession
         }
     }
 
+    /// <inheritdoc />
+    public override void SetGroundGrid(GroundGridSettings settings)
+    {
+        if (!this.Runner.TrySetGroundGridConfig(this.context, NativeSessionConversions.ToNative(settings)))
+        {
+            throw new InvalidOperationException("The native editor module is unavailable.");
+        }
+    }
+
     /// <summary>Builds editor startup configuration using the discovered SDK's data locations.</summary>
     /// <param name="settings">Authored engine settings, including explicit path overrides.</param>
     /// <param name="editorCVarsArchivePath">The editor's optional console archive.</param>
