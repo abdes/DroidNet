@@ -373,7 +373,7 @@ another dispatch.
 ### 6.1 Enablement
 
 `vtx.occlusion.enable` turns the occlusion test on or off for camera and
-shadow views, and defaults to `false` until the validation gates (§8) pass.
+shadow views, and defaults to `true`.
 A camera view culls by occlusion only when it runs the depth prepass, whose
 phase 1 depth phase 2 tests against, and uses reversed-Z depth.
 

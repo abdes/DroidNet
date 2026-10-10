@@ -1406,7 +1406,7 @@ auto Renderer::RegisterConsoleBindings(
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = std::string(kCVarVortexOcclusionEnabled),
     .help = "Enable two-phase GPU occlusion culling",
-    .default_value = false,
+    .default_value = true,
     .flags = console::CVarFlags::kArchive,
     .min_value = std::nullopt,
     .max_value = std::nullopt,
@@ -3448,12 +3448,12 @@ auto Renderer::GetAerialPerspectiveLutSampleCountMaxPerSlice() const noexcept
 auto Renderer::GetOcclusionEnabled() const noexcept -> bool
 {
   if (console_ != nullptr) {
-    bool value = false;
+    bool value = true;
     if (console_->TryGetCVarValue<bool>(kCVarVortexOcclusionEnabled, value)) {
       return value;
     }
   }
-  return false;
+  return true;
 }
 
 auto Renderer::GetContactShadowsEnabled() const noexcept -> bool

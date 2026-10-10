@@ -241,6 +241,8 @@ void OcclusionModule::BuildPhase1(RenderContext& ctx,
     resolved_view->Viewport(), resolved_view->Scissor(), extent.x, extent.y);
   const auto view_projection
     = resolved_view->ProjectionMatrix() * resolved_view->ViewMatrix();
+  const auto draw_count
+    = static_cast<std::uint32_t>(prepared_frame->GetDrawMetadata().size());
   view.inputs = DrawCullInputs {
     .frame_sequence = ctx.frame_sequence,
     .frame_slot = ctx.frame_slot,
@@ -249,9 +251,10 @@ void OcclusionModule::BuildPhase1(RenderContext& ctx,
     .depth = occlusion::internal::DrawCullDepth::ForProjection(view_projection),
     .viewport = clamped.viewport,
     .scissors = clamped.scissors,
-    // The box test assumes reversed-Z depth.
-    .occlusion_enabled
-    = config_.enabled && resolved_view->ReverseZ() && !stateless,
+    // The box test assumes reversed-Z depth. A view without draws, such as
+    // one rendered before its scene loads, has nothing to cull.
+    .occlusion_enabled = config_.enabled && resolved_view->ReverseZ()
+      && !stateless && draw_count != 0U,
     .depth_bias = config_.depth_bias,
   };
 
@@ -262,8 +265,6 @@ void OcclusionModule::BuildPhase1(RenderContext& ctx,
   view.history_key = key;
 
   if (view.inputs.occlusion_enabled) {
-    const auto draw_count
-      = static_cast<std::uint32_t>(prepared_frame->GetDrawMetadata().size());
     const auto history = view.history.Prepare(recorder,
       impl_->renderer->GetGraphics(), impl_->BeginSlotWords(ctx),
       prepared_frame->draw_sources, draw_count, reset);

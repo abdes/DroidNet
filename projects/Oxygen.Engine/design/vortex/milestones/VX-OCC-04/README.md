@@ -370,9 +370,9 @@ Design: [occlusion.md §6.4](../../lld/occlusion.md#64-shadow-views).
 
 ## S7 — Closeout
 
-- [ ] **Default on.** `vtx.occlusion.enable` defaults to `true`
+- [x] **Default on.** `vtx.occlusion.enable` defaults to `true`
       (`Vortex/Renderer.cpp`); the editor sets no override.
-- [ ] **Gates.** [occlusion.md §8](../../lld/occlusion.md#8-validation-gates)
+- [x] **Gates.** [occlusion.md §8](../../lld/occlusion.md#8-validation-gates)
       gate 6 (chunked mesh) and gate 9 (capture: fewer base-pass and shadow draws,
       image identical to occlusion off).
 - [ ] **Status.**

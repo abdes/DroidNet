@@ -194,7 +194,7 @@ NOLINT_TEST_F(
     renderer->GetCapabilityFamilies(), kPhase1DefaultRuntimeCapabilityFamilies);
 }
 
-NOLINT_TEST_F(RendererCapabilityBindingTest, OcclusionConsoleCVarDefaultsOff)
+NOLINT_TEST_F(RendererCapabilityBindingTest, OcclusionConsoleCVarDefaultsOn)
 {
   const auto renderer = MakeRenderer(RendererCapabilityFamily::kScenePreparation
     | RendererCapabilityFamily::kDeferredShading);
@@ -203,11 +203,11 @@ NOLINT_TEST_F(RendererCapabilityBindingTest, OcclusionConsoleCVarDefaultsOff)
     &console,
   });
 
-  EXPECT_FALSE(renderer->GetOcclusionEnabled());
+  EXPECT_TRUE(renderer->GetOcclusionEnabled());
 
   EXPECT_EQ(
-    console.Execute("vtx.occlusion.enable true").status, ExecutionStatus::kOk);
-  EXPECT_TRUE(renderer->GetOcclusionEnabled());
+    console.Execute("vtx.occlusion.enable false").status, ExecutionStatus::kOk);
+  EXPECT_FALSE(renderer->GetOcclusionEnabled());
 }
 
 } // namespace
