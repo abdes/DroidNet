@@ -4,19 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <filesystem>
-#include <fstream>
+// Covers: Import/BuiltinGeometryCatalog.cpp
+
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include <fmt/format.h>
 #include <fmt/ranges.h>
-#include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/BuiltinGeometryCatalog.h>
+#include <Oxygen/Cooker/Test/Support/JsonSchema.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BuiltinGeometry.h>
 #include <Oxygen/Data/GeometryAsset.h>
@@ -29,30 +29,31 @@ namespace {
 using nlohmann::json;
 using oxygen::content::import::ExportBuiltinGeometryCatalog;
 
-auto LoadSchema(const std::string& name) -> json
+auto GeometrySchema() -> const json&
 {
-  const auto path = std::filesystem::path(__FILE__).parent_path()
-    / "../../Import/Schemas" / name;
-  auto stream = std::ifstream(path);
-  return json::parse(stream);
+  static const auto schema = oxygen::cooker::test::LoadSchema(
+    "Import/Schemas/oxygen.geometry-descriptor.schema.json");
+  return schema;
+}
+
+auto MaterialSchema() -> const json&
+{
+  static const auto schema = oxygen::cooker::test::LoadSchema(
+    "Import/Schemas/oxygen.material-descriptor.schema.json");
+  return schema;
 }
 
 //! Exported contributions validate against the native schemas and use actual
 //! live bounds/materials.
 NOLINT_TEST(BuiltinGeometryCatalogTest, ContributionsMatchSchemasAndLiveAssets)
 {
-  auto geometry_validator = nlohmann::json_schema::json_validator {};
-  geometry_validator.set_root_schema(
-    LoadSchema("oxygen.geometry-descriptor.schema.json"));
-  auto material_validator = nlohmann::json_schema::json_validator {};
-  material_validator.set_root_schema(
-    LoadSchema("oxygen.material-descriptor.schema.json"));
   const auto catalog = json::parse(ExportBuiltinGeometryCatalog("Content"));
   EXPECT_EQ(catalog.at("schema"), "oxygen.builtin-geometry-catalog.v3");
   ASSERT_EQ(catalog.at("geometries").size(),
     oxygen::data::GetBuiltinGeometryNames().size());
   const auto& material = catalog.at("default_material").at("descriptor");
-  EXPECT_NO_THROW(static_cast<void>(material_validator.validate(material)));
+  EXPECT_THAT(oxygen::cooker::test::ValidateJson(MaterialSchema(), material),
+    testing::IsEmpty());
   const auto live_material = oxygen::data::MaterialAsset::CreateDefault();
   const auto& parameters = material.at("parameters");
   EXPECT_FLOAT_EQ(
@@ -66,7 +67,9 @@ NOLINT_TEST(BuiltinGeometryCatalogTest, ContributionsMatchSchemasAndLiveAssets)
   for (const auto& entry : catalog.at("geometries")) {
     SCOPED_TRACE(entry.at("name").get<std::string>());
     const auto& descriptor = entry.at("descriptor");
-    EXPECT_NO_THROW(static_cast<void>(geometry_validator.validate(descriptor)));
+    EXPECT_THAT(
+      oxygen::cooker::test::ValidateJson(GeometrySchema(), descriptor),
+      testing::IsEmpty());
     const auto geometry = oxygen::data::ResolveBuiltinGeometry(
       entry.at("asset_uri").get<std::string>());
     ASSERT_NE(geometry, nullptr);
@@ -127,9 +130,7 @@ NOLINT_TEST(BuiltinGeometryCatalogTest, MountAndAuthoringCategoriesArePreserved)
     EXPECT_EQ(entry.at("canonical_name"), entry.at("name"));
     const auto identity = oxygen::data::ResolveBuiltinGeometryIdentity(
       entry.at("asset_uri").get<std::string>());
-    if (!identity.has_value()) {
-      FAIL() << "Expected identity to contain a value";
-    }
+    ASSERT_TRUE(identity.has_value()) << "Expected identity to contain a value";
     using Category = oxygen::data::BuiltinGeometryAuthoringCategory;
     switch (identity->authoring_category) {
     case Category::kStandard:

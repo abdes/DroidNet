@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Import/Internal/BufferSource.cpp
+
 #include <algorithm>
 #include <filesystem>
 #include <string_view>
@@ -13,6 +15,7 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
+#include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -20,12 +23,7 @@ namespace {
   using internal::BufferSource;
   using Json = nlohmann::basic_json<>;
 
-  auto HasCode(const std::vector<ImportDiagnostic>& diagnostics,
-    const std::string_view code) -> bool
-  {
-    return std::ranges::any_of(
-      diagnostics, [code](const auto& item) { return item.code == code; });
-  }
+  using oxygen::cooker::test::HasDiagnosticCode;
 
   NOLINT_TEST(BufferSourceTest, SeparatesRawInputFromDeclaredOutputWithoutIo)
   {
@@ -38,9 +36,7 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto sources = BufferSource::FromDeclarations(
       declarations, "authored/geometry.json", diagnostics);
-    if (!sources.has_value()) {
-      FAIL() << "Expected sources to contain a value";
-    }
+    ASSERT_TRUE(sources.has_value()) << "Expected sources to contain a value";
     ASSERT_EQ(sources->size(), 1U);
     EXPECT_TRUE(diagnostics.empty());
     const auto& source = sources->front();
@@ -63,8 +59,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(BufferSource::FromDeclarations(
       declarations, "geometry.json", diagnostics));
-    EXPECT_TRUE(
-      HasCode(diagnostics, "buffer.container.virtual_path_duplicate"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, "buffer.container.virtual_path_duplicate"));
     ASSERT_FALSE(diagnostics.empty());
     EXPECT_EQ(diagnostics.front().object_path, "buffers[1].virtual_path");
   }
@@ -78,8 +74,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(BufferSource::FromDeclarations(
       declarations, "geometry.json", diagnostics, "lod.buffers"));
-    EXPECT_TRUE(
-      HasCode(diagnostics, "buffer.container.schema_validation_failed"));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, "buffer.container.schema_validation_failed"));
     ASSERT_FALSE(diagnostics.empty());
     EXPECT_EQ(diagnostics.front().source_path, "geometry.json");
     EXPECT_TRUE(diagnostics.front().object_path.starts_with("lod.buffers[0]"));
@@ -94,9 +90,7 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     const auto sources = BufferSource::FromDeclarations(
       declarations, "geometry.json", diagnostics);
-    if (!sources.has_value()) {
-      FAIL() << "Expected sources to contain a value";
-    }
+    ASSERT_TRUE(sources.has_value()) << "Expected sources to contain a value";
     ASSERT_EQ(sources->size(), 1U);
     EXPECT_EQ(sources->front().element_stride, 0U);
     EXPECT_EQ(sources->front().element_format, 1U);
@@ -107,7 +101,8 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(BufferSource::FromDeclarations(
       Json::object(), "geometry.json", diagnostics));
-    EXPECT_TRUE(HasCode(diagnostics, "buffer.container.buffers_missing"));
+    EXPECT_TRUE(
+      HasDiagnosticCode(diagnostics, "buffer.container.buffers_missing"));
   }
 
   NOLINT_TEST(BufferSourceTest, RetainsDuplicateViewDiagnostic)
@@ -122,7 +117,7 @@ namespace {
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(BufferSource::FromDeclarations(
       declarations, "geometry.json", diagnostics));
-    EXPECT_TRUE(HasCode(diagnostics, "buffer.view.name_duplicate"));
+    EXPECT_TRUE(HasDiagnosticCode(diagnostics, "buffer.view.name_duplicate"));
     ASSERT_EQ(diagnostics.size(), 1U);
     EXPECT_EQ(diagnostics.front().object_path, "buffers[0].views[1].name");
   }

@@ -4,9 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+// Covers: Import/Internal/ImportedLightSemantics.h
 
 #include <Oxygen/Cooker/Import/Internal/ImportedLightSemantics.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 

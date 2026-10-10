@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Loose/Inspection.cpp, Loose/Validation.cpp
+
 #include <cstdlib>
 #include <filesystem>
 

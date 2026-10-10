@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <system_error>
@@ -19,11 +21,14 @@
 #include <gtest/gtest.h>
 
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 
+using oxygen::content::LooseCookedIndex;
 using oxygen::content::internal::LooseCookedSource;
+using oxygen::content::testing::DescriptorRecordOverride;
 using oxygen::content::testing::LooseCookedTestWriter;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetType;
@@ -304,6 +309,46 @@ TEST_F(LooseCookedSourceTest, FullIntegritySupportsLongMemberPaths)
     LooseCookedSource source(
       CookedRoot(), LooseCookedSource::OpenMode::kVerifyContent);
   });
+}
+
+//! Forged descriptor size/digest and index version round-trip through the
+//! index.
+TEST_F(LooseCookedSourceTest, WriterForgesDescriptorRecordAndIndexVersion)
+{
+  // Arrange
+  const auto key = MakeAssetKey(7U);
+  const std::array bytes { std::byte { 1 }, std::byte { 2 } };
+  auto forged_sha = std::array<std::uint8_t, 32> {};
+  forged_sha.fill(0xABU);
+  {
+    LooseCookedTestWriter writer(CookedRoot());
+    writer.WriteAssetDescriptor(key, AssetType::kMaterial, "/Content/a.omat",
+      "a.omat", bytes, {},
+      DescriptorRecordOverride { .size = 16U, .sha256 = forged_sha });
+    (void)writer.Finish();
+  }
+
+  // Act
+  const auto index = LooseCookedIndex::LoadFromRoot(CookedRoot());
+
+  // Assert
+  EXPECT_EQ(
+    index.FindDescriptorSize(key), std::optional<std::uint64_t> { 16U });
+  ASSERT_TRUE(index.FindDescriptorSha256(key).has_value());
+  EXPECT_TRUE(std::ranges::equal(*index.FindDescriptorSha256(key), forged_sha));
+  EXPECT_EQ(std::filesystem::file_size(CookedRoot() / "a.omat"), 16U);
+
+  // Arrange: an unsupported index version must be rejected by the reader.
+  {
+    LooseCookedTestWriter writer(CookedRoot());
+    writer.SetIndexVersion(999U);
+    (void)writer.Finish();
+  }
+
+  // Act + Assert
+  EXPECT_THROW(
+    { static_cast<void>(LooseCookedIndex::LoadFromRoot(CookedRoot())); },
+    std::runtime_error);
 }
 
 } // namespace

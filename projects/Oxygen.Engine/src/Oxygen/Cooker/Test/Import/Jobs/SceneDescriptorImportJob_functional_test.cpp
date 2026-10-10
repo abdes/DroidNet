@@ -1,0 +1,1188 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+// Covers: Import/Internal/Jobs/SceneDescriptorImportJob.cpp
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <exception>
+#include <filesystem>
+#include <fstream>
+#include <ios>
+#include <latch>
+#include <limits>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
+
+#include <Oxygen/Base/Finally.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportJobId.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Cooker/Test/Support/DescriptorFixtures.h>
+#include <Oxygen/Cooker/Test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/Test/Support/FileIo.h>
+#include <Oxygen/Cooker/Test/Support/TempDir.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/MeshType.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Writer.h>
+#include <Oxygen/Testing/GTest.h>
+
+using oxygen::base::CheckedAt;
+
+namespace oxygen::content::import::test {
+
+namespace {
+
+  using oxygen::cooker::test::ReadBytes;
+  using oxygen::cooker::test::ScopedTempDir;
+  using oxygen::cooker::test::WriteBytes;
+  using oxygen::cooker::test::WriteText;
+
+  auto WriteSlotGeometry(const std::filesystem::path& path) -> void
+  {
+    namespace geometry = data::pak::geometry;
+    std::filesystem::create_directories(path.parent_path());
+    // NOLINTNEXTLINE(*-signed-bitwise)
+    serio::FileStream<> stream(path, std::ios::out | std::ios::trunc);
+    serio::Writer writer(stream);
+    const auto packed = writer.ScopedAlignment(1);
+    auto descriptor = geometry::GeometryAssetDesc {};
+    descriptor.header.asset_type
+      = static_cast<uint8_t>(data::AssetType::kGeometry);
+    descriptor.header.version = geometry::kGeometryAssetVersion;
+    descriptor.lod_count = 1;
+    auto mesh = geometry::MeshDesc {};
+    mesh.mesh_type = static_cast<uint8_t>(data::MeshType::kStandard);
+    mesh.submesh_count = 1;
+    mesh.mesh_view_count = 1;
+    auto submesh = geometry::SubMeshDesc {};
+    submesh.slot_id
+      = data::MaterialSlotId::FromString("00000000-0000-0000-0000-000000000001")
+          .value();
+    submesh.mesh_view_count = 1;
+    const auto view = geometry::MeshViewDesc {
+      .first_index = 0,
+      .index_count = 3,
+      .first_vertex = 0,
+      .vertex_count = 3,
+    };
+    const auto write = [&writer](const auto& record) -> auto {
+      ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span(&record, 1))));
+    };
+    write(descriptor);
+    write(mesh);
+    write(submesh);
+    write(view);
+    ASSERT_TRUE(writer.Flush());
+  }
+
+  using oxygen::cooker::test::HasDiagnosticCode;
+
+  auto SubmitAndWait(AsyncImportService& service, ImportRequest request)
+    -> ImportReport
+  {
+    auto report = ImportReport {};
+    std::latch done(1);
+    const auto submitted = service.SubmitImport(
+      std::move(request),
+      [&report, &done](
+        const ImportJobId /*job_id*/, const ImportReport& completed) -> void {
+        report = completed;
+        done.count_down();
+      },
+      nullptr);
+    if (!submitted.has_value()) {
+      report.success = false;
+      report.diagnostics.push_back({
+        .severity = ImportSeverity::kError,
+        .code = "test.submit_failed",
+        .message = "Failed to submit scene descriptor import job",
+        .source_path = {},
+        .object_path = {},
+      });
+      return report;
+    }
+    done.wait();
+    return report;
+  }
+
+  class SceneDescriptorImportJobTest : public testing::Test {
+  protected:
+    auto MakeRequest(const std::filesystem::path& cooked_root,
+      const std::string& descriptor_json,
+      std::string_view job_name = "DemoScene") -> ImportRequest
+    {
+      auto document = nlohmann::json::parse(descriptor_json);
+      document.emplace("version", data::pak::world::kSceneAssetVersion);
+      auto request = ImportRequest {};
+      request.source_path = "inline://scene-descriptor";
+      request.job_name = std::string(job_name);
+      request.cooked_root = cooked_root;
+      request.loose_cooked_layout.virtual_mount_root = "/.cooked";
+      request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
+        .normalized_descriptor_json = document.dump(),
+      };
+      return request;
+    }
+  };
+
+  NOLINT_TEST_F(SceneDescriptorImportJobTest, EmptyScenePreservesEnvironment)
+  {
+    const ScopedTempDir temp;
+    const auto root = temp.Path() / "empty_scene_environment";
+    std::filesystem::create_directories(root);
+    auto service = AsyncImportService {};
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    const auto report = SubmitAndWait(service, MakeRequest(root, R"({
+      "name":"EmptyScene", "nodes":[],
+      "environment": {
+        "background": {"color_rgb":[0.1,0.2,0.3]},
+        "post_process_volume": {"manual_exposure_ev":9.5}
+      }
+    })"));
+    ASSERT_TRUE(report.success);
+    ASSERT_EQ(report.scenes_written, 1U);
+    const auto bytes = ReadBytes(root / "Scenes/EmptyScene.oscene");
+    const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
+    EXPECT_TRUE(scene.GetNodes().empty());
+    EXPECT_TRUE(
+      scene.GetComponents<data::pak::world::RenderableRecord>().empty());
+    EXPECT_TRUE(
+      scene.GetComponents<data::pak::world::PerspectiveCameraRecord>().empty());
+    ASSERT_TRUE(scene.HasEnvironmentBlock());
+    const auto background = scene.TryGetBackgroundEnvironment();
+    if (!background) {
+      FAIL() << "Expected background";
+    }
+    EXPECT_FLOAT_EQ(background->color_rgb[0], 0.1F);
+    EXPECT_FLOAT_EQ(background->color_rgb[1], 0.2F);
+    EXPECT_FLOAT_EQ(background->color_rgb[2], 0.3F);
+    const auto exposure = scene.TryGetPostProcessVolumeEnvironment();
+    if (!exposure) {
+      FAIL() << "Expected exposure";
+    }
+    EXPECT_FLOAT_EQ(exposure->manual_exposure_ev, 9.5F);
+  }
+
+  NOLINT_TEST_F(SceneDescriptorImportJobTest, EmptySceneRejectsDanglingCamera)
+  {
+    const ScopedTempDir temp;
+    const auto root = temp.Path() / "empty_scene_invalid_camera";
+    std::filesystem::create_directories(root);
+    auto service = AsyncImportService {};
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    const auto report = SubmitAndWait(service, MakeRequest(root, R"({
+      "name":"EmptyScene", "nodes":[],
+      "cameras":{"perspective":[{"node":0,"aspect_mode":"auto"}]}
+    })"));
+    EXPECT_FALSE(report.success);
+    EXPECT_EQ(report.scenes_written, 0U);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "scene.descriptor.camera_node_index_out_of_range"));
+  }
+
+  //! Writes a cooked texture sidecar naming source texture `index`.
+  auto WriteTextureSidecar(const std::filesystem::path& root,
+    const std::string_view name, const Format format, const uint32_t index,
+    const TextureType type) -> void
+  {
+    const bool cube = type == TextureType::kTextureCube;
+    serio::MemoryStream stream;
+    serio::Writer writer(stream);
+    const auto packed = writer.ScopedAlignment(1);
+    constexpr auto kMagic = std::array { 'O', 'T', 'E', 'X' };
+    ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span { kMagic })));
+    ASSERT_TRUE(writer.Write(uint16_t { 1U }));
+    ASSERT_TRUE(writer.Write(uint16_t { 0U }));
+    ASSERT_TRUE(writer.Write(index));
+    ASSERT_TRUE(writer.Write(data::pak::core::TextureResourceDesc {
+      .data_offset = 0U,
+      .size_bytes = cube ? 24U : 4U,
+      .texture_type = static_cast<uint8_t>(type),
+      .compression_type = 0U,
+      .width = 1U,
+      .height = 1U,
+      .depth = 1U,
+      .array_layers = static_cast<uint16_t>(cube ? 6U : 1U),
+      .mip_levels = 1U,
+      .format = static_cast<uint8_t>(format),
+      .alignment = 256U,
+    }));
+    WriteBytes(root / "Textures" / name, stream.Data());
+  }
+
+  auto WriteMeteringMaskSidecar(const std::filesystem::path& root,
+    const Format format, const uint32_t index) -> void
+  {
+    WriteTextureSidecar(
+      root, "Meter.otex", format, index, TextureType::kTexture2D);
+  }
+
+  auto WriteCubemapSidecar(const std::filesystem::path& root,
+    const std::string_view name, const uint32_t index) -> void
+  {
+    WriteTextureSidecar(
+      root, name, Format::kRGBA16Float, index, TextureType::kTextureCube);
+  }
+
+  NOLINT_TEST_F(SceneDescriptorImportJobTest,
+    MeteringMaskUsesCurrentSourceLocalTextureReference)
+  {
+    auto service = AsyncImportService {};
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    const ScopedTempDir temp;
+    const auto root = temp.Path() / "mask_reference";
+    std::filesystem::create_directories(root);
+    constexpr auto kDescriptor = R"({"name":"MaskScene","nodes":[{}],
+      "environment":{"post_process_volume":{"auto_exposure_metering_mask":"/.cooked/Textures/Meter.otex"}}})";
+    WriteMeteringMaskSidecar(root, Format::kRGBA8UNorm, 4U);
+    const auto success = SubmitAndWait(service, MakeRequest(root, kDescriptor));
+    ASSERT_TRUE(success.success);
+    const auto bytes = ReadBytes(root / "Scenes/MaskScene.oscene");
+    const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
+    const auto exposure = scene.TryGetPostProcessVolumeEnvironment();
+    ASSERT_TRUE(exposure.has_value()) << "Expected exposure to contain a value";
+    EXPECT_EQ(exposure->auto_exposure_metering_mask.get(), 0U);
+    const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
+    const auto scene_key
+      = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/MaskScene.oscene");
+    ASSERT_TRUE(scene_key.has_value());
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+    const auto references = index.FindAssetReferences(scene_key.value());
+    ASSERT_TRUE(references.has_value());
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+    EXPECT_THAT(references.value().Resources(),
+      ::testing::ElementsAre(data::ResourceBinding {
+        .kind = data::ResourceKind::kTexture,
+        .index = ResourceIndexT { 4U },
+      }));
+
+    WriteMeteringMaskSidecar(root, Format::kRGBA8UNormSRGB, 4U);
+    const auto srgb = SubmitAndWait(service, MakeRequest(root, kDescriptor));
+    EXPECT_FALSE(srgb.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      srgb.diagnostics, "scene.descriptor.mask_format_invalid"));
+    WriteMeteringMaskSidecar(root, Format::kRGBA8UNorm, 0U);
+    const auto absent = SubmitAndWait(service, MakeRequest(root, kDescriptor));
+    EXPECT_FALSE(absent.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      absent.diagnostics, "scene.descriptor.mask_source_invalid"));
+
+    const auto external = temp.Path() / "external_mask_reference";
+    std::filesystem::create_directories(external);
+    WriteMeteringMaskSidecar(external, Format::kRGBA8UNorm, 1U);
+    auto request = MakeRequest(root, kDescriptor);
+    request.cooked_context_roots.push_back(external);
+    const auto foreign = SubmitAndWait(service, std::move(request));
+    EXPECT_FALSE(foreign.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      foreign.diagnostics, "scene.descriptor.mask_source_invalid"));
+
+    // A deleted mask leaves the scene without one, with a warning.
+    std::filesystem::remove(root / "Textures/Meter.otex");
+    const auto deleted = SubmitAndWait(service, MakeRequest(root, kDescriptor));
+    EXPECT_TRUE(deleted.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      deleted.diagnostics, "scene.descriptor.texture_descriptor_missing"));
+    const auto unmasked = data::SceneAsset(
+      data::AssetKey {}, ReadBytes(root / "Scenes/MaskScene.oscene"))
+                            .TryGetPostProcessVolumeEnvironment();
+    ASSERT_TRUE(unmasked.has_value());
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+    EXPECT_EQ(
+      unmasked->auto_exposure_metering_mask, data::kNoResourceReference);
+  }
+
+  NOLINT_TEST_F(SceneDescriptorImportJobTest,
+    PhysicalCamerasRoundTripWithAuthoredValuesAndDefaults)
+  {
+    namespace world = data::pak::world;
+    const ScopedTempDir temp;
+    const auto root = temp.Path() / "physical_cameras";
+    std::filesystem::create_directories(root);
+    auto service = AsyncImportService {};
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    const auto report = SubmitAndWait(service, MakeRequest(root, R"({
+      "name": "Physical", "nodes": [{}, {}, {}, {}],
+      "cameras": {
+        "perspective": [
+          {"node":0,"aspect_mode":"fixed","aspect_ratio":1.5,"aperture_f":2.8,"shutter_rate":250,"iso":400},
+          {"node":1,"aspect_mode":"auto"}],
+        "orthographic": [
+          {"node":2,"aspect_mode":"fixed","orthographic_size":2,"aspect_ratio":1.5,"aperture_f":8,"shutter_rate":60,"iso":200},
+          {"node":3,"aspect_mode":"auto"}]
+      }
+    })"));
+    ASSERT_TRUE(report.success);
+    const auto bytes = ReadBytes(root / "Scenes/Physical.oscene");
+    const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
+    const auto perspective
+      = scene.GetComponents<world::PerspectiveCameraRecord>();
+    const auto orthographic
+      = scene.GetComponents<world::OrthographicCameraRecord>();
+    ASSERT_EQ(perspective.size(), 2U);
+    ASSERT_EQ(orthographic.size(), 2U);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).aperture_f, 2.8F);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).shutter_rate, 250.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).iso, 400.0F);
+    EXPECT_EQ(CheckedAt(perspective, 0).aspect_mode, CameraAspectMode::kFixed);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 0).aspect_ratio, 1.5F);
+    EXPECT_EQ(CheckedAt(perspective, 1).aspect_mode, CameraAspectMode::kAuto);
+    EXPECT_EQ(CheckedAt(orthographic, 0).aspect_mode, CameraAspectMode::kFixed);
+    EXPECT_EQ(CheckedAt(orthographic, 1).aspect_mode, CameraAspectMode::kAuto);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).left, -3.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).right, 3.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).bottom, -2.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).top, 2.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).aperture_f, 8.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).shutter_rate, 60.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 0).iso, 200.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 1).aperture_f, 11.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 1).shutter_rate, 125.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(perspective, 1).iso, 100.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 1).aperture_f, 11.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 1).shutter_rate, 125.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(orthographic, 1).iso, 100.0F);
+  }
+
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, RejectsCoupledExposureAndCurveErrors)
+  {
+    auto service = AsyncImportService {};
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    const ScopedTempDir temp;
+    const auto root = temp.Path() / "invalid_exposure";
+    std::filesystem::create_directories(root);
+    for (const auto& invalid : std::vector<nlohmann::json> {
+           { { "auto_exposure_min_ev", 10 }, { "auto_exposure_max_ev", 5 } },
+           {
+             { "auto_exposure_low_percentile", 0.9 },
+             { "auto_exposure_high_percentile", 0.1 },
+           },
+           {
+             { "auto_exposure_min_log_luminance", 31 },
+             { "auto_exposure_log_luminance_range", 2 },
+           },
+           {
+             {
+               "auto_exposure_compensation_curve",
+               {
+                 { { "metered_ev", 0 }, { "compensation_ev", 1 } },
+                 { { "metered_ev", 0 }, { "compensation_ev", 2 } },
+               },
+             },
+           },
+           { { "exposure_compensation_ev", 10000 } },
+         }) {
+      auto document
+        = nlohmann::json::parse(R"({"name":"Invalid","nodes":[{}]})");
+      document.update(
+        { { "environment", { { "post_process_volume", invalid } } } });
+      SCOPED_TRACE(document.dump());
+      const auto report
+        = SubmitAndWait(service, MakeRequest(root, document.dump()));
+      EXPECT_FALSE(report.success);
+      EXPECT_EQ(report.scenes_written, 0U);
+      EXPECT_TRUE(HasDiagnosticCode(
+        report.diagnostics, "scene.descriptor.exposure_invalid"));
+    }
+  }
+
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, NodeFlagSourceModesRoundTripWithoutFlattening)
+  {
+    namespace world = data::pak::world;
+    const ScopedTempDir temp;
+    const auto root = temp.Path() / "node_flag_source_modes";
+    std::filesystem::create_directories(root);
+    auto service = AsyncImportService {};
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    const auto report = SubmitAndWait(service, MakeRequest(root, R"({
+      "name": "Flags",
+      "nodes": [
+        {"name":"HiddenRoot", "flags":{
+          "visible":"hidden", "casts_shadows":"off", "receives_shadows":"on"}},
+        {"name":"InheritedChild", "parent":0},
+        {"name":"LocalChild", "parent":0, "flags":{
+          "visible":"shown", "casts_shadows":"on", "receives_shadows":"off", "static":true}},
+        {"name":"DefaultRoot"},
+        {"name":"InheritedRoot", "flags":{
+          "visible":"inherit", "casts_shadows":"inherit", "receives_shadows":"inherit"}}
+      ]
+    })"));
+    ASSERT_TRUE(report.success);
+    ASSERT_EQ(report.scenes_written, 1U);
+    const auto bytes = ReadBytes(root / "Scenes/Flags.oscene");
+    const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
+    const auto nodes = scene.GetNodes();
+    ASSERT_EQ(nodes.size(), 5U);
+    EXPECT_EQ(
+      CheckedAt(nodes, 0).node_flags, world::kSceneNodeFlag_ReceivesShadows);
+    EXPECT_EQ(CheckedAt(nodes, 0).inherited_flags, 0U);
+    EXPECT_EQ(CheckedAt(nodes, 1).node_flags, 0U);
+    EXPECT_EQ(
+      CheckedAt(nodes, 1).inherited_flags, world::kSceneNodeFlags_Inheritable);
+    EXPECT_EQ(CheckedAt(nodes, 2).node_flags,
+      world::kSceneNodeFlag_Visible | world::kSceneNodeFlag_CastsShadows
+        | world::kSceneNodeFlag_Static);
+    EXPECT_EQ(CheckedAt(nodes, 2).inherited_flags, 0U);
+    EXPECT_EQ(
+      CheckedAt(nodes, 3).node_flags, world::kSceneNodeFlags_Inheritable);
+    EXPECT_EQ(CheckedAt(nodes, 3).inherited_flags, 0U);
+    EXPECT_EQ(CheckedAt(nodes, 4).node_flags, 0U);
+    EXPECT_EQ(
+      CheckedAt(nodes, 4).inherited_flags, world::kSceneNodeFlags_Inheritable);
+  }
+
+  auto WriteIndexedReference(const std::filesystem::path& root,
+    const data::AssetKey& key, const data::AssetType type) -> void
+  {
+    auto writer = LooseCookedWriter(root);
+    const auto fixture = type == data::AssetType::kGeometry
+      ? content::test::GeometryDescriptor("Mesh")
+      : content::test::MaterialDescriptor("Wrong");
+    writer.WriteAssetDescriptor(key, type, "/Art/Geometry/Mesh.ogeo",
+      type == data::AssetType::kGeometry ? "Geometry/Mesh.ogeo"
+                                         : "Materials/Wrong.omat",
+      fixture.bytes, fixture.references);
+    static_cast<void>(writer.Finish());
+  }
+
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, OrderedRootsResolveLastMatchingAsset)
+  {
+    const ScopedTempDir temp;
+    const auto output = temp.Path() / "ordered_output";
+    std::filesystem::create_directories(output);
+    const auto library = temp.Path() / "ordered_library";
+    std::filesystem::create_directories(library);
+    const auto own_key = data::AssetKey::FromVirtualPath("/Own/Mesh.ogeo");
+    const auto library_key
+      = data::AssetKey::FromVirtualPath("/Library/Mesh.ogeo");
+    WriteIndexedReference(output, own_key, data::AssetType::kGeometry);
+    WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
+    auto service = AsyncImportService {};
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    const auto* const descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
+      "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
+    for (const auto own_wins : { false, true }) {
+      auto request = MakeRequest(output, descriptor);
+      request.cooked_context_roots = own_wins
+        ? std::vector<std::filesystem::path> { library, output }
+        : std::vector<std::filesystem::path> { output, library };
+      const auto report = SubmitAndWait(service, std::move(request));
+      ASSERT_TRUE(report.success);
+      const auto bytes = ReadBytes(
+        output / LooseCookedLayout {}.SceneDescriptorRelPath("Scene"));
+      const auto scene = data::SceneAsset(
+        data::AssetKey {}, std::span<const std::byte>(bytes));
+      const auto renderables
+        = scene.GetComponents<data::pak::world::RenderableRecord>();
+      ASSERT_EQ(renderables.size(), 1U);
+      EXPECT_EQ(CheckedAt(renderables, 0).geometry_key,
+        own_wins ? own_key : library_key);
+    }
+  }
+
+  NOLINT_TEST_F(SceneDescriptorImportJobTest,
+    NewDescriptorRespectsPriorityBeforeIndexPublication)
+  {
+    const ScopedTempDir temp;
+    const auto output = temp.Path() / "unindexed_output";
+    std::filesystem::create_directories(output);
+    const auto library = temp.Path() / "unindexed_library";
+    std::filesystem::create_directories(library);
+    const auto own_key
+      = data::AssetKey::FromVirtualPath("/Art/Geometry/Mesh.ogeo");
+    const auto library_key
+      = data::AssetKey::FromVirtualPath("/Library/Mesh.ogeo");
+    WriteText(output / "Geometry/Mesh.ogeo", "new descriptor");
+    WriteIndexedReference(library, library_key, data::AssetType::kGeometry);
+    auto service = AsyncImportService {};
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    const auto* const descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
+      "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
+    for (const auto own_wins : { true, false }) {
+      auto request = MakeRequest(output, descriptor);
+      request.loose_cooked_layout.virtual_mount_root = "/Art";
+      request.cooked_context_roots = own_wins
+        ? std::vector<std::filesystem::path> { library, output }
+        : std::vector<std::filesystem::path> { output, library };
+      const auto report = SubmitAndWait(service, std::move(request));
+      ASSERT_TRUE(report.success);
+      const auto bytes = ReadBytes(
+        output / LooseCookedLayout {}.SceneDescriptorRelPath("Scene"));
+      const auto scene = data::SceneAsset(
+        data::AssetKey {}, std::span<const std::byte>(bytes));
+      const auto renderables
+        = scene.GetComponents<data::pak::world::RenderableRecord>();
+      ASSERT_EQ(renderables.size(), 1U);
+      EXPECT_EQ(CheckedAt(renderables, 0).geometry_key,
+        own_wins ? own_key : library_key);
+    }
+  }
+
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, WinningRootTypeMismatchDoesNotFallBack)
+  {
+    const ScopedTempDir temp;
+    const auto output = temp.Path() / "wrong_winner_output";
+    std::filesystem::create_directories(output);
+    const auto library = temp.Path() / "wrong_winner_library";
+    std::filesystem::create_directories(library);
+    WriteIndexedReference(output,
+      data::AssetKey::FromVirtualPath("/Own/Mesh.ogeo"),
+      data::AssetType::kGeometry);
+    WriteIndexedReference(library,
+      data::AssetKey::FromVirtualPath("/Library/Wrong.omat"),
+      data::AssetType::kMaterial);
+    auto service = AsyncImportService {};
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    auto request
+      = MakeRequest(output, R"({"name":"Scene","nodes":[{"name":"Mesh"}],
+      "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})");
+    request.cooked_context_roots = { library };
+    const auto report = SubmitAndWait(service, std::move(request));
+    EXPECT_FALSE(report.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "scene.descriptor.reference_type_mismatch"));
+  }
+
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, ResolvesReferencesAndEmitsSceneDescriptor)
+  {
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "resolves_and_emits";
+    std::filesystem::create_directories(cooked_root);
+    ASSERT_NO_FATAL_FAILURE(
+      WriteSlotGeometry(cooked_root / "Geometry" / "cube.ogeo"));
+    WriteText(cooked_root / "Materials" / "cube.omat", "omat");
+    WriteText(cooked_root / "Scripts" / "spin.oscript", "oscript");
+    WriteText(cooked_root / "Input" / "jump.oiact", "oiact");
+    WriteText(cooked_root / "Input" / "gameplay.oimap", "oimap");
+    WriteText(cooked_root / "Scenes" / "DemoScene.opscene", "physics");
+
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+
+    const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
+      "name": "DemoScene",
+      "nodes": [
+        { "name": "Root" },
+        { "name": "MeshNode", "parent": 0 }
+      ],
+      "renderables": [
+        {
+          "node": 1,
+          "geometry_ref": "/.cooked/Geometry/cube.ogeo",
+          "material_overrides": [{
+            "slot_id": "00000000-0000-0000-0000-000000000001",
+            "material_ref": "/.cooked/Materials/cube.omat",
+            "layout_revision": "0000000000000000000000000000000000000000000000000000000000000001"
+          }],
+          "visible": true
+        }
+      ],
+      "references": {
+        "scripts": ["/.cooked/Scripts/spin.oscript"],
+        "input_actions": ["/.cooked/Input/jump.oiact"],
+        "input_mapping_contexts": ["/.cooked/Input/gameplay.oimap"],
+        "physics_sidecars": ["/.cooked/Scenes/DemoScene.opscene"]
+      }
+    })"));
+
+    EXPECT_TRUE(report.success);
+    EXPECT_EQ(report.scenes_written, 1U);
+    EXPECT_FALSE(HasDiagnosticCode(
+      report.diagnostics, "scene.descriptor.reference_missing"));
+
+    auto layout = LooseCookedLayout {};
+    const auto expected_relpath = layout.SceneDescriptorRelPath("DemoScene");
+    const auto scene_path
+      = cooked_root / std::filesystem::path(expected_relpath);
+    EXPECT_TRUE(std::filesystem::exists(scene_path));
+
+    const auto scene_bytes = ReadBytes(scene_path);
+    ASSERT_FALSE(scene_bytes.empty());
+
+    const auto scene = oxygen::data::SceneAsset(
+      oxygen::data::AssetKey {}, std::span<const std::byte>(scene_bytes));
+    const auto renderables
+      = scene.GetComponents<oxygen::data::pak::world::RenderableRecord>();
+    ASSERT_EQ(renderables.size(), 1U);
+    const auto assignments
+      = scene.GetComponents<oxygen::data::pak::world::MaterialOverrideRecord>();
+    ASSERT_EQ(assignments.size(), 1U);
+    EXPECT_EQ(assignments.front().material_key,
+      oxygen::data::AssetKey::FromVirtualPath("/.cooked/Materials/cube.omat"));
+  }
+
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, MissingGeometryReferenceProducesDiagnostic)
+  {
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "missing_geometry_reference";
+    std::filesystem::create_directories(cooked_root);
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+
+    const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
+      "name": "DemoScene",
+      "nodes": [
+        { "name": "Root" },
+        { "name": "MeshNode", "parent": 0 }
+      ],
+      "renderables": [
+        {
+          "node": 1,
+          "geometry_ref": "/.cooked/Geometry/missing.ogeo"
+        }
+      ]
+    })"));
+
+    EXPECT_FALSE(report.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "scene.descriptor.reference_missing"));
+  }
+
+  NOLINT_TEST_F(SceneDescriptorImportJobTest,
+    DirectionalLightManualCascadeDistancesDeriveMaxShadowDistance)
+  {
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "directional_light_tuning";
+    std::filesystem::create_directories(cooked_root);
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+
+    const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
+      "name": "DirectionalTuning",
+      "nodes": [
+        { "name": "Root" },
+        { "name": "Sun", "parent": 0 }
+      ],
+      "lights": {
+        "directional": [
+          {
+            "node": 1,
+            "common": {
+              "affects_world": false, "color_rgb": [0.25, 0.5, 0.75],
+              "casts_shadows": true, "exposure_compensation_ev": -2,
+              "shadow": { "bias": 0.125, "normal_bias": 0.25,
+                "contact_shadows": true, "resolution_hint": 3 }
+            },
+            "atmosphere_light_slot": 2,
+            "use_per_pixel_atmosphere_transmittance": true,
+            "atmosphere_disk_luminance_scale_rgb": [0.5, 1.0, 2.0],
+            "angular_size_radians": 0.02,
+            "cascade_count": 4,
+            "cascade_distances": [10.0, 30.0, 80.0, 200.0],
+            "distribution_exponent": 1.0,
+            "intensity_lux": 10000.0
+          }
+        ]
+      }
+    })"));
+
+    EXPECT_TRUE(report.success);
+    EXPECT_EQ(report.scenes_written, 1U);
+
+    auto layout = LooseCookedLayout {};
+    const auto scene_path = cooked_root
+      / std::filesystem::path(
+        layout.SceneDescriptorRelPath("DirectionalTuning"));
+    ASSERT_TRUE(std::filesystem::exists(scene_path));
+
+    const auto scene_bytes = ReadBytes(scene_path);
+    ASSERT_FALSE(scene_bytes.empty());
+
+    const auto scene = oxygen::data::SceneAsset(
+      oxygen::data::AssetKey {}, std::span<const std::byte>(scene_bytes));
+    const auto directional
+      = scene.GetComponents<oxygen::data::pak::world::DirectionalLightRecord>();
+    ASSERT_EQ(directional.size(), 1U);
+    EXPECT_EQ(CheckedAt(directional, 0).common.affects_world, 0U);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).common.color_rgb[0], 0.25F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).common.color_rgb[1], 0.5F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).common.color_rgb[2], 0.75F);
+    EXPECT_EQ(CheckedAt(directional, 0).common.casts_shadows, 1U);
+    EXPECT_FLOAT_EQ(
+      CheckedAt(directional, 0).common.exposure_compensation_ev, -2.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).common.shadow.bias, 0.125F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).common.shadow.normal_bias, 0.25F);
+    EXPECT_EQ(CheckedAt(directional, 0).common.shadow.contact_shadows, 1U);
+    EXPECT_EQ(CheckedAt(directional, 0).common.shadow.resolution_hint, 3U);
+    EXPECT_EQ(CheckedAt(directional, 0).atmosphere_light_slot, 2U);
+    EXPECT_EQ(
+      CheckedAt(directional, 0).use_per_pixel_atmosphere_transmittance, 1U);
+    EXPECT_FLOAT_EQ(
+      CheckedAt(directional, 0).atmosphere_disk_luminance_scale_rgb[0], 0.5F);
+    EXPECT_FLOAT_EQ(
+      CheckedAt(directional, 0).atmosphere_disk_luminance_scale_rgb[1], 1.0F);
+    EXPECT_FLOAT_EQ(
+      CheckedAt(directional, 0).atmosphere_disk_luminance_scale_rgb[2], 2.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).angular_size_radians, 0.02F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).intensity_lux, 10000.0F);
+    EXPECT_EQ(CheckedAt(directional, 0).split_mode, 1U);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).max_shadow_distance, 200.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).cascade_distances[0], 10.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).cascade_distances[1], 30.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).cascade_distances[2], 80.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).cascade_distances[3], 200.0F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).transition_fraction, 0.1F);
+    EXPECT_FLOAT_EQ(CheckedAt(directional, 0).distance_fadeout_fraction, 0.1F);
+
+    // Exercise strict binary ingress with otherwise valid cooked content.
+    using oxygen::data::pak::world::SceneAssetDesc;
+    using oxygen::data::pak::world::SceneComponentTableDesc;
+    SceneAssetDesc descriptor {};
+    std::memcpy(&descriptor, scene_bytes.data(), sizeof(descriptor));
+    ASSERT_EQ(descriptor.component_table_count, 1U);
+    SceneComponentTableDesc table {};
+    std::memcpy(&table,
+      std::span(scene_bytes)
+        .subspan(descriptor.component_table_directory_offset)
+        .data(),
+      sizeof(table));
+    for (unsigned malformed = 0U; malformed < 8U; ++malformed) {
+      SCOPED_TRACE(malformed);
+      auto record = CheckedAt(directional, 0);
+      // NOLINTBEGIN(*-magic-numbers) - distinct malformed-field cases
+      switch (malformed) {
+      case 0:
+        record.common.affects_world = 2U;
+        break;
+      case 1:
+        record.common.shadow.contact_shadows = 2U;
+        break;
+      case 2:
+        record.common.shadow.resolution_hint = 4U;
+        break;
+      case 3:
+        record.atmosphere_light_slot = 3U;
+        break;
+      case 4:
+        record.use_per_pixel_atmosphere_transmittance = 2U;
+        break;
+      case 5:
+        record.intensity_lux = std::numeric_limits<float>::infinity();
+        break;
+      case 6:
+        record.cascade_distances[1] = record.cascade_distances[0];
+        break;
+      default:
+        record.atmosphere_disk_luminance_scale_rgb[1] = -1.0F;
+        break;
+      }
+      // NOLINTEND(*-magic-numbers)
+      auto malformed_bytes = scene_bytes;
+      std::memcpy(std::span(malformed_bytes).subspan(table.table.offset).data(),
+        &record, sizeof(record));
+      EXPECT_THROW(
+        static_cast<void>(oxygen::data::SceneAsset(oxygen::data::AssetKey {},
+          std::span<const std::byte>(malformed_bytes))),
+        std::exception);
+    }
+  }
+
+  NOLINT_TEST_F(SceneDescriptorImportJobTest,
+    RejectsLegacyDescriptorVersionWithRecookDiagnostic)
+  {
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "legacy_version";
+    std::filesystem::create_directories(cooked_root);
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+
+    const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
+      "version": 2,
+      "name": "LegacyScene",
+      "nodes": [ { "name": "Root" } ]
+    })"));
+
+    EXPECT_FALSE(report.success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "scene.descriptor.recook_required"));
+  }
+
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, SerializesV3EnvironmentAndLocalFogRecords)
+  {
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "environment_and_local_fog";
+    std::filesystem::create_directories(cooked_root);
+    WriteCubemapSidecar(cooked_root, "sky_probe.otex", 5U);
+    WriteCubemapSidecar(cooked_root, "fog_probe.otex", 6U);
+    WriteCubemapSidecar(cooked_root, "backdrop.otex", 7U);
+
+    auto service = AsyncImportService(AsyncImportService::Config {
+      .thread_pool_size = 2U,
+    });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+
+    const auto report = SubmitAndWait(service, MakeRequest(cooked_root, R"({
+      "name": "EnvironmentScene",
+      "nodes": [
+        { "name": "Root" },
+        { "name": "FogVolumeNode", "parent": 0 }
+      ],
+      "environment": {
+        "fog": {
+          "enabled": true,
+          "model": 1,
+          "extinction_sigma_t_per_m": 0.01,
+          "height_falloff_per_m": 0.2,
+          "height_offset_m": 0.0,
+          "start_distance_m": 1.0,
+          "max_opacity": 0.8,
+          "single_scattering_albedo_rgb": [0.9, 0.8, 0.7],
+          "anisotropy_g": 0.25,
+          "enable_height_fog": true,
+          "enable_volumetric_fog": true,
+          "second_fog_density": 0.03,
+          "second_fog_height_falloff": 0.15,
+          "second_fog_height_offset": 10.0,
+          "fog_inscattering_luminance": [1.0, 0.9, 0.8],
+          "sky_atmosphere_ambient_contribution_color_scale": [0.2, 0.3, 0.4],
+          "inscattering_color_cubemap_ref": "/.cooked/Textures/fog_probe.otex",
+          "inscattering_color_cubemap_angle": 0.5,
+          "inscattering_texture_tint": [0.7, 0.6, 0.5],
+          "fully_directional_inscattering_color_distance": 100.0,
+          "non_directional_inscattering_color_distance": 50.0,
+          "directional_inscattering_luminance": [0.1, 0.2, 0.3],
+          "directional_inscattering_exponent": 4.0,
+          "directional_inscattering_start_distance": 15.0,
+          "end_distance_m": 2500.0,
+          "fog_cutoff_distance_m": 3000.0,
+          "volumetric_fog_scattering_distribution": 0.6,
+          "volumetric_fog_albedo": [0.5, 0.6, 0.7],
+          "volumetric_fog_emissive": [0.0, 0.1, 0.2],
+          "volumetric_fog_extinction_scale": 1.5,
+          "volumetric_fog_distance": 500.0,
+          "volumetric_fog_start_distance": 3.0,
+          "volumetric_fog_near_fade_in_distance": 4.0,
+          "volumetric_fog_static_lighting_scattering_intensity": 2.0,
+          "override_light_colors_with_fog_inscattering_colors": true,
+          "holdout": false,
+          "render_in_main_pass": true,
+          "visible_in_reflection_captures": true,
+          "visible_in_real_time_sky_captures": false
+        },
+        "sky_light": {
+          "enabled": true,
+          "source": 1,
+          "cubemap_ref": "/.cooked/Textures/sky_probe.otex",
+          "intensity": 1.5,
+          "tint_rgb": [0.8, 0.9, 1.0],
+          "diffuse_intensity": 1.1,
+          "specular_intensity": 1.2,
+          "source_cubemap_angle_radians": 0.75,
+          "lower_hemisphere_color": [0.1, 0.2, 0.3],
+          "lower_hemisphere_is_solid_color": false,
+          "lower_hemisphere_blend_alpha": 0.35,
+          "volumetric_scattering_intensity": 0.4,
+          "affect_reflections": true
+        },
+        "sky_sphere": {
+          "enabled": true,
+          "source": 0,
+          "cubemap_ref": "/.cooked/Textures/backdrop.otex",
+          "solid_color_rgb": [0.1, 0.2, 0.3],
+          "intensity": 2.0,
+          "rotation_radians": 1.25,
+          "tint_rgb": [0.9, 0.8, 0.7]
+        }
+      },
+      "local_fog_volumes": [
+        {
+          "node": 1,
+          "enabled": true,
+          "radial_fog_extinction": 0.3,
+          "height_fog_extinction": 0.2,
+          "height_fog_falloff": 0.15,
+          "height_fog_offset": 1.25,
+          "fog_phase_g": 0.4,
+          "fog_albedo": [0.7, 0.8, 0.9],
+          "fog_emissive": [0.1, 0.2, 0.3],
+          "sort_priority": 2
+        }
+      ]
+    })"));
+
+    EXPECT_TRUE(report.success);
+    EXPECT_EQ(report.scenes_written, 1U);
+
+    auto layout = LooseCookedLayout {};
+    const auto scene_path = cooked_root
+      / std::filesystem::path(
+        layout.SceneDescriptorRelPath("EnvironmentScene"));
+    ASSERT_TRUE(std::filesystem::exists(scene_path));
+
+    const auto scene_bytes = ReadBytes(scene_path);
+    ASSERT_FALSE(scene_bytes.empty());
+
+    const auto scene = oxygen::data::SceneAsset(
+      oxygen::data::AssetKey {}, std::span<const std::byte>(scene_bytes));
+
+    const auto fog = scene.TryGetFogEnvironment();
+    ASSERT_TRUE(fog.has_value()) << "Expected fog to contain a value";
+    EXPECT_EQ(fog->enable_height_fog, 1U);
+    EXPECT_EQ(fog->enable_volumetric_fog, 1U);
+    EXPECT_FLOAT_EQ(fog->second_fog_density, 0.03F);
+    EXPECT_FLOAT_EQ(fog->volumetric_fog_extinction_scale, 1.5F);
+    EXPECT_EQ(fog->override_light_colors_with_fog_inscattering_colors, 1U);
+    EXPECT_EQ(fog->visible_in_real_time_sky_captures, 0U);
+
+    const auto sky_light = scene.TryGetSkyLightEnvironment();
+    ASSERT_TRUE(sky_light.has_value())
+      << "Expected sky_light to contain a value";
+    EXPECT_FLOAT_EQ(sky_light->source_cubemap_angle_radians, 0.75F);
+    EXPECT_EQ(sky_light->lower_hemisphere_is_solid_color, 0U);
+    EXPECT_FLOAT_EQ(sky_light->lower_hemisphere_blend_alpha, 0.35F);
+    EXPECT_FLOAT_EQ(sky_light->volumetric_scattering_intensity, 0.4F);
+
+    const auto sky_sphere = scene.TryGetSkySphereEnvironment();
+    ASSERT_TRUE(sky_sphere.has_value())
+      << "Expected sky_sphere to contain a value";
+    EXPECT_EQ(sky_sphere->source, 0U);
+    EXPECT_FLOAT_EQ(sky_sphere->intensity, 2.0F);
+    EXPECT_FLOAT_EQ(sky_sphere->rotation_radians, 1.25F);
+    EXPECT_FLOAT_EQ(sky_sphere->tint_rgb[2], 0.7F);
+    EXPECT_FLOAT_EQ(sky_sphere->solid_color_rgb[1], 0.2F);
+
+    // Each cubemap binds its own source texture through the reference table.
+    const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
+    const auto scene_key = index.FindAssetKeyByVirtualPath(
+      "/.cooked/Scenes/EnvironmentScene.oscene");
+    ASSERT_TRUE(scene_key.has_value());
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+    const auto references = index.FindAssetReferences(scene_key.value());
+    ASSERT_TRUE(references.has_value());
+    const auto texture_of
+      = [&](const data::ResourceReferenceIndex reference) -> uint32_t {
+      // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+      const auto resolved = references.value().ResolveResource(
+        reference, data::ResourceKind::kTexture);
+      return resolved && resolved->has_value() ? resolved->value().get() : 0U;
+    };
+    EXPECT_EQ(texture_of(fog->inscattering_color_cubemap), 6U);
+    EXPECT_EQ(texture_of(sky_light->cubemap), 5U);
+    EXPECT_EQ(texture_of(sky_sphere->cubemap), 7U);
+
+    const auto local_fog
+      = scene.GetComponents<oxygen::data::pak::world::LocalFogVolumeRecord>();
+    ASSERT_EQ(local_fog.size(), 1U);
+    EXPECT_EQ(CheckedAt(local_fog, 0).node_index, 1U);
+    EXPECT_EQ(CheckedAt(local_fog, 0).enabled, 1U);
+    EXPECT_FLOAT_EQ(CheckedAt(local_fog, 0).radial_fog_extinction, 0.3F);
+    EXPECT_EQ(CheckedAt(local_fog, 0).sort_priority, 2);
+  }
+
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, CompletePostProcessAndBackgroundRoundTrip)
+  {
+    auto service = AsyncImportService(
+      AsyncImportService::Config { .thread_pool_size = 2U });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    const ScopedTempDir temp;
+    const auto root = temp.Path() / "complete_environment";
+    std::filesystem::create_directories(root);
+    auto document = nlohmann::json::parse(
+      R"JSON(
+{
+  "name": "Environment",
+  "nodes": [
+    {
+      "name": "Root"
+    }
+  ],
+  "environment": {
+    "post_process_volume": {
+      "tone_mapper": 1,
+      "exposure_mode": 2,
+      "exposure_enabled": false,
+      "exposure_compensation_ev": 1.25,
+      "exposure_key": 8.75,
+      "manual_exposure_ev": 11.5,
+      "auto_exposure_min_ev": -3.25,
+      "auto_exposure_max_ev": 12.75,
+      "auto_exposure_speed_up": 5.5,
+      "auto_exposure_speed_down": 1.75,
+      "auto_exposure_metering_mode": 0,
+      "auto_exposure_low_percentile": 0.2,
+      "auto_exposure_high_percentile": 0.85,
+      "auto_exposure_min_log_luminance": -10.5,
+      "auto_exposure_log_luminance_range": 21.25,
+      "auto_exposure_target_luminance": 0.27,
+      "auto_exposure_spot_meter_radius": 0.35,
+      "auto_exposure_black_influence": 0.4,
+      "auto_exposure_transition_distance_ev": 2.5,
+      "auto_exposure_compensation_curve": [
+        {"metered_ev": -4, "compensation_ev": 1.25},
+        {"metered_ev": 12, "compensation_ev": -0.5}
+      ],
+      "bloom_intensity": 0.6,
+      "bloom_threshold": 2.25,
+      "saturation": 0.8,
+      "contrast": 1.4,
+      "vignette_intensity": 0.3,
+      "display_gamma": 2.4,
+      "enabled": true
+    },
+    "background": {
+      "enabled": true,
+      "color_rgb": [
+        0.05,
+        0.25,
+        0.75
+      ]
+    }
+  }
+}
+)JSON");
+    for (uint32_t tone = 0; tone != 4; ++tone) {
+      for (uint32_t exposure = 0; exposure != 3; ++exposure) {
+        for (uint32_t metering = 0; metering != 3; ++metering) {
+          auto& input = document.at("environment").at("post_process_volume");
+          input.update({
+            { "tone_mapper", tone },
+            { "exposure_mode", exposure },
+            { "auto_exposure_metering_mode", metering },
+            { "exposure_enabled", exposure == 1 },
+          });
+          SCOPED_TRACE(document.dump());
+          const auto report = SubmitAndWait(
+            service, MakeRequest(root, document.dump(), "Environment"));
+          ASSERT_TRUE(report.success);
+          EXPECT_EQ(report.scenes_written, 1U);
+          const auto path
+            = root / LooseCookedLayout {}.SceneDescriptorRelPath("Environment");
+          const auto bytes = ReadBytes(path);
+          const auto scene = data::SceneAsset(
+            data::AssetKey {}, std::span<const std::byte>(bytes));
+          const auto post = scene.TryGetPostProcessVolumeEnvironment();
+          ASSERT_TRUE(post.has_value());
+          EXPECT_EQ(post->header.record_size, 160U);
+          EXPECT_EQ(static_cast<uint32_t>(post->tone_mapper), tone);
+          EXPECT_EQ(static_cast<uint32_t>(post->exposure_mode), exposure);
+          EXPECT_EQ(
+            static_cast<uint32_t>(post->auto_exposure_metering_mode), metering);
+          EXPECT_EQ(post->exposure_enabled, exposure == 1 ? 1U : 0U);
+          EXPECT_FLOAT_EQ(post->exposure_compensation_ev, 1.25F);
+          EXPECT_FLOAT_EQ(post->exposure_key, 8.75F);
+          EXPECT_FLOAT_EQ(post->manual_exposure_ev, 11.5F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_min_ev, -3.25F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_max_ev, 12.75F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_speed_up, 5.5F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_speed_down, 1.75F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_low_percentile, 0.2F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_high_percentile, 0.85F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_min_log_luminance, -10.5F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_log_luminance_range, 21.25F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_target_luminance, 0.27F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_spot_meter_radius, 0.35F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_black_influence, 0.4F);
+          EXPECT_FLOAT_EQ(post->auto_exposure_transition_distance_ev, 2.5F);
+          EXPECT_EQ(post->exposure_extension_version, 1U);
+          EXPECT_EQ(
+            post->auto_exposure_metering_mask, data::kNoResourceReference);
+          const auto curve = scene.GetPostProcessCompensationCurve();
+          ASSERT_EQ(curve.size(), 2U);
+          EXPECT_FLOAT_EQ(CheckedAt(curve, 0).metered_ev, -4.0F);
+          EXPECT_FLOAT_EQ(CheckedAt(curve, 0).compensation_ev, 1.25F);
+          EXPECT_FLOAT_EQ(CheckedAt(curve, 1).metered_ev, 12.0F);
+          EXPECT_FLOAT_EQ(CheckedAt(curve, 1).compensation_ev, -0.5F);
+          EXPECT_FLOAT_EQ(post->bloom_intensity, 0.6F);
+          EXPECT_FLOAT_EQ(post->bloom_threshold, 2.25F);
+          EXPECT_FLOAT_EQ(post->saturation, 0.8F);
+          EXPECT_FLOAT_EQ(post->contrast, 1.4F);
+          EXPECT_FLOAT_EQ(post->vignette_intensity, 0.3F);
+          EXPECT_FLOAT_EQ(post->display_gamma, 2.4F);
+          const auto background = scene.TryGetBackgroundEnvironment();
+          if (!background.has_value()) {
+            FAIL() << "Expected background to contain a value";
+          }
+          EXPECT_EQ(background->enabled, 1U);
+          EXPECT_EQ(background->header.record_size, 24U);
+          EXPECT_FLOAT_EQ(background->color_rgb[0], 0.05F);
+          EXPECT_FLOAT_EQ(background->color_rgb[1], 0.25F);
+          EXPECT_FLOAT_EQ(background->color_rgb[2], 0.75F);
+        }
+      }
+    }
+  }
+
+  NOLINT_TEST_F(SceneDescriptorImportJobTest,
+    RejectsPreviousSceneVersionWithRecookDiagnostic)
+  {
+    auto service = AsyncImportService(
+      AsyncImportService::Config { .thread_pool_size = 1U });
+    const auto stop_service
+      = oxygen::Finally([&service] -> void { service.Stop(); });
+    const ScopedTempDir temp;
+    const auto root = temp.Path() / "previous_scene_version";
+    std::filesystem::create_directories(root);
+    const auto report = SubmitAndWait(service,
+      MakeRequest(
+        root, R"({"version":5,"name":"Old","nodes":[{"name":"Root"}]})"));
+    EXPECT_FALSE(report.success);
+    EXPECT_EQ(report.scenes_written, 0U);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report.diagnostics, "scene.descriptor.recook_required"));
+  }
+
+} // namespace
+
+} // namespace oxygen::content::import::test

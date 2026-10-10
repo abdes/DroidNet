@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Import/Internal/MaterialSource.cpp
+
 #include <algorithm>
 #include <filesystem>
 #include <limits>
@@ -16,16 +18,12 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
+#include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
 namespace {
-  auto HasCode(const std::vector<ImportDiagnostic>& diagnostics,
-    const std::string_view code) -> bool
-  {
-    return std::ranges::any_of(
-      diagnostics, [code](const auto& item) { return item.code == code; });
-  }
+  using oxygen::cooker::test::HasDiagnosticCode;
 
   NOLINT_TEST(
     MaterialSourceTest, PreparesEveryNativeTextureSlotWithoutReadingFiles)
@@ -47,9 +45,7 @@ namespace {
     std::vector<ImportDiagnostic> diagnostics;
     const auto source = MaterialSource::FromDescriptor(
       document.dump(), "source.omat.json", "", diagnostics);
-    if (!source.has_value()) {
-      FAIL() << "Expected source to contain a value";
-    }
+    ASSERT_TRUE(source.has_value()) << "Expected source to contain a value";
     EXPECT_TRUE(diagnostics.empty());
     EXPECT_EQ(MaterialSource::TextureSlots().size(), 12U);
     for (const auto& slot : MaterialSource::TextureSlots()) {
@@ -70,26 +66,19 @@ namespace {
     const auto named = MaterialSource::FromDescriptor(
       R"({"name":"Authored","content_hashing":false})", "Fallback.omat.json",
       "Override", diagnostics);
-    if (!named.has_value()) {
-      FAIL() << "Expected named to contain a value";
-    }
+    ASSERT_TRUE(named.has_value()) << "Expected named to contain a value";
     EXPECT_EQ(named->name, "Override");
     EXPECT_EQ(named->storage_name, "Override");
-    if (!named->content_hashing.has_value()) {
-      FAIL() << "Expected named->content_hashing to contain a value";
-    }
+    ASSERT_TRUE(named->content_hashing.has_value())
+      << "Expected named->content_hashing to contain a value";
     EXPECT_FALSE(named->content_hashing.value());
     const auto authored = MaterialSource::FromDescriptor(
       R"({"name":"Authored"})", "Fallback.omat.json", "", diagnostics);
-    if (!authored.has_value()) {
-      FAIL() << "Expected authored to contain a value";
-    }
+    ASSERT_TRUE(authored.has_value()) << "Expected authored to contain a value";
     EXPECT_EQ(authored->name, "Authored");
     const auto fallback = MaterialSource::FromDescriptor(
       "{}", "Fallback.omat.json", "", diagnostics);
-    if (!fallback.has_value()) {
-      FAIL() << "Expected fallback to contain a value";
-    }
+    ASSERT_TRUE(fallback.has_value()) << "Expected fallback to contain a value";
     EXPECT_EQ(fallback->name, "Fallback.omat");
     EXPECT_FALSE(fallback->content_hashing.has_value());
   }
@@ -102,7 +91,8 @@ namespace {
       {"stage":"pixel","source_path":"another.hlsl","entry_point":"PS"}]})",
       "material.json", "", diagnostics);
     EXPECT_FALSE(result);
-    EXPECT_TRUE(HasCode(diagnostics, "material.shader_stage_duplicate"));
+    EXPECT_TRUE(
+      HasDiagnosticCode(diagnostics, "material.shader_stage_duplicate"));
   }
 
   NOLINT_TEST(MaterialSourceTest, PreparationRejectsUnsupportedEmissionRange)
@@ -112,9 +102,9 @@ namespace {
       R"({"parameters":{"emissive_color":[1,1,1],"emissive_intensity":70000}})",
       "material.json", "", diagnostics);
     EXPECT_FALSE(result);
-    EXPECT_TRUE(
-      HasCode(diagnostics, "material.descriptor.schema_validation_failed")
-      || HasCode(diagnostics, "material.emissive_factor_range"));
+    EXPECT_TRUE(HasDiagnosticCode(
+                  diagnostics, "material.descriptor.schema_validation_failed")
+      || HasDiagnosticCode(diagnostics, "material.emissive_factor_range"));
   }
 
   NOLINT_TEST(MaterialSourceTest, ForcePackedRequiresTheSameTextureAndUv)
@@ -126,7 +116,7 @@ namespace {
       "roughness":{"virtual_path":"/Content/orm.otex","uv_set":1}}})",
       "material.json", "", diagnostics);
     EXPECT_FALSE(result);
-    EXPECT_TRUE(HasCode(diagnostics, "material.orm_policy"));
+    EXPECT_TRUE(HasDiagnosticCode(diagnostics, "material.orm_policy"));
   }
 
   NOLINT_TEST(
@@ -137,7 +127,8 @@ namespace {
     source.inputs.emissive_factor[0] = std::numeric_limits<float>::infinity();
     std::vector<ImportDiagnostic> diagnostics;
     EXPECT_FALSE(source.Validate("model.gltf", diagnostics));
-    EXPECT_TRUE(HasCode(diagnostics, "material.emissive_factor_range"));
+    EXPECT_TRUE(
+      HasDiagnosticCode(diagnostics, "material.emissive_factor_range"));
   }
 }
 }

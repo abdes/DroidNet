@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Pak/PakCatalogIo.cpp
+
+#include <algorithm>
 #include <array>
 #include <cstdint>
-#include <filesystem>
 #include <string_view>
 
-#include <process.h>
+#include "PakTestSupport.h"
 
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
 #include <Oxygen/Testing/GTest.h>
@@ -18,31 +20,11 @@ namespace {
 
 namespace data = oxygen::data;
 namespace pak = oxygen::content::pak;
+namespace paktest = oxygen::content::pak::test;
 
-auto MakeSourceKey(const uint8_t seed) -> data::SourceKey
-{
-  auto bytes = std::array<uint8_t, data::SourceKey::kSizeBytes> {};
-  for (auto i = size_t { 0U }; i < bytes.size(); ++i) {
-    bytes[i] = static_cast<uint8_t>(seed + static_cast<uint8_t>(i));
-  }
-  bytes[6] = static_cast<uint8_t>((bytes[6] & 0x0FU) | 0x70U);
-  bytes[8] = static_cast<uint8_t>((bytes[8] & 0x3FU) | 0x80U);
-  return data::SourceKey::FromBytes(bytes).value();
-}
-
-auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
-{
-  auto bytes = std::array<uint8_t, data::AssetKey::kSizeBytes> {};
-  bytes.fill(seed);
-  return data::AssetKey::FromBytes(bytes);
-}
-
-auto MakeDigest(const uint8_t seed) -> std::array<uint8_t, 32>
-{
-  auto digest = std::array<uint8_t, 32> {};
-  digest.fill(seed);
-  return digest;
-}
+using paktest::MakeAssetKey;
+using paktest::MakeDigest;
+using paktest::MakeSourceKey;
 
 auto MakeEntry(const uint8_t asset_seed, const data::AssetType type,
   const uint8_t descriptor_seed, const uint8_t transitive_seed)
@@ -73,13 +55,6 @@ auto MakeCatalog() -> data::PakCatalog
     .catalog_digest = MakeDigest(0x61U) } };
   catalog.catalog_digest = catalog.ComputeDigest().value();
   return catalog;
-}
-
-auto TempCatalogPath() -> std::filesystem::path
-{
-  return std::filesystem::temp_directory_path()
-    / std::filesystem::path(
-      "oxygen-pak-catalog-io-" + std::to_string(_getpid()) + ".json");
 }
 
 auto ExpectCatalogEqual(
@@ -157,25 +132,6 @@ NOLINT_TEST(PakCatalogIoTest, ParseRejectsDuplicateAssetKeys)
   const auto parsed = pak::PakCatalogIo::Parse(text);
 
   EXPECT_FALSE(parsed.has_value());
-}
-
-NOLINT_TEST(PakCatalogIoTest, ReadAndWriteRoundTripCatalogFile)
-{
-  const auto path = TempCatalogPath();
-  std::error_code ec;
-  std::filesystem::remove(path, ec);
-
-  const auto catalog = MakeCatalog();
-  const auto write_result = pak::PakCatalogIo::Write(path, catalog);
-  ASSERT_TRUE(write_result.has_value());
-
-  const auto read_result = pak::PakCatalogIo::Read(path);
-  ASSERT_TRUE(read_result.has_value());
-  ExpectCatalogEqual(read_result.value(),
-    pak::PakCatalogIo::Parse(pak::PakCatalogIo::ToCanonicalJsonString(catalog))
-      .value());
-
-  std::filesystem::remove(path, ec);
 }
 
 } // namespace

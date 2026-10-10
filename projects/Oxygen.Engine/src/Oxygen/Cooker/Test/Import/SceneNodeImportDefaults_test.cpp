@@ -4,12 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstdint>
+// Covers: Import/Internal/SceneNodeImportDefaults.h
 
-#include <Oxygen/Testing/GTest.h>
+#include <cstdint>
 
 #include <Oxygen/Cooker/Import/Internal/SceneNodeImportDefaults.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 

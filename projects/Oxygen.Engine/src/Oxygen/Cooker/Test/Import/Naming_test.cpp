@@ -4,11 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Import/Naming.cpp
+
 #include <memory>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 

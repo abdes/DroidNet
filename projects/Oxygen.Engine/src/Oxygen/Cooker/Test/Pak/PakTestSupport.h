@@ -8,37 +8,40 @@
 
 #include <algorithm>
 #include <array>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <span>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
-
-#include <Oxygen/Testing/GTest.h>
-
-#if defined(_WIN32)
-#  include <Windows.h>
-#elif defined(__unix__) || defined(__APPLE__)
-#  include <unistd.h>
-#endif
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
+#include <Oxygen/Content/Test/Fixtures/LooseCookedTestWriter.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Test/Support/Diagnostics.h>
+#include <Oxygen/Cooker/Test/Support/FileIo.h>
+#include <Oxygen/Cooker/Test/Support/TempDir.h>
+#include <Oxygen/Cooker/Test/Support/TestValues.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::pak::test {
 
@@ -56,137 +59,29 @@ struct AssetSpec final {
   data::AssetReferences references;
 };
 
-//! A minimal current-format scene for planner tests that do not need nodes.
-[[nodiscard]] inline auto MakeEmptySceneDescriptor() -> std::vector<std::byte>
-{
-  namespace world = data::pak::world;
-  auto descriptor = world::SceneAssetDesc {};
-  descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
-  descriptor.header.version = world::kSceneAssetVersion;
-  auto environment = world::SceneEnvironmentBlockHeader {};
-  environment.byte_size = sizeof(environment);
-  serio::MemoryStream stream;
-  serio::Writer writer(stream);
-  const auto packed = writer.ScopedAlignment(1);
-  if (!writer.Write(descriptor) || !writer.Write(environment)) {
-    throw std::runtime_error("Could not serialize current scene fixture");
-  }
-  const auto bytes = stream.Data();
-  return { bytes.begin(), bytes.end() };
-}
-
 struct FileSpec final {
   lc::FileKind kind = lc::FileKind::kUnknown;
   std::string relpath;
   std::vector<std::byte> payload;
 };
 
-[[nodiscard]] inline auto CurrentProcessIdForTests() -> uint64_t
-{
-#if defined(_WIN32)
-  return static_cast<uint64_t>(::GetCurrentProcessId());
-#elif defined(__unix__) || defined(__APPLE__)
-  return static_cast<uint64_t>(::getpid());
-#else
-  return 0U;
-#endif
-}
-
-class TempDirFixture : public testing::Test {
+//! Per-test unique temp directory; thin naming adapter over `TempDirTest`.
+class TempDirFixture : public oxygen::cooker::test::TempDirTest {
 protected:
-  void SetUp() override
-  {
-    static auto counter = std::atomic_uint64_t { 0U };
-    const auto id = ++counter;
-    auto leaf = std::ostringstream {};
-    leaf << "pid-" << CurrentProcessIdForTests() << "-case-" << id;
-    root_ = std::filesystem::temp_directory_path() / "oxygen_pak_tests"
-      / leaf.str();
-    std::filesystem::create_directories(root_);
-  }
-
-  void TearDown() override
-  {
-    if (!IsSafeTempDeletionTarget(root_)) {
-      ADD_FAILURE() << "Refusing to delete unsafe temp directory: "
-                    << root_.string();
-      return;
-    }
-
-    auto ec = std::error_code {};
-    std::filesystem::remove_all(root_, ec);
-    if (ec) {
-      ADD_FAILURE() << "Failed to delete temp directory '" << root_.string()
-                    << "': " << ec.message();
-    }
-  }
-
   [[nodiscard]] auto Root() const -> const std::filesystem::path&
   {
-    return root_;
+    return TempDir();
   }
 
   [[nodiscard]] auto Path(std::string_view leaf) const -> std::filesystem::path
   {
-    return root_ / std::filesystem::path(leaf);
+    return TempDir() / std::filesystem::path(leaf);
   }
-
-private:
-  [[nodiscard]] static auto IsUnderBaseDir(const std::filesystem::path& path,
-    const std::filesystem::path& base) -> bool
-  {
-    auto path_it = path.begin();
-    auto base_it = base.begin();
-    for (; base_it != base.end(); ++base_it, ++path_it) {
-      if (path_it == path.end() || *path_it != *base_it) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  [[nodiscard]] static auto IsSafeTempDeletionTarget(
-    const std::filesystem::path& candidate) -> bool
-  {
-    if (candidate.empty() || !candidate.is_absolute()) {
-      return false;
-    }
-
-    auto ec = std::error_code {};
-    const auto canonical_candidate
-      = std::filesystem::weakly_canonical(candidate, ec);
-    if (ec || canonical_candidate.empty()
-      || !canonical_candidate.is_absolute()) {
-      return false;
-    }
-
-    const auto expected_base = std::filesystem::weakly_canonical(
-      std::filesystem::temp_directory_path() / "oxygen_pak_tests", ec);
-    if (ec || expected_base.empty() || !expected_base.is_absolute()) {
-      return false;
-    }
-
-    if (!std::filesystem::exists(canonical_candidate, ec) || ec
-      || !std::filesystem::is_directory(canonical_candidate, ec) || ec) {
-      return false;
-    }
-
-    if (canonical_candidate == expected_base) {
-      return false;
-    }
-
-    return IsUnderBaseDir(canonical_candidate, expected_base);
-  }
-
-  std::filesystem::path root_ {};
 };
 
-[[nodiscard]] inline auto MakeAssetKey(const uint8_t seed) -> data::AssetKey
-{
-  auto bytes = std::array<uint8_t, data::AssetKey::kSizeBytes> {};
-  bytes.fill(seed);
-  return data::AssetKey::FromBytes(bytes);
-}
+//! Shared helpers, re-exported so Pak tests keep spelling them `paktest::X`.
+using oxygen::cooker::test::HasDiagnosticCode;
+using oxygen::cooker::test::MakeAssetKey;
 
 [[nodiscard]] inline auto MakeSourceKey(const uint8_t seed) -> data::SourceKey
 {
@@ -215,163 +110,139 @@ private:
   });
 }
 
-[[nodiscard]] inline auto HasDiagnosticCode(
-  std::span<const PakDiagnostic> diagnostics, const std::string_view code)
-  -> bool
+//! A base catalog with the given entries and a valid digest.
+[[nodiscard]] inline auto MakeBaseCatalog(
+  std::span<const data::PakCatalogEntry> entries) -> data::PakCatalog
 {
-  return std::ranges::any_of(
-    diagnostics, [code](const PakDiagnostic& d) { return d.code == code; });
+  constexpr auto kBaseCatalogSourceSeed = uint8_t { 0xC1U };
+  constexpr auto kBaseCatalogContentVersion = uint16_t { 9U };
+
+  auto catalog = data::PakCatalog {
+    .source_key = MakeSourceKey(kBaseCatalogSourceSeed),
+    .content_version = kBaseCatalogContentVersion,
+    .catalog_digest = {},
+    .entries
+    = std::vector<data::PakCatalogEntry>(entries.begin(), entries.end()),
+  };
+  catalog.catalog_digest = catalog.ComputeDigest().value();
+  return catalog;
 }
 
-[[nodiscard]] inline auto WriteFileBytes(
-  const std::filesystem::path& path, std::span<const std::byte> bytes) -> bool
+//! Stores the SHA-256 of `bytes` (with the hash field zeroed) in its header.
+inline auto EnableDescriptorHash(std::vector<std::byte>& bytes) -> void
 {
-  std::filesystem::create_directories(path.parent_path());
-  auto stream = std::ofstream(path, std::ios::binary | std::ios::trunc);
-  if (!stream.good()) {
-    return false;
-  }
-  if (!bytes.empty()) {
-    // NOLINTNEXTLINE(*-reinterpret-cast)
-    stream.write(reinterpret_cast<const char*>(bytes.data()),
-      static_cast<std::streamsize>(bytes.size()));
-  }
-  stream.flush();
-  return stream.good();
+  const auto digest = oxygen::base::ComputeSha256(bytes);
+  auto field = std::span(bytes).subspan(
+    offsetof(data::pak::core::AssetHeader, content_hash), digest.size());
+  std::memcpy(field.data(), digest.data(), digest.size());
 }
 
+//! The physics sidecar paired with `scene`, with a valid descriptor hash.
+[[nodiscard]] inline auto MakePhysicsSidecarSpec(
+  const uint8_t seed, const AssetSpec& scene) -> AssetSpec
+{
+  auto descriptor = data::pak::physics::PhysicsSceneAssetDesc {};
+  descriptor.header.asset_type
+    = static_cast<uint8_t>(data::AssetType::kPhysicsScene);
+  descriptor.header.version = data::pak::physics::kPhysicsSceneAssetVersion;
+  descriptor.target_scene_key = scene.key;
+  const auto digest = oxygen::base::ComputeSha256(scene.descriptor_payload);
+  std::ranges::copy(digest, std::begin(descriptor.target_scene_content_hash));
+  const auto view = std::as_bytes(std::span { &descriptor, 1U });
+  auto bytes = std::vector<std::byte>(view.begin(), view.end());
+  EnableDescriptorHash(bytes);
+  return AssetSpec {
+    .key = MakeAssetKey(seed),
+    .asset_type = data::AssetType::kPhysicsScene,
+    .descriptor_relpath = "Physics.opscene",
+    .virtual_path = "/Game/Physics" + std::to_string(seed) + ".opscene",
+    .descriptor_size = bytes.size(),
+    .descriptor_sha = oxygen::base::ComputeSha256(bytes),
+    .descriptor_payload = std::move(bytes),
+  };
+}
+
+//! The source identity `WriteLooseIndex` records for a given seed.
+[[nodiscard]] inline auto LooseSourceKey(const uint8_t seed) -> data::SourceKey
+{
+  auto bytes = std::array<uint8_t, data::SourceKey::kSizeBytes> {};
+  for (auto i = size_t { 0U }; i < bytes.size(); ++i) {
+    bytes.at(i) = static_cast<uint8_t>(seed + static_cast<uint8_t>(i + 1U));
+  }
+  bytes.at(6) = static_cast<uint8_t>((bytes.at(6) & 0x0FU) | 0x70U);
+  bytes.at(8) = static_cast<uint8_t>((bytes.at(8) & 0x3FU) | 0x80U);
+  return data::SourceKey::FromBytes(bytes).value();
+}
+
+//! Writes a loose cooked root through the shared forging writer.
+/*!
+ An asset's recorded `descriptor_size` and `descriptor_sha` may deliberately
+ disagree with its payload; an all-zero digest records the computed one.
+*/
 [[nodiscard]] inline auto WriteLooseIndex(const std::filesystem::path& root,
   std::span<const AssetSpec> assets, std::span<const FileSpec> files,
   const uint8_t guid_seed) -> bool
 {
-  std::filesystem::create_directories(root);
+  auto writer = content::testing::LooseCookedTestWriter(root);
+  writer.SetSourceKey(LooseSourceKey(guid_seed));
   for (const auto& file : files) {
-    if (!WriteFileBytes(root / file.relpath,
-          std::span<const std::byte>(
-            file.payload.data(), file.payload.size()))) {
-      return false;
-    }
+    writer.WriteFile(file.kind, file.relpath, file.payload);
   }
-
-  auto strings = std::string {};
-  strings.push_back('\0');
-
-  auto asset_entries = std::vector<lc::AssetEntry> {};
-  asset_entries.reserve(assets.size());
   for (const auto& asset : assets) {
-    auto descriptor_bytes = asset.descriptor_payload;
-    if (descriptor_bytes.empty()) {
-      descriptor_bytes.resize(static_cast<size_t>(asset.descriptor_size));
-    }
-    if (!WriteFileBytes(root / asset.descriptor_relpath,
-          std::span<const std::byte>(
-            descriptor_bytes.data(), descriptor_bytes.size()))) {
-      return false;
-    }
+    writer.WriteAssetDescriptor(asset.key, asset.asset_type, asset.virtual_path,
+      asset.descriptor_relpath, asset.descriptor_payload, asset.references,
+      content::testing::DescriptorRecordOverride {
+        .size = asset.descriptor_size, .sha256 = asset.descriptor_sha });
+  }
+  static_cast<void>(writer.Finish());
+  return true;
+}
 
-    const auto descriptor_offset = static_cast<uint32_t>(strings.size());
-    strings += asset.descriptor_relpath;
-    strings.push_back('\0');
+//! Options for `MakeFullRequest` / `MakePatchRequest`.
+struct FullRequestOptions final {
+  std::vector<data::CookedSource> sources {};
+  uint16_t content_version = 1U;
+  data::SourceKey source_key = MakeSourceKey(0x7DU);
+  bool embed_browse_index = false;
+  bool compute_crc32 = true;
+};
 
-    const auto virtual_path_offset = static_cast<uint32_t>(strings.size());
-    strings += asset.virtual_path;
-    strings.push_back('\0');
+//! A deterministic full-build request without manifest or base catalogs.
+[[nodiscard]] inline auto MakeFullRequest(
+  const std::filesystem::path& output_pak_path, FullRequestOptions options = {})
+  -> PakBuildRequest
+{
+  return PakBuildRequest {
+    .mode = BuildMode::kFull,
+    .sources = std::move(options.sources),
+    .output_pak_path = output_pak_path,
+    .output_manifest_path = {},
+    .content_version = options.content_version,
+    .source_key = options.source_key,
+    .base_catalogs = {},
 
-    auto entry = lc::AssetEntry {};
-    entry.asset_key = asset.key;
-    entry.descriptor_relpath_offset = descriptor_offset;
-    entry.virtual_path_offset = virtual_path_offset;
-    entry.asset_type = static_cast<uint8_t>(asset.asset_type);
-    entry.descriptor_size = asset.descriptor_size;
-    const auto digest = base::IsAllZero(asset.descriptor_sha)
-      ? base::ComputeSha256(descriptor_bytes)
-      : asset.descriptor_sha;
-    std::ranges::copy(digest, std::begin(entry.descriptor_sha256));
-    asset_entries.push_back(entry);
-  }
+    .options = {
+      .deterministic = true,
+      .embed_browse_index = options.embed_browse_index,
+      .emit_manifest_in_full = false,
+      .compute_crc32 = options.compute_crc32,
+      .fail_on_warnings = false,
+    },
+  };
+}
 
-  auto file_entries = std::vector<lc::FileRecord> {};
-  file_entries.reserve(files.size());
-  for (const auto& file : files) {
-    const auto relpath_offset = static_cast<uint32_t>(strings.size());
-    strings += file.relpath;
-    strings.push_back('\0');
-
-    auto entry = lc::FileRecord {};
-    entry.kind = file.kind;
-    entry.relpath_offset = relpath_offset;
-    entry.size = static_cast<uint64_t>(file.payload.size());
-    entry.sha256 = base::ComputeSha256(file.payload);
-    file_entries.push_back(entry);
-  }
-
-  auto header = lc::IndexHeader {};
-  header.version = lc::kIndexVersion;
-  header.flags = static_cast<uint32_t>(lc::kHasVirtualPaths);
-  if (!file_entries.empty()) {
-    header.flags |= static_cast<uint32_t>(lc::kHasFileRecords);
-  }
-  for (size_t i = 0; i < std::size(header.source_identity); ++i) {
-    header.source_identity.at(i)
-      = static_cast<uint8_t>(guid_seed + static_cast<uint8_t>(i + 1U));
-  }
-  header.source_identity.at(6)
-    = static_cast<uint8_t>((header.source_identity.at(6) & 0x0FU) | 0x70U);
-  header.source_identity.at(8)
-    = static_cast<uint8_t>((header.source_identity.at(8) & 0x3FU) | 0x80U);
-  header.string_table_offset = sizeof(lc::IndexHeader);
-  header.string_table_size = static_cast<uint64_t>(strings.size());
-  header.asset_entries_offset
-    = header.string_table_offset + header.string_table_size;
-  header.asset_count = static_cast<uint32_t>(asset_entries.size());
-  header.asset_entry_size = sizeof(lc::AssetEntry);
-  header.file_records_offset = header.asset_entries_offset
-    + (static_cast<uint64_t>(asset_entries.size()) * sizeof(lc::AssetEntry));
-  header.file_record_count = static_cast<uint32_t>(file_entries.size());
-  header.file_record_size = file_entries.empty() ? 0U : sizeof(lc::FileRecord);
-
-  std::vector<std::byte> reference_bytes;
-  const auto references_offset
-    = header.file_records_offset + file_entries.size() * sizeof(lc::FileRecord);
-  for (size_t i = 0; i < assets.size(); ++i) {
-    const auto& references = oxygen::base::CheckedAt(assets, i).references;
-    const auto encoded = references.Encode();
-    if (!encoded) {
-      throw std::runtime_error(encoded.error());
-    }
-    if (encoded->empty()) {
-      continue;
-    }
-    asset_entries.at(i).references = {
-      .offset = references_offset + reference_bytes.size(),
-      .resource_count = static_cast<uint32_t>(references.Resources().size()),
-      .key_count = static_cast<uint32_t>(references.Keys().size()),
-    };
-    reference_bytes.insert(
-      reference_bytes.end(), encoded->begin(), encoded->end());
-  }
-
-  auto index = std::ofstream(
-    root / "container.index.bin", std::ios::binary | std::ios::trunc);
-  if (!index.good()) {
-    return false;
-  }
-  // NOLINTNEXTLINE(*-reinterpret-cast)
-  index.write(reinterpret_cast<const char*>(&header), sizeof(header));
-  index.write(strings.data(), static_cast<std::streamsize>(strings.size()));
-  for (const auto& asset : asset_entries) {
-    // NOLINTNEXTLINE(*-reinterpret-cast)
-    index.write(reinterpret_cast<const char*>(&asset), sizeof(asset));
-  }
-  for (const auto& file : file_entries) {
-    // NOLINTNEXTLINE(*-reinterpret-cast)
-    index.write(reinterpret_cast<const char*>(&file), sizeof(file));
-  }
-  if (!reference_bytes.empty()) {
-    index.write(reinterpret_cast<const char*>(reference_bytes.data()),
-      static_cast<std::streamsize>(reference_bytes.size()));
-  }
-  return index.good();
+//! A deterministic patch request; the manifest sits next to the pak.
+[[nodiscard]] inline auto MakePatchRequest(
+  const std::filesystem::path& output_pak_path,
+  std::vector<data::PakCatalog> base_catalogs, FullRequestOptions options = {})
+  -> PakBuildRequest
+{
+  auto request = MakeFullRequest(output_pak_path, std::move(options));
+  request.mode = BuildMode::kPatch;
+  request.output_manifest_path = output_pak_path;
+  request.output_manifest_path.replace_extension(".manifest");
+  request.base_catalogs = std::move(base_catalogs);
+  return request;
 }
 
 } // namespace oxygen::content::pak::test

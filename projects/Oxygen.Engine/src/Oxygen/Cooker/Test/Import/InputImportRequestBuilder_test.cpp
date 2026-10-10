@@ -4,13 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Import/Internal/InputImportRequestBuilder.cpp
+
+#include <filesystem>
 #include <sstream>
 #include <string>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Cooker/Import/InputImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/InputImportSettings.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -51,8 +53,7 @@ NOLINT_TEST(InputImportRequestBuilderTest, RejectsMissingSourcePath)
   const auto request = BuildInputImportRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(
-    errors.str().find("source_path is required") != std::string::npos);
+  EXPECT_THAT(errors.str(), ::testing::HasSubstr("source_path is required"));
 }
 
 NOLINT_TEST(InputImportRequestBuilderTest, RejectsUnsupportedSourceExtension)
@@ -64,22 +65,24 @@ NOLINT_TEST(InputImportRequestBuilderTest, RejectsUnsupportedSourceExtension)
   const auto request = BuildInputImportRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("*.input.json") != std::string::npos);
+  EXPECT_THAT(errors.str(), ::testing::HasSubstr("*.input.json"));
 }
 
 NOLINT_TEST(InputImportRequestBuilderTest, AcceptsAbsoluteCookedRoot)
 {
   auto settings = InputImportSettings {};
   settings.source_path = "Content/Input/Player.input.json";
-  settings.cooked_root = "C:/tmp/oxygen-input-cooked";
+  // Only compared, never created on disk.
+  const auto cooked_root = std::filesystem::temp_directory_path()
+    / "oxygen-cooker-tests" / "unit" / "oxygen-input-cooked";
+  settings.cooked_root = cooked_root.string();
   std::ostringstream errors;
 
   const auto request = BuildInputImportRequest(settings, errors);
 
   ASSERT_TRUE(request.has_value()) << errors.str();
   ASSERT_TRUE(request->cooked_root.has_value());
-  EXPECT_EQ(
-    request->cooked_root->generic_string(), "C:/tmp/oxygen-input-cooked");
+  EXPECT_EQ(*request->cooked_root, cooked_root);
 }
 
 NOLINT_TEST(InputImportRequestBuilderTest, RejectsRelativeCookedRoot)
@@ -92,8 +95,8 @@ NOLINT_TEST(InputImportRequestBuilderTest, RejectsRelativeCookedRoot)
   const auto request = BuildInputImportRequest(settings, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("cooked root must be an absolute path")
-    != std::string::npos);
+  EXPECT_THAT(
+    errors.str(), ::testing::HasSubstr("cooked root must be an absolute path"));
 }
 
 NOLINT_TEST(InputImportRequestBuilderTest, CarriesManifestOrchestrationMetadata)
@@ -123,8 +126,8 @@ NOLINT_TEST(InputImportRequestBuilderTest, RejectsDependsOnWithoutJobId)
     = BuildInputImportRequest(settings, "", { "core.input" }, errors);
 
   EXPECT_FALSE(request.has_value());
-  EXPECT_TRUE(errors.str().find("depends_on requires a non-empty job_id")
-    != std::string::npos);
+  EXPECT_THAT(errors.str(),
+    ::testing::HasSubstr("depends_on requires a non-empty job_id"));
 }
 
 } // namespace

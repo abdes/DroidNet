@@ -4,9 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Covers: Import/CapturedInputSet.cpp
+
 #include <chrono>
-#include <exception>
 #include <filesystem>
+#include <stdexcept>
 #include <string>
 
 #include <nlohmann/json.hpp>
@@ -90,63 +92,65 @@ namespace {
     EXPECT_FALSE(input->file.has_value());
   }
 
-  NOLINT_TEST(CapturedInputSetTest, RejectsSchemaAndDigestErrors)
+  //! A named corruption applied to an otherwise valid document.
+  struct RejectionCase final {
+    const char* name;
+    void (*corrupt)(nlohmann::json& document);
+  };
+
+  class CapturedInputSetRejectionTest
+    : public ::testing::TestWithParam<RejectionCase> { };
+
+  NOLINT_TEST_P(CapturedInputSetRejectionTest, ParseThrowsInvalidArgument)
   {
     auto document = MakeDocument();
-    document.at("schema_version") = 2;
+    GetParam().corrupt(document);
     EXPECT_THROW(static_cast<void>(CapturedInputSet::Parse(document.dump())),
-      std::exception);
-    document = MakeDocument();
-    document.at("inputs").at(0).at("file").at("sha256") = "0";
-    EXPECT_THROW(static_cast<void>(CapturedInputSet::Parse(document.dump())),
-      std::exception);
-    document = MakeDocument();
-    document.emplace("unknown", true);
-    EXPECT_THROW(static_cast<void>(CapturedInputSet::Parse(document.dump())),
-      std::exception);
+      std::invalid_argument);
   }
 
-  NOLINT_TEST(CapturedInputSetTest, RejectsContradictoryAndDuplicateInputs)
-  {
-    auto document = MakeDocument();
-    document.at("inputs").at(0).at("exists") = false;
-    EXPECT_THROW(static_cast<void>(CapturedInputSet::Parse(document.dump())),
-      std::exception);
-    document = MakeDocument();
-    document.at("inputs").push_back(document.at("inputs").front());
-    EXPECT_THROW(static_cast<void>(CapturedInputSet::Parse(document.dump())),
-      std::exception);
-    document = MakeDocument();
-    document.at("inputs").at(0).at("metadata").at("size") = 7;
-    EXPECT_THROW(static_cast<void>(CapturedInputSet::Parse(document.dump())),
-      std::exception);
-  }
-
-  NOLINT_TEST(CapturedInputSetTest, RejectsRelativeAndNullTerminatedPaths)
-  {
-    auto document = MakeDocument();
-    document.at("inputs").at(0).at("logical_path") = "relative.gltf";
-    EXPECT_THROW(static_cast<void>(CapturedInputSet::Parse(document.dump())),
-      std::exception);
-    document = MakeDocument();
-    document.at("inputs").at(0).at("file").at("path")
-      = std::string("capture\0suffix", 14);
-    EXPECT_THROW(static_cast<void>(CapturedInputSet::Parse(document.dump())),
-      std::exception);
-  }
-
-  NOLINT_TEST(
-    CapturedInputSetTest, RejectsNumericOverflowBeforeNativeConversion)
-  {
-    auto document = MakeDocument();
-    document.at("inputs").at(0).at("file").at("size") = 1.0e30;
-    EXPECT_THROW(static_cast<void>(CapturedInputSet::Parse(document.dump())),
-      std::exception);
-    document = MakeDocument();
-    document.at("inputs").at(0).at("metadata").at("last_modified_seconds")
-      = 1.0e30;
-    EXPECT_THROW(static_cast<void>(CapturedInputSet::Parse(document.dump())),
-      std::exception);
-  }
+  INSTANTIATE_TEST_SUITE_P(Corruptions, CapturedInputSetRejectionTest,
+    ::testing::Values(
+      RejectionCase { "UnsupportedSchemaVersion",
+        [](nlohmann::json& document) { document.at("schema_version") = 2; } },
+      RejectionCase { "MalformedDigest",
+        [](nlohmann::json& document) {
+          document.at("inputs").at(0).at("file").at("sha256") = "0";
+        } },
+      RejectionCase { "UnknownTopLevelProperty",
+        [](nlohmann::json& document) { document.emplace("unknown", true); } },
+      RejectionCase { "ExistsFalseWithCapturedBytes",
+        [](nlohmann::json& document) {
+          document.at("inputs").at(0).at("exists") = false;
+        } },
+      RejectionCase { "DuplicateInputs",
+        [](nlohmann::json& document) {
+          document.at("inputs").push_back(document.at("inputs").front());
+        } },
+      RejectionCase { "MetadataSizeDiffersFromFileSize",
+        [](nlohmann::json& document) {
+          document.at("inputs").at(0).at("metadata").at("size") = 7;
+        } },
+      RejectionCase { "RelativeLogicalPath",
+        [](nlohmann::json& document) {
+          document.at("inputs").at(0).at("logical_path") = "relative.gltf";
+        } },
+      RejectionCase { "NullTerminatedFilePath",
+        [](nlohmann::json& document) {
+          document.at("inputs").at(0).at("file").at("path")
+            = std::string("capture\0suffix", 14);
+        } },
+      RejectionCase { "FileSizeOverflow",
+        [](nlohmann::json& document) {
+          document.at("inputs").at(0).at("file").at("size") = 1.0e30;
+        } },
+      RejectionCase { "TimestampSecondsOverflow",
+        [](nlohmann::json& document) {
+          document.at("inputs").at(0).at("metadata").at("last_modified_seconds")
+            = 1.0e30;
+        } }),
+    [](const ::testing::TestParamInfo<RejectionCase>& info) {
+      return std::string(info.param.name);
+    });
 } // namespace
 } // namespace oxygen::content::import::test

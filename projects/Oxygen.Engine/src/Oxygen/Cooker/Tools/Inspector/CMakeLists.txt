@@ -26,9 +26,9 @@ asap_push_module("${META_MODULE_NAME}")
 
 find_package(nlohmann_json REQUIRED)
 find_package(nlohmann_json_schema_validator REQUIRED)
-add_executable(
-  ${META_MODULE_TARGET}
-  "main.cpp"
+add_library(
+  oxygen-cooker-inspector-core
+  STATIC
   "DependencyReport.cpp"
   "DependencyReport.h"
   "AssetKeyMap.cpp"
@@ -40,9 +40,33 @@ add_executable(
   "InventoryReport.cpp"
   "InventoryReport.h"
 )
+set_target_properties(
+  oxygen-cooker-inspector-core
+  PROPERTIES
+    FOLDER
+      "Tools"
+)
+target_link_libraries(
+  oxygen-cooker-inspector-core
+  PUBLIC
+    oxygen::base
+    oxygen::data
+    oxygen::cooker
+    oxygen::content
+    oxygen::clap
+    nlohmann_json::nlohmann_json
+    nlohmann_json_schema_validator
+)
+
+add_executable(${META_MODULE_TARGET} "main.cpp")
+target_link_libraries(
+  ${META_MODULE_TARGET}
+  PRIVATE
+    oxygen-cooker-inspector-core
+)
 
 oxygen_embed_json_schemas(
-  TARGET ${META_MODULE_TARGET}
+  TARGET oxygen-cooker-inspector-core
   OUTPUT_HEADER
     "${CMAKE_BINARY_DIR}/generated/Oxygen/Cooker/Tools/Inspector/AssetKeyMap_schema.h"
   NAMESPACE "oxygen::content::inspection"
@@ -67,17 +91,13 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
-target_link_libraries(
-  ${META_MODULE_TARGET}
-  PRIVATE
-    oxygen::base
-    oxygen::data
-    oxygen::cooker
-    oxygen::content
-    oxygen::clap
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
+# ------------------------------------------------------------------------------
+# Tests
+# ------------------------------------------------------------------------------
+
+if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Test")
+  add_subdirectory("Test")
+endif()
 
 # ------------------------------------------------------------------------------
 # Deployment instructions

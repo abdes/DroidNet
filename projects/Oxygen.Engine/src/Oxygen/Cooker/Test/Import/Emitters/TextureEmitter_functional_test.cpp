@@ -1,0 +1,876 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+// Covers: Import/Internal/Emitters/TextureEmitter.cpp
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <istream>
+#include <limits>
+#include <memory>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/Internal/Emitters/TextureEmitter.h>
+#include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
+#include <Oxygen/Cooker/Import/Internal/ResourceTableAggregator.h>
+#include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Cooker/Import/Internal/WindowsFileWriter.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Cooker/Test/Support/FileIo.h>
+#include <Oxygen/Cooker/Test/Support/TempDir.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Testing/GTest.h>
+
+using PakTextureResourceDesc = oxygen::data::pak::core::TextureResourceDesc;
+namespace import = oxygen::content::import;
+namespace co = oxygen::co;
+
+namespace {
+
+using oxygen::cooker::test::ReadBytes;
+
+// Alignment used by TextureEmitter (matches kRowPitchAlignment)
+constexpr uint64_t kTextureAlignment = 256;
+
+//! Aligns a value up to the alignment boundary.
+constexpr auto AlignUp(uint64_t value, uint64_t alignment) -> uint64_t
+{
+  if (alignment <= 1) {
+    return value;
+  }
+  const auto remainder = value % alignment;
+  return (remainder == 0) ? value : (value + (alignment - remainder));
+}
+
+//=== Test Helpers ===--------------------------------------------------------//
+
+//! Parse texture table from binary data.
+auto ParseTextureTable(const std::vector<std::byte>& data)
+  -> std::vector<PakTextureResourceDesc>
+{
+  const auto count = data.size() / sizeof(PakTextureResourceDesc);
+  std::vector<PakTextureResourceDesc> table(count);
+  const auto dest_span
+    = std::span<PakTextureResourceDesc>(table.data(), table.size());
+  auto dest_bytes = std::as_writable_bytes(dest_span);
+  const auto bytes_to_copy = std::min(data.size(), dest_bytes.size());
+  std::copy_n(data.begin(), bytes_to_copy, dest_bytes.begin());
+  return table;
+}
+
+//=== Test Fixture ===--------------------------------------------------------//
+
+//! Test fixture for TextureEmitter tests.
+class TextureEmitterTest : public oxygen::cooker::test::TempDirTest {
+protected:
+  // Local type aliases so member signatures can use unqualified names.
+  using LooseCookedLayout = import::LooseCookedLayout;
+  using TextureEmitter = import::TextureEmitter;
+  using TextureTableAggregator = import::TextureTableAggregator;
+  using ImportEventLoop = import::ImportEventLoop;
+  using FileWriter = import::WindowsFileWriter;
+  using ResourceTableRegistry = import::ResourceTableRegistry;
+
+  struct PayloadProps {
+    uint32_t width;
+    uint32_t height;
+    uint16_t mip_levels;
+    size_t data_size;
+  };
+
+  auto SetUp() -> void override
+  {
+    loop_ = std::make_unique<ImportEventLoop>();
+    writer_ = std::make_unique<FileWriter>(*loop_);
+    table_registry_ = std::make_unique<ResourceTableRegistry>(*writer_);
+  }
+
+  auto TearDown() -> void override
+  {
+    table_registry_.reset();
+    writer_.reset();
+    loop_.reset();
+  }
+
+  [[nodiscard]] auto Layout() const -> const LooseCookedLayout&
+  {
+    return layout_;
+  }
+
+  [[nodiscard]] auto MakeEmitterConfig() const -> TextureEmitter::Config
+  {
+    return TextureEmitter::Config {
+      .cooked_root = TempDir(),
+      .layout = layout_,
+      .packing_policy_id = "d3d12",
+      .data_alignment = kTextureAlignment,
+    };
+  }
+
+  //! Create a test cooked texture payload with specified dimensions.
+  static auto MakeTestPayload(const PayloadProps& payload_props,
+    const bool with_content_hashing = false) -> import::CookedTexturePayload
+  {
+    import::CookedTexturePayload payload;
+    payload.desc.width = payload_props.width;
+    payload.desc.height = payload_props.height;
+    payload.desc.mip_levels = payload_props.mip_levels;
+    payload.desc.depth = 1;
+    payload.desc.array_layers = 1;
+    payload.desc.texture_type = oxygen::TextureType::kTexture2D;
+    payload.desc.format = oxygen::Format::kBC7UNorm;
+
+    // Default to no hashing so tests cover the fast identity path.
+    payload.desc.content_hash = 0;
+
+    // Fill payload with recognizable pattern
+    payload.payload.resize(payload_props.data_size);
+    for (size_t i = 0; i < payload_props.data_size; ++i) {
+      constexpr size_t kByteMask = std::numeric_limits<uint8_t>::max();
+      payload.payload.at(i) = static_cast<std::byte>(i & kByteMask);
+    }
+
+    if (with_content_hashing) {
+      payload.desc.content_hash
+        = import::util::ComputeContentHash(payload.payload);
+      if (payload.desc.content_hash == 0) {
+        payload.desc.content_hash = 1;
+      }
+    }
+
+    return payload;
+  }
+
+  //! Create a test cooked texture payload with default properties.
+  static auto MakeTestPayload() -> import::CookedTexturePayload
+  {
+    return MakeTestPayload({
+      .width = kDefaultTextureWidth,
+      .height = kDefaultTextureHeight,
+      .mip_levels = kDefaultTextureMips,
+      .data_size = kDefaultTextureDataSize,
+    });
+  }
+
+  [[nodiscard]] auto TextureAggregator() const -> TextureTableAggregator&
+  {
+    return table_registry_->TextureAggregator(TempDir(), layout_);
+  }
+
+  // NOLINTBEGIN(*-non-private-member-variables-in-classes)
+  static constexpr uint32_t kDefaultTextureWidth = 4;
+  static constexpr uint32_t kDefaultTextureHeight = 4;
+  static constexpr uint16_t kDefaultTextureMips = 1;
+  static constexpr size_t kDefaultTextureDataSize = 128;
+
+  std::unique_ptr<ImportEventLoop> loop_;
+  std::unique_ptr<FileWriter> writer_;
+  std::unique_ptr<ResourceTableRegistry> table_registry_;
+  LooseCookedLayout layout_ {}; // Uses default paths
+  // NOLINTEND(*-non-private-member-variables-in-classes)
+};
+
+//=== Basic Emission Tests ===------------------------------------------------//
+
+NOLINT_TEST_F(
+  TextureEmitterTest, ExplicitFallbackIsAvailableBeforeAnyUserTexture)
+{
+  TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+  EXPECT_FALSE(
+    emitter.TryGetDescriptor(oxygen::data::pak::core::kFallbackResourceIndex)
+      .has_value());
+  emitter.EnsureFallbackTexture();
+  EXPECT_TRUE(
+    emitter.TryGetDescriptor(oxygen::data::pak::core::kFallbackResourceIndex)
+      .has_value());
+  const auto size = emitter.GetStats().data_file_size;
+  EXPECT_GT(size, 0U);
+  emitter.EnsureFallbackTexture();
+  EXPECT_EQ(emitter.GetStats().data_file_size, size);
+  EXPECT_TRUE(co::Run(*loop_, emitter.Finalize()));
+}
+
+NOLINT_TEST_F(TextureEmitterTest, EmitSingleTextureAssignsFirstIndex)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+    auto payload = MakeTestPayload();
+
+    const auto index = emitter.Emit(std::move(payload), "test_texture");
+    const auto success = co_await emitter.Finalize();
+
+    EXPECT_EQ(index, 1);
+    EXPECT_TRUE(success);
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, EmitUniqueTexturesAssignsSequentialIndices)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+
+    constexpr std::array<std::string_view, 5> kSalts {
+      "t0",
+      "t1",
+      "t2",
+      "t3",
+      "t4",
+    };
+    std::vector<uint32_t> indices;
+    indices.reserve(kSalts.size());
+    for (size_t i = 0; i < kSalts.size(); ++i) {
+      const auto salt = kSalts.at(i);
+      auto payload = MakeTestPayload();
+      if (!payload.payload.empty()) {
+        payload.payload.at(0) = static_cast<std::byte>(i + 1);
+      }
+      indices.push_back(emitter.Emit(std::move(payload), salt));
+    }
+
+    const auto success = co_await emitter.Finalize();
+
+    EXPECT_EQ(indices.size(), kSalts.size());
+    for (size_t i = 0; i < kSalts.size(); ++i) {
+      EXPECT_EQ(indices.at(i), i + 1);
+    }
+    EXPECT_TRUE(success);
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, EmitQueuesWriteReturnsBeforeFinalize)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+    auto payload = MakeTestPayload();
+
+    const uint32_t index = emitter.Emit(std::move(payload), "test_texture");
+    const bool had_pending = emitter.GetStats().pending_writes > 0;
+    const auto success = co_await emitter.Finalize();
+
+    EXPECT_EQ(index, 1);
+    EXPECT_TRUE(had_pending);
+    EXPECT_TRUE(success);
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, EmitAfterFinalizeThrows)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+
+    const auto success = co_await emitter.Finalize();
+    EXPECT_TRUE(success);
+
+    NOLINT_EXPECT_THROW((void)emitter.Emit(MakeTestPayload(), "test_texture"),
+      std::runtime_error);
+  });
+}
+
+//=== Finalization Tests ===--------------------------------------------------//
+
+NOLINT_TEST_F(TextureEmitterTest, FinalizeDrainsPendingWrites)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+
+    (void)emitter.Emit(MakeTestPayload(), "t0");
+    (void)emitter.Emit(MakeTestPayload(), "t1");
+    EXPECT_GT(emitter.GetStats().pending_writes, 0U);
+
+    const auto success = co_await emitter.Finalize();
+
+    EXPECT_TRUE(success);
+    EXPECT_EQ(emitter.GetStats().pending_writes, 0);
+    EXPECT_EQ(emitter.GetStats().error_count, 0);
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureTableFile)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+    auto payload0 = MakeTestPayload();
+    auto payload1 = MakeTestPayload();
+    if (!payload1.payload.empty()) {
+      payload1.payload.at(0) ^= std::byte { 0xFF };
+    }
+    const auto idx0 = emitter.Emit(std::move(payload0), "t0");
+    const auto idx1 = emitter.Emit(std::move(payload1), "t1");
+    EXPECT_EQ(idx0, 1);
+    EXPECT_EQ(idx1, 2);
+
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
+    const bool tables_ok = co_await table_registry_->FinalizeAll();
+    EXPECT_TRUE(tables_ok);
+
+    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    EXPECT_TRUE(std::filesystem::exists(table_path));
+
+    const auto table_data = ReadBytes(table_path);
+    const auto table = ParseTextureTable(table_data);
+    EXPECT_EQ(table.size(), 3);
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureDataFileWithAlignment)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+    constexpr size_t kPayloadSize1 = 2048;
+    constexpr size_t kPayloadSize2 = 1024;
+    constexpr uint32_t kWidth = 8;
+    constexpr uint32_t kHeight = 8;
+    constexpr uint16_t kMipLevels = 4;
+    const auto idx0 = emitter.Emit(MakeTestPayload({
+                                     .width = kWidth,
+                                     .height = kHeight,
+                                     .mip_levels = kMipLevels,
+                                     .data_size = kPayloadSize1,
+                                   }),
+      "test_texture");
+    const auto idx1 = emitter.Emit(MakeTestPayload({
+                                     .width = kWidth,
+                                     .height = kHeight,
+                                     .mip_levels = kMipLevels,
+                                     .data_size = kPayloadSize2,
+                                   }),
+      "test_texture2");
+    EXPECT_EQ(idx0, 1);
+    EXPECT_EQ(idx1, 2);
+
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
+    const bool tables_ok = co_await table_registry_->FinalizeAll();
+    EXPECT_TRUE(tables_ok);
+
+    const auto data_path = TempDir() / Layout().TexturesDataRelPath();
+    EXPECT_TRUE(std::filesystem::exists(data_path));
+
+    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table = ParseTextureTable(ReadBytes(table_path));
+
+    EXPECT_EQ(table.size(), 3);
+    EXPECT_EQ(table.at(0).data_offset, 0);
+
+    const auto aligned_offset1
+      = AlignUp(table.at(0).size_bytes, kTextureAlignment);
+    const auto aligned_offset2
+      = AlignUp(aligned_offset1 + kPayloadSize1, kTextureAlignment);
+
+    EXPECT_EQ(table.at(1).data_offset, aligned_offset1);
+    EXPECT_EQ(table.at(1).size_bytes, kPayloadSize1);
+    EXPECT_EQ(table.at(2).data_offset, aligned_offset2);
+    EXPECT_EQ(table.at(2).size_bytes, kPayloadSize2);
+
+    const auto data_file_size = std::filesystem::file_size(data_path);
+    EXPECT_EQ(data_file_size, aligned_offset2 + kPayloadSize2);
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, FinalizeSerializesTextureMetadataToTable)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+    constexpr uint16_t kNumLayers = 6;
+    constexpr uint32_t kWidth = 512;
+    constexpr uint32_t kHeight = 256;
+    constexpr uint16_t kMipLevels = 4;
+    constexpr uint16_t kDepth = 1;
+    constexpr auto kPayloadSize = kWidth * kHeight * kMipLevels;
+    auto payload = MakeTestPayload({
+      .width = kWidth,
+      .height = kHeight,
+      .mip_levels = kMipLevels,
+      .data_size = kPayloadSize,
+    });
+    payload.desc.array_layers = kNumLayers;
+    payload.desc.depth = kDepth;
+    const auto idx = emitter.Emit(std::move(payload), "test_texture");
+    EXPECT_EQ(idx, 1);
+
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
+    const bool tables_ok = co_await table_registry_->FinalizeAll();
+    EXPECT_TRUE(tables_ok);
+
+    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table = ParseTextureTable(ReadBytes(table_path));
+
+    EXPECT_EQ(table.size(), 2);
+    EXPECT_EQ(table.at(1).width, kWidth);
+    EXPECT_EQ(table.at(1).height, kHeight);
+    EXPECT_EQ(table.at(1).mip_levels, kMipLevels);
+    EXPECT_EQ(table.at(1).array_layers, kNumLayers);
+    EXPECT_EQ(table.at(1).depth, kDepth);
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, FinalizeWithoutUserTexturesWritesFallback)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+
+    const auto success = co_await emitter.Finalize();
+    const bool tables_ok = co_await table_registry_->FinalizeAll();
+    EXPECT_TRUE(tables_ok);
+
+    EXPECT_TRUE(success);
+
+    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    EXPECT_TRUE(std::filesystem::exists(table_path));
+
+    const auto data_path = TempDir() / Layout().TexturesDataRelPath();
+    EXPECT_TRUE(std::filesystem::exists(data_path));
+
+    const auto table = ParseTextureTable(ReadBytes(table_path));
+    EXPECT_EQ(table.size(), 1);
+    EXPECT_EQ(table.at(0).data_offset, 0U);
+    EXPECT_GT(table.at(0).size_bytes, 0U);
+
+    const auto data_bytes = ReadBytes(data_path);
+    const auto data_file_size = data_bytes.size();
+    EXPECT_EQ(data_file_size, table.at(0).size_bytes);
+
+    std::vector<uint8_t> payload(data_bytes.size());
+    std::transform(data_bytes.begin(), data_bytes.end(), payload.begin(),
+      [](const std::byte value) -> uint8_t {
+        return static_cast<uint8_t>(std::to_integer<uint8_t>(value));
+      });
+
+    oxygen::data::TextureResource fallback_resource(table.at(0), payload);
+    EXPECT_EQ(fallback_resource.GetPayload().size(), table.at(0).size_bytes);
+    EXPECT_EQ(fallback_resource.GetPayloadHeader().total_payload_size,
+      table.at(0).size_bytes);
+    EXPECT_EQ(fallback_resource.GetData().size(),
+      fallback_resource.GetSubresourceLayouts().front().size_bytes);
+  });
+}
+
+//=== State Query Tests ===---------------------------------------------------//
+
+NOLINT_TEST_F(TextureEmitterTest, StatsDataFileSizeTracksAccumulatedSize)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+    constexpr uint32_t kWidth = 8;
+    constexpr uint32_t kHeight = 4;
+    constexpr uint16_t kMipLevels = 4;
+    constexpr size_t kSize1 = 1000;
+    constexpr size_t kSize2 = 500;
+
+    uint64_t size_after_first = 0;
+    uint64_t size_after_second = 0;
+
+    EXPECT_EQ(emitter.GetStats().data_file_size, 0);
+
+    const auto idx1 = emitter.Emit(MakeTestPayload({
+                                     .width = kWidth,
+                                     .height = kHeight,
+                                     .mip_levels = kMipLevels,
+                                     .data_size = kSize1,
+                                   }),
+      "test_texture1");
+    EXPECT_EQ(idx1, 1);
+    size_after_first = emitter.GetStats().data_file_size;
+    EXPECT_GT(size_after_first, 0);
+
+    const auto idx2 = emitter.Emit(MakeTestPayload({
+                                     .width = kWidth,
+                                     .height = kHeight,
+                                     .mip_levels = kMipLevels,
+                                     .data_size = kSize2,
+                                   }),
+      "test_texture2");
+    EXPECT_EQ(idx2, 2);
+    size_after_second = emitter.GetStats().data_file_size;
+    EXPECT_GT(size_after_second, size_after_first);
+
+    const auto finalized = co_await emitter.Finalize();
+    const bool tables_ok = co_await table_registry_->FinalizeAll();
+    EXPECT_TRUE(finalized);
+    EXPECT_TRUE(tables_ok);
+
+    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto data_path = TempDir() / Layout().TexturesDataRelPath();
+    const auto table = ParseTextureTable(ReadBytes(table_path));
+    EXPECT_EQ(table.size(), 3);
+
+    EXPECT_EQ(size_after_first,
+      static_cast<uint64_t>(table.at(1).data_offset) + table.at(1).size_bytes);
+    EXPECT_EQ(size_after_second,
+      static_cast<uint64_t>(table.at(2).data_offset) + table.at(2).size_bytes);
+    EXPECT_EQ(size_after_second, std::filesystem::file_size(data_path));
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, StatsEmittedTexturesCountsFallbackAndUsers)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+
+    // Assert initial state
+    EXPECT_EQ(emitter.GetStats().emitted_textures, 0);
+
+    auto payload0 = MakeTestPayload();
+    auto payload1 = MakeTestPayload();
+    auto payload2 = MakeTestPayload();
+    if (!payload1.payload.empty()) {
+      payload1.payload.at(0) ^= std::byte { 0x11 };
+    }
+    if (!payload2.payload.empty()) {
+      payload2.payload.at(0) ^= std::byte { 0x22 };
+    }
+    const auto idx0 = emitter.Emit(std::move(payload0), "test_texture1");
+    EXPECT_EQ(idx0, 1);
+    EXPECT_EQ(emitter.GetStats().emitted_textures, 2);
+
+    const auto idx1 = emitter.Emit(std::move(payload1), "test_texture2");
+    const auto idx2 = emitter.Emit(std::move(payload2), "test_texture3");
+    EXPECT_EQ(idx1, 2);
+    EXPECT_EQ(idx2, 3);
+    EXPECT_EQ(emitter.GetStats().emitted_textures, 4);
+
+    const auto success = co_await emitter.Finalize();
+
+    EXPECT_EQ(emitter.GetStats().emitted_textures, 4);
+    EXPECT_TRUE(success);
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, StatsErrorCountStartsAtZero)
+{
+  const TextureEmitter emitter(
+    *writer_, TextureAggregator(), MakeEmitterConfig());
+
+  EXPECT_EQ(emitter.GetStats().error_count, 0);
+}
+
+//=== Content Verification Tests ===------------------------------------------//
+
+NOLINT_TEST_F(TextureEmitterTest, DataFileWritesPayloadBytes)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+    auto payload = MakeTestPayload();
+    // Copy before move
+    const std::vector<std::byte> expected_data = payload.payload;
+
+    const auto idx = emitter.Emit(std::move(payload), "test_texture");
+    EXPECT_EQ(idx, 1);
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
+    const bool tables_ok = co_await table_registry_->FinalizeAll();
+    EXPECT_TRUE(tables_ok);
+
+    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table = ParseTextureTable(ReadBytes(table_path));
+    EXPECT_GE(table.size(), 2);
+
+    const auto data_path = TempDir() / Layout().TexturesDataRelPath();
+    const auto actual_data = ReadBytes(data_path);
+
+    const auto offset = static_cast<size_t>(table.at(1).data_offset);
+    EXPECT_LE(offset + expected_data.size(), actual_data.size());
+    const auto actual_slice
+      = std::span(actual_data).subspan(offset, expected_data.size());
+    EXPECT_TRUE(std::equal(
+      actual_slice.begin(), actual_slice.end(), expected_data.begin()));
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, DataFileWritesMultiplePayloadsInOrder)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+
+    // Build payloads with expected per-payload patterns.
+    std::vector<import::CookedTexturePayload> payloads;
+    std::vector<std::vector<std::byte>> expected_payloads;
+
+    for (size_t i = 0; i < 3; ++i) {
+      constexpr uint32_t kWidth = 8;
+      constexpr uint32_t kHeight = 4;
+      constexpr uint16_t kMipLevels = 4;
+
+      const size_t payload_size = 100 + (i * 50);
+      auto payload = MakeTestPayload({
+        .width = kWidth,
+        .height = kHeight,
+        .mip_levels = kMipLevels,
+        .data_size = payload_size,
+      });
+      // Fill with distinct pattern based on index
+      for (auto& b : payload.payload) {
+        constexpr auto kSalt = 10;
+        b = static_cast<std::byte>((i + 1) * kSalt);
+      }
+
+      expected_payloads.push_back(payload.payload);
+      payloads.push_back(std::move(payload));
+    }
+
+    // Emit all and finalize in a single Run
+    for (size_t i = 0; i < payloads.size(); ++i) {
+      const auto key = "test_texture_" + std::to_string(i);
+      const auto idx = emitter.Emit(std::move(payloads.at(i)), key);
+      EXPECT_EQ(idx, static_cast<uint32_t>(i + 1));
+    }
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
+    const bool tables_ok = co_await table_registry_->FinalizeAll();
+    EXPECT_TRUE(tables_ok);
+
+    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table = ParseTextureTable(ReadBytes(table_path));
+    EXPECT_EQ(table.size(), 1 + expected_payloads.size());
+
+    const auto data_path = TempDir() / Layout().TexturesDataRelPath();
+    const auto actual_data = ReadBytes(data_path);
+
+    for (size_t i = 0; i < expected_payloads.size(); ++i) {
+      const auto& expected = expected_payloads.at(i);
+      const auto table_index = i + 1;
+      const auto offset
+        = static_cast<size_t>(table.at(table_index).data_offset);
+      const auto size = static_cast<size_t>(table.at(table_index).size_bytes);
+      EXPECT_EQ(size, expected.size());
+      EXPECT_LE(offset + size, actual_data.size());
+      EXPECT_EQ(offset % kTextureAlignment, 0U);
+
+      const auto actual_slice = std::span(actual_data).subspan(offset, size);
+      EXPECT_TRUE(
+        std::equal(actual_slice.begin(), actual_slice.end(), expected.begin()));
+
+      if (table_index > 1) {
+        const auto prev_end
+          = static_cast<uint64_t>(table.at(table_index - 1).data_offset)
+          + static_cast<size_t>(table.at(table_index - 1).size_bytes);
+        EXPECT_EQ(table.at(table_index).data_offset,
+          AlignUp(prev_end, kTextureAlignment));
+      }
+    }
+  });
+}
+
+//=== Deduplication Tests ===-------------------------------------------------//
+
+NOLINT_TEST_F(TextureEmitterTest, DedupNoHashIdenticalPayloadAcrossSalts)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+    auto payload1 = MakeTestPayload();
+    auto payload2 = MakeTestPayload();
+
+    const uint32_t idx1 = emitter.Emit(std::move(payload1), "salt_a");
+    const uint32_t idx2 = emitter.Emit(std::move(payload2), "salt_b");
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
+    const bool tables_ok = co_await table_registry_->FinalizeAll();
+
+    EXPECT_TRUE(tables_ok);
+    EXPECT_EQ(idx1, 1);
+    EXPECT_EQ(idx2, 1);
+
+    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table = ParseTextureTable(ReadBytes(table_path));
+    EXPECT_EQ(table.size(), 2);
+  });
+}
+
+NOLINT_TEST_F(
+  TextureEmitterTest, CollisionPolicyWarnKeepFirstExpectedToKeepIndex)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    std::vector<import::ImportDiagnostic> diagnostics;
+    auto config = MakeEmitterConfig();
+    config.collision_policy = import::DedupCollisionPolicy::kWarnKeepFirst;
+    config.on_dedup_diagnostic
+      = [&](import::ImportDiagnostic diagnostic) -> void {
+      diagnostics.push_back(std::move(diagnostic));
+    };
+    TextureEmitter emitter(*writer_, TextureAggregator(), std::move(config));
+    auto payload1 = MakeTestPayload();
+    auto payload2 = MakeTestPayload();
+    EXPECT_FALSE(payload2.payload.empty());
+    payload2.payload.at(0) ^= std::byte { 0xFF };
+
+    const uint32_t idx1 = emitter.Emit(std::move(payload1), "same_salt");
+    const uint32_t idx2 = emitter.Emit(std::move(payload2), "same_salt");
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
+    const bool tables_ok = co_await table_registry_->FinalizeAll();
+
+    EXPECT_TRUE(tables_ok);
+    EXPECT_EQ(idx1, 1);
+    EXPECT_EQ(idx2, 1);
+    EXPECT_EQ(diagnostics.size(), 1U);
+    if (diagnostics.size() == 1U) {
+      EXPECT_EQ(diagnostics.front().code, "import.dedup_collision.texture");
+      EXPECT_EQ(diagnostics.front().severity, import::ImportSeverity::kWarning);
+    }
+
+    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table = ParseTextureTable(ReadBytes(table_path));
+    EXPECT_EQ(table.size(), 2);
+    co_return;
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, CollisionPolicyWarnReplaceExpectedToEmitNew)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    std::vector<import::ImportDiagnostic> diagnostics;
+    auto config = MakeEmitterConfig();
+    config.collision_policy = import::DedupCollisionPolicy::kWarnReplace;
+    config.on_dedup_diagnostic
+      = [&](import::ImportDiagnostic diagnostic) -> void {
+      diagnostics.push_back(std::move(diagnostic));
+    };
+    TextureEmitter emitter(*writer_, TextureAggregator(), std::move(config));
+    auto payload1 = MakeTestPayload();
+    auto payload2 = MakeTestPayload();
+    EXPECT_FALSE(payload2.payload.empty());
+    payload2.payload.at(0) ^= std::byte { 0x0F };
+
+    const uint32_t idx1 = emitter.Emit(std::move(payload1), "same_salt");
+    const uint32_t idx2 = emitter.Emit(std::move(payload2), "same_salt");
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
+    const bool tables_ok = co_await table_registry_->FinalizeAll();
+
+    EXPECT_TRUE(tables_ok);
+    EXPECT_EQ(idx1, 1);
+    EXPECT_EQ(idx2, 2);
+    EXPECT_EQ(diagnostics.size(), 1U);
+    if (diagnostics.size() == 1U) {
+      EXPECT_EQ(diagnostics.front().code, "import.dedup_collision.texture");
+      EXPECT_EQ(diagnostics.front().severity, import::ImportSeverity::kWarning);
+    }
+    co_return;
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, CollisionPolicyErrorExpectedToThrow)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    auto config = MakeEmitterConfig();
+    config.collision_policy = import::DedupCollisionPolicy::kError;
+    TextureEmitter emitter(*writer_, TextureAggregator(), std::move(config));
+    auto payload1 = MakeTestPayload();
+    auto payload2 = MakeTestPayload();
+    EXPECT_FALSE(payload2.payload.empty());
+    payload2.payload.at(0) ^= std::byte { 0xF0 };
+
+    (void)emitter.Emit(std::move(payload1), "same_salt");
+    EXPECT_THROW(
+      (void)emitter.Emit(std::move(payload2), "same_salt"), std::runtime_error);
+    co_return;
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, EmitWithHashSaltIgnoredIdenticalContent)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+    auto payload1 = MakeTestPayload(
+      {
+        .width = kDefaultTextureWidth,
+        .height = kDefaultTextureHeight,
+        .mip_levels = kDefaultTextureMips,
+        .data_size = kDefaultTextureDataSize,
+      },
+      true);
+    auto payload2 = MakeTestPayload(
+      {
+        .width = kDefaultTextureWidth,
+        .height = kDefaultTextureHeight,
+        .mip_levels = kDefaultTextureMips,
+        .data_size = kDefaultTextureDataSize,
+      },
+      true);
+
+    const uint32_t idx1 = emitter.Emit(std::move(payload1), "salt_a");
+    const uint32_t idx2 = emitter.Emit(std::move(payload2), "salt_b");
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
+    const bool tables_ok = co_await table_registry_->FinalizeAll();
+
+    EXPECT_TRUE(tables_ok);
+    EXPECT_EQ(idx1, 1);
+    EXPECT_EQ(idx2, 1);
+
+    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table = ParseTextureTable(ReadBytes(table_path));
+    EXPECT_EQ(table.size(), 2);
+  });
+}
+
+NOLINT_TEST_F(TextureEmitterTest, EmitWithHashSameSaltDifferentContent)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  co::Run(*loop_, [&] -> co::Co<> {
+    TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
+    auto payload1 = MakeTestPayload(
+      {
+        .width = kDefaultTextureWidth,
+        .height = kDefaultTextureHeight,
+        .mip_levels = kDefaultTextureMips,
+        .data_size = kDefaultTextureDataSize,
+      },
+      true);
+    auto payload2 = payload1;
+    EXPECT_FALSE(payload2.payload.empty());
+    constexpr auto kAllBitsSet = std::numeric_limits<uint8_t>::max();
+    payload2.payload.at(0) ^= static_cast<std::byte>(kAllBitsSet);
+    payload2.desc.content_hash
+      = import::util::ComputeContentHash(payload2.payload);
+    if (payload2.desc.content_hash == 0) {
+      payload2.desc.content_hash = 1;
+    }
+
+    const uint32_t idx1 = emitter.Emit(std::move(payload1), "same_salt");
+    const uint32_t idx2 = emitter.Emit(std::move(payload2), "same_salt");
+    EXPECT_TRUE((co_await emitter.Finalize()).has_value());
+    const bool tables_ok = co_await table_registry_->FinalizeAll();
+
+    EXPECT_TRUE(tables_ok);
+    EXPECT_EQ(idx1, 1);
+    EXPECT_EQ(idx2, 2);
+
+    const auto table_path = TempDir() / Layout().TexturesTableRelPath();
+    const auto table = ParseTextureTable(ReadBytes(table_path));
+    EXPECT_EQ(table.size(), 3);
+  });
+}
+
+} // namespace
