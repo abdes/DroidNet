@@ -61,6 +61,17 @@ authoring, the engine owns execution, Interop exposes the analyzer
 Script assets in the source state; their cooked `.oscript` is the cooked
 state of the same identity.
 
+**Identity.** A script is identified by its source location, like every
+other asset: the asset name is the file stem and the script job's layout
+places the output in the source file's folder, so `Content/Player/move.lua`
+cooks to `/Content/Player/move.oscript`, not to a shared `Scripts` folder.
+One file holds one script, so renaming or moving the file is the ordinary
+relocation and rewrites the slots and overrides that refer to it. Two
+sources with the same stem in one folder (`move.lua` and `move.luau`) would
+produce the same virtual path; both show the error
+`OXE.SCRIPT.IDENTITY_COLLISION` and neither cooks until one is renamed. New
+Script, rename and move reject a name that would collide before writing.
+
 **New Script** (Content Browser, context menu and New): asks for a name,
 writes `<Name>.lua` to the target folder (default `Content/Scripts`), selects
 it and opens it in the code editor. The template:
@@ -93,13 +104,23 @@ and `{column}` placeholders. A failed launch is an operation result
 diagnostic counts, read from analysis (section 5). Rename, move and delete
 follow the existing transactions and retarget slot references.
 
-**Input files**: users write the cooker's input files by hand (`*.input.json` for mapping contexts with their
-actions, `*.input-action.json` for single actions, validated by
+**Input files**: users write the cooker's input files by hand
+(`*.input.json` for mapping contexts with their actions,
+`*.input-action.json` for single actions, validated by
 `oxygen.input.schema.json`). Files under authoring mounts are Input sources;
 the cook emits one `input` job per file, its actions and mapping contexts
 appear in the Content Browser and in asset and Play-section pickers, Edit
 opens the file in the code editor, and schema or import errors fail the cook
-in the cooking panel.
+in the cooking panel. Input assets are identified by their source location,
+like every other asset ([input authoring §7.2](input-authoring.md#72-asset-identity)):
+each job's layout places its outputs in the source file's folder, so `Jump`
+declared in `Content/Gameplay/Player.input.json` is
+`/Content/Gameplay/Jump.oiact`. Until the engine resolves references between
+input files by virtual path ([ED-M09](../plan/ED-M09-input-authoring.md)
+IF-12), only self-contained files cook: a mapping, chain or combo step that
+names an action the file does not declare fails that file's job before the
+cooker runs (`OXE.SCRIPT.INPUT_REFERENCE_UNSUPPORTED`), so the result never
+depends on job order.
 
 **Project tooling**: projects contain `.luaurc` and `Types/oxygen.d.luau`
 copied from the SDK, refreshed when the SDK's copy differs, so VS Code with
@@ -170,12 +191,14 @@ Save and reopen keep slot identity, order, execution order and overrides.
 ## 7. Cooking
 
 - Every script referenced by a slot or by the scene references gets a
-  `script` job: compiled bytecode (debug mode) embedded, with the source path
-  recorded so the player can reload it. This needs the cooker to accept
+  `script` job with its output at the source folder (section 4): compiled
+  bytecode (debug mode) embedded, with the source path recorded so the
+  player can reload it. This needs the cooker to accept
   compile plus external source together
   ([hosting §6](../../../projects/Oxygen.Engine/design/scripting/scene-script-hosting.md#6-source-reload)).
-- Every input file under an authoring mount gets an `input` job; scenes
-  and sidecars that reference its actions or contexts depend on it.
+- Every input file under an authoring mount gets an `input` job with its
+  outputs at the source folder (section 4); scenes and sidecars that
+  reference its actions or contexts depend on it.
 - Every scene with scripted nodes gets one `script-sidecar` job generated
   from the scene model: node index from the descriptor generator, `slot_id`
   from the slot GUID, execution order, and typed overrides (asset as virtual
@@ -257,7 +280,8 @@ entries clear when the file is fixed; session entries clear on the next Play.
 ## 10. Operation results
 
 Editor-side codes: `OXE.SCRIPT.*` (create, launch the code editor, analysis
-unavailable) and `OXE.PLAY.*` (cook failed, player missing from the SDK,
+unavailable, identity collision, input file referencing another file's
+action) and `OXE.PLAY.*` (cook failed, player missing from the SDK,
 launch failed, session ended unexpectedly). Engine diagnostic codes (`S0xxx`)
 stay as reported.
 

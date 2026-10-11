@@ -208,6 +208,10 @@ Level `kTypes` needs the API definitions described in
 - `oxygen.scene` gains `active_camera()` and `set_active_camera(node)`, and
   `oxygen.input` gains `activate_context` and `deactivate_context`
   ([scene start state](../runtime-core/scene-instantiation-and-player.md#scene-start-state)).
+- The input system identifies actions and contexts by asset key; names are
+  labels. `oxygen.input.on_action` takes an action asset reference only, the
+  name form is removed, and two actions that share a name stay distinct.
+  Example scripts declare their actions as `asset` parameters.
 - `scene-scripting-api-v1.md` §3.1 and §8 and
   `scene-scripting-cooking-design.md` §4.2 defer to this document for
   parameters, hooks and attachment.
