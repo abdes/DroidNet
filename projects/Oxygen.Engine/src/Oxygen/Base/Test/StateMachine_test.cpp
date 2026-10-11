@@ -7,10 +7,11 @@
 #include <any>
 #include <exception>
 #include <stdexcept>
-
-#include <Oxygen/Testing/GTest.h>
+#include <type_traits>
+#include <utility>
 
 #include <Oxygen/Base/StateMachine.h>
+#include <Oxygen/Testing/GTest.h>
 
 using testing::ByRef;
 using testing::Eq;
@@ -826,6 +827,32 @@ NOLINT_TEST(StateMachine, OneOfIsATest)
     = const_cast<const OneOf<DoNothing, TransitionTo<State>>&>(action)
         .GetAs<DoNothing>();
   EXPECT_THROW(action.GetAs<TransitionTo<State>>(), std::bad_variant_access);
+}
+
+NOLINT_TEST(StateMachine, OneOfIsCopyable)
+//! The converting-constructor guard really filters OneOf-derived types, so
+//! copying and moving resolve to the defaulted constructors instead of
+//! re-entering the variant conversion.
+{
+  struct CopyState { };
+  using Action
+    = OneOf<oxygen::fsm::TransitionTo<CopyState>, oxygen::fsm::DoNothing>;
+
+  static_assert(std::is_copy_constructible_v<Action>);
+  static_assert(std::is_move_constructible_v<Action>);
+
+  auto action = Action { DoNothing {} };
+  const auto copy = action;
+  EXPECT_THAT(copy.IsA<DoNothing>(), IsTrue());
+
+  auto moved = std::move(action);
+  EXPECT_THAT(moved.IsA<DoNothing>(), IsTrue());
+
+  // Derived helpers such as Maybe inherit the filtered constructors and keep
+  // copy semantics as well.
+  Maybe<oxygen::fsm::TransitionTo<CopyState>> maybe_action { DoNothing {} };
+  const auto maybe_copy = maybe_action;
+  EXPECT_THAT(maybe_copy.IsA<DoNothing>(), IsTrue());
 }
 
 struct State { };

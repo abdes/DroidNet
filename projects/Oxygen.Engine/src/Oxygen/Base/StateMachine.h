@@ -457,9 +457,11 @@ constexpr auto supports_alternative() -> bool
  @tparam Actions The set of possible action types.
 */
 template <typename... Actions> struct OneOf {
-  template <typename T,
-    std::enable_if<
-      !std::is_base_of_v<OneOf, std::remove_reference_t<T>>>* = nullptr>
+  // The guard really filters: constructing from an OneOf (or a type derived
+  // from it, e.g. Maybe) is excluded here so those cases resolve to the
+  // defaulted copy/move constructors instead of re-entering the variant.
+  template <typename T>
+    requires(!std::is_base_of_v<OneOf, std::remove_cvref_t<T>>)
   // NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions,bugprone-forwarding-reference-overload)
   OneOf(T&& arg)
     : option(std::forward<T>(arg))

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -88,6 +89,52 @@ thread_local int Counter::default_constructs_ = 0;
 thread_local int Counter::copy_constructs_ = 0;
 thread_local int Counter::move_constructs_ = 0;
 thread_local int Counter::destructs_ = 0;
+
+// Helper type whose copy constructor can be armed to throw after a given
+// number of successful copies. Tracks the number of live elements so a
+// failed bulk construction can be checked for both rollback (no leaked
+// elements) and size consistency.
+class ThrowOnCopy {
+public:
+  //! -1 disables throwing; otherwise the (copies_so_far_ + 1)-th copy throws.
+  static thread_local int throw_after_copies_;
+  static thread_local int copies_so_far_;
+  static thread_local int live_;
+
+  ThrowOnCopy() { ++live_; }
+
+  ThrowOnCopy(const ThrowOnCopy&)
+  {
+    ++copies_so_far_;
+    if (throw_after_copies_ >= 0 && copies_so_far_ > throw_after_copies_) {
+      throw std::runtime_error("ThrowOnCopy: copy failed");
+    }
+    ++live_;
+  }
+
+  ThrowOnCopy(ThrowOnCopy&&) noexcept { ++live_; }
+
+  ~ThrowOnCopy() { --live_; }
+
+  auto operator=(const ThrowOnCopy&) -> ThrowOnCopy& = default;
+  auto operator=(ThrowOnCopy&&) noexcept -> ThrowOnCopy& = default;
+
+  static auto Arm(int allowed_copies) -> void
+  {
+    throw_after_copies_ = allowed_copies;
+    copies_so_far_ = 0;
+  }
+
+  static auto Disarm() -> void
+  {
+    throw_after_copies_ = -1;
+    copies_so_far_ = 0;
+  }
+};
+
+thread_local int ThrowOnCopy::throw_after_copies_ = -1;
+thread_local int ThrowOnCopy::copies_so_far_ = 0;
+thread_local int ThrowOnCopy::live_ = 0;
 
 NOLINT_TEST(StaticVectorTest, DefaultConstructor)
 {
@@ -524,6 +571,61 @@ NOLINT_TEST(StaticVectorDeathTest, PopBackOnEmpty)
   StaticVector<int, 3> vec;
   EXPECT_DEATH(vec.pop_back(), "pop_back called on empty container");
 #endif
+}
+
+//=== Exception Safety Tests ===----------------------------------------------//
+
+//! Copy construction with a throwing element copy must not leak the
+//! already-constructed prefix nor leave a size ahead of the elements.
+NOLINT_TEST(StaticVectorExceptionSafetyTest, CopyConstructionRollsBackOnThrow)
+{
+  // Arrange
+  using Vector = StaticVector<ThrowOnCopy, 4>;
+  Vector source;
+  source.push_back(ThrowOnCopy {});
+  source.push_back(ThrowOnCopy {});
+  const int live_before = ThrowOnCopy::live_;
+
+  // Act: the first element copy succeeds, the second throws while
+  // copy-constructing `target`.
+  ThrowOnCopy::Arm(1);
+  NOLINT_EXPECT_THROW(auto target = Vector(source), std::runtime_error);
+  ThrowOnCopy::Disarm();
+
+  // Assert: the constructed prefix was destroyed on rollback; only the
+  // source still exists.
+  EXPECT_EQ(ThrowOnCopy::live_, live_before);
+  EXPECT_EQ(source.size(), 2u);
+}
+
+//! Copy assignment with a throwing element copy must leave the target a
+//! valid, empty vector - never a size claiming elements that do not exist.
+NOLINT_TEST(
+  StaticVectorExceptionSafetyTest, CopyAssignmentLeavesValidVectorOnThrow)
+{
+  // Arrange
+  StaticVector<ThrowOnCopy, 4> source;
+  source.push_back(ThrowOnCopy {});
+  source.push_back(ThrowOnCopy {});
+  StaticVector<ThrowOnCopy, 4> target;
+  target.push_back(ThrowOnCopy {});
+  const int live_before = ThrowOnCopy::live_;
+
+  // Act: the assignment clears the old element, then the second copy throws.
+  ThrowOnCopy::Arm(1);
+  NOLINT_EXPECT_THROW(target = source, std::runtime_error);
+  ThrowOnCopy::Disarm();
+
+  // Assert: the cleared old element is gone, the partial copy was rolled
+  // back, and the target remains a consistent (empty) container.
+  EXPECT_TRUE(target.empty());
+  EXPECT_EQ(source.size(), 2u);
+  EXPECT_EQ(ThrowOnCopy::live_, live_before - 1);
+
+  // The target is usable again afterwards.
+  target = source;
+  EXPECT_EQ(target.size(), 2u);
+  EXPECT_EQ(ThrowOnCopy::live_, live_before + 1);
 }
 
 } // namespace

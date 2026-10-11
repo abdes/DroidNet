@@ -13,6 +13,8 @@
 #include <type_traits>
 #include <utility>
 
+#include <Oxygen/Base/ScopeGuard.h>
+
 // ReSharper disable CppMemberFunctionMayBeStatic
 
 namespace oxygen {
@@ -65,22 +67,18 @@ public:
   constexpr ~StaticVector() noexcept { clear(); }
 
   constexpr StaticVector(const size_type count, const T& value)
-    : current_size_((std::min)(count, MaxElements))
   {
     assert(count <= MaxElements && "StaticVector: count exceeds maximum size");
-    for (size_type i = 0; i < current_size_; ++i) {
-      new (storage_ + i * sizeof(T)) T(value);
-    }
+    const size_type n = (std::min)(count, MaxElements);
+    ConstructRange(0, n, [&](void* p) { new (p) T(value); });
   }
 
   constexpr explicit StaticVector(const size_type count)
     requires std::default_initializable<T>
-    : current_size_((std::min)(count, MaxElements))
   {
     assert(count <= MaxElements && "StaticVector: count exceeds maximum size");
-    for (size_type i = 0; i < current_size_; ++i) {
-      new (storage_ + i * sizeof(T)) T();
-    }
+    const size_type n = (std::min)(count, MaxElements);
+    ConstructRange(0, n, [](void* p) { new (p) T(); });
   }
 
   template <typename InputIt>
@@ -88,41 +86,35 @@ public:
   constexpr StaticVector(InputIt first, InputIt last)
   {
     const auto input_size = static_cast<size_type>(std::distance(first, last));
-    current_size_ = (std::min)(input_size, MaxElements);
+    const size_type n = (std::min)(input_size, MaxElements);
     auto it = first;
-    for (size_type i = 0; i < current_size_; ++i, ++it) {
-      new (storage_ + i * sizeof(T)) T(*it);
-    }
+    ConstructRange(0, n, [&](void* p) { new (p) T(*it++); });
     assert(input_size <= MaxElements
       && "StaticVector: range constructor input exceeds maximum size");
   }
 
   constexpr StaticVector(std::initializer_list<T> init)
-    : current_size_((std::min)(init.size(), MaxElements))
   {
     assert(init.size() <= MaxElements
       && "StaticVector: initializer list size exceeds maximum size");
+    const size_type n = (std::min)(init.size(), MaxElements);
     auto it = init.begin();
-    for (size_type i = 0; i < current_size_; ++i, ++it) {
-      new (storage_ + i * sizeof(T)) T(*it);
-    }
+    ConstructRange(0, n, [&](void* p) { new (p) T(*it++); });
   }
 
   constexpr StaticVector(const StaticVector& other)
-    : current_size_(other.current_size_)
   {
-    for (size_type i = 0; i < current_size_; ++i) {
-      new (storage_ + i * sizeof(T)) T(other[i]);
-    }
+    size_type i = 0;
+    ConstructRange(
+      0, other.current_size_, [&](void* p) { new (p) T(other[i++]); });
   }
 
   constexpr StaticVector(StaticVector&& other) noexcept
     requires std::move_constructible<T>
-    : current_size_(other.current_size_)
   {
-    for (size_type i = 0; i < current_size_; ++i) {
-      new (storage_ + i * sizeof(T)) T(std::move(other[i]));
-    }
+    size_type i = 0;
+    ConstructRange(0, other.current_size_,
+      [&](void* p) { new (p) T(std::move(other[i++])); });
     other.clear();
   }
 
@@ -130,10 +122,9 @@ public:
   {
     if (this != &other) {
       clear();
-      current_size_ = other.current_size_;
-      for (size_type i = 0; i < current_size_; ++i) {
-        new (storage_ + i * sizeof(T)) T(other[i]);
-      }
+      size_type i = 0;
+      ConstructRange(
+        0, other.current_size_, [&](void* p) { new (p) T(other[i++]); });
     }
     return *this;
   }
@@ -143,10 +134,9 @@ public:
   {
     if (this != &other) {
       clear();
-      current_size_ = other.current_size_;
-      for (size_type i = 0; i < current_size_; ++i) {
-        new (storage_ + i * sizeof(T)) T(std::move(other[i]));
-      }
+      size_type i = 0;
+      ConstructRange(0, other.current_size_,
+        [&](void* p) { new (p) T(std::move(other[i++])); });
       other.clear();
     }
     return *this;
@@ -155,13 +145,11 @@ public:
   constexpr auto operator=(std::initializer_list<T> list) -> StaticVector&
   {
     clear();
-    current_size_ = (std::min)(list.size(), MaxElements);
     assert(list.size() <= MaxElements
       && "StaticVector: initializer list size exceeds maximum size");
+    const size_type n = (std::min)(list.size(), MaxElements);
     auto it = list.begin();
-    for (size_type i = 0; i < current_size_; ++i, ++it) {
-      new (storage_ + i * sizeof(T)) T(*it);
-    }
+    ConstructRange(0, n, [&](void* p) { new (p) T(*it++); });
     return *this;
   }
 
@@ -366,6 +354,54 @@ public:
   {
     return std::lexicographical_compare_three_way(
       begin(), end(), other.begin(), other.end());
+  }
+
+private:
+  //! Destroy the constructed elements in [from, to) without touching the size.
+  constexpr auto DestroyRange(const size_type from, const size_type to) noexcept
+    -> void
+  {
+    if constexpr (!std::is_trivially_destructible_v<T>) {
+      for (size_type i = from; i < to; ++i) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+        reinterpret_cast<T*>(storage_ + i * sizeof(T))->~T();
+      }
+    } else {
+      (void)from;
+      (void)to;
+    }
+  }
+
+  //! Placement-construct elements over [from, to) and publish the size only
+  //! after all of them exist.
+  /*!
+   If an element construction throws, a scope guard destroys the
+   already-constructed prefix before the exception propagates (the success
+   path runs no cleanup). The vector is therefore never left claiming more
+   elements than it actually holds: the size is assigned exactly once, after
+   the last successful construction, so the destructor and every subsequent
+   operation see a consistent container.
+
+   @param from  First index to construct at.
+   @param to    One past the last index to construct at.
+   @param construct_at  Callable invoked with the storage address of each
+                        element to construct.
+   */
+  template <typename ConstructAt>
+  constexpr auto ConstructRange(const size_type from, const size_type to,
+    ConstructAt&& construct_at) -> void
+  {
+    size_type constructed = from;
+    const auto rollback = [&]() noexcept {
+      if (constructed < to) {
+        DestroyRange(from, constructed);
+      }
+    };
+    const ScopeGuard cleanup { rollback };
+    for (; constructed < to; ++constructed) {
+      construct_at(storage_ + constructed * sizeof(T));
+    }
+    current_size_ = to;
   }
 };
 
