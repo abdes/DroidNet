@@ -35,6 +35,13 @@ namespace oxygen::input::testing {
  Intended for unit tests that need to exercise InputSystem behavior without
  duplicating setup code. Derived tests can call OnFrameStart/OnInput/
  OnSnapshot/OnFrameEnd directly on the provided InputSystem.
+
+ ### Coroutine test bodies
+ Tests run their body as `co::Run(Loop(), [&]() -> co::Co<> { ... })`, marked
+ `NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe`. The capture
+ is safe: Run() blocks until the coroutine completes, and the lambda temporary
+ lives until the end of that full expression, so every captured fixture member
+ outlives the coroutine.
 */
 class InputSystemTest : public ::testing::Test {
 protected:

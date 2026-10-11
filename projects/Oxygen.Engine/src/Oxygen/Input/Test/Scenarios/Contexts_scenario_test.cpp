@@ -39,7 +39,7 @@ class ContextScenario : public ScenarioTest { };
 //! ends with a Canceled edge when the menu opens and does not come back.
 NOLINT_TEST_F(ContextScenario, SprintDoesNotStickAfterPauseMenu)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto sprint = MakeAction("Sprint", ActionValueType::kBool);
     auto back = MakeAction("MenuBack", ActionValueType::kBool);
@@ -78,7 +78,7 @@ NOLINT_TEST_F(ContextScenario, SprintDoesNotStickAfterPauseMenu)
 //! active: the deferred cancel is withdrawn.
 NOLINT_TEST_F(ContextScenario, ReactivationInSameFrameKeepsAction)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto sprint = MakeAction("Sprint", ActionValueType::kBool);
     auto gameplay = MakeContext("gameplay", 0);
@@ -99,7 +99,7 @@ NOLINT_TEST_F(ContextScenario, ReactivationInSameFrameKeepsAction)
 //! action is canceled at once and stays idle.
 NOLINT_TEST_F(ContextScenario, RemovedContextCancelsItsActions)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto move = MakeAction("Move", ActionValueType::kBool);
     auto gameplay = MakeContext("gameplay", 0);
@@ -128,7 +128,7 @@ NOLINT_TEST_F(ContextScenario, DisablingInputCancelsHeldActions)
   Console console;
   System().RegisterConsoleBindings(observer_ptr { &console });
 
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto move = MakeAction("Move", ActionValueType::kBool);
     auto jump = MakeAction("Jump", ActionValueType::kBool);

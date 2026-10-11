@@ -62,7 +62,7 @@ protected:
 //! the strafe key while W is held must not stop the character.
 NOLINT_TEST_F(BindingScenario, ReleasingOneOfSeveralKeysKeepsActionOngoing)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto move = MakeAction("Move", ActionValueType::kBool);
     auto ctx = MakeContext("gameplay", 0);
@@ -90,7 +90,7 @@ NOLINT_TEST_F(BindingScenario, ReleasingOneOfSeveralKeysKeepsActionOngoing)
 //! not stop automatic fire.
 NOLINT_TEST_F(BindingScenario, AlternateBindingReleaseKeepsAutoFire)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto fire = MakeAction("Fire", ActionValueType::kBool);
     auto ctx = MakeContext("gameplay", 0);
@@ -111,7 +111,7 @@ NOLINT_TEST_F(BindingScenario, AlternateBindingReleaseKeepsAutoFire)
 //! scale (0, -1) gives (0, -1).
 NOLINT_TEST_F(BindingScenario, ScaleMapsKeysOntoAxes)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto ctx = MakeContext("gameplay", 0);
     auto move = MakeWasdMove(*ctx, ActionAccumulation::kCumulative);
@@ -133,7 +133,7 @@ NOLINT_TEST_F(BindingScenario, ScaleMapsKeysOntoAxes)
 //! everything returns to rest.
 NOLINT_TEST_F(BindingScenario, CumulativeWasdCombinesAndCancels)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto ctx = MakeContext("gameplay", 0);
     auto move = MakeWasdMove(*ctx, ActionAccumulation::kCumulative);
@@ -163,7 +163,7 @@ NOLINT_TEST_F(BindingScenario, CumulativeWasdCombinesAndCancels)
 //! Releasing a strafe key keeps the forward axis and the activation.
 NOLINT_TEST_F(BindingScenario, StrafeReleaseKeepsForwardAxis)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto ctx = MakeContext("gameplay", 0);
     auto move = MakeWasdMove(*ctx, ActionAccumulation::kCumulative);
@@ -184,7 +184,7 @@ NOLINT_TEST_F(BindingScenario, StrafeReleaseKeepsForwardAxis)
 //! Highest-absolute (default): two keys for the same direction do not stack.
 NOLINT_TEST_F(BindingScenario, HighestAbsoluteDoesNotStackDuplicateBindings)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto ctx = MakeContext("gameplay", 0);
     auto highest = MakeAction("MoveHighest", ActionValueType::kAxis2D);
@@ -212,7 +212,7 @@ NOLINT_TEST_F(BindingScenario, HighestAbsoluteDoesNotStackDuplicateBindings)
 //! Bias offsets an absolute binding; a 1D action takes the x component.
 NOLINT_TEST_F(BindingScenario, BiasOffsetsAbsoluteBinding)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto ctx = MakeContext("gameplay", 0);
     auto throttle = MakeAction("Throttle", ActionValueType::kAxis1D);
@@ -230,7 +230,7 @@ NOLINT_TEST_F(BindingScenario, BiasOffsetsAbsoluteBinding)
 //! Mouse sensitivity: Mouse X with scale 0.5 halves the delta.
 NOLINT_TEST_F(BindingScenario, MouseScaleHalvesDelta)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto ctx = MakeContext("camera", 0);
     auto yaw = MakeAction("Yaw", ActionValueType::kAxis1D);

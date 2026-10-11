@@ -57,7 +57,7 @@ constexpr int32_t kHighPriority = 100;
 //! Basic: Space pressed triggers Jump via Pressed trigger
 NOLINT_TEST_F(InputSystemTest, ProcessesPressedForJump)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
     auto jump = std::make_shared<Action>("Jump", ActionValueType::kBool);
@@ -91,7 +91,7 @@ NOLINT_TEST_F(InputSystemTest, ProcessesPressedForJump)
 //! Consumption: first mapping consumes; second mapping does not trigger
 NOLINT_TEST_F(InputSystemTest, ConsumptionPreventsSecondMapping)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
     auto primary = std::make_shared<Action>("Primary", ActionValueType::kBool);
@@ -141,7 +141,7 @@ NOLINT_TEST_F(InputSystemTest, ConsumptionPreventsSecondMapping)
 //! Tap: press and release in the same frame triggers tap
 NOLINT_TEST_F(InputSystemTest, TapTriggersOnSameFramePressRelease)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
     auto tap = std::make_shared<Action>("Tap", ActionValueType::kBool);
@@ -176,7 +176,7 @@ NOLINT_TEST_F(InputSystemTest, TapTriggersOnSameFramePressRelease)
 //! Context activation toggle: inactive context should not process input
 NOLINT_TEST_F(InputSystemTest, ContextActivationToggle)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
     auto act = std::make_shared<Action>("A", ActionValueType::kBool);
@@ -228,7 +228,7 @@ using oxygen::platform::Key;
 //! Mouse motion routing to X/Y/XY mappings
 NOLINT_TEST_F(InputSystemTest, RoutesMouseMotionToAxisMappings)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
     auto look_x = std::make_shared<Action>("LookX", ActionValueType::kAxis1D);
@@ -296,7 +296,7 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseMotionToAxisMappings)
 //! Mouse wheel routing to XY/X/Y directional mappings
 NOLINT_TEST_F(InputSystemTest, RoutesMouseWheelToAxisMappings)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
     auto wheel_x = std::make_shared<Action>("WheelX", ActionValueType::kAxis1D);
@@ -365,7 +365,7 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheelToAxisMappings)
 //! Mouse wheel directional slots: Up/Down/Left/Right
 NOLINT_TEST_F(InputSystemTest, RoutesMouseWheelDirectionalSlots)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
     auto up = std::make_shared<Action>("WheelUp", ActionValueType::kBool);
@@ -472,7 +472,7 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheelDirectionalSlots)
 //! Mixed scroll (+x, -y): triggers Right and Down across separate contexts
 NOLINT_TEST_F(InputSystemTest, RoutesMouseWheel_MixedDirectionalAcrossContexts)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange: two contexts, one mapping Right, the other mapping Down
     auto right = std::make_shared<Action>("WheelRight", ActionValueType::kBool);
@@ -524,7 +524,7 @@ NOLINT_TEST_F(InputSystemTest, RoutesMouseWheel_MixedDirectionalAcrossContexts)
 //! Cross-context consumption and staged-input flush behavior
 NOLINT_TEST_F(InputSystemTest, CrossContextConsumptionFlushesLowerPriority)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange: Two contexts, higher priority consumes on Space, lower has a
     // Pressed on Space
@@ -582,7 +582,7 @@ NOLINT_TEST_F(InputSystemTest, ChainPlusTap_TimingWindow)
 {
   using Tag = oxygen::engine::internal::EngineTagFactory;
 
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto shift = std::make_shared<Action>("Shift", ActionValueType::kBool);
     auto super = std::make_shared<Action>("Super", ActionValueType::kBool);

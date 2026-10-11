@@ -77,7 +77,7 @@ protected:
 //! interaction with Completed, which gameplay uses to end the animation.
 NOLINT_TEST_F(LifecycleScenario, HoldToInteractReportsCompleted)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto open = MakeAction("OpenDoor", ActionValueType::kBool);
     auto ctx = MakeContext("gameplay", 0);
@@ -114,7 +114,7 @@ NOLINT_TEST_F(LifecycleScenario, HoldToInteractReportsCompleted)
 //! canceled, so the two outcomes stay distinguishable.
 NOLINT_TEST_F(LifecycleScenario, AbortedHoldIsCanceled)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto open = MakeAction("OpenDoor", ActionValueType::kBool);
     auto ctx = MakeContext("gameplay", 0);
@@ -146,7 +146,7 @@ NOLINT_TEST_F(LifecycleScenario, AbortedHoldIsCanceled)
 //! canceled. (Unreal documents Canceled here; see Docs/Triggers/Pulse.md.)
 NOLINT_TEST_F(LifecycleScenario, AutoFireReleasedBetweenPulsesCompletes)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto fire = MakeAction("AutoFire", ActionValueType::kBool);
     auto ctx = MakeContext("gameplay", 0);
@@ -184,7 +184,7 @@ NOLINT_TEST_F(LifecycleScenario, AutoFireReleasedBetweenPulsesCompletes)
 //! following frame.
 NOLINT_TEST_F(LifecycleScenario, PressedAndTapActivationsComplete)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto jump = MakeAction("Jump", ActionValueType::kBool);
     auto dodge = MakeAction("Dodge", ActionValueType::kBool);
@@ -223,7 +223,7 @@ NOLINT_TEST_F(LifecycleScenario, PressedAndTapActivationsComplete)
 //! flight. A reader that still holds it in frame N+1 sees frame N.
 NOLINT_TEST_F(LifecycleScenario, PublishedSnapshotDoesNotChangeNextFrame)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto jump = MakeAction("Jump", ActionValueType::kBool);
     auto ctx = MakeContext("gameplay", 0);
@@ -244,7 +244,7 @@ NOLINT_TEST_F(LifecycleScenario, PublishedSnapshotDoesNotChangeNextFrame)
 //! published snapshot. Reading it stays valid (run under AddressSanitizer).
 NOLINT_TEST_F(LifecycleScenario, SnapshotSurvivesActionRemoval)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto jump = MakeAction("LevelJump", ActionValueType::kBool);
     auto ctx = MakeContext("level", 0);
@@ -268,7 +268,7 @@ NOLINT_TEST_F(LifecycleScenario, SnapshotSurvivesActionRemoval)
 //! the Combo reads each transition of its step action once.
 NOLINT_TEST_F(LifecycleScenario, SingleTapWithMouseMoveIsNotDoubleTap)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto tap = MakeAction("TapRight", ActionValueType::kBool);
     auto dash = MakeAction("Dash", ActionValueType::kBool);
@@ -292,7 +292,7 @@ NOLINT_TEST_F(LifecycleScenario, SingleTapWithMouseMoveIsNotDoubleTap)
 //! A real double tap within the window dashes.
 NOLINT_TEST_F(LifecycleScenario, DoubleTapDashes)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto tap = MakeAction("TapRight", ActionValueType::kBool);
     auto dash = MakeAction("Dash", ActionValueType::kBool);
@@ -319,7 +319,7 @@ NOLINT_TEST_F(LifecycleScenario, DoubleTapDashes)
 //! held: W fires while Shift is held and not after Shift was released.
 NOLINT_TEST_F(LifecycleScenario, ChainRequiresPrerequisiteHeld)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto shift = MakeAction("Modifier", ActionValueType::kBool);
     auto sprint_dash = MakeAction("SprintDash", ActionValueType::kBool);
@@ -351,7 +351,7 @@ NOLINT_TEST_F(LifecycleScenario, ChainRequiresPrerequisiteHeld)
 //! Shift does not.
 NOLINT_TEST_F(LifecycleScenario, ChainHonorsMaxDelay)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto shift = MakeAction("Modifier", ActionValueType::kBool);
     auto quick = MakeAction("QuickFollowUp", ActionValueType::kBool);
