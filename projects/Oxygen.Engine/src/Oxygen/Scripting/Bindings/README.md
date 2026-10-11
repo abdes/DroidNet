@@ -157,22 +157,16 @@ Binding code retrieves them with `GetActiveFrameContext(state)` /
 `GetActiveEngine(state)`. Both return a null observer on failure; callers must
 handle that case.
 
-### 3.2 Binding Context (Per-Script-Invocation)
+### 3.2 Script Instance (Per Slot)
 
-`PushScriptContext(state, slot_context*, dt_seconds)` pushes a Lua table that
-serves as the script's `self` argument. The table contains:
-
-- `__oxgn_binding_context` — tagged userdata (`kTagBindingContext`) holding
-  a `LuaBindingContext` (slot handle + `dt_seconds`).
-- Compatibility helpers: `GetParam`, `SetLocalRotationEuler`, `SetLocalRotation`,
-  `GetDeltaSeconds`.
-
-Modern code should use `oxygen.*` namespaces for everything except the
-context argument itself, which remains necessary for slot/script execution
-plumbing.
-
-`GetBindingContextFromScriptArg(state, arg_index)` retrieves the context and
-validates the tag before returning the pointer.
+`ScriptingModule` runs each ready slot as one instance. The chunk returns the
+table made by `oxygen.script` (`IsScriptTable` checks the registry's weak set
+of such tables). The instance `self` is a plain table whose metatable indexes
+the script table and which carries `self.node` (`PushSceneNode`) and the
+read-only `self.params` (`PushScriptParam` per effective parameter). Hooks
+receive `self` and, for per-frame hooks, `dt`. Bindings never receive a
+per-call context argument; they read the active frame context and engine from
+the runtime context above.
 
 ### 3.3 Events Runtime (Registry-Backed, Sandbox Lifetime)
 
@@ -238,7 +232,7 @@ Current tag allocations:
 
 | Range | Subsystem                                                                               |
 | ----- | --------------------------------------------------------------------------------------- |
-| 10–12 | Scripting contexts (`kTagBindingContext`, `kTagRuntimeContext`, `kTagEventRuntime`)     |
+| 11–12 | Scripting contexts (`kTagRuntimeContext`, `kTagEventRuntime`)                           |
 | 20–22 | Math types (`kTagVec4`, `kTagQuat`, `kTagMat4`)                                         |
 | 30–31 | Scene (`kTagSceneNode`, `kTagSceneQuery`)                                               |
 | 40–42 | Content resources and assets (`kTagTextureResource`, `kTagBufferResource`, `kTagAsset`) |

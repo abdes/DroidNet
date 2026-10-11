@@ -46,6 +46,7 @@
 #include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/ContentLoadScope.h>
 #include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
@@ -95,19 +96,18 @@
 #include <Oxygen/Core/RefCountedEviction.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MeshType.h>
-#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
-#include <Oxygen/Data/PatchManifest.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/ScriptAsset.h>
@@ -164,7 +164,7 @@ auto AssetLoader::InternResourceKey(const data::SourceInstanceId source,
 struct AssetLoader::Impl final {
   internal::ContentSourceRegistry source_registry {};
   uint64_t mount_revision = 0;
-  std::weak_ptr<const internal::ContentLoadScopeState> load_scope {};
+  std::weak_ptr<const internal::ContentLoadScopeState> load_scope;
   std::optional<internal::ContentReleaseQueue::Cache::EvictionNotificationScope>
     cache_notifications;
 
@@ -182,15 +182,15 @@ namespace internal {
       EvictionEvent event {};
     };
 
-    observer_ptr<AssetLoader> owner {};
-    std::weak_ptr<int> lifetime {};
-    std::shared_ptr<ContentReleaseQueue> epoch {};
+    observer_ptr<AssetLoader> owner;
+    std::weak_ptr<int> lifetime;
+    std::shared_ptr<ContentReleaseQueue> epoch;
     uint64_t revision = 0;
     ContentSourceRegistry registry {};
-    std::vector<ContentReleaseQueue::Cache::RetiredEntry> retired {};
-    std::vector<Notification> notifications {};
+    std::vector<ContentReleaseQueue::Cache::RetiredEntry> retired;
+    std::vector<Notification> notifications;
     std::unordered_map<TypeId, std::vector<EvictionRegistry::Subscriber>>
-      subscribers {};
+      subscribers;
   };
 
 } // namespace internal
@@ -272,9 +272,9 @@ inline auto GetResourceTypeIndexByTypeId(const oxygen::TypeId type_id)
   -> uint16_t
 {
   static const auto ids = MakeTypeIdArray(oxygen::content::ResourceTypeList {});
-  for (uint16_t i = 0; i < ids.size(); ++i) {
+  for (size_t i = 0; i < ids.size(); ++i) {
     if (ids.at(i) == type_id) {
-      return i;
+      return static_cast<uint16_t>(i);
     }
   }
   throw std::runtime_error("Unknown resource type id for ResourceRef binding");
@@ -289,20 +289,6 @@ inline auto IsResourceTypeId(const oxygen::TypeId type_id) -> bool
 } // namespace
 
 namespace {
-// Helper validates eviction callback arguments. Parameter ordering chosen to
-// minimize misuse. expected_cache_key: hash originally computed for resource
-// actual_cache_key: hash received from eviction callback
-// type_id: type id reference for validation
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-auto SanityCheckResourceEviction(const uint64_t expected_cache_key,
-  const uint64_t actual_cache_key, const oxygen::TypeId expected_type_id,
-  const oxygen::TypeId actual_type_id) -> bool
-{
-  CHECK_EQ_F(expected_cache_key, actual_cache_key);
-  CHECK_EQ_F(expected_type_id, actual_type_id);
-  return true;
-}
-
 auto ReadInputMappingContextAssetDesc(
   const internal::IContentSource& source, const oxygen::data::AssetKey& key)
   -> std::optional<oxygen::data::pak::input::InputMappingContextAssetDesc>
@@ -429,7 +415,7 @@ AssetLoader::AssetLoader(
   RegisterLoader(loaders::LoadTextureResource);
   RegisterLoader(loaders::LoadPhysicsResource);
   impl_->cache_notifications.emplace(
-    content_cache_.OnEviction([this](const auto& retired) {
+    content_cache_.OnEviction([this](const auto& retired) -> auto {
       RetireCacheEntry(retired, EvictionReason::kRefCountZero);
     }));
 }
@@ -568,63 +554,90 @@ auto oxygen::content::to_string(
   const AssetLoader::LoadTelemetryEvent event) noexcept -> std::string_view
 {
   using LoadTelemetryEvent = AssetLoader::LoadTelemetryEvent;
-  static constexpr oxygen::EnumIndexedArray<LoadTelemetryEvent, std::string_view>
-    kEventNames {
-      .data = {
-        "request",
-        "cache_hit",
-        "cache_miss",
-        "tasks_deduped",
-        "tasks_spawned",
-        "err_decode",
-        "err_type_mismatch",
-        "err_retry_failed",
-        "err_canceled",
-      },
-    };
-  return kEventNames.at(event);
+  switch (event) {
+  case LoadTelemetryEvent::kRequest:
+    return "request";
+  case LoadTelemetryEvent::kCacheHit:
+    return "cache_hit";
+  case LoadTelemetryEvent::kCacheMiss:
+    return "cache_miss";
+  case LoadTelemetryEvent::kTasksDeduped:
+    return "tasks_deduped";
+  case LoadTelemetryEvent::kTasksSpawned:
+    return "tasks_spawned";
+  case LoadTelemetryEvent::kDecodeFailure:
+    return "err_decode";
+  case LoadTelemetryEvent::kTypeMismatch:
+    return "err_type_mismatch";
+  case LoadTelemetryEvent::kStoreRetryFailure:
+    return "err_retry_failed";
+  case LoadTelemetryEvent::kCancellation:
+    return "err_canceled";
+  case LoadTelemetryEvent::kCount:
+    break;
+  }
+  return "__NotSupported__";
 }
 
 auto oxygen::content::to_string(
   const AssetLoader::TypedLoadMetric metric) noexcept -> std::string_view
 {
   using TypedLoadMetric = AssetLoader::TypedLoadMetric;
-  static constexpr oxygen::EnumIndexedArray<TypedLoadMetric, std::string_view>
-    kMetricNames {
-      .data = {
-        "requests",
-        "cache_hits",
-        "cache_misses",
-        "tasks_deduped",
-        "tasks_spawned",
-        "err_decode",
-        "err_type_mismatch",
-        "err_retry_failed",
-        "err_canceled",
-      },
-    };
-  return kMetricNames.at(metric);
+  switch (metric) {
+  case TypedLoadMetric::kRequests:
+    return "requests";
+  case TypedLoadMetric::kCacheHits:
+    return "cache_hits";
+  case TypedLoadMetric::kCacheMisses:
+    return "cache_misses";
+  case TypedLoadMetric::kTasksDeduped:
+    return "tasks_deduped";
+  case TypedLoadMetric::kTasksSpawned:
+    return "tasks_spawned";
+  case TypedLoadMetric::kErrDecode:
+    return "err_decode";
+  case TypedLoadMetric::kErrTypeMismatch:
+    return "err_type_mismatch";
+  case TypedLoadMetric::kErrRetryFailed:
+    return "err_retry_failed";
+  case TypedLoadMetric::kErrCanceled:
+    return "err_canceled";
+  case TypedLoadMetric::kCount:
+    break;
+  }
+  return "__NotSupported__";
 }
 
 auto AssetLoader::ApplyLoadTelemetryEvent(
   TypedLoadTelemetry& counters, const LoadTelemetryEvent event) noexcept -> void
 {
-  static constexpr oxygen::EnumIndexedArray<LoadTelemetryEvent, std::optional<TypedLoadMetric>>
-    kEventCounters {
-      .data = {
-        TypedLoadMetric::kRequests,
-        TypedLoadMetric::kCacheHits,
-        TypedLoadMetric::kCacheMisses,
-        TypedLoadMetric::kTasksDeduped,
-        TypedLoadMetric::kTasksSpawned,
-        TypedLoadMetric::kErrDecode,
-        TypedLoadMetric::kErrTypeMismatch,
-        TypedLoadMetric::kErrRetryFailed,
-        TypedLoadMetric::kErrCanceled,
-      },
-    };
-  if (const auto metric = kEventCounters.at(event); metric.has_value()) {
-    ++counters.at(*metric);
+  const auto metric = [event] -> std::optional<TypedLoadMetric> {
+    switch (event) {
+    case LoadTelemetryEvent::kRequest:
+      return TypedLoadMetric::kRequests;
+    case LoadTelemetryEvent::kCacheHit:
+      return TypedLoadMetric::kCacheHits;
+    case LoadTelemetryEvent::kCacheMiss:
+      return TypedLoadMetric::kCacheMisses;
+    case LoadTelemetryEvent::kTasksDeduped:
+      return TypedLoadMetric::kTasksDeduped;
+    case LoadTelemetryEvent::kTasksSpawned:
+      return TypedLoadMetric::kTasksSpawned;
+    case LoadTelemetryEvent::kDecodeFailure:
+      return TypedLoadMetric::kErrDecode;
+    case LoadTelemetryEvent::kTypeMismatch:
+      return TypedLoadMetric::kErrTypeMismatch;
+    case LoadTelemetryEvent::kStoreRetryFailure:
+      return TypedLoadMetric::kErrRetryFailed;
+    case LoadTelemetryEvent::kCancellation:
+      return TypedLoadMetric::kErrCanceled;
+    case LoadTelemetryEvent::kCount:
+      break;
+    }
+    return std::nullopt;
+  }();
+  if (metric.has_value()) {
+    ++counters[*metric];
   }
 }
 
@@ -644,9 +657,9 @@ auto AssetLoader::RecordStorePressureEvent(
     ++telemetry_stats_.pressure.resource_store_failed;
   } else if (trigger == "resource_store_over_budget") {
     ++telemetry_stats_.pressure.resource_store_over_budget;
-  } else if (trigger.find("_store_failed") != std::string_view::npos) {
+  } else if (trigger.contains("_store_failed")) {
     ++telemetry_stats_.pressure.asset_store_failed;
-  } else if (trigger.find("_store_succeeded") != std::string_view::npos) {
+  } else if (trigger.contains("_store_succeeded")) {
     ++telemetry_stats_.pressure.asset_store_succeeded;
   }
 }
@@ -773,8 +786,7 @@ auto AssetLoader::UpdateTelemetrySummaryCVar() -> void
       + stats.buffer_resources.at(cache_hits)
       + stats.script_resources.at(cache_hits)
       + stats.physics_resources.at(cache_hits));
-  (void)console_->SetCVarFromText(
-    { .name = std::string(kCVarLastStats), .text = summary },
+  (void)console_->SetCVarFromText({ .name = kCVarLastStats, .text = summary },
     {
       .source = console::CommandSource::kAutomation,
       .shipping_build = false,
@@ -846,12 +858,12 @@ void AssetLoader::Stop()
     return;
   }
   {
-    auto eviction_guard
-      = content_cache_.OnEviction([this, operation](const auto& retired) {
-          if (operation) {
-            RetireCacheEntry(retired, EvictionReason::kShutdown);
-          }
-        });
+    auto eviction_guard = content_cache_.OnEviction(
+      [this, operation](const auto& retired) -> auto {
+        if (operation) {
+          RetireCacheEntry(retired, EvictionReason::kShutdown);
+        }
+      });
     content_cache_.Clear();
   }
   if (!operation) {
@@ -1043,12 +1055,12 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
 
   auto clear_content_caches = [this] -> void {
     const OperationLifetime operation(*this);
-    auto eviction_guard
-      = content_cache_.OnEviction([this, operation](const auto& retired) {
-          if (operation) {
-            RetireCacheEntry(retired, EvictionReason::kClear);
-          }
-        });
+    auto eviction_guard = content_cache_.OnEviction(
+      [this, operation](const auto& retired) -> auto {
+        if (operation) {
+          RetireCacheEntry(retired, EvictionReason::kClear);
+        }
+      });
     content_cache_.Clear();
     if (!operation) {
       return;
@@ -1176,7 +1188,8 @@ auto AssetLoader::PrepareMountSetAsync(
       "Content mounts changed before preparation began");
   }
   auto sources = co_await pool->Run([paths = std::move(roots),
-                                      verify = verify_content] {
+                                      verify = verify_content]
+    -> std::vector<internal::ContentSourceRegistry::PreparedSource> {
     std::vector<internal::ContentSourceRegistry::PreparedSource> prepared;
     prepared.reserve(paths.size());
     for (const auto& path : paths) {
@@ -1191,18 +1204,20 @@ auto AssetLoader::PrepareMountSetAsync(
           throw std::system_error(
             lease.error(), "Acquire candidate generation lease");
         }
-        prepared.push_back(
-          { .source = std::make_shared<internal::LooseCookedSource>(normalized,
-              verify ? internal::LooseCookedSource::OpenMode::kVerifyContent
-                     : internal::LooseCookedSource::OpenMode::kValidateMetadata,
-              std::move(lease).value()),
-            .generation = true });
+        prepared.push_back({
+          .source = std::make_shared<internal::LooseCookedSource>(normalized,
+            verify ? internal::LooseCookedSource::OpenMode::kVerifyContent
+                   : internal::LooseCookedSource::OpenMode::kValidateMetadata,
+            std::move(lease).value()),
+          .generation = true,
+        });
       } else {
-        prepared.push_back({ .source
-          = std::make_shared<internal::LooseCookedSource>(normalized,
+        prepared.push_back({
+          .source = std::make_shared<internal::LooseCookedSource>(normalized,
             verify ? internal::LooseCookedSource::OpenMode::kVerifyContent
                    : internal::LooseCookedSource::OpenMode::kValidateMetadata),
-          .generation = false });
+          .generation = false,
+        });
       }
     }
     return prepared;
@@ -1242,13 +1257,14 @@ auto AssetLoader::CommitPreparedMounts(PreparedMountSet&& prepared)
     throw std::logic_error(
       "Drain accepted loads before committing content mounts");
   }
-  auto owned = std::move(prepared.state_);
+  auto owned = std::move(prepared).state_;
   auto& state = *owned;
   const auto keys = content_cache_.KeysSnapshot();
   state.retired.reserve(keys.size());
   state.notifications.reserve(
     keys.size() + eviction_registry_->TrackedResources().size());
-  const auto prepare_event = [&](const uint64_t key, const TypeId type) {
+  const auto prepare_event
+    = [&](const uint64_t key, const TypeId type) -> void {
     EvictionEvent event {
       .asset_key = {},
       .key = {},
@@ -1287,8 +1303,10 @@ auto AssetLoader::CommitPreparedMounts(PreparedMountSet&& prepared)
     }
   }
   {
-    auto collect = content_cache_.OnEviction(
-      [&state](const auto& retired) { state.retired.push_back(retired); });
+    auto collect
+      = content_cache_.OnEviction([&state](const auto& retired) -> auto {
+          state.retired.push_back(retired);
+        });
     content_cache_.Clear();
   }
   // All allocations and validation precede this publication point. Payloads and
@@ -1314,12 +1332,13 @@ auto AssetLoader::CompleteMountRetirement(
   const OperationLifetime operation(*this);
   for (const auto& notification : state.notifications) {
     internal::EvictionRegistry::ActiveEviction active {
-      .key = notification.cache_key, .previous = nullptr
+      .key = notification.cache_key,
+      .previous = nullptr,
     };
     if (!eviction_registry_->TryEnterEviction(active)) {
       continue;
     }
-    const auto leave = Finally([this, &active, operation] noexcept {
+    const auto leave = Finally([this, &active, operation] noexcept -> void {
       if (operation) {
         eviction_registry_->ExitEviction(active);
       }
@@ -1884,6 +1903,8 @@ auto AssetLoader::GetHydratedScriptSlots(const data::SceneAsset& scene_asset,
     IAssetLoader::HydratedScriptSlot hydrated {
       .script_asset_key = slot_record.script_asset_key,
       .flags = slot_record.flags,
+      .execution_order = slot_record.execution_order,
+      .params = {},
     };
     try {
       hydrated.params = scene_asset.ReadScriptParameters(slot_record);
@@ -1958,8 +1979,8 @@ auto AssetLoader::LoadResourceAsyncFromCookedErased(const TypeId type_id,
 auto AssetLoader::AddTypeErasedAssetLoader(const TypeId type_id,
   const std::string_view type_name, LoadFnErased&& loader) -> void
 {
-  auto [it, inserted] = asset_loaders_.insert_or_assign(
-    type_id, std::forward<LoadFnErased>(loader));
+  auto [it, inserted]
+    = asset_loaders_.insert_or_assign(type_id, std::move(loader));
   if (!inserted) {
     LOG_F(WARNING, "Replacing loader for type: {}/{}", type_id, type_name);
   } else {
@@ -1970,8 +1991,8 @@ auto AssetLoader::AddTypeErasedAssetLoader(const TypeId type_id,
 auto AssetLoader::AddTypeErasedResourceLoader(const TypeId type_id,
   const std::string_view type_name, LoadFnErased&& loader) -> void
 {
-  auto [it, inserted] = resource_loaders_.insert_or_assign(
-    type_id, std::forward<LoadFnErased>(loader));
+  auto [it, inserted]
+    = resource_loaders_.insert_or_assign(type_id, std::move(loader));
   if (!inserted) {
     LOG_F(
       WARNING, "Replacing resource loader for type: {}/{}", type_id, type_name);
@@ -2117,11 +2138,11 @@ auto AssetLoader::ReloadScript(const std::filesystem::path& path) -> void
         std::function<void(std::shared_ptr<data::ScriptAsset>)> done) -> void {
       StartLoadAsset<data::ScriptAsset>(key, std::move(done));
     },
-    .acquire_bytecode =
-      [this](const data::ScriptAsset& asset) {
-        return AcquireScriptBytecode(asset);
-      },
-    .is_current = [operation]() { return static_cast<bool>(operation); },
+    .acquire_bytecode = [this](const data::ScriptAsset& asset)
+      -> std::shared_ptr<data::ScriptResource> {
+      return AcquireScriptBytecode(asset);
+    },
+    .is_current = [operation] -> bool { return static_cast<bool>(operation); },
   };
   script_hot_reload_service_->ReloadScript(path, callbacks);
 }
@@ -2153,11 +2174,11 @@ auto AssetLoader::ReloadAllScripts() -> void
         std::function<void(std::shared_ptr<data::ScriptAsset>)> done) -> void {
       StartLoadAsset<data::ScriptAsset>(key, std::move(done));
     },
-    .acquire_bytecode =
-      [this](const data::ScriptAsset& asset) {
-        return AcquireScriptBytecode(asset);
-      },
-    .is_current = [operation]() { return static_cast<bool>(operation); },
+    .acquire_bytecode = [this](const data::ScriptAsset& asset)
+      -> std::shared_ptr<data::ScriptResource> {
+      return AcquireScriptBytecode(asset);
+    },
+    .is_current = [operation] -> bool { return static_cast<bool>(operation); },
   };
   script_hot_reload_service_->ReloadAllScripts(callbacks);
 }
@@ -2182,7 +2203,8 @@ auto AssetLoader::AcquireScriptBytecode(const data::ScriptAsset& asset)
   const auto id = identities_->Find(internal::CookedResourceIdentity {
     .source = asset.GetSourceOrigin().instance,
     .kind = internal::ResourceKind::kScript,
-    .index = index->get() });
+    .index = index->get(),
+  });
   const auto bundle
     = std::static_pointer_cast<const internal::ContentBindingBundle>(retained);
   const auto* binding = bundle->FindResourceBinding(ResourceKey { id.get() });
@@ -2650,8 +2672,10 @@ void oxygen::content::AssetLoader::UnloadObject(const uint64_t cache_key,
   }
 
   // Prevent re-entrant eviction notifications for the same cache key.
-  internal::EvictionRegistry::ActiveEviction active { .key = cache_key,
-    .previous = nullptr };
+  internal::EvictionRegistry::ActiveEviction active {
+    .key = cache_key,
+    .previous = nullptr,
+  };
   if (!eviction_registry_->TryEnterEviction(active)) {
     LOG_F(
       2, "AssetLoader: nested eviction ignored for cache_key={}", cache_key);

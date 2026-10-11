@@ -21,7 +21,6 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
-#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Scene.h>
@@ -40,8 +39,7 @@ namespace {
     ScriptingModule& module, observer_ptr<engine::FrameContext> context) -> void
   {
     TestEventLoop loop;
-    oxygen::co::Run(
-      loop, [&] -> co::Co<> { co_await module.OnSceneMutation(context); });
+    oxygen::co::Run(loop, module.OnSceneMutation(context));
   }
 
   auto ExpectMeshBuffers(const data::GeometryAsset& geometry,
@@ -170,11 +168,13 @@ end
     SCOPED_TRACE(name);
     const auto geometry = node.GetRenderable().GetGeometry();
     ASSERT_NE(geometry, nullptr);
+    constexpr int kSegments = 12;
+    constexpr float kCapsuleRadius = 0.75F;
     const auto expected
       = [&] -> std::optional<
               std::pair<std::vector<data::Vertex>, std::vector<uint32_t>>> {
       if (name == "Capsule") {
-        return data::MakeCapsuleMeshAsset(4, 12, 4.0F, 0.75F);
+        return data::MakeCapsuleMeshAsset(4, kSegments, 4.0F, kCapsuleRadius);
       }
       if (name == "IcoSphere") {
         return data::MakeIcoSphereMeshAsset(0);
@@ -182,7 +182,7 @@ end
       if (name == "SubdividedCube") {
         return data::MakeSubdividedCubeMeshAsset(3);
       }
-      return data::MakeTorusMeshAsset(12);
+      return data::MakeTorusMeshAsset(kSegments);
     }();
     if (!expected.has_value()) {
       FAIL() << "Expected expected to contain a value";
@@ -239,7 +239,6 @@ if type(scene) ~= "table" then
   error("expected oxygen.scene table")
 end
 local expected = {
-  "current_node", "param",
   "create_node", "destroy_node", "destroy_hierarchy", "reparent", "root_nodes",
   "find_one", "find_many", "count", "exists", "query",
   "has_environment", "get_environment", "ensure_environment", "clear_environment"
@@ -288,6 +287,8 @@ assert_legacy_removed("find_path")
 assert_legacy_removed("create")
 assert_legacy_removed("current")
 assert_legacy_removed("get_param")
+assert_legacy_removed("current_node")
+assert_legacy_removed("param")
 )lua" },
     .chunk_name = ScriptChunkName { "scene_bindings_legacy_absence" },
   });

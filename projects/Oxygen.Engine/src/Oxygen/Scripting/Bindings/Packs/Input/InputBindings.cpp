@@ -12,7 +12,10 @@
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
+#include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Input/InputBindings.h>
 
 namespace oxygen::scripting::bindings {
@@ -47,8 +50,10 @@ namespace {
 
   auto IsSupportedEdge(const std::string_view edge_name) -> bool
   {
-    return std::ranges::any_of(kSupportedEdges,
-      [edge_name](const std::string_view edge) { return edge == edge_name; });
+    return std::ranges::any_of(
+      kSupportedEdges, [edge_name](const std::string_view edge) -> bool {
+        return edge == edge_name;
+      });
   }
 
   auto RequireStringArg(lua_State* state, const int arg_index,
@@ -121,10 +126,31 @@ namespace {
     return kLuaSingleResult;
   }
 
+  //! An action asset reference names the action the asset declares; any
+  //! other string is an action name.
+  auto ResolveActionName(lua_State* state, const std::string_view action)
+    -> std::string
+  {
+    const auto key = TryParseAssetGuid(action);
+    if (!key.has_value()) {
+      return std::string(action);
+    }
+    const auto loader = GetAssetLoader(state);
+    const auto asset
+      = loader != nullptr ? loader->GetInputActionAsset(*key) : nullptr;
+    if (asset == nullptr) {
+      (void)luaL_error(state,
+        "oxygen.input.on_action: input action asset %s is not loaded",
+        std::string(action).c_str());
+    }
+    return std::string(asset->GetAssetName());
+  }
+
   auto LuaInputOnActionImpl(lua_State* state) -> int
   {
-    const auto action_name = RequireStringArg(
-      state, kLuaArg1, "oxygen.input.on_action expects action name");
+    const auto action_name = ResolveActionName(state,
+      RequireStringArg(state, kLuaArg1,
+        "oxygen.input.on_action expects an action asset or action name"));
     const auto edge_name = RequireStringArg(
       state, kLuaArg2, "oxygen.input.on_action expects edge name");
     if (lua_isfunction(state, kLuaArg3) == 0) {

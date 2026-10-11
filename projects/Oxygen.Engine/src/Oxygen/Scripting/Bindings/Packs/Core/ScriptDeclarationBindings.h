@@ -13,10 +13,14 @@ namespace oxygen::scripting::bindings {
 //! Registers `oxygen.script` and the `oxygen.param.<type>` constructors.
 /*!
  Tools read a script's declaration statically (see ScriptAnalyzer); at
- runtime `oxygen.script` returns its table and each `oxygen.param.<type>`
- returns its table tagged with `type`, so a declaring script loads and runs.
+ runtime `oxygen.script` records and returns its table and each
+ `oxygen.param.<type>` returns its table tagged with `type`, so a declaring
+ script loads and runs.
 */
 auto RegisterScriptDeclarationBindings(lua_State* state, int oxygen_table_index)
   -> void;
+
+//! Whether the value at `index` is a table returned by `oxygen.script`.
+auto IsScriptTable(lua_State* state, int index) -> bool;
 
 } // namespace oxygen::scripting::bindings

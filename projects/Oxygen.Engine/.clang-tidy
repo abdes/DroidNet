@@ -51,6 +51,14 @@ CheckOptions:
     value: Append
   - key: cppcoreguidelines-avoid-do-while.IgnoreMacros
     value: true
+  # Abort-only failures: allocation and log formatting (fmt's format_error and
+  # its locale bad_cast) cannot be handled by callers, so noexcept functions
+  # that allocate or log stay noexcept.
+  - key: bugprone-exception-escape.IgnoredExceptions
+    value: 'bad_alloc,bad_array_new_length,format_error,bad_cast'
+  # EnumIndexedArray's enum-keyed operator[] is bounds-safe by type.
+  - key: cppcoreguidelines-pro-bounds-avoid-unchecked-container-access.ExcludeClasses
+    value: '::std::map;::std::unordered_map;::std::flat_map;::oxygen::EnumIndexedArray'
 
 HeaderFilterRegex: '^<Oxygen/.*>$'
 ExcludeHeaderFilterRegex: '^<Oxygen/.*signal\.hpp>$'

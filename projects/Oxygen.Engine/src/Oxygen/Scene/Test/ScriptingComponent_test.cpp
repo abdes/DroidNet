@@ -10,10 +10,12 @@
 #include <string>
 #include <utility>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Core/Scripting/ScriptExecutable.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -62,6 +64,19 @@ NOLINT_TEST_F(
   EXPECT_TRUE(slots.front().Diagnostics().empty());
   EXPECT_FALSE(slots.front().IsDisabled());
   EXPECT_NO_THROW(slots.front().Run());
+}
+
+//! A slot keeps the execution order it was added with.
+NOLINT_TEST_F(ScriptingComponentTest, AddSlot_KeepsExecutionOrder)
+{
+  constexpr int32_t kOrder = 7;
+  component_.AddSlot(MakeScriptAsset(), kOrder);
+  component_.AddSlot(MakeScriptAsset());
+
+  EXPECT_THAT(component_.Slots(),
+    testing::ElementsAre(
+      testing::Property(&ScriptingComponent::Slot::ExecutionOrder, kOrder),
+      testing::Property(&ScriptingComponent::Slot::ExecutionOrder, 0)));
 }
 
 NOLINT_TEST_F(ScriptingComponentTest, MarkSlotReady_InstallsExecutableAndRuns)

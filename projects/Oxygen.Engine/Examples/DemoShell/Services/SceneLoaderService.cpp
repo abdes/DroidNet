@@ -2861,7 +2861,7 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
         continue;
       }
 
-      if (!scripting.AddSlot(script_asset)) {
+      if (!scripting.AddSlot(script_asset, slot_record.execution_order)) {
         LOG_F(ERROR, "failed to attach script slot to node {}", node_index);
         continue;
       }

@@ -63,6 +63,8 @@
       "depends_on": [
         "scene.multi_script_scene",
         "script.OrbitShapesScript",
+        "material.ScriptedCubeMat",
+        "material.CompanionOrbMat",
         "script.TimeOfDayScript",
         "input.multi_script_scene"
       ],
@@ -84,14 +86,49 @@
               "value": 0.45
             },
             {
-              "key": "host_material_guid",
-              "type": "string",
-              "value": "478af52e-7d2a-747c-3e84-44b1c11411c3"
+              "key": "host_material",
+              "type": "asset",
+              "value": "/.cooked/Materials/ScriptedCubeMat.omat"
             },
             {
-              "key": "orb_material_guid",
-              "type": "string",
-              "value": "a19a3dc5-3733-2d36-2bb5-db375e5e5aef"
+              "key": "orb_material",
+              "type": "asset",
+              "value": "/.cooked/Materials/CompanionOrbMat.omat"
+            },
+            {
+              "key": "speed_up",
+              "type": "asset",
+              "value": "/.cooked/Input/RotateSpeedUpAction.oiact"
+            },
+            {
+              "key": "speed_down",
+              "type": "asset",
+              "value": "/.cooked/Input/RotateSpeedDownAction.oiact"
+            },
+            {
+              "key": "stop",
+              "type": "asset",
+              "value": "/.cooked/Input/RotateStopAction.oiact"
+            },
+            {
+              "key": "invert",
+              "type": "asset",
+              "value": "/.cooked/Input/RotateInvertAction.oiact"
+            },
+            {
+              "key": "cycle_shape",
+              "type": "asset",
+              "value": "/.cooked/Input/CycleShapeAction.oiact"
+            },
+            {
+              "key": "spawn_orb",
+              "type": "asset",
+              "value": "/.cooked/Input/SpawnOrbAction.oiact"
+            },
+            {
+              "key": "pulse_scale",
+              "type": "asset",
+              "value": "/.cooked/Input/PulseScaleAction.oiact"
             }
           ]
         },

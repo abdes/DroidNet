@@ -33,8 +33,6 @@ local omath = oxygen.math
 local log = oxygen.log
 local otime = oxygen.time
 
-local node_ref = nil
-local host_runtime_id = nil
 local created = false
 local created_nodes = {}
 local material_pool = {}
@@ -56,43 +54,6 @@ local function node_tag(node)
   return string.format("%s[sid=%d idx=%d]", node:get_name() or "?", id.scene_id or -1, id.node_index or -1)
 end
 
-local function same_runtime_id(a, b)
-  if a == nil or b == nil then
-    return false
-  end
-  return a.scene_id == b.scene_id and a.node_index == b.node_index
-end
-
-local function resolve_host_node(ctx, allow_lock)
-  local current = scene.current_node(ctx)
-  if not valid(current) then
-    return nil
-  end
-  if host_runtime_id == nil then
-    if not allow_lock then
-      return nil
-    end
-    host_runtime_id = current:runtime_id()
-    node_ref = current
-    log.info("proc_cubes: host locked -> " .. node_tag(current))
-    return current
-  end
-  local current_id = current:runtime_id()
-  if same_runtime_id(current_id, host_runtime_id) then
-    node_ref = current
-    return current
-  end
-  return nil
-end
-
-local function resolve_geometry_token(ctx)
-  local token = scene.param(ctx, "geometry_token") or "proc/cube"
-  if type(token) ~= "string" or #token == 0 then
-    return "proc/cube"
-  end
-  return token
-end
-
 local function parse_material_guids(text)
   local out = {}
   if type(text) ~= "string" then
@@ -107,10 +68,10 @@ local function parse_material_guids(text)
   return out
 end
 
-local function load_materials_from_param(ctx)
+local function load_materials_from_param(params)
   material_pool = {}
   pending_material_guids = {}
-  local raw = scene.param(ctx, "material_guids")
+  local raw = params.material_guids
   if type(raw) == "string" and #raw > 0 then
     local guids = parse_material_guids(raw)
     for _, g in ipairs(guids) do
@@ -142,17 +103,18 @@ local function lerp(a, b, t)
   return a + ((b - a) * t)
 end
 
-local function initialize_spawn_state(host_node, ctx)
+local function initialize_spawn_state(host_node, params)
   local state = {}
-  state.geometry_token = resolve_geometry_token(ctx)
-  load_materials_from_param(ctx)
+  state.geometry_token = params.geometry_token ~= "" and params.geometry_token
+    or "proc/cube"
+  load_materials_from_param(params)
   gradient_material_cache = {}
   default_material_cache = nil
   state.logged_geometry_error = false
 
   state.has_gradient_material_binding = type(assets.create_material_with_base_color) == "function"
-  state.use_material_guids = scene.param(ctx, "use_material_guids") == true
-  state.gradient_steps = math.floor(scene.param(ctx, "gradient_steps") or 12)
+  state.use_material_guids = params.use_material_guids
+  state.gradient_steps = math.floor(params.gradient_steps)
   if state.gradient_steps < 1 then
     state.gradient_steps = 1
   end
@@ -171,14 +133,14 @@ local function initialize_spawn_state(host_node, ctx)
     logged_material_mode = true
   end
 
-  local count = scene.param(ctx, "count") or 64
-  local cell_size = scene.param(ctx, "cell_size") or 1.0
-  local min_scale = scene.param(ctx, "min_scale") or 0.6
-  local max_scale = scene.param(ctx, "max_scale") or 1.0
-  local origin_height_multiplier = scene.param(ctx, "origin_height_multiplier") or 5.0
-  local height_falloff_power = scene.param(ctx, "height_falloff_power") or 2.2
-  state.max_spawns_per_frame = math.floor(scene.param(ctx, "max_spawns_per_frame") or 100)
-  state.max_prepare_steps_per_frame = math.floor(scene.param(ctx, "max_prepare_steps_per_frame") or 1000)
+  local count = params.count
+  local cell_size = params.cell_size
+  local min_scale = params.min_scale
+  local max_scale = params.max_scale
+  local origin_height_multiplier = params.origin_height_multiplier
+  local height_falloff_power = params.height_falloff_power
+  state.max_spawns_per_frame = math.floor(params.max_spawns_per_frame)
+  state.max_prepare_steps_per_frame = math.floor(params.max_prepare_steps_per_frame)
   if state.max_spawns_per_frame < 1 then
     state.max_spawns_per_frame = 1
   end
@@ -470,23 +432,13 @@ local function spawn_batch(state, host_node)
   return false
 end
 
-function script.on_scene_mutation(ctx, dt_seconds)
-  local _ = dt_seconds
-  -- keep host lock semantics similar to other scripts
-  if not valid(node_ref) then
-    host_runtime_id = nil
-  end
-  local host_node = resolve_host_node(ctx, true)
-  if not valid(host_node) then
-    return
-  end
-
+function script.on_scene_mutation(self, _dt_seconds)
   if created then
     return
   end
 
   if spawn_state == nil then
-    spawn_state = initialize_spawn_state(host_node, ctx)
+    spawn_state = initialize_spawn_state(self.node, self.params)
   end
 
   if spawn_state.phase == "prepare" then
@@ -494,13 +446,7 @@ function script.on_scene_mutation(ctx, dt_seconds)
     return
   end
 
-  created = spawn_batch(spawn_state, host_node)
-end
-
-function script.on_gameplay(ctx, dt_seconds)
-  -- noop; can be extended to animate the cluster
-  local _ = ctx
-  local _dt = dt_seconds
+  created = spawn_batch(spawn_state, self.node)
 end
 
 return script

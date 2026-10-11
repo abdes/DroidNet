@@ -3,7 +3,8 @@
 Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.9
 validated; rescoped on 2026-10-08; M08.10 added on 2026-10-09, M08.10a–d
 delivered on 2026-10-09, M08.10e on 2026-10-10, M08.10f and M08.10g on
-2026-10-11, the M08.10h scripting design on 2026-10-11 and M08.10i next**
+2026-10-11, the M08.10h scripting design, M08.10i and M08.10j on 2026-10-11
+and M08.10k next**
 
 Current: **M08.10 Engine capability parity in the editor**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
@@ -1345,7 +1346,9 @@ Implementation, in build order:
 | M08.10f   | Delivered on 2026-10-11: per-pane exposure state; adapting auto exposure keeps its pane rendering.             |
 | M08.10g   | Delivered on 2026-10-11: aperture, shutter rate and ISO in both camera sections, with undo and live sync.      |
 | M08.10h   | Delivered on 2026-10-11: scripting design and owner decisions SD-1–SD-7.                                       |
-| M08.10i–q | Open; M08.10i is next.                                                                                         |
+| M08.10i   | Delivered on 2026-10-11: parameter declarations, analyzer, asset and node parameters, sidecar validation.      |
+| M08.10j   | Delivered on 2026-10-11: instances with `self`, start/destroy hooks, execution order, owned listeners.         |
+| M08.10k–q | Open; M08.10k is next.                                                                                         |
 
 Checks: each authored capability survives save, reopen and cook, and the
 cooked project renders it in RenderScene as in the editor; the grid

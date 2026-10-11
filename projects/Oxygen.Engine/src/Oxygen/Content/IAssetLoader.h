@@ -117,7 +117,8 @@ public:
     data::pak::scripting::ScriptSlotFlags flags {
       data::pak::scripting::ScriptSlotFlags::kNone,
     };
-    std::vector<data::pak::scripting::ScriptParamRecord> params {};
+    int32_t execution_order { 0 };
+    std::vector<data::pak::scripting::ScriptParamRecord> params;
   };
 
   IAssetLoader() = default;

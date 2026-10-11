@@ -7,7 +7,7 @@
 #pragma once
 
 #include <atomic>
-#include <deque>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -67,11 +67,15 @@ constexpr ScriptingSessionId kInvalidScriptingSessionId { 0 };
 
 using Task = std::function<void(lua_State*)>;
 
+//! Main-thread task queue fed from any thread.
+/*!
+ Tasks submitted for a session that is no longer current are dropped, both at
+ submission and when processed.
+*/
 class ScriptTaskQueue {
 public:
   ScriptTaskQueue() = default;
-
-  ~ScriptTaskQueue() { DrainAndDestroyPendingTasks(); }
+  ~ScriptTaskQueue() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(ScriptTaskQueue)
   OXYGEN_MAKE_NON_MOVABLE(ScriptTaskQueue)
@@ -79,53 +83,35 @@ public:
   auto StartSession() -> void
   {
     current_session_id_.fetch_add(1, std::memory_order_acq_rel);
-    DrainAndDestroyPendingTasks();
+    DrainPendingTasks();
   }
 
-  auto EndSession() -> void { DrainAndDestroyPendingTasks(); }
+  auto EndSession() -> void { DrainPendingTasks(); }
 
   auto Submit(Task task, ScriptingSessionId session_id) -> void
   {
-    if (!task) {
+    if (!task || session_id != GetSessionId()) {
       return;
     }
-
-    const auto active_session_id
-      = current_session_id_.load(std::memory_order_acquire);
-    if (session_id.get() != active_session_id) {
-      return;
-    }
-
-    auto* node = new PendingTaskNode {
+    const std::scoped_lock lock(mutex_);
+    pending_.push_back(PendingTask {
       .task = std::move(task),
-      .session_id = session_id.get(),
-      .next = nullptr,
-    };
-
-    auto* head = pending_head_.load(std::memory_order_relaxed);
-    do {
-      node->next = head;
-    } while (!pending_head_.compare_exchange_weak(
-      head, node, std::memory_order_release, std::memory_order_relaxed));
+      .session_id = session_id,
+    });
   }
 
   auto Process(lua_State* state) -> void
   {
-    auto* pending = pending_head_.exchange(nullptr, std::memory_order_acq_rel);
-    pending = ReverseList(pending);
-
-    const auto active_session_id
-      = current_session_id_.load(std::memory_order_acquire);
-
-    while (pending != nullptr) {
-      auto* node = pending;
-      pending = pending->next;
-
-      if (node->task != nullptr && node->session_id == active_session_id) {
-        node->task(state);
+    std::vector<PendingTask> pending;
+    {
+      const std::scoped_lock lock(mutex_);
+      pending.swap(pending_);
+    }
+    const auto active_session_id = GetSessionId();
+    for (auto& entry : pending) {
+      if (entry.session_id == active_session_id) {
+        entry.task(state);
       }
-
-      delete node;
     }
   }
 
@@ -136,39 +122,23 @@ public:
   }
 
 private:
-  struct PendingTaskNode final {
+  struct PendingTask {
     Task task;
-    uint64_t session_id { 0 };
-    PendingTaskNode* next { nullptr };
+    ScriptingSessionId session_id;
   };
 
-  static auto ReverseList(PendingTaskNode* head) -> PendingTaskNode*
+  auto DrainPendingTasks() -> void
   {
-    PendingTaskNode* prev = nullptr;
-    auto* current = head;
-    while (current != nullptr) {
-      auto* next = current->next;
-      current->next = prev;
-      prev = current;
-      current = next;
-    }
-    return prev;
-  }
-
-  auto DrainAndDestroyPendingTasks() -> void
-  {
-    auto* pending = pending_head_.exchange(nullptr, std::memory_order_acq_rel);
-    while (pending != nullptr) {
-      auto* node = pending;
-      pending = pending->next;
-      delete node;
-    }
+    std::vector<PendingTask> pending;
+    const std::scoped_lock lock(mutex_);
+    pending.swap(pending_);
   }
 
   std::atomic<uint64_t> current_session_id_ {
     kInvalidScriptingSessionId.get()
   };
-  std::atomic<PendingTaskNode*> pending_head_ { nullptr };
+  std::mutex mutex_;
+  std::vector<PendingTask> pending_;
 };
 
 /*!
@@ -178,13 +148,25 @@ private:
   environment, and executes scripts attached to SceneNodes via the
   ScriptingComponent.
 
+  Each ready slot is one script instance. Its chunk returns the table made by
+  `oxygen.script`; the instance `self` indexes that table and carries
+  `self.node` and the read-only `self.params`. Hooks are optional methods:
+  `on_start(self)` runs once in the first Gameplay phase after the slot is
+  ready, before any `on_gameplay` of that phase; `on_fixed_simulation`,
+  `on_gameplay` and `on_scene_mutation` receive `(self, dt)`; and
+  `on_destroy(self)` runs when a started instance ends (slot removed, node
+  destroyed, scene changed, executable changed or module shut down). Within a
+  phase, instances run by execution order, then node order, then slot
+  position. Event and input listeners registered by an instance are released
+  after its `on_destroy`.
+
   ### Key Responsibilities
   - **Environment Sandboxing**: Ensures scripts run in isolated environments
     with restricted access to dangerous Lua globals.
   - **Hot-Reload Integration**: Subscribes to AssetLoader events to
     automatically update running script instances when disk files change.
-  - **Lifecycle Management**: Invokes Lua hooks (on_gameplay, on_scene_mutation)
-    during specific engine phases.
+  - **Lifecycle Management**: Starts, runs and ends script instances during
+    the engine phases.
   - **Binding Pack Registration**: Serves as the registry for C++ engine
     bindings exposed to Lua.
 
@@ -286,7 +268,7 @@ public:
 private:
   struct SlotRuntimeKey {
     scene::NodeHandle node_handle;
-    scene::ScriptSlotIndex slot_index {};
+    scene::ScriptSlotIndex slot_index;
 
     [[nodiscard]] auto operator==(const SlotRuntimeKey&) const noexcept -> bool
       = default;
@@ -304,48 +286,51 @@ private:
 
   struct ActiveScriptSlot {
     SlotRuntimeKey key;
-    std::shared_ptr<const ScriptExecutable> executable;
-    uint64_t executable_fingerprint { 0 };
+    int32_t execution_order { 0 };
   };
 
+  //! One script instance: the slot's script table and its `self`.
   struct SlotRuntimeState {
     std::shared_ptr<const ScriptExecutable> executable;
     data::AssetKey asset_key;
     uint64_t last_known_fingerprint { 0 };
-    int module_ref { -1 };
-    int on_gameplay_ref { -1 };
-    int on_scene_mutation_ref { -1 };
     int instance_env_ref { -1 };
-    bool failed_initialization { false };
-    bool reported_initialization_error { false };
-    std::string initialization_error;
-    bool failed_execution { false };
+    int script_ref { -1 };
+    int self_ref { -1 };
+    //! `on_start` completed; only started instances receive other hooks.
+    bool started { false };
+    //! Loading or a hook failed; no further hooks until the executable
+    //! changes.
+    bool faulted { false };
     uint64_t event_owner_id { 0 };
     Uuid component_incarnation;
     std::optional<scene::ScriptingComponent::Slot> slot_identity;
   };
 
+  //! Per-frame instance hooks, each run in instance order.
+  enum class InstanceHook : uint8_t {
+    kFixedSimulation,
+    kGameplay,
+    kSceneMutation,
+  };
+
   auto InitializeSandbox() -> ScriptExecutionResult;
-  auto InitializeInstanceEnvironment(SlotRuntimeState& state) -> void;
   auto InvokePhaseHook(std::string_view hook_name,
     observer_ptr<engine::FrameContext> context) -> ScriptExecutionResult;
-  auto RunSceneScripts(observer_ptr<engine::FrameContext> context)
+  auto RunInstances(
+    observer_ptr<engine::FrameContext> context, InstanceHook hook) -> void;
+  auto PrepareInstance(const SlotRuntimeKey& key,
+    observer_ptr<engine::FrameContext> context) -> SlotRuntimeState*;
+  auto CreateInstance(const SlotRuntimeKey& key, SlotRuntimeState& state,
+    scene::SceneNode& node, const scene::ScriptingComponent::Slot& slot)
     -> ScriptExecutionResult;
-  auto RunSceneMutationScripts(observer_ptr<engine::FrameContext> context)
-    -> ScriptExecutionResult;
-  auto ExecuteSlotGameplay(const SlotRuntimeKey& key,
-    SlotRuntimeState& runtime_state, const scene::SceneNode& node,
-    const scene::ScriptingComponent::Slot& slot,
-    observer_ptr<engine::FrameContext> context, float dt_seconds)
-    -> ScriptExecutionResult;
-  auto ExecuteSlotSceneMutation(const SlotRuntimeKey& key,
-    SlotRuntimeState& runtime_state, const scene::SceneNode& node,
-    const scene::ScriptingComponent::Slot& slot,
-    observer_ptr<engine::FrameContext> context, float dt_seconds)
-    -> ScriptExecutionResult;
-  auto RebuildSlotRuntime(const SlotRuntimeKey& key, SlotRuntimeState& state,
-    const scene::ScriptingComponent::Slot& slot) -> ScriptExecutionResult;
-  auto DestroySlotRuntime(SlotRuntimeState& state) -> void;
+  auto PushInstanceParams(const scene::ScriptingComponent::Slot& slot) -> void;
+  auto CallInstanceHook(SlotRuntimeState& state, std::string_view hook_name,
+    std::optional<float> dt_seconds) -> ScriptExecutionResult;
+  auto FaultInstance(const SlotRuntimeKey& key, SlotRuntimeState& state,
+    observer_ptr<engine::FrameContext> context, std::string_view hook_name,
+    const ScriptExecutionResult& result) -> void;
+  auto EndInstance(SlotRuntimeState& state) -> void;
   [[nodiscard]] auto IsCurrentSlotRuntime(
     const SlotRuntimeKey& key, const SlotRuntimeState& state) const -> bool;
   auto EnsureSceneObservation(observer_ptr<engine::FrameContext> context)
@@ -355,6 +340,8 @@ private:
   auto DeactivateSlot(const SlotRuntimeKey& key) -> void;
   auto UpdateSlot(const SlotRuntimeKey& key,
     const scene::ScriptingComponent::Slot& slot) -> void;
+  auto SortActiveSlots() -> void;
+  auto EndAllInstances() -> void;
   auto ProcessPendingTasks() -> void;
   auto RegisterDefaultBindingPacks() -> bool;
   auto ReportHookError(observer_ptr<engine::FrameContext> context,
@@ -368,7 +355,7 @@ private:
   int runtime_env_ref_ { -1 };
   int global_env_ref_ { -1 };
   engine::ModulePriority priority_;
-  observer_ptr<IAsyncEngine> engine_ {};
+  observer_ptr<IAsyncEngine> engine_;
   bool attached_ { false };
   bool input_bridge_logs_enabled_ { false };
   int input_bridge_log_verbosity_ { 2 };
@@ -377,15 +364,14 @@ private:
   content::IAssetLoader::EvictionSubscription script_reload_subscription_;
   std::unordered_map<SlotRuntimeKey, SlotRuntimeState, SlotRuntimeKeyHash>
     slot_runtimes_;
+  //! Active slots in instance order once sorted: execution order, then node
+  //! order, then slot position.
   std::vector<ActiveScriptSlot> active_frame_slots_;
   std::unordered_map<SlotRuntimeKey, size_t, SlotRuntimeKeyHash>
     active_slot_indices_;
+  bool active_slots_sorted_ { true };
   std::weak_ptr<scene::Scene> observed_scene_;
 
-  std::mutex pending_tasks_mutex_;
-  std::deque<Task>
-    pending_tasks_; // Deprecated by ScriptTaskQueue but kept for transition if
-                    // needed, though we will replace usage.
   ScriptTaskQueue task_queue_;
 };
 

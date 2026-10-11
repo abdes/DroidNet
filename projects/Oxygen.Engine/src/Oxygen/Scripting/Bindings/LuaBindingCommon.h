@@ -9,8 +9,6 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
-#include <Oxygen/Scene/SceneNode.h>
-#include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 #include <Oxygen/Scripting/api_export.h>
 
 struct lua_State;
@@ -41,7 +39,7 @@ namespace oxygen::scripting::bindings {
 // ### DO
 //
 // - Assign every non-trivially-destructible userdata type its own
-//   tag in `LuauUserdataTag`.  A single tag may be shared across
+//   `kTag*` constant below.  A single tag may be shared across
 //   types only when they are layout-compatible and share the same
 //   destructor (e.g. all `AssetUserdata` variants use `kTagAsset`).
 // - Call `lua_setuserdatadtor` exactly once per tag, typically in the
@@ -100,7 +98,7 @@ namespace oxygen::scripting::bindings {
 // @see lua_newuserdatatagged, lua_setuserdatadtor (Luau C API)
 //===------------------------------------------------------------------------===
 
-//! Luau userdata tags for Oxygen types.
+//! Luau userdata tags for Oxygen types, as the `int` the Luau API takes.
 /*!
  Each tag identifies a distinct userdata layout so the Luau GC can
  invoke the correct C++ destructor registered via
@@ -112,33 +110,16 @@ namespace oxygen::scripting::bindings {
           tag.  See the "Luau Userdata Lifecycle" comment block above
           for the full pattern.
 */
-enum LuauUserdataTag : uint8_t {
-  kTagBindingContext = 10,
-  kTagRuntimeContext = 11,
-  kTagEventRuntime = 12,
-  kTagVec4 = 20,
-  kTagQuat = 21,
-  kTagMat4 = 22,
-  kTagSceneNode = 30,
-  kTagSceneQuery = 31,
-  kTagTextureResource = 40,
-  kTagBufferResource = 41,
-  kTagAsset = 42,
-};
-
-struct LuaSlotExecutionContext {
-  scene::NodeHandle node_handle;
-  const scene::ScriptingComponent::Slot* slot { nullptr };
-};
-
-struct LuaBindingContext {
-  LuaSlotExecutionContext slot_context {};
-  bool has_slot_context { false };
-  float dt_seconds { 0.0F };
-};
-
-OXGN_SCRP_API auto PushScriptContext(lua_State* state,
-  LuaSlotExecutionContext* slot_context, float dt_seconds) -> void;
+inline constexpr int kTagRuntimeContext = 11;
+inline constexpr int kTagEventRuntime = 12;
+inline constexpr int kTagVec4 = 20;
+inline constexpr int kTagQuat = 21;
+inline constexpr int kTagMat4 = 22;
+inline constexpr int kTagSceneNode = 30;
+inline constexpr int kTagSceneQuery = 31;
+inline constexpr int kTagTextureResource = 40;
+inline constexpr int kTagBufferResource = 41;
+inline constexpr int kTagAsset = 42;
 
 OXGN_SCRP_API auto SetActiveFrameContext(lua_State* state,
   observer_ptr<engine::FrameContext> frame_context) noexcept -> void;
@@ -152,19 +133,8 @@ OXGN_SCRP_API auto SetActiveEngine(
 OXGN_SCRP_NDAPI auto GetActiveEngine(lua_State* state) noexcept
   -> observer_ptr<IAsyncEngine>;
 
-OXGN_SCRP_NDAPI auto GetBindingContextFromScriptArg(
-  lua_State* state, int arg_index = 1) noexcept -> LuaBindingContext*;
-
 OXGN_SCRP_NDAPI auto PushScriptParam(
   lua_State* state, const data::ScriptParam& param) -> int;
-
-OXGN_SCRP_NDAPI auto GetParamValue(lua_State* state) -> int;
-
-OXGN_SCRP_NDAPI auto SetLocalRotationEuler(
-  lua_State* state, float x, float y, float z) -> int;
-
-OXGN_SCRP_NDAPI auto SetLocalRotationQuat(
-  lua_State* state, float x, float y, float z, float w) -> int;
 
 OXGN_SCRP_NDAPI auto PushOxygenSubtable(
   lua_State* state, int oxygen_table_index, const char* field_name) -> int;

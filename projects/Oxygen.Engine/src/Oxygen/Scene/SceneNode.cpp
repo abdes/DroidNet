@@ -4,34 +4,52 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Resource.h>
+#include <Oxygen/Base/ResourceHandle.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Core/Scripting/ScriptExecutable.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Detail/GraphData.h>
 #include <Oxygen/Scene/Internal/IMutationCollector.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/LightValidation.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneTraversal.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Scene/SceneTraversal.h> // IWYU pragma: keep
+#include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 #include <Oxygen/Scene/Types/Flags.h>
-#include <stdexcept>
+#include <Oxygen/Scene/Types/Traversal.h>
 
 using oxygen::scene::SceneNode;
 using oxygen::scene::SceneNodeFlags;
 using oxygen::scene::SceneNodeImpl;
 using oxygen::scene::detail::GraphData;
 
-// Camera type aliases for brevity and clarity
-using PerspectiveCamera = oxygen::scene::PerspectiveCamera;
-using OrthographicCamera = oxygen::scene::OrthographicCamera;
+using oxygen::scene::OrthographicCamera;
+using oxygen::scene::PerspectiveCamera;
 
-using DirectionalLight = oxygen::scene::DirectionalLight;
-using PointLight = oxygen::scene::PointLight;
-using SpotLight = oxygen::scene::SpotLight;
+using oxygen::scene::DirectionalLight;
+using oxygen::scene::PointLight;
+using oxygen::scene::SpotLight;
 
 // =============================================================================
 // SceneNode Validator Implementations
@@ -106,8 +124,10 @@ protected:
     state.scene = scene;
     if (const auto* impl_ref = scene->TryGetNodeImpl(node_->GetHandle());
       impl_ref != nullptr) {
-      // Cast away const to allow modifying the SceneNodeImpl. All validators
-      // for SceneNode are non-cost anyway due to lazy invalidation.
+      // SceneNode keeps a weak_ptr<const Scene> so read-only and mutating
+      // traversal share one handle type; a validated mutating call regains
+      // write access here. Validators are non-const due to lazy invalidation.
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
       state.node_impl = const_cast<SceneNodeImpl*>(impl_ref);
       result_.reset();
       return true;
@@ -226,7 +246,7 @@ auto oxygen::scene::to_string(const SceneNode& node) noexcept -> std::string
   if (!node.IsValid()) {
     return "SN(invalid)";
   }
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   // In debug mode, include the name of the node if it exists
   return fmt::format(
     "SN({}, n='{}')", to_string_compact(node.GetHandle()), node.GetName());
@@ -421,8 +441,7 @@ auto SceneNode::CollectTransformChangedMutation() const noexcept -> void
   if (!scene) {
     return;
   }
-  if (const auto collector
-    = const_cast<Scene*>(scene.get())->AsMutationCollector();
+  if (const auto collector = scene->AsMutationCollector();
     collector != nullptr) {
     collector->CollectTransformChanged(GetHandle());
   }
@@ -485,10 +504,16 @@ auto SceneNode::AttachCamera(std::unique_ptr<Component> camera) noexcept -> bool
         return false;
       }
 
-      if (type_id == PerspectiveCamera::ClassTypeId()) {
-        state.node_impl->AddComponent<PerspectiveCamera>(std::move(camera));
-      } else if (type_id == OrthographicCamera::ClassTypeId()) {
-        state.node_impl->AddComponent<OrthographicCamera>(std::move(camera));
+      try {
+        if (type_id == PerspectiveCamera::ClassTypeId()) {
+          state.node_impl->AddComponent<PerspectiveCamera>(std::move(camera));
+        } else if (type_id == OrthographicCamera::ClassTypeId()) {
+          state.node_impl->AddComponent<OrthographicCamera>(std::move(camera));
+        }
+      } catch (const oxygen::ComponentError& ex) {
+        LOG_F(ERROR, "Camera attach rejected for SceneNode {}: {}",
+          nostd::to_string(*this), ex.what());
+        return false;
       }
       if (const auto collector = state.scene->AsMutationCollector();
         collector != nullptr) {
@@ -577,30 +602,24 @@ auto SceneNode::ReplaceCamera(std::unique_ptr<Component> camera) noexcept
       DCHECK_NOTNULL_F(state.scene);
       DCHECK_NOTNULL_F(state.node_impl);
 
-      // Remove any existing camera
-      if (state.node_impl->HasComponent<PerspectiveCamera>()) {
-        state.node_impl->ReplaceComponent<PerspectiveCamera>(std::move(camera));
-        if (const auto collector = state.scene->AsMutationCollector();
-          collector != nullptr) {
-          collector->CollectCameraChanged(state.node->GetHandle());
+      try {
+        if (state.node_impl->HasComponent<PerspectiveCamera>()) {
+          state.node_impl->ReplaceComponent<PerspectiveCamera>(
+            std::move(camera));
+        } else if (state.node_impl->HasComponent<OrthographicCamera>()) {
+          state.node_impl->ReplaceComponent<OrthographicCamera>(
+            std::move(camera));
+        } else if (const auto type_id = camera->GetTypeId();
+          type_id == PerspectiveCamera::ClassTypeId()) {
+          // No camera yet: act as AttachCamera.
+          state.node_impl->AddComponent<PerspectiveCamera>(std::move(camera));
+        } else if (type_id == OrthographicCamera::ClassTypeId()) {
+          state.node_impl->AddComponent<OrthographicCamera>(std::move(camera));
         }
-        return true;
-      }
-      if (state.node_impl->HasComponent<OrthographicCamera>()) {
-        state.node_impl->ReplaceComponent<OrthographicCamera>(
-          std::move(camera));
-        if (const auto collector = state.scene->AsMutationCollector();
-          collector != nullptr) {
-          collector->CollectCameraChanged(state.node->GetHandle());
-        }
-        return true;
-      }
-      // If no camera exists, act as AttachCamera
-      const auto type_id = camera->GetTypeId();
-      if (type_id == PerspectiveCamera::ClassTypeId()) {
-        state.node_impl->AddComponent<PerspectiveCamera>(std::move(camera));
-      } else if (type_id == OrthographicCamera::ClassTypeId()) {
-        state.node_impl->AddComponent<OrthographicCamera>(std::move(camera));
+      } catch (const oxygen::ComponentError& ex) {
+        LOG_F(ERROR, "Camera replace rejected for SceneNode {}: {}",
+          nostd::to_string(*this), ex.what());
+        return false;
       }
       if (const auto collector = state.scene->AsMutationCollector();
         collector != nullptr) {
@@ -668,7 +687,7 @@ auto SceneNode::GetCamera() noexcept
 auto SceneNode::HasCamera() noexcept -> bool
 {
   return SafeCall(
-    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept {
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
       DCHECK_EQ_F(state.node, this);
       DCHECK_NOTNULL_F(state.scene);
       DCHECK_NOTNULL_F(state.node_impl);
@@ -762,9 +781,13 @@ auto SceneNode::ReplaceLight(std::unique_ptr<Component> light,
 auto SceneNode::CommitLight(std::unique_ptr<Component> light,
   const bool replace, LightValidationError* error) noexcept -> bool
 {
-  if (error) *error = {};
+  if (error != nullptr) {
+    *error = {};
+  }
   if (!light) {
-    if (error) *error = { .field = "type", .message = "A light component is required" };
+    if (error != nullptr) {
+      *error = { .field = "type", .message = "A light component is required" };
+    }
     return false;
   }
   return CommitLightCandidate(*light, &light, replace, error);
@@ -774,73 +797,111 @@ auto SceneNode::CommitLightCandidate(const Component& candidate,
   std::unique_ptr<Component>* replacement, const bool replace,
   LightValidationError* error) noexcept -> bool
 {
-  if (error) *error = {};
-  const auto reject = [error](LightValidationError failure) {
+  if (error != nullptr) {
+    *error = {};
+  }
+  const auto reject = [error](LightValidationError failure) -> bool {
     LOG_F(ERROR, "Light edit rejected: {}: {}", failure.field, failure.message);
-    if (error) *error = std::move(failure);
+    if (error != nullptr) {
+      *error = std::move(failure);
+    }
     return false;
   };
   if (const auto failure = ValidateLight(candidate)) {
     return reject(*failure);
   }
-  return SafeCall(NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
-    const bool existing = state.node_impl->HasComponent<DirectionalLight>()
-      || state.node_impl->HasComponent<PointLight>()
-      || state.node_impl->HasComponent<SpotLight>();
-    if (existing && !replace) {
-      return reject({ .field = "type", .message = "The node already owns a light" });
-    }
-    if (candidate.GetTypeId() == DirectionalLight::ClassTypeId()) {
-      const auto slot = static_cast<const DirectionalLight&>(candidate).GetAtmosphereLightSlot();
-      const bool retains_slot = state.node_impl->HasComponent<DirectionalLight>()
-        && state.node_impl->GetComponent<DirectionalLight>().GetAtmosphereLightSlot() == slot;
-      // Ordinary intensity/color edits retain already validated ownership.
-      if (slot != AtmosphereLightSlot::kNone && !retains_slot) {
-        std::optional<LightValidationError> conflict;
-        static_cast<void>(state.scene->Traverse().Traverse(
-          [&](const auto& visited, bool) -> VisitResult {
-            if (visited.handle != GetHandle()
-              && visited.node_impl->template HasComponent<DirectionalLight>()
-              && visited.node_impl->template GetComponent<DirectionalLight>().GetAtmosphereLightSlot() == slot) {
-              conflict = LightValidationError { .field = "atmosphere_light_slot",
-                .message = "Atmosphere slot is already owned by '"
-                  + std::string(visited.node_impl->GetName()) + "'",
-                .conflicting_node = visited.handle };
-            }
-            return VisitResult::kContinue;
-          }));
-        if (conflict) return reject(*conflict);
+  return SafeCall(
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
+      const bool existing = state.node_impl->HasComponent<DirectionalLight>()
+        || state.node_impl->HasComponent<PointLight>()
+        || state.node_impl->HasComponent<SpotLight>();
+      if (existing && !replace) {
+        return reject(
+          { .field = "type", .message = "The node already owns a light" });
       }
-    }
-    const auto install = [&]<typename T>() -> bool {
-      if (replacement == nullptr) {
-        if (!state.node_impl->HasComponent<T>()) {
-          return reject({ .field = "type", .message = "The light type changed during this edit" });
+      if (candidate.GetTypeId() == DirectionalLight::ClassTypeId()) {
+        // Components carry no RTTI across modules; GetTypeId() checked it.
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+        const auto slot = static_cast<const DirectionalLight&>(candidate)
+                            .GetAtmosphereLightSlot();
+        const bool retains_slot
+          = state.node_impl->HasComponent<DirectionalLight>()
+          && state.node_impl->GetComponent<DirectionalLight>()
+               .GetAtmosphereLightSlot()
+            == slot;
+        // Ordinary intensity/color edits retain already validated ownership.
+        if (slot != AtmosphereLightSlot::kNone && !retains_slot) {
+          std::optional<LightValidationError> conflict;
+          static_cast<void>(state.scene->Traverse().Traverse(
+            [&](const auto& visited, bool) -> VisitResult {
+              if (visited.handle != GetHandle()
+                && visited.node_impl->template HasComponent<DirectionalLight>()
+                && visited.node_impl->template GetComponent<DirectionalLight>()
+                     .GetAtmosphereLightSlot()
+                  == slot) {
+                conflict = LightValidationError {
+                  .field = "atmosphere_light_slot",
+                  .message = "Atmosphere slot is already owned by '"
+                    + std::string(visited.node_impl->GetName()) + "'",
+                  .conflicting_node = visited.handle,
+                };
+              }
+              return VisitResult::kContinue;
+            }));
+          if (conflict) {
+            return reject(*conflict);
+          }
         }
-        state.node_impl->GetComponent<T>().CopyPropertiesFrom(static_cast<const T&>(candidate));
-        return true;
       }
-      if (state.node_impl->HasComponent<DirectionalLight>()) {
-        state.node_impl->ReplaceComponent<DirectionalLight, T>(std::move(*replacement));
-      } else if (state.node_impl->HasComponent<PointLight>()) {
-        state.node_impl->ReplaceComponent<PointLight, T>(std::move(*replacement));
-      } else if (state.node_impl->HasComponent<SpotLight>()) {
-        state.node_impl->ReplaceComponent<SpotLight, T>(std::move(*replacement));
+      const auto install = [&]<typename T> -> bool {
+        if (replacement == nullptr) {
+          if (!state.node_impl->HasComponent<T>()) {
+            return reject({
+              .field = "type",
+              .message = "The light type changed during this edit",
+            });
+          }
+          state.node_impl->GetComponent<T>().CopyPropertiesFrom(
+            static_cast<const T&>(candidate));
+          return true;
+        }
+        // A composition rule (such as another component requiring the old
+        // light) rejects the edit instead of failing the call.
+        try {
+          if (state.node_impl->HasComponent<DirectionalLight>()) {
+            state.node_impl->ReplaceComponent<DirectionalLight, T>(
+              std::move(*replacement));
+          } else if (state.node_impl->HasComponent<PointLight>()) {
+            state.node_impl->ReplaceComponent<PointLight, T>(
+              std::move(*replacement));
+          } else if (state.node_impl->HasComponent<SpotLight>()) {
+            state.node_impl->ReplaceComponent<SpotLight, T>(
+              std::move(*replacement));
+          } else {
+            state.node_impl->AddComponent<T>(std::move(*replacement));
+          }
+        } catch (const oxygen::ComponentError& ex) {
+          return reject({ .field = "type", .message = ex.what() });
+        }
+        return true;
+      };
+      const auto type_id = candidate.GetTypeId();
+      bool installed = false;
+      if (type_id == DirectionalLight::ClassTypeId()) {
+        installed = install.template operator()<DirectionalLight>();
+      } else if (type_id == PointLight::ClassTypeId()) {
+        installed = install.template operator()<PointLight>();
       } else {
-        state.node_impl->AddComponent<T>(std::move(*replacement));
+        installed = install.template operator()<SpotLight>();
+      }
+      if (!installed) {
+        return false;
+      }
+      if (const auto collector = state.scene->AsMutationCollector()) {
+        collector->CollectLightChanged(GetHandle());
       }
       return true;
-    };
-    const bool installed = candidate.GetTypeId() == DirectionalLight::ClassTypeId()
-      ? install.template operator()<DirectionalLight>()
-      : candidate.GetTypeId() == PointLight::ClassTypeId()
-        ? install.template operator()<PointLight>() : install.template operator()<SpotLight>();
-    if (!installed) return false;
-    if (const auto collector = state.scene->AsMutationCollector()) {
-      collector->CollectLightChanged(GetHandle());
-    }
-    return true;
-  });
+    });
 }
 
 /*!
@@ -886,7 +947,7 @@ auto SceneNode::GetLight() noexcept
 auto SceneNode::HasLight() noexcept -> bool
 {
   return SafeCall(
-    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept {
+    NodeIsValidAndInScene(), [&](const SafeCallState& state) noexcept -> bool {
       DCHECK_EQ_F(state.node, this);
       DCHECK_NOTNULL_F(state.scene);
       DCHECK_NOTNULL_F(state.node_impl);
@@ -915,21 +976,20 @@ auto SceneNode::GetScripting() const noexcept -> Scripting
 
 auto SceneNode::AttachScripting() noexcept -> bool
 {
-  return SafeCall(NodeIsValidAndInScene(), [&](SafeCallState& state) {
+  return SafeCall(NodeIsValidAndInScene(), [&](SafeCallState& state) -> bool {
     if (state.node_impl->HasComponent<ScriptingComponent>()) {
       return false;
     }
-    auto* mutable_scene = const_cast<Scene*>(state.scene);
-    DCHECK_NOTNULL_F(mutable_scene);
+    DCHECK_NOTNULL_F(state.scene);
     state.node_impl->AddComponent<ScriptingComponent>(
-      state.node->GetHandle(), mutable_scene->AsMutationCollector());
+      state.node->GetHandle(), state.scene->AsMutationCollector());
     return true;
   });
 }
 
 auto SceneNode::DetachScripting() noexcept -> bool
 {
-  return SafeCall(NodeIsValidAndInScene(), [&](SafeCallState& state) {
+  return SafeCall(NodeIsValidAndInScene(), [&](SafeCallState& state) -> bool {
     if (!state.node_impl->HasComponent<ScriptingComponent>()) {
       return false;
     }
@@ -942,7 +1002,7 @@ auto SceneNode::DetachScripting() noexcept -> bool
 
 auto SceneNode::HasScripting() const noexcept -> bool
 {
-  return SafeCall(NodeIsValidAndInScene(), [&](SafeCallState& state) {
+  return SafeCall(NodeIsValidAndInScene(), [&](SafeCallState& state) -> bool {
     return state.node_impl->HasComponent<ScriptingComponent>();
   });
 }
@@ -976,30 +1036,34 @@ auto SceneNode::Scripting::RequiresScripting() const
 }
 
 auto SceneNode::Scripting::AddSlot(
-  std::shared_ptr<const data::ScriptAsset> asset) noexcept -> bool
+  std::shared_ptr<const data::ScriptAsset> asset,
+  const int32_t execution_order) noexcept -> bool
 {
-  return SafeCall(RequiresScripting(), [&](SafeCallState& state) {
-    state.scripting->AddSlot(std::move(asset));
+  return SafeCall(RequiresScripting(), [&](SafeCallState& state) -> bool {
+    state.scripting->AddSlot(std::move(asset), execution_order);
     return true;
   });
 }
 
 auto SceneNode::Scripting::RemoveSlot(const Slot& slot) noexcept -> bool
 {
-  return SafeCall(RequiresScripting(),
-    [&](SafeCallState& state) { return state.scripting->RemoveSlot(slot); });
+  return SafeCall(RequiresScripting(), [&](SafeCallState& state) -> bool {
+    return state.scripting->RemoveSlot(slot);
+  });
 }
 
 auto SceneNode::Scripting::Slots() const noexcept -> std::span<const Slot>
 {
-  return SafeCall(RequiresScripting(),
-    [&](SafeCallState& state) { return state.scripting->Slots(); });
+  return SafeCall(
+    RequiresScripting(), [&](SafeCallState& state) -> std::span<const Slot> {
+      return state.scripting->Slots();
+    });
 }
 
 auto SceneNode::Scripting::SetParameter(const Slot& slot, std::string_view name,
   data::ScriptParam value) noexcept -> bool
 {
-  return SafeCall(RequiresScripting(), [&](SafeCallState& state) {
+  return SafeCall(RequiresScripting(), [&](SafeCallState& state) -> bool {
     return state.scripting->SetParameter(slot, name, std::move(value));
   });
 }
@@ -1008,9 +1072,11 @@ auto SceneNode::Scripting::TryGetParameter(
   const Slot& slot, std::string_view name) const noexcept
   -> std::optional<std::reference_wrapper<const data::ScriptParam>>
 {
-  return SafeCall(RequiresScripting(), [&](SafeCallState& state) {
-    return state.scripting->TryGetParameter(slot, name);
-  });
+  return SafeCall(RequiresScripting(),
+    [&](SafeCallState& state)
+      -> std::optional<std::reference_wrapper<const data::ScriptParam>> {
+      return state.scripting->TryGetParameter(slot, name);
+    });
 }
 
 auto SceneNode::Scripting::GetParameter(
@@ -1027,14 +1093,16 @@ auto SceneNode::Scripting::Parameters(const Slot& slot) const noexcept
   -> EffectiveParametersView
 {
   return SafeCall(RequiresScripting(),
-    [&](SafeCallState& state) { return state.scripting->Parameters(slot); });
+    [&](SafeCallState& state) -> Slot::EffectiveParametersView {
+      return state.scripting->Parameters(slot);
+    });
 }
 
 auto SceneNode::Scripting::MarkSlotReady(const Slot& slot,
   std::shared_ptr<const scripting::ScriptExecutable> executable) noexcept
   -> bool
 {
-  return SafeCall(RequiresScripting(), [&](SafeCallState& state) {
+  return SafeCall(RequiresScripting(), [&](SafeCallState& state) -> bool {
     return state.scripting->MarkSlotReady(slot, std::move(executable));
   });
 }
@@ -1042,7 +1110,7 @@ auto SceneNode::Scripting::MarkSlotReady(const Slot& slot,
 auto SceneNode::Scripting::MarkSlotCompilationFailed(
   const Slot& slot, std::string diagnostic_message) noexcept -> bool
 {
-  return SafeCall(RequiresScripting(), [&](SafeCallState& state) {
+  return SafeCall(RequiresScripting(), [&](SafeCallState& state) -> bool {
     return state.scripting->MarkSlotCompilationFailed(
       slot, std::move(diagnostic_message));
   });

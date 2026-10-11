@@ -1,5 +1,18 @@
 local script = oxygen.script {
-  params = {},
+  params = {
+    forward = oxygen.param.asset { kind = "input_action",
+      description = "Action that drives forward" },
+    reverse = oxygen.param.asset { kind = "input_action",
+      description = "Action that drives in reverse" },
+    steer_left = oxygen.param.asset { kind = "input_action",
+      description = "Action that steers left" },
+    steer_right = oxygen.param.asset { kind = "input_action",
+      description = "Action that steers right" },
+    brake = oxygen.param.asset { kind = "input_action",
+      description = "Action that brakes" },
+    hand_brake = oxygen.param.asset { kind = "input_action",
+      description = "Action that pulls the hand brake" },
+  },
 }
 
 local input = oxygen.input
@@ -10,7 +23,6 @@ local vehicle_api = oxygen.physics.vehicle
 local CONTROL_LOG_INTERVAL_SECONDS = 1.0
 local HOLD_LATCH_FRAMES = 2
 
-local input_test_wired = false
 local vehicle_node = nil
 local vehicle_handle = nil
 local vehicle_wait_logged = false
@@ -167,13 +179,13 @@ local function compute_control_input()
   }
 end
 
-local function set_control_flag(state_key, active, action_name, edge_name)
+local function set_control_flag(state_key, active, edge_name)
   local current = control_state[state_key]
   if current == active then
     return
   end
   control_state[state_key] = active
-  log.info("[INPUT TEST] " .. action_name .. " -> " .. edge_name .. " (active=" .. tostring(active) .. ")")
+  log.info("[INPUT TEST] " .. state_key .. " -> " .. edge_name .. " (active=" .. tostring(active) .. ")")
 end
 
 local function tick_control_latches()
@@ -229,48 +241,47 @@ local function apply_vehicle_control()
   end
 end
 
-local function wire_input_once()
-  if input_test_wired then return end
-  local function bind_hold(action_name, state_key)
+local function wire_input(params)
+  local function bind_hold(state_key)
+    local action = params[state_key]
+    if action == nil then
+      return
+    end
     local function engage(edge_name)
       control_latch_frames[state_key] = HOLD_LATCH_FRAMES
-      set_control_flag(state_key, true, action_name, edge_name)
+      set_control_flag(state_key, true, edge_name)
     end
     local function release(edge_name)
       control_latch_frames[state_key] = 0
-      set_control_flag(state_key, false, action_name, edge_name)
+      set_control_flag(state_key, false, edge_name)
     end
 
-    input.on_action(action_name, input.edges.triggered, function()
+    input.on_action(action, input.edges.triggered, function()
       engage("triggered")
     end)
-    input.on_action(action_name, input.edges.released, function()
+    input.on_action(action, input.edges.released, function()
       release("released")
     end)
-    input.on_action(action_name, input.edges.completed, function()
+    input.on_action(action, input.edges.completed, function()
       release("completed")
     end)
-    input.on_action(action_name, input.edges.canceled, function()
+    input.on_action(action, input.edges.canceled, function()
       release("canceled")
     end)
   end
 
-  bind_hold("VehicleForwardAction", "forward")
-  bind_hold("VehicleReverseAction", "reverse")
-  bind_hold("VehicleSteerLeftAction", "steer_left")
-  bind_hold("VehicleSteerRightAction", "steer_right")
-  bind_hold("VehicleBrakeAction", "brake")
-  bind_hold("VehicleHandbrakeAction", "hand_brake")
-
-  input_test_wired = true
+  for state_key in pairs(control_state) do
+    bind_hold(state_key)
+  end
   log.info("[INPUT TEST] Inputs successfully wired. Waiting for key presses...")
 end
 
-function script.on_gameplay(_ctx, dt_seconds)
-  if type(dt_seconds) == "number" then
-    control_log_timer = control_log_timer + dt_seconds
-  end
-  wire_input_once()
+function script.on_start(self)
+  wire_input(self.params)
+end
+
+function script.on_gameplay(_self, dt_seconds)
+  control_log_timer = control_log_timer + dt_seconds
   tick_control_latches()
   apply_vehicle_control()
 end

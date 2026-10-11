@@ -23,7 +23,8 @@
       "name": "rotate",
       "compile": false,
       "script_storage": "embedded",
-      "content_hashing": true
+      "content_hashing": true,
+      "id": "script.rotate"
     },
     {
       "id": "rotate.input",
@@ -46,10 +47,21 @@
               "key": "rotation_angle",
               "type": "float",
               "value": 0.7853982
+            },
+            {
+              "key": "speed_up",
+              "type": "asset",
+              "value": "/.cooked/Input/RotateSpeedUpAction.oiact"
+            },
+            {
+              "key": "speed_down",
+              "type": "asset",
+              "value": "/.cooked/Input/RotateSpeedDownAction.oiact"
             }
           ]
         }
-      ]
+      ],
+      "depends_on": ["script.rotate", "rotate.input"]
     },
     {
       "type": "script-sidecar",
@@ -67,10 +79,21 @@
               "key": "rotation_angle",
               "type": "float",
               "value": 10.5707964
+            },
+            {
+              "key": "speed_up",
+              "type": "asset",
+              "value": "/.cooked/Input/RotateSpeedUpAction.oiact"
+            },
+            {
+              "key": "speed_down",
+              "type": "asset",
+              "value": "/.cooked/Input/RotateSpeedDownAction.oiact"
             }
           ]
         }
-      ]
+      ],
+      "depends_on": ["script.rotate", "rotate.input"]
     }
   ]
 }

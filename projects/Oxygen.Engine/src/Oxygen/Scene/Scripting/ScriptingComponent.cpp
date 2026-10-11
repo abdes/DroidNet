@@ -5,20 +5,35 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
+#include <iterator>
+#include <memory>
+#include <optional>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Core/Scripting/ScriptExecutable.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/Internal/IMutationCollector.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
+#include <Oxygen/Scene/Types/ScriptSlotIndex.h>
 
 namespace oxygen::scene {
 
-auto ScriptingComponent::AddSlot(std::shared_ptr<const data::ScriptAsset> asset)
-  -> void
+auto ScriptingComponent::AddSlot(std::shared_ptr<const data::ScriptAsset> asset,
+  const int32_t execution_order) -> void
 {
   slots_.emplace_back();
   auto& slot = slots_.back();
   slot.slot_id_ = next_slot_id_++;
+  slot.execution_order_ = execution_order;
   slot.asset_ = std::move(asset);
   slot.compile_state_ = Slot::CompileState::kPendingCompilation;
   slot.diagnostics_.clear();
@@ -27,19 +42,17 @@ auto ScriptingComponent::AddSlot(std::shared_ptr<const data::ScriptAsset> asset)
 
 auto ScriptingComponent::RemoveSlot(const Slot& slot) -> bool
 {
-  const auto slot_index = TryGetSlotIndex(slot);
-  const bool was_active = slot_index.has_value()
-    && slots_[slot_index->get()].compile_state_ == Slot::CompileState::kReady
-    && !slots_[slot_index->get()].IsDisabled()
-    && slots_[slot_index->get()].Executable() != nullptr;
-
-  auto it = FindSlotById(slot.slot_id_);
+  const auto it = FindSlotById(slot.slot_id_);
   if (it == slots_.end()) {
     return false;
   }
+  const auto slot_index
+    = ScriptSlotIndex(static_cast<uint32_t>(std::distance(slots_.begin(), it)));
+  const bool was_active = it->compile_state_ == Slot::CompileState::kReady
+    && !it->IsDisabled() && it->Executable() != nullptr;
   slots_.erase(it);
   if (was_active && mutation_collector_) {
-    mutation_collector_->CollectScriptSlotDeactivated(owner_node_, *slot_index);
+    mutation_collector_->CollectScriptSlotDeactivated(owner_node_, slot_index);
   }
   return true;
 }
@@ -65,7 +78,7 @@ auto ScriptingComponent::SetParameter(
 
   auto& overrides = slot_it->overrides_;
   auto it = std::ranges::find_if(
-    overrides, [name](const auto& pair) { return pair.first == name; });
+    overrides, [name](const auto& pair) -> auto { return pair.first == name; });
 
   if (it != overrides.end()) {
     it->second = std::move(value);
@@ -86,7 +99,7 @@ auto ScriptingComponent::TryGetParameter(
 
   // 1. Check runtime overrides
   auto it = std::ranges::find_if(slot_it->overrides_,
-    [name](const auto& pair) { return pair.first == name; });
+    [name](const auto& pair) -> auto { return pair.first == name; });
 
   if (it != slot_it->overrides_.end()) {
     return std::cref(it->second);
@@ -200,7 +213,7 @@ auto ScriptingComponent::EmitActiveSlotDeactivations() const -> void
     return;
   }
   for (size_t i = 0; i < slots_.size(); ++i) {
-    const auto& slot = slots_[i];
+    const auto& slot = slots_.at(i);
     if (slot.compile_state_ != Slot::CompileState::kReady || slot.IsDisabled()
       || slot.Executable() == nullptr) {
       continue;
@@ -221,15 +234,17 @@ auto ScriptingComponent::Clone() const -> std::unique_ptr<Component>
 auto ScriptingComponent::FindSlotById(const uint64_t slot_id) noexcept
   -> std::vector<Slot>::iterator
 {
-  return std::ranges::find_if(slots_,
-    [slot_id](const Slot& candidate) { return candidate.slot_id_ == slot_id; });
+  return std::ranges::find_if(slots_, [slot_id](const Slot& candidate) -> bool {
+    return candidate.slot_id_ == slot_id;
+  });
 }
 
 auto ScriptingComponent::FindSlotById(const uint64_t slot_id) const noexcept
   -> std::vector<Slot>::const_iterator
 {
-  return std::ranges::find_if(slots_,
-    [slot_id](const Slot& candidate) { return candidate.slot_id_ == slot_id; });
+  return std::ranges::find_if(slots_, [slot_id](const Slot& candidate) -> bool {
+    return candidate.slot_id_ == slot_id;
+  });
 }
 
 } // namespace oxygen::scene

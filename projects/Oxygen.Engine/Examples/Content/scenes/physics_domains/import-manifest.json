@@ -206,7 +206,39 @@
           "node_index": 12,
           "slot_id": "physics_domains_controller",
           "script_virtual_path": "/.cooked/Scripts/physics_domains_controller.oscript",
-          "execution_order": 0
+          "execution_order": 0,
+          "params": [
+            {
+              "key": "forward",
+              "type": "asset",
+              "value": "/.cooked/Input/VehicleForwardAction.oiact"
+            },
+            {
+              "key": "reverse",
+              "type": "asset",
+              "value": "/.cooked/Input/VehicleReverseAction.oiact"
+            },
+            {
+              "key": "steer_left",
+              "type": "asset",
+              "value": "/.cooked/Input/VehicleSteerLeftAction.oiact"
+            },
+            {
+              "key": "steer_right",
+              "type": "asset",
+              "value": "/.cooked/Input/VehicleSteerRightAction.oiact"
+            },
+            {
+              "key": "brake",
+              "type": "asset",
+              "value": "/.cooked/Input/VehicleBrakeAction.oiact"
+            },
+            {
+              "key": "hand_brake",
+              "type": "asset",
+              "value": "/.cooked/Input/VehicleHandbrakeAction.oiact"
+            }
+          ]
         }
       ]
     },
@@ -226,7 +258,39 @@
           "node_index": 12,
           "slot_id": "physics_domains_controller",
           "script_virtual_path": "/.cooked/Scripts/physics_domains_controller.oscript",
-          "execution_order": 0
+          "execution_order": 0,
+          "params": [
+            {
+              "key": "forward",
+              "type": "asset",
+              "value": "/.cooked/Input/VehicleForwardAction.oiact"
+            },
+            {
+              "key": "reverse",
+              "type": "asset",
+              "value": "/.cooked/Input/VehicleReverseAction.oiact"
+            },
+            {
+              "key": "steer_left",
+              "type": "asset",
+              "value": "/.cooked/Input/VehicleSteerLeftAction.oiact"
+            },
+            {
+              "key": "steer_right",
+              "type": "asset",
+              "value": "/.cooked/Input/VehicleSteerRightAction.oiact"
+            },
+            {
+              "key": "brake",
+              "type": "asset",
+              "value": "/.cooked/Input/VehicleBrakeAction.oiact"
+            },
+            {
+              "key": "hand_brake",
+              "type": "asset",
+              "value": "/.cooked/Input/VehicleHandbrakeAction.oiact"
+            }
+          ]
         },
         {
           "node_index": 21,

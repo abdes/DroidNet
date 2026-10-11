@@ -4,21 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <exception>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <lua.h>
-#include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneBindings.h>
@@ -92,42 +93,6 @@ namespace {
     }
     return node_opt->IsAlive();
   }
-
-  auto LuaSceneCurrentNode(lua_State* state) -> int
-  {
-    auto* ctx = GetBindingContextFromScriptArg(state, 1);
-    if ((ctx != nullptr) && ctx->has_slot_context) {
-      const auto frame_context = GetActiveFrameContext(state);
-      if (frame_context == nullptr) {
-        lua_pushnil(state);
-        return 1;
-      }
-      const auto& scene = frame_context->GetScene();
-      const auto node_opt = scene->GetNode(ctx->slot_context.node_handle);
-      if (!node_opt || !node_opt->IsAlive()) {
-        lua_pushnil(state);
-        return 1;
-      }
-      const auto& node = *node_opt;
-      const auto handle = node.GetHandle();
-      static uint32_t s_last_scene_id = std::numeric_limits<uint32_t>::max();
-      static uint32_t s_last_node_index = std::numeric_limits<uint32_t>::max();
-      const auto scene_id = static_cast<uint32_t>(handle.GetSceneId());
-      const auto node_index = static_cast<uint32_t>(handle.Index());
-      if (scene_id != s_last_scene_id || node_index != s_last_node_index) {
-        LOG_F(INFO,
-          "scene.current_node switched: name='{}' scene_id={} node_index={}",
-          node.GetName(), scene_id, node_index);
-        s_last_scene_id = scene_id;
-        s_last_node_index = node_index;
-      }
-      return PushSceneNode(state, node);
-    }
-    lua_pushnil(state);
-    return 1;
-  }
-
-  auto LuaSceneParam(lua_State* state) -> int { return GetParamValue(state); }
 
   auto LuaSceneCreateNode(lua_State* state) -> int
   {
@@ -482,19 +447,19 @@ namespace {
   auto LegacySceneMigrationTarget(const std::string_view key) -> const char*
   {
     if (key == "find") {
-      return "find_one / find_many / query";
+      return "oxygen.scene.find_one / find_many / query";
     }
     if (key == "find_path") {
-      return "find_one / query";
+      return "oxygen.scene.find_one / query";
     }
     if (key == "create") {
-      return "create_node";
+      return "oxygen.scene.create_node";
     }
-    if (key == "current") {
-      return "current_node";
+    if (key == "current" || key == "current_node") {
+      return "self.node";
     }
-    if (key == "get_param") {
-      return "param";
+    if (key == "get_param" || key == "param") {
+      return "self.params";
     }
     return nullptr;
   }
@@ -511,8 +476,7 @@ namespace {
     const std::string_view key(key_ptr, len);
     const char* replacement = LegacySceneMigrationTarget(key);
     if (replacement != nullptr) {
-      LOG_F(WARNING, "oxygen.scene.{} was removed in v1; use oxygen.scene.{}",
-        key, replacement);
+      LOG_F(WARNING, "oxygen.scene.{} was removed; use {}", key, replacement);
       lua_pushnil(state);
       return 1;
     }
@@ -532,11 +496,6 @@ auto RegisterSceneBindings(lua_State* state, const int oxygen_table_index)
 
   const int module_index
     = PushOxygenSubtable(state, oxygen_table_index, "scene");
-
-  lua_pushcfunction(state, LuaSceneCurrentNode, "scene.current_node");
-  lua_setfield(state, module_index, "current_node");
-  lua_pushcfunction(state, LuaSceneParam, "scene.param");
-  lua_setfield(state, module_index, "param");
 
   lua_pushcfunction(state, LuaSceneCreateNode, "scene.create_node");
   lua_setfield(state, module_index, "create_node");

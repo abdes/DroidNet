@@ -9,7 +9,6 @@ local scene = oxygen.scene
 local omath = oxygen.math
 local log = oxygen.log
 
-local initialized = false
 local elapsed_seconds = 0.0
 local cached_sun_node = nil
 
@@ -91,9 +90,13 @@ local function apply_environment_settings(azimuth_deg, elevation_deg, color_rgb,
   end
 end
 
-function script.on_gameplay(ctx, dt_seconds)
-  local _ = ctx
-  local cycle_seconds = scene.param(ctx, "day_duration_seconds") or 60.0
+function script.on_start(self)
+  log.info(string.format("time_of_day: enabled (%gs day cycle)",
+    self.params.day_duration_seconds))
+end
+
+function script.on_gameplay(self, dt_seconds)
+  local cycle_seconds = self.params.day_duration_seconds
   if cycle_seconds <= 1.0 then
     cycle_seconds = 60.0
   end
@@ -125,11 +128,6 @@ function script.on_gameplay(ctx, dt_seconds)
   apply_sun_node_settings(sun_node, azimuth_deg, elevation_deg, color_rgb, lux)
   apply_environment_settings(
     azimuth_deg, elevation_deg, color_rgb, lux, day01, sun_disk_enabled)
-
-  if not initialized then
-    initialized = true
-    log.info("time_of_day: enabled (60s day cycle)")
-  end
 end
 
 return script

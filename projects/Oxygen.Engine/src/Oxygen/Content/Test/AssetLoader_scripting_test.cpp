@@ -130,6 +130,8 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
 }
 
 //! Key of the script an asset parameter of the scripted scene names.
+constexpr int32_t kSlotExecutionOrder = 3;
+
 auto ParamScriptKey() -> oxygen::data::AssetKey
 {
   return oxygen::data::AssetKey::FromVirtualPath("/Test/param-script.oscript");
@@ -177,6 +179,7 @@ auto WriteLooseCookedSceneWithScripting(
   ScriptSlotRecord slot {};
   slot.script_asset_key
     = oxygen::data::AssetKey::FromVirtualPath("/Test/scene-script.oscript");
+  slot.execution_order = kSlotExecutionOrder;
   ScriptParamRecord param {};
   if (with_asset_param) {
     slot.params_array_offset = offset_params;
@@ -439,6 +442,55 @@ NOLINT_TEST_F(AssetLoaderScriptingTest, ScriptAssetLoadsDeclaredParameters)
         co_return oxygen::co::kJoin;
       };
     }(script_key, cooked_root, &el, kSpeedDefault));
+}
+
+//! Hydrated slots carry the cooked execution order.
+NOLINT_TEST_F(AssetLoaderScriptingTest, HydratedSlotCarriesExecutionOrder)
+{
+  using oxygen::data::pak::scripting::ScriptingComponentRecord;
+  const auto scene_key
+    = oxygen::data::AssetKey::FromVirtualPath("/Test/ScriptingOrder.oscene");
+  const auto cooked_root = temp_dir_ / "loose_scene_slot_order";
+  WriteLooseCookedSceneWithScripting(cooked_root, scene_key);
+
+  TestEventLoop el;
+  oxygen::co::Run(el,
+    [](oxygen::data::AssetKey scene_key, std::filesystem::path cooked_root,
+      TestEventLoop* loop) -> Co<> {
+      auto& el = *loop;
+      oxygen::co::ThreadPool pool(el, 2);
+      AssetLoaderConfig config {};
+      config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+      AssetLoader loader(Tag::Get(), config);
+      loader.RegisterLoader(oxygen::content::loaders::LoadSceneAsset);
+
+      OXCO_WITH_NURSERY(n)
+      {
+        co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+        loader.Run();
+        loader.AddLooseCookedRoot(cooked_root);
+
+        const auto scene
+          = co_await loader.LoadAssetAsync<SceneAsset>(scene_key);
+        EXPECT_THAT(scene, NotNull());
+        if (scene) {
+          const auto components
+            = scene->GetComponents<ScriptingComponentRecord>();
+          EXPECT_EQ(components.size(), 1U);
+          if (!components.empty()) {
+            const auto slots
+              = loader.GetHydratedScriptSlots(*scene, components.front());
+            EXPECT_EQ(slots.size(), 1U);
+            if (!slots.empty()) {
+              EXPECT_EQ(slots.front().execution_order, kSlotExecutionOrder);
+            }
+          }
+        }
+
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      };
+    }(scene_key, cooked_root, &el));
 }
 
 //! A slot's asset parameter is a scene reference and a load dependency.

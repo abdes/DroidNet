@@ -7,33 +7,55 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <tuple>
 #include <utility>
+#include <vector>
 
 #include <Luau/Compiler.h>
+#include <fmt/format.h>
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Scripting/ScriptExecutable.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
+#include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
+#include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Scene/Scripting/ScriptingComponent.h>
+#include <Oxygen/Scene/Types/ScriptSlotIndex.h>
+#include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
-#include <Oxygen/Scripting/Bindings/Packs/Content/ContentAsyncBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/CoreBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/ScriptDeclarationBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Input/InputBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneBindingPack.h>
+#include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Compilers/LuauScriptCompiler.h>
 #include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
 #include <Oxygen/Scripting/Input/InputScriptEventBridge.h>
@@ -48,7 +70,6 @@ namespace {
   constexpr int kLuaStackSecondTop = -2;
   constexpr int kLuaSingleValueCount = 1;
 
-  constexpr int kLuaNoRef = -1;
   constexpr std::string_view kCVarScriptingInputBridgeLogs
     = "scrp.input_bridge_logs";
   constexpr std::string_view kCVarScriptingInputBridgeLogVerbosity
@@ -162,16 +183,6 @@ namespace {
     return ComputeFNV1a64(bytecode.data(), bytecode.size());
   }
 
-  auto CreateRefPreserveStack(lua_State* state, const int index) -> int
-  {
-    const int top = lua_gettop(state);
-    const int abs_index = lua_absindex(state, index);
-    lua_pushvalue(state, abs_index);
-    const int ref = lua_ref(state, kLuaStackTop);
-    lua_settop(state, top);
-    return ref;
-  }
-
   auto TryGetHookFunction(lua_State* state, std::string_view hook_name) -> bool
   {
     // Preferred: oxygen.<hook_name>()
@@ -271,6 +282,21 @@ namespace {
     return false;
   }
 
+  //! A slot's private environment; globals fall back to the shared global
+  //! environment.
+  auto CreateInstanceEnvironment(lua_State* state, const int global_env_ref)
+    -> int
+  {
+    lua_newtable(state); // instance_env
+    lua_newtable(state); // metatable
+    lua_getref(state, global_env_ref);
+    lua_setfield(state, kLuaStackSecondTop, "__index");
+    lua_setmetatable(state, kLuaStackSecondTop);
+    const auto ref = lua_ref(state, kLuaStackTop);
+    lua_pop(state, kLuaSingleValueCount);
+    return ref;
+  }
+
 } // namespace
 
 ScriptingModule::ScriptingModule(const engine::ModulePriority priority)
@@ -292,7 +318,7 @@ auto ScriptingModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
   if (auto loader = engine_->GetAssetLoader()) {
     script_reload_subscription_ = loader->SubscribeScriptReload(
       [this](const data::AssetKey& key,
-        const std::shared_ptr<const data::ScriptResource>& resource) {
+        const std::shared_ptr<const data::ScriptResource>& resource) -> void {
         if (!resource) {
           return;
         }
@@ -332,11 +358,9 @@ auto ScriptingModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
   }
   bindings::SetActiveEngine(lua_state_, engine_);
 
-  if (binding_packs_.empty()) {
-    if (!RegisterDefaultBindingPacks()) {
-      OnShutdown();
-      return false;
-    }
+  if (binding_packs_.empty() && !RegisterDefaultBindingPacks()) {
+    OnShutdown();
+    return false;
   }
 
   const auto sandbox_result = InitializeSandbox();
@@ -367,13 +391,9 @@ auto ScriptingModule::OnShutdown() noexcept -> void
 
   if (lua_state_ != nullptr) {
     bindings::SetActiveFrameContext(lua_state_, {});
+    // Instances end while the engine bindings are still reachable.
+    EndAllInstances();
     bindings::SetActiveEngine(lua_state_, {});
-
-    for (auto& [_, runtime] : slot_runtimes_) {
-      DestroySlotRuntime(runtime);
-    }
-    slot_runtimes_.clear();
-
     bindings::ShutdownEventsRuntime(lua_state_);
 
     if (global_env_ref_ != LUA_NOREF) {
@@ -435,8 +455,10 @@ auto ScriptingModule::RegisterConsoleBindings(
       DCHECK_NOTNULL_F(engine_);
       if (auto loader = engine_->GetAssetLoader()) {
         loader->ReloadAllScripts();
-        return { .status = console::ExecutionStatus::kOk,
-          .output = "Reloading all scripts..." };
+        return {
+          .status = console::ExecutionStatus::kOk,
+          .output = "Reloading all scripts...",
+        };
       }
       return {
         .status = console::ExecutionStatus::kError,
@@ -450,8 +472,10 @@ auto ScriptingModule::RegisterConsoleBindings(
     .help = "List all registered script source roots",
     .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
       if (!attached_) {
-        return { .status = console::ExecutionStatus::kError,
-          .error = "Engine not attached" };
+        return {
+          .status = console::ExecutionStatus::kError,
+          .error = "Engine not attached",
+        };
       }
       DCHECK_NOTNULL_F(engine_);
       const auto roots = engine_->GetPathFinder().ScriptSourceRoots();
@@ -544,6 +568,7 @@ auto ScriptingModule::OnFixedSimulation(
   if (!result.ok) {
     ReportHookError(context, "on_fixed_simulation", result);
   }
+  RunInstances(context, InstanceHook::kFixedSimulation);
 
   if (lua_state_ != nullptr) {
     const ScopedActiveFrameContext active_context(lua_state_, context);
@@ -571,10 +596,7 @@ auto ScriptingModule::OnGameplay(observer_ptr<engine::FrameContext> context)
     ReportHookError(context, "on_gameplay", result);
   }
 
-  const auto scene_result = RunSceneScripts(context);
-  if (!scene_result.ok) {
-    ReportHookError(context, "scene_tick", scene_result);
-  }
+  RunInstances(context, InstanceHook::kGameplay);
 
   if (lua_state_ != nullptr) {
     const ScopedActiveFrameContext active_context(lua_state_, context);
@@ -600,10 +622,7 @@ auto ScriptingModule::OnSceneMutation(
     ReportHookError(context, "on_scene_mutation", result);
   }
 
-  const auto scene_mutation_result = RunSceneMutationScripts(context);
-  if (!scene_mutation_result.ok) {
-    ReportHookError(context, "scene_mutation", scene_mutation_result);
-  }
+  RunInstances(context, InstanceHook::kSceneMutation);
 
   if (lua_state_ != nullptr) {
     const ScopedActiveFrameContext active_context(lua_state_, context);
@@ -739,10 +758,10 @@ auto ScriptingModule::RegisterBindingPack(
     return false;
   }
 
-  const auto already_registered
-    = std::ranges::any_of(binding_packs_, [&pack](const auto& existing) {
-        return existing && existing->Name() == pack->Name();
-      });
+  const auto already_registered = std::ranges::any_of(
+    binding_packs_, [&pack](const auto& existing) -> auto {
+      return existing && existing->Name() == pack->Name();
+    });
   if (already_registered) {
     return false;
   }
@@ -756,10 +775,9 @@ auto ScriptingModule::RegisterBindingPack(
         .runtime_env_ref = runtime_env_ref_,
       });
     if (!ok) {
-      binding_packs_.erase(
-        std::remove_if(binding_packs_.begin(), binding_packs_.end(),
-          [raw_pack](const auto& item) { return item.get() == raw_pack; }),
-        binding_packs_.end());
+      std::erase_if(binding_packs_, [raw_pack](const auto& item) -> bool {
+        return item.get() == raw_pack;
+      });
       return false;
     }
   }
@@ -769,11 +787,9 @@ auto ScriptingModule::RegisterBindingPack(
 auto ScriptingModule::UnregisterBindingPack(std::string_view pack_name) -> bool
 {
   const auto old_size = binding_packs_.size();
-  binding_packs_.erase(
-    std::remove_if(binding_packs_.begin(), binding_packs_.end(),
-      [pack_name](
-        const auto& pack) { return pack && pack->Name() == pack_name; }),
-    binding_packs_.end());
+  std::erase_if(binding_packs_, [pack_name](const auto& pack) -> bool {
+    return pack && pack->Name() == pack_name;
+  });
   return old_size != binding_packs_.size();
 }
 
@@ -929,11 +945,8 @@ auto ScriptingModule::EnsureSceneObservation(
   }
   active_frame_slots_.clear();
   active_slot_indices_.clear();
-
-  for (auto& [_, runtime] : slot_runtimes_) {
-    DestroySlotRuntime(runtime);
-  }
-  slot_runtimes_.clear();
+  active_slots_sorted_ = true;
+  EndAllInstances();
 
   if (scene != nullptr) {
     const bool subscribed
@@ -956,7 +969,7 @@ auto ScriptingModule::EnsureSceneObservation(
       if (node.HasScripting()) {
         const auto scripting = node.GetScripting();
         const auto slots = scripting.Slots();
-        constexpr auto kMaxSlotIndex = (std::numeric_limits<uint32_t>::max)();
+        constexpr auto kMaxSlotIndex = std::numeric_limits<uint32_t>::max();
         if (slots.size() > kMaxSlotIndex) {
           LOG_F(ERROR,
             "Skipping scripting slot hydration for node {}: slot count {} "
@@ -964,15 +977,17 @@ auto ScriptingModule::EnsureSceneObservation(
             nostd::to_string(node.GetHandle()), slots.size());
         } else {
           for (size_t i = 0; i < slots.size(); ++i) {
-            const auto& slot = slots[i];
+            const auto& slot = slots.subspan(i, 1).front();
             if (slot.Executable() == nullptr || slot.IsDisabled()) {
               continue;
             }
 
             ActivateSlot(
-              SlotRuntimeKey { .node_handle = node.GetHandle(),
+              SlotRuntimeKey {
+                .node_handle = node.GetHandle(),
                 .slot_index
-                = scene::ScriptSlotIndex { static_cast<uint32_t>(i) } },
+                = scene::ScriptSlotIndex { static_cast<uint32_t>(i) },
+              },
               slot);
           }
         }
@@ -995,20 +1010,20 @@ auto ScriptingModule::ActivateSlot(const SlotRuntimeKey& key,
 
   if (const auto it = active_slot_indices_.find(key);
     it != active_slot_indices_.end()) {
-    auto& active_slot = active_frame_slots_[it->second];
-    active_slot.executable = slot.Executable();
-    active_slot.executable_fingerprint
-      = ExecutableFingerprint(*slot.Executable());
+    auto& active_slot = active_frame_slots_.at(it->second);
+    if (active_slot.execution_order != slot.ExecutionOrder()) {
+      active_slot.execution_order = slot.ExecutionOrder();
+      active_slots_sorted_ = false;
+    }
     return;
   }
 
-  const auto index = active_frame_slots_.size();
-  active_slot_indices_.insert_or_assign(key, index);
+  active_slot_indices_.insert_or_assign(key, active_frame_slots_.size());
   active_frame_slots_.push_back(ActiveScriptSlot {
     .key = key,
-    .executable = slot.Executable(),
-    .executable_fingerprint = ExecutableFingerprint(*slot.Executable()),
+    .execution_order = slot.ExecutionOrder(),
   });
+  active_slots_sorted_ = false;
 }
 
 auto ScriptingModule::UpdateSlot(const SlotRuntimeKey& key,
@@ -1028,10 +1043,9 @@ auto ScriptingModule::UpdateSlot(const SlotRuntimeKey& key,
       || runtime.last_known_fingerprint
         != ExecutableFingerprint(*slot.Executable())
       || !IsCurrentSlotRuntime(key, runtime)) {
-      DestroySlotRuntime(runtime);
-      runtime.executable = slot.Executable();
-      runtime.last_known_fingerprint
-        = ExecutableFingerprint(*slot.Executable());
+      // The next phase creates a new instance from the new executable.
+      EndInstance(runtime);
+      slot_runtimes_.erase(runtime_it);
     }
   }
 }
@@ -1043,8 +1057,9 @@ auto ScriptingModule::DeactivateSlot(const SlotRuntimeKey& key) -> void
     const size_t index = idx_it->second;
     const size_t last_index = active_frame_slots_.size() - 1;
     if (index != last_index) {
-      active_frame_slots_[index] = std::move(active_frame_slots_[last_index]);
-      active_slot_indices_[active_frame_slots_[index].key] = index;
+      active_frame_slots_.at(index) = active_frame_slots_.at(last_index);
+      active_slot_indices_[active_frame_slots_.at(index).key] = index;
+      active_slots_sorted_ = false;
     }
     active_frame_slots_.pop_back();
     active_slot_indices_.erase(idx_it);
@@ -1052,333 +1067,146 @@ auto ScriptingModule::DeactivateSlot(const SlotRuntimeKey& key) -> void
 
   const auto runtime_it = slot_runtimes_.find(key);
   if (runtime_it != slot_runtimes_.end()) {
-    DestroySlotRuntime(runtime_it->second);
+    EndInstance(runtime_it->second);
     slot_runtimes_.erase(runtime_it);
   }
 }
 
-auto ScriptingModule::RunSceneScripts(
-  observer_ptr<engine::FrameContext> context) -> ScriptExecutionResult
+auto ScriptingModule::SortActiveSlots() -> void
 {
-  if (lua_state_ == nullptr) {
-    return ErrorResult("runtime", "lua state is null");
+  if (active_slots_sorted_) {
+    return;
   }
-  if (context == nullptr) {
-    return OkResult();
+  const auto order = [](const ActiveScriptSlot& slot)
+    -> std::tuple<int, unsigned int, unsigned int> {
+    return { slot.execution_order, slot.key.node_handle.Index(),
+      slot.key.slot_index.get() };
+  };
+  std::ranges::sort(
+    active_frame_slots_, [&order](const auto& lhs, const auto& rhs) -> auto {
+      return order(lhs) < order(rhs);
+    });
+  for (size_t i = 0; i < active_frame_slots_.size(); ++i) {
+    active_slot_indices_[active_frame_slots_.at(i).key] = i;
+  }
+  active_slots_sorted_ = true;
+}
+
+auto ScriptingModule::EndAllInstances() -> void
+{
+  for (auto& [_, runtime] : slot_runtimes_) {
+    EndInstance(runtime);
+  }
+  slot_runtimes_.clear();
+}
+
+auto ScriptingModule::RunInstances(
+  const observer_ptr<engine::FrameContext> context, const InstanceHook hook)
+  -> void
+{
+  if (lua_state_ == nullptr || context == nullptr
+    || context->GetScene() == nullptr) {
+    return;
   }
 
-  const auto scene = context->GetScene();
-  if (scene == nullptr) {
-    return OkResult();
+  SortActiveSlots();
+  // Hooks may change the active set; iterate a stable copy of the order.
+  std::vector<SlotRuntimeKey> keys;
+  keys.reserve(active_frame_slots_.size());
+  for (const auto& active_slot : active_frame_slots_) {
+    keys.push_back(active_slot.key);
   }
 
   using seconds_f = std::chrono::duration<float>;
-  const float dt_seconds
-    = std::chrono::duration_cast<seconds_f>(context->GetGameDeltaTime().get())
-        .count();
+  const auto delta = hook == InstanceHook::kFixedSimulation
+    ? context->GetFixedDeltaTime().get()
+    : context->GetGameDeltaTime().get();
+  const float dt_seconds = std::chrono::duration_cast<seconds_f>(delta).count();
+  const ScopedActiveFrameContext active_context(lua_state_, context);
 
-  for (auto& slot_info : active_frame_slots_) {
-    // Re-validate node existence (handle safety)
-    auto node = scene->GetNode(slot_info.key.node_handle);
-    if (!node.has_value() || !node->HasScripting()) {
-      continue;
-    }
-
-    auto scripting = node->GetScripting();
-    const auto slots = scripting.Slots();
-    if (slot_info.key.slot_index >= slots.size()) {
-      continue;
-    }
-
-    const auto& slot = slots[slot_info.key.slot_index];
-    if (slot.IsDisabled() || slot.Executable() == nullptr) {
-      continue;
-    }
-
-    // In-place reloads and same-hash executable replacements need not emit
-    // scene slot mutations. Reconcile against the attached slot every phase.
-    slot_info.executable = slot.Executable();
-    slot_info.executable_fingerprint
-      = ExecutableFingerprint(*slot_info.executable);
-    auto& runtime = slot_runtimes_[slot_info.key];
-    const bool runtime_needs_rebuild
-      = runtime.executable != slot_info.executable
-      || runtime.last_known_fingerprint != slot_info.executable_fingerprint
-      || !IsCurrentSlotRuntime(slot_info.key, runtime);
-
-    if (runtime_needs_rebuild) {
-      DestroySlotRuntime(runtime);
-      runtime.executable = slot_info.executable;
-      runtime.last_known_fingerprint = slot_info.executable_fingerprint;
-      const auto init_result = RebuildSlotRuntime(slot_info.key, runtime, slot);
-      if (!init_result.ok && !runtime.reported_initialization_error) {
-        runtime.failed_initialization = true;
-        runtime.initialization_error = init_result.message;
-        runtime.reported_initialization_error = true;
-        bindings::RetireEventListenerOwner(lua_state_, runtime.event_owner_id);
-        const auto msg = std::string("script slot initialization failed [")
-                           .append(init_result.stage)
-                           .append("]: ")
-                           .append(init_result.message);
-        LOG_SCOPE_F(ERROR, "Script Init Error");
-        LOG_F(ERROR, "    stage: {}", init_result.stage);
-        LOG_F(ERROR, "  message: {}", init_result.message);
-        ReportContentError(context, msg);
-      }
-      if (!init_result.ok) {
+  if (hook == InstanceHook::kGameplay) {
+    // Every instance ready this phase starts before any on_gameplay runs.
+    for (const auto& key : keys) {
+      auto* runtime = PrepareInstance(key, context);
+      if (runtime == nullptr || runtime->started) {
         continue;
       }
+      const auto result = CallInstanceHook(*runtime, "on_start", std::nullopt);
+      if (result.ok) {
+        runtime->started = true;
+      } else {
+        FaultInstance(key, *runtime, context, "on_start", result);
+      }
     }
+  }
 
-    if (runtime.failed_initialization || runtime.failed_execution) {
+  const auto hook_name = [hook] -> std::string_view {
+    switch (hook) {
+    case InstanceHook::kFixedSimulation:
+      return "on_fixed_simulation";
+    case InstanceHook::kGameplay:
+      return "on_gameplay";
+    case InstanceHook::kSceneMutation:
+      return "on_scene_mutation";
+    }
+    return {};
+  }();
+  for (const auto& key : keys) {
+    auto* runtime = PrepareInstance(key, context);
+    if (runtime == nullptr || !runtime->started) {
       continue;
     }
-
-    const auto gameplay_result = ExecuteSlotGameplay(
-      slot_info.key, runtime, *node, slot, context, dt_seconds);
-    if (!gameplay_result.ok) {
-      runtime.failed_execution = true;
-      bindings::RetireEventListenerOwner(lua_state_, runtime.event_owner_id);
-      const auto msg = std::string("script slot on_gameplay failed [")
-                         .append(gameplay_result.stage)
-                         .append("]: ")
-                         .append(gameplay_result.message);
-      LOG_SCOPE_F(ERROR, "Script Slot Error");
-      LOG_F(ERROR, "    stage: {}", gameplay_result.stage);
-      LOG_F(ERROR, "  message: {}", gameplay_result.message);
-      ReportContentError(context, msg);
+    const auto result = CallInstanceHook(*runtime, hook_name, dt_seconds);
+    if (!result.ok) {
+      FaultInstance(key, *runtime, context, hook_name, result);
     }
   }
-
-  return OkResult();
 }
 
-auto ScriptingModule::RunSceneMutationScripts(
-  observer_ptr<engine::FrameContext> context) -> ScriptExecutionResult
+auto ScriptingModule::PrepareInstance(const SlotRuntimeKey& key,
+  const observer_ptr<engine::FrameContext> context) -> SlotRuntimeState*
 {
-  if (lua_state_ == nullptr) {
-    return ErrorResult("runtime", "lua state is null");
-  }
-  if (context == nullptr) {
-    return OkResult();
-  }
-
   const auto scene = context->GetScene();
-  if (scene == nullptr) {
-    return OkResult();
+  auto node = scene->GetNode(key.node_handle);
+  if (!node.has_value() || !node->HasScripting()) {
+    return nullptr;
+  }
+  const auto slots = node->GetScripting().Slots();
+  if (key.slot_index >= slots.size()) {
+    return nullptr;
+  }
+  const auto& slot = slots.subspan(key.slot_index.get(), 1).front();
+  if (slot.IsDisabled() || slot.Executable() == nullptr) {
+    return nullptr;
   }
 
-  using seconds_f = std::chrono::duration<float>;
-  const float dt_seconds
-    = std::chrono::duration_cast<seconds_f>(context->GetGameDeltaTime().get())
-        .count();
-
-  for (auto& slot_info : active_frame_slots_) {
-    // Re-validate node existence (handle safety)
-    auto node = scene->GetNode(slot_info.key.node_handle);
-    if (!node.has_value() || !node->HasScripting()) {
-      continue;
-    }
-
-    auto scripting = node->GetScripting();
-    const auto slots = scripting.Slots();
-    if (slot_info.key.slot_index >= slots.size()) {
-      continue;
-    }
-
-    const auto& slot = slots[slot_info.key.slot_index];
-    if (slot.IsDisabled() || slot.Executable() == nullptr) {
-      continue;
-    }
-
-    // Scene mutation can be the first hook phase after an executable update.
-    slot_info.executable = slot.Executable();
-    slot_info.executable_fingerprint
-      = ExecutableFingerprint(*slot_info.executable);
-    auto& runtime = slot_runtimes_[slot_info.key];
-    const bool runtime_needs_rebuild
-      = runtime.executable != slot_info.executable
-      || runtime.last_known_fingerprint != slot_info.executable_fingerprint
-      || !IsCurrentSlotRuntime(slot_info.key, runtime);
-
-    if (runtime_needs_rebuild) {
-      DestroySlotRuntime(runtime);
-      runtime.executable = slot_info.executable;
-      runtime.last_known_fingerprint = slot_info.executable_fingerprint;
-      const auto init_result = RebuildSlotRuntime(slot_info.key, runtime, slot);
-      if (!init_result.ok && !runtime.reported_initialization_error) {
-        runtime.failed_initialization = true;
-        runtime.initialization_error = init_result.message;
-        runtime.reported_initialization_error = true;
-        bindings::RetireEventListenerOwner(lua_state_, runtime.event_owner_id);
-        const auto msg = std::string("script slot initialization failed [")
-                           .append(init_result.stage)
-                           .append("]: ")
-                           .append(init_result.message);
-        LOG_SCOPE_F(ERROR, "Script Init Error");
-        LOG_F(ERROR, "    stage: {}", init_result.stage);
-        LOG_F(ERROR, "  message: {}", init_result.message);
-        ReportContentError(context, msg);
-      }
-      if (!init_result.ok) {
-        continue;
-      }
-    }
-
-    if (runtime.failed_initialization || runtime.failed_execution) {
-      continue;
-    }
-
-    const auto mutation_result = ExecuteSlotSceneMutation(
-      slot_info.key, runtime, *node, slot, context, dt_seconds);
-    if (!mutation_result.ok) {
-      runtime.failed_execution = true;
-      bindings::RetireEventListenerOwner(lua_state_, runtime.event_owner_id);
-      const auto msg = std::string("script slot on_scene_mutation failed [")
-                         .append(mutation_result.stage)
-                         .append("]: ")
-                         .append(mutation_result.message);
-      LOG_SCOPE_F(ERROR, "Script Slot Error");
-      LOG_F(ERROR, "    stage: {}", mutation_result.stage);
-      LOG_F(ERROR, "  message: {}", mutation_result.message);
-      ReportContentError(context, msg);
+  // In-place reloads and same-hash executable replacements need not emit
+  // scene slot mutations. Reconcile against the attached slot every phase.
+  auto& runtime = slot_runtimes_[key];
+  if (runtime.executable != slot.Executable()
+    || runtime.last_known_fingerprint
+      != ExecutableFingerprint(*slot.Executable())
+    || !IsCurrentSlotRuntime(key, runtime)) {
+    EndInstance(runtime);
+    const auto result = CreateInstance(key, runtime, *node, slot);
+    if (!result.ok) {
+      FaultInstance(key, runtime, context, "load", result);
     }
   }
-
-  return OkResult();
+  return runtime.faulted ? nullptr : &runtime;
 }
 
-auto ScriptingModule::ExecuteSlotGameplay(const SlotRuntimeKey& key,
-  SlotRuntimeState& runtime_state, const scene::SceneNode& node,
-  const scene::ScriptingComponent::Slot& slot,
-  const observer_ptr<engine::FrameContext> context, const float dt_seconds)
-  -> ScriptExecutionResult
+auto ScriptingModule::CreateInstance(const SlotRuntimeKey& key,
+  SlotRuntimeState& state, scene::SceneNode& node,
+  const scene::ScriptingComponent::Slot& slot) -> ScriptExecutionResult
 {
-  const ScopedLuaStackTop stack_guard(lua_state_, "ExecuteSlotGameplay");
-  const ScopedActiveFrameContext active_context(lua_state_, context);
+  const ScopedLuaStackTop stack_guard(lua_state_, "CreateInstance");
 
-  if (runtime_state.failed_initialization) {
-    return ErrorResult("slot_binding", runtime_state.initialization_error);
-  }
-
-  if (!IsValidLuaRef(runtime_state.on_gameplay_ref)
-    && !IsValidLuaRef(runtime_state.on_scene_mutation_ref)) {
-    const auto rebuild_result = RebuildSlotRuntime(key, runtime_state, slot);
-    if (!rebuild_result.ok) {
-      return rebuild_result;
-    }
-  }
-
-  if (!IsValidLuaRef(runtime_state.on_gameplay_ref)) {
-    return OkResult();
-  }
-
-  const bindings::ScopedEventListenerOwner owner_scope(
-    lua_state_, runtime_state.event_owner_id);
-  lua_getref(lua_state_, runtime_state.on_gameplay_ref);
-  if (!lua_isfunction(lua_state_, kLuaStackTop)) {
-    lua_pop(lua_state_, kLuaSingleValueCount);
-    return ErrorResult(
-      "slot_binding", "on_gameplay entry point is not callable");
-  }
-
-  bindings::LuaSlotExecutionContext invocation_context {
-    .node_handle = node.GetHandle(), .slot = &slot
-  };
-  bindings::PushScriptContext(lua_state_, &invocation_context, dt_seconds);
-  lua_pushnumber(lua_state_, dt_seconds);
-
-  const auto call_status = lua_pcall(lua_state_, 2, kLuaNoResults, 0);
-  CHECK_F(call_status != LUA_ERRERR,
-    "lua_pcall returned LUA_ERRERR in ExecuteSlotGameplay");
-  if (call_status != LUA_OK) {
-    const auto error_message = BuildLuaErrorWithTraceback(lua_state_);
-    lua_pop(lua_state_, 1); // original error object
-    return ErrorResult("slot_runtime", error_message);
-  }
-  return OkResult();
-}
-
-auto ScriptingModule::ExecuteSlotSceneMutation(const SlotRuntimeKey& key,
-  SlotRuntimeState& runtime_state, const scene::SceneNode& node,
-  const scene::ScriptingComponent::Slot& slot,
-  const observer_ptr<engine::FrameContext> context, const float dt_seconds)
-  -> ScriptExecutionResult
-{
-  const ScopedLuaStackTop stack_guard(lua_state_, "ExecuteSlotSceneMutation");
-  const ScopedActiveFrameContext active_context(lua_state_, context);
-
-  if (runtime_state.failed_initialization) {
-    return ErrorResult("slot_binding", runtime_state.initialization_error);
-  }
-
-  if (!IsValidLuaRef(runtime_state.on_gameplay_ref)
-    && !IsValidLuaRef(runtime_state.on_scene_mutation_ref)) {
-    const auto rebuild_result = RebuildSlotRuntime(key, runtime_state, slot);
-    if (!rebuild_result.ok) {
-      return rebuild_result;
-    }
-  }
-
-  if (!IsValidLuaRef(runtime_state.on_scene_mutation_ref)) {
-    return OkResult();
-  }
-
-  const bindings::ScopedEventListenerOwner owner_scope(
-    lua_state_, runtime_state.event_owner_id);
-  lua_getref(lua_state_, runtime_state.on_scene_mutation_ref);
-  if (!lua_isfunction(lua_state_, kLuaStackTop)) {
-    lua_pop(lua_state_, kLuaSingleValueCount);
-    return ErrorResult(
-      "slot_binding", "on_scene_mutation entry point is not callable");
-  }
-
-  bindings::LuaSlotExecutionContext invocation_context {
-    .node_handle = node.GetHandle(), .slot = &slot
-  };
-  bindings::PushScriptContext(lua_state_, &invocation_context, dt_seconds);
-  lua_pushnumber(lua_state_, dt_seconds);
-
-  const auto call_status = lua_pcall(lua_state_, 2, kLuaNoResults, 0);
-  CHECK_F(call_status != LUA_ERRERR,
-    "lua_pcall returned LUA_ERRERR in ExecuteSlotSceneMutation");
-  if (call_status != LUA_OK) {
-    const auto error_message = BuildLuaErrorWithTraceback(lua_state_);
-    lua_pop(lua_state_, 1); // original error object
-    return ErrorResult("slot_runtime", error_message);
-  }
-  return OkResult();
-}
-
-auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
-  SlotRuntimeState& state, const scene::ScriptingComponent::Slot& slot)
-  -> ScriptExecutionResult
-{
-  if (lua_state_ == nullptr) {
-    return ErrorResult("runtime", "lua state is null");
-  }
-  const ScopedLuaStackTop stack_guard(lua_state_, "RebuildSlotRuntime");
-
-  DestroySlotRuntime(state);
   state.executable = slot.Executable();
+  state.last_known_fingerprint = ExecutableFingerprint(*state.executable);
   state.asset_key
     = slot.Asset() ? slot.Asset()->GetAssetKey() : data::AssetKey {};
-  state.failed_initialization = false;
-  state.reported_initialization_error = false;
-  state.initialization_error.clear();
-  state.failed_execution = false;
-
-  if (state.executable == nullptr) {
-    return ErrorResult("slot_binding", "slot has no executable");
-  }
-  state.last_known_fingerprint = ExecutableFingerprint(*state.executable);
-  const auto owner_scene = observed_scene_.lock();
-  auto owner_node = owner_scene ? owner_scene->GetNode(key.node_handle)
-                                : std::optional<scene::SceneNode> {};
-  if (!owner_node || !owner_node->HasScripting()) {
-    return ErrorResult("slot_binding", "script owner is no longer attached");
-  }
-  const auto owner_impl = owner_node->GetImpl();
+  const auto owner_impl = node.GetImpl();
   if (!owner_impl) {
     return ErrorResult("slot_binding", "script owner is no longer alive");
   }
@@ -1390,17 +1218,17 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
   state.event_owner_id = bindings::CreateEventListenerOwner(lua_state_,
     [scene = observed_scene_, key, incarnation, slot_identity = slot,
       executable = std::weak_ptr<const ScriptExecutable>(state.executable),
-      fingerprint = state.last_known_fingerprint]() -> bool {
+      fingerprint = state.last_known_fingerprint] -> bool {
       const auto owner_scene = scene.lock();
       const auto expected_executable = executable.lock();
       if (!owner_scene || !expected_executable) {
         return false;
       }
-      auto node = owner_scene->GetNode(key.node_handle);
-      if (!node || !node->HasScripting()) {
+      auto owner = owner_scene->GetNode(key.node_handle);
+      if (!owner || !owner->HasScripting()) {
         return false;
       }
-      const auto impl = node->GetImpl();
+      const auto impl = owner->GetImpl();
       if (!impl) {
         return false;
       }
@@ -1425,11 +1253,8 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
   const bindings::ScopedEventListenerOwner owner_scope(
     lua_state_, state.event_owner_id);
 
-  InitializeInstanceEnvironment(state);
-  if (state.instance_env_ref == LUA_NOREF) {
-    return ErrorResult("slot_binding", "failed to create instance environment");
-  }
-
+  state.instance_env_ref
+    = CreateInstanceEnvironment(lua_state_, global_env_ref_);
   const auto bytecode = state.executable->BytecodeView();
   if (bytecode.empty()) {
     return ErrorResult(
@@ -1445,139 +1270,132 @@ auto ScriptingModule::RebuildSlotRuntime(const SlotRuntimeKey& key,
   if (load_status != LUA_OK) {
     const auto error_message = LuaToString(lua_state_, kLuaStackTop);
     lua_settop(lua_state_, env_index - 1); // drop env and load error
-    state.failed_initialization = true;
-    state.initialization_error = error_message;
     return ErrorResult("slot_load", error_message);
   }
   lua_remove(lua_state_, env_index); // keep chunk only
 
   const auto call_status = lua_pcall(lua_state_, kLuaNoArgs, 1, 0);
   CHECK_F(call_status != LUA_ERRERR,
-    "lua_pcall returned LUA_ERRERR in RebuildSlotRuntime");
+    "lua_pcall returned LUA_ERRERR in CreateInstance");
   if (call_status != LUA_OK) {
     const auto error_message = BuildLuaErrorWithTraceback(lua_state_);
     lua_pop(lua_state_, 1); // original error object
-    state.failed_initialization = true;
-    state.initialization_error = error_message;
     return ErrorResult("slot_runtime", error_message);
   }
-
-  if (lua_isfunction(lua_state_, kLuaStackTop)) {
-    state.on_gameplay_ref = CreateRefPreserveStack(lua_state_, kLuaStackTop);
-    lua_pop(lua_state_, kLuaSingleValueCount); // function
-    state.on_scene_mutation_ref = kLuaNoRef;
-    state.module_ref = kLuaNoRef;
-    return OkResult();
+  if (!bindings::IsScriptTable(lua_state_, kLuaStackTop)) {
+    lua_pop(lua_state_, 1); // returned value
+    return ErrorResult(
+      "slot_binding", "script must return the table created by oxygen.script");
   }
+  state.script_ref = lua_ref(lua_state_, kLuaStackTop);
+  lua_pop(lua_state_, 1); // script table
 
-  if (lua_istable(lua_state_, kLuaStackTop)) {
-    const auto value_index = lua_gettop(lua_state_);
-    state.module_ref = CreateRefPreserveStack(lua_state_, value_index);
-    lua_pop(lua_state_, kLuaSingleValueCount); // returned module table
-    if (!IsValidLuaRef(state.module_ref)) {
-      state.failed_initialization = true;
-      state.initialization_error = "script returned nil module table";
-      return ErrorResult("slot_binding", state.initialization_error);
-    }
-
-    lua_getref(lua_state_, state.module_ref);
-    if (!lua_istable(lua_state_, kLuaStackTop)) {
-      lua_pop(lua_state_, kLuaSingleValueCount);
-      state.failed_initialization = true;
-      state.initialization_error = "script module reference is not a table";
-      return ErrorResult("slot_binding", state.initialization_error);
-    }
-    const int module_table_index = lua_gettop(lua_state_);
-
-    lua_getfield(lua_state_, module_table_index, "on_gameplay");
-    if (lua_isfunction(lua_state_, kLuaStackTop)) {
-      state.on_gameplay_ref = CreateRefPreserveStack(lua_state_, kLuaStackTop);
-      lua_pop(lua_state_, kLuaSingleValueCount); // function
-    } else {
-      lua_pop(lua_state_, kLuaSingleValueCount); // non-function
-      state.on_gameplay_ref = kLuaNoRef;
-    }
-
-    lua_getfield(lua_state_, module_table_index, "on_scene_mutation");
-    if (lua_isfunction(lua_state_, kLuaStackTop)) {
-      state.on_scene_mutation_ref
-        = CreateRefPreserveStack(lua_state_, kLuaStackTop);
-      lua_pop(lua_state_, kLuaSingleValueCount); // function
-    } else {
-      lua_pop(lua_state_, kLuaSingleValueCount); // non-function
-      state.on_scene_mutation_ref = kLuaNoRef;
-    }
-
-    if (!IsValidLuaRef(state.on_gameplay_ref)
-      && !IsValidLuaRef(state.on_scene_mutation_ref)) {
-      lua_pop(lua_state_, kLuaSingleValueCount); // module table
-      state.failed_initialization = true;
-      state.initialization_error = "script module must expose on_gameplay(ctx, "
-                                   "dt) or on_scene_mutation(ctx, dt)";
-      return ErrorResult("slot_binding", state.initialization_error);
-    }
-
-    lua_pop(lua_state_, kLuaSingleValueCount); // module table
-    return OkResult();
-  }
-
-  lua_pop(lua_state_, kLuaSingleValueCount); // unexpected return value
-  state.failed_initialization = true;
-  state.initialization_error
-    = "script must return either a function or a module table";
-  return ErrorResult("slot_binding", state.initialization_error);
+  lua_newtable(lua_state_); // self
+  bindings::PushSceneNode(lua_state_, node);
+  lua_setfield(lua_state_, kLuaStackSecondTop, "node");
+  PushInstanceParams(slot);
+  lua_setfield(lua_state_, kLuaStackSecondTop, "params");
+  lua_newtable(lua_state_); // metatable: methods resolve on the script
+  lua_getref(lua_state_, state.script_ref);
+  lua_setfield(lua_state_, kLuaStackSecondTop, "__index");
+  lua_setmetatable(lua_state_, kLuaStackSecondTop);
+  state.self_ref = lua_ref(lua_state_, kLuaStackTop);
+  lua_pop(lua_state_, 1); // self
+  return OkResult();
 }
 
-auto ScriptingModule::InitializeInstanceEnvironment(SlotRuntimeState& state)
-  -> void
+auto ScriptingModule::PushInstanceParams(
+  const scene::ScriptingComponent::Slot& slot) -> void
 {
-  if (lua_state_ == nullptr || global_env_ref_ == LUA_NOREF) {
-    return;
+  lua_newtable(lua_state_);
+  for (const auto& entry : slot.Parameters()) {
+    lua_pushlstring(lua_state_, entry.key.data(), entry.key.size());
+    (void)bindings::PushScriptParam(lua_state_, entry.value.get());
+    lua_rawset(lua_state_, -3);
   }
-
-  lua_newtable(lua_state_); // instance_env
-
-  // Create metatable for inheritance from sandbox globals
-  lua_newtable(lua_state_); // mt
-  lua_getref(lua_state_, global_env_ref_);
-  lua_setfield(lua_state_, -2, "__index");
-
-  lua_setmetatable(lua_state_, -2);
-
-  state.instance_env_ref = CreateRefPreserveStack(lua_state_, -1);
-  lua_pop(lua_state_, 1);
+  lua_setreadonly(lua_state_, kLuaStackTop, 1);
 }
 
-auto ScriptingModule::DestroySlotRuntime(SlotRuntimeState& state) -> void
+auto ScriptingModule::CallInstanceHook(SlotRuntimeState& state,
+  const std::string_view hook_name, const std::optional<float> dt_seconds)
+  -> ScriptExecutionResult
+{
+  const ScopedLuaStackTop stack_guard(lua_state_, "CallInstanceHook");
+  if (!IsValidLuaRef(state.script_ref) || !IsValidLuaRef(state.self_ref)) {
+    return ErrorResult("slot_binding", "script instance is not loaded");
+  }
+
+  const bindings::ScopedEventListenerOwner owner_scope(
+    lua_state_, state.event_owner_id);
+  lua_getref(lua_state_, state.script_ref);
+  lua_getfield(lua_state_, kLuaStackTop, std::string(hook_name).c_str());
+  lua_remove(lua_state_, kLuaStackSecondTop); // keep the hook
+  if (!lua_isfunction(lua_state_, kLuaStackTop)) {
+    lua_pop(lua_state_, kLuaSingleValueCount);
+    return OkResult(); // hooks are optional
+  }
+
+  lua_getref(lua_state_, state.self_ref);
+  int arg_count = 1;
+  if (dt_seconds.has_value()) {
+    lua_pushnumber(lua_state_, *dt_seconds);
+    ++arg_count;
+  }
+  const auto call_status = lua_pcall(lua_state_, arg_count, kLuaNoResults, 0);
+  CHECK_F(call_status != LUA_ERRERR,
+    "lua_pcall returned LUA_ERRERR in CallInstanceHook");
+  if (call_status != LUA_OK) {
+    const auto error_message = BuildLuaErrorWithTraceback(lua_state_);
+    lua_pop(lua_state_, 1); // original error object
+    return ErrorResult("slot_runtime", error_message);
+  }
+  return OkResult();
+}
+
+auto ScriptingModule::FaultInstance(const SlotRuntimeKey& key,
+  SlotRuntimeState& state, const observer_ptr<engine::FrameContext> context,
+  const std::string_view hook_name, const ScriptExecutionResult& result) -> void
+{
+  state.faulted = true;
+  bindings::RetireEventListenerOwner(lua_state_, state.event_owner_id);
+  const auto message = std::string("script slot ")
+                         .append(hook_name)
+                         .append(" failed [")
+                         .append(result.stage)
+                         .append("] (node=")
+                         .append(nostd::to_string(key.node_handle))
+                         .append(" slot=")
+                         .append(std::to_string(key.slot_index.get()))
+                         .append("): ")
+                         .append(result.message);
+  LOG_SCOPE_F(ERROR, "Script Slot Error");
+  LOG_F(ERROR, "     hook: {}", hook_name);
+  LOG_F(ERROR, "    stage: {}", result.stage);
+  LOG_F(ERROR, "  message: {}", result.message);
+  ReportContentError(context, message);
+}
+
+auto ScriptingModule::EndInstance(SlotRuntimeState& state) -> void
 {
   if (lua_state_ != nullptr) {
+    if (state.started && !state.faulted) {
+      // The node may already be gone; on_destroy sees self.node as it is.
+      const auto result = CallInstanceHook(state, "on_destroy", std::nullopt);
+      if (!result.ok) {
+        LOG_F(ERROR, "script slot on_destroy failed [{}]: {}", result.stage,
+          result.message);
+      }
+    }
+    // Listeners registered by the instance, on_destroy included, end here.
     bindings::RetireEventListenerOwner(lua_state_, state.event_owner_id);
-    if (IsValidLuaRef(state.on_gameplay_ref)) {
-      lua_unref(lua_state_, state.on_gameplay_ref);
-    }
-    if (IsValidLuaRef(state.on_scene_mutation_ref)) {
-      lua_unref(lua_state_, state.on_scene_mutation_ref);
-    }
-    if (IsValidLuaRef(state.module_ref)) {
-      lua_unref(lua_state_, state.module_ref);
-    }
-    if (IsValidLuaRef(state.instance_env_ref)) {
-      lua_unref(lua_state_, state.instance_env_ref);
+    for (const auto ref :
+      { state.self_ref, state.script_ref, state.instance_env_ref }) {
+      if (IsValidLuaRef(ref)) {
+        lua_unref(lua_state_, ref);
+      }
     }
   }
-
-  state.on_gameplay_ref = kLuaNoRef;
-  state.on_scene_mutation_ref = kLuaNoRef;
-  state.module_ref = kLuaNoRef;
-  state.instance_env_ref = kLuaNoRef;
-  state.last_known_fingerprint = 0;
-  state.failed_initialization = false;
-  state.reported_initialization_error = false;
-  state.initialization_error.clear();
-  state.failed_execution = false;
-  state.event_owner_id = 0;
-  state.component_incarnation = Uuid {};
-  state.slot_identity.reset();
+  state = SlotRuntimeState {};
 }
 
 auto ScriptingModule::IsCurrentSlotRuntime(
@@ -1631,7 +1449,7 @@ auto ScriptingModule::ReportEventDispatchErrors(
     auto message = prefix + failure.message;
     for (auto& [key, runtime] : slot_runtimes_) {
       if (runtime.event_owner_id == failure.owner) {
-        runtime.failed_execution = true;
+        runtime.faulted = true;
         message.append(" (node=")
           .append(nostd::to_string(key.node_handle))
           .append(" slot=")

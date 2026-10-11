@@ -22,6 +22,7 @@
 
 #include <Oxygen/Base/EnumIndexedArray.h>
 #include <Oxygen/Base/Finally.h>
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/PathFinder.h>
@@ -1421,12 +1422,11 @@ private:
   OXGN_CNTT_API auto BeginAcceptedLoad() -> void;
   OXGN_CNTT_API auto EndAcceptedLoad() noexcept -> void;
   std::thread::id owning_thread_id_;
-  void AssertOwningThread() const
+  //! Use from another thread is a contract violation: abort.
+  void AssertOwningThread() const noexcept
   {
-    if (owning_thread_id_ != std::this_thread::get_id()) {
-      throw std::runtime_error(
-        "AssetLoader used from non-owning thread (owning-thread invariant)");
-    }
+    CHECK_F(owning_thread_id_ == std::this_thread::get_id(),
+      "AssetLoader used from non-owning thread (owning-thread invariant)");
   }
 
   struct LoadedGeometryBuffer final {

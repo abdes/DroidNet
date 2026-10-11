@@ -17,6 +17,9 @@ namespace oxygen::scripting::bindings {
 
 namespace {
 
+  //! Registry key of the weak-keyed set of tables `oxygen.script` returned.
+  constexpr const char* kScriptTablesKey = "oxygen.script.tables";
+
   constexpr auto kParamTypeNames = std::to_array<const char*>({
     "bool",
     "int",
@@ -29,11 +32,32 @@ namespace {
     "node",
   });
 
-  //! `oxygen.script(table)`: returns the script table.
+  auto PushScriptTables(lua_State* state) -> void
+  {
+    lua_getfield(state, LUA_REGISTRYINDEX, kScriptTablesKey);
+    if (lua_istable(state, -1)) {
+      return;
+    }
+    lua_pop(state, 1);
+    lua_newtable(state); // set
+    lua_newtable(state); // metatable
+    lua_pushstring(state, "k");
+    lua_setfield(state, -2, "__mode");
+    lua_setmetatable(state, -2);
+    lua_pushvalue(state, -1);
+    lua_setfield(state, LUA_REGISTRYINDEX, kScriptTablesKey);
+  }
+
+  //! `oxygen.script(table)`: records and returns the script table.
   auto LuaScript(lua_State* state) -> int
   {
     luaL_checktype(state, 1, LUA_TTABLE);
     lua_settop(state, 1);
+    PushScriptTables(state);
+    lua_pushvalue(state, 1);
+    lua_pushboolean(state, 1);
+    lua_rawset(state, -3);
+    lua_pop(state, 1);
     return 1;
   }
 
@@ -49,6 +73,20 @@ namespace {
   }
 
 } // namespace
+
+auto IsScriptTable(lua_State* state, const int index) -> bool
+{
+  if (!lua_istable(state, index)) {
+    return false;
+  }
+  const int table_index = lua_absindex(state, index);
+  PushScriptTables(state);
+  lua_pushvalue(state, table_index);
+  lua_rawget(state, -2);
+  const bool recorded = lua_toboolean(state, -1) != 0;
+  lua_pop(state, 2);
+  return recorded;
+}
 
 auto RegisterScriptDeclarationBindings(
   lua_State* state, const int oxygen_table_index) -> void

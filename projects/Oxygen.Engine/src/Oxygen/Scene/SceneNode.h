@@ -399,7 +399,7 @@ private:
         auto&& /*self_ref*/) mutable noexcept -> auto { return func(state); });
 
     if (result.has_value()) {
-      return result.value();
+      return std::move(*result);
     }
     return ReturnT {};
   }
@@ -488,7 +488,7 @@ protected:
         auto&& /*self_ref*/) mutable noexcept -> auto { return func(state); });
 
     if (result.has_value()) {
-      return result.value();
+      return std::move(*result);
     }
     return ReturnT {};
   }
@@ -819,10 +819,11 @@ public:
 
   //=== Slot API ===----------------------------------------------------------//
 
-  //! Adds a new script slot to this node.
+  //! Adds a new script slot to this node, with the execution order of its
+  //! instance (lower runs earlier).
   //! Invalidates previously obtained slot references and spans.
-  OXGN_SCN_API auto AddSlot(
-    std::shared_ptr<const data::ScriptAsset> asset) noexcept -> bool;
+  OXGN_SCN_API auto AddSlot(std::shared_ptr<const data::ScriptAsset> asset,
+    int32_t execution_order = 0) noexcept -> bool;
 
   //! Removes a script slot.
   //! Invalidates previously obtained slot references and spans.

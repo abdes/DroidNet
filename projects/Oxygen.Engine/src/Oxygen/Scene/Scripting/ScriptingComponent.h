@@ -99,7 +99,7 @@ public:
               .value = std::cref(override_it_->second),
             };
           }
-          const auto entry = **default_it_;
+          const auto entry = *default_it_.value();
           return ParameterEntry { .key = entry.key, .value = entry.value };
         }
 
@@ -112,7 +112,7 @@ public:
           if (in_overrides_) {
             ++override_it_;
           } else {
-            ++(*default_it_);
+            ++default_it_.value();
           }
           AdvanceToVisible();
           return *this;
@@ -214,6 +214,13 @@ public:
       return compile_state_;
     }
 
+    //! Position of this slot's instance among all script instances of a
+    //! phase; lower runs earlier.
+    [[nodiscard]] auto ExecutionOrder() const noexcept -> int32_t
+    {
+      return execution_order_;
+    }
+
     [[nodiscard]] auto Diagnostics() const noexcept
       -> std::span<const Diagnostic>
     {
@@ -241,8 +248,10 @@ public:
     [[nodiscard]] auto OverrideParameters() const
     {
       return overrides_ | std::views::transform([](const auto& kv) -> auto {
-        return ParameterEntry { .key = kv.first,
-          .value = std::cref(kv.second) };
+        return ParameterEntry {
+          .key = kv.first,
+          .value = std::cref(kv.second),
+        };
       });
     }
 
@@ -263,8 +272,8 @@ public:
       std::string_view key) const noexcept
       -> std::optional<std::reference_wrapper<const data::ScriptParam>>
     {
-      const auto it = std::ranges::find_if(
-        overrides_, [key](const auto& pair) { return pair.first == key; });
+      const auto it = std::ranges::find_if(overrides_,
+        [key](const auto& pair) -> auto { return pair.first == key; });
       if (it == overrides_.end()) {
         return std::nullopt;
       }
@@ -277,6 +286,7 @@ public:
   private:
     friend class ScriptingComponent;
     uint64_t slot_id_ { 0 };
+    int32_t execution_order_ { 0 };
     std::shared_ptr<const data::ScriptAsset> asset_;
     std::vector<std::pair<std::string, data::ScriptParam>> overrides_;
     CompileState compile_state_ { CompileState::kPendingCompilation };
@@ -286,9 +296,9 @@ public:
 
   //! Default constructor.
   OXGN_SCN_API ScriptingComponent() = default;
-  OXGN_SCN_API explicit ScriptingComponent(const NodeHandle& owner_node,
-    observer_ptr<internal::IMutationCollector> collector)
-    : owner_node_(owner_node)
+  OXGN_SCN_API explicit ScriptingComponent(
+    NodeHandle owner_node, observer_ptr<internal::IMutationCollector> collector)
+    : owner_node_(std::move(owner_node))
     , mutation_collector_(collector)
   {
   }
@@ -306,18 +316,19 @@ public:
     return incarnation_.value;
   }
 
-  //! Adds a new script slot to this component.
+  //! Adds a new script slot to this component, with the execution order of
+  //! its instance (lower runs earlier).
   //! Invalidates previously obtained slot references and spans.
-  OXGN_SCN_API auto AddSlot(std::shared_ptr<const data::ScriptAsset> asset)
-    -> void;
+  OXGN_SCN_API auto AddSlot(std::shared_ptr<const data::ScriptAsset> asset,
+    int32_t execution_order = 0) -> void;
 
   //! Removes a script slot by reference.
   //! Invalidates previously obtained slot references and spans.
   OXGN_SCN_API auto RemoveSlot(const Slot& slot) -> bool;
 
   //! Returns the stable slot index for a slot reference, if present.
-  OXGN_SCN_API auto TryGetSlotIndex(const Slot& slot) const noexcept
-    -> std::optional<ScriptSlotIndex>;
+  [[nodiscard]] OXGN_SCN_API auto TryGetSlotIndex(
+    const Slot& slot) const noexcept -> std::optional<ScriptSlotIndex>;
 
   OXGN_SCN_API auto EmitActiveSlotDeactivations() const -> void;
 
@@ -373,7 +384,7 @@ private:
 
     RuntimeIncarnation() = default;
     ~RuntimeIncarnation() = default;
-    RuntimeIncarnation(const RuntimeIncarnation&) { }
+    RuntimeIncarnation(const RuntimeIncarnation& /*unused*/) { }
     auto operator=(const RuntimeIncarnation& other) -> RuntimeIncarnation&
     {
       if (this != &other) {
@@ -401,8 +412,8 @@ private:
 
   std::vector<Slot> slots_;
   uint64_t next_slot_id_ { 1 };
-  NodeHandle owner_node_ {};
-  observer_ptr<internal::IMutationCollector> mutation_collector_ {};
+  NodeHandle owner_node_;
+  observer_ptr<internal::IMutationCollector> mutation_collector_;
   RuntimeIncarnation incarnation_;
 };
 
