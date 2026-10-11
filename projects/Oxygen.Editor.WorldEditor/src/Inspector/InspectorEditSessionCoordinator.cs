@@ -219,15 +219,13 @@ internal sealed partial class InspectorEditSessionCoordinator(
     {
         try
         {
-            await Task.Delay(CommitGroupController.DefaultWheelIdleDelay, idle.Token).ConfigureAwait(true);
-            if (ReferenceEquals(this.active, gesture) && ReferenceEquals(gesture.Idle, idle))
+            // A new wheel sample, selection change or explicit end supersedes this timer; it then
+            // ends quietly instead of throwing per wheel tick.
+            await Task.Delay(CommitGroupController.DefaultWheelIdleDelay, idle.Token).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+            if (!idle.IsCancellationRequested && ReferenceEquals(this.active, gesture) && ReferenceEquals(gesture.Idle, idle))
             {
                 this.End(NumberBoxEditCompletionKind.Commit);
             }
-        }
-        catch (OperationCanceledException)
-        {
-            // A new wheel sample, selection change or explicit end superseded this timer.
         }
         finally
         {

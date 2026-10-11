@@ -417,11 +417,9 @@ internal sealed partial class TransformEditController(
 
     private async Task CommitAfterWheelIdleAsync(string property, CancellationToken cancellationToken)
     {
-        try
-        {
-            await Task.Delay(MouseWheelCommitDelay, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        // Each wheel tick restarts this timer; a superseded delay ends quietly instead of throwing.
+        await Task.Delay(MouseWheelCommitDelay, cancellationToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+        if (cancellationToken.IsCancellationRequested)
         {
             return;
         }

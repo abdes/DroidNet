@@ -910,11 +910,10 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
     private async Task CommitPilotAfterPauseAsync(CancellationToken cancellationToken)
     {
-        try
-        {
-            await Task.Delay(this.PilotCommitDelay, cancellationToken).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException)
+        // Every input event restarts this pause; a superseded delay ends quietly instead of
+        // throwing one first-chance exception per pointer move.
+        await Task.Delay(this.PilotCommitDelay, cancellationToken).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+        if (cancellationToken.IsCancellationRequested)
         {
             return;
         }
@@ -943,11 +942,10 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
 
     private async Task RaiseStateChangedAfterPauseAsync(CancellationToken cancellationToken)
     {
-        try
-        {
-            await Task.Delay(this.NavigationSettleDelay, cancellationToken).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException)
+        // Every input event restarts this pause; a superseded delay ends quietly instead of
+        // throwing one first-chance exception per pointer move.
+        await Task.Delay(this.NavigationSettleDelay, cancellationToken).ConfigureAwait(ConfigureAwaitOptions.ContinueOnCapturedContext | ConfigureAwaitOptions.SuppressThrowing);
+        if (cancellationToken.IsCancellationRequested)
         {
             return;
         }
