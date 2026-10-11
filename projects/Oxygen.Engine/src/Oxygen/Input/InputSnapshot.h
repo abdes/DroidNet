@@ -10,7 +10,7 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
+#include <map>
 #include <vector>
 
 #include <Oxygen/Input/Action.h>
@@ -139,12 +139,21 @@ public:
   // Timing is available via FrameContext; not exposed by this snapshot.
 
 private:
+  //! Frozen copy of one action at snapshot time.
+  struct Entry {
+    Action::State state {};
+    ActionValue value {};
+    bool value_updated { false };
+    std::vector<Action::FrameTransition> transitions;
+  };
+
   //! Find action by name, returns nullptr if not found
   [[nodiscard]] auto FindAction(std::string_view action_name) const
-    -> const Action*;
+    -> const Entry*;
 
-  // Name -> action pointer (lifetime owned by InputSystem)
-  std::unordered_map<std::string, const Action*> actions_;
+  // Value copies: the snapshot does not depend on Action lifetime or on
+  // later frames mutating the actions.
+  std::map<std::string, Entry, std::less<>> actions_;
 };
 
 } // namespace oxygen::input

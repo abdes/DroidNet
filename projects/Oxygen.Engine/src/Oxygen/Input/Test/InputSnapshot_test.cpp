@@ -292,4 +292,47 @@ NOLINT_TEST(InputSnapshot, UnknownAction_Defaults)
 
 // (Frame start time is owned by FrameContext and not mirrored here.)
 
+//! The snapshot is published into FrameContext for later phases and frames in
+//! flight; starting the next frame must not change what it reports.
+NOLINT_TEST(InputSnapshot, FrozenAcrossNextFrameStart)
+{
+  // Arrange
+  auto a
+    = std::make_shared<Action>("jump", oxygen::input::ActionValueType::kBool);
+  a->BeginFrameTracking();
+  a->UpdateState(Action::State { .triggered = true }, ActionValue { true });
+  a->EndFrameTracking();
+  std::vector<std::shared_ptr<Action>> actions { a };
+  const InputSnapshot snap { actions };
+
+  // Act: the next frame starts and clears the action's edges
+  a->BeginFrameTracking();
+
+  // Assert
+  EXPECT_TRUE(snap.IsActionTriggered("jump"));
+  EXPECT_TRUE(snap.DidActionTrigger("jump"));
+  EXPECT_EQ(snap.GetActionTransitions("jump").size(), 1U);
+}
+
+//! A snapshot must stay readable after its actions are destroyed (level
+//! unload while a parallel or render task still holds the snapshot).
+NOLINT_TEST(InputSnapshot, OutlivesItsActions)
+{
+  // Arrange
+  auto a
+    = std::make_shared<Action>("jump", oxygen::input::ActionValueType::kBool);
+  a->BeginFrameTracking();
+  a->UpdateState(Action::State { .triggered = true }, ActionValue { true });
+  std::vector<std::shared_ptr<Action>> actions { a };
+  const InputSnapshot snap { actions };
+
+  // Act: drop every owner of the action
+  actions.clear();
+  a.reset();
+
+  // Assert
+  EXPECT_TRUE(snap.DidActionTrigger("jump"));
+  EXPECT_TRUE(snap.GetActionValue("jump").GetAs<bool>());
+}
+
 } // namespace
