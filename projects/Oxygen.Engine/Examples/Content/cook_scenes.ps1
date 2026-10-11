@@ -7,8 +7,10 @@ Cooks one or all shipped scene manifests with Oxygen ImportTool.
 This script finds and runs the Oxygen.Cooker.ImportTool against scene 'import-manifest.json' files.
 It can target a specific scene by folder name, or all scenes found in the 'scenes' subdirectory.
 In an installed SDK, it uses the importer in that SDK's bin directory.
-In a source checkout, it selects an existing importer from CMake presets,
-preferring Release, ordinary builds, then Ninja. No reconfiguration is run.
+In a source checkout, it selects a configured build tree from CMake presets,
+preferring Release, ordinary builds, then Ninja, and builds the importer
+target there first, so a stale importer is rebuilt before it cooks anything.
+No reconfiguration is run.
 The native ImportTool validates manifests and descriptors against its current schemas.
 The -All scope is the authored scene manifests and their dependencies; unreferenced
 raw FBX models and standalone images are not imported, and PAKs are not rebuilt.
@@ -98,7 +100,14 @@ if (Test-Path -LiteralPath $SdkSupport) {
     $RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
     . (Join-Path $RepoRoot 'tools/cli/BuildSelection.ps1')
 }
-$tools = Resolve-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-importtool' -BuildTree $BuildTree -Config $Config -Preset $Preset -Overrides @{ 'oxygen-cooker-importtool' = $ToolPath }
+# An explicit tool or an installed SDK is used as is; a source checkout
+# builds the importer so cooking never runs a stale tool.
+$installedSdk = Test-Path -LiteralPath $SdkSupport
+if ($ToolPath -or $installedSdk) {
+    $tools = Resolve-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-importtool' -BuildTree $BuildTree -Config $Config -Preset $Preset -Overrides @{ 'oxygen-cooker-importtool' = $ToolPath }
+} else {
+    $tools = Build-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-importtool' -BuildTree $BuildTree -Config $Config -Preset $Preset
+}
 Write-OxygenExecutableSelection $tools
 
 # Collect scenes to process

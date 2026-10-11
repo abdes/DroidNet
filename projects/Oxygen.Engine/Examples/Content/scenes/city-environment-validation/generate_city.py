@@ -15,6 +15,7 @@ the import manifest in this directory.
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 import random
@@ -529,7 +530,7 @@ def scene_document() -> dict:
     mist = s.node("RiverMist_LocalFog", (0.0, RIVER.cy, 12.0), scale=(5000.0, 260.0, 40.0),
                   flags={"visible": "shown", "casts_shadows": "on", "receives_shadows": "on"})
     return {
-        "version": 12,
+        "version": 13,
         "name": SCENE_NAME,
         "nodes": s.nodes,
         "renderables": s.renderables,
@@ -641,6 +642,10 @@ def write_json(path: Path, document: dict) -> None:
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.parse_args()
     for stale in HERE.glob("MatCity*.material.json"):
         if stale.name.removesuffix(".material.json") not in MATERIALS:
             stale.unlink()

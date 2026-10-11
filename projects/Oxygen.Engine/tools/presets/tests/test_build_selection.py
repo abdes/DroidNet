@@ -403,17 +403,30 @@ exit $LASTEXITCODE
         shutil.copyfile(source, target)
         return target
 
-    def test_cook_workflow_uses_shared_resolution_and_global_option_order(self):
+    RECORDING_CMAKE = """
+$global:realCmake = (Get-Command cmake -CommandType Application).Source
+function global:cmake {
+    if ($args[0] -ne '--build') { return & $global:realCmake @args }
+    Write-Host "BUILD $($args -join ' ')"
+    $global:LASTEXITCODE = 0
+}
+"""
+
+    def test_cook_workflow_builds_importer_then_uses_shared_resolution(self):
         tree = self.tree("ninja")
+        (tree / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.ImportTool")
         self.copy_workflow("Examples/Content/cook_scenes.ps1")
         scene = self.root / "Examples/Content/scenes/fixture"
         scene.mkdir(parents=True)
         (scene / "import-manifest.json").write_text("{}", encoding="utf-8")
-        output = self.command("""
+        output = self.command(self.RECORDING_CMAKE + """
 & (Join-Path $PSScriptRoot 'Examples/Content/cook_scenes.ps1') -Scene fixture -NoTUI
 exit $LASTEXITCODE
 """)
+        # The selected tree builds the importer first, so a stale one is
+        # rebuilt before it cooks anything.
+        self.assertIn("BUILD --build --preset conan-ninja-release --target oxygen-cooker-importtool", output)
         self.assertIn("conan-ninja-release", output)
         self.assertIn("RUNTIME=ninja-Release", output)
         self.assertIn("ARG1=--no-tui", output)
@@ -549,13 +562,15 @@ function global:cmake { throw 'Unexpected build invocation' }
 
     def test_packaging_propagates_shared_tool_failure(self):
         tree = self.tree("ninja")
+        (tree / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.PakTool", 29)
         self.copy_workflow("Examples/Content/pak_content.ps1")
         (self.root / "Examples/Content/.cooked/main").mkdir(parents=True)
-        output = self.command("""
+        output = self.command(self.RECORDING_CMAKE + """
 & (Join-Path $PSScriptRoot 'Examples/Content/pak_content.ps1')
 exit $LASTEXITCODE
 """, expect=29)
+        self.assertIn("BUILD --build --preset conan-ninja-release --target oxygen-cooker-paktool", output)
         self.assertIn("RUNTIME=ninja-Release", output)
         self.assertIn("ARG1=build", output)
         self.assertNotIn("Published artifacts:", output)
@@ -563,7 +578,8 @@ exit $LASTEXITCODE
     def test_cooker_callers_have_no_private_launch_paths(self):
         for relative in ("Examples/Content/cook_scenes.ps1", "Examples/Content/pak_content.ps1", "Examples/Content/import_models.ps1"):
             text = (ENGINE / relative).read_text(encoding="utf-8")
-            self.assertIn("Build-OxygenExecutables" if "import_models" in relative else "Resolve-OxygenExecutables", text)
+            # Source checkouts build their tools so they are never stale.
+            self.assertIn("Build-OxygenExecutables", text)
             self.assertIn("Invoke-OxygenTool", text)
             self.assertNotIn("Resolve-OxygenBuildSelection", text)
             self.assertNotIn("Invoke-OxygenSelectedExecutable", text)

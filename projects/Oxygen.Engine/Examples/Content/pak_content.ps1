@@ -5,7 +5,8 @@ Packages this Content directory's loose-cooked output with Oxygen PakTool.
 
 .DESCRIPTION
 This script packages `.cooked/main` into `pak`, both beside the script. An installed
-SDK uses its bundled PakTool; a source checkout uses an existing build.
+SDK uses its bundled PakTool; a source checkout builds PakTool in the
+selected tree first, so a stale tool is rebuilt before packaging.
 
 By default it emits:
 - `<BaseName>.pak`
@@ -36,9 +37,9 @@ Canonical lowercase UUIDv7 source identity for the pak line.
 
 .PARAMETER ToolPath
 Optional explicit path to `Oxygen.Cooker.PakTool.exe`. If omitted, the script
-uses the installed SDK's PakTool. In a source checkout it selects a built PakTool,
-preferring Release, ordinary builds, then Ninja. Build-selection switches apply
-only in a source checkout.
+uses the installed SDK's PakTool. In a source checkout it builds PakTool in a
+configured tree, preferring Release, ordinary builds, then Ninja. Build-selection
+switches apply only in a source checkout.
 
 .PARAMETER DiagnosticsFile
 Optional explicit diagnostics report path. If omitted, no diagnostics report is
@@ -120,7 +121,14 @@ if (Test-Path -LiteralPath $SdkSupport) {
     $RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
     . (Join-Path $RepoRoot 'tools/cli/BuildSelection.ps1')
 }
-$tools = Resolve-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-paktool' -BuildTree $BuildTree -Config $Config -Preset $Preset -Overrides @{ 'oxygen-cooker-paktool' = $ToolPath }
+# An explicit tool or an installed SDK is used as is; a source checkout
+# builds PakTool so packaging never runs a stale tool.
+$installedSdk = Test-Path -LiteralPath $SdkSupport
+if ($ToolPath -or $installedSdk) {
+    $tools = Resolve-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-paktool' -BuildTree $BuildTree -Config $Config -Preset $Preset -Overrides @{ 'oxygen-cooker-paktool' = $ToolPath }
+} else {
+    $tools = Build-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-paktool' -BuildTree $BuildTree -Config $Config -Preset $Preset
+}
 Write-OxygenExecutableSelection $tools
 
 $CookedRoot = Get-FullPath $CookedRoot
