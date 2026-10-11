@@ -11,7 +11,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -22,7 +21,6 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -36,6 +34,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 #include <Oxygen/Scripting/Attachment/SceneScriptAttachment.h>
+#include <Oxygen/Scripting/Attachment/ScriptOverrideCheck.h>
 #include <Oxygen/Scripting/Compilers/ScriptCompileKey.h>
 #include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
 #include <Oxygen/Scripting/IScriptSourceResolver.h>
@@ -58,34 +57,6 @@ namespace {
       return std::nullopt;
     }
     return std::string_view(std::begin(record.key), nul);
-  }
-
-  auto TypeName(const data::ScriptParam& value) -> std::string_view
-  {
-    return std::visit(
-      [](const auto& v) -> std::string_view {
-        using T = std::decay_t<decltype(v)>;
-        if constexpr (std::is_same_v<T, bool>) {
-          return "bool";
-        } else if constexpr (std::is_same_v<T, int32_t>) {
-          return "int";
-        } else if constexpr (std::is_same_v<T, float>) {
-          return "float";
-        } else if constexpr (std::is_same_v<T, std::string>) {
-          return "string";
-        } else if constexpr (std::is_same_v<T, Vec2>) {
-          return "vec2";
-        } else if constexpr (std::is_same_v<T, Vec3>) {
-          return "vec3";
-        } else if constexpr (std::is_same_v<T, Vec4>) {
-          return "vec4";
-        } else if constexpr (std::is_same_v<T, data::ScriptAssetParam>) {
-          return "asset";
-        } else {
-          return "node";
-        }
-      },
-      value);
   }
 
   //! Attaches the slots of one node and records their outcomes.
@@ -195,38 +166,14 @@ namespace {
           Reject(outcome, "a parameter override is malformed");
           continue;
         }
-        const auto declared = script.TryGetParameter(*key);
-        if (!declared.has_value()) {
-          Reject(outcome,
-            fmt::format("parameter '{}' is not declared by the script", *key));
+        if (auto rejection
+          = CheckParameterOverride(script, *key, *value, nodes_.size())) {
+          Reject(outcome, std::move(*rejection));
           continue;
-        }
-        if (declared->get().index() != value->index()) {
-          Reject(outcome,
-            fmt::format("parameter '{}' expects a {} value, not a {} value",
-              *key, TypeName(declared->get()), TypeName(*value)));
-          continue;
-        }
-        if (const auto* asset = std::get_if<data::ScriptAssetParam>(&*value)) {
-          const auto& kind
-            = std::get<data::ScriptAssetParam>(declared->get()).asset_type;
-          if (asset->asset_type != kind) {
-            Reject(outcome,
-              fmt::format(
-                "parameter '{}' refers to an asset of another kind", *key));
-            continue;
-          }
         }
         const auto* node = std::get_if<data::ScriptNodeParam>(&*value);
         if (node != nullptr
           && node->node_index != data::pak::scripting::kUnsetNodeParam) {
-          if (node->node_index >= nodes_.size()) {
-            Reject(outcome,
-              fmt::format("parameter '{}' refers to node {}, which the "
-                          "scene does not have",
-                *key, node->node_index));
-            continue;
-          }
           (void)scripting.BindNodeParameter(
             slot, *key, base::CheckedAt(nodes_, node->node_index));
         }

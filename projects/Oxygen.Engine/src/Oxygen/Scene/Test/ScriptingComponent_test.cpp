@@ -100,6 +100,23 @@ NOLINT_TEST_F(ScriptingComponentTest, ReplaceSlotAsset_KeepsOverrides)
   EXPECT_TRUE(slot.HasOverrideParameter("speed"));
 }
 
+//! Removing an override restores the default and drops its node binding.
+NOLINT_TEST_F(ScriptingComponentTest, RemoveParameter_DropsOverrideAndBinding)
+{
+  using oxygen::scene::NodeHandle;
+  component_.AddSlot(MakeScriptAsset());
+  const auto& slot = component_.Slots().front();
+  ASSERT_TRUE(component_.SetParameter(slot, "target",
+    oxygen::data::ScriptParam { oxygen::data::ScriptNodeParam { 1U } }));
+  ASSERT_TRUE(component_.BindNodeParameter(slot, "target", NodeHandle(1U)));
+
+  EXPECT_TRUE(component_.RemoveParameter(slot, "target"));
+  EXPECT_FALSE(component_.RemoveParameter(slot, "target"));
+
+  EXPECT_FALSE(component_.Slots().front().HasOverrideParameter("target"));
+  EXPECT_EQ(component_.Slots().front().TryGetBoundNode("target"), std::nullopt);
+}
+
 //! A slot keeps the execution order it was added with.
 NOLINT_TEST_F(ScriptingComponentTest, AddSlot_KeepsExecutionOrder)
 {

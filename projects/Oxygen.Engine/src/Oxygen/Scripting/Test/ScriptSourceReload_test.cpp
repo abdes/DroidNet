@@ -123,6 +123,8 @@ return script
       return path;
     }
 
+    [[nodiscard]] auto Node() -> scene::SceneNode& { return node_; }
+
     [[nodiscard]] auto Slot() -> const scene::ScriptingComponent::Slot&
     {
       return node_.GetScripting().Slots().front();
@@ -196,6 +198,46 @@ NOLINT_TEST_F(ScriptSourceReloadTest, OnlyScriptsUsingTheFileReload)
 
   EXPECT_EQ(reload.ReloadAll(Scene()), 1U);
   EXPECT_NE(Slot().Executable(), Original());
+}
+
+//! An override the new declarations no longer accept is removed with a
+//! diagnostic; one they still accept is kept.
+NOLINT_TEST_F(ScriptSourceReloadTest, OverridesAreCheckedAgainstNewDeclarations)
+{
+  auto scripting = Node().GetScripting();
+  ASSERT_TRUE(scripting.SetParameter(
+    scripting.Slots().front(), "speed", data::ScriptParam { 3.0F }));
+  auto reload = MakeReload();
+  const auto path = WriteSource(R"lua(
+local script = oxygen.script {
+  params = {
+    speed = oxygen.param.string { default = "fast" },
+  },
+}
+return script
+)lua");
+
+  EXPECT_EQ(reload.OnSourceChanged(Scene(), path), 1U);
+
+  ASSERT_EQ(Diagnostics().size(), 1U);
+  EXPECT_EQ(Diagnostics().front().code, DiagnosticCode::kOverrideRejected);
+  EXPECT_FALSE(Slot().HasOverrideParameter("speed"));
+  EXPECT_EQ(
+    std::get<std::string>(scripting.GetParameter(Slot(), "speed")), "fast");
+}
+
+//! An override that still matches survives the reload.
+NOLINT_TEST_F(ScriptSourceReloadTest, MatchingOverrideIsKept)
+{
+  auto scripting = Node().GetScripting();
+  ASSERT_TRUE(scripting.SetParameter(
+    scripting.Slots().front(), "speed", data::ScriptParam { 3.0F }));
+  auto reload = MakeReload();
+
+  EXPECT_EQ(reload.OnSourceChanged(Scene(), WriteSource(kNewSource)), 1U);
+
+  EXPECT_TRUE(Diagnostics().empty());
+  EXPECT_EQ(std::get<float>(scripting.GetParameter(Slot(), "speed")), 3.0F);
 }
 
 } // namespace oxygen::scripting::test

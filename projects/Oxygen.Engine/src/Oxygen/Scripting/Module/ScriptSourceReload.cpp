@@ -5,10 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <span>
+#include <string>
 #include <system_error>
 #include <unordered_map>
 #include <utility>
@@ -17,6 +20,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Span.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
@@ -30,6 +34,7 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scripting/Analysis/ScriptAnalyzer.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
+#include <Oxygen/Scripting/Attachment/ScriptOverrideCheck.h>
 #include <Oxygen/Scripting/Compilers/ScriptCompileKey.h>
 #include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
 #include <Oxygen/Scripting/IScriptSourceResolver.h>
@@ -79,10 +84,13 @@ namespace {
     return scripts;
   }
 
-  //! Installs a reloaded script in every slot of `scene` that uses it.
+  //! Installs a reloaded script in every slot of `scene` that uses it. An
+  //! override the new declarations no longer accept is removed, with a
+  //! diagnostic, so the slot runs on the declared default.
   auto InstallReloaded(scene::Scene& scene,
     const std::shared_ptr<const data::ScriptAsset>& asset,
-    const std::shared_ptr<const ScriptExecutable>& executable) -> void
+    const std::shared_ptr<const ScriptExecutable>& executable,
+    const ScriptSourceReload::DiagnosticSink& sink) -> void
   {
     const auto key = asset->GetAssetKey();
     ForEachNode(scene, [&](scene::SceneNode& node) -> void {
@@ -90,11 +98,40 @@ namespace {
         return;
       }
       auto scripting = node.GetScripting();
-      for (const auto& slot : scripting.Slots()) {
-        if (slot.Asset() && slot.Asset()->GetAssetKey() == key) {
-          (void)scripting.ReplaceSlotAsset(slot, asset);
-          (void)scripting.MarkSlotReady(slot, executable);
+      const auto slots = scripting.Slots();
+      for (std::size_t index = 0; index < slots.size(); ++index) {
+        const auto& slot = base::CheckedAt(slots, index);
+        if (!slot.Asset() || slot.Asset()->GetAssetKey() != key) {
+          continue;
         }
+        (void)scripting.ReplaceSlotAsset(slot, asset);
+        auto overrides
+          = std::vector<std::pair<std::string, data::ScriptParam>> {};
+        for (const auto& entry : slot.OverrideParameters()) {
+          overrides.emplace_back(std::string(entry.key), entry.value.get());
+        }
+        for (const auto& [name, value] : overrides) {
+          auto rejection
+            = CheckParameterOverride(*asset, name, value, std::nullopt);
+          if (!rejection.has_value()) {
+            continue;
+          }
+          (void)scripting.RemoveParameter(slot, name);
+          sink(ScriptDiagnostic {
+            .severity = DiagnosticSeverity::kError,
+            .code = DiagnosticCode::kOverrideRejected,
+            .message = std::move(*rejection),
+            .labels = {},
+            .notes = {},
+            .help = std::nullopt,
+            .slot = SlotContext {
+              .node = std::string(node.GetName()),
+              .slot_index = static_cast<uint32_t>(index),
+              .hook = "reload",
+            },
+          });
+        }
+        (void)scripting.MarkSlotReady(slot, executable);
       }
     });
   }
@@ -207,7 +244,7 @@ auto ScriptSourceReload::Reload(const std::shared_ptr<scene::Scene>& scene,
     IScriptCompilationService::SlotAcquireCallbacks {
       .on_ready
       = [alive = std::weak_ptr(alive_), weak_scene = std::weak_ptr(scene),
-          reloaded](
+          reloaded, sink = sink_](
           std::shared_ptr<const ScriptBytecodeBlob> bytecode) -> void {
         const auto live_scene = weak_scene.lock();
         if (alive.expired() || !live_scene) {
@@ -216,8 +253,8 @@ auto ScriptSourceReload::Reload(const std::shared_ptr<scene::Scene>& scene,
         LOG_F(
           INFO, "reloaded script {}", data::to_string(reloaded->GetAssetKey()));
         InstallReloaded(*live_scene, reloaded,
-          std::make_shared<const CompiledScriptExecutable>(
-            std::move(bytecode)));
+          std::make_shared<const CompiledScriptExecutable>(std::move(bytecode)),
+          sink);
       },
       .on_failed = [alive = std::weak_ptr(alive_), sink = sink_](
                      const std::vector<ScriptDiagnostic>& diagnostics) -> void {

@@ -89,6 +89,20 @@ auto ScriptingComponent::SetParameter(
   return true;
 }
 
+auto ScriptingComponent::RemoveParameter(
+  const Slot& slot, const std::string_view name) -> bool
+{
+  const auto slot_it = FindSlotById(slot.slot_id_);
+  if (slot_it == slots_.end()) {
+    return false;
+  }
+  std::erase_if(slot_it->node_bindings_,
+    [name](const auto& pair) -> bool { return pair.first == name; });
+  return std::erase_if(slot_it->overrides_, [name](const auto& pair) -> bool {
+    return pair.first == name;
+  }) > 0;
+}
+
 auto ScriptingComponent::ReplaceSlotAsset(
   const Slot& slot, std::shared_ptr<const data::ScriptAsset> asset) -> bool
 {

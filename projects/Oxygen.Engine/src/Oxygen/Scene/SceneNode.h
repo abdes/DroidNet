@@ -840,6 +840,11 @@ public:
   OXGN_SCN_API auto SetParameter(const Slot& slot, std::string_view name,
     data::ScriptParam value) noexcept -> bool;
 
+  //! Removes a slot's override of a parameter; see
+  //! ScriptingComponent::RemoveParameter().
+  OXGN_SCN_API auto RemoveParameter(
+    const Slot& slot, std::string_view name) noexcept -> bool;
+
   //! Gives a slot a new version of its script asset; see
   //! ScriptingComponent::ReplaceSlotAsset().
   OXGN_SCN_API auto ReplaceSlotAsset(const Slot& slot,

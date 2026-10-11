@@ -357,6 +357,11 @@ public:
   OXGN_SCN_API auto SetParameter(
     const Slot& slot, std::string_view name, data::ScriptParam value) -> bool;
 
+  //! Removes a slot's override of a parameter, and its node binding; the
+  //! declared default applies again. Returns false when there was none.
+  OXGN_SCN_API auto RemoveParameter(const Slot& slot, std::string_view name)
+    -> bool;
+
   //! Gives a slot a new version of its script asset, such as one whose
   //! declarations were re-read from changed source. Overrides and node
   //! bindings are kept; the executable is replaced separately.

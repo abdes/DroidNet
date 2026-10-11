@@ -49,6 +49,7 @@ set(
   OXYGEN_SCRIPTING_HEADERS
   "api_export.h"
   "Attachment/SceneScriptAttachment.h"
+  "Attachment/ScriptOverrideCheck.h"
   "Bindings/BindingRegistry.h"
   "Bindings/LuaBindingCommon.h"
   "Bindings/Packs/Content/ContentAsyncBindings.h"
@@ -94,6 +95,7 @@ set(
 set(
   OXYGEN_SCRIPTING_PRIVATE_SOURCES
   "Attachment/SceneScriptAttachment.cpp"
+  "Attachment/ScriptOverrideCheck.cpp"
   "Bindings/BindingRegistry.cpp"
   "Bindings/LuaBindingCommon.cpp"
   "Bindings/Packs/Content/ContentAsyncBindings.cpp"
