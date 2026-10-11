@@ -427,8 +427,9 @@ walkthrough in the normal Release editor.
 
 Purpose: users create and edit input actions and mapping contexts in the
 editor (REQ-045). Design: [input authoring LLD](lld/input-authoring.md);
-sequence and acceptance: [plan](plan/ED-M09-input-authoring.md), starting with
-the owner's review of the design (M09.1). The ID previously named the
+sequence and acceptance: [plan](plan/ED-M09-input-authoring.md). The design
+was approved in M09.1; the engine input fixes (M09.2) come first. The ID
+previously named the
 viewport tools that ED-M08.4–M08.6 delivered.
 
 ### ED-M10 - V0.1 Acceptance

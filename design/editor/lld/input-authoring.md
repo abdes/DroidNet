@@ -1,6 +1,6 @@
 # Input Authoring LLD
 
-Status: `design; UI approved by the owner (ED-M09.1); awaiting re-review`;
+Status: `design approved (ED-M09.1, 2026-10-11)`;
 delivered by [ED-M09](../plan/ED-M09-input-authoring.md).
 
 Summary: users create input actions and input mapping contexts from the

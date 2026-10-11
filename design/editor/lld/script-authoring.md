@@ -110,8 +110,10 @@ follow the existing transactions and retarget slot references.
 `oxygen.input.schema.json`). Files under authoring mounts are Input sources;
 the cook emits one `input` job per file, its actions and mapping contexts
 appear in the Content Browser and in asset and Play-section pickers, Edit
-opens the file in the code editor, and schema or import errors fail the cook
-in the cooking panel. Input assets are identified by their source location,
+opens the file in the code editor (the input editor once
+[ED-M09](../plan/ED-M09-input-authoring.md) delivers it, with **Open in code
+editor** kept), and schema or import errors fail the cook in the cooking
+panel. Input assets are identified by their source location,
 like every other asset ([input authoring §7.2](input-authoring.md#72-asset-identity)):
 each job's layout places its outputs in the source file's folder, so `Jump`
 declared in `Content/Gameplay/Player.input.json` is
@@ -120,7 +122,8 @@ input files by virtual path ([ED-M09](../plan/ED-M09-input-authoring.md)
 IF-12), only self-contained files cook: a mapping, chain or combo step that
 names an action the file does not declare fails that file's job before the
 cooker runs (`OXE.SCRIPT.INPUT_REFERENCE_UNSUPPORTED`), so the result never
-depends on job order.
+depends on job order. ED-M09.4 retires that code when it enables references
+by virtual path.
 
 **Project tooling**: projects contain `.luaurc` and `Types/oxygen.d.luau`
 copied from the SDK, refreshed when the SDK's copy differs, so VS Code with
@@ -169,7 +172,8 @@ selected node (multi-selection shows a message to select one node).
   hints: number fields with min, max, step and unit; vector fields; a color
   field for `color = true`; a choice list for `options`; a text box with the
   string length limit; an asset picker filtered by `kind` (input actions
-  included); and a node picker with search that also accepts a node dragged
+  and mapping contexts included, offering New action and New context once
+  ED-M09.9 delivers them); and a node picker with search that also accepts a node dragged
   from the Scene Explorer. Labels come from the parameter name, with the
   description as tooltip.
 - An overridden value shows the override marker and a reset to the default.
@@ -251,10 +255,10 @@ Settings that decide how the scene starts as a game are properties of the
 scene, not of its nodes, as in Unreal's World Settings. The scene inspector
 gains a **Play** section beside the environment sections.
 
-| Field                   | Source/default                                                          | UI/effect                                                                                                                                             |
-| ----------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Starting camera         | Camera node reference in the scene; unset                               | Picker of the scene's camera nodes. Unset shows the camera that will be used, the first in hierarchy order. Cooked as `starting_camera`.              |
-| Starting input contexts | Ordered list of mapping context references, each with a priority; empty | Add from a picker of mapping contexts; the priority defaults to the context's own and can be overridden. The player activates exactly these at start. |
+| Field                   | Source/default                                                          | UI/effect                                                                                                                                                                                                |
+| ----------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Starting camera         | Camera node reference in the scene; unset                               | Picker of the scene's camera nodes. Unset shows the camera that will be used, the first in hierarchy order. Cooked as `starting_camera`.                                                                 |
+| Starting input contexts | Ordered list of mapping context references, each with a priority; empty | Add from a picker of mapping contexts (New context with ED-M09.9); the priority defaults to the context's own, read from its source, and can be overridden. The player activates exactly these at start. |
 
 The input contexts move here from the Scene References section, which keeps
 its other lists. A context listed here is also a cook dependency of the scene.
