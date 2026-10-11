@@ -175,6 +175,129 @@ namespace {
   }
 
   //! Writes a cooked texture sidecar naming source texture `index`.
+  //! An authored scene records its instances and start state, and lists the
+  //! instanced scene and starting contexts as references.
+  NOLINT_TEST_F(SceneDescriptorImportJobTest, RecordsInstancesAndStartState)
+  {
+    namespace world = data::pak::world;
+    const auto root = TempDir() / "composed_scene";
+    std::filesystem::create_directories(root);
+    const auto model = Import(MakeRequest(
+      root, R"({"name":"Model","nodes":[{"name":"part"}]})", "Model"));
+    ASSERT_HAS_VALUE(model);
+    ASSERT_TRUE(model->success);
+    WriteText(root / "Input/gameplay.oimap", "context");
+
+    const auto report = Import(MakeRequest(root, R"({
+      "name":"Level",
+      "nodes":[{"name":"root"},
+        {"name":"model","parent":0,
+         "instance":{"scene_ref":"/.cooked/Scenes/Model.oscene"}},
+        {"name":"camera","parent":0}],
+      "cameras":{"perspective":[{"node":2,"aspect_mode":"auto"}]},
+      "starting_camera":2,
+      "starting_input_contexts":[
+        {"context_ref":"/.cooked/Input/gameplay.oimap","priority":3}]
+    })"));
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success);
+
+    const auto model_key
+      = data::AssetKey::FromVirtualPath("/.cooked/Scenes/Model.oscene");
+    const auto context_key
+      = data::AssetKey::FromVirtualPath("/.cooked/Input/gameplay.oimap");
+    const auto bytes = ReadBytes(root / "Scenes/Level.oscene");
+    const auto scene = data::SceneAsset(data::AssetKey {}, bytes);
+    EXPECT_FALSE(scene.IsModelScene());
+    EXPECT_EQ(scene.GetStartingCamera(), std::optional<uint32_t> { 2U });
+    const auto instances = scene.GetComponents<world::SceneInstanceRecord>();
+    ASSERT_EQ(instances.size(), 1U);
+    EXPECT_EQ(CheckedAt(instances, 0).node_index, 1U);
+    EXPECT_EQ(CheckedAt(instances, 0).scene_key, model_key);
+    const auto contexts
+      = scene.GetComponents<world::StartingInputContextRecord>();
+    ASSERT_EQ(contexts.size(), 1U);
+    EXPECT_EQ(CheckedAt(contexts, 0).context_key, context_key);
+    EXPECT_EQ(CheckedAt(contexts, 0).priority, 3);
+
+    const auto index = lc::LooseCookedIndex::LoadFromRoot(root);
+    const auto scene_key
+      = index.FindAssetKeyByVirtualPath("/.cooked/Scenes/Level.oscene");
+    ASSERT_HAS_VALUE(scene_key);
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+    const auto references = index.FindAssetReferences(scene_key.value());
+    ASSERT_HAS_VALUE(references);
+    // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+    EXPECT_THAT(references.value().Keys(),
+      ::testing::UnorderedElementsAre(
+        data::KeyReference {
+          .key = model_key,
+          .kind = data::KeyReferenceKind::kAsset,
+          .expected_type = data::AssetType::kScene,
+        },
+        data::KeyReference {
+          .key = context_key,
+          .kind = data::KeyReferenceKind::kAsset,
+          .expected_type = data::AssetType::kInputMappingContext,
+        }));
+  }
+
+  //! The starting camera must own a camera.
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, RejectsStartingCameraWithoutCamera)
+  {
+    const auto root = TempDir() / "starting_camera_without_camera";
+    std::filesystem::create_directories(root);
+    const auto report = Import(MakeRequest(root,
+      R"({"name":"Scene","nodes":[{"name":"root"}],"starting_camera":0})"));
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report->diagnostics, "scene.starting_camera.not_a_camera"));
+  }
+
+  //! A scene that instances itself, directly or through another scene, fails.
+  NOLINT_TEST_F(SceneDescriptorImportJobTest, RejectsInstanceCycles)
+  {
+    const auto root = TempDir() / "instance_cycles";
+    std::filesystem::create_directories(root);
+    // A one-node scene, optionally instancing another scene on its node.
+    const auto scene = [](const std::string_view name,
+                         const std::string_view instanced) -> std::string {
+      auto node = nlohmann::json { { "name", "root" } };
+      if (!instanced.empty()) {
+        const auto path
+          = "/.cooked/Scenes/" + std::string(instanced) + ".oscene";
+        node.emplace("instance",
+          nlohmann::json {
+            { "scene_ref", path },
+          });
+      }
+      return nlohmann::json {
+        { "name", name },
+        { "nodes", nlohmann::json::array({ node }) },
+      }
+        .dump();
+    };
+    const auto cook = [&](const std::string_view name,
+                        const std::string_view instanced) -> bool {
+      const auto report
+        = Import(MakeRequest(root, scene(name, instanced), name));
+      return report.has_value() && report->success;
+    };
+    ASSERT_TRUE(cook("A", ""));
+    ASSERT_TRUE(cook("B", "A"));
+
+    for (const auto* const instanced : { "A", "B" }) {
+      const auto report = Import(MakeRequest(root, scene("A", instanced), "A"));
+      ASSERT_HAS_VALUE(report);
+      EXPECT_FALSE(report->success) << instanced;
+      EXPECT_TRUE(HasDiagnosticCode(
+        report->diagnostics, "scene.descriptor.instance_cycle"))
+        << instanced;
+    }
+  }
+
   auto WriteTextureSidecar(const std::filesystem::path& root,
     const std::string_view name, const Format format, const uint32_t index,
     const TextureType type) -> void
@@ -794,9 +917,12 @@ namespace {
 
     const auto cooked_root = TempDir() / "environment_and_local_fog";
     std::filesystem::create_directories(cooked_root);
-    WriteCubemapSidecar(cooked_root, "sky_probe.otex", 5U);
-    WriteCubemapSidecar(cooked_root, "fog_probe.otex", 6U);
-    WriteCubemapSidecar(cooked_root, "backdrop.otex", 7U);
+    constexpr auto kSkyProbe = 5U;
+    constexpr auto kFogProbe = 6U;
+    constexpr auto kBackdrop = 7U;
+    WriteCubemapSidecar(cooked_root, "sky_probe.otex", kSkyProbe);
+    WriteCubemapSidecar(cooked_root, "fog_probe.otex", kFogProbe);
+    WriteCubemapSidecar(cooked_root, "backdrop.otex", kBackdrop);
 
     const auto report = Import(MakeRequest(cooked_root, R"({
       "name": "EnvironmentScene",
@@ -942,9 +1068,9 @@ namespace {
         reference, data::ResourceKind::kTexture);
       return resolved && resolved->has_value() ? resolved->value().get() : 0U;
     };
-    EXPECT_EQ(texture_of(fog->inscattering_color_cubemap), 6U);
-    EXPECT_EQ(texture_of(sky_light->cubemap), 5U);
-    EXPECT_EQ(texture_of(sky_sphere->cubemap), 7U);
+    EXPECT_EQ(texture_of(fog->inscattering_color_cubemap), kFogProbe);
+    EXPECT_EQ(texture_of(sky_light->cubemap), kSkyProbe);
+    EXPECT_EQ(texture_of(sky_sphere->cubemap), kBackdrop);
 
     const auto local_fog
       = scene.GetComponents<oxygen::data::pak::world::LocalFogVolumeRecord>();

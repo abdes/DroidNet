@@ -14,6 +14,7 @@
 #include <numbers>
 
 #include <Oxygen/Base/Compilers.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
@@ -34,14 +35,14 @@ OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
 namespace oxygen::data::pak::world {
 
 //! Scene node flags for `NodeRecord::node_flags`.
-[[maybe_unused]] constexpr uint32_t kSceneNodeFlag_Visible = (1U << 0);
-[[maybe_unused]] constexpr uint32_t kSceneNodeFlag_Static = (1U << 1);
-[[maybe_unused]] constexpr uint32_t kSceneNodeFlag_CastsShadows = (1U << 2);
-[[maybe_unused]] constexpr uint32_t kSceneNodeFlag_ReceivesShadows = (1U << 3);
+[[maybe_unused]] constexpr uint32_t kSceneNodeFlag_Visible = (1U << 0U);
+[[maybe_unused]] constexpr uint32_t kSceneNodeFlag_Static = (1U << 1U);
+[[maybe_unused]] constexpr uint32_t kSceneNodeFlag_CastsShadows = (1U << 2U);
+[[maybe_unused]] constexpr uint32_t kSceneNodeFlag_ReceivesShadows = (1U << 3U);
 [[maybe_unused]] constexpr uint32_t kSceneNodeFlag_RayCastingSelectable
-  = (1U << 4);
+  = (1U << 4U);
 [[maybe_unused]] constexpr uint32_t kSceneNodeFlag_IgnoreParentTransform
-  = (1U << 5);
+  = (1U << 5U);
 
 //! Flags with authored Local/Inherit source modes.
 inline constexpr uint32_t kSceneNodeFlags_Inheritable = kSceneNodeFlag_Visible
@@ -60,6 +61,18 @@ using SceneNodeIndexT = uint32_t;
 
 //! Index type for scene component tables.
 using SceneComponentIndexT = uint32_t;
+
+//! `SceneAssetDesc::starting_camera` value of a scene without one.
+inline constexpr SceneNodeIndexT kNoStartingCamera = 0xFFFFFFFFU;
+
+//! Scene asset flags.
+enum class SceneAssetFlags : uint32_t { // NOLINT(*-enum-size)
+  kNone = 0,
+  //! The scene is the output of a model import (glTF, FBX): a read-only
+  //! model scene that authored scenes instance, never run on its own.
+  kModelScene = OXYGEN_FLAG(0),
+};
+OXYGEN_DEFINE_FLAGS_OPERATORS(SceneAssetFlags)
 
 //! Scene data table descriptor.
 /*!
@@ -109,6 +122,12 @@ static_assert(sizeof(SceneStringTable) == 8);
  - optional component tables (e.g. `RenderableRecord[]`) described by the
    component table directory at `component_table_directory_offset`
 
+ The directory also holds scene-level tables: `SceneInstanceRecord[]`
+ (model scenes instanced under authored nodes) and
+ `StartingInputContextRecord[]` (input contexts the scene starts with).
+ `starting_camera` names the camera node the scene starts viewing through, or
+ is `kNoStartingCamera`.
+
  `nodes.entry_size` MUST match the corresponding struct size for the scene
  format version. Component tables declare their own `entry_size` via
  `SceneComponentTableDesc::table.entry_size`.
@@ -135,9 +154,12 @@ struct SceneAssetDesc {
   uint32_t component_table_count = 0;
   //! Descriptor-local script slots; each slot locates its own parameter array.
   SceneComponentTable script_slots {};
+  SceneAssetFlags flags = SceneAssetFlags::kNone;
+  //! Camera node the scene starts viewing through.
+  SceneNodeIndexT starting_camera = kNoStartingCamera;
 };
 #pragma pack(pop)
-static_assert(sizeof(SceneAssetDesc) == 155);
+static_assert(sizeof(SceneAssetDesc) == 163);
 
 //! Scene component table directory entry.
 /*!
@@ -230,6 +252,30 @@ struct RenderableRecord {
 };
 #pragma pack(pop)
 static_assert(sizeof(RenderableRecord) == 24);
+
+#pragma pack(push, 1)
+//! A model scene instanced under an authored node
+//! (`ComponentType::kSceneInstance`).
+/*!
+ When the scene is instantiated, the root nodes of the scene named by
+ `scene_key` become children of `node_index`.
+*/
+struct SceneInstanceRecord {
+  SceneNodeIndexT node_index = 0;
+  AssetKey scene_key;
+};
+#pragma pack(pop)
+static_assert(sizeof(SceneInstanceRecord) == 20);
+
+#pragma pack(push, 1)
+//! An input mapping context the scene starts with
+//! (`ComponentType::kStartingInputContext`), in activation order.
+struct StartingInputContextRecord {
+  AssetKey context_key;
+  int32_t priority = 0;
+};
+#pragma pack(pop)
+static_assert(sizeof(StartingInputContextRecord) == 20);
 
 #pragma pack(push, 1)
 //! One instance assignment. Absence restores the geometry's binding defaults.
@@ -799,8 +845,10 @@ inline constexpr std::array kKnownEnvironmentRecordSizes {
 //! Validate the current record length, including the bounded exposure-curve
 //! tail.
 [[nodiscard]] constexpr auto IsValidEnvironmentRecordSize(
-  const uint32_t system_type, const uint32_t record_size) noexcept -> bool
+  const SceneEnvironmentSystemRecordHeader& header) noexcept -> bool
 {
+  const auto system_type = header.system_type;
+  const auto record_size = header.record_size;
   if (system_type
     == nostd::to_underlying(EnvironmentComponentType::kPostProcessVolume)) {
     constexpr auto kPrefixSize = sizeof(PostProcessVolumeEnvironmentRecord);

@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <iterator>
 #include <memory>
 #include <numbers>
 #include <optional>
@@ -335,6 +336,22 @@ auto CameraWorldTransform(const oxygen::data::SceneAsset& scene, uint32_t index)
 
 using oxygen::cooker::test::ExpectVec3Near;
 
+//! A model import emits a model scene: flagged as such, with no start state
+//! or instances of its own.
+NOLINT_TEST_F(CameraAttachmentSceneTest, ImportedSceneIsAModelScene)
+{
+  ASSERT_TRUE(error_.empty()) << error_;
+  for (const auto& item : cases_) {
+    SCOPED_TRACE(item.pass);
+    EXPECT_TRUE(item.scene->IsModelScene());
+    EXPECT_FALSE(item.scene->GetStartingCamera().has_value());
+    EXPECT_TRUE(
+      item.scene->GetComponents<world::SceneInstanceRecord>().empty());
+    EXPECT_TRUE(
+      item.scene->GetComponents<world::StartingInputContextRecord>().empty());
+  }
+}
+
 NOLINT_TEST_F(
   CameraAttachmentSceneTest, CameraAttachmentNodesHaveStableNamesIdsAndFlags)
 {
@@ -404,9 +421,11 @@ NOLINT_TEST_F(CameraAttachmentSceneTest,
     };
     for (uint32_t index = 0; index < source_count; ++index) {
       const auto& node = scene->GetNode(index);
-      const auto expected_parent = index >= source_count - 2 ? index
-        : index == 2                                         ? 1U
-                                                             : 0U;
+      // The last two nodes are roots; node 2 is a child of node 1.
+      auto expected_parent = index == 2 ? 1U : 0U;
+      if (index >= source_count - 2) {
+        expected_parent = index;
+      }
       EXPECT_EQ(node.parent_index, expected_parent);
       const auto position
         = index < positions.size() ? positions.at(index) : glm::vec3(0);
@@ -539,9 +558,10 @@ NOLINT_TEST_F(
     EXPECT_EQ(CheckedAt(lights, 1).node_index, source_count + 6);
     for (const auto& light : lights) {
       EXPECT_FLOAT_EQ(light.intensity_lux, 5000.0F);
+      constexpr auto kAuthoredColor = glm::vec3 { 0.8F, 0.6F, 0.4F };
       ExpectVec3Near({ light.common.color_rgb[0], light.common.color_rgb[1],
                        light.common.color_rgb[2] },
-        { 0.8F, 0.6F, 0.4F });
+        kAuthoredColor);
     }
   }
 }
@@ -587,10 +607,11 @@ NOLINT_TEST_F(
       200.0 * std::numbers::pi
         * ((1.0 - std::cos(0.2F)) + ((std::cos(0.2F) - std::cos(0.5F)) / 3.0)),
       0.0001);
+    constexpr auto kSpotColor = glm::vec3 { 0.2F, 0.4F, 0.6F };
     ExpectVec3Near({ CheckedAt(spots, 0).common.color_rgb[0],
                      CheckedAt(spots, 0).common.color_rgb[1],
                      CheckedAt(spots, 0).common.color_rgb[2] },
-      { 0.2F, 0.4F, 0.6F });
+      kSpotColor);
   }
 }
 
@@ -669,8 +690,9 @@ NOLINT_TEST_F(CameraAttachmentSceneTest,
     ExpectVec3Near(glm::normalize(glm::vec3(
                      CameraWorldTransform(*scene, 1) * glm::vec4(0, -1, 0, 0))),
       { 0, 0, 1 });
-    ExpectVec3Near(
-      glm::vec3(glm::column(CameraWorldTransform(*scene, 2), 3)), { 2, -7, 6 });
+    constexpr auto kCameraPosition = glm::vec3 { 2, -7, 6 };
+    ExpectVec3Near(glm::vec3(glm::column(CameraWorldTransform(*scene, 2), 3)),
+      kCameraPosition);
   }
 }
 
@@ -1102,7 +1124,8 @@ NOLINT_TEST_F(
   for (size_t slot = 0; slot < bound_keys.size(); ++slot) {
     SCOPED_TRACE(slot);
     const auto& submesh = imported.slots.at(slot).submesh;
-    EXPECT_EQ(std::string(submesh.name), expected_slot_names.at(slot));
+    EXPECT_EQ(
+      std::string_view(std::data(submesh.name)), expected_slot_names.at(slot));
     EXPECT_FALSE(submesh.slot_id.IsNil());
     slot_ids.at(slot) = submesh.slot_id;
     EXPECT_EQ(imported.slots.at(slot).view.index_count, 3U);
@@ -1143,8 +1166,8 @@ NOLINT_TEST_F(
       std::as_writable_bytes(std::span<MaterialAssetDesc, 1>(&material, 1))));
     for (size_t channel = 0; channel < expected_colors.at(slot).size();
       ++channel) {
-      EXPECT_FLOAT_EQ(
-        material.base_color[channel], expected_colors.at(slot).at(channel));
+      EXPECT_FLOAT_EQ(CheckedAt(std::span(material.base_color), channel),
+        expected_colors.at(slot).at(channel));
     }
     EXPECT_EQ(
       material.roughness, oxygen::data::Unorm16(expected_roughness.at(slot)));

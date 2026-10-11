@@ -17,6 +17,7 @@
 #include <string_view>
 #include <system_error>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -38,6 +39,7 @@
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/TextureReferenceResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
+#include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
@@ -52,6 +54,7 @@
 #include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -86,6 +89,8 @@ namespace {
     std::vector<data::AssetKey> geometry_keys;
     std::vector<SceneEnvironmentSystem> environment_systems;
     data::AssetReferences environment_references;
+    //! Descriptor object path of each `build.instances` entry, for diagnostics.
+    std::vector<std::string> instance_paths;
   };
 
   class SceneDescriptorAdapter final {
@@ -461,7 +466,7 @@ namespace {
       if (!known_format
         || desc.texture_type != static_cast<uint8_t>(TextureType::kTextureCube)
         || desc.width == 0U || desc.width != desc.height || desc.depth != 1U
-        || desc.array_layers != 6U) {
+        || desc.array_layers != kCubeFaceCount) {
         return "Sky cubemap requires a cube texture with six square faces";
       }
       return std::nullopt;
@@ -569,6 +574,85 @@ namespace {
     };
   }
 
+  //! The cooked descriptor of an asset listed in a mounted root's index.
+  auto FindIndexedDescriptor(const SceneDescriptorExecutionContext& context,
+    const data::AssetKey& key) -> std::optional<std::filesystem::path>
+  {
+    for (auto mount = context.mounts.rbegin(); mount != context.mounts.rend();
+      ++mount) {
+      if (!mount->inspection) {
+        continue;
+      }
+      for (const auto& asset : mount->inspection->Assets()) {
+        if (asset.key == key) {
+          return mount->root / asset.descriptor_relpath;
+        }
+      }
+    }
+    return std::nullopt;
+  }
+
+  //! Walks the cooked scenes reachable through instances and fails when one
+  //! of them instances the scene being cooked. Scenes not yet cooked end
+  //! their branch: their own cook checks them.
+  // NOLINTBEGIN(*-avoid-reference-coroutine-parameters) - awaited in place
+  auto CheckInstanceCycles(SceneDescriptorExecutionContext& context,
+    const data::AssetKey& scene_key, const LinkedSceneDescriptor& prepared,
+    IAsyncFileReader& file_reader) -> co::Co<bool>
+  // NOLINTEND(*-avoid-reference-coroutine-parameters)
+  {
+    struct Pending final {
+      data::AssetKey key;
+      size_t origin = 0;
+    };
+    auto pending = std::vector<Pending> {};
+    for (size_t i = 0; i < prepared.build.instances.size(); ++i) {
+      pending.push_back(
+        { .key = prepared.build.instances.at(i).scene_key, .origin = i });
+    }
+    auto visited = std::unordered_set<data::AssetKey> {};
+    while (!pending.empty()) {
+      const auto [key, origin] = pending.back();
+      pending.pop_back();
+      const auto& object_path = prepared.instance_paths.at(origin);
+      if (key == scene_key) {
+        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+          "scene.descriptor.instance_cycle",
+          "The instanced scene instances this scene", object_path);
+        co_return false;
+      }
+      if (!visited.insert(key).second) {
+        continue;
+      }
+      const auto path = FindIndexedDescriptor(context, key);
+      if (!path) {
+        continue;
+      }
+      auto bytes = co_await file_reader.ReadFile(*path);
+      if (!bytes) {
+        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+          "scene.descriptor.instance_unreadable",
+          "Cannot read an instanced scene: " + path->string(), object_path);
+        co_return false;
+      }
+      try {
+        const auto scene = data::SceneAsset(key, std::move(bytes.value()));
+        for (const auto& nested :
+          scene.GetComponents<data::pak::world::SceneInstanceRecord>()) {
+          pending.push_back({ .key = nested.scene_key, .origin = origin });
+        }
+      } catch (const std::exception& error) {
+        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+          "scene.descriptor.instance_invalid",
+          "An instanced scene is invalid; re-cook it: "
+            + std::string(error.what()),
+          object_path);
+        co_return false;
+      }
+    }
+    co_return true;
+  }
+
   auto LinkSceneDescriptor(SceneDescriptorExecutionContext& context,
     internal::SceneSource source, const EnvironmentTextureIndices& textures)
     -> std::optional<LinkedSceneDescriptor>
@@ -579,6 +663,7 @@ namespace {
       .geometry_keys = {},
       .environment_systems = {},
       .environment_references = {},
+      .instance_paths = {},
     };
     const auto scene_virtual_path
       = context.request.loose_cooked_layout.SceneVirtualPath(
@@ -631,13 +716,54 @@ namespace {
       prepared.geometry_keys.push_back(renderable.geometry_key);
     }
 
+    const auto scene_key = data::AssetKey::FromVirtualPath(scene_virtual_path);
+    prepared.build.instances.reserve(source.instances.size());
+    for (auto& instance : source.instances) {
+      const auto resolved = ResolveAssetReference(context, instance.scene,
+        data::AssetType::kScene, true, instance.object_path);
+      if (!resolved.has_value()) {
+        return std::nullopt;
+      }
+      if (resolved->first == scene_key) {
+        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+          "scene.descriptor.instance_cycle", "A scene cannot instance itself",
+          std::move(instance.object_path));
+        return std::nullopt;
+      }
+      prepared.build.instances.push_back({
+        .node_index = instance.node_index,
+        .scene_key = resolved->first,
+      });
+      prepared.instance_paths.push_back(std::move(instance.object_path));
+    }
+    auto starting_contexts = std::unordered_set<data::AssetKey> {};
+    for (auto& starting : source.starting_input_contexts) {
+      const auto resolved = ResolveAssetReference(context, starting.context,
+        data::AssetType::kInputMappingContext, true, starting.object_path);
+      if (!resolved.has_value()) {
+        return std::nullopt;
+      }
+      if (!starting_contexts.insert(resolved->first).second) {
+        AddDiagnostic(context.session, context.request, ImportSeverity::kError,
+          "scene.descriptor.starting_input_context_duplicate",
+          "An input context can start only once",
+          std::move(starting.object_path));
+        return std::nullopt;
+      }
+      prepared.build.starting_input_contexts.push_back({
+        .context_key = resolved->first,
+        .priority = starting.priority,
+      });
+    }
+
     AssetReferenceBuilder references;
     const auto bind_texture
-      = [&references](const data::pak::core::ResourceIndexT index) {
-          return index == data::pak::core::kNoResourceIndex
-            ? data::kNoResourceReference
-            : references.AddResource(data::ResourceKind::kTexture, index);
-        };
+      = [&references](const data::pak::core::ResourceIndexT index)
+      -> data::ResourceReferenceIndex {
+      return index == data::pak::core::kNoResourceIndex
+        ? data::kNoResourceReference
+        : references.AddResource(data::ResourceKind::kTexture, index);
+    };
     if (source.post_process.has_value()) {
       auto system = BuildPostProcessSystemRecord(
         context, *source.post_process, bind_texture(textures.metering_mask));
@@ -823,6 +949,14 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   auto& prepared = *prepared_opt;
+  if (!co_await CheckInstanceCycles(context,
+        data::AssetKey::FromVirtualPath(
+          Request().loose_cooked_layout.SceneVirtualPath(prepared.scene_name)),
+        prepared, *CookedReader())) {
+    ReportPhaseProgress(
+      ImportPhase::kFailed, 1.0F, "Scene descriptor instances a cycle");
+    co_return co_await FinalizeWithTelemetry(session);
+  }
   auto request_for_pipeline = Request();
   request_for_pipeline.source_path = std::filesystem::path(prepared.scene_name);
   auto& pipeline = CreatePipeline<ScenePipeline>(*ThreadPool(),

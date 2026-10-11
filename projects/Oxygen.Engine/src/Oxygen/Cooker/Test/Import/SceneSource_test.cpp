@@ -141,6 +141,60 @@ namespace {
       diagnostics, "scene.descriptor.camera_node_index_out_of_range"));
   }
 
+  //! Instances, the starting camera and starting contexts stay symbolic until
+  //! linking; contexts keep their authored order and priorities.
+  NOLINT_TEST(SceneSourceTest, RetainsInstancesAndStartState)
+  {
+    auto document = MakeScene();
+    document.at("nodes") = json::parse(R"([
+      {"name":"root"},
+      {"name":"model","parent":0,
+       "instance":{"scene_ref":"/Content/Scenes/model.oscene"}},
+      {"name":"camera","parent":0}])");
+    document.emplace("starting_camera", 2);
+    document.emplace("starting_input_contexts", json::parse(R"([
+      {"context_ref":"/Content/Input/gameplay.oimap","priority":5},
+      {"context_ref":"/Content/Input/menu.oimap"}])"));
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto source
+      = SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics);
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
+    EXPECT_TRUE(diagnostics.empty());
+    ASSERT_EQ(source->instances.size(), 1U);
+    EXPECT_EQ(source->instances.front().node_index, 1U);
+    EXPECT_EQ(source->instances.front().scene, "/Content/Scenes/model.oscene");
+    EXPECT_EQ(source->build.starting_camera, 2U);
+    ASSERT_EQ(source->starting_input_contexts.size(), 2U);
+    EXPECT_EQ(source->starting_input_contexts.front().context,
+      "/Content/Input/gameplay.oimap");
+    EXPECT_EQ(source->starting_input_contexts.front().priority, 5);
+    EXPECT_EQ(source->starting_input_contexts.back().priority, 0);
+  }
+
+  //! A scene without start state has no starting camera.
+  NOLINT_TEST(SceneSourceTest, DefaultsToNoStartingCamera)
+  {
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    const auto source = SceneSource::FromDescriptor(
+      MakeScene().dump(), "scene.json", diagnostics);
+    ASSERT_HAS_VALUE(source) << "Expected source to contain a value";
+    EXPECT_EQ(
+      source->build.starting_camera, data::pak::world::kNoStartingCamera);
+    EXPECT_TRUE(source->instances.empty());
+    EXPECT_TRUE(source->starting_input_contexts.empty());
+  }
+
+  NOLINT_TEST(SceneSourceTest, RejectsStartingCameraOutsideTheScene)
+  {
+    auto document = MakeScene();
+    document.emplace("starting_camera", 0);
+    auto diagnostics = std::vector<ImportDiagnostic> {};
+    EXPECT_FALSE(
+      SceneSource::FromDescriptor(document.dump(), "scene.json", diagnostics));
+    EXPECT_TRUE(HasDiagnosticCode(
+      diagnostics, "scene.descriptor.starting_camera_out_of_range"));
+  }
+
   NOLINT_TEST(SceneSourceTest, RejectsInvalidExposureBeforeCookedLinking)
   {
     auto document = MakeScene();

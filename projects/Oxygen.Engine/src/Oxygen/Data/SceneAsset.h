@@ -71,6 +71,14 @@ template <> struct ComponentTraits<pak::scripting::ScriptingComponentRecord> {
   static constexpr ComponentType kType = ComponentType::kScripting;
 };
 
+template <> struct ComponentTraits<pak::world::SceneInstanceRecord> {
+  static constexpr ComponentType kType = ComponentType::kSceneInstance;
+};
+
+template <> struct ComponentTraits<pak::world::StartingInputContextRecord> {
+  static constexpr ComponentType kType = ComponentType::kStartingInputContext;
+};
+
 //! Represents a loaded Scene asset.
 /*!
   SceneAsset provides a high-level, read-only view over the raw binary data of a
@@ -191,6 +199,26 @@ public:
   OXGN_DATA_NDAPI auto GetRootNode() const noexcept
     -> const pak::world::NodeRecord&;
 
+  //=== Scene Composition and Start State ===-------------------------------//
+
+  //! True when the scene is a model import's output, which authored scenes
+  //! instance and which is never run on its own.
+  [[nodiscard]] auto IsModelScene() const noexcept -> bool
+  {
+    return (desc_.flags & pak::world::SceneAssetFlags::kModelScene)
+      != pak::world::SceneAssetFlags::kNone;
+  }
+
+  //! Returns the camera node the scene starts viewing through, if authored.
+  [[nodiscard]] auto GetStartingCamera() const noexcept
+    -> std::optional<pak::world::SceneNodeIndexT>
+  {
+    if (desc_.starting_camera == pak::world::kNoStartingCamera) {
+      return std::nullopt;
+    }
+    return desc_.starting_camera;
+  }
+
   //=== Environment Access (v3+) ===----------------------------------------//
 
   //! Returns true if this scene carries a trailing environment block.
@@ -251,7 +279,9 @@ public:
     @tparam T The component record type (e.g. pak::world::RenderableRecord).
     @return A span of component records. Returns empty span if no table exists.
   */
+  // Decoding allocates the component cache; failing to allocate is fatal.
   template <typename T>
+  // NOLINTNEXTLINE(bugprone-exception-escape)
   [[nodiscard]] auto GetComponents() const noexcept -> std::span<const T>
   {
     // Map C++ type to ComponentType enum using Traits.
@@ -359,8 +389,8 @@ private:
   mutable std::vector<pak::world::NodeRecord> nodes_cache_;
   mutable bool nodes_cache_valid_ { false };
 
-  const char* string_table_ptr_ { nullptr };
-  size_t string_table_size_ { 0 };
+  //! Views the descriptor's string table.
+  std::string_view string_table_;
 
   // Component directory cache (type -> {ptr, count})
   struct ComponentTableEntry {

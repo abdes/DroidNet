@@ -1325,6 +1325,14 @@ namespace {
       scene.GetComponents<world::MaterialOverrideRecord>()) {
       component_keys.insert(material_override.material_key);
     }
+    for (const auto& instance :
+      scene.GetComponents<world::SceneInstanceRecord>()) {
+      component_keys.insert(instance.scene_key);
+    }
+    for (const auto& context :
+      scene.GetComponents<world::StartingInputContextRecord>()) {
+      component_keys.insert(context.context_key);
+    }
 
     auto keys = std::set<data::AssetKey> {};
     for (const auto& slots :

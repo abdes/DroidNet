@@ -281,7 +281,7 @@ namespace {
   }
 
   // cgltf owns successful reads until file.release; failures retain local RAII.
-  auto ReadCgltfFile(const cgltf_memory_options*,
+  auto ReadCgltfFile(const cgltf_memory_options* /*unused*/,
     const cgltf_file_options* file_options, const char* path, cgltf_size* size,
     void** data) noexcept -> cgltf_result
   {
@@ -299,9 +299,11 @@ namespace {
         observed.emplace(snapshot->BeginParserRead(logical));
       }
       const auto requested_maximum = *size;
+      // NOLINTNEXTLINE(*-signed-bitwise) - std::ios openmode bitmask
+      constexpr auto kOpenMode = std::ios::binary | std::ios::ate;
       std::ifstream file(
         base::ToNativePath(observed ? observed->PhysicalPath() : logical),
-        std::ios::binary | std::ios::ate);
+        kOpenMode);
       if (!file) {
         return cgltf_result_file_not_found;
       }
@@ -311,10 +313,12 @@ namespace {
       }
       const auto requested
         = *size == 0U ? static_cast<cgltf_size>(length) : *size;
-      if (requested > static_cast<cgltf_size>(length)
+      if (std::cmp_greater(requested, length)
         || !std::in_range<std::streamsize>(requested)) {
         return cgltf_result_io_error;
       }
+      // cgltf frees this raw buffer through ReleaseCgltfFile.
+      // NOLINTNEXTLINE(*-avoid-c-arrays)
       auto bytes = std::make_unique_for_overwrite<char[]>(requested);
       file.seekg(0);
       if (!file.read(bytes.get(), static_cast<std::streamsize>(requested))) {
@@ -343,9 +347,12 @@ namespace {
     }
   }
 
-  auto ReleaseCgltfFile(const cgltf_memory_options*, const cgltf_file_options*,
-    void* data, cgltf_size) noexcept -> void
+  auto ReleaseCgltfFile(const cgltf_memory_options* /*unused*/,
+    const cgltf_file_options* /*unused*/, void* data,
+    cgltf_size /*unused*/) noexcept -> void
   {
+    // Frees the buffer ReadCgltfFile handed to cgltf.
+    // NOLINTNEXTLINE(*-avoid-c-arrays)
     const std::unique_ptr<char[]> bytes(static_cast<char*>(data));
   }
 
@@ -462,12 +469,9 @@ namespace {
 
     std::vector<glm::vec2> out(accessor->count);
     for (cgltf_size i = 0; i < accessor->count; ++i) {
-      cgltf_float v[4] = {};
-      cgltf_accessor_read_float(accessor, i, v, 4);
-      out.at(i) = glm::vec2 {
-        v[0],
-        v[1],
-      };
+      auto v = std::array<cgltf_float, 4> {};
+      cgltf_accessor_read_float(accessor, i, v.data(), v.size());
+      out.at(i) = glm::make_vec2(v.data());
     }
     return out;
   }
@@ -481,13 +485,9 @@ namespace {
 
     std::vector<glm::vec3> out(accessor->count);
     for (cgltf_size i = 0; i < accessor->count; ++i) {
-      cgltf_float v[4] = {};
-      cgltf_accessor_read_float(accessor, i, v, 4);
-      out.at(i) = glm::vec3 {
-        v[0],
-        v[1],
-        v[2],
-      };
+      auto v = std::array<cgltf_float, 4> {};
+      cgltf_accessor_read_float(accessor, i, v.data(), v.size());
+      out.at(i) = glm::make_vec3(v.data());
     }
     return out;
   }
@@ -501,14 +501,9 @@ namespace {
 
     std::vector<glm::vec4> out(accessor->count);
     for (cgltf_size i = 0; i < accessor->count; ++i) {
-      cgltf_float v[4] = {};
-      cgltf_accessor_read_float(accessor, i, v, 4);
-      out.at(i) = glm::vec4 {
-        v[0],
-        v[1],
-        v[2],
-        v[3],
-      };
+      auto v = std::array<cgltf_float, 4> {};
+      cgltf_accessor_read_float(accessor, i, v.data(), v.size());
+      out.at(i) = glm::make_vec4(v.data());
     }
     return out;
   }
@@ -522,9 +517,9 @@ namespace {
 
     std::vector<glm::uvec4> out(accessor->count);
     for (cgltf_size i = 0; i < accessor->count; ++i) {
-      cgltf_uint v[4] = {};
-      cgltf_accessor_read_uint(accessor, i, v, 4);
-      out.at(i) = glm::uvec4 { v[0], v[1], v[2], v[3] };
+      auto v = std::array<cgltf_uint, 4> {};
+      cgltf_accessor_read_uint(accessor, i, v.data(), v.size());
+      out.at(i) = glm::make_vec4(v.data());
     }
     return out;
   }
@@ -538,14 +533,9 @@ namespace {
 
     std::vector<glm::mat4> out(accessor->count);
     for (cgltf_size i = 0; i < accessor->count; ++i) {
-      cgltf_float v[16] = {};
-      cgltf_accessor_read_float(accessor, i, v, 16);
-      out.at(i) = glm::mat4 {
-        glm::vec4 { v[0], v[1], v[2], v[3] },
-        glm::vec4 { v[4], v[5], v[6], v[7] },
-        glm::vec4 { v[8], v[9], v[10], v[11] },
-        glm::vec4 { v[12], v[13], v[14], v[15] },
-      };
+      auto v = std::array<cgltf_float, 16> {}; // NOLINT(*-magic-numbers)
+      cgltf_accessor_read_float(accessor, i, v.data(), v.size());
+      out.at(i) = glm::make_mat4(v.data());
     }
     return out;
   }
@@ -561,41 +551,6 @@ namespace {
     for (cgltf_size i = 0; i < accessor->count; ++i) {
       out.at(i) = static_cast<uint32_t>(cgltf_accessor_read_index(accessor, i));
     }
-    return out;
-  }
-
-  struct AccessorBounds final {
-    glm::vec3 min = glm::vec3(0.0F);
-    glm::vec3 max = glm::vec3(0.0F);
-  };
-
-  [[nodiscard]] auto ReadAccessorBounds(const cgltf_accessor* accessor)
-    -> std::optional<AccessorBounds>
-  {
-    if (accessor == nullptr || accessor->has_min == 0
-      || accessor->has_max == 0) {
-      return std::nullopt;
-    }
-
-    return AccessorBounds {
-      .min = glm::vec3(accessor->min[0], accessor->min[1], accessor->min[2]),
-      .max = glm::vec3(accessor->max[0], accessor->max[1], accessor->max[2]),
-    };
-  }
-
-  [[nodiscard]] auto ToBounds3(const AccessorBounds& bounds) -> Bounds3
-  {
-    Bounds3 out;
-    out.min = std::array {
-      bounds.min.x,
-      bounds.min.y,
-      bounds.min.z,
-    };
-    out.max = std::array {
-      bounds.max.x,
-      bounds.max.y,
-      bounds.max.z,
-    };
     return out;
   }
 
@@ -619,10 +574,9 @@ namespace {
       return nullptr;
     }
 
-    for (cgltf_size i = 0; i < data.nodes_count; ++i) {
-      const auto* node = &data.nodes[i];
-      if (node != nullptr && node->mesh == &mesh && node->skin != nullptr) {
-        return node->skin;
+    for (const auto& node : std::span(data.nodes, data.nodes_count)) {
+      if (node.mesh == &mesh && node.skin != nullptr) {
+        return node.skin;
       }
     }
     return nullptr;
@@ -634,7 +588,7 @@ namespace {
       return false;
     }
 
-    if (material->has_pbr_metallic_roughness) {
+    if (material->has_pbr_metallic_roughness != 0) {
       const auto& pbr = material->pbr_metallic_roughness;
       if (pbr.base_color_texture.texture != nullptr
         || pbr.metallic_roughness_texture.texture != nullptr) {
@@ -735,7 +689,6 @@ namespace {
     case TextureUsage::kClearcoatNormal:
       return TexturePreset::kNormal;
     case TextureUsage::kTransmission:
-      return TexturePreset::kRoughness; // Best approximation (single channel)
     case TextureUsage::kThickness:
       return TexturePreset::kRoughness; // Best approximation (single channel)
     }
@@ -784,7 +737,7 @@ namespace {
 
   [[nodiscard]] auto ResolveUvSet(const cgltf_texture_view& view) -> uint8_t
   {
-    if (view.has_transform && view.transform.has_texcoord) {
+    if ((view.has_transform != 0) && (view.transform.has_texcoord != 0)) {
       return static_cast<uint8_t>(view.transform.texcoord);
     }
     return static_cast<uint8_t>(view.texcoord);
@@ -797,7 +750,7 @@ namespace {
     binding.source_id = std::move(source_id);
     binding.index = 0;
     binding.uv_set = ResolveUvSet(view);
-    if (view.has_transform) {
+    if (view.has_transform != 0) {
       binding.uv_transform.scale[0]
         = static_cast<float>(view.transform.scale[0]);
       binding.uv_transform.scale[1]
@@ -818,64 +771,40 @@ namespace {
       binding.uv_transform.offset[1], binding.uv_transform.rotation_radians);
   }
 
-  [[nodiscard]] auto LoadExternalBytes(const std::filesystem::path& path,
-    std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id)
-    -> std::shared_ptr<std::vector<std::byte>>
-  {
-    std::ifstream file(
-      base::ToNativePath(path), std::ios::binary | std::ios::ate);
-    if (!file) {
-      diagnostics.push_back(MakeWarningDiagnostic("gltf.image.load_failed",
-        "Failed to open glTF image file", source_id, path.string()));
-      return std::make_shared<std::vector<std::byte>>();
-    }
-
-    const auto size = file.tellg();
-    if (size <= 0) {
-      diagnostics.push_back(MakeWarningDiagnostic("gltf.image.empty",
-        "glTF image file is empty", source_id, path.string()));
-      return std::make_shared<std::vector<std::byte>>();
-    }
-
-    auto bytes
-      = std::make_shared<std::vector<std::byte>>(static_cast<size_t>(size));
-    file.seekg(0, std::ios::beg);
-    if (!file.read(reinterpret_cast<char*>(bytes->data()), size)) {
-      diagnostics.push_back(MakeWarningDiagnostic("gltf.image.read_failed",
-        "Failed to read glTF image file", source_id, path.string()));
-      return std::make_shared<std::vector<std::byte>>();
-    }
-
-    return bytes;
-  }
-
   [[nodiscard]] auto DecodeBase64(std::string_view encoded)
     -> std::shared_ptr<std::vector<std::byte>>
   {
     auto bytes = std::make_shared<std::vector<std::byte>>();
     bytes->reserve((encoded.size() * 3U) / 4U);
 
+    // RFC 4648 alphabet: A-Z, a-z, 0-9, '+', '/'.
+    constexpr int kLowerStart = 26;
+    constexpr int kDigitStart = 52;
+    constexpr int kPlusValue = 62;
+    constexpr int kSlashValue = 63;
+    constexpr uint32_t kBitsPerChar = 6U;
+    constexpr uint32_t kBitsPerByte = 8U;
     auto decode_char = [](const char c) -> int {
       if (c >= 'A' && c <= 'Z') {
         return c - 'A';
       }
       if (c >= 'a' && c <= 'z') {
-        return c - 'a' + 26;
+        return c - 'a' + kLowerStart;
       }
       if (c >= '0' && c <= '9') {
-        return c - '0' + 52;
+        return c - '0' + kDigitStart;
       }
       if (c == '+') {
-        return 62;
+        return kPlusValue;
       }
       if (c == '/') {
-        return 63;
+        return kSlashValue;
       }
       return -1;
     };
 
     uint32_t accum = 0;
-    int bits = 0;
+    uint32_t bits = 0;
     for (const char c : encoded) {
       if (c == '=') {
         break;
@@ -886,10 +815,10 @@ namespace {
         continue;
       }
 
-      accum = (accum << 6) | static_cast<uint32_t>(value);
-      bits += 6;
-      if (bits >= 8) {
-        bits -= 8;
+      accum = (accum << kBitsPerChar) | static_cast<uint32_t>(value);
+      bits += kBitsPerChar;
+      if (bits >= kBitsPerByte) {
+        bits -= kBitsPerByte;
         const auto byte = static_cast<std::byte>((accum >> bits) & 0xFFU);
         bytes->push_back(byte);
       }
@@ -910,7 +839,7 @@ namespace {
     }
 
     const auto header = uri.substr(0, comma);
-    if (header.find(";base64") == std::string_view::npos) {
+    if (!header.contains(";base64")) {
       diagnostics.push_back(MakeWarningDiagnostic("gltf.image.data_uri",
         "glTF data URI is not base64 encoded", source_id, ""));
       return std::make_shared<std::vector<std::byte>>();
@@ -960,12 +889,12 @@ namespace {
     if (image.buffer_view != nullptr && image.buffer_view->buffer != nullptr
       && image.buffer_view->buffer->data != nullptr) {
       const auto* buffer = image.buffer_view->buffer;
-      const auto* raw = static_cast<const std::byte*>(buffer->data)
-        + image.buffer_view->offset;
-      const auto size = image.buffer_view->size;
+      const auto buffer_bytes
+        = std::span(static_cast<const std::byte*>(buffer->data), buffer->size);
       return ResolvedTextureSource {
         .bytes = TexturePipeline::SourceBytes {
-          .bytes = std::span(raw, size),
+          .bytes = buffer_bytes.subspan(
+            image.buffer_view->offset, image.buffer_view->size),
           .owner = std::static_pointer_cast<const void>(owner),
         },
       };
@@ -978,7 +907,7 @@ namespace {
     }
 
     std::string_view uri(image.uri);
-    if (uri.rfind("data:", 0) == 0) {
+    if (uri.starts_with("data:")) {
       auto bytes = DecodeDataUri(uri, diagnostics, source_id);
       return ResolvedTextureSource {
         .bytes = TexturePipeline::SourceBytes {
@@ -1063,7 +992,6 @@ namespace {
   {
     switch (policy.unit_normalization) {
     case UnitNormalizationPolicy::kPreserveSource:
-      return 1.0F;
     case UnitNormalizationPolicy::kNormalizeToMeters:
       return 1.0F;
     case UnitNormalizationPolicy::kApplyCustomFactor:
@@ -1106,8 +1034,9 @@ namespace {
   {
     std::vector<internal::MeshBakeNode> nodes(data.nodes_count);
     std::vector<uint8_t> emit_mesh(data.meshes_count);
-    for (size_t index = 0; index < data.meshes_count; ++index) {
-      emit_mesh.at(index) = data.meshes[index].primitives_count != 0;
+    for (size_t index = 0;
+      const auto& mesh : std::span(data.meshes, data.meshes_count)) {
+      emit_mesh.at(index++) = mesh.primitives_count != 0 ? 1U : 0U;
     }
     std::unordered_set<const cgltf_node*> animated_or_joint;
     for (const auto& animation :
@@ -1122,16 +1051,16 @@ namespace {
         animated_or_joint.insert(joint);
       }
     }
-    for (size_t index = 0; index < data.nodes_count; ++index) {
-      const auto& node = data.nodes[index];
+    for (size_t index = 0;
+      const auto& node : std::span(data.nodes, data.nodes_count)) {
+      auto& input = nodes.at(index++);
       if (node.mesh == nullptr) {
         continue;
       }
-      auto& input = nodes.at(index);
       input.mesh_index = static_cast<size_t>(node.mesh - data.meshes);
-      cgltf_float matrix[16] {};
-      cgltf_node_transform_local(&node, matrix);
-      input.local_transform = glm::make_mat4(matrix);
+      auto matrix = std::array<cgltf_float, 16> {}; // NOLINT(*-magic-numbers)
+      cgltf_node_transform_local(&node, matrix.data());
+      input.local_transform = glm::make_mat4(matrix.data());
       input.local_transform
         = ConvertGltfTransform(input.local_transform, policy);
       if (node.children_count != 0 || node.camera != nullptr
@@ -1178,8 +1107,9 @@ namespace {
       if (positions != nullptr) {
         for (cgltf_size index = 0; index < positions->count; ++index) {
           std::array<cgltf_float, 3> position {};
-          if (!cgltf_accessor_read_float(
-                positions, index, position.data(), position.size())) {
+          if (cgltf_accessor_read_float(
+                positions, index, position.data(), position.size())
+            == 0) {
             return std::nullopt;
           }
           for (const auto component : position) {
@@ -1234,7 +1164,8 @@ namespace {
         return result;
       }
       const auto& variant = bake_plan.variants.at(variant_index);
-      const auto* mesh = &data.meshes[variant.mesh_index];
+      const auto* mesh = &base::CheckedAt(
+        std::span(data.meshes, data.meshes_count), variant.mesh_index);
       if (mesh == nullptr) {
         continue;
       }
@@ -1273,11 +1204,9 @@ namespace {
     }
 
     std::unordered_map<const cgltf_material*, uint32_t> material_index;
-    for (cgltf_size i = 0; i < data.materials_count; ++i) {
-      const auto* mat = &data.materials[i];
-      if (mat != nullptr) {
-        material_index.emplace(mat, static_cast<uint32_t>(i));
-      }
+    for (uint32_t i = 0;
+      const auto& mat : std::span(data.materials, data.materials_count)) {
+      material_index.emplace(&mat, i++);
     }
 
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
@@ -1313,7 +1242,8 @@ namespace {
     for (const auto& source : prepared.sources) {
       const auto& variant = source.variant;
       const auto mesh_i = variant.mesh_index;
-      const auto* mesh = &data.meshes[variant.mesh_index];
+      const auto* mesh = &base::CheckedAt(
+        std::span(data.meshes, data.meshes_count), variant.mesh_index);
       const auto& mesh_name = source.name;
 
       std::vector<PrimitiveInfo> primitives;
@@ -1338,7 +1268,8 @@ namespace {
           return result;
         }
 
-        const auto& prim = mesh->primitives[prim_i];
+        const auto& prim = base::CheckedAt(
+          std::span(mesh->primitives, mesh->primitives_count), prim_i);
         if (prim.type != cgltf_primitive_type_triangles) {
           result.diagnostics.push_back(
             MakeErrorDiagnostic("gltf.primitive.type",
@@ -1362,8 +1293,8 @@ namespace {
         std::unordered_map<uint32_t, const cgltf_accessor*> joints_by_index;
         std::unordered_map<uint32_t, const cgltf_accessor*> weights_by_index;
 
-        for (cgltf_size attr_i = 0; attr_i < prim.attributes_count; ++attr_i) {
-          const auto& attr = prim.attributes[attr_i];
+        for (const auto& attr :
+          std::span(prim.attributes, prim.attributes_count)) {
           switch (attr.type) {
           case cgltf_attribute_type_position:
             positions = attr.data;
@@ -1378,7 +1309,8 @@ namespace {
             tangents = attr.data;
             break;
           case cgltf_attribute_type_color:
-            if (!color_index.has_value() || attr.index < color_index.value()) {
+            if (!color_index.has_value()
+              || std::cmp_less(attr.index, color_index.value())) {
               color_index = attr.index;
               colors = attr.data;
             }
@@ -1396,11 +1328,10 @@ namespace {
 
         if (!texcoords_by_index.empty()) {
           std::vector<cgltf_size> preferred_uv_sets;
-          preferred_uv_sets.reserve(5U);
 
           if (prim.material != nullptr) {
             const auto& material = *prim.material;
-            if (material.has_pbr_metallic_roughness) {
+            if (material.has_pbr_metallic_roughness != 0) {
               const auto& pbr = material.pbr_metallic_roughness;
               if (pbr.base_color_texture.texture != nullptr) {
                 preferred_uv_sets.push_back(
@@ -1637,7 +1568,9 @@ namespace {
       item.mesh_name = mesh_name;
       item.storage_mesh_name = mesh_name;
       item.source_key = variant.representative_node != internal::kNoBakeIndex
-        ? static_cast<const void*>(&data.nodes[variant.representative_node])
+        ? static_cast<const void*>(
+            &base::CheckedAt(std::span(data.nodes, data.nodes_count),
+              variant.representative_node))
         : static_cast<const void*>(mesh);
       item.bake_transform = variant.transform;
       item.material_keys.assign(
@@ -1991,14 +1924,16 @@ namespace {
         for (uint32_t i = 0; i < used.size(); ++i) {
           if (used.at(i) != 0U) {
             item.material_slots_used.push_back(i);
-            const auto* label
-              = i < data.materials_count ? data.materials[i].name : nullptr;
-            item.material_slot_names.emplace(i < data.materials_count
-                ? i
-                : std::numeric_limits<uint32_t>::max(),
-              label != nullptr
-                ? label
-                : (i < data.materials_count ? "Material" : "Default"));
+            const auto authored = i < data.materials_count;
+            const auto* label = authored
+              ? base::CheckedAt(
+                  std::span(data.materials, data.materials_count), i)
+                  .name
+              : nullptr;
+            const auto* fallback = authored ? "Material" : "Default";
+            item.material_slot_names.emplace(
+              authored ? i : std::numeric_limits<uint32_t>::max(),
+              label != nullptr ? label : fallback);
           }
         }
       }
@@ -2006,7 +1941,7 @@ namespace {
       item.lods = {
         MeshLod {
           .lod_name = "LOD0",
-          .source = std::move(triangle_mesh),
+          .source = triangle_mesh,
           .source_owner = std::move(owner),
         },
       };
@@ -2083,10 +2018,10 @@ auto GltfAdapter::InspectSource(const std::filesystem::path& source_path,
         texture.resolved_path.lexically_relative(source_path.parent_path())
           .generic_string());
     }
-    result.supported
-      = std::ranges::none_of(result.diagnostics, [](const auto& diagnostic) {
-          return diagnostic.severity == ImportSeverity::kError;
-        });
+    result.supported = std::ranges::none_of(
+      result.diagnostics, [](const auto& diagnostic) -> auto {
+        return diagnostic.severity == ImportSeverity::kError;
+      });
   }
   std::ranges::sort(result.external_files);
   const auto duplicates = std::ranges::unique(result.external_files);
@@ -2174,8 +2109,8 @@ auto GltfAdapter::PrepareGeometry(const AdapterInput& input) const
   return PrepareGeometryNames(*impl_->data_owner, input);
 }
 
-auto GltfAdapter::BuildWorkItems(GeometryWorkTag, GeometryWorkItemSink& sink,
-  const AdapterInput& input) -> WorkItemStreamResult
+auto GltfAdapter::BuildWorkItems(GeometryWorkTag /*unused*/,
+  GeometryWorkItemSink& sink, const AdapterInput& input) -> WorkItemStreamResult
 {
   if (!impl_->data_owner) {
     WorkItemStreamResult result;
@@ -2213,7 +2148,7 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
   const auto scene_name = input.request.GetSceneName();
   const auto source_path_text = input.request.source_path.string();
   const auto& data = *impl_->data_owner;
-  const uint32_t material_count = static_cast<uint32_t>(data.materials_count);
+  const auto material_count = static_cast<uint32_t>(data.materials_count);
   result.sources.reserve(material_count);
   for (uint32_t i = 0; i < material_count; ++i) {
     if (input.stop_token.stop_requested()) {
@@ -2222,7 +2157,8 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
         MakeCancelDiagnostic(input.source_id_prefix));
       return result;
     }
-    const auto& material = data.materials[i];
+    const auto& material
+      = base::CheckedAt(std::span(data.materials, data.materials_count), i);
     const std::string_view authored = material.name ? material.name : "";
     const NamingContext material_context {
       .kind = ImportNameKind::kMaterial,
@@ -2255,7 +2191,7 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
     item.material.inputs.double_sided = material.double_sided != 0;
     item.material.inputs.unlit = material.unlit != 0;
 
-    if (material.has_pbr_metallic_roughness) {
+    if (material.has_pbr_metallic_roughness != 0) {
       const auto& pbr = material.pbr_metallic_roughness;
       item.material.inputs.base_color[0]
         = static_cast<float>(pbr.base_color_factor[0]);
@@ -2302,11 +2238,11 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
           *material.emissive_texture.texture, TextureUsage::kEmissive));
     }
 
-    if (material.has_ior) {
+    if (material.has_ior != 0) {
       item.material.inputs.ior = material.ior.ior;
     }
 
-    if (material.has_specular) {
+    if (material.has_specular != 0) {
       item.material.inputs.specular_factor = material.specular.specular_factor;
       if (material.specular.specular_texture.texture != nullptr) {
         ApplyTextureBinding(item.material.textures.specular,
@@ -2317,7 +2253,7 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
       }
     }
 
-    if (material.has_sheen) {
+    if (material.has_sheen != 0) {
       item.material.inputs.sheen_color_factor[0]
         = static_cast<float>(material.sheen.sheen_color_factor[0]);
       item.material.inputs.sheen_color_factor[1]
@@ -2333,7 +2269,7 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
       }
     }
 
-    if (material.has_clearcoat) {
+    if (material.has_clearcoat != 0) {
       item.material.inputs.clearcoat_factor
         = material.clearcoat.clearcoat_factor;
       item.material.inputs.clearcoat_roughness
@@ -2354,7 +2290,7 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
       }
     }
 
-    if (material.has_transmission) {
+    if (material.has_transmission != 0) {
       item.material.inputs.transmission_factor
         = material.transmission.transmission_factor;
       if (material.transmission.transmission_texture.texture != nullptr) {
@@ -2366,7 +2302,7 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
       }
     }
 
-    if (material.has_volume) {
+    if (material.has_volume != 0) {
       item.material.inputs.thickness_factor = material.volume.thickness_factor;
       item.material.inputs.attenuation_distance
         = material.volume.attenuation_distance;
@@ -2385,7 +2321,7 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
       }
     }
 
-    if (material.has_pbr_metallic_roughness) {
+    if (material.has_pbr_metallic_roughness != 0) {
       const auto& pbr = material.pbr_metallic_roughness;
       if (pbr.base_color_texture.texture != nullptr) {
         ApplyTextureBinding(item.material.textures.base_color,
@@ -2416,8 +2352,8 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
   return result;
 }
 
-auto GltfAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
-  const AdapterInput& input) -> WorkItemStreamResult
+auto GltfAdapter::BuildWorkItems(MaterialWorkTag /*unused*/,
+  MaterialWorkItemSink& sink, const AdapterInput& input) -> WorkItemStreamResult
 {
   auto prepared = PrepareMaterials(input);
   auto result = WorkItemStreamResult {};
@@ -2479,7 +2415,7 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
 
     const auto source_id = BuildTextureSourceId(
       input.source_id_prefix, data, *view.texture, usage);
-    if (work_items.find(source_id) != work_items.end()) {
+    if (work_items.contains(source_id)) {
       return;
     }
 
@@ -2536,8 +2472,9 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
         MakeCancelDiagnostic(input.source_id_prefix));
       return result;
     }
-    const auto& material = data.materials[i];
-    if (material.has_pbr_metallic_roughness) {
+    const auto& material
+      = base::CheckedAt(std::span(data.materials, data.materials_count), i);
+    if (material.has_pbr_metallic_roughness != 0) {
       const auto& pbr = material.pbr_metallic_roughness;
       register_texture(pbr.base_color_texture, TextureUsage::kBaseColor);
       register_texture(
@@ -2555,8 +2492,8 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
   return result;
 }
 
-auto GltfAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
-  const AdapterInput& input) -> WorkItemStreamResult
+auto GltfAdapter::BuildWorkItems(TextureWorkTag /*unused*/,
+  TextureWorkItemSink& sink, const AdapterInput& input) -> WorkItemStreamResult
 {
   auto prepared = PrepareTextures(input);
   auto result = WorkItemStreamResult {};
@@ -2712,9 +2649,10 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     const auto base_name
       = input.naming_service->MakeUniqueName(authored, node_context);
 
-    cgltf_float local_matrix_data[16] = {};
-    cgltf_node_transform_local(node, local_matrix_data);
-    auto local_matrix = glm::make_mat4(local_matrix_data);
+    auto local_matrix_data
+      = std::array<cgltf_float, 16> {}; // NOLINT(*-magic-numbers)
+    cgltf_node_transform_local(node, local_matrix_data.data());
+    auto local_matrix = glm::make_mat4(local_matrix_data.data());
 
     local_matrix
       = ConvertGltfTransform(local_matrix, request.options.coordinate);
@@ -2751,17 +2689,17 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
     ++ordinal;
 
-    for (cgltf_size i = 0; i < node->children_count; ++i) {
-      self(node->children[i], index, current_name, ordinal, world_matrix, self);
+    for (const auto* child : std::span(node->children, node->children_count)) {
+      self(child, index, current_name, ordinal, world_matrix, self);
     }
   };
 
   uint32_t ordinal = 0;
   if (data.scenes_count > 0) {
-    const auto* scene = data.scene != nullptr ? data.scene : &data.scenes[0];
-    for (cgltf_size i = 0; i < scene->nodes_count; ++i) {
-      apply_node(scene->nodes[i], kInvalidParent, {}, ordinal,
-        glm::mat4 { 1.0F }, apply_node);
+    const auto* scene = data.scene != nullptr ? data.scene : data.scenes;
+    for (const auto* root : std::span(scene->nodes, scene->nodes_count)) {
+      apply_node(
+        root, kInvalidParent, {}, ordinal, glm::mat4 { 1.0F }, apply_node);
     }
   }
 
@@ -2856,7 +2794,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
         node.local_matrix = node.world_matrix;
       } else {
         const auto det = glm::determinant(parent_world);
-        if (std::abs(det) > 1e-6F) {
+        constexpr auto kSingularDeterminant = 1e-6F;
+        if (std::abs(det) > kSingularDeterminant) {
           node.local_matrix = glm::inverse(parent_world) * node.world_matrix;
         } else {
           diagnostics.push_back(MakeErrorDiagnostic("scene.pruning.singular",
@@ -2871,6 +2810,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   }
 
   SceneBuild build;
+  build.flags = data::pak::world::SceneAssetFlags::kModelScene;
   build.nodes.reserve(pruned_nodes.size());
   build.strings.push_back(std::byte { 0 });
   std::vector<NodeRecord> component_attachments;
@@ -2933,7 +2873,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       = glm::vec3(glm::column(node.local_matrix, 3));
     const auto translation_delta
       = glm::length(translation - matrix_translation);
-    if (translation_delta > 1e-3F) {
+    constexpr auto kTranslationTolerance = 1e-3F;
+    if (translation_delta > kTranslationTolerance) {
       LOG_F(WARNING,
         "SceneImport: node '{}' translation mismatch (decompose vs matrix) "
         "decomposed=({:.6f},{:.6f},{:.6f}) matrix=({:.6f},{:.6f},{:.6f})",
@@ -2989,11 +2930,11 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       if (cam.type == cgltf_camera_type_perspective) {
         const auto& perspective = cam.data.perspective;
         const float fov_y = perspective.yfov;
-        const float aspect_ratio = perspective.has_aspect_ratio
+        const float aspect_ratio = (perspective.has_aspect_ratio != 0)
           ? static_cast<float>(perspective.aspect_ratio)
           : kDefaultCameraAspectRatio;
         const float near_plane = perspective.znear * unit_scale;
-        const float far_plane = perspective.has_zfar
+        const float far_plane = (perspective.has_zfar != 0)
           ? static_cast<float>(perspective.zfar) * unit_scale
           : near_plane + (1000.0F * unit_scale);
 
@@ -3003,8 +2944,9 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
           .aspect_ratio = aspect_ratio,
           .near_plane = near_plane,
           .far_plane = far_plane,
-          .aspect_mode = perspective.has_aspect_ratio ? CameraAspectMode::kFixed
-                                                      : CameraAspectMode::kAuto,
+          .aspect_mode = (perspective.has_aspect_ratio != 0)
+            ? CameraAspectMode::kFixed
+            : CameraAspectMode::kAuto,
         });
       } else if (cam.type == cgltf_camera_type_orthographic) {
         const auto& ortho = cam.data.orthographic;
@@ -3051,7 +2993,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
       float local_range = request.options.gltf_omitted_light_range_m;
       if (light.type == cgltf_light_type_point
         || light.type == cgltf_light_type_spot) {
-        if (light.has_range) {
+        if (light.has_range != 0) {
           local_range
             = light.range * ComputeUnitScale(request.options.coordinate);
         }
@@ -3135,8 +3077,8 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   return result;
 }
 
-auto GltfAdapter::BuildWorkItems(SceneWorkTag, SceneWorkItemSink& sink,
-  const AdapterInput& input) -> WorkItemStreamResult
+auto GltfAdapter::BuildWorkItems(SceneWorkTag /*unused*/,
+  SceneWorkItemSink& sink, const AdapterInput& input) -> WorkItemStreamResult
 {
   if (!impl_->data_owner) {
     WorkItemStreamResult result;

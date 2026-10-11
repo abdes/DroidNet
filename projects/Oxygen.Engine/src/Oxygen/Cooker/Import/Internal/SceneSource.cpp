@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -19,6 +20,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
@@ -37,18 +39,18 @@ namespace {
   using nlohmann::json_schema::json_validator;
 
   struct SourceContext final {
-    const std::filesystem::path& source_path;
-    std::vector<ImportDiagnostic>& diagnostics;
+    observer_ptr<const std::filesystem::path> source_path;
+    observer_ptr<std::vector<ImportDiagnostic>> diagnostics;
   };
 
   auto AddDiagnostic(SourceContext& context, const ImportSeverity severity,
     std::string code, std::string message, std::string object_path = {}) -> void
   {
-    context.diagnostics.push_back({
+    context.diagnostics->push_back({
       .severity = severity,
       .code = std::move(code),
       .message = std::move(message),
-      .source_path = context.source_path.string(),
+      .source_path = context.source_path->string(),
       .object_path = std::move(object_path),
     });
   }
@@ -148,11 +150,11 @@ namespace {
     return false;
   }
 
-  template <size_t Count>
-  auto CopyFloatArray(const json& source, float (&dest)[Count]) -> void
+  //! Copies the leading elements of a JSON number array into a fixed field.
+  auto CopyFloatArray(const json& source, const std::span<float> dest) -> void
   {
-    for (size_t i = 0; i < Count; ++i) {
-      dest[i] = source.at(i).get<float>();
+    for (size_t i = 0; auto& value : dest) {
+      value = source.at(i++).get<float>();
     }
   }
 
@@ -509,10 +511,7 @@ namespace {
         = common_doc.at("affects_world").get<bool>() ? 1U : 0U;
     }
     if (common_doc.contains("color_rgb")) {
-      const auto& color = common_doc.at("color_rgb");
-      for (size_t i = 0; i < 3U; ++i) {
-        common.color_rgb[i] = color.at(i).get<float>();
-      }
+      CopyFloatArray(common_doc.at("color_rgb"), common.color_rgb);
     }
     if (common_doc.contains("casts_shadows")) {
       common.casts_shadows
@@ -635,29 +634,51 @@ namespace {
       if (node_doc.contains("transform")) {
         const auto& transform = node_doc.at("transform");
         if (transform.contains("translation")) {
-          const auto& translation = transform.at("translation");
-          for (size_t i = 0; i < 3U; ++i) {
-            node_record.translation[i] = translation.at(i).get<float>();
-          }
+          CopyFloatArray(transform.at("translation"), node_record.translation);
         }
         if (transform.contains("rotation")) {
-          const auto& rotation = transform.at("rotation");
-          for (size_t i = 0; i < 4U; ++i) {
-            node_record.rotation[i] = rotation.at(i).get<float>();
-          }
+          CopyFloatArray(transform.at("rotation"), node_record.rotation);
         }
         if (transform.contains("scale")) {
-          const auto& scale = transform.at("scale");
-          for (size_t i = 0; i < 3U; ++i) {
-            node_record.scale[i] = scale.at(i).get<float>();
-          }
+          CopyFloatArray(transform.at("scale"), node_record.scale);
         }
+      }
+
+      if (node_doc.contains("instance")) {
+        prepared.instances.push_back({
+          .node_index = static_cast<uint32_t>(node_i),
+          .scene = node_doc.at("instance").at("scene_ref").get<std::string>(),
+          .object_path = node_path + ".instance.scene_ref",
+        });
       }
 
       prepared.build.nodes.push_back(node_record);
     }
 
     prepared.build.strings = std::move(string_table).Build();
+
+    if (descriptor_doc.contains("starting_camera")) {
+      const auto camera = descriptor_doc.at("starting_camera").get<uint32_t>();
+      if (!ValidateNodeIndex(context, camera, node_count,
+            "scene.descriptor.starting_camera_out_of_range",
+            "Starting camera node index is out of range", "starting_camera")) {
+        return std::nullopt;
+      }
+      prepared.build.starting_camera = camera;
+    }
+    if (descriptor_doc.contains("starting_input_contexts")) {
+      const auto& values = descriptor_doc.at("starting_input_contexts");
+      prepared.starting_input_contexts.reserve(values.size());
+      for (size_t i = 0; i < values.size(); ++i) {
+        const auto& document = values.at(i);
+        prepared.starting_input_contexts.push_back({
+          .context = document.at("context_ref").get<std::string>(),
+          .priority = document.value("priority", int32_t { 0 }),
+          .object_path
+          = "starting_input_contexts[" + std::to_string(i) + "].context_ref",
+        });
+      }
+    }
 
     if (descriptor_doc.contains("renderables")) {
       const auto& values = descriptor_doc.at("renderables");
@@ -819,12 +840,8 @@ namespace {
             ? 1U
             : 0U;
           if (light_doc.contains("atmosphere_disk_luminance_scale_rgb")) {
-            for (std::size_t channel = 0U; channel < 3U; ++channel) {
-              light.atmosphere_disk_luminance_scale_rgb[channel]
-                = light_doc.at("atmosphere_disk_luminance_scale_rgb")
-                    .at(channel)
-                    .get<float>();
-            }
+            CopyFloatArray(light_doc.at("atmosphere_disk_luminance_scale_rgb"),
+              light.atmosphere_disk_luminance_scale_rgb);
           }
           if (light_doc.contains("cascade_count")) {
             light.cascade_count = light_doc.at("cascade_count").get<uint32_t>();
@@ -838,10 +855,8 @@ namespace {
               = light_doc.at("max_shadow_distance").get<float>();
           }
           if (light_doc.contains("cascade_distances")) {
-            const auto& distances = light_doc.at("cascade_distances");
-            for (size_t d = 0; d < 4U; ++d) {
-              light.cascade_distances[d] = distances.at(d).get<float>();
-            }
+            CopyFloatArray(
+              light_doc.at("cascade_distances"), light.cascade_distances);
             if (!light_doc.contains("split_mode")) {
               light.split_mode = 1U;
             }
@@ -1014,8 +1029,9 @@ namespace {
     if (descriptor_doc.contains("references")) {
       const auto& refs_doc = descriptor_doc.at("references");
 
-      const auto add_references = [&](const std::string_view key,
-                                    const std::optional<data::AssetType> type) {
+      const auto add_references
+        = [&](const std::string_view key,
+            const std::optional<data::AssetType> type) -> void {
         if (!refs_doc.contains(key)) {
           return;
         }
@@ -1047,8 +1063,10 @@ auto SceneSource::FromDescriptor(const std::string_view bytes,
   const std::filesystem::path& source_path,
   std::vector<ImportDiagnostic>& diagnostics) -> std::optional<SceneSource>
 {
-  auto context
-    = SourceContext { .source_path = source_path, .diagnostics = diagnostics };
+  auto context = SourceContext {
+    .source_path = observer_ptr { &source_path },
+    .diagnostics = observer_ptr { &diagnostics },
+  };
   try {
     const auto document = json::parse(bytes);
     if (!document.is_object()) {

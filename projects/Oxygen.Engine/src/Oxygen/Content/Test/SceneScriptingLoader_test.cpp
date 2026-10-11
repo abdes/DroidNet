@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <initializer_list>
 #include <span>
@@ -33,6 +34,18 @@ auto PackScriptingRecords(const std::initializer_list<
   return bytes;
 }
 
+//! The directory entry of a packed scripting table of `count` records.
+auto ScriptingTable(const uint32_t count)
+  -> oxygen::data::pak::world::SceneComponentTable
+{
+  return {
+    .offset = 0U,
+    .count = count,
+    .entry_size
+    = sizeof(oxygen::data::pak::scripting::ScriptingComponentRecord),
+  };
+}
+
 } // namespace
 
 NOLINT_TEST(SceneScriptingLoaderTest, ValidateScriptingSlotRangesValid)
@@ -43,7 +56,8 @@ NOLINT_TEST(SceneScriptingLoaderTest, ValidateScriptingSlotRangesValid)
   });
 
   EXPECT_NO_THROW({
-    oxygen::content::loaders::detail::ValidateScriptingSlotRanges(bytes, 2, 3);
+    oxygen::content::loaders::detail::ValidateScriptingSlotRanges(
+      bytes, ScriptingTable(2), 3);
   });
 }
 
@@ -55,7 +69,7 @@ NOLINT_TEST(SceneScriptingLoaderTest, ValidateScriptingSlotRangesOutOfBounds)
   EXPECT_THROW(
     {
       oxygen::content::loaders::detail::ValidateScriptingSlotRanges(
-        bytes, 1, 3);
+        bytes, ScriptingTable(1), 3);
     },
     std::runtime_error);
 }
@@ -67,8 +81,8 @@ NOLINT_TEST(SceneScriptingLoaderTest, ValidateScriptingSlotRangesOverlapThrows)
     { .node_index = 1, .slot_start_index = 2, .slot_count = 2 },
   });
 
-  EXPECT_THROW(
-    oxygen::content::loaders::detail::ValidateScriptingSlotRanges(bytes, 2, 6),
+  EXPECT_THROW(oxygen::content::loaders::detail::ValidateScriptingSlotRanges(
+                 bytes, ScriptingTable(2), 6),
     std::runtime_error);
 }
 
@@ -82,8 +96,8 @@ NOLINT_TEST(SceneScriptingLoaderTest, ValidateComponentTableRejectsBadSort)
   EXPECT_THROW(
     {
       oxygen::content::loaders::detail::ValidateComponentTable<
-        oxygen::data::pak::scripting::ScriptingComponentRecord>(bytes, 2,
-        sizeof(oxygen::data::pak::scripting::ScriptingComponentRecord), 3);
+        oxygen::data::pak::scripting::ScriptingComponentRecord>(
+        bytes, ScriptingTable(2), 3);
     },
     std::runtime_error);
 }

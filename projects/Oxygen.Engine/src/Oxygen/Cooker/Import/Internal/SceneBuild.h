@@ -33,6 +33,16 @@ struct SceneBuild final {
   std::vector<data::pak::world::DirectionalLightRecord> directional_lights;
   std::vector<data::pak::world::PointLightRecord> point_lights;
   std::vector<data::pak::world::SpotLightRecord> spot_lights;
+
+  data::pak::world::SceneAssetFlags flags
+    = data::pak::world::SceneAssetFlags::kNone;
+  data::pak::world::SceneNodeIndexT starting_camera
+    = data::pak::world::kNoStartingCamera;
+  //! Sorted by node; one instance per node.
+  std::vector<data::pak::world::SceneInstanceRecord> instances;
+  //! In activation order.
+  std::vector<data::pak::world::StartingInputContextRecord>
+    starting_input_contexts;
 };
 
 } // namespace oxygen::content::import

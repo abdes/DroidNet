@@ -25,7 +25,7 @@ namespace oxygen::content::import::internal {
 //! A scene's source values and symbolic dependencies, before cooked linking.
 struct SceneSource final {
   struct MaterialAssignment final {
-    data::MaterialSlotId slot_id {};
+    data::MaterialSlotId slot_id;
     std::string material;
     std::string layout_revision;
   };
@@ -40,6 +40,20 @@ struct SceneSource final {
   struct Reference final {
     std::string virtual_path;
     std::optional<data::AssetType> type;
+    std::string object_path;
+  };
+
+  //! A node that instances a scene, before linking.
+  struct Instance final {
+    uint32_t node_index = 0;
+    std::string scene;
+    std::string object_path;
+  };
+
+  //! An input mapping context the scene starts with, before linking.
+  struct StartingInputContext final {
+    std::string context;
+    int32_t priority = 0;
     std::string object_path;
   };
 
@@ -69,6 +83,10 @@ struct SceneSource final {
   SceneBuild build;
   std::vector<Renderable> renderables;
   std::vector<Reference> references;
+  //! In node order.
+  std::vector<Instance> instances;
+  //! In activation order.
+  std::vector<StartingInputContext> starting_input_contexts;
   std::optional<data::pak::world::SkyAtmosphereEnvironmentRecord> atmosphere;
   std::optional<data::pak::world::BackgroundEnvironmentRecord> background;
   std::optional<Fog> fog;

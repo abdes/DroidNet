@@ -11,8 +11,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <memory>
 #include <numbers>
 #include <optional>
@@ -34,7 +32,6 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/matrix.hpp>
 
-#include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
@@ -128,12 +125,28 @@ namespace {
    This keeps low-range authoring intuitive while allowing explicit lumens
    for higher intensities.
   */
+  //! Views a ufbx list as a span.
+  template <typename List> [[nodiscard]] auto Items(const List& list) noexcept
+  {
+    return std::span(list.data, list.count);
+  }
+
+  //! Element `index` of a ufbx list, bounds-checked.
+  template <typename List>
+  [[nodiscard]] auto ItemAt(const List& list, const size_t index)
+    -> decltype(auto)
+  {
+    return base::CheckedAt(Items(list), index);
+  }
+
   [[nodiscard]] auto FbxIntensityToLumens(const float intensity) noexcept
     -> float
   {
+    constexpr float kMultiplierRangeEnd = 15.0F;
+    constexpr float kCandleLumens = 15.0F;
     const float clamped = (std::max)(0.0F, intensity);
-    if (clamped <= 15.0F) {
-      return clamped * 15.0F;
+    if (clamped <= kMultiplierRangeEnd) {
+      return clamped * kCandleLumens;
     }
     return clamped;
   }
@@ -151,7 +164,7 @@ namespace {
     }
 
     if (texture->file_textures.count > 0) {
-      return texture->file_textures.data[0];
+      return ItemAt(texture->file_textures, 0);
     }
 
     return texture;
@@ -183,36 +196,12 @@ namespace {
     auto out = p.generic_string();
 
 #ifdef _WIN32
-    std::transform(
-      out.begin(), out.end(), out.begin(), [](const char c) -> char {
-        return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-      });
+    std::ranges::transform(out, out.begin(), [](const char c) -> char {
+      return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    });
 #endif
 
     return out;
-  }
-
-  [[nodiscard]] auto TryReadWholeFileBytes(const std::filesystem::path& path)
-    -> std::optional<std::vector<std::byte>>
-  {
-    std::ifstream file(
-      base::ToNativePath(path), std::ios::binary | std::ios::ate);
-    if (!file) {
-      return std::nullopt;
-    }
-
-    const auto size = file.tellg();
-    if (size <= 0) {
-      return std::nullopt;
-    }
-
-    auto bytes = std::vector<std::byte>(size);
-    file.seekg(0, std::ios::beg);
-    if (!file.read(reinterpret_cast<char*>(bytes.data()), size)) {
-      return std::nullopt;
-    }
-
-    return bytes;
   }
 
   using data::pak::world::DirectionalLightRecord;
@@ -248,7 +237,7 @@ namespace {
     std::stop_token stop_token;
   };
 
-  auto UfbxProgressCallback(void* user, const ufbx_progress*)
+  auto UfbxProgressCallback(void* user, const ufbx_progress* /*unused*/)
     -> ufbx_progress_result
   {
     const auto* ctx = static_cast<const UfbxCancelContext*>(user);
@@ -303,19 +292,6 @@ namespace {
       static_cast<float>(v.y),
       static_cast<float>(v.z),
     };
-  }
-
-  [[nodiscard]] auto FindNodesForMesh(const ufbx_scene& scene,
-    const ufbx_mesh* target_mesh) -> std::vector<const ufbx_node*>
-  {
-    std::vector<const ufbx_node*> nodes;
-    for (size_t ni = 0; ni < scene.nodes.count; ++ni) {
-      const auto* node = scene.nodes.data[ni];
-      if (node != nullptr && node->mesh == target_mesh) {
-        nodes.push_back(node);
-      }
-    }
-    return nodes;
   }
 
   [[nodiscard]] auto ToVec2(const ufbx_vec2 v) -> glm::vec2
@@ -377,6 +353,7 @@ namespace {
     case UFBX_COORDINATE_AXIS_NEGATIVE_Z:
       return AxisVec { .x = 0, .y = 0, .z = -1 };
     case UFBX_COORDINATE_AXIS_UNKNOWN:
+    case UFBX_COORDINATE_AXIS_FORCE_32BIT:
       break;
     }
 
@@ -434,14 +411,14 @@ namespace {
     auto find_in_connections
       = [](const ufbx_connection_list& list) -> const ufbx_skin_deformer* {
       for (size_t i = 0; i < list.count; ++i) {
-        const auto& conn = list.data[i];
+        const auto& conn = ItemAt(list, i);
         if (conn.src != nullptr
           && conn.src->type == UFBX_ELEMENT_SKIN_DEFORMER) {
-          return reinterpret_cast<const ufbx_skin_deformer*>(conn.src);
+          return ufbx_as_skin_deformer(conn.src);
         }
         if (conn.dst != nullptr
           && conn.dst->type == UFBX_ELEMENT_SKIN_DEFORMER) {
-          return reinterpret_cast<const ufbx_skin_deformer*>(conn.dst);
+          return ufbx_as_skin_deformer(conn.dst);
         }
       }
       return nullptr;
@@ -453,7 +430,7 @@ namespace {
         return false;
       }
       for (size_t i = 0; i < list.count; ++i) {
-        const auto& conn = list.data[i];
+        const auto& conn = ItemAt(list, i);
         if (conn.src == element || conn.dst == element) {
           return true;
         }
@@ -462,35 +439,35 @@ namespace {
     };
 
     for (size_t i = 0; i < mesh.skin_deformers.count; ++i) {
-      const auto* deformer = mesh.skin_deformers.data[i];
+      const auto* deformer = ItemAt(mesh.skin_deformers, i);
       if (deformer != nullptr) {
         return deformer;
       }
     }
 
     for (size_t i = 0; i < mesh.all_deformers.count; ++i) {
-      const auto* element = mesh.all_deformers.data[i];
+      const auto* element = ItemAt(mesh.all_deformers, i);
       if (element != nullptr && element->type == UFBX_ELEMENT_SKIN_DEFORMER) {
-        return reinterpret_cast<const ufbx_skin_deformer*>(element);
+        return ufbx_as_skin_deformer(element);
       }
     }
 
     for (size_t i = 0; i < mesh.element.connections_dst.count; ++i) {
-      const auto& conn = mesh.element.connections_dst.data[i];
+      const auto& conn = ItemAt(mesh.element.connections_dst, i);
       if (conn.src != nullptr && conn.src->type == UFBX_ELEMENT_SKIN_DEFORMER) {
-        return reinterpret_cast<const ufbx_skin_deformer*>(conn.src);
+        return ufbx_as_skin_deformer(conn.src);
       }
     }
 
     for (size_t i = 0; i < mesh.element.connections_src.count; ++i) {
-      const auto& conn = mesh.element.connections_src.data[i];
+      const auto& conn = ItemAt(mesh.element.connections_src, i);
       if (conn.dst != nullptr && conn.dst->type == UFBX_ELEMENT_SKIN_DEFORMER) {
-        return reinterpret_cast<const ufbx_skin_deformer*>(conn.dst);
+        return ufbx_as_skin_deformer(conn.dst);
       }
     }
 
     for (size_t i = 0; i < mesh.instances.count; ++i) {
-      const auto* node = mesh.instances.data[i];
+      const auto* node = ItemAt(mesh.instances, i);
       if (node == nullptr) {
         continue;
       }
@@ -510,7 +487,7 @@ namespace {
     if (mesh.element.scene != nullptr) {
       const auto& scene = *mesh.element.scene;
       for (size_t i = 0; i < scene.skin_deformers.count; ++i) {
-        const auto* deformer = scene.skin_deformers.data[i];
+        const auto* deformer = ItemAt(scene.skin_deformers, i);
         if ((deformer != nullptr)
           && (is_connected_to(deformer->element.connections_dst, &mesh.element)
             || is_connected_to(
@@ -555,15 +532,15 @@ namespace {
         std::make_pair(w.w, j.w),
       };
 
-      std::sort(influences.begin(), influences.end(),
+      std::ranges::sort(influences,
         [](const auto& a, const auto& b) -> auto { return a.first > b.first; });
 
       size_t kept = 0;
-      for (size_t k = 0; k < influences.size(); ++k) {
-        if (influences.at(k).first < kMinWeight) {
-          influences.at(k).first = 0.0F;
+      for (auto& influence : influences) {
+        if (influence.first < kMinWeight) {
+          influence.first = 0.0F;
         }
-        if (influences.at(k).first > 0.0F) {
+        if (influence.first > 0.0F) {
           ++kept;
         }
       }
@@ -659,14 +636,14 @@ namespace {
     std::vector face_material_slots(mesh.num_faces, UFBX_NO_INDEX);
     if (mesh.material_parts.data != nullptr && mesh.material_parts.count > 0) {
       for (size_t part_i = 0; part_i < mesh.material_parts.count; ++part_i) {
-        const auto& part = mesh.material_parts.data[part_i];
+        const auto& part = ItemAt(mesh.material_parts, part_i);
         const auto slot = part.index;
         if (part.face_indices.data == nullptr) {
           continue;
         }
         const auto face_count = part.face_indices.count;
         for (size_t fi = 0; fi < face_count; ++fi) {
-          const auto face_index = part.face_indices.data[fi];
+          const auto face_index = ItemAt(part.face_indices, fi);
           if (face_index < mesh.num_faces) {
             face_material_slots.at(face_index) = slot;
           }
@@ -675,7 +652,7 @@ namespace {
     } else if (mesh.face_material.data != nullptr
       && mesh.face_material.count >= mesh.num_faces) {
       for (size_t face_i = 0; face_i < mesh.num_faces; ++face_i) {
-        face_material_slots.at(face_i) = mesh.face_material.data[face_i];
+        face_material_slots.at(face_i) = ItemAt(mesh.face_material, face_i);
       }
     } else {
       diagnostics.push_back(MakeWarningDiagnostic("mesh.face_material_missing",
@@ -697,7 +674,7 @@ namespace {
       const uint32_t source_slot = face_material_slots.at(face_i);
       if (material_list != nullptr && material_list->data != nullptr
         && source_slot != UFBX_NO_INDEX && source_slot < material_list->count) {
-        const auto* material = material_list->data[source_slot];
+        const auto* material = ItemAt(*material_list, source_slot);
         if (material != nullptr) {
           if (const auto it = scene_material_index_by_ptr.find(material);
             it != scene_material_index_by_ptr.end()) {
@@ -741,8 +718,9 @@ namespace {
         }
       }
 
-      it->second.indices.insert(it->second.indices.end(), tri_indices.begin(),
-        tri_indices.begin() + tri_index_count);
+      const auto used = std::span(tri_indices).first(tri_index_count);
+      it->second.indices.insert(
+        it->second.indices.end(), used.begin(), used.end());
       it->second.range.index_count += static_cast<uint32_t>(tri_index_count);
       if (face.num_indices != 3) {
         ++triangulated_faces;
@@ -761,12 +739,12 @@ namespace {
 
       for (size_t i = 0; i < mesh.num_vertices; ++i) {
         if (i >= skin_deformer->vertices.count) {
-          out.joint_indices.push_back(glm::uvec4(0U));
-          out.joint_weights.push_back(glm::vec4(0.0F));
+          out.joint_indices.emplace_back(0U);
+          out.joint_weights.emplace_back(0.0F);
           continue;
         }
 
-        const auto vertex = skin_deformer->vertices.data[i];
+        const auto vertex = ItemAt(skin_deformer->vertices, i);
         std::array<uint32_t, 4> joints {};
         std::array<float, 4> weights {};
 
@@ -777,7 +755,7 @@ namespace {
           if (weight_index >= skin_deformer->weights.count) {
             continue;
           }
-          const auto weight = skin_deformer->weights.data[weight_index];
+          const auto weight = ItemAt(skin_deformer->weights, weight_index);
           const auto slot = static_cast<glm::uvec4::length_type>(w);
           joints.at(slot) = static_cast<uint32_t>(weight.cluster_index);
           weights.at(slot) = static_cast<float>(weight.weight);
@@ -794,10 +772,10 @@ namespace {
     std::vector<std::pair<uint32_t, MaterialRange>> sorted_ranges;
     sorted_ranges.reserve(range_map.size());
     for (auto& [slot, range] : range_map) {
-      sorted_ranges.push_back({ slot, std::move(range) });
+      sorted_ranges.emplace_back(slot, std::move(range));
     }
 
-    std::sort(sorted_ranges.begin(), sorted_ranges.end(),
+    std::ranges::sort(sorted_ranges,
       [](const auto& a, const auto& b) -> auto { return a.first < b.first; });
 
     out.ranges.reserve(sorted_ranges.size());
@@ -855,7 +833,7 @@ namespace {
         out.inverse_bind_matrices.reserve(cluster_count);
         out.joint_remap.reserve(cluster_count);
         for (size_t i = 0; i < cluster_count; ++i) {
-          const auto* cluster = skin_deformer->clusters.data[i];
+          const auto* cluster = ItemAt(skin_deformer->clusters, i);
           if (cluster == nullptr) {
             continue;
           }
@@ -963,7 +941,6 @@ namespace {
     case TextureUsage::kClearcoatNormal:
       return TexturePreset::kNormal;
     case TextureUsage::kTransmission:
-      return TexturePreset::kRoughness;
     case TextureUsage::kThickness:
       return TexturePreset::kRoughness;
     }
@@ -1112,7 +1089,7 @@ namespace {
 
     if (identity.embedded) {
       const auto bytes = std::span(
-        reinterpret_cast<const std::byte*>(identity.file_texture->content.data),
+        static_cast<const std::byte*>(identity.file_texture->content.data),
         identity.file_texture->content.size);
       if (bytes.empty()) {
         diagnostics.push_back(MakeWarningDiagnostic("fbx.texture.empty",
@@ -1163,11 +1140,7 @@ namespace {
     }
 
     const auto name = ToStringView(material.name);
-    if (StartsWithIgnoreCase(name, "lambert")) {
-      return true;
-    }
-
-    return false;
+    return StartsWithIgnoreCase(name, "lambert");
   }
 
   [[nodiscard]] auto HasMaterialTextures(const ufbx_material* material) -> bool
@@ -1525,7 +1498,7 @@ namespace {
     std::vector<std::vector<std::vector<const ufbx_material*>>> material_groups(
       scene.meshes.count);
     for (size_t index = 0; index < scene.meshes.count; ++index) {
-      mesh_indices.emplace(scene.meshes.data[index], index);
+      mesh_indices.emplace(ItemAt(scene.meshes, index), index);
     }
     std::unordered_set<const ufbx_element*> animated;
     for (const auto* layer : scene.anim_layers) {
@@ -1534,7 +1507,7 @@ namespace {
       }
     }
     for (size_t index = 0; index < scene.nodes.count; ++index) {
-      const auto* node = scene.nodes.data[index];
+      const auto* node = ItemAt(scene.nodes, index);
       if (node == nullptr || node->mesh == nullptr) {
         continue;
       }
@@ -1543,8 +1516,9 @@ namespace {
       input.local_transform = MakeLocalTransformMatrix(node->local_transform);
       const auto& materials
         = node->materials.count != 0 ? node->materials : node->mesh->materials;
+      const auto material_items = Items(materials);
       const std::vector<const ufbx_material*> bindings(
-        materials.data, materials.data + materials.count);
+        material_items.begin(), material_items.end());
       auto& groups = material_groups.at(input.mesh_index);
       const auto match = std::ranges::find(groups, bindings);
       input.material_binding = static_cast<size_t>(match - groups.begin());
@@ -1597,7 +1571,7 @@ namespace {
         return result;
       }
       const auto& variant = bake_plan.variants.at(variant_index);
-      const auto* mesh = scene.meshes.data[variant.mesh_index];
+      const auto* mesh = ItemAt(scene.meshes, variant.mesh_index);
       if (mesh == nullptr) {
         continue;
       }
@@ -1641,7 +1615,7 @@ namespace {
       scene_material_index_by_ptr;
     scene_material_index_by_ptr.reserve(scene.materials.count);
     for (uint32_t mat_i = 0; mat_i < scene.materials.count; ++mat_i) {
-      const auto* mat = scene.materials.data[mat_i];
+      const auto* mat = ItemAt(scene.materials, mat_i);
       if (mat == nullptr) {
         continue;
       }
@@ -1659,7 +1633,7 @@ namespace {
     for (const auto& source : prepared.sources) {
       const auto& variant = source.variant;
       const auto mesh_i = variant.mesh_index;
-      const auto* mesh = scene.meshes.data[variant.mesh_index];
+      const auto* mesh = ItemAt(scene.meshes, variant.mesh_index);
       const auto& mesh_name = source.name;
       if (input.stop_token.stop_requested()) {
         result.success = false;
@@ -1676,7 +1650,7 @@ namespace {
       item.storage_mesh_name = mesh_name;
       item.source_key = variant.representative_node != internal::kNoBakeIndex
         ? static_cast<const void*>(
-            scene.nodes.data[variant.representative_node])
+            ItemAt(scene.nodes, variant.representative_node))
         : static_cast<const void*>(mesh);
       item.bake_transform = variant.transform;
       item.material_keys.assign(
@@ -1686,14 +1660,14 @@ namespace {
       bool has_material_textures = false;
       const ufbx_node* material_node
         = variant.representative_node != internal::kNoBakeIndex
-        ? scene.nodes.data[variant.representative_node]
+        ? ItemAt(scene.nodes, variant.representative_node)
         : nullptr;
       const ufbx_material_list* material_list = &mesh->materials;
       if (material_node != nullptr && material_node->materials.count > 0) {
         material_list = &material_node->materials;
       }
       for (size_t mat_i = 0; mat_i < material_list->count; ++mat_i) {
-        const auto* material = material_list->data[mat_i];
+        const auto* material = ItemAt(*material_list, mat_i);
         if (HasMaterialTextures(material)) {
           has_material_textures = true;
           break;
@@ -1719,7 +1693,7 @@ namespace {
       if (!buffers->ranges.empty()) {
         for (const auto& range : buffers->ranges) {
           const auto* material = range.source_slot < material_list->count
-            ? material_list->data[range.source_slot]
+            ? ItemAt(*material_list, range.source_slot)
             : nullptr;
           item.material_slot_names.try_emplace(range.source_slot,
             material != nullptr ? std::string(ToStringView(material->name))
@@ -1787,7 +1761,7 @@ namespace {
       item.lods = {
         MeshLod {
           .lod_name = "LOD0",
-          .source = std::move(triangle_mesh),
+          .source = triangle_mesh,
           .source_owner = std::move(owner),
         },
       };
@@ -1845,9 +1819,11 @@ auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
     result.source_left_handed = IsLeftHandedAxes(axes);
   }
   const auto* units = ufbx_find_prop(&scene->settings.props, "UnitScaleFactor");
+  constexpr auto kUnauthoredProp
+    = static_cast<uint32_t>(UFBX_PROP_FLAG_NOT_FOUND)
+    | static_cast<uint32_t>(UFBX_PROP_FLAG_SYNTHETIC);
   if (units != nullptr
-    && (units->flags & (UFBX_PROP_FLAG_NOT_FOUND | UFBX_PROP_FLAG_SYNTHETIC))
-      == 0
+    && (static_cast<uint32_t>(units->flags) & kUnauthoredProp) == 0U
     && std::isfinite(scene->settings.unit_meters)
     && scene->settings.unit_meters > 0.0) {
     result.source_unit_meters = scene->settings.unit_meters;
@@ -1865,10 +1841,10 @@ auto FbxAdapter::InspectSource(const std::filesystem::path& source_path,
         texture.resolved_path.lexically_relative(source_path.parent_path())
           .generic_string());
     }
-    result.supported
-      = std::ranges::none_of(result.diagnostics, [](const auto& diagnostic) {
-          return diagnostic.severity == ImportSeverity::kError;
-        });
+    result.supported = std::ranges::none_of(
+      result.diagnostics, [](const auto& diagnostic) -> auto {
+        return diagnostic.severity == ImportSeverity::kError;
+      });
   }
   std::ranges::sort(result.external_files);
   const auto duplicates = std::ranges::unique(result.external_files);
@@ -1951,8 +1927,8 @@ auto FbxAdapter::PrepareGeometry(const AdapterInput& input) const
   return PrepareGeometryNames(*impl_->source.scene, input);
 }
 
-auto FbxAdapter::BuildWorkItems(GeometryWorkTag, GeometryWorkItemSink& sink,
-  const AdapterInput& input) -> WorkItemStreamResult
+auto FbxAdapter::BuildWorkItems(GeometryWorkTag /*unused*/,
+  GeometryWorkItemSink& sink, const AdapterInput& input) -> WorkItemStreamResult
 {
   if (!impl_->source.scene) {
     WorkItemStreamResult result;
@@ -2081,7 +2057,7 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
     const auto scene_name = input.request.GetSceneName();
     const auto source_path_text = input.request.source_path.string();
 
-    const auto* material = scene.materials.data[i];
+    const auto* material = ItemAt(scene.materials, i);
     const auto authored_name = material != nullptr
       ? ToStringView(material->name)
       : std::string_view {};
@@ -2104,14 +2080,14 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
     item.material.alpha_mode = MaterialAlphaMode::kOpaque;
 
     if (material != nullptr) {
-      ufbx_vec4 base = { { 1.0, 1.0, 1.0, 1.0 } };
+      auto base = glm::vec4 { 1.0F };
       if (material->pbr.base_color.has_value
         && material->pbr.base_color.value_components >= 3) {
-        base = material->pbr.base_color.value_vec4;
+        base = ToVec4(material->pbr.base_color.value_vec4);
       } else if (material->fbx.diffuse_color.has_value
         && material->fbx.diffuse_color.value_components >= 3) {
-        const auto dc = material->fbx.diffuse_color.value_vec3;
-        base = { { dc.x, dc.y, dc.z, 1.0 } };
+        base
+          = glm::vec4 { ToVec3(material->fbx.diffuse_color.value_vec3), 1.0F };
       }
 
       float base_factor = 1.0F;
@@ -2144,14 +2120,15 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
       }
 
       {
-        ufbx_vec4 emission = { { 0.0, 0.0, 0.0, 0.0 } };
+        auto emission = glm::vec4 { 0.0F };
         if (material->pbr.emission_color.has_value
           && material->pbr.emission_color.value_components >= 3) {
-          emission = material->pbr.emission_color.value_vec4;
+          emission = ToVec4(material->pbr.emission_color.value_vec4);
         } else if (material->fbx.emission_color.has_value
           && material->fbx.emission_color.value_components >= 3) {
-          const auto ec = material->fbx.emission_color.value_vec3;
-          emission = { { ec.x, ec.y, ec.z, 0.0 } };
+          emission
+            = glm::vec4 { ToVec3(material->fbx.emission_color.value_vec3),
+                0.0F };
         }
 
         float emission_factor = 1.0F;
@@ -2340,8 +2317,8 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
         }
       }
 
-      if ((material->features.ior.enabled)
-        && (material->pbr.specular_ior.has_value)) {
+      if (material->features.ior.enabled
+        && material->pbr.specular_ior.has_value) {
         item.material.inputs.ior
           = static_cast<float>(material->pbr.specular_ior.value_real);
       }
@@ -2357,8 +2334,8 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
   return result;
 }
 
-auto FbxAdapter::BuildWorkItems(MaterialWorkTag, MaterialWorkItemSink& sink,
-  const AdapterInput& input) -> WorkItemStreamResult
+auto FbxAdapter::BuildWorkItems(MaterialWorkTag /*unused*/,
+  MaterialWorkItemSink& sink, const AdapterInput& input) -> WorkItemStreamResult
 {
   auto prepared = PrepareMaterials(input);
   auto result = WorkItemStreamResult {};
@@ -2448,7 +2425,7 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
 
     const auto tex_source_id = BuildTextureSourceId(
       input.source_id_prefix, identity->texture_id, usage);
-    if (work_items.find(tex_source_id) != work_items.end()) {
+    if (work_items.contains(tex_source_id)) {
       return;
     }
 
@@ -2499,7 +2476,7 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
       return result;
     }
 
-    const auto* material = scene.materials.data[i];
+    const auto* material = ItemAt(scene.materials, i);
     if (material == nullptr) {
       continue;
     }
@@ -2552,8 +2529,8 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
   return result;
 }
 
-auto FbxAdapter::BuildWorkItems(TextureWorkTag, TextureWorkItemSink& sink,
-  const AdapterInput& input) -> WorkItemStreamResult
+auto FbxAdapter::BuildWorkItems(TextureWorkTag /*unused*/,
+  TextureWorkItemSink& sink, const AdapterInput& input) -> WorkItemStreamResult
 {
   auto prepared = PrepareTextures(input);
   auto result = WorkItemStreamResult {};
@@ -2650,7 +2627,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   std::unordered_map<const ufbx_node*, size_t> source_node_indices;
   source_node_indices.reserve(scene.nodes.count);
   for (size_t index = 0; index < scene.nodes.count; ++index) {
-    source_node_indices.emplace(scene.nodes.data[index], index);
+    source_node_indices.emplace(ItemAt(scene.nodes, index), index);
   }
 
   if (!input.geometry_keys.empty()
@@ -2720,7 +2697,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     ++ordinal;
 
     for (size_t i = 0; i < node->children.count; ++i) {
-      self(self, node->children.data[i], index, current_name, ordinal,
+      self(self, ItemAt(node->children, i), index, current_name, ordinal,
         world_matrix);
     }
   };
@@ -2821,7 +2798,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
         node.local_matrix = node.world_matrix;
       } else {
         const auto det = glm::determinant(parent_world);
-        if (std::abs(det) > 1e-6F) {
+        constexpr auto kSingularDeterminant = 1e-6F;
+        if (std::abs(det) > kSingularDeterminant) {
           node.local_matrix = glm::inverse(parent_world) * node.world_matrix;
         } else {
           diagnostics.push_back(MakeErrorDiagnostic("scene.pruning.singular",
@@ -2836,6 +2814,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   }
 
   SceneBuild build;
+  build.flags = data::pak::world::SceneAssetFlags::kModelScene;
   build.nodes.reserve(pruned_nodes.size());
   build.strings.push_back(std::byte { 0 });
 
@@ -3006,8 +2985,8 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   return result;
 }
 
-auto FbxAdapter::BuildWorkItems(SceneWorkTag, SceneWorkItemSink& sink,
-  const AdapterInput& input) -> WorkItemStreamResult
+auto FbxAdapter::BuildWorkItems(SceneWorkTag /*unused*/,
+  SceneWorkItemSink& sink, const AdapterInput& input) -> WorkItemStreamResult
 {
   if (!impl_->source.scene) {
     WorkItemStreamResult result;

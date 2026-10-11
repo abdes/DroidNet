@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <array>
-#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -28,6 +27,7 @@
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceOrigin.h>
@@ -52,6 +52,56 @@ namespace {
       throw std::runtime_error(std::string(what) + " decode failed");
     }
     return record;
+  }
+
+  //! Instances are sorted by node, one per node, and name a scene.
+  auto ValidateSceneInstances(const std::span<const std::byte> data,
+    const pak::world::SceneComponentTable& table,
+    const pak::world::SceneNodeIndexT node_count) -> void
+  {
+    if (table.entry_size != sizeof(pak::world::SceneInstanceRecord)) {
+      throw std::runtime_error(
+        "SceneAsset scene instance record size mismatch");
+    }
+    std::optional<pak::world::SceneNodeIndexT> previous;
+    for (uint32_t index = 0; index < table.count; ++index) {
+      const auto record = ReadPackedRecord<pak::world::SceneInstanceRecord>(
+        data.subspan(table.offset + (size_t { index } * table.entry_size),
+          table.entry_size),
+        "SceneAsset scene instance");
+      if (record.node_index >= node_count
+        || (previous && record.node_index <= *previous)) {
+        throw std::runtime_error("SceneAsset scene instance nodes must be "
+                                 "in range, sorted and unique");
+      }
+      if (record.scene_key.IsNil()) {
+        throw std::runtime_error("SceneAsset scene instance has no scene");
+      }
+      previous = record.node_index;
+    }
+  }
+
+  //! Starting input contexts name distinct contexts.
+  auto ValidateStartingInputContexts(const std::span<const std::byte> data,
+    const pak::world::SceneComponentTable& table) -> void
+  {
+    if (table.entry_size != sizeof(pak::world::StartingInputContextRecord)) {
+      throw std::runtime_error(
+        "SceneAsset starting input context record size mismatch");
+    }
+    std::unordered_set<AssetKey> contexts;
+    for (uint32_t index = 0; index < table.count; ++index) {
+      const auto record
+        = ReadPackedRecord<pak::world::StartingInputContextRecord>(
+          data.subspan(table.offset + (size_t { index } * table.entry_size),
+            table.entry_size),
+          "SceneAsset starting input context");
+      if (record.context_key.IsNil()
+        || !contexts.insert(record.context_key).second) {
+        throw std::runtime_error(
+          "SceneAsset starting input contexts must be named and distinct");
+      }
+    }
   }
 
 } // namespace
@@ -116,6 +166,8 @@ SceneAsset::SceneAsset(
   ParseAndValidate();
 }
 
+// Decoding allocates the node cache; failing to allocate is fatal.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 auto SceneAsset::GetNodes() const noexcept
   -> std::span<const pak::world::NodeRecord>
 {
@@ -153,6 +205,8 @@ auto SceneAsset::GetNodes() const noexcept
   return { nodes_cache_.data(), nodes_cache_.size() };
 }
 
+// An index out of range is a caller bug; the checked access aborts on it.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 auto SceneAsset::GetNode(pak::world::SceneNodeIndexT index) const noexcept
   -> const pak::world::NodeRecord&
 {
@@ -164,20 +218,21 @@ auto SceneAsset::GetNode(pak::world::SceneNodeIndexT index) const noexcept
 auto SceneAsset::GetNodeName(const pak::world::NodeRecord& node) const noexcept
   -> std::string_view
 {
-  if (node.scene_name_offset >= string_table_size_) {
+  if (node.scene_name_offset >= string_table_.size()) {
     return {};
   }
 
-  const char* begin = string_table_ptr_ + node.scene_name_offset;
-  const char* end = string_table_ptr_ + string_table_size_;
-  const auto it = std::find(begin, end, '\0');
-  return { begin, static_cast<size_t>(it - begin) };
+  const auto tail = string_table_.substr(node.scene_name_offset);
+  return tail.substr(0, tail.find('\0'));
 }
 
+// Calling this on a scene without nodes is a caller bug; the checked access
+// aborts on it.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 auto SceneAsset::GetRootNode() const noexcept -> const pak::world::NodeRecord&
 {
   const auto nodes = GetNodes();
-  DCHECK_GT_F(nodes.size(), 0);
+  DCHECK_GT_F(nodes.size(), 0U);
   return oxygen::base::CheckedAt(nodes, 0);
 }
 
@@ -195,6 +250,11 @@ auto SceneAsset::ParseAndValidate() -> void
       "SceneAsset unsupported descriptor version; re-cook the scene content");
   }
 
+  if ((desc_.flags & ~pak::world::SceneAssetFlags::kModelScene)
+    != pak::world::SceneAssetFlags::kNone) {
+    throw std::runtime_error("SceneAsset has unknown scene flags");
+  }
+
   auto range_ok
     = [](const size_t offset, const size_t size, const size_t total) -> bool {
     return offset <= total && size <= (total - offset);
@@ -206,6 +266,7 @@ auto SceneAsset::ParseAndValidate() -> void
   post_process_curve_.clear();
 
   size_t payload_end = sizeof(pak::world::SceneAssetDesc);
+  std::unordered_set<std::uint32_t> camera_nodes;
 
   // Validate Node Table
   if (desc_.nodes.count > 0) {
@@ -277,7 +338,6 @@ auto SceneAsset::ParseAndValidate() -> void
       = data_.subspan(desc_.component_table_directory_offset, dir_bytes);
 
     std::unordered_set<std::uint32_t> light_nodes;
-    std::unordered_set<std::uint32_t> camera_nodes;
     std::array<bool, 3> atmosphere_slots {};
     component_tables_.clear();
     component_tables_.reserve(desc_.component_table_count);
@@ -401,6 +461,10 @@ auto SceneAsset::ParseAndValidate() -> void
         validate_lights.template operator()<pak::world::PointLightRecord>();
       } else if (type == ComponentType::kSpotLight) {
         validate_lights.template operator()<pak::world::SpotLightRecord>();
+      } else if (type == ComponentType::kSceneInstance) {
+        ValidateSceneInstances(data_, entry.table, desc_.nodes.count);
+      } else if (type == ComponentType::kStartingInputContext) {
+        ValidateStartingInputContexts(data_, entry.table);
       }
 
       component_tables_.push_back({
@@ -412,16 +476,26 @@ auto SceneAsset::ParseAndValidate() -> void
     }
   }
 
+  if (desc_.starting_camera != pak::world::kNoStartingCamera
+    && !camera_nodes.contains(desc_.starting_camera)) {
+    throw std::runtime_error("SceneAsset starting camera is not a camera node");
+  }
+
   // Cache node and string table views.
   node_count_ = desc_.nodes.count;
   nodes_cache_valid_ = false;
   nodes_cache_.clear();
 
-  string_table_size_ = desc_.scene_strings.size;
-  string_table_ptr_ = string_table_size_ == 0
-    ? nullptr
-    : std::bit_cast<const char*>(
-        data_.subspan(desc_.scene_strings.offset).data());
+  string_table_ = {};
+  if (desc_.scene_strings.size != 0U) {
+    const auto strings
+      = data_.subspan(desc_.scene_strings.offset, desc_.scene_strings.size);
+    // The string table is a byte blob of NUL-terminated UTF-8 names.
+    // NOLINTBEGIN(*-reinterpret-cast)
+    string_table_
+      = { reinterpret_cast<const char*>(strings.data()), strings.size() };
+    // NOLINTEND(*-reinterpret-cast)
+  }
 
   if (desc_.script_slots.count != 0U) {
     const auto slots_size = uint64_t { desc_.script_slots.count }
@@ -542,7 +616,7 @@ auto SceneAsset::ParseAndValidate() -> void
         throw std::runtime_error("SceneAsset environment record out of bounds");
       }
 
-      if (!pak::world::IsValidEnvironmentRecordSize(record_type, record_size)) {
+      if (!pak::world::IsValidEnvironmentRecordSize(record_header)) {
         throw std::runtime_error("SceneAsset environment record size mismatch");
       }
 

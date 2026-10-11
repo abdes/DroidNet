@@ -9,7 +9,7 @@
     },
     "version": {
       "type": "integer",
-      "const": 12
+      "const": 13
     },
     "name": {
       "$ref": "#/definitions/identifier"
@@ -23,6 +23,18 @@
       "maxItems": 65535,
       "items": {
         "$ref": "#/definitions/node"
+      }
+    },
+    "starting_camera": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Index of the camera node the scene starts viewing through."
+    },
+    "starting_input_contexts": {
+      "type": "array",
+      "description": "Input mapping contexts added and activated when the scene starts, in order.",
+      "items": {
+        "$ref": "#/definitions/starting_input_context"
       }
     },
     "renderables": {
@@ -112,6 +124,11 @@
       "minLength": 1,
       "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.oimap$"
     },
+    "canonical_oscene_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^/(?!.*//)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+\\.oscene$"
+    },
     "canonical_physics_scene_path": {
       "type": "string",
       "minLength": 1,
@@ -183,6 +200,35 @@
         },
         "transform": {
           "$ref": "#/definitions/node_transform"
+        },
+        "instance": {
+          "$ref": "#/definitions/scene_instance"
+        }
+      }
+    },
+    "scene_instance": {
+      "type": "object",
+      "description": "Instances a scene: its root nodes become children of this node when the scene is instantiated.",
+      "additionalProperties": false,
+      "required": ["scene_ref"],
+      "properties": {
+        "scene_ref": {
+          "$ref": "#/definitions/canonical_oscene_path"
+        }
+      }
+    },
+    "starting_input_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_ref"],
+      "properties": {
+        "context_ref": {
+          "$ref": "#/definitions/canonical_input_mapping_context_path"
+        },
+        "priority": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
         }
       }
     },

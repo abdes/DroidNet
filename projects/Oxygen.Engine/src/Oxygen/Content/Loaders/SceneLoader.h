@@ -64,7 +64,7 @@ namespace detail {
     }
 
     const auto tail = string_table.subspan(offset);
-    const auto it = std::find(tail.begin(), tail.end(), std::byte { 0 });
+    const auto it = std::ranges::find(tail, std::byte { 0 });
     if (it == tail.end()) {
       throw std::runtime_error(
         "scene asset string table entry missing NUL terminator");
@@ -73,13 +73,15 @@ namespace detail {
 
   template <typename RecordT>
   inline auto ValidateComponentTable(
-    const std::span<const std::byte> table_bytes, const uint32_t count,
-    const uint32_t entry_size, const uint32_t node_count) -> void
+    const std::span<const std::byte> table_bytes,
+    const oxygen::data::pak::world::SceneComponentTable& table,
+    const uint32_t node_count) -> void
   {
+    const auto count = table.count;
     if (count == 0) {
       return;
     }
-    if (entry_size != sizeof(RecordT)) {
+    if (table.entry_size != sizeof(RecordT)) {
       throw std::runtime_error("scene asset component record size mismatch");
     }
     if (table_bytes.size() < static_cast<size_t>(count) * sizeof(RecordT)) {
@@ -109,10 +111,12 @@ namespace detail {
   }
 
   inline auto ValidateScriptingSlotRanges(
-    const std::span<const std::byte> table_bytes, const uint32_t count,
+    const std::span<const std::byte> table_bytes,
+    const oxygen::data::pak::world::SceneComponentTable& table,
     const uint32_t global_slot_count) -> void
   {
     using RecordT = oxygen::data::pak::scripting::ScriptingComponentRecord;
+    const auto count = table.count;
 
     if (count == 0) {
       return;
@@ -202,7 +206,6 @@ namespace detail {
           sizeof(oxygen::data::pak::world::SceneEnvironmentSystemRecordHeader)),
         "scene environment record header");
 
-      const uint32_t record_type = record_header.system_type;
       const uint32_t record_size = record_header.record_size;
 
       if (record_size < sizeof(
@@ -215,8 +218,7 @@ namespace detail {
         throw std::runtime_error("scene environment record out of bounds");
       }
 
-      if (!data::pak::world::IsValidEnvironmentRecordSize(
-            record_type, record_size)) {
+      if (!data::pak::world::IsValidEnvironmentRecordSize(record_header)) {
         throw std::runtime_error("scene environment record size mismatch");
       }
 
@@ -233,7 +235,8 @@ namespace detail {
     -> std::vector<data::ResourceReferenceUse>
   {
     auto uses = std::vector<data::ResourceReferenceUse> {};
-    const auto add = [&uses](const data::ResourceReferenceIndex reference) {
+    const auto add
+      = [&uses](const data::ResourceReferenceIndex reference) -> void {
       if (reference != data::kNoResourceReference) {
         uses.push_back({
           .reference = reference,
@@ -455,6 +458,11 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   std::unordered_map<oxygen::data::AssetKey, oxygen::data::AssetType>
     param_asset_deps;
   bool has_scripting_table = false;
+  // Instanced scenes and starting contexts are references, not load
+  // dependencies: instantiation loads them, and a missing one is an issue on
+  // its instance or context rather than a failed scene load.
+  std::unordered_set<oxygen::data::AssetKey> instance_refs;
+  std::unordered_set<oxygen::data::AssetKey> context_refs;
 
   for (const auto& entry : tables) {
     if (entry.table.count == 0) {
@@ -472,7 +480,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     if (type == oxygen::data::ComponentType::kRenderable) {
       detail::ValidateComponentTable<
         oxygen::data::pak::world::RenderableRecord>(
-        table_bytes, entry.table.count, entry.table.entry_size, node_count);
+        table_bytes, entry.table, node_count);
 
       // Dependency collection is identity-only.
       for (uint32_t i = 0; i < entry.table.count; ++i) {
@@ -487,7 +495,7 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     } else if (type == oxygen::data::ComponentType::kMaterialOverride) {
       using Record = oxygen::data::pak::world::MaterialOverrideRecord;
       detail::ValidateComponentTable<Record>(
-        table_bytes, entry.table.count, entry.table.entry_size, node_count);
+        table_bytes, entry.table, node_count);
       for (uint32_t i = 0; i < entry.table.count; ++i) {
         const auto record = detail::ReadPackedRecord<Record>(
           table_bytes.subspan(
@@ -500,30 +508,52 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     } else if (type == oxygen::data::ComponentType::kPerspectiveCamera) {
       detail::ValidateComponentTable<
         oxygen::data::pak::world::PerspectiveCameraRecord>(
-        table_bytes, entry.table.count, entry.table.entry_size, node_count);
+        table_bytes, entry.table, node_count);
     } else if (type == oxygen::data::ComponentType::kOrthographicCamera) {
       detail::ValidateComponentTable<
         oxygen::data::pak::world::OrthographicCameraRecord>(
-        table_bytes, entry.table.count, entry.table.entry_size, node_count);
+        table_bytes, entry.table, node_count);
     } else if (type == oxygen::data::ComponentType::kDirectionalLight) {
       detail::ValidateComponentTable<
         oxygen::data::pak::world::DirectionalLightRecord>(
-        table_bytes, entry.table.count, entry.table.entry_size, node_count);
+        table_bytes, entry.table, node_count);
     } else if (type == oxygen::data::ComponentType::kPointLight) {
       detail::ValidateComponentTable<
         oxygen::data::pak::world::PointLightRecord>(
-        table_bytes, entry.table.count, entry.table.entry_size, node_count);
+        table_bytes, entry.table, node_count);
     } else if (type == oxygen::data::ComponentType::kSpotLight) {
       detail::ValidateComponentTable<oxygen::data::pak::world::SpotLightRecord>(
-        table_bytes, entry.table.count, entry.table.entry_size, node_count);
+        table_bytes, entry.table, node_count);
+    } else if (type == oxygen::data::ComponentType::kSceneInstance) {
+      using Record = data::pak::world::SceneInstanceRecord;
+      detail::ValidateComponentTable<Record>(
+        table_bytes, entry.table, node_count);
+      for (uint32_t i = 0; i < entry.table.count; ++i) {
+        const auto record = detail::ReadPackedRecord<Record>(
+          table_bytes.subspan(size_t { i } * sizeof(Record), sizeof(Record)),
+          "scene instance record");
+        instance_refs.insert(record.scene_key);
+      }
+    } else if (type == oxygen::data::ComponentType::kStartingInputContext) {
+      using Record = data::pak::world::StartingInputContextRecord;
+      if (entry.table.entry_size != sizeof(Record)) {
+        throw std::runtime_error(
+          "scene starting input context record size mismatch");
+      }
+      for (uint32_t i = 0; i < entry.table.count; ++i) {
+        const auto record = detail::ReadPackedRecord<Record>(
+          table_bytes.subspan(size_t { i } * sizeof(Record), sizeof(Record)),
+          "scene starting input context");
+        context_refs.insert(record.context_key);
+      }
     } else if (type == oxygen::data::ComponentType::kScripting) {
       detail::ValidateComponentTable<
         oxygen::data::pak::scripting::ScriptingComponentRecord>(
-        table_bytes, entry.table.count, entry.table.entry_size, node_count);
+        table_bytes, entry.table, node_count);
       has_scripting_table = true;
 
       detail::ValidateScriptingSlotRanges(
-        table_bytes, entry.table.count, desc.script_slots.count);
+        table_bytes, entry.table, desc.script_slots.count);
       for (uint32_t i = 0; i < entry.table.count; ++i) {
         const auto record = detail::ReadPackedRecord<
           data::pak::scripting::ScriptingComponentRecord>(
@@ -582,7 +612,8 @@ inline auto LoadSceneAsset(const LoaderContext& context)
 
   auto asset = std::make_unique<data::SceneAsset>(context.current_asset_key,
     std::move(bytes),
-    data::SourceOrigin { context.source_key, context.source_instance });
+    data::SourceOrigin {
+      .key = context.source_key, .instance = context.source_instance });
   if (context.asset_references) {
     std::vector<data::KeyReference> keys;
     const auto add_asset
@@ -604,6 +635,12 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     }
     for (const auto& [key, type] : param_asset_deps) {
       add_asset(key, type);
+    }
+    for (const auto& key : instance_refs) {
+      add_asset(key, data::AssetType::kScene);
+    }
+    for (const auto& key : context_refs) {
+      add_asset(key, data::AssetType::kInputMappingContext);
     }
     context.ValidateReferences(detail::EnvironmentTextureUses(*asset), keys);
   }

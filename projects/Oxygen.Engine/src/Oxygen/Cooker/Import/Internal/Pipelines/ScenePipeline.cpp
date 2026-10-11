@@ -27,9 +27,11 @@
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/LightValidation.h>
@@ -100,19 +102,6 @@ namespace {
     };
   }
 
-  [[nodiscard]] auto MakeWarningDiagnostic(std::string code,
-    std::string message, std::string_view source_id,
-    std::string_view object_path) -> ImportDiagnostic
-  {
-    return ImportDiagnostic {
-      .severity = ImportSeverity::kWarning,
-      .code = std::move(code),
-      .message = std::move(message),
-      .source_path = std::string(source_id),
-      .object_path = std::string(object_path),
-    };
-  }
-
   [[nodiscard]] auto BuildSceneAssetKey(const std::string_view virtual_path)
     -> AssetKey
   {
@@ -162,6 +151,29 @@ namespace {
       [](const SpotLightRecord& a, const SpotLightRecord& b) -> bool {
         return a.node_index < b.node_index;
       });
+
+    std::ranges::sort(
+      build.instances, {}, &data::pak::world::SceneInstanceRecord::node_index);
+  }
+
+  //! Each instance root is a distinct node of the scene and names a scene;
+  //! each starting context is named once.
+  [[nodiscard]] auto HasValidStartState(const SceneBuild& build) -> bool
+  {
+    std::unordered_set<std::uint32_t> instance_nodes;
+    for (const auto& instance : build.instances) {
+      if (instance.node_index >= build.nodes.size()
+        || instance.scene_key.IsNil()
+        || !instance_nodes.insert(instance.node_index).second) {
+        return false;
+      }
+    }
+    std::unordered_set<AssetKey> contexts;
+    return std::ranges::all_of(
+      build.starting_input_contexts, [&contexts](const auto& context) -> bool {
+        return !context.context_key.IsNil()
+          && contexts.insert(context.context_key).second;
+      });
   }
 
   template <typename Record>
@@ -193,6 +205,13 @@ namespace {
     for (const auto& assignment : build.material_overrides) {
       references.AddAsset(assignment.material_key, data::AssetType::kMaterial);
     }
+    for (const auto& instance : build.instances) {
+      references.AddAsset(instance.scene_key, data::AssetType::kScene);
+    }
+    for (const auto& context : build.starting_input_contexts) {
+      references.AddAsset(
+        context.context_key, data::AssetType::kInputMappingContext);
+    }
 
     for (size_t index = 0; index < build.nodes.size(); ++index) {
       if (!data::pak::world::HasCanonicalNodeFlags(build.nodes.at(index))) {
@@ -210,13 +229,14 @@ namespace {
 
     SceneAssetDesc desc {};
     desc.header.asset_type = static_cast<uint8_t>(AssetType::kScene);
-    util::TruncateAndNullTerminate(
-      desc.header.name, sizeof(desc.header.name), scene_name);
+    util::TruncateAndNullTerminate(std::span(desc.header.name), scene_name);
     desc.header.version = data::pak::world::kSceneAssetVersion;
     desc.header.content_hash = {};
     desc.nodes.offset = sizeof(SceneAssetDesc);
     desc.nodes.count = static_cast<uint32_t>(build.nodes.size());
     desc.nodes.entry_size = sizeof(NodeRecord);
+    desc.flags = build.flags;
+    desc.starting_camera = build.starting_camera;
 
     std::unordered_set<std::uint32_t> light_nodes;
     std::unordered_set<std::uint32_t> camera_nodes;
@@ -235,6 +255,21 @@ namespace {
         MakeErrorDiagnostic("scene.camera.invalid_ownership",
           "Each camera must own a valid, distinct scene node", source_id,
           "cameras"));
+      return outcome;
+    }
+    if (build.starting_camera != data::pak::world::kNoStartingCamera
+      && !camera_nodes.contains(build.starting_camera)) {
+      diagnostics.push_back(
+        MakeErrorDiagnostic("scene.starting_camera.not_a_camera",
+          "The starting camera must be a node that owns a camera", source_id,
+          "starting_camera"));
+      return outcome;
+    }
+    if (!HasValidStartState(build)) {
+      diagnostics.push_back(MakeErrorDiagnostic("scene.composition.invalid",
+        "Scene instances must be distinct scene nodes naming a scene, and "
+        "starting input contexts must be named once",
+        source_id, "instances"));
       return outcome;
     }
     std::array<bool, 3> atmosphere_slots {};
@@ -278,7 +313,6 @@ namespace {
     };
 
     std::vector<ComponentTablePayload> component_tables;
-    component_tables.reserve(7);
 
     auto add_component_table
       = [&](const ComponentType type, const size_t entry_size,
@@ -327,6 +361,12 @@ namespace {
       std::as_bytes(std::span(build.point_lights)));
     add_component_table(ComponentType::kSpotLight, sizeof(SpotLightRecord),
       std::as_bytes(std::span(build.spot_lights)));
+    add_component_table(ComponentType::kSceneInstance,
+      sizeof(data::pak::world::SceneInstanceRecord),
+      std::as_bytes(std::span(build.instances)));
+    add_component_table(ComponentType::kStartingInputContext,
+      sizeof(data::pak::world::StartingInputContextRecord),
+      std::as_bytes(std::span(build.starting_input_contexts)));
 
     std::vector<SceneComponentTableDesc> component_directory;
 
@@ -424,8 +464,7 @@ namespace {
         return outcome;
       }
 
-      if (!data::pak::world::IsValidEnvironmentRecordSize(
-            header.system_type, header.record_size)) {
+      if (!data::pak::world::IsValidEnvironmentRecordSize(header)) {
         diagnostics.push_back(
           MakeErrorDiagnostic("scene.environment.record_size_mismatch",
             "Environment record does not match its declared type", source_id,
@@ -472,7 +511,8 @@ namespace {
     if (bytes.size() < kOffset + sizeof(content_hash)) {
       return;
     }
-    std::memcpy(bytes.data() + kOffset, &content_hash, sizeof(content_hash));
+    std::memcpy(std::span(bytes).subspan(kOffset).data(), &content_hash,
+      sizeof(content_hash));
   }
 
 } // namespace
@@ -504,6 +544,8 @@ auto ScenePipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
+    // The pipeline outlives the nursery that runs its workers.
+    // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
     nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
 }

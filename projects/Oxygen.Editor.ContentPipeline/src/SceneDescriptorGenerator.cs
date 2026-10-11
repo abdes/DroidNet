@@ -23,7 +23,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="proceduralGeometryDescriptors">The generated geometry descriptor service.</param>
 public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescriptorService proceduralGeometryDescriptors) : ISceneDescriptorGenerator
 {
-    private const int NativeSceneDescriptorVersion = 12;
+    private const int NativeSceneDescriptorVersion = 13;
     private const double MaximumExposureLogLuminance = 32;
     private static readonly Lazy<EditorSchemaCatalog> SceneSchemas = new(() =>
         EditorSchemaCatalog.LoadFromDirectory(Path.Combine(

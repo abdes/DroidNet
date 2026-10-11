@@ -7,30 +7,43 @@
 #include <algorithm>
 #include <atomic>
 #include <bitset>
+#include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <limits>
-#include <ranges>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <span>
 #include <stdexcept>
-
-#include <fmt/format.h>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Base/ResourceTable.h>
-#include <Oxygen/Composition/ObjectMetadata.h>
+#include <Oxygen/Composition/ObjectMetaData.h>
 #include <Oxygen/Scene/Detail/Scene_safecall_impl.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Internal/IMutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationDispatcher.h>
+#include <Oxygen/Scene/Internal/MutationTypes.h>
 #include <Oxygen/Scene/Internal/ScriptSlotMutationProcessor.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneQuery.h>
-#include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/Scripting/ScriptingComponent.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Scene/Types/ScriptSlotIndex.h>
 
 using oxygen::scene::NodeHandle;
 using oxygen::scene::Scene;
@@ -63,7 +76,7 @@ struct SceneIdManager {
   static constexpr Scene::SceneId kMaxScenes = NodeHandle::kMaxSceneId;
 
   std::mutex mutex;
-  std::bitset<kMaxScenes> used_ids {};
+  std::bitset<kMaxScenes> used_ids;
 
   //! Allocates the next available scene ID
   auto AllocateId() -> std::optional<Scene::SceneId>;
@@ -77,12 +90,12 @@ struct SceneIdManager {
 
 auto SceneIdManager::AllocateId() -> std::optional<Scene::SceneId>
 {
-  std::lock_guard<std::mutex> lock(mutex);
+  std::scoped_lock lock(mutex);
 
   // Find first available ID, that is not the invalid ID
   for (size_t i = 0; i < kMaxScenes; ++i) {
-    if (!used_ids[i] && i != NodeHandle::kInvalidSceneId) {
-      used_ids[i] = true;
+    if (!used_ids.test(i) && i != NodeHandle::kInvalidSceneId) {
+      used_ids.set(i);
       return static_cast<Scene::SceneId>(i);
     }
   }
@@ -93,10 +106,10 @@ auto SceneIdManager::AllocateId() -> std::optional<Scene::SceneId>
 
 void SceneIdManager::ReleaseId(Scene::SceneId id) noexcept
 {
-  std::lock_guard<std::mutex> lock(mutex);
+  std::scoped_lock lock(mutex);
 
   if (id < kMaxScenes) {
-    used_ids[id] = false;
+    used_ids.reset(id);
   }
 }
 
@@ -185,7 +198,7 @@ void Scene::LogPartialFailure(
   [[maybe_unused]] const std::vector<uint8_t>& results,
   [[maybe_unused]] const std::string& operation_name) const
 {
-#if defined(NDEBUG)
+#ifdef NDEBUG
   return;
 #else // NDEBUG
   const auto successful_count = std::ranges::count(results, 1);
@@ -243,10 +256,11 @@ void Scene::DefragmentStorage()
 {
   // Defragment the underlying storage using a simple comparator
   // This will reorganize nodes for better cache locality
-  nodes_->Defragment([](const SceneNodeImpl& a, const SceneNodeImpl& b) {
-    // Sort by name for predictable ordering
-    return a.GetName() < b.GetName();
-  });
+  nodes_->Defragment(
+    [](const SceneNodeImpl& a, const SceneNodeImpl& b) -> bool {
+      // Sort by name for predictable ordering
+      return a.GetName() < b.GetName();
+    });
 }
 
 void Scene::Clear() noexcept
@@ -266,6 +280,32 @@ auto Scene::SetEnvironment(
 }
 
 auto Scene::ClearEnvironment() noexcept -> void { environment_.reset(); }
+
+auto Scene::SetActiveCamera(SceneNode& node) noexcept -> bool
+{
+  if (!Contains(node) || !node.IsAlive() || !node.HasCamera()) {
+    return false;
+  }
+  active_camera_ = node.GetHandle();
+  return true;
+}
+
+auto Scene::ClearActiveCamera() noexcept -> void
+{
+  active_camera_ = NodeHandle {};
+}
+
+auto Scene::ActiveCamera() const noexcept -> std::optional<SceneNode>
+{
+  if (!active_camera_.IsValid()) {
+    return std::nullopt;
+  }
+  auto node = GetNode(active_camera_);
+  if (!node.has_value() || !node->IsAlive() || !node->HasCamera()) {
+    return std::nullopt;
+  }
+  return node;
+}
 
 auto Scene::GetParent(SceneNode& node) const noexcept
   -> std::optional<SceneNode>
@@ -391,49 +431,58 @@ auto Scene::GetPrevSiblingUnsafe(SceneNode& node,
     node_impl->AsGraphNode().GetPrevSibling(), node);
 }
 
-auto Scene::GetNodeImpl(const SceneNode& node) noexcept -> OptionalRefToImpl
+auto Scene::LookupNodeImpl(NodeTable& nodes, const SceneNode& node) noexcept
+  -> SceneNodeImpl*
 {
-  // This is a logic error, should be fixed in the code. An invalid handle
-  // should not be used anymore.
   CHECK_F(node.IsValid(), "expecting a valid node handle");
-
   try {
-    auto& impl = nodes_->ItemAt(node.GetHandle());
-    return { impl };
+    return &nodes.ItemAt(node.GetHandle());
   } catch ([[maybe_unused]] const std::exception& ex) {
-    // If the handle is valid but the node is no longer in the scene, this
-    // is a case for lazy invalidation.
     DLOG_F(4, "Node {} is no longer there -> invalidate : {}",
-      to_string_compact(node.GetHandle()), ex.what());
+      oxygen::to_string_compact(node.GetHandle()), ex.what());
     node.Invalidate();
-    return std::nullopt;
+    return nullptr;
   }
 }
 
-auto Scene::GetNodeImpl(const SceneNode& node) const noexcept
-  -> OptionalConstRefToImpl
-{
-  return const_cast<Scene*>(this)->GetNodeImpl(node);
-}
-
-auto Scene::GetNodeImplRef(const ResourceHandle& handle) noexcept
+auto Scene::NodeImplAt(NodeTable& nodes, const ResourceHandle& handle) noexcept
   -> SceneNodeImpl&
 {
-  // This is a logic error, should be fixed in the code. An invalid handle
-  // should not be used anymore.
   CHECK_F(handle.IsValid(), "expecting a valid node handle");
-
   try {
-    return GetNodeImplRefUnsafe(handle);
+    return nodes.ItemAt(handle);
   } catch (const std::exception&) {
     ABORT_F("expecting the node to exist");
   }
 }
 
+auto Scene::GetNodeImpl(const SceneNode& node) noexcept -> OptionalRefToImpl
+{
+  if (auto* impl = LookupNodeImpl(*nodes_, node)) {
+    return { *impl };
+  }
+  return std::nullopt;
+}
+
+auto Scene::GetNodeImpl(const SceneNode& node) const noexcept
+  -> OptionalConstRefToImpl
+{
+  if (const auto* impl = LookupNodeImpl(*nodes_, node)) {
+    return { *impl };
+  }
+  return std::nullopt;
+}
+
+auto Scene::GetNodeImplRef(const ResourceHandle& handle) noexcept
+  -> SceneNodeImpl&
+{
+  return NodeImplAt(*nodes_, handle);
+}
+
 auto Scene::GetNodeImplRef(const ResourceHandle& handle) const noexcept
   -> const SceneNodeImpl&
 {
-  return const_cast<Scene*>(this)->GetNodeImplRef(handle);
+  return NodeImplAt(*nodes_, handle);
 }
 
 auto Scene::GetNodeImplRefUnsafe(const ResourceHandle& handle) const
@@ -459,6 +508,8 @@ auto Scene::TryGetNodeImpl(const ResourceHandle& handle) const noexcept
   return nodes_->TryGet(handle);
 }
 
+// Scenes are always owned by a shared_ptr, so shared_from_this() cannot throw.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 auto Scene::GetNode(const NodeHandle& handle) const noexcept
   -> std::optional<SceneNode>
 {
@@ -508,7 +559,7 @@ auto Scene::GetChildrenCount(const SceneNode& parent) const noexcept -> size_t
   auto current_child_handle
     = parent_impl_opt->get().AsGraphNode().GetFirstChild();
   while (current_child_handle.IsValid()) {
-    auto& child_node_impl = GetNodeImplRef(current_child_handle);
+    const auto& child_node_impl = GetNodeImplRef(current_child_handle);
     ++count;
     current_child_handle = child_node_impl.AsGraphNode().GetNextSibling();
   }
@@ -555,7 +606,7 @@ void Scene::RemoveRootNode(const NodeHandle& node)
 
 void Scene::EnsureRootNodesValid() const noexcept
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   for (const auto& handle : root_nodes_) {
     // A bug that needs fixing.
     DCHECK_F(handle.IsValid(), "expecting a valid root node handle");
@@ -802,7 +853,7 @@ auto Scene::UnregisterObserver(
 {
   const auto previous_size = observers_.size();
   std::erase_if(
-    observers_, [observer](const ObserverSubscription& subscription) {
+    observers_, [observer](const ObserverSubscription& subscription) -> bool {
       return subscription.observer == observer;
     });
   const auto changed = observers_.size() != previous_size;
@@ -819,9 +870,9 @@ auto Scene::UnregisterObserver(
 void Scene::NotifyLightFlagsChanged(const NodeHandle& node_handle)
 {
   const auto* node = TryGetNodeImpl(node_handle);
-  if (node && (node->HasComponent<DirectionalLight>()
-                || node->HasComponent<PointLight>()
-                || node->HasComponent<SpotLight>())) {
+  if (node
+    && (node->HasComponent<DirectionalLight>()
+      || node->HasComponent<PointLight>() || node->HasComponent<SpotLight>())) {
     if (const auto collector = AsMutationCollector()) {
       collector->CollectLightChanged(node_handle);
     }
@@ -849,7 +900,7 @@ auto Scene::ResolveScriptSlot(const NodeHandle& node_handle,
   if (slot_index.get() >= slots.size()) {
     return nullptr;
   }
-  return &slots[slot_index.get()];
+  return slots.subspan(slot_index.get(), 1).data();
 }
 
 auto Scene::NotifyObservers(const SceneMutationMask mutation_type,
@@ -910,42 +961,40 @@ auto Scene::SyncObservers() -> void
 
   mutation_dispatcher_->Dispatch(*mutation_collector_,
     internal::IMutationDispatcher::DispatchContext {
-      .resolve_script_slot =
-        [this](
-          const NodeHandle& node_handle, const ScriptSlotIndex slot_index) {
-          return ResolveScriptSlot(node_handle, slot_index);
-        },
-      .notify_script_observers =
-        [this](const SceneMutationMask mutation_type,
+      .resolve_script_slot
+      = [this](const NodeHandle& node_handle,
+          const ScriptSlotIndex slot_index) -> const ScriptingComponent::Slot* {
+        return ResolveScriptSlot(node_handle, slot_index);
+      },
+      .notify_script_observers
+      = [this](const SceneMutationMask mutation_type,
           const NodeHandle& node_handle, const ScriptSlotIndex slot_index,
-          const ScriptingComponent::Slot* slot, const uint64_t sequence) {
-          NotifyObservers(
-            mutation_type, node_handle, slot_index, slot, sequence);
-        },
-      .notify_light_mutation =
-        [this](
-          const internal::LightMutation& mutation, const uint64_t sequence) {
-          NotifyObservers(SceneMutationMask::kLightChanged,
-            mutation.node_handle, ScriptSlotIndex {}, nullptr, sequence);
-        },
-      .notify_camera_mutation =
-        [this](
-          const internal::CameraMutation& mutation, const uint64_t sequence) {
-          NotifyObservers(SceneMutationMask::kCameraChanged,
-            mutation.node_handle, ScriptSlotIndex {}, nullptr, sequence);
-        },
-      .notify_transform_mutation =
-        [this](const internal::TransformMutation& mutation,
-          const uint64_t sequence) {
-          NotifyObservers(SceneMutationMask::kTransformChanged,
-            mutation.node_handle, ScriptSlotIndex {}, nullptr, sequence);
-        },
-      .notify_node_destroyed_mutation =
-        [this](const internal::NodeDestroyedMutation& mutation,
-          const uint64_t sequence) {
-          NotifyObservers(SceneMutationMask::kNodeDestroyed,
-            mutation.node_handle, ScriptSlotIndex {}, nullptr, sequence);
-        },
+          const ScriptingComponent::Slot* slot,
+          const uint64_t sequence) -> void {
+        NotifyObservers(mutation_type, node_handle, slot_index, slot, sequence);
+      },
+      .notify_light_mutation = [this](const internal::LightMutation& mutation,
+                                 const uint64_t sequence) -> void {
+        NotifyObservers(SceneMutationMask::kLightChanged, mutation.node_handle,
+          ScriptSlotIndex {}, nullptr, sequence);
+      },
+      .notify_camera_mutation = [this](const internal::CameraMutation& mutation,
+                                  const uint64_t sequence) -> void {
+        NotifyObservers(SceneMutationMask::kCameraChanged, mutation.node_handle,
+          ScriptSlotIndex {}, nullptr, sequence);
+      },
+      .notify_transform_mutation
+      = [this](const internal::TransformMutation& mutation,
+          const uint64_t sequence) -> void {
+        NotifyObservers(SceneMutationMask::kTransformChanged,
+          mutation.node_handle, ScriptSlotIndex {}, nullptr, sequence);
+      },
+      .notify_node_destroyed_mutation
+      = [this](const internal::NodeDestroyedMutation& mutation,
+          const uint64_t sequence) -> void {
+        NotifyObservers(SceneMutationMask::kNodeDestroyed, mutation.node_handle,
+          ScriptSlotIndex {}, nullptr, sequence);
+      },
     });
   if (!hydration_mutation_collection_enabled_) {
     hydration_first_sequence_.reset();
@@ -1004,7 +1053,10 @@ auto Scene::UpdateMutationCollectionState(const bool log_transition) -> void
   }
 }
 
+// Traversal failures here mean a corrupt node table; abort is the only
+// outcome.
 // ReSharper disable once CppMemberFunctionMayBeConst
+// NOLINTNEXTLINE(bugprone-exception-escape)
 void Scene::Update(const bool skip_dirty_flags) noexcept
 {
   LOG_SCOPE_F(2, "Scene update");

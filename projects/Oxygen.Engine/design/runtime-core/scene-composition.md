@@ -43,17 +43,18 @@ imported one as a whole.
 {
   "name": "Backpack",
   "transform": { "translation": [-1.5, 0, 0] },
-  "instance": { "scene": "/Content/Scenes/backpack/backpack.oscene" }
+  "instance": { "scene_ref": "/Content/Scenes/backpack/backpack.oscene" }
 }
 ```
 
 ## 3. Runtime instancing, not cook-time copying (SC-1)
 
 The cooked authored scene records each instance as a node index and the
-instanced scene's asset key; the instanced scene is a dependency of the
-authored one. Scene instantiation loads each instanced scene and creates its
-nodes under the instance root, recursively, with the same record handling as
-any scene.
+instanced scene's asset key, and lists the instanced scene among its asset
+references. It is not a load dependency: scene instantiation loads each
+instanced scene and creates its nodes under the instance root, recursively,
+with the same record handling as any scene, so a missing model does not fail
+the authored scene's load.
 
 Chosen over copying the model's nodes into the authored scene at cook
 time because:
@@ -101,9 +102,9 @@ built now.
 - `SceneAssetDesc` gains a descriptor-local `instances` table of
   `SceneInstanceRecord { SceneNodeIndexT node_index; AssetKey scene_key; }`.
   It shares the scene version increase with the start-state fields.
-- The scene descriptor schema gains the node field `instance.scene`, a
+- The scene descriptor schema gains the node field `instance.scene_ref`, a
   canonical scene virtual path, resolved by the same lookup as other
-  virtual-path references and added to the scene's dependencies.
+  virtual-path references and listed in the scene's asset references.
 - A model import's scene output is marked as a model scene (an asset flag)
   so tools and the player can refuse it as a Play target.
 

@@ -120,6 +120,7 @@ m_gtest_program(
   SceneBasic
   SOURCES
     ${TEST_FACTORY_SOURCES}
+    "Scene_active_camera_test.cpp"
     "Scene_basic_test.cpp"
     "Scene_cloning_test.cpp"
     "Scene_environment_test.cpp"

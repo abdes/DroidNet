@@ -287,8 +287,8 @@ public sealed class SceneDescriptorGeneratorTests
         _ = result.Diagnostics.Should().BeEmpty();
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         var root = document.RootElement;
-        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v12");
-        _ = root.GetProperty("version").GetInt32().Should().Be(12);
+        _ = root.GetProperty("$schema").GetString().Should().Be("oxygen.scene-descriptor.v13");
+        _ = root.GetProperty("version").GetInt32().Should().Be(13);
         var nodes = root.GetProperty("nodes");
         _ = nodes.GetArrayLength().Should().Be(2);
         _ = nodes[1].GetProperty("parent").GetInt32().Should().Be(0);
@@ -662,7 +662,7 @@ public sealed class SceneDescriptorGeneratorTests
                 var result = await generator.GenerateAsync(savedScene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
                 _ = result.Diagnostics.Should().BeEmpty();
                 using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
-                _ = document.RootElement.GetProperty("version").GetInt32().Should().Be(12);
+                _ = document.RootElement.GetProperty("version").GetInt32().Should().Be(13);
                 var environment = document.RootElement.GetProperty("environment");
                 _ = environment.GetProperty("sky_atmosphere").GetProperty("enabled").GetBoolean().Should().BeFalse();
                 var post = environment.GetProperty("post_process_volume");
@@ -1002,7 +1002,7 @@ public sealed class SceneDescriptorGeneratorTests
 
     private static void AssertSupportedSceneDescriptor(JsonElement root, Guid slotId)
     {
-        _ = root.GetProperty("version").GetInt32().Should().Be(12);
+        _ = root.GetProperty("version").GetInt32().Should().Be(13);
         _ = root.GetProperty("name").GetString().Should().Be("Main");
         _ = root.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()
             .Should().Be("/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");

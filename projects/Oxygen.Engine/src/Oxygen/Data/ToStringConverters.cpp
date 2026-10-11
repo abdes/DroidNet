@@ -76,6 +76,8 @@ auto oxygen::data::to_string(oxygen::data::ComponentType value) noexcept
     case ComponentType::kPointLight:         return "PLIT";
     case ComponentType::kSpotLight:          return "SLIT";
     case ComponentType::kScripting:          return "SCRP";
+    case ComponentType::kSceneInstance:      return "INST";
+    case ComponentType::kStartingInputContext: return "SICX";
     case ComponentType::kLocalFogVolume:     return "LFOG";
     case ComponentType::kMaterialOverride:   return "MSLT";
     // clang-format on

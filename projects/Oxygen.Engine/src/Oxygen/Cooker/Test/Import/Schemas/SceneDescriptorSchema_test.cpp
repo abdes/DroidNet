@@ -34,13 +34,13 @@ auto Schema() -> const json&
   return schema;
 }
 
-// The documents in the table below spell out `"version": 12`; this test fails
+// The documents in the table below spell out `"version": 13`; this test fails
 // loudly when the schema and the scene asset version drift apart.
 NOLINT_TEST(SceneDescriptorSchemaTest, SchemaVersionMatchesSceneAssetVersion)
 {
   EXPECT_EQ(Schema().at("properties").at("version").at("const"),
     MakeCurrentSceneDescriptor("{}").at("version"));
-  EXPECT_EQ(Schema().at("properties").at("version").at("const"), 12);
+  EXPECT_EQ(Schema().at("properties").at("version").at("const"), 13);
 }
 
 class SceneDescriptorSchemaCaseTest
@@ -55,7 +55,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
   ::testing::Values(
     SchemaCase {
       "AcceptsCanonicalDocument",
-      R"({ "version": 12,
+      R"({ "version": 13,
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.scene-descriptor.schema.json",
     "name": "DemoScene",
     "nodes": [
@@ -93,7 +93,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     },
     SchemaCase {
       "RejectsUnknownNestedFields",
-      R"({ "version": 12,
+      R"({ "version": 13,
     "name": "BadScene",
     "nodes": [ { "name": "Root", "unknown_field": true } ]
   })",
@@ -102,7 +102,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     },
     SchemaCase {
       "AcceptsDirectionalShadowTuningFields",
-      R"({ "version": 12,
+      R"({ "version": 13,
     "name": "TunedScene",
     "nodes": [
       { "name": "Root" }
@@ -128,7 +128,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     },
     SchemaCase {
       "AcceptsCurrentEnvironmentAndLocalFogShape",
-      R"({ "version": 12,
+      R"({ "version": 13,
     "name": "FogScene",
     "nodes": [
       { "name": "Root" },
@@ -316,7 +316,9 @@ NOLINT_TEST(SceneDescriptorSchemaTest, RequiresExplicitCameraAspectPolicy)
   })");
   EXPECT_THAT(ValidateJson(Schema(), doc), IsEmpty());
   auto& camera = doc.at("cameras").at("perspective").at(0);
-  camera.update({ { "aspect_mode", "fixed" }, { "aspect_ratio", 1.5 } });
+  constexpr auto kFixedAspectRatio = 1.5;
+  camera.update(
+    { { "aspect_mode", "fixed" }, { "aspect_ratio", kFixedAspectRatio } });
   EXPECT_THAT(ValidateJson(Schema(), doc), IsEmpty());
   camera.update({ { "aspect_mode", "stretch" } });
   EXPECT_THAT(ValidateJson(Schema(), doc),
@@ -382,7 +384,8 @@ NOLINT_TEST(
          "/environment/post_process_volume/auto_exposure_metering_mode",
        }) {
     auto invalid = base;
-    invalid.at(json::json_pointer(pointer)) = 99;
+    constexpr auto kUndefinedEnumValue = 99;
+    invalid.at(json::json_pointer(pointer)) = kUndefinedEnumValue;
     EXPECT_THAT(ValidateJson(Schema(), invalid),
       Contains(HasSubstr(std::string(pointer) + ": ")))
       << pointer;
@@ -394,9 +397,10 @@ NOLINT_TEST(
       Contains(HasSubstr("/environment/background/color_rgb/0: ")));
   }
   auto overflow = base;
+  constexpr auto kBeyondFloatRange = 1e100;
   overflow.at("environment")
     .at("post_process_volume")
-    .update({ { "manual_exposure_ev", 1e100 } });
+    .update({ { "manual_exposure_ev", kBeyondFloatRange } });
   EXPECT_THAT(ValidateJson(Schema(), overflow),
     Contains(
       HasSubstr("/environment/post_process_volume/manual_exposure_ev: ")));
@@ -426,7 +430,8 @@ NOLINT_TEST(SceneDescriptorSchemaTest, RejectsRetiredCaptureModeAndOldVersion)
       Contains(HasSubstr("'real_time_capture_enabled'")));
   }
   auto previous = canonical;
-  previous.update({ { "version", 7 } });
+  constexpr auto kRetiredVersion = 7;
+  previous.update({ { "version", kRetiredVersion } });
   EXPECT_THAT(
     ValidateJson(Schema(), previous), Contains(HasSubstr("/version: ")));
 }

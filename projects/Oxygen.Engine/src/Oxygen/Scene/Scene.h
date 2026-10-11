@@ -26,20 +26,20 @@ template <typename T> class ResourceTable;
 
 namespace oxygen::scene {
 
-enum class SceneMutationMask : uint32_t {
+enum class SceneMutationMask : uint32_t { // NOLINT(*-enum-size)
   kNone = 0,
-  kScriptSlotActivated = 1u << 0u,
-  kScriptSlotChanged = 1u << 1u,
-  kScriptSlotDeactivated = 1u << 2u,
-  kLightChanged = 1u << 3u,
-  kCameraChanged = 1u << 4u,
+  kScriptSlotActivated = 1U << 0U,
+  kScriptSlotChanged = 1U << 1U,
+  kScriptSlotDeactivated = 1U << 2U,
+  kLightChanged = 1U << 3U,
+  kCameraChanged = 1U << 4U,
   // Coalesced by node during dispatch.
-  kTransformChanged = 1u << 5u,
+  kTransformChanged = 1U << 5U,
   // Not coalesced; each destroy record is delivered.
-  kNodeDestroyed = 1u << 6u,
-  kAllScriptSlotMutations = (1u << 0u) | (1u << 1u) | (1u << 2u),
-  kAllMutations = kAllScriptSlotMutations | (1u << 3u) | (1u << 4u) | (1u << 5u)
-    | (1u << 6u),
+  kNodeDestroyed = 1U << 6U,
+  kAllScriptSlotMutations = (1U << 0U) | (1U << 1U) | (1U << 2U),
+  kAllMutations = kAllScriptSlotMutations | (1U << 3U) | (1U << 4U) | (1U << 5U)
+    | (1U << 6U),
 };
 
 constexpr auto operator|(const SceneMutationMask lhs,
@@ -226,6 +226,23 @@ public:
 
   //! Removes the current scene environment (if any).
   OXGN_SCN_API auto ClearEnvironment() noexcept -> void;
+
+  //! Makes `node` the camera the scene is viewed through.
+  /*!
+   @return False, leaving the active camera unchanged, when `node` is not a
+   live node of this scene with a camera component.
+  */
+  OXGN_SCN_API auto SetActiveCamera(SceneNode& node) noexcept -> bool;
+
+  //! Leaves the scene without an active camera.
+  OXGN_SCN_API auto ClearActiveCamera() noexcept -> void;
+
+  //! Returns the active camera node.
+  /*!
+   @return The node, or nothing when none was set, or once that node is
+   destroyed or no longer has a camera component.
+  */
+  OXGN_SCN_NDAPI auto ActiveCamera() const noexcept -> std::optional<SceneNode>;
 
   //! Marks a native/editor environment edit after its scene mutations apply.
   //! Transient, scene-thread metadata; runtime animation does not call this.
@@ -755,11 +772,22 @@ private:
   static void PreserveWorldTransform(SceneNode& node, SceneNodeImpl* node_impl,
     SceneNodeImpl* new_parent_impl = nullptr) noexcept;
 
+  //! Looks up a node's implementation; a node no longer in the table is
+  //! invalidated (lazy invalidation). An invalid node is a caller bug.
+  static auto LookupNodeImpl(NodeTable& nodes, const SceneNode& node) noexcept
+    -> SceneNodeImpl*;
+  //! The implementation of a node that must exist; anything else is a caller
+  //! bug and aborts.
+  static auto NodeImplAt(
+    NodeTable& nodes, const ResourceHandle& handle) noexcept -> SceneNodeImpl&;
+
   std::shared_ptr<NodeTable> nodes_;
   //!< Set of root nodes for robust, duplicate-free management.
   std::vector<NodeHandle> root_nodes_;
 
   std::unique_ptr<SceneEnvironment> environment_;
+  //! Camera node the scene is viewed through; see ActiveCamera().
+  NodeHandle active_camera_;
   std::uint64_t environment_authoring_revision_ { 0U };
 
   //! Unique ID for this scene (0-255)

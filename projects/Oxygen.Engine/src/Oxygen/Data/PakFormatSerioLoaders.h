@@ -290,6 +290,8 @@ inline auto Load(AnyReader& reader, data::pak::world::SceneAssetDesc& desc)
   CHECK_RESULT(reader.ReadInto(desc.component_table_directory_offset));
   CHECK_RESULT(reader.ReadInto(desc.component_table_count));
   CHECK_RESULT(reader.ReadInto(desc.script_slots));
+  CHECK_RESULT(reader.ReadInto(desc.flags));
+  CHECK_RESULT(reader.ReadInto(desc.starting_camera));
 
   return {};
 }
@@ -338,6 +340,24 @@ inline auto Load(AnyReader& reader, data::pak::world::RenderableRecord& record)
   CHECK_RESULT(reader.ReadInto(record.geometry_key));
   CHECK_RESULT(reader.ReadInto(record.visible));
 
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::world::SceneInstanceRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.node_index));
+  CHECK_RESULT(reader.ReadInto(record.scene_key));
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::world::StartingInputContextRecord& record) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(record.context_key));
+  CHECK_RESULT(reader.ReadInto(record.priority));
   return {};
 }
 

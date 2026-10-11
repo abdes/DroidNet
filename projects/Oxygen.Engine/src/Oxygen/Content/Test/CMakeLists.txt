@@ -98,6 +98,7 @@ m_gtest_program(
     "InputLoaders_test.cpp"
     "MaterialLoader_test.cpp"
     "Mocks/MockStream.h"
+    "SceneLoader_composition_test.cpp"
     "SceneLoader_test.cpp"
     "TextureLoader_test.cpp"
 )
