@@ -562,9 +562,17 @@ identity and must update every authored referrer in one transaction.
   `ExtraAssets`; material texture paths; geometry descriptor material, buffer
   and skeleton paths; texture descriptor `source`, `sources[].file` and
   `virtual_path`; import sidecar `BundleRoot`, `PrimaryRelativePath`, `Files`
-  and `OutputDirectory`. Identities compare without the scheme and `.json`
-  suffix; a rewrite keeps the field's form (full URI, virtual path or
-  file-relative path).
+  and `OutputDirectory`; input file action references (mapping `action`,
+  `linked_action` and combo step `action` virtual paths), scene Play-section
+  starting input contexts and script parameter overrides of input kinds.
+  Identities compare without the scheme and `.json` suffix; a rewrite keeps
+  the field's form (full URI, virtual path or file-relative path).
+- **Input assets.** An input file may declare several assets; each one's
+  identity is its source folder plus its declared name, not the file. Moving
+  the file relocates all of its assets, Rename file changes none, and Move
+  asset extracts one declaration into its own file. The rules, collision
+  checks and confirmations are owned by
+  [input authoring §7.2 and §8.4](input-authoring.md#72-asset-identity).
 - **Plan.** Source moves with their companion files (a texture's image, a
   model's sidecar), a folder prefix mapping and the rewritten references of
   every referrer, including a moved descriptor's own `virtual_path`. Rejected:

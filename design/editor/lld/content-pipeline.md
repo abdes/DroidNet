@@ -322,6 +322,7 @@ Required job type mapping:
 | glTF/GLB source media import                          | `gltf`                            |
 | FBX source media import                               | `fbx`                             |
 | texture source or descriptor                          | `texture` or `texture-descriptor` |
+| input source `*.input.json` or `*.input-action.json`  | `input` (section 24)              |
 
 Scene jobs depend on the material and geometry jobs needed by their
 renderables. Folder/project cook generates a manifest and validates it against
@@ -1356,3 +1357,37 @@ queries where this batch supplies their facts. Preserve separate source invalida
 import scheduling and runtime ownership graphs. Tests cover multi-root crash/preview
 failure, source conflicts, shutdown, old readers, no perpetual stale loop, exact
 analysis/cook closure and bounded process launches.
+
+## 24. Input Sources
+
+[Input authoring](input-authoring.md) owns the input asset model; this section
+owns how the pipeline cooks it.
+
+- **Jobs.** Every `*.input.json` and `*.input-action.json` under an authoring
+  mount is one `input` job.
+- **Placement.** The job's layout sets `descriptors_dir` empty and
+  `input_subdir` to the source file's mount-relative folder, as
+  `CreateJobLayout` does for materials. `Jump` declared in
+  `Content/Gameplay/Player.input.json` cooks to `/Content/Gameplay/Jump.oiact`
+  and round-trips to `asset:///Content/Gameplay/Jump.oiact`.
+- **Several outputs per source.** Provenance records every key an input job
+  emits with its file and declaration JSON pointer; the project input index
+  is built from the same facts. An output whose declaration disappears by any
+  route (rename, delete, Move asset, file move, hand edit, file removal) is
+  retired at the next publication; Split transfers the key to its new file
+  without retiring it.
+- **Dependencies.** A reference to an action in another file is a `.oiact`
+  virtual path once the engine supports it (input authoring IF-12 b). The
+  manifest then adds `depends_on` on the job that produces it and, across
+  mounts, that mount's root in `cooked_context_roots` in content priority
+  order, as for any descriptor reference. Until then only self-contained
+  files cook: a reference to another file's action fails that file's job
+  before the cooker runs with `OXE.SCRIPT.INPUT_REFERENCE_UNSUPPORTED`
+  ([script authoring §4](script-authoring.md#4-script-assets)); ED-M09.4
+  lifts the restriction.
+- **Collisions.** Two declarations producing the same virtual path fail both
+  jobs before the cooker runs (`OXE.INPUT.IDENTITY_COLLISION`).
+- **Diagnostics.** Native `input.*` codes keep their codes and map to
+  properties through their `$`-rooted object path.
+
+Gates: input authoring IA-7 and IA-14.
