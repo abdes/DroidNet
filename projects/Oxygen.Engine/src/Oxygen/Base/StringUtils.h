@@ -105,6 +105,24 @@ namespace detail {
       out.push_back(static_cast<CharT>(0x80U | (cp & 0x3FU)));
     }
   }
+
+  //! Decode UTF-16 (with surrogate pairs) and append its UTF-8 encoding.
+  /*!
+   Unpaired surrogates are rejected through AppendUtf8's scalar-value check.
+   */
+  template <typename OutputType>
+  void AppendUtf16ToUtf8(OutputType& out, const std::u16string_view in)
+  {
+    out.reserve(in.size());
+    for (size_t i = 0; i < in.size(); ++i) {
+      char32_t cp = in[i];
+      if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < in.size()
+        && in[i + 1] >= 0xDC00 && in[i + 1] <= 0xDFFF) {
+        cp = 0x10000 + ((cp - 0xD800) << 10U) + (in[++i] - 0xDC00);
+      }
+      AppendUtf8(out, cp);
+    }
+  }
 } // namespace detail
 #endif
 
@@ -228,17 +246,10 @@ inline void WideToUtf8(const char16_t* in, std::string& out)
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   WideToUtf8(std::wstring_view(reinterpret_cast<const wchar_t*>(in)), out);
 #else
-  const std::u16string_view utf16(in);
+  // wchar_t is UTF-32 here: decode the UTF-16 text instead of reinterpreting
+  // its storage as wide characters.
   std::string encoded;
-  encoded.reserve(utf16.size());
-  for (size_t i = 0; i < utf16.size(); ++i) {
-    char32_t cp = utf16[i];
-    if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < utf16.size()
-      && utf16[i + 1] >= 0xDC00 && utf16[i + 1] <= 0xDFFF) {
-      cp = 0x10000 + ((cp - 0xD800) << 10U) + (utf16[++i] - 0xDC00);
-    }
-    detail::AppendUtf8(encoded, cp);
-  }
+  detail::AppendUtf16ToUtf8(encoded, std::u16string_view(in));
   out = std::move(encoded);
 #endif
 }
@@ -255,8 +266,17 @@ inline void WideToUtf8(const wchar_t* in, std::u8string& out)
 
 inline void WideToUtf8(const char16_t* in, std::u8string& out)
 {
+#if defined(OXYGEN_WINDOWS)
+  // wchar_t is UTF-16 on Windows.
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   WideToUtf8(std::wstring_view(reinterpret_cast<const wchar_t*>(in)), out);
+#else
+  // wchar_t is UTF-32 here: reinterpreting UTF-16 storage as wchar_t would
+  // decode every other code unit, so run the UTF-16 decoder instead.
+  std::u8string encoded;
+  detail::AppendUtf16ToUtf8(encoded, std::u16string_view(in));
+  out = std::move(encoded);
+#endif
 }
 
 inline void WideToUtf8(std::string_view in, std::u8string& out)

@@ -17,13 +17,14 @@
 #  include <Oxygen/Base/StringUtils.h>
 #  include <Oxygen/Base/api_export.h>
 
-namespace oxygen {
+namespace oxygen::windows {
 enum class ComErrorEnum;
 }
 
-// Make com_error_enum known to std library
+// Make oxygen::windows::ComErrorEnum known to the std library
 template <>
-struct std::is_error_code_enum<oxygen::ComErrorEnum> : std::true_type { };
+struct std::is_error_code_enum<oxygen::windows::ComErrorEnum> : std::true_type {
+};
 
 namespace oxygen::windows {
 
@@ -49,9 +50,15 @@ public:
   [[nodiscard]] auto default_error_condition(const int hr) const noexcept
     -> std::error_condition override
   {
-    return (HRESULT_CODE(hr) || hr == 0)
-      ? std::system_category().default_error_condition(HRESULT_CODE(hr))
-      : std::error_condition { hr, ComCategory() };
+    // Only HRESULTs carrying the Win32 facility correspond to system error
+    // codes; other facilities (RPC, Dispatch/ITF, DEP, user-defined, ...)
+    // must stay in the COM category instead of being looked up as a win32
+    // error via their truncated HRESULT_CODE.
+    if (hr == 0
+      || HRESULT_FACILITY(static_cast<HRESULT>(hr)) == FACILITY_WIN32) {
+      return std::system_category().default_error_condition(HRESULT_CODE(hr));
+    }
+    return std::error_condition { hr, ComCategory() };
   }
   [[nodiscard]] OXYGEN_BASE_API auto message(int hr) const
     -> std::string override;
@@ -110,15 +117,31 @@ namespace detail {
   {
     std::string utf8_message {};
     if constexpr (Nullable<T>) {
-      HandleComErrorImpl(hr, utf8_message);
+      // A null message means "no context to log"; a real narrow message
+      // must not be dropped just because pointers are nullable.
+      if (message == nullptr) {
+        HandleComErrorImpl(hr, utf8_message);
+        return;
+      }
+    }
+
+    using MessageT = std::decay_t<T>;
+    if constexpr (std::convertible_to<MessageT, std::string_view>) {
+      // Narrow string types already carry UTF-8 bytes.
+      utf8_message.assign(std::string_view { message });
+    } else if constexpr (std::convertible_to<MessageT, std::u8string_view>) {
+      const std::u8string_view u8_message { message };
+      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+      utf8_message.assign(
+        reinterpret_cast<const char*>(u8_message.data()), u8_message.size());
     } else {
       try {
-        string_utils::WideToUtf8(message, utf8_message);
+        string_utils::WideToUtf8(std::wstring_view { message }, utf8_message);
       } catch (const std::exception& e) {
         utf8_message.append("__not_available__ (").append(e.what()).append(")");
       }
-      HandleComErrorImpl(hr, utf8_message);
     }
+    HandleComErrorImpl(hr, utf8_message);
   }
 
 } // namespace detail

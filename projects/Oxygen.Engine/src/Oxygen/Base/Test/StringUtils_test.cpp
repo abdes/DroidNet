@@ -194,4 +194,51 @@ NOLINT_TEST_F(ToUtf8Test, CanConvertLargeWideString)
   EXPECT_EQ(length - 1, output.size());
 }
 
+//=== UTF-16 (char16_t) to UTF-8 Conversion Tests ===-------------------------//
+
+namespace {
+  //! UTF-16 code units: 'G' 'r' 'ü' U+1F600 (surrogate pair) 'Ω',
+  //! NUL-terminated.
+  constexpr std::array<char16_t, 7> kUtf16Text {
+    char16_t { 'G' },
+    char16_t { 'r' },
+    char16_t { 0x00FC },
+    char16_t { 0xD83D },
+    char16_t { 0xDE00 },
+    char16_t { 0x03A9 },
+    char16_t { 0 },
+  };
+
+  //! The same text encoded in UTF-8: G r C3BC F09F9880 CEA9.
+  const std::string kExpectedUtf8 { "G\x72\xC3\xBC\xF0\x9F\x98\x80\xCE\xA9" };
+} // namespace
+
+//! char16_t input converts correctly on every platform (on Linux wchar_t is
+//! UTF-32, so the storage must never be reinterpreted).
+NOLINT_TEST(StringUtilsTest, WideToUtf8_Char16IntoNarrowString)
+{
+  std::string output;
+  NOLINT_EXPECT_NO_THROW(WideToUtf8(kUtf16Text.data(), output));
+  EXPECT_EQ(output, kExpectedUtf8);
+}
+
+NOLINT_TEST(StringUtilsTest, WideToUtf8_Char16IntoUtf8String)
+{
+  std::u8string output;
+  NOLINT_EXPECT_NO_THROW(WideToUtf8(kUtf16Text.data(), output));
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+  const std::string as_narrow { reinterpret_cast<const char*>(output.data()),
+    output.size() };
+  EXPECT_EQ(as_narrow, kExpectedUtf8);
+}
+
+NOLINT_TEST(StringUtilsTest, WideToUtf8_Char16LoneSurrogateThrows)
+{
+  constexpr std::array<char16_t, 3> lone_surrogate { char16_t { 0xD83D },
+    char16_t { 'x' }, char16_t { 0 } };
+  std::string output;
+  NOLINT_EXPECT_THROW(
+    WideToUtf8(lone_surrogate.data(), output), std::exception);
+}
+
 } // namespace oxygen::string_utils
