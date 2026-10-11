@@ -42,6 +42,22 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
       "Exceptions_test.cpp"
       "ComError_test.cpp"
   )
+else()
+  # Keep the Windows-only test sources visible in IDE project trees on other
+  # platforms, without compiling them into any test program.
+  target_sources(
+    Oxygen.Base.Types.Tests
+    PRIVATE
+      "Exceptions_test.cpp"
+      "ComError_test.cpp"
+  )
+  set_source_files_properties(
+    "Exceptions_test.cpp"
+    "ComError_test.cpp"
+    PROPERTIES
+      HEADER_FILE_ONLY
+        TRUE
+  )
 endif()
 
 m_gtest_program(TypeList SOURCES "TypeList_test.cpp")

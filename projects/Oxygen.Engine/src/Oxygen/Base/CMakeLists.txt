@@ -96,21 +96,42 @@ set(
   "Filesystem.cpp"
   "Sha256.cpp"
   "Uuid.cpp"
+)
+set(
+  OXYGEN_BASE_WINDOWS_SOURCES
   "Windows/ComError.cpp"
   "Windows/Exceptions.cpp"
 )
+set(
+  OXYGEN_BASE_WINDOWS_HEADERS
+  "Windows/ComError.h"
+  "Windows/Exceptions.h"
+)
+# Keep every module file visible in IDE project trees on all platforms.
+# Off-platform Windows sources are listed header-only so they are neither
+# compiled nor (being outside FILE_SET HEADERS) installed.
+set_source_files_properties(
+  ${OXYGEN_BASE_WINDOWS_SOURCES}
+  ${OXYGEN_BASE_WINDOWS_HEADERS}
+  PROPERTIES
+    HEADER_FILE_ONLY
+      TRUE
+)
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+  set_source_files_properties(
+    ${OXYGEN_BASE_WINDOWS_SOURCES}
+    PROPERTIES
+      HEADER_FILE_ONLY
+        FALSE
+  )
+  list(APPEND OXYGEN_BASE_PRIVATE_SOURCES ${OXYGEN_BASE_WINDOWS_SOURCES})
+  list(APPEND OXYGEN_BASE_HEADERS ${OXYGEN_BASE_WINDOWS_HEADERS})
+else()
   list(
     APPEND
     OXYGEN_BASE_PRIVATE_SOURCES
-    "Windows/ComError.cpp"
-    "Windows/Exceptions.cpp"
-  )
-  list(
-    APPEND
-    OXYGEN_BASE_HEADERS
-    "Windows/ComError.h"
-    "Windows/Exceptions.h"
+    ${OXYGEN_BASE_WINDOWS_SOURCES}
+    ${OXYGEN_BASE_WINDOWS_HEADERS}
   )
 endif()
 
