@@ -19,16 +19,97 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 
 find_package(fmt CONFIG REQUIRED)
-find_package(SDL3 CONFIG REQUIRED)
-find_package(imgui CONFIG REQUIRED)
+if(OXYGEN_BUILD_FULL_ENGINE)
+  find_package(SDL3 CONFIG REQUIRED)
+  find_package(imgui CONFIG REQUIRED)
+endif()
 
 # ==============================================================================
 # Build instructions
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
-# Main module target
+# Input vocabulary target
+#
+# Keys, mouse buttons, input slots and input events: platform-neutral data used
+# by the Input module, the cooker and the SDL backend. It has no windowing or
+# SDL dependency, so it also builds in reusable (non-full-engine) selections.
 # ------------------------------------------------------------------------------
+
+set(OXYGEN_PLATFORM_INPUT_TARGET "${META_MODULE_TARGET}-input")
+add_library(${OXYGEN_PLATFORM_INPUT_TARGET})
+add_library(
+  ${META_MODULE_TARGET_ALIAS}-input
+  ALIAS ${OXYGEN_PLATFORM_INPUT_TARGET}
+)
+set_target_properties(
+  ${OXYGEN_PLATFORM_INPUT_TARGET}
+  PROPERTIES
+    DEFINE_SYMBOL
+      "OXGN_PLIN_EXPORTS"
+    OUTPUT_NAME
+      $<IF:$<BOOL:${BUILD_SHARED_LIBS}>,${META_MODULE_NAME}.Input,${META_MODULE_NAME}.Input-static>
+    VERSION
+      ${META_VERSION}
+    SOVERSION
+      ${META_VERSION_MAJOR}
+    PROJECT_LABEL
+      ${META_MODULE_NAME}.Input
+)
+
+set(
+  OXYGEN_PLATFORM_INPUT_HEADERS
+  "Input.h"
+  "InputApiExport.h"
+  "InputEvent.h"
+  "Types.h"
+)
+
+target_sources(
+  ${OXYGEN_PLATFORM_INPUT_TARGET}
+  PRIVATE
+    "Input.cpp"
+    ${OXYGEN_PLATFORM_INPUT_HEADERS}
+  PUBLIC
+    FILE_SET HEADERS
+    BASE_DIRS "${OXYGEN_SOURCE_DIR}"
+    FILES ${OXYGEN_PLATFORM_INPUT_HEADERS}
+)
+
+arrange_target_files_for_ide(${OXYGEN_PLATFORM_INPUT_TARGET})
+
+target_compile_features(${OXYGEN_PLATFORM_INPUT_TARGET} PUBLIC cxx_std_23)
+target_compile_definitions(
+  ${OXYGEN_PLATFORM_INPUT_TARGET}
+  PUBLIC
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_PLIN_STATIC>
+)
+
+target_link_libraries(
+  ${OXYGEN_PLATFORM_INPUT_TARGET}
+  PUBLIC
+    fmt::fmt-header-only
+    oxygen::base
+    oxygen::composition
+    oxygen::core
+)
+
+# ------------------------------------------------------------------------------
+# Main module target (SDL backend; full engine only)
+# ------------------------------------------------------------------------------
+
+if(NOT OXYGEN_BUILD_FULL_ENGINE)
+  if(OXYGEN_BUILD_TESTS)
+    add_subdirectory("Test")
+  endif()
+  oxygen_module_install(
+    EXPORT ${META_MODULE_NAMESPACE}
+    TARGETS
+      ${OXYGEN_PLATFORM_INPUT_TARGET}
+  )
+  asap_pop_module("${META_MODULE_NAME}")
+  return()
+endif()
 
 add_library(${META_MODULE_TARGET})
 add_library(${META_MODULE_TARGET_ALIAS} ALIAS ${META_MODULE_TARGET})
@@ -50,11 +131,8 @@ set_target_properties(
 set(
   OXYGEN_PLATFORM_HEADERS
   "Display.h"
-  "Input.h"
-  "InputEvent.h"
   "Platform.h"
   "PlatformEvent.h"
-  "Types.h"
   "Window.h"
   "SDL/Wrapper.h"
   "ImGui/ImGuiSdl3Backend.h"
@@ -64,7 +142,6 @@ set(
   OXYGEN_PLATFORM_PRIVATE_SOURCES
   "AsyncOps.cpp"
   "Detail/Window_ManagerInterface.h"
-  "Input.cpp"
   "Platform.cpp"
   # SDL Specific
   "SDL/Wrapper.cpp"
@@ -110,6 +187,7 @@ target_link_libraries(
     oxygen::composition
     oxygen::oxco
     oxygen::core
+    ${META_MODULE_TARGET_ALIAS}-input
     SDL3::SDL3
     imgui::imgui
 )
@@ -129,6 +207,7 @@ endif()
 oxygen_module_install(
   EXPORT ${META_MODULE_NAMESPACE}
   TARGETS
+    ${OXYGEN_PLATFORM_INPUT_TARGET}
     ${META_MODULE_TARGET}
 )
 
