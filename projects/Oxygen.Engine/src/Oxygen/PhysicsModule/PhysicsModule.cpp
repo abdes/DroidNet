@@ -664,13 +664,20 @@ auto PhysicsModule::OnGameplay(observer_ptr<engine::FrameContext> context)
       continue;
     }
 
-    const auto position
-      = node->GetTransform().GetWorldPosition().value_or(Vec3(0.0F));
-    const auto rotation = node->GetTransform().GetWorldRotation().value_or(
-      Quat(1.0F, 0.0F, 0.0F, 0.0F));
+    // kGameplay runs before kTransformPropagation, so the propagated world
+    // cache may be stale (or dirty) for poses authored this frame. Compose
+    // the authoritative scene pose from the local transform chain instead,
+    // matching the dynamic-pull path's pre-propagation convention.
+    const auto world_trs = BuildWorldTrsFromLocalChain(*node);
+    DCHECK_F(world_trs.has_value(),
+      "PhysicsModule kinematic push expects a resolvable local transform "
+      "chain for a live observed scene node.");
     batched_body_ids.push_back(binding->body_id);
-    batched_positions.push_back(position);
-    batched_rotations.push_back(rotation);
+    batched_positions.push_back(
+      world_trs.has_value() ? world_trs->position : Vec3(0.0F));
+    batched_rotations.push_back(world_trs.has_value()
+        ? world_trs->rotation
+        : Quat(1.0F, 0.0F, 0.0F, 0.0F));
   }
 
   if (batched_body_ids.empty()) {
