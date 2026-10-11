@@ -128,6 +128,9 @@ chain.RequirePrerequisiteHeld(true); // prereq must be Ongoing at press time
   - Completed: not applicable; chains are instantaneous triggers.
 - Edge cases:
   - No trigger before prerequisite Triggered.
+  - The max-delay window runs from the moment the prerequisite arms the chain,
+    whether or not the chained key has had input: Shift then W 0.5 s later
+    does not fire with a 0.3 s window.
   - No auto-repeat while held; rising edge required.
   - After max-delay expiry, chain won’t re-arm until prerequisite idles.
 

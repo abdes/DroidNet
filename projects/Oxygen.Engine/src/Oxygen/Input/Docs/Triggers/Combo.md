@@ -45,6 +45,11 @@ Implications:
   prior frame won't repeatedly reset.
 - The combo can span many frames: windows are accumulated via delta-time across
   updates until the next qualifying transition happens.
+- Each transition counts once. The combo keeps a cursor per step action (frame
+  serial and number of transitions seen), so re-evaluating the combo in the
+  same frame — the input system evaluates after every event, including
+  unrelated mouse motion — never counts the same transition twice. One tap of
+  D with mouse movement in the same frame is not a double tap.
 
 ## Timeline example (three steps)
 

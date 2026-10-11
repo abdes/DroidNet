@@ -1,146 +1,125 @@
 # Actions
 
-An Action represents a high-level input concept (e.g., Jump, Fire) with a
-persistent level state and per-frame edges. It integrates with triggers and
-mappings to track when an input is held, pressed, released, or otherwise
-transitions state during a frame.
+An `Action` is a named logical input (Jump, Fire, Move) with a typed value,
+a level state that persists across frames, and edges that exist for one frame.
+Gameplay reads actions; only the input system writes them.
 
-## Core concepts
+## Value and state
 
-- Level state (persistent across frames):
-  - `ongoing` — the action is currently held/active.
-  - `value` — the last-known ActionValue (bool/axis), persists across frames.
-- Edge events (per-frame only):
-  - `Triggered` — emitted by triggers when conditions are met within the frame.
-  - `Completed` — end of a successful action (one-shot semantics).
-  - `Canceled` — action ended by release or interruption.
-  - `Started` / `Released` — derived from transitions on `ongoing` bit:
-    - `Started`: Idle → Ongoing
-    - `Released`: Ongoing → Idle
+- **Value type**: `kBool`, `kAxis1D` or `kAxis2D`, fixed at construction.
+- **Level state** (persists): `IsOngoing()`, `IsTriggered()`, `IsIdle()`,
+  `GetValue()`.
+- **Edges** (current frame only): `WasStartedThisFrame()` (Idle → Ongoing),
+  `WasTriggeredThisFrame()`, `WasCompletedThisFrame()`,
+  `WasCanceledThisFrame()`, `WasReleasedThisFrame()` (Ongoing → Idle),
+  `WasValueUpdatedThisFrame()`, and the full `GetFrameTransitions()` list.
+- **Configuration**: `SetConsumesInput()` (see
+  [Mappings.md](Mappings.md#consumption)) and `SetAccumulation()`.
 
-## Time model and mapping interplay
+The state mutators are private. `InputSystem` and `InputActionMapping` write
+actions; unit tests use the `testing::ActionTestAccess` peer
+(`Test/ActionTestAccess.h`). Gameplay cannot desynchronize an action from its
+bindings.
 
-- Timebase:
-  - Action does not advance time on its own; it receives snapshots from
-    mappings. Per-frame transitions are derived when the mapping updates the
-    action via `UpdateState`.
-  - Mappings are responsible for advancing time-based triggers using the
-    `delta_time` parameter to their `Update` method.
-  - Platform input event timestamps are not used by the mapping; only
-    `delta_time` advances trigger timing.
+## Several bindings, one action
 
-- Frame flow (high level):
+Each `InputActionMapping` that drives an action records its own latest
+evaluation (a _contribution_: state, value and the frame it was written in).
+After every contribution the action recombines all of them:
 
-```mermaid
-sequenceDiagram
-  autonumber
-  participant Frame
-  participant InputSystem as InputSystem
-  participant Ctx as InputMappingContext
-  participant Map as InputActionMapping
-  participant Act as Action
+| Field     | Rule                                                                                                                                                                  |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ongoing   | Any contribution is ongoing.                                                                                                                                          |
+| Triggered | Any contribution triggered **in the current frame**. Older contributions keep their ongoing bit but not their edges.                                                  |
+| Canceled  | Some contribution canceled in the current frame **and** the combined action is not active. A cancel from one binding does not cancel an action another binding holds. |
+| Value     | Combined per component by the accumulation mode. `kBool`: any true.                                                                                                   |
 
-  Frame->>InputSystem: BeginFrameTracking() on all actions
-  Frame->>InputSystem: Drain & route events (HandleInput)
-  InputSystem->>Ctx: Update(game_dt)
-  Ctx->>Map: Update(game_dt)
-  Map->>Act: UpdateState(State,value)
-  InputSystem->>Frame: Build snapshot (edges valid this frame)
-  Frame->>InputSystem: EndFrameTracking() (clear edges)
+Accumulation modes (`ActionAccumulation`):
+
+- `kHighestAbsolute` (default) — per component, keep the value with the
+  largest magnitude. W and Up Arrow both bound to forward give 1, not 2; W + D
+  give (1, 1).
+- `kCumulative` — sum per component. W + S give 0 (opposing keys cancel);
+  W and Up Arrow give 2, which is the documented trade-off.
+
+This matches Unreal Enhanced Input's per-mapping aggregation and its
+highest-absolute default (`EInputActionAccumulationBehavior`).
+
+When a binding goes away (its context is deactivated or removed), its
+contribution is removed and the action recombines.
+
+## Relative values
+
+Mouse motion and wheel bindings are relative: their value is the sum of every
+event received in the current frame, and returns to zero in the next frame
+without motion. `GetValue()` of a look action is therefore the whole-frame
+delta, independent of how many events the device sent or the frame rate.
+Do not sum `GetFrameTransitions()` values to recover a delta; transitions
+record state changes, not samples.
+
+## Activation outcome: Completed or Canceled
+
+An _activation_ starts when the action becomes active (triggered or ongoing)
+and ends when it becomes inactive. It ends with exactly one closing edge:
+
+- **Completed** if it triggered at least once and was not canceled.
+- **Canceled** if it never triggered, or if it was interrupted.
+
+Activations that trigger without holding (Pressed, Released, Tap, and a
+one-frame Pulse) complete at the start of the following frame, so gameplay
+sees Triggered in frame N and Completed in frame N+1.
+
+| Scenario                                              | Edges                                |
+| ----------------------------------------------------- | ------------------------------------ |
+| Hold E 0.5 s to open a door, release after it opened  | Triggered ... Completed              |
+| Release E at 0.2 s of a 0.5 s hold                    | Canceled                             |
+| Auto-fire Pulse, release between pulses after 3 shots | Triggered ×3, Completed              |
+| Jump (Pressed)                                        | Triggered, then Completed next frame |
+| Sprint held while its context is deactivated          | Canceled                             |
+
+Unreal derives Completed from the trigger state at the moment of release, so
+it reports Canceled for a Pulse released between pulses even after it fired.
+Oxygen decides by outcome: the auto-fire succeeded, so it completes. Unreal's
+invariant — every triggered activation completes — is kept.
+
+## Fixed-step consumption
+
+Frame edges are the wrong tool for a fixed-step simulation: a frame may run no
+substep (the edge is lost) or several (the edge is seen twice). Every rising
+Triggered edge is also latched in a counter that survives frame boundaries:
+
+```cpp
+// In the fixed-step phase, once per substep:
+if (jump->ConsumeFixedStepTrigger()) {
+  body.ApplyJumpImpulse();
+}
 ```
 
-- Interplay:
-  - Edges (Triggered/Completed/Canceled) are non-sticky and cleared at
-    `BeginFrameTracking` for the next frame. Level state (`ongoing`, `value`)
-    persists across frames.
-  - The mapping decides what `State` to apply to the `Action` based on
-    triggers and the current `ActionValue`.
+One press yields exactly one `true`. Two presses inside one rendered frame
+yield two. Actions that trigger every frame while held (Down, Pulse) latch one
+edge per frame in which they trigger.
 
-## Invariants
-
-- Edge flags are non-sticky and reset at BeginFrameTracking().
-- Level state (`ongoing` and `value`) persists across frames.
-- Transitions are recorded only within the current frame window.
-
-### Transition timestamps
-
-- Transitions are timestamped using a steady clock in the current
-  implementation. A future improvement is to unify timestamps with the engine
-  timebase for cross-subsystem consistency.
-
-## Lifecycle
+## Frame lifecycle
 
 ```mermaid
 flowchart TD
-  A[BeginFrameTracking]
-  A -->|clear edges & transitions| B[UpdateState*]
-  B -->|record transitions when flags change| B
-  B --> C[EndFrameTracking]
-  C -->|level state persists| A
+  A["kFrameStart: begin frame<br/>clear edges and transitions<br/>complete non-held activations"]
+  A --> B["kInput: contributions from mappings<br/>recombine, record transitions"]
+  B --> C["end of kInput: snapshot copied<br/>edges stay readable until the next frame"]
+  C --> A
 ```
 
-- BeginFrameTracking():
-  - Clears per-frame edges and transitions.
-  - Only `ongoing` persists across frames.
-- UpdateState():
-  - Applies incoming state/value and records transitions when flags change.
-- EndFrameTracking():
-  - No hard reset; level state persists.
+Edges and transitions are readable on the action from the end of `kInput`
+until the next `kFrameStart`. Readers outside that window (parallel tasks,
+frames in flight) use the `InputSnapshot`.
 
-## State machine (level state only)
-
-```mermaid
-stateDiagram-v2
-  [*] --> Idle
-  Idle --> Ongoing: input actuated
-  Ongoing --> Idle: input released
-```
-
-## Edge derivation from transitions
-
-```mermaid
-sequenceDiagram
-  participant Frame
-  participant Action
-  Note over Action: Derive edges from from_state/to_state deltas
-
-  Frame->>Action: BeginFrameTracking
-  Frame->>Action: UpdateState(Idle -> Ongoing)
-  Note over Action: Started (derived), may also Triggered
-  Frame->>Action: UpdateState(Ongoing -> Idle)
-  Note over Action: Released (derived), Completed or Canceled
-  Frame->>Action: EndFrameTracking
-```
-
-## Contract
-
-- Inputs: State snapshots (from mapping/trigger logic) and ActionValue.
-- Output: Transitions and edge helpers restricted to current frame.
-- Non-goals: Long-term history; transitions reset every frame.
-
-## Typical usage
+## Usage
 
 ```cpp
-Action jump{"Jump", ActionValueType::kBool};
-
-// Frame start
-jump.BeginFrameTracking();
-
-// Input update wires in state/value
-jump.UpdateState(Action::State{ .triggered = press_event, .ongoing = is_down },
-                 ActionValue{ is_down });
-
-// Query edges and level
-if (jump.WasStartedThisFrame()) { /* play SFX */ }
-if (jump.WasTriggeredThisFrame()) { /* apply impulse */ }
-if (jump.IsOngoing()) { /* sustain charge */ }
-
-// Frame end
-jump.EndFrameTracking();
+if (fire->WasTriggeredThisFrame()) { weapon.Fire(); }
+if (aim->IsOngoing()) { camera.Aim(); }
+if (open_door->WasCompletedThisFrame()) { anim.EndInteraction(); }
+if (open_door->WasCanceledThisFrame()) { anim.AbortInteraction(); }
+const auto look = look_action->GetValue().GetAs<oxygen::Axis2D>();
+camera.AddYawPitch(look.x, look.y);
 ```
-
-## Notes
-
-- Use `Was*ThisFrame()` helpers for edge logic (Started/Released/Triggered/Completed/Canceled).
-- `GetFrameTransitions()` provides full transition details (timestamps/values) for advanced logic like combos/chains.
-- TODO: Unify transition timestamps with engine time (see TimeUtils.h) for consistent timing across subsystems.

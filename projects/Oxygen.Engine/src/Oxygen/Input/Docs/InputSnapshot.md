@@ -1,4 +1,4 @@
-# FrameInputSnapshot
+# InputSnapshot
 
 A consolidated, read-only view of input for a single frame. Built and FROZEN
 at the end of the kInput phase so it is immediately available to subsequent
@@ -19,13 +19,17 @@ provided by FrameContext and should be queried from there when needed.
 - Each frame, actions call BeginFrameTracking() before input processing. During
   kInput, input events and mapping contexts update actions; transitions (edges)
   are recorded as they occur.
-- At the END of kInput, FrameInputSnapshot is constructed as a thin view over
-  the current actions. It holds pointers to actions (no duplicated data) and
-  answers queries by delegating to them. Immediately after construction,
-  actions EndFrameTracking() so edges don’t carry over.
+- At the END of kInput, the InputSnapshot is built as a **value copy** of
+  every action: name, state flags, value, value-updated flag and the frame's
+  transitions. It holds no pointer to an action, so it is immutable: a reader
+  that keeps it into the next frame still sees this frame, and it stays valid
+  after the action is removed (level unload) or destroyed.
 - The frozen snapshot is available to FixedSim, Gameplay, and other phases in
   the same frame, and is also included in the unified snapshots built at
-  kSnapshot (without rebuilding).
+  kSnapshot (without rebuilding). Parallel tasks and frames in flight may hold
+  it as long as they need (`std::shared_ptr<const InputSnapshot>`).
+- Copy cost: one small entry per action plus its transitions for the frame
+  (typically zero to three).
 
 ## Edge vs Level — precise meanings
 
@@ -40,7 +44,7 @@ provided by FrameContext and should be queried from there when needed.
   - Non-sticky: edges exist only for the current frame window.
   - Use for event-like behaviors (single-shot fire, open menu, confirm).
 
-## API overview (thin view)
+## API overview
 
 Level queries (final snapshot):
 
@@ -72,7 +76,7 @@ Edge queries (per-frame transitions):
   - Precise predicate for a specific state transition.
 - GetActionTransitions(name) → `span<const FrameTransition>`
   - Full list of transitions for the action during the frame; includes the
-    timestamp and value at each transition.
+    states and the value at each transition.
 
 Timing:
 
@@ -131,13 +135,23 @@ if (snapshot.DidActionValueUpdate("move")) {
 
 ### Complex timing: combos/animations
 
-Use GetActionTransitions() to read the exact sequence of edges with timestamps
-and values to drive animations or combo logic.
+Use GetActionTransitions() to read the exact sequence of edges with their
+values to drive animations or combo logic.
 
 ```cpp
 for (const auto& t : snapshot.GetActionTransitions("attack")) {
-  anim.ProcessEdge(t.timestamp, t.to_state, t.value_at_transition);
+  anim.ProcessEdge(t.from_state, t.to_state, t.value_at_transition);
 }
+```
+
+### Relative axes (look, wheel zoom)
+
+GetActionValue() of a mouse or wheel action is the whole-frame delta. Do not
+sum transition values.
+
+```cpp
+const auto look = snapshot.GetActionValue("look").GetAs<oxygen::Axis2D>();
+camera.AddYawPitch(look.x, look.y);
 ```
 
 ## Guidelines
@@ -149,11 +163,6 @@ for (const auto& t : snapshot.GetActionTransitions("attack")) {
 - For exact control and timing, prefer DidActionTransition()/GetActionTransitions().
 - Avoid polling IsActionTriggered for “click once” behavior; use
   DidActionTrigger instead to eliminate bounce/double-trigger issues.
-
-## Notes
-
-- Timestamps in transitions are steady_clock::time_point. A future change may
-  align them with engine time for cross-system consistency.
 
 ## Glossary
 
