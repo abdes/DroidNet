@@ -8,6 +8,7 @@
 
 #include <memory>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
@@ -48,19 +49,38 @@ protected:
   //! Helper to send a mouse button event through the broadcast channel
   void SendMouseButtonEvent(oxygen::platform::MouseButton button,
     oxygen::platform::ButtonState state,
-    oxygen::SubPixelPosition position = { 0.0f, 0.0f });
+    oxygen::SubPixelPosition position = { .x = 0.0F, .y = 0.0F });
 
   //! Helper to send a mouse motion event through the broadcast channel
-  void SendMouseMotion(
-    float dx, float dy, oxygen::SubPixelPosition position = { 0.0f, 0.0f });
+  void SendMouseMotion(float dx, float dy,
+    oxygen::SubPixelPosition position = { .x = 0.0F, .y = 0.0F });
 
   //! Helper to send a mouse wheel event through the broadcast channel
-  void SendMouseWheel(
-    float dx, float dy, oxygen::SubPixelPosition position = { 0.0f, 0.0f });
+  void SendMouseWheel(float dx, float dy,
+    oxygen::SubPixelPosition position = { .x = 0.0F, .y = 0.0F });
 
   [[nodiscard]] auto Now() const noexcept { return phy_time_.Now(); }
 
-protected:
+  //! Event loop driving the coroutine-based InputSystem pipeline.
+  [[nodiscard]] auto Loop() noexcept -> oxygen::co::testing::TestEventLoop&
+  {
+    return loop_;
+  }
+
+  //! The InputSystem under test.
+  [[nodiscard]] auto System() const noexcept -> oxygen::engine::InputSystem&
+  {
+    return *input_system_;
+  }
+
+  //! The frame context passed to the InputSystem phase handlers.
+  [[nodiscard]] auto Context() const noexcept
+    -> oxygen::observer_ptr<oxygen::engine::FrameContext>
+  {
+    return oxygen::observer_ptr { frame_context_.get() };
+  }
+
+private:
   oxygen::co::testing::TestEventLoop loop_;
   std::unique_ptr<oxygen::co::BroadcastChannel<oxygen::platform::InputEvent>>
     input_channel_;

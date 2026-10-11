@@ -6,6 +6,9 @@
 
 //! Tests for ActionTriggerHold
 
+#include <chrono>
+
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -19,10 +22,18 @@ using namespace std::chrono_literals;
 
 namespace {
 
+//! Axis actuation threshold.
+constexpr float kAxisThreshold = 0.40F;
+//! Axis value just below kAxisThreshold.
+constexpr float kBelowAxisThreshold = 0.39F;
+//! Axis value just above kAxisThreshold.
+constexpr float kAboveAxisThreshold = 0.41F;
+
 NOLINT_TEST(ActionTriggerHold, TriggersAfterThreshold)
 {
   ActionTriggerHold trigger;
-  trigger.SetHoldDurationThreshold(0.1F);
+  constexpr float kHoldSeconds = 0.1F;
+  trigger.SetHoldDurationThreshold(kHoldSeconds);
   trigger.OneShot(true);
 
   ActionValue v { false };
@@ -50,7 +61,8 @@ NOLINT_TEST(ActionTriggerHold, TriggersAfterThreshold)
 NOLINT_TEST(ActionTriggerHold, NoTriggerIfReleasedBeforeThreshold)
 {
   ActionTriggerHold trigger;
-  trigger.SetHoldDurationThreshold(0.2F);
+  constexpr float kHoldSeconds = 0.2F;
+  trigger.SetHoldDurationThreshold(kHoldSeconds);
   trigger.OneShot(true);
 
   ActionValue v { false };
@@ -68,7 +80,8 @@ NOLINT_TEST(ActionTriggerHold, FiresAtExactThreshold)
 {
   // Arrange
   ActionTriggerHold trigger;
-  trigger.SetHoldDurationThreshold(0.20F);
+  constexpr float kHoldSeconds = 0.20F;
+  trigger.SetHoldDurationThreshold(kHoldSeconds);
   trigger.OneShot(true);
   ActionValue v { false };
 
@@ -90,18 +103,19 @@ NOLINT_TEST(ActionTriggerHold, TriggersOnAxisAboveThreshold)
 {
   // Arrange
   ActionTriggerHold trigger;
-  trigger.SetHoldDurationThreshold(0.10F);
+  constexpr float kHoldSeconds = 0.10F;
+  trigger.SetHoldDurationThreshold(kHoldSeconds);
   trigger.OneShot(true);
-  trigger.SetActuationThreshold(0.40F);
+  trigger.SetActuationThreshold(kAxisThreshold);
   ActionValue v { Axis1D { 0.0F } };
 
   // Below threshold -> accumulate but no ongoing state; ensure no trigger
-  v.Update(Axis1D { 0.39F });
+  v.Update(Axis1D { kBelowAxisThreshold });
   trigger.UpdateState(v, CanonicalDuration { 200ms });
   EXPECT_FALSE(trigger.IsTriggered());
 
   // Cross positive threshold and hold
-  v.Update(Axis1D { 0.41F });
+  v.Update(Axis1D { kAboveAxisThreshold });
   trigger.UpdateState(v, CanonicalDuration { 50ms });
   EXPECT_FALSE(trigger.IsTriggered());
   trigger.UpdateState(v, CanonicalDuration { 50ms });
@@ -124,7 +138,8 @@ NOLINT_TEST(ActionTriggerHold, RepeatsIfOneShotDisabled)
 {
   // Arrange
   ActionTriggerHold trigger;
-  trigger.SetHoldDurationThreshold(0.05F);
+  constexpr float kHoldSeconds = 0.05F;
+  trigger.SetHoldDurationThreshold(kHoldSeconds);
   trigger.OneShot(false);
   ActionValue v { false };
 
@@ -149,7 +164,8 @@ NOLINT_TEST(ActionTriggerHold, NoExtraTriggersWhileHeld)
 {
   // Arrange
   ActionTriggerHold trigger;
-  trigger.SetHoldDurationThreshold(0.05F);
+  constexpr float kHoldSeconds = 0.05F;
+  trigger.SetHoldDurationThreshold(kHoldSeconds);
   trigger.OneShot(true);
   ActionValue v { false };
 

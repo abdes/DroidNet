@@ -7,6 +7,7 @@
 #include <memory>
 
 #include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/ActionValue.h>
 
 using oxygen::input::Action;
 

@@ -6,6 +6,9 @@
 
 //! Tests for ActionTriggerHoldAndRelease
 
+#include <chrono>
+
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -19,10 +22,16 @@ using namespace std::chrono_literals;
 
 namespace {
 
+//! Axis actuation threshold.
+constexpr float kAxisThreshold = 0.40F;
+//! Axis value just above kAxisThreshold.
+constexpr float kAboveAxisThreshold = 0.41F;
+
 NOLINT_TEST(ActionTriggerHoldAndRelease, TriggersOnReleaseAfterHold)
 { // NOLINT(*-avoid-c-arrays)
   ActionTriggerHoldAndRelease trigger;
-  trigger.SetHoldDurationThreshold(0.2F);
+  constexpr float kHoldSeconds = 0.2F;
+  trigger.SetHoldDurationThreshold(kHoldSeconds);
 
   ActionValue v { false };
 
@@ -45,7 +54,8 @@ NOLINT_TEST(ActionTriggerHoldAndRelease, TriggersOnReleaseAfterHold)
 NOLINT_TEST(ActionTriggerHoldAndRelease, NoTriggerIfReleasedBeforeThreshold)
 { // NOLINT(*-avoid-c-arrays)
   ActionTriggerHoldAndRelease trigger;
-  trigger.SetHoldDurationThreshold(0.2F);
+  constexpr float kHoldSeconds = 0.2F;
+  trigger.SetHoldDurationThreshold(kHoldSeconds);
 
   ActionValue v { false };
   v.Update(true);
@@ -70,14 +80,15 @@ NOLINT_TEST(ActionTriggerHoldAndRelease, FiresAtExactThresholdOnRelease)
 {
   // Arrange
   ActionTriggerHoldAndRelease trigger;
-  trigger.SetHoldDurationThreshold(0.20F);
+  constexpr float kHoldSeconds = 0.20F;
+  trigger.SetHoldDurationThreshold(kHoldSeconds);
   ActionValue v { false };
 
   // Act: press and hold exactly the threshold duration
   v.Update(true);
   trigger.UpdateState(v,
     CanonicalDuration { std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::duration<float>(0.20F)) });
+      std::chrono::duration<float>(kHoldSeconds)) });
 
   // Assert: still not triggered until release
   EXPECT_FALSE(trigger.IsTriggered());
@@ -93,7 +104,9 @@ NOLINT_TEST(ActionTriggerHoldAndRelease, NoTriggerBeforeRelease)
 {
   // Arrange
   ActionTriggerHoldAndRelease trigger;
-  trigger.SetHoldDurationThreshold(0.10F);
+  constexpr float kHoldSeconds = 0.10F;
+  constexpr float kHalfHoldSeconds = 0.05F;
+  trigger.SetHoldDurationThreshold(kHoldSeconds);
   ActionValue v { false };
 
   // Act: press and hold beyond threshold
@@ -102,11 +115,11 @@ NOLINT_TEST(ActionTriggerHoldAndRelease, NoTriggerBeforeRelease)
   EXPECT_FALSE(trigger.IsTriggered());
   trigger.UpdateState(v,
     CanonicalDuration { std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::duration<float>(0.05F)) });
+      std::chrono::duration<float>(kHalfHoldSeconds)) });
   EXPECT_FALSE(trigger.IsTriggered());
   trigger.UpdateState(v,
     CanonicalDuration { std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::duration<float>(0.10F)) });
+      std::chrono::duration<float>(kHoldSeconds)) });
   EXPECT_FALSE(trigger.IsTriggered());
 
   // Release -> triggers once
@@ -120,15 +133,17 @@ NOLINT_TEST(ActionTriggerHoldAndRelease, TriggersOnPositiveReleaseAfterHold)
 {
   // Arrange
   ActionTriggerHoldAndRelease trigger;
-  trigger.SetHoldDurationThreshold(0.05F);
-  trigger.SetActuationThreshold(0.40F);
+  constexpr float kHoldSeconds = 0.05F;
+  constexpr float kPartialHoldSeconds = 0.03F;
+  trigger.SetHoldDurationThreshold(kHoldSeconds);
+  trigger.SetActuationThreshold(kAxisThreshold);
   ActionValue v { Axis1D { 0.0F } };
 
   // Rise above threshold and hold
-  v.Update(Axis1D { 0.41F });
+  v.Update(Axis1D { kAboveAxisThreshold });
   trigger.UpdateState(v,
     CanonicalDuration { std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::duration<float>(0.03F)) });
+      std::chrono::duration<float>(kPartialHoldSeconds)) });
   EXPECT_FALSE(trigger.IsTriggered());
   trigger.UpdateState(v, CanonicalDuration { 20ms });
   EXPECT_FALSE(trigger.IsTriggered());
@@ -144,8 +159,9 @@ NOLINT_TEST(ActionTriggerHoldAndRelease, TriggersOnNegativeReleaseAfterHold)
 {
   // Arrange
   ActionTriggerHoldAndRelease trigger;
-  trigger.SetHoldDurationThreshold(0.05F);
-  trigger.SetActuationThreshold(0.40F);
+  constexpr float kHoldSeconds = 0.05F;
+  trigger.SetHoldDurationThreshold(kHoldSeconds);
+  trigger.SetActuationThreshold(kAxisThreshold);
   ActionValue v { Axis1D { 0.0F } };
 
   // Go below negative threshold and hold

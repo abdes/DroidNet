@@ -6,6 +6,8 @@
 
 //! Tests for ActionTriggerPulse
 
+#include <chrono>
+
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -31,7 +33,8 @@ NOLINT_TEST(ActionTriggerPulse, NoTriggerWithoutActuation)
 NOLINT_TEST(ActionTriggerPulse, TriggersAtIntervalsWhileHeld)
 {
   ActionTriggerPulse trigger;
-  trigger.SetInterval(0.1F);
+  constexpr float kIntervalSeconds = 0.1F;
+  trigger.SetInterval(kIntervalSeconds);
 
   ActionValue v { false };
   v.Update(true);
@@ -55,14 +58,16 @@ NOLINT_TEST(ActionTriggerPulse, TriggersAtIntervalsWhileHeld)
   // Release -> cancel the pulse sequence
   v.Update(false);
   trigger.UpdateState(v, CanonicalDuration {});
-  EXPECT_TRUE(trigger.IsCanceled());
+  // Released after pulses fired: the activation succeeded (D5), not canceled.
+  EXPECT_FALSE(trigger.IsCanceled());
 }
 
 //! Cancel when released after multiple pulses
-NOLINT_TEST(ActionTriggerPulse, CanceledWhenReleasedAfterMultiplePulses)
+NOLINT_TEST(ActionTriggerPulse, NotCanceledWhenReleasedAfterMultiplePulses)
 {
   ActionTriggerPulse trigger;
-  trigger.SetInterval(0.05F);
+  constexpr float kIntervalSeconds = 0.05F;
+  trigger.SetInterval(kIntervalSeconds);
 
   ActionValue v { false };
   v.Update(true);
@@ -80,15 +85,18 @@ NOLINT_TEST(ActionTriggerPulse, CanceledWhenReleasedAfterMultiplePulses)
   // Release
   v.Update(false);
   trigger.UpdateState(v, CanonicalDuration {});
-  EXPECT_TRUE(trigger.IsCanceled());
+  // Released after pulses fired: the activation succeeded (D5), not canceled.
+  EXPECT_FALSE(trigger.IsCanceled());
 }
 
 //! Slightly late frames should still trigger within jitter tolerance
 NOLINT_TEST(ActionTriggerPulse, JitterToleranceAllowsLateFrame)
 {
   ActionTriggerPulse trigger;
-  trigger.SetInterval(0.1F);
-  trigger.SetJitterTolerance(0.02F);
+  constexpr float kIntervalSeconds = 0.1F;
+  trigger.SetInterval(kIntervalSeconds);
+  constexpr float kJitterSeconds = 0.02F;
+  trigger.SetJitterTolerance(kJitterSeconds);
 
   ActionValue v { false };
   v.Update(true);
@@ -107,7 +115,8 @@ NOLINT_TEST(ActionTriggerPulse, JitterToleranceAllowsLateFrame)
 NOLINT_TEST(ActionTriggerPulse, PhaseAlignmentCarriesOvershoot)
 {
   ActionTriggerPulse trigger;
-  trigger.SetInterval(0.1F);
+  constexpr float kIntervalSeconds = 0.1F;
+  trigger.SetInterval(kIntervalSeconds);
   trigger.EnablePhaseAlignment(true);
 
   ActionValue v { false };
@@ -126,7 +135,8 @@ NOLINT_TEST(ActionTriggerPulse, PhaseAlignmentCarriesOvershoot)
   // Release -> canceled
   v.Update(false);
   trigger.UpdateState(v, CanonicalDuration {});
-  EXPECT_TRUE(trigger.IsCanceled());
+  // Released after pulses fired: the activation succeeded (D5), not canceled.
+  EXPECT_FALSE(trigger.IsCanceled());
 }
 
 //! Linear ramping from a slower to a faster interval increases cadence over
@@ -135,7 +145,14 @@ NOLINT_TEST(ActionTriggerPulse, RateRampSpeedsUp)
 {
   ActionTriggerPulse trigger;
   // Start at 0.2s interval, ramp to 0.05s over 1s
-  trigger.SetRateRamp(0.2F, 0.05F, 1.0F);
+  constexpr float kStartIntervalSeconds = 0.2F;
+  constexpr float kEndIntervalSeconds = 0.05F;
+  constexpr float kRampSeconds = 1.0F;
+  trigger.SetRateRamp({
+    .start_interval_seconds = kStartIntervalSeconds,
+    .end_interval_seconds = kEndIntervalSeconds,
+    .duration_seconds = kRampSeconds,
+  });
 
   ActionValue v { false };
   v.Update(true);
@@ -161,7 +178,8 @@ NOLINT_TEST(ActionTriggerPulse, RateRampSpeedsUp)
   // Release
   v.Update(false);
   trigger.UpdateState(v, CanonicalDuration {});
-  EXPECT_TRUE(trigger.IsCanceled());
+  // Released after pulses fired: the activation succeeded (D5), not canceled.
+  EXPECT_FALSE(trigger.IsCanceled());
 }
 
 } // namespace

@@ -6,17 +6,21 @@
 
 //! Tests for ActionTriggerCombo
 
+#include <chrono>
 #include <memory>
 
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/ActionState.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
+#include <Oxygen/Input/Test/ActionTestAccess.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerCombo;
 using oxygen::input::ActionValue;
+using oxygen::input::testing::ActionTestAccess;
 using oxygen::time::CanonicalDuration;
 using namespace std::chrono_literals;
 
@@ -32,8 +36,8 @@ NOLINT_TEST(ActionTriggerCombo, TriggersWhenStepsCompleteInOrder)
   combo.AddComboStep(B, oxygen::input::ActionState::kTriggered, 0.5F);
 
   // Step 1: A triggers
-  A->BeginFrameTracking();
-  A->UpdateState(
+  ActionTestAccess::BeginFrame(*A);
+  ActionTestAccess::UpdateState(*A,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -48,8 +52,8 @@ NOLINT_TEST(ActionTriggerCombo, TriggersWhenStepsCompleteInOrder)
   EXPECT_FALSE(combo.IsTriggered());
 
   // Step 2: B triggers within time
-  B->BeginFrameTracking();
-  B->UpdateState(
+  ActionTestAccess::BeginFrame(*B);
+  ActionTestAccess::UpdateState(*B,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -77,8 +81,8 @@ NOLINT_TEST(ActionTriggerCombo, BreakerResetsProgress)
   ActionValue dummy { false };
 
   // Start sequence with A
-  A->BeginFrameTracking();
-  A->UpdateState(
+  ActionTestAccess::BeginFrame(*A);
+  ActionTestAccess::UpdateState(*A,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -86,13 +90,14 @@ NOLINT_TEST(ActionTriggerCombo, BreakerResetsProgress)
       .canceled = false,
     },
     dummy);
+  constexpr float kElapsedSeconds = 0.1F;
   combo.UpdateState(dummy,
     CanonicalDuration { std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::duration<float>(0.1F)) });
+      std::chrono::duration<float>(kElapsedSeconds)) });
 
   // Breaker triggers -> should reset
-  X->BeginFrameTracking();
-  X->UpdateState(
+  ActionTestAccess::BeginFrame(*X);
+  ActionTestAccess::UpdateState(*X,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -103,8 +108,8 @@ NOLINT_TEST(ActionTriggerCombo, BreakerResetsProgress)
   combo.UpdateState(dummy, CanonicalDuration {});
 
   // B triggers (out-of-order) -> should not complete
-  B->BeginFrameTracking();
-  B->UpdateState(
+  ActionTestAccess::BeginFrame(*B);
+  ActionTestAccess::UpdateState(*B,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -127,8 +132,8 @@ NOLINT_TEST(ActionTriggerCombo, OutOfOrderStepResets)
   ActionValue dummy { false };
 
   // Fire B first -> combo should reset/ignore and not trigger
-  B->BeginFrameTracking();
-  B->UpdateState(
+  ActionTestAccess::BeginFrame(*B);
+  ActionTestAccess::UpdateState(*B,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -155,14 +160,17 @@ NOLINT_TEST(ActionTriggerCombo, StepTimeoutResets)
   auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
   auto B = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
   ActionTriggerCombo combo;
-  combo.AddComboStep(A, oxygen::input::ActionState::kTriggered, 0.20F);
-  combo.AddComboStep(B, oxygen::input::ActionState::kTriggered, 0.20F);
+  constexpr float kStepWindowSeconds = 0.20F;
+  combo.AddComboStep(
+    A, oxygen::input::ActionState::kTriggered, kStepWindowSeconds);
+  combo.AddComboStep(
+    B, oxygen::input::ActionState::kTriggered, kStepWindowSeconds);
 
   ActionValue dummy { false };
 
   // Step 1: Trigger A
-  A->BeginFrameTracking();
-  A->UpdateState(
+  ActionTestAccess::BeginFrame(*A);
+  ActionTestAccess::UpdateState(*A,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -175,16 +183,16 @@ NOLINT_TEST(ActionTriggerCombo, StepTimeoutResets)
   // Wait beyond B's allowed window
   // Clear per-action frame states to avoid residual Triggered flags, and
   // accumulate timeout across two updates to ensure deterministic reset
-  A->BeginFrameTracking();
-  B->BeginFrameTracking();
+  ActionTestAccess::BeginFrame(*A);
+  ActionTestAccess::BeginFrame(*B);
   combo.UpdateState(dummy, CanonicalDuration { 300ms });
-  A->BeginFrameTracking();
-  B->BeginFrameTracking();
+  ActionTestAccess::BeginFrame(*A);
+  ActionTestAccess::BeginFrame(*B);
   combo.UpdateState(dummy, CanonicalDuration { 300ms });
 
   // Now trigger B -> should not complete (combo reset to step 0)
-  B->BeginFrameTracking();
-  B->UpdateState(
+  ActionTestAccess::BeginFrame(*B);
+  ActionTestAccess::UpdateState(*B,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -203,14 +211,17 @@ NOLINT_TEST(ActionTriggerCombo, BoundaryExactDelaySucceeds)
   auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
   auto B = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
   ActionTriggerCombo combo;
-  combo.AddComboStep(A, oxygen::input::ActionState::kTriggered, 0.10F);
-  combo.AddComboStep(B, oxygen::input::ActionState::kTriggered, 0.10F);
+  constexpr float kStepWindowSeconds = 0.10F;
+  combo.AddComboStep(
+    A, oxygen::input::ActionState::kTriggered, kStepWindowSeconds);
+  combo.AddComboStep(
+    B, oxygen::input::ActionState::kTriggered, kStepWindowSeconds);
 
   ActionValue dummy { false };
 
   // Step 1
-  A->BeginFrameTracking();
-  A->UpdateState(
+  ActionTestAccess::BeginFrame(*A);
+  ActionTestAccess::UpdateState(*A,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -224,8 +235,8 @@ NOLINT_TEST(ActionTriggerCombo, BoundaryExactDelaySucceeds)
   combo.UpdateState(dummy, CanonicalDuration { 100ms });
 
   // Step 2 at boundary -> should complete
-  B->BeginFrameTracking();
-  B->UpdateState(
+  ActionTestAccess::BeginFrame(*B);
+  ActionTestAccess::UpdateState(*B,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -246,8 +257,11 @@ NOLINT_TEST(ActionTriggerCombo, FirstStepHasNoTimeout)
   auto A = std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
   auto B = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
   ActionTriggerCombo combo;
-  combo.AddComboStep(A, oxygen::input::ActionState::kTriggered, 0.05F);
-  combo.AddComboStep(B, oxygen::input::ActionState::kTriggered, 0.05F);
+  constexpr float kStepWindowSeconds = 0.05F;
+  combo.AddComboStep(
+    A, oxygen::input::ActionState::kTriggered, kStepWindowSeconds);
+  combo.AddComboStep(
+    B, oxygen::input::ActionState::kTriggered, kStepWindowSeconds);
 
   ActionValue dummy { false };
 
@@ -256,8 +270,8 @@ NOLINT_TEST(ActionTriggerCombo, FirstStepHasNoTimeout)
   EXPECT_FALSE(combo.IsTriggered());
 
   // Start with A
-  A->BeginFrameTracking();
-  A->UpdateState(
+  ActionTestAccess::BeginFrame(*A);
+  ActionTestAccess::UpdateState(*A,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -268,8 +282,8 @@ NOLINT_TEST(ActionTriggerCombo, FirstStepHasNoTimeout)
   combo.UpdateState(dummy, CanonicalDuration {});
 
   // Trigger B immediately within its window
-  B->BeginFrameTracking();
-  B->UpdateState(
+  ActionTestAccess::BeginFrame(*B);
+  ActionTestAccess::UpdateState(*B,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -294,8 +308,8 @@ NOLINT_TEST(ActionTriggerCombo, ResetsAfterCompletion)
   ActionValue dummy { false };
 
   // Complete once: A then B
-  A->BeginFrameTracking();
-  A->UpdateState(
+  ActionTestAccess::BeginFrame(*A);
+  ActionTestAccess::UpdateState(*A,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -304,8 +318,8 @@ NOLINT_TEST(ActionTriggerCombo, ResetsAfterCompletion)
     },
     dummy);
   combo.UpdateState(dummy, CanonicalDuration {});
-  B->BeginFrameTracking();
-  B->UpdateState(
+  ActionTestAccess::BeginFrame(*B);
+  ActionTestAccess::UpdateState(*B,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -317,8 +331,8 @@ NOLINT_TEST(ActionTriggerCombo, ResetsAfterCompletion)
   EXPECT_TRUE(combo.IsTriggered());
 
   // Start again: must require A first, B alone shouldn't complete
-  B->BeginFrameTracking();
-  B->UpdateState(
+  ActionTestAccess::BeginFrame(*B);
+  ActionTestAccess::UpdateState(*B,
     Action::State {
       .triggered = true,
       .ongoing = false,

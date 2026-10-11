@@ -6,19 +6,21 @@
 
 //! Unit tests for InputActionMapping behavior (event handling and trigger eval)
 
+#include <chrono>
 #include <memory>
-
-#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
+#include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputActionMapping.h>
+#include <Oxygen/Input/Test/ActionTestAccess.h>
+#include <Oxygen/Input/Test/InputSystemTest.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
-
-#include <Oxygen/Input/Test/InputSystemTest.h>
+#include <Oxygen/Platform/Types.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 
@@ -37,6 +39,7 @@ using oxygen::input::ActionTriggerDown;
 using oxygen::input::ActionTriggerHold;
 using oxygen::input::ActionTriggerPressed;
 using oxygen::input::InputActionMapping;
+using oxygen::input::testing::ActionTestAccess;
 using oxygen::platform::ButtonState;
 using oxygen::platform::InputSlots;
 using oxygen::platform::Key;
@@ -49,6 +52,10 @@ using oxygen::platform::MouseWheelEvent;
 using oxygen::platform::WindowIdType;
 using oxygen::time::CanonicalDuration;
 
+//! Mouse motion/wheel deltas used to drive axis mappings.
+constexpr float kDelta = 3.0F;
+constexpr float kLargeDelta = 5.0F;
+
 class InputActionMappingTest : public oxygen::input::testing::InputSystemTest {
 protected:
   void SetUp() override { InputSlots::Initialize(); }
@@ -56,20 +63,22 @@ protected:
   // Helpers to craft events
   auto MakeKey(ButtonState s) -> KeyEvent
   {
-    return KeyEvent(Now(), kInvalidWindowId,
-      oxygen::platform::input::KeyInfo(Key::kSpace, false), s);
+    return { Now(), kInvalidWindowId,
+      oxygen::platform::input::KeyInfo(Key::kSpace, false), s };
   }
   auto MakeMouseBtn(MouseButton b, ButtonState s) -> MouseButtonEvent
   {
-    return MouseButtonEvent(Now(), kInvalidWindowId, { 0, 0 }, b, s);
+    return MouseButtonEvent(Now(), kInvalidWindowId, { .x = 0, .y = 0 }, b, s);
   }
   auto MakeMouseMotion(float dx, float dy) -> MouseMotionEvent
   {
-    return MouseMotionEvent(Now(), kInvalidWindowId, { 0, 0 }, { dx, dy });
+    return MouseMotionEvent(
+      Now(), kInvalidWindowId, { .x = 0, .y = 0 }, { .dx = dx, .dy = dy });
   }
   auto MakeMouseWheel(float dx, float dy) -> MouseWheelEvent
   {
-    return MouseWheelEvent(Now(), kInvalidWindowId, { 0, 0 }, { dx, dy });
+    return MouseWheelEvent(
+      Now(), kInvalidWindowId, { .x = 0, .y = 0 }, { .dx = dx, .dy = dy });
   }
 };
 
@@ -148,11 +157,11 @@ NOLINT_TEST_F(InputActionMappingTest, MouseMotion_UsesMappedAxis)
   map_x.AddTrigger(trig);
 
   // Act: motion dx=5, dy=0
-  map_x.HandleInput(MakeMouseMotion(5.0F, 0.0F));
+  map_x.HandleInput(MakeMouseMotion(kLargeDelta, 0.0F));
   EXPECT_EQ(map_x.Update(CanonicalDuration {}), ax->ConsumesInput());
 
   // Assert: axis1D should be 5
-  EXPECT_EQ(ax->GetValue().GetAs<Axis1D>().x, 5.0F);
+  EXPECT_EQ(ax->GetValue().GetAs<Axis1D>().x, kLargeDelta);
 
   // Arrange Y
   auto ay = std::make_shared<Action>(
@@ -161,9 +170,9 @@ NOLINT_TEST_F(InputActionMappingTest, MouseMotion_UsesMappedAxis)
   map_y.AddTrigger(std::make_shared<ActionTriggerDown>());
 
   // Act: motion dx=0, dy=-3
-  map_y.HandleInput(MakeMouseMotion(0.0F, -3.0F));
+  map_y.HandleInput(MakeMouseMotion(0.0F, -kDelta));
   EXPECT_EQ(map_y.Update(CanonicalDuration {}), ay->ConsumesInput());
-  EXPECT_EQ(ay->GetValue().GetAs<Axis1D>().x, -3.0F);
+  EXPECT_EQ(ay->GetValue().GetAs<Axis1D>().x, -kDelta);
 
   // Arrange XY
   auto axy = std::make_shared<Action>(
@@ -203,9 +212,9 @@ NOLINT_TEST_F(InputActionMappingTest, MouseWheel_RespectsSlot)
     "WheelXY", oxygen::input::ActionValueType::kAxis2D);
   InputActionMapping map_xy(axy, InputSlots::MouseWheelXY);
   map_xy.AddTrigger(std::make_shared<ActionTriggerDown>());
-  map_xy.HandleInput(MakeMouseWheel(3.0F, -4.0F));
+  map_xy.HandleInput(MakeMouseWheel(kDelta, -4.0F));
   EXPECT_EQ(map_xy.Update(CanonicalDuration {}), axy->ConsumesInput());
-  EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().x, 3.0F);
+  EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().x, kDelta);
   EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().y, -4.0F);
 }
 
@@ -267,7 +276,8 @@ NOLINT_TEST_F(InputActionMappingTest, ImplicitOnly_AllMustTrigger_Mapping)
 
   auto hold = std::make_shared<ActionTriggerHold>();
   hold->MakeImplicit();
-  hold->SetHoldDurationThreshold(0.05F);
+  constexpr float kHoldSeconds = 0.05F;
+  hold->SetHoldDurationThreshold(kHoldSeconds);
   hold->OneShot(true);
   mapping.AddTrigger(hold);
 
@@ -324,7 +334,9 @@ NOLINT_TEST_F(InputActionMappingTest, MouseMotion_ValueClearsNextUpdate)
   EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().x, 1.0F);
   EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().y, -2.0F);
 
-  // Next update with no motion should clear to zero
+  // Relative axes hold the frame's accumulated motion until the next frame
+  // starts; a new frame with no motion reads zero.
+  ActionTestAccess::BeginFrame(*axy);
   EXPECT_EQ(map_xy.Update(CanonicalDuration {}), axy->ConsumesInput());
   EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().x, 0.0F);
   EXPECT_EQ(axy->GetValue().GetAs<Axis2D>().y, 0.0F);
@@ -370,7 +382,7 @@ NOLINT_TEST_F(InputActionMappingTest, WheelDirectional_SpecificSlots)
     = std::make_shared<Action>("Up", oxygen::input::ActionValueType::kAxis1D);
   InputActionMapping mup(aup, InputSlots::MouseWheelUp);
   mup.AddTrigger(std::make_shared<ActionTriggerDown>());
-  mup.HandleInput(MakeMouseWheel(0.0F, 3.0F));
+  mup.HandleInput(MakeMouseWheel(0.0F, kDelta));
   EXPECT_EQ(mup.Update(CanonicalDuration {}), aup->ConsumesInput());
   EXPECT_GT(aup->GetValue().GetAs<Axis1D>().x, 0.0F);
 }
@@ -435,7 +447,8 @@ NOLINT_TEST_F(
 
   auto hold = std::make_shared<ActionTriggerHold>();
   hold->MakeImplicit();
-  hold->SetHoldDurationThreshold(0.05F);
+  constexpr float kHoldSeconds = 0.05F;
+  hold->SetHoldDurationThreshold(kHoldSeconds);
   hold->OneShot(true);
   mapping.AddTrigger(hold);
 
@@ -449,6 +462,109 @@ NOLINT_TEST_F(
   // as well; therefore it must not trigger.
   EXPECT_FALSE(mapping.Update(CanonicalDuration { 40ms }));
   EXPECT_FALSE(action->IsTriggered());
+}
+
+//! Scale and bias: value * scale + bias per component; a key feeds both
+//! components.
+NOLINT_TEST_F(InputActionMappingTest, ScaleAndBias_ApplyPerComponent)
+{
+  auto action
+    = std::make_shared<Action>("Move", oxygen::input::ActionValueType::kAxis2D);
+  InputActionMapping mapping(action, InputSlots::Space);
+  mapping.AddTrigger(std::make_shared<ActionTriggerDown>());
+  mapping.SetScale({ .x = 0.0F, .y = -1.0F });
+  mapping.SetBias({ .x = 0.25F, .y = 0.0F });
+  EXPECT_EQ(mapping.GetScale().y, -1.0F);
+  EXPECT_EQ(mapping.GetBias().x, 0.25F);
+
+  mapping.HandleInput(MakeKey(ButtonState::kPressed));
+  (void)mapping.Update(CanonicalDuration {});
+
+  const auto value = action->GetValue().GetAs<Axis2D>();
+  EXPECT_FLOAT_EQ(value.x, 0.25F);
+  EXPECT_FLOAT_EQ(value.y, -1.0F);
+}
+
+//! Bias is not applied to relative sources: a delta has no rest offset.
+NOLINT_TEST_F(InputActionMappingTest, Bias_IgnoredForRelativeSources)
+{
+  auto action
+    = std::make_shared<Action>("Yaw", oxygen::input::ActionValueType::kAxis1D);
+  InputActionMapping mapping(action, InputSlots::MouseX);
+  mapping.AddTrigger(std::make_shared<ActionTriggerDown>());
+  mapping.SetScale({ .x = 2.0F, .y = 2.0F });
+  mapping.SetBias({ .x = 1.0F, .y = 1.0F });
+  EXPECT_TRUE(mapping.IsRelative());
+
+  mapping.HandleInput(MakeMouseMotion(kDelta, 0.0F));
+  (void)mapping.Update(CanonicalDuration {});
+  EXPECT_FLOAT_EQ(action->GetValue().GetAs<Axis1D>().x, 6.0F);
+}
+
+//! Mouse axes and wheel slots are relative; keys and buttons are not.
+NOLINT_TEST_F(InputActionMappingTest, IsRelative_ClassifiesSlots)
+{
+  auto action
+    = std::make_shared<Action>("Any", oxygen::input::ActionValueType::kAxis2D);
+  EXPECT_TRUE(InputActionMapping(action, InputSlots::MouseXY).IsRelative());
+  EXPECT_TRUE(InputActionMapping(action, InputSlots::MouseWheelY).IsRelative());
+  EXPECT_TRUE(
+    InputActionMapping(action, InputSlots::MouseWheelUp).IsRelative());
+  EXPECT_FALSE(InputActionMapping(action, InputSlots::Space).IsRelative());
+  EXPECT_FALSE(
+    InputActionMapping(action, InputSlots::LeftMouseButton).IsRelative());
+}
+
+//! Several motion events between updates of the same frame accumulate.
+NOLINT_TEST_F(InputActionMappingTest, RelativeSource_AccumulatesWithinFrame)
+{
+  auto action
+    = std::make_shared<Action>("Look", oxygen::input::ActionValueType::kAxis2D);
+  InputActionMapping mapping(action, InputSlots::MouseXY);
+  auto trigger = std::make_shared<ActionTriggerDown>();
+  trigger->SetActuationThreshold(0.0F);
+  mapping.AddTrigger(trigger);
+
+  ActionTestAccess::BeginFrame(*action);
+  for (int i = 0; i < 3; ++i) {
+    mapping.HandleInput(MakeMouseMotion(1.0F, -2.0F));
+    (void)mapping.Update(CanonicalDuration {});
+  }
+  EXPECT_FLOAT_EQ(action->GetValue().GetAs<Axis2D>().x, kDelta);
+  EXPECT_FLOAT_EQ(action->GetValue().GetAs<Axis2D>().y, -6.0F);
+  ActionTestAccess::EndFrame(*action);
+
+  // A new frame starts a new sum.
+  ActionTestAccess::BeginFrame(*action);
+  mapping.HandleInput(MakeMouseMotion(1.0F, 0.0F));
+  (void)mapping.Update(CanonicalDuration {});
+  EXPECT_FLOAT_EQ(action->GetValue().GetAs<Axis2D>().x, 1.0F);
+}
+
+//! Deactivate cancels an active binding and leaves an idle one silent.
+NOLINT_TEST_F(InputActionMappingTest, Deactivate_CancelsOnlyActiveBinding)
+{
+  auto held
+    = std::make_shared<Action>("Sprint", oxygen::input::ActionValueType::kBool);
+  InputActionMapping held_mapping(held, InputSlots::Space);
+  auto down = std::make_shared<ActionTriggerDown>();
+  down->MakeExplicit();
+  held_mapping.AddTrigger(down);
+  held_mapping.HandleInput(MakeKey(ButtonState::kPressed));
+  (void)held_mapping.Update(CanonicalDuration {});
+  ASSERT_TRUE(held_mapping.IsActive());
+
+  held_mapping.Deactivate();
+  EXPECT_FALSE(held_mapping.IsActive());
+  EXPECT_FALSE(held->IsOngoing());
+  EXPECT_TRUE(held->WasCanceledThisFrame());
+
+  auto idle
+    = std::make_shared<Action>("Jump", oxygen::input::ActionValueType::kBool);
+  InputActionMapping idle_mapping(idle, InputSlots::Space);
+  idle_mapping.AddTrigger(std::make_shared<ActionTriggerPressed>());
+  idle_mapping.Deactivate();
+  EXPECT_FALSE(idle->WasCanceledThisFrame());
 }
 
 } // namespace

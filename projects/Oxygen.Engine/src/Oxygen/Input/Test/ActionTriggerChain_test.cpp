@@ -6,17 +6,20 @@
 
 //! Tests for ActionTriggerChain
 
+#include <chrono>
 #include <memory>
 
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
+#include <Oxygen/Input/Test/ActionTestAccess.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::input::Action;
 using oxygen::input::ActionTriggerChain;
 using oxygen::input::ActionValue;
+using oxygen::input::testing::ActionTestAccess;
 using oxygen::time::CanonicalDuration;
 using namespace std::chrono_literals;
 
@@ -30,8 +33,8 @@ NOLINT_TEST(ActionTriggerChain, TriggersWhenLinkedActionTriggers)
   chain.SetLinkedAction(linked);
 
   // Arrange: linked action triggers
-  linked->BeginFrameTracking();
-  linked->UpdateState(
+  ActionTestAccess::BeginFrame(*linked);
+  ActionTestAccess::UpdateState(*linked,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -70,14 +73,14 @@ NOLINT_TEST(ActionTriggerChain, DoesNotTriggerWhenUnlinkedOrIdle)
     = std::make_shared<Action>("B", oxygen::input::ActionValueType::kBool);
   ActionTriggerChain chain_linked;
   chain_linked.SetLinkedAction(linked);
-  linked->BeginFrameTracking();
+  ActionTestAccess::BeginFrame(*linked);
   // No trigger update on linked -> remains idle
   chain_linked.UpdateState(dummy, CanonicalDuration {});
   EXPECT_FALSE(chain_linked.IsTriggered());
   EXPECT_TRUE(chain_linked.IsIdle());
 
   // When prerequisite becomes active, still need local press
-  linked->UpdateState(
+  ActionTestAccess::UpdateState(*linked,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -97,11 +100,12 @@ NOLINT_TEST(ActionTriggerChain, ExpiresArmAfterMaxDelay)
     = std::make_shared<Action>("C", oxygen::input::ActionValueType::kBool);
   ActionTriggerChain chain;
   chain.SetLinkedAction(linked);
-  chain.SetMaxDelaySeconds(0.1F); // 100 ms window
+  constexpr float kWindowSeconds = 0.1F; // 100 ms window
+  chain.SetMaxDelaySeconds(kWindowSeconds);
 
   // Arm by triggering prerequisite
-  linked->BeginFrameTracking();
-  linked->UpdateState(
+  ActionTestAccess::BeginFrame(*linked);
+  ActionTestAccess::UpdateState(*linked,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -127,8 +131,8 @@ NOLINT_TEST(ActionTriggerChain, RequiresPrerequisiteHeldOnPress)
   chain.RequirePrerequisiteHeld(true);
 
   // Arm by triggering prerequisite, but then let it go idle
-  linked->BeginFrameTracking();
-  linked->UpdateState(
+  ActionTestAccess::BeginFrame(*linked);
+  ActionTestAccess::UpdateState(*linked,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -137,7 +141,7 @@ NOLINT_TEST(ActionTriggerChain, RequiresPrerequisiteHeldOnPress)
     },
     ActionValue { false });
   // Simulate prerequisite going idle
-  linked->UpdateState(
+  ActionTestAccess::UpdateState(*linked,
     Action::State {
       .triggered = false,
       .ongoing = false,
