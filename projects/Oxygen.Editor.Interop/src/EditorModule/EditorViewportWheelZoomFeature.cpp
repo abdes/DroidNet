@@ -91,7 +91,7 @@ namespace oxygen::interop::module {
 
     auto transform = camera_node.GetTransform();
     const float wheel_ticks =
-      viewport::AccumulateAxis1DFromTransitionsOrZero(input_snapshot,
+      viewport::GetAxis1DOrZero(input_snapshot,
         "Editor.Camera.Zoom");
 
     if (std::abs(wheel_ticks) <= 0.0f) {

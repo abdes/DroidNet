@@ -515,13 +515,8 @@ void CameraControlPanel::DrawInputDebugInfo()
   auto orbit_action = vm_->GetOrbitAction();
   if (orbit_action
     && orbit_action->GetValueType() == input::ActionValueType::kAxis2D) {
-    glm::vec2 mouse_delta(0.0F);
-
-    for (const auto& transition : orbit_action->GetFrameTransitions()) {
-      const auto& value = transition.value_at_transition.GetAs<Axis2D>();
-      mouse_delta.x += value.x;
-      mouse_delta.y += value.y;
-    }
+    const auto& value = orbit_action->GetValue().GetAs<Axis2D>();
+    const glm::vec2 mouse_delta(value.x, value.y);
 
     ImGui::Spacing();
     ImGui::PushID("MouseDeltaTable");

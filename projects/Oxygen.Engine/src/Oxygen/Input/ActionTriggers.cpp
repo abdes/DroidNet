@@ -6,9 +6,16 @@
 
 #include <algorithm>
 #include <cassert>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <memory>
+#include <utility>
 
-#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/ActionState.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
 
@@ -190,7 +197,7 @@ auto ActionTriggerPulse::DoUpdateState(const ActionValue& action_value,
       static_cast<std::chrono::nanoseconds>(ramp_end_).count());
     const auto lerp_ns = start_ns + ((end_ns - start_ns) * t);
     effective_interval = oxygen::time::CanonicalDuration {
-      std::chrono::nanoseconds { static_cast<long long>(lerp_ns) }
+      std::chrono::nanoseconds { static_cast<int64_t>(lerp_ns) }
     };
   }
 
@@ -257,20 +264,19 @@ void ActionTriggerPulse::EnablePhaseAlignment(const bool enable)
   phase_align_ = enable;
 }
 
-void ActionTriggerPulse::SetRateRamp(const float start_interval_seconds,
-  const float end_interval_seconds, const float ramp_duration_seconds)
+void ActionTriggerPulse::SetRateRamp(const PulseRateRamp& ramp)
 {
   ramp_start_ = oxygen::time::CanonicalDuration {
     std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::duration<float>(start_interval_seconds))
+      std::chrono::duration<float>(ramp.start_interval_seconds))
   };
   ramp_end_ = oxygen::time::CanonicalDuration {
     std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::duration<float>(end_interval_seconds))
+      std::chrono::duration<float>(ramp.end_interval_seconds))
   };
   ramp_duration_ = oxygen::time::CanonicalDuration {
     std::chrono::duration_cast<std::chrono::nanoseconds>(
-      std::chrono::duration<float>(ramp_duration_seconds))
+      std::chrono::duration<float>(ramp.duration_seconds))
   };
   ramp_enabled_ = static_cast<std::chrono::nanoseconds>(ramp_duration_)
     > std::chrono::nanoseconds::zero();
@@ -453,12 +459,40 @@ auto ActionTriggerCombo::DoUpdateState(const ActionValue& /*action_value*/,
   // matches the requested mask? We use frame transitions (edges) rather than
   // sticky current states so that timeouts truly reset progress and require
   // new input events to advance.
-  const auto occurred_this_frame = [](const std::shared_ptr<Action>& action,
-                                     const ActionState mask) -> bool {
+  const auto cursor_for = [this](const Action& action) -> Cursor& {
+    auto it = std::ranges::find_if(cursors_,
+      [&action](const Cursor& c) -> bool { return c.action == &action; });
+    if (it == cursors_.end()) {
+      cursors_.push_back(Cursor { .action = &action });
+      it = std::prev(cursors_.end());
+    }
+    if (it->frame_serial != action.GetFrameSerial()) {
+      it->frame_serial = action.GetFrameSerial();
+      it->seen = 0;
+    }
+    return *it;
+  };
+  // Only transitions not yet evaluated by this combo count.
+  const auto occurred_this_frame
+    = [&cursor_for](
+        const std::shared_ptr<Action>& action, const ActionState mask) -> bool {
+    const auto transitions = action->GetFrameTransitions();
+    const auto& cursor = cursor_for(*action);
     return std::ranges::any_of(
-      action->GetFrameTransitions(), [mask](const auto& tr) {
+      transitions.subspan(std::min(cursor.seen, transitions.size())),
+      [mask](const auto& tr) -> bool {
         return (tr.to_state & mask) != ActionState::kNone;
       });
+  };
+  // After this evaluation, mark every observed transition as seen.
+  const auto mark_seen = [&]() -> void {
+    for (const auto& step : combo_steps_) {
+      cursor_for(*step.action).seen = step.action->GetFrameTransitions().size();
+    }
+    for (const auto& breaker : combo_breakers_) {
+      cursor_for(*breaker.action).seen
+        = breaker.action->GetFrameTransitions().size();
+    }
   };
 
   // Check for any combo breaker that fired
@@ -469,7 +503,7 @@ auto ActionTriggerCombo::DoUpdateState(const ActionValue& /*action_value*/,
       break;
     }
   }
-  auto current_step = combo_steps_[current_step_index_];
+  auto current_step = combo_steps_.at(current_step_index_);
 
   // Check if a combo action fired out of order
   for (size_t i = 0; i < combo_steps_.size(); ++i) {
@@ -481,12 +515,12 @@ auto ActionTriggerCombo::DoUpdateState(const ActionValue& /*action_value*/,
     if (i < current_step_index_) {
       continue;
     }
-    const auto& step = combo_steps_[i];
+    const auto& step = combo_steps_.at(i);
     if (occurred_this_frame(step.action, step.completion_states)) {
       // Reset combo on out-of-order future step
       current_step_index_ = 0;
       waited_time_ = {};
-      current_step = combo_steps_[current_step_index_];
+      current_step = combo_steps_.at(current_step_index_);
       break;
     }
   }
@@ -499,7 +533,7 @@ auto ActionTriggerCombo::DoUpdateState(const ActionValue& /*action_value*/,
       // Reset combo
       current_step_index_ = 0;
       waited_time_ = {};
-      current_step = combo_steps_[current_step_index_];
+      current_step = combo_steps_.at(current_step_index_);
     }
   }
 
@@ -510,10 +544,12 @@ auto ActionTriggerCombo::DoUpdateState(const ActionValue& /*action_value*/,
     if (current_step_index_ == combo_steps_.size()) {
       current_step_index_ = 0;
       SetTriggerState(State::kIdle);
+      mark_seen();
       return true;
     }
   }
 
   SetTriggerState(State::kOngoing);
+  mark_seen();
   return false;
 }

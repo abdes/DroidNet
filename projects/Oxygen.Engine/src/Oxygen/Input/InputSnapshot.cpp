@@ -5,9 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <memory>
+#include <span>
+#include <string_view>
+#include <vector>
 
+#include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/ActionState.h>
+#include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputSnapshot.h>
-#include <Oxygen/Platform/InputEvent.h>
 
 using oxygen::input::Action;
 using oxygen::input::ActionState;
@@ -86,7 +92,8 @@ auto InputSnapshot::DidActionStart(std::string_view action_name) const -> bool
     return false;
   }
   bool saw_start_edge = false; // within-frame Ongoing edge
-  for (const auto& t : std::span<const Action::FrameTransition>(a->transitions)) {
+  for (const auto& t :
+    std::span<const Action::FrameTransition>(a->transitions)) {
     const bool from_none = (t.from_state == ActionState::kNone);
     const bool from_ongoing
       = static_cast<bool>(t.from_state & ActionState::kOngoing);
@@ -141,7 +148,8 @@ auto InputSnapshot::DidActionTrigger(std::string_view action_name) const -> bool
     return false;
   }
   return std::ranges::any_of(
-    std::span<const Action::FrameTransition>(a->transitions), [](const Action::FrameTransition& t) {
+    std::span<const Action::FrameTransition>(a->transitions),
+    [](const Action::FrameTransition& t) -> bool {
       return static_cast<bool>(t.to_state & ActionState::kTriggered);
     });
 }
@@ -152,13 +160,15 @@ auto InputSnapshot::DidActionRelease(std::string_view action_name) const -> bool
   if (a == nullptr) {
     return false;
   }
-  return std::ranges::any_of(std::span<const Action::FrameTransition>(a->transitions), [](const auto& t) {
-    const bool from_ongoing
-      = static_cast<bool>(t.from_state & ActionState::kOngoing);
-    const bool to_ongoing
-      = static_cast<bool>(t.to_state & ActionState::kOngoing);
-    return from_ongoing && !to_ongoing;
-  });
+  return std::ranges::any_of(
+    std::span<const Action::FrameTransition>(a->transitions),
+    [](const auto& t) -> bool {
+      const bool from_ongoing
+        = static_cast<bool>(t.from_state & ActionState::kOngoing);
+      const bool to_ongoing
+        = static_cast<bool>(t.to_state & ActionState::kOngoing);
+      return from_ongoing && !to_ongoing;
+    });
 }
 
 auto InputSnapshot::DidActionValueUpdate(std::string_view action_name) const
@@ -177,7 +187,8 @@ auto InputSnapshot::DidActionTransition(
   }
 
   return std::ranges::any_of(
-    std::span<const Action::FrameTransition>(a->transitions), [from, to](const Action::FrameTransition& t) {
+    std::span<const Action::FrameTransition>(a->transitions),
+    [from, to](const Action::FrameTransition& t) -> bool {
       return t.from_state == from && t.to_state == to;
     });
 }
@@ -186,8 +197,9 @@ auto InputSnapshot::GetActionTransitions(std::string_view action_name) const
   -> std::span<const Action::FrameTransition>
 {
   const auto* a = FindAction(action_name);
-  return (a != nullptr) ? std::span<const Action::FrameTransition>(a->transitions)
-                        : std::span<const Action::FrameTransition> {};
+  return (a != nullptr)
+    ? std::span<const Action::FrameTransition>(a->transitions)
+    : std::span<const Action::FrameTransition> {};
 }
 
 auto InputSnapshot::FindAction(std::string_view action_name) const
