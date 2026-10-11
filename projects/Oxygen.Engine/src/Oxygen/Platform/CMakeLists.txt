@@ -64,11 +64,63 @@ set(
   "InputEvent.h"
   "Types.h"
 )
+set(OXYGEN_PLATFORM_INPUT_SOURCES "Input.cpp")
+
+# The SDL backend's files live in this folder too. They are listed here, ahead
+# of both targets, so each target's IDE inventory can skip the other's files.
+set(
+  OXYGEN_PLATFORM_HEADERS
+  "Display.h"
+  "Platform.h"
+  "PlatformEvent.h"
+  "Window.h"
+  "SDL/Wrapper.h"
+  "ImGui/ImGuiSdl3Backend.h"
+  "api_export.h"
+)
+set(
+  OXYGEN_PLATFORM_PRIVATE_SOURCES
+  "AsyncOps.cpp"
+  "Detail/Window_ManagerInterface.h"
+  "Platform.cpp"
+  # SDL Specific
+  "SDL/Wrapper.cpp"
+  "SDL/Window.cpp"
+  "SDL/Display.cpp"
+  "SDL/EventPump.cpp"
+  "SDL/WindowManager.cpp"
+  "SDL/InputEvents.cpp"
+  "SDL/Init.cpp"
+  "SDL/SdlEventUtils.cpp"
+  # ImGui
+  "ImGui/imgui_impl_sdl3.h"
+  "ImGui/imgui_impl_sdl3.cpp"
+  "ImGui/ImGuiSdl3Backend.cpp"
+)
+
+function(oxygen_platform_exact_file_patterns out_var)
+  set(patterns)
+  foreach(file IN LISTS ARGN)
+    string(REPLACE "." "[.]" escaped "${file}")
+    list(APPEND patterns "^${escaped}$")
+  endforeach()
+  set(${out_var} "${patterns}" PARENT_SCOPE)
+endfunction()
+oxygen_platform_exact_file_patterns(
+  OXYGEN_PLATFORM_INPUT_FILE_PATTERNS
+  ${OXYGEN_PLATFORM_INPUT_HEADERS}
+  ${OXYGEN_PLATFORM_INPUT_SOURCES}
+)
+oxygen_platform_exact_file_patterns(
+  OXYGEN_PLATFORM_BACKEND_FILE_PATTERNS
+  ${OXYGEN_PLATFORM_HEADERS}
+  ${OXYGEN_PLATFORM_PRIVATE_SOURCES}
+)
 
 target_sources(
   ${OXYGEN_PLATFORM_INPUT_TARGET}
   PRIVATE
-    "Input.cpp"
+    ${OXYGEN_PLATFORM_INPUT_SOURCES}
     ${OXYGEN_PLATFORM_INPUT_HEADERS}
   PUBLIC
     FILE_SET HEADERS
@@ -76,7 +128,11 @@ target_sources(
     FILES ${OXYGEN_PLATFORM_INPUT_HEADERS}
 )
 
-arrange_target_files_for_ide(${OXYGEN_PLATFORM_INPUT_TARGET})
+arrange_target_files_for_ide(
+  ${OXYGEN_PLATFORM_INPUT_TARGET}
+  EXCLUDE_PATTERNS
+    ${OXYGEN_PLATFORM_BACKEND_FILE_PATTERNS}
+)
 
 target_compile_features(${OXYGEN_PLATFORM_INPUT_TARGET} PUBLIC cxx_std_23)
 target_compile_definitions(
@@ -128,36 +184,6 @@ set_target_properties(
       ${META_MODULE_NAME}
 )
 
-set(
-  OXYGEN_PLATFORM_HEADERS
-  "Display.h"
-  "Platform.h"
-  "PlatformEvent.h"
-  "Window.h"
-  "SDL/Wrapper.h"
-  "ImGui/ImGuiSdl3Backend.h"
-  "api_export.h"
-)
-set(
-  OXYGEN_PLATFORM_PRIVATE_SOURCES
-  "AsyncOps.cpp"
-  "Detail/Window_ManagerInterface.h"
-  "Platform.cpp"
-  # SDL Specific
-  "SDL/Wrapper.cpp"
-  "SDL/Window.cpp"
-  "SDL/Display.cpp"
-  "SDL/EventPump.cpp"
-  "SDL/WindowManager.cpp"
-  "SDL/InputEvents.cpp"
-  "SDL/Init.cpp"
-  "SDL/SdlEventUtils.cpp"
-  # ImGui
-  "ImGui/imgui_impl_sdl3.h"
-  "ImGui/imgui_impl_sdl3.cpp"
-  "ImGui/ImGuiSdl3Backend.cpp"
-)
-
 target_sources(
   ${META_MODULE_TARGET}
   PRIVATE
@@ -169,7 +195,11 @@ target_sources(
     FILES ${OXYGEN_PLATFORM_HEADERS}
 )
 
-arrange_target_files_for_ide(${META_MODULE_TARGET})
+arrange_target_files_for_ide(
+  ${META_MODULE_TARGET}
+  EXCLUDE_PATTERNS
+    ${OXYGEN_PLATFORM_INPUT_FILE_PATTERNS}
+)
 
 target_compile_definitions(
   ${META_MODULE_TARGET}
