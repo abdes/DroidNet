@@ -1062,6 +1062,40 @@ NOLINT_TEST_F(NamedTypeNamedArgsTest, NamedArgumentsAnyOrder)
   EXPECT_EQ(std::string("JamesBond"), otherFullName);
 }
 
+//! The adapter stores a copy of the callable, not a reference to it.
+/*!
+ * Passing an lvalue used to deduce F as a reference type, leaving the
+ * returned adapter dangling once the source callable went away or changed.
+ */
+NOLINT_TEST_F(NamedTypeNamedArgsTest, NamedArgFunctionCopiesTheCallable)
+{
+  using AnyWidth = oxygen::NamedType<int, struct CopyWidthTag>;
+  using AnyHeight = oxygen::NamedType<int, struct CopyHeightTag>;
+
+  struct Joiner {
+    std::string tag;
+    auto operator()(AnyWidth w, AnyHeight h) const
+    {
+      return tag + ":" + std::to_string(w.get()) + "x"
+        + std::to_string(h.get());
+    }
+  };
+
+  Joiner joiner { "T" };
+  auto any_order = oxygen::MakeNamedArgFunction<AnyWidth, AnyHeight>(joiner);
+
+  // Mutating the source must not affect the stored copy...
+  joiner.tag = "MUTATED";
+  EXPECT_EQ(any_order(AnyHeight { 10 }, AnyWidth { 20 }), "T:20x10");
+
+  // ...and the adapter must stay valid when the source goes out of scope.
+  auto detached = [] {
+    Joiner local { "L" };
+    return oxygen::MakeNamedArgFunction<AnyWidth, AnyHeight>(local);
+  }();
+  EXPECT_EQ(detached(AnyWidth { 1 }, AnyHeight { 2 }), "L:1x2");
+}
+
 //! Named arguments support braced-init construction.
 NOLINT_TEST_F(NamedTypeNamedArgsTest, NamedArgumentsWithBracketConstructor)
 {

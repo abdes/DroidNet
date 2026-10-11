@@ -320,7 +320,12 @@ namespace nt_detail {
  */
 template <class... Args, class F> auto MakeNamedArgFunction(F&& f)
 {
-  return nt_detail::AnyOrderCallable<F, Args...> { std::forward<F>(f) };
+  // Store a copy/move of the callable. Without remove_cvref, an lvalue
+  // argument deduces F as a reference type and AnyOrderCallable would hold a
+  // dangling reference to the caller's object.
+  return nt_detail::AnyOrderCallable<std::remove_cvref_t<F>, Args...> {
+    std::forward<F>(f)
+  };
 }
 
 } // namespace oxygen
