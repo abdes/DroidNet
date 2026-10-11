@@ -1,0 +1,29 @@
+{
+  "name": "CameraSwitchCube",
+  "bounds": {
+    "min": [-0.5, -0.5, -0.5],
+    "max": [0.5, 0.5, 0.5]
+  },
+  "lods": [
+    {
+      "name": "CameraSwitchCube_lod0",
+      "mesh_type": "procedural",
+      "bounds": {
+        "min": [-0.5, -0.5, -0.5],
+        "max": [0.5, 0.5, 0.5]
+      },
+      "procedural": {
+        "generator": "Cube",
+        "mesh_name": "CameraSwitchCube"
+      },
+      "submeshes": [
+        {
+          "name": "CameraSwitchCube_surface",
+          "slot_id": "6f1c2a9e-3b47-4d58-9e21-0c7a8b5d4f13",
+          "material_ref": "/.cooked/Materials/CameraSwitchMat.omat",
+          "views": [{ "view_ref": "__all__" }]
+        }
+      ]
+    }
+  ]
+}

@@ -989,6 +989,13 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
   std::vector<vortex::CompositionView>& views) -> void
 {
   auto& shell = GetShell();
+  // Scripts switch cameras through the scene; view through its active camera.
+  if (const auto scene = shell.TryGetScene(); scene != nullptr) {
+    if (const auto active = scene->ActiveCamera();
+      active.has_value() && active->GetHandle() != main_camera_.GetHandle()) {
+      main_camera_ = *active;
+    }
+  }
   if (!active_scene_.IsValid() || !main_camera_.IsAlive()
     || !main_camera_.HasCamera()) {
     ResetMainViewState(observer_ptr { &context });

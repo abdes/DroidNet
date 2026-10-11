@@ -1,0 +1,48 @@
+{
+  "actions": [
+    {
+      "name": "CameraSwitchNext",
+      "type": "bool",
+      "consumes_input": true
+    },
+    {
+      "name": "CameraSwitchOpenMenu",
+      "type": "bool",
+      "consumes_input": true
+    },
+    {
+      "name": "CameraSwitchCloseMenu",
+      "type": "bool",
+      "consumes_input": true
+    }
+  ],
+  "contexts": [
+    {
+      "name": "CameraSwitchPlay",
+      "priority": 100,
+      "mappings": [
+        {
+          "action": "CameraSwitchNext",
+          "slot": "C",
+          "trigger": "pressed"
+        },
+        {
+          "action": "CameraSwitchOpenMenu",
+          "slot": "Tab",
+          "trigger": "pressed"
+        }
+      ]
+    },
+    {
+      "name": "CameraSwitchMenu",
+      "priority": 200,
+      "mappings": [
+        {
+          "action": "CameraSwitchCloseMenu",
+          "slot": "Tab",
+          "trigger": "pressed"
+        }
+      ]
+    }
+  ]
+}

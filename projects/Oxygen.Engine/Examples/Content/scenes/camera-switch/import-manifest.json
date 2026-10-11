@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "max_in_flight_jobs": 1,
+  "output": "../../.cooked/main",
+  "jobs": [
+    {
+      "id": "material.CameraSwitchMat",
+      "type": "material-descriptor",
+      "source": "./CameraSwitchMat.material.json",
+      "name": "CameraSwitchMat",
+      "content_hashing": true
+    },
+    {
+      "id": "geometry.CameraSwitchCube",
+      "type": "geometry-descriptor",
+      "source": "./CameraSwitchCube.geometry.json",
+      "name": "CameraSwitchCube",
+      "content_hashing": true,
+      "depends_on": ["material.CameraSwitchMat"]
+    },
+    {
+      "id": "script.camera_switch",
+      "type": "script",
+      "source": "./camera_switch.lua",
+      "name": "camera_switch",
+      "compile": false,
+      "script_storage": "external",
+      "content_hashing": true
+    },
+    {
+      "id": "input.camera_switch",
+      "type": "input",
+      "source": "./camera_switch.input.json"
+    },
+    {
+      "id": "scene.camera_switch",
+      "type": "scene-descriptor",
+      "source": "./camera_switch.scene.json",
+      "name": "camera_switch",
+      "content_hashing": true,
+      "depends_on": ["geometry.CameraSwitchCube", "input.camera_switch"]
+    },
+    {
+      "type": "script-sidecar",
+      "name": "camera_switch_sidecar",
+      "target_scene_virtual_path": "/.cooked/Scenes/camera_switch.oscene",
+      "content_hashing": true,
+      "depends_on": [
+        "scene.camera_switch",
+        "script.camera_switch",
+        "input.camera_switch"
+      ],
+      "bindings": [
+        {
+          "node_index": 5,
+          "slot_id": "camera_switch",
+          "script_virtual_path": "/.cooked/Scripts/camera_switch.oscript",
+          "execution_order": 0,
+          "params": [
+            {
+              "key": "first_camera",
+              "type": "node",
+              "value": 2
+            },
+            {
+              "key": "second_camera",
+              "type": "node",
+              "value": 3
+            },
+            {
+              "key": "play_context",
+              "type": "asset",
+              "value": "/.cooked/Input/CameraSwitchPlay.oimap"
+            },
+            {
+              "key": "menu_context",
+              "type": "asset",
+              "value": "/.cooked/Input/CameraSwitchMenu.oimap"
+            },
+            {
+              "key": "next_camera",
+              "type": "asset",
+              "value": "/.cooked/Input/CameraSwitchNext.oiact"
+            },
+            {
+              "key": "open_menu",
+              "type": "asset",
+              "value": "/.cooked/Input/CameraSwitchOpenMenu.oiact"
+            },
+            {
+              "key": "close_menu",
+              "type": "asset",
+              "value": "/.cooked/Input/CameraSwitchCloseMenu.oiact"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "defaults": {
+    "script": {
+      "source_root": "../.."
+    }
+  }
+}
