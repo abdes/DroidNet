@@ -1,3 +1,4 @@
+#requires -Version 7.4
 <#
 .SYNOPSIS
 Cooks one or all shipped scene manifests with Oxygen ImportTool.

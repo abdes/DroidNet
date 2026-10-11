@@ -1,3 +1,4 @@
+#requires -Version 7.4
 <#
 .SYNOPSIS
 Packages this Content directory's loose-cooked output with Oxygen PakTool.

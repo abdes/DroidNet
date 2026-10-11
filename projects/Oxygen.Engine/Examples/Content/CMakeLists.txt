@@ -44,6 +44,8 @@ set_property(
 )
 include(RuntimeEnvironment)
 oxygen_get_runtime_launcher(oxygen-cooker-importtool OXYGEN_SHOWCASE_LAUNCHER)
+# The content scripts require PowerShell 7.4 or newer.
+find_program(OXYGEN_PWSH_EXECUTABLE NAMES pwsh REQUIRED)
 set(OXYGEN_SHOWCASE_STAMP "${OXYGEN_SHOWCASE_ROOT}/cooked-$<CONFIG>.stamp")
 add_custom_command(
   OUTPUT
@@ -61,12 +63,12 @@ add_custom_command(
     "${CMAKE_COMMAND}" -E rm -rf "${OXYGEN_SHOWCASE_CONTENT}/.cooked"
     "${OXYGEN_SHOWCASE_CONTENT}/pak"
   COMMAND
-    "${OXYGEN_SHOWCASE_LAUNCHER}" powershell.exe -NoLogo -NoProfile
+    "${OXYGEN_SHOWCASE_LAUNCHER}" "${OXYGEN_PWSH_EXECUTABLE}" -NoLogo -NoProfile
     -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/cook_scenes.ps1"
     -All -NoTUI -ContentRoot "${OXYGEN_SHOWCASE_CONTENT}" -ToolPath
     "$<TARGET_FILE:oxygen-cooker-importtool>"
   COMMAND
-    "${OXYGEN_SHOWCASE_LAUNCHER}" powershell.exe -NoLogo -NoProfile
+    "${OXYGEN_SHOWCASE_LAUNCHER}" "${OXYGEN_PWSH_EXECUTABLE}" -NoLogo -NoProfile
     -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/pak_content.ps1"
     -CookedRoot "${OXYGEN_SHOWCASE_CONTENT}/.cooked/main" -ContentRoot
     "${OXYGEN_SHOWCASE_CONTENT}" -OutputDir "${OXYGEN_SHOWCASE_CONTENT}/pak"

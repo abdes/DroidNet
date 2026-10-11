@@ -42,9 +42,9 @@ without building; model imports also require its sibling Inspector. The caller
 owns freshness for explicit paths. Do not combine `-ToolPath` with build-selection
 switches. Keep tools and runtime from the same checkout/configuration or SDK.
 
-`cook_scenes.cmd` and `pak_content.cmd` use Windows PowerShell. `import_models.cmd`
-launches PowerShell 7.4 or newer (`pwsh`). Every script supports `-Help`/`-h` before tool
-selection; model imports and packaging also support `-WhatIf`.
+The scripts require PowerShell 7.4 or newer (`pwsh`); the `.cmd` launchers start
+it. Every script supports `-Help`/`-h` before tool selection; model imports and
+packaging also support `-WhatIf`.
 
 ## Cook maintained scenes
 
