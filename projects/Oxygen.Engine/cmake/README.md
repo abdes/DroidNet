@@ -34,6 +34,16 @@ Scripting's existing whole-`Bindings/` exclusion is intentionally retained;
 The inventory does not watch new files or replace explicit source lists: rerun
 configuration to audit a newly added file. Warnings never add or delete files.
 
+`oxygen_group_target_files_for_ide(target [DECLARED_FILES var])` is the grouping
+half on its own, for targets that share a directory with others, such as test
+executables, where the inventory would report the other targets' files.
+`gtest_program()` applies it to every test executable at the end of the defining
+directory, so sources added later with `target_sources()` are grouped too. Do
+not add `source_group()` calls next to the test helpers: `source_group()` does
+not evaluate generator expressions, so a guarded path becomes a
+`$<$<BOOL:1>:Dir` folder, and a `PREFIX` repeats the directory each source path
+already names.
+
 Inventory recognizes literal paths and single literal paths wrapped by
 `$<0:path>`, `$<1:path>`, `$<BUILD_INTERFACE:path>` or a single `BOOL`,
 `PLATFORM_ID` or `CONFIG` guard, such as `$<$<BOOL:${WIN32}>:Platform_win.cpp>`.

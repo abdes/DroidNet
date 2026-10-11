@@ -113,12 +113,6 @@ function(oxygen_cooker_test area tier)
       TIMEOUT
         ${_timeout}
   )
-  source_group(
-    TREE ${CMAKE_CURRENT_SOURCE_DIR}
-    PREFIX "${area}"
-    FILES
-      ${x_SOURCES}
-  )
 endfunction()
 
 oxygen_cooker_test(

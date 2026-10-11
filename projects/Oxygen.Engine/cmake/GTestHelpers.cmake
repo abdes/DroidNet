@@ -8,6 +8,7 @@ if(NOT TARGET GTest::gtest)
   find_package(GTest REQUIRED CONFIG)
 endif()
 
+include("${CMAKE_CURRENT_LIST_DIR}/BuildHelpers.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/TestRuntime.cmake")
 
 # ------------------------------------------------------------------------------
@@ -45,6 +46,15 @@ function(gtest_program program_name)
   )
 
   target_link_libraries(${program_name} PRIVATE ${x_DEPS})
+
+  # Group once the directory is complete, so sources that callers add with
+  # target_sources() after this call are grouped too. The target name is
+  # bound now; a deferred call would otherwise expand it at the end.
+  cmake_language(
+    EVAL
+    CODE
+      "cmake_language(DEFER CALL oxygen_group_target_files_for_ide [==[${program_name}]==])"
+  )
 
   oxygen_configure_test_runtime(${program_name})
   # Benchmarks reuse the executable setup without joining the correctness suite.
@@ -104,11 +114,5 @@ function(m_gtest_program program_name)
       oxygen::testing
     LABELS
       ${x_LABELS}
-  )
-  source_group(
-    TREE ${CMAKE_CURRENT_SOURCE_DIR}
-    PREFIX ${program_name}
-    FILES
-      ${x_SOURCES}
   )
 endfunction()
