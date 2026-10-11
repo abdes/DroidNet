@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <bit>
 #include <cstdint>
 #include <cstdlib>
 #include <type_traits>
@@ -78,22 +79,29 @@ inline uint64_t ByteSwap64(const uint64_t value)
 }
 #endif
 
-template <typename T> constexpr auto ByteSwap(T value) noexcept -> T
+//! Reverses the byte order of a 1-, 2-, 4- or 8-byte trivially copyable value.
+/*!
+ The argument is bit-cast to the unsigned type of the same width, swapped, and
+ bit-cast back, so floating-point values have their representation (not their
+ numeric value) reversed. Sizes other than 1, 2, 4 or 8 bytes, and types that
+ are not trivially copyable, are excluded by the constraint and fail to
+ compile.
+ */
+template <typename T>
+  requires std::is_trivially_copyable_v<T>
+  && (sizeof(T) == 1u || sizeof(T) == sizeof(uint16_t)
+    || sizeof(T) == sizeof(uint32_t) || sizeof(T) == sizeof(uint64_t))
+constexpr auto ByteSwap(T value) noexcept -> T
 {
-  static_assert(std::is_trivially_copyable_v<T>);
-  if constexpr (sizeof(T) == 1) {
+  if constexpr (sizeof(T) == 1u) {
     return value;
+  } else if constexpr (sizeof(T) == sizeof(uint16_t)) {
+    return std::bit_cast<T>(ByteSwap16(std::bit_cast<uint16_t>(value)));
+  } else if constexpr (sizeof(T) == sizeof(uint32_t)) {
+    return std::bit_cast<T>(ByteSwap32(std::bit_cast<uint32_t>(value)));
+  } else {
+    return std::bit_cast<T>(ByteSwap64(std::bit_cast<uint64_t>(value)));
   }
-  if constexpr (sizeof(T) == sizeof(uint16_t)) {
-    return static_cast<T>(ByteSwap16(static_cast<uint16_t>(value)));
-  }
-  if constexpr (sizeof(T) == sizeof(uint32_t)) {
-    return static_cast<T>(ByteSwap32(static_cast<uint32_t>(value)));
-  }
-  if constexpr (sizeof(T) == sizeof(uint64_t)) {
-    return static_cast<T>(ByteSwap64(static_cast<uint64_t>(value)));
-  }
-  OXYGEN_UNREACHABLE_RETURN(value);
 }
 
 } // namespace oxygen

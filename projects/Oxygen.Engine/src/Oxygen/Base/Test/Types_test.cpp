@@ -4,14 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/Endian.h>
-#include <Oxygen/Base/Types/Geometry.h>
-
+#include <bit>
 #include <cstdint>
 #include <numbers>
 #include <string>
 #include <type_traits>
 
+#include <Oxygen/Base/Endian.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -22,6 +22,9 @@ template <typename T>
 concept HasToString = requires(const T& type) {
   { to_string(type) } -> std::convertible_to<std::string>;
 };
+
+template <typename T>
+concept ByteSwappable = requires(const T& value) { oxygen::ByteSwap(value); };
 
 #define CHECK_HAS_TO_STRING(T)                                                 \
   static_assert(HasToString<oxygen::T>, "T must have to_string implementation")
@@ -80,28 +83,47 @@ NOLINT_TEST(ByteSwapTest, ByteSwap_64Bit)
   EXPECT_EQ(oxygen::ByteSwap(value), expected);
 }
 
-NOLINT_TEST(ByteSwapTest, ByteSwap_Float)
+NOLINT_TEST(ByteSwapTest, ByteSwap_Float_SwapsRepresentationNotValue)
 {
-  union {
-    float f;
-    uint32_t i;
-  } u1 = { std::numbers::pi_v<float> }, u2;
+  // std::numbers::pi_v<float> is 0x40490FDB in IEEE-754 binary32; the
+  // bit-reversed representation is 0xDB0F4940 (the pre-bit_cast version
+  // truncated pi to the integer 3 instead).
+  constexpr float value = std::numbers::pi_v<float>;
+  const auto swapped = oxygen::ByteSwap(value);
 
-  u2.i = oxygen::ByteSwap(u1.i);
-  u1.i = oxygen::ByteSwap(u2.i);
-  EXPECT_FLOAT_EQ(u1.f, std::numbers::pi_v<float>);
+  EXPECT_EQ(std::bit_cast<uint32_t>(swapped), uint32_t { 0xDB0F4940 });
+  EXPECT_FLOAT_EQ(oxygen::ByteSwap(swapped), value);
 }
 
-NOLINT_TEST(ByteSwapTest, ByteSwap_Double)
+NOLINT_TEST(ByteSwapTest, ByteSwap_Double_SwapsRepresentationNotValue)
 {
-  union {
-    double d;
-    uint64_t i;
-  } u1 = { std::numbers::pi }, u2;
+  // std::numbers::pi is 0x400921FB54442D18 in IEEE-754 binary64.
+  constexpr double value = std::numbers::pi;
+  const auto swapped = oxygen::ByteSwap(value);
 
-  u2.i = oxygen::ByteSwap(u1.i);
-  u1.i = oxygen::ByteSwap(u2.i);
-  EXPECT_DOUBLE_EQ(u1.d, std::numbers::pi);
+  EXPECT_EQ(std::bit_cast<uint64_t>(swapped), uint64_t { 0x182D4454FB210940 });
+  EXPECT_DOUBLE_EQ(oxygen::ByteSwap(swapped), value);
+}
+
+NOLINT_TEST(ByteSwapTest, ByteSwap_UnsupportedTypesAreIllFormed)
+{
+  // Only trivially copyable 1/2/4/8-byte values are byte-swappable; other
+  // sizes must fail to compile rather than reach an unreachable path.
+  struct alignas(1) ThreeBytes {
+    uint8_t bytes[3];
+  };
+  struct alignas(1) FourByteNonTriviallyCopyable {
+    FourByteNonTriviallyCopyable() = default;
+    FourByteNonTriviallyCopyable(const FourByteNonTriviallyCopyable&) { }
+    uint32_t x { 0 };
+  };
+
+  EXPECT_TRUE(ByteSwappable<uint8_t>);
+  EXPECT_TRUE(ByteSwappable<uint32_t>);
+  EXPECT_TRUE(ByteSwappable<float>);
+  EXPECT_TRUE(ByteSwappable<double>);
+  EXPECT_FALSE(ByteSwappable<ThreeBytes>);
+  EXPECT_FALSE(ByteSwappable<FourByteNonTriviallyCopyable>);
 }
 
 } // namespace
