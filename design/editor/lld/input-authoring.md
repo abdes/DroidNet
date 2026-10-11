@@ -9,9 +9,11 @@ mappings in evaluation order, grouped by action; each mapping binds one
 keyboard or mouse input, captured by pressing it or picked from a list, and
 carries an ordered list of triggers edited as typed cards. The files are the
 engine's own `*.input-action.json` and `*.input.json` formats, so
-hand-written files open in the same editors. Save cooks; renames retarget
-every input file, scene and script that refers to the asset; Play runs the
-result. The engine owns the input model, the formats and the cooker
+hand-written files open in the same editors. Assets are identified by their
+source location, like every other asset, so renames and moves retarget every
+input file, scene and script that refers to them. Save cooks; Play runs the
+result. The UI is built after the engine input fixes listed in the plan's
+[findings](../plan/ED-M09-input-authoring.md#findings-from-the-analysis). The engine owns the input model, the formats and the cooker
 ([input cooking architecture](../../../projects/Oxygen.Engine/design/content-pipeline/input-cooking-architecture.md));
 this LLD owns the authoring workflow. Read [scenarios](#1-purpose),
 [format](#7-data-contracts), [editors](#9-ui-surfaces),
@@ -65,32 +67,36 @@ Engine, verified in source:
   `actions`, at least one `contexts` entry) and
   `oxygen.input-action.schema.json` (`*.input-action.json`: one action).
   The cooker validates against the primary schema, then the action schema.
-- **Identity is the name.** An action cooks to
-  `<mount>/Input/<name>.oiact` and a context to `<mount>/Input/<name>.oimap`
-  (`LooseCookedLayout`); the asset key derives from that virtual path. The
-  source file's folder and name play no part.
-- **References are names.** Mapping `action`, trigger `chord_action` and
-  combo step `action` are resolved first against the file's own `actions`,
-  then against actions already in the cooked root and its
-  `cooked_context_roots`. A file that uses another file's action needs that
-  file's job as a `depends_on`.
-- **Runtime registers by name.** `InputSystem` keys actions and contexts by
-  name; hydration merges a second action of the same name and fails on a
-  value-type mismatch.
+- **Output location.** An action cooks to
+  `<virtual_mount_root>/<descriptors_dir>/<input_subdir>/<name>.oiact` and a
+  context to the same folder with `.oimap` (`LooseCookedLayout`); the asset
+  key derives from that virtual path. The default layout puts every input
+  asset of a mount in one `Input` folder, by declared name. A manifest job
+  may set its own layout, which is how the editor places materials, geometry
+  and scenes at their source folder.
+- **References are bare names, resolved globally.** Mapping `action`,
+  trigger `chord_action` and combo step `action` resolve first against the
+  file's own `actions`, then against any action of that name in the cooked
+  root and its `cooked_context_roots` ([IF-12](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui)).
+- **Runtime identity is the name.** `InputSystem` keys actions and contexts
+  by name; hydration merges distinct action assets that share a name, and
+  script input events are named after the action ([IF-12](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui)).
 - **Mapping order is evaluation order.** When a consuming action triggers,
   every later mapping in its context is cancelled and lower-priority contexts
-  are not updated that frame, whatever input they are bound to
-  ([IF-9](../plan/ED-M09-input-authoring.md#engine-behavior-to-confirm)).
+  are not updated that frame, whatever input they are bound to. The engine's
+  own documentation says only the consumed input is blocked
+  ([IF-9](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui)).
 - **Triggers.** Hydration reads `hold_time` for hold, hold-and-release and
   tap (tap's release window), `interval` for pulse, `chord_action` for chord
-  and action chain (both become the same runtime `ActionTriggerChain`), and
+  and action chain (both become the same runtime `ActionTriggerChain`,
+  [IF-10](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui)), and
   combo steps with `completion_states` as `ActionState` flags (Ongoing 2,
   Canceled 4, Completed 8, Triggered 16) and `time_to_complete` in seconds.
   After the first step, a step's window must be positive or the combo resets.
 - **A mapping without triggers never fires.**
 - **Scale and bias are cooked but not applied**: hydration and
   `InputActionMapping` ignore them
-  ([IF-1](../plan/ED-M09-input-authoring.md#engine-defects)). A key drives an
+  ([IF-1](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui)). A key drives an
   axis action's X component with 1 while pressed.
 - **Flags.** `auto_load`/`auto_activate` are honored by RenderScene's
   showcase loader; the player and scene instantiation ignore them and start
@@ -120,7 +126,7 @@ Editor:
 ```text
 Content Browser New/Open ──► InputDocumentService (one document per file)
   edit through commands ──► immutable InputSource + history + revision
-  Save ──► atomic write ──► incremental cook (input job, depends_on by name)
+  Save ──► atomic write ──► incremental cook (input job, depends_on from references)
   Rename/Move/Delete ──► relocation transaction (input files, scenes, scripts)
 Script parameter / Play section pickers ──► input asset identities
 Play ──► cooked scene + starting contexts in the player
@@ -133,16 +139,16 @@ previewed live in editor viewports: input runs in Play.
 
 ## 6. Ownership
 
-| Owner                                   | Responsibility                                                                                                                                 |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Oxygen.Editor.InputEditor` (new, IQ-8) | Input documents, commands, history, save, conflicts, relocation participant, action and context editors, key selector and capture session.     |
-| `Oxygen.Managed.Assets`                 | Immutable `InputSource` model, schema-validated reader and canonical writer, project input index (names to declarations and references).       |
-| `Oxygen.Editor.Schemas`                 | Engine input schemas plus `oxygen.input.editor.schema.json` overlay: labels, units, steps, defaults for new items, conditional visibility.     |
-| `Oxygen.Editor.ContentBrowser`          | Rows per declared asset, creation commands, details and referrers, pickers, relocation reference kinds for input.                              |
-| `Oxygen.Editor.ContentPipeline`         | Input jobs, name-based `depends_on`, context roots, retirement of outputs a file no longer declares, mapping cooker diagnostics to properties. |
-| `Oxygen.Editor.Runtime`                 | One key translation table (`VirtualKey` and pointer input to engine key identity), shared by the viewport bridge and key capture.              |
-| WorldEditor / scripting (ED-M08.10)     | Script parameter and Play-section pickers and their persistence; unchanged by this LLD except the touch points in IQ-10.                       |
-| Engine (Input, Content, Cooker, Data)   | Value types, slots, triggers, schemas, cooking, hydration and runtime behavior.                                                                |
+| Owner                                   | Responsibility                                                                                                                                                                                   |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Oxygen.Editor.InputEditor` (new, IQ-8) | Input documents, commands, history, save, conflicts, relocation participant, action and context editors, key selector and capture session.                                                       |
+| `Oxygen.Managed.Assets`                 | Immutable `InputSource` model, schema-validated reader and canonical writer, project input index (declarations and their references).                                                            |
+| `Oxygen.Editor.Schemas`                 | Engine input schemas plus `oxygen.input.editor.schema.json` overlay: labels, units, steps, defaults for new items, conditional visibility.                                                       |
+| `Oxygen.Editor.ContentBrowser`          | Rows per declared asset, creation commands, details and referrers, pickers, relocation reference kinds for input.                                                                                |
+| `Oxygen.Editor.ContentPipeline`         | Input jobs with a per-job layout at the source folder, `depends_on` and context roots from references, retirement of outputs a file no longer declares, cooker diagnostics mapped to properties. |
+| `Oxygen.Editor.Runtime`                 | One key translation table (`VirtualKey` and pointer input to engine key identity), shared by the viewport bridge and key capture.                                                                |
+| WorldEditor / scripting (ED-M08.10)     | Script parameter and Play-section pickers and their persistence; unchanged by this LLD except the touch points in IQ-10.                                                                         |
+| Engine (Input, Content, Cooker, Data)   | Value types, slots, triggers, schemas, cooking, hydration and runtime behavior.                                                                                                                  |
 
 The editor does not write cooked input, simulate triggers or define input
 semantics. Fields exist only where the engine reads them.
@@ -162,8 +168,8 @@ forbid additional properties.
 
 The default folder is `Content/Input` ([IQ-9](#152-open-questions)).
 Actions live in their own files so that any context can use them and each
-has its own row, history and Rename; contexts reference them by name, which
-the cook resolves through `depends_on` (section 11).
+has its own row, history and Rename; contexts reference them by virtual path
+(section 7.2), from which the cook derives `depends_on` (section 11).
 
 A hand-written `*.input.json` may declare several actions and contexts. Each
 declaration is its own asset; the file is their shared source. The editor
@@ -172,31 +178,43 @@ files** (section 8.4) converts one on request.
 
 ### 7.2 Asset identity
 
-An input asset's identity is its engine identity, the name-derived virtual
-path: `asset:///<Mount>/Input/<Name>.oiact` or `.oimap`. Persisted
-references (script parameter overrides, Play-section contexts) store this
-URI. The source file is a row fact, like a material's descriptor path.
+Input assets follow the content-management rule for every asset
+([content browser §9.5](content-browser-asset-identity.md#95-asset-relocation)):
+identity is the virtual path of the source location, and native keys derive
+from it.
 
-| Change                       | Identity  | Referrers rewritten                                                                 |
-| ---------------------------- | --------- | ----------------------------------------------------------------------------------- |
-| Move a file within its mount | Unchanged | None; only the file moves.                                                          |
-| Move a file to another mount | Changes   | Scenes and scripts (URI); input files need no change (names resolve across mounts). |
-| Rename an action             | Changes   | Input files (mapping, chord and combo names), scenes and scripts.                   |
-| Rename a context             | Changes   | Scenes and scripts.                                                                 |
+- **Placement.** The editor gives each input job a layout with
+  `descriptors_dir` empty and `input_subdir` set to the source file's
+  mount-relative folder, as it does for materials. A declaration named `Jump`
+  in `Content/Gameplay/Player.input.json` cooks to
+  `/Content/Gameplay/Jump.oiact`; its identity is
+  `asset:///Content/Gameplay/Jump.oiact`. No engine change is needed.
+- **Name and file.** In a file holding one asset, the asset name is the file
+  stem, as for materials: `Content/Gameplay/Jump.input-action.json` declares
+  `Jump`, so source and cooked paths match. A `name` that differs from the
+  stem is an error with the fix "Use the file name"
+  (`OXE.INPUT.NAME_STEM_MISMATCH`). A file holding several assets is a
+  multi-output source: each declaration's identity is its folder plus its
+  name.
+- **References.** Persisted references (script parameter overrides,
+  Play-section contexts) store the identity URI. Inside input files, an action
+  declared in the same file is referenced by name; any other action by its
+  virtual path, `/Content/Gameplay/Jump` ([IF-12](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui)).
+- **Uniqueness.** Two declarations that produce the same virtual path are an
+  error (`OXE.INPUT.IDENTITY_COLLISION`); the cooker rejects them too
+  ([IF-7](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui)). Equal names in different folders are different assets; the
+  runtime keys them by asset key after IF-12.
 
-Names are unique across the project's mounts for actions and, separately,
-for contexts, because the runtime registers both by name. An action declared
-identically in two files is one asset with two sources (warning); with
-different types it is an error, as in the cooker. Two contexts with the same
-name are an error (the cooker would silently let one overwrite the other,
-[IF-7](../plan/ED-M09-input-authoring.md#engine-defects)).
+| Change                                 | Identity                          | Referrers rewritten by the relocation                        |
+| -------------------------------------- | --------------------------------- | ------------------------------------------------------------ |
+| Rename a single-asset file's asset     | Changes; file and name renamed    | Input files (paths), scenes, scripts.                        |
+| Rename an asset in a multi-asset file  | Changes; name renamed in the file | Same file (local names), other input files, scenes, scripts. |
+| Move a file (any folder or mount)      | Changes for every asset it holds  | Input files (paths), scenes, scripts.                        |
+| Split a multi-asset file (same folder) | Unchanged                         | None.                                                        |
 
-A name is 1–63 characters matching `[A-Za-z_][A-Za-z0-9_]*`, which keeps
-virtual paths, file names and script references simple
-([IQ-4](#152-open-questions)). Hand-written names outside that pattern open
-with a warning and are kept until renamed. For an editor-created file the
-file stem equals the name; Rename keeps them equal. A file whose stem differs
-(hand-written, or holding several assets) keeps its file name.
+A name is 1–63 characters matching `[A-Za-z_][A-Za-z0-9_]*`, the schema
+pattern after [IF-6](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui), so it is a valid file stem and path segment
+([IQ-4](#152-open-questions)).
 
 ### 7.3 Model
 
@@ -209,51 +227,56 @@ reorders; IDs are never written.
 InputSource(Kind: ActionFile | InputFile, Path, Actions[], Contexts[])
 InputActionDecl(Id, Name, ValueType: Bool|Axis1D|Axis2D, ConsumesInput)
 InputContextDecl(Id, Name, Priority:int32, AutoLoad, AutoActivate, Mappings[])
-InputMapping(Id, ActionName, Slot, Scale:(x,y), Bias:(x,y), Triggers[],
-             WrittenAsShorthand)
-InputTrigger(Id, Type, Behavior, ActuationThreshold,
-             HoldTime?, Interval?, LinkedActionName?, ComboSteps[])
-ComboStep(Id, ActionName, CompletionStates:flags, TimeToComplete)
+ActionRef = LocalName(name) | AssetPath(virtual path)
+InputMapping(Id, Action:ActionRef, Slot, Scale:(x,y), Bias:(x,y),
+             Triggers[], WrittenAsShorthand)
+InputTrigger(Id, Type, Behavior, ActuationThreshold, HoldTime?, TapTime?,
+             Interval?, LinkedAction:ActionRef?, RequireHeld, MaxDelay,
+             ComboSteps[])
+ComboStep(Id, Action:ActionRef, CompletionStates:flags, TimeToComplete)
+InputActionDecl and InputContextDecl also carry Description?
 ```
 
 Reading normalizes nothing that changes the file: a slot alias, the
-`trigger` shorthand, `aux` versus `combo_actions` and omitted defaults are
-remembered so that an unedited file saves identically apart from key order
-and whitespace. Editing an item writes its canonical form: canonical slot
-name, `triggers` array (the shorthand is kept while the mapping still has
-exactly that one default trigger), `combo_actions`.
+`trigger` shorthand and omitted defaults are remembered so that an unedited
+file saves identically apart from key order and whitespace. Editing an item
+writes its canonical form: canonical slot name and the `triggers` array (the
+shorthand is kept while the mapping still has exactly that one default
+trigger).
 
 ### 7.4 Fields
 
-Seconds display with an `s` suffix and three decimals. Defaults are for items
-the editor creates; reading keeps the engine defaults for omitted fields.
+Paths and rules are those of the input schemas after M09.2
+([must-fix findings](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui)); the editor validates with the schema and only
+adds the cross-file checks a schema cannot express. Seconds display with an
+`s` suffix and three decimals. Defaults are for items the editor creates.
 
-| Field                              | File path                           | New default                        | Validation                                                      |
-| ---------------------------------- | ----------------------------------- | ---------------------------------- | --------------------------------------------------------------- |
-| Action name                        | `name`                              | entered at creation                | section 7.2                                                     |
-| Value type                         | `type`                              | Digital (`bool`)                   | enum                                                            |
-| Consume input                      | `consumes_input`                    | off                                | bool                                                            |
-| Context name                       | `contexts[].name`                   | entered at creation                | section 7.2                                                     |
-| Priority                           | `contexts[].priority`               | 0                                  | int32; higher runs first                                        |
-| Load when mounted                  | `auto_load`                         | off                                | bool                                                            |
-| Activate when loaded               | `auto_activate`                     | off                                | requires Load when mounted (schema)                             |
-| Input                              | `mappings[].slot`                   | chosen when added                  | a known slot; `None` shows as Unbound                           |
-| Scale, bias                        | `mappings[].scale`, `bias`          | (1,1), (0,0)                       | finite; see [IQ-2](#152-open-questions)                         |
-| Trigger type                       | `triggers[].type`                   | Pressed for Digital, Down for axes | enum; Chord covers `action_chain` ([IQ-5](#152-open-questions)) |
-| Behavior                           | `triggers[].behavior`               | Implicit                           | enum                                                            |
-| Actuation threshold                | `triggers[].actuation_threshold`    | 0.5                                | finite, ≥ 0                                                     |
-| Hold time (Hold, Hold and release) | `hold_time`                         | 0.5 s                              | > 0 (schema requires it)                                        |
-| Tap time (Tap)                     | `hold_time`                         | 0.2 s                              | > 0                                                             |
-| Interval (Pulse)                   | `interval`                          | 0.25 s                             | > 0 (schema requires it)                                        |
-| Chord action (Chord)               | `chord_action`                      | none; must be picked               | an existing action; not the mapping's own                       |
-| Combo steps (Combo)                | `combo_actions[]`                   | one empty step                     | at least one step                                               |
-| Step action                        | `combo_actions[].action`            | none; must be picked               | an existing action                                              |
-| Step completes on                  | `combo_actions[].completion_states` | Triggered                          | at least one of Triggered, Completed, Ongoing, Canceled         |
-| Step window                        | `combo_actions[].time_to_complete`  | 0.5 s                              | ≥ 0; > 0 for every step after the first                         |
-
-Rules the schema does not express are editor checks with `OXE.INPUT.*`
-codes (section 12) and are proposed as schema additions
-([IF-2 to IF-6](../plan/ED-M09-input-authoring.md#engine-defects)).
+| Field                              | File path                         | New default                        | Validation                                                                                            |
+| ---------------------------------- | --------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Action name                        | `name`                            | file stem                          | section 7.2                                                                                           |
+| Description                        | `description`                     | empty                              | up to 256 characters ([IF-13](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui))        |
+| Value type                         | `type`                            | Digital (`bool`)                   | enum                                                                                                  |
+| Consume input                      | `consumes_input`                  | off                                | bool                                                                                                  |
+| Context name                       | `contexts[].name`                 | file stem                          | section 7.2                                                                                           |
+| Priority                           | `contexts[].priority`             | 0                                  | int32; higher runs first                                                                              |
+| Load when mounted                  | `auto_load`                       | off                                | bool                                                                                                  |
+| Activate when loaded               | `auto_activate`                   | off                                | requires Load when mounted                                                                            |
+| Input                              | `mappings[].slot`                 | chosen when added                  | a known slot; `None` shows as Unbound                                                                 |
+| Scale, bias                        | `mappings[].scale`, `bias`        | (1, 1), (0, 0)                     | finite ([IF-1](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui))                       |
+| Triggers                           | `mappings[].triggers`             | Pressed for Digital, Down for axes | at least one ([IF-3](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui))                 |
+| Trigger type                       | `triggers[].type`                 | —                                  | enum; one Action chain type ([IF-10](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui)) |
+| Behavior                           | `triggers[].behavior`             | Implicit                           | enum                                                                                                  |
+| Actuation threshold                | `triggers[].actuation_threshold`  | 0.5                                | finite, ≥ 0                                                                                           |
+| Hold time (Hold, Hold and release) | `hold_time`                       | 0.5 s                              | > 0 ([IF-5](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui))                          |
+| Tap time (Tap)                     | `tap_time`                        | 0.2 s                              | > 0 ([IF-5](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui))                          |
+| Interval (Pulse)                   | `interval`                        | 0.25 s                             | > 0 ([IF-5](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui))                          |
+| Linked action (Action chain)       | `linked_action`                   | must be picked                     | an existing action; not the mapping's own                                                             |
+| Require held (Action chain)        | `require_held`                    | off                                | bool                                                                                                  |
+| Max delay (Action chain)           | `max_delay`                       | 0 s (no limit)                     | ≥ 0                                                                                                   |
+| Combo steps (Combo)                | `combo_steps[]`                   | one step                           | at least one ([IF-13](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui))                |
+| Step action                        | `combo_steps[].action`            | must be picked                     | an existing action                                                                                    |
+| Step completes on                  | `combo_steps[].completion_states` | Triggered                          | at least one of Triggered, Completed, Ongoing, Canceled                                               |
+| Step window                        | `combo_steps[].time_to_complete`  | 0.5 s                              | > 0 after the first step ([IF-2](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui))     |
 
 ## 8. Commands, Services, Or Adapters
 
@@ -265,8 +288,8 @@ open by file, edit under the authoring lock, one history entry per committed
 gesture, revision before asynchronous work, atomic save with saved-revision
 acknowledgement, close drains persistence. It implements
 `IDocumentConflictParticipant` (an external edit offers Reload or Save copy)
-and the relocation participant (an open document re-points its path and the
-names it references without closing).
+and the relocation participant (an open document re-points its path and its
+references without closing).
 
 Opening an action or context row opens its file's document and selects that
 asset. A file already open is activated, not opened twice.
@@ -306,18 +329,20 @@ first Save or a demand from a picker does.
 
 These run as the
 [relocation transaction](content-browser-asset-identity.md#95-asset-relocation)
-(journal, atomic writes, rollback, Undo from the result). The reference index
-gains three input kinds ([IQ-10](#152-open-questions)): action names in input
-files (mapping `action`, `chord_action`, combo step `action`), context URIs in
+(journal, atomic writes, rollback, Undo from the result), with the identity
+rule of every other asset (section 7.2). The reference index gains three
+input kinds ([IQ-10](#152-open-questions)): action paths in input files
+(mapping `action`, `linked_action`, combo step `action`), context URIs in
 scene Play sections, and input asset URIs in script parameter overrides.
 
-- **Rename** an action or context: the name changes in its file and in every
-  referring input file, scene and script; an editor-created file is renamed
-  with it. Collisions and invalid names are rejected before anything is
+- **Rename** an action or context: in a single-asset file the file and its
+  name are renamed together; in a multi-asset file the declaration and its
+  local references are renamed. Every referring input file, scene and script
+  is rewritten. Collisions and invalid names are rejected before anything is
   written.
-- **Move** acts on the source file. For a file holding several assets the
-  command says so ("Move file with 4 input assets"). Section 7.2 decides
-  which referrers change.
+- **Move** acts on the source file and changes the identity of every asset
+  it holds. For a file holding several assets the command says so ("Move file
+  with 4 input assets").
 - **Delete** lists referrers and confirms when any exist. An asset alone in
   its file deletes the file; an asset in a shared file is removed from it.
   Removing the last context of an `*.input.json` is rejected
@@ -357,9 +382,9 @@ events routed to the editor window; it installs no hooks.
 
 ### 8.6 Validation service
 
-`InputValidation` runs on load, after every commit and before cook, over the
-document and the project input index (names, duplicates, unresolved
-references). Results attach to fields and rows; they do not block editing.
+`InputValidation` runs on load, after every commit and before cook: the
+schema over the document, then the project input index for identity
+collisions, name and stem agreement and unresolved references. Results attach to fields and rows; they do not block editing.
 Errors block that file's cook with the same messages.
 
 ## 9. UI Surfaces
@@ -391,10 +416,11 @@ Errors block that file's cook with the same messages.
 | [glyph] Jump      Input action · Content/Input/Jump.input-action.json |
 |                                                    [Needs cooking]    |
 +-----------------------------------------------------------------------+
+| Description    [ Makes the player jump                             ]  |
 | Value type     [ Digital | Axis 1D | Axis 2D ]                         |
-| Consume input  [x]  When it triggers, later mappings in its context   |
-|                     and lower-priority contexts are skipped that       |
-|                     frame, whatever their input.                       |
+| Consume input  [x]  When it triggers, its input is not delivered to   |
+|                     later mappings in its context or to lower-priority |
+|                     contexts.                                          |
 +-----------------------------------------------------------------------+
 | Used by                                                                |
 |   Gameplay   Space · Pressed                         [Open]            |
@@ -422,7 +448,7 @@ is not blocked.
 |     [W]       Down                       |  ▾ Hold     [Implicit|Explicit|Blocker] |
 |     [Up]      Down                       |      Actuation threshold  0.50          |
 | ▾ Look              Axis 2D   [+] [⋯]   |      Hold time            0.400 s       |
-|     [Mouse XY] ⚠ No triggers: never fires|                                         |
+|     [Mouse XY] ⚠ Needs a trigger         |                                         |
 +----------------------------------------+-----------------------------------------+
 ```
 
@@ -445,12 +471,14 @@ is not blocked.
 - **+ Action** opens the action picker (search, value type, source file; New
   action). Choosing adds the action with one binding that opens the key
   selector.
-- **Details pane.** The selected binding's input, then Scale X/Y and Bias X/Y
-  (only once the runtime applies them, IQ-2), then its triggers. Triggers are an
+- **Details pane.** The selected binding's input, then Scale X/Y and Bias X/Y,
+  then its triggers. Triggers are an
   ordered list of cards: a type dropdown, a three-way behavior selector,
   remove and move. Each type shows only the fields the engine reads (table 7.4).
   Combo shows its steps as a table: action picker, "completes on" flag chips,
-  window in seconds, move and remove. Chord shows an action picker. Tooltips
+  window in seconds, move and remove. Action chain shows the linked action,
+  Require held (the linked action must be held at the press) and Max delay
+  (0 for no limit). Tooltips
   state the engine's meaning: Implicit triggers must all trigger; with any
   Explicit trigger, at least one Explicit must trigger; a triggered Blocker
   stops the mapping.
@@ -461,7 +489,7 @@ is not blocked.
   outline listing them; selecting one shows its editor. Editor-created files
   hide it.
 - **Clipboard.** Copy and paste of bindings between contexts as their schema
-  JSON; pasting into another document keeps action names.
+  JSON; pasting into another file turns local action names into paths.
 
 ### 9.4 Key selector
 
@@ -498,7 +526,7 @@ panel lists cook failures with Go To Property.
   written canonically (section 7.3). The three example input files under
   `Examples/Content` round-trip with identical cooked descriptors.
 - Element IDs, selection, outline state and capture state are not persisted.
-- Missing actions in mappings stay as authored names.
+- Unresolved action references stay as authored.
 - Saving never cooks synchronously and never saves other documents.
 
 ## 11. Live Sync / Cook / Runtime Behavior
@@ -507,22 +535,22 @@ panel lists cook failures with Go To Property.
   ([cooking workflows §4](content-cooking-workflows.md#4-cooking-triggers));
   picker demand cooks the saved closure. No live projection: editor viewports
   do not run game input.
-- **Jobs.** One `input` job per file. The project input index adds
-  `depends_on` on the jobs of the files that declare every action the file
-  uses by name, and passes other mounts' roots as `cooked_context_roots` in
-  content priority order. A changed action file makes its dependents stale.
+- **Jobs.** One `input` job per file, with the layout of section 7.2. Its
+  path references give `depends_on` on the jobs that produce them and, across
+  mounts, the `cooked_context_roots` in content priority order, as for any
+  descriptor reference. A changed action file makes its dependents stale.
 - **Outputs.** An input job has several outputs. Provenance records the
   emitted keys per file; after a rename or removal, outputs the file no longer
   emits are retired with the existing retirement path, so old names leave the
   index.
 - **Failures.** The cooker's `input.*` diagnostics keep their codes and map to
-  properties through their object path; both forms the cooker emits
-  (`$.contexts[0].mappings[2]` and `contexts.Gameplay.mappings[2]`) resolve
-  ([IF-14](../plan/ED-M09-input-authoring.md#documentation-and-editor-design-inconsistencies)).
+  properties through their object path, a `$`-rooted JSON path after
+  [IF-14](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui).
   A dirty input document in a cook closure follows the Save listed and Cook
   flow.
 - **Play.** The Play section's contexts and script references resolve to the
-  cooked assets; the player hydrates them by key. Nothing in Play reads the
+  cooked assets; the player hydrates them by key and, after IF-12, identifies
+  them at runtime by key. Nothing in Play reads the
   Load and Activate flags.
 
 ## 12. Operation Results And Diagnostics
@@ -532,23 +560,20 @@ Operations: `Input.Create`, `Input.Open`, `Input.Edit`, `Input.Save`,
 Domain `InputAuthoring`; persistence uses `Document`, cooking `AssetCook`,
 relocation its existing domain.
 
-| Code                               | Severity | When                                                                       |
-| ---------------------------------- | -------- | -------------------------------------------------------------------------- |
-| `OXE.INPUT.SOURCE_INVALID`         | Error    | The file fails its schema; row is Broken; editing is disabled.             |
-| `OXE.INPUT.NAME_INVALID`           | Error    | Empty, longer than 63 characters or outside the name pattern (new names).  |
-| `OXE.INPUT.NAME_PATTERN`           | Warning  | A hand-written name outside the pattern.                                   |
-| `OXE.INPUT.NAME_NOT_UNIQUE`        | Error    | Two contexts, or two differently typed actions, share a name.              |
-| `OXE.INPUT.DUPLICATE_DECLARATION`  | Warning  | One action declared identically in two files.                              |
-| `OXE.INPUT.ACTION_MISSING`         | Error    | A mapping, chord or combo step names no declared action.                   |
-| `OXE.INPUT.SLOT_UNKNOWN`           | Error    | A slot name the engine does not know.                                      |
-| `OXE.INPUT.MAPPING_NO_TRIGGERS`    | Warning  | A mapping with no triggers never fires.                                    |
-| `OXE.INPUT.TRIGGER_FIELD_REQUIRED` | Error    | Hold, tap or pulse time not positive; chord action or combo steps missing. |
-| `OXE.INPUT.COMBO_STEP_UNREACHABLE` | Error    | A step with no completion state, or a zero window after the first step.    |
-| `OXE.INPUT.VALUE_OUT_OF_RANGE`     | Error    | Non-finite or out-of-range number; the edit is rejected.                   |
-| `OXE.INPUT.SCALE_BIAS_IGNORED`     | Info     | Non-default scale or bias, which the runtime does not apply (IF-1).        |
-| `OXE.INPUT.LAST_CONTEXT_IN_FILE`   | Error    | Delete would leave an `*.input.json` without contexts.                     |
-| `OXE.INPUT.CAPTURE_UNSUPPORTED`    | Info     | A captured key has no engine slot.                                         |
-| `OXE.INPUT.CREATE_FAILED`          | Error    | Creating a file failed; names the path and cause.                          |
+| Code                               | Severity | When                                                                      |
+| ---------------------------------- | -------- | ------------------------------------------------------------------------- |
+| `OXE.INPUT.SOURCE_INVALID`         | Error    | The file fails its schema; row is Broken; editing is disabled.            |
+| `OXE.INPUT.NAME_INVALID`           | Error    | Empty, longer than 63 characters or outside the name pattern (new names). |
+| `OXE.INPUT.NAME_STEM_MISMATCH`     | Error    | A single-asset file's `name` differs from its file stem.                  |
+| `OXE.INPUT.IDENTITY_COLLISION`     | Error    | Two declarations produce the same virtual path.                           |
+| `OXE.INPUT.ACTION_MISSING`         | Error    | A mapping, linked action or combo step reference resolves to no action.   |
+| `OXE.INPUT.SLOT_UNKNOWN`           | Error    | A slot name the engine does not know.                                     |
+| `OXE.INPUT.TRIGGER_FIELD_REQUIRED` | Error    | A schema-required trigger field is missing or out of range.               |
+| `OXE.INPUT.COMBO_STEP_UNREACHABLE` | Error    | A step with no completion state, or a zero window after the first step.   |
+| `OXE.INPUT.VALUE_OUT_OF_RANGE`     | Error    | Non-finite or out-of-range number; the edit is rejected.                  |
+| `OXE.INPUT.LAST_CONTEXT_IN_FILE`   | Error    | Delete would leave an `*.input.json` without contexts.                    |
+| `OXE.INPUT.CAPTURE_UNSUPPORTED`    | Info     | A captured key has no engine slot.                                        |
+| `OXE.INPUT.CREATE_FAILED`          | Error    | Creating a file failed; names the path and cause.                         |
 
 Diagnostics carry the document, file path, asset URI and property path.
 Engine `input.*` codes stay as reported.
@@ -567,57 +592,56 @@ Engine `input.*` codes stay as reported.
 
 ## 14. Validation Gates
 
-| ID   | Check                                                                                                                                                        |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| IA-1 | Creating an action and a context writes schema-valid files whose cook produces the expected keys; reader and writer tests cover every field and default.     |
-| IA-2 | The example input files open, save unchanged in value and cook to identical descriptors; aliases, shorthand and `aux` survive until edited.                  |
-| IA-3 | Key capture session tests with synthesized events: letters, digits, both-side modifiers, keypad and extended keys, mouse buttons, wheel, Escape, focus loss. |
-| IA-4 | Every trigger type's fields edit, validate and round-trip; type change, reorder, combo steps and flags undo and redo as single entries.                      |
-| IA-5 | Rename, move, delete and split retarget input files, Play sections and script overrides as in section 7.2; relocation Undo restores all files.               |
-| IA-6 | Gesture, undo/redo, dirty, save-then-edit and external-change conflict behavior match the material document contract.                                        |
-| IA-7 | Save cooks the file and its dependents; a cross-file action resolves; a renamed action's old output leaves the index; cook errors navigate to the field.     |
-| IA-8 | A scene whose Play section starts an editor-authored context runs in the player, and a script's `on_action` handler fires for a bound key.                   |
-| IA-9 | Owner review of SC1–SC10 in the running editor.                                                                                                              |
+| ID   | Check                                                                                                                                                                                                                                     |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IA-1 | Creating an action and a context writes schema-valid files whose cook produces the expected keys; reader and writer tests cover every field and default.                                                                                  |
+| IA-2 | The example input files open, save unchanged in value and cook to identical descriptors; aliases and shorthand survive until edited.                                                                                                      |
+| IA-3 | Key capture session tests with synthesized events: letters, digits, both-side modifiers, keypad and extended keys, mouse buttons, wheel, Escape, focus loss.                                                                              |
+| IA-4 | Every trigger type's fields edit, validate and round-trip; type change, reorder, combo steps and flags undo and redo as single entries.                                                                                                   |
+| IA-5 | Rename, move, delete and split change identities and retarget input files, Play sections and script overrides as in section 7.2; Undo restores all files.                                                                                 |
+| IA-6 | Gesture, undo/redo, dirty, save-then-edit and external-change conflict behavior match the material document contract.                                                                                                                     |
+| IA-7 | Save cooks the file and its dependents; an action referenced by path from another folder and mount resolves; equal names in two folders stay distinct; a renamed action's old output leaves the index; cook errors navigate to the field. |
+| IA-8 | A scene whose Play section starts an editor-authored context runs in the player, and a script's `on_action` handler fires for a bound key.                                                                                                |
+| IA-9 | Owner review of SC1–SC10 in the running editor.                                                                                                                                                                                           |
 
 ## 15. Open Issues
 
 ### 15.1 Engine gaps
 
 Capabilities the engine does not provide, which this design therefore does
-not offer. Engine defects and inconsistencies found during the analysis
-(scale and bias ignored at runtime, unusable schema defaults, silent
-overwrites and others) are tracked with fixes and pass/fail checks in the
-plan's [findings](../plan/ED-M09-input-authoring.md#findings-from-the-analysis).
+not offer. Engine defects and inconsistencies found during the analysis are
+not gaps: they are fixed before the input UI is built, as listed with their
+pass/fail checks in the plan's
+[findings](../plan/ED-M09-input-authoring.md#findings-from-the-analysis).
 
-| ID   | Gap                                                                                                                                                                         | Editor handling                                       | Matters for V0.1                                                          |
-| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
-| EG-1 | Runtime trigger options absent from the cooked format: hold one-shot; pulse trigger-on-start, limit, jitter, phase, ramp; chain max delay and require-held; combo breakers. | Not offered.                                          | No; combo breakers and hold one-shot are the first candidates after V0.1. |
-| EG-2 | No input modifiers beyond scale and bias (dead zone, smoothing, response curves).                                                                                           | Not offered.                                          | No; negate and swizzle follow from IF-1.                                  |
-| EG-3 | No triggers on the action itself shared by all its mappings.                                                                                                                | Not offered; per-binding triggers only.               | No.                                                                       |
-| EG-4 | No 3D axis value type.                                                                                                                                                      | Not offered.                                          | No.                                                                       |
-| EG-5 | No gamepad slots.                                                                                                                                                           | Not offered; the key selector has no gamepad section. | No (out of scope).                                                        |
-| EG-6 | No player-remappable bindings or runtime rebinding.                                                                                                                         | Not offered.                                          | No (out of scope).                                                        |
-| EG-7 | No description field for authors' notes (the schemas reject extra properties).                                                                                              | None.                                                 | Low.                                                                      |
-| EG-8 | No API to evaluate a context against synthetic input outside a running game.                                                                                                | No in-editor preview (IQ-7).                          | No.                                                                       |
+| ID   | Gap                                                                                                                                                                                  | Editor handling                                       | Matters for V0.1                                                          |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------- |
+| EG-1 | Runtime trigger options absent from the cooked format: hold one-shot; pulse trigger-on-start, limit, jitter, phase, ramp; combo breakers (chain options join the format with IF-10). | Not offered.                                          | No; combo breakers and hold one-shot are the first candidates after V0.1. |
+| EG-2 | No input modifiers beyond scale and bias (dead zone, smoothing, response curves).                                                                                                    | Not offered.                                          | No; negate and swizzle follow from IF-1.                                  |
+| EG-3 | No triggers on the action itself shared by all its mappings.                                                                                                                         | Not offered; per-binding triggers only.               | No.                                                                       |
+| EG-4 | No 3D axis value type.                                                                                                                                                               | Not offered.                                          | No.                                                                       |
+| EG-5 | No gamepad slots.                                                                                                                                                                    | Not offered; the key selector has no gamepad section. | No (out of scope).                                                        |
+| EG-6 | No player-remappable bindings or runtime rebinding.                                                                                                                                  | Not offered.                                          | No (out of scope).                                                        |
+| EG-7 | No API to evaluate a context against synthetic input outside a running game.                                                                                                         | No in-editor preview (IQ-7).                          | No.                                                                       |
 
 ### 15.2 Open questions
 
 In priority order. Each open row needs the owner's decision at ED-M09.1.
 
-| ID    | Question                                                             | Recommendation                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| ----- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| IQ-1  | Authoring format and file granularity.                               | Decided 2026-10-11: Engine formats unchanged; the editor creates one asset per file; hand-written multi-asset files are edited in place, with explicit Split (sections 7.1, 8.4).                                                                                                                                                                                                                                                 |
-| IQ-2  | Scale and bias have no runtime effect (IF-1).                        | Schedule the engine fix (apply scale and bias in mappings) in ED-M09.2 and show Scale X/Y and Bias X/Y per binding in the details pane. If declined: hide them, keep hand-written values and show `SCALE_BIAS_IGNORED`.                                                                                                                                                                                                           |
-| IQ-3  | Input asset identity and name scope.                                 | Name-derived virtual path (section 7.2); names unique project-wide per kind; moves within a mount rewrite nothing.                                                                                                                                                                                                                                                                                                                |
-| IQ-4  | Name pattern.                                                        | `[A-Za-z_][A-Za-z0-9_]*`, 1–63 characters, for new names and renames; hand-written exceptions kept with a warning.                                                                                                                                                                                                                                                                                                                |
-| IQ-5  | Chord and action chain behave identically at runtime (IF-10).        | One "Chord" type in the picker, written as `chord`; hand-written `action_chain` shows as Chord and is kept until its type is changed.                                                                                                                                                                                                                                                                                             |
-| IQ-6  | Show Load when mounted and Activate when loaded, which Play ignores? | Show, collapsed under Standalone loading, with the one-line explanation. Alternative: hide and preserve.                                                                                                                                                                                                                                                                                                                          |
-| IQ-7  | In-editor live preview of a context.                                 | Defer past V0.1; Play is the test path (EG-8).                                                                                                                                                                                                                                                                                                                                                                                    |
-| IQ-8  | Module placement.                                                    | New `Oxygen.Editor.InputEditor` project beside MaterialEditor; ARCHITECTURE and project layout list it.                                                                                                                                                                                                                                                                                                                           |
-| IQ-9  | Default folder.                                                      | `Content/Input`, created by the project template and used by the creation target policy ([project layout](project-layout-and-templates.md)).                                                                                                                                                                                                                                                                                      |
-| IQ-10 | Touch points in other LLDs (not edited here).                        | At ED-M09.1 close, amend: [script authoring](script-authoring.md) §4 (Edit opens the input editor; Open in code editor remains), §6 and §8 (pickers offer New action and New context; Play priority default reads the source); [content browser §9.5](content-browser-asset-identity.md#95-asset-relocation) (input reference kinds); [content pipeline](content-pipeline.md) (name-based `depends_on`, multi-output provenance). |
-| IQ-11 | Mapping order.                                                       | Show evaluation order with contiguous action groups and an explicit Group by action (section 9.3), rather than a grouped view that hides order.                                                                                                                                                                                                                                                                                   |
-| IQ-12 | Schema augmentation (IF-2 to IF-6).                                  | Engine schema-only change in ED-M09.2 so the cooker rejects what the editor rejects.                                                                                                                                                                                                                                                                                                                                              |
+| ID    | Question                                                             | Recommendation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ----- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| IQ-1  | Authoring format and file granularity.                               | Decided 2026-10-11: Engine formats unchanged; the editor creates one asset per file; hand-written multi-asset files are edited in place, with explicit Split (sections 7.1, 8.4).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| IQ-2  | Scale and bias have no runtime effect (IF-1).                        | Fixed before the UI ([IF-1](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui)); Scale X/Y and Bias X/Y shown per binding.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| IQ-3  | Input asset identity and name scope.                                 | Corrected 2026-10-11 in owner review: identity follows the source location like every asset; equal names in different folders are distinct ([IF-12](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui), section 7.2).                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| IQ-4  | Name pattern.                                                        | `[A-Za-z_][A-Za-z0-9_]*`, 1–63 characters, enforced by the schema ([IF-6](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui)); single-asset files use it as the file stem.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| IQ-5  | Chord and action chain.                                              | One Action chain type with Require held and Max delay; `chord` removed from the format ([IF-10](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui)).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| IQ-6  | Show Load when mounted and Activate when loaded, which Play ignores? | Show, collapsed under Standalone loading, with the one-line explanation. Alternative: hide and preserve.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| IQ-7  | In-editor live preview of a context.                                 | Defer past V0.1; Play is the test path (EG-7).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| IQ-8  | Module placement.                                                    | New `Oxygen.Editor.InputEditor` project beside MaterialEditor; ARCHITECTURE and project layout list it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| IQ-9  | Default folder.                                                      | `Content/Input`, created by the project template and used by the creation target policy ([project layout](project-layout-and-templates.md)).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| IQ-10 | Touch points in other LLDs (not edited here).                        | At ED-M09.1 close, amend: [script authoring](script-authoring.md) §4 (Edit opens the input editor; Open in code editor remains), §6 and §8 (pickers offer New action and New context; Play priority default reads the source); [content browser §9.5](content-browser-asset-identity.md#95-asset-relocation) (input reference kinds; the identity rule is unchanged); [content pipeline](content-pipeline.md) (input job layout at the source folder, `depends_on` from path references, multi-output provenance); engine [scene script hosting](../../../projects/Oxygen.Engine/design/scripting/scene-script-hosting.md) (`on_action` resolves an action asset by key, IF-12). |
+| IQ-11 | Mapping order.                                                       | Show evaluation order with contiguous action groups and an explicit Group by action (section 9.3), rather than a grouped view that hides order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| IQ-12 | Schema augmentation (IF-2 to IF-6).                                  | Part of M09.2 ([IF-2 to IF-6](../plan/ED-M09-input-authoring.md#must-fix-before-the-input-ui)).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 
 ### 15.3 Rejected alternatives
 
@@ -629,11 +653,14 @@ In priority order. Each open row needs the owner's decision at ED-M09.1.
 - **Hand-written files read-only in the editor**: two workflows for the same
   assets; scripting already makes hand-written files first-class.
 - **Splitting multi-asset files on open**: rewrites user files unasked.
-- **GUID or path references inside input files**: the engine resolves names.
+- **Identity from the declared name alone**, every input asset in one
+  `Input` folder: identity would not follow the source location as for every
+  other asset, moves would bypass relocation, and names would have to be
+  unique project-wide.
+- **GUID references inside input files**: the engine and every other
+  descriptor reference assets by virtual path.
 - **An editor simulation of triggers for preview**: a second implementation of
   engine semantics that would drift.
-- **Exposing scale and bias while the runtime ignores them**: saved and live
-  semantics would differ (pending IQ-2).
 - **A grouped mapping view that hides order**: order decides consumption.
 - **Capture through global keyboard hooks**: needs real input and focus, cannot
   be tested headlessly and reaches outside the editor.

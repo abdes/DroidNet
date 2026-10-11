@@ -1192,9 +1192,12 @@ its original scope. The development-only qualification harness is post-V0.1.
 
 Status: `planned; design drafted, IQ-1 decided; awaiting owner review`
 
-The plan's findings record eight engine input defects (scale and bias
-ignored at runtime, unusable schema defaults, silent overwrites) and the
-ED-M08.10o cook-order gap, each with a fix and a pass/fail check.
+The plan's findings list the engine input defects that M09.2 fixes before
+any input UI: name-based identity and references, consumption that blocks
+all input, scale and bias ignored at runtime, the redundant chord trigger,
+unusable schema defaults, silent overwrites and inconsistent diagnostics.
+They also record the ED-M08.10o input cooking issue raised on the pull
+request.
 
 Plan: [ED-M09-input-authoring.md](plan/ED-M09-input-authoring.md). The ID
 previously named the viewport tools that ED-M08.4–M08.6 delivered.
