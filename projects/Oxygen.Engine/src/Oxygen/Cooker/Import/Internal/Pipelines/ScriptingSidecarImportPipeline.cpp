@@ -16,6 +16,8 @@
 #include <limits>
 #include <map>
 #include <optional>
+#include <ranges>
+#include <set>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -46,12 +48,14 @@
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
-#include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 
@@ -115,13 +119,24 @@ namespace {
     });
   }
 
+  //! One parsed override; asset values are resolved against the cooked
+  //! contexts after parsing.
+  struct SidecarParam final {
+    data::pak::scripting::ScriptParamRecord record = {};
+    std::string asset_virtual_path;
+  };
+
   struct SidecarBindingRow final {
     uint32_t node_index = 0;
     std::string slot_id;
     std::string script_virtual_path;
     int32_t execution_order = 0;
-    std::vector<data::pak::scripting::ScriptParamRecord> params;
+    std::vector<SidecarParam> params;
   };
+
+  //! Parameter declarations of each script a sidecar references.
+  using ScriptDeclarationMap
+    = std::map<data::AssetKey, std::vector<script::ScriptParamRecord>>;
 
   struct SidecarDocument final {
     std::vector<SidecarBindingRow> rows;
@@ -145,12 +160,13 @@ namespace {
     return std::to_string(node_index) + "|" + std::string { slot_id };
   }
 
-  using ScriptParamParserFn = bool (*)(const nlohmann::json& value,
-    data::pak::scripting::ScriptParamRecord& out, std::string& error);
+  using ScriptParamParserFn = bool (*)(
+    const nlohmann::json& value, SidecarParam& out, std::string& error);
 
-  auto ParseBoolParamValue(const nlohmann::json& value,
-    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  auto ParseBoolParamValue(const nlohmann::json& value, SidecarParam& param,
+    std::string& error) -> bool
   {
+    auto& out = param.record;
     using data::pak::scripting::ScriptParamType;
     if (!value.is_boolean()) {
       error = "bool param requires boolean value";
@@ -161,9 +177,10 @@ namespace {
     return true;
   }
 
-  auto ParseInt32ParamValue(const nlohmann::json& value,
-    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  auto ParseInt32ParamValue(const nlohmann::json& value, SidecarParam& param,
+    std::string& error) -> bool
   {
+    auto& out = param.record;
     using data::pak::scripting::ScriptParamType;
     if (!value.is_number_integer()) {
       error = "int32 param requires integer value";
@@ -180,9 +197,10 @@ namespace {
     return true;
   }
 
-  auto ParseFloatParamValue(const nlohmann::json& value,
-    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  auto ParseFloatParamValue(const nlohmann::json& value, SidecarParam& param,
+    std::string& error) -> bool
   {
+    auto& out = param.record;
     using data::pak::scripting::ScriptParamType;
     if (!value.is_number()) {
       error = "float param requires numeric value";
@@ -193,9 +211,10 @@ namespace {
     return true;
   }
 
-  auto ParseStringParamValue(const nlohmann::json& value,
-    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  auto ParseStringParamValue(const nlohmann::json& value, SidecarParam& param,
+    std::string& error) -> bool
   {
+    auto& out = param.record;
     using data::pak::scripting::ScriptParamType;
     if (!value.is_string()) {
       error = "string param requires string value";
@@ -226,40 +245,70 @@ namespace {
         + std::to_string(N);
       return false;
     }
+    auto components = std::array<float, N> {};
     for (size_t i = 0; i < N; ++i) {
       if (!value.at(i).is_number()) {
         error = std::string(type_name)
           + " param array must contain numeric elements";
         return false;
       }
-      out.value.as_vec[i] = value.at(i).get<float>();
+      components.at(i) = value.at(i).get<float>();
     }
+    std::ranges::copy(components, std::begin(out.value.as_vec));
     out.type = param_type;
     return true;
   }
 
-  auto ParseVec2ParamValue(const nlohmann::json& value,
-    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  auto ParseVec2ParamValue(const nlohmann::json& value, SidecarParam& param,
+    std::string& error) -> bool
   {
+    auto& out = param.record;
     using data::pak::scripting::ScriptParamType;
     return ParseVectorParamValue<2>(
       value, out, ScriptParamType::kVec2, "vec2", error);
   }
 
-  auto ParseVec3ParamValue(const nlohmann::json& value,
-    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  auto ParseVec3ParamValue(const nlohmann::json& value, SidecarParam& param,
+    std::string& error) -> bool
   {
+    auto& out = param.record;
     using data::pak::scripting::ScriptParamType;
     return ParseVectorParamValue<3>(
       value, out, ScriptParamType::kVec3, "vec3", error);
   }
 
-  auto ParseVec4ParamValue(const nlohmann::json& value,
-    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  auto ParseVec4ParamValue(const nlohmann::json& value, SidecarParam& param,
+    std::string& error) -> bool
   {
+    auto& out = param.record;
     using data::pak::scripting::ScriptParamType;
     return ParseVectorParamValue<4>(
       value, out, ScriptParamType::kVec4, "vec4", error);
+  }
+
+  auto ParseAssetParamValue(const nlohmann::json& value, SidecarParam& param,
+    std::string& error) -> bool
+  {
+    if (!value.is_string() || value.get<std::string>().empty()) {
+      error = "asset param requires a virtual path string value";
+      return false;
+    }
+    param.record.type = script::ScriptParamType::kAsset;
+    param.asset_virtual_path = value.get<std::string>();
+    return true;
+  }
+
+  auto ParseNodeParamValue(const nlohmann::json& value, SidecarParam& param,
+    std::string& error) -> bool
+  {
+    if (!value.is_number_unsigned()
+      || value.get<uint64_t>() >= script::kUnsetNodeParam) {
+      error = "node param requires a scene node index value";
+      return false;
+    }
+    param.record.type = script::ScriptParamType::kNode;
+    param.record.value.as_node_index = value.get<uint32_t>();
+    return true;
   }
 
   struct ScriptParamParserEntry final {
@@ -267,14 +316,43 @@ namespace {
     ScriptParamParserFn parse_fn = nullptr;
   };
 
-  constexpr auto kScriptParamParsers = std::array<ScriptParamParserEntry, 7> {
-    ScriptParamParserEntry { "bool", &ParseBoolParamValue },
-    ScriptParamParserEntry { "int32", &ParseInt32ParamValue },
-    ScriptParamParserEntry { "float", &ParseFloatParamValue },
-    ScriptParamParserEntry { "string", &ParseStringParamValue },
-    ScriptParamParserEntry { "vec2", &ParseVec2ParamValue },
-    ScriptParamParserEntry { "vec3", &ParseVec3ParamValue },
-    ScriptParamParserEntry { "vec4", &ParseVec4ParamValue },
+  constexpr auto kScriptParamParsers = std::array<ScriptParamParserEntry, 9> {
+    ScriptParamParserEntry {
+      .type_name = "bool",
+      .parse_fn = &ParseBoolParamValue,
+    },
+    ScriptParamParserEntry {
+      .type_name = "int32",
+      .parse_fn = &ParseInt32ParamValue,
+    },
+    ScriptParamParserEntry {
+      .type_name = "float",
+      .parse_fn = &ParseFloatParamValue,
+    },
+    ScriptParamParserEntry {
+      .type_name = "string",
+      .parse_fn = &ParseStringParamValue,
+    },
+    ScriptParamParserEntry {
+      .type_name = "vec2",
+      .parse_fn = &ParseVec2ParamValue,
+    },
+    ScriptParamParserEntry {
+      .type_name = "vec3",
+      .parse_fn = &ParseVec3ParamValue,
+    },
+    ScriptParamParserEntry {
+      .type_name = "vec4",
+      .parse_fn = &ParseVec4ParamValue,
+    },
+    ScriptParamParserEntry {
+      .type_name = "asset",
+      .parse_fn = &ParseAssetParamValue,
+    },
+    ScriptParamParserEntry {
+      .type_name = "node",
+      .parse_fn = &ParseNodeParamValue,
+    },
   };
 
   auto FindScriptParamParser(const std::string_view type_name)
@@ -287,8 +365,8 @@ namespace {
     return it == kScriptParamParsers.end() ? nullptr : &(*it);
   }
 
-  auto ParseScriptParamRecord(const nlohmann::json& param,
-    data::pak::scripting::ScriptParamRecord& out, std::string& error) -> bool
+  auto ParseScriptParamRecord(
+    const nlohmann::json& param, SidecarParam& out, std::string& error) -> bool
   {
     if (!param.is_object()) {
       error = "Param record must be an object";
@@ -308,7 +386,11 @@ namespace {
     }
 
     const auto key = param.at("key").get<std::string>();
-    if (!CopyNullTerminated(key, std::span { out.key })) {
+    if (key.empty()) {
+      error = "Param key must not be empty";
+      return false;
+    }
+    if (!CopyNullTerminated(key, std::span { out.record.key })) {
       error = "Param key exceeds ScriptParamRecord::key capacity";
       return false;
     }
@@ -422,7 +504,7 @@ namespace {
           continue;
         }
         for (size_t j = 0; j < binding.at("params").size(); ++j) {
-          auto parsed_param = data::pak::scripting::ScriptParamRecord {};
+          auto parsed_param = SidecarParam {};
           auto error = std::string {};
           const auto param_path
             = object_path + ".params[" + std::to_string(j) + "]";
@@ -432,7 +514,20 @@ namespace {
               "script.sidecar.param_invalid", std::move(error), param_path);
             continue;
           }
-          row.params.push_back(parsed_param);
+          const auto key = data::TryGetScriptParamKey(parsed_param.record);
+          const auto duplicate = std::ranges::any_of(
+            row.params, [&key](const SidecarParam& existing) -> bool {
+              return data::TryGetScriptParamKey(existing.record) == key;
+            });
+          if (duplicate) {
+            AddDiagnosticAtPath(session, request, ImportSeverity::kError,
+              "script.sidecar.param_duplicate",
+              "Parameter '" + std::string(key.value_or(""))
+                + "' is overridden twice in one slot",
+              param_path + ".key");
+            continue;
+          }
+          row.params.push_back(std::move(parsed_param));
         }
       }
 
@@ -477,7 +572,7 @@ namespace {
     SceneDescriptorPatcher(
       const SidecarResolvedSceneState& scene, const SceneScriptData& scripts)
       : source_descriptor_(scene.source_scene_descriptor)
-      , scripts_(scripts)
+      , scripts_(&scripts)
       , environment_offset_(scene.environment_offset)
     {
     }
@@ -575,7 +670,7 @@ namespace {
           + (static_cast<size_t>(i) * sizeof(SceneComponentTableDesc));
         auto entry = SceneComponentTableDesc {};
         std::memcpy(
-          &entry, source_descriptor_.data() + dir_offset, sizeof(entry));
+          &entry, source_descriptor_.subspan(dir_offset).data(), sizeof(entry));
 
         if (entry.table.count == 0U) {
           continue;
@@ -603,7 +698,8 @@ namespace {
         };
         payload.bytes.resize(static_cast<size_t>(table_size));
         std::memcpy(payload.bytes.data(),
-          source_descriptor_.data() + static_cast<size_t>(entry.table.offset),
+          source_descriptor_.subspan(static_cast<size_t>(entry.table.offset))
+            .data(),
           payload.bytes.size());
         component_payloads_.push_back(std::move(payload));
       }
@@ -614,7 +710,7 @@ namespace {
     auto AppendScriptingComponentPayload() -> void
     {
       using data::ComponentType;
-      if (scripts_.components.empty()) {
+      if (scripts_->components.empty()) {
         return;
       }
 
@@ -624,16 +720,15 @@ namespace {
         .bytes = {},
       };
       payload.bytes.resize(
-        scripts_.components.size() * sizeof(script::ScriptingComponentRecord));
-      std::memcpy(
-        payload.bytes.data(), scripts_.components.data(), payload.bytes.size());
+        scripts_->components.size() * sizeof(script::ScriptingComponentRecord));
+      std::memcpy(payload.bytes.data(), scripts_->components.data(),
+        payload.bytes.size());
       component_payloads_.push_back(std::move(payload));
     }
 
     auto CaptureTrailingBytes() -> void
     {
-      const auto trailing
-        = std::span(source_descriptor_).subspan(environment_offset_);
+      const auto trailing = source_descriptor_.subspan(environment_offset_);
       trailing_bytes_.assign(trailing.begin(), trailing.end());
     }
 
@@ -665,12 +760,13 @@ namespace {
         out.insert(out.end(), bytes.begin(), bytes.end());
       };
 
-      append_bytes(std::span<const std::byte>(source_descriptor_.data()
-          + static_cast<size_t>(source_desc_.nodes.offset),
-        static_cast<size_t>(node_table_size_)));
-      append_bytes(std::span<const std::byte>(source_descriptor_.data()
-          + static_cast<size_t>(source_desc_.scene_strings.offset),
-        static_cast<size_t>(scene_string_size_)));
+      const auto source = source_descriptor_;
+      append_bytes(
+        source.subspan(static_cast<size_t>(source_desc_.nodes.offset),
+          static_cast<size_t>(node_table_size_)));
+      append_bytes(
+        source.subspan(static_cast<size_t>(source_desc_.scene_strings.offset),
+          static_cast<size_t>(scene_string_size_)));
 
       if (!component_payloads_.empty()) {
         desc.component_table_directory_offset = out.size();
@@ -697,22 +793,22 @@ namespace {
           append_bytes(component_payloads_.at(i).bytes);
         }
 
-        std::memcpy(
-          out.data() + directory_offset, directory.data(), directory_size);
+        std::memcpy(std::span(out).subspan(directory_offset).data(),
+          directory.data(), directory_size);
       }
 
       desc.script_slots = {};
-      if (!scripts_.slots.empty()) {
-        if (scripts_.slots.size() > std::numeric_limits<uint32_t>::max()) {
+      if (!scripts_->slots.empty()) {
+        if (scripts_->slots.size() > std::numeric_limits<uint32_t>::max()) {
           error = "Scene script slot count exceeds the format limit";
           return false;
         }
         desc.script_slots = {
           .offset = out.size(),
-          .count = static_cast<uint32_t>(scripts_.slots.size()),
+          .count = static_cast<uint32_t>(scripts_->slots.size()),
           .entry_size = sizeof(script::ScriptSlotRecord),
         };
-        auto slots = scripts_.slots;
+        auto slots = scripts_->slots;
         const auto parameter_base
           = out.size() + (slots.size() * sizeof(script::ScriptSlotRecord));
         for (auto& slot : slots) {
@@ -723,7 +819,7 @@ namespace {
           }
         }
         append_bytes(std::as_bytes(std::span(slots)));
-        append_bytes(std::as_bytes(std::span(scripts_.params)));
+        append_bytes(std::as_bytes(std::span(scripts_->params)));
       }
       append_bytes(trailing_bytes_);
 
@@ -732,30 +828,143 @@ namespace {
       return true;
     }
 
-    const std::vector<std::byte>& source_descriptor_;
-    const SceneScriptData& scripts_;
+    std::span<const std::byte> source_descriptor_;
+    observer_ptr<const SceneScriptData> scripts_;
     size_t environment_offset_;
     world::SceneAssetDesc source_desc_ {};
     uint64_t node_table_size_ = 0;
     uint64_t scene_string_size_ = 0;
     uint64_t payload_end_ = 0;
-    std::vector<ComponentPayload> component_payloads_ {};
-    std::vector<std::byte> trailing_bytes_ {};
+    std::vector<ComponentPayload> component_payloads_;
+    std::vector<std::byte> trailing_bytes_;
   };
 
-  auto ResolveMountedAssetTypeByKey(
+  struct MountedAsset final {
+    const SidecarCookedInspectionContext* context = nullptr;
+    const lc::AssetEntry* entry = nullptr;
+  };
+
+  //! Finds an asset in the cooked contexts, the last mounted one first.
+  auto FindMountedAsset(
     std::span<const SidecarCookedInspectionContext> cooked_contexts,
-    const data::AssetKey& key) -> std::optional<data::AssetType>
+    const data::AssetKey& key) -> std::optional<MountedAsset>
   {
     for (size_t i = cooked_contexts.size(); i > 0; --i) {
       const auto& context = oxygen::base::CheckedAt(cooked_contexts, i - 1U);
       for (const auto& asset : context.inspection.Assets()) {
         if (asset.key == key) {
-          return static_cast<data::AssetType>(asset.asset_type);
+          return MountedAsset { .context = &context, .entry = &asset };
         }
       }
     }
     return std::nullopt;
+  }
+
+  auto ResolveMountedAssetTypeByKey(
+    std::span<const SidecarCookedInspectionContext> cooked_contexts,
+    const data::AssetKey& key) -> std::optional<data::AssetType>
+  {
+    const auto mounted = FindMountedAsset(cooked_contexts, key);
+    if (!mounted) {
+      return std::nullopt;
+    }
+    return static_cast<data::AssetType>(mounted->entry->asset_type);
+  }
+
+  //! Reads the parameter declarations of a cooked script descriptor.
+  auto DecodeScriptDeclarations(std::span<const std::byte> bytes)
+    -> std::optional<std::vector<script::ScriptParamRecord>>
+  {
+    if (bytes.size() < sizeof(script::ScriptAssetDesc)) {
+      return std::nullopt;
+    }
+    auto desc = script::ScriptAssetDesc {};
+    std::memcpy(&desc, bytes.data(), sizeof(desc));
+    if (static_cast<data::AssetType>(desc.header.asset_type)
+        != data::AssetType::kScript
+      || desc.header.version != script::kScriptAssetVersion) {
+      return std::nullopt;
+    }
+
+    const auto& table = desc.params;
+    auto declarations = std::vector<script::ScriptParamRecord> {};
+    if (table.count == 0U) {
+      return declarations;
+    }
+    if (table.entry_size != sizeof(script::ScriptParamRecord)
+      || table.offset < sizeof(desc) || table.offset > bytes.size()
+      || (bytes.size() - table.offset) / sizeof(script::ScriptParamRecord)
+        < table.count) {
+      return std::nullopt;
+    }
+    declarations.resize(table.count);
+    std::memcpy(declarations.data(), bytes.subspan(table.offset).data(),
+      declarations.size() * sizeof(script::ScriptParamRecord));
+    if (!std::ranges::all_of(
+          declarations, [](const script::ScriptParamRecord& record) -> bool {
+            return data::TryGetScriptParamKey(record).has_value();
+          })) {
+      return std::nullopt;
+    }
+    return declarations;
+  }
+
+  //! Loads the declarations of every script the sidecar binds.
+  /*!
+   Rows whose script does not resolve are skipped here; the scene builder
+   reports them with their JSON paths.
+  */
+  auto LoadScriptDeclarations(ImportSession& session,
+    const ImportRequest& request, content::VirtualPathResolver& resolver,
+    std::span<const SidecarCookedInspectionContext> cooked_contexts,
+    IAsyncFileReader& reader, const SidecarDocument& parsed)
+    -> co::Co<std::optional<ScriptDeclarationMap>>
+  {
+    auto declarations = ScriptDeclarationMap {};
+    for (size_t row_index = 0; row_index < parsed.rows.size(); ++row_index) {
+      const auto& row = parsed.rows.at(row_index);
+      auto key = std::optional<data::AssetKey> {};
+      try {
+        key = resolver.ResolveAssetKey(row.script_virtual_path);
+      } catch (const std::invalid_argument&) {
+        continue;
+      }
+      if (!key || declarations.contains(*key)) {
+        continue;
+      }
+      const auto mounted = FindMountedAsset(cooked_contexts, *key);
+      if (!mounted
+        || static_cast<data::AssetType>(mounted->entry->asset_type)
+          != data::AssetType::kScript) {
+        continue;
+      }
+
+      const auto object_path
+        = "bindings[" + std::to_string(row_index) + "].script_virtual_path";
+      const auto read = co_await reader.ReadFile(
+        mounted->context->cooked_root / mounted->entry->descriptor_relpath);
+      if (!read.has_value()) {
+        AddDiagnosticAtPath(session, request, ImportSeverity::kError,
+          "script.sidecar.script_declarations_unreadable",
+          "Failed to read the script descriptor: " + read.error().ToString(),
+          object_path);
+        continue;
+      }
+      auto decoded = DecodeScriptDeclarations(read.value());
+      if (!decoded) {
+        AddDiagnosticAtPath(session, request, ImportSeverity::kError,
+          "script.sidecar.script_declarations_unreadable",
+          "Script descriptor is invalid or not in the current format; recook "
+          "the script",
+          object_path);
+        continue;
+      }
+      declarations.emplace(*key, std::move(*decoded));
+    }
+    if (session.HasErrors()) {
+      co_return std::nullopt;
+    }
+    co_return declarations;
   }
 
   auto BuildBindingsByNodeFromComponents(const data::SceneAsset& scene)
@@ -851,14 +1060,15 @@ namespace {
       content::VirtualPathResolver& resolver, const SidecarDocument& parsed,
       const uint32_t node_count,
       std::span<const SidecarCookedInspectionContext> cooked_contexts,
-      const data::SceneAsset& scene)
-      : session_(session)
-      , request_(request)
-      , resolver_(resolver)
-      , parsed_(parsed)
+      const data::SceneAsset& scene, const ScriptDeclarationMap& declarations)
+      : session_(&session)
+      , request_(&request)
+      , resolver_(&resolver)
+      , parsed_(&parsed)
       , node_count_(node_count)
       , cooked_contexts_(cooked_contexts)
-      , scene_(scene)
+      , scene_(&scene)
+      , declarations_(&declarations)
     {
     }
 
@@ -866,15 +1076,16 @@ namespace {
     {
       using data::pak::core::OffsetT;
 
-      auto merged_bindings = BuildBindingsByNodeFromComponents(scene_);
+      auto merged_bindings = BuildBindingsByNodeFromComponents(*scene_);
 
       auto incoming_bindings
         = std::map<uint32_t, std::vector<SlotWithParams>> {};
-      for (size_t row_index = 0; row_index < parsed_.rows.size(); ++row_index) {
-        const auto& row = parsed_.rows.at(row_index);
+      for (size_t row_index = 0; row_index < parsed_->rows.size();
+        ++row_index) {
+        const auto& row = parsed_->rows.at(row_index);
         const auto object_path = "bindings[" + std::to_string(row_index) + "]";
         if (row.node_index >= node_count_) {
-          AddDiagnosticAtPath(session_, request_, ImportSeverity::kError,
+          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
             "script.sidecar.node_ref_unresolved",
             "Node index is out of bounds for target scene",
             object_path + ".node_index");
@@ -884,16 +1095,16 @@ namespace {
         auto resolved_script_key = std::optional<data::AssetKey> {};
         try {
           resolved_script_key
-            = resolver_.ResolveAssetKey(row.script_virtual_path);
+            = resolver_->ResolveAssetKey(row.script_virtual_path);
         } catch (const std::invalid_argument& ex) {
-          AddDiagnosticAtPath(session_, request_, ImportSeverity::kError,
+          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
             "script.sidecar.script_virtual_path_invalid",
             "Script virtual path is invalid: " + std::string(ex.what()),
             object_path + ".script_virtual_path");
           continue;
         }
         if (!resolved_script_key.has_value()) {
-          AddDiagnosticAtPath(session_, request_, ImportSeverity::kError,
+          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
             "script.sidecar.script_ref_unresolved",
             "Script virtual path did not resolve to an asset key",
             object_path + ".script_virtual_path");
@@ -902,17 +1113,30 @@ namespace {
         const auto resolved_asset_type = ResolveMountedAssetTypeByKey(
           cooked_contexts_, *resolved_script_key);
         if (!resolved_asset_type.has_value()) {
-          AddDiagnosticAtPath(session_, request_, ImportSeverity::kError,
+          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
             "script.sidecar.script_ref_unresolved",
             "Resolved script key is not present in mounted cooked context",
             object_path + ".script_virtual_path");
           continue;
         }
         if (*resolved_asset_type != data::AssetType::kScript) {
-          AddDiagnosticAtPath(session_, request_, ImportSeverity::kError,
+          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
             "script.sidecar.script_ref_not_script_asset",
             "Resolved reference does not identify a script asset",
             object_path + ".script_virtual_path");
+          continue;
+        }
+
+        const auto declared = declarations_->find(*resolved_script_key);
+        if (declared == declarations_->end()) {
+          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
+            "script.sidecar.script_declarations_unreadable",
+            "Script parameter declarations are unavailable",
+            object_path + ".script_virtual_path");
+          continue;
+        }
+        auto params = ValidateOverrides(row, object_path, declared->second);
+        if (!params) {
           continue;
         }
 
@@ -923,11 +1147,11 @@ namespace {
         payload.slot.params_count = 0;
         payload.slot.execution_order = row.execution_order;
         payload.slot.flags = script::ScriptSlotFlags::kNone;
-        payload.params = row.params;
+        payload.params = std::move(*params);
         incoming_bindings[row.node_index].push_back(std::move(payload));
       }
 
-      if (session_.HasErrors()) {
+      if (session_->HasErrors()) {
         return std::nullopt;
       }
 
@@ -939,17 +1163,127 @@ namespace {
         merged_bindings.insert_or_assign(node_index, std::move(slots));
       }
 
-      return SerializeBindingsByNode(session_, request_, merged_bindings);
+      return SerializeBindingsByNode(*session_, *request_, merged_bindings);
     }
 
   private:
-    ImportSession& session_;
-    const ImportRequest& request_;
-    content::VirtualPathResolver& resolver_;
-    const SidecarDocument& parsed_;
+    //! Checks each override of `row` against the script's declarations and
+    //! resolves asset values; reports every violation at its JSON path.
+    auto ValidateOverrides(const SidecarBindingRow& row,
+      const std::string& object_path,
+      std::span<const script::ScriptParamRecord> declared)
+      -> std::optional<std::vector<script::ScriptParamRecord>>
+    {
+      auto records = std::vector<script::ScriptParamRecord> {};
+      auto valid = true;
+      for (size_t j = 0; j < row.params.size(); ++j) {
+        const auto& param = row.params.at(j);
+        const auto param_path
+          = object_path + ".params[" + std::to_string(j) + "]";
+        const auto key
+          = std::string(data::TryGetScriptParamKey(param.record).value_or(""));
+        const auto declaration = std::ranges::find_if(
+          declared, [&key](const script::ScriptParamRecord& record) -> bool {
+            return data::TryGetScriptParamKey(record) == key;
+          });
+        if (declaration == declared.end()) {
+          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
+            "script.sidecar.param_undeclared",
+            "Script '" + row.script_virtual_path + "' declares no parameter '"
+              + key + "'",
+            param_path + ".key");
+          valid = false;
+          continue;
+        }
+        if (declaration->type != param.record.type) {
+          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
+            "script.sidecar.param_type_mismatch",
+            "Parameter '" + key + "' is declared "
+              + std::string(script::to_string(declaration->type))
+              + " but the override is "
+              + std::string(script::to_string(param.record.type)),
+            param_path + ".type");
+          valid = false;
+          continue;
+        }
+
+        auto record = param.record;
+        if (record.type == script::ScriptParamType::kAsset) {
+          const auto asset = ResolveAssetParam(param, key,
+            declaration->value.as_asset.asset_type, param_path + ".value");
+          if (!asset) {
+            valid = false;
+            continue;
+          }
+          record.value.as_asset = *asset;
+        } else if (record.type == script::ScriptParamType::kNode
+          && record.value.as_node_index >= node_count_) {
+          AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
+            "script.sidecar.param_node_out_of_range",
+            "Node index " + std::to_string(record.value.as_node_index)
+              + " of parameter '" + key + "' is out of bounds for target scene",
+            param_path + ".value");
+          valid = false;
+          continue;
+        }
+        records.push_back(record);
+      }
+      if (!valid) {
+        return std::nullopt;
+      }
+      return records;
+    }
+
+    auto ResolveAssetParam(const SidecarParam& param, const std::string& key,
+      const data::AssetType declared_type, const std::string& value_path)
+      -> std::optional<script::ScriptAssetParamValue>
+    {
+      auto asset_key = std::optional<data::AssetKey> {};
+      try {
+        asset_key = resolver_->ResolveAssetKey(param.asset_virtual_path);
+      } catch (const std::invalid_argument& ex) {
+        AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
+          "script.sidecar.param_asset_path_invalid",
+          "Asset virtual path of parameter '" + key
+            + "' is invalid: " + std::string(ex.what()),
+          value_path);
+        return std::nullopt;
+      }
+      const auto asset_type = asset_key
+        ? ResolveMountedAssetTypeByKey(cooked_contexts_, *asset_key)
+        : std::nullopt;
+      if (!asset_type) {
+        AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
+          "script.sidecar.param_asset_unresolved",
+          "Asset '" + param.asset_virtual_path + "' of parameter '" + key
+            + "' is not present in the mounted cooked content",
+          value_path);
+        return std::nullopt;
+      }
+      if (*asset_type != declared_type) {
+        AddDiagnosticAtPath(*session_, *request_, ImportSeverity::kError,
+          "script.sidecar.param_asset_kind_mismatch",
+          "Parameter '" + key + "' expects a "
+            + std::string(data::to_string(declared_type)) + " asset but '"
+            + param.asset_virtual_path + "' is a "
+            + std::string(data::to_string(*asset_type)),
+          value_path);
+        return std::nullopt;
+      }
+      return script::ScriptAssetParamValue {
+        .key = *asset_key,
+        .asset_type = declared_type,
+      };
+    }
+
+    observer_ptr<ImportSession> session_;
+    observer_ptr<const ImportRequest> request_;
+    observer_ptr<content::VirtualPathResolver> resolver_;
+    observer_ptr<const SidecarDocument> parsed_;
     uint32_t node_count_ = 0;
     std::span<const SidecarCookedInspectionContext> cooked_contexts_;
-    const data::SceneAsset& scene_;
+    observer_ptr<const data::SceneAsset> scene_;
+    observer_ptr<const ScriptDeclarationMap> declarations_;
   };
 
   auto BuildPatchedSceneDescriptor(ImportSession& session,
@@ -970,30 +1304,72 @@ namespace {
       constexpr auto kContentHashOffset
         = offsetof(data::pak::core::AssetHeader, content_hash);
       std::memcpy(
-        patched_scene_bytes.data() + kContentHashOffset, &hash, sizeof(hash));
+        std::span(patched_scene_bytes).subspan(kContentHashOffset).data(),
+        &hash, sizeof(hash));
     }
 
     return patched_scene_bytes;
   }
 
+  //! Asset keys the scene's previous script slots contributed, other than
+  //! keys its own components also use.
+  auto CollectScriptOnlyParamKeys(const data::SceneAsset& scene)
+    -> std::set<data::AssetKey>
+  {
+    auto component_keys = std::set<data::AssetKey> {};
+    for (const auto& renderable :
+      scene.GetComponents<world::RenderableRecord>()) {
+      component_keys.insert(renderable.geometry_key);
+    }
+    for (const auto& material_override :
+      scene.GetComponents<world::MaterialOverrideRecord>()) {
+      component_keys.insert(material_override.material_key);
+    }
+
+    auto keys = std::set<data::AssetKey> {};
+    for (const auto& slots :
+      BuildBindingsByNodeFromComponents(scene) | std::views::values) {
+      for (const auto& slot : slots) {
+        for (const auto& param : slot.params) {
+          if (param.type == script::ScriptParamType::kAsset
+            && !component_keys.contains(param.value.as_asset.key)) {
+            keys.insert(param.value.as_asset.key);
+          }
+        }
+      }
+    }
+    return keys;
+  }
+
   auto EmitPatchedScene(ImportSession& session, const ImportRequest& request,
-    const SidecarResolvedSceneState& scene_state,
+    const SidecarResolvedSceneState& scene_state, const data::SceneAsset& scene,
     std::span<const std::byte> patched_scene_bytes,
     const SceneScriptData& scripts) -> co::Co<bool>
   {
     using data::AssetType;
 
     try {
+      const auto previous_param_keys = CollectScriptOnlyParamKeys(scene);
       AssetReferenceBuilder references(scene_state.references.Resources());
       for (const auto& reference : scene_state.references.Keys()) {
-        if (reference.kind != data::KeyReferenceKind::kAsset
-          || reference.expected_type != data::AssetType::kScript) {
+        const auto from_scripts
+          = reference.kind == data::KeyReferenceKind::kAsset
+          && (reference.expected_type == data::AssetType::kScript
+            || previous_param_keys.contains(reference.key));
+        if (!from_scripts) {
           references.AddKey(
             reference.kind, reference.key, reference.expected_type);
         }
       }
       for (const auto& slot : scripts.slots) {
         references.AddAsset(slot.script_asset_key, data::AssetType::kScript);
+      }
+      for (const auto& param : scripts.params) {
+        if (param.type == script::ScriptParamType::kAsset
+          && !param.value.as_asset.key.IsNil()) {
+          references.AddAsset(
+            param.value.as_asset.key, param.value.as_asset.asset_type);
+        }
       }
       co_await session.AssetEmitter().EmitSync(scene_state.scene_key,
         AssetType::kScene, scene_state.scene_virtual_path,
@@ -1099,13 +1475,19 @@ namespace {
   auto ApplyScriptingSidecar(ImportSession& session,
     const ImportRequest& request, content::VirtualPathResolver& resolver,
     std::span<const SidecarCookedInspectionContext> cooked_contexts,
-    const SidecarDocument& parsed,
+    IAsyncFileReader& reader, const SidecarDocument& parsed,
     const SidecarResolvedSceneState& resolved_scene_state) -> co::Co<bool>
   {
+    const auto declarations = co_await LoadScriptDeclarations(
+      session, request, resolver, cooked_contexts, reader, parsed);
+    if (!declarations) {
+      co_return false;
+    }
+
     const data::SceneAsset scene(resolved_scene_state.scene_key,
       std::span<const std::byte>(resolved_scene_state.source_scene_descriptor));
     auto builder = SceneScriptBuilder(session, request, resolver, parsed,
-      resolved_scene_state.node_count, cooked_contexts, scene);
+      resolved_scene_state.node_count, cooked_contexts, scene, *declarations);
     const auto scripts = builder.Build();
     if (!scripts) {
       co_return false;
@@ -1116,7 +1498,7 @@ namespace {
       co_return false;
     }
     if (!co_await EmitPatchedScene(
-          session, request, resolved_scene_state, *patched, *scripts)) {
+          session, request, resolved_scene_state, scene, *patched, *scripts)) {
       co_return false;
     }
 
@@ -1155,7 +1537,7 @@ auto ScriptingSidecarImportPipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
-    nursery.Start([this] -> co::Co<> { co_await Worker(); });
+    nursery.Start(&ScriptingSidecarImportPipeline::Worker, this);
   }
 }
 
@@ -1328,8 +1710,8 @@ auto ScriptingSidecarImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  co_return co_await ApplyScriptingSidecar(
-    *session, req, resolver, cooked_contexts, *parsed, *resolved_scene_state);
+  co_return co_await ApplyScriptingSidecar(*session, req, resolver,
+    cooked_contexts, *io_handles->reader, *parsed, *resolved_scene_state);
 }
 
 auto ScriptingSidecarImportPipeline::ReportCancelled(WorkItem item) -> co::Co<>

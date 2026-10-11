@@ -10,6 +10,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <string>
+#include <string_view>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/AssetType.h>
@@ -76,6 +77,7 @@ auto oxygen::data::to_string(oxygen::data::ComponentType value) noexcept
     case ComponentType::kSpotLight:          return "SLIT";
     case ComponentType::kScripting:          return "SCRP";
     case ComponentType::kLocalFogVolume:     return "LFOG";
+    case ComponentType::kMaterialOverride:   return "MSLT";
     // clang-format on
   }
 
@@ -114,7 +116,7 @@ auto oxygen::data::to_string(oxygen::data::BufferResource::UsageFlags value)
   bool first = true;
   auto checked = UsageFlags::kNone;
 
-  auto check_and_append = [&](UsageFlags flag, const char* name) {
+  auto check_and_append = [&](UsageFlags flag, const char* name) -> void {
     if ((value & flag) == flag) {
       if (!first) {
         result += " | ";
@@ -160,6 +162,8 @@ auto oxygen::data::pak::scripting::to_string(
     case ScriptParamType::kVec2:   return "Vec2";
     case ScriptParamType::kVec3:   return "Vec3";
     case ScriptParamType::kVec4:   return "Vec4";
+    case ScriptParamType::kAsset:  return "Asset";
+    case ScriptParamType::kNode:   return "Node";
     // clang-format on
   }
   return "__NotSupported__";
@@ -169,10 +173,8 @@ auto oxygen::data::pak::scripting::to_string(
   const oxygen::data::pak::scripting::ScriptLanguage value) noexcept
   -> std::string_view
 {
-  switch (value) {
-    // clang-format off
-    case ScriptLanguage::kLuau: return "Luau";
-    // clang-format on
+  if (value == ScriptLanguage::kLuau) {
+    return "Luau";
   }
   return "__NotSupported__";
 }
@@ -217,7 +219,7 @@ auto oxygen::data::pak::scripting::to_string(
   auto checked = Flags::kNone;
 
   [[maybe_unused]]
-  auto check_and_append = [&](const Flags flag, const char* name) {
+  auto check_and_append = [&](const Flags flag, const char* name) -> void {
     if ((value & flag) == flag) {
       if (!first) {
         result += " | ";
@@ -236,7 +238,7 @@ auto oxygen::data::pak::scripting::to_string(
 }
 
 auto oxygen::data::pak::scripting::to_string(
-  const oxygen::data::pak::scripting::ScriptingComponentFlags value) noexcept
+  const oxygen::data::pak::scripting::ScriptingComponentFlags value)
   -> std::string
 {
   using Flags = oxygen::data::pak::scripting::ScriptingComponentFlags;
@@ -250,7 +252,7 @@ auto oxygen::data::pak::scripting::to_string(
   auto checked = Flags::kNone;
 
   [[maybe_unused]]
-  auto check_and_append = [&](const Flags flag, const char* name) {
+  auto check_and_append = [&](const Flags flag, const char* name) -> void {
     if ((value & flag) == flag) {
       if (!first) {
         result += " | ";
@@ -269,8 +271,7 @@ auto oxygen::data::pak::scripting::to_string(
 }
 
 auto oxygen::data::pak::scripting::to_string(
-  const oxygen::data::pak::scripting::ScriptSlotFlags value) noexcept
-  -> std::string
+  const oxygen::data::pak::scripting::ScriptSlotFlags value) -> std::string
 {
   using Flags = oxygen::data::pak::scripting::ScriptSlotFlags;
 
@@ -283,7 +284,7 @@ auto oxygen::data::pak::scripting::to_string(
   auto checked = Flags::kNone;
 
   [[maybe_unused]]
-  auto check_and_append = [&](const Flags flag, const char* name) {
+  auto check_and_append = [&](const Flags flag, const char* name) -> void {
     if ((value & flag) == flag) {
       if (!first) {
         result += " | ";
@@ -358,7 +359,8 @@ auto oxygen::data::pak::input::to_string(
   bool first = true;
   [[maybe_unused]] auto checked = Flags::kNone;
 
-  const auto check_and_append = [&](const Flags flag, const char* name) {
+  const auto check_and_append
+    = [&](const Flags flag, const char* name) -> void {
     if ((value & flag) == flag) {
       if (!first) {
         result += " | ";
@@ -388,7 +390,8 @@ auto oxygen::data::pak::input::to_string(
   bool first = true;
   [[maybe_unused]] auto checked = Flags::kNone;
 
-  const auto check_and_append = [&](const Flags flag, const char* name) {
+  const auto check_and_append
+    = [&](const Flags flag, const char* name) -> void {
     if ((value & flag) == flag) {
       if (!first) {
         result += " | ";
@@ -435,7 +438,8 @@ auto oxygen::data::loose_cooked::to_string(
   bool first = true;
   [[maybe_unused]] auto checked = static_cast<Flags>(0);
 
-  const auto check_and_append = [&](const Flags flag, const char* name) {
+  const auto check_and_append
+    = [&](const Flags flag, const char* name) -> void {
     if ((value & flag) == flag) {
       if (!first) {
         result += " | ";

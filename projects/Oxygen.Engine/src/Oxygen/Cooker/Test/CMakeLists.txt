@@ -178,6 +178,7 @@ oxygen_cooker_test(
     "Import/Jobs/ScriptImportTestSupport.h"
     "Import/Jobs/ScriptingSidecarImportJob_binding_functional_test.cpp"
     "Import/Jobs/ScriptingSidecarImportJob_context_functional_test.cpp"
+    "Import/Jobs/ScriptingSidecarImportJob_declarations_functional_test.cpp"
     "Import/Jobs/ScriptingSidecarImportJob_params_functional_test.cpp"
     "Import/Jobs/ScriptingSidecarImportJob_reimport_functional_test.cpp"
     "Import/Jobs/ScriptingSidecarImportJob_validation_functional_test.cpp"

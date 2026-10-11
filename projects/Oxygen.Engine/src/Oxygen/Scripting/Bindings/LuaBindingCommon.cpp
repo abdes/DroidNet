@@ -4,14 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <glm/gtc/quaternion.hpp>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <type_traits>
+#include <variant>
+
+#include <glm/ext/quaternion_float.hpp>
 #include <lua.h>
 #include <lualib.h>
 
-#include <string>
-#include <type_traits>
-
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
@@ -81,7 +88,8 @@ namespace {
       state, sizeof(LuaRuntimeContext), kTagRuntimeContext);
     lua_setuserdatadtor(state, kTagRuntimeContext, LuaRuntimeContextDtor);
 
-    auto* runtime_context = new (runtime_context_mem) LuaRuntimeContext {};
+    auto* runtime_context
+      = std::construct_at(static_cast<LuaRuntimeContext*>(runtime_context_mem));
     luaL_getmetatable(state, kRuntimeContextMetatableName);
     lua_setmetatable(state, -2);
     lua_setfield(state, LUA_REGISTRYINDEX, kRuntimeContextFieldName);
@@ -160,7 +168,8 @@ auto PushScriptContext(lua_State* state, LuaSlotExecutionContext* slot_context,
 
   auto* const binding_context_mem = lua_newuserdatatagged(
     state, sizeof(LuaBindingContext), kTagBindingContext);
-  auto* const binding_context = new (binding_context_mem) LuaBindingContext {};
+  auto* const binding_context
+    = std::construct_at(static_cast<LuaBindingContext*>(binding_context_mem));
   if (slot_context != nullptr) {
     binding_context->slot_context = *slot_context;
     binding_context->has_slot_context = true;
@@ -245,7 +254,7 @@ auto GetBindingContextFromScriptArg(
 auto PushScriptParam(lua_State* state, const data::ScriptParam& param) -> int
 {
   std::visit(
-    [state](const auto& value) {
+    [state](const auto& value) -> void {
       using T = std::decay_t<decltype(value)>;
       if constexpr (std::is_same_v<T, bool>) {
         lua_pushboolean(state, value ? 1 : 0);
@@ -269,7 +278,18 @@ auto PushScriptParam(lua_State* state, const data::ScriptParam& param) -> int
         lua_rawseti(state, -2, 3);
         lua_pushnumber(state, value.w);
         lua_rawseti(state, -2, 4);
+      } else if constexpr (std::is_same_v<T, data::ScriptAssetParam>) {
+        // Asset references reach scripts as the GUID text every
+        // `oxygen.assets` load function accepts.
+        if (value.key.IsNil()) {
+          lua_pushnil(state);
+        } else {
+          const auto text = data::to_string(value.key);
+          lua_pushlstring(state, text.c_str(), text.size());
+        }
       } else {
+        // Node references resolve to scene nodes only when slots attach to a
+        // scene; an index alone names no node.
         lua_pushnil(state);
       }
     },

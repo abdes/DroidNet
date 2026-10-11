@@ -1,4 +1,15 @@
-local script = {}
+local script = oxygen.script {
+  params = {
+    speed = oxygen.param.float { default = 1.6, min = 0, unit = "m/s",
+      description = "Orbit speed" },
+    bounce_amplitude = oxygen.param.float { default = 0.45, min = 0,
+      unit = "m", description = "Height of the orbs' bounce" },
+    host_material_guid = oxygen.param.string {
+      description = "Material of the host shape" },
+    orb_material_guid = oxygen.param.string {
+      description = "Material of the orbiting shapes" },
+  },
+}
 
 local scene = oxygen.scene
 local assets = oxygen.assets

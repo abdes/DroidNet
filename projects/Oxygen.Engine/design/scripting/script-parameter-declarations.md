@@ -101,7 +101,8 @@ Rules the analyzer enforces, each with its own diagnostic:
 4. Keys are identifiers of at most 63 bytes; strings fit the record limits.
 5. `default` matches the type; `min`, `max` and `step` apply to numeric
    types; `options` to strings; `color` to `vec3`/`vec4`; `kind` is required
-   for `asset`.
+   for `asset`. Asset and node parameters take no `default`: they are set per
+   slot. A parameter without `default` uses its type's zero value.
 
 Types: `bool`, `int`, `float`, `string`, `vec2`, `vec3`, `vec4`, `asset`
 (with a required asset kind) and `node` (a node of the same scene). The asset

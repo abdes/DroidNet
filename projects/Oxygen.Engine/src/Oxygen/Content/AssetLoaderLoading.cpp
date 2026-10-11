@@ -22,6 +22,7 @@
 
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/TypeList.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/AssetLoader.h>
@@ -34,6 +35,7 @@
 #include <Oxygen/Content/Internal/ContentSourceView.h>
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/Internal/InFlightOperationTable.h>
+#include <Oxygen/Content/Internal/PhysicsBindings.h>
 #include <Oxygen/Content/Internal/ResourceLoadPipeline.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/PhysicsAssetLoader.h>
@@ -44,6 +46,7 @@
 #include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputActionAsset.h>
@@ -55,6 +58,7 @@
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/ScriptAsset.h>
+#include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/TaskCancelledException.h>
@@ -62,7 +66,7 @@
 namespace oxygen::content {
 namespace {
   template <typename Fn>
-  auto WithContentType(const TypeId type, Fn&& fn) -> std::shared_ptr<void>
+  auto WithContentType(const TypeId type, const Fn& fn) -> std::shared_ptr<void>
   {
     if (type == data::MaterialAsset::ClassTypeId()) {
       return fn.template operator()<data::MaterialAsset>();
@@ -119,14 +123,14 @@ namespace {
       return data::AssetType::kInputMappingContext;
     }
   }
-}
+} // namespace
 
 #ifndef NDEBUG
 auto AssetLoader::PeekCachedAsset(const uint64_t key) const
   -> std::shared_ptr<const data::Asset>
 {
   auto erased = WithContentType(
-    content_cache_.GetTypeId(key), [&]<typename T>() -> std::shared_ptr<void> {
+    content_cache_.GetTypeId(key), [&]<typename T> -> std::shared_ptr<void> {
       if constexpr (std::derived_from<T, data::Asset>) {
         return std::static_pointer_cast<data::Asset>(
           content_cache_.Peek<T>(key));
@@ -145,7 +149,7 @@ auto AssetLoader::AcquireCached(const TypeId type, const uint64_t key)
   if (releases_->IsClosed()) {
     return {};
   }
-  return WithContentType(type, [&]<typename T>() {
+  return WithContentType(type, [&]<typename T> -> std::shared_ptr<void> {
     auto acquired = internal::ContentAcquisition::FromCache<T>(
       content_cache_, *releases_, key, CheckoutOwner::kExternal);
     return std::move(acquired.owner);
@@ -167,7 +171,7 @@ auto AssetLoader::AcquireBoundAsset(
       = std::static_pointer_cast<const internal::ContentBindingBundle>(
         retained);
     if (const auto* bound = bundle->FindAssetBinding(key)) {
-      return WithContentType(type, [&]<typename T>() -> std::shared_ptr<void> {
+      return WithContentType(type, [&]<typename T> -> std::shared_ptr<void> {
         return bound->publication.Acquire<T>(
           content_cache_, *releases_, CheckoutOwner::kExternal);
       });
@@ -182,7 +186,8 @@ auto AssetLoader::LoadAssetPublicationAsync(const data::AssetKey& key,
   const CheckoutOwner role) -> co::Co<internal::ContentAcquisition>
 {
   BeginAcceptedLoad();
-  const auto completion = Finally([this]() noexcept { EndAcceptedLoad(); });
+  const auto completion
+    = Finally([this] noexcept -> void { EndAcceptedLoad(); });
   AssertOwningThread();
   request = AdmitAssetRequest(NormalizeLoadRequest(std::move(request)));
   constexpr auto kind = AssetKind<T>();
@@ -199,10 +204,11 @@ auto AssetLoader::LoadAssetPublicationAsync(const data::AssetKey& key,
     co_return cached;
   }
   RecordAssetTelemetry(kind, LoadTelemetryEvent::kCacheMiss);
-  const internal::InFlightOperationTable::RequestMeta meta { .priority
-    = request.priority,
+  const internal::InFlightOperationTable::RequestMeta meta {
+    .priority = request.priority,
     .intent = request.intent,
-    .sequence = next_load_request_sequence_.fetch_add(1) };
+    .sequence = next_load_request_sequence_.fetch_add(1),
+  };
   internal::SharedContentResult result;
   if (auto joined
     = in_flight_ops_->Find(T::ClassTypeId(), target->cache_key, meta)) {
@@ -221,8 +227,10 @@ auto AssetLoader::LoadAssetPublicationAsync(const data::AssetKey& key,
     co_return internal::ContentAcquisition {};
   }
   auto owner = result.publication.Acquire<T>(content_cache_, *releases, role);
-  co_return internal::ContentAcquisition { .publication = result.publication,
-    .owner = std::move(owner) };
+  co_return internal::ContentAcquisition {
+    .publication = result.publication,
+    .owner = std::move(owner),
+  };
 }
 
 template <typename T>
@@ -231,7 +239,7 @@ auto AssetLoader::DecodeAndPublishAssetAsync(data::AssetKey key,
   std::shared_ptr<internal::ContentReleaseQueue> releases)
   -> co::Co<internal::SharedContentResult>
 {
-  const auto erase = Finally([&]() noexcept {
+  const auto erase = Finally([&] noexcept -> void {
     in_flight_ops_->Erase(T::ClassTypeId(), target.cache_key,
       internal::InFlightOperationTable::OperationId { operation_id });
   });
@@ -373,13 +381,20 @@ auto AssetLoader::BindDependenciesAsync(data::MaterialAsset& asset,
   internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
   BindMaterialTextureKeys(asset, asset.GetSourceOrigin().instance);
-  const std::array keys { asset.GetBaseColorTextureKey(),
-    asset.GetNormalTextureKey(), asset.GetMetallicTextureKey(),
-    asset.GetRoughnessTextureKey(), asset.GetAmbientOcclusionTextureKey(),
-    asset.GetEmissiveTextureKey(), asset.GetSpecularTextureKey(),
-    asset.GetSheenColorTextureKey(), asset.GetClearcoatTextureKey(),
-    asset.GetClearcoatNormalTextureKey(), asset.GetTransmissionTextureKey(),
-    asset.GetThicknessTextureKey() };
+  const std::array keys {
+    asset.GetBaseColorTextureKey(),
+    asset.GetNormalTextureKey(),
+    asset.GetMetallicTextureKey(),
+    asset.GetRoughnessTextureKey(),
+    asset.GetAmbientOcclusionTextureKey(),
+    asset.GetEmissiveTextureKey(),
+    asset.GetSpecularTextureKey(),
+    asset.GetSheenColorTextureKey(),
+    asset.GetClearcoatTextureKey(),
+    asset.GetClearcoatNormalTextureKey(),
+    asset.GetTransmissionTextureKey(),
+    asset.GetThicknessTextureKey(),
+  };
   for (const auto key : keys) {
     static_cast<void>(co_await BindResourceAsync<data::TextureResource>(
       key, bindings, request));
@@ -448,11 +463,54 @@ auto AssetLoader::BindDependenciesAsync(data::SceneAsset& asset,
     for (const auto& slot : slots) {
       static_cast<void>(co_await BindAssetAsync<data::ScriptAsset>(
         slot.script_asset_key, asset, bindings, request));
+      for (const auto& param : slot.params) {
+        if (param.type == data::pak::scripting::ScriptParamType::kAsset) {
+          co_await BindScriptParamAssetAsync(
+            param.value.as_asset, asset, bindings, request);
+        }
+      }
     }
   }
 }
 
-auto AssetLoader::BindDependenciesAsync(data::ScriptAsset&,
+auto AssetLoader::BindScriptParamAssetAsync(
+  const data::pak::scripting::ScriptAssetParamValue& value,
+  data::SceneAsset& asset, internal::ContentBindingBuilder& bindings,
+  LoadRequest request) -> co::Co<>
+{
+  // An asset parameter keeps its asset resident with the scene, as the
+  // scene's own components do. Scenes and physics assets are not loaded as
+  // dependencies of another scene.
+  if (value.key.IsNil()) {
+    co_return;
+  }
+  switch (value.asset_type) {
+  case data::AssetType::kMaterial:
+    static_cast<void>(co_await BindAssetAsync<data::MaterialAsset>(
+      value.key, asset, bindings, request));
+    break;
+  case data::AssetType::kGeometry:
+    static_cast<void>(co_await BindAssetAsync<data::GeometryAsset>(
+      value.key, asset, bindings, request));
+    break;
+  case data::AssetType::kScript:
+    static_cast<void>(co_await BindAssetAsync<data::ScriptAsset>(
+      value.key, asset, bindings, request));
+    break;
+  case data::AssetType::kInputAction:
+    static_cast<void>(co_await BindAssetAsync<data::InputActionAsset>(
+      value.key, asset, bindings, request));
+    break;
+  case data::AssetType::kInputMappingContext:
+    static_cast<void>(co_await BindAssetAsync<data::InputMappingContextAsset>(
+      value.key, asset, bindings, request));
+    break;
+  default:
+    break;
+  }
+}
+
+auto AssetLoader::BindDependenciesAsync(data::ScriptAsset& /*asset*/,
   const internal::DependencyCollector& collector,
   internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
@@ -461,7 +519,7 @@ auto AssetLoader::BindDependenciesAsync(data::ScriptAsset&,
 }
 
 auto AssetLoader::BindDependenciesAsync(data::InputMappingContextAsset& asset,
-  const internal::DependencyCollector&,
+  const internal::DependencyCollector& /*collector*/,
   internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
   for (const auto& mapping : asset.GetMappings()) {
@@ -479,7 +537,7 @@ auto AssetLoader::BindDependenciesAsync(data::InputMappingContextAsset& asset,
 }
 
 auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,
-  const internal::DependencyCollector&,
+  const internal::DependencyCollector& /*collector*/,
   internal::ContentBindingBuilder& bindings, LoadRequest request) -> co::Co<>
 {
   const auto& view = request.scope.state_->view;
@@ -522,10 +580,12 @@ auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,
         }
         constexpr auto type_index = static_cast<uint16_t>(
           IndexOf<data::PhysicsResource, ResourceTypeList>::value);
-        frozen->resources.push_back({ .asset_key = reference.key,
+        frozen->resources.push_back({
+          .asset_key = reference.key,
           .key = InternResourceKey(layer.id, type_index, *index),
           .source = layer.id,
-          .owner = source });
+          .owner = source,
+        });
         found = true;
         break;
       }
@@ -545,7 +605,12 @@ auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,
       continue;
     }
     const auto source_id = view->ResolveAsset(reference.key);
-    const auto source = source_id ? ResolveSourceForId(*source_id) : nullptr;
+    if (!source_id) {
+      throw std::runtime_error(
+        "Required physics descriptor is missing or has the wrong type: "
+        + data::to_string(reference.key));
+    }
+    const auto source = ResolveSourceForId(*source_id);
     if (!source
       || source->GetAssetType(reference.key) != reference.expected_type) {
       throw std::runtime_error(
@@ -558,20 +623,26 @@ auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,
       throw std::runtime_error(
         "Cannot read physics descriptor: " + data::to_string(reference.key));
     }
-    const LoaderContext context { .current_asset_key = reference.key,
+    const LoaderContext context {
+      .current_asset_key = reference.key,
       .source_instance = *source_id,
       .desc_reader = reader.get(),
       .asset_references = observer_ptr(&references),
       .work_offline = true,
-      .parse_only = true };
+      .parse_only = true,
+    };
     switch (reference.expected_type) {
     case data::AssetType::kCollisionShape:
-      frozen->shapes.push_back({ .key = reference.key,
-        .descriptor = loaders::LoadCollisionShapeDescriptor(context) });
+      frozen->shapes.push_back({
+        .key = reference.key,
+        .descriptor = loaders::LoadCollisionShapeDescriptor(context),
+      });
       break;
     case data::AssetType::kPhysicsMaterial:
-      frozen->materials.push_back({ .key = reference.key,
-        .descriptor = loaders::LoadPhysicsMaterialDescriptor(context) });
+      frozen->materials.push_back({
+        .key = reference.key,
+        .descriptor = loaders::LoadPhysicsMaterialDescriptor(context),
+      });
       break;
     default:
       throw std::runtime_error(
@@ -589,9 +660,10 @@ auto AssetLoader::BindDependenciesAsync(data::PhysicsSceneAsset& asset,
   co_return;
 }
 
-auto AssetLoader::BindDependenciesAsync(data::InputActionAsset&,
-  const internal::DependencyCollector&, internal::ContentBindingBuilder&,
-  LoadRequest) -> co::Co<>
+auto AssetLoader::BindDependenciesAsync(data::InputActionAsset& /*asset*/,
+  const internal::DependencyCollector& /*collector*/,
+  internal::ContentBindingBuilder& /*bindings*/, LoadRequest /*request*/)
+  -> co::Co<>
 {
   co_return;
 }

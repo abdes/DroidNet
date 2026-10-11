@@ -64,17 +64,19 @@ namespace {
   using data::pak::scripting::ScriptResourceDesc;
 
   struct ScriptTables {
-    std::vector<ScriptResourceDesc> entries {};
-    std::vector<std::byte> data_blob {};
+    std::vector<ScriptResourceDesc> entries;
+    std::vector<std::byte> data_blob;
     bool existed = false;
   };
 
   struct ScriptAssetPatchContext {
-    data::AssetKey key {};
+    data::AssetKey key;
     std::string virtual_path;
     std::string descriptor_relpath;
     std::filesystem::path descriptor_path;
     ScriptAssetDesc descriptor {};
+    //! Whole descriptor, including the parameter declarations after it.
+    std::vector<std::byte> descriptor_bytes;
   };
 
   struct SealedLooseSourceResult {
@@ -115,10 +117,12 @@ namespace {
     }
     in.seekg(0, std::ios::beg);
 
-    auto bytes = std::vector<std::byte>(static_cast<size_t>(size));
+    auto chars = std::vector<char>(static_cast<size_t>(size));
+    auto bytes = std::vector<std::byte>(chars.size());
     if (!bytes.empty()) {
-      in.read(reinterpret_cast<char*>(bytes.data()),
-        static_cast<std::streamsize>(bytes.size()));
+      in.read(chars.data(), static_cast<std::streamsize>(chars.size()));
+      std::ranges::transform(chars, bytes.begin(),
+        [](const char c) -> std::byte { return static_cast<std::byte>(c); });
       if (!in) {
         return std::nullopt;
       }
@@ -136,14 +140,17 @@ namespace {
       return false;
     }
 
-    auto out = std::ofstream(
-      base::ToNativePath(path), std::ios::binary | std::ios::trunc);
+    auto out = std::ofstream(base::ToNativePath(path),
+      static_cast<std::ios::openmode>(static_cast<unsigned>(std::ios::binary)
+        | static_cast<unsigned>(std::ios::trunc)));
     if (!out.is_open()) {
       return false;
     }
     if (!bytes.empty()) {
-      out.write(reinterpret_cast<const char*>(bytes.data()),
-        static_cast<std::streamsize>(bytes.size()));
+      auto chars = std::vector<char>(bytes.size());
+      std::ranges::transform(bytes, chars.begin(),
+        [](const std::byte b) -> char { return static_cast<char>(b); });
+      out.write(chars.data(), static_cast<std::streamsize>(chars.size()));
     }
     return static_cast<bool>(out);
   }
@@ -152,7 +159,7 @@ namespace {
     -> bool
   {
     return std::ranges::any_of(
-      path, [](const auto& part) { return part == ".."; });
+      path, [](const auto& part) -> bool { return part == ".."; });
   }
 
   [[nodiscard]] auto ComputeDescriptorSha256(const std::filesystem::path& path)
@@ -176,10 +183,12 @@ namespace {
     }
 
     auto header = data::loose_cooked::IndexHeader {};
-    in.read(reinterpret_cast<char*>(&header), sizeof(header));
+    auto header_chars = std::array<char, sizeof(header)> {};
+    in.read(header_chars.data(), header_chars.size());
     if (!in) {
       return std::nullopt;
     }
+    std::memcpy(&header, header_chars.data(), sizeof(header));
     return header;
   }
 
@@ -224,7 +233,7 @@ namespace {
       return std::nullopt;
     }
     for (const auto& root : source_roots) {
-      const auto candidate = (root / stored).lexically_normal();
+      auto candidate = (root / stored).lexically_normal();
       const auto relative = candidate.lexically_relative(root);
       if (relative.empty() || relative.has_root_path()
         || HasParentTraversal(relative)) {
@@ -256,11 +265,18 @@ namespace {
     return absolute_root.lexically_normal();
   }
 
-  [[nodiscard]] auto MakeStagedLooseRoot(
-    const std::filesystem::path& original_root,
-    const std::filesystem::path& staging_parent, const size_t source_index)
+  struct StagedLooseRootRequest final {
+    std::filesystem::path original_root;
+    std::filesystem::path staging_parent;
+    size_t source_index = 0;
+  };
+
+  [[nodiscard]] auto MakeStagedLooseRoot(const StagedLooseRootRequest& request)
     -> std::filesystem::path
   {
+    const auto& original_root = request.original_root;
+    const auto& staging_parent = request.staging_parent;
+    const auto source_index = request.source_index;
     static auto counter = std::atomic_uint64_t { 0 };
     const auto id = counter.fetch_add(1, std::memory_order_relaxed);
 
@@ -269,8 +285,8 @@ namespace {
       name = "cooked";
     }
     for (auto& ch : name) {
-      if (!(std::isalnum(static_cast<unsigned char>(ch)) || ch == '-'
-            || ch == '_' || ch == '.')) {
+      if (std::isalnum(static_cast<unsigned char>(ch)) == 0 && ch != '-'
+        && ch != '_' && ch != '.') {
         ch = '_';
       }
     }
@@ -345,7 +361,7 @@ namespace {
     if (tables.entries.empty()) {
       tables.entries.push_back(ScriptResourceDesc {});
     }
-    tables.data_blob = std::move(*data_bytes);
+    tables.data_blob = *data_bytes;
     return tables;
   }
 
@@ -378,7 +394,7 @@ namespace {
       = cooked_root / std::filesystem::path(asset_entry.descriptor_relpath);
     const auto descriptor_bytes = ReadFileBytes(descriptor_path);
     if (!descriptor_bytes.has_value()
-      || descriptor_bytes->size() != sizeof(ScriptAssetDesc)) {
+      || descriptor_bytes->size() < sizeof(ScriptAssetDesc)) {
       return std::nullopt;
     }
 
@@ -397,6 +413,7 @@ namespace {
       .descriptor_relpath = asset_entry.descriptor_relpath,
       .descriptor_path = descriptor_path,
       .descriptor = descriptor,
+      .descriptor_bytes = *descriptor_bytes,
     };
   }
 
@@ -404,20 +421,22 @@ namespace {
     std::span<const std::byte> source_bytes) -> std::optional<ResourceIndexT>
   {
     if (tables.entries.size()
-      >= static_cast<size_t>((std::numeric_limits<uint32_t>::max)())) {
+      >= static_cast<size_t>(std::numeric_limits<uint32_t>::max())) {
       return std::nullopt;
     }
     if (tables.data_blob.size()
-      > static_cast<size_t>((std::numeric_limits<OffsetT>::max)())) {
+      > static_cast<size_t>(std::numeric_limits<OffsetT>::max())) {
       return std::nullopt;
     }
     if (source_bytes.size()
-      > static_cast<size_t>((std::numeric_limits<DataBlobSizeT>::max)())) {
+      > static_cast<size_t>(std::numeric_limits<DataBlobSizeT>::max())) {
       return std::nullopt;
     }
 
-    const auto hashing_enabled = std::ranges::any_of(tables.entries,
-      [](const ScriptResourceDesc& entry) { return entry.content_hash != 0; });
+    const auto hashing_enabled = std::ranges::any_of(
+      tables.entries, [](const ScriptResourceDesc& entry) -> bool {
+        return entry.content_hash != 0;
+      });
     const auto resource_index
       = ResourceIndexT { static_cast<uint32_t>(tables.entries.size()) };
 
@@ -473,7 +492,10 @@ namespace {
         ScriptSealingError>::Ok(std::nullopt);
     }
 
-    if (descriptor.source_resource_index == data::kNoResourceReference) {
+    // Compiled scripts ship their bytecode; only source-only scripts need
+    // their external source embedded.
+    if (descriptor.source_resource_index == data::kNoResourceReference
+      && descriptor.bytecode_resource_index == data::kNoResourceReference) {
       const auto external_source = TryGetExternalSourcePath(descriptor);
       if (!external_source.has_value()) {
         return Result<std::optional<data::AssetReferences>,
@@ -533,8 +555,9 @@ namespace {
     }
 
     ClearExternalSourceContract(descriptor);
-    if (!WriteFileBytes(context->descriptor_path,
-          std::as_bytes(std::span { &descriptor, 1 }))) {
+    auto descriptor_bytes = context->descriptor_bytes;
+    std::memcpy(descriptor_bytes.data(), &descriptor, sizeof(descriptor));
+    if (!WriteFileBytes(context->descriptor_path, descriptor_bytes)) {
       return Result<std::optional<data::AssetReferences>,
         ScriptSealingError>::Err(ScriptSealingError {
         .error_code = "paktool.script_seal.script_descriptor_write_failed",
@@ -720,8 +743,11 @@ namespace {
         SealedLooseSourceResult {});
     }
 
-    const auto staged_root
-      = MakeStagedLooseRoot(*normalized_root, staging_parent, source_index);
+    const auto staged_root = MakeStagedLooseRoot({
+      .original_root = *normalized_root,
+      .staging_parent = staging_parent,
+      .source_index = source_index,
+    });
     if (const auto ec = CopyCookedRoot(*normalized_root, staged_root); ec) {
       return Result<SealedLooseSourceResult, ScriptSealingError>::Err(
         ScriptSealingError {
@@ -732,7 +758,7 @@ namespace {
         });
     }
 
-    const auto cleanup_staged_root = [&staged_root]() {
+    const auto cleanup_staged_root = [&staged_root] -> void {
       CleanupStagedLooseRoots(
         std::span<const std::filesystem::path>(&staged_root, size_t { 1 }));
     };
@@ -879,9 +905,8 @@ auto CleanupStagedLooseRoots(
   }
 
   std::ranges::sort(staging_parents);
-  staging_parents.erase(
-    std::unique(staging_parents.begin(), staging_parents.end()),
-    staging_parents.end());
+  const auto duplicates = std::ranges::unique(staging_parents);
+  staging_parents.erase(duplicates.begin(), duplicates.end());
 
   for (const auto& parent : staging_parents) {
     auto ec = std::error_code {};

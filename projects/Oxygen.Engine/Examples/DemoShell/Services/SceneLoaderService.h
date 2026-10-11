@@ -236,7 +236,7 @@ private:
   //! Queue script compilation for a slot when source is available.
   void QueueSlotCompilation(scene::SceneNode node,
     const scene::SceneNode::Scripting::Slot& slot,
-    std::shared_ptr<const data::ScriptAsset> script_asset);
+    const std::shared_ptr<const data::ScriptAsset>& script_asset);
   //! Choose an active camera based on the asset content.
   void SelectActiveCamera(const data::SceneAsset& asset);
   //! Ensure active camera is valid and viewport is applied.

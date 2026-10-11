@@ -16,6 +16,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "./AssetLoader_test.h"
@@ -58,11 +59,14 @@ using oxygen::data::ScriptResource;
 namespace {
 
 auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
-  const oxygen::data::AssetKey& script_key) -> void
+  const oxygen::data::AssetKey& script_key,
+  std::span<const oxygen::data::pak::scripting::ScriptParamRecord> declarations
+  = {}) -> void
 {
   using oxygen::data::AssetType;
   using oxygen::data::loose_cooked::FileKind;
   using oxygen::data::pak::scripting::ScriptAssetDesc;
+  using oxygen::data::pak::scripting::ScriptParamRecord;
   using oxygen::data::pak::scripting::ScriptResourceDesc;
 
   const LooseCookedLayout layout {};
@@ -76,6 +80,20 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
   script_desc.bytecode_resource_index
     = oxygen::data::ResourceReferenceIndex { 0U };
   script_desc.source_resource_index = oxygen::data::kNoResourceReference;
+  if (!declarations.empty()) {
+    script_desc.params = {
+      .offset = sizeof(ScriptAssetDesc),
+      .count = static_cast<uint32_t>(declarations.size()),
+      .entry_size = sizeof(ScriptParamRecord),
+    };
+  }
+  auto desc_bytes = std::vector<std::byte>(
+    sizeof(ScriptAssetDesc) + declarations.size_bytes());
+  std::memcpy(desc_bytes.data(), &script_desc, sizeof(script_desc));
+  if (!declarations.empty()) {
+    std::memcpy(std::span(desc_bytes).subspan(sizeof(ScriptAssetDesc)).data(),
+      declarations.data(), declarations.size_bytes());
+  }
 
   const auto desc_rel = std::filesystem::path("Scripts") / "Reload.oscript";
 
@@ -90,7 +108,7 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
   oxygen::content::testing::LooseCookedTestWriter writer(cooked_root);
   writer.WriteAssetDescriptor(script_key, AssetType::kScript,
     std::string(layout.virtual_mount_root) + "/" + desc_rel.generic_string(),
-    desc_rel.generic_string(), std::as_bytes(std::span { &script_desc, 1U }),
+    desc_rel.generic_string(), desc_bytes,
     oxygen::data::AssetReferences::Create(
       {
         {
@@ -111,13 +129,22 @@ auto WriteLooseCookedScriptAsset(const std::filesystem::path& cooked_root,
   static_cast<void>(writer.Finish());
 }
 
+//! Key of the script an asset parameter of the scripted scene names.
+auto ParamScriptKey() -> oxygen::data::AssetKey
+{
+  return oxygen::data::AssetKey::FromVirtualPath("/Test/param-script.oscript");
+}
+
 auto WriteLooseCookedSceneWithScripting(
   const std::filesystem::path& cooked_root,
-  const oxygen::data::AssetKey& scene_key) -> void
+  const oxygen::data::AssetKey& scene_key, const bool with_asset_param = false)
+  -> void
 {
   using oxygen::data::AssetType;
   using oxygen::data::loose_cooked::FileKind;
   using oxygen::data::pak::scripting::ScriptingComponentRecord;
+  using oxygen::data::pak::scripting::ScriptParamRecord;
+  using oxygen::data::pak::scripting::ScriptParamType;
   using oxygen::data::pak::scripting::ScriptSlotRecord;
   using oxygen::data::pak::world::NodeRecord;
   using oxygen::data::pak::world::SceneAssetDesc;
@@ -139,7 +166,9 @@ auto WriteLooseCookedSceneWithScripting(
   const uint32_t offset_dir = offset_strings + strings_size;
   const uint32_t offset_table = offset_dir + sizeof(SceneComponentTableDesc);
   const uint32_t offset_slots = offset_table + sizeof(ScriptingComponentRecord);
-  const uint32_t offset_env = offset_slots + sizeof(ScriptSlotRecord);
+  const uint32_t offset_params = offset_slots + sizeof(ScriptSlotRecord);
+  const uint32_t params_size = with_asset_param ? sizeof(ScriptParamRecord) : 0;
+  const uint32_t offset_env = offset_params + params_size;
   desc.script_slots = {
     .offset = offset_slots,
     .count = 1U,
@@ -148,6 +177,17 @@ auto WriteLooseCookedSceneWithScripting(
   ScriptSlotRecord slot {};
   slot.script_asset_key
     = oxygen::data::AssetKey::FromVirtualPath("/Test/scene-script.oscript");
+  ScriptParamRecord param {};
+  if (with_asset_param) {
+    slot.params_array_offset = offset_params;
+    slot.params_count = 1U;
+    std::ranges::copy(std::string_view { "helper" }, std::begin(param.key));
+    param.type = ScriptParamType::kAsset;
+    param.value.as_asset = {
+      .key = ParamScriptKey(),
+      .asset_type = AssetType::kScript,
+    };
+  }
 
   desc.nodes.offset = offset_nodes;
   desc.nodes.count = 1;
@@ -190,30 +230,45 @@ auto WriteLooseCookedSceneWithScripting(
     sizeof(scripting));
   std::memcpy(
     std::span(bytes).subspan(offset_slots).data(), &slot, sizeof(slot));
+  if (with_asset_param) {
+    std::memcpy(
+      std::span(bytes).subspan(offset_params).data(), &param, sizeof(param));
+  }
   std::memcpy(std::span(bytes).subspan(offset_env).data(), &env, sizeof(env));
 
   const auto rel_desc
     = std::filesystem::path(layout.scenes_subdir) / "ScriptScene.scene";
+  auto scene_keys = std::vector<oxygen::data::KeyReference> {
+    {
+      .key = slot.script_asset_key,
+      .kind = oxygen::data::KeyReferenceKind::kAsset,
+      .expected_type = AssetType::kScript,
+    },
+  };
+  if (with_asset_param) {
+    scene_keys.push_back({
+      .key = ParamScriptKey(),
+      .kind = oxygen::data::KeyReferenceKind::kAsset,
+      .expected_type = AssetType::kScript,
+    });
+  }
 
   oxygen::content::testing::LooseCookedTestWriter writer(cooked_root);
   writer.WriteAssetDescriptor(scene_key, AssetType::kScene,
     std::string(layout.virtual_mount_root) + "/" + rel_desc.generic_string(),
     rel_desc.generic_string(), bytes,
-    oxygen::data::AssetReferences::Create({},
-      {
-        {
-          .key = slot.script_asset_key,
-          .kind = oxygen::data::KeyReferenceKind::kAsset,
-          .expected_type = AssetType::kScript,
-        },
-      })
-      .value());
+    oxygen::data::AssetReferences::Create({}, std::move(scene_keys)).value());
   oxygen::data::pak::scripting::ScriptAssetDesc script {};
   script.header.asset_type = static_cast<uint8_t>(AssetType::kScript);
   script.header.version = oxygen::data::pak::scripting::kScriptAssetVersion;
   writer.WriteAssetDescriptor(slot.script_asset_key, AssetType::kScript,
     "/Test/scene-script.oscript", "scene-script.oscript",
     std::as_bytes(std::span { &script, 1U }));
+  if (with_asset_param) {
+    writer.WriteAssetDescriptor(ParamScriptKey(), AssetType::kScript,
+      "/Test/param-script.oscript", "param-script.oscript",
+      std::as_bytes(std::span { &script, 1U }));
+  }
   writer.WriteFile(FileKind::kScriptsTable,
     std::string(layout.resources_dir) + "/scripts.table", {});
   writer.WriteFile(FileKind::kScriptsData,
@@ -312,6 +367,109 @@ NOLINT_TEST_F(AssetLoaderScriptingTest,
         EXPECT_TRUE(
           loader.HasScriptAsset(oxygen::data::AssetKey::FromVirtualPath(
             "/Test/scene-script.oscript")));
+
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      };
+    }(scene_key, cooked_root, &el));
+}
+
+//! Parameter declarations cooked after the script descriptor load into the
+//! asset in declaration order with their types and defaults.
+NOLINT_TEST_F(AssetLoaderScriptingTest, ScriptAssetLoadsDeclaredParameters)
+{
+  using oxygen::data::ScriptAssetParam;
+  using oxygen::data::pak::scripting::ScriptParamRecord;
+  using oxygen::data::pak::scripting::ScriptParamType;
+
+  // Arrange
+  const auto script_key
+    = oxygen::data::AssetKey::FromVirtualPath("/Test/Reload.oscript");
+  const auto cooked_root = temp_dir_ / "loose_script_declarations";
+  constexpr auto kSpeedDefault = 2.5F;
+  auto declarations = std::array<ScriptParamRecord, 2> {};
+  std::ranges::copy(
+    std::string_view { "speed" }, std::begin(declarations.at(0).key));
+  declarations.at(0).type = ScriptParamType::kFloat;
+  declarations.at(0).value.as_float = kSpeedDefault;
+  std::ranges::copy(
+    std::string_view { "orb" }, std::begin(declarations.at(1).key));
+  declarations.at(1).type = ScriptParamType::kAsset;
+  declarations.at(1).value.as_asset = {
+    .key = {},
+    .asset_type = oxygen::data::AssetType::kMaterial,
+  };
+  WriteLooseCookedScriptAsset(cooked_root, script_key, declarations);
+
+  TestEventLoop el;
+  oxygen::co::Run(el,
+    [](oxygen::data::AssetKey script_key, std::filesystem::path cooked_root,
+      TestEventLoop* loop, float speed_default) -> Co<> {
+      auto& el = *loop;
+      oxygen::co::ThreadPool pool(el, 2);
+      AssetLoaderConfig config {};
+      config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+      AssetLoader loader(Tag::Get(), config);
+      loader.RegisterLoader(oxygen::content::loaders::LoadScriptAsset);
+      loader.RegisterLoader(oxygen::content::loaders::LoadScriptResource);
+
+      OXCO_WITH_NURSERY(n)
+      {
+        co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+        loader.Run();
+        loader.AddLooseCookedRoot(cooked_root);
+
+        // Act
+        const auto script
+          = co_await loader.LoadAssetAsync<ScriptAsset>(script_key);
+
+        // Assert
+        EXPECT_THAT(script, NotNull());
+        if (script) {
+          EXPECT_EQ(script->ParametersCount(), 2U);
+          EXPECT_FLOAT_EQ(
+            std::get<float>(script->GetParameter("speed")), speed_default);
+          EXPECT_EQ(
+            std::get<ScriptAssetParam>(script->GetParameter("orb")).asset_type,
+            oxygen::data::AssetType::kMaterial);
+          const auto first = script->Parameters().begin();
+          EXPECT_EQ((*first).key, "speed");
+        }
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      };
+    }(script_key, cooked_root, &el, kSpeedDefault));
+}
+
+//! A slot's asset parameter is a scene reference and a load dependency.
+NOLINT_TEST_F(AssetLoaderScriptingTest, SceneAssetParameterIsADependency)
+{
+  const auto scene_key
+    = oxygen::data::AssetKey::FromVirtualPath("/Test/ScriptingParams.oscene");
+  const auto cooked_root = temp_dir_ / "loose_scene_asset_param";
+  WriteLooseCookedSceneWithScripting(cooked_root, scene_key, true);
+
+  TestEventLoop el;
+  oxygen::co::Run(el,
+    [](oxygen::data::AssetKey scene_key, std::filesystem::path cooked_root,
+      TestEventLoop* loop) -> Co<> {
+      auto& el = *loop;
+      oxygen::co::ThreadPool pool(el, 2);
+      AssetLoaderConfig config {};
+      config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+      AssetLoader loader(Tag::Get(), config);
+      loader.RegisterLoader(oxygen::content::loaders::LoadSceneAsset);
+
+      OXCO_WITH_NURSERY(n)
+      {
+        co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+        loader.Run();
+        loader.AddLooseCookedRoot(cooked_root);
+
+        const auto scene
+          = co_await loader.LoadAssetAsync<SceneAsset>(scene_key);
+        EXPECT_THAT(scene, NotNull());
+        EXPECT_TRUE(loader.HasScriptAsset(ParamScriptKey()));
 
         loader.Stop();
         co_return oxygen::co::kJoin;

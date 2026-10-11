@@ -1,4 +1,9 @@
-local script = {}
+local script = oxygen.script {
+  params = {
+    day_duration_seconds = oxygen.param.float { default = 60, min = 0,
+      unit = "s", description = "Length of one day-night cycle" },
+  },
+}
 
 local scene = oxygen.scene
 local omath = oxygen.math

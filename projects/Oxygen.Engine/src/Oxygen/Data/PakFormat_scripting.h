@@ -8,6 +8,7 @@
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_world.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
@@ -32,7 +33,9 @@ enum class ScriptParamType : uint32_t {
   kString = 4,
   kVec2 = 5,
   kVec3 = 6,
-  kVec4 = 7
+  kVec4 = 7,
+  kAsset = 8,
+  kNode = 9,
 };
 OXGN_DATA_NDAPI auto to_string(ScriptParamType value) noexcept
   -> std::string_view;
@@ -60,27 +63,50 @@ enum class ScriptingComponentFlags : uint32_t { // NOLINT(*-enum-size)
   kNone = 0
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(ScriptingComponentFlags)
-OXGN_DATA_NDAPI auto to_string(ScriptingComponentFlags value) noexcept
-  -> std::string;
+OXGN_DATA_NDAPI auto to_string(ScriptingComponentFlags value) -> std::string;
 
 enum class ScriptSlotFlags : uint32_t { // NOLINT(*-enum-size)
   kNone = 0
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(ScriptSlotFlags)
-OXGN_DATA_NDAPI auto to_string(ScriptSlotFlags value) noexcept -> std::string;
+OXGN_DATA_NDAPI auto to_string(ScriptSlotFlags value) -> std::string;
+
+//! `ScriptParamRecord::value.as_node_index` of a node parameter with no node.
+inline constexpr world::SceneNodeIndexT kUnsetNodeParam = 0xFFFFFFFFU;
+
+//! Asset reference value of a `kAsset` script parameter.
+/*!
+ `asset_type` is the asset kind the script declares. A nil `key` means the
+ parameter is unset.
+*/
+#pragma pack(push, 1)
+struct ScriptAssetParamValue {
+  AssetKey key;
+  AssetType asset_type = AssetType::kUnknown;
+};
+#pragma pack(pop)
+static_assert(sizeof(ScriptAssetParamValue) == 17);
 
 //! Fixed-size script parameter record.
+/*!
+ Used both for a script asset's parameter declarations (key, type and default
+ value) and for a script slot's overrides. A `kNode` value is a node index of
+ the scene that owns the slot. Declarations carry no node or asset default:
+ their value is `kUnsetNodeParam`, or a nil key with the declared asset kind.
+*/
 #pragma pack(push, 1)
 // NOLINTNEXTLINE(*-type-member-init) - MUST be initialized by users
 struct ScriptParamRecord {
   char key[64]; // Parameter name (null-terminated)
   ScriptParamType type = ScriptParamType::kNone;
   union {
-    bool as_bool;
+    bool as_bool = false;
     int32_t as_int32;
     float as_float;
     float as_vec[4]; // Used for Vec2, Vec3, Vec4
     char as_string[60]; // Maximum 59 chars + null terminator
+    ScriptAssetParamValue as_asset;
+    world::SceneNodeIndexT as_node_index;
   } value;
 };
 #pragma pack(pop)
@@ -123,7 +149,15 @@ struct ScriptResourceDesc {
 #pragma pack(pop)
 static_assert(sizeof(ScriptResourceDesc) == 23);
 
+//! Descriptor-local packed record array inside a script descriptor.
+using ScriptDataTable = world::SceneDataTable;
+
 //! Script Asset Descriptor.
+/*!
+ `params` locates the script's parameter declarations, one ScriptParamRecord
+ per declared parameter, at a descriptor-relative offset after this struct.
+ Authoring hints (range, unit, description, options, color) are not cooked.
+*/
 #pragma pack(push, 1)
 struct ScriptAssetDesc {
   core::AssetHeader header;
@@ -131,9 +165,10 @@ struct ScriptAssetDesc {
   ResourceReferenceIndex source_resource_index = kNoResourceReference;
   ScriptAssetFlags flags = ScriptAssetFlags::kNone;
   char external_source_path[120] = {}; // Null-terminated, null-padded
+  ScriptDataTable params {};
 };
 #pragma pack(pop)
-static_assert(sizeof(ScriptAssetDesc) == 235);
+static_assert(sizeof(ScriptAssetDesc) == 251);
 
 } // namespace oxygen::data::pak::scripting
 

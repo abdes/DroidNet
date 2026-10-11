@@ -43,13 +43,14 @@
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Content/ContentLoadScope.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
@@ -63,10 +64,6 @@
 #include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
 #include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Input/Action.h>
-#include <Oxygen/Input/ActionTriggers.h>
-#include <Oxygen/Input/ActionValue.h>
-#include <Oxygen/Input/InputActionMapping.h>
-#include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
@@ -80,7 +77,6 @@
 #include <Oxygen/Physics/Vehicle/VehicleDesc.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/PhysicsModule/ScenePhysics.h>
-#include <Oxygen/Platform/Input.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
@@ -113,12 +109,23 @@ namespace {
     return std::string(name_view);
   }
 
+  //! Squared length below which a direction is degenerate.
+  constexpr float kDegenerateLengthSquared = 1e-8F;
+  //! |cos| above which forward is treated as colinear with up.
+  constexpr float kColinearCosine = 0.999F;
+  //! |forward.z| above which Back is the alternate up direction.
+  constexpr float kVerticalForwardZ = 0.9F;
+  //! Tolerance of IsNearlyEqual.
+  constexpr float kNearlyEqualTolerance = 1e-5F;
+  //! Smallest dynamic body mass derived from a material density, in kg.
+  constexpr float kMinDynamicMassKg = 0.001F;
+
   auto MakeLookRotationFromPosition(
     const glm::vec3& position, const glm::vec3& target) -> glm::quat
   {
     const auto forward_raw = target - position;
     const float forward_len2 = glm::dot(forward_raw, forward_raw);
-    if (forward_len2 <= 1e-8F) {
+    if (forward_len2 <= kDegenerateLengthSquared) {
       return { 1.0F, 0.0F, 0.0F, 0.0F };
     }
 
@@ -126,15 +133,15 @@ namespace {
     // Avoid singularities when forward is colinear with up.
     glm::vec3 up_dir = space::move::Up;
     const float dot_abs = std::abs(glm::dot(forward, glm::normalize(up_dir)));
-    if (dot_abs > 0.999F) {
+    if (dot_abs > kColinearCosine) {
       // Pick an alternate up that is guaranteed to be non-colinear.
-      up_dir
-        = (std::abs(forward.z) > 0.9F) ? space::move::Back : space::move::Up;
+      up_dir = (std::abs(forward.z) > kVerticalForwardZ) ? space::move::Back
+                                                         : space::move::Up;
     }
 
     const auto right_raw = glm::cross(forward, up_dir);
     const float right_len2 = glm::dot(right_raw, right_raw);
-    if (right_len2 <= 1e-8F) {
+    if (right_len2 <= kDegenerateLengthSquared) {
       return { 1.0F, 0.0F, 0.0F, 0.0F };
     }
 
@@ -188,7 +195,7 @@ namespace {
 
   auto IsNearlyEqual(const float lhs, const float rhs) noexcept -> bool
   {
-    return std::abs(lhs - rhs) <= 1e-5F;
+    return std::abs(lhs - rhs) <= kNearlyEqualTolerance;
   }
 
   auto IsUniformScale(const Vec3& scale) noexcept -> bool
@@ -403,118 +410,6 @@ namespace {
     return member_node_indices;
   }
 
-  auto ScriptParamFromRecord(
-    const data::pak::scripting::ScriptParamRecord& record)
-    -> std::optional<data::ScriptParam>
-  {
-    using data::pak::scripting::ScriptParamType;
-    switch (record.type) {
-    case ScriptParamType::kBool:
-      return data::ScriptParam { record.value.as_bool };
-    case ScriptParamType::kInt32:
-      return data::ScriptParam { record.value.as_int32 };
-    case ScriptParamType::kFloat:
-      return data::ScriptParam { record.value.as_float };
-    case ScriptParamType::kString: {
-      const auto* const begin = std::begin(record.value.as_string);
-      const auto* const end = std::end(record.value.as_string);
-      const auto* const nul = std::ranges::find(record.value.as_string, '\0');
-      if (nul == end) {
-        return std::nullopt;
-      }
-      return data::ScriptParam { std::string(begin, nul) };
-    }
-    case ScriptParamType::kVec2:
-      return data::ScriptParam { Vec2(
-        record.value.as_vec[0], record.value.as_vec[1]) };
-    case ScriptParamType::kVec3:
-      return data::ScriptParam { Vec3(record.value.as_vec[0],
-        record.value.as_vec[1], record.value.as_vec[2]) };
-    case ScriptParamType::kVec4:
-      return data::ScriptParam { Vec4(record.value.as_vec[0],
-        record.value.as_vec[1], record.value.as_vec[2],
-        record.value.as_vec[3]) };
-    case ScriptParamType::kNone:
-    default:
-      return std::nullopt;
-    }
-  }
-
-  auto ToActionValueType(const uint8_t value_type_id)
-    -> std::optional<input::ActionValueType>
-  {
-    switch (value_type_id) {
-    case static_cast<uint8_t>(input::ActionValueType::kBool):
-      return input::ActionValueType::kBool;
-    case static_cast<uint8_t>(input::ActionValueType::kAxis1D):
-      return input::ActionValueType::kAxis1D;
-    case static_cast<uint8_t>(input::ActionValueType::kAxis2D):
-      return input::ActionValueType::kAxis2D;
-    default:
-      return std::nullopt;
-    }
-  }
-
-  auto ResolveInputSlot(const std::string_view slot_name)
-    -> const platform::InputSlot*
-  {
-    if (slot_name.empty()) {
-      return nullptr;
-    }
-
-    if (slot_name == "Keyboard.PgUp" || slot_name == "Keyboard.PageUp") {
-      return &platform::InputSlots::PageUp;
-    }
-    if (slot_name == "Keyboard.PgDn" || slot_name == "Keyboard.PageDown") {
-      return &platform::InputSlots::PageDown;
-    }
-    if (slot_name == "Keyboard.End") {
-      return &platform::InputSlots::End;
-    }
-
-    static const std::vector<platform::InputSlot> all_slots
-      = [] -> std::vector<platform::InputSlot> {
-      std::vector<platform::InputSlot> slots;
-      platform::InputSlots::GetAllInputSlots(slots);
-      return slots;
-    }();
-    for (const auto& slot : all_slots) {
-      const auto name = slot.GetName();
-      if (slot_name == name) {
-        return &slot;
-      }
-
-      std::string keyboard_name("Keyboard.");
-      keyboard_name += name;
-      if (slot_name == keyboard_name) {
-        return &slot;
-      }
-    }
-
-    return nullptr;
-  }
-
-  void ApplyTriggerBehavior(
-    const data::pak::input::InputTriggerBehavior behavior,
-    const std::shared_ptr<input::ActionTrigger>& trigger)
-  {
-    if (!trigger) {
-      return;
-    }
-    switch (behavior) {
-    case data::pak::input::InputTriggerBehavior::kExplicit:
-      trigger->MakeExplicit();
-      break;
-    case data::pak::input::InputTriggerBehavior::kBlocker:
-      trigger->MakeBlocker();
-      break;
-    case data::pak::input::InputTriggerBehavior::kImplicit:
-    default:
-      trigger->MakeImplicit();
-      break;
-    }
-  }
-
   constexpr uint64_t kLuauCompilerFingerprint = 0x6C7561755F7631ULL;
   constexpr uint64_t kLuauVmBytecodeVersion = 1ULL;
   constexpr uint64_t kUnknownCompilerFingerprint = 0x756E6B6E6F776E31ULL;
@@ -532,23 +427,17 @@ namespace {
   auto CompilerFingerprintForLanguage(
     const data::pak::scripting::ScriptLanguage language) -> uint64_t
   {
-    switch (language) {
-    case data::pak::scripting::ScriptLanguage::kLuau:
-      return kLuauCompilerFingerprint;
-    default:
-      return kUnknownCompilerFingerprint;
-    }
+    return language == data::pak::scripting::ScriptLanguage::kLuau
+      ? kLuauCompilerFingerprint
+      : kUnknownCompilerFingerprint;
   }
 
   auto VmBytecodeVersionForLanguage(
     const data::pak::scripting::ScriptLanguage language) -> uint64_t
   {
-    switch (language) {
-    case data::pak::scripting::ScriptLanguage::kLuau:
-      return kLuauVmBytecodeVersion;
-    default:
-      return kUnknownVmBytecodeVersion;
-    }
+    return language == data::pak::scripting::ScriptLanguage::kLuau
+      ? kLuauVmBytecodeVersion
+      : kUnknownVmBytecodeVersion;
   }
 
   auto ComputeCompileKey(const data::AssetKey asset_key,
@@ -577,7 +466,9 @@ namespace {
   auto HexPreview(std::span<const uint8_t> bytes, const size_t max_bytes)
     -> std::string
   {
-    static constexpr char kHex[] = "0123456789abcdef";
+    constexpr std::string_view kHexDigits = "0123456789abcdef";
+    constexpr unsigned kNibbleBits = 4U;
+    constexpr unsigned kNibbleMask = 0x0FU;
     const auto count = std::min(bytes.size(), max_bytes);
     if (count == 0) {
       return "<empty>";
@@ -587,8 +478,9 @@ namespace {
     out.reserve(count * 3);
     for (size_t i = 0; i < count; ++i) {
       const auto value = oxygen::base::CheckedAt(bytes, i);
-      out.push_back(kHex[(value >> 4U) & 0x0FU]);
-      out.push_back(kHex[value & 0x0FU]);
+      out.push_back(kHexDigits.at(
+        (static_cast<unsigned>(value) >> kNibbleBits) & kNibbleMask));
+      out.push_back(kHexDigits.at(static_cast<unsigned>(value) & kNibbleMask));
       if (i + 1 < count) {
         out.push_back(' ');
       }
@@ -645,7 +537,7 @@ SceneLoaderService::SceneLoaderService(content::IAssetLoader& loader,
   , path_finder_(std::move(path_finder))
   , engine_(engine)
   , input_system_(input_system)
-  , compilation_service_(std::move(compilation_service))
+  , compilation_service_(compilation_service)
   , source_resolver_(
       std::make_unique<scripting::ScriptSourceResolver>(path_finder_))
 {
@@ -1045,8 +937,8 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
   case data::pak::physics::ShapeType::kBox: {
     const auto& half_extents = shape_desc.shape_params.box.half_extents;
     ensure_no_cooked_ref();
-    if (!(half_extents[0] > 0.0F && half_extents[1] > 0.0F
-          && half_extents[2] > 0.0F)) {
+    if (!(half_extents[0] > 0.0F) || !(half_extents[1] > 0.0F)
+      || !(half_extents[2] > 0.0F)) {
       throw std::runtime_error(
         std::string("OXY-SHAPE-008: invalid box half_extents in ")
         + std::string(binding_kind)
@@ -1060,7 +952,7 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
     const float radius = shape_desc.shape_params.cylinder.radius;
     const float half_height = shape_desc.shape_params.cylinder.half_height;
     ensure_no_cooked_ref();
-    if (!(radius > 0.0F && half_height > 0.0F)) {
+    if (!(radius > 0.0F) || !(half_height > 0.0F)) {
       throw std::runtime_error(
         std::string("OXY-SHAPE-008: invalid cylinder params in ")
         + std::string(binding_kind)
@@ -1074,7 +966,7 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
   case data::pak::physics::ShapeType::kCone: {
     const float radius = shape_desc.shape_params.cone.radius;
     const float half_height = shape_desc.shape_params.cone.half_height;
-    if (!(radius > 0.0F && half_height > 0.0F)) {
+    if (!(radius > 0.0F) || !(half_height > 0.0F)) {
       throw std::runtime_error(
         std::string("OXY-SHAPE-008: invalid cone params in ")
         + std::string(binding_kind)
@@ -1132,9 +1024,9 @@ auto SceneLoaderService::BuildCollisionShapeFromDescriptor(
         + std::string(binding_kind)
         + " binding (node_index=" + std::to_string(node_index) + ")");
     }
-    if (!(params.limits_max[0] > params.limits_min[0]
-          && params.limits_max[1] > params.limits_min[1]
-          && params.limits_max[2] > params.limits_min[2])) {
+    if (!(params.limits_max[0] > params.limits_min[0])
+      || !(params.limits_max[1] > params.limits_min[1])
+      || !(params.limits_max[2] > params.limits_min[2])) {
       throw std::runtime_error(
         std::string("OXY-SHAPE-008: invalid world_boundary limits in ")
         + std::string(binding_kind)
@@ -1531,7 +1423,7 @@ void SceneLoaderService::HydrateRigidBodyBindings(
         desc.restitution = (std::max)(0.0F, material_desc.restitution);
         if (record.mass <= 0.0F
           && desc.type != physics::body::BodyType::kStatic) {
-          desc.mass_kg = (std::max)(0.001F, material_desc.density);
+          desc.mass_kg = (std::max)(kMinDynamicMassKg, material_desc.density);
         }
       }
     }
@@ -1672,10 +1564,11 @@ void SceneLoaderService::HydrateSoftBodyBindings(
       ? data::pak::physics::PhysicsResourceFormat::
           kJoltSoftBodySharedSettingsBinary
       : data::pak::physics::PhysicsResourceFormat::kPhysXSoftBodySettingsBinary;
-    const auto expected_settings_format_name = use_jolt_settings
+    const auto* const expected_settings_format_name = use_jolt_settings
       ? "jolt_soft_body_shared_settings_binary"
       : "physx_soft_body_settings_binary";
-    const auto selected_backend_name = use_jolt_settings ? "jolt" : "physx";
+    const auto* const selected_backend_name
+      = use_jolt_settings ? "jolt" : "physx";
     if (record.topology_format != expected_settings_format) {
       throw std::runtime_error(
         std::string("soft-body topology_format does not match active backend ")
@@ -2979,7 +2872,7 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
       if (slots.empty()) {
         continue;
       }
-      const auto slot = slots.back();
+      const auto& slot = slots.back();
 
       if (!slot_record.params.empty()) {
         ApplySlotParameters(scripting, slot, slot_record.params);
@@ -2987,8 +2880,7 @@ void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
           node_index, slot_record.params.size());
       }
 
-      QueueSlotCompilation(
-        runtime_nodes_.at(node_index), slot, std::move(script_asset));
+      QueueSlotCompilation(runtime_nodes_.at(node_index), slot, script_asset);
     }
   }
 }
@@ -3000,14 +2892,14 @@ void SceneLoaderService::ApplySlotParameters(
 {
   for (const auto& param : params) {
     const auto* const key_begin = std::begin(param.key);
-    const auto key_end = std::ranges::find(param.key, '\0');
+    const auto* const key_end = std::ranges::find(param.key, '\0');
     if (key_end == std::end(param.key)) {
       LOG_F(WARNING, "script parameter key is not null-terminated");
       continue;
     }
     const std::string_view key(
       key_begin, static_cast<size_t>(key_end - key_begin));
-    const auto value = ScriptParamFromRecord(param);
+    const auto value = data::ToScriptParam(param);
     if (!value.has_value()) {
       LOG_F(WARNING, "skipping unsupported script parameter type");
       continue;
@@ -3020,7 +2912,7 @@ void SceneLoaderService::ApplySlotParameters(
 
 void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
   const scene::SceneNode::Scripting::Slot& slot,
-  std::shared_ptr<const data::ScriptAsset> script_asset)
+  const std::shared_ptr<const data::ScriptAsset>& script_asset)
 {
   if (!script_asset) {
     LOG_F(ERROR, "script compilation skipped because script asset is null");
@@ -3156,6 +3048,10 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
     "source_hash={})",
     data::to_string(script_asset->GetAssetKey()), compile_key, source_size,
     source_hash);
+  // The callbacks share one immutable copy of the slot, so copying or moving
+  // them never copies its parameters.
+  const auto shared_slot
+    = std::make_shared<const scene::SceneNode::Scripting::Slot>(slot);
   auto acquire = compilation_service_->AcquireForSlot(
     scripting::IScriptCompilationService::Request {
       .compile_key = compile_key,
@@ -3164,23 +3060,24 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
     },
     scripting::IScriptCompilationService::SlotAcquireCallbacks {
       .on_ready
-      = [node, slot](
+      = [node, slot = shared_slot](
           std::shared_ptr<const scripting::ScriptBytecodeBlob> bytecode) mutable
         -> void {
         if (node.IsAlive()) {
           auto scripting = node.GetScripting();
-          (void)scripting.MarkSlotReady(slot,
+          (void)scripting.MarkSlotReady(*slot,
             std::make_shared<const scripting::CompiledScriptExecutable>(
               std::move(bytecode)));
           LOG_F(INFO, "slot ready from compilation");
         }
       },
-      .on_failed = [node, slot](std::string diagnostic) mutable -> void {
+      .on_failed
+      = [node, slot = shared_slot](std::string diagnostic) mutable -> void {
         if (node.IsAlive()) {
           auto scripting = node.GetScripting();
           LOG_F(ERROR, "script compilation failed: {}", diagnostic);
           (void)scripting.MarkSlotCompilationFailed(
-            slot, std::move(diagnostic));
+            *slot, std::move(diagnostic));
         }
       },
     });

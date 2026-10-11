@@ -316,6 +316,24 @@ inline auto MakeSidecarPayload(const SidecarBindingSpec& binding) -> std::string
   return MakeSidecarPayload(std::vector { binding });
 }
 
+//! Views a null-padded fixed-size character field as text.
+inline auto FixedString(std::span<const char> text) -> std::string_view
+{
+  const auto end = std::ranges::find(text, '\0');
+  return { text.data(), static_cast<size_t>(end - text.begin()) };
+}
+
+//! Source of a script declaring the float `speed` that MakeSpeedBinding
+//! overrides; `tag` keeps otherwise identical sources distinct.
+inline auto SpeedScriptSource(const std::string_view tag = {}) -> std::string
+{
+  return "local Script = oxygen.script {\n"
+         "  params = { speed = oxygen.param.float {} },\n"
+         "}\n"
+         "-- "
+    + std::string(tag) + "\nreturn Script\n";
+}
+
 //! Binding to node 0, slot `main`, order 2, with one float `speed` param.
 inline auto MakeSpeedBinding(const std::string_view script_virtual_path,
   const float speed = 3.5F) -> SidecarBindingSpec

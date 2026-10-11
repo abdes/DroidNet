@@ -20,6 +20,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
@@ -37,11 +38,15 @@
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/Scripting/Analysis/ScriptAnalyzer.h>
+#include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 
 namespace oxygen::content::import {
 
@@ -61,15 +66,25 @@ namespace {
   using data::pak::scripting::ScriptCompression;
   using data::pak::scripting::ScriptEncoding;
   using data::pak::scripting::ScriptLanguage;
+  using data::pak::scripting::ScriptParamRecord;
   using data::pak::scripting::ScriptResourceDesc;
   enum class EmbeddedResourceKind : uint8_t { kSource = 0, kBytecode = 1 };
 
+  //! Descriptor under construction. Built in place and never moved: the
+  //! reference builder's containers allocate when moved.
   struct ScriptDescriptorContext final {
-    data::AssetKey key {};
+    ScriptDescriptorContext() = default;
+    ~ScriptDescriptorContext() = default;
+    OXYGEN_MAKE_NON_COPYABLE(ScriptDescriptorContext)
+    OXYGEN_MAKE_NON_MOVABLE(ScriptDescriptorContext)
+
+    data::AssetKey key;
     std::string virtual_path;
     std::string descriptor_relpath;
     ScriptAssetDesc descriptor {};
     AssetReferenceBuilder references;
+    //! Declared parameters, written after the descriptor.
+    std::vector<ScriptParamRecord> params;
   };
 
   [[nodiscard]] auto IsStopRequested(const std::stop_token& token) noexcept
@@ -92,14 +107,6 @@ namespace {
       return false;
     }
 
-    if (scripting.compile_scripts
-      && scripting.script_storage == ScriptStorageMode::kExternal) {
-      script_import::AddDiagnostic(session, request, ImportSeverity::kError,
-        "script.request.invalid_option_combo",
-        "compile_scripts=true is invalid with script_storage=external");
-      return false;
-    }
-
     if (scripting.compile_scripts && !script_compile_callback) {
       const auto* const mode
         = (scripting.compile_mode == ScriptCompileMode::kDebug) ? "debug"
@@ -115,8 +122,8 @@ namespace {
     return true;
   }
 
-  auto BuildScriptDescriptorContext(ImportSession& session,
-    const ImportRequest& request) -> std::optional<ScriptDescriptorContext>
+  auto InitScriptDescriptorContext(ImportSession& session,
+    const ImportRequest& request, ScriptDescriptorContext& context) -> bool
   {
     const auto script_name
       = script_import::DeriveScriptName(request.source_path);
@@ -139,16 +146,71 @@ namespace {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.name_too_long",
         "Derived script name exceeds ScriptAssetDesc::header.name capacity");
-      return std::nullopt;
+      return false;
     }
 
-    return ScriptDescriptorContext {
-      .key = key,
-      .virtual_path = virtual_path,
-      .descriptor_relpath = descriptor_relpath,
-      .descriptor = descriptor,
-      .references = {},
-    };
+    context.key = key;
+    context.virtual_path = virtual_path;
+    context.descriptor_relpath = descriptor_relpath;
+    context.descriptor = descriptor;
+    return true;
+  }
+
+  auto ToImportSeverity(const scripting::DiagnosticSeverity severity)
+    -> ImportSeverity
+  {
+    switch (severity) {
+    case scripting::DiagnosticSeverity::kError:
+      return ImportSeverity::kError;
+    case scripting::DiagnosticSeverity::kWarning:
+      return ImportSeverity::kWarning;
+    case scripting::DiagnosticSeverity::kNote:
+      break;
+    }
+    return ImportSeverity::kInfo;
+  }
+
+  //! Reads the script's parameter declarations into cooked records.
+  /*!
+   Reports every analysis diagnostic. Fails when the script has errors, so a
+   script whose declaration is invalid never cooks.
+  */
+  auto AnalyzeDeclarations(ImportSession& session, const ImportRequest& request,
+    std::span<const std::byte> source_bytes, ScriptDescriptorContext& context)
+    -> bool
+  {
+    const auto source_name
+      = script_import::BuildExternalSourcePath(request).value_or(
+        request.source_path.generic_string());
+    const auto analysis = scripting::ScriptAnalyzer {}.Analyze({
+      .source_name = source_name,
+      .source = source_bytes,
+      .level = scripting::AnalysisLevel::kDeclarations,
+    });
+    for (const auto& diagnostic : analysis.diagnostics) {
+      script_import::AddDiagnostic(session, request,
+        ToImportSeverity(diagnostic.severity),
+        "script." + scripting::to_string(diagnostic.code),
+        scripting::FormatSummary(diagnostic));
+    }
+    if (analysis.HasErrors()) {
+      return false;
+    }
+
+    context.params.reserve(analysis.declarations.size());
+    for (const auto& declaration : analysis.declarations) {
+      auto record = data::MakeScriptParamRecord(
+        declaration.name, declaration.default_value);
+      if (!record) {
+        script_import::AddDiagnostic(session, request, ImportSeverity::kError,
+          "script.asset.declaration_unencodable",
+          "Parameter '" + declaration.name
+            + "' does not fit ScriptParamRecord");
+        return false;
+      }
+      context.params.push_back(*record);
+    }
+    return true;
   }
 
   auto AppendEmbeddedScriptResource(ImportSession& session,
@@ -252,19 +314,19 @@ namespace {
     if (table_entries.empty()) {
       table_entries.push_back(ScriptResourceDesc {});
     }
-    if (table_entries.size() >= (std::numeric_limits<uint32_t>::max)()) {
+    if (table_entries.size() >= std::numeric_limits<uint32_t>::max()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.resource_index_overflow",
         "scripts.table reached maximum ScriptResourceDesc entry count");
       co_return false;
     }
-    if (data_blob.size() > (std::numeric_limits<OffsetT>::max)()) {
+    if (data_blob.size() > std::numeric_limits<OffsetT>::max()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.data_offset_overflow",
         "scripts.data offset overflow while appending script payload");
       co_return false;
     }
-    if (source_bytes.size() > (std::numeric_limits<DataBlobSizeT>::max)()) {
+    if (source_bytes.size() > std::numeric_limits<DataBlobSizeT>::max()) {
       script_import::AddDiagnostic(session, request, ImportSeverity::kError,
         "script.asset.payload_too_large",
         "Script payload exceeds DataBlobSizeT limits");
@@ -386,10 +448,25 @@ namespace {
   auto EmitScriptDescriptor(
     ImportSession& session, ScriptDescriptorContext& context) -> bool
   {
+    if (!context.params.empty()) {
+      context.descriptor.params = {
+        .offset = sizeof(ScriptAssetDesc),
+        .count = static_cast<uint32_t>(context.params.size()),
+        .entry_size = sizeof(ScriptParamRecord),
+      };
+    }
+    auto bytes = std::vector<std::byte>(sizeof(ScriptAssetDesc)
+      + (context.params.size() * sizeof(ScriptParamRecord)));
+    std::memcpy(bytes.data(), &context.descriptor, sizeof(ScriptAssetDesc));
+    if (!context.params.empty()) {
+      std::memcpy(std::span(bytes).subspan(sizeof(ScriptAssetDesc)).data(),
+        context.params.data(),
+        context.params.size() * sizeof(ScriptParamRecord));
+    }
+
     try {
       session.AssetEmitter().Emit(context.key, AssetType::kScript,
-        context.virtual_path, context.descriptor_relpath,
-        std::as_bytes(std::span { &context.descriptor, 1 }),
+        context.virtual_path, context.descriptor_relpath, bytes,
         std::move(context.references).Build());
     } catch (const std::exception& ex) {
       script_import::AddDiagnostic(session, session.Request(),
@@ -434,7 +511,7 @@ auto ScriptAssetImportPipeline::Start(co::Nursery& nursery) -> void
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
     // NOLINTNEXTLINE(*-lambda-coroutines)
-    nursery.Start([this]() -> co::Co<> { co_await Worker(); });
+    nursery.Start(&ScriptAssetImportPipeline::Worker, this);
   }
 }
 
@@ -577,8 +654,12 @@ auto ScriptAssetImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     co_return false;
   }
 
-  auto descriptor_context = BuildScriptDescriptorContext(*session, req);
-  if (!descriptor_context.has_value()) {
+  auto descriptor_context = ScriptDescriptorContext {};
+  if (!InitScriptDescriptorContext(*session, req, descriptor_context)) {
+    co_return false;
+  }
+  if (!AnalyzeDeclarations(
+        *session, req, item.source_bytes, descriptor_context)) {
     co_return false;
   }
 
@@ -591,31 +672,33 @@ auto ScriptAssetImportPipeline::Process(WorkItem& item) -> co::Co<bool>
     }
   }
 
+  // Embedded storage carries the source; external storage records its path.
+  // Compiled bytecode is embedded either way, so external scripts run from
+  // the source when a source root has it and from the bytecode otherwise.
   if (req.options.scripting.script_storage == ScriptStorageMode::kEmbedded) {
-    const auto appended = co_await AppendEmbeddedScriptResource(*session, req,
-      item.source_bytes, item.index_registry, *descriptor_context,
-      EmbeddedResourceKind::kSource);
+    const auto appended
+      = co_await AppendEmbeddedScriptResource(*session, req, item.source_bytes,
+        item.index_registry, descriptor_context, EmbeddedResourceKind::kSource);
     if (!appended) {
       co_return false;
     }
-
-    if (bytecode_bytes.has_value()) {
-      const auto appended_bytecode
-        = co_await AppendEmbeddedScriptResource(*session, req,
-          std::span<const std::byte>(
-            bytecode_bytes->data(), bytecode_bytes->size()),
-          item.index_registry, *descriptor_context,
-          EmbeddedResourceKind::kBytecode);
-      if (!appended_bytecode) {
-        co_return false;
-      }
-    }
   } else if (!ConfigureExternalSource(
-               *session, req, descriptor_context->descriptor)) {
+               *session, req, descriptor_context.descriptor)) {
     co_return false;
   }
 
-  co_return EmitScriptDescriptor(*session, *descriptor_context);
+  if (bytecode_bytes.has_value()) {
+    const auto appended_bytecode = co_await AppendEmbeddedScriptResource(
+      *session, req,
+      std::span<const std::byte>(
+        bytecode_bytes->data(), bytecode_bytes->size()),
+      item.index_registry, descriptor_context, EmbeddedResourceKind::kBytecode);
+    if (!appended_bytecode) {
+      co_return false;
+    }
+  }
+
+  co_return EmitScriptDescriptor(*session, descriptor_context);
 }
 
 auto ScriptAssetImportPipeline::ReportCancelled(WorkItem item) -> co::Co<>

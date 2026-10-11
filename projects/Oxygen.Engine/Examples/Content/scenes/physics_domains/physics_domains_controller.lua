@@ -1,4 +1,6 @@
-local script = {}
+local script = oxygen.script {
+  params = {},
+}
 
 local input = oxygen.input
 local log = oxygen.log

@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -22,6 +23,9 @@
 namespace oxygen::content::import::test {
 
 namespace {
+
+  //! A node index no test scene has.
+  constexpr auto kOutOfRangeNode = 99999U;
 
   auto HasAnyObjectPath(const std::vector<ImportDiagnostic>& diagnostics)
     -> bool
@@ -135,16 +139,18 @@ namespace {
     WriteText(sidecar_source,
       MakeSidecarPayload(std::vector {
         SidecarBindingSpec {
-          .node_index = 99999U,
+          .node_index = kOutOfRangeNode,
           .slot_id = "oob",
           .script_virtual_path = CanonicalScriptVirtualPath("missing"),
           .execution_order = 1,
+          .params = {},
         },
         SidecarBindingSpec {
           .node_index = 0U,
           .slot_id = "bad_path",
           .script_virtual_path = "Scripts/not_canonical.oscript",
           .execution_order = 2,
+          .params = {},
         },
       }));
 
@@ -193,7 +199,7 @@ namespace {
     const auto cooked_root
       = temp.Path() / "script_sidecar_invalid_target_scene_path";
     const auto script_source = cooked_root / "input" / "seed_script.luau";
-    WriteText(script_source, "return 1");
+    WriteText(script_source, SpeedScriptSource("1"));
     ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
                          ScriptStorageMode::kExternal, false))
         .success);
@@ -274,7 +280,7 @@ namespace {
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "script_sidecar_missing_scene";
     const auto script_source = cooked_root / "input" / "seed_script.luau";
-    WriteText(script_source, "return 0");
+    WriteText(script_source, SpeedScriptSource("0"));
     ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
                          ScriptStorageMode::kExternal, false))
         .success);
@@ -296,7 +302,8 @@ namespace {
     const ScopedTempDir temp;
     const auto cooked_root
       = temp.Path() / "script_sidecar_duplicate_binding_identity";
-    const auto cooked = CookSceneWithScript(cooked_root, "return 123");
+    const auto cooked
+      = CookSceneWithScript(cooked_root, SpeedScriptSource("123"));
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
     ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
@@ -306,10 +313,18 @@ namespace {
     WriteText(sidecar_source,
       MakeSidecarPayload(std::vector {
         SidecarBindingSpec {
+          .node_index = 0,
+          .slot_id = "main",
           .script_virtual_path = script_asset->virtual_path,
+          .execution_order = std::nullopt,
+          .params = {},
         },
         SidecarBindingSpec {
+          .node_index = 0,
+          .slot_id = "main",
           .script_virtual_path = script_asset->virtual_path,
+          .execution_order = std::nullopt,
+          .params = {},
         },
       }));
 
@@ -326,7 +341,8 @@ namespace {
   {
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "script_sidecar_out_of_bounds_node";
-    const auto cooked = CookSceneWithScript(cooked_root, "return 123");
+    const auto cooked
+      = CookSceneWithScript(cooked_root, SpeedScriptSource("123"));
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
     ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
@@ -335,8 +351,11 @@ namespace {
     const auto sidecar_source = cooked_root / "input" / "oob.sidescript.json";
     WriteText(sidecar_source,
       MakeSidecarPayload(SidecarBindingSpec {
-        .node_index = 99999U,
+        .node_index = kOutOfRangeNode,
+        .slot_id = "main",
         .script_virtual_path = script_asset->virtual_path,
+        .execution_order = std::nullopt,
+        .params = {},
       }));
 
     const auto report = Submit(MakeSidecarRequest(

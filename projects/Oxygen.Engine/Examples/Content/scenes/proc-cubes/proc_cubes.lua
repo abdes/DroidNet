@@ -1,4 +1,31 @@
-local script = {}
+local script = oxygen.script {
+  params = {
+    count = oxygen.param.int { default = 64, min = 0,
+      description = "Number of cubes" },
+    cell_size = oxygen.param.float { default = 1, min = 0, unit = "m",
+      description = "Grid cell size" },
+    min_scale = oxygen.param.float { default = 0.6, min = 0,
+      description = "Smallest cube scale" },
+    max_scale = oxygen.param.float { default = 1, min = 0,
+      description = "Largest cube scale" },
+    origin_height_multiplier = oxygen.param.float { default = 5,
+      description = "Height multiplier at the grid origin" },
+    height_falloff_power = oxygen.param.float { default = 2.2,
+      description = "Height falloff exponent" },
+    geometry_token = oxygen.param.string { default = "proc/cube",
+      description = "Procedural geometry to spawn" },
+    material_guids = oxygen.param.string {
+      description = "Material asset to use when use_material_guids is set" },
+    use_material_guids = oxygen.param.bool {
+      description = "Use the listed material instead of gradients" },
+    gradient_steps = oxygen.param.int { default = 12, min = 1,
+      description = "Number of gradient materials" },
+    max_spawns_per_frame = oxygen.param.int { default = 100, min = 1,
+      description = "Cubes created per frame" },
+    max_prepare_steps_per_frame = oxygen.param.int { default = 1000, min = 1,
+      description = "Preparation steps per frame" },
+  },
+}
 
 local scene = oxygen.scene
 local assets = oxygen.assets

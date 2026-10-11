@@ -28,6 +28,46 @@
 
 namespace oxygen::content::loaders {
 
+namespace detail {
+
+  //! Reads the parameter declarations that follow a script descriptor.
+  /*!
+   @param reader Descriptor reader; its position is unspecified afterwards.
+   @param base_pos Reader position of the descriptor's first byte.
+   @param table The descriptor's declaration table.
+   @throw std::runtime_error if the table or a declaration is invalid.
+  */
+  inline auto ReadScriptParamDeclarations(serio::AnyReader& reader,
+    const size_t base_pos, const data::pak::scripting::ScriptDataTable& table)
+    -> std::vector<data::pak::scripting::ScriptParamRecord>
+  {
+    using data::pak::scripting::ScriptParamRecord;
+
+    auto declarations = std::vector<ScriptParamRecord> {};
+    if (table.count == 0U) {
+      if (table.offset != 0U) {
+        throw std::runtime_error(
+          "Empty script parameter declarations have nonzero offset");
+      }
+      return declarations;
+    }
+    if (table.entry_size != sizeof(ScriptParamRecord)
+      || table.offset < sizeof(data::pak::scripting::ScriptAssetDesc)) {
+      throw std::runtime_error("Script parameter declaration table is invalid");
+    }
+
+    CheckLoaderResult(reader.Seek(base_pos + table.offset), "script asset",
+      "Seek(param declarations)");
+    declarations.resize(table.count);
+    for (auto& declaration : declarations) {
+      CheckLoaderResult(reader.ReadInto(declaration), "script asset",
+        "ReadInto(ScriptParamRecord)");
+    }
+    return declarations;
+  }
+
+} // namespace detail
+
 //! Loader for script assets.
 inline auto LoadScriptAsset(const LoaderContext& context)
   -> std::unique_ptr<data::ScriptAsset>
@@ -39,6 +79,8 @@ inline auto LoadScriptAsset(const LoaderContext& context)
 
   auto pack = reader.ScopedAlignment(1);
 
+  const auto base_pos = reader.Position();
+  CheckLoaderResult(base_pos, "script asset", "Position(base)");
   auto desc_blob
     = reader.ReadBlob(sizeof(data::pak::scripting::ScriptAssetDesc));
   CheckLoaderResult(desc_blob, "script asset", "ScriptAssetDesc");
@@ -66,16 +108,15 @@ inline auto LoadScriptAsset(const LoaderContext& context)
   };
   context.ValidateReferences(resource_uses, {});
 
+  const auto declared_params
+    = detail::ReadScriptParamDeclarations(reader, *base_pos, desc.params);
+
   if (!context.parse_only) {
     if (!context.dependency_collector) {
       throw std::runtime_error(
         "ScriptAsset loader requires a dependency collector for non-parse-only "
         "loads");
     }
-
-    // TODO(phase-next): Wire runtime external source loading using
-    // desc.external_source_path + ScriptAssetFlags::kAllowExternalSource.
-    // Current runtime path resolves embedded script resources only.
 
     const auto script_indices
       = std::array { desc.bytecode_resource_index, desc.source_resource_index };
@@ -101,10 +142,8 @@ inline auto LoadScriptAsset(const LoaderContext& context)
     }
   }
 
-  // ScriptAsset defaults are currently carried by ScriptSlotRecord parameter
-  // arrays in scene data. Asset-level defaults remain empty in this phase.
   return std::make_unique<data::ScriptAsset>(context.current_asset_key, desc,
-    std::vector<data::pak::scripting::ScriptParamRecord> {},
+    declared_params,
     data::SourceOrigin { context.source_key, context.source_instance });
 }
 

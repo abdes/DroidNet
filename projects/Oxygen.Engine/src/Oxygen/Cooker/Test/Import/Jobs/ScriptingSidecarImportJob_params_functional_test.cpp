@@ -28,6 +28,8 @@ namespace oxygen::content::import::test {
 
 namespace {
 
+  constexpr auto kSceneBSpeed = 7.5F;
+
   class ScriptingSidecarImportJobParamsTest : public ScriptingImportTestBase {
   };
 
@@ -53,7 +55,7 @@ namespace {
     std::filesystem::copy_file(model_path, scene_b_source);
 
     const auto script_source = input_dir / "rotate_shared.luau";
-    WriteText(script_source, "return 1");
+    WriteText(script_source, SpeedScriptSource("1"));
 
     ASSERT_TRUE(Submit(MakeSceneRequest(scene_a_source, cooked_root)).success);
     ASSERT_TRUE(Submit(MakeSceneRequest(scene_b_source, cooked_root)).success);
@@ -100,7 +102,8 @@ namespace {
     WriteText(sidecar_a,
       MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path, 1.0F)));
     WriteText(sidecar_b,
-      MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path, 7.5F)));
+      MakeSidecarPayload(
+        MakeSpeedBinding(script_asset->virtual_path, kSceneBSpeed)));
 
     ASSERT_TRUE(
       Submit(MakeSidecarRequest(sidecar_a, cooked_root, scene_a->virtual_path))
@@ -156,7 +159,7 @@ namespace {
     };
 
     EXPECT_FLOAT_EQ(ReadSpeedForScene(*scene_a), 1.0F);
-    EXPECT_FLOAT_EQ(ReadSpeedForScene(*scene_b), 7.5F);
+    EXPECT_FLOAT_EQ(ReadSpeedForScene(*scene_b), kSceneBSpeed);
   }
 
   NOLINT_TEST_F(ScriptingSidecarImportJobParamsTest,
@@ -186,7 +189,7 @@ namespace {
     std::filesystem::copy_file(model_path, scene_b_source);
 
     const auto script_source = input_dir / "rotate_shared.luau";
-    WriteText(script_source, "return 1");
+    WriteText(script_source, SpeedScriptSource("1"));
 
     const auto scene_a_report = SubmitAndWait(
       service.Service(), MakeSceneRequest(scene_a_source, cooked_root));
@@ -241,7 +244,8 @@ namespace {
     WriteText(sidecar_a,
       MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path, 1.0F)));
     WriteText(sidecar_b,
-      MakeSidecarPayload(MakeSpeedBinding(script_asset->virtual_path, 7.5F)));
+      MakeSidecarPayload(
+        MakeSpeedBinding(script_asset->virtual_path, kSceneBSpeed)));
 
     auto report_a = ImportReport {};
     auto report_b = ImportReport {};
@@ -320,7 +324,7 @@ namespace {
     };
 
     EXPECT_FLOAT_EQ(ReadSpeedForScene(*scene_a), 1.0F);
-    EXPECT_FLOAT_EQ(ReadSpeedForScene(*scene_b), 7.5F);
+    EXPECT_FLOAT_EQ(ReadSpeedForScene(*scene_b), kSceneBSpeed);
   }
 
   NOLINT_TEST_F(
@@ -333,8 +337,22 @@ namespace {
 
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "script_sidecar_all_param_types";
+    constexpr auto kScriptSource = std::string_view { R"lua(
+local Script = oxygen.script {
+  params = {
+    enabled = oxygen.param.bool {},
+    lives = oxygen.param.int {},
+    speed = oxygen.param.float {},
+    title = oxygen.param.string {},
+    uv = oxygen.param.vec2 {},
+    dir = oxygen.param.vec3 {},
+    quat = oxygen.param.vec4 {},
+  },
+}
+return Script
+)lua" };
     const auto cooked
-      = CookSceneWithScript(cooked_root, "return 123", "param_types.luau");
+      = CookSceneWithScript(cooked_root, kScriptSource, "param_types.luau");
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
     ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
@@ -388,7 +406,7 @@ namespace {
     EXPECT_EQ(ParamAt(2).type, ScriptParamType::kFloat);
     EXPECT_FLOAT_EQ(ParamAt(2).value.as_float, 3.5F);
     EXPECT_EQ(ParamAt(3).type, ScriptParamType::kString);
-    EXPECT_STREQ(ParamAt(3).value.as_string, "agent");
+    EXPECT_EQ(FixedString(ParamAt(3).value.as_string), "agent");
     EXPECT_EQ(ParamAt(4).type, ScriptParamType::kVec2);
     EXPECT_FLOAT_EQ(ParamAt(4).value.as_vec[0], 1.0F);
     EXPECT_FLOAT_EQ(ParamAt(4).value.as_vec[1], 2.0F);
@@ -419,8 +437,8 @@ namespace {
     const auto& param = GetParam();
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "script_sidecar_rejected_param";
-    const auto cooked = CookSceneWithScript(
-      cooked_root, "return 123", std::string(param.script_stem) + ".luau");
+    const auto cooked = CookSceneWithScript(cooked_root,
+      SpeedScriptSource("123"), std::string(param.script_stem) + ".luau");
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
     ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";

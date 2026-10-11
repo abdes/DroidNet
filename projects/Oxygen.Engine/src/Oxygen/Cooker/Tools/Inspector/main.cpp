@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -138,13 +139,40 @@ auto FileKindToString(const FileKind kind) -> std::string_view
   }
 }
 
+constexpr std::string_view kHexDigits = "0123456789abcdef";
+constexpr unsigned kNibbleBits = 4U;
+constexpr unsigned kNibbleMask = 0x0FU;
+
+//! Column widths of the tabular listings.
+constexpr int kFileKindColumn = 15;
+constexpr int kFilePathColumn = 34;
+constexpr int kSizeColumn = 10;
+constexpr int kOffsetColumn = 19;
+constexpr int kStrideColumn = 6;
+constexpr int kFormatColumn = 15;
+constexpr int kDimensionsColumn = 11;
+constexpr int kLayersColumn = 6;
+constexpr int kTextureTypeColumn = 14;
+constexpr int kScriptEncodingColumn = 25;
+constexpr int kScriptHashColumn = 66;
+
+auto HexHigh(const uint8_t byte) -> char
+{
+  return kHexDigits.at(
+    (static_cast<unsigned>(byte) >> kNibbleBits) & kNibbleMask);
+}
+
+auto HexLow(const uint8_t byte) -> char
+{
+  return kHexDigits.at(static_cast<unsigned>(byte) & kNibbleMask);
+}
+
 auto DumpHexSha256(std::ostream& os,
   const std::span<const uint8_t, oxygen::data::loose_cooked::kSha256Size>&
     digest) -> void
 {
-  static constexpr char kHex[] = "0123456789abcdef";
   for (const auto b : digest) {
-    os << kHex[(b >> 4) & 0x0f] << kHex[b & 0x0f];
+    os << HexHigh(b) << HexLow(b);
   }
 }
 
@@ -157,13 +185,12 @@ auto ToHex64(const uint64_t value) -> std::string
 
 auto ToHexBytes(const std::span<const uint8_t> bytes) -> std::string
 {
-  static constexpr char kHex[] = "0123456789abcdef";
   auto out = std::string {};
   out.reserve(2 + (bytes.size() * 2));
   out.append("0x");
   for (const auto byte : bytes) {
-    out.push_back(kHex[(byte >> 4U) & 0x0FU]);
-    out.push_back(kHex[byte & 0x0FU]);
+    out.push_back(HexHigh(byte));
+    out.push_back(HexLow(byte));
   }
   return out;
 }
@@ -183,10 +210,7 @@ auto FindFileRelPathBySuffix(const oxygen::content::lc::Inspection& inspection,
   const std::string_view suffix) -> std::optional<std::string>
 {
   for (const auto& entry : inspection.Files()) {
-    if (entry.relpath.size() >= suffix.size()
-      && entry.relpath.compare(
-           entry.relpath.size() - suffix.size(), suffix.size(), suffix)
-        == 0) {
+    if (entry.relpath.ends_with(suffix)) {
       return entry.relpath;
     }
   }
@@ -241,9 +265,10 @@ auto DumpFileRecords(
   os << "---------------  ----------------------------------  ----------\n";
 
   for (const auto& e : entries) {
-    os << std::left << std::setw(15) << FileKindToString(e.kind) << "  ";
-    os << std::left << std::setw(34) << e.relpath << "  ";
-    os << std::right << std::setw(10) << e.size;
+    os << std::left << std::setw(kFileKindColumn) << FileKindToString(e.kind)
+       << "  ";
+    os << std::left << std::setw(kFilePathColumn) << e.relpath << "  ";
+    os << std::right << std::setw(kSizeColumn) << e.size;
     os << "\n";
   }
 }
@@ -368,17 +393,19 @@ auto RunDumpBuffers(const DumpResourceOptions& opts) -> int
 
     for (size_t i = 0; i < entries.size(); ++i) {
       const auto& e = entries.at(i);
-      const auto format_name
+      const auto* const format_name
         = nostd::to_string(static_cast<oxygen::Format>(e.element_format));
       const auto usage_name = nostd::to_string(
         static_cast<oxygen::data::BufferResource::UsageFlags>(e.usage_flags));
 
       std::cout << std::right << std::setw(3) << i << (i == 0 ? "*" : " ")
                 << " ";
-      std::cout << std::left << std::setw(19) << ToHex64(e.data_offset) << " ";
-      std::cout << std::right << std::setw(10) << e.size_bytes << " ";
-      std::cout << std::right << std::setw(6) << e.element_stride << " ";
-      std::cout << std::left << std::setw(15) << format_name << " ";
+      std::cout << std::left << std::setw(kOffsetColumn)
+                << ToHex64(e.data_offset) << " ";
+      std::cout << std::right << std::setw(kSizeColumn) << e.size_bytes << " ";
+      std::cout << std::right << std::setw(kStrideColumn) << e.element_stride
+                << " ";
+      std::cout << std::left << std::setw(kFormatColumn) << format_name << " ";
       std::cout << std::left << std::setw(32) << usage_name << " ";
       std::cout << std::left << std::setw(16) << ToHex64(e.content_hash)
                 << "\n";
@@ -427,21 +454,25 @@ auto RunDumpTextures(const DumpResourceOptions& opts) -> int
 
     for (size_t i = 0; i < entries.size(); ++i) {
       const auto& e = entries.at(i);
-      const auto type_name
+      const auto* const type_name
         = nostd::to_string(static_cast<oxygen::TextureType>(e.texture_type));
-      const auto format_name
+      const auto* const format_name
         = nostd::to_string(static_cast<oxygen::Format>(e.format));
       std::ostringstream dims;
       dims << e.width << "x" << e.height;
 
       std::cout << std::right << std::setw(3) << i << "  ";
-      std::cout << std::left << std::setw(19) << ToHex64(e.data_offset) << " ";
-      std::cout << std::right << std::setw(10) << e.size_bytes << " ";
-      std::cout << std::left << std::setw(11) << dims.str() << " ";
+      std::cout << std::left << std::setw(kOffsetColumn)
+                << ToHex64(e.data_offset) << " ";
+      std::cout << std::right << std::setw(kSizeColumn) << e.size_bytes << " ";
+      std::cout << std::left << std::setw(kDimensionsColumn) << dims.str()
+                << " ";
       std::cout << std::right << std::setw(4) << e.mip_levels << " ";
-      std::cout << std::right << std::setw(6) << e.array_layers << " ";
-      std::cout << std::left << std::setw(14) << type_name << " ";
-      std::cout << std::left << std::setw(15) << format_name << " ";
+      std::cout << std::right << std::setw(kLayersColumn) << e.array_layers
+                << " ";
+      std::cout << std::left << std::setw(kTextureTypeColumn) << type_name
+                << " ";
+      std::cout << std::left << std::setw(kFormatColumn) << format_name << " ";
       std::cout << std::left << std::setw(16) << ToHex64(e.content_hash)
                 << "\n";
     }
@@ -539,10 +570,12 @@ auto RunDumpPhysics(const DumpResourceOptions& opts) -> int
 
       std::cout << std::right << std::setw(3) << i << (i == 0 ? "*" : " ")
                 << " ";
-      std::cout << std::left << std::setw(19) << ToHex64(e.data_offset) << " ";
-      std::cout << std::right << std::setw(10) << e.size_bytes << " ";
-      std::cout << std::left << std::setw(25) << format_name << " ";
-      std::cout << std::left << std::setw(66)
+      std::cout << std::left << std::setw(kOffsetColumn)
+                << ToHex64(e.data_offset) << " ";
+      std::cout << std::right << std::setw(kSizeColumn) << e.size_bytes << " ";
+      std::cout << std::left << std::setw(kScriptEncodingColumn) << format_name
+                << " ";
+      std::cout << std::left << std::setw(kScriptHashColumn)
                 << ToHexBytes(std::span<const uint8_t, 32>(e.content_hash))
                 << "\n";
     }
@@ -555,15 +588,10 @@ auto RunDumpPhysics(const DumpResourceOptions& opts) -> int
   }
 }
 
-auto ReadFixedString(const char* bytes, size_t max_len) -> std::string
+auto ReadFixedString(const std::span<const char> bytes) -> std::string
 {
-  size_t len = 0;
-  for (; len < max_len; ++len) {
-    if (bytes[len] == '\0') {
-      break;
-    }
-  }
-  return { bytes, len };
+  const auto end = std::ranges::find(bytes, '\0');
+  return { bytes.begin(), end };
 }
 
 auto FormatScriptParamValue(
@@ -578,7 +606,7 @@ auto FormatScriptParamValue(
   case ScriptParamType::kFloat:
     return std::to_string(record.value.as_float);
   case ScriptParamType::kString:
-    return "\"" + ReadFixedString(record.value.as_string, 60) + "\"";
+    return "\"" + ReadFixedString(record.value.as_string) + "\"";
   case ScriptParamType::kVec2:
     return fmt::format(
       "({}, {})", record.value.as_vec[0], record.value.as_vec[1]);
@@ -588,6 +616,15 @@ auto FormatScriptParamValue(
   case ScriptParamType::kVec4:
     return fmt::format("({}, {}, {}, {})", record.value.as_vec[0],
       record.value.as_vec[1], record.value.as_vec[2], record.value.as_vec[3]);
+  case ScriptParamType::kAsset:
+    return fmt::format("{} ({})",
+      oxygen::data::to_string(record.value.as_asset.key),
+      oxygen::data::to_string(record.value.as_asset.asset_type));
+  case ScriptParamType::kNode:
+    return record.value.as_node_index
+        == oxygen::data::pak::scripting::kUnsetNodeParam
+      ? std::string { "<unset node>" }
+      : fmt::format("node {}", record.value.as_node_index);
   case ScriptParamType::kNone:
   default:
     return "<none>";
@@ -627,7 +664,7 @@ auto ReadStructAt(const std::vector<std::byte>& bytes, const size_t offset)
     return std::nullopt;
   }
   T value {};
-  std::memcpy(&value, bytes.data() + offset, sizeof(T));
+  std::memcpy(&value, std::span(bytes).subspan(offset).data(), sizeof(T));
   return value;
 }
 
@@ -638,15 +675,9 @@ auto ParseStringFromTable(
     return "<invalid>";
   }
 
-  const auto* const base = table.data() + offset;
-  const auto max_len = table.size() - offset;
-  size_t len = 0;
-  for (; len < max_len; ++len) {
-    if (base[len] == '\0') {
-      break;
-    }
-  }
-  return { base, len };
+  const auto rest = table.subspan(offset);
+  const auto end = std::ranges::find(rest, '\0');
+  return { rest.begin(), end };
 }
 
 auto RunDumpInputActions(const DumpInputOptions& opts) -> int
@@ -682,8 +713,7 @@ auto RunDumpInputActions(const DumpInputOptions& opts) -> int
         continue;
       }
 
-      std::cout << "  name='"
-                << ReadFixedString(desc->header.name, sizeof(desc->header.name))
+      std::cout << "  name='" << ReadFixedString(desc->header.name)
                 << "' value_type=" << static_cast<uint32_t>(desc->value_type)
                 << " flags=" << nostd::to_string(desc->flags) << "\n";
     }
@@ -737,23 +767,23 @@ auto RunDumpInputMappings(const DumpInputOptions& opts) -> int
         continue;
       }
 
-      std::cout << "  name='"
-                << ReadFixedString(desc->header.name, sizeof(desc->header.name))
+      std::cout << "  name='" << ReadFixedString(desc->header.name)
                 << "' flags=" << nostd::to_string(desc->flags)
                 << " mappings=" << desc->mappings.count
                 << " triggers=" << desc->triggers.count
                 << " aux=" << desc->trigger_aux.count
                 << " strings=" << desc->strings.count << "\n";
 
-      std::span<const char> string_table {};
+      auto string_storage = std::string {};
       const auto string_off = static_cast<size_t>(desc->strings.offset);
       const auto string_size = static_cast<size_t>(desc->strings.count);
       if (string_size > 0 && string_off <= descriptor.size()
         && string_size <= (descriptor.size() - string_off)) {
-        string_table = std::span<const char>(
-          reinterpret_cast<const char*>(descriptor.data() + string_off),
-          string_size);
+        string_storage.resize(string_size);
+        std::memcpy(string_storage.data(),
+          std::span(descriptor).subspan(string_off).data(), string_size);
       }
+      const auto string_table = std::span<const char>(string_storage);
 
       const auto mapping_count = static_cast<size_t>(desc->mappings.count);
       const auto mapping_start = static_cast<size_t>(desc->mappings.offset);
@@ -859,9 +889,7 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
           std::cout << "  ! failed to decode descriptor\n";
           continue;
         }
-        std::cout << "  name='"
-                  << ReadFixedString(
-                       desc->header.name, sizeof(desc->header.name))
+        std::cout << "  name='" << ReadFixedString(desc->header.name)
                   << "' static_friction=" << desc->static_friction
                   << " dynamic_friction=" << desc->dynamic_friction
                   << " restitution=" << desc->restitution
@@ -882,9 +910,7 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
           std::cout << "  ! failed to decode descriptor\n";
           continue;
         }
-        std::cout << "  name='"
-                  << ReadFixedString(
-                       desc->header.name, sizeof(desc->header.name))
+        std::cout << "  name='" << ReadFixedString(desc->header.name)
                   << "' shape_type=" << static_cast<uint32_t>(desc->shape_type)
                   << " local_pos=(" << desc->local_position[0] << ","
                   << desc->local_position[1] << "," << desc->local_position[2]
@@ -912,8 +938,7 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
         std::cout << "  ! failed to decode descriptor\n";
         continue;
       }
-      std::cout << "  name='"
-                << ReadFixedString(desc->header.name, sizeof(desc->header.name))
+      std::cout << "  name='" << ReadFixedString(desc->header.name)
                 << "' target_scene_key="
                 << oxygen::data::to_string(desc->target_scene_key)
                 << " target_node_count=" << desc->target_node_count
@@ -921,9 +946,9 @@ auto RunDumpPhysicsAssets(const DumpPhysicsAssetsOptions& opts) -> int
                 << " table_dir_offset="
                 << ToHex64(desc->component_table_directory_offset) << "\n";
 
-      const size_t dir_offset
+      const auto dir_offset
         = static_cast<size_t>(desc->component_table_directory_offset);
-      const size_t dir_count = static_cast<size_t>(desc->component_table_count);
+      const auto dir_count = static_cast<size_t>(desc->component_table_count);
       const size_t dir_bytes = dir_count * sizeof(PhysicsComponentTableDesc);
       if (dir_count == 0) {
         continue;
@@ -994,9 +1019,8 @@ auto RunDumpSceneScripts(
                     << " flags=" << static_cast<uint32_t>(slot.flags) << "\n";
           if (mode == ScriptDumpMode::kParameters) {
             for (const auto& parameter : scene.ReadScriptParameters(slot)) {
-              std::cout << "    "
-                        << ReadFixedString(parameter.key, sizeof(parameter.key))
-                        << " = " << FormatScriptParamValue(parameter) << "\n";
+              std::cout << "    " << ReadFixedString(parameter.key) << " = "
+                        << FormatScriptParamValue(parameter) << "\n";
             }
           }
         }

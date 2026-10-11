@@ -10,8 +10,10 @@
 #include <functional>
 #include <optional>
 #include <ranges>
+#include <span>
+#include <string>
 #include <string_view>
-#include <unordered_map>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -19,22 +21,74 @@
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/Asset.h>
+#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/api_export.h>
 
 namespace oxygen::data {
 
+//! Asset reference value of a script parameter.
+/*!
+ `asset_type` is the declared asset kind; a nil `key` means unset.
+*/
+struct ScriptAssetParam {
+  AssetKey key;
+  AssetType asset_type = AssetType::kUnknown;
+
+  auto operator==(const ScriptAssetParam&) const -> bool = default;
+};
+
+//! Scene node reference value of a script parameter.
+/*!
+ `node_index` indexes the nodes of the scene that owns the slot;
+ `pak::scripting::kUnsetNodeParam` means unset.
+*/
+struct ScriptNodeParam {
+  pak::world::SceneNodeIndexT node_index = pak::scripting::kUnsetNodeParam;
+
+  auto operator==(const ScriptNodeParam&) const -> bool = default;
+};
+
 //! Script parameter variant for runtime use.
-using ScriptParam
-  = std::variant<bool, int32_t, float, Vec2, Vec3, Vec4, std::string>;
+using ScriptParam = std::variant<bool, int32_t, float, Vec2, Vec3, Vec4,
+  std::string, ScriptAssetParam, ScriptNodeParam>;
+
+//! Returns the key of a cooked script parameter record.
+/*!
+ @return The key, or std::nullopt when it is empty or not null-terminated.
+*/
+OXGN_DATA_NDAPI auto TryGetScriptParamKey(
+  const pak::scripting::ScriptParamRecord& record) noexcept
+  -> std::optional<std::string_view>;
+
+//! Converts the value of a cooked script parameter record.
+/*!
+ @return The value, or std::nullopt for `kNone`, an unknown type or a string
+ that is not null-terminated.
+*/
+OXGN_DATA_NDAPI auto ToScriptParam(
+  const pak::scripting::ScriptParamRecord& record)
+  -> std::optional<ScriptParam>;
+
+//! Builds a cooked script parameter record from a key and a value.
+/*!
+ The record type follows the alternative `value` holds.
+
+ @return The record, or std::nullopt when the key is empty or does not fit
+ the record's key, or a string value does not fit its value.
+*/
+OXGN_DATA_NDAPI auto MakeScriptParamRecord(std::string_view key,
+  const ScriptParam& value) -> std::optional<pak::scripting::ScriptParamRecord>;
 
 //! Script asset as stored in the PAK file asset directory.
 /*!
   Represents a script asset that can be attached to scene nodes. It
-  references
-  script resources (bytecode and/or source), may expose an optional
-  external
-  source path, and can contain default parameters.
+  references script resources (bytecode and/or source), may expose an
+  optional external source path, and carries the parameters the script
+  declares: each parameter's key, type (the alternative held by its value,
+  plus the asset kind for asset parameters) and default value, in declaration
+  order.
 
   @see ScriptAssetDesc, ScriptParamRecord, ScriptResource
 */
@@ -47,11 +101,15 @@ public:
     std::reference_wrapper<const ScriptParam> value;
   };
 
-  //! Constructs a ScriptAsset with descriptor, default parameters, and resource
-  //! metadata.
+  //! Constructs a ScriptAsset with descriptor, declared parameters, and
+  //! resource metadata.
+  /*!
+   @throw std::invalid_argument if a declaration has an invalid key or value,
+   or repeats a key.
+  */
   OXGN_DATA_API ScriptAsset(AssetKey asset_key,
     pak::scripting::ScriptAssetDesc desc,
-    const std::vector<pak::scripting::ScriptParamRecord>& default_params = {},
+    std::span<const pak::scripting::ScriptParamRecord> declared_params = {},
     SourceOrigin source_origin = {});
 
   ~ScriptAsset() override = default;
@@ -109,28 +167,28 @@ public:
       || GetSourceResourceIndex() != kNoResourceReference;
   }
 
-  //! Returns the number of default parameters defined for this script.
+  //! Returns the number of parameters this script declares.
   [[nodiscard]] auto ParametersCount() const noexcept -> std::size_t
   {
     return params_.size();
   }
 
-  //! True when a default parameter with this key exists.
+  //! True when the script declares a parameter with this key.
   [[nodiscard]] OXGN_DATA_API auto HasParameter(
     std::string_view key) const noexcept -> bool;
 
-  //! Tries to retrieve a default parameter by name.
-  //! Returns std::nullopt when the key is not present.
+  //! Tries to retrieve a declared parameter's default value by name.
+  //! Returns std::nullopt when the key is not declared.
   [[nodiscard]] OXGN_DATA_API auto TryGetParameter(
     std::string_view key) const noexcept
     -> std::optional<std::reference_wrapper<const ScriptParam>>;
 
-  //! Retrieves a default parameter by name.
-  //! Throws std::out_of_range when not found.
+  //! Retrieves a declared parameter's default value by name.
+  //! Throws std::out_of_range when not declared.
   [[nodiscard]] OXGN_DATA_API auto GetParameter(std::string_view key) const
     -> const ScriptParam&;
 
-  //! Returns a lazy view over all default parameters.
+  //! Returns a lazy view over all declared parameters, in declaration order.
   //! Entry references remain valid for the lifetime of this ScriptAsset.
   [[nodiscard]] auto Parameters() const
   {
@@ -144,7 +202,7 @@ public:
 
 private:
   pak::scripting::ScriptAssetDesc desc_ {};
-  std::unordered_map<std::string, ScriptParam> params_;
+  std::vector<std::pair<std::string, ScriptParam>> params_;
 };
 
 } // namespace oxygen::data

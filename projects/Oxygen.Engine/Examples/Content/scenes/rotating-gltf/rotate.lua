@@ -1,4 +1,9 @@
-local script = {}
+local script = oxygen.script {
+  params = {
+    rotation_angle = oxygen.param.float { default = 0.9, min = 0,
+      unit = "rad/s", description = "Initial rotation speed" },
+  },
+}
 
 local scene = oxygen.scene
 local input = oxygen.input

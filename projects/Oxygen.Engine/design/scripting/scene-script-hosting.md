@@ -33,7 +33,7 @@ outside this design.
 | Owner               | Responsibility                                                                                                                   |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `Oxygen.Data`       | Cooked records: declarations, parameter values, slots ([§4](#4-parameter-types-and-cooked-records)).                             |
-| `Oxygen.Scripting`  | Analyzer, compiler, diagnostics, instance model and hooks, scene attachment, source reload.                                      |
+| `Oxygen.Scripting`  | Analyzer (in `Oxygen.Scripting.Analysis`, §7), compiler, diagnostics, instance model and hooks, scene attachment, source reload. |
 | `Oxygen.Cooker`     | Script asset import (declarations), sidecar validation against declarations, reference dependencies.                             |
 | `Oxygen.Scene`      | `ScriptingComponent` slots with execution order and compile state; unchanged ownership.                                          |
 | Scene instantiation | Creates nodes from a `SceneAsset` and calls scene attachment ([player host](../runtime-core/scene-instantiation-and-player.md)). |
@@ -104,22 +104,24 @@ parameters.
 | `kAsset` | `AssetKey` (16 bytes) and the declared `AssetType` | Resolved by the cooker from a virtual path; recorded as a scene dependency. |
 | `kNode`  | Scene-local node index (`SceneNodeIndexT`)         | Resolved at attachment to the node created for that index.                  |
 
-Script assets gain a descriptor-local declaration array after
-`ScriptAssetDesc`, one `ScriptParamDeclRecord` per parameter: key, type,
-asset type (for `kAsset`) and default value, using the same value union.
-`kScriptAssetVersion` increases; maintained content is recooked. Authoring
-hints (`min`, `max`, `step`, `unit`, `description`, `options`, `color`) are
-not cooked; tools read them from source through the analyzer (§7).
+Script assets gain a descriptor-local declaration array after `ScriptAssetDesc`,
+located by `ScriptAssetDesc::params`: one `ScriptParamRecord` per parameter,
+holding its key, type and default value; a `kAsset` value carries the declared
+asset type with a nil key. Asset and node parameters declare no default, and a
+parameter without an authored default cooks its type's zero value.
+`kScriptAssetVersion` increases to 3; maintained content is recooked. Authoring
+hints (`min`, `max`, `step`, `unit`, `description`, `options`, `color`) are not
+cooked; tools read them from source through the analyzer (§7).
 
 `ScriptSlotRecord::execution_order` is honored, and
 `IAssetLoader::HydratedScriptSlot` carries it.
 
 Sidecar parameters accept `"type": "asset"` with a virtual path value and
-`"type": "node"` with a node index. The sidecar pipeline validates every
-override against the script's declarations: an unknown key, a type mismatch,
-an out-of-range node index or an asset of the wrong kind is an error naming
-the JSON path, so a cooked scene never carries an override the script does
-not declare.
+`"type": "node"` with a node index; a declared `int` is written `"int32"`. The
+sidecar pipeline validates every override against the script's declarations: an
+unknown key, a type mismatch, an out-of-range node index or an asset of the
+wrong kind is an error naming the JSON path, so a cooked scene never carries an
+override the script does not declare.
 
 ## 5. Scene script attachment
 
@@ -190,6 +192,10 @@ auto Analyze(const ScriptAnalysisRequest&) -> ScriptAnalysis;
 
 The cooker, the compile service and the editor (through Interop) all use it,
 so every surface reports the same declarations and the same diagnostics.
+It lives in `Oxygen.Scripting.Analysis`, which links Base, Data and the Luau
+AST but not the scripting runtime, so the cooker and Interop use it without
+the engine or the Luau VM. A chunk without `oxygen.script`, such as a module
+other scripts load, declares no parameters and is not an error.
 Level `kTypes` needs the API definitions described in
 [script diagnostics](script-diagnostics.md#5-type-checking).
 

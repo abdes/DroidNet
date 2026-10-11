@@ -459,8 +459,13 @@ inline auto Load(AnyReader& reader,
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { &record.value, 1 })));
   using data::pak::scripting::ScriptParamType;
-  if (record.type > ScriptParamType::kVec4
+  if (record.type > ScriptParamType::kNode
     || std::ranges::find(record.key, '\0') == std::end(record.key)) {
+    return Err(std::errc::invalid_argument);
+  }
+  if (record.type == ScriptParamType::kAsset
+    && (record.value.as_asset.asset_type == data::AssetType::kUnknown
+      || record.value.as_asset.asset_type > data::AssetType::kMaxAssetType)) {
     return Err(std::errc::invalid_argument);
   }
   if (record.type == ScriptParamType::kBool

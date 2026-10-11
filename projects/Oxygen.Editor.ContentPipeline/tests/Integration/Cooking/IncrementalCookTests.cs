@@ -85,11 +85,12 @@ public sealed class IncrementalCookTests
         var scriptPath = Path.Combine(libraryRoot, "Content", "Scripts", "Orbit.oscript");
         Directory.CreateDirectory(Path.GetDirectoryName(scriptPath)!);
 
-        // Minimal ScriptAssetDesc with the current header version and no resource bindings.
-        var scriptBytes = new byte[235];
+        // Minimal ScriptAssetDesc with the current header version, no resource bindings
+        // and no parameter declarations.
+        var scriptBytes = new byte[251];
         scriptBytes[0] = 4;
         "Orbit"u8.CopyTo(scriptBytes.AsSpan(1, 64));
-        scriptBytes[65] = 2;
+        scriptBytes[65] = 3;
         SHA256.HashData(scriptBytes.AsSpan(0, 67)).CopyTo(scriptBytes, 67);
         BinaryPrimitives.WriteUInt32LittleEndian(scriptBytes.AsSpan(103, sizeof(uint)), uint.MaxValue);
         BinaryPrimitives.WriteUInt32LittleEndian(scriptBytes.AsSpan(107, sizeof(uint)), uint.MaxValue);

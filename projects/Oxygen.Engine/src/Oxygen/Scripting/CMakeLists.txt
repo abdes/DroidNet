@@ -106,6 +106,7 @@ set(
   "Bindings/Packs/Core/IdsBindings.cpp"
   "Bindings/Packs/Core/LogBindings.cpp"
   "Bindings/Packs/Core/MathBindings.cpp"
+  "Bindings/Packs/Core/ScriptDeclarationBindings.cpp"
   "Bindings/Packs/Core/TimeBindings.cpp"
   "Bindings/Packs/Input/InputBindingPack.cpp"
   "Bindings/Packs/Input/InputBindings.cpp"
@@ -141,6 +142,7 @@ set(
 )
 
 add_subdirectory("Bindings")
+add_subdirectory("Analysis")
 
 target_sources(
   ${META_MODULE_TARGET}
@@ -153,7 +155,13 @@ target_sources(
     FILES ${OXYGEN_SCRIPTING_HEADERS}
 )
 
-arrange_target_files_for_ide(${META_MODULE_TARGET} EXCLUDE_PATTERNS "bindings/")
+# Analysis/ is its own module (Oxygen.Scripting.Analysis).
+arrange_target_files_for_ide(
+  ${META_MODULE_TARGET}
+  EXCLUDE_PATTERNS
+    "bindings/"
+    "^analysis/"
+)
 
 target_compile_features(${META_MODULE_TARGET} PUBLIC cxx_std_20)
 target_compile_definitions(

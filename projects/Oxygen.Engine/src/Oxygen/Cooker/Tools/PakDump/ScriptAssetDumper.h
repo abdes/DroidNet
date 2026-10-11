@@ -66,6 +66,7 @@ public:
       PrintUtils::Field(
         "External Source Path", path.empty() ? "<none>" : path, 8);
     }
+    PrintUtils::Field("Declared Parameters", desc.params.count, 8);
 
     if (!ctx.verbose && !ctx.show_resource_data) {
       std::cout << "\n";

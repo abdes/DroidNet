@@ -9,8 +9,10 @@
 #include <algorithm>
 #include <cstddef>
 #include <memory>
+#include <ranges>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -450,6 +452,8 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   std::unordered_set<oxygen::data::AssetKey> geometry_deps;
   std::unordered_set<oxygen::data::AssetKey> material_deps;
   std::unordered_set<oxygen::data::AssetKey> script_deps;
+  std::unordered_map<oxygen::data::AssetKey, oxygen::data::AssetType>
+    param_asset_deps;
   bool has_scripting_table = false;
 
   for (const auto& entry : tables) {
@@ -532,6 +536,19 @@ inline auto LoadSceneAsset(const LoaderContext& context)
           if (!slot.script_asset_key.IsNil()) {
             script_deps.insert(slot.script_asset_key);
           }
+          for (uint32_t p = 0; p < slot.params_count; ++p) {
+            using ParamRecord = data::pak::scripting::ScriptParamRecord;
+            const auto param = detail::ReadPackedRecord<ParamRecord>(
+              bytes_span.subspan(
+                slot.params_array_offset + (size_t { p } * sizeof(ParamRecord)),
+                sizeof(ParamRecord)),
+              "scene script parameter");
+            if (param.type == data::pak::scripting::ScriptParamType::kAsset
+              && !param.value.as_asset.key.IsNil()) {
+              param_asset_deps.insert_or_assign(
+                param.value.as_asset.key, param.value.as_asset.asset_type);
+            }
+          }
         }
       }
     }
@@ -555,6 +572,9 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     }
     if (has_scripting_table) {
       for (const auto& dep : script_deps) {
+        context.dependency_collector->AddAssetDependency(dep);
+      }
+      for (const auto& dep : param_asset_deps | std::views::keys) {
         context.dependency_collector->AddAssetDependency(dep);
       }
     }
@@ -581,6 +601,9 @@ inline auto LoadSceneAsset(const LoaderContext& context)
     }
     for (const auto& key : script_deps) {
       add_asset(key, data::AssetType::kScript);
+    }
+    for (const auto& [key, type] : param_asset_deps) {
+      add_asset(key, type);
     }
     context.ValidateReferences(detail::EnvironmentTextureUses(*asset), keys);
   }

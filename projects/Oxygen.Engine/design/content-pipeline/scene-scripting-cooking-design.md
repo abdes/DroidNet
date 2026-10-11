@@ -198,9 +198,12 @@ Deterministic resolution algorithm:
 2. `compile_mode: debug | optimized = debug`
 3. `script_storage: embedded | external = embedded`
 
-Validity:
+Combinations:
 
-1. `compile_scripts=true && script_storage=external` is invalid.
+1. `compile_scripts=true && script_storage=external` embeds the bytecode and
+   records the source path: the runtime runs the source when a script source
+   root contains it and the bytecode otherwise
+   ([source reload](../scripting/scene-script-hosting.md#6-source-reload)).
 
 ### 5.2 Sidecar Options
 

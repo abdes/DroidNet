@@ -11,8 +11,6 @@
 #include <cstddef>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
-#include <ios>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -24,12 +22,14 @@
 #include "ScriptImportTestSupport.h"
 
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Testing/GTest.h>
@@ -44,8 +44,10 @@ namespace {
     using data::pak::scripting::ScriptAssetDesc;
 
     ScriptAssetDesc desc {};
-    std::ifstream in(descriptor_path, std::ios::binary);
-    in.read(reinterpret_cast<char*>(&desc), sizeof(desc));
+    const auto bytes = ReadBytes(descriptor_path);
+    if (bytes.size() >= sizeof(desc)) {
+      std::memcpy(&desc, bytes.data(), sizeof(desc));
+    }
     return desc;
   }
 
@@ -230,8 +232,7 @@ namespace {
       = std::filesystem::relative(source_path, cooked_root.parent_path())
           .lexically_normal()
           .generic_string();
-    const auto actual_external_path
-      = std::string_view { desc.external_source_path };
+    const auto actual_external_path = FixedString(desc.external_source_path);
     EXPECT_EQ(actual_external_path, expected_external_path);
   }
 
@@ -265,7 +266,7 @@ namespace {
     const auto desc = ReadScriptDescriptor(descriptor_path);
     EXPECT_EQ((desc.flags & ScriptAssetFlags::kAllowExternalSource),
       ScriptAssetFlags::kAllowExternalSource);
-    EXPECT_EQ(std::string_view { desc.external_source_path },
+    EXPECT_EQ(FixedString(desc.external_source_path),
       "scenes/physics_domains/relative_source.lua");
 
     std::filesystem::remove_all(test_root, ec);
@@ -301,7 +302,7 @@ namespace {
     const auto desc = ReadScriptDescriptor(descriptor_path);
     EXPECT_EQ((desc.flags & ScriptAssetFlags::kAllowExternalSource),
       ScriptAssetFlags::kAllowExternalSource);
-    EXPECT_EQ(std::string_view { desc.external_source_path },
+    EXPECT_EQ(FixedString(desc.external_source_path),
       "scenes/multi-script/relative_cooked_root.lua");
 
     std::filesystem::remove_all(test_root, ec);
@@ -335,8 +336,7 @@ namespace {
     auto config = AsyncImportService::Config {};
     config.thread_pool_size = 2;
     config.script_compile_callback
-      = [kCompileSentinel](
-          const AsyncImportService::ScriptCompileRequest& request)
+      = [](const AsyncImportService::ScriptCompileRequest& request)
       -> AsyncImportService::ScriptCompileResult {
       auto bytecode = std::vector<std::byte> { kCompileSentinel };
       bytecode.insert(bytecode.end(), request.source_bytes.begin(),
@@ -424,19 +424,136 @@ namespace {
     EXPECT_FALSE(std::filesystem::exists(descriptor_path));
   }
 
-  NOLINT_TEST_F(ScriptAssetImportJobTest, CompileWithExternalStorageIsRejected)
+  //! Compiling an external script embeds its bytecode and keeps the source
+  //! path, so it runs from the source when available and from the bytecode
+  //! otherwise.
+  NOLINT_TEST_F(ScriptAssetImportJobTest,
+    CompileWithExternalStorageEmbedsBytecodeAndRecordsSource)
   {
+    using data::kNoResourceReference;
+    using data::pak::scripting::ScriptAssetFlags;
+
+    // Arrange
+    auto config = AsyncImportService::Config {};
+    config.thread_pool_size = 2;
+    config.script_compile_callback
+      = [](const AsyncImportService::ScriptCompileRequest& request)
+      -> AsyncImportService::ScriptCompileResult {
+      return AsyncImportService::ScriptCompileResult {
+        .success = true,
+        .bytecode = std::vector<std::byte>(
+          request.source_bytes.begin(), request.source_bytes.end()),
+        .diagnostics = {},
+      };
+    };
+    auto service = ScopedImportService(config);
     const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "script_import_invalid_combo";
+    const auto cooked_root = temp.Path() / "script_import_compiled_external";
     const auto source_path = cooked_root / "input" / "combo.luau";
     WriteText(source_path, "return 1");
 
-    const auto report = Submit(MakeScriptRequest(
-      source_path, cooked_root, ScriptStorageMode::kExternal, true));
+    // Act
+    const auto report = SubmitAndWait(service.Service(),
+      MakeScriptRequest(
+        source_path, cooked_root, ScriptStorageMode::kExternal, true));
 
+    // Assert
+    ASSERT_HAS_VALUE(report);
+    ASSERT_TRUE(report->success);
+    const auto desc
+      = ReadScriptDescriptor(cooked_root / "Scripts" / "combo.oscript");
+    EXPECT_NE(desc.bytecode_resource_index, kNoResourceReference);
+    EXPECT_EQ(desc.source_resource_index, kNoResourceReference);
+    EXPECT_EQ(desc.flags, ScriptAssetFlags::kAllowExternalSource);
+    EXPECT_FALSE(FixedString(desc.external_source_path).empty());
+  }
+
+  //! Declared parameters cook after the descriptor with their types,
+  //! defaults and asset kinds.
+  NOLINT_TEST_F(ScriptAssetImportJobTest, DeclaredParametersAreCooked)
+  {
+    using data::AssetType;
+    using data::pak::scripting::ScriptAssetDesc;
+    using data::pak::scripting::ScriptParamRecord;
+    using data::pak::scripting::ScriptParamType;
+
+    // Arrange
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "script_import_declarations";
+    const auto source_path = cooked_root / "input" / "orbit.luau";
+    constexpr auto kSpeedDefault = 1.5F;
+    WriteText(source_path, R"lua(local Orbit = oxygen.script {
+  params = {
+    speed = oxygen.param.float { default = 1.5, min = 0, unit = "m/s" },
+    orb = oxygen.param.asset { kind = "material" },
+    target = oxygen.param.node {},
+  },
+}
+return Orbit
+)lua");
+
+    // Act
+    const auto report = Submit(MakeScriptRequest(
+      source_path, cooked_root, ScriptStorageMode::kEmbedded));
+
+    // Assert
+    ASSERT_TRUE(report.success);
+    const auto bytes = ReadBytes(cooked_root / "Scripts" / "orbit.oscript");
+    ASSERT_GE(bytes.size(), sizeof(ScriptAssetDesc));
+    auto desc = ScriptAssetDesc {};
+    std::memcpy(&desc, bytes.data(), sizeof(desc));
+    ASSERT_EQ(desc.params.count, 3U);
+    EXPECT_EQ(desc.params.offset, sizeof(ScriptAssetDesc));
+    EXPECT_EQ(desc.params.entry_size, sizeof(ScriptParamRecord));
+    ASSERT_EQ(
+      bytes.size(), sizeof(ScriptAssetDesc) + (3U * sizeof(ScriptParamRecord)));
+    auto params = std::vector<ScriptParamRecord>(3U);
+    std::memcpy(params.data(),
+      std::span(bytes).subspan(sizeof(ScriptAssetDesc)).data(),
+      params.size() * sizeof(ScriptParamRecord));
+
+    EXPECT_EQ(FixedString(params.at(0).key), "speed");
+    EXPECT_EQ(params.at(0).type, ScriptParamType::kFloat);
+    EXPECT_FLOAT_EQ(params.at(0).value.as_float, kSpeedDefault);
+    EXPECT_EQ(FixedString(params.at(1).key), "orb");
+    EXPECT_EQ(params.at(1).type, ScriptParamType::kAsset);
+    EXPECT_EQ(params.at(1).value.as_asset.asset_type, AssetType::kMaterial);
+    EXPECT_TRUE(params.at(1).value.as_asset.key.IsNil());
+    EXPECT_EQ(FixedString(params.at(2).key), "target");
+    EXPECT_EQ(params.at(2).type, ScriptParamType::kNode);
+    EXPECT_EQ(
+      params.at(2).value.as_node_index, data::pak::scripting::kUnsetNodeParam);
+  }
+
+  //! A declaration error fails the import with its script diagnostic and
+  //! writes no descriptor.
+  NOLINT_TEST_F(ScriptAssetImportJobTest, InvalidDeclarationFailsImport)
+  {
+    // Arrange
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "script_import_bad_declaration";
+    const auto source_path = cooked_root / "input" / "computed.luau";
+    WriteText(source_path,
+      "local base = 1\n"
+      "local S = oxygen.script {\n"
+      "  params = { speed = oxygen.param.float { default = base * 2 } },\n"
+      "}\n"
+      "return S\n");
+
+    // Act
+    const auto report = Submit(MakeScriptRequest(
+      source_path, cooked_root, ScriptStorageMode::kEmbedded));
+
+    // Assert
     EXPECT_FALSE(report.success);
-    EXPECT_TRUE(HasDiagnosticCode(
-      report.diagnostics, "script.request.invalid_option_combo"));
+    const auto diagnostic = std::ranges::find_if(
+      report.diagnostics, [](const ImportDiagnostic& d) -> bool {
+        return d.code == "script.S0302";
+      });
+    ASSERT_NE(diagnostic, report.diagnostics.end());
+    EXPECT_NE(diagnostic->message.find("computed.luau:3:"), std::string::npos);
+    EXPECT_FALSE(
+      std::filesystem::exists(cooked_root / "Scripts" / "computed.oscript"));
   }
 
   NOLINT_TEST_F(

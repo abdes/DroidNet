@@ -6,8 +6,10 @@
 
 #include <array>
 #include <memory>
+#include <string_view>
 
 #include <Oxygen/Scripting/Bindings/BindingRegistry.h>
+#include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/AppBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/ConventionsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/CoreBindingPack.h>
@@ -15,21 +17,25 @@
 #include <Oxygen/Scripting/Bindings/Packs/Core/IdsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/LogBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/MathBindings.h>
+#include <Oxygen/Scripting/Bindings/Packs/Core/ScriptDeclarationBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/TimeBindings.h>
 
 namespace oxygen::scripting::bindings {
 
 namespace {
-  constexpr std::array<BindingNamespace, 8> kCoreNamespaces = { {
-    { .name = "app", .register_fn = RegisterAppBindings },
-    { .name = "conventions", .register_fn = RegisterConventionsBindings },
-    { .name = "events", .register_fn = RegisterEventsBindings },
-    { .name = "hash", .register_fn = RegisterHashBindings },
-    { .name = "log", .register_fn = RegisterLogBindings },
-    { .name = "math", .register_fn = RegisterMathBindings },
-    { .name = "time", .register_fn = RegisterTimeBindings },
-    { .name = "uuid", .register_fn = RegisterUuidBindings },
-  } };
+  constexpr std::array<BindingNamespace, 9> kCoreNamespaces = {
+    {
+      { .name = "app", .register_fn = RegisterAppBindings },
+      { .name = "conventions", .register_fn = RegisterConventionsBindings },
+      { .name = "events", .register_fn = RegisterEventsBindings },
+      { .name = "hash", .register_fn = RegisterHashBindings },
+      { .name = "log", .register_fn = RegisterLogBindings },
+      { .name = "math", .register_fn = RegisterMathBindings },
+      { .name = "script", .register_fn = RegisterScriptDeclarationBindings },
+      { .name = "time", .register_fn = RegisterTimeBindings },
+      { .name = "uuid", .register_fn = RegisterUuidBindings },
+    },
+  };
 
   class CoreBindingPack final : public contracts::IScriptBindingPack {
   public:

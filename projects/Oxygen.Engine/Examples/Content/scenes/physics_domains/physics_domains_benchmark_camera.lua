@@ -1,4 +1,27 @@
-local script = {}
+local script = oxygen.script {
+  params = {
+    enabled = oxygen.param.bool { default = true,
+      description = "Drive the camera along the benchmark path" },
+    fixed_dt_seconds = oxygen.param.float { default = 0.016666667, min = 0,
+      unit = "s", description = "Simulated time per frame" },
+    warmup_frames = oxygen.param.int { default = 0, min = 0,
+      description = "Frames to wait before moving" },
+    sweep_speed_radians = oxygen.param.float { default = 0.9,
+      unit = "rad/s", description = "Horizontal sweep speed" },
+    vertical_speed_ratio = oxygen.param.float { default = 0.5,
+      description = "Vertical speed relative to the sweep" },
+    vertical_phase_radians = oxygen.param.float { default = 0,
+      unit = "rad", description = "Vertical motion phase" },
+    start_angle_radians = oxygen.param.float { default = 0,
+      unit = "rad", description = "Sweep start angle" },
+    lateral_amplitude = oxygen.param.float { default = 3, unit = "m",
+      description = "Sideways travel" },
+    depth_amplitude = oxygen.param.float { default = 5, unit = "m",
+      description = "Forward travel" },
+    height_amplitude = oxygen.param.float { default = 1.25, unit = "m",
+      description = "Vertical travel" },
+  },
+}
 
 local omath = oxygen.math
 local scene = oxygen.scene

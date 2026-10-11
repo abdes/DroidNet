@@ -54,7 +54,8 @@ namespace {
 
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "script_sidecar_binds_scene";
-    const auto cooked = CookSceneWithScript(cooked_root, "return 123");
+    const auto cooked
+      = CookSceneWithScript(cooked_root, SpeedScriptSource("123"));
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
     ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
@@ -93,7 +94,8 @@ namespace {
 
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "script_sidecar_inline_binds_scene";
-    const auto cooked = CookSceneWithScript(cooked_root, "return 123");
+    const auto cooked
+      = CookSceneWithScript(cooked_root, SpeedScriptSource("123"));
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
     ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
@@ -124,7 +126,7 @@ namespace {
   NOLINT_TEST_F(ScriptingSidecarImportJobBindingTest,
     ScriptingSidecarCallbacksProvideProgressAndSingleCompletion)
   {
-    constexpr auto kScriptSource = std::string_view { "return 123" };
+    const auto kScriptSource = SpeedScriptSource("123");
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "script_callbacks_sidecar";
     const auto cooked = CookSceneWithScript(
@@ -152,7 +154,7 @@ namespace {
   NOLINT_TEST_F(ScriptingSidecarImportJobBindingTest,
     ScriptingSidecarReportCountersArePopulated)
   {
-    constexpr auto kScriptSource = std::string_view { "return 123" };
+    const auto kScriptSource = SpeedScriptSource("123");
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "script_report_counters_sidecar";
     const auto cooked
@@ -178,7 +180,7 @@ namespace {
   NOLINT_TEST_F(ScriptingSidecarImportJobBindingTest,
     MixedBatchCommitPreservesSuccessfulScriptWhenSidecarFails)
   {
-    constexpr auto kScriptSource = std::string_view { "return 10" };
+    const auto kScriptSource = SpeedScriptSource("10");
     const ScopedTempDir temp;
     const auto cooked_root = temp.Path() / "script_mixed_batch_commit";
     const auto script_source = cooked_root / "input" / "batch_success.luau";
@@ -235,8 +237,8 @@ namespace {
     const ScopedTempDir temp;
     const auto cooked_root
       = temp.Path() / "script_dispatch_sidecar_cooked_context";
-    const auto cooked
-      = CookSceneWithScript(cooked_root, "return 21", "dispatch_cooked.luau");
+    const auto cooked = CookSceneWithScript(
+      cooked_root, SpeedScriptSource("21"), "dispatch_cooked.luau");
     const auto& scene_asset = cooked.scene;
     const auto& script_asset = cooked.script;
     ASSERT_HAS_VALUE(scene_asset) << "Expected scene asset to be present";
@@ -260,7 +262,7 @@ namespace {
     const auto inflight_scene_root
       = temp.Path() / "script_dispatch_sidecar_inflight_scene";
     const auto script_source = cooked_root / "input" / "dispatch_inflight.luau";
-    WriteText(script_source, "return 31");
+    WriteText(script_source, SpeedScriptSource("31"));
 
     const auto model_path = ModelPath();
     ASSERT_TRUE(std::filesystem::exists(model_path));
@@ -300,7 +302,7 @@ namespace {
     ASSERT_TRUE(std::filesystem::exists(model_path));
 
     const auto base_script_source = cooked_root / "input" / "base_batch.luau";
-    WriteText(base_script_source, "return 1");
+    WriteText(base_script_source, SpeedScriptSource("1"));
     ASSERT_TRUE(Submit(MakeScriptRequest(base_script_source, cooked_root,
                          ScriptStorageMode::kExternal, false))
         .success);
@@ -319,7 +321,7 @@ namespace {
       MakeSidecarPayload(MakeSpeedBinding(base_script->virtual_path)));
 
     const auto extra_script_source = cooked_root / "input" / "extra_batch.luau";
-    WriteText(extra_script_source, "return 2");
+    WriteText(extra_script_source, SpeedScriptSource("2"));
 
     auto script_report = ImportReport {};
     auto sidecar_report = ImportReport {};
@@ -381,7 +383,7 @@ namespace {
       first_report.diagnostics, "script.sidecar.script_ref_unresolved"));
 
     const auto script_source = cooked_root / "input" / "deferred.luau";
-    WriteText(script_source, "return 55");
+    WriteText(script_source, SpeedScriptSource("55"));
     ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
                          ScriptStorageMode::kExternal, false))
         .success);

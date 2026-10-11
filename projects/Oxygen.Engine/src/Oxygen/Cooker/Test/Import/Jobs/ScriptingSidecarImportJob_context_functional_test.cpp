@@ -40,7 +40,7 @@ namespace {
     ASSERT_TRUE(std::filesystem::exists(model_path));
 
     const auto script_source = cooked_root / "input" / "runtime.luau";
-    WriteText(script_source, "return 7");
+    WriteText(script_source, SpeedScriptSource("7"));
     ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
                          ScriptStorageMode::kExternal, false))
         .success);
@@ -102,7 +102,7 @@ namespace {
     ASSERT_TRUE(std::filesystem::exists(model_path));
 
     const auto script_source = cooked_root / "input" / "seed.luau";
-    WriteText(script_source, "return 1");
+    WriteText(script_source, SpeedScriptSource("1"));
     ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
                          ScriptStorageMode::kExternal, false))
         .success);
@@ -150,7 +150,7 @@ namespace {
     ASSERT_TRUE(std::filesystem::exists(model_path));
 
     const auto script_source = cooked_root / "input" / "resolver_ref.luau";
-    WriteText(script_source, "return 5");
+    WriteText(script_source, SpeedScriptSource("5"));
     ASSERT_TRUE(Submit(MakeScriptRequest(script_source, cooked_root,
                          ScriptStorageMode::kExternal, false))
         .success);
@@ -204,7 +204,7 @@ namespace {
 
     const auto context_script_source
       = context_root / "input" / "context_script.luau";
-    WriteText(context_script_source, "return 77");
+    WriteText(context_script_source, SpeedScriptSource("77"));
     ASSERT_TRUE(Submit(MakeScriptRequest(context_script_source, context_root,
                          ScriptStorageMode::kExternal, false))
         .success);
@@ -228,7 +228,7 @@ namespace {
 
     const auto request_script_source
       = request_root / "input" / "context_script.luau";
-    WriteText(request_script_source, "return 88");
+    WriteText(request_script_source, SpeedScriptSource("88"));
     ASSERT_TRUE(Submit(MakeScriptRequest(request_script_source, request_root,
                          ScriptStorageMode::kExternal, false))
         .success);
@@ -284,7 +284,7 @@ namespace {
 
     const auto script_source_a = concurrent_root / "input" / "parity.luau";
     const auto script_source_b = standalone_root / "input" / "parity.luau";
-    constexpr auto kScriptText = std::string_view { "return 42" };
+    const auto kScriptText = SpeedScriptSource("42");
     WriteText(script_source_a, kScriptText);
     WriteText(script_source_b, kScriptText);
 
