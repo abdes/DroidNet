@@ -105,8 +105,8 @@ scene helpers and orientation, and the M08.7 Content Browser redesign are
 validated on 2026-10-08; M08.8 asset relocation on 2026-10-09. M08.9 viewport performance and per-frame editor work on 2026-10-09. M08.10
 engine capability parity in the editor is in progress: fog and the sky
 (M08.10a–d) were delivered on 2026-10-09, the ground grid settings (M08.10e)
-on 2026-10-10, and per-pane view state with exposure-adaptation settling
-(M08.10f) is next.
+on 2026-10-10, eye adaptation in editor panes (M08.10f) and physical camera
+controls (M08.10g) on 2026-10-11, and scripting (M08.10h–i) is next.
 
 ## 4. Milestone Roadmap
 

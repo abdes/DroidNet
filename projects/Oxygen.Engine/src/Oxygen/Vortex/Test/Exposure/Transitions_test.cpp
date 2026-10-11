@@ -7,6 +7,7 @@
 #include <cmath>
 #include <memory>
 #include <optional>
+#include <tuple>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -187,6 +188,36 @@ NOLINT_TEST_F(ExposureGpuTest, SceneAndDirectSettingsUseIdenticalGainsAndRates)
       .delta_time = 0.0F,
     });
   EXPECT_NEAR(ServicePixel(service, bright, settings), 0x1p-15F, 1e-7F);
+}
+
+//! Auto exposure easing toward a new brightness reports adaptation, so a host
+//! rendering on demand keeps rendering, and stops once it reaches the target.
+NOLINT_TEST_F(ExposureGpuTest, ServiceReportsAdaptationUntilExposureConverges)
+{
+  auto service = PostProcessService(*renderer_);
+  const auto handle = ctx_.current_view.view_state_handle;
+  const auto dark = Uniform(.25F, 4U, 4U);
+  const auto bright = Uniform(8.0F, 4U, 4U);
+  auto options = ServicePixelOptions {};
+  std::ignore = ServicePixel(service, dark, {}, options);
+  std::ignore = ServicePixel(service, dark, {}, options);
+  EXPECT_FALSE(service.IsExposureAdapting(handle))
+    << "The first solve starts at its target";
+
+  // Each frame reads back the previous frame's completed status.
+  options.delta_time_seconds = .0625F;
+  std::ignore = ServicePixel(service, bright, {}, options);
+  std::ignore = ServicePixel(service, bright, {}, options);
+  EXPECT_TRUE(service.IsExposureAdapting(handle));
+
+  options.delta_time_seconds = 60.0F;
+  for (auto frame = 0; frame < 8; ++frame) {
+    std::ignore = ServicePixel(service, bright, {}, options);
+    if (!service.IsExposureAdapting(handle)) {
+      break;
+    }
+  }
+  EXPECT_FALSE(service.IsExposureAdapting(handle));
 }
 
 NOLINT_TEST_F(
@@ -904,13 +935,12 @@ NOLINT_TEST_F(
   ASSERT_TRUE(first.AttachCamera(std::make_unique<scene::PerspectiveCamera>()));
   ASSERT_TRUE(
     second.AttachCamera(std::make_unique<scene::PerspectiveCamera>()));
-  auto texture = CreateRegisteredTexture(TextureDesc {
-    .width = 4U,
-    .height = 4U,
-    .format = Format::kRGBA32Float,
-    .is_render_target = true,
-    .initial_state = ResourceStates::kCommon,
-  });
+  auto texture_desc = TextureDesc {};
+  texture_desc.width = texture_desc.height = 4U;
+  texture_desc.format = Format::kRGBA32Float;
+  texture_desc.is_render_target = true;
+  texture_desc.initial_state = ResourceStates::kCommon;
+  auto texture = CreateRegisteredTexture(texture_desc);
   auto target = Backend().CreateFramebuffer(
     FramebufferDesc {}.AddColorAttachment(texture));
   auto view = CompositionView {};

@@ -493,7 +493,10 @@ static uint2 LoadProducerFailure(AutoExposureAverageConstants pass)
     return (status.Load(48u) & 16u) != 0u ? status.Load2(52u) : 0u.xx;
 }
 
-static void StoreSolved(RWByteAddressBuffer destination, ExposureStateData state, AutoExposureAverageConstants pass)
+// Completed status flag 64: auto exposure is still easing toward its target, so
+// the image moves with no input change.
+static void StoreSolved(RWByteAddressBuffer destination, ExposureStateData state, AutoExposureAverageConstants pass,
+    bool adapting)
 {
     const uint2 producer_failure = LoadProducerFailure(pass);
     if (producer_failure.y != 0u) state.flags |= EXPOSURE_RANGE_FAILURE;
@@ -505,7 +508,7 @@ static void StoreSolved(RWByteAddressBuffer destination, ExposureStateData state
     status.Store4(32u,uint4(state.applied_generation,state.product_layout_revision));
     const uint flags = ((state.flags & EXPOSURE_HISTORY_VALID) != 0u ? 1u : 0u)
         | ((state.flags & EXPOSURE_REQUEST_REJECTED) != 0u ? 8u : 0u)
-        | (producer_failure.y != 0u ? 18u : 0u);
+        | (producer_failure.y != 0u ? 18u : 0u) | (adapting ? 64u : 0u);
     status.Store4(48u,uint4(flags,producer_failure,state.fp16_eligible_streak));
     status.Store4(64u,uint4(pass.frame_sequence,(state.flags & EXPOSURE_REJECTION_MASK)>>EXPOSURE_REJECTION_SHIFT,0u));
 }
@@ -527,7 +530,7 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         // contributes neither a current meter measurement nor FP16 eligibility.
         previous.flags &= ~(EXPOSURE_LUMINANCE_VALID | EXPOSURE_METER_EV_VALID | EXPOSURE_FP16_ELIGIBLE);
         previous.frame_sequence = pass.frame_sequence;
-        StoreSolved(output, previous, pass);
+        StoreSolved(output, previous, pass, false);
         return;
     }
     const bool source_loss = (pass.control_flags & 64u) != 0u
@@ -575,7 +578,7 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         next.flags |= EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED
             | (zero ? EXPOSURE_ZERO_TARGET : 0u);
         next.fallback_reason = 3u;
-        StoreSolved(output, next, pass);
+        StoreSolved(output, next, pass, false);
         return;
     }
     const bool borrowing = pass.borrowed_state_srv != K_INVALID_BINDLESS_INDEX && !source_loss;
@@ -610,7 +613,7 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
             | EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED | EXPOSURE_BORROWED
             | (source.displayed_scale == 0.0 ? EXPOSURE_ZERO_TARGET : 0u);
         next.fallback_reason = source.fallback_reason;
-        StoreSolved(output, next, pass);
+        StoreSolved(output, next, pass, false);
         return;
     }
     next.flags &= ~EXPOSURE_BORROWED;
@@ -623,7 +626,7 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
         next.flags |= EXPOSURE_HISTORY_VALID | EXPOSURE_INITIALIZED;
         next.fallback_reason = 0u;
         if (new_request) next.applied_generation = pass.requested_generation;
-        StoreSolved(output, next, pass);
+        StoreSolved(output, next, pass, false);
         return;
     }
     if (targets.key_count == 0u || targets.key_count > 68u) return;
@@ -689,7 +692,8 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     if (new_request && (seed || preserve || (remeter && (valid_meter || locked)))) {
         next.applied_generation = pass.requested_generation;
     }
-    StoreSolved(output, next, pass);
+    // Without a solve the gain holds, so a stale target is not adaptation.
+    StoreSolved(output, next, pass, solve && next.latent_scale != next.latent_target_scale);
 }
 
 // Pre-scene constants: three uint4 blocks, mirrored by ResolveFrame.
@@ -905,6 +909,7 @@ void FinalizeFp16Suitability(uint3 pixel : SV_DispatchThreadID)
     uint failure = report.Load(12u);
     uint first_failure = report.Load(16u);
     const uint producer_flags = status.Load(48u) & 16u;
+    const uint adapting = status.Load(48u) & 64u;
     bool conversion_failed = false;
     if (producer_flags != 0u) {
         failure |= status.Load(56u);
@@ -960,7 +965,7 @@ void FinalizeFp16Suitability(uint3 pixel : SV_DispatchThreadID)
     state.Store4(64u, uint4(asuint(valid_candidate ? candidate : 1.0), streak, pass.layout));
     const uint status_flags = (valid ? 1u : 0u) | (failure != 0u ? 2u : 0u)
         | (streak >= 2u ? 4u : 0u) | ((flags & EXPOSURE_REQUEST_REJECTED) != 0u ? 8u : 0u)
-        | producer_flags | (conversion_failed ? 32u : 0u);
+        | producer_flags | (conversion_failed ? 32u : 0u) | adapting;
     status.Store4(0u, uint4(pass.lifetime, pass.sequence));
     status.Store4(16u, uint4(settings, requested));
     status.Store4(32u, uint4(applied, pass.layout));

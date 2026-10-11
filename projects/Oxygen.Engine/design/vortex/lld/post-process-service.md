@@ -250,21 +250,21 @@ remain stored on invalid input; current validity describes the current frame.
 
 ### ExposureCompletedStatus: 80 bytes
 
-| Offset | Type  | Field / meaning                                                                                                              |
-| ------ | ----- | ---------------------------------------------------------------------------------------------------------------------------- |
-| 0      | uint2 | view_state_identity                                                                                                          |
-| 8      | uint2 | frame_sequence                                                                                                               |
-| 16     | uint2 | settings_revision                                                                                                            |
-| 24     | uint2 | requested_generation                                                                                                         |
-| 32     | uint2 | applied_generation                                                                                                           |
-| 40     | uint2 | product_layout_revision                                                                                                      |
-| 48     | uint  | flags: valid=1, range failure=2, FP16 eligible=4, rejected transition=8, producer failure=16, rejected current conversion=32 |
-| 52     | uint  | first_failure_product (zero means none)                                                                                      |
-| 56     | uint  | first_failure_kind                                                                                                           |
-| 60     | uint  | fp16_eligible_streak                                                                                                         |
-| 64     | uint2 | candidate_state_generation                                                                                                   |
-| 72     | uint  | transition rejection reason (0=none, 1=not Auto, 2=unsupported seed)                                                         |
-| 76     | uint  | reserved, zero                                                                                                               |
+| Offset | Type  | Field / meaning                                                                                                                           |
+| ------ | ----- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| 0      | uint2 | view_state_identity                                                                                                                       |
+| 8      | uint2 | frame_sequence                                                                                                                            |
+| 16     | uint2 | settings_revision                                                                                                                         |
+| 24     | uint2 | requested_generation                                                                                                                      |
+| 32     | uint2 | applied_generation                                                                                                                        |
+| 40     | uint2 | product_layout_revision                                                                                                                   |
+| 48     | uint  | flags: valid=1, range failure=2, FP16 eligible=4, rejected transition=8, producer failure=16, rejected current conversion=32, adapting=64 |
+| 52     | uint  | first_failure_product (zero means none)                                                                                                   |
+| 56     | uint  | first_failure_kind                                                                                                                        |
+| 60     | uint  | fp16_eligible_streak                                                                                                                      |
+| 64     | uint2 | candidate_state_generation                                                                                                                |
+| 72     | uint  | transition rejection reason (0=none, 1=not Auto, 2=unsupported seed)                                                                      |
+| 76     | uint  | reserved, zero                                                                                                                            |
 
 Status contains identity/eligibility, not a CPU numerical-gain authority. The
 candidate_state_generation references a retained GPU state record. Pin that
@@ -273,6 +273,14 @@ retire. Each in-flight frame has a distinct status allocation. Atomic first
 failure wins using a compare-exchange on product ID; status completion requires
 all producer writes before copying to the existing asynchronous readback ring.
 Product IDs are assigned in SceneTextures' domain inventory.
+
+The adapting flag reports an owning Auto solve whose gain has not reached its
+target; a frame without a solve holds its gain and reports no adaptation. Every
+rendered frame of such a view copies its status, merged with any transition or
+precision copy of the same frame, and `Renderer::IsExposureAdapting` answers
+from the latest completed one. A host that renders on demand renders the view
+again while it is set, so it lags convergence by the readback's frames. Other
+modes, borrowers and stateless views clear the observation.
 
 A source curve key is two float32 values, eight bytes: EV at 0, compensation at 4.
 Resolve its compensation, calibration/target logarithms and bounded-EV

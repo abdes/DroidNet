@@ -118,6 +118,10 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto InspectExposureSettings(
     CompositionView::ViewStateHandle handle) const
     -> std::optional<ExposureSettingsStatus>;
+  //! Whether the view's auto exposure was still easing toward its target at
+  //! its latest completed frame. The answer lags rendering by the readback.
+  [[nodiscard]] OXGN_VRTX_API auto IsExposureAdapting(
+    CompositionView::ViewStateHandle handle) const -> bool;
 
   OXGN_VRTX_API explicit PostProcessService(
     Renderer& renderer, observer_ptr<content::IAssetLoader> asset_loader = {});
@@ -187,6 +191,8 @@ public:
     frame::SequenceNumber sequence;
     std::optional<ExposureTransitionToken> status_transition;
     std::optional<std::uint64_t> precision_epoch;
+    //! An owning auto exposure, whose completed status reports adaptation.
+    bool observes_adaptation { false };
   };
   //! Observe unattenuated opaque input using the current immutable frame lease.
   [[nodiscard]] OXGN_VRTX_API auto CapturePreEnvironmentRange(
@@ -335,6 +341,7 @@ private:
     std::uint64_t control_revision { 0U };
     std::optional<std::uint64_t> precision_epoch;
     std::optional<PrecisionTicket> precision;
+    bool adaptation { false };
   };
   std::unordered_map<CompositionView::ViewStateHandle,
     std::deque<PendingExposureStatus>>
@@ -344,10 +351,21 @@ private:
   std::unordered_map<CompositionView::ViewStateHandle,
     std::shared_ptr<ExposureReadbackPool>>
     reusable_exposure_status_;
+  struct AdaptationObservation {
+    std::uint64_t lifetime { 0U };
+    std::uint64_t frame_sequence { 0U };
+    bool adapting { false };
+  };
+  std::unordered_map<CompositionView::ViewStateHandle, AdaptationObservation>
+    exposure_adaptation_;
   [[nodiscard]] auto IsExposureStatusNeeded(
     const PendingExposureStatus& job) const -> bool;
   [[nodiscard]] auto IsPrecisionStatusNeeded(
     const PendingExposureStatus& job) const -> bool;
+  //! Read back this frame's adaptation, or forget it for a non-adapting view.
+  auto ObserveExposureAdaptation(const RenderContext& ctx,
+    graphics::CommandRecorder& recorder, const PreparedExposure& prepared)
+    -> void;
   void PublishExposureStatusOnSubmission(
     graphics::CommandRecorder& recorder, PendingExposureStatus job);
   auto QueueExposureStatus(PendingExposureStatus job) -> void;

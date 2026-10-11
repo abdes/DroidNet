@@ -2,8 +2,8 @@
 
 Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.9
 validated; rescoped on 2026-10-08; M08.10 added on 2026-10-09, M08.10a–d
-delivered on 2026-10-09, M08.10e on 2026-10-10, M08.10g on 2026-10-11 and
-M08.10f next**
+delivered on 2026-10-09, M08.10e on 2026-10-10, M08.10f and M08.10g on
+2026-10-11 and M08.10h next**
 
 Current: **M08.10 Engine capability parity in the editor**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
@@ -1120,9 +1120,9 @@ thread, and the managed layer does no per-frame work. In priority order:
    a host and its camera inset compose together. A held pane stays published
    through `Renderer::HoldPublishedRuntimeView`, keeping its identity and
    output, and its surface is neither composed nor presented, so it keeps the
-   last image. Editor views are stateless, so there is no exposure history to
-   converge and no settle window. With idle viewports set to render, every
-   visible pane renders each frame.
+   last image. A pane whose image still moves on its own, such as auto
+   exposure adapting (M08.10), renders until the renderer reports rest. With
+   idle viewports set to render, every visible pane renders each frame.
 
 4. **One compositing submission.** `Renderer::OnCompositing` acquired a
    command recorder per target surface; it records every surface's
@@ -1276,14 +1276,15 @@ stands behind them. This slice removes those lock-outs.
    view); editor panes publish none, so editor auto exposure jumps to its
    metered value every frame, the authored adaptation speeds have no effect,
    and exposure transitions and other temporal history are unavailable. Each
-   `EditorView` owns a state handle for its lifetime and releases it when the
-   view is destroyed. Adaptation then moves the image with no input change,
-   so Vortex reports a view as settling while its adapted exposure has not
-   reached its target, and the pane renders until it settles. The exposure
-   service reads exposure state back only for transitions and precision
-   qualification today, so a view adapting in auto exposure gains a small
-   readback of its displayed and target scale per rendered frame; panes
-   render a few frames past convergence because readbacks lag.
+   pane publishes a persistent state handle derived from its unique view id;
+   the renderer releases the state with the publication, so a pane withdrawn
+   while hidden starts its exposure afresh. Adaptation then moves the image
+   with no input change, so Vortex reports a view as adapting
+   (`Renderer::IsExposureAdapting`) while its auto exposure has not reached
+   its target, and the pane renders until it settles. The flag travels in the
+   exposure's existing completed status, which an adapting-capable view now
+   copies back on every rendered frame; panes render a few frames past
+   convergence because readbacks lag.
 6. **Physical camera.** Aperture, shutter rate and ISO set the camera's
    exposure in the engine and already round-trip through the editor's scene
    model, sync and cooking, and the exposure section already offers the
@@ -1320,9 +1321,9 @@ Implementation, in build order:
 | M08.10b   | Delivered on 2026-10-09: height and volumetric fog; local fog volume component, viewport icon and composition. |
 | M08.10c–d | Validated on 2026-10-09 by owner review in the running editor: backdrop, Sky Sphere, Sky Light, calibration.   |
 | M08.10e   | Delivered on 2026-10-10: per-user ground grid settings in the Settings flyout, applied to every pane.          |
-| M08.10f   | Next: per-pane view state and exposure-adaptation settling.                                                    |
+| M08.10f   | Delivered on 2026-10-11: per-pane exposure state; adapting auto exposure keeps its pane rendering.             |
 | M08.10g   | Delivered on 2026-10-11: aperture, shutter rate and ISO in both camera sections, with undo and live sync.      |
-| M08.10h–i | Open.                                                                                                          |
+| M08.10h–i | Open; M08.10h is next.                                                                                         |
 
 Checks: each authored capability survives save, reopen and cook, and the
 cooked project renders it in RenderScene as in the editor; the grid

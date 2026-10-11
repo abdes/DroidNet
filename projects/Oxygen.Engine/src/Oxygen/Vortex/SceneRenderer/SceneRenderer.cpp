@@ -3354,6 +3354,12 @@ auto SceneRenderer::InspectExposureSettings(
                        : std::nullopt;
 }
 
+auto SceneRenderer::IsExposureAdapting(
+  const CompositionView::ViewStateHandle handle) const -> bool
+{
+  return post_process_ && post_process_->IsExposureAdapting(handle);
+}
+
 auto SceneRenderer::AcquireIblCapture(const ViewId view)
   -> Result<environment::IblCaptureLease, environment::IblCaptureError>
 {

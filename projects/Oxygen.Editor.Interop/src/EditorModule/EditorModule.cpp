@@ -998,12 +998,14 @@ namespace oxygen::interop::module {
     }
 
     // A view whose image is still moving on its own, such as the ground grid
-    // easing after the camera stops, renders until the renderer reports rest.
+    // easing after the camera stops or auto exposure adapting to a new
+    // brightness, renders until the renderer reports rest.
     for (const auto& pane : panes) {
       const auto published
         = renderer.ResolvePublishedRuntimeViewId(pane.view->GetViewId());
       if (const auto status = renderer.InspectViewRenderStatus(published);
-        status.has_value() && status->settling) {
+        (status.has_value() && status->settling)
+        || renderer.IsExposureAdapting(published)) {
         pane_policy_.Invalidate(pane.view->GetViewId());
       }
     }
@@ -1061,6 +1063,11 @@ namespace oxygen::interop::module {
     const auto scene_fb = view.GetFramebuffer();
     auto composition_view = vortex::CompositionView::ForScene(
       view.GetViewId(), view_desc, view.GetRenderCameraNode());
+    // A persistent state gives the pane exposure history, so auto exposure
+    // adapts at its authored speeds. The view id is unique per pane, and the
+    // renderer releases the state with the publication.
+    composition_view.view_state_handle
+      = vortex::CompositionView::ViewStateHandle { view.GetViewId().get() };
     composition_view.name = config.name;
     composition_view.clear_color = config.clear_color;
     composition_view.with_atmosphere = true;

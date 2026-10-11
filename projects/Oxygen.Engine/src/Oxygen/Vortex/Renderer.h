@@ -471,6 +471,11 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto InspectViewRenderStatus(ViewId view_id) const
     -> std::optional<ViewRenderStatus>;
+  //! Whether a published view's auto exposure is still easing toward its
+  //! target, as of its latest completed frame. Like a settling status, a host
+  //! rendering on demand renders the view again until this clears.
+  [[nodiscard]] OXGN_VRTX_API auto IsExposureAdapting(ViewId view_id) const
+    -> bool;
   //! Resident content that can change a view's image without a scene edit.
   //! Hosts rendering on demand re-render when successive values differ.
   [[nodiscard]] OXGN_VRTX_API auto GetResidentContentRevision() const noexcept

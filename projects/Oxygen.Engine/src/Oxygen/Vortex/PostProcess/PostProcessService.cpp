@@ -128,6 +128,13 @@ auto PostProcessService::GetExposureMaskContentRevision() const noexcept
   return mask_binder_ ? mask_binder_->GetResidentContentRevision() : 0U;
 }
 
+auto PostProcessService::IsExposureAdapting(
+  const CompositionView::ViewStateHandle handle) const -> bool
+{
+  const auto found = exposure_adaptation_.find(handle);
+  return found != exposure_adaptation_.end() && found->second.adapting;
+}
+
 auto PostProcessService::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
@@ -700,6 +707,14 @@ auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
         ctx.frame_sequence, settings->revision);
     }
   }
+  // Only an owning auto exposure moves the image on its own.
+  const bool observes_adaptation = exposure.state && !exposure.solve_failed
+    && !exposure.borrowed_exposure
+    && ctx.current_view.view_state_handle
+      != CompositionView::kInvalidViewStateHandle
+    && !effective_config.Settings().temporary_unit_exposure
+    && effective_config.Exposure().authored.enabled
+    && effective_config.Exposure().authored.mode == engine::ExposureMode::kAuto;
   return PreparedExposure {
     .owner = this,
     .exposure = exposure,
@@ -710,6 +725,7 @@ auto PostProcessService::PrepareSceneExposure(const ViewId view_id,
     .sequence = ctx.frame_sequence,
     .status_transition = status_transition,
     .precision_epoch = precision_epoch,
+    .observes_adaptation = observes_adaptation,
   };
 }
 
@@ -1057,7 +1073,8 @@ auto PostProcessService::FinalizeScenePrecision(RenderContext& ctx,
           && prepared.config.Exposure().authored.mode
             == engine::ExposureMode::kAuto
           && precision.source_handle
-            == CompositionView::kInvalidViewStateHandle, }, });
+            == CompositionView::kInvalidViewStateHandle, },
+      .adaptation = prepared.observes_adaptation, });
   return true;
 }
 
@@ -1125,6 +1142,7 @@ auto PostProcessService::Record(const ViewId view_id, RenderContext& ctx,
     EnqueueExposureStatus(recorder, *prepared_exposure->status_transition,
       exposure.state, ctx.frame_sequence, effective_config.Revision());
   }
+  ObserveExposureAdaptation(ctx, recorder, *prepared_exposure);
 
   const auto submitted_state = ExecutionState {
     .published_bindings = slot != kInvalidShaderVisibleIndex,
@@ -1211,6 +1229,7 @@ auto PostProcessService::RemoveViewState(const ViewId view_id,
   pending_exposure_status_.erase(view_state_handle);
   deferred_exposure_status_.erase(view_state_handle);
   reusable_exposure_status_.erase(view_state_handle);
+  exposure_adaptation_.erase(view_state_handle);
   renderer_.RetireExposureTransitions(view_state_handle);
   exposure_pass_->RemoveViewState(view_state_handle);
 }
@@ -1231,6 +1250,34 @@ void PostProcessService::EnqueueExposureStatus(
       .settings_revision = settings_revision,
       .precision_epoch = {},
       .precision = {},
+    });
+}
+
+auto PostProcessService::ObserveExposureAdaptation(const RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const PreparedExposure& prepared) -> void
+{
+  if (!prepared.observes_adaptation) {
+    exposure_adaptation_.erase(prepared.handle);
+    return;
+  }
+  // A finalized precision status already carries this frame's adaptation.
+  if (const auto precision = precision_states_.find(prepared.handle);
+    precision != precision_states_.end()
+    && precision->second.finalized_frame == ctx.frame_sequence) {
+    return;
+  }
+  PublishExposureStatusOnSubmission(recorder,
+    PendingExposureStatus {
+      .state = prepared.exposure.state,
+      .feedback = {},
+      .token = {},
+      .handle = prepared.handle,
+      .lifetime = prepared.lifetime,
+      .frame_sequence = ctx.frame_sequence.get(),
+      .settings_revision = prepared.config.Revision(),
+      .precision_epoch = {},
+      .precision = {},
+      .adaptation = true,
     });
 }
 
@@ -1268,12 +1315,14 @@ auto PostProcessService::QueueExposureStatus(PendingExposureStatus job) -> void
       && existing.control_revision == job.control_revision
       && existing.precision_epoch == job.precision_epoch;
   };
+  // A same-frame copy already queued reads the same status for adaptation.
   if (const auto pending = pending_exposure_status_.find(job.handle);
     pending != pending_exposure_status_.end()) {
-    for (const auto& existing : pending->second) {
+    for (auto& existing : pending->second) {
       if (same_frame(existing)) {
         CHECK_F(!job.precision || existing.precision,
           "A precision status cannot follow an earlier copy of the same frame");
+        existing.adaptation = existing.adaptation || job.adaptation;
         return;
       }
     }
@@ -1281,6 +1330,7 @@ auto PostProcessService::QueueExposureStatus(PendingExposureStatus job) -> void
   if (const auto deferred = deferred_exposure_status_.find(job.handle);
     deferred != deferred_exposure_status_.end()
     && same_frame(deferred->second)) {
+    deferred->second.adaptation = deferred->second.adaptation || job.adaptation;
     if (!job.precision || deferred->second.precision) {
       return;
     }
@@ -1305,7 +1355,8 @@ auto PostProcessService::IsExposureStatusNeeded(
   }
   // A failed qualification attempt cannot erase a valid authored solve. Its
   // epoch gates eligibility below; the control revision gates both outcomes.
-  return (job.token && renderer_.NeedsExposureAcknowledgement(*job.token))
+  return job.adaptation
+    || (job.token && renderer_.NeedsExposureAcknowledgement(*job.token))
     || IsPrecisionStatusNeeded(job);
 }
 
@@ -1442,6 +1493,23 @@ auto PostProcessService::PollExposureStatus() -> void
           return false;
         }
         const auto& status = **packet;
+        if (job.adaptation
+          && integer(status.view_state_identity) == job.lifetime
+          && integer(status.frame_sequence) == job.frame_sequence) {
+          constexpr uint32_t kExposureAdapting = 1U << 6U;
+          auto& observed = exposure_adaptation_[job.handle];
+          if (observed.lifetime != job.lifetime
+            || observed.frame_sequence <= job.frame_sequence) {
+            observed = AdaptationObservation {
+              .lifetime = job.lifetime,
+              .frame_sequence = job.frame_sequence,
+              .adapting = (status.flags & kExposureAdapting) != 0U,
+            };
+          }
+        }
+        if (!job.token && !job.precision) {
+          return true;
+        }
         auto requested_generation
           = job.precision ? job.precision->transition_generation : 0U;
         if (!job.precision && job.token) {

@@ -3519,6 +3519,13 @@ auto Renderer::InspectViewRenderStatus(ViewId view_id) const
                          : std::nullopt;
 }
 
+auto Renderer::IsExposureAdapting(const ViewId view_id) const -> bool
+{
+  return scene_renderer_
+    && scene_renderer_->IsExposureAdapting(
+      ResolvePublishedRuntimeViewStateHandle(view_id));
+}
+
 auto Renderer::GetAssetLoader() const noexcept
   -> observer_ptr<content::IAssetLoader>
 {

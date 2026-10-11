@@ -205,6 +205,8 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto InspectExposureSettings(
     CompositionView::ViewStateHandle handle) const
     -> std::optional<ExposureSettingsStatus>;
+  [[nodiscard]] OXGN_VRTX_API auto IsExposureAdapting(
+    CompositionView::ViewStateHandle handle) const -> bool;
   OXGN_VRTX_NDAPI auto GetLastEnvironmentLightingState() const
     -> const EnvironmentLightingState&;
   [[nodiscard]] OXGN_VRTX_API auto InspectSkyLight(
