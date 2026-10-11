@@ -22,8 +22,6 @@
 #include <variant>
 #include <vector>
 
-#include <fmt/format.h>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -936,8 +934,7 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
     }
 
     DLOG_F(3, "mesh : {}", entry.mesh->GetName());
-    const auto scope_name = fmt::format("Mesh '{}'", entry.mesh->GetName());
-    DLOG_SCOPE_F(3, scope_name.c_str()); // NOLINT
+    DLOG_SCOPE_F(3, "Mesh '{}'", entry.mesh->GetName());
 
     // Vertex upload ------------------------------------------------------
     if (entry.vertex_srv_index == kInvalidShaderVisibleIndex
