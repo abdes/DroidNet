@@ -339,9 +339,11 @@ set(
   "Import/Internal/Pipelines/InputImportPipeline.cpp"
   "Import/Internal/Pipelines/MaterialPipeline.cpp"
   "Import/Internal/Pipelines/MeshBuildPipeline.cpp"
+  "Import/Internal/MaterialSlotAllocation.cpp"
   "Import/MaterialSlotProvenance.cpp"
   "Import/RetainedModelImport.cpp"
   "Import/SceneImportSettings.cpp"
+  "Import/Internal/ImportSourceSnapshot.cpp"
   "Import/Internal/BufferSource.cpp"
   "Import/Internal/GeometrySource.cpp"
   "Import/Internal/SceneSource.cpp"
@@ -394,38 +396,41 @@ set(
   ${OXYGEN_COOKER_PRIVATE_HEADERS}
 )
 
-# Stateless internals shared with test executables in shared builds. These
-# files must depend only on exported or public headers: in shared builds the
-# test holds its own copy of the objects, so they must not reference
-# DLL-internal symbols.
-add_library(
-  oxygen-cooker-test-visible-internals
-  OBJECT
-  "Import/Internal/MaterialSlotAllocation.cpp"
-  "Import/Internal/ImportSourceSnapshot.cpp"
-)
-set_target_properties(
-  oxygen-cooker-test-visible-internals
-  PROPERTIES
-    FOLDER
-      "Testing"
-)
-target_link_libraries(
-  oxygen-cooker-test-visible-internals
-  PUBLIC
-    oxygen::base
-    oxygen::core
-    oxygen::composition
-    oxygen::console
-    oxygen::data
-    oxygen::content
-  PRIVATE
-    glm::glm
-    spng::spng_static
-    tinyexr::tinyexr
-    nlohmann_json::nlohmann_json
-    nlohmann_json_schema_validator
-)
+# Stateless internals that tests call directly. In shared builds the cooker
+# DLL does not export them, so tests link this static copy instead; in static
+# builds the cooker library already provides them. These files must depend only
+# on exported or public headers, because the copy lives outside the DLL.
+if(OXYGEN_BUILD_TESTS AND BUILD_SHARED_LIBS)
+  add_library(
+    oxygen-cooker-test-visible-internals
+    STATIC
+    "Import/Internal/MaterialSlotAllocation.cpp"
+    "Import/Internal/ImportSourceSnapshot.cpp"
+  )
+  set_target_properties(
+    oxygen-cooker-test-visible-internals
+    PROPERTIES
+      FOLDER
+        "Testing"
+  )
+  target_link_libraries(
+    oxygen-cooker-test-visible-internals
+    PUBLIC
+      oxygen::base
+      oxygen::core
+      oxygen::composition
+      oxygen::console
+      oxygen::data
+      oxygen::content
+    PRIVATE
+      glm::glm
+      spng::spng_static
+      tinyexr::tinyexr
+      nlohmann_json::nlohmann_json
+      nlohmann_json_schema_validator
+  )
+  oxygen_group_target_files_for_ide(oxygen-cooker-test-visible-internals)
+endif()
 
 target_sources(
   ${META_MODULE_TARGET}
@@ -438,12 +443,7 @@ target_sources(
     FILES ${OXYGEN_COOKER_HEADERS}
 )
 
-arrange_target_files_for_ide(
-  ${META_MODULE_TARGET}
-  EXCLUDE_PATTERNS
-    "import/internal/materialslotallocation"
-    "import/internal/importsourcesnapshot"
-)
+arrange_target_files_for_ide(${META_MODULE_TARGET})
 
 # Enable OpenMP for bc7enc source only: /openmp for MSVC, -fopenmp otherwise
 set_source_files_properties(
@@ -478,7 +478,6 @@ target_link_libraries(
   PRIVATE
     oxygen::scene
     oxygen::physics
-    oxygen-cooker-test-visible-internals
     glm::glm
     spng::spng_static
     tinyexr::tinyexr

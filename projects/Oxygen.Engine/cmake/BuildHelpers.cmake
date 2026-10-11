@@ -71,26 +71,27 @@ function(_oxygen_inventory_path entry output)
   set(${output} "${entry}" PARENT_SCOPE)
 endfunction()
 
-function(arrange_target_files_for_ide target)
-  cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "EXCLUDE_PATTERNS")
+# Groups a target's files for IDEs: "src" mirrors the target's source
+# directory, "generated" its binary directory, and "external" holds files
+# outside both. Guarded paths are grouped by the literal path they guard.
+# DECLARED_FILES receives the normalized paths of all inspected files.
+function(oxygen_group_target_files_for_ide target)
+  cmake_parse_arguments(PARSE_ARGV 1 arg "" "DECLARED_FILES" "")
   if(DEFINED arg_UNPARSED_ARGUMENTS OR DEFINED arg_KEYWORDS_MISSING_VALUES)
     message(
       FATAL_ERROR
-      "arrange_target_files_for_ide: invalid arguments: ${arg_UNPARSED_ARGUMENTS}; missing values: ${arg_KEYWORDS_MISSING_VALUES}"
+      "oxygen_group_target_files_for_ide: invalid arguments: ${arg_UNPARSED_ARGUMENTS}; missing values: ${arg_KEYWORDS_MISSING_VALUES}"
     )
   endif()
   if(NOT TARGET "${target}")
-    message(
-      FATAL_ERROR
-      "arrange_target_files_for_ide: unknown target '${target}'."
-    )
+    message(FATAL_ERROR "IDE file grouping: unknown target '${target}'.")
   endif()
   get_target_property(alias "${target}" ALIASED_TARGET)
   get_target_property(imported "${target}" IMPORTED)
   if(alias OR imported)
     message(
       FATAL_ERROR
-      "arrange_target_files_for_ide requires a locally defined, non-alias target: ${target}."
+      "IDE file grouping requires a locally defined, non-alias target: ${target}."
     )
   endif()
   get_target_property(source_dir "${target}" SOURCE_DIR)
@@ -99,7 +100,7 @@ function(arrange_target_files_for_ide target)
   if(NOT source_dir STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     message(
       FATAL_ERROR
-      "arrange_target_files_for_ide must be called in the directory that defines ${target}."
+      "IDE file grouping must run in the directory that defines ${target}."
     )
   endif()
   set(entries)
@@ -241,6 +242,21 @@ function(arrange_target_files_for_ide target)
   if(external_files)
     source_group("external" FILES ${external_files})
   endif()
+  if(arg_DECLARED_FILES)
+    set(${arg_DECLARED_FILES} "${declared}" PARENT_SCOPE)
+  endif()
+endfunction()
+
+function(arrange_target_files_for_ide target)
+  cmake_parse_arguments(PARSE_ARGV 1 arg "" "" "EXCLUDE_PATTERNS")
+  if(DEFINED arg_UNPARSED_ARGUMENTS OR DEFINED arg_KEYWORDS_MISSING_VALUES)
+    message(
+      FATAL_ERROR
+      "arrange_target_files_for_ide: invalid arguments: ${arg_UNPARSED_ARGUMENTS}; missing values: ${arg_KEYWORDS_MISSING_VALUES}"
+    )
+  endif()
+  oxygen_group_target_files_for_ide("${target}" DECLARED_FILES declared)
+  get_target_property(source_dir "${target}" SOURCE_DIR)
 
   # Deliberately no CONFIGURE_DEPENDS: inventory runs at configure time, and its
   # glob must never become the build's source list or a source of build rules.

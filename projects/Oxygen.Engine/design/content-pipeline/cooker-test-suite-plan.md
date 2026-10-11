@@ -377,14 +377,15 @@ callers in **different directories**.
 
 5. **Internal sources used by tests ([D-04](#6-decisions)).**
    `Import/Internal/MaterialSlotAllocation.cpp` and
-   `Import/Internal/ImportSourceSnapshot.cpp` become an OBJECT library,
-   `oxygen-cooker-test-visible-internals`. The cooker library includes the
-   objects. Test executables add them only in shared builds:
-   `$<$<BOOL:${BUILD_SHARED_LIBS}>:$<TARGET_OBJECTS:oxygen-cooker-test-visible-internals>>`.
-   In static builds the static library already provides the symbols. The DLL
-   export surface does not change. A CMake comment restricts the OBJECT library
-   to **stateless** internals that depend only on exported or public headers,
-   because in shared builds the test holds its own copy of the code.
+   `Import/Internal/ImportSourceSnapshot.cpp` stay ordinary cooker sources.
+   Shared builds with tests also build them into a STATIC library,
+   `oxygen-cooker-test-visible-internals`, which the tests that call them link.
+   In static builds the static cooker library already provides the symbols and
+   the library is not defined. The DLL export surface does not change. A CMake
+   comment restricts the library to **stateless** internals that depend only on
+   exported or public headers, because in shared builds the copy lives outside
+   the DLL. An OBJECT library is not used: the Visual Studio generator lists
+   its objects as `.obj` items in every consumer project.
 6. **Target executables** (14 GoogleTest executables, down from 40):
 
 | Executable (`Oxygen.Cooker.` …)     | Tier       | Source directory                                                                                |
@@ -822,7 +823,7 @@ their original numbers.
 | D-01 | Make the request-builder and `ImportManifest` tests in-memory by adding text-based production overloads? | **No.** They stay functional temp-file tests and production APIs are unchanged.                                                                                                                                                                                                                                                                                                      | –             |
 | D-02 | Unify the three loose-index serializers?                                                                 | **Yes.** Content's `LooseCookedTestWriter` becomes the single forging writer, extended in Content where needed.                                                                                                                                                                                                                                                                      | CT-4.9        |
 | D-03 | Core libraries for the tool sources?                                                                     | **All three tools** (PakTool, Inspector, ImportTool) use the same `<tool>-core` static library + thin `main.cpp` pattern. The FTXUI screens go into ImportTool's core library.                                                                                                                                                                                                       | CT-3.6        |
-| D-04 | Internal `.cpp` files compiled into both the library and the tests?                                      | **OBJECT library**, with objects linked into tests only in shared builds. Exporting the classes was rejected because it pollutes the DLL export surface. Limited to stateless internals.                                                                                                                                                                                             | CT-3.8        |
+| D-04 | Internal `.cpp` files compiled into both the library and the tests?                                      | **STATIC library**, linked into tests only in shared builds; the cooker compiles the same files as its own sources. Exporting the classes was rejected because it pollutes the DLL export surface. An OBJECT library was rejected because Visual Studio shows its objects as `.obj` items in every consumer project. Limited to stateless internals.                                 | CT-3.8        |
 | D-05 | Replace the 52 MB `dino-a.fbx` in Cooker tests?                                                          | **Reuse the existing small fixtures.** `dino-a.fbx` stays only as an ImportTool manual-testing asset.                                                                                                                                                                                                                                                                                | CT-6.10       |
 | D-06 | Where does `ScriptCompileMode_contract_test.cpp` live?                                                   | **Engine tests** (`src/Oxygen/Engine/Test/`).                                                                                                                                                                                                                                                                                                                                        | CT-3.9        |
 | D-07 | Cooker tests that use `content::internal`, construct `AssetLoader`, or assert Content runtime behaviour? | **Each case resolved** ([E.6](#e6-cross-module-assertions-d-07)). Cooker keeps the checks on its own output, read through stateless public readers ([§2.8](#28-module-boundary-what-a-cooker-test-may-use)). Content gains the 3 checks it was missing, with its own fixtures. No test needs an example application; end-to-end acceptance stays with the Examples content pipeline. | CT-5.7        |
@@ -1045,7 +1046,6 @@ function(oxygen_cooker_test area tier)
     DEPS oxygen::cooker Oxygen.Cooker.TestSupport ${x_DEPS}
     LABELS cooker ${_label})
   set_tests_properties(${_name} PROPERTIES TIMEOUT ${_timeout})
-  source_group(TREE ${CMAKE_CURRENT_SOURCE_DIR} PREFIX "${area}" FILES ${x_SOURCES})
 endfunction()
 ```
 

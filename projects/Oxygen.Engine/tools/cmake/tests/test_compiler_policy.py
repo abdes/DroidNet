@@ -1,165 +1,188 @@
+# pyright: strict
 """Build/run checks for private policy and sanitizer compile/link/runtime behavior."""
 
 import json
 import os
-from pathlib import Path
-import shutil
 import sys
-import tempfile
 import unittest
+from pathlib import Path
 
-from test_build_contract import CMAKE, ENGINE, CommandTests
+from cmake_testing import (
+    CMAKE,
+    NATIVE_GENERATORS,
+    NINJA,
+    NINJA_MULTI,
+    WINDOWS,
+    CommandTestCase,
+    Result,
+    cmake_project,
+    include,
+    read,
+    requires_compiler,
+    windows_only,
+    write,
+)
+
+WARNING_FLAG = "/W4" if WINDOWS else "-Wextra"
+
+SUBJECT = """#include <cstdlib>
+#if defined(_CPPRTTI) || defined(__GXX_RTTI)
+#error Oxygen must disable RTTI
+#endif
+extern "C" int exercise(int offset) {
+  volatile int* p = static_cast<int*>(std::malloc(4 * sizeof(int)));
+  p[0] = 42; int value = p[offset]; std::free(const_cast<int*>(p)); return value;
+}
+"""
+
+CONSUMER = """#include <cstring>
+extern "C" int exercise(int);
+struct A { virtual ~A() = default; }; struct B : A {};
+int main(int argc, char** argv) { B b; A* a = &b;
+  if (!dynamic_cast<B*>(a)) return 2;
+  return exercise(argc > 1 && !std::strcmp(argv[1], "bad") ? 12 : 0) == 42 ? 0 : 1;
+}
+"""
 
 
-@unittest.skipUnless(CMAKE and (shutil.which("cl") if os.name == "nt" else shutil.which("c++")),
-                     "A configured native compiler environment is required")
-class CompilerPolicyTests(CommandTests):
-    def write_project(self, root, *, asan=False, shared=False, strict=False, pic=None):
-        (root / "oxygen").mkdir()
-        (root / "oxygen/CMakeLists.txt").write_text(
-            'set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)\n'
-            f'add_library(subject {"SHARED" if shared else "STATIC"} subject.cpp warning.c)\n'
-            'set_target_properties(subject PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON\n'
+@requires_compiler
+class CompilerPolicyTests(CommandTestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.binary = self.root / "build"
+
+    def write_project(
+        self, *, asan: bool = False, shared: bool = False, strict: bool = False, pic: str | None = None
+    ) -> None:
+        oxygen = self.root / "oxygen"
+        write(
+            oxygen / "CMakeLists.txt",
+            "set(CMAKE_COMPILE_WARNING_AS_ERROR OFF)\n"
+            f"add_library(subject {'SHARED' if shared else 'STATIC'} subject.cpp warning.c)\n"
+            "set_target_properties(subject PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON\n"
             '  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/dependency-bin")\n'
-            + ('set_property(TARGET subject PROPERTY COMPILE_WARNING_AS_ERROR ON)\n' if strict else ''),
-            encoding="utf-8",
+            + ("set_property(TARGET subject PROPERTY COMPILE_WARNING_AS_ERROR ON)\n" if strict else ""),
         )
-        (root / "oxygen/subject.cpp").write_text(
-            '#include <cstdlib>\n'
-            '#if defined(_CPPRTTI) || defined(__GXX_RTTI)\n#error Oxygen must disable RTTI\n#endif\n'
-            'extern "C" int exercise(int offset) {\n'
-            '  volatile int* p = static_cast<int*>(std::malloc(4 * sizeof(int)));\n'
-            '  p[0] = 42; int value = p[offset]; std::free(const_cast<int*>(p)); return value;\n}\n',
-            encoding="utf-8",
-        )
-        (root / "oxygen/warning.c").write_text(
-            'int warning_probe(void) { int intentionally_unused; return 0; }\n', encoding="utf-8",
-        )
-        (root / "main.cpp").write_text(
-            '#include <cstring>\n'
-            'extern "C" int exercise(int);\n'
-            'struct A { virtual ~A() = default; }; struct B : A {};\n'
-            'int main(int argc, char** argv) { B b; A* a = &b;\n'
-            '  if (!dynamic_cast<B*>(a)) return 2;\n'
-            '  return exercise(argc > 1 && !std::strcmp(argv[1], "bad") ? 12 : 0) == 42 ? 0 : 1;\n}\n',
-            encoding="utf-8",
-        )
-        (root / "CMakeLists.txt").write_text(
-            'cmake_minimum_required(VERSION 4.2)\nproject(Policy C CXX)\n'
-            'enable_testing()\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n'
-            f'set(OXYGEN_WITH_ASAN {"ON" if asan else "OFF"})\n'
-            + (f'set(CMAKE_POSITION_INDEPENDENT_CODE {pic})\n' if pic is not None else '')
-            + f'include("{ENGINE.as_posix()}/cmake/CompilerPolicy.cmake")\n'
-            'if(MSVC)\nstring(APPEND CMAKE_EXE_LINKER_FLAGS " /OPT:NOREF")\nendif()\n'
-            'add_subdirectory(oxygen)\n'
-            'oxygen_apply_directory_build_policy("${CMAKE_CURRENT_SOURCE_DIR}/oxygen")\n'
-            'add_library(GTest::gtest INTERFACE IMPORTED)\n'
-            f'include("{ENGINE.as_posix()}/cmake/GTestHelpers.cmake")\n'
-            'gtest_program(consumer SOURCES main.cpp DEPS subject)\n'
-            'file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/consumer-$<CONFIG>.txt" CONTENT "$<TARGET_FILE:consumer>")\n'
-            'get_target_property(_interface subject INTERFACE_COMPILE_OPTIONS)\n'
-            'if(_interface)\nmessage(FATAL_ERROR "Private policy leaked: ${_interface}")\nendif()\n'
-            'get_target_property(_pic subject POSITION_INDEPENDENT_CODE)\n'
-            'file(WRITE "${CMAKE_BINARY_DIR}/pic.txt" "${_pic}")\n', encoding="utf-8",
+        write(oxygen / "subject.cpp", SUBJECT)
+        write(oxygen / "warning.c", "int warning_probe(void) { int intentionally_unused; return 0; }\n")
+        write(self.root / "main.cpp", CONSUMER)
+        write(
+            self.root / "CMakeLists.txt",
+            cmake_project(
+                "Policy",
+                "C CXX",
+                "enable_testing()\nset(CMAKE_EXPORT_COMPILE_COMMANDS ON)\n"
+                f"set(OXYGEN_WITH_ASAN {'ON' if asan else 'OFF'})\n"
+                + (f"set(CMAKE_POSITION_INDEPENDENT_CODE {pic})\n" if pic is not None else "")
+                + include("CompilerPolicy.cmake")
+                + 'if(MSVC)\nstring(APPEND CMAKE_EXE_LINKER_FLAGS " /OPT:NOREF")\nendif()\n'
+                "add_subdirectory(oxygen)\n"
+                'oxygen_apply_directory_build_policy("${CMAKE_CURRENT_SOURCE_DIR}/oxygen")\n'
+                "add_library(GTest::gtest INTERFACE IMPORTED)\n"
+                + include("GTestHelpers.cmake")
+                + "gtest_program(consumer SOURCES main.cpp DEPS subject)\n"
+                'file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/consumer-$<CONFIG>.txt" CONTENT "$<TARGET_FILE:consumer>")\n'
+                "get_target_property(_interface subject INTERFACE_COMPILE_OPTIONS)\n"
+                'if(_interface)\nmessage(FATAL_ERROR "Private policy leaked: ${_interface}")\nendif()\n'
+                "get_target_property(_pic subject POSITION_INDEPENDENT_CODE)\n"
+                'file(WRITE "${CMAKE_BINARY_DIR}/pic.txt" "${_pic}")\n',
+            ),
         )
 
-    def configure(self, root, generator="Ninja"):
-        return self.run_command([CMAKE, "-S", str(root), "-B", str(root / "build"),
-                                 "-G", generator, "-DCMAKE_BUILD_TYPE=Debug"], root)
+    def configure_policy(self, generator: str = NINJA) -> Result:
+        return self.configure(self.root, self.binary, generator, "-DCMAKE_BUILD_TYPE=Debug")
 
-    def test_private_warnings_rtti_and_module_error_opt_in(self):
+    def compile_command(self, source: str) -> str:
+        commands = json.loads(read(self.binary / "compile_commands.json"))
+        return next(entry["command"] for entry in commands if entry["file"].endswith(source))
+
+    def consumer(self) -> str:
+        return read(self.binary / "consumer-Debug.txt")
+
+    def test_private_warnings_rtti_and_module_error_opt_in(self) -> None:
         for strict in (False, True):
-            with self.subTest(strict=strict), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                self.write_project(root, strict=strict)
-                self.configure(root)
-                build = self.run_command([CMAKE, "--build", "build", "--verbose"], root, success=not strict)
-                self.assertIn("intentionally_unused", build.stdout + build.stderr)
+            with self.subTest(strict=strict):
+                self.binary = self.root / f"build-{strict}"
+                self.write_project(strict=strict)
+                self.configure_policy()
+                result = self.build(self.binary, "--verbose", success=not strict)
+                self.assertIn("intentionally_unused", result.stdout + result.stderr)
                 if not strict:
-                    executable = (root / "build/consumer-Debug.txt").read_text()
-                    self.run_command([executable], root)
-                    commands = json.loads((root / "build/compile_commands.json").read_text())
-                    own = next(c["command"] for c in commands if c["file"].endswith("subject.cpp"))
-                    parent = next(c["command"] for c in commands if c["file"].endswith("main.cpp"))
-                    self.assertIn("/W4" if os.name == "nt" else "-Wextra", own)
-                    self.assertNotIn("/W4" if os.name == "nt" else "-Wextra", parent)
+                    self.run_command([self.consumer()])
+                    self.assertIn(WARNING_FLAG, self.compile_command("subject.cpp"))
+                    self.assertNotIn(WARNING_FLAG, self.compile_command("main.cpp"))
 
-    @unittest.skipUnless(os.name == "nt", "Windows DLL search path regression")
-    def test_execution_with_multiple_transitive_runtime_directories(self):
-        with tempfile.TemporaryDirectory(prefix="oxygen runtime ") as tmp:
-            root = Path(tmp)
-            self.write_project(root, shared=True)
-            with (root / "oxygen/CMakeLists.txt").open("a", encoding="utf-8") as source:
-                source.write(
-                    'add_library(second SHARED second.cpp)\n'
-                    'set_target_properties(second PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON\n'
-                    '  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/second dependency")\n'
-                    'target_link_libraries(subject PRIVATE second)\n')
-            (root / "oxygen/second.cpp").write_text(
-                'extern "C" int second_value() { return 42; }\n', encoding="utf-8")
-            path = root / "oxygen/subject.cpp"
-            path.write_text(path.read_text().replace(
+    @windows_only
+    def test_execution_with_multiple_transitive_runtime_directories(self) -> None:
+        self.write_project(shared=True)
+        oxygen = self.root / "oxygen"
+        with (oxygen / "CMakeLists.txt").open("a", encoding="utf-8") as stream:
+            stream.write(
+                "add_library(second SHARED second.cpp)\n"
+                "set_target_properties(second PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON\n"
+                '  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/second dependency")\n'
+                "target_link_libraries(subject PRIVATE second)\n"
+            )
+        write(oxygen / "second.cpp", 'extern "C" int second_value() { return 42; }\n')
+        write(
+            oxygen / "subject.cpp",
+            SUBJECT.replace(
                 'extern "C" int exercise', 'extern "C" int second_value();\nextern "C" int exercise'
-            ).replace('p[0] = 42;', 'p[0] = second_value();'), encoding="utf-8")
-            self.configure(root, "Ninja Multi-Config")
-            self.run_command([CMAKE, "--build", "build", "--config", "Debug"], root)
-            ctest = str(Path(CMAKE).with_name("ctest.exe"))
-            result = self.run_command([ctest, "--test-dir", "build", "-C", "Debug", "-R", "^consumer$", "--no-tests=error", "-V"], root)
-            self.assertIn("100% tests passed", result.stdout)
+            ).replace("p[0] = 42;", "p[0] = second_value();"),
+        )
+        self.configure_policy(NINJA_MULTI)
+        self.build(self.binary)
+        self.ctest(self.binary, "consumer")
 
-    def test_runtime_launcher_preserves_arguments_and_exit_status(self):
-        with tempfile.TemporaryDirectory(prefix="oxygen arguments ") as tmp:
-            root = Path(tmp)
-            script = root / "launcher.cmake"
-            script.write_text(
-                f'set(OXYGEN_RUNTIME_COMMAND [==[{Path(CMAKE).as_posix()};-E;env;--]==])\n'
-                f'include("{ENGINE.as_posix()}/cmake/RunTest.cmake")\n', encoding="utf-8")
-            arguments = ["", "a;b", '"quoted"', "]==]", "trailing\\", "${not_expanded}"]
-            result = self.run_command([
-                CMAKE, "-P", str(script), "--", sys.executable, "-c",
-                "import json,sys; print(json.dumps(sys.argv[1:])); sys.exit(37)",
-                *arguments,
-            ], root, success=False)
-            self.assertEqual(result.returncode, 37, result.stdout + result.stderr)
-            self.assertEqual(json.loads(result.stdout), arguments)
+    def test_runtime_launcher_preserves_arguments_and_exit_status(self) -> None:
+        arguments = ["", "a;b", '"quoted"', "]==]", "trailing\\", "${not_expanded}"]
+        result = self.cmake_script(
+            f"set(OXYGEN_RUNTIME_COMMAND [==[{Path(CMAKE).as_posix()};-E;env;--]==])\n" + include("RunTest.cmake"),
+            "--",
+            sys.executable,
+            "-c",
+            "import json,sys; print(json.dumps(sys.argv[1:])); sys.exit(37)",
+            *arguments,
+            name="launcher.cmake",
+            success=False,
+        )
+        self.assertEqual(result.returncode, 37, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout), arguments)
 
-    def test_static_and_shared_asan_detection_and_test_execution(self):
-        generators = ["Ninja", "Ninja Multi-Config"]
-        if os.name == "nt":
-            generators.append("Visual Studio 18 2026")
-        for generator in generators:
+    def test_static_and_shared_asan_detection_and_test_execution(self) -> None:
+        for generator in NATIVE_GENERATORS:
             for shared in (False, True):
-                with self.subTest(generator=generator, shared=shared), tempfile.TemporaryDirectory() as tmp:
-                    root = Path(tmp)
-                    self.write_project(root, asan=True, shared=shared)
-                    self.configure(root, generator)
-                    build = self.run_command([CMAKE, "--build", "build", "--config", "Debug", "--verbose"], root)
-                    self.assertIn("fsanitize=address", build.stdout)
-                    if os.name == "nt" and generator.startswith("Ninja"):
-                        self.assertIn("/OPT:NOREF", build.stdout)
-                        self.assertIn("/INCREMENTAL:NO", build.stdout)
-                        commands = json.loads((root / "build/compile_commands.json").read_text())
-                        own = next(c["command"] for c in commands if c["file"].endswith("subject.cpp"))
-                        self.assertNotIn("/RTC", own)
-                        self.assertNotIn("/ZI", own)
-                    ctest = str(Path(CMAKE).with_name("ctest.exe" if os.name == "nt" else "ctest"))
-                    result = self.run_command([ctest, "--test-dir", "build", "-C", "Debug", "-R", "^consumer$", "--no-tests=error", "-V"], root)
-                    self.assertIn("100% tests passed", result.stdout)
-                    executable = (root / "build/consumer-Debug.txt").read_text()
-                    env = os.environ.copy()
-                    if os.name == "nt":
-                        env["PATH"] = str(root / "build/dependency-bin/Debug") + os.pathsep + str(root / "build/dependency-bin") + os.pathsep + env["PATH"]
-                    result = self.run_command([executable, "bad"], root, success=False, env=env)
-                    self.assertIn("AddressSanitizer: heap-buffer-overflow", result.stdout + result.stderr)
+                with self.subTest(generator=generator, shared=shared):
+                    self.binary = self.root / f"build-{generator}-{shared}"
+                    self.write_project(asan=True, shared=shared)
+                    self.check_asan(generator)
 
-    @unittest.skipIf(os.name == "nt", "PIC behavior is a portable-platform check")
-    def test_pic_default_and_explicit_parent_override(self):
+    def check_asan(self, generator: str) -> None:
+        self.configure_policy(generator)
+        result = self.build(self.binary, "--verbose")
+        self.assertIn("fsanitize=address", result.stdout)
+        if WINDOWS and generator.startswith(NINJA):
+            self.assertIn("/OPT:NOREF", result.stdout)
+            self.assertIn("/INCREMENTAL:NO", result.stdout)
+            subject = self.compile_command("subject.cpp")
+            self.assertNotIn("/RTC", subject)
+            self.assertNotIn("/ZI", subject)
+        self.ctest(self.binary, "consumer")
+        env = dict(os.environ)
+        if WINDOWS:
+            runtime = self.binary / "dependency-bin"
+            env["PATH"] = os.pathsep.join((str(runtime / "Debug"), str(runtime), env["PATH"]))
+        result = self.run_command([self.consumer(), "bad"], success=False, env=env)
+        self.assertIn("AddressSanitizer: heap-buffer-overflow", result.stdout + result.stderr)
+
+    @unittest.skipIf(WINDOWS, "PIC behavior is a portable-platform check")
+    def test_pic_default_and_explicit_parent_override(self) -> None:
         for supplied, expected in ((None, "ON"), ("OFF", "OFF"), ("ON", "ON")):
-            with self.subTest(pic=supplied), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                self.write_project(root, pic=supplied)
-                self.configure(root)
-                self.assertEqual((root / "build/pic.txt").read_text(), expected)
+            with self.subTest(pic=supplied):
+                self.binary = self.root / f"build-{supplied}"
+                self.write_project(pic=supplied)
+                self.configure_policy()
+                self.assertEqual(read(self.binary / "pic.txt"), expected)
 
 
 if __name__ == "__main__":

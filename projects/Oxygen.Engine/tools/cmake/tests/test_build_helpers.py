@@ -1,65 +1,59 @@
+# pyright: strict
 """Module metadata, hierarchy and IDE inventory contracts at the CMake minimum."""
 
-import os
-from pathlib import Path
-import tempfile
 import unittest
-import xml.etree.ElementTree as ET
+from collections.abc import Iterable, Sequence
+from pathlib import Path
 
-from test_build_contract import CMAKE, ENGINE, CommandTests
+from cmake_testing import (
+    ENGINE,
+    NATIVE_GENERATORS,
+    NINJA,
+    VISUAL_STUDIO,
+    ProjectTestCase,
+    include,
+    msbuild_items,
+    mtimes,
+    read,
+    requires_cmake,
+    requires_compiler,
+    windows_only,
+)
 
-
-@unittest.skipUnless(CMAKE, "CMake is required")
-class HelperFixture(CommandTests):
-    def setUp(self):
-        temporary = tempfile.TemporaryDirectory(prefix="oxygen helper spaces ")
-        self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
-        self.source = self.root / "source"
-        self.source.mkdir()
-        self.build = self.root / "build"
-
-    def write(self, path, text="// fixture\n"):
-        path = self.source / path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8")
-
-    def project(self, body, *, language="NONE"):
-        self.write("CMakeLists.txt",
-                   f'cmake_minimum_required(VERSION 4.2)\nproject(Helpers {language})\n'
-                   f'include("{ENGINE.as_posix()}/cmake/BuildHelpers.cmake")\n'
-                   f'include("{ENGINE.as_posix()}/cmake/LogHelpers.cmake")\n' + body)
-
-    def configure(self, *, generator="Ninja", success=True):
-        return self.run_command([CMAKE, "-S", str(self.source), "-B", str(self.build),
-                                 "-G", generator, "-DCMAKE_BUILD_TYPE=Debug"],
-                                self.root, success=success)
+INVENTORY_HEADERS = ("relative.h", "absolute.h", "public.h", "space dir/header.h", "generated/header.h")
 
 
-class HelperTests(HelperFixture):
-    def test_all_production_module_declarations(self):
+@requires_cmake
+class HelperTests(ProjectTestCase):
+    def assert_configure_fails(self, cases: Sequence[tuple[str, str]], prefix: str = "") -> None:
+        for body, diagnostic in cases:
+            with self.subTest(body=body):
+                self.project(prefix + body)
+                result = self.configure_project(success=False)
+                self.assertIn(diagnostic, result.stderr)
+
+    def test_all_production_module_declarations(self) -> None:
         # Exercise the real declaration preambles, including examples not
         # provisioned by the local Conan graph. No dependency discovery/build.
-        bodies = []
+        marker = 'asap_push_module("${META_MODULE_NAME}")'
+        bodies: list[str] = []
         for base in (ENGINE / "src", ENGINE / "Examples"):
             for path in sorted(base.rglob("CMakeLists.txt")):
-                source = path.read_text(encoding="utf-8")
+                source = read(path)
                 if "asap_module_declare(" not in source:
                     continue
-                preamble = source.split('asap_push_module("${META_MODULE_NAME}")', 1)[0]
-                self.assertNotEqual(preamble, source, str(path))
-                bodies.append(preamble + '''
-asap_push_module("${META_MODULE_NAME}")
-add_library(${META_MODULE_TARGET} INTERFACE)
-asap_pop_module("${META_MODULE_NAME}")
-''')
-        self.assertGreater(len(bodies), 0)
+                preamble, found, _ = source.partition(marker)
+                self.assertTrue(found, str(path))
+                bodies.append(
+                    f"{preamble}{marker}\nadd_library(${{META_MODULE_TARGET}} INTERFACE)\n"
+                    'asap_pop_module("${META_MODULE_NAME}")\n'
+                )
+        self.assertTrue(bodies)
         self.project("\n".join(bodies))
-        result = self.configure()
-        self.assertNotIn("Warning", result.stderr)
+        self.assertNotIn("Warning", self.configure_project().stderr)
 
-    def test_metadata_hierarchy_nested_scope_and_reinclude(self):
-        self.project('''
+    def test_metadata_hierarchy_nested_scope_and_reinclude(self) -> None:
+        self.project("""
 set(depth sentinel-depth)
 set(removed sentinel-removed)
 set(OXYGEN_IS_MASTER_PROJECT TRUE)
@@ -80,64 +74,82 @@ if(NOT ASAP_LOG_PROJECT_HIERARCHY STREQUAL "" OR
    NOT depth STREQUAL "sentinel-depth" OR NOT removed STREQUAL "sentinel-removed")
   message(FATAL_ERROR "State leaked")
 endif()
-''')
-        self.write("child/CMakeLists.txt", f'''
-include("{ENGINE.as_posix()}/cmake/LogHelpers.cmake")
-include("{ENGINE.as_posix()}/cmake/BuildHelpers.cmake")
+""")
+        self.write(
+            "child/CMakeLists.txt",
+            include("LogHelpers.cmake")
+            + include("BuildHelpers.cmake")
+            + """
 asap_module_declare(MODULE_NAME Oxygen.Parent.Child DESCRIPTION "child")
 if(NOT META_MODULE_TARGET STREQUAL "oxygen-parent-child" OR
    NOT META_MODULE_TARGET_ALIAS STREQUAL "oxygen::parent-child")
   message(FATAL_ERROR "Incorrect target names")
 endif()
-asap_push_module("${{META_MODULE_NAME}}")
-add_library(${{META_MODULE_TARGET}} INTERFACE)
-asap_pop_module("${{META_MODULE_NAME}}")
-''')
-        result = self.configure()
+asap_push_module("${META_MODULE_NAME}")
+add_library(${META_MODULE_TARGET} INTERFACE)
+asap_pop_module("${META_MODULE_NAME}")
+""",
+        )
+        result = self.configure_project()
         self.assertNotIn("Warning", result.stderr)
         self.assertIn("[Oxygen] > (Oxygen.Parent) > (Oxygen.Parent.Child)", result.stdout)
 
-    def test_invalid_declarations_and_collisions(self):
-        cases = [
-            ('asap_module_declare()', 'MODULE_NAME'),
-            ('asap_module_declare(MODULE_NAME)', 'missing values'),
-            ('asap_module_declare(MODULE_NAME "")', 'MODULE_NAME'),
-            ('asap_module_declare(MODULE_NAME Oxygen..Base)', 'identifier'),
-            ('asap_module_declare(MODULE_NAME Oxygen.Base DESCRIPTION)', 'missing values'),
-            ('asap_module_declare(MODULE_NAME Oxygen.Base TYPO value)', 'invalid arguments'),
-            ('asap_module_declare(MODULE_NAME Oxygen.Base MODULE_TARGET_NAME custom)', 'invalid arguments'),
-            ('asap_module_declare(MODULE_NAME Oxygen.Base WITHOUT_VERSION_H)', 'invalid arguments'),
-            ('add_library(oxygen-base INTERFACE)\nasap_module_declare(MODULE_NAME Oxygen.Base)', 'conflicts'),
-        ]
-        for body, diagnostic in cases:
-            with self.subTest(body=body):
-                self.project(body)
-                result = self.configure(success=False)
-                self.assertIn(diagnostic, result.stderr)
+    def test_invalid_declarations_and_collisions(self) -> None:
+        self.assert_configure_fails(
+            [
+                ("asap_module_declare()", "MODULE_NAME"),
+                ("asap_module_declare(MODULE_NAME)", "missing values"),
+                ('asap_module_declare(MODULE_NAME "")', "MODULE_NAME"),
+                ("asap_module_declare(MODULE_NAME Oxygen..Base)", "identifier"),
+                ("asap_module_declare(MODULE_NAME Oxygen.Base DESCRIPTION)", "missing values"),
+                ("asap_module_declare(MODULE_NAME Oxygen.Base TYPO value)", "invalid arguments"),
+                ("asap_module_declare(MODULE_NAME Oxygen.Base MODULE_TARGET_NAME custom)", "invalid arguments"),
+                ("asap_module_declare(MODULE_NAME Oxygen.Base WITHOUT_VERSION_H)", "invalid arguments"),
+                ("add_library(oxygen-base INTERFACE)\nasap_module_declare(MODULE_NAME Oxygen.Base)", "conflicts"),
+            ]
+        )
 
-    def test_invalid_hierarchy_operations(self):
-        cases = [
-            ('asap_pop_project(Oxygen)', 'empty stack'),
-            ('asap_push_project(Oxygen)\nasap_pop_project(Other)', 'top of stack'),
-            ('asap_push_module(Oxygen.Base)', 'declare module'),
-            ('asap_push_project(Oxygen extra)', 'exactly one name'),
-            ('asap_push_project("")', 'nonempty'),
-            ('asap_push_project("bad;name")', 'nonempty'),
-            ('asap_push_project("bad(name)")', 'nonempty'),
-        ]
-        for body, diagnostic in cases:
-            with self.subTest(body=body):
-                self.project(body)
-                result = self.configure(success=False)
-                self.assertIn(diagnostic, result.stderr)
+    def test_invalid_hierarchy_operations(self) -> None:
+        self.assert_configure_fails(
+            [
+                ("asap_pop_project(Oxygen)", "empty stack"),
+                ("asap_push_project(Oxygen)\nasap_pop_project(Other)", "top of stack"),
+                ("asap_push_module(Oxygen.Base)", "declare module"),
+                ("asap_push_project(Oxygen extra)", "exactly one name"),
+                ('asap_push_project("")', "nonempty"),
+                ('asap_push_project("bad;name")', "nonempty"),
+                ('asap_push_project("bad(name)")', "nonempty"),
+            ]
+        )
 
-    def inventory(self):
-        for name in ("relative.h", "absolute.h", "public.h", "interface.h",
-                     "platform.h", "space dir/header.h", "Bindings/ignored.cpp",
-                     "Test/ignored.cpp", "Tools/ignored.cpp", "Benchmarks/ignored.cpp",
-                     "Examples/ignored.cpp"):
+    def test_invalid_inventory_calls(self) -> None:
+        self.assert_configure_fails(
+            [
+                ("arrange_target_files_for_ide(missing)", "unknown target"),
+                ("arrange_target_files_for_ide(subject TYPO)", "invalid arguments"),
+                ("arrange_target_files_for_ide(subject EXCLUDE_PATTERNS)", "missing values"),
+                ("add_library(alias ALIAS subject)\narrange_target_files_for_ide(alias)", "non-alias"),
+                ("add_library(external INTERFACE IMPORTED)\narrange_target_files_for_ide(external)", "locally defined"),
+            ],
+            prefix="add_library(subject INTERFACE)\n",
+        )
+
+    def inventory(self) -> None:
+        for name in (
+            "relative.h",
+            "absolute.h",
+            "public.h",
+            "interface.h",
+            "platform.h",
+            "space dir/header.h",
+            "Bindings/ignored.cpp",
+            "Test/ignored.cpp",
+            "Tools/ignored.cpp",
+            "Benchmarks/ignored.cpp",
+            "Examples/ignored.cpp",
+        ):
             self.write(name)
-        self.project('''
+        self.project("""
 add_library(subject INTERFACE)
 set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/generated/header.h" PROPERTIES GENERATED TRUE)
 target_sources(subject PRIVATE relative.h "${CMAKE_CURRENT_SOURCE_DIR}/absolute.h"
@@ -146,95 +158,79 @@ target_sources(subject PRIVATE relative.h "${CMAKE_CURRENT_SOURCE_DIR}/absolute.
   PUBLIC FILE_SET HEADERS BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}" FILES public.h
   INTERFACE FILE_SET api TYPE HEADERS BASE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}" FILES interface.h)
 arrange_target_files_for_ide(subject EXCLUDE_PATTERNS "bindings/")
-''')
+""")
 
-    def test_inventory_paths_file_sets_generated_and_inactive_sources(self):
+    def test_inventory_paths_file_sets_generated_and_inactive_sources(self) -> None:
         self.inventory()
-        result = self.configure()
+        result = self.configure_project()
         self.assertNotIn("NOT part", result.stderr)
         self.assertNotIn("cannot inspect", result.stderr)
         # A newly added file is reported on the next configure, including a
         # directory whose name only ends in 'test' (not an excluded Test dir).
         self.write("Contest/forgotten.cpp")
-        result = self.configure()
+        result = self.configure_project()
         self.assertIn("Contest/forgotten.cpp", result.stderr)
         self.assertNotIn("Bindings/ignored.cpp", result.stderr)
         self.assertNotIn("platform.h", result.stderr)
 
-    def test_unsupported_expression_is_explicit(self):
+    def test_unsupported_expression_is_explicit(self) -> None:
         self.write("one.h")
         self.write("two.h")
-        self.project('''
+        self.project("""
 add_library(subject INTERFACE)
 target_sources(subject PRIVATE "$<IF:$<BOOL:1>,one.h,two.h>")
 arrange_target_files_for_ide(subject)
-''')
-        result = self.configure()
+""")
+        result = self.configure_project()
         self.assertIn("cannot inspect expression", result.stderr)
         self.assertIn("Inventory is incomplete", result.stderr)
 
-    def test_invalid_inventory_calls(self):
-        cases = [
-            ('arrange_target_files_for_ide(missing)', 'unknown target'),
-            ('arrange_target_files_for_ide(subject TYPO)', 'invalid arguments'),
-            ('arrange_target_files_for_ide(subject EXCLUDE_PATTERNS)', 'missing values'),
-            ('add_library(alias ALIAS subject)\narrange_target_files_for_ide(alias)', 'non-alias'),
-            ('add_library(external INTERFACE IMPORTED)\narrange_target_files_for_ide(external)', 'locally defined'),
+    def project_headers(self) -> list[str]:
+        return [
+            item.attrib.get("Include", "").replace("\\", "/")
+            for item in msbuild_items(self.binary / "subject.vcxproj", "ClInclude")
         ]
-        for body, diagnostic in cases:
-            with self.subTest(body=body):
-                self.project('add_library(subject INTERFACE)\n' + body)
-                result = self.configure(success=False)
-                self.assertIn(diagnostic, result.stderr)
 
-    @unittest.skipUnless(os.name == "nt", "Visual Studio project generation")
-    def test_visual_studio_header_only_project_and_groups(self):
+    def assert_headers_listed(self, headers: Iterable[str]) -> None:
+        listed = self.project_headers()
+        for header in headers:
+            self.assertTrue(any(path.endswith(header) for path in listed), header)
+
+    @windows_only
+    def test_visual_studio_header_only_project_and_groups(self) -> None:
         self.inventory()
-        self.configure(generator="Visual Studio 18 2026")
-        project = ET.parse(self.build / "subject.vcxproj")
-        includes = [e.attrib.get("Include", "").replace("\\", "/")
-                    for e in project.iter() if e.tag.endswith("ClInclude")]
-        for header in ("relative.h", "absolute.h", "public.h", "space dir/header.h", "generated/header.h"):
-            self.assertTrue(any(p.endswith(header) for p in includes), header)
+        self.configure_project(VISUAL_STUDIO)
+        self.assert_headers_listed(INVENTORY_HEADERS)
         # INTERFACE-only headers are usage requirements; explicitly list them
         # on the native target too when IDE visibility is required (as OxCo does).
         with (self.source / "CMakeLists.txt").open("a", encoding="utf-8") as stream:
-            stream.write('target_sources(subject PRIVATE interface.h)\n')
+            stream.write("target_sources(subject PRIVATE interface.h)\n")
         # Prove visibility does not depend on stale projects/solution entries.
-        solution_files = list(self.build.glob("*.sln")) + list(self.build.glob("*.slnx"))
-        self.assertEqual(len(solution_files), 1)
-        solution = solution_files[0]
-        for path in (self.build / "subject.vcxproj", self.build / "subject.vcxproj.filters", solution):
+        solutions = [*self.binary.glob("*.sln"), *self.binary.glob("*.slnx")]
+        self.assertEqual(len(solutions), 1)
+        solution = solutions[0]
+        for path in (self.binary / "subject.vcxproj", self.binary / "subject.vcxproj.filters", solution):
             path.unlink()
-            self.assertFalse(path.exists())
-        self.configure(generator="Visual Studio 18 2026")
-        project = ET.parse(self.build / "subject.vcxproj")
-        includes = [e.attrib.get("Include", "").replace("\\", "/")
-                    for e in project.iter() if e.tag.endswith("ClInclude")]
-        for header in ("relative.h", "absolute.h", "public.h", "interface.h", "space dir/header.h", "generated/header.h"):
-            self.assertTrue(any(p.endswith(header) for p in includes), header)
+        self.configure_project(VISUAL_STUDIO)
+        headers = (*INVENTORY_HEADERS, "interface.h")
+        self.assert_headers_listed(headers)
         self.assertIn("subject.vcxproj", solution.read_text(encoding="utf-8-sig"))
-        filters = ET.parse(self.build / "subject.vcxproj.filters")
-        filter_items = {e.attrib["Include"].replace("\\", "/"): next(iter(e)).text
-                        for e in filters.iter() if e.tag.endswith("ClInclude")}
-        for header in ("relative.h", "absolute.h", "public.h", "interface.h", "space dir/header.h", "generated/header.h"):
-            group = next((v for k, v in filter_items.items() if k.endswith(header)), None)
-            self.assertIsNotNone(group, header)
-            self.assertTrue(group.startswith("generated" if header.startswith("generated/") else "src"), group)
+        groups = {
+            item.attrib["Include"].replace("\\", "/"): item.findtext("{*}Filter", default="")
+            for item in msbuild_items(self.binary / "subject.vcxproj.filters", "ClInclude")
+        }
+        for header in headers:
+            group = next((name for path, name in groups.items() if path.endswith(header)), "")
+            expected = "generated" if header.startswith("generated/") else "src"
+            self.assertTrue(group.startswith(expected), f"{header}: {group!r}")
 
 
-@unittest.skipUnless(os.environ.get("OXYGEN_RUN_HELPER_BUILD_TESTS") == "1",
-                     "Build tests require explicit opt-in on shared hosts")
-class HelperBuildTests(HelperFixture):
-    def test_explicit_build_shortcut_has_one_artifact_and_is_incremental(self):
-        generators = ["Ninja", "Ninja Multi-Config"]
-        if os.name == "nt":
-            generators.append("Visual Studio 18 2026")
-        for index, generator in enumerate(generators):
-            with self.subTest(generator=generator):
-                self.build = self.root / f"build-{index}"
-                self.write("main.cpp", 'int main() { return 0; }\n')
-                self.project('''
+@requires_compiler
+class HelperBuildTests(ProjectTestCase):
+    def test_explicit_build_shortcut_has_one_artifact_and_is_incremental(self) -> None:
+        self.write("main.cpp", "int main() { return 0; }\n")
+        self.project(
+            """
 asap_module_declare(MODULE_NAME Oxygen.Tools.Probe DESCRIPTION "probe")
 asap_push_module("${META_MODULE_NAME}")
 add_executable(${META_MODULE_TARGET} main.cpp)
@@ -246,22 +242,29 @@ add_custom_target(${META_MODULE_NAME} DEPENDS ${META_MODULE_TARGET})
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/artifact-$<CONFIG>.txt" CONTENT "$<TARGET_FILE:${META_MODULE_TARGET}>")
 asap_pop_module("${META_MODULE_NAME}")
-''', language="CXX")
-                self.configure(generator=generator)
-                for config in (["Debug"] if generator == "Ninja" else ["Debug", "Release"]):
-                    command = [CMAKE, "--build", str(self.build), "--config", config, "--parallel", "1", "--target"]
-                    self.run_command(command + ["Oxygen.Tools.Probe"], self.root)
-                    artifact = Path((self.build / f"artifact-{config}.txt").read_text())
-                    self.run_command([str(artifact)], self.root)
-                    def timestamps():
-                        objects = [p for p in self.build.rglob("*") if p.suffix in (".obj", ".o")]
-                        self.assertTrue(objects)
-                        return {p: p.stat().st_mtime_ns for p in [artifact, *objects]}
+""",
+            language="CXX",
+        )
+        for index, generator in enumerate(NATIVE_GENERATORS):
+            with self.subTest(generator=generator):
+                self.binary = self.root / f"build-{index}"
+                self.configure_project(generator)
+                for config in ("Debug",) if generator == NINJA else ("Debug", "Release"):
+                    self.check_shortcut(config)
 
-                    before = timestamps()
-                    self.run_command(command + ["oxygen-tools-probe"], self.root)
-                    self.run_command(command + ["Oxygen.Tools.Probe"], self.root)
-                    self.assertEqual(before, timestamps())
+    def check_shortcut(self, config: str) -> None:
+        def build(target: str) -> None:
+            self.build(self.binary, "--parallel", "1", "--target", target, config=config)
+
+        build("Oxygen.Tools.Probe")
+        artifact = Path(read(self.binary / f"artifact-{config}.txt"))
+        self.run_command([artifact])
+        objects = [path for path in self.binary.rglob("*") if path.suffix in (".obj", ".o")]
+        self.assertTrue(objects)
+        before = mtimes([artifact, *objects])
+        build("oxygen-tools-probe")
+        build("Oxygen.Tools.Probe")
+        self.assertEqual(before, mtimes(before))
 
 
 if __name__ == "__main__":

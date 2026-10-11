@@ -1,170 +1,141 @@
-"""Exercise Oxygen's real build policy without provisioning engine dependencies.
-
-Run from an x64 VS 2026 developer shell. OXYGEN_TEST_CMAKE can select an exact
-CMake executable for local checks; CI exercises only the supported minimum.
-"""
+# pyright: strict
+"""Oxygen's toolchain, build-type and recipe policy, without engine dependencies."""
 
 import json
-import os
-from pathlib import Path
-import shutil
-import subprocess
-import tempfile
 import unittest
 
+from cmake_testing import (
+    CMAKE,
+    CONAN,
+    NINJA,
+    NINJA_MULTI,
+    VISUAL_STUDIO,
+    WINDOWS_PROFILE,
+    CommandTestCase,
+    ProjectTestCase,
+    cmake_project,
+    include,
+    oxygen_recipe,
+    read,
+    requires_cmake,
+    requires_compiler,
+    requires_conan,
+    windows_only,
+    write,
+)
 
-ENGINE = Path(__file__).resolve().parents[3]
-CMAKE = os.environ.get("OXYGEN_TEST_CMAKE") or shutil.which("cmake")
-CONAN = shutil.which("conan")
+CPP23_PROBE = """#include <expected>
+constexpr std::expected<int, int> result(23);
+static_assert(result.value() == 23);
+int main() { return result.value() == 23 ? 0 : 1; }
+"""
 
 
-class CommandTests(unittest.TestCase):
-    def run_command(self, command, root, *, success=True, env=None):
-        result = subprocess.run(
-            command, cwd=root, capture_output=True, text=True,
-            encoding="utf-8", errors="replace", env=env,
-        )
-        output = result.stdout + result.stderr
-        if success:
-            self.assertEqual(result.returncode, 0, output)
-        else:
-            self.assertNotEqual(result.returncode, 0, output)
-        return result
-
-
-@unittest.skipUnless(CMAKE, "CMake is required")
-class WindowsToolHostTests(CommandTests):
-    def test_host_policy_without_configuring_or_compiling(self):
+@requires_cmake
+class WindowsToolHostTests(CommandTestCase):
+    def test_host_policy_without_configuring_or_compiling(self) -> None:
         cases = (
             ("Hostx64", "x64", "amd64/", None),
             ("Hostx86", "x64", "amd64/", "x64-hosted MSVC compiler"),
             ("Hostx64", "x86", "amd64/", "toolset host=x64"),
             ("Hostx64", "x64", "", "64-bit MSBuild"),
         )
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            script = root / "host-policy.cmake"
-            for compiler_host, toolset_host, msbuild_host, error in cases:
-                with self.subTest(compiler_host=compiler_host, toolset_host=toolset_host,
-                                  msbuild_host=msbuild_host):
-                    script.write_text(
-                        'cmake_minimum_required(VERSION 4.2)\n'
-                        'set(CMAKE_SYSTEM_NAME Windows)\n'
-                        'set(CMAKE_CXX_COMPILER_ID MSVC)\n'
-                        'set(CMAKE_CXX_COMPILER_VERSION 19.51)\n'
-                        f'set(CMAKE_CXX_COMPILER "C:/VS/bin/{compiler_host}/x64/cl.exe")\n'
-                        'set(CMAKE_GENERATOR "Visual Studio 18 2026")\n'
-                        f'set(CMAKE_VS_PLATFORM_TOOLSET_HOST_ARCHITECTURE {toolset_host})\n'
-                        f'set(CMAKE_MAKE_PROGRAM "C:/VS/Bin/{msbuild_host}MSBuild.exe")\n'
-                        'set(CMAKE_CXX_COMPILE_FEATURES cxx_std_23)\n'
-                        'set(OXYGEN_COMPILER_TARGETS_X64 TRUE)\n'
-                        f'include("{ENGINE.as_posix()}/cmake/ToolchainRequirements.cmake")\n',
-                        encoding="utf-8",
-                    )
-                    result = self.run_command([CMAKE, "-P", str(script)], root, success=error is None)
-                    if error:
-                        self.assertIn(error, result.stdout + result.stderr)
+        for compiler_host, toolset_host, msbuild_host, error in cases:
+            with self.subTest(compiler_host=compiler_host, toolset_host=toolset_host, msbuild_host=msbuild_host):
+                result = self.cmake_script(
+                    "set(CMAKE_SYSTEM_NAME Windows)\n"
+                    "set(CMAKE_CXX_COMPILER_ID MSVC)\n"
+                    "set(CMAKE_CXX_COMPILER_VERSION 19.51)\n"
+                    f'set(CMAKE_CXX_COMPILER "C:/VS/bin/{compiler_host}/x64/cl.exe")\n'
+                    f'set(CMAKE_GENERATOR "{VISUAL_STUDIO}")\n'
+                    f"set(CMAKE_VS_PLATFORM_TOOLSET_HOST_ARCHITECTURE {toolset_host})\n"
+                    f'set(CMAKE_MAKE_PROGRAM "C:/VS/Bin/{msbuild_host}MSBuild.exe")\n'
+                    "set(CMAKE_CXX_COMPILE_FEATURES cxx_std_23)\n"
+                    "set(OXYGEN_COMPILER_TARGETS_X64 TRUE)\n" + include("ToolchainRequirements.cmake"),
+                    success=error is None,
+                )
+                if error:
+                    self.assertIn(error, result.stdout + result.stderr)
 
 
-@unittest.skipUnless(CMAKE, "CMake is required")
-class ConfigurationTests(CommandTests):
-    def configure(self, root, generator, *arguments):
-        return self.run_command(
-            [CMAKE, "-S", str(root), "-B", str(root / "build"),
-             "-G", generator, *arguments], root,
+@requires_cmake
+class ConfigurationTests(ProjectTestCase):
+    def write_project(self, *, toolchain: bool = False, before: str = "") -> None:
+        body = include("ToolchainRequirements.cmake") if toolchain else ""
+        body += before + include("BuildConfiguration.cmake")
+        body += 'file(WRITE "${CMAKE_BINARY_DIR}/selected.txt" "${CMAKE_BUILD_TYPE}")\n'
+        if toolchain:
+            body += "add_executable(contract main.cpp)\ntarget_compile_features(contract PRIVATE cxx_std_23)\n"
+            self.write("main.cpp", CPP23_PROBE)
+        self.write("CMakeLists.txt", cmake_project("Contract", "CXX" if toolchain else "NONE", body))
+
+    def selected(self) -> str:
+        return read(self.binary / "selected.txt")
+
+    def test_single_config_default_and_explicit_values(self) -> None:
+        self.write_project()
+        for index, (supplied, expected) in enumerate(
+            (
+                (None, "Debug"),
+                ("", "Debug"),
+                ("Debug", "Debug"),
+                ("Release", "Release"),
+                ("RelWithDebInfo", "RelWithDebInfo"),
+                ("OFF", "OFF"),
+            )
+        ):
+            with self.subTest(build_type=supplied):
+                self.binary = self.root / f"build-{index}"
+                arguments = [] if supplied is None else [f"-DCMAKE_BUILD_TYPE={supplied}"]
+                self.configure(self.source, self.binary, NINJA, *arguments)
+                self.assertEqual(self.selected(), expected)
+                # Reconfiguration must preserve the caller's next choice, too.
+                self.configure(self.source, self.binary, NINJA, "-DCMAKE_BUILD_TYPE=Release")
+                self.assertEqual(self.selected(), "Release")
+
+    def test_empty_normal_variable_defaults(self) -> None:
+        self.write_project(before='set(CMAKE_BUILD_TYPE "")\n')
+        self.configure(self.source, self.binary)
+        self.assertEqual(self.selected(), "Debug")
+
+    def test_multi_config_preserves_configurations(self) -> None:
+        self.write_project()
+        self.configure(self.source, self.binary, NINJA_MULTI, "-DCMAKE_CONFIGURATION_TYPES=Debug;Release")
+        self.assertEqual(self.selected(), "")
+        cache = read(self.binary / "CMakeCache.txt")
+        self.assertRegex(cache, r"CMAKE_CONFIGURATION_TYPES:[^=\n]+=Debug;Release")
+        self.assertNotIn("CMAKE_DEFAULT_CONFIGS:", cache)
+
+    @windows_only
+    @requires_compiler
+    def test_supported_generators_compile_cpp23(self) -> None:
+        self.write_project(toolchain=True)
+        for index, generator in enumerate((NINJA, NINJA_MULTI, VISUAL_STUDIO)):
+            with self.subTest(generator=generator):
+                self.binary = self.root / f"build-{index}"
+                platform = ["-A", "x64"] if generator == VISUAL_STUDIO else []
+                self.configure(self.source, self.binary, generator, *platform)
+                for config in ("Debug", "Release"):
+                    if generator == NINJA:
+                        self.configure(self.source, self.binary, generator, f"-DCMAKE_BUILD_TYPE={config}")
+                    self.build(self.binary, config=config)
+                    folder = self.binary if generator == NINJA else self.binary / config
+                    self.run_command([folder / "contract.exe"])
+
+    @windows_only
+    @requires_compiler
+    def test_actual_win32_compiler_is_rejected(self) -> None:
+        self.write_project(toolchain=True)
+        self.assert_fails_with(
+            [CMAKE, "-S", self.source, "-B", self.binary, "-G", VISUAL_STUDIO, "-A", "Win32"],
+            "requires an MSVC x64 target",
         )
 
-    def write_project(self, root, *, toolchain=False, before=""):
-        language = "CXX" if toolchain else "NONE"
-        modules = ENGINE / "cmake"
-        source = f"cmake_minimum_required(VERSION 4.2)\nproject(Contract {language})\n"
-        if toolchain:
-            source += f'include("{modules.as_posix()}/ToolchainRequirements.cmake")\n'
-        source += before
-        source += f'include("{modules.as_posix()}/BuildConfiguration.cmake")\n'
-        source += 'file(WRITE "${CMAKE_BINARY_DIR}/selected.txt" "${CMAKE_BUILD_TYPE}")\n'
-        if toolchain:
-            source += (
-                'add_executable(contract main.cpp)\n'
-                'target_compile_features(contract PRIVATE cxx_std_23)\n'
-            )
-            (root / "main.cpp").write_text(
-                "#include <expected>\n"
-                "constexpr std::expected<int, int> result(23);\n"
-                "static_assert(result.value() == 23);\n"
-                "int main() { return result.value() == 23 ? 0 : 1; }\n",
-                encoding="utf-8",
-            )
-        (root / "CMakeLists.txt").write_text(source, encoding="utf-8")
 
-    def test_single_config_default_and_explicit_values(self):
-        for supplied, expected in ((None, "Debug"), ("", "Debug"),
-                                   ("Debug", "Debug"), ("Release", "Release"),
-                                   ("RelWithDebInfo", "RelWithDebInfo"),
-                                   ("OFF", "OFF")):
-            with self.subTest(build_type=supplied), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                self.write_project(root)
-                args = [] if supplied is None else [f"-DCMAKE_BUILD_TYPE={supplied}"]
-                self.configure(root, "Ninja", *args)
-                self.assertEqual((root / "build/selected.txt").read_text(), expected)
-                # Reconfiguration must preserve the caller's next choice, too.
-                self.configure(root, "Ninja", "-DCMAKE_BUILD_TYPE=Release")
-                self.assertEqual((root / "build/selected.txt").read_text(), "Release")
-
-    def test_empty_normal_variable_defaults(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            self.write_project(root, before='set(CMAKE_BUILD_TYPE "")\n')
-            self.configure(root, "Ninja")
-            self.assertEqual((root / "build/selected.txt").read_text(), "Debug")
-
-    def test_multi_config_preserves_configurations(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            self.write_project(root)
-            self.configure(root, "Ninja Multi-Config",
-                           "-DCMAKE_CONFIGURATION_TYPES=Debug;Release")
-            self.assertEqual((root / "build/selected.txt").read_text(), "")
-            cache = (root / "build/CMakeCache.txt").read_text()
-            self.assertRegex(cache, r"CMAKE_CONFIGURATION_TYPES:[^=\n]+=Debug;Release")
-            self.assertNotIn("CMAKE_DEFAULT_CONFIGS:", cache)
-
-    @unittest.skipUnless(os.name == "nt", "Windows toolchain integration")
-    def test_supported_generators_compile_cpp23(self):
-        for generator in ("Ninja", "Ninja Multi-Config", "Visual Studio 18 2026"):
-            with self.subTest(generator=generator), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                self.write_project(root, toolchain=True)
-                args = ["-A", "x64"] if generator.startswith("Visual Studio") else []
-                self.configure(root, generator, *args)
-                for config in ("Debug", "Release"):
-                    if generator == "Ninja":
-                        self.configure(root, generator, f"-DCMAKE_BUILD_TYPE={config}")
-                    self.run_command(
-                        [CMAKE, "--build", str(root / "build"), "--config", config], root,
-                    )
-                    executable = root / "build"
-                    if generator != "Ninja":
-                        executable /= config
-                    self.run_command([str(executable / "contract.exe")], root)
-
-    @unittest.skipUnless(os.name == "nt", "Windows toolchain integration")
-    def test_actual_win32_compiler_is_rejected(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            self.write_project(root, toolchain=True)
-            result = self.run_command(
-                [CMAKE, "-S", str(root), "-B", str(root / "build"),
-                 "-G", "Visual Studio 18 2026", "-A", "Win32"], root, success=False,
-            )
-            self.assertIn("requires an MSVC x64 target", result.stdout + result.stderr)
-
-
-@unittest.skipUnless(CONAN, "Conan is required")
-class RecipeContractTests(CommandTests):
-    def test_validation_and_package_scoped_language(self):
-        cases = (
+@requires_conan
+class RecipeContractTests(CommandTestCase):
+    def test_validation_and_package_scoped_language(self) -> None:
+        cases: tuple[tuple[list[str], str | None], ...] = (
             ([], None),
             (["-s", "oxygen/*:compiler.cppstd=20"], "C++ standard"),
             (["-s", "compiler.version=194"], "requires MSVC 19.50"),
@@ -172,40 +143,20 @@ class RecipeContractTests(CommandTests):
             (["-s", "arch=x86"], "requires Windows x64"),
             (["-s", "os=Linux"], "requires Windows x64"),
         )
-        for arguments, error in cases:
-            with self.subTest(arguments=arguments), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp)
-                recipe = ENGINE / "conanfile.py"
-                (root / "conanfile.py").write_text(
-                    "import importlib.util\n"
-                    f"spec = importlib.util.spec_from_file_location('oxygen', {str(recipe)!r})\n"
-                    "module = importlib.util.module_from_spec(spec)\n"
-                    "spec.loader.exec_module(module)\n"
-                    "class ContractFixture(module.OxygenConan):\n"
-                    "    def requirements(self):\n"
-                    "        pass\n"
-                    "    def build_requirements(self):\n"
-                    "        pass\n",
-                    encoding="utf-8",
-                )
-                (root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
-                profile = ENGINE / "profiles/windows-msvc.ini"
-                command = [
-                    CONAN, "install", str(root), "--no-remote", "--build=never",
-                    f"-pr:h={profile}", f"-pr:b={profile}",
-                    "-s", "build_type=Release", *arguments,
-                ]
-                result = self.run_command(command, root, success=error is None)
+        profiles = [f"-pr:h={WINDOWS_PROFILE}", f"-pr:b={WINDOWS_PROFILE}", "-s", "build_type=Release"]
+        for index, (arguments, error) in enumerate(cases):
+            with self.subTest(arguments=arguments):
+                recipe = self.root / f"recipe-{index}"
+                write(recipe / "conanfile.py", oxygen_recipe())
+                write(recipe / "VERSION", "0.1.0\n")
+                install = [CONAN, "install", recipe, "--no-remote", "--build=never", *profiles, *arguments]
                 if error:
-                    self.assertIn(error, result.stdout + result.stderr)
-                else:
-                    result = self.run_command(
-                        [CONAN, "graph", "info", str(root), "--no-remote",
-                         f"-pr:h={profile}", f"-pr:b={profile}",
-                         "-s", "build_type=Release", "--format=json"], root,
-                    )
-                    graph = json.loads(result.stdout)["graph"]["nodes"]
-                    self.assertEqual(graph["0"]["settings"]["compiler.cppstd"], "23")
+                    self.assert_fails_with(install, error)
+                    continue
+                self.run_command(install)
+                result = self.run_command([CONAN, "graph", "info", recipe, "--no-remote", *profiles, "--format=json"])
+                nodes = json.loads(result.stdout)["graph"]["nodes"]
+                self.assertEqual(nodes["0"]["settings"]["compiler.cppstd"], "23")
 
 
 if __name__ == "__main__":

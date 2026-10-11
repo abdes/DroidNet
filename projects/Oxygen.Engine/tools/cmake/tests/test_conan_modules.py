@@ -1,92 +1,99 @@
-"""Opt-in checks of the real selected Conan graph and canonical binary identity."""
-import json
-import os
+# pyright: strict
+"""Checks of the real selected Conan graph and canonical binary identity."""
+
 import unittest
 
-from test_build_contract import CONAN, ENGINE, CommandTests
+from cmake_testing import PROFILES, ConanGraphTestCase, GraphNodes, Json, options, requires_conan, requires_env
 
 
-@unittest.skipUnless(CONAN and os.environ.get("OXYGEN_RUN_CONAN_GRAPH_INTEGRATION"),
-                     "Requires the cached dependency recipes")
-class ModuleGraphTests(CommandTests):
-    def graph(self, *options, profile="windows-msvc.ini"):
-        result = self.run_command([
-            CONAN, "graph", "info", str(ENGINE),
-            "-pr:h", str(ENGINE / "profiles" / profile),
-            "-pr:b", str(ENGINE / "profiles/windows-msvc.ini"),
-            "-s:h", "build_type=Debug", "-s:b", "build_type=Release",
-            "--no-remote", "--format=json", *options,
-        ], ENGINE)
-        return json.loads(result.stdout)["graph"]["nodes"]
+def dependency_names(nodes: GraphNodes) -> set[str]:
+    return {node["name"] for key, node in nodes.items() if key != "0"}
 
-    def test_exact_external_closures(self):
+
+def node_named(nodes: GraphNodes, name: str) -> Json:
+    return next(node for node in nodes.values() if node["name"] == name)
+
+
+@requires_conan
+@requires_env("OXYGEN_RUN_CONAN_GRAPH_INTEGRATION", "Needs the dependency recipes in the local Conan cache")
+class ModuleGraphTests(ConanGraphTestCase):
+    def assert_valid(self, nodes: GraphNodes) -> None:
+        self.assertIsNone(nodes["0"].get("info_invalid"))
+
+    def test_exact_external_closures(self) -> None:
         for selection, expected in (
-            ("Base", {"fmt"}), ("OxCo", {"fmt", "asio"}),
+            ("Base", {"fmt"}),
+            ("OxCo", {"fmt", "asio"}),
             ("Clap", {"fmt", "magic_enum"}),
             ("OxCo,Clap", {"fmt", "asio", "magic_enum"}),
         ):
             with self.subTest(selection=selection):
-                nodes = self.graph("-o", f"&:modules={selection}")
-                self.assertIsNone(nodes["0"].get("info_invalid"))
-                self.assertEqual({node["name"] for key, node in nodes.items() if key != "0"}, expected)
+                nodes = self.graph(*options(f"&:modules={selection}"))
+                self.assert_valid(nodes)
+                self.assertEqual(dependency_names(nodes), expected)
                 self.assertFalse(any(node["context"] == "build" for node in nodes.values()))
 
-    def test_equivalent_selections_and_checker_defaults_have_equal_ids(self):
-        variants = []
-        for selection in ("OxCo,Clap", "Clap,Base,OxCo,Clap", "Base,OxCo,TextWrap,Clap"):
-            variants.append(self.graph("-o", f"&:modules={selection}")["0"]["package_id"])
-        variants.append(self.graph("-o", "&:modules=OxCo,Clap", "-o", "&:awaitable_state_checker=True")["0"]["package_id"])
-        self.assertEqual(len(set(variants)), 1)
-        disabled = self.graph("-o", "&:modules=OxCo,Clap", "-o", "&:awaitable_state_checker=False")
-        self.assertNotEqual(variants[0], disabled["0"]["package_id"])
+    def test_equivalent_selections_and_checker_defaults_have_equal_ids(self) -> None:
+        variants = {
+            self.graph(*options(*selection))["0"]["package_id"]
+            for selection in (
+                ("&:modules=OxCo,Clap",),
+                ("&:modules=Clap,Base,OxCo,Clap",),
+                ("&:modules=Base,OxCo,TextWrap,Clap",),
+                ("&:modules=OxCo,Clap", "&:awaitable_state_checker=True"),
+            )
+        }
+        self.assertEqual(len(variants), 1)
+        disabled = self.graph(*options("&:modules=OxCo,Clap", "&:awaitable_state_checker=False"))
+        self.assertNotIn(disabled["0"]["package_id"], variants)
 
-    def test_consumer_defaults_and_explicit_development_requirements(self):
+    def test_consumer_defaults_and_explicit_development_requirements(self) -> None:
         full = self.graph()
-        self.assertEqual(full["0"]["options"]["modules"], "full")
-        self.assertEqual(full["0"]["options"]["shared"], "True")
+        root_options = full["0"]["options"]
+        self.assertEqual(root_options["modules"], "full")
+        self.assertEqual(root_options["shared"], "True")
         for name in ("tests", "benchmarks", "examples", "docs", "tools"):
-            self.assertEqual(full["0"]["options"][name], "False")
-        self.assertFalse({"gtest", "benchmark"}.intersection(node["name"] for node in full.values()))
+            self.assertEqual(root_options[name], "False", name)
+        self.assertFalse({"gtest", "benchmark"} & dependency_names(full))
         self.assertEqual({node["context"] for node in full.values() if node["name"] == "dxc"}, {"host", "build"})
-        development = self.graph("-o", "&:modules=OxCo", "-o", "&:tests=True", "-o", "&:benchmarks=True")
-        self.assertTrue({"gtest", "benchmark"}.issubset(node["name"] for node in development.values()))
+        development = self.graph(*options("&:modules=OxCo", "&:tests=True", "&:benchmarks=True"))
+        self.assertLessEqual({"gtest", "benchmark"}, dependency_names(development))
 
-    def test_tracy_dependency_is_present_only_when_enabled(self):
+    def test_tracy_dependency_is_present_only_when_enabled(self) -> None:
         for enabled in (False, True):
             with self.subTest(enabled=enabled):
-                nodes = self.graph("-o", f"&:with_tracy={enabled}")
-                self.assertIsNone(nodes["0"].get("info_invalid"))
+                nodes = self.graph(*options(f"&:with_tracy={enabled}"))
+                self.assert_valid(nodes)
                 tracy = [node for node in nodes.values() if node["name"] == "tracy"]
                 self.assertEqual(len(tracy), int(enabled))
                 if tracy:
                     self.assertEqual(tracy[0]["options"]["enable"], "True")
 
-    def test_ui_instrumentation_selects_matching_imgui_and_package_identity(self):
-        ordinary = self.graph("-o", "&:examples=True")
-        instrumented = self.graph("-o", "&:examples=True", "-o", "&:ui_tests=True")
+    def test_ui_instrumentation_selects_matching_imgui_and_package_identity(self) -> None:
+        ordinary = self.graph(*options("&:examples=True"))
+        instrumented = self.graph(*options("&:examples=True", "&:ui_tests=True"))
         for nodes, enabled in ((ordinary, "False"), (instrumented, "True")):
-            self.assertIsNone(nodes["0"].get("info_invalid"))
-            imgui = next(node for node in nodes.values() if node["name"] == "imgui")
-            self.assertEqual(imgui["options"]["enable_test_engine"], enabled)
+            self.assert_valid(nodes)
+            self.assertEqual(node_named(nodes, "imgui")["options"]["enable_test_engine"], enabled)
         self.assertNotEqual(ordinary["0"]["package_id"], instrumented["0"]["package_id"])
-        for options in (("&:examples=False",), ("&:modules=OxCo", "&:examples=True")):
-            arguments = [argument for option in options for argument in ("-o", option)]
-            nodes = self.graph("-o", "&:ui_tests=True", *arguments)
-            self.assertIn("UI tests require", nodes["0"]["info_invalid"])
+        for selection in (("&:examples=False",), ("&:modules=OxCo", "&:examples=True")):
+            with self.subTest(selection=selection):
+                nodes = self.graph(*options("&:ui_tests=True", *selection))
+                self.assertIn("UI tests require", nodes["0"]["info_invalid"])
 
-    def test_local_static_graphs_remain_valid(self):
-        full = self.graph("-o", "&:shared=False")["0"]
+    def test_local_static_graphs_remain_valid(self) -> None:
+        full = self.graph(*options("&:shared=False"))["0"]
         self.assertIsNone(full.get("info_invalid"))
         self.assertFalse(full.get("invalid_build"))
-        module = self.graph("-o", "&:modules=Base", "-o", "&:shared=False")["0"]
+        module = self.graph(*options("&:modules=Base", "&:shared=False"))["0"]
         self.assertFalse(module.get("invalid_build"))
 
-    def test_portable_modules_do_not_inherit_full_engine_platform_restrictions(self):
+    def test_portable_modules_do_not_inherit_full_engine_platform_restrictions(self) -> None:
         for profile in ("Linux-gcc.ini", "macos-clang.ini"):
             with self.subTest(profile=profile):
-                nodes = self.graph("-o", "&:modules=OxCo,Clap", profile=profile)
-                self.assertIsNone(nodes["0"].get("info_invalid"))
-                self.assertEqual({node["name"] for key, node in nodes.items() if key != "0"}, {"fmt", "asio", "magic_enum"})
+                nodes = self.graph(*options("&:modules=OxCo,Clap"), profile=PROFILES / profile)
+                self.assert_valid(nodes)
+                self.assertEqual(dependency_names(nodes), {"fmt", "asio", "magic_enum"})
 
 
 if __name__ == "__main__":

@@ -74,14 +74,14 @@ oxygen_cooker_test(
     "Import/TexturePackingPolicy_test.cpp"
     "Import/TextureSourceAssembly_test.cpp"
 )
-# Stateless internals are linked into the test only in shared builds, where
-# the cooker DLL does not export them. In static builds the static cooker
-# library already provides the symbols.
-target_sources(
-  Oxygen.Cooker.Import.Unit.Tests
-  PRIVATE
-    $<$<BOOL:${BUILD_SHARED_LIBS}>:$<TARGET_OBJECTS:oxygen-cooker-test-visible-internals>>
-)
+# Shared builds only: the cooker DLL does not export these internals.
+if(TARGET oxygen-cooker-test-visible-internals)
+  target_link_libraries(
+    Oxygen.Cooker.Import.Unit.Tests
+    PRIVATE
+      oxygen-cooker-test-visible-internals
+  )
+endif()
 # The source-validation fixtures construct ufbx values passed into Cooker.
 # Match Cooker's private vendor ABI without exposing it to engine consumers.
 set_source_files_properties(
@@ -147,11 +147,13 @@ oxygen_cooker_test(
     $<$<BOOL:${WIN32}>:Import/WindowsFileReader_functional_test.cpp>
     $<$<BOOL:${WIN32}>:Import/WindowsFileWriter_functional_test.cpp>
 )
-target_sources(
-  Oxygen.Cooker.Import.Functional.Tests
-  PRIVATE
-    $<$<BOOL:${BUILD_SHARED_LIBS}>:$<TARGET_OBJECTS:oxygen-cooker-test-visible-internals>>
-)
+if(TARGET oxygen-cooker-test-visible-internals)
+  target_link_libraries(
+    Oxygen.Cooker.Import.Functional.Tests
+    PRIVATE
+      oxygen-cooker-test-visible-internals
+  )
+endif()
 
 oxygen_cooker_test(
   Import.Jobs

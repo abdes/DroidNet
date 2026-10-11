@@ -34,6 +34,16 @@ Scripting's existing whole-`Bindings/` exclusion is intentionally retained;
 The inventory does not watch new files or replace explicit source lists: rerun
 configuration to audit a newly added file. Warnings never add or delete files.
 
+`oxygen_group_target_files_for_ide(target [DECLARED_FILES var])` is the grouping
+half on its own, for targets that share a directory with others, such as test
+executables, where the inventory would report the other targets' files.
+`gtest_program()` applies it to every test executable at the end of the defining
+directory, so sources added later with `target_sources()` are grouped too. Do
+not add `source_group()` calls next to the test helpers: `source_group()` does
+not evaluate generator expressions, so a guarded path becomes a
+`$<$<BOOL:1>:Dir` folder, and a `PREFIX` repeats the directory each source path
+already names.
+
 Inventory recognizes literal paths and single literal paths wrapped by
 `$<0:path>`, `$<1:path>`, `$<BUILD_INTERFACE:path>` or a single `BOOL`,
 `PLATFORM_ID` or `CONFIG` guard, such as `$<$<BOOL:${WIN32}>:Platform_win.cpp>`.
@@ -70,10 +80,9 @@ No global shortcut registry or auxiliary-target renaming is introduced.
 
 `test_build_helpers.py` checks metadata, all production declaration preambles,
 hierarchy isolation, argument errors, inventory exclusions and generated Visual
-Studio header projects. Set `OXYGEN_RUN_HELPER_BUILD_TESTS=1` to additionally build
-and run a C++23 shortcut fixture with Ninja, Ninja Multi-Config and Visual Studio
-on Windows, checking unchanged object/executable timestamps across both names.
-These checks remain available locally; GitHub CI is intentionally disabled.
+Studio header projects. It also builds and runs a C++23 shortcut fixture with
+Ninja, Ninja Multi-Config and Visual Studio on Windows, checking unchanged
+object/executable timestamps across both names.
 
 ## Full-engine build contract
 
@@ -252,16 +261,9 @@ Local dirty packages are allowed and identified. B04 adds no official-release
 mode or publication gate. Release automation must eventually apply its own policy
 to this factual metadata; CMake `Release` is only a build configuration.
 
-`test_source_provenance.py` runs script/Git/export checks without invoking a
-compiler. Its native incremental, runtime and install tests are opt-in:
-
-```powershell
-$env:OXYGEN_RUN_PROVENANCE_BUILD_TESTS = '1'
-python -m unittest discover -s tools/cmake/tests -p test_source_provenance.py -v
-```
-
-Obtain build permission first on shared hosts. The native fixtures build the
-production version implementation sequentially, without engine dependencies.
+`test_source_provenance.py` runs script/Git/export checks, then builds the
+production version implementation in a temporary fixture, without engine
+dependencies, to check incremental, runtime and install behavior.
 
 ## Selecting reusable modules
 
