@@ -215,10 +215,12 @@ Save and reopen keep slot identity, order, execution order and overrides.
 
 ### Play button
 
-While the player is an external process, the scene document toolbar has one
-split button: the main part starts Play (Restart while a session runs) and
-its dropdown holds the play session settings. Stop sits beside it while a
-session runs.
+The player is an external process that stays running between sessions
+([runtime host](../../../projects/Oxygen.Engine/design/runtime-core/runtime-host.md#45-who-holds-control-after-stop)).
+The scene document toolbar has one split button: the main part starts Play
+(Restart while a session runs: `end_session`, then `play`) and its dropdown
+holds the play session settings and **Close player**, which sends `stop`.
+Stop sits beside it while a session runs and sends `end_session`.
 
 | Setting     | Default    | Effect                                                                                          |
 | ----------- | ---------- | ----------------------------------------------------------------------------------------------- |
@@ -228,8 +230,9 @@ session runs.
 
 The settings are per-user editor settings, persisted across restarts
 ([settings LLD](settings-architecture.md#55-play-session-preferences)). They
-apply to the next launch and are written into its launch file; they are not
-scene data and are never cooked.
+apply to the next launch and are written into its launch file; a change
+while a player runs shows "applies after Close player". They are not scene
+data and are never cooked.
 
 ### Flow
 
@@ -237,14 +240,20 @@ scene data and are never cooked.
 2. Incremental cook of the active scene's closure; a failed cook stops here
    with its result in the cooking panel.
 3. A scene without a camera disables Play with that reason.
-4. Write the launch file to the project's local (ignored) state folder:
-   project cooked mounts in order, the scene, the project's authoring roots as
-   script source roots, the session settings and a pipe name. Start
-   `Oxygen.Player.exe` from the installed SDK.
-5. Stream events: `log` to the Output panel, `diagnostic` to Problems,
-   `lifecycle` to the toolbar state and an operation result on failure.
-6. Stop sends `stop` and waits briefly before ending the process. Closing the
-   project or the editor stops the session.
+4. No player connected: write the launch file to the project's local
+   (ignored) state folder (project cooked mounts in order, the scene, the
+   project's authoring roots as script source roots, the session settings and
+   a pipe name) and start `Oxygen.Player.exe` from the installed SDK. A player
+   connected: send `play` with the scene; the player remounts the cooked
+   content first, so the cook from step 2 is always seen.
+5. Stream events: clear Output and Problems on `session_started`; `log` to
+   the Output panel, `diagnostic` to Problems, `lifecycle` (`session_started`,
+   `paused`, `resumed`, `session_ended`) to the toolbar state, and an
+   operation result on failure.
+6. Stop sends `end_session`; the player stays up for the next Play. Closing
+   the project or the editor sends `stop` and waits briefly before ending the
+   process. A closed pipe means the player exited; the next Play launches a
+   new one.
 
 One session at a time. Saving a script while playing reloads it in the player
 without a cook; scene edits apply on the next Play.

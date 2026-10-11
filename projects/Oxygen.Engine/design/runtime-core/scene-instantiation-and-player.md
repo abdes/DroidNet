@@ -110,7 +110,9 @@ until physics authoring is scheduled.
 ## 3. `Oxygen.Player`
 
 An SDK executable (`bin/Oxygen.Player.exe`) with a window, Vortex, input and
-scripting.
+scripting. It is built on `Oxygen.Host`, and its debug UI (console, command
+palette, viewport toolbar, Play/Pause/Stop) and its pause and stop
+behaviour are specified in [runtime host and debug UI](runtime-host.md).
 
 ### Launch
 
@@ -137,19 +139,34 @@ No setting persists between launches; the launch file is the whole input.
   message in the window and reports a lifecycle failure; the process stays up
   so the user can read it.
 - Input reaches the scene's mapping contexts. Closing the window, a `stop`
-  request on the pipe, or `oxygen.app.request_stop()` ends the session.
+  request on the pipe, or `oxygen.app.request_stop()` ends the process. The
+  toolbar's Stop and an `end_session` request end only the play session
+  ([runtime host](runtime-host.md#4-pause-frame-step-and-play-sessions)).
 
 ### Event stream
 
 One JSON object per line, validated by `oxygen.player-events.schema.json`:
 
-| Event        | Payload                                                             |
-| ------------ | ------------------------------------------------------------------- |
-| `lifecycle`  | `starting`, `scene_loaded`, `scene_failed` (with issues), `stopped` |
-| `log`        | Severity, channel and text, including `oxygen.log` output           |
-| `diagnostic` | A [script diagnostic](../scripting/script-diagnostics.md#2-model)   |
+| Event        | Payload                                                                                                                                                              |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lifecycle`  | `starting`, `session_started`, `scene_loaded`, `scene_failed` (with issues), `paused`, `resumed`, `session_ended`, `stopped`. `stopped` means the process is ending. |
+| `log`        | Severity, channel and text, including `oxygen.log` output                                                                                                            |
+| `diagnostic` | A [script diagnostic](../scripting/script-diagnostics.md#2-model)                                                                                                    |
 
-The launcher sends `{"request":"stop"}` on the same pipe.
+The launcher sends one request object per line on the same pipe:
+
+| Request       | Effect                                                                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `play`        | Remounts the launch mounts and begins a session on `scene` (a scene virtual path; the launch file's scene when omitted); ignored while one runs ([runtime host](runtime-host.md#44-session-lifecycle)). |
+| `pause`       | Pauses the engine.                                                                                                                                                                                      |
+| `resume`      | Resumes it.                                                                                                                                                                                             |
+| `step`        | Simulates `frames` frames (default 1) and stays paused.                                                                                                                                                 |
+| `end_session` | Ends the session; the process stays up and reports `session_ended`.                                                                                                                                     |
+| `stop`        | Ends the process.                                                                                                                                                                                       |
+
+A `scene_failed` is followed by `session_ended`, so the launcher can send
+`play` again. The reader runs on its own thread and hands requests to the
+engine thread; nothing on the pipe thread touches the engine.
 
 ## 4. Migration
 
@@ -165,4 +182,4 @@ RenderScene behavior is otherwise unchanged.
 | SIP-2 | RenderScene loads every maintained scene with the same result as before the move.                                                                                                                                               |
 | SIP-3 | The player loads a launch file, applies its window settings, renders through the starting camera with the starting input contexts active, follows a script's camera and context switches, and streams lifecycle and log events. |
 | SIP-4 | A failing script in the player streams its diagnostic; a source edit reloads it while running.                                                                                                                                  |
-| SIP-5 | `stop` ends the session cleanly; a bad launch file fails with a schema diagnostic.                                                                                                                                              |
+| SIP-5 | `end_session` ends the session and leaves the process ready for `play`; `stop` ends the process cleanly; a bad launch file fails with a schema diagnostic.                                                                      |
