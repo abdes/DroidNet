@@ -333,8 +333,10 @@ struct Message {
 
 /* Everything with a verbosity less than or equal to g_global_verbosity passes
 the global cutoff. You can set this in code or via the -v argument.
-Set to loguru::Verbosity_OFF to disable all logging.
+Set to loguru::Verbosity_OFF to disable all logging except FATAL messages.
 Default is 0, i.e. only ERROR, WARNING and INFO are emitted.
+FATAL messages are never filtered, neither by the global cutoff nor by
+vmodule rules.
 */
 LOGURU_EXPORT extern Verbosity g_global_verbosity;
 // Controls whether loguru writes to stderr at all (true by default).
@@ -410,7 +412,7 @@ struct Options {
    (default). -v INFO     Only show INFO, WARNING, ERROR, FATAL (default). -v
    WARNING  Only show WARNING, ERROR, FATAL. -v ERROR    Only show ERROR, FATAL.
                         -v FATAL    Only show FATAL.
-                        -v OFF      Turn off logging.
+                        -v OFF      Turn off logging except FATAL.
 
           -L, --logfile <path>
             Log to a file. Prefix the path with '+' to append,
@@ -538,6 +540,8 @@ LOGURU_EXPORT Verbosity current_verbosity_cutoff();
 // - The global cutoff (set by -v) is always applied first.
 // - Vmodule rules can only further suppress logging; they do not override
 //   the global cutoff.
+// - Messages at Verbosity_FATAL or more severe are never filtered, neither
+//   by the global cutoff nor by vmodule rules.
 // - First match wins. Put more specific patterns before general ones.
 //
 // Pattern syntax: '*' matches any sequence, '?' matches any single char.
@@ -678,14 +682,38 @@ public:
     , _name {}
   {
   } // No logging
+#  if LOGURU_USE_FMTLIB
+  LogScopeRAII(Verbosity verbosity, const char* file, unsigned line,
+    LOGURU_FORMAT_STRING_TYPE format, fmt::format_args args);
+
+  template <typename... Args>
+  LogScopeRAII(Verbosity verbosity, const char* file, unsigned line,
+    LOGURU_FORMAT_STRING_TYPE format, const Args&... args)
+    : _verbosity(verbosity)
+    , _file(file)
+    , _line(line)
+  {
+    // Important: fmt::make_format_args requires lvalue references to argument
+    // objects that remain alive when the args are created. Materialize the
+    // mapped arguments via `WithMappedArgs` and invoke Init inside the lambda
+    // so temporaries (e.g. std::string results from ADL `to_string`) stay
+    // alive; Init copies the formatted name into `_name` before returning.
+    oxgn_lg_detail::WithMappedArgs(
+      [&](auto&... ms) { this->Init(format, fmt::make_format_args(ms...)); },
+      args...);
+  }
+
+  void Init(LOGURU_FORMAT_STRING_TYPE format, fmt::format_args args);
+#  else
   LogScopeRAII(Verbosity verbosity, const char* file, unsigned line,
     LOGURU_FORMAT_STRING_TYPE format, va_list vlist) LOGURU_PRINTF_LIKE(5, 0);
   LogScopeRAII(Verbosity verbosity, const char* file, unsigned line,
     LOGURU_FORMAT_STRING_TYPE format, ...) LOGURU_PRINTF_LIKE(5, 6);
-  ~LogScopeRAII();
 
   void Init(LOGURU_FORMAT_STRING_TYPE format, va_list vlist)
     LOGURU_PRINTF_LIKE(2, 0);
+#  endif
+  ~LogScopeRAII();
 
 #  if defined(_MSC_VER) && _MSC_VER > 1800
   // older MSVC default move constructors close the scope on move. See
@@ -1270,8 +1298,8 @@ LOGURU_ANONYMOUS_NAMESPACE_END
       EXPAND(RAW_VLOG_F(verbosity, __VA_ARGS__))
 #    define DVLOG_SCOPE_F(verbosity, ...)                                      \
       EXPAND(VLOG_SCOPE_F(verbosity, __VA_ARGS__))
-#    define DVLOG_SCOPE_FUNCTION(verbosity, ...)                               \
-      EXPAND(VLOG_SCOPE_FUNCTION(verbosity, __VA_ARGS__))
+#    define DVLOG_SCOPE_FUNCTION(verbosity)                                    \
+      EXPAND(VLOG_SCOPE_F(verbosity, __func__))
 #    define DLOG_SCOPE_F(verbosity, ...)                                       \
       EXPAND(LOG_SCOPE_F(verbosity, __VA_ARGS__))
 #    define DLOG_SCOPE_FUNCTION(verbosity) EXPAND(LOG_SCOPE_FUNCTION(verbosity))
@@ -1284,7 +1312,7 @@ LOGURU_ANONYMOUS_NAMESPACE_END
 #    define DRAW_LOG_F(verbosity_name, ...)
 #    define DRAW_VLOG_F(verbosity, ...)
 #    define DVLOG_SCOPE_F(verbosity, ...)
-#    define DVLOG_SCOPE_FUNCTION(verbosity, ...)
+#    define DVLOG_SCOPE_FUNCTION(verbosity)
 #    define DLOG_SCOPE_F(verbosity, ...)
 #    define DLOG_SCOPE_FUNCTION(verbosity, ...)
 #  endif

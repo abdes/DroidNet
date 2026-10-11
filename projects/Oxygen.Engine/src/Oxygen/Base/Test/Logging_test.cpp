@@ -8,6 +8,7 @@
 #include <cctype>
 #include <cstdint>
 #include <limits>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -137,6 +138,10 @@ protected:
 
   void TearDown() override
   {
+    // Restore any fatal-handler or vmodule state a test installed so a
+    // failure mid-test cannot leak into the next one.
+    loguru::set_fatal_handler(nullptr);
+    loguru::clear_vmodule_overrides();
     loguru::g_global_verbosity = saved_verbosity_;
     loguru::g_log_to_stderr = saved_log_to_stderr_;
   }
@@ -447,6 +452,106 @@ NOLINT_TEST_F(
 
   // Assert (rounded to 3 decimals)
   EXPECT_THAT(output, HasSubstr("1.235 s: unit"));
+}
+
+//=== Scope, Cutoff Filtering and Error Context Tests ===---------------------//
+
+class LoggingBehaviorTests : public BasicLoggingFixture { };
+
+//! Verify that FATAL messages bypass the global cutoff entirely
+/*!
+ * -v=OFF must not hide the reason for a FATAL/abort. The fatal handler is
+ * set to throw so the test observes the emitted message without aborting.
+ */
+NOLINT_TEST_F(LoggingBehaviorTests, FATAL_NotFilteredByGlobalCutoff)
+{
+  // Arrange
+  SetVerbosity(loguru::Verbosity_OFF);
+  loguru::set_fatal_handler(
+    [](const loguru::Message&) { throw std::runtime_error("fatal handled"); });
+
+  // Act
+  const auto output = CaptureStderr(
+    [&] { NOLINT_EXPECT_NO_THROW({ LOG_F(FATAL, "fatal boom {}", 42); }); });
+
+  // Assert
+  EXPECT_THAT(output, HasSubstr("fatal boom 42"));
+}
+
+//! Verify that vmodule overrides cannot suppress FATAL messages
+NOLINT_TEST_F(LoggingBehaviorTests, FATAL_NotFilteredByVmoduleOverride)
+{
+  // Arrange
+  loguru::configure_vmodule("Logging_test=OFF");
+  loguru::set_fatal_handler(
+    [](const loguru::Message&) { throw std::runtime_error("fatal handled"); });
+
+  // Act
+  const auto output = CaptureStderr(
+    [&] { NOLINT_EXPECT_NO_THROW({ LOG_F(FATAL, "vmodule boom {}", 7); }); });
+
+  // Assert
+  EXPECT_THAT(output, HasSubstr("vmodule boom 7"));
+}
+
+//! Verify that the global cutoff still filters non-FATAL verbosity levels
+NOLINT_TEST_F(LoggingBehaviorTests, Info_StillFilteredByGlobalCutoff)
+{
+  // Arrange
+  SetVerbosity(loguru::Verbosity_OFF);
+
+  // Act
+  const auto output = CaptureStderr([] { LOG_F(INFO, "quiet message {}", 1); });
+
+  // Assert
+  EXPECT_THAT(output, Not(HasSubstr("quiet message")));
+}
+
+//! Verify that LOG_SCOPE_F formats fmt-style arguments into the scope name
+/*!
+ * Covers the fix where LOG_SCOPE_F takes fmt arguments directly instead of
+ * requiring callers to pre-format with fmt::format().c_str().
+ */
+NOLINT_TEST_F(LoggingBehaviorTests, LogScope_FormatsArguments)
+{
+  // Act: both the scope-entry ("{ ") and scope-exit ("} ... s: ") lines
+  // must carry the formatted name.
+  const auto output
+    = CaptureStderr([] { LOG_SCOPE_F(INFO, "framebuffer slot {}", 3); });
+
+  // Assert
+  EXPECT_THAT(output, HasSubstr("{ framebuffer slot 3"));
+  EXPECT_THAT(output, HasSubstr(" s: framebuffer slot 3"));
+}
+
+//! Verify that LOG_SCOPE_F accepts a plain message without arguments
+NOLINT_TEST_F(LoggingBehaviorTests, LogScope_FormatsPlainMessage)
+{
+  // Act
+  const auto output = CaptureStderr([] { LOG_SCOPE_F(INFO, "Staging"); });
+
+  // Assert
+  EXPECT_THAT(output, HasSubstr("{ Staging"));
+}
+
+//! Verify that error context entries render with aligned columns
+/*!
+ * Exercises the ERROR_CONTEXT preamble format string: file right-aligned,
+ * line and description left-aligned, then the formatted value.
+ */
+NOLINT_TEST_F(LoggingBehaviorTests, ErrorContext_FormatsEntryColumns)
+{
+  // Arrange
+  const int sample_value = 42;
+  ERROR_CONTEXT("Sample value", sample_value);
+
+  // Act
+  const auto context = loguru::get_error_context();
+
+  // Assert
+  EXPECT_THAT(context.c_str(),
+    AllOf(HasSubstr("[ErrorContext]"), HasSubstr("Logging_test.cpp"),
+      HasSubstr("Sample value:"), HasSubstr("42")));
 }
 
 } // namespace

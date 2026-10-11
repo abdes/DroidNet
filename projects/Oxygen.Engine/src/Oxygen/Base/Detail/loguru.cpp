@@ -1045,6 +1045,12 @@ LOGURU_EXPORT void clear_vmodule_overrides()
 
 LOGURU_EXPORT bool is_enabled_for(Verbosity verbosity, const char* file_path)
 {
+  // FATAL and more severe messages are never filtered, neither by the
+  // global cutoff nor by vmodule overrides.
+  if (verbosity <= Verbosity_FATAL) {
+    return true;
+  }
+
   if (verbosity > g_global_verbosity) {
     return false;
   }
@@ -1200,6 +1206,11 @@ LOGURU_EXPORT void ensure_module_site_registered(
 LOGURU_EXPORT bool check_module_fast(
   std::atomic<int>* site_cache, Verbosity verbosity, const char* file_path)
 {
+  // FATAL and more severe messages are never filtered, neither by the
+  // global cutoff nor by vmodule overrides.
+  if (verbosity <= Verbosity_FATAL) {
+    return true;
+  }
   if (verbosity > g_global_verbosity) {
     return false;
   }
@@ -1404,7 +1415,7 @@ void shutdown()
   set_name_to_verbosity_callback(nullptr);
 }
 
-void write_date_time(char* buff, unsigned long long buff_size)
+void write_date_time(char* buff, uint64_t buff_size)
 {
   auto now = system_clock::now();
   long long ms_since_epoch
@@ -1443,8 +1454,7 @@ auto home_dir() -> const char*
 #  endif // _WIN32
 }
 
-void suggest_log_path(
-  const char* prefix, char* buff, unsigned long long buff_size)
+void suggest_log_path(const char* prefix, char* buff, uint64_t buff_size)
 {
   if (prefix[0] == '~') {
     snprintf(buff, buff_size - 1, "%s%s", home_dir(), prefix + 1);
@@ -2213,7 +2223,10 @@ void log_to_everywhere(int stack_trace_skip, Verbosity verbosity,
     std::scoped_lock l(s_module_mutex);
     has_vmodule = !s_module_list.empty();
   }
-  if (!has_vmodule && verbosity > current_verbosity_cutoff()) {
+  // The global fast path must not filter the FATAL band; is_enabled_for()
+  // treats those as always enabled.
+  if (verbosity > Verbosity_FATAL && !has_vmodule &&
+    verbosity > current_verbosity_cutoff()) {
     return;
   }
 
@@ -2297,6 +2310,16 @@ void flush()
   s_needs_flushing.store(false, std::memory_order_relaxed);
 }
 
+#  if LOGURU_USE_FMTLIB
+LogScopeRAII::LogScopeRAII(Verbosity verbosity, const char* file, unsigned line,
+  const char* format, fmt::format_args args)
+  : _verbosity(verbosity)
+  , _file(file)
+  , _line(line)
+{
+  this->Init(format, args);
+}
+#  else
 LogScopeRAII::LogScopeRAII(Verbosity verbosity, const char* file, unsigned line,
   const char* format, va_list vlist)
   : _verbosity(verbosity)
@@ -2317,6 +2340,7 @@ LogScopeRAII::LogScopeRAII(
   this->Init(format, vlist);
   va_end(vlist);
 }
+#  endif
 
 LogScopeRAII::~LogScopeRAII()
 {
@@ -2350,6 +2374,32 @@ LogScopeRAII::~LogScopeRAII()
   }
 }
 
+#  if LOGURU_USE_FMTLIB
+void LogScopeRAII::Init(const char* format, fmt::format_args args)
+{
+  std::scoped_lock lock(s_mutex);
+  // Use full enable check (including per-module vmodule override) rather than
+  // only comparing against the global cutoff. This ensures scope indentation
+  // is applied when a module-specific override suppresses a log site.
+  _indent_stderr = is_enabled_for(_verbosity, _file);
+  _start_time_ns = now_ns();
+  // Copy the formatted name into the fixed scope buffer, truncating like the
+  // vsnprintf path does.
+  const auto formatted = fmt::vformat(format, args);
+  snprintf(_name, sizeof(_name), "%s", formatted.c_str());
+  log_to_everywhere(1, _verbosity, _file, _line, "{ ", _name);
+
+  if (_indent_stderr) {
+    ++s_stderr_indentation;
+  }
+
+  for (auto& p : s_callbacks) {
+    if (_verbosity <= p.verbosity) {
+      ++p.indentation;
+    }
+  }
+}
+#  else
 void LogScopeRAII::Init(const char* format, va_list vlist)
 {
   std::scoped_lock lock(s_mutex);
@@ -2371,6 +2421,7 @@ void LogScopeRAII::Init(const char* format, va_list vlist)
     }
   }
 }
+#  endif
 
 #  if LOGURU_USE_FMTLIB
 void vlog_and_abort(int stack_trace_skip, const char* expr, const char* file,
@@ -2535,7 +2586,9 @@ auto get_error_context_for(const EcEntryBase* ec_head) -> Text
     for (auto entry : stack) {
       const auto description = std::string(entry->_descr) + ":";
 #  if LOGURU_USE_FMTLIB
-      auto prefix = textprintf("[ErrorContext] {.{}s}:{:-5u} {:-20s} ",
+      // Mirror the printf branch: filename right-aligned in the file column
+      // (dynamic width), line left-aligned in 5, description in 20.
+      auto prefix = textprintf("[ErrorContext] {:>{}}:{:<5} {:<20} ",
         filename(entry->_file), LOGURU_FILENAME_WIDTH, entry->_line,
         description.c_str());
 #  else

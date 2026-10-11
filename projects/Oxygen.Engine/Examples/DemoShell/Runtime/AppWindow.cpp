@@ -8,6 +8,9 @@
 #include <memory>
 #include <utility>
 
+#include "DemoShell/Runtime/AppWindow.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Engine/AsyncEngine.h>
@@ -22,9 +25,6 @@
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Vortex/Renderer.h>
-
-#include "DemoShell/Runtime/AppWindow.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
 
 namespace oxygen::examples {
 
@@ -227,7 +227,7 @@ auto AppWindow::EnsureFramebuffers() -> bool
 
   auto failed = false;
   for (auto i = 0U; i < frame::kFramesInFlight.get(); ++i) {
-    DLOG_SCOPE_F(INFO, fmt::format("framebuffer slot {}", i).c_str());
+    DLOG_SCOPE_F(INFO, "framebuffer slot {}", i);
     auto color_attachment = surface_->GetBackBuffer(i);
     if (!color_attachment) {
       LOG_F(ERROR, "Failed to get back buffer for slot {}", i);

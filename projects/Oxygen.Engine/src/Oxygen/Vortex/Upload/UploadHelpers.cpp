@@ -61,7 +61,7 @@ auto EnsureBufferAndSrv(Graphics& gfx,
       EnsureBufferResult::kUnchanged);
   }
 
-  DLOG_SCOPE_F(2, fmt::format("EnsureBufferAndSrv: '{}'", debug_label).c_str());
+  DLOG_SCOPE_F(2, "EnsureBufferAndSrv: '{}'", debug_label);
   DLOG_F(2, "requested size  : {} bytes", size_bytes);
   DLOG_F(2, "stride          : {} bytes", stride);
   DLOG_F(2, "existing buffer : {}{}", buffer ? "yes" : "no",

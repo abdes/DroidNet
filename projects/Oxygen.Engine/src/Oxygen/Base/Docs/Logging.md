@@ -51,7 +51,9 @@ meaningful):
 -v OFF
 ```
 
-Rule: a message logs only if its verbosity is **<= global cutoff**.
+Rule: a message logs only if its verbosity is **<= global cutoff**. The
+exception is the FATAL band: messages at `Verbosity_FATAL` or more severe are
+never filtered, neither by the global cutoff nor by vmodule rules.
 
 ### Log file
 

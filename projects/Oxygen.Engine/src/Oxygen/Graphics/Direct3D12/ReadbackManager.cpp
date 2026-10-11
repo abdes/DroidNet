@@ -1311,7 +1311,7 @@ auto D3D12ReadbackManager::Cancel(const ReadbackTicket ticket)
 auto D3D12ReadbackManager::ReadBufferNow(const Buffer& source,
   BufferRange range) -> std::expected<std::vector<std::byte>, ReadbackError>
 {
-  DLOG_SCOPE_F(1, fmt::format("ReadBufferNow `{}`", source.GetName()).c_str());
+  DLOG_SCOPE_F(1, "ReadBufferNow `{}`", source.GetName());
 
   auto readback = CreateBufferReadback("ReadBufferNow");
   CHECK_NOTNULL_F(readback.get());
@@ -1355,7 +1355,7 @@ auto D3D12ReadbackManager::ReadTextureNow(
   const bool tightly_pack)
   -> std::expected<OwnedTextureReadbackData, ReadbackError>
 {
-  DLOG_SCOPE_F(1, fmt::format("ReadTextureNow `{}`", source.GetName()).c_str());
+  DLOG_SCOPE_F(1, "ReadTextureNow `{}`", source.GetName());
 
   auto readback = CreateTextureReadback("ReadTextureNow");
   CHECK_NOTNULL_F(readback.get());

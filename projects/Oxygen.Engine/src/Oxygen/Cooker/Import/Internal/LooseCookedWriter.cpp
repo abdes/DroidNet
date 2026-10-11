@@ -662,7 +662,7 @@ struct LooseCookedWriter::Impl final {
     }
 
     const auto cooked_root_str = cooked_root_.string();
-    LOG_SCOPE_F(INFO, fmt::format("Finish {}", cooked_root_str).c_str());
+    LOG_SCOPE_F(INFO, "Finish {}", cooked_root_str);
 
     ValidateRequiredFilePairs_();
 

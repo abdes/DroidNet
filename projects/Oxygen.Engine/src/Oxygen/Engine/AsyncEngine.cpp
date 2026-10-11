@@ -455,7 +455,7 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
       break;
     }
 
-    LOG_SCOPE_F(1, fmt::format("Frame {}", frame_number_.get()).c_str());
+    LOG_SCOPE_F(1, "Frame {}", frame_number_.get());
 
     // Use persistent frame context (views persist across frames with stable
     // IDs)

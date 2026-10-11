@@ -376,7 +376,7 @@ auto UploadPlanner::PlanTexture2D(const UploadTextureDesc& desc,
   planned.reserve(subresources.size());
   for (std::size_t idx = 0; idx < subresources.size(); ++idx) {
     const auto& sr = subresources[idx];
-    DLOG_SCOPE_F(3, fmt::format("subresource[{}]", idx).c_str());
+    DLOG_SCOPE_F(3, "subresource[{}]", idx);
     DLOG_F(3, "mip={}, array_slice={}", sr.mip, sr.array_slice);
     DLOG_F(3, "x,y={},{} w,h={},{}", sr.x, sr.y, sr.width, sr.height);
 
@@ -596,7 +596,7 @@ auto UploadPlanner::PlanTexture3D(const UploadTextureDesc& desc,
   planned.reserve(subresources.size());
   for (std::size_t idx = 0; idx < subresources.size(); ++idx) {
     const auto& sr = subresources[idx];
-    DLOG_SCOPE_F(3, fmt::format("subresource[{}]", idx).c_str());
+    DLOG_SCOPE_F(3, "subresource[{}]", idx);
     DLOG_F(3, "mip={}, array_slice={}", sr.mip, sr.array_slice);
     DLOG_F(3, "x,y={},{} w,h={},{}", sr.x, sr.y, sr.width, sr.height);
     DLOG_F(3, "z={}, depth={}", sr.z, sr.depth);
