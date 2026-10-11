@@ -1,0 +1,275 @@
+# Script Authoring LLD
+
+Status: `design; owner decisions SD-1–SD-7 taken 2026-10-11`; delivered by
+[ED-M08.10](../plan/ED-M08-runtime-parity-and-standalone-validation.md#m0810--engine-capability-parity-in-the-editor).
+
+Summary: users write Luau scripts in their own code editor and do everything
+else in the Oxygen editor: create a script from a template, attach it to
+nodes, set its parameters with typed fields and pickers, see its errors as
+they save, and press Play to run the cooked scene with live script reload.
+The engine owns the script model, parameter declarations, diagnostics and
+the player ([scene script hosting](../../../projects/Oxygen.Engine/design/scripting/scene-script-hosting.md),
+[script diagnostics](../../../projects/Oxygen.Engine/design/scripting/script-diagnostics.md),
+[player host](../../../projects/Oxygen.Engine/design/runtime-core/scene-instantiation-and-player.md));
+this LLD owns the authoring workflow. Physics bindings are out of scope.
+
+## 1. Scenarios
+
+| ID  | Scenario                                                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| SC1 | Create a script from the Content Browser; it opens in the user's code editor.                                                        |
+| SC2 | Declare parameters in the script; after saving, the inspector shows one field per parameter.                                         |
+| SC3 | Add a Scripting component to a node; add, remove and reorder slots; pick a script per slot.                                          |
+| SC4 | Set parameter values: numbers with ranges and units, vectors and colors, choices, and references to assets, input actions and nodes. |
+| SC5 | See script errors on save, in the inspector, on the script in the Content Browser and in Problems; open the code editor at the line. |
+| SC6 | Save, cook and reopen keep slots and values; renaming or moving a referenced asset or node keeps the reference.                      |
+| SC7 | Press Play: the scene runs in the player with scripts and input; logs and errors stream back; editing a script reloads it live.      |
+| SC8 | Stop, change something, and Play again.                                                                                              |
+
+## 2. Traceability and links
+
+REQ-005/006/007/017/043/044; GOAL-001/006. Architecture: the editor owns
+authoring, the engine owns execution, Interop exposes the analyzer
+([RULES](../../oxygen/RULES.md#ownership)). Related LLDs:
+[property inspector](property-inspector.md),
+[property pipeline](property-pipeline.md),
+[scene authoring model](scene-authoring-model.md),
+[content browser identity](content-browser-asset-identity.md),
+[content pipeline](content-pipeline.md),
+[cooking panel](cooking-panel.md),
+[diagnostics and operation results](diagnostics-operation-results.md),
+[settings](settings-architecture.md).
+
+## 3. Baseline
+
+- Scenes carry scene-level script references (`SceneReferencesData.Scripts`)
+  with typed pickers. They are cook dependencies for scripts loaded at
+  runtime by other scripts; nothing executes them. They stay as they are.
+- The Content Browser knows the Script kind for cooked `.oscript` outputs
+  only; `Content/Scripts` exists in new projects.
+- The editor cannot create input actions or mapping contexts and does not
+  cook input files. Editor input authoring belongs to
+  [ED-M09](../plan/ED-M09-input-authoring.md); this design cooks
+  hand-written input files (section 4, Input files).
+- There is no node scripting component, no script cook job and no way to run
+  a scene from the editor. Editor viewports do not run scripts; that does not
+  change in V0.1 (in-editor simulation is post-V0.1).
+
+## 4. Script assets
+
+**Source recognition.** `.lua` and `.luau` files under authoring mounts are
+Script assets in the source state; their cooked `.oscript` is the cooked
+state of the same identity.
+
+**New Script** (Content Browser, context menu and New): asks for a name,
+writes `<Name>.lua` to the target folder (default `Content/Scripts`), selects
+it and opens it in the code editor. The template:
+
+```lua
+local Script = oxygen.script {
+  params = {
+    speed = oxygen.param.float { default = 1, min = 0, unit = "m/s",
+      description = "How fast the node moves" },
+  },
+}
+
+function Script:on_start()
+end
+
+function Script:on_gameplay(dt)
+end
+
+return Script
+```
+
+**Edit Script**: double-click or the Edit command opens the file in the
+configured code editor, at a line and column when invoked from a diagnostic.
+The preference (Settings, editor-scoped) offers the system default, VS Code
+(`code --goto file:line:column`) and a custom command with `{file}`, `{line}`
+and `{column}` placeholders. A failed launch is an operation result
+(`OXE.SCRIPT.EDITOR_LAUNCH_FAILED`) naming the command.
+
+**Details pane**: the declared parameters (name, type, default) and the
+diagnostic counts, read from analysis (section 5). Rename, move and delete
+follow the existing transactions and retarget slot references.
+
+**Input files**: users write the cooker's input files by hand (`*.input.json` for mapping contexts with their
+actions, `*.input-action.json` for single actions, validated by
+`oxygen.input.schema.json`). Files under authoring mounts are Input sources;
+the cook emits one `input` job per file, its actions and mapping contexts
+appear in the Content Browser and in asset and Play-section pickers, Edit
+opens the file in the code editor, and schema or import errors fail the cook
+in the cooking panel.
+
+**Project tooling**: projects contain `.luaurc` and `Types/oxygen.d.luau`
+copied from the SDK, refreshed when the SDK's copy differs, so VS Code with
+`luau-lsp` completes the `oxygen` API and reports the same type errors the
+engine reports. New projects get both from the template; opening an older
+project adds them and logs the change.
+
+## 5. Analysis
+
+`IScriptAnalysisService` (WorldEditor) calls Interop's
+`ScriptAnalysis.Analyze(sourceName, bytes, level)`, which wraps the engine
+`ScriptAnalyzer`, and returns declarations with hints plus diagnostics.
+
+- Results are cached by path and content hash.
+- The project catalog's change notifications re-analyze a script when its
+  file changes, so the inspector and Problems update on save. Analysis is
+  not cooking; the cook still runs only on its existing triggers.
+- Level `kTypes` when the type definitions are available, otherwise `kLint`.
+
+## 6. Node scripting component
+
+### Data
+
+| Field                       | Type                           | Notes                                              |
+| --------------------------- | ------------------------------ | -------------------------------------------------- |
+| `Slots`                     | ordered list of `ScriptSlot`   | List order is the slot position.                   |
+| `ScriptSlot.Id`             | GUID                           | Stable identity for commands and cook `slot_id`.   |
+| `ScriptSlot.Script`         | typed asset reference (Script) | Missing references stay visible.                   |
+| `ScriptSlot.ExecutionOrder` | int32, default 0               | Lower runs earlier, across all nodes.              |
+| `ScriptSlot.Overrides`      | map key → typed value          | Only values that differ from the declared default. |
+
+Override values are `bool`, `int`, `float`, `string`, `vec2`–`vec4`, an asset
+reference (typed URI, retargeted like every other asset reference) or a node
+reference (node identity in the document, converted to a node index at cook).
+
+### Inspector
+
+A **Scripting** section, added through Add Component, shown for a single
+selected node (multi-selection shows a message to select one node).
+
+- One card per slot, in order: a script picker (filtered to Script assets,
+  with New Script), the execution order field, move up and down, and remove.
+  The card header shows the script name and an error or warning badge with
+  the first diagnostic message; clicking it opens Problems at that entry.
+- Below the picker, one field per declared parameter, using the declaration
+  hints: number fields with min, max, step and unit; vector fields; a color
+  field for `color = true`; a choice list for `options`; a text box with the
+  string length limit; an asset picker filtered by `kind` (input actions
+  included); and a node picker with search that also accepts a node dragged
+  from the Scene Explorer. Labels come from the parameter name, with the
+  description as tooltip.
+- An overridden value shows the override marker and a reset to the default.
+- Overrides whose key the script no longer declares, or whose type changed,
+  are listed as stale with one Remove stale action. They are kept until
+  removed, and the cook reports them (section 7).
+- While the script has errors, its last valid declarations stay on screen,
+  marked as out of date.
+
+All edits are commands with undo/redo and dirty state through the property
+pipeline. The component has no live projection: scripts do not run in editor
+viewports.
+
+### Persistence
+
+The component serializes with the scene (scene format version increases).
+Save and reopen keep slot identity, order, execution order and overrides.
+
+## 7. Cooking
+
+- Every script referenced by a slot or by the scene references gets a
+  `script` job: compiled bytecode (debug mode) embedded, with the source path
+  recorded so the player can reload it. This needs the cooker to accept
+  compile plus external source together
+  ([hosting §6](../../../projects/Oxygen.Engine/design/scripting/scene-script-hosting.md#6-source-reload)).
+- Every input file under an authoring mount gets an `input` job; scenes
+  and sidecars that reference its actions or contexts depend on it.
+- Every scene with scripted nodes gets one `script-sidecar` job generated
+  from the scene model: node index from the descriptor generator, `slot_id`
+  from the slot GUID, execution order, and typed overrides (asset as virtual
+  path, node as index). It depends on the scene and script jobs.
+- Compile errors, stale overrides, missing nodes and wrong asset kinds fail
+  the cook with diagnostics in the cooking panel, rendered with their spans,
+  with Go To Property for slot and override errors.
+
+## 8. Play
+
+### Play button
+
+While the player is an external process, the scene document toolbar has one
+split button: the main part starts Play (Restart while a session runs) and
+its dropdown holds the play session settings. Stop sits beside it while a
+session runs.
+
+| Setting     | Default    | Effect                                                                                          |
+| ----------- | ---------- | ----------------------------------------------------------------------------------------------- |
+| Window size | 1280 × 720 | Player client size: presets (1280 × 720, 1600 × 900, 1920 × 1080) or a custom width and height. |
+| VSync       | On         | Player presents with vertical sync.                                                             |
+| Frame cap   | Off        | Off, or a frame rate limit in frames per second.                                                |
+
+The settings are per-user editor settings, persisted across restarts
+([settings LLD](settings-architecture.md#55-play-session-preferences)). They
+apply to the next launch and are written into its launch file; they are not
+scene data and are never cooked.
+
+### Flow
+
+1. Dirty documents: one Save All confirmation, or cancel (no partial play).
+2. Incremental cook of the active scene's closure; a failed cook stops here
+   with its result in the cooking panel.
+3. A scene without a camera disables Play with that reason.
+4. Write the launch file to the project's local (ignored) state folder:
+   project cooked mounts in order, the scene, the project's authoring roots as
+   script source roots, the session settings and a pipe name. Start
+   `Oxygen.Player.exe` from the installed SDK.
+5. Stream events: `log` to the Output panel, `diagnostic` to Problems,
+   `lifecycle` to the toolbar state and an operation result on failure.
+6. Stop sends `stop` and waits briefly before ending the process. Closing the
+   project or the editor stops the session.
+
+One session at a time. Saving a script while playing reloads it in the player
+without a cook; scene edits apply on the next Play.
+
+### Play section of the scene
+
+Settings that decide how the scene starts as a game are properties of the
+scene, not of its nodes, as in Unreal's World Settings. The scene inspector
+gains a **Play** section beside the environment sections.
+
+| Field                   | Source/default                                                          | UI/effect                                                                                                                                             |
+| ----------------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Starting camera         | Camera node reference in the scene; unset                               | Picker of the scene's camera nodes. Unset shows the camera that will be used, the first in hierarchy order. Cooked as `starting_camera`.              |
+| Starting input contexts | Ordered list of mapping context references, each with a priority; empty | Add from a picker of mapping contexts; the priority defaults to the context's own and can be overridden. The player activates exactly these at start. |
+
+The input contexts move here from the Scene References section, which keeps
+its other lists. A context listed here is also a cook dependency of the scene.
+
+References follow renames, moves and reparenting. A deleted or no-longer-camera
+node, or a missing context, shows as missing and fails the cook with Go To
+Property. Edits are undoable scene commands. At runtime, scripts switch
+cameras with `oxygen.scene.set_active_camera(node)` and contexts with
+`oxygen.input.activate_context` and `deactivate_context`
+([player host](../../../projects/Oxygen.Engine/design/runtime-core/scene-instantiation-and-player.md#scene-start-state)).
+Editor panes keep their own navigation cameras and input.
+
+## 9. Problems
+
+A dockable Problems panel lists script diagnostics from analysis and from the
+running session, grouped by file, with severity, code and message.
+Selecting an entry renders its full diagnostic (spans, labels, notes, help)
+in a monospace detail view using the engine's layout; the code links to its
+explanation. Double-click opens the code editor at the primary span. Runtime
+entries name the node and slot and select the node on request. Analysis
+entries clear when the file is fixed; session entries clear on the next Play.
+
+## 10. Operation results
+
+Editor-side codes: `OXE.SCRIPT.*` (create, launch the code editor, analysis
+unavailable) and `OXE.PLAY.*` (cook failed, player missing from the SDK,
+launch failed, session ended unexpectedly). Engine diagnostic codes (`S0xxx`)
+stay as reported.
+
+## 11. Exit gates
+
+| ID   | Check                                                                                                                                                                                            |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SA-1 | New Script writes the template and opens it; Edit opens the configured editor at a diagnostic's line.                                                                                            |
+| SA-2 | Saving a script updates its parameter fields and Problems without a cook.                                                                                                                        |
+| SA-3 | Slot and override commands undo/redo; save/reopen round-trips every value type, order and execution order.                                                                                       |
+| SA-4 | Asset and node references survive rename and move; a deleted node shows as missing and fails the cook visibly.                                                                                   |
+| SA-5 | Cook emits script and sidecar jobs; RenderScene and the player run the cooked scene with the authored values.                                                                                    |
+| SA-6 | Play saves, cooks and launches with the session settings on the starting camera and input contexts; it streams logs and a runtime diagnostic; a script edit reloads live; Stop ends the session. |
+| SA-7 | Session settings survive an editor restart; a hand-written input file cooks and its actions appear in parameter pickers.                                                                         |
+| SA-8 | Owner review in the running editor of SC1–SC8.                                                                                                                                                   |

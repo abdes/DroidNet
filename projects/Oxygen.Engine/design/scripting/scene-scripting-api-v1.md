@@ -76,6 +76,11 @@ The module is exposed as `oxygen.scene`.
 
 ## 3.1 Context and Parameters
 
+Superseded by [scene script hosting](scene-script-hosting.md#32-instances)
+(design, 2026-10-11): hooks receive the instance `self`, `self.node` and
+`self.params` replace both functions below, and the functions are removed
+when that design is implemented.
+
 1. `scene.current_node(ctx) -> SceneNode?`
    Returns the node bound to the executing slot context.
 
@@ -399,6 +404,9 @@ userdata. No failed token resolves to a substitute cube.
    Shape: `{min=vec3, max=vec3}`
 
 ## 8. Node Scripting Component API
+
+Slot hooks, execution order and parameter declarations are owned by
+[scene script hosting](scene-script-hosting.md).
 
 1. `script:slots() -> {SlotRef}`
 2. `script:add_slot(script_asset: string|userdata) -> boolean`

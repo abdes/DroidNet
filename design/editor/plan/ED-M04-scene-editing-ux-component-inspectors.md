@@ -27,7 +27,7 @@ checklist item into a task or explicit non-scope item. Name real code files,
 services, data contracts, UI surfaces, tests, and manual validation steps.
 Do not invent fake proof. Do not silently drop scope. Validation gates must be
 observable by the user or asserted by real tests. Keep ED-M05 material authoring,
-ED-M07 cook policy, ED-M09 viewport tools, and multi-viewport engine work out
+ED-M07 cook policy, ED-M08.4–M08.6 viewport tools, and multi-viewport engine work out
 of this milestone unless an ED-M04 LLD explicitly requires a seam.
 
 ## 3. PRD Traceability
@@ -108,7 +108,7 @@ ED-M04 does not include:
   mount-after-cook refresh. Those are ED-M07.
 - Standalone runtime parity. That is ED-M08.
 - Viewport selection highlight, gizmos, icons, frame all/selected, or camera
-  navigation. Those are ED-M09.
+  navigation. Those are ED-M08.4–M08.6.
 - Multi-viewport engine support. It remains deferred and must not block ED-M04.
 - Production editors for OrthographicCamera, PointLightComponent, or
   SpotLightComponent. Existing add/remove can remain; missing editors show a
@@ -693,7 +693,7 @@ Likely test files:
 | Environment schema drifts from engine concepts.                             | ED-M04 fields use engine-aligned names/units and persist as scene authoring data; ED-M07 chooses cooked descriptor shape.                                                                                                               |
 | Runtime not running blocks authoring.                                       | Commands commit authoring state and publish `LiveSync.SkippedNotRunning` warning.                                                                                                                                                       |
 | Settings changes cross persistence scopes or break startup/project loading. | Follow the settings placement matrix and validate startup/project loading when a durable setting is migrated. Scene, workspace, editor preference, project policy, and runtime-session state keep their own mutation and storage paths. |
-| Validation reruns full scans or presents duplicate failures.                | Review incremental invalidation and result publication together in the ED-M04/ED-M09 design work; scoped field messages and operation summaries must remain usable without a new validation dashboard.                                  |
+| Validation reruns full scans or presents duplicate failures.                | Review incremental invalidation and result publication together in the ED-M04/ED-M08.4–M08.6 design work; scoped field messages and operation summaries must remain usable without a new validation dashboard.                          |
 | Unsupported engine APIs throw.                                              | Unsupported environment paths return `SyncOutcome.Unsupported`; material slots use the runtime override path and classify rejection/failure.                                                                                            |
 | Point/spot/orthographic editor scope creeps in.                             | Existing add/remove can remain. Production editors are deferred unless trivial raw/read-only blocks are added.                                                                                                                          |
 | Tests become fake because WinUI is hard to automate.                        | Test pure command/domain/sync seams. Mark true visual checks as manual with exact expected result.                                                                                                                                      |

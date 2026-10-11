@@ -352,7 +352,7 @@ Command and validation responsibilities are divided across milestones:
   ED-M01 foundation. ED-M03 consumes them for authoring/save/sync failures;
   this is not ownership of a separate validation dashboard.
 - The full validation invalidation model remains an open design item in
-  documents-and-commands section 15, assigned there to ED-M04/ED-M09. ED-M03
+  documents-and-commands section 15, assigned there to ED-M04/ED-M08.4–M08.6. ED-M03
   validation does not close those later contributions.
 
 The existing validation ledger row and DynamicTree rename-hook exception

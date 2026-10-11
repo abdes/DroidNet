@@ -79,11 +79,11 @@ flowchart LR
     M00 --> M01
     M01 --> M03
     M02 --> M03
-    M03 --> M04 --> M05 --> M06 --> M06A --> M07 --> M07A --> M07B --> M08 --> M10
+    M03 --> M04 --> M05 --> M06 --> M06A --> M07 --> M07A --> M07B --> M08 --> M09 --> M10
 ```
 
 `ED-M02` is validated; its supported-viewport evidence is recorded. The current
-execution sequence is ED-M08 -> ED-M10; ED-M09 is absorbed into ED-M08. ED-M07A and ED-M07B are validated.
+execution sequence is ED-M08 -> ED-M09 -> ED-M10. ED-M07A and ED-M07B are validated.
 Earlier milestones retain their delivery records; source-identified omissions
 are assigned to 07A/07B, with no new M04 closure action. M08 still requires its
 joint review with the recorded ED-M02 evidence.
@@ -98,7 +98,7 @@ M08.2 rendering and view behavior is validated and closed on 2026-10-08.
 M08.V0 viewport robustness, M08.V1 multi-viewport layouts and M08.V2
 viewport state persistence are validated and closed on 2026-10-08. The
 2026-10-08 rescope retires the development-only parity harness and adds the
-viewport editing tools (absorbing ED-M09) and the Content Browser redesign,
+viewport editing tools (the former ED-M09) and the Content Browser redesign,
 including reference-aware rename/move. M08.3 viewport HUD, M08.4 picking,
 selection outline and framing, M08.5 transform gizmos and snapping, and M08.6
 scene helpers and orientation, and the M08.7 Content Browser redesign are
@@ -106,7 +106,8 @@ validated on 2026-10-08; M08.8 asset relocation on 2026-10-09. M08.9 viewport pe
 engine capability parity in the editor is in progress: fog and the sky
 (M08.10a–d) were delivered on 2026-10-09, the ground grid settings (M08.10e)
 on 2026-10-10, eye adaptation in editor panes (M08.10f) and physical camera
-controls (M08.10g) on 2026-10-11, and scripting (M08.10h–i) is next.
+controls (M08.10g) and the scripting design (M08.10h) on 2026-10-11;
+the scripting engine and editor slices (M08.10i–q) follow.
 
 ## 4. Milestone Roadmap
 
@@ -124,7 +125,7 @@ controls (M08.10g) on 2026-10-11, and scripting (M08.10h–i) is next.
 | `ED-M07A` | Authoring integrity and runtime convergence      | Identified background, gesture, field-diagnostic, sync-lifetime and save-integrity gaps close with concrete UI/native evidence.                                                                                    | `property-pipeline`, `property-inspector`, `environment-authoring`, `documents-and-commands`, `material-editor`, `settings-architecture`, `live-engine-sync`                                 | detailed plan exists                        |
 | `ED-M07B` | Safe content publication and compatibility       | Intuitive content discovery/use, consistent status, incremental cooking, saved snapshots, safe publication, complete native mappings, matched builds and reproducible import work.                                 | `content-cooking-workflows`, `content-browser-asset-identity`, `material-editor`, `content-pipeline`, `runtime-integration`, `project-services`, `asset-primitives`                          | Validated; complete workflow audit recorded |
 | `ED-M08`  | Runtime parity and authoring workspace           | Canonical engine/editor authoring, multi-viewport layouts, viewport picking/gizmos/snapping/helpers, and a Content Browser with previews, reference-aware relocation and drag-and-drop.                            | Detailed plan's implementation document map                                                                                                                                                  | In progress                                 |
-| `ED-M09`  | Viewport authoring tools and overlays (absorbed) | Delivered by ED-M08.4–M08.6.                                                                                                                                                                                       | `viewport-and-tools`                                                                                                                                                                         | Absorbed into ED-M08                        |
+| `ED-M09`  | Input authoring                                  | Users create and edit input actions and mapping contexts in the editor.                                                                                                                                            | To be written by the milestone owner                                                                                                                                                         | Planned; design not started                 |
 | `ED-M10`  | V0.1 acceptance                                  | The full PRD V0.1 workflow completes end-to-end without manual repair.                                                                                                                                             | all V0.1 LLDs                                                                                                                                                                                | required before validation                  |
 
 ## 5. Milestone Details
@@ -408,7 +409,7 @@ ED-M07A/07B are validated. The
 [detailed plan](plan/ED-M08-runtime-parity-and-standalone-validation.md) owns
 the slices: canonical data and rendering (M08.1, M08.F1, M08.2), viewport
 layouts and persistence (M08.V0–V2), the viewport HUD and editing tools
-(M08.3–M08.6, absorbing ED-M09), and the Content Browser redesign, asset
+(M08.3–M08.6, the former ED-M09), and the Content Browser redesign, asset
 relocation, viewport performance, engine capability parity, thumbnails and
 drag-and-drop (M08.7–M08.12). The
 [V0.1 authoring contract](review/ED-M08-v01-authoring-scope.md) defines the
@@ -422,11 +423,12 @@ harness in the standalone LLD is post-V0.1.
 Exit gate: the detailed plan's exit checklist, including the user's closeout
 walkthrough in the normal Release editor.
 
-### ED-M09 - Viewport Authoring Tools And Overlays
+### ED-M09 - Input Authoring
 
-Absorbed into ED-M08 on 2026-10-08: picking, selection feedback and framing
-(M08.4), transform gizmos and snapping (M08.5), and node icons and helpers
-(M08.6).
+Purpose: users create and edit input actions and mapping contexts in the
+editor (REQ-045). The [plan](plan/ED-M09-input-authoring.md) is owned and
+written by the milestone owner. The ID previously named the viewport tools
+that ED-M08.4–M08.6 delivered.
 
 ### ED-M10 - V0.1 Acceptance
 
@@ -522,7 +524,7 @@ Active milestone plans:
 | [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md)             | `ED-M07B`   |
 | [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md)                   | `ED-M08`    |
 | [ED-M08.F1-descriptor-local-references.md](plan/ED-M08.F1-descriptor-local-references.md)                                       | `ED-M08.F1` |
-| [ED-M09-viewport-authoring-tools.md](plan/ED-M09-viewport-authoring-tools.md)                                                   | `ED-M09`    |
+| [ED-M09-input-authoring.md](plan/ED-M09-input-authoring.md)                                                                     | `ED-M09`    |
 | [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md)                                                 | `ED-M10`    |
 
 ## 8. Milestone Closure

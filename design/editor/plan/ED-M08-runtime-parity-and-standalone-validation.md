@@ -3,15 +3,15 @@
 Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.9
 validated; rescoped on 2026-10-08; M08.10 added on 2026-10-09, M08.10a–d
 delivered on 2026-10-09, M08.10e on 2026-10-10, M08.10f and M08.10g on
-2026-10-11 and M08.10h next**
+2026-10-11, the M08.10h scripting design on 2026-10-11 and M08.10i next**
 
 Current: **M08.10 Engine capability parity in the editor**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
 (former M08.3 and M08.5–M08.8) and the former M08.4 audit, and replaces them
 with what the editor still lacks as an authoring tool: viewport picking,
 selection feedback, transform gizmos, scene helpers and a refined HUD, and a
-Content Browser with real previews, working commands and drag-and-drop. ED-M09
-is absorbed into M08.4–M08.6. See [remaining slices](#4-execution-sequence) and
+Content Browser with real previews, working commands and drag-and-drop. The
+former ED-M09 viewport tools are delivered by M08.4–M08.6. See [remaining slices](#4-execution-sequence) and
 [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
 its rendering, precision and publication contracts remain unchanged.
@@ -64,6 +64,7 @@ redefined by the schedule.
 | [Runtime integration](../lld/runtime-integration.md)                                                                     | Build compatibility, scene/view lifetimes and production capabilities                                   |
 | [Standalone qualification](../lld/standalone-runtime-validation.md)                                                      | Post-V0.1 development harness design; not executed by M08                                               |
 | [Settings architecture](../lld/settings-architecture.md)                                                                 | Authored settings, local workspace state, runtime-session and startup preferences                       |
+| [Script authoring](../lld/script-authoring.md)                                                                           | Script assets, Scripting component, parameters, script cooking, Play and Problems                       |
 | [Viewport and tools](../lld/viewport-and-tools.md)                                                                       | HUD, view modes, picking, outline, framing, gizmos, snapping, helpers and drag-and-drop placement       |
 | [Content Browser asset identity](../lld/content-browser-asset-identity.md)                                               | Browser layout, views, commands, thumbnails and drag sources                                            |
 | [Documents and commands](../lld/documents-and-commands.md)                                                               | Save/close lifecycle, command outcomes and document ownership                                           |
@@ -72,14 +73,15 @@ redefined by the schedule.
 
 ### Native implementation references
 
-| Document                                                                                                                                                                                                     | Native implementation authority                                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| [V0.1 rendering contract](../../../projects/Oxygen.Engine/design/vortex/lld/editor-rendering.md)                                                                                                             | Concrete source owners and required changes for light enumeration, visibility, shadow receiving/contact, camera framing and grading |
-| [Captured-sky IBL](../../../projects/Oxygen.Engine/design/vortex/lld/captured-sky-ibl.md)                                                                                                                    | Scene-global capture anchor, HDR products, diffuse SH, GGX filtering/BRDF integration, atomic publication and Stage 13 activation   |
-| [Lighting service](../../../projects/Oxygen.Engine/design/vortex/lld/lighting-service.md), [shadow service](../../../projects/Oxygen.Engine/design/vortex/lld/shadow-service.md)                             | Direct-light/shadow family ownership, wire/resource contracts and established CSM filtering/bias behavior                           |
-| [Environment service](../../../projects/Oxygen.Engine/design/vortex/lld/environment-service.md), [indirect lighting service](../../../projects/Oxygen.Engine/design/vortex/lld/indirect-lighting-service.md) | Environment product publication and canonical indirect surface evaluation; retirement of the Stage 12 ambient bridge                |
-| [Cubemap processing](../../../projects/Oxygen.Engine/design/vortex/lld/cubemap-processing.md), [static skylight baseline](../../../projects/Oxygen.Engine/design/vortex/lld/skybox-static-skylight.md)       | Existing source orientation, SH/radiance normalization and static-cubemap behavior reused by the new IBL contract                   |
-| [View initialization](../../../projects/Oxygen.Engine/design/vortex/lld/init-views.md), [post-process service](../../../projects/Oxygen.Engine/design/vortex/lld/post-process-service.md)                    | View/history ownership, exposure, output composition and per-view processing                                                        |
+| Document                                                                                                                                                                                                                                                                                                                | Native implementation authority                                                                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| [V0.1 rendering contract](../../../projects/Oxygen.Engine/design/vortex/lld/editor-rendering.md)                                                                                                                                                                                                                        | Concrete source owners and required changes for light enumeration, visibility, shadow receiving/contact, camera framing and grading |
+| [Captured-sky IBL](../../../projects/Oxygen.Engine/design/vortex/lld/captured-sky-ibl.md)                                                                                                                                                                                                                               | Scene-global capture anchor, HDR products, diffuse SH, GGX filtering/BRDF integration, atomic publication and Stage 13 activation   |
+| [Lighting service](../../../projects/Oxygen.Engine/design/vortex/lld/lighting-service.md), [shadow service](../../../projects/Oxygen.Engine/design/vortex/lld/shadow-service.md)                                                                                                                                        | Direct-light/shadow family ownership, wire/resource contracts and established CSM filtering/bias behavior                           |
+| [Environment service](../../../projects/Oxygen.Engine/design/vortex/lld/environment-service.md), [indirect lighting service](../../../projects/Oxygen.Engine/design/vortex/lld/indirect-lighting-service.md)                                                                                                            | Environment product publication and canonical indirect surface evaluation; retirement of the Stage 12 ambient bridge                |
+| [Cubemap processing](../../../projects/Oxygen.Engine/design/vortex/lld/cubemap-processing.md), [static skylight baseline](../../../projects/Oxygen.Engine/design/vortex/lld/skybox-static-skylight.md)                                                                                                                  | Existing source orientation, SH/radiance normalization and static-cubemap behavior reused by the new IBL contract                   |
+| [View initialization](../../../projects/Oxygen.Engine/design/vortex/lld/init-views.md), [post-process service](../../../projects/Oxygen.Engine/design/vortex/lld/post-process-service.md)                                                                                                                               | View/history ownership, exposure, output composition and per-view processing                                                        |
+| [Scene script hosting](../../../projects/Oxygen.Engine/design/scripting/scene-script-hosting.md), [script diagnostics](../../../projects/Oxygen.Engine/design/scripting/script-diagnostics.md), [scene instantiation and player](../../../projects/Oxygen.Engine/design/runtime-core/scene-instantiation-and-player.md) | Script model, hooks, parameter records, attachment, reload, diagnostics, player host                                                |
 
 Closed VTX-M08 evidence proves its original static diffuse-only implementation.
 The V0.1 rendering/IBL contracts explicitly extend that baseline; the ED-M08
@@ -1292,26 +1294,45 @@ stands behind them. This slice removes those lock-outs.
    ManualCamera exposure always uses the defaults. Perspective and
    orthographic camera sections gain the three fields.
 7. **Scripting.** The engine attaches scripts to scene nodes as script slots
-   with typed parameters (`ScriptingComponentRecord`, `ScriptSlotRecord`,
-   `ScriptParamRecord`) and runs them in the runtime. The editor authors
-   them. Its user interface (how scripts are created or assigned, how slots
-   and parameters appear in the inspector, and how script assets appear in
-   the content browser) is designed with the owner interactively before any
-   implementation, and its design joins this plan before the code does.
+   with typed parameters and runs them in the runtime; the editor authors
+   them and runs the cooked scene with Play. Owner decisions of 2026-10-11:
+   Play launches the runtime from the editor; slot execution order, source
+   reload into running slots, start/destroy hooks and engine-owned slot
+   attachment (replacing the example shell's code) are engine work in this
+   slice; script errors are reported with source spans in the style of
+   `rustc`. Play starts on the starting camera and input contexts authored in the
+   scene's Play section, and scripts switch both at runtime. A split Play
+   button carries per-user session settings. Hand-written input files are cooked;
+   editor input authoring is [ED-M09](ED-M09-input-authoring.md). The design is in the
+   [script authoring LLD](../lld/script-authoring.md) (workflow, inspector,
+   cooking, Play, Problems) and the engine's
+   [scene script hosting](../../../projects/Oxygen.Engine/design/scripting/scene-script-hosting.md),
+   [script diagnostics](../../../projects/Oxygen.Engine/design/scripting/script-diagnostics.md)
+   and [scene instantiation and player](../../../projects/Oxygen.Engine/design/runtime-core/scene-instantiation-and-player.md)
+   documents. The owner's design decisions are recorded in
+   [scripting decisions](#scripting-decisions).
 
 Implementation, in build order:
 
-| Step    | Projects                               | Delivers                                                              |
-| ------- | -------------------------------------- | --------------------------------------------------------------------- |
-| M08.10a | Design documents                       | Exclusion verification against the engine; confirmed items join below |
-| M08.10b | Editor.World, Interop, WorldEditor     | Height and volumetric fog; local fog volume component                 |
-| M08.10c | Design, with the owner                 | Sky map, sky cubemap and image-based lighting user interface design   |
-| M08.10d | Per the sky design                     | Cubemap texture import; Sky Sphere; Sky Light source and multipliers  |
-| M08.10e | Editor.Interop, WorldEditor            | Ground grid settings                                                  |
-| M08.10f | Oxygen.Engine (Vortex), Editor.Interop | Per-pane view state; exposure-adaptation settling                     |
-| M08.10g | WorldEditor                            | Physical camera controls                                              |
-| M08.10h | Design, with the owner                 | Scripting user interface design                                       |
-| M08.10i | Per the scripting design               | Script authoring, persistence and cooking                             |
+| Step    | Projects                                                     | Delivers                                                                                                                                                              |
+| ------- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| M08.10a | Design documents                                             | Exclusion verification against the engine; confirmed items join below                                                                                                 |
+| M08.10b | Editor.World, Interop, WorldEditor                           | Height and volumetric fog; local fog volume component                                                                                                                 |
+| M08.10c | Design, with the owner                                       | Sky map, sky cubemap and image-based lighting user interface design                                                                                                   |
+| M08.10d | Per the sky design                                           | Cubemap texture import; Sky Sphere; Sky Light source and multipliers                                                                                                  |
+| M08.10e | Editor.Interop, WorldEditor                                  | Ground grid settings                                                                                                                                                  |
+| M08.10f | Oxygen.Engine (Vortex), Editor.Interop                       | Per-pane view state; exposure-adaptation settling                                                                                                                     |
+| M08.10g | WorldEditor                                                  | Physical camera controls                                                                                                                                              |
+| M08.10h | Design, with the owner                                       | Scripting design: workflow, engine hosting, diagnostics, player                                                                                                       |
+| M08.10i | Oxygen.Engine (Data, Cooker, Scripting)                      | Parameter declarations and analyzer; asset and node parameters; sidecar validation; compiled external scripts                                                         |
+| M08.10j | Oxygen.Engine (Scripting), examples                          | Instances with `self`, start/destroy hooks, execution order, connection ownership; example scripts migrated                                                           |
+| M08.10k | Oxygen.Engine (Scripting)                                    | Script diagnostics: model, catalog, producers, text renderer, JSON form                                                                                               |
+| M08.10l | Oxygen.Engine, DemoShell                                     | Engine scene instantiation and script attachment; starting camera and input contexts, active camera and context switching; source reload; DemoShell scripting removed |
+| M08.10m | Oxygen.Engine                                                | `Oxygen.Player` with launch file and event stream                                                                                                                     |
+| M08.10n | Oxygen.Engine (Scripting)                                    | Binding registration tables, generated API definitions and type checking                                                                                              |
+| M08.10o | Editor.Interop, ContentBrowser, ContentPipeline, WorldEditor | Script assets, analysis, code-editor preference, project tooling, Problems; hand-written input files cooked                                                           |
+| M08.10p | Editor.World, WorldEditor, ContentPipeline                   | Scripting component, inspector, persistence, script and sidecar cooking                                                                                               |
+| M08.10q | WorldEditor, Editor.Runtime, ContentPipeline                 | Scene Play section (starting camera and input contexts) and its cooking; Play split button with session settings; Play, Stop and session streaming                    |
 
 #### M08.10 status
 
@@ -1323,7 +1344,8 @@ Implementation, in build order:
 | M08.10e   | Delivered on 2026-10-10: per-user ground grid settings in the Settings flyout, applied to every pane.          |
 | M08.10f   | Delivered on 2026-10-11: per-pane exposure state; adapting auto exposure keeps its pane rendering.             |
 | M08.10g   | Delivered on 2026-10-11: aperture, shutter rate and ISO in both camera sections, with undo and live sync.      |
-| M08.10h–i | Open; M08.10h is next.                                                                                         |
+| M08.10h   | Delivered on 2026-10-11: scripting design and owner decisions SD-1–SD-7.                                       |
+| M08.10i–q | Open; M08.10i is next.                                                                                         |
 
 Checks: each authored capability survives save, reopen and cook, and the
 cooked project renders it in RenderScene as in the editor; the grid
@@ -1331,7 +1353,21 @@ settings persist per user and apply to every pane; a Vortex test that a
 view reports settling while its exposure adapts and stops when it
 converges; user review in the running editor of fog, local fog volumes, the
 sky settings, the grid settings, and eye adaptation in a pane that settles
-and then idles.
+and then idles. Scripting: the exit gates of the
+[script authoring LLD](../lld/script-authoring.md#11-exit-gates) and the
+engine's hosting (SSH), diagnostics (SDG) and player (SIP) gates.
+
+#### Scripting decisions
+
+| ID   | Priority | Decision                                                                                                                                                                     | State                                                                                                                                                                                             | Next action | Owner |
+| ---- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----- |
+| SD-1 | 1        | Who owns parameter declarations ([research](../../../projects/Oxygen.Engine/design/scripting/script-parameter-declarations.md))                                              | Decided 2026-10-11: B, declared in the script and extracted statically by the engine                                                                                                              | None        | Owner |
+| SD-2 | 2        | Play runs a new SDK player on an engine scene-instantiation library ([player design](../../../projects/Oxygen.Engine/design/runtime-core/scene-instantiation-and-player.md)) | Decided 2026-10-11: approved                                                                                                                                                                      | None        | Owner |
+| SD-3 | 3        | Type checking against Oxygen API definitions (M08.10n) is V0.1 scope                                                                                                         | Decided 2026-10-11: in scope, with definitions generated from the binding registrations ([type checking](../../../projects/Oxygen.Engine/design/scripting/script-diagnostics.md#5-type-checking)) | None        | Owner |
+| SD-4 | 4        | How Play chooses its camera                                                                                                                                                  | Decided 2026-10-11: the scene's starting camera, authored in the scene's Play section (first camera as fallback); scripts switch the active camera                                                | None        | Owner |
+| SD-5 | 5        | Which input contexts a played scene starts with                                                                                                                              | Decided 2026-10-11: a list with priorities in the scene's Play section, moved from Scene References; scripts activate and deactivate contexts                                                     | None        | Owner |
+| SD-6 | 6        | Play session settings                                                                                                                                                        | Decided 2026-10-11: a split Play button whose dropdown sets window size, VSync and frame cap, persisted as per-user editor settings, while the player is external                                 | None        | Owner |
+| SD-7 | 7        | Input asset authoring                                                                                                                                                        | Decided 2026-10-11: V0.1 scope as [ED-M09](ED-M09-input-authoring.md); scripting cooks hand-written input files                                                                                   | None        | Owner |
 
 ### M08.11 — Asset thumbnails and previews
 

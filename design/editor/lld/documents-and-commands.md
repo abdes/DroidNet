@@ -492,7 +492,7 @@ ED-M03 documents/commands are complete when:
 - Current field diagnostics are keyed by document lifetime, target/PropertyId
   and revision; newer successful edits replace resolved current errors and
   revalidate affected near/far and sun/reference dependents. ED-M07A.3 implements
-  this mechanism; ED-M09 tools consume it without another validation model.
+  this mechanism; ED-M08.4–M08.6 tools consume it without another validation model.
 
 ## 16. V0.1 Authoring Integrity Qualification
 

@@ -38,7 +38,7 @@ visual evidence.
 
 `REQ-029` is not claimed by ED-M02. Initial camera framing is validation
 evidence for `REQ-025` and `SUCCESS-003`; explicit camera navigation and frame
-selected/all belong to ED-M09.
+selected/all belong to ED-M08.4–M08.6.
 
 ## 3. Required LLDs
 

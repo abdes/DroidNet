@@ -41,6 +41,7 @@ implementation and review, and must trace to [PRD.md](../PRD.md),
 | [viewport-and-tools.md](./viewport-and-tools.md)                         | Viewports, camera navigation, tools, overlays, multi-view.                                                                       |
 | [settings-architecture.md](./settings-architecture.md)                   | Editor, project, workspace, runtime, scene, and diagnostic settings ownership.                                                   |
 | [diagnostics-operation-results.md](./diagnostics-operation-results.md)   | Operation results, diagnostics, failure domains, presentation rules.                                                             |
+| [script-authoring.md](./script-authoring.md)                             | Script assets and analysis, node Scripting component and parameters, script cooking, Play and Problems.                          |
 
 ## Required LLD Sections
 

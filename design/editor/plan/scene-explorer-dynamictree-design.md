@@ -5,10 +5,10 @@ The separately owned live runtime/engine integration remains tracked. Explorer
 category filters affect rows only; viewport picking and native engine/interop
 qualification remain separately owned.
 
-| Outcome                                                                                                                                       | Remaining                                                                                                               | Evidence                                                                                                                                                                                                                 |
-| --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| SE-01 generic tree capabilities and the single-scene DemoApp showcase are implemented and validated.                                          | Separately owned ED-M09 runtime integration and native qualification.                                                   | 170 Models and 110 UI tests passed; scoped builds and changed-file hooks passed. T9 proves scoped interaction/recycling; T10 measures native compact/normal profiles on a 1,000-row lazy tree.                           |
-| SE-03 editor-owned Explorer presentation, transient search/reveal, Explorer-only category filtering and shared lock enforcement are complete. | Live viewport/runtime integration remains tracked separately under ED-M09; native hide remains deferred by user choice. | WorldEditor Unit and Unit.UI Debug/x64 builds succeeded with analyzers enabled; existing analyzer warnings remain. The focused Explorer header test passed 1/1; previous full Unit.UI totals remain historical evidence. |
+| Outcome                                                                                                                                       | Remaining                                                                                                                       | Evidence                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| SE-01 generic tree capabilities and the single-scene DemoApp showcase are implemented and validated.                                          | Separately owned ED-M08.4–M08.6 runtime integration and native qualification.                                                   | 170 Models and 110 UI tests passed; scoped builds and changed-file hooks passed. T9 proves scoped interaction/recycling; T10 measures native compact/normal profiles on a 1,000-row lazy tree.                           |
+| SE-03 editor-owned Explorer presentation, transient search/reveal, Explorer-only category filtering and shared lock enforcement are complete. | Live viewport/runtime integration remains tracked separately under ED-M08.4–M08.6; native hide remains deferred by user choice. | WorldEditor Unit and Unit.UI Debug/x64 builds succeeded with analyzers enabled; existing analyzer warnings remain. The focused Explorer header test passed 1/1; previous full Unit.UI totals remain historical evidence. |
 
 ## 1. Goal, scope and design authority
 
@@ -51,8 +51,8 @@ Other required references:
   guidance](../../../.github/prompts/csharp-mstest.prompt.md).
 
 This plan is scoped design implementation, not a reopening of delivered ED-M03
-or a competing ED-M09 viewport milestone. It owns Explorer/control work and
-consumes the runtime picking/overlay capabilities owned by ED-M09 and the
+or a competing ED-M08.4–M08.6 viewport milestone. It owns Explorer/control work and
+consumes the runtime picking/overlay capabilities owned by ED-M08.4–M08.6 and the
 existing runtime integration boundaries. Missing native support must be
 implemented by its owner under explicit authorization, not hidden behind a
 successful UI-only test.
@@ -1053,7 +1053,7 @@ defects were marked closed.
       **actual scene ancestors only**, never logical folders (R1); the editor
       sends hidden roots and the engine resolves the closure (DD2), as a
       revisioned per-activation snapshot applied to every editing viewport of
-      the active scene (DD3, R6). - **D8b** is ED-M09's work: picking does not
+      the active scene (DD3, R6). - **D8b** is ED-M08.4–M08.6 work: picking does not
       exist at any layer. The Explorer contributes category and hidden-set
       filters on each pick request (DD4); hidden nodes cannot be picked in
       viewports (R8) yet Explorer selection still works, and a hidden node
@@ -1789,7 +1789,7 @@ Menus-host context-menu integration.
 **Native hide is deferred by user choice.** Do not start D8a engine/interop
 mask implementation until the user decides it is the right time. It may remain
 pending while editor work proceeds and blocks native/full qualification, not
-the editor deliverable. D8b's ED-M09-supported native picking path remains a
+the editor deliverable. D8b's ED-M08.4–M08.6-supported native picking path remains a
 separate runtime dependency for end-to-end category-picking qualification. The
 [D8 capability analysis](../review/D8-show-in-editor-runtime-capability.md)
 owns native scope and authorization.
@@ -1819,7 +1819,7 @@ owns native scope and authorization.
    authoring lock gates are complete; the focused Explorer header test and
    WorldEditor Unit/Unit.UI builds provide the recorded verification evidence.
 
-**Remaining live-engine item — tracked separately under ED-M09:** implement
+**Remaining live-engine item — tracked separately under ED-M08.4–M08.6:** implement
 viewport picking and selection policy independently of the Explorer-only
 category filters, and enforce lock exclusion in transform/gizmo manipulation.
 Locked nodes stay selectable by viewport picking and marquee. ED-M08.4 owns
@@ -1852,7 +1852,7 @@ call.
 | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
 | Spotlight search                        | Collapsed Pavilion spotlight appears with ancestors; unrelated rows are excluded; match count correct; selected Sculpture is not silently replaced; clear restores expansion.                                                                                                                                                                                     | Explorer Unit/UI, SE-02/03                                  |
 | Explorer search and categories          | Search uses one search input with its built-in transient clear affordance in compact and standard/comfortable density. Category toggles use the available header width and filter only represented Explorer rows; uncategorized rows remain, matching ancestors provide context, selection is preserved, search composes with filters and counts visible matches. | Explorer UI, SE-03                                          |
-| Explorer filters versus viewport        | Toggle a category off: its Explorer rows disappear while active selection and viewport eligibility remain unchanged; re-enable it and verify search/count behavior. Viewport pick/selection filtering is a separately owned ED-M09 contract.                                                                                                                      | Explorer UI, SE-03; viewport integration, ED-M09            |
+| Explorer filters versus viewport        | Toggle a category off: its Explorer rows disappear while active selection and viewport eligibility remain unchanged; re-enable it and verify search/count behavior. Viewport pick/selection filtering is a separately owned ED-M08.4–M08.6 contract.                                                                                                              | Explorer UI, SE-03; viewport integration, ED-M08.4–M08.6    |
 | Parent hide/lock                        | Parent action disables inherited child action with explanation; child's local choice survives parent restoration; inspection remains possible; Show all changes Hide only.                                                                                                                                                                                        | Workspace/Explorer/Inspector UI + native integration, SE-03 |
 | Generic slot reuse                      | A non-scene “status/action” row and a default no-slot tree work; action clicks/keys do not select/drag; trailing columns align across depth and recycling.                                                                                                                                                                                                        | DynamicTree Models/UI + DemoApp, SE-01                      |
 | Rename                                  | F2/toolbar/menu use same inline editor; Enter commits once; Escape rejects draft; invalid/stale target no mutation; text shortcuts do not delete the row.                                                                                                                                                                                                         | DynamicTree UI + Explorer command/UI, SE-01/02              |
@@ -1946,7 +1946,7 @@ acceptance blocked until the required API and observed behavior exist.
 | ----- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
 | SE-01 | validated | T9/T10 and generic-control corrections verified; no remaining slice work.                                                                                                                                                                                                                                                                                                                                                   | Implementer      |
 | SE-02 | validated | All editor-owned corrections and decisions are closed. Current evidence: 270 WorldEditor Unit, 49 WorldEditor UI, 69 Projects, 68 Documents, 181 DynamicTree Models, 47 DynamicTree UI and 11 Menus UI cases pass. Owning builds and analyzer-enabled Editor app build pass; analyzer warnings remain. Only separately owned native D8a/D8b qualification carries forward. Historical totals remain bounded prior evidence. | Implementer      |
-| SE-03 | validated | Editor-owned Explorer presentation/search/reveal, Explorer-only category filters and current authoring lock gates are complete; WorldEditor Unit and Unit.UI Debug/x64 builds succeeded and the focused header/filter UI test passed. Live viewport/runtime integration remains tracked under ED-M09; native hide remains deferred by user choice.                                                                          | Implementer      |
+| SE-03 | validated | Editor-owned Explorer presentation/search/reveal, Explorer-only category filters and current authoring lock gates are complete; WorldEditor Unit and Unit.UI Debug/x64 builds succeeded and the focused header/filter UI test passed. Live viewport/runtime integration remains tracked under ED-M08.4–M08.6; native hide remains deferred by user choice.                                                                  | Implementer      |
 
 Use `ready`, `in_progress`, `landed_needs_validation`, `blocked`, `validated` accurately.
 Document contract decisions and named dependencies next to the slice, not as a

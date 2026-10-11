@@ -150,6 +150,16 @@ current value; a stored value outside its range restores its default. A
 pane's own grid toggle is viewport state (§5.2) and still hides the grid in
 that pane. Nothing is written to scene documents, history or cooked output.
 
+### 5.5 Play session preferences
+
+`PlaySessionSettingsService` owns the typed `WorldEditor/PlaySession` setting
+with `SettingScope.Application`: player window width and height, VSync, and
+frame cap (off or frames per second). The Play split button's dropdown edits
+it ([script authoring](script-authoring.md#play-button)); each edit is saved
+at once and restored when the editor starts. Values are written into the next
+player launch file only. A stored value outside its range restores its
+default. Nothing is written to scene documents, history or cooked output.
+
 ## 6. Mutation Path Rules
 
 ### 6.1 Scene-scope settings

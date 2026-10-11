@@ -2,9 +2,9 @@
 
 Status: `decided by owner (2026-10-05)`. Contract approved; implementation pending.
 
-| Outcome                                                                                                                                                                                                                        | Remaining                                                                                       | Evidence                                                                                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| D8 is partitioned into an engine/interop capability (D8a, editing-view hide mask) and an ED-M09 dependency (D8b, viewport picking). Architectural decisions DD1–DD4 are established with a simple "not visible in view" model. | Engine (E1–E3), Interop/Runtime (I1–I4), and Editor (W1–W5) task implementation; qualification. | Source reading of Scene, Vortex, Interop and Runtime boundaries (2026-10-05); owner directives on shadow elimination, warning fallback and gizmo visibility. |
+| Outcome                                                                                                                                                                                                                                | Remaining                                                                                       | Evidence                                                                                                                                                     |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| D8 is partitioned into an engine/interop capability (D8a, editing-view hide mask) and an ED-M08.4–M08.6 dependency (D8b, viewport picking). Architectural decisions DD1–DD4 are established with a simple "not visible in view" model. | Engine (E1–E3), Interop/Runtime (I1–I4), and Editor (W1–W5) task implementation; qualification. | Source reading of Scene, Vortex, Interop and Runtime boundaries (2026-10-05); owner directives on shadow elimination, warning fallback and gizmo visibility. |
 
 **Summary.** The editor can build the complete "Show in Editor" workspace state,
 persistence and row UI immediately ([C49](../plan/scene-explorer-dynamictree-design.md#L1144)).
@@ -59,13 +59,13 @@ not part of D8.
 
 Decision D8 bundles two distinct capabilities with different owners:
 
-| ID      | Capability                                                                                                                            | Status today         | Owner                                                              | Scope / Dependency                                                                        |
-| ------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| **D8a** | Editing-view hide mask: suppress geometry, shadows and viewport picking for hidden nodes (and descendants) in editing viewports only. | Absent at all layers | Engine (Vortex) → Interop → Runtime                                | Viewport suppression of the eye; unblocks SE-03 native qualification.                     |
-| **D8b** | Viewport picking with Mesh/Light/Camera category filtering and hidden-node exclusion.                                                 | Absent at all layers | ED-M09 ([plan step 2](../plan/ED-M09-viewport-authoring-tools.md)) | Viewport interaction tools; category toggles are filters carried on ED-M09 pick requests. |
+| ID      | Capability                                                                                                                            | Status today         | Owner                                                                               | Scope / Dependency                                                                                |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| **D8a** | Editing-view hide mask: suppress geometry, shadows and viewport picking for hidden nodes (and descendants) in editing viewports only. | Absent at all layers | Engine (Vortex) → Interop → Runtime                                                 | Viewport suppression of the eye; unblocks SE-03 native qualification.                             |
+| **D8b** | Viewport picking with Mesh/Light/Camera category filtering and hidden-node exclusion.                                                 | Absent at all layers | ED-M08.4–M08.6 ([plan](../plan/ED-M08-runtime-parity-and-standalone-validation.md)) | Viewport interaction tools; category toggles are filters carried on ED-M08.4–M08.6 pick requests. |
 
-D8a is a small, focused engine/interop task. D8b is owned by ED-M09; the Scene Explorer
-only provides category preferences and hidden-set inputs to ED-M09 pick requests.
+D8a is a small, focused engine/interop task. D8b is owned by ED-M08.4–M08.6; the Scene Explorer
+only provides category preferences and hidden-set inputs to ED-M08.4–M08.6 pick requests.
 
 ## 3. Current state (source-verified)
 
@@ -163,7 +163,7 @@ Normative contract for D8a and D8b:
 
 ### DD4 — Category picking filters and gizmos (D8b)
 
-- **Decision (Approved):** Viewport picking is owned by ED-M09. Category toggles (Mesh, Light, Camera) and hidden-node exclusion are passed as filter arguments on each pick request, rather than stored as native engine state.
+- **Decision (Approved):** Viewport picking is owned by ED-M08.4–M08.6. Category toggles (Mesh, Light, Camera) and hidden-node exclusion are passed as filter arguments on each pick request, rather than stored as native engine state.
 - **Interaction Contract:** Editor-hidden nodes cannot be picked in viewports. They stay in the scene graph and transform normally; when selected (individually or in a multi-selection), the viewport renders their transform gizmo at their world transform, allowing spatial manipulation while geometry stays hidden.
 
 ## 6. Action plans
@@ -202,12 +202,12 @@ Normative contract for D8a and D8b:
 | --- | --------------------------------------------------------------------------- | -------------- | ---------------------------------------------- |
 | W5  | Connect W4 to live native dispatch; verify viewport suppression end-to-end. | `WorldEditor/` | Viewport hides geometry and shadows on toggle. |
 
-**Gated on ED-M09 (D8b):**
+**Gated on ED-M08.4–M08.6 (D8b):**
 
-| ID  | Task                                                                                                                             | Files / Area         | Acceptance                                           |
-| --- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ---------------------------------------------------- |
-| W6  | Pass category filters (Mesh, Light, Camera) and hidden set into ED-M09 pick requests. Hidden nodes cannot be picked in viewport. | `Viewport/`          | Viewport picking ignores hidden nodes.               |
-| W7  | When an editor-hidden node is selected in Scene Explorer, display its transform gizmo in the viewport at its world transform.    | `Viewport/Overlays/` | Transform gizmo renders and manipulates hidden node. |
+| ID  | Task                                                                                                                                     | Files / Area         | Acceptance                                           |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | ---------------------------------------------------- |
+| W6  | Pass category filters (Mesh, Light, Camera) and hidden set into ED-M08.4–M08.6 pick requests. Hidden nodes cannot be picked in viewport. | `Viewport/`          | Viewport picking ignores hidden nodes.               |
+| W7  | When an editor-hidden node is selected in Scene Explorer, display its transform gizmo in the viewport at its world transform.            | `Viewport/Overlays/` | Transform gizmo renders and manipulates hidden node. |
 
 ## 7. Sequencing
 
@@ -231,9 +231,9 @@ flowchart TD
     W4 -.->|When I4 lands| W5["W5 Live Viewport Suppression"]
   end
 
-  subgraph ED_M09 [ED-M09 Scope: D8b]
-    M1["ED-M09 Viewport Picking"] --> W6["W6 Picking Category Filter"]
-    M2["ED-M09 Transform Gizmos"] --> W7["W7 Gizmo on Hidden Node Selection"]
+  subgraph ED_M08_VIEWPORT [ED-M08.4–M08.6 Scope: D8b]
+    M1["ED-M08.4–M08.6 Viewport Picking"] --> W6["W6 Picking Category Filter"]
+    M2["ED-M08.4–M08.6 Transform Gizmos"] --> W7["W7 Gizmo on Hidden Node Selection"]
   end
 ```
 

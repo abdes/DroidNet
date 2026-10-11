@@ -123,8 +123,8 @@ offers none; these are engine facts, not editor choices. Mesh topology and
 material-slot creation are modeling tools with no engine counterpart. Physical-camera exposure, fog, local fog
 volumes, the Sky Sphere and every Sky Light source and multiplier are rendered
 by the engine and authored in V0.1 (ED-M08.10), as are node scripts. Physics authoring is post-V0.1
-by owner decision. Script authoring is V0.1 work in ED-M08.10, with its
-user interface designed with the owner before implementation. Multi-viewport layouts are in
+by owner decision. Script authoring and Play are V0.1 work in ED-M08.10, designed in the
+[script authoring LLD](../lld/script-authoring.md). Multi-viewport layouts are in
 scope under ED-M08.V1.
 
 The [engine deferred-capability record](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md)

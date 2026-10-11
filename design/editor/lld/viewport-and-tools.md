@@ -11,7 +11,7 @@ ED-M08.V1 owns multi-viewport layouts and the camera preview inset; ED-M08.V2
 owns viewport state persistence.
 
 Selection highlights, transform gizmos, node icons, picking, and advanced
-overlays are planned for ED-M09. They are intentionally not ED-M02 blockers.
+overlays are planned for ED-M08.4–M08.6. They are intentionally not ED-M02 blockers.
 
 ## 2. PRD Traceability
 
@@ -32,7 +32,7 @@ overlays are planned for ED-M09. They are intentionally not ED-M02 blockers.
 - `scene-explorer.md`: later owner of hierarchy selection that viewport tools
   will consume.
 - `diagnostics-operation-results.md`: visible viewport/runtime failures.
-- `PLAN.md` ED-M02 and ED-M09 split.
+- `PLAN.md` ED-M02 and ED-M08.4–M08.6 split.
 
 ## 4. Current Baseline
 
@@ -99,7 +99,7 @@ Target invariants:
 6. The editor camera is owned by the runtime/editor view, not by scene camera
    authoring data.
 7. ED-M02 framing means the default camera observes authored content after
-   load; explicit frame commands are ED-M09.
+   load; explicit frame commands are ED-M08.4–M08.6.
 8. Runtime settings controls reflect service state and fail visibly.
 9. Viewport UI remains responsive while attach/resize/create work is async.
 
@@ -115,7 +115,7 @@ Target invariants:
 | Engine view ID                                      | Runtime result stored by `ViewportViewModel` |
 | Runtime camera preset calls                         | `ViewportViewModel` through `IEngineService` |
 | Runtime FPS/logging settings                        | Scene editor UI through `IEngineService`     |
-| Selection/picking/gizmos                            | ED-M09 LLD scope, not ED-M02                 |
+| Selection/picking/gizmos                            | ED-M08.4–M08.6 LLD scope, not ED-M02         |
 
 ## 7. Data Contracts
 
@@ -229,7 +229,7 @@ ED-M02 commands and service calls:
 | Logging verbosity changed | scene editor UI        | write `IEngineService.EngineLoggingVerbosity`.    |
 
 Command-based scene mutation, undoable transform tools, and selection tools are
-deferred to ED-M03/ED-M09.
+deferred to ED-M03/ED-M08.4–M08.6.
 
 ## 9. UI Surfaces
 
@@ -364,7 +364,7 @@ where practical.
 
 ## 15. Closed V0.1 Decisions
 
-ED-M02 remains the recorded presentation/lifecycle baseline. ED-M09 implements
+ED-M02 remains the recorded presentation/lifecycle baseline. ED-M08.4–M08.6 implements
 the interaction contract below and consumes ED-M07A's command/session/diagnostic
 mechanism. ED-M08.V1 qualifies every multi-pane layout; until it does, a
 crash-prone mode does not qualify as supported.
@@ -525,7 +525,7 @@ Field/tool errors use ED-M07A.3's current revision-scoped diagnostics and existi
 operation/output surfaces. Tool rejection leaves before-values intact. No new
 validation dashboard or independently scheduled full-scene validation is added.
 
-### ED-M09 Pass/Fail Gates
+### ED-M08.4–M08.6 Pass/Fail Gates
 
 - [ ] Navigate each existing mode, lose focus during drag/key hold, close/reopen,
       and pause for publication: no stuck input, leaked capture, or authored-camera

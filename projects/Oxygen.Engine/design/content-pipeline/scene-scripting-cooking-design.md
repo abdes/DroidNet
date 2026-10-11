@@ -74,6 +74,12 @@ Batching is external: multiple requests, one script asset per request.
 
 ### 4.2 Scene Scripting Sidecar Import Request
 
+Parameter declarations, the `asset` and `node` parameter types, validation of
+overrides against declarations, and compiled scripts with an external source
+path are specified by
+[scene script hosting](../scripting/scene-script-hosting.md#4-parameter-types-and-cooked-records)
+(design, 2026-10-11) and change this contract when implemented.
+
 Scripting sidecar import uses plain `ImportRequest` with
 `ImportOptions::scripting.import_kind = kScriptingSidecar` and targets exactly
 one scene via a scene locator.

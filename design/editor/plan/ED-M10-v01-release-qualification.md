@@ -5,12 +5,12 @@ Status: `planned; qualification pending`
 ## 1. Purpose
 
 Qualify the complete decided V0.1 capability matrix and operating envelope on a
-matched artifact set. This is the release gate after ED-M07A/07B/08, not a
+matched artifact set. This is the release gate after ED-M07A/07B/08/09, not a
 substitute for their implementation or a place to discover undecided scope.
 
 ## 2. PRD Traceability
 
-All REQ-001 through REQ-042 and SUCCESS-001 through SUCCESS-009, as applicable to
+All REQ-001 through REQ-045 and SUCCESS-001 through SUCCESS-009, as applicable to
 the supported capability matrix; explicit non-goals remain excluded.
 
 ## 3. Required LLDs

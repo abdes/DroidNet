@@ -173,7 +173,10 @@ flowchart TB
 ```
 
 Standalone runtime is outside the editor. It consumes cooked products and
-proves that the editor produced real Oxygen runtime data.
+proves that the editor produced real Oxygen runtime data. Play starts the
+SDK player as a separate process on the project's cooked output and reads its
+event stream; it never runs scripts inside the editor process
+([script authoring](lld/script-authoring.md#8-play)).
 
 ### 2.2 Editor and Oxygen Engine
 
