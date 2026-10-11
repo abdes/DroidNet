@@ -36,6 +36,7 @@
 #include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
 #include <Oxygen/Scripting/Input/InputScriptEventBridge.h>
 #include <Oxygen/Scripting/Module/RuntimeDiagnostics.h>
+#include <Oxygen/Scripting/Module/ScriptSourceReload.h>
 #include <Oxygen/Scripting/api_export.h>
 
 struct lua_State;
@@ -371,6 +372,8 @@ private:
   auto FaultInstance(SlotRuntimeState& state,
     observer_ptr<engine::FrameContext> context, std::string_view hook_name,
     ScriptDiagnostic diagnostic) -> void;
+  //! Reports a diagnostic of a script source reload, which has no slot.
+  auto PublishSourceDiagnostic(const ScriptDiagnostic& diagnostic) -> void;
   auto PublishDiagnostic(const SlotRuntimeState& state,
     std::string_view hook_name, ScriptDiagnostic diagnostic,
     observer_ptr<engine::FrameContext> context) -> void;
@@ -405,7 +408,7 @@ private:
   int input_bridge_log_verbosity_ { 2 };
   std::vector<bindings::contracts::ScriptBindingPackPtr> binding_packs_;
   input::InputScriptEventBridge input_event_bridge_ {};
-  content::IAssetLoader::EvictionSubscription script_reload_subscription_;
+  std::unique_ptr<ScriptSourceReload> source_reload_;
   std::unordered_map<SlotRuntimeKey, SlotRuntimeState, SlotRuntimeKeyHash>
     slot_runtimes_;
   //! Active slots in instance order once sorted: execution order, then node

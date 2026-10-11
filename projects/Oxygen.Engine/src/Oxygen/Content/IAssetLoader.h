@@ -585,21 +585,6 @@ public:
   virtual auto SubscribeResourceEvictions(
     TypeId resource_type, EvictionHandler handler) -> EvictionSubscription = 0;
 
-  //=== Hot Reloading ===-----------------------------------------------------//
-
-  //! Trigger a hot-reload of a script asset from a file path.
-  virtual auto ReloadScript(const std::filesystem::path& path) -> void = 0;
-
-  //! Trigger a full reload of all currently loaded script assets.
-  virtual auto ReloadAllScripts() -> void = 0;
-
-  using ScriptReloadCallback = std::function<void(
-    const data::AssetKey&, std::shared_ptr<const data::ScriptResource>)>;
-
-  //! Subscribe to script reload events.
-  virtual auto SubscribeScriptReload(ScriptReloadCallback callback)
-    -> EvictionSubscription = 0;
-
   //! Mint a synthetic texture key suitable for buffer-driven workflows.
   [[nodiscard]] virtual auto MintSyntheticTextureKey() -> ResourceKey = 0;
 

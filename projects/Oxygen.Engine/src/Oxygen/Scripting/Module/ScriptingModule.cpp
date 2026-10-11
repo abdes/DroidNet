@@ -40,14 +40,12 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
-#include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
-#include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
-#include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/Types/ScriptSlotIndex.h>
 #include <Oxygen/Scripting/Analysis/DiagnosticRenderer.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
@@ -62,9 +60,9 @@
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Compilers/LuauScriptCompiler.h>
-#include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
 #include <Oxygen/Scripting/Input/InputScriptEventBridge.h>
 #include <Oxygen/Scripting/Module/RuntimeDiagnostics.h>
+#include <Oxygen/Scripting/Module/ScriptSourceReload.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 
 namespace oxygen::scripting {
@@ -374,42 +372,17 @@ auto ScriptingModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
   (void)engine_->GetScriptCompilationService().RegisterCompiler(
     std::make_shared<LuauScriptCompiler>());
 
-  if (auto loader = engine_->GetAssetLoader()) {
-    script_reload_subscription_ = loader->SubscribeScriptReload(
-      [this](const data::AssetKey& key,
-        const std::shared_ptr<const data::ScriptResource>& resource) -> void {
-        if (!resource) {
-          return;
-        }
-
-        // Wrap data::ScriptResource into scripting::ScriptBytecodeBlob
-        const auto& data = resource->GetData();
-        std::vector<uint8_t> bytes(data.begin(), data.end());
-        auto bytecode = std::make_shared<const ScriptBytecodeBlob>(
-          ScriptBytecodeBlob::FromOwned(std::move(bytes),
-            resource->GetLanguage(), resource->GetCompression(),
-            resource->GetContentHash(), ScriptBlobOrigin::kExternalFile,
-            ScriptBlobCanonicalName { "hot-reload" }));
-
-        LOG_F(INFO, "applying hot-reload for asset {} (new_hash={})",
-          data::to_string(key), bytecode->ContentHash());
-
-        // Find all instances using this asset and update their executable
-        // bytecode. The next slot hook reconciles the live executable and
-        // rebuilds its runtime without requiring a scene mutation notification.
-        for (auto& [slot_key, state] : slot_runtimes_) {
-          if (state.asset_key == key && state.executable
-            && slot_key.node_handle.IsValid()) {
-            // Downcast to CompiledScriptExecutable to update bytecode
-            // NOLINTNEXTLINE(*-static-cast-downcast)
-            auto* compiled = static_cast<CompiledScriptExecutable*>(
-              // NOLINTNEXTLINE(*-const-cast)
-              const_cast<ScriptExecutable*>(state.executable.get()));
-            compiled->UpdateBytecode(bytecode);
-          }
-        }
+  // Changed script sources recompile into the slots of the observed scene.
+  source_reload_
+    = std::make_unique<ScriptSourceReload>(engine_->GetPathFinder(),
+      observer_ptr { &engine_->GetScriptCompilationService() },
+      [this](const ScriptDiagnostic& diagnostic) -> void {
+        PublishSourceDiagnostic(diagnostic);
       });
-  }
+  engine_->SetScriptSourceChangedHandler(
+    [this](const std::filesystem::path& file) -> void {
+      (void)source_reload_->OnSourceChanged(observed_scene_.lock(), file);
+    });
 
   lua_state_ = luaL_newstate();
   if (lua_state_ == nullptr) {
@@ -442,6 +415,8 @@ auto ScriptingModule::OnShutdown() noexcept -> void
 
   if (attached_) {
     DCHECK_NOTNULL_F(engine_);
+    engine_->SetScriptSourceChangedHandler({});
+    source_reload_.reset();
     (void)engine_->GetScriptCompilationService().UnregisterCompiler(
       data::pak::scripting::ScriptLanguage::kLuau);
     attached_ = false;
@@ -503,25 +478,18 @@ auto ScriptingModule::RegisterConsoleBindings(
 
   (void)console->RegisterCommand(console::CommandDefinition {
     .name = "scripting.reload_all",
-    .help = "Manually trigger a full reload of all script assets",
+    .help = "Recompile every script of the scene from its source",
     .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
-      if (!attached_) {
+      if (!attached_ || !source_reload_) {
         return {
           .status = console::ExecutionStatus::kError,
           .error = "Engine not attached",
         };
       }
-      DCHECK_NOTNULL_F(engine_);
-      if (auto loader = engine_->GetAssetLoader()) {
-        loader->ReloadAllScripts();
-        return {
-          .status = console::ExecutionStatus::kOk,
-          .output = "Reloading all scripts...",
-        };
-      }
+      const auto submitted = source_reload_->ReloadAll(observed_scene_.lock());
       return {
-        .status = console::ExecutionStatus::kError,
-        .error = "AssetLoader not available",
+        .status = console::ExecutionStatus::kOk,
+        .output = fmt::format("Recompiling {} script(s)...", submitted),
       };
     },
   });
@@ -1516,6 +1484,23 @@ auto ScriptingModule::PublishDiagnostic(const SlotRuntimeState& state,
   if (context) {
     ReportContentError(context, FormatSummary(diagnostic));
   }
+  // A handler may add or remove handlers.
+  const auto handlers = diagnostic_handlers_;
+  for (const auto& handler : handlers | std::views::values) {
+    handler(diagnostic);
+  }
+}
+
+auto ScriptingModule::PublishSourceDiagnostic(
+  const ScriptDiagnostic& diagnostic) -> void
+{
+  static const auto kNoSources = SourceTextCache {};
+  auto text = RenderText(
+    diagnostic, diagnostic_sources_ ? *diagnostic_sources_ : kNoSources);
+  if (text.ends_with('\n')) {
+    text.pop_back();
+  }
+  LOG_F(ERROR, "{}", text);
   // A handler may add or remove handlers.
   const auto handlers = diagnostic_handlers_;
   for (const auto& handler : handlers | std::views::values) {

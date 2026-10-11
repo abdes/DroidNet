@@ -25,7 +25,6 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
-#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::testing {
@@ -98,36 +97,4 @@ auto WriteTexturedMaterialSource(const std::filesystem::path& root,
   return source;
 }
 
-auto WriteScriptSource(const std::filesystem::path& root,
-  const data::AssetKey& key) -> data::SourceKey
-{
-  data::pak::scripting::ScriptAssetDesc descriptor {};
-  descriptor.header.asset_type = static_cast<uint8_t>(data::AssetType::kScript);
-  descriptor.header.version = data::pak::scripting::kScriptAssetVersion;
-  descriptor.bytecode_resource_index = data::ResourceReferenceIndex { 0U };
-  const std::array<uint8_t, 4> payload { 1U, 2U, 3U, 4U };
-  data::pak::scripting::ScriptResourceDesc resource {};
-  resource.size_bytes = static_cast<uint32_t>(payload.size());
-  resource.encoding = data::pak::scripting::ScriptEncoding::kBytecode;
-  const auto table
-    = std::array { data::pak::scripting::ScriptResourceDesc {}, resource };
-  const auto references = data::AssetReferences::Create(
-    {
-      { .kind = data::ResourceKind::kScript, .index = ResourceIndexT { 1U } },
-    },
-    {})
-                            .value();
-  const data::SourceKey source { Uuid::Generate() };
-  LooseCookedTestWriter writer(root);
-  writer.SetSourceKey(source);
-  writer.WriteAssetDescriptor(key, data::AssetType::kScript,
-    "/Test/Logic.oscript", "Logic.oscript",
-    std::as_bytes(std::span(&descriptor, 1U)), references);
-  writer.WriteFile(data::loose_cooked::FileKind::kScriptsTable, "scripts.table",
-    std::as_bytes(std::span(table)));
-  writer.WriteFile(data::loose_cooked::FileKind::kScriptsData, "scripts.data",
-    std::as_bytes(std::span(payload)));
-  static_cast<void>(writer.Finish());
-  return source;
-}
 } // namespace oxygen::content::testing

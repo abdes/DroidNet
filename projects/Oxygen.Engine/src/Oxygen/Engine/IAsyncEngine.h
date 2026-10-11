@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -80,6 +81,14 @@ public:
   virtual auto SubscribeModuleAttached(
     ::oxygen::engine::ModuleAttachedCallback cb, bool replay_existing = false)
     -> ModuleSubscription = 0;
+
+  //! Receives each script source file the hot-reload watcher finds changed.
+  using ScriptSourceChangedHandler
+    = std::function<void(const std::filesystem::path&)>;
+  //! Sets the one receiver of changed script sources; an empty handler stops
+  //! delivery.
+  virtual auto SetScriptSourceChangedHandler(ScriptSourceChangedHandler handler)
+    -> void = 0;
 
   [[nodiscard]] virtual auto GetModuleByType(
     oxygen::TypeId type_id) const noexcept

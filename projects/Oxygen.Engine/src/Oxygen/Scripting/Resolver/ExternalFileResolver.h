@@ -6,7 +6,11 @@
 
 #pragma once
 
+#include <filesystem>
+#include <optional>
+
 #include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scripting/IScriptSourceResolver.h>
 #include <Oxygen/Scripting/api_export.h>
 
@@ -23,6 +27,12 @@ public:
   OXGN_SCRP_NDAPI auto Resolve(
     const IScriptSourceResolver::ResolveRequest& request) const
     -> IScriptSourceResolver::ResolveResult;
+
+  //! The file the asset's external source path resolves to: the first script
+  //! source root that contains it. Nothing when the asset has no valid
+  //! external source path or no root contains it.
+  OXGN_SCRP_NDAPI auto ResolvePath(const data::ScriptAsset& asset) const
+    -> std::optional<std::filesystem::path>;
 
 private:
   PathFinder path_finder_;

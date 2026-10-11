@@ -20,7 +20,6 @@
 #include <Oxygen/OxCo/EventLoop.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
-#include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
 #include <Oxygen/Testing/GTest.h>
@@ -34,9 +33,7 @@ using oxygen::PlatformConfig;
 using oxygen::TypeId;
 using oxygen::data::AssetKey;
 using oxygen::graphics::BackendType;
-using oxygen::scripting::CompiledScriptExecutable;
 using oxygen::scripting::ScriptBlobOrigin;
-using oxygen::scripting::ScriptBytecodeBlob;
 using oxygen::scripting::ScriptingModule;
 using oxygen::scripting::ScriptSourceBlob;
 using oxygen::scripting::ScriptSourceResolver;
@@ -176,49 +173,6 @@ NOLINT_TEST_F(ScriptingAdvancedTest, FirstRootWinsPrecedence)
     reinterpret_cast<const char*>(blob.BytesView().data()), // NOLINT
     blob.Size());
   EXPECT_EQ(content, "return 'root1'");
-}
-
-//! 2. CONCURRENCY TEST: Thread-safe bytecode updates.
-NOLINT_TEST_F(ScriptingAdvancedTest, BytecodeUpdatesAreThreadSafe)
-{
-  auto blob1
-    = std::make_shared<const ScriptBytecodeBlob>(ScriptBytecodeBlob::FromOwned(
-      { 1 }, oxygen::data::pak::scripting::ScriptLanguage::kLuau,
-      oxygen::data::pak::scripting::ScriptCompression::kNone, 1,
-      oxygen::scripting::ScriptBlobOrigin::kExternalFile,
-      oxygen::scripting::ScriptBlobCanonicalName { "v1" }));
-
-  auto blob2
-    = std::make_shared<const ScriptBytecodeBlob>(ScriptBytecodeBlob::FromOwned(
-      { 2 }, oxygen::data::pak::scripting::ScriptLanguage::kLuau,
-      oxygen::data::pak::scripting::ScriptCompression::kNone, 2,
-      oxygen::scripting::ScriptBlobOrigin::kExternalFile,
-      oxygen::scripting::ScriptBlobCanonicalName { "v2" }));
-
-  CompiledScriptExecutable executable(blob1);
-
-  std::atomic<bool> stop { false };
-
-  // Thread A: Constantly reading bytecode
-  std::thread reader([&]() {
-    while (!stop) {
-      auto view = executable.BytecodeView();
-      (void)view.size();
-    }
-  });
-
-  // Thread B: Constantly updating bytecode
-  std::thread writer([&]() {
-    constexpr int kIterationCount = 1000;
-    for (int i = 0; i < kIterationCount; ++i) {
-      executable.UpdateBytecode(i % 2 == 0 ? blob1 : blob2);
-    }
-    stop = true;
-  });
-
-  reader.join();
-  writer.join();
-  SUCCEED();
 }
 
 //! 3. MODULE EXECUTION TEST: Verify ScriptingModule can execute resolved

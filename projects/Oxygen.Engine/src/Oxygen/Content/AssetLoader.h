@@ -76,7 +76,6 @@ namespace internal {
   class ResourceLoadPipeline;
   class SceneCatalogQueryService;
   class ScriptQueryService;
-  class ScriptHotReloadService;
   class IContentSource;
   struct ResourceRef;
   struct DependencyCollector;
@@ -444,21 +443,6 @@ public:
   //! Subscribe to resource eviction notifications for a resource type.
   OXGN_CNTT_API auto SubscribeResourceEvictions(TypeId resource_type,
     EvictionHandler handler) -> EvictionSubscription override;
-
-  //=== Hot Reloading ===-----------------------------------------------------//
-
-  //! Trigger a hot-reload of a script asset from a file path.
-  OXGN_CNTT_API auto ReloadScript(const std::filesystem::path& path)
-    -> void override;
-
-  //! Trigger a full reload of all currently loaded script assets.
-  OXGN_CNTT_API auto ReloadAllScripts() -> void override;
-
-  using IAssetLoader::ScriptReloadCallback;
-
-  //! Subscribe to script reload events.
-  OXGN_CNTT_API auto SubscribeScriptReload(ScriptReloadCallback callback)
-    -> EvictionSubscription override;
 
   //=== Resource Loading =====================================================//
 
@@ -1384,8 +1368,6 @@ private:
   OXGN_CNTT_API auto ResolveSourceForId(data::SourceInstanceId source_id) const
     -> std::shared_ptr<const internal::IContentSource>;
 
-  //! Recursively invalidates an asset and all its cached resource dependencies.
-  OXGN_CNTT_API auto InvalidateAssetTree(const data::AssetKey& key) -> void;
   OXGN_CNTT_API auto ExecuteTrimPass(std::string_view trigger, bool automatic)
     -> void;
   OXGN_CNTT_API auto MaybeAutoTrimOnBudgetPressure(
@@ -1417,8 +1399,6 @@ private:
     TypeId type_id, std::string_view type_name, LoadFnErased&& loader) -> void;
 
   // Thread ownership for single-thread phase 1 policy.
-  auto AcquireScriptBytecode(const data::ScriptAsset& asset)
-    -> std::shared_ptr<data::ScriptResource>;
   OXGN_CNTT_API auto EnsureLoadEpoch(
     const std::shared_ptr<internal::ContentReleaseQueue>& epoch) const -> void;
   OXGN_CNTT_API auto BeginAcceptedLoad() -> void;
@@ -1465,8 +1445,6 @@ private:
 
   bool verify_content_hashes_ { false };
   ResidencyPolicy residency_policy_ {};
-
-  std::unique_ptr<internal::ScriptHotReloadService> script_hot_reload_service_;
 
   //=== Eviction Notifications ===-----------------------------------------//
 

@@ -382,13 +382,6 @@ public:
   {
     return {};
   }
-  auto ReloadScript(const std::filesystem::path& /*path*/) -> void override { }
-  auto ReloadAllScripts() -> void override { }
-  auto SubscribeScriptReload(ScriptReloadCallback /*callback*/)
-    -> EvictionSubscription override
-  {
-    return {};
-  }
   auto MintSyntheticTextureKey() -> ResourceKey override { return {}; }
   auto MintSyntheticBufferKey() -> ResourceKey override { return {}; }
   auto MintSyntheticScriptKey() -> ResourceKey override { return {}; }

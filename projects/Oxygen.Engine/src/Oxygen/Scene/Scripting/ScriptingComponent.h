@@ -357,6 +357,12 @@ public:
   OXGN_SCN_API auto SetParameter(
     const Slot& slot, std::string_view name, data::ScriptParam value) -> bool;
 
+  //! Gives a slot a new version of its script asset, such as one whose
+  //! declarations were re-read from changed source. Overrides and node
+  //! bindings are kept; the executable is replaced separately.
+  OXGN_SCN_API auto ReplaceSlotAsset(
+    const Slot& slot, std::shared_ptr<const data::ScriptAsset> asset) -> bool;
+
   //! Binds a node parameter of a slot to a scene node. A node parameter
   //! stores a node index of its scene asset; whoever creates the nodes binds
   //! it to the node created for that index.

@@ -6,10 +6,21 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
+#include <ios>
 #include <iterator>
+#include <optional>
+#include <string_view>
+#include <system_error>
 #include <utility>
+#include <vector>
 
+#include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/ScriptAsset.h>
+#include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
+#include <Oxygen/Scripting/IScriptSourceResolver.h>
 #include <Oxygen/Scripting/Resolver/ExternalFileResolver.h>
 
 namespace oxygen::scripting {
@@ -23,12 +34,15 @@ namespace {
     constexpr uint64_t kFnvPrime = 1099511628211ULL;
 
     auto hash = kFnvOffsetBasis;
-    auto mix_u64 = [&hash](const uint64_t value) {
+    constexpr uint64_t kByteMask = 0xFFU;
+    constexpr int kBytesPerWord = 8;
+    constexpr uint64_t kBitsPerByte = 8U;
+    auto mix_u64 = [&hash](const uint64_t value) -> void {
       auto v = value;
-      for (int i = 0; i < 8; ++i) {
-        hash ^= (v & 0xFFULL);
+      for (int i = 0; i < kBytesPerWord; ++i) {
+        hash ^= (v & kByteMask);
         hash *= kFnvPrime;
-        v >>= 8;
+        v >>= kBitsPerByte;
       }
     };
 
@@ -78,6 +92,26 @@ ExternalFileResolver::ExternalFileResolver(PathFinder path_finder)
 {
 }
 
+auto ExternalFileResolver::ResolvePath(const data::ScriptAsset& asset) const
+  -> std::optional<std::filesystem::path>
+{
+  const auto external_path = asset.TryGetExternalSourcePath();
+  if (!external_path.has_value()) {
+    return std::nullopt;
+  }
+  const auto relative_path = NormalizeExternalPath(*external_path);
+  if (relative_path.is_absolute() || HasParentTraversal(relative_path)) {
+    return std::nullopt;
+  }
+  for (const auto& root : path_finder_.ScriptSourceRoots()) {
+    auto full_path = (root / relative_path).lexically_normal();
+    if (std::filesystem::exists(full_path)) {
+      return full_path;
+    }
+  }
+  return std::nullopt;
+}
+
 auto ExternalFileResolver::Resolve(
   const IScriptSourceResolver::ResolveRequest& request) const
   -> IScriptSourceResolver::ResolveResult
@@ -125,7 +159,7 @@ auto ExternalFileResolver::Resolve(
   }
 
   const auto& full_path = *resolved_path;
-  std::ifstream input(full_path, std::ios::in | std::ios::binary);
+  std::ifstream input(full_path, std::ios::binary);
   if (!input.is_open()) {
     return IScriptSourceResolver::ResolveResult {
       .ok = false,

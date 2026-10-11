@@ -197,15 +197,6 @@ public:
     throw std::logic_error("Renderer test loader does not commit disk mounts");
   }
 
-  auto ReloadScript(const std::filesystem::path& /*path*/) -> void override { }
-  auto ReloadAllScripts() -> void override { }
-
-  auto SubscribeScriptReload(ScriptReloadCallback /*callback*/)
-    -> EvictionSubscription override
-  {
-    return {};
-  }
-
   auto TrimCache() -> void override { textures_.clear(); }
   auto ProcessPendingReleases() -> void override { }
 

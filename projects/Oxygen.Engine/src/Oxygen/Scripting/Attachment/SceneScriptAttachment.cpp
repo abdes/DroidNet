@@ -18,7 +18,6 @@
 
 #include <fmt/format.h>
 
-#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Span.h>
@@ -37,58 +36,19 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 #include <Oxygen/Scripting/Attachment/SceneScriptAttachment.h>
+#include <Oxygen/Scripting/Compilers/ScriptCompileKey.h>
 #include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
 #include <Oxygen/Scripting/IScriptSourceResolver.h>
 
 namespace oxygen::scripting {
 
 namespace {
-  using data::pak::scripting::ScriptLanguage;
   using data::pak::scripting::ScriptParamRecord;
   using Slot = scene::SceneNode::Scripting::Slot;
   using State = SceneScriptSlotOutcome::State;
 
-  constexpr uint64_t kLuauCompilerFingerprint = 0x6C7561755F7631ULL;
-  constexpr uint64_t kLuauVmBytecodeVersion = 1ULL;
-  constexpr uint64_t kUnknownCompilerFingerprint = 0x756E6B6E6F776E31ULL;
-  constexpr uint64_t kUnknownVmBytecodeVersion = 0ULL;
-#ifdef _WIN64
-  constexpr uint64_t kPlatformAbiSalt = 0x77696E36345F6D73ULL;
-#elif defined(__linux__) && defined(__x86_64__)
-  constexpr uint64_t kPlatformAbiSalt = 0x6C6E7836345F6763ULL;
-#elif defined(__APPLE__) && defined(__aarch64__)
-  constexpr uint64_t kPlatformAbiSalt = 0x6D61635F61726D36ULL;
-#else
-  constexpr uint64_t kPlatformAbiSalt = 0x756E6B6E6F776E5FULL;
-#endif
-
   constexpr auto kCompileMode
     = core::meta::scripting::ScriptCompileMode::kDebug;
-
-  //! Identifies one compilation: the same script source compiled by the same
-  //! compiler for the same platform shares its bytecode.
-  auto ComputeCompileKey(const data::AssetKey& asset_key,
-    const ScriptSourceBlob& blob) -> IScriptCompilationService::CompileKey
-  {
-    const auto is_luau = blob.Language() == ScriptLanguage::kLuau;
-    uint64_t seed = 0;
-    HashCombine(seed, asset_key);
-    HashCombine(seed, kCompileMode);
-    HashCombine(seed, blob.Language());
-    HashCombine(seed, blob.Compression());
-    HashCombine(seed, blob.GetOrigin());
-    HashCombine(seed, blob.GetCanonicalName().get());
-    HashCombine(seed, blob.ContentHash());
-    HashCombine(
-      seed, is_luau ? kLuauCompilerFingerprint : kUnknownCompilerFingerprint);
-    HashCombine(
-      seed, is_luau ? kLuauVmBytecodeVersion : kUnknownVmBytecodeVersion);
-    HashCombine(seed, kPlatformAbiSalt);
-    for (const auto byte : blob.BytesView()) {
-      HashCombine(seed, byte);
-    }
-    return IScriptCompilationService::CompileKey { seed };
-  }
 
   auto ParamKey(const ScriptParamRecord& record)
     -> std::optional<std::string_view>
@@ -338,7 +298,8 @@ namespace {
     auto Compile(const Slot& slot, const data::AssetKey& script_key,
       ScriptSourceBlob source) const -> void
     {
-      const auto compile_key = ComputeCompileKey(script_key, source);
+      const auto compile_key
+        = ComputeScriptCompileKey(script_key, source, kCompileMode);
       const auto shared_slot = std::make_shared<const Slot>(slot);
       (void)compiler_->AcquireForSlot(
         IScriptCompilationService::Request {

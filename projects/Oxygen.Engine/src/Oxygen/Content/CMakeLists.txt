@@ -100,8 +100,6 @@ set(
   "Internal/ScriptQueryService.h"
   "Internal/ScriptQueryService.cpp"
   "Internal/PhysicsBindings.h"
-  "Internal/ScriptHotReloadService.h"
-  "Internal/ScriptHotReloadService.cpp"
   "Internal/DependencyCollector.h"
   "Internal/ContentFileReader.h"
   "Internal/IContentSource.h"

@@ -27,7 +27,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include <fmt/format.h>
@@ -68,7 +67,6 @@
 #include <Oxygen/Content/Internal/ResourceLoadPipeline.h>
 #include <Oxygen/Content/Internal/ResourceRef.h>
 #include <Oxygen/Content/Internal/SceneCatalogQueryService.h>
-#include <Oxygen/Content/Internal/ScriptHotReloadService.h>
 #include <Oxygen/Content/Internal/ScriptQueryService.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/LoaderFunctions.h>
@@ -110,7 +108,6 @@
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
@@ -337,8 +334,6 @@ AssetLoader::AssetLoader(
 
   owning_thread_id_ = std::this_thread::get_id();
   eviction_alive_token_ = std::make_shared<int>(0);
-  script_hot_reload_service_
-    = std::make_unique<internal::ScriptHotReloadService>(config.path_finder);
   scene_catalog_query_service_
     = std::make_unique<internal::SceneCatalogQueryService>();
   script_query_service_ = std::make_unique<internal::ScriptQueryService>();
@@ -829,10 +824,6 @@ void AssetLoader::Run()
     if (!operation) {
       return;
     }
-    script_hot_reload_service_->Reset();
-    if (!operation) {
-      return;
-    }
     releases_ = std::make_shared<internal::ContentReleaseQueue>();
     eviction_alive_token_ = std::make_shared<int>(0);
   }
@@ -874,10 +865,6 @@ void AssetLoader::Stop()
     return;
   }
   eviction_registry_->Clear();
-  if (!operation) {
-    return;
-  }
-  script_hot_reload_service_->Reset();
   if (!operation) {
     return;
   }
@@ -2054,175 +2041,7 @@ auto AssetLoader::SubscribeResourceEvictions(
 void AssetLoader::UnsubscribeResourceEvictions(
   const TypeId resource_type, const EvictionSubscriptionId id) noexcept
 {
-  if (resource_type == data::ScriptAsset::ClassTypeId()) {
-    script_hot_reload_service_->Unsubscribe(id);
-    return;
-  }
   eviction_registry_->RemoveSubscriber(resource_type, id);
-}
-
-auto AssetLoader::InvalidateAssetTree(const data::AssetKey& key) -> void
-{
-  AssertOwningThread();
-  const OperationLifetime operation(*this);
-
-  const auto identity = ResolveAssetIdentityForKey(key);
-  if (!identity.has_value()) {
-    return;
-  }
-  const auto hash = identity->cache_key;
-  const auto source_id = identity->source_id;
-  auto asset = content_cache_.Peek<data::ScriptAsset>(hash);
-
-  if (asset) {
-    // Invalidate script-specific resources if applicable
-    const auto resource_type_index = static_cast<uint16_t>(
-      IndexOf<data::ScriptResource, ResourceTypeList>::value);
-
-    auto invalidate_resource
-      = [&](const data::ResourceReferenceIndex reference) -> void {
-      const auto resolved = asset->GetReferences().ResolveResource(
-        reference, data::ResourceKind::kScript);
-      if (!resolved) {
-        throw std::runtime_error(resolved.error());
-      }
-      const auto& index = *resolved;
-      if (index) {
-        const auto rkey
-          = InternResourceKey(source_id, resource_type_index, *index);
-        static_cast<void>(content_cache_.Invalidate(rkey.get()));
-      }
-    };
-
-    invalidate_resource(asset->GetBytecodeResourceIndex());
-    if (!operation) {
-      return;
-    }
-    invalidate_resource(asset->GetSourceResourceIndex());
-    if (!operation) {
-      return;
-    }
-  }
-
-  // Finally remove the asset itself
-  static_cast<void>(content_cache_.Invalidate(hash));
-}
-
-auto AssetLoader::ReloadScript(const std::filesystem::path& path) -> void
-{
-  AssertOwningThread();
-  if ((nursery_ == nullptr) || !thread_pool_) {
-    return;
-  }
-
-  const OperationLifetime operation(*this);
-  const internal::ScriptHotReloadService::ReloadCallbacks callbacks {
-    .enumerate_loaded_script_keys = [this] -> std::vector<data::AssetKey> {
-      std::vector<data::AssetKey> script_keys;
-      for (const auto& [id, locator] : identities_->Entries()) {
-        if (const auto* asset = std::get_if<internal::AssetIdentity>(locator);
-          asset != nullptr
-          && content_cache_.Peek<data::ScriptAsset>(id.get())) {
-          script_keys.push_back(asset->asset);
-        }
-      }
-      return script_keys;
-    },
-    .get_script_asset = [this](const data::AssetKey& key)
-      -> std::shared_ptr<oxygen::data::ScriptAsset> {
-      return GetAsset<data::ScriptAsset>(key);
-    },
-    .invalidate_asset_tree
-    = [this](const data::AssetKey& key) -> void { InvalidateAssetTree(key); },
-    .start_load_script_asset
-    = [this](const data::AssetKey& key,
-        std::function<void(std::shared_ptr<data::ScriptAsset>)> done) -> void {
-      StartLoadAsset<data::ScriptAsset>(key, std::move(done));
-    },
-    .acquire_bytecode = [this](const data::ScriptAsset& asset)
-      -> std::shared_ptr<data::ScriptResource> {
-      return AcquireScriptBytecode(asset);
-    },
-    .is_current = [operation] -> bool { return static_cast<bool>(operation); },
-  };
-  script_hot_reload_service_->ReloadScript(path, callbacks);
-}
-
-auto AssetLoader::ReloadAllScripts() -> void
-{
-  AssertOwningThread();
-  const OperationLifetime operation(*this);
-  const internal::ScriptHotReloadService::ReloadCallbacks callbacks {
-    .enumerate_loaded_script_keys = [this] -> std::vector<data::AssetKey> {
-      std::vector<data::AssetKey> script_keys;
-      for (const auto& [id, locator] : identities_->Entries()) {
-        if (const auto* asset = std::get_if<internal::AssetIdentity>(locator);
-          asset != nullptr
-          && content_cache_.Peek<data::ScriptAsset>(id.get())) {
-          script_keys.push_back(asset->asset);
-        }
-      }
-      return script_keys;
-    },
-    .get_script_asset = [this](const data::AssetKey& key)
-      -> std::shared_ptr<oxygen::data::ScriptAsset> {
-      return GetAsset<data::ScriptAsset>(key);
-    },
-    .invalidate_asset_tree
-    = [this](const data::AssetKey& key) -> void { InvalidateAssetTree(key); },
-    .start_load_script_asset
-    = [this](const data::AssetKey& key,
-        std::function<void(std::shared_ptr<data::ScriptAsset>)> done) -> void {
-      StartLoadAsset<data::ScriptAsset>(key, std::move(done));
-    },
-    .acquire_bytecode = [this](const data::ScriptAsset& asset)
-      -> std::shared_ptr<data::ScriptResource> {
-      return AcquireScriptBytecode(asset);
-    },
-    .is_current = [operation] -> bool { return static_cast<bool>(operation); },
-  };
-  script_hot_reload_service_->ReloadAllScripts(callbacks);
-}
-
-auto AssetLoader::AcquireScriptBytecode(const data::ScriptAsset& asset)
-  -> std::shared_ptr<data::ScriptResource>
-{
-  const auto& retained = asset.GetRuntimeBindings();
-  if (!retained
-    || retained->GetTypeId() != internal::ContentBindingBundle::ClassTypeId()) {
-    return {};
-  }
-  const auto resolved = asset.GetReferences().ResolveResource(
-    asset.GetBytecodeResourceIndex(), data::ResourceKind::kScript);
-  if (!resolved) {
-    throw std::runtime_error(resolved.error());
-  }
-  const auto& index = *resolved;
-  if (!index) {
-    return {};
-  }
-  const auto id = identities_->Find(internal::CookedResourceIdentity {
-    .source = asset.GetSourceOrigin().instance,
-    .kind = internal::ResourceKind::kScript,
-    .index = index->get(),
-  });
-  const auto bundle
-    = std::static_pointer_cast<const internal::ContentBindingBundle>(retained);
-  const auto* binding = bundle->FindResourceBinding(ResourceKey { id.get() });
-  return binding ? binding->publication.Acquire<data::ScriptResource>(
-                     content_cache_, *releases_, CheckoutOwner::kExternal)
-                 : nullptr;
-}
-
-auto AssetLoader::SubscribeScriptReload(ScriptReloadCallback callback)
-  -> EvictionSubscription
-{
-  AssertOwningThread();
-  const EvictionSubscriptionId id { next_eviction_subscriber_id_++ };
-  script_hot_reload_service_->Subscribe(id, std::move(callback));
-
-  return MakeEvictionSubscription(data::ScriptAsset::ClassTypeId(), id,
-    observer_ptr<IAssetLoader> { this }, eviction_alive_token_);
 }
 
 auto AssetLoader::DecodeAssetAsyncErasedImpl(const TypeId type_id,

@@ -681,14 +681,6 @@ namespace {
       throw std::logic_error(
         "Scene hydration test loader does not commit disk mounts");
     }
-    auto ReloadScript(const std::filesystem::path& /*path*/) -> void override {
-    }
-    auto ReloadAllScripts() -> void override { }
-    auto SubscribeScriptReload(ScriptReloadCallback /*callback*/)
-      -> EvictionSubscription override
-    {
-      return {};
-    }
     auto TrimCache() -> void override { }
     auto ProcessPendingReleases() -> void override { }
 

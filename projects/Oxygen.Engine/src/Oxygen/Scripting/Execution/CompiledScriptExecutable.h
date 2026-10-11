@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <utility>
 
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
 #include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
@@ -19,16 +19,10 @@ namespace oxygen::scripting {
 
 //! Implementation of ScriptExecutable that holds Luau bytecode.
 /*!
-  CompiledScriptExecutable acts as the bridge between the compilation service
-  and the execution module. It stores the compiled bytecode and provides
-  atomic, thread-safe access to it.
-
-  ### Design Contracts
-  - **Hot-Reloadable**: Supports atomic replacement of its bytecode via
-    UpdateBytecode(). This is the primary mechanism for script hot-reloading.
-  - **Thread-Safe**: Uses std::atomic<shared_ptr> to ensure that script
-    execution on the main thread is never interrupted or corrupted by
-    background bytecode updates.
+  CompiledScriptExecutable is the bridge between the compilation service and
+  the execution module. It is immutable: a reload installs a new executable in
+  the slot (ScriptingComponent::MarkSlotReady), which ends the old instance
+  and starts a new one.
 */
 class CompiledScriptExecutable final : public ScriptExecutable {
 public:
@@ -43,28 +37,16 @@ public:
   [[nodiscard]] auto BytecodeView() const noexcept
     -> std::span<const uint8_t> override
   {
-    if (auto blob = bytecode_.load(std::memory_order_acquire)) {
-      return blob->BytesView();
-    }
-    return {};
+    return bytecode_ ? bytecode_->BytesView() : std::span<const uint8_t> {};
   }
 
   [[nodiscard]] auto ContentHash() const noexcept -> uint64_t override
   {
-    if (auto blob = bytecode_.load(std::memory_order_acquire)) {
-      return blob->ContentHash();
-    }
-    return 0;
-  }
-
-  auto UpdateBytecode(std::shared_ptr<const ScriptBytecodeBlob> new_bytecode)
-    -> void
-  {
-    bytecode_.store(std::move(new_bytecode), std::memory_order_release);
+    return bytecode_ ? bytecode_->ContentHash() : 0;
   }
 
 private:
-  std::atomic<std::shared_ptr<const ScriptBytecodeBlob>> bytecode_;
+  std::shared_ptr<const ScriptBytecodeBlob> bytecode_;
 };
 
 } // namespace oxygen::scripting

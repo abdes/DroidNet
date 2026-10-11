@@ -846,9 +846,11 @@ return script
         ASSERT_NE(replacement, nullptr);
         ASSERT_EQ(replacement->ContentHash(),
           declared_hash == 0 ? 0 : kReplacementHash);
-        // Matches the reload callback's in-place replacement. Neither this nor
-        // the observer-free hook calls below changes the attached slot object.
-        executable->UpdateBytecode(replacement);
+        // A source reload installs a new executable in the slot.
+        auto script_node = scene->GetRootNodes().front();
+        auto scripting = script_node.GetScripting();
+        ASSERT_TRUE(scripting.MarkSlotReady(scripting.Slots().front(),
+          std::make_shared<CompiledScriptExecutable>(replacement)));
         engine::FrameContext reloaded_frame;
         reloaded_frame.SetScene(observer_ptr<Scene> { scene.get() });
         module.OnFrameStart(observer_ptr { &reloaded_frame });

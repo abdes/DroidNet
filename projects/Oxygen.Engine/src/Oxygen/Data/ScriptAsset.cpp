@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -170,6 +171,14 @@ ScriptAsset::ScriptAsset(AssetKey asset_key,
     }
     params_.emplace_back(std::string(*key), std::move(*value));
   }
+}
+
+auto ScriptAsset::WithDeclarations(
+  const std::span<const pak::scripting::ScriptParamRecord> declared_params)
+  const -> std::shared_ptr<ScriptAsset>
+{
+  return std::make_shared<ScriptAsset>(
+    GetAssetKey(), desc_, declared_params, GetSourceOrigin());
 }
 
 auto ScriptAsset::TryGetExternalSourcePath() const noexcept

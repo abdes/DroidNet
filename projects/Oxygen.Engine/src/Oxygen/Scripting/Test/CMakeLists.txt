@@ -53,6 +53,7 @@ m_gtest_program(
   SOURCES
     "Fakes/FakeScriptCompilationService.h"
     "SceneScriptAttachment_test.cpp"
+    "ScriptSourceReload_test.cpp"
 )
 
 m_gtest_program(Resolver SOURCES "ScriptSourceResolver_test.cpp")

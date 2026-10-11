@@ -84,6 +84,22 @@ NOLINT_TEST_F(ScriptingComponentTest, BindNodeParameter_RecordsTheLatestNode)
   EXPECT_EQ(bound.TryGetBoundNode("other"), std::nullopt);
 }
 
+//! Replacing a slot's asset keeps its overrides.
+NOLINT_TEST_F(ScriptingComponentTest, ReplaceSlotAsset_KeepsOverrides)
+{
+  component_.AddSlot(MakeScriptAsset());
+  ASSERT_TRUE(component_.SetParameter(
+    component_.Slots().front(), "speed", oxygen::data::ScriptParam { 2.0F }));
+  const auto replacement = MakeScriptAsset();
+
+  EXPECT_TRUE(
+    component_.ReplaceSlotAsset(component_.Slots().front(), replacement));
+
+  const auto& slot = component_.Slots().front();
+  EXPECT_EQ(slot.Asset(), replacement);
+  EXPECT_TRUE(slot.HasOverrideParameter("speed"));
+}
+
 //! A slot keeps the execution order it was added with.
 NOLINT_TEST_F(ScriptingComponentTest, AddSlot_KeepsExecutionOrder)
 {

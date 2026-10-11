@@ -23,7 +23,4 @@ auto WriteMaterialSource(const std::filesystem::path& root,
 auto WriteTexturedMaterialSource(const std::filesystem::path& root,
   const data::AssetKey& key) -> data::SourceKey;
 
-auto WriteScriptSource(const std::filesystem::path& root,
-  const data::AssetKey& key) -> data::SourceKey;
-
 } // namespace oxygen::content::testing

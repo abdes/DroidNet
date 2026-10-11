@@ -157,6 +157,9 @@ public:
     ::oxygen::engine::ModuleAttachedCallback cb, bool replay_existing = false)
     -> ModuleSubscription override;
 
+  OXGN_NGIN_API auto SetScriptSourceChangedHandler(
+    ScriptSourceChangedHandler handler) -> void override;
+
   //! Get current engine configuration
   OXGN_NGIN_NDAPI auto GetEngineConfig() const noexcept
     -> const EngineConfig& override;
@@ -328,6 +331,7 @@ private:
 
   std::unique_ptr<content::AssetLoader> asset_loader_;
   std::unique_ptr<scripting::ScriptHotReloadService> hot_reload_service_;
+  ScriptSourceChangedHandler script_source_changed_handler_;
   std::shared_ptr<scripting::ScriptCompilationService>
     script_compilation_service_;
 

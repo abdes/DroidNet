@@ -105,6 +105,20 @@ public:
     return {};
   }
 
+  auto SetScriptSourceChangedHandler(ScriptSourceChangedHandler handler)
+    -> void override
+  {
+    script_source_changed_handler_ = std::move(handler);
+  }
+
+  //! Delivers a changed script source as the hot-reload watcher would.
+  auto NotifyScriptSourceChanged(const std::filesystem::path& path) -> void
+  {
+    if (script_source_changed_handler_) {
+      script_source_changed_handler_(path);
+    }
+  }
+
   auto GetModuleByType(oxygen::TypeId type_id) const noexcept
     -> std::optional<std::reference_wrapper<engine::EngineModule>> override
   {
@@ -165,6 +179,7 @@ private:
   FakeScriptCompilationService compilation_service_ {};
   bool running_ { true };
   observer_ptr<content::IAssetLoader> asset_loader_;
+  ScriptSourceChangedHandler script_source_changed_handler_;
   std::unordered_map<oxygen::TypeId,
     std::reference_wrapper<engine::EngineModule>>
     modules_ {};

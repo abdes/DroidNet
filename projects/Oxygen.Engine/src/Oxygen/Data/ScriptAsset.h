@@ -8,6 +8,7 @@
 
 #include <cstddef>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <ranges>
 #include <span>
@@ -168,6 +169,15 @@ public:
   }
 
   //! Returns the number of parameters this script declares.
+  //! A copy of this asset that declares `declared_params` instead, as after
+  //! its source changed. The key, descriptor and source origin are kept.
+  /*!
+   @throw std::invalid_argument as the constructor.
+  */
+  [[nodiscard]] OXGN_DATA_API auto WithDeclarations(
+    std::span<const pak::scripting::ScriptParamRecord> declared_params) const
+    -> std::shared_ptr<ScriptAsset>;
+
   [[nodiscard]] auto ParametersCount() const noexcept -> std::size_t
   {
     return params_.size();

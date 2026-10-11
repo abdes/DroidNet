@@ -37,6 +37,8 @@ public:
   MOCK_METHOD(void, Stop, (), (override));
   MOCK_METHOD(ModuleSubscription, SubscribeModuleAttached,
     (engine::ModuleAttachedCallback, bool), (override));
+  MOCK_METHOD(void, SetScriptSourceChangedHandler, (ScriptSourceChangedHandler),
+    (override));
   MOCK_METHOD(std::optional<std::reference_wrapper<engine::EngineModule>>,
     GetModuleByType, (TypeId), (const, noexcept, override));
   // NOLINTEND(bugprone-exception-escape,modernize-use-trailing-return-type)

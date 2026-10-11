@@ -30,8 +30,9 @@ namespace oxygen::scripting {
   registered script source roots (provided via PathFinder) for modifications
    to .lua and .luau files.
 
-  When a change is detected, it triggers a reload request via the AssetLoader,
-  which maps the disk change back to a specific asset and notifies subscribers.
+  When a change is detected, it reports the changed file; the engine hands it
+  to the receiver set with IAsyncEngine::SetScriptSourceChangedHandler, which
+  maps it to the scripts that use it and recompiles them.
 
   ### Design Contracts
   - **Asynchronous**: Runs entirely in a background coroutine loop (WatchLoop).

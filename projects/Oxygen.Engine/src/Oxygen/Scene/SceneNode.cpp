@@ -1068,6 +1068,14 @@ auto SceneNode::Scripting::SetParameter(const Slot& slot, std::string_view name,
   });
 }
 
+auto SceneNode::Scripting::ReplaceSlotAsset(const Slot& slot,
+  std::shared_ptr<const data::ScriptAsset> asset) noexcept -> bool
+{
+  return SafeCall(RequiresScripting(), [&](SafeCallState& state) -> bool {
+    return state.scripting->ReplaceSlotAsset(slot, std::move(asset));
+  });
+}
+
 auto SceneNode::Scripting::BindNodeParameter(const Slot& slot,
   const std::string_view name, const SceneNode& target) noexcept -> bool
 {

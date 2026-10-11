@@ -10,27 +10,21 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "./AssetLoader_test.h"
-#include "Fixtures/AssetLoaderSources.h"
 #include "Utils/PakUtils.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/ScriptAsset.h>
-#include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
@@ -287,51 +281,6 @@ NOLINT_TEST_F(AssetLoaderBasicTest,
       co_return oxygen::co::kJoin;
     };
   }(&el));
-}
-
-auto PopulateFailedReload(AssetLoader* loader, std::filesystem::path root,
-  oxygen::data::AssetKey key) -> Co<>
-{
-  OXCO_WITH_NURSERY(nursery)
-  {
-    co_await nursery.Start(&AssetLoader::ActivateAsync, loader);
-    loader->Run();
-    loader->AddLooseCookedRoot(root);
-    auto script
-      = co_await loader->LoadAssetAsync<oxygen::data::ScriptAsset>(key);
-    EXPECT_NE(script, nullptr);
-    loader->RegisterLoader(
-      [](const oxygen::content::LoaderContext&)
-        -> std::unique_ptr<oxygen::data::ScriptAsset> { return {}; });
-    loader->ReloadAllScripts();
-    co_await loader->WaitForPendingLoadsAsync();
-    EXPECT_FALSE(loader->HasScriptAsset(key));
-    co_return oxygen::co::kCancel;
-  };
-}
-
-NOLINT_TEST_F(AssetLoaderBasicTest, UncachedEvictionFlushCanDestroyLoader)
-{
-  TestEventLoop loop;
-  oxygen::co::ThreadPool pool(loop, 2);
-  AssetLoaderConfig config {};
-  config.thread_pool = observer_ptr { &pool };
-  auto loader = std::make_unique<AssetLoader>(Tag::Get(), config);
-  const auto key
-    = oxygen::data::AssetKey::FromVirtualPath("/Test/Logic.oscript");
-  const auto root = temp_dir_ / "source";
-  oxygen::content::testing::WriteScriptSource(root, key);
-  oxygen::co::Run(loop, PopulateFailedReload(loader.get(), root, key));
-  unsigned int calls = 0;
-  auto subscription = loader->SubscribeResourceEvictions(
-    oxygen::data::ScriptResource::ClassTypeId(),
-    [&](const EvictionEvent&) -> void {
-      ++calls;
-      loader.reset();
-    });
-  loader->TrimCache();
-  EXPECT_FALSE(loader);
-  EXPECT_EQ(calls, 1U);
 }
 
 } // namespace

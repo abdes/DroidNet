@@ -89,6 +89,17 @@ auto ScriptingComponent::SetParameter(
   return true;
 }
 
+auto ScriptingComponent::ReplaceSlotAsset(
+  const Slot& slot, std::shared_ptr<const data::ScriptAsset> asset) -> bool
+{
+  const auto slot_it = FindSlotById(slot.slot_id_);
+  if (slot_it == slots_.end() || asset == nullptr) {
+    return false;
+  }
+  slot_it->asset_ = std::move(asset);
+  return true;
+}
+
 auto ScriptingComponent::BindNodeParameter(
   const Slot& slot, const std::string_view name, NodeHandle node) -> bool
 {
@@ -184,6 +195,7 @@ auto ScriptingComponent::MarkSlotReady(const Slot& slot,
     = was_active ? slot_it->Executable()->ContentHash() : 0;
 
   slot_it->compile_state_ = Slot::CompileState::kReady;
+  slot_it->diagnostics_.clear();
   slot_it->executable_ = std::move(executable);
   DLOG_F(2, "slot state set to ready");
 

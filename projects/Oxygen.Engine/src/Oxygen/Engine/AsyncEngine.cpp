@@ -314,6 +314,12 @@ auto AsyncEngine::SubscribeModuleAttached(
     std::move(cb), replay_existing);
 }
 
+auto AsyncEngine::SetScriptSourceChangedHandler(
+  ScriptSourceChangedHandler handler) -> void
+{
+  script_source_changed_handler_ = std::move(handler);
+}
+
 auto AsyncEngine::GetEngineConfig() const noexcept -> const EngineConfig&
 {
   return config_;
@@ -1467,9 +1473,9 @@ auto AsyncEngine::InitializeDetachedServices() -> void
     if (config_.scripting.enable_hot_reload) {
       hot_reload_service_ = std::make_unique<scripting::ScriptHotReloadService>(
         *this, path_finder_,
-        [this](const std::filesystem::path& path) {
-          if (asset_loader_) {
-            asset_loader_->ReloadScript(path);
+        [this](const std::filesystem::path& path) -> void {
+          if (script_source_changed_handler_) {
+            script_source_changed_handler_(path);
           }
         },
         config_.scripting.hot_reload_poll_interval);
