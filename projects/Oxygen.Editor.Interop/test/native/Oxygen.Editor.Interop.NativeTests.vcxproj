@@ -139,7 +139,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(OxygenEngineInstallDir)\lib\Oxygen.Engine.EditorInterface-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Base-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Composition-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Platform-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Input-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Content-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Engine-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Graphics.Common-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Graphics.Direct3D12-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Core-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Scene-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.SceneSync-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Data-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Vortex-d.lib;$(InteropBinaryDir)\DroidNet.Oxygen.Editor.Interop.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(OxygenEngineInstallDir)\lib\Oxygen.Engine.EditorInterface-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Base-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Composition-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Platform-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Platform.Input-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Input-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Content-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Engine-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Graphics.Common-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Graphics.Direct3D12-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Core-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Scene-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.SceneSync-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Data-d.lib;$(OxygenEngineInstallDir)\lib\Oxygen.Vortex-d.lib;$(InteropBinaryDir)\DroidNet.Oxygen.Editor.Interop.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(OxygenEngineInstallDir)\lib;$(InteropBinaryDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
@@ -165,6 +165,7 @@
         $(OxygenEngineInstallDir)\lib\Oxygen.Base.lib;
         $(OxygenEngineInstallDir)\lib\Oxygen.Composition.lib;
         $(OxygenEngineInstallDir)\lib\Oxygen.Platform.lib;
+        $(OxygenEngineInstallDir)\lib\Oxygen.Platform.Input.lib;
         $(OxygenEngineInstallDir)\lib\Oxygen.Input.lib;
         $(OxygenEngineInstallDir)\lib\Oxygen.Content.lib;
         $(OxygenEngineInstallDir)\lib\Oxygen.Engine.lib;
