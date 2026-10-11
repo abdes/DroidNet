@@ -6,6 +6,10 @@
 
 #pragma once
 
+#include <cassert>
+#include <type_traits>
+#include <utility>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Base/TypeList.h>
@@ -98,8 +102,8 @@ namespace oxygen {
 
  @warning ResourceTypeList order determines compile-time type IDs. Never reorder
  existing types - only append new types to maintain binary compatibility!
- @warning Maximum 256 resource types supported due to
- ResourceHandle::ResourceTypeT being uint8_t
+ @warning Maximum 255 resource types (IDs 0-254): ResourceHandle::ResourceTypeT
+ is uint8_t and value 255 is reserved as ResourceHandle::kTypeNotInitialized
 
  @see ResourceTable, ResourceHandle, GetResourceTypeId
 */
@@ -118,7 +122,7 @@ public:
    ResourceTypeList, providing zero runtime overhead type resolution through
    template metaprogramming.
 
-   @return Compile-time constant resource type ID (0-255)
+   @return Compile-time constant resource type ID (0-254)
 
    @see @ref ResourceTypeList.h "Compile Time Resource Type System for usage and
    requirements"
@@ -126,8 +130,10 @@ public:
   static constexpr auto GetResourceType() noexcept
     -> ResourceHandle::ResourceTypeT
   {
+    // Type ID kResourceTypeMax (255) is reserved as kTypeNotInitialized, so
+    // only indices below it are valid resource types.
     static_assert(IndexOf<ResourceT, ResourceTypeList>::value
-        <= ResourceHandle::kResourceTypeMax,
+        < ResourceHandle::kResourceTypeMax,
       "Too many resource types for ResourceHandle::ResourceTypeT!");
     return static_cast<ResourceHandle::ResourceTypeT>(
       IndexOf<ResourceT, ResourceTypeList>::value);

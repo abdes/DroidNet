@@ -2,7 +2,7 @@
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
   <Type Name="oxygen::ResourceHandle">
     <DisplayString Condition="(handle_ &amp; 0xFFFFFFFF) != 0xFFFFFFFF">
-      RH(i:{handle_ &amp; 0xFFFFFFFF}, t:{(handle_ >> 44) &amp; 0xFF}, g:{(handle_ >> 32) &amp; 0xFFF}, c:{(handle_ >> 44) &amp; 0xFF})
+      RH(i:{handle_ &amp; 0xFFFFFFFF}, t:{(handle_ >> 52) &amp; 0xFF}, g:{(handle_ >> 32) &amp; 0xFFF}, c:{(handle_ >> 44) &amp; 0xFF})
     </DisplayString>
     <DisplayString Condition="(handle_ &amp; 0xFFFFFFFF) == 0xFFFFFFFF">RH(Invalid)</DisplayString>
     <Expand>

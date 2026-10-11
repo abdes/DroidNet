@@ -212,8 +212,9 @@ private:
   [[nodiscard]] auto GetInnerIndex(const ResourceHandle& handle) const
     -> ResourceHandle::IndexT;
 
-  // Common implementation for insertion that prepares the handle and metadata
-  // but delegates item creation to the provided functor
+  // Common implementation for insertion. The item is created first so that a
+  // throwing construction leaves every backing set and the freelist untouched;
+  // only afterwards are the sparse slot, freelist and metadata committed.
   template <typename ItemCreator>
   auto InsertImpl(ItemCreator&& item_creator) -> ResourceHandle;
 
@@ -411,6 +412,17 @@ auto ResourceTable<T>::InsertImpl(ItemCreator&& item_creator) -> ResourceHandle
       items_.size(), items_.capacity());
   }
 
+  // Create the item first: if its construction throws, no table state has
+  // been modified yet and the container stays consistent. (Failures from the
+  // std::vector bookkeeping below are allocation failures and propagate as
+  // std::bad_alloc.)
+  const auto& item_creator_ref = std::forward<ItemCreator>(item_creator);
+  item_creator_ref();
+
+  // Dense-set index of the freshly created element.
+  const ResourceHandle::IndexT dense_index
+    = static_cast<ResourceHandle::IndexT>(items_.size() - 1);
+
   ResourceHandle handle(ResourceHandle::kInvalidIndex, item_type_);
   fragmented_ = true;
 
@@ -431,15 +443,12 @@ auto ResourceTable<T>::InsertImpl(ItemCreator&& item_creator) -> ResourceHandle
 
     // convert the index from freelist to inner index
     inner_handle.SetFree(false);
-    inner_handle.SetIndex(detail::NewIndex(items_));
+    inner_handle.SetIndex(dense_index);
 
     handle = inner_handle;
     handle.SetIndex(outer_index);
   }
 
-  // Delegate item creation to the provided functor
-  const auto& item_creator_ref = std::forward<ItemCreator>(item_creator);
-  item_creator_ref();
   meta_.push_back({ handle.Index() });
 
   return handle;
@@ -576,7 +585,7 @@ auto ResourceTable<T>::Defragment(Compare comp, const size_t max_swaps)
     SignedIndex j1 = i + 1;
 
     if constexpr (std::is_trivially_copyable_v<T>) {
-      while (i >= 0 && comp(items_[at(i)], tmp)) {
+      while (i >= 0 && comp(tmp, items_[at(i)])) {
         sparse_table_[meta_[at(i)].dense_to_sparse].SetIndex(
           static_cast<ResourceHandle::IndexT>(j1));
         --i;
@@ -595,7 +604,7 @@ auto ResourceTable<T>::Defragment(Compare comp, const size_t max_swaps)
       }
     } else {
       while (i >= 0 && (max_swaps == 0 || swaps < max_swaps)
-        && comp(items_[at(i)], tmp)) {
+        && comp(tmp, items_[at(i)])) {
         items_[at(j1)] = std::move(items_[at(i)]);
         meta_[at(j1)] = std::move(meta_[at(i)]);
         sparse_table_[meta_[at(j1)].dense_to_sparse].SetIndex(

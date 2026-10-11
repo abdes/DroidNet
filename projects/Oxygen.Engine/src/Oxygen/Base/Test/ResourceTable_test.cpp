@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 
@@ -53,6 +54,20 @@ struct Item {
 
   auto operator=(const Item& other) -> Item& = default;
   [[maybe_unused]] auto operator=(Item&& other) noexcept -> Item& = default;
+};
+
+//! Type whose construction throws on demand; exercises insertion safety.
+struct ThrowingItem {
+  ThrowingItem() = default;
+  explicit ThrowingItem(bool should_throw)
+  {
+    if (should_throw) {
+      throw std::runtime_error("ThrowingItem: construction failed");
+    }
+  }
+
+  OXYGEN_DEFAULT_COPYABLE(ThrowingItem)
+  OXYGEN_DEFAULT_MOVABLE(ThrowingItem)
 };
 
 } // namespace
@@ -510,16 +525,25 @@ NOLINT_TEST(ResourceTableTest, Defragment)
   const auto handle_43 = table.Emplace(43);
   const auto handle_42 = table.Emplace(42);
   table.Erase(handle_43);
-  table.Emplace(41);
+  const auto handle_41 = table.Emplace(41);
   table.Erase(handle_42);
 
-  table.Emplace(45);
-  table.Emplace(44);
+  const auto handle_45 = table.Emplace(45);
+  const auto handle_44 = table.Emplace(44);
 
   const size_t swaps
     = table.Defragment([](const int& a, const int& b) { return a < b; });
 
-  EXPECT_EQ(swaps, 2);
+  // The dense set must be ordered by comp as documented ("ordered before"):
+  // ascending. Only the key 44 has to move into the sorted prefix [41, 45].
+  EXPECT_EQ(swaps, 1u);
+  const std::vector<int> expected { 41, 44, 45 };
+  EXPECT_TRUE(std::ranges::equal(table.Items(), expected));
+
+  // Reverse lookups from handles must stay consistent after reordering.
+  EXPECT_EQ(table.ItemAt(handle_41), 41);
+  EXPECT_EQ(table.ItemAt(handle_44), 44);
+  EXPECT_EQ(table.ItemAt(handle_45), 45);
 }
 
 class ResourceTableTestPreFilled : public testing::Test {
@@ -605,6 +629,9 @@ NOLINT_TEST(ResourceTableTest, RandomInsertEraseAndDefragment)
   table.Defragment(
     [](const Item& a, const Item& b) { return a.value < b.value; });
 
+  // The documented order is ascending by the comparison function.
+  EXPECT_TRUE(std::ranges::is_sorted(table.Items(), {}, &Item::value));
+
   // Check that the table is not corrupted and has the expected items
   EXPECT_EQ(table.Size(), handles.size());
   for (const auto& handle : handles) {
@@ -612,6 +639,38 @@ NOLINT_TEST(ResourceTableTest, RandomInsertEraseAndDefragment)
     const auto& item = table.ItemAt(handle);
     EXPECT_FALSE(item.value.empty());
   }
+}
+
+NOLINT_TEST(
+  ResourceTableInsertSafetyTest, ThrowingConstructionKeepsTablesConsistent)
+{
+  static constexpr ResourceHandle::ResourceTypeT kItemType { 1 };
+
+  ResourceTable<ThrowingItem> table(kItemType, 4);
+
+  // A failed construction before the first success must not consume a
+  // sparse slot: the next insert still lands on index 0.
+  NOLINT_EXPECT_THROW(table.Emplace(true), std::runtime_error);
+  EXPECT_EQ(table.Size(), 0u);
+  const auto first = table.Emplace();
+  EXPECT_EQ(first.Index(), 0u);
+  EXPECT_TRUE(table.Contains(first));
+
+  // A failed construction must not claim the freed hole either, so the
+  // following insert reuses the hole's slot.
+  const auto doomed = table.Emplace();
+  ASSERT_EQ(table.Erase(doomed), 1u);
+  NOLINT_EXPECT_THROW(table.Emplace(true), std::runtime_error);
+  const auto reused = table.Emplace();
+  EXPECT_EQ(reused.Index(), doomed.Index());
+
+  // Lookups and removal still work on every live handle.
+  EXPECT_TRUE(table.Contains(first));
+  EXPECT_TRUE(table.Contains(reused));
+  EXPECT_EQ(table.Size(), 2u);
+  EXPECT_EQ(table.Erase(first), 1u);
+  EXPECT_EQ(table.Erase(reused), 1u);
+  EXPECT_EQ(table.Size(), 0u);
 }
 
 } // namespace

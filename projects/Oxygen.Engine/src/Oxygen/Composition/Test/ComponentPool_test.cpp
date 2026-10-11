@@ -339,9 +339,10 @@ NOLINT_TEST_F(
 //=== Defragmentation Tests ===-----------------------------------------------//
 
 /*!
- IMPORTANT: ResourceTable's defragmentation implements reverse insertion sort.
- "a < b" comparison results in DESCENDING order (not ascending as expected).
- Defragmentation only works on fragmented tables (after deletions create gaps).
+ ResourceTable's defragmentation orders the dense set exactly as `comp`
+ documents: `comp(a, b) == true` places `a` before `b` (an "a < b"
+ comparison yields ASCENDING order). Defragmentation only works on
+ fragmented tables (after deletions create gaps).
  */
 
 //! Test defragmentation with built-in Compare method
@@ -364,13 +365,13 @@ NOLINT_TEST_F(ComponentPoolBasicTest, DefragmentWithComparison_OrdersComponents)
   auto swaps_performed
     = pool_->Defragment(); // Uses TestTransformComponent::Compare
 
-  // Assert - descending order due to reverse insertion sort
+  // Assert - ascending order, as documented for the comparison function
   EXPECT_GT(swaps_performed, 0);
   std::size_t count = 0;
-  int prev_x = (std::numeric_limits<int>::max)();
+  int prev_x = (std::numeric_limits<int>::min)();
   pool_->ForEach([&](const TestTransformComponent& component) {
     if (count > 0) {
-      EXPECT_GE(prev_x, component.GetX());
+      EXPECT_LE(prev_x, component.GetX());
     }
     prev_x = component.GetX();
     ++count;
@@ -392,7 +393,7 @@ NOLINT_TEST_F(
 
   // Create fragmentation
   pool_->Deallocate(handles[0]); // Delete y=30
-  pool_->Deallocate(handles[3]); // Delete y=40
+  pool_->Deallocate(handles[1]); // Delete y=10
 
   // Act - custom comparison by Y coordinate
   auto swaps_performed = pool_->Defragment(
@@ -400,20 +401,20 @@ NOLINT_TEST_F(
       return a.GetY() < b.GetY(); // "Ascending" comparison
     });
 
-  // Assert - still produces descending order
+  // Assert - ascending order by the provided comparison
   EXPECT_GT(swaps_performed, 0);
   std::size_t count = 0;
-  int prev_y = (std::numeric_limits<int>::max)();
+  int prev_y = (std::numeric_limits<int>::min)();
   pool_->ForEach([&](const TestTransformComponent& component) {
     if (count == 0) {
-      EXPECT_EQ(component.GetY(), 20); // Largest first
+      EXPECT_EQ(component.GetY(), 5); // Smallest first
     } else if (count == 1) {
-      EXPECT_EQ(component.GetY(), 10);
+      EXPECT_EQ(component.GetY(), 20);
     } else if (count == 2) {
-      EXPECT_EQ(component.GetY(), 5); // Smallest last
+      EXPECT_EQ(component.GetY(), 40); // Largest last
     }
     if (count > 0) {
-      EXPECT_GE(prev_y, component.GetY());
+      EXPECT_LE(prev_y, component.GetY());
     }
     prev_y = component.GetY();
     ++count;
