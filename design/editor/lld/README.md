@@ -42,6 +42,7 @@ implementation and review, and must trace to [PRD.md](../PRD.md),
 | [settings-architecture.md](./settings-architecture.md)                   | Editor, project, workspace, runtime, scene, and diagnostic settings ownership.                                                   |
 | [diagnostics-operation-results.md](./diagnostics-operation-results.md)   | Operation results, diagnostics, failure domains, presentation rules.                                                             |
 | [script-authoring.md](./script-authoring.md)                             | Script assets and analysis, node Scripting component and parameters, script cooking, Play and Problems.                          |
+| [input-authoring.md](./input-authoring.md)                               | Input action and mapping context assets, their editors, key capture, triggers, retargeting and cooking.                          |
 
 ## Required LLD Sections
 

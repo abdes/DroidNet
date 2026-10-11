@@ -125,7 +125,7 @@ the scripting engine and editor slices (M08.10i–q) follow.
 | `ED-M07A` | Authoring integrity and runtime convergence      | Identified background, gesture, field-diagnostic, sync-lifetime and save-integrity gaps close with concrete UI/native evidence.                                                                                    | `property-pipeline`, `property-inspector`, `environment-authoring`, `documents-and-commands`, `material-editor`, `settings-architecture`, `live-engine-sync`                                 | detailed plan exists                        |
 | `ED-M07B` | Safe content publication and compatibility       | Intuitive content discovery/use, consistent status, incremental cooking, saved snapshots, safe publication, complete native mappings, matched builds and reproducible import work.                                 | `content-cooking-workflows`, `content-browser-asset-identity`, `material-editor`, `content-pipeline`, `runtime-integration`, `project-services`, `asset-primitives`                          | Validated; complete workflow audit recorded |
 | `ED-M08`  | Runtime parity and authoring workspace           | Canonical engine/editor authoring, multi-viewport layouts, viewport picking/gizmos/snapping/helpers, and a Content Browser with previews, reference-aware relocation and drag-and-drop.                            | Detailed plan's implementation document map                                                                                                                                                  | In progress                                 |
-| `ED-M09`  | Input authoring                                  | Users create and edit input actions and mapping contexts in the editor.                                                                                                                                            | To be written by the milestone owner                                                                                                                                                         | Planned; design not started                 |
+| `ED-M09`  | Input authoring                                  | Users create and edit input actions and mapping contexts in the editor.                                                                                                                                            | [input-authoring.md](lld/input-authoring.md)                                                                                                                                                 | Design drafted; awaiting owner review       |
 | `ED-M10`  | V0.1 acceptance                                  | The full PRD V0.1 workflow completes end-to-end without manual repair.                                                                                                                                             | all V0.1 LLDs                                                                                                                                                                                | required before validation                  |
 
 ## 5. Milestone Details
@@ -426,9 +426,10 @@ walkthrough in the normal Release editor.
 ### ED-M09 - Input Authoring
 
 Purpose: users create and edit input actions and mapping contexts in the
-editor (REQ-045). The [plan](plan/ED-M09-input-authoring.md) is owned and
-written by the milestone owner. The ID previously named the viewport tools
-that ED-M08.4–M08.6 delivered.
+editor (REQ-045). Design: [input authoring LLD](lld/input-authoring.md);
+sequence and acceptance: [plan](plan/ED-M09-input-authoring.md), starting with
+the owner's review of the design (M09.1). The ID previously named the
+viewport tools that ED-M08.4–M08.6 delivered.
 
 ### ED-M10 - V0.1 Acceptance
 
