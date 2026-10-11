@@ -84,9 +84,11 @@ context that happens to be loaded. Oxygen follows the same model for both.
   context asset reference (an `asset` parameter of kind
   `input_mapping_context`). A context not yet added is hydrated on first
   activation with its asset's default priority.
-- RenderScene keeps its showcase policy of loading every mounted context
-  flagged AutoLoad and activating those flagged AutoActivate; the player and
-  instantiation ignore those flags.
+- The scene's starting contexts are the only start mechanism. The
+  per-context `auto_load` and `auto_activate` flags are removed from the
+  input schema, the cooked mapping context descriptor and every loader;
+  RenderScene and DemoShell start the contexts of the scene they
+  instantiate, like the player.
 
 Physics hydration stays in DemoShell, running on `SceneInstance::nodes`,
 until physics authoring is scheduled.
