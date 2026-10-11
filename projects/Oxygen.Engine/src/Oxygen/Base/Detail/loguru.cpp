@@ -43,6 +43,7 @@
 #  include <functional>
 #  include <memory>
 #  include <mutex>
+#  include <regex>
 #  include <span>
 #  include <stdexcept>
 #  include <string>
@@ -674,20 +675,6 @@ void parse_args(int& argc, const char** argv, const char* verbosity_flag)
     const char* cmd = argv[arg_it];
     const auto arg_len = std::strlen(verbosity_flag);
     const auto cmd_len = std::strlen(cmd);
-
-    // Check for verbosity flag (e.g., -v)
-    bool last_is_alpha = false;
-    if (arg_len < cmd_len) {
-#  if LOGURU_USE_LOCALE
-      try {
-        last_is_alpha = std::isalpha(cmd[arg_len], std::locale(""));
-      } catch (...) {
-        last_is_alpha = std::isalpha(static_cast<int>(cmd[arg_len]));
-      }
-#  else
-      last_is_alpha = std::isalpha(static_cast<int>(cmd[arg_len]));
-#  endif
-    }
 
     // Only treat this as the verbosity flag if the token exactly matches the
     // verbosity_flag or if the next character is '=' or a digit. This avoids
@@ -1762,7 +1749,7 @@ void set_thread_name(const char* name)
 }
 
 void get_thread_name(
-  char* buffer, unsigned long long length, bool right_align_hex_id)
+  char* buffer, uint64_t length, bool right_align_hex_id)
 {
   CHECK_NE_F(length, 0u, "Zero length buffer in get_thread_name");
   CHECK_NOTNULL_F(buffer, "nullptr in get_thread_name");
@@ -2070,12 +2057,14 @@ static void print_preamble(char* out_buff, size_t out_buff_size,
     file = filename(file);
   }
 
-  char level_buff[6];
+  // snprintf always terminates within the given size; widths are capped by
+  // the format so a custom name or "-128" fits the column.
+  char level_buff[8];
   const char* custom_level_name = get_verbosity_name(verbosity);
   if (custom_level_name) {
-    snprintf(level_buff, sizeof(level_buff) - 1, "%s", custom_level_name);
+    snprintf(level_buff, sizeof(level_buff), "%.5s", custom_level_name);
   } else {
-    snprintf(level_buff, sizeof(level_buff) - 1, "% 4d",
+    snprintf(level_buff, sizeof(level_buff), "% 4d",
       static_cast<int8_t>(verbosity));
   }
 
@@ -2210,12 +2199,6 @@ static void log_message(int stack_trace_skip, Message& message,
     }
 
     if (abort_if_fatal) {
-#  if !defined(_WIN32)
-      if (s_signal_options.sigabrt) {
-        // Make sure we don't catch our own abort:
-        signal(SIGABRT, SIG_DFL);
-      }
-#  endif
       abort();
     }
   }

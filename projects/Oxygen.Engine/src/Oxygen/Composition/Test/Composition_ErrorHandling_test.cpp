@@ -4,25 +4,25 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/Object.h>
-#include <Oxygen/Testing/GTest.h>
 #include <functional>
 
 #include "./BaseCompositionTest.h"
+
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Object.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::TypeId;
 
 namespace {
 // Forward declare pooled type
 class PooledComponent;
-// ResourceTypeList after forward declaration
-using ResourceTypeList = oxygen::TypeList<PooledComponent>;
+// TestResourceTypeList after forward declaration
+using TestResourceTypeList = oxygen::TypeList<PooledComponent>;
 // Full definition of pooled type
 class PooledComponent final : public oxygen::Component {
-  OXYGEN_POOLED_COMPONENT(PooledComponent, ResourceTypeList)
+  OXYGEN_POOLED_COMPONENT(PooledComponent, TestResourceTypeList)
 public:
-  using ResourceTypeList = ::ResourceTypeList;
   PooledComponent() = default;
   explicit PooledComponent(int v)
     : value_(v)

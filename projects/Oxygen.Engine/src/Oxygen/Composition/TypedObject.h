@@ -40,9 +40,9 @@
 #if defined(OXYGEN_MSVC_VERSION)
 #  define OXYGEN_TYPE_NAME_IMPL() __FUNCSIG__
 #elif defined(OXYGEN_GNUC_VERSION_CHECK) || defined(OXYGEN_CLANG_VERSION)
-#  define OXYGEN_TYPE_NAME_IMPL_() __PRETTY_FUNCTION__
+#  define OXYGEN_TYPE_NAME_IMPL() __PRETTY_FUNCTION__
 #else
-#  define OXYGEN_TYPE_NAME_IMPL_() #arg_type
+#  define OXYGEN_TYPE_NAME_IMPL() #arg_type
 #endif
 
 #define OXYGEN_TYPED(arg_type)                                                 \

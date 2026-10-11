@@ -21,16 +21,6 @@ namespace {
   constexpr int kNear = 4;
   constexpr int kFar = 5;
 
-  inline auto NormalizePlane(Frustum::Plane& p) noexcept -> void
-  {
-    const float len = std::sqrt(glm::dot(p.normal, p.normal));
-    if (len > 0.0F) {
-      const float inv = 1.0F / len;
-      p.normal *= inv;
-      p.d *= inv;
-    }
-  }
-
   [[nodiscard]] auto MakePlane(const glm::vec3& a, const glm::vec3& b,
     const glm::vec3& c, const glm::vec3& inside_point) noexcept
     -> Frustum::Plane

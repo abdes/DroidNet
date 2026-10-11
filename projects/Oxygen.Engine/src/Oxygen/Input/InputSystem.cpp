@@ -26,7 +26,6 @@
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
-#include <Oxygen/Platform/Platform.h>
 
 using oxygen::input::Action;
 using oxygen::input::InputMappingContext;
@@ -262,7 +261,7 @@ void InputSystem::ProcessInputEvent(std::shared_ptr<InputEvent>& event)
     DCHECK_F(event->HasComponent<platform::input::KeyComponent>());
     const auto key_code
       = event->GetComponent<KeyComponent>().GetKeyInfo().GetKeyCode();
-    const auto& slot = Platform::GetInputSlotForKey(key_code);
+    const auto slot = InputSlots::GetInputSlotForKey(key_code);
     HandleInput(slot, *event);
   }
   // Mouse button events

@@ -26,6 +26,11 @@ class ModuleGraphTests(ConanGraphTestCase):
             ("OxCo", {"fmt", "asio"}),
             ("Clap", {"fmt", "magic_enum"}),
             ("OxCo,Clap", {"fmt", "asio", "magic_enum"}),
+            ("Console", {"fmt", "nlohmann_json"}),
+            ("Core", {"fmt", "asio", "glm"}),
+            # Reusable Platform is the input vocabulary only: no SDL or ImGui.
+            ("Platform", {"fmt", "asio", "glm"}),
+            ("Input", {"fmt", "asio", "glm", "nlohmann_json"}),
         ):
             with self.subTest(selection=selection):
                 nodes = self.graph(*options(f"&:modules={selection}"))
@@ -94,6 +99,9 @@ class ModuleGraphTests(ConanGraphTestCase):
                 nodes = self.graph(*options("&:modules=OxCo,Clap"), profile=PROFILES / profile)
                 self.assert_valid(nodes)
                 self.assertEqual(dependency_names(nodes), {"fmt", "asio", "magic_enum"})
+                nodes = self.graph(*options("&:modules=Input"), profile=PROFILES / profile)
+                self.assert_valid(nodes)
+                self.assertEqual(dependency_names(nodes), {"fmt", "asio", "glm", "nlohmann_json"})
 
 
 if __name__ == "__main__":

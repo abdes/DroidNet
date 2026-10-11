@@ -8,16 +8,15 @@
 
 #include <memory>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
-#include <Oxygen/Platform/input.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::input::testing {
 

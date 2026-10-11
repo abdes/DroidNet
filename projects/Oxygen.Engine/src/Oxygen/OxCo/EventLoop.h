@@ -110,7 +110,8 @@ public:
    constructor and to `post()` to allow for a variety of notification
    architectures.
   */
-  ThreadNotification(EventLoopT&, void (*fn)(void*), void* arg)
+  ThreadNotification(
+    EventLoopT& /*loop*/, void (* /*fn*/)(void*), void* /*arg*/)
   {
     static_assert(!std::is_same_v<EventLoopT, EventLoopT>,
       "Specialize this class for your event loop type "

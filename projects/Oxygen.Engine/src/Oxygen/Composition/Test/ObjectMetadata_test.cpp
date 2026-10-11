@@ -4,9 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Composition/ObjectMetadata.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 

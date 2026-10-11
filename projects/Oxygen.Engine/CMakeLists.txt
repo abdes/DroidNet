@@ -181,7 +181,14 @@ if(
       DEFINED
         CMAKE_VISIBILITY_INLINES_HIDDEN
 )
-  set(CMAKE_CXX_VISIBILITY_PRESET hidden)
+  # Windows exports explicitly through the OXGN_*_API macros, and that build
+  # enforces the module export boundary. On ELF/Mach-O, types keep default
+  # visibility: a polymorphic class emits its vtable and type_info in the
+  # library that defines its key function, and hidden class visibility would
+  # make consumers that construct it, or use RTTI on it, fail to link. Inline
+  # functions stay hidden, matching the per-module semantics of inline
+  # functions on Windows and limiting the export of inlined third-party code.
+  set(CMAKE_CXX_VISIBILITY_PRESET default)
   set(CMAKE_VISIBILITY_INLINES_HIDDEN YES)
 endif()
 

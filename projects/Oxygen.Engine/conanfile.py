@@ -124,7 +124,17 @@ class OxygenConan(ConanFile):
 
     @staticmethod
     def _module_closure(selection):
-        names = ("Base", "Composition", "OxCo", "Serio", "TextWrap", "Clap")
+        names = ("Base", "Composition", "OxCo", "Serio", "TextWrap", "Clap",
+                 "Config", "Console", "Core", "Platform", "Input")
+        # Direct module dependencies, listed in reverse dependency order so one
+        # pass yields the closure (mirrors cmake/ModuleSelection.cmake).
+        dependencies = (
+            ("Input", ("Console", "Platform", "Core")),
+            ("Platform", ("Config", "Core", "Composition", "OxCo")),
+            ("Core", ("Composition", "OxCo")),
+            ("Console", ("Config",)),
+            ("Clap", ("TextWrap",)),
+        )
         if str(selection) == "full":
             return ()
         requested = {name.strip() for name in str(selection).split(",")}
@@ -134,8 +144,9 @@ class OxygenConan(ConanFile):
                 f"Invalid modules selection: {sorted(invalid)}. Use 'full' or "
                 f"comma-separated module names: {', '.join(names)}.")
         requested.add("Base")
-        if "Clap" in requested:
-            requested.add("TextWrap")
+        for module, required in dependencies:
+            if module in requested:
+                requested.update(required)
         return tuple(name for name in names if name in requested)
 
     @property
@@ -304,6 +315,13 @@ class OxygenConan(ConanFile):
             self.requires("asio/1.36.0", transitive_headers=True)
         if self._full_engine or "Clap" in self._modules:
             self.requires("magic_enum/0.9.7", transitive_headers=True)
+        if not self._full_engine:
+            if "Core" in self._modules:
+                self.requires("glm/1.0.1", transitive_headers=True)
+            if "Console" in self._modules:
+                self.requires("nlohmann_json/3.11.3", transitive_headers=True)
+            # Reusable builds provide Platform's input vocabulary only
+            # (oxygen::platform-input); the SDL backend is full-engine only.
 
         self._test_deps = set()
         if self.options.tests:

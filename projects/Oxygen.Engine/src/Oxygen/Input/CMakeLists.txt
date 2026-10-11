@@ -103,7 +103,7 @@ target_link_libraries(
   PUBLIC
     oxygen::base
     oxygen::console
-    oxygen::platform
+    oxygen::platform-input
     oxygen::core
 )
 
@@ -125,7 +125,8 @@ if(OXYGEN_BUILD_DOCS AND OXYGEN_WITH_DOXYGEN)
     VERSION ${META_VERSION}
     TITLE "\"Input\""
     BRIEF "\"Oxygen Input subsystem\""
-    INPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}"
+    INPUT_PATH
+      "${CMAKE_CURRENT_SOURCE_DIR}"
   )
 endif()
 

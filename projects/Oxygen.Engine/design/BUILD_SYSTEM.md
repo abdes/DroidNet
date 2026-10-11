@@ -74,11 +74,14 @@ Conan 2.32+. Supported generators are Ninja, Ninja Multi-Config and Visual Studi
 18 2026. Existing platform profiles are not proof that the full engine supports
 another compiler or OS. Reject unsupported combinations early and clearly.
 
-Base, Composition, OxCo, Serio, TextWrap and Clap have a separate reusable-module
-contract for Windows, Linux and macOS. Platform support and validation evidence
-are different statements: do not claim a platform was tested because its
-configuration was accepted. Existing Linux C++ portability gaps and unperformed
-macOS validation are not resolved by CMake configuration alone.
+Base, Composition, OxCo, Serio, TextWrap, Clap, Config, Console, Core, Platform
+and Input have a separate reusable-module contract for Windows, Linux and macOS.
+In a reusable selection, Platform provides only its platform-neutral input
+vocabulary (`oxygen::platform-input`); the SDL windowing backend belongs to the
+full engine. Platform support and validation evidence are different statements:
+do not claim a platform was tested because its configuration was accepted.
+Linux is validated with GCC 14 (static) and Clang 18 (shared) for the Input
+closure; macOS execution has not been exercised.
 
 Keep language requirements on targets using `target_compile_features`. Oxygen's
 Conan C++23 setting does not require forcing every dependency to use that same
@@ -99,7 +102,7 @@ Oxygen has one Conan recipe, `oxygen`, with named components. The default builds
 the full engine. An application requesting `OxCo,Clap` gets those modules and
 their transitive closure, not all engine modules and development targets.
 Full-engine Conan packages use shared libraries because the showcase loads its
-graphics backend dynamically. The six reusable modules also support static
+graphics backend dynamically. The reusable modules also support static
 packages; a fully static showcase is not part of that package contract.
 
 Consumers use the same native CMake names through Conan or an installed SDK:
@@ -113,7 +116,7 @@ Dependency consumers do not build Oxygen tests, benchmarks or optional examples
 by default, including when Conan builds their dependency from source. A contributor
 checks out the repository and uses its development workflow instead.
 
-Source embedding is deliberately bounded to the six reusable modules. Require an
+Source embedding is deliberately bounded to the reusable modules. Require an
 explicit module selection and use the parent's dependency graph. Respect its
 configuration, install prefix and explicit output settings; keep default outputs
 inside Oxygen's binary subtree. Embedded tests, examples, documentation, optional
@@ -146,6 +149,16 @@ Oxygen preserves its no-native-RTTI boundary. Application translation units that
 derive from Oxygen polymorphic classes must use compatible RTTI-disabled settings.
 Unrelated application code may use native RTTI. This is an integration constraint,
 not a reason to disable RTTI globally in every consumer.
+
+Symbol visibility follows the same split. Windows exports explicitly through each
+module's `OXGN_*_API` macros, and that build enforces the module export boundary.
+On ELF and Mach-O, Oxygen keeps default visibility for types and functions and
+hides inline functions (`-fvisibility-inlines-hidden`). A polymorphic class emits
+its vtable and type information in the library that defines its key function;
+hidden class visibility would make consumers that construct it or use RTTI on it
+fail to link, and a separate per-class annotation would be invisible to the
+Windows build that most development uses. Hidden inline functions keep the
+per-module semantics of inline functions that Windows already has.
 
 ASan is a complete configuration contract: a matching dependency profile, package
 identity, compile instrumentation, link options and runtime launch environment.

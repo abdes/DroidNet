@@ -103,7 +103,7 @@ inline std::string to_string(MaybeStringLike const& /*m*/) { return "adl-9"; }
 struct Loggable {
   int v { 0 };
 };
-inline std::string to_string(Loggable const& l)
+[[maybe_unused]] inline std::string to_string(Loggable const& l)
 {
   return "LOG:" + std::to_string(l.v);
 }

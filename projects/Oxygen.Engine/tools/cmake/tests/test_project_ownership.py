@@ -103,6 +103,19 @@ class OwnershipTests(CommandTestCase):
             + 'if(NOT OXYGEN_ENABLED_MODULES STREQUAL "Base;TextWrap;Clap")\n'
             'message(FATAL_ERROR "Wrong module closure: ${OXYGEN_ENABLED_MODULES}")\nendif()\n'
         )
+        self.configure_policy(
+            "set(OXYGEN_MODULES Input)\n"
+            + MODULE_SELECTION
+            + 'if(NOT OXYGEN_ENABLED_MODULES STREQUAL '
+            '"Base;Composition;OxCo;Config;Console;Core;Platform;Input")\n'
+            'message(FATAL_ERROR "Wrong module closure: ${OXYGEN_ENABLED_MODULES}")\nendif()\n'
+        )
+        self.configure_policy(
+            "set(OXYGEN_MODULES Platform)\n"
+            + MODULE_SELECTION
+            + 'if(NOT OXYGEN_ENABLED_MODULES STREQUAL "Base;Composition;OxCo;Config;Core;Platform")\n'
+            'message(FATAL_ERROR "Wrong module closure: ${OXYGEN_ENABLED_MODULES}")\nendif()\n'
+        )
         for selection in ("Vortex", "OFF"):
             self.assert_rejected(
                 f"set(OXYGEN_MODULES {selection})\n" + MODULE_SELECTION, "Unknown reusable Oxygen module"

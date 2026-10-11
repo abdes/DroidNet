@@ -183,10 +183,4 @@ auto Platform::Compose(const PlatformConfig& config) -> void
   AddComponent<InputEvents>();
 }
 
-auto Platform::GetInputSlotForKey(const platform::Key key)
-  -> platform::InputSlot
-{
-  return platform::InputSlots::GetInputSlotForKey(key);
-}
-
 } // namespace oxygen
