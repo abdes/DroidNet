@@ -145,7 +145,7 @@ namespace oxygen::interop::module {
     }
 
     const auto mouse_delta =
-      viewport::AccumulateAxis2DFromTransitionsOrZero(input_snapshot,
+      viewport::GetAxis2DOrZero(input_snapshot,
         "Editor.Mouse.Delta");
     if ((std::abs(mouse_delta.x) <= 0.0f) && (std::abs(mouse_delta.y) <= 0.0f)) {
       return;

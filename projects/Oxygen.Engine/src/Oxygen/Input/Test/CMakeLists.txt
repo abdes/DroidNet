@@ -49,6 +49,24 @@ m_gtest_program(
     "InputSnapshot_test.cpp"
     "InputSystem_basic_test.cpp"
     "InputSystem_integration_test.cpp"
+    "ActionContribution_test.cpp"
+    "ActionTestAccess.h"
+    "InputSystemTest.cpp"
+    "InputSystemTest.h"
+)
+
+# Functional suite: gameplay scenarios driven through the real InputSystem.
+m_gtest_program(
+  Scenarios
+  SOURCES
+    "Scenarios/Bindings_scenario_test.cpp"
+    "Scenarios/Consumption_scenario_test.cpp"
+    "Scenarios/Contexts_scenario_test.cpp"
+    "Scenarios/Lifecycle_scenario_test.cpp"
+    "Scenarios/MouseAxes_scenario_test.cpp"
+    "Scenarios/ScenarioTest.cpp"
+    "Scenarios/ScenarioTest.h"
+    "Scenarios/Timing_scenario_test.cpp"
     "InputSystemTest.cpp"
     "InputSystemTest.h"
 )

@@ -109,6 +109,14 @@ struct ModuleTimingData {
   */
   time::CanonicalDuration game_delta_time { std::chrono::nanoseconds(0) };
 
+  //! Physical (wall-clock) time elapsed since the last frame
+  /*!
+   Real time from the physical clock, unaffected by time scaling and pause.
+   For player-facing durations that must keep running in pause menus and must
+   not stretch in slow motion, such as input hold and tap windows.
+  */
+  time::CanonicalDuration physical_delta_time { std::chrono::nanoseconds(0) };
+
   //! Fixed timestep delta time for deterministic simulation systems
   /*!
    Constant time step used for physics, networking, and other systems requiring

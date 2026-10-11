@@ -230,7 +230,7 @@ namespace oxygen::interop::module {
     bool rotated = false;
     if (look_active) {
       const auto mouse_delta =
-        viewport::AccumulateAxis2DFromTransitionsOrZero(input_snapshot,
+        viewport::GetAxis2DOrZero(input_snapshot,
           "Editor.Mouse.Delta");
       if ((std::abs(mouse_delta.x) > 0.0f) || (std::abs(mouse_delta.y) > 0.0f)) {
         state.yaw_radians += -mouse_delta.x * params.look_radians_per_pixel;

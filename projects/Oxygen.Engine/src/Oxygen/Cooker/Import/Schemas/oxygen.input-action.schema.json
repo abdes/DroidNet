@@ -24,6 +24,12 @@
       "type": "boolean",
       "default": false,
       "description": "When true, consumes matching input so lower-priority mappings do not also trigger."
+    },
+    "accumulation": {
+      "type": "string",
+      "enum": ["highest_absolute", "cumulative"],
+      "default": "highest_absolute",
+      "description": "How the values of several bindings combine, per component: keep the one with the highest magnitude, or sum them."
     }
   },
   "required": ["name", "type"]

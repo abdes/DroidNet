@@ -6,11 +6,11 @@
 
 #pragma once
 
+#include <map>
 #include <memory>
 #include <span>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Input/Action.h>
@@ -55,65 +55,66 @@ public:
   //! LEVEL query: final snapshot flags at frame end
   /*! Returns the bitfield of the final action state at the end of the frame.
    Prefer DidAction* methods for edge queries within the frame window. */
-  [[nodiscard]] OXGN_NPUT_API ActionState GetActionStateFlags(
-    std::string_view action_name) const;
+  [[nodiscard]] OXGN_NPUT_API auto GetActionStateFlags(
+    std::string_view action_name) const -> ActionState;
 
   //! Check if action is in triggered state NOTE: Final snapshot flag (level at
   //! frame end). For edges, prefer DidActionTrigger().
-  [[nodiscard]] OXGN_NPUT_API bool IsActionTriggered(
-    std::string_view action_name) const;
+  [[nodiscard]] OXGN_NPUT_API auto IsActionTriggered(
+    std::string_view action_name) const -> bool;
 
   //! Check if action is in ongoing state
-  [[nodiscard]] OXGN_NPUT_API bool IsActionOngoing(
-    std::string_view action_name) const;
+  [[nodiscard]] OXGN_NPUT_API auto IsActionOngoing(
+    std::string_view action_name) const -> bool;
 
   //! Check if action is in completed state NOTE: Final snapshot flag (level at
   //! frame end). For edges, prefer DidActionComplete().
-  [[nodiscard]] OXGN_NPUT_API bool IsActionCompleted(
-    std::string_view action_name) const;
+  [[nodiscard]] OXGN_NPUT_API auto IsActionCompleted(
+    std::string_view action_name) const -> bool;
 
   //! Check if action is in canceled state NOTE: Final snapshot flag (level at
   //! frame end). For edges, prefer DidActionCancel().
-  [[nodiscard]] OXGN_NPUT_API bool IsActionCanceled(
-    std::string_view action_name) const;
+  [[nodiscard]] OXGN_NPUT_API auto IsActionCanceled(
+    std::string_view action_name) const -> bool;
 
   //! Check if action is in idle state
-  [[nodiscard]] OXGN_NPUT_API bool IsActionIdle(
-    std::string_view action_name) const;
+  [[nodiscard]] OXGN_NPUT_API auto IsActionIdle(
+    std::string_view action_name) const -> bool;
 
   //! Get current action value
-  [[nodiscard]] OXGN_NPUT_API ActionValue GetActionValue(
-    std::string_view action_name) const;
+  [[nodiscard]] OXGN_NPUT_API auto GetActionValue(
+    std::string_view action_name) const -> ActionValue;
 
   // -- Transition queries for animations --------------------------------------
 
   //! Check if action transitioned from idle/none to triggered this frame
-  [[nodiscard]] OXGN_NPUT_API bool DidActionStart(
-    std::string_view action_name) const;
+  [[nodiscard]] OXGN_NPUT_API auto DidActionStart(
+    std::string_view action_name) const -> bool;
 
   //! EDGE: Did the action produce a Triggered transition in this frame
-  [[nodiscard]] OXGN_NPUT_API bool DidActionTrigger(
-    std::string_view action_name) const;
+  [[nodiscard]] OXGN_NPUT_API auto DidActionTrigger(
+    std::string_view action_name) const -> bool;
 
   //! Check if action completed this frame
-  [[nodiscard]] OXGN_NPUT_API bool DidActionComplete(
-    std::string_view action_name) const;
+  [[nodiscard]] OXGN_NPUT_API auto DidActionComplete(
+    std::string_view action_name) const -> bool;
 
   //! Check if action was canceled this frame
-  [[nodiscard]] OXGN_NPUT_API bool DidActionCancel(
-    std::string_view action_name) const;
+  [[nodiscard]] OXGN_NPUT_API auto DidActionCancel(
+    std::string_view action_name) const -> bool;
 
   //! EDGE: Did the action release (Ongoing -> not Ongoing) this frame
-  [[nodiscard]] OXGN_NPUT_API bool DidActionRelease(
-    std::string_view action_name) const;
+  [[nodiscard]] OXGN_NPUT_API auto DidActionRelease(
+    std::string_view action_name) const -> bool;
 
   //! EDGE: Was the action value updated at least once this frame
-  [[nodiscard]] OXGN_NPUT_API bool DidActionValueUpdate(
-    std::string_view action_name) const;
+  [[nodiscard]] OXGN_NPUT_API auto DidActionValueUpdate(
+    std::string_view action_name) const -> bool;
 
   //! Check if a specific state transition occurred this frame
-  [[nodiscard]] OXGN_NPUT_API bool DidActionTransition(
-    std::string_view action_name, ActionState from, ActionState to) const;
+  [[nodiscard]] OXGN_NPUT_API auto DidActionTransition(
+    std::string_view action_name, ActionState from, ActionState to) const
+    -> bool;
 
   //! Get all transitions for an action during this frame
   [[nodiscard]] OXGN_NPUT_API auto GetActionTransitions(
@@ -139,12 +140,21 @@ public:
   // Timing is available via FrameContext; not exposed by this snapshot.
 
 private:
+  //! Frozen copy of one action at snapshot time.
+  struct Entry {
+    Action::State state {};
+    ActionValue value;
+    bool value_updated { false };
+    std::vector<Action::FrameTransition> transitions;
+  };
+
   //! Find action by name, returns nullptr if not found
   [[nodiscard]] auto FindAction(std::string_view action_name) const
-    -> const Action*;
+    -> const Entry*;
 
-  // Name -> action pointer (lifetime owned by InputSystem)
-  std::unordered_map<std::string, const Action*> actions_;
+  // Value copies: the snapshot does not depend on Action lifetime or on
+  // later frames mutating the actions.
+  std::map<std::string, Entry, std::less<>> actions_;
 };
 
 } // namespace oxygen::input

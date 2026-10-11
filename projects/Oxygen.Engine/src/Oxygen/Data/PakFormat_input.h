@@ -28,6 +28,8 @@ namespace oxygen::data::pak::input {
 enum class InputActionAssetFlags : uint32_t { // NOLINT(*-enum-size)
   kNone = 0,
   kConsumesInput = OXYGEN_FLAG(0),
+  //! Bindings' values are summed per component (default: highest magnitude).
+  kCumulativeAccumulation = OXYGEN_FLAG(1),
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(InputActionAssetFlags)
 OXGN_DATA_NDAPI auto to_string(InputActionAssetFlags value) -> std::string;

@@ -374,6 +374,7 @@ auto oxygen::data::pak::input::to_string(
   };
 
   check_and_append(Flags::kConsumesInput, "ConsumesInput");
+  check_and_append(Flags::kCumulativeAccumulation, "CumulativeAccumulation");
   DCHECK_EQ_F(checked, value,
     "to_string: Unchecked InputActionAssetFlags value detected");
   return result;

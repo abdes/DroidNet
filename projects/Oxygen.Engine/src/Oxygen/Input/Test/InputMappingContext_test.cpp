@@ -6,20 +6,21 @@
 
 //! Unit tests for InputMappingContext routing and update semantics
 
+#include <chrono>
 #include <memory>
-
-#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
+#include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
+#include <Oxygen/Input/Test/InputSystemTest.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
-
-#include <Oxygen/Input/Test/InputSystemTest.h>
+#include <Oxygen/Platform/Types.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 
@@ -56,11 +57,13 @@ protected:
 
   auto MakeMouseMotion(float dx, float dy) -> MouseMotionEvent
   {
-    return MouseMotionEvent(Now(), kInvalidWindowId, { 0, 0 }, { dx, dy });
+    return MouseMotionEvent(
+      Now(), kInvalidWindowId, { .x = 0, .y = 0 }, { .dx = dx, .dy = dy });
   }
   auto MakeMouseWheel(float dx, float dy) -> MouseWheelEvent
   {
-    return MouseWheelEvent(Now(), kInvalidWindowId, { 0, 0 }, { dx, dy });
+    return MouseWheelEvent(
+      Now(), kInvalidWindowId, { .x = 0, .y = 0 }, { .dx = dx, .dy = dy });
   }
 };
 
@@ -106,7 +109,7 @@ NOLINT_TEST_F(InputMappingContextTest, SimilarSlots_RoutesMouseWheelVariants)
 {
   // Arrange
   InputMappingContext ctx("ctx2");
-  auto mk = [](const char* name) {
+  auto mk = [](const char* name) -> std::shared_ptr<Action> {
     return std::make_shared<Action>(
       name, oxygen::input::ActionValueType::kAxis1D);
   };
@@ -185,7 +188,10 @@ NOLINT_TEST_F(InputMappingContextTest, Update_ConsumptionCancelsLaterMappings)
   // Assert
   EXPECT_TRUE(consumed);
   EXPECT_TRUE(a1->IsTriggered());
-  EXPECT_TRUE(a2->IsCanceled()); // later mapping canceled
+  // Same slot was consumed: the later mapping never activates. It was never
+  // active, so it gets no Canceled edge either.
+  EXPECT_FALSE(a2->IsTriggered());
+  EXPECT_FALSE(a2->IsCanceled());
 }
 
 //! When a later mapping consumes input, earlier mappings must be canceled too
@@ -379,7 +385,7 @@ NOLINT_TEST_F(InputMappingContextTest, Update_NoConsumptionProcessesAll)
 {
   // Arrange
   InputMappingContext ctx("ctx4");
-  auto mk = [] {
+  auto mk = [] -> std::shared_ptr<Action> {
     return std::make_shared<Action>("A", oxygen::input::ActionValueType::kBool);
   };
 
@@ -425,7 +431,8 @@ NOLINT_TEST_F(InputMappingContextTest, ImplicitOnly_AllMustTrigger)
 
   auto hold = std::make_shared<ActionTriggerHold>();
   hold->MakeImplicit();
-  hold->SetHoldDurationThreshold(0.1F); // 100 ms
+  constexpr float kHoldSeconds = 0.1F; // 100 ms
+  hold->SetHoldDurationThreshold(kHoldSeconds);
   hold->OneShot(true);
   map->AddTrigger(hold);
 

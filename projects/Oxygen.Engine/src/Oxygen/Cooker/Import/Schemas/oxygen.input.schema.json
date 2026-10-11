@@ -45,6 +45,11 @@
         "consumes_input": {
           "type": "boolean",
           "default": false
+        },
+        "accumulation": {
+          "type": "string",
+          "enum": ["highest_absolute", "cumulative"],
+          "default": "highest_absolute"
         }
       },
       "required": ["name", "type"]

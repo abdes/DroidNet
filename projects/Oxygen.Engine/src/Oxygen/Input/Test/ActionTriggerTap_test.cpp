@@ -6,6 +6,8 @@
 
 //! Tests for ActionTriggerTap
 
+#include <chrono>
+
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -18,10 +20,14 @@ using namespace std::chrono_literals;
 
 namespace {
 
+//! Above a digital press, which reads as 1.0.
+constexpr float kAboveDigitalThreshold = 1.1F;
+
 NOLINT_TEST(ActionTriggerTap, TriggersOnQuickRelease)
 {
   ActionTriggerTap trigger;
-  trigger.SetTapTimeThreshold(0.2F);
+  constexpr float kTapSeconds = 0.2F;
+  trigger.SetTapTimeThreshold(kTapSeconds);
 
   ActionValue v { false };
 
@@ -39,7 +45,8 @@ NOLINT_TEST(ActionTriggerTap, FiresAtExactThreshold)
 {
   // Arrange
   ActionTriggerTap trigger;
-  trigger.SetTapTimeThreshold(0.20F);
+  constexpr float kTapSeconds = 0.20F;
+  trigger.SetTapTimeThreshold(kTapSeconds);
   ActionValue v { false };
 
   // Act
@@ -57,7 +64,8 @@ NOLINT_TEST(ActionTriggerTap, SetsCanceledOnRelease)
 {
   // Arrange
   ActionTriggerTap trigger;
-  trigger.SetTapTimeThreshold(0.10F);
+  constexpr float kTapSeconds = 0.10F;
+  trigger.SetTapTimeThreshold(kTapSeconds);
   ActionValue v { false };
 
   // Act: hold longer than threshold then release
@@ -76,7 +84,8 @@ NOLINT_TEST(ActionTriggerTap, TriggersAfterCancel)
 {
   // Arrange
   ActionTriggerTap trigger;
-  trigger.SetTapTimeThreshold(0.10F);
+  constexpr float kTapSeconds = 0.10F;
+  trigger.SetTapTimeThreshold(kTapSeconds);
   ActionValue v { false };
 
   // Act 1: cancel
@@ -104,7 +113,8 @@ NOLINT_TEST(ActionTriggerTap, DoubleTapFiresTwice)
 {
   // Arrange
   ActionTriggerTap trigger;
-  trigger.SetTapTimeThreshold(0.20F);
+  constexpr float kTapSeconds = 0.20F;
+  trigger.SetTapTimeThreshold(kTapSeconds);
   ActionValue v { false };
 
   // Act & Assert: first tap
@@ -128,8 +138,9 @@ NOLINT_TEST(ActionTriggerTap, NoTriggerBelowActuationThreshold)
   // Arrange
   ActionTriggerTap trigger;
   // Force a threshold higher than boolean 'true' mapping (assumed 1.0)
-  trigger.SetActuationThreshold(1.1F);
-  trigger.SetTapTimeThreshold(0.20F);
+  trigger.SetActuationThreshold(kAboveDigitalThreshold);
+  constexpr float kTapSeconds = 0.20F;
+  trigger.SetTapTimeThreshold(kTapSeconds);
   ActionValue v { false };
 
   // Act: press/release with boolean value; should not actuate
@@ -147,7 +158,8 @@ NOLINT_TEST(ActionTriggerTap, VeryShortPressTriggers)
 {
   // Arrange
   ActionTriggerTap trigger;
-  trigger.SetTapTimeThreshold(0.20F);
+  constexpr float kTapSeconds = 0.20F;
+  trigger.SetTapTimeThreshold(kTapSeconds);
   ActionValue v { false };
 
   // Act
@@ -163,7 +175,8 @@ NOLINT_TEST(ActionTriggerTap, VeryShortPressTriggers)
 NOLINT_TEST(ActionTriggerTap, DoesNotTriggerOnLongHold)
 {
   ActionTriggerTap trigger;
-  trigger.SetTapTimeThreshold(0.1F);
+  constexpr float kTapSeconds = 0.1F;
+  trigger.SetTapTimeThreshold(kTapSeconds);
 
   ActionValue v { false };
   v.Update(true);
@@ -178,7 +191,8 @@ NOLINT_TEST(ActionTriggerTap, DoesNotTriggerOnLongHold)
 NOLINT_TEST(ActionTriggerTap, NoTriggerIfNotReleased)
 {
   ActionTriggerTap trigger;
-  trigger.SetTapTimeThreshold(0.2F);
+  constexpr float kTapSeconds = 0.2F;
+  trigger.SetTapTimeThreshold(kTapSeconds);
   ActionValue v { false };
   v.Update(true);
   trigger.UpdateState(v, CanonicalDuration { 100ms });

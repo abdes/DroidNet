@@ -105,7 +105,8 @@ NOLINT_TEST_F(InputLoadersTest, LoadInputActionAssetValidDescriptorParses)
   desc.header.version = oxygen::data::pak::input::kInputActionAssetVersion;
   std::snprintf(desc.header.name, sizeof(desc.header.name), "%s", "Accel");
   desc.value_type = 2;
-  desc.flags = InputActionAssetFlags::kConsumesInput;
+  desc.flags = InputActionAssetFlags::kConsumesInput
+    | InputActionAssetFlags::kCumulativeAccumulation;
 
   WriteBlob(desc);
   ASSERT_TRUE(writer_.Flush());
@@ -115,6 +116,7 @@ NOLINT_TEST_F(InputLoadersTest, LoadInputActionAssetValidDescriptorParses)
   ASSERT_THAT(asset, ::testing::NotNull());
   EXPECT_EQ(asset->GetValueTypeId(), 2);
   EXPECT_TRUE(asset->ConsumesInput());
+  EXPECT_TRUE(asset->AccumulatesCumulatively());
 }
 
 NOLINT_TEST_F(InputLoadersTest,

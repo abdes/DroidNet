@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionState.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -22,6 +23,18 @@ auto oxygen::input::to_string(
     return "Axis1D";
   case ActionValueType::kAxis2D:
     return "Axis2D";
+  }
+  return "__NotSupported__";
+}
+
+auto oxygen::input::to_string(
+  const oxygen::input::ActionAccumulation value) noexcept -> std::string_view
+{
+  switch (value) {
+  case ActionAccumulation::kHighestAbsolute:
+    return "HighestAbsolute";
+  case ActionAccumulation::kCumulative:
+    return "Cumulative";
   }
   return "__NotSupported__";
 }
@@ -82,7 +95,8 @@ auto oxygen::input::to_string(const oxygen::input::ActionState value)
   bool first = true;
   auto checked = Flags::kNone;
 
-  const auto check_and_append = [&](const Flags flag, const char* name) {
+  const auto check_and_append
+    = [&](const Flags flag, const char* name) -> void {
     if ((value & flag) == flag) {
       if (!first) {
         result += " | ";

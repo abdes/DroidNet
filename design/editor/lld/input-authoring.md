@@ -82,10 +82,10 @@ Engine, verified in source:
   by name; hydration merges distinct action assets that share a name, and
   script input events are named after the action ([IF-12][mf]).
 - **Mapping order is evaluation order.** When a consuming action triggers,
-  every later mapping in its context is cancelled and lower-priority contexts
-  are not updated that frame, whatever input they are bound to. The engine's
-  own documentation says only the consumed input is blocked
-  ([IF-9][mf]).
+  later mappings in its context and mappings in lower-priority contexts are
+  skipped for that event only if their slot shares a physical source with the
+  consumer; an active one is cancelled, an idle one drops its input silently
+  ([IF-9][mf], delivered).
 - **Triggers.** Hydration reads `hold_time` for hold, hold-and-release and
   tap (tap's release window), `interval` for pulse, `chord_action` for chord
   and action chain (both become the same runtime `ActionTriggerChain`,
@@ -94,10 +94,13 @@ Engine, verified in source:
   Canceled 4, Completed 8, Triggered 16) and `time_to_complete` in seconds.
   After the first step, a step's window must be positive or the combo resets.
 - **A mapping without triggers never fires.**
-- **Scale and bias are cooked but not applied**: hydration and
-  `InputActionMapping` ignore them
-  ([IF-1][mf]). A key drives an
-  axis action's X component with 1 while pressed.
+- **Scale and bias apply per component** (`value * scale + bias`; no bias on
+  mouse and wheel deltas). A key feeds both components, so W with scale
+  (0, 1) gives (0, 1) and an unscaled key on an Axis 2D action gives (1, 1)
+  ([IF-1][mf], delivered).
+- **Several mappings of one action combine** per the action's
+  `accumulation`: `highest_absolute` (default; W and Up Arrow do not stack)
+  or `cumulative` (sum; W and S cancel out).
 - **Starting contexts.** A scene's starting input contexts, authored in its
   Play section, are the only way contexts start
   ([player][player-start]). ED-M08.10l removes the `auto_load` and
@@ -300,6 +303,7 @@ adds the cross-file checks a schema cannot express. Seconds display with an
 | Description                        | `description`                     | empty                              | up to 256 characters ([IF-13][mf])                      |
 | Value type                         | `type`                            | Digital (`bool`)                   | enum                                                    |
 | Consume input                      | `consumes_input`                  | off                                | bool                                                    |
+| Accumulation                       | `accumulation`                    | Highest absolute                   | enum: `highest_absolute`, `cumulative`                  |
 | Context name                       | `contexts[].name`                 | file stem                          | section 7.2                                             |
 | Priority                           | `contexts[].priority`             | 0                                  | int32; higher runs first                                |
 | Input                              | `mappings[].slot`                 | chosen when added                  | a known slot; `None` shows as Unbound                   |
@@ -726,15 +730,15 @@ not gaps: they are fixed before the input UI is built, as listed with their
 pass/fail checks in the plan's
 [findings][findings].
 
-| ID   | Gap                                                                                                                                                                                  | Editor handling                                       | Matters for V0.1                                                          |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------- |
-| EG-1 | Runtime trigger options absent from the cooked format: hold one-shot; pulse trigger-on-start, limit, jitter, phase, ramp; combo breakers (chain options join the format with IF-10). | Not offered.                                          | No; combo breakers and hold one-shot are the first candidates after V0.1. |
-| EG-2 | No input modifiers beyond scale and bias (dead zone, smoothing, response curves).                                                                                                    | Not offered.                                          | No; negate and swizzle follow from IF-1.                                  |
-| EG-3 | No triggers on the action itself shared by all its mappings.                                                                                                                         | Not offered; per-binding triggers only.               | No.                                                                       |
-| EG-4 | No 3D axis value type.                                                                                                                                                               | Not offered.                                          | No.                                                                       |
-| EG-5 | No gamepad slots.                                                                                                                                                                    | Not offered; the key selector has no gamepad section. | No (out of scope).                                                        |
-| EG-6 | No player-remappable bindings or runtime rebinding.                                                                                                                                  | Not offered.                                          | No (out of scope).                                                        |
-| EG-7 | No API to evaluate a context against synthetic input outside a running game.                                                                                                         | No in-editor preview (IQ-7).                          | No.                                                                       |
+| ID   | Gap                                                                                                                                                                                  | Editor handling                                       | Matters for V0.1                                                                                                    |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| EG-1 | Runtime trigger options absent from the cooked format: hold one-shot; pulse trigger-on-start, limit, jitter, phase, ramp; combo breakers (chain options join the format with IF-10). | Not offered.                                          | No; combo breakers and hold one-shot are the first candidates after V0.1.                                           |
+| EG-2 | No input modifiers beyond scale and bias (dead zone, smoothing, response curves).                                                                                                    | Not offered.                                          | No; negate is a negative scale, and a scalar input feeds both components, so swizzle is not needed for keys (IF-1). |
+| EG-3 | No triggers on the action itself shared by all its mappings.                                                                                                                         | Not offered; per-binding triggers only.               | No.                                                                                                                 |
+| EG-4 | No 3D axis value type.                                                                                                                                                               | Not offered.                                          | No.                                                                                                                 |
+| EG-5 | No gamepad slots.                                                                                                                                                                    | Not offered; the key selector has no gamepad section. | No (out of scope).                                                                                                  |
+| EG-6 | No player-remappable bindings or runtime rebinding.                                                                                                                                  | Not offered.                                          | No (out of scope).                                                                                                  |
+| EG-7 | No API to evaluate a context against synthetic input outside a running game.                                                                                                         | No in-editor preview (IQ-7).                          | No.                                                                                                                 |
 
 ### 15.2 Open questions
 

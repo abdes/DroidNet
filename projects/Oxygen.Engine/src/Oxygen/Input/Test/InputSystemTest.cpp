@@ -4,8 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+
+#include <gtest/gtest.h>
+
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Input/Test/InputSystemTest.h>
+#include <Oxygen/OxCo/BroadcastChannel.h>
+#include <Oxygen/Platform/Input.h>
+#include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/Types.h>
 
 namespace oxygen::engine::internal {
@@ -77,7 +87,7 @@ void InputSystemTest::SendMouseMotion(
   using oxygen::platform::MouseMotionEvent;
 
   auto event = std::make_shared<MouseMotionEvent>(
-    Now(), kInvalidWindowId, position, SubPixelMotion { dx, dy });
+    Now(), kInvalidWindowId, position, SubPixelMotion { .dx = dx, .dy = dy });
   auto& writer = input_channel_->ForWrite();
   bool sent = writer.TrySend(event);
   ASSERT_TRUE(sent) << "Failed to send mouse motion event to broadcast channel";
@@ -90,7 +100,7 @@ void InputSystemTest::SendMouseWheel(
   using oxygen::platform::MouseWheelEvent;
 
   auto event = std::make_shared<MouseWheelEvent>(
-    Now(), kInvalidWindowId, position, SubPixelMotion { dx, dy });
+    Now(), kInvalidWindowId, position, SubPixelMotion { .dx = dx, .dy = dy });
   auto& writer = input_channel_->ForWrite();
   bool sent = writer.TrySend(event);
   ASSERT_TRUE(sent) << "Failed to send mouse wheel event to broadcast channel";

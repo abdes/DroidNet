@@ -6,12 +6,20 @@
 
 //! Tests for ActionTriggerReleased
 
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
+
+//! Above a digital press, which reads as 1.0.
+constexpr float kAboveDigitalThreshold = 1.1F;
+//! Axis actuation threshold.
+constexpr float kAxisThreshold = 0.40F;
+//! Axis value just above kAxisThreshold.
+constexpr float kAboveAxisThreshold = 0.41F;
 
 using oxygen::Axis1D;
 using oxygen::input::ActionTriggerReleased;
@@ -63,7 +71,7 @@ NOLINT_TEST(ActionTriggerReleased, NoTriggerBelowActuationThreshold)
 {
   // Arrange
   ActionTriggerReleased trigger;
-  trigger.SetActuationThreshold(1.1F);
+  trigger.SetActuationThreshold(kAboveDigitalThreshold);
   ActionValue v { false };
 
   // Act: press with boolean 'true' (mapped to 1.0) < 1.1 -> no ongoing
@@ -82,11 +90,11 @@ NOLINT_TEST(ActionTriggerReleased, TriggersOnPositiveFall)
 {
   // Arrange
   ActionTriggerReleased trigger;
-  trigger.SetActuationThreshold(0.40F);
+  trigger.SetActuationThreshold(kAxisThreshold);
   ActionValue v { Axis1D { 0.0F } };
 
   // Rise above threshold (Ongoing), no trigger yet
-  v.Update(Axis1D { 0.41F });
+  v.Update(Axis1D { kAboveAxisThreshold });
   trigger.UpdateState(v, CanonicalDuration {});
   EXPECT_FALSE(trigger.IsTriggered());
 
@@ -101,7 +109,7 @@ NOLINT_TEST(ActionTriggerReleased, TriggersOnNegativeRiseToZero)
 {
   // Arrange
   ActionTriggerReleased trigger;
-  trigger.SetActuationThreshold(0.40F);
+  trigger.SetActuationThreshold(kAxisThreshold);
   ActionValue v { Axis1D { 0.0F } };
 
   // Go negative beyond threshold (Ongoing), no trigger yet

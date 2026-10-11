@@ -4,16 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Input/Test/InputSystemTest.h>
+#include <chrono>
+#include <cstdint>
+#include <format>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include <gtest/gtest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
+#include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
+#include <Oxygen/Input/Test/InputSystemTest.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Input.h>
+#include <Oxygen/Platform/InputEvent.h>
 
 using oxygen::observer_ptr;
 using oxygen::input::Action;
@@ -38,6 +52,10 @@ struct EngineTagFactory {
 
 namespace {
 
+//! Mapping context priorities above the default of 0.
+constexpr int32_t kHighPriority = 100;
+constexpr int32_t kModifierPriority = 1000;
+
 class InputSystemIntegrationTest : public InputSystemTest { };
 
 //! Integration: realistic combat input with history log and validation
@@ -56,7 +74,8 @@ class InputSystemIntegrationTest : public InputSystemTest { };
 NOLINT_TEST_F(
   InputSystemIntegrationTest, CombatScenario_Integration_HistoryMatches)
 {
-  oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
+  oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange ---------------------------------------------------------------
     auto attack = std::make_shared<Action>("Attack", ActionValueType::kBool);
     auto charged
@@ -72,12 +91,12 @@ NOLINT_TEST_F(
     roll->SetConsumesInput(true);
     dodge->SetConsumesInput(true);
 
-    input_system_->AddAction(attack);
-    input_system_->AddAction(charged);
-    input_system_->AddAction(jump);
-    input_system_->AddAction(move);
-    input_system_->AddAction(roll);
-    input_system_->AddAction(dodge);
+    System().AddAction(attack);
+    System().AddAction(charged);
+    System().AddAction(jump);
+    System().AddAction(move);
+    System().AddAction(roll);
+    System().AddAction(dodge);
 
     auto ctx = std::make_shared<InputMappingContext>("combat");
 
@@ -112,7 +131,7 @@ NOLINT_TEST_F(
 
     // Move: W/A/S/D Down (treat as boolean movement on). We'll use W in the
     // scenario, but wire all 4 for completeness.
-    auto add_move_map = [&](const auto& slot) {
+    auto add_move_map = [&](const auto& slot) -> void {
       auto m = std::make_shared<InputActionMapping>(move, slot);
       auto d = std::make_shared<ActionTriggerDown>();
       d->MakeExplicit();
@@ -155,8 +174,8 @@ NOLINT_TEST_F(
     }
 
     // Register context
-    input_system_->AddMappingContext(ctx, 0);
-    input_system_->ActivateMappingContext(ctx);
+    System().AddMappingContext(ctx, 0);
+    System().ActivateMappingContext(ctx);
 
     // Helpers ---------------------------------------------------------------
     auto key_to_str = [](Key k) -> const char* {
@@ -189,6 +208,8 @@ NOLINT_TEST_F(
     };
 
     // Build scenario frames -------------------------------------------------
+    constexpr int kChargeFrame1Ms = 300;
+    constexpr int kChargeFrame2Ms = 250;
     std::vector<FrameStep> steps = {
       // F1: Jump
       FrameStep { .events={ { Key::kSpace, ButtonState::kPressed } }, .dt_ms=0 },
@@ -202,8 +223,8 @@ NOLINT_TEST_F(
       },
       // F3..F6: Charged (hold J across time, release)
       FrameStep { .events={ { Key::kJ, ButtonState::kPressed } }, .dt_ms=0 }, // F3
-      FrameStep { .events={}, .dt_ms=300 }, // F4 +300ms
-      FrameStep { .events={}, .dt_ms=250 }, // F5 +250ms (total 550ms)
+      FrameStep { .events={}, .dt_ms=kChargeFrame1Ms }, // F4 +300ms
+      FrameStep { .events={}, .dt_ms=kChargeFrame2Ms }, // F5 +250ms (total 550ms)
       FrameStep { .events={ { Key::kJ, ButtonState::kReleased } }, .dt_ms=0 }, // F6
       // F7-F9: Dodge roll while moving (W held, then K press, then stop move)
       FrameStep { .events={ { Key::kW, ButtonState::kPressed } }, .dt_ms=0 }, // F7
@@ -235,9 +256,9 @@ NOLINT_TEST_F(
 
     using Tag = oxygen::engine::internal::EngineTagFactory;
 
-    for (size_t i = 0; i < steps.size(); ++i) {
-      const auto frame_index = static_cast<int>(i + 1);
-      const auto& step = steps[i];
+    int frame_index = 0;
+    for (const auto& step : steps) {
+      ++frame_index;
 
       // Inject input events for this frame
       std::string ev_desc;
@@ -266,16 +287,16 @@ NOLINT_TEST_F(
         timing.fixed_delta_time = oxygen::time::CanonicalDuration {
           std::chrono::milliseconds(step.dt_ms)
         };
-        frame_context_->SetModuleTimingData(timing, Tag::Get());
+        Context()->SetModuleTimingData(timing, Tag::Get());
       }
 
       // Process a frame through the InputSystem
-      input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
-      co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+      System().OnFrameStart(Context());
+      co_await System().OnInput(Context());
 
       // Gather triggered actions for this frame
       std::vector<std::string_view> fired;
-      auto capture = [&](const std::shared_ptr<Action>& a) {
+      auto capture = [&](const std::shared_ptr<Action>& a) -> void {
         if (a->WasTriggeredThisFrame()) {
           fired.emplace_back(a->GetName());
         }
@@ -291,19 +312,22 @@ NOLINT_TEST_F(
       if (fired.empty()) {
         act_desc = "None";
       } else {
-        for (size_t j = 0; j < fired.size(); ++j) {
-          if (j > 0)
+        bool first_action = true;
+        for (const auto& name : fired) {
+          if (!first_action) {
             act_desc += ", ";
-          act_desc += std::string(fired[j]);
+          }
+          act_desc += name;
+          first_action = false;
         }
       }
 
-      history.emplace_back("[F" + std::to_string(frame_index) + "] " + ev_desc
-        + " -> " + act_desc);
+      history.emplace_back(
+        std::format("[F{}] {} -> {}", frame_index, ev_desc, act_desc));
 
       // Finalize frame phases
-      input_system_->OnSnapshot(observer_ptr { frame_context_.get() });
-      input_system_->OnFrameEnd(observer_ptr { frame_context_.get() });
+      System().OnSnapshot(Context());
+      System().OnFrameEnd(Context());
     }
 
     // Assert ---------------------------------------------------------------
@@ -316,7 +340,8 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   InputSystemIntegrationTest, CrossContext_ConsumerCancelsEarlierContext)
 {
-  oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
+  oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
     auto shift = std::make_shared<Action>("Shift", ActionValueType::kBool);
     auto jump = std::make_shared<Action>("Jump", ActionValueType::kBool);
@@ -326,9 +351,9 @@ NOLINT_TEST_F(
     // JumpHigher consumes input
     jump_higher->SetConsumesInput(true);
 
-    input_system_->AddAction(shift);
-    input_system_->AddAction(jump);
-    input_system_->AddAction(jump_higher);
+    System().AddAction(shift);
+    System().AddAction(jump);
+    System().AddAction(jump_higher);
 
     // High-priority modifier context (Shift)
     auto mod_ctx = std::make_shared<InputMappingContext>("mods");
@@ -340,8 +365,8 @@ NOLINT_TEST_F(
       map_shift->AddTrigger(t);
       mod_ctx->AddMapping(map_shift);
     }
-    input_system_->AddMappingContext(mod_ctx, 1000);
-    input_system_->ActivateMappingContext(mod_ctx);
+    System().AddMappingContext(mod_ctx, kModifierPriority);
+    System().ActivateMappingContext(mod_ctx);
 
     // Ground movement context with JumpHigher (chain + consume), then Jump
     auto ground_ctx = std::make_shared<InputMappingContext>("ground");
@@ -368,19 +393,19 @@ NOLINT_TEST_F(
       m_jump->AddTrigger(t_jump);
       ground_ctx->AddMapping(m_jump);
     }
-    input_system_->AddMappingContext(ground_ctx, 0);
-    input_system_->ActivateMappingContext(ground_ctx);
+    System().AddMappingContext(ground_ctx, 0);
+    System().ActivateMappingContext(ground_ctx);
 
     // Step 1: press Shift to arm the chain
     SendKeyEvent(Key::kLeftShift, ButtonState::kPressed);
-    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
-    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+    System().OnFrameStart(Context());
+    co_await System().OnInput(Context());
 
     // Step 2: Press and release Space (same frame) -> JumpHigher should trigger
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
     SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
-    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+    System().OnFrameStart(Context());
+    co_await System().OnInput(Context());
 
     // After the release the consuming JumpHigher must trigger and the Jump
     // mapping in the same context (or other contexts) must be cancelled.
@@ -394,7 +419,8 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
 {
-  oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
+  oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange: High-priority context with 'High' mapping; low-priority context
     // with two mappings whose order relative to a consumer will be validated.
     auto high = std::make_shared<Action>("High", ActionValueType::kBool);
@@ -404,9 +430,9 @@ NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
     // B will be the consumer in our scenarios
     lowB->SetConsumesInput(true);
 
-    input_system_->AddAction(high);
-    input_system_->AddAction(lowA);
-    input_system_->AddAction(lowB);
+    System().AddAction(high);
+    System().AddAction(lowA);
+    System().AddAction(lowB);
 
     // High context (priority 100)
     auto ctx_high = std::make_shared<InputMappingContext>("high_ctx");
@@ -436,15 +462,15 @@ NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
       ctx_low1->AddMapping(mB);
     }
 
-    input_system_->AddMappingContext(ctx_low1, 0);
-    input_system_->AddMappingContext(ctx_high, 100);
-    input_system_->ActivateMappingContext(ctx_low1);
-    input_system_->ActivateMappingContext(ctx_high);
+    System().AddMappingContext(ctx_low1, 0);
+    System().AddMappingContext(ctx_high, kHighPriority);
+    System().ActivateMappingContext(ctx_low1);
+    System().ActivateMappingContext(ctx_high);
 
     // Press: high-priority Pressed mapping should trigger on the press frame
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
-    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
-    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+    System().OnFrameStart(Context());
+    co_await System().OnInput(Context());
 
     EXPECT_TRUE(high->WasTriggeredThisFrame());
     EXPECT_FALSE(lowA->WasTriggeredThisFrame());
@@ -452,8 +478,8 @@ NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
 
     // Release: tap mappings in the low context should trigger on release
     SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
-    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+    System().OnFrameStart(Context());
+    co_await System().OnInput(Context());
 
     EXPECT_FALSE(high->WasTriggeredThisFrame());
     EXPECT_TRUE(lowA->WasTriggeredThisFrame());
@@ -480,21 +506,21 @@ NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
     }
 
     // Replace the lower-priority context with this new ordering
-    input_system_->DeactivateMappingContext(ctx_low1);
-    input_system_->AddMappingContext(ctx_low2, 0);
-    input_system_->ActivateMappingContext(ctx_low2);
+    System().DeactivateMappingContext(ctx_low1);
+    System().AddMappingContext(ctx_low2, 0);
+    System().ActivateMappingContext(ctx_low2);
 
     // Press: high triggers on press frame
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
-    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
-    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+    System().OnFrameStart(Context());
+    co_await System().OnInput(Context());
 
     EXPECT_TRUE(high->WasTriggeredThisFrame());
 
     // Release: consumer lowB should trigger and cancel the later lowA mapping
     SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
-    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+    System().OnFrameStart(Context());
+    co_await System().OnInput(Context());
 
     EXPECT_FALSE(high->WasTriggeredThisFrame());
     EXPECT_TRUE(lowB->WasTriggeredThisFrame());
@@ -510,7 +536,8 @@ NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
 NOLINT_TEST_F(
   InputSystemIntegrationTest, TDD_JumpHigherCancelsThenJumpTriggersOnNextTap)
 {
-  oxygen::co::Run(loop_, [&]() -> oxygen::co::Co<> {
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
+  oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange (same wiring as CrossContext_ConsumerCancelsEarlierContext)
     auto shift = std::make_shared<Action>("Shift", ActionValueType::kBool);
     auto jump = std::make_shared<Action>("Jump", ActionValueType::kBool);
@@ -518,9 +545,9 @@ NOLINT_TEST_F(
       = std::make_shared<Action>("JumpHigher", ActionValueType::kBool);
     jump_higher->SetConsumesInput(true);
 
-    input_system_->AddAction(shift);
-    input_system_->AddAction(jump);
-    input_system_->AddAction(jump_higher);
+    System().AddAction(shift);
+    System().AddAction(jump);
+    System().AddAction(jump_higher);
 
     auto mod_ctx = std::make_shared<InputMappingContext>("mods");
     {
@@ -531,8 +558,8 @@ NOLINT_TEST_F(
       map_shift->AddTrigger(t);
       mod_ctx->AddMapping(map_shift);
     }
-    input_system_->AddMappingContext(mod_ctx, 1000);
-    input_system_->ActivateMappingContext(mod_ctx);
+    System().AddMappingContext(mod_ctx, kModifierPriority);
+    System().ActivateMappingContext(mod_ctx);
 
     auto ground_ctx = std::make_shared<InputMappingContext>("ground");
     {
@@ -554,19 +581,19 @@ NOLINT_TEST_F(
       m_jump->AddTrigger(t_jump);
       ground_ctx->AddMapping(m_jump);
     }
-    input_system_->AddMappingContext(ground_ctx, 0);
-    input_system_->ActivateMappingContext(ground_ctx);
+    System().AddMappingContext(ground_ctx, 0);
+    System().ActivateMappingContext(ground_ctx);
 
     // Press Shift
     SendKeyEvent(Key::kLeftShift, ButtonState::kPressed);
-    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
-    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+    System().OnFrameStart(Context());
+    co_await System().OnInput(Context());
 
     // Press+release Space -> JumpHigher should trigger and Jump canceled
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
     SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
-    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+    System().OnFrameStart(Context());
+    co_await System().OnInput(Context());
 
     EXPECT_TRUE(jump_higher->WasTriggeredThisFrame());
     EXPECT_TRUE(jump->WasCanceledThisFrame());
@@ -574,13 +601,13 @@ NOLINT_TEST_F(
     // Release Shift so the chain is no longer armed, then single tap Space
     // should allow Jump to trigger on its own.
     SendKeyEvent(Key::kLeftShift, ButtonState::kReleased);
-    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
-    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+    System().OnFrameStart(Context());
+    co_await System().OnInput(Context());
 
     SendKeyEvent(Key::kSpace, ButtonState::kPressed);
     SendKeyEvent(Key::kSpace, ButtonState::kReleased);
-    input_system_->OnFrameStart(observer_ptr { frame_context_.get() });
-    co_await input_system_->OnInput(observer_ptr { frame_context_.get() });
+    System().OnFrameStart(Context());
+    co_await System().OnInput(Context());
 
     EXPECT_TRUE(jump->WasTriggeredThisFrame());
 

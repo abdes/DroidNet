@@ -6,8 +6,11 @@
 
 #pragma once
 
+#include <cstdint>
 #include <span>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Input/ActionState.h>
@@ -20,59 +23,58 @@ class InputSystem;
 
 namespace oxygen::input {
 
-class ActionTrigger;
+class InputActionMapping;
 
-//! High-level input Action with per-frame edges and persistent level state.
+namespace testing {
+  class ActionTestAccess;
+} // namespace testing
+
+//! How an action combines the values of its bindings.
+enum class ActionAccumulation : uint8_t {
+  //! Per component, keep the value with the largest magnitude. Duplicate
+  //! bindings for one direction do not stack (W and Up give 1); opposing
+  //! bindings do not cancel.
+  kHighestAbsolute,
+  //! Per component, sum the bindings. Opposing bindings cancel (W and S give
+  //! 0); duplicate bindings for one direction stack (W and Up give 2).
+  kCumulative,
+};
+
+OXGN_NPUT_NDAPI auto to_string(ActionAccumulation value) noexcept
+  -> std::string_view;
+
+//! High-level input action with per-frame edges and persistent level state.
 /*!
- Maintains a persistent "level" state (ongoing/value) across frames and
- exposes per-frame edges (triggered, completed, canceled, started/released
- derived from transitions) that reset every frame.
+ An action is driven by one or more bindings (InputActionMapping), possibly in
+ several mapping contexts. Each binding contributes its own evaluation; the
+ action combines them:
 
-### Invariants
+ - Ongoing and Triggered when any binding is.
+ - Canceled only when a binding canceled and no binding is active.
+ - Value per component according to GetAccumulation().
+ - Completed when an activation that triggered at least once ends without a
+   cancel. Activations that never hold (Pressed, Tap, Released) complete on
+   the frame after they trigger, so every activation that triggered is closed
+   by exactly one Completed edge.
 
-- Edge flags are non-sticky: `triggered`, `completed`, and `canceled` are
-  cleared at the beginning of each frame by BeginFrameTracking().
-- Level state persists: `ongoing` persists across frames and reflects the
-  current held/active condition of the action.
-- Transitions are per-frame: only transitions that occur after
-  BeginFrameTracking() and before EndFrameTracking() are visible via
-  GetFrameTransitions() and Was*ThisFrame() helpers.
-- Value persistence: `value_` persists as the last known value across frames.
-  Use WasValueUpdatedThisFrame() to detect updates in the current frame.
+ ### Frame model
 
-### Contract
+ Level state (`ongoing`, value) persists across frames. Edges (`triggered`,
+ `completed`, `canceled`) and the frame's transitions are cleared when the
+ InputSystem starts a frame. Use the Was*ThisFrame() queries for edges and
+ Is*() for levels.
 
-- Inputs: State snapshots (from mappings/triggers) and an ActionValue.
-- Outputs: Per-frame transitions and edge helpers for the current frame.
-- Error modes: Duplicate updates with identical flags produce no transitions.
+ ### Ownership
 
-### Frame Lifecycle
+ Gameplay reads actions; only the input system changes them. State mutation
+ is private to InputSystem and InputActionMapping. Engine phases after kInput
+ should read the published InputSnapshot, which is immutable.
 
-- BeginFrameTracking():
-  - Clears per-frame edges and transitions: sets `triggered`, `completed`,
-    and `canceled` to false; preserves `ongoing`.
-  - Clears the per-frame value-updated flag.
-- UpdateState(state, value):
-  - Updates `state_` and `value_`.
-  - Records a transition when the snapshot flags change.
-- EndFrameTracking():
-  - No hard reset. Level state (`ongoing` and `value_`) persists into the
-    next frame. Per-frame transitions remain as the snapshot of this frame.
-
-### Usage Notes
-
-- Use IsOngoing()/IsIdle() for level conditions.
-- Use Was*ThisFrame() helpers for edges (Started/Released/etc.).
-- Consumers that need precise timing should read GetFrameTransitions().
-
- @see BeginFrameTracking, EndFrameTracking, GetFrameTransitions,
- WasTriggeredThisFrame, WasCompletedThisFrame, WasCanceledThisFrame,
- WasReleasedThisFrame, WasValueUpdatedThisFrame
+ @see InputActionMapping, InputSnapshot
 */
 class Action {
 public:
-  //! Update action state and record transitions
-  // New: update using a scoped State struct to avoid error-prone bool args
+  //! Level and edge flags of an action or of one binding's evaluation.
   struct State {
     bool triggered { false };
     bool ongoing { false };
@@ -102,17 +104,22 @@ public:
     return value_type_;
   }
 
+  //! Current value, combined from all bindings. Relative inputs (mouse
+  //! motion, wheel) hold the sum of the current frame's motion.
   [[nodiscard]] auto GetValue() const -> const ActionValue& { return value_; }
 
-  //! Value lifetime semantics:
-  //! - `value_` persists as the last known value across frames.
-  //! - Use WasValueUpdatedThisFrame() to detect value updates in the frame.
+  //! True if the value was written at least once in the current frame.
   OXGN_NPUT_NDAPI auto WasValueUpdatedThisFrame() const -> bool;
+
+  // -- Configuration ----------------------------------------------------------
 
   [[nodiscard]] auto ConsumesInput() const { return consume_input_; }
   void SetConsumesInput(bool consume) { consume_input_ = consume; }
 
-  // -- Action state queries ---------------------------------------------------
+  [[nodiscard]] auto GetAccumulation() const { return accumulation_; }
+  void SetAccumulation(const ActionAccumulation mode) { accumulation_ = mode; }
+
+  // -- Level queries ----------------------------------------------------------
 
   [[nodiscard]] auto IsCanceled() const { return state_.canceled; }
   [[nodiscard]] auto IsCompleted() const { return state_.completed; }
@@ -123,24 +130,14 @@ public:
   }
   [[nodiscard]] auto IsTriggered() const { return state_.triggered; }
 
-  OXGN_NPUT_API void UpdateState(const State& state, const ActionValue& value);
+  // -- Edge queries (current frame) -------------------------------------------
 
-  // -- Frame transition tracking ----------------------------------------------
-
-  //! Begin tracking transitions for a new frame
-  OXGN_NPUT_API void BeginFrameTracking();
-
-  //! End frame tracking and finalize transition history
-  OXGN_NPUT_API void EndFrameTracking();
-
-  //! Get all transitions that occurred during the current frame
+  //! All transitions recorded in the current frame, in order.
   [[nodiscard]] auto GetFrameTransitions() const
     -> std::span<const FrameTransition>
   {
     return frame_transitions_;
   }
-
-  // -- Convenience per-frame edge queries -------------------------------------
 
   //! True if the action transitioned Idle->Ongoing in this frame
   OXGN_NPUT_NDAPI auto WasStartedThisFrame() const -> bool;
@@ -157,29 +154,80 @@ public:
   //! True if the action transitioned Ongoing->Idle in this frame
   OXGN_NPUT_NDAPI auto WasReleasedThisFrame() const -> bool;
 
+  //! Identifies the current frame; advances each time a frame starts. Lets
+  //! observers tell this frame's transitions from a previous frame's.
+  [[nodiscard]] auto GetFrameSerial() const noexcept { return frame_serial_; }
+
+  // -- Fixed-step consumption -------------------------------------------------
+
+  //! Consume one Triggered edge for a fixed-step consumer.
+  /*!
+   Every rising Triggered edge is latched until consumed, independently of the
+   per-frame edge window. A fixed-step simulation calls this once per substep:
+   one press yields exactly one `true`, whether the frame runs zero, one or
+   several substeps. Actions that trigger every frame while held (Down, Pulse)
+   latch one edge per frame in which they trigger.
+  */
+  OXGN_NPUT_NDAPI auto ConsumeFixedStepTrigger() -> bool;
+
+  //! Number of latched Triggered edges not yet consumed.
+  [[nodiscard]] auto GetPendingFixedStepTriggers() const noexcept
+  {
+    return pending_fixed_triggers_;
+  }
+
 private:
+  friend class engine::InputSystem;
+  friend class InputActionMapping;
+  friend class testing::ActionTestAccess;
+
+  //! One binding's latest evaluation of this action.
+  struct Contribution {
+    const void* binding { nullptr };
+    State state {};
+    ActionValue value;
+    //! Frame serial at which `state` was written; edges from earlier frames
+    //! are ignored when combining.
+    uint64_t frame_serial { 0 };
+  };
+
+  //! Record a binding's evaluation and recompute the action.
+  OXGN_NPUT_API void Contribute(
+    const void* binding, const State& state, const ActionValue& value);
+
+  //! Forget a binding (its context was deactivated or removed).
+  OXGN_NPUT_API void RemoveContribution(const void* binding);
+
+  //! Start a frame: clear edges and transitions; close non-held activations
+  //! that triggered in the previous frame with a Completed edge.
+  OXGN_NPUT_API void BeginFrameTracking();
+
+  //! End a frame. Level state persists; transitions stay readable until the
+  //! next BeginFrameTracking().
+  OXGN_NPUT_API void EndFrameTracking();
+
+  //! Replace the state and value and record a transition if the flags change.
+  OXGN_NPUT_API void UpdateState(const State& state, const ActionValue& value);
+
+  void Recombine();
+  void RecordTransition(
+    ActionState from, ActionState to, const ActionValue& value);
+  [[nodiscard]] auto ZeroValue() const -> ActionValue;
+
   std::string name_;
   ActionValueType value_type_;
   ActionValue value_;
   bool consume_input_ { false };
+  ActionAccumulation accumulation_ { ActionAccumulation::kHighestAbsolute };
 
-  // Current action state
-  State state_ {
-    .triggered = false,
-    .ongoing = false,
-    .completed = false,
-    .canceled = false,
-  };
-
-  // Frame transition tracking
+  State state_ {};
   std::vector<FrameTransition> frame_transitions_;
-
-  // Per-frame flag indicating whether value_ was updated in the frame
   bool value_updated_this_frame_ { false };
 
-  //! Helper to record a state transition
-  void RecordTransition(
-    ActionState from, ActionState to, const ActionValue& value);
+  std::vector<Contribution> contributions_;
+  uint64_t frame_serial_ { 1 };
+  bool triggered_this_activation_ { false };
+  uint32_t pending_fixed_triggers_ { 0 };
 };
 
 } // namespace oxygen::input

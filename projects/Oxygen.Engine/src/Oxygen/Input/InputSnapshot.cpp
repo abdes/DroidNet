@@ -5,9 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <memory>
+#include <span>
+#include <string_view>
+#include <vector>
 
+#include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/ActionState.h>
+#include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputSnapshot.h>
-#include <Oxygen/Platform/InputEvent.h>
 
 using oxygen::input::Action;
 using oxygen::input::ActionState;
@@ -20,10 +26,21 @@ InputSnapshot::InputSnapshot(
   // Build a thin lookup from name to action pointer. We deliberately do not
   // copy state or transitions to avoid redundancy. Actions won't change after
   // kInput, so querying them is stable during the remainder of the frame.
-  actions_.reserve(actions.size());
   for (const auto& a : actions) {
     if (a) {
-      actions_.emplace(a->GetName(), a.get());
+      const auto t = a->GetFrameTransitions();
+      actions_.emplace(a->GetName(),
+        Entry {
+          .state = Action::State {
+            .triggered = a->IsTriggered(),
+            .ongoing = a->IsOngoing(),
+            .completed = a->IsCompleted(),
+            .canceled = a->IsCanceled(),
+          },
+          .value = a->GetValue(),
+          .value_updated = a->WasValueUpdatedThisFrame(),
+          .transitions = { t.begin(), t.end() },
+        });
     }
   }
 }
@@ -32,32 +49,32 @@ auto InputSnapshot::IsActionTriggered(std::string_view action_name) const
   -> bool
 {
   const auto* a = FindAction(action_name);
-  return (a != nullptr) ? a->IsTriggered() : false;
+  return (a != nullptr) ? a->state.triggered : false;
 }
 
 auto InputSnapshot::IsActionOngoing(std::string_view action_name) const -> bool
 {
   const auto* a = FindAction(action_name);
-  return (a != nullptr) ? a->IsOngoing() : false;
+  return (a != nullptr) ? a->state.ongoing : false;
 }
 
 auto InputSnapshot::IsActionCompleted(std::string_view action_name) const
   -> bool
 {
   const auto* a = FindAction(action_name);
-  return (a != nullptr) ? a->IsCompleted() : false;
+  return (a != nullptr) ? a->state.completed : false;
 }
 
 auto InputSnapshot::IsActionCanceled(std::string_view action_name) const -> bool
 {
   const auto* a = FindAction(action_name);
-  return (a != nullptr) ? a->IsCanceled() : false;
+  return (a != nullptr) ? a->state.canceled : false;
 }
 
 auto InputSnapshot::IsActionIdle(std::string_view action_name) const -> bool
 {
   const auto* a = FindAction(action_name);
-  return (a != nullptr) ? a->IsIdle()
+  return (a != nullptr) ? !(a->state.ongoing || a->state.triggered)
                         : true; // Default to idle if action not found
 }
 
@@ -65,7 +82,7 @@ auto InputSnapshot::GetActionValue(std::string_view action_name) const
   -> ActionValue
 {
   const auto* a = FindAction(action_name);
-  return (a != nullptr) ? a->GetValue() : ActionValue {};
+  return (a != nullptr) ? a->value : ActionValue {};
 }
 
 auto InputSnapshot::DidActionStart(std::string_view action_name) const -> bool
@@ -75,7 +92,8 @@ auto InputSnapshot::DidActionStart(std::string_view action_name) const -> bool
     return false;
   }
   bool saw_start_edge = false; // within-frame Ongoing edge
-  for (const auto& t : a->GetFrameTransitions()) {
+  for (const auto& t :
+    std::span<const Action::FrameTransition>(a->transitions)) {
     const bool from_none = (t.from_state == ActionState::kNone);
     const bool from_ongoing
       = static_cast<bool>(t.from_state & ActionState::kOngoing);
@@ -120,11 +138,7 @@ auto InputSnapshot::GetActionStateFlags(std::string_view action_name) const
   if (a == nullptr) {
     return ActionState::kNone;
   }
-  return Action::State { .triggered = a->IsTriggered(),
-    .ongoing = a->IsOngoing(),
-    .completed = a->IsCompleted(),
-    .canceled = a->IsCanceled() }
-    .ToActionState();
+  return a->state.ToActionState();
 }
 
 auto InputSnapshot::DidActionTrigger(std::string_view action_name) const -> bool
@@ -134,7 +148,8 @@ auto InputSnapshot::DidActionTrigger(std::string_view action_name) const -> bool
     return false;
   }
   return std::ranges::any_of(
-    a->GetFrameTransitions(), [](const Action::FrameTransition& t) {
+    std::span<const Action::FrameTransition>(a->transitions),
+    [](const Action::FrameTransition& t) -> bool {
       return static_cast<bool>(t.to_state & ActionState::kTriggered);
     });
 }
@@ -145,20 +160,22 @@ auto InputSnapshot::DidActionRelease(std::string_view action_name) const -> bool
   if (a == nullptr) {
     return false;
   }
-  return std::ranges::any_of(a->GetFrameTransitions(), [](const auto& t) {
-    const bool from_ongoing
-      = static_cast<bool>(t.from_state & ActionState::kOngoing);
-    const bool to_ongoing
-      = static_cast<bool>(t.to_state & ActionState::kOngoing);
-    return from_ongoing && !to_ongoing;
-  });
+  return std::ranges::any_of(
+    std::span<const Action::FrameTransition>(a->transitions),
+    [](const auto& t) -> bool {
+      const bool from_ongoing
+        = static_cast<bool>(t.from_state & ActionState::kOngoing);
+      const bool to_ongoing
+        = static_cast<bool>(t.to_state & ActionState::kOngoing);
+      return from_ongoing && !to_ongoing;
+    });
 }
 
 auto InputSnapshot::DidActionValueUpdate(std::string_view action_name) const
   -> bool
 {
   const auto* a = FindAction(action_name);
-  return (a != nullptr) ? a->WasValueUpdatedThisFrame() : false;
+  return (a != nullptr) ? a->value_updated : false;
 }
 
 auto InputSnapshot::DidActionTransition(
@@ -170,7 +187,8 @@ auto InputSnapshot::DidActionTransition(
   }
 
   return std::ranges::any_of(
-    a->GetFrameTransitions(), [from, to](const Action::FrameTransition& t) {
+    std::span<const Action::FrameTransition>(a->transitions),
+    [from, to](const Action::FrameTransition& t) -> bool {
       return t.from_state == from && t.to_state == to;
     });
 }
@@ -179,13 +197,14 @@ auto InputSnapshot::GetActionTransitions(std::string_view action_name) const
   -> std::span<const Action::FrameTransition>
 {
   const auto* a = FindAction(action_name);
-  return (a != nullptr) ? a->GetFrameTransitions()
-                        : std::span<const Action::FrameTransition> {};
+  return (a != nullptr)
+    ? std::span<const Action::FrameTransition>(a->transitions)
+    : std::span<const Action::FrameTransition> {};
 }
 
 auto InputSnapshot::FindAction(std::string_view action_name) const
-  -> const Action*
+  -> const Entry*
 {
-  const auto it = actions_.find(std::string { action_name });
-  return it != actions_.end() ? it->second : nullptr;
+  const auto it = actions_.find(action_name);
+  return it != actions_.end() ? &it->second : nullptr;
 }

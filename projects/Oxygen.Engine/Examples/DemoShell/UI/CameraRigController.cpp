@@ -6,6 +6,10 @@
 
 #include <algorithm>
 
+#include "DemoShell/UI/CameraRigController.h"
+#include "DemoShell/UI/DroneCameraController.h"
+#include "DemoShell/UI/FlyCameraController.h"
+#include "DemoShell/UI/OrbitCameraController.h"
 #include <glm/geometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -16,11 +20,6 @@
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Scene/SceneNode.h>
-
-#include "DemoShell/UI/CameraRigController.h"
-#include "DemoShell/UI/DroneCameraController.h"
-#include "DemoShell/UI/FlyCameraController.h"
-#include "DemoShell/UI/OrbitCameraController.h"
 
 namespace oxygen::examples::ui {
 
@@ -336,12 +335,9 @@ auto CameraRigController::Update(time::CanonicalDuration delta_time) -> void
 
     if (orbit_action_
       && orbit_action_->GetValueType() == input::ActionValueType::kAxis2D) {
-      glm::vec2 orbit_delta(0.0F);
-      for (const auto& tr : orbit_action_->GetFrameTransitions()) {
-        const auto& v = tr.value_at_transition.GetAs<Axis2D>();
-        orbit_delta.x += v.x;
-        orbit_delta.y += v.y;
-      }
+      // A relative action's value is the whole-frame mouse delta.
+      const auto& v = orbit_action_->GetValue().GetAs<Axis2D>();
+      const glm::vec2 orbit_delta(v.x, v.y);
 
       if (std::abs(orbit_delta.x) > 0.0F || std::abs(orbit_delta.y) > 0.0F) {
         orbit_controller_->AddOrbitInput(orbit_delta);
@@ -378,12 +374,8 @@ auto CameraRigController::Update(time::CanonicalDuration delta_time) -> void
 
   if (orbit_action_
     && orbit_action_->GetValueType() == input::ActionValueType::kAxis2D) {
-    glm::vec2 look_delta(0.0F);
-    for (const auto& tr : orbit_action_->GetFrameTransitions()) {
-      const auto& v = tr.value_at_transition.GetAs<Axis2D>();
-      look_delta.x += v.x;
-      look_delta.y += v.y;
-    }
+    const auto& v = orbit_action_->GetValue().GetAs<Axis2D>();
+    const glm::vec2 look_delta(v.x, v.y);
 
     if (std::abs(look_delta.x) > 0.0F || std::abs(look_delta.y) > 0.0F) {
       fly_controller_->AddRotationInput(look_delta);

@@ -6,12 +6,22 @@
 
 //! Tests for ActionTriggerPressed
 
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
+
+//! Above a digital press, which reads as 1.0.
+constexpr float kAboveDigitalThreshold = 1.1F;
+//! Axis actuation threshold.
+constexpr float kAxisThreshold = 0.40F;
+//! Axis value just below kAxisThreshold.
+constexpr float kBelowAxisThreshold = 0.39F;
+//! Axis value just above kAxisThreshold.
+constexpr float kAboveAxisThreshold = 0.41F;
 
 using oxygen::Axis1D;
 using oxygen::input::ActionTriggerPressed;
@@ -57,7 +67,7 @@ NOLINT_TEST(ActionTriggerPressed, NoTriggerBelowActuationThreshold)
   // Arrange
   ActionTriggerPressed trigger;
   // Force a threshold higher than boolean 'true' mapping (1.0)
-  trigger.SetActuationThreshold(1.1F);
+  trigger.SetActuationThreshold(kAboveDigitalThreshold);
   ActionValue v { false };
 
   // Act: press with boolean value; should not actuate
@@ -73,16 +83,16 @@ NOLINT_TEST(ActionTriggerPressed, TriggersOnlyAboveThreshold)
 {
   // Arrange
   ActionTriggerPressed trigger;
-  trigger.SetActuationThreshold(0.40F);
+  trigger.SetActuationThreshold(kAxisThreshold);
   ActionValue v { Axis1D { 0.0F } };
 
   // Act & Assert: below threshold -> no trigger
-  v.Update(Axis1D { 0.39F });
+  v.Update(Axis1D { kBelowAxisThreshold });
   trigger.UpdateState(v, CanonicalDuration {});
   EXPECT_FALSE(trigger.IsTriggered());
 
   // Cross threshold -> trigger once
-  v.Update(Axis1D { 0.41F });
+  v.Update(Axis1D { kAboveAxisThreshold });
   trigger.UpdateState(v, CanonicalDuration {});
   EXPECT_TRUE(trigger.IsTriggered());
 
@@ -130,16 +140,16 @@ NOLINT_TEST(ActionTriggerPressed, NegativeCrossesThreshold)
 {
   // Arrange
   ActionTriggerPressed trigger;
-  trigger.SetActuationThreshold(0.40F);
+  trigger.SetActuationThreshold(kAxisThreshold);
   ActionValue v { Axis1D { 0.0F } };
 
   // Act & Assert: negative below threshold -> no trigger
-  v.Update(Axis1D { -0.39F });
+  v.Update(Axis1D { -kBelowAxisThreshold });
   trigger.UpdateState(v, CanonicalDuration {});
   EXPECT_FALSE(trigger.IsTriggered());
 
   // Cross negative threshold (abs > 0.40) -> trigger once
-  v.Update(Axis1D { -0.41F });
+  v.Update(Axis1D { -kAboveAxisThreshold });
   trigger.UpdateState(v, CanonicalDuration {});
   EXPECT_TRUE(trigger.IsTriggered());
 

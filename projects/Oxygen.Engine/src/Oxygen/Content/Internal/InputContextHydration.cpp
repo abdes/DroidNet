@@ -209,6 +209,9 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
         if (action_asset->ConsumesInput()) {
           existing->SetConsumesInput(true);
         }
+        if (action_asset->AccumulatesCumulatively()) {
+          existing->SetAccumulation(input::ActionAccumulation::kCumulative);
+        }
         action_cache.emplace(action_asset_key, existing);
         return existing;
       }
@@ -216,6 +219,9 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
       auto action
         = std::make_shared<input::Action>(action_name, *value_type_opt);
       action->SetConsumesInput(action_asset->ConsumesInput());
+      action->SetAccumulation(action_asset->AccumulatesCumulatively()
+          ? input::ActionAccumulation::kCumulative
+          : input::ActionAccumulation::kHighestAbsolute);
       input_system.AddAction(action);
       action_cache.emplace(action_asset_key, action);
       return action;
@@ -263,6 +269,9 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
 
       auto hydrated_mapping
         = std::make_shared<input::InputActionMapping>(action, *slot);
+      hydrated_mapping->SetScale(
+        { .x = mapping.scale[0], .y = mapping.scale[1] });
+      hydrated_mapping->SetBias({ .x = mapping.bias[0], .y = mapping.bias[1] });
 
       const auto trigger_end = trigger_start + trigger_count;
       for (size_t trigger_index = trigger_start; trigger_index < trigger_end;

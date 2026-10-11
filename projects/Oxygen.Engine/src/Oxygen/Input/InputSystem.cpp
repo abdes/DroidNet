@@ -10,11 +10,15 @@
 #include <cstdlib>
 #include <list>
 #include <memory>
+#include <optional>
 #include <ranges>
+#include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
@@ -24,6 +28,8 @@
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSnapshot.h>
 #include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/OxCo/BroadcastChannel.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Input.h>
 #include <Oxygen/Platform/InputEvent.h>
 
@@ -43,8 +49,8 @@ constexpr std::string_view kCVarInputLogEvents = "nput.log_events";
   std::list<InputSystem::InputMappingContextEntry>& list,
   const InputMappingContext& context)
 {
-  return std::ranges::find_if(
-    list, [&context](const InputSystem::InputMappingContextEntry& entry) {
+  return std::ranges::find_if(list,
+    [&context](const InputSystem::InputMappingContextEntry& entry) -> bool {
       return context.GetName() == entry.mapping_context->GetName();
     });
 }
@@ -121,7 +127,6 @@ void InputSystem::SetName(std::string_view name) noexcept
 
 auto InputSystem::OnFrameStart(observer_ptr<FrameContext> /*context*/) -> void
 {
-  // Begin frame tracking for all actions
   for (auto& action : actions_) {
     action->BeginFrameTracking();
   }
@@ -129,93 +134,46 @@ auto InputSystem::OnFrameStart(observer_ptr<FrameContext> /*context*/) -> void
 
 auto InputSystem::OnInput(observer_ptr<FrameContext> context) -> co::Co<>
 {
-  // Per-frame pass: advance time for triggers using the game delta time.
-  //
-  // NOTE:
-  // Run this pass BEFORE draining events. Otherwise, transient axis mappings
-  // (mouse motion / wheel) that clear their local value after evaluation can
-  // be re-evaluated in this pass with a cleared (zero) value, overwriting the
-  // action's final value before the snapshot is frozen.
-  if (context->GetGameDeltaTime() > time::CanonicalDuration {}) {
-    for (const auto& [priority, is_active, mapping_context] :
-      std::ranges::reverse_view(mapping_contexts_)) {
-      if (is_active) {
-        if (mapping_context->Update(context->GetGameDeltaTime())) {
-          // Input is consumed
-          DLOG_F(1, "Stopping updates to mapping contexts (input consumed)");
-          // Flush staged input in remaining active contexts to avoid leaking
-          // stale staged events into subsequent frames.
-          auto it = std::ranges::find_if(mapping_contexts_,
-            [&mapping_context](const InputMappingContextEntry& e) {
-              return e.mapping_context.get() == mapping_context.get();
-            });
-          for (auto fit = mapping_contexts_.begin(); fit != it; ++fit) {
-            if (fit->is_active) {
-              fit->mapping_context->FlushPending();
-            }
-          }
-          break;
-        }
-      }
-    }
+  ApplyPendingDeactivations();
+
+  // Trigger time is physical time: hold, tap and pulse windows are durations
+  // the player feels, so they keep running in pause menus and do not stretch
+  // in slow motion. Fall back to game time when the engine provides no
+  // physical delta.
+  const auto& timing = context->GetModuleTimingData();
+  const auto trigger_dt
+    = timing.physical_delta_time > time::CanonicalDuration {}
+    ? timing.physical_delta_time
+    : context->GetGameDeltaTime();
+
+  // Advance time before draining events, so that relative (mouse) mappings,
+  // whose value clears after each evaluation, are not re-evaluated with a
+  // cleared value after this frame's events.
+  if (trigger_dt > time::CanonicalDuration {}) {
+    EvaluateContexts(trigger_dt, nullptr);
   }
 
-  // Drain all events from BroadcastChannel for this frame
-  frame_events_.clear();
   if (!input_enabled_) {
-    DrainPendingInputEvents();
-    current_snapshot_ = std::make_shared<input::InputSnapshot>(actions_);
-    for (auto& action : actions_) {
-      action->EndFrameTracking();
-    }
-    co_return;
-  }
-
-  while (auto event = input_reader_.TryReceive()) {
-    frame_events_.push_back(event);
-    ProcessInputEvent(event); // Use existing ProcessInputEvent method
-
-    // Micro-update pass: evaluate triggers immediately after this event with
-    // zero dt so same-frame sequences (press->release) are recognized and
-    // consumption rules are applied promptly.
-    for (const auto& [priority, is_active, mapping_context] :
-      std::ranges::reverse_view(mapping_contexts_)) {
-      if (is_active) {
-        if (mapping_context->Update(oxygen::time::CanonicalDuration {})) {
-          DLOG_F(1,
-            "Stopping updates to mapping contexts after event (input "
-            "consumed)");
-          // Flush staged input in remaining active contexts (earlier in the
-          // reverse traversal) to avoid leaking staged events into later
-          // contexts/frames.
-          // mapping_contexts_ is sorted ascending by priority. We evaluate
-          // in reverse (descending). When a higher-priority context consumes,
-          // we must flush the remaining lower-priority contexts that would be
-          // evaluated after it. In the forward-sorted list, those contexts are
-          // the ones that come BEFORE the consumer.
-          auto it = std::ranges::find_if(mapping_contexts_,
-            [&mapping_context](const InputMappingContextEntry& e) {
-              return e.mapping_context.get() == mapping_context.get();
-            });
-          for (auto fit = mapping_contexts_.begin(); fit != it; ++fit) {
-            if (fit->is_active) {
-              fit->mapping_context->FlushPending();
-            }
-          }
-          break;
-        }
+    if (was_enabled_) {
+      for (const auto& entry : mapping_contexts_) {
+        entry.mapping_context->DeactivateAll();
       }
+      was_enabled_ = false;
+    }
+    DrainPendingInputEvents();
+  } else {
+    was_enabled_ = true;
+    while (const auto event = input_reader_.TryReceive()) {
+      // Evaluate after each event with zero delta, so press/release within
+      // one frame is recognized and consumption applies to this event.
+      const auto slot = RouteInputEvent(*event);
+      EvaluateContexts(
+        time::CanonicalDuration {}, slot ? &slot.value() : nullptr);
     }
   }
 
-  // Action states are updated by the mapping system during the Update calls
-  // above
-
-  // Freeze input for this frame: build the snapshot now so it is available to
-  // subsequent phases (FixedSim, Gameplay, etc.). Then end frame tracking so
-  // edges do not accumulate past this phase.
+  // Freeze this frame's input for the later phases.
   current_snapshot_ = std::make_shared<input::InputSnapshot>(actions_);
-
   for (auto& action : actions_) {
     action->EndFrameTracking();
   }
@@ -224,14 +182,11 @@ auto InputSystem::OnInput(observer_ptr<FrameContext> context) -> co::Co<>
 
 auto InputSystem::OnSnapshot(observer_ptr<FrameContext> /*context*/) -> void
 {
-  // Input snapshot is frozen at the end of kInput, and is automatically
-  // published by the engine in kSnapshot.
+  // The snapshot is frozen at the end of kInput and published by the engine.
 }
 
 auto InputSystem::OnFrameEnd(observer_ptr<FrameContext> /*context*/) -> void
 {
-  // Clear frame data for next frame
-  frame_events_.clear();
   current_snapshot_.reset();
 }
 
@@ -240,7 +195,27 @@ auto InputSystem::DrainPendingInputEvents() -> void
   while (input_reader_.TryReceive()) { }
 }
 
-void InputSystem::ProcessInputEvent(std::shared_ptr<InputEvent>& event)
+void InputSystem::ApplyPendingDeactivations()
+{
+  for (const auto& context : pending_deactivations_) {
+    context->DeactivateAll();
+  }
+  pending_deactivations_.clear();
+}
+
+void InputSystem::EvaluateContexts(const time::CanonicalDuration delta_time,
+  const platform::InputSlot* event_slot)
+{
+  input::InputMappingContext::ClaimedSources claimed;
+  for (const auto& entry : std::ranges::reverse_view(mapping_contexts_)) {
+    if (entry.is_active) {
+      (void)entry.mapping_context->Update(delta_time, claimed, event_slot);
+    }
+  }
+}
+
+auto InputSystem::RouteInputEvent(const InputEvent& event)
+  -> std::optional<InputSlot>
 {
   using platform::KeyEvent;
   using platform::MouseButtonEvent;
@@ -252,86 +227,64 @@ void InputSystem::ProcessInputEvent(std::shared_ptr<InputEvent>& event)
   using platform::input::MouseWheelComponent;
 
   if (log_events_) {
-    DLOG_F(2, "Processing input event of type {}", event->GetTypeNamePretty());
+    DLOG_F(2, "Processing input event of type {}", event.GetTypeNamePretty());
   }
 
-  // Keyboard events
-  if (const auto event_type = event->GetTypeId();
+  std::optional<InputSlot> slot;
+  if (const auto event_type = event.GetTypeId();
     event_type == KeyEvent::ClassTypeId()) {
-    DCHECK_F(event->HasComponent<platform::input::KeyComponent>());
-    const auto key_code
-      = event->GetComponent<KeyComponent>().GetKeyInfo().GetKeyCode();
-    const auto slot = InputSlots::GetInputSlotForKey(key_code);
-    HandleInput(slot, *event);
-  }
-  // Mouse button events
-  else if (event_type == MouseButtonEvent::ClassTypeId()) {
-    DCHECK_F(event->HasComponent<platform::input::MouseButtonComponent>());
-    const auto button = event->GetComponent<MouseButtonComponent>().GetButton();
-    const InputSlot* slot { nullptr };
-
+    DCHECK_F(event.HasComponent<KeyComponent>());
+    slot = InputSlots::GetInputSlotForKey(
+      event.GetComponent<KeyComponent>().GetKeyInfo().GetKeyCode());
+  } else if (event_type == MouseButtonEvent::ClassTypeId()) {
+    DCHECK_F(event.HasComponent<MouseButtonComponent>());
     using enum platform::MouseButton;
-    switch (button) {
+    switch (event.GetComponent<MouseButtonComponent>().GetButton()) {
     case kLeft:
-      slot = &InputSlots::LeftMouseButton;
+      slot = InputSlots::LeftMouseButton;
       break;
     case kRight:
-      slot = &InputSlots::RightMouseButton;
+      slot = InputSlots::RightMouseButton;
       break;
     case kMiddle:
-      slot = &InputSlots::MiddleMouseButton;
+      slot = InputSlots::MiddleMouseButton;
       break;
     case kExtButton1:
-      slot = &InputSlots::ThumbMouseButton1;
+      slot = InputSlots::ThumbMouseButton1;
       break;
     case kExtButton2:
-      slot = &InputSlots::ThumbMouseButton2;
+      slot = InputSlots::ThumbMouseButton2;
       break;
     case kNone:
-      slot = &InputSlots::None;
+      break;
     }
-    assert(slot != nullptr);
-    if (slot != nullptr && *slot != InputSlots::None) {
-      HandleInput(*slot, *event);
-    }
-  }
-  // Mouse motion events
-  else if (event_type == MouseMotionEvent::ClassTypeId()) {
-    DCHECK_F(event->HasComponent<platform::input::MouseMotionComponent>());
-    if (const auto [dx, dy]
-      = event->GetComponent<MouseMotionComponent>().GetMotion();
-      std::abs(dx) > 0 || std::abs(dy) > 0) {
-      HandleInput(InputSlots::MouseXY, *event);
-    }
-  }
-  // Mouse wheel events
-  else if (event_type == MouseWheelEvent::ClassTypeId()) {
-    DCHECK_F(event->HasComponent<platform::input::MouseWheelComponent>());
+  } else if (event_type == MouseMotionEvent::ClassTypeId()) {
+    DCHECK_F(event.HasComponent<MouseMotionComponent>());
     const auto [dx, dy]
-      = event->GetComponent<MouseWheelComponent>().GetScrollAmount();
-    if (std::abs(dx) > 0 && std::abs(dy) > 0) {
-      HandleInput(InputSlots::MouseWheelXY, *event);
-      return;
+      = event.GetComponent<MouseMotionComponent>().GetMotion();
+    if (dx != 0.0F || dy != 0.0F) {
+      slot = InputSlots::MouseXY;
     }
-    if (std::abs(dx) > 0) {
-      HandleInput(InputSlots::MouseWheelX, *event);
-    }
-    if (std::abs(dy) > 0) {
-      HandleInput(InputSlots::MouseWheelY, *event);
+  } else if (event_type == MouseWheelEvent::ClassTypeId()) {
+    DCHECK_F(event.HasComponent<MouseWheelComponent>());
+    // Every wheel event is routed on MouseWheelXY; contexts fan it out to
+    // the axis and direction slots that read it.
+    const auto [dx, dy]
+      = event.GetComponent<MouseWheelComponent>().GetScrollAmount();
+    if (dx != 0.0F || dy != 0.0F) {
+      slot = InputSlots::MouseWheelXY;
     }
   }
-}
 
-void InputSystem::HandleInput(const InputSlot& slot, const InputEvent& event)
-{
-  // iterate over mapping contexts in the reverse order (higher priority
-  // first)
-  for (const auto& [priority, is_active, context] :
-    std::ranges::reverse_view(mapping_contexts_)) {
-    if (is_active) {
-      context->HandleInput(slot, event);
+  if (!slot || *slot == InputSlots::None) {
+    return std::nullopt;
+  }
+  for (const auto& entry : std::ranges::reverse_view(mapping_contexts_)) {
+    if (entry.is_active) {
+      entry.mapping_context->HandleInput(*slot, event);
     }
   }
+  return slot;
 }
 
 void InputSystem::AddAction(const std::shared_ptr<Action>& action)
@@ -355,7 +308,7 @@ auto InputSystem::GetActionByName(std::string_view name) const
   -> std::shared_ptr<Action>
 {
   const auto found = std::ranges::find_if(
-    actions_, [&name](const std::shared_ptr<Action>& entry) {
+    actions_, [&name](const std::shared_ptr<Action>& entry) -> bool {
       return entry->GetName() == name;
     });
   return found != actions_.cend() ? *found : std::shared_ptr<Action>();
@@ -376,7 +329,7 @@ void InputSystem::AddMappingContext(
   const auto insert_location
     = std::ranges::lower_bound(mapping_contexts_, new_entry,
       [](const InputMappingContextEntry& entry,
-        const InputMappingContextEntry& value) {
+        const InputMappingContextEntry& value) -> bool {
         return entry.priority < value.priority;
       });
   mapping_contexts_.emplace(insert_location, new_entry);
@@ -385,19 +338,30 @@ void InputSystem::AddMappingContext(
 void InputSystem::RemoveMappingContext(
   const std::shared_ptr<InputMappingContext>& context)
 {
-  std::erase_if(
-    mapping_contexts_, [&context](const InputMappingContextEntry& entry) {
+  if (context) {
+    context->DeactivateAll();
+    std::erase(pending_deactivations_, context);
+  }
+  std::erase_if(mapping_contexts_,
+    [&context](const InputMappingContextEntry& entry) -> bool {
       return context == entry.mapping_context;
     });
 }
 
-void InputSystem::ClearAllMappingContexts() { mapping_contexts_.clear(); }
+void InputSystem::ClearAllMappingContexts()
+{
+  for (const auto& entry : mapping_contexts_) {
+    entry.mapping_context->DeactivateAll();
+  }
+  pending_deactivations_.clear();
+  mapping_contexts_.clear();
+}
 
 auto InputSystem::GetMappingContextByName(std::string_view name) const
   -> std::shared_ptr<InputMappingContext>
 {
   const auto found = std::ranges::find_if(
-    mapping_contexts_, [&name](const InputMappingContextEntry& entry) {
+    mapping_contexts_, [&name](const InputMappingContextEntry& entry) -> bool {
       return name == entry.mapping_context->GetName();
     });
   return found != std::ranges::cend(mapping_contexts_)
@@ -418,6 +382,8 @@ void InputSystem::ActivateMappingContext(
     return;
   }
 
+  // Reactivated before its deactivation took effect: keep its state.
+  std::erase(pending_deactivations_, found->mapping_context);
   found->is_active = true;
 }
 
@@ -431,6 +397,9 @@ void InputSystem::DeactivateMappingContext(
       "Input mapping context with [{}] has not been previously added",
       context->GetName());
     return;
+  }
+  if (found->is_active) {
+    pending_deactivations_.push_back(found->mapping_context);
   }
   found->is_active = false;
 }

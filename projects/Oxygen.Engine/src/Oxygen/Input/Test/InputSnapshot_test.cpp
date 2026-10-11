@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <chrono>
 #include <memory>
 #include <string>
 #include <vector>
@@ -13,12 +12,14 @@
 #include <Oxygen/Input/ActionState.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputSnapshot.h>
+#include <Oxygen/Input/Test/ActionTestAccess.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::input::Action;
 using oxygen::input::ActionState;
 using oxygen::input::ActionValue;
 using oxygen::input::InputSnapshot;
+using oxygen::input::testing::ActionTestAccess;
 
 namespace {
 
@@ -28,9 +29,10 @@ NOLINT_TEST(InputSnapshot, LevelFlagsAndValue)
   // Arrange
   auto a
     = std::make_shared<Action>("jump", oxygen::input::ActionValueType::kBool);
-  a->BeginFrameTracking();
-  a->UpdateState(Action::State { .triggered = true }, ActionValue { true });
-  a->EndFrameTracking();
+  ActionTestAccess::BeginFrame(*a);
+  ActionTestAccess::UpdateState(
+    *a, Action::State { .triggered = true }, ActionValue { true });
+  ActionTestAccess::EndFrame(*a);
 
   std::vector<std::shared_ptr<Action>> actions { a };
   // Act
@@ -60,8 +62,8 @@ NOLINT_TEST(InputSnapshot, Edge_SpecificTransitionPredicate)
   // Arrange
   auto a
     = std::make_shared<Action>("door", oxygen::input::ActionValueType::kBool);
-  a->BeginFrameTracking();
-  a->UpdateState(
+  ActionTestAccess::BeginFrame(*a);
+  ActionTestAccess::UpdateState(*a,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -69,7 +71,7 @@ NOLINT_TEST(InputSnapshot, Edge_SpecificTransitionPredicate)
       .canceled = false,
     },
     ActionValue { true });
-  a->UpdateState(
+  ActionTestAccess::UpdateState(*a,
     Action::State {
       .triggered = false,
       .ongoing = false,
@@ -77,7 +79,7 @@ NOLINT_TEST(InputSnapshot, Edge_SpecificTransitionPredicate)
       .canceled = false,
     },
     ActionValue { false });
-  a->EndFrameTracking();
+  ActionTestAccess::EndFrame(*a);
 
   std::vector<std::shared_ptr<Action>> actions { a };
   // Act
@@ -96,9 +98,10 @@ NOLINT_TEST(InputSnapshot, Edge_ImmediateStart_NoneToTriggered)
   // Arrange
   auto a
     = std::make_shared<Action>("fire", oxygen::input::ActionValueType::kBool);
-  a->BeginFrameTracking();
-  a->UpdateState(Action::State { .triggered = true }, ActionValue { true });
-  a->EndFrameTracking();
+  ActionTestAccess::BeginFrame(*a);
+  ActionTestAccess::UpdateState(
+    *a, Action::State { .triggered = true }, ActionValue { true });
+  ActionTestAccess::EndFrame(*a);
 
   std::vector<std::shared_ptr<Action>> actions { a };
   // Act
@@ -116,8 +119,8 @@ NOLINT_TEST(InputSnapshot, Edge_Start_OngoingThenTrigger)
   // Arrange
   auto a
     = std::make_shared<Action>("sprint", oxygen::input::ActionValueType::kBool);
-  a->BeginFrameTracking();
-  a->UpdateState(
+  ActionTestAccess::BeginFrame(*a);
+  ActionTestAccess::UpdateState(*a,
     Action::State {
       .triggered = false,
       .ongoing = true,
@@ -125,7 +128,7 @@ NOLINT_TEST(InputSnapshot, Edge_Start_OngoingThenTrigger)
       .canceled = false,
     },
     ActionValue { true });
-  a->UpdateState(
+  ActionTestAccess::UpdateState(*a,
     Action::State {
       .triggered = true,
       .ongoing = true,
@@ -133,7 +136,7 @@ NOLINT_TEST(InputSnapshot, Edge_Start_OngoingThenTrigger)
       .canceled = false,
     },
     ActionValue { true });
-  a->EndFrameTracking();
+  ActionTestAccess::EndFrame(*a);
 
   std::vector<std::shared_ptr<Action>> actions { a };
   // Act
@@ -151,8 +154,8 @@ NOLINT_TEST(InputSnapshot, Edge_ReleaseWithinFrame)
   // Arrange
   auto a
     = std::make_shared<Action>("grab", oxygen::input::ActionValueType::kBool);
-  a->BeginFrameTracking();
-  a->UpdateState(
+  ActionTestAccess::BeginFrame(*a);
+  ActionTestAccess::UpdateState(*a,
     Action::State {
       .triggered = false,
       .ongoing = true,
@@ -160,7 +163,7 @@ NOLINT_TEST(InputSnapshot, Edge_ReleaseWithinFrame)
       .canceled = false,
     },
     ActionValue { true });
-  a->UpdateState(
+  ActionTestAccess::UpdateState(*a,
     Action::State {
       .triggered = false,
       .ongoing = false,
@@ -168,7 +171,7 @@ NOLINT_TEST(InputSnapshot, Edge_ReleaseWithinFrame)
       .canceled = false,
     },
     ActionValue { false });
-  a->EndFrameTracking();
+  ActionTestAccess::EndFrame(*a);
 
   std::vector<std::shared_ptr<Action>> actions { a };
   // Act
@@ -185,8 +188,8 @@ NOLINT_TEST(InputSnapshot, Edge_CompleteAndCancel)
   // Arrange
   auto ac = std::make_shared<Action>(
     "complete", oxygen::input::ActionValueType::kBool);
-  ac->BeginFrameTracking();
-  ac->UpdateState(
+  ActionTestAccess::BeginFrame(*ac);
+  ActionTestAccess::UpdateState(*ac,
     Action::State {
       .triggered = true,
       .ongoing = false,
@@ -194,7 +197,7 @@ NOLINT_TEST(InputSnapshot, Edge_CompleteAndCancel)
       .canceled = false,
     },
     ActionValue { true });
-  ac->UpdateState(
+  ActionTestAccess::UpdateState(*ac,
     Action::State {
       .triggered = false,
       .ongoing = false,
@@ -202,12 +205,12 @@ NOLINT_TEST(InputSnapshot, Edge_CompleteAndCancel)
       .canceled = false,
     },
     ActionValue { false });
-  ac->EndFrameTracking();
+  ActionTestAccess::EndFrame(*ac);
 
   auto an
     = std::make_shared<Action>("cancel", oxygen::input::ActionValueType::kBool);
-  an->BeginFrameTracking();
-  an->UpdateState(
+  ActionTestAccess::BeginFrame(*an);
+  ActionTestAccess::UpdateState(*an,
     Action::State {
       .triggered = false,
       .ongoing = true,
@@ -215,7 +218,7 @@ NOLINT_TEST(InputSnapshot, Edge_CompleteAndCancel)
       .canceled = false,
     },
     ActionValue { true });
-  an->UpdateState(
+  ActionTestAccess::UpdateState(*an,
     Action::State {
       .triggered = false,
       .ongoing = false,
@@ -223,7 +226,7 @@ NOLINT_TEST(InputSnapshot, Edge_CompleteAndCancel)
       .canceled = true,
     },
     ActionValue { false });
-  an->EndFrameTracking();
+  ActionTestAccess::EndFrame(*an);
 
   std::vector<std::shared_ptr<Action>> actions { ac, an };
   // Act
@@ -243,8 +246,8 @@ NOLINT_TEST(InputSnapshot, Edge_ValueUpdate)
   // Arrange
   auto a
     = std::make_shared<Action>("move", oxygen::input::ActionValueType::kBool);
-  a->BeginFrameTracking();
-  a->UpdateState(
+  ActionTestAccess::BeginFrame(*a);
+  ActionTestAccess::UpdateState(*a,
     Action::State {
       .triggered = false,
       .ongoing = true,
@@ -252,13 +255,13 @@ NOLINT_TEST(InputSnapshot, Edge_ValueUpdate)
       .canceled = false,
     },
     ActionValue { true });
-  a->EndFrameTracking();
+  ActionTestAccess::EndFrame(*a);
 
   auto b
     = std::make_shared<Action>("idle", oxygen::input::ActionValueType::kBool);
-  b->BeginFrameTracking();
+  ActionTestAccess::BeginFrame(*b);
   // no updates in this frame
-  b->EndFrameTracking();
+  ActionTestAccess::EndFrame(*b);
 
   std::vector<std::shared_ptr<Action>> actions { a, b };
   // Act
@@ -279,7 +282,7 @@ NOLINT_TEST(InputSnapshot, UnknownAction_Defaults)
   InputSnapshot snap { actions };
 
   // Assert
-  EXPECT_EQ(snap.GetActionTransitions("nope").size(), 0u);
+  EXPECT_EQ(snap.GetActionTransitions("nope").size(), 0U);
   EXPECT_FALSE(snap.IsActionTriggered("nope"));
   EXPECT_FALSE(snap.IsActionOngoing("nope"));
   EXPECT_FALSE(snap.IsActionCompleted("nope"));
@@ -291,5 +294,50 @@ NOLINT_TEST(InputSnapshot, UnknownAction_Defaults)
 }
 
 // (Frame start time is owned by FrameContext and not mirrored here.)
+
+//! The snapshot is published into FrameContext for later phases and frames in
+//! flight; starting the next frame must not change what it reports.
+NOLINT_TEST(InputSnapshot, FrozenAcrossNextFrameStart)
+{
+  // Arrange
+  auto a
+    = std::make_shared<Action>("jump", oxygen::input::ActionValueType::kBool);
+  ActionTestAccess::BeginFrame(*a);
+  ActionTestAccess::UpdateState(
+    *a, Action::State { .triggered = true }, ActionValue { true });
+  ActionTestAccess::EndFrame(*a);
+  std::vector<std::shared_ptr<Action>> actions { a };
+  const InputSnapshot snap { actions };
+
+  // Act: the next frame starts and clears the action's edges
+  ActionTestAccess::BeginFrame(*a);
+
+  // Assert
+  EXPECT_TRUE(snap.IsActionTriggered("jump"));
+  EXPECT_TRUE(snap.DidActionTrigger("jump"));
+  EXPECT_EQ(snap.GetActionTransitions("jump").size(), 1U);
+}
+
+//! A snapshot must stay readable after its actions are destroyed (level
+//! unload while a parallel or render task still holds the snapshot).
+NOLINT_TEST(InputSnapshot, OutlivesItsActions)
+{
+  // Arrange
+  auto a
+    = std::make_shared<Action>("jump", oxygen::input::ActionValueType::kBool);
+  ActionTestAccess::BeginFrame(*a);
+  ActionTestAccess::UpdateState(
+    *a, Action::State { .triggered = true }, ActionValue { true });
+  std::vector<std::shared_ptr<Action>> actions { a };
+  const InputSnapshot snap { actions };
+
+  // Act: drop every owner of the action
+  actions.clear();
+  a.reset();
+
+  // Assert
+  EXPECT_TRUE(snap.DidActionTrigger("jump"));
+  EXPECT_TRUE(snap.GetActionValue("jump").GetAs<bool>());
+}
 
 } // namespace

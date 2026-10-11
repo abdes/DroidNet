@@ -696,6 +696,7 @@ auto AsyncEngine::PhaseFrameStart(observer_ptr<FrameContext> context)
     const auto& td = time_manager_->GetFrameTimingData();
     ModuleTimingData module_timing {};
     module_timing.game_delta_time = td.simulation_delta;
+    module_timing.physical_delta_time = td.physical_delta;
     module_timing.fixed_delta_time
       = time_manager_->GetSimulationClock().GetFixedTimestep();
     module_timing.interpolation_alpha

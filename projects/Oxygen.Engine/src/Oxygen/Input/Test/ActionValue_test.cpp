@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -18,13 +19,14 @@ NOLINT_TEST(ActionValue, ConstructionAndGetAs)
   // Arrange
   ActionValue b { true };
   ActionValue a1 { oxygen::Axis1D { 0.5F } };
-  ActionValue a2 { oxygen::Axis2D { 0.25F, -0.75F } };
+  constexpr float kNegativeY = -0.75F;
+  ActionValue a2 { oxygen::Axis2D { .x = 0.25F, .y = kNegativeY } };
 
   // Act & Assert
   EXPECT_TRUE(b.GetAs<bool>());
   EXPECT_FLOAT_EQ(a1.GetAs<oxygen::Axis1D>().x, 0.5F);
   EXPECT_FLOAT_EQ(a2.GetAs<oxygen::Axis2D>().x, 0.25F);
-  EXPECT_FLOAT_EQ(a2.GetAs<oxygen::Axis2D>().y, -0.75F);
+  EXPECT_FLOAT_EQ(a2.GetAs<oxygen::Axis2D>().y, kNegativeY);
 }
 
 //! Tests Set() overloads change the stored value.
@@ -40,11 +42,12 @@ NOLINT_TEST(ActionValue, SetOverrides)
   EXPECT_FLOAT_EQ(v.GetAs<oxygen::Axis1D>().x, 1.0F);
 
   // Act
-  v.Set(oxygen::Axis2D { 0.5F, 0.6F });
+  constexpr float kY = 0.6F;
+  v.Set(oxygen::Axis2D { .x = 0.5F, .y = kY });
 
   // Assert
   EXPECT_FLOAT_EQ(v.GetAs<oxygen::Axis2D>().x, 0.5F);
-  EXPECT_FLOAT_EQ(v.GetAs<oxygen::Axis2D>().y, 0.6F);
+  EXPECT_FLOAT_EQ(v.GetAs<oxygen::Axis2D>().y, kY);
 
   // Act
   v.Set(true);
@@ -59,7 +62,7 @@ NOLINT_TEST(ActionValue, UpdateFromBool)
   // Arrange
   ActionValue vb { false };
   ActionValue v1 { oxygen::Axis1D { 0.0F } };
-  ActionValue v2 { oxygen::Axis2D { 0.0F, 0.0F } };
+  ActionValue v2 { oxygen::Axis2D { .x = 0.0F, .y = 0.0F } };
 
   // Act
   vb.Update(true);
@@ -78,7 +81,7 @@ NOLINT_TEST(ActionValue, UpdateFromAxis1D)
   // Arrange
   ActionValue vb { false };
   ActionValue v1 { oxygen::Axis1D { 0.0F } };
-  ActionValue v2 { oxygen::Axis2D { 0.0F, 0.0F } };
+  ActionValue v2 { oxygen::Axis2D { .x = 0.0F, .y = 0.0F } };
 
   // Act
   const oxygen::Axis1D src { 0.42F };
@@ -98,10 +101,10 @@ NOLINT_TEST(ActionValue, UpdateFromAxis2D)
   // Arrange
   ActionValue vb { false };
   ActionValue v1 { oxygen::Axis1D { 0.0F } };
-  ActionValue v2 { oxygen::Axis2D { 0.0F, 0.0F } };
+  ActionValue v2 { oxygen::Axis2D { .x = 0.0F, .y = 0.0F } };
 
   // Act
-  const oxygen::Axis2D src { 0.3F, -0.6F };
+  const oxygen::Axis2D src { .x = 0.3F, .y = -0.6F };
   vb.Update(src);
   v1.Update(src);
   v2.Update(src);
@@ -119,14 +122,17 @@ NOLINT_TEST(ActionValue, IsActuatedThresholds)
   // Arrange
   ActionValue bfalse { false };
   ActionValue btrue { true };
-  ActionValue a1 { oxygen::Axis1D { 0.1F } };
-  ActionValue a2 { oxygen::Axis2D { 0.05F, 0.06F } };
+  constexpr float kSmall = 0.1F;
+  constexpr float kSmallerX = 0.05F;
+  constexpr float kSmallerY = 0.06F;
+  ActionValue a1 { oxygen::Axis1D { kSmall } };
+  ActionValue a2 { oxygen::Axis2D { .x = kSmallerX, .y = kSmallerY } };
 
   // Act & Assert
   EXPECT_FALSE(bfalse.IsActuated(0.5F));
   EXPECT_TRUE(btrue.IsActuated(0.5F));
-  EXPECT_TRUE(a1.IsActuated(0.05F));
-  EXPECT_FALSE(a2.IsActuated(0.1F));
+  EXPECT_TRUE(a1.IsActuated(kSmallerX));
+  EXPECT_FALSE(a2.IsActuated(kSmall));
 
   // Boundary: exactly threshold should be false since check is '>'
   ActionValue a_edge { oxygen::Axis1D { 0.5F } };

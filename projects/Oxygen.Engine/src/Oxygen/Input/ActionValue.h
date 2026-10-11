@@ -52,7 +52,7 @@ public:
   void Update(bool update)
   {
     std::visit(
-      [&](auto& cur) noexcept {
+      [&](auto& cur) noexcept -> void {
         using T = std::remove_cvref_t<decltype(cur)>;
         if constexpr (std::is_same_v<T, bool>) {
           cur = update;
@@ -68,7 +68,7 @@ public:
   void Update(const Axis1D& update)
   {
     std::visit(
-      [&](auto& cur) noexcept {
+      [&](auto& cur) noexcept -> void {
         using T = std::remove_cvref_t<decltype(cur)>;
         if constexpr (std::is_same_v<T, bool>) {
           cur = (std::abs(update.x) > 0.0F);
@@ -84,7 +84,7 @@ public:
   void Update(const Axis2D& update)
   {
     std::visit(
-      [&](auto& cur) noexcept {
+      [&](auto& cur) noexcept -> void {
         using T = std::remove_cvref_t<decltype(cur)>;
         if constexpr (std::is_same_v<T, bool>) {
           cur = (std::abs(update.x) > 0.0F || std::abs(update.y) > 0.0F);
@@ -105,7 +105,7 @@ public:
   [[nodiscard]] auto IsActuated(float threshold) const -> bool
   {
     return std::visit(
-      [&](const auto& cur) noexcept {
+      [&](const auto& cur) noexcept -> bool {
         using T = std::remove_cvref_t<decltype(cur)>;
         if constexpr (std::is_same_v<T, bool>) {
           return static_cast<float>(cur) > threshold;

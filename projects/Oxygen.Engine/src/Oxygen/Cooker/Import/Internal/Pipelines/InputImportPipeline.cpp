@@ -66,6 +66,7 @@ namespace {
     std::string name;
     uint8_t value_type = 0;
     bool consumes_input = false;
+    bool cumulative = false;
     data::AssetKey key {};
     std::string virtual_path;
     std::string descriptor_relpath;
@@ -602,6 +603,9 @@ namespace {
     desc.value_type = action.value_type;
     desc.flags = action.consumes_input ? InputActionAssetFlags::kConsumesInput
                                        : InputActionAssetFlags::kNone;
+    if (action.cumulative) {
+      desc.flags |= InputActionAssetFlags::kCumulativeAccumulation;
+    }
 
     serio::MemoryStream stream;
     serio::Writer writer(stream);
@@ -717,6 +721,16 @@ namespace {
       }
       action.value_type = *parsed_type;
       action.consumes_input = node.value("consumes_input", false);
+      const auto accumulation
+        = node.value("accumulation", std::string { "highest_absolute" });
+      if (accumulation != "highest_absolute" && accumulation != "cumulative") {
+        AddDiagnostic(session, request, ImportSeverity::kError,
+          "input.schema.contract_mismatch",
+          "Unsupported action accumulation '" + accumulation + "'",
+          path + ".accumulation");
+        return false;
+      }
+      action.cumulative = accumulation == "cumulative";
 
       if (local_action_types.contains(action.name)) {
         AddDiagnostic(session, request, ImportSeverity::kError,

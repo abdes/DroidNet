@@ -11,6 +11,8 @@ the input actuates and cancels if released early.
 - On reaching threshold: fires Triggered. With OneShot(true), it fires once;
   with OneShot(false), it can fire again on subsequent updates while held.
 - On early release: transitions to Idle and reports Canceled (no Triggered).
+- On release after it triggered: not a cancel; the action ends the
+  activation with Completed, whether OneShot is on or off.
 
 Default configuration: OneShot(true), threshold = 0s (configure via API).
 
@@ -92,7 +94,8 @@ hold.OneShot(true); // or false to allow repeated triggers while held
 - States:
   - Idle: not actuated
   - Ongoing: actuated (timing)
-  - Completed: true only for one-shot once released after Triggered
+  - Completed: reported by the action when released after Triggered (one-shot
+    or repeating)
 - Edge cases:
   - No trigger without meeting threshold.
   - Axis uses absolute value for threshold.

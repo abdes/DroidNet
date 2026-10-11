@@ -308,6 +308,12 @@ public:
     return triggered_once_ && (IsIdle());
   }
 
+  //! Releasing after the hold succeeded completes; it is not a cancel.
+  [[nodiscard]] auto IsCanceled() const -> bool override
+  {
+    return ActionTrigger::IsCanceled() && !triggered_once_;
+  }
+
   void Reset() noexcept override
   {
     ActionTriggerTimed::Reset();
@@ -373,6 +379,14 @@ private:
 // Notes:
 // - There is no "completed" terminal state for Pulse; releasing input ends the
 //   pulse sequence via cancellation.
+//! Interval ramp for ActionTriggerPulse (for example, accelerating auto-fire).
+struct PulseRateRamp {
+  float start_interval_seconds { 0.0F };
+  float end_interval_seconds { 0.0F };
+  //! Time over which the interval moves from start to end; 0 disables.
+  float duration_seconds { 0.0F };
+};
+
 class ActionTriggerPulse : public ActionTriggerTimed {
 public:
   explicit ActionTriggerPulse() = default;
@@ -407,9 +421,11 @@ public:
 
   [[nodiscard]] auto IsCompleted() const -> bool override { return false; }
 
+  //! Releasing after at least one pulse completes; it is not a cancel.
   [[nodiscard]] auto IsCanceled() const -> bool override
   {
-    return IsIdle() && (GetPreviousState() == State::kOngoing);
+    return IsIdle() && (GetPreviousState() == State::kOngoing)
+      && trigger_count_ == 0;
   }
 
   void Reset() noexcept override
@@ -429,9 +445,8 @@ public:
   //! When enabled, carry over overshoot so pulses stay phase-aligned to start
   OXGN_NPUT_API void EnablePhaseAlignment(bool enable = true);
 
-  //! Linearly ramp the interval from start->end over ramp_duration seconds
-  OXGN_NPUT_API void SetRateRamp(float start_interval_seconds,
-    float end_interval_seconds, float ramp_duration_seconds);
+  //! Linearly ramp the interval from start to end over the ramp duration.
+  OXGN_NPUT_API void SetRateRamp(const PulseRateRamp& ramp);
 
 protected:
   OXGN_NPUT_API auto DoUpdateState(const ActionValue& action_value,
@@ -612,6 +627,7 @@ public:
     ActionTrigger::Reset();
     waited_time_ = {};
     current_step_index_ = 0;
+    cursors_.clear();
   }
 
 protected:
@@ -624,6 +640,16 @@ private:
 
   oxygen::time::CanonicalDuration waited_time_;
   size_t current_step_index_ { 0 };
+
+  //! Per observed action: how many of its frame transitions this combo has
+  //! already evaluated, so one transition advances at most one step even
+  //! when the combo is evaluated several times in a frame.
+  struct Cursor {
+    const Action* action { nullptr };
+    uint64_t frame_serial { 0 };
+    size_t seen { 0 };
+  };
+  std::vector<Cursor> cursors_;
 };
 
 } // namespace oxygen::input

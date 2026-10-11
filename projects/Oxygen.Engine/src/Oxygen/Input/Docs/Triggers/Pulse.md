@@ -1,15 +1,17 @@
 # Pulse Trigger
 
 The Pulse trigger emits a periodic Triggered event at a fixed interval while the
-input is actuated (pressed/held). It cancels when the input is released. Think
-of it like a metronome driven by input state.
+input is actuated (pressed/held). Think of it like a metronome driven by input
+state.
 
 ## Behavior summary
 
 - On press: enters Ongoing immediately (no immediate trigger by default).
 - While held: emits Triggered at each interval boundary (metronome ticks).
-- On release: transitions to Idle and reports Canceled.
-- No “Completed” state (Pulse is not one-shot).
+- On release: transitions to Idle. It reports Canceled only if it never
+  pulsed; after at least one pulse the release is a success, and the action
+  ends with Completed (see [Actions.md](../Actions.md#activation-outcome-completed-or-canceled)).
+  Unreal reports Canceled here; Oxygen decides by outcome.
 
 Optional stability controls (opt-in, minimal surface):
 
@@ -49,7 +51,7 @@ sequenceDiagram
   Note over Pulse: t = 0.10 → Triggered
   Note over Pulse: t = 0.20 → Triggered
   Input->>Pulse: release (any time)
-  Note over Pulse: Idle → Canceled
+  Note over Pulse: Idle (action: Completed after pulses,<br/>Canceled if none)
 ```
 
 ### Slightly late frames (jitter tolerance)
@@ -122,21 +124,28 @@ pulse.TriggerOnStart(false);
 // Optional stability controls (all opt-in)
 pulse.SetJitterTolerance(0.02F);       // allow up to +20ms late
 pulse.EnablePhaseAlignment(true);      // keep phase stable (default true)
-pulse.SetRateRamp(0.20F, 0.05F, 1.0F); // speed up over 1s while held
+// Speed up from 0.2 s to 0.05 s between pulses over 1 s while held.
+pulse.SetRateRamp({
+  .start_interval_seconds = 0.20F,
+  .end_interval_seconds = 0.05F,
+  .duration_seconds = 1.0F,
+});
 ```
 
 ## Contract
 
 - Inputs: ActionValue (actuated bool/axis), delta_time.
-- Emits: Triggered when interval elapsed; Canceled when released.
+- Emits: Triggered when interval elapsed; Canceled when released before the
+  first pulse.
 - States:
   - Idle: not actuated
   - Ongoing: actuated (tracking elapsed)
-  - Completed: never used (always false)
+  - Completed: not set by the trigger; the action completes the activation
+    when released after at least one pulse
 - Edge cases:
   - No trigger without actuation.
   - At most one Triggered per update.
-  - Release during a sequence yields Canceled (not Completed).
+  - Release between pulses after at least one pulse is not a cancel.
 
 ## Testing notes
 
