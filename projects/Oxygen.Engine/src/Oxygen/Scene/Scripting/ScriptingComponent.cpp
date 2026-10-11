@@ -23,6 +23,7 @@
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/Internal/IMutationCollector.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/Types/ScriptSlotIndex.h>
 
 namespace oxygen::scene {
@@ -84,6 +85,24 @@ auto ScriptingComponent::SetParameter(
     it->second = std::move(value);
   } else {
     overrides.emplace_back(std::string(name), std::move(value));
+  }
+  return true;
+}
+
+auto ScriptingComponent::BindNodeParameter(
+  const Slot& slot, const std::string_view name, NodeHandle node) -> bool
+{
+  const auto slot_it = FindSlotById(slot.slot_id_);
+  if (slot_it == slots_.end()) {
+    return false;
+  }
+  auto& bindings = slot_it->node_bindings_;
+  const auto it = std::ranges::find_if(
+    bindings, [name](const auto& pair) -> bool { return pair.first == name; });
+  if (it != bindings.end()) {
+    it->second = std::move(node);
+  } else {
+    bindings.emplace_back(std::string(name), std::move(node));
   }
   return true;
 }

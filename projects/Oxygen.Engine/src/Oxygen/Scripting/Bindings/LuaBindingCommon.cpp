@@ -167,8 +167,8 @@ auto PushScriptParam(lua_State* state, const data::ScriptParam& param) -> int
           lua_pushlstring(state, text.c_str(), text.size());
         }
       } else {
-        // Node references resolve to scene nodes only when slots attach to a
-        // scene; an index alone names no node.
+        // An index alone names no node: script instances push the node the
+        // slot's parameter is bound to (ScriptingComponent::BindNodeParameter).
         lua_pushnil(state);
       }
     },

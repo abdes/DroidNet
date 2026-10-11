@@ -197,6 +197,25 @@ namespace {
         "produced by an incompatible compiler. Cook the script again.",
     },
     {
+      .code = DiagnosticCode::kAttachFailed,
+      .title = "the script could not be attached",
+      .explanation
+      = "A scene names a script whose asset is not loaded, whose source cannot "
+        "be found, or that has no bytecode or source to run. The slot stays "
+        "disabled; the rest of the scene runs. Check that the script is "
+        "cooked with the scene and, for external sources, that the source "
+        "file is under a script source root.",
+    },
+    {
+      .code = DiagnosticCode::kOverrideRejected,
+      .title = "a parameter override does not match the script",
+      .explanation
+      = "A scene overrides a parameter the script does not declare, with a "
+        "value of another type or asset kind, or with a node the scene does "
+        "not have. The override is ignored and the declared default stays. "
+        "Update the scene after changing the script's declarations.",
+    },
+    {
       .code = DiagnosticCode::kRuntimeError,
       .title = "the script raised an error",
       .explanation

@@ -7,6 +7,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -15,6 +16,7 @@
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -64,6 +66,22 @@ NOLINT_TEST_F(
   EXPECT_TRUE(slots.front().Diagnostics().empty());
   EXPECT_FALSE(slots.front().IsDisabled());
   EXPECT_NO_THROW(slots.front().Run());
+}
+
+//! A node parameter binds to one node; binding it again replaces the node,
+//! and an unbound parameter has no node.
+NOLINT_TEST_F(ScriptingComponentTest, BindNodeParameter_RecordsTheLatestNode)
+{
+  using oxygen::scene::NodeHandle;
+  component_.AddSlot(MakeScriptAsset());
+  const auto& slot = component_.Slots().front();
+
+  EXPECT_TRUE(component_.BindNodeParameter(slot, "target", NodeHandle(3U)));
+  EXPECT_TRUE(component_.BindNodeParameter(slot, "target", NodeHandle(5U)));
+
+  const auto& bound = component_.Slots().front();
+  EXPECT_EQ(bound.TryGetBoundNode("target"), NodeHandle(5U));
+  EXPECT_EQ(bound.TryGetBoundNode("other"), std::nullopt);
 }
 
 //! A slot keeps the execution order it was added with.

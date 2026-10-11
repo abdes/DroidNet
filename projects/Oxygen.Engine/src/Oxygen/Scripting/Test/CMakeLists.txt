@@ -48,6 +48,13 @@ m_gtest_program(
 
 m_gtest_program(CompilationService SOURCES "ScriptCompilationService_test.cpp")
 
+m_gtest_program(
+  Attachment
+  SOURCES
+    "Fakes/FakeScriptCompilationService.h"
+    "SceneScriptAttachment_test.cpp"
+)
+
 m_gtest_program(Resolver SOURCES "ScriptSourceResolver_test.cpp")
 target_link_libraries("Oxygen.Scripting.Resolver.Tests" PRIVATE oxygen::loader)
 

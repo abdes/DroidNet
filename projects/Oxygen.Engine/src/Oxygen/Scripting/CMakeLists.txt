@@ -48,6 +48,7 @@ set_target_properties(
 set(
   OXYGEN_SCRIPTING_HEADERS
   "api_export.h"
+  "Attachment/SceneScriptAttachment.h"
   "Bindings/BindingRegistry.h"
   "Bindings/LuaBindingCommon.h"
   "Bindings/Packs/Content/ContentAsyncBindings.h"
@@ -90,6 +91,7 @@ set(
 )
 set(
   OXYGEN_SCRIPTING_PRIVATE_SOURCES
+  "Attachment/SceneScriptAttachment.cpp"
   "Bindings/BindingRegistry.cpp"
   "Bindings/LuaBindingCommon.cpp"
   "Bindings/Packs/Content/ContentAsyncBindings.cpp"
@@ -188,6 +190,7 @@ target_link_libraries(
     oxygen::scene
     oxygen::scripting-bindings-contracts
   PRIVATE
+    oxygen::content
     oxygen::input
     oxygen::physicsmodule
 )

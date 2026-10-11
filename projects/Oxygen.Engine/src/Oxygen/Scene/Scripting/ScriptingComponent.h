@@ -283,12 +283,26 @@ public:
     [[nodiscard]] auto GetOverrideParameter(std::string_view key) const
       -> const data::ScriptParam&;
 
+    //! The scene node a node parameter refers to, once bound.
+    [[nodiscard]] auto TryGetBoundNode(std::string_view key) const noexcept
+      -> std::optional<NodeHandle>
+    {
+      const auto it = std::ranges::find_if(node_bindings_,
+        [key](const auto& pair) -> bool { return pair.first == key; });
+      if (it == node_bindings_.end()) {
+        return std::nullopt;
+      }
+      return it->second;
+    }
+
   private:
     friend class ScriptingComponent;
     uint64_t slot_id_ { 0 };
     int32_t execution_order_ { 0 };
     std::shared_ptr<const data::ScriptAsset> asset_;
     std::vector<std::pair<std::string, data::ScriptParam>> overrides_;
+    //! Node parameters resolved to the nodes of the scene they attach to.
+    std::vector<std::pair<std::string, NodeHandle>> node_bindings_;
     CompileState compile_state_ { CompileState::kPendingCompilation };
     std::vector<Diagnostic> diagnostics_;
     std::shared_ptr<const scripting::ScriptExecutable> executable_;
@@ -342,6 +356,12 @@ public:
   //! The slot reference must come from this component's current Slots() view.
   OXGN_SCN_API auto SetParameter(
     const Slot& slot, std::string_view name, data::ScriptParam value) -> bool;
+
+  //! Binds a node parameter of a slot to a scene node. A node parameter
+  //! stores a node index of its scene asset; whoever creates the nodes binds
+  //! it to the node created for that index.
+  OXGN_SCN_API auto BindNodeParameter(
+    const Slot& slot, std::string_view name, NodeHandle node) -> bool;
 
   //! Tries to get a parameter value, checking overrides first, then falling
   //! back to defaults.

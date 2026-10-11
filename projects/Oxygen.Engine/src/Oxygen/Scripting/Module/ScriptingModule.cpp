@@ -1408,9 +1408,24 @@ auto ScriptingModule::PushInstanceParams(
   const scene::ScriptingComponent::Slot& slot) -> void
 {
   lua_newtable(lua_state_);
+  const auto scene = observed_scene_.lock();
   for (const auto& entry : slot.Parameters()) {
     lua_pushlstring(lua_state_, entry.key.data(), entry.key.size());
-    (void)bindings::PushScriptParam(lua_state_, entry.value.get());
+    // A node parameter is the scene node it was bound to; unbound, or bound
+    // to a node that no longer exists, it is nil.
+    if (std::holds_alternative<data::ScriptNodeParam>(entry.value.get())) {
+      const auto bound = slot.TryGetBoundNode(entry.key);
+      const auto target = bound.has_value() && scene != nullptr
+        ? scene->GetNode(*bound)
+        : std::nullopt;
+      if (target.has_value()) {
+        (void)bindings::PushSceneNode(lua_state_, *target);
+      } else {
+        lua_pushnil(lua_state_);
+      }
+    } else {
+      (void)bindings::PushScriptParam(lua_state_, entry.value.get());
+    }
     lua_rawset(lua_state_, -3);
   }
   lua_setreadonly(lua_state_, kLuaStackTop, 1);

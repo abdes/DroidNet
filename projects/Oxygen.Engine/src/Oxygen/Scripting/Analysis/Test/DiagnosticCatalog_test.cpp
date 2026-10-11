@@ -43,6 +43,8 @@ namespace {
     DiagnosticCode::kFieldTypeMismatch,
     DiagnosticCode::kNotAScript,
     DiagnosticCode::kLoadFailed,
+    DiagnosticCode::kAttachFailed,
+    DiagnosticCode::kOverrideRejected,
     DiagnosticCode::kRuntimeError,
   });
 

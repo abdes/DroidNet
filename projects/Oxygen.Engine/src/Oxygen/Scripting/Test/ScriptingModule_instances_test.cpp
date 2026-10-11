@@ -272,6 +272,50 @@ return script
   ExpectLua(module, "assert(_G.__self_checked == true)");
 }
 
+//! A node parameter is the scene node it is bound to, and nil when unbound.
+NOLINT_TEST_F(ScriptInstanceTest, NodeParameterIsItsBoundNode)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+  const auto executable = CompileSlotExecutable(R"lua(
+local script = oxygen.script {
+  params = {
+    target = oxygen.param.node {},
+    unbound = oxygen.param.node {},
+  },
+}
+function script.on_start(self)
+  assert(self.params.target:get_name() == "target-node",
+    "the node parameter is not its bound node")
+  assert(self.params.unbound == nil, "an unbound node parameter is not nil")
+  _G.__node_checked = true
+end
+return script
+)lua",
+    3);
+  ASSERT_NE(executable, nullptr);
+  auto scene = std::make_shared<scene::Scene>("nodes", kDefaultSceneCapacity);
+  auto node = scene->CreateNode("script-node");
+  const auto target = scene->CreateNode("target-node");
+  ASSERT_TRUE(node.AttachScripting());
+  auto scripting = node.GetScripting();
+  ASSERT_TRUE(scripting.AddSlot(MakeScriptAsset()));
+  const auto& slot = scripting.Slots().front();
+  for (const auto* name : { "target", "unbound" }) {
+    ASSERT_TRUE(scripting.SetParameter(slot, name,
+      data::ScriptParam { data::ScriptNodeParam { .node_index = 1U } }));
+  }
+  ASSERT_TRUE(scripting.BindNodeParameter(slot, "target", target));
+  ASSERT_TRUE(scripting.MarkSlotReady(scripting.Slots().front(), executable));
+
+  engine::FrameContext frame;
+  frame.SetScene(observer_ptr { scene.get() });
+  RunSlotHooks(module, frame);
+
+  EXPECT_FALSE(frame.HasErrors());
+  ExpectLua(module, "assert(_G.__node_checked == true)");
+}
+
 //! A started instance gets on_destroy when it ends by any route, and its
 //! listeners are released afterwards.
 NOLINT_TEST_F(ScriptInstanceTest, StartedInstanceEndsWithOnDestroy)

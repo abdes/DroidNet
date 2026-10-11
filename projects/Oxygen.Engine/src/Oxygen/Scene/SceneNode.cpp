@@ -1068,6 +1068,14 @@ auto SceneNode::Scripting::SetParameter(const Slot& slot, std::string_view name,
   });
 }
 
+auto SceneNode::Scripting::BindNodeParameter(const Slot& slot,
+  const std::string_view name, const SceneNode& target) noexcept -> bool
+{
+  return SafeCall(RequiresScripting(), [&](SafeCallState& state) -> bool {
+    return state.scripting->BindNodeParameter(slot, name, target.GetHandle());
+  });
+}
+
 auto SceneNode::Scripting::TryGetParameter(
   const Slot& slot, std::string_view name) const noexcept
   -> std::optional<std::reference_wrapper<const data::ScriptParam>>

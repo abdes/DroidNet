@@ -62,6 +62,8 @@ enum class DiagnosticCode : uint16_t {
   // Binding and attachment
   kNotAScript = 601,
   kLoadFailed = 602,
+  kAttachFailed = 603,
+  kOverrideRejected = 604,
 
   // Runtime
   kRuntimeError = 701,

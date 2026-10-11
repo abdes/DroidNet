@@ -840,6 +840,10 @@ public:
   OXGN_SCN_API auto SetParameter(const Slot& slot, std::string_view name,
     data::ScriptParam value) noexcept -> bool;
 
+  //! Binds a node parameter of a slot to a node of the same scene.
+  OXGN_SCN_API auto BindNodeParameter(const Slot& slot, std::string_view name,
+    const SceneNode& target) noexcept -> bool;
+
   //! Tries to get a parameter value, checking overrides first then falling
   //! back to defaults.
   //! The slot reference must come from this object's current Slots() view.
