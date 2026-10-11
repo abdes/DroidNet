@@ -190,13 +190,15 @@ from it.
   in `Content/Gameplay/Player.input.json` cooks to
   `/Content/Gameplay/Jump.oiact`; its identity is
   `asset:///Content/Gameplay/Jump.oiact`. No engine change is needed.
-- **Name and file.** In a file holding one asset, the asset name is the file
-  stem, as for materials: `Content/Gameplay/Jump.input-action.json` declares
-  `Jump`, so source and cooked paths match. A `name` that differs from the
-  stem is an error with the fix "Use the file name"
-  (`OXE.INPUT.NAME_STEM_MISMATCH`). A file holding several assets is a
-  multi-output source: each declaration's identity is its folder plus its
-  name.
+- **Single-asset form.** A `*.input-action.json` file, or an `*.input.json`
+  with exactly one context and no `actions`, is in single-asset form. Its
+  asset name is the file stem, as for materials:
+  `Content/Gameplay/Jump.input-action.json` declares `Jump`, so source and
+  cooked paths match. A `name` that differs from the stem is an error
+  (`OXE.INPUT.NAME_STEM_MISMATCH`) with two one-click fixes, Rename file and
+  Rename asset. Every other file is a multi-asset file: each declaration's
+  identity is its folder plus its declared name, and the file name carries no
+  identity.
 - **References.** Persisted references (script parameter overrides,
   Play-section contexts) store the identity URI. Inside input files, an action
   declared in the same file is referenced by name; any other action by its
@@ -206,15 +208,50 @@ from it.
   ([IF-12][mf]).
 - **Uniqueness.** Two declarations that produce the same virtual path are an
   error (`OXE.INPUT.IDENTITY_COLLISION`); the cooker rejects them too
-  ([IF-7][mf]). Equal names in different folders are different assets; the
-  runtime keys them by asset key once ED-M08.10l delivers IF-12 (c).
+  ([IF-7][mf]). `Jump` declared in `Player.input.json` and in
+  `Jump.input-action.json` of the same folder both produce
+  `/Content/Gameplay/Jump.oiact`. Equal names in different folders are
+  different assets; the runtime keys them by asset key once ED-M08.10l
+  delivers IF-12 (c).
 
-| Change                                 | Identity                          | Referrers rewritten by the relocation                        |
-| -------------------------------------- | --------------------------------- | ------------------------------------------------------------ |
-| Rename a single-asset file's asset     | Changes; file and name renamed    | Input files (paths), scenes, scripts.                        |
-| Rename an asset in a multi-asset file  | Changes; name renamed in the file | Same file (local names), other input files, scenes, scripts. |
-| Move a file (any folder or mount)      | Changes for every asset it holds  | Input files (paths), scenes, scripts.                        |
-| Split a multi-asset file (same folder) | Unchanged                         | None.                                                        |
+Multi-asset files need four further rules so that what the user sees stays
+predictable:
+
+- **The stem rule is stable.** Identity never depends on how many assets a
+  file holds; the form only decides whether the stem check applies. The
+  editor never adds a declaration to an existing file. A Delete, Move asset or
+  Split that leaves an `*.input.json` in single-asset form with a stem that
+  differs from its remaining context's name says so in its confirmation, with
+  "Also rename the file to `<Name>.input.json`" checked by default; unchecked,
+  the confirmation shows the `NAME_STEM_MISMATCH` the file will have and its
+  fixes before anything is written. A hand edit that adds a second asset to a
+  single-asset file changes no identity; the stem check stops applying.
+- **Every output maps back to its source.** The project input index maps each
+  key a file emits to that file and the declaration's JSON pointer. Content
+  Browser rows merge cooked and source facts through it, and Reveal source,
+  Go To Property, staleness and retirement use it. A key whose declaration
+  disappears by any route (rename, delete, Move asset, move file, a hand edit
+  or the file's removal outside the editor) is retired at the next
+  publication. A key that changes source without changing identity (Split)
+  changes owner and is not retired.
+- **Collisions are checked before writing.** Create, Rename, Rename file, Move
+  file, Move asset, Split, Duplicate and Paste check the file names they
+  would write and the identities they would produce against the index. A
+  collision rejects the whole operation, names both sources and writes
+  nothing (`OXE.INPUT.IDENTITY_COLLISION`); for example, Split of a
+  `Player.input.json` declaring `Jump` where `Jump.input-action.json` exists.
+- **Rename and move act on what the row shows.** A row is an asset, so
+  Rename and Move on it act on that asset (section 8.4); file-level Rename
+  file and Move file are separate, explicit commands.
+
+| Change                                 | Identity                          | Referrers rewritten by the relocation                                               |
+| -------------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------- |
+| Rename a single-asset file's asset     | Changes; file and name renamed    | Input files (paths), scenes, scripts.                                               |
+| Rename an asset in a multi-asset file  | Changes; name renamed in the file | Same file (local names), other input files, scenes, scripts.                        |
+| Move a file (any folder or mount)      | Changes for every asset it holds  | Input files (paths), scenes, scripts.                                               |
+| Split a multi-asset file (same folder) | Unchanged                         | None.                                                                               |
+| Rename file (multi-asset file)         | Unchanged                         | None.                                                                               |
+| Move asset out of a multi-asset file   | Changes for that asset            | Input files (paths), scenes, scripts; local references across the cut become paths. |
 
 A name is 1–63 characters matching `[A-Za-z_][A-Za-z0-9_]*`, the schema
 pattern after [IF-6][mf], so it is a valid file stem and path segment
@@ -344,19 +381,37 @@ scene Play sections, and input asset URIs in script parameter overrides.
   local references are renamed. Every referring input file, scene and script
   is rewritten. Collisions and invalid names are rejected before anything is
   written.
-- **Move** acts on the source file and changes the identity of every asset
-  it holds. For a file holding several assets the command says so ("Move file
-  with 4 input assets").
+- **Rename file** (multi-asset files only, from any of its rows and the
+  document outline): renames the file and nothing else. The dialog says
+  "Renaming the file does not rename its 4 input assets"; no identity changes
+  and no referrer is rewritten. Single-asset files have no separate file
+  rename, because Rename keeps file and name equal.
+- **Move** on an asset row, by command or drag, moves that asset
+  ([IQ-13](#152-open-questions)). From a single-asset file it moves the file.
+  From a multi-asset file it is **Move asset**: the declaration is removed
+  from its file and written to `<target>/<Name>.input-action.json` or
+  `<target>/<Name>.input.json`; its identity changes and its referrers are
+  rewritten. References between the moved asset and the assets left behind,
+  which were local names, become virtual paths on both sides; a moved context
+  takes no actions with it. Moving the last context out of a file that keeps
+  actions is rejected (`OXE.INPUT.LAST_CONTEXT_IN_FILE`) with Split offered.
+- **Move file** (from any row of a multi-asset file and the document outline)
+  moves the whole file and changes the identity of every asset it holds; its
+  confirmation says "Move file with 4 input assets".
 - **Delete** lists referrers and confirms when any exist. An asset alone in
   its file deletes the file; an asset in a shared file is removed from it.
   Removing the last context of an `*.input.json` is rejected
   (`OXE.INPUT.LAST_CONTEXT_IN_FILE`) with Delete file and Split as the offered
   actions, since the schema requires one context. Remaining references show
-  as missing and fail their cook.
+  as missing and fail their cook. The stem rule of section 7.2 applies to the
+  file that remains.
 - **Split into asset files** (on a multi-asset file): writes one
   `*.input-action.json` per action and one `*.input.json` per context in the
   same folder, then deletes the original. Identities do not change, so no
-  referrer is rewritten. One relocation-style transaction with Undo.
+  referrer is rewritten; local references between the new files become
+  virtual paths. The confirmation lists the files to write, and existing file
+  names or identities reject it before writing. One relocation-style
+  transaction with Undo.
 
 ### 8.5 Key capture
 
@@ -416,9 +471,11 @@ Errors block that file's cook with the same messages.
 
 - **Rows.** One row per declared action and context, in the folder of its
   source file. When a file holds more than one asset, rows show "in
-  Player.input.json" under the name. A file that fails schema validation shows
-  one Broken row named after the file, with the schema messages and **Open in
-  code editor**.
+  Player.input.json" under the name, and their context menu adds Rename
+  file…, Move file…, Split into asset files and Reveal source (opens the file
+  at the declaration). Rename, Move and drag act on the asset (section 8.4).
+  A file that fails schema validation shows one Broken row named after the
+  file, with the schema messages and **Open in code editor**.
 - **Tiles.** Generated, no renderer: the action tile shows its value-type
   glyph (button, slider, two-axis pad) and the consume-input mark; the context
   tile shows up to four key caps of its first bindings and the mapping count.
@@ -427,7 +484,8 @@ Errors block that file's cook with the same messages.
   it. **Open in code editor** stays available on every input row.
 - **Details.** Action: value type, consume input, source file, and "Used by":
   contexts with their bindings (`Gameplay — Space, Pressed`), scripts and
-  scenes, each opening its user. Context: priority, mapping and action counts,
+  scenes, each opening its user. Source: the file and, for a multi-asset
+  file, "declaration 2 of 4". Context: priority, mapping and action counts,
   flags, source file, and scenes and scripts that start or switch it.
 - **Filters.** The existing Input actions and Input mapping contexts filters
   include source rows.
@@ -589,25 +647,26 @@ panel lists cook failures with Go To Property.
 ## 12. Operation Results And Diagnostics
 
 Operations: `Input.Create`, `Input.Open`, `Input.Edit`, `Input.Save`,
-`Input.Cook`, `Input.Rename`, `Input.Move`, `Input.Delete`, `Input.Split`.
+`Input.Cook`, `Input.Rename`, `Input.RenameFile`, `Input.Move`,
+`Input.MoveAsset`, `Input.Delete`, `Input.Split`.
 Domain `InputAuthoring`; persistence uses `Document`, cooking `AssetCook`,
 relocation its existing domain.
 
-| Code                               | Severity | When                                                                      |
-| ---------------------------------- | -------- | ------------------------------------------------------------------------- |
-| `OXE.INPUT.SOURCE_INVALID`         | Error    | The file fails its schema; row is Broken; editing is disabled.            |
-| `OXE.INPUT.NAME_INVALID`           | Error    | Empty, longer than 63 characters or outside the name pattern (new names). |
-| `OXE.INPUT.NAME_STEM_MISMATCH`     | Error    | A single-asset file's `name` differs from its file stem.                  |
-| `OXE.INPUT.IDENTITY_COLLISION`     | Error    | Two declarations produce the same virtual path.                           |
-| `OXE.INPUT.ACTION_MISSING`         | Error    | A mapping, linked action or combo step reference resolves to no action.   |
-| `OXE.INPUT.SLOT_UNKNOWN`           | Error    | A slot name the engine does not know.                                     |
-| `OXE.INPUT.TRIGGER_FIELD_REQUIRED` | Error    | A schema-required trigger field is missing or out of range.               |
-| `OXE.INPUT.COMBO_STEP_UNREACHABLE` | Error    | A step with no completion state, or a zero window after the first step.   |
-| `OXE.INPUT.VALUE_OUT_OF_RANGE`     | Error    | Non-finite or out-of-range number; the edit is rejected.                  |
-| `OXE.INPUT.LAST_CONTEXT_IN_FILE`   | Error    | Delete would leave an `*.input.json` without contexts.                    |
-| `OXE.INPUT.BINDING_CONFLICT`       | Warning  | The same or an overlapping slot is bound twice where both can fire.       |
-| `OXE.INPUT.CAPTURE_UNSUPPORTED`    | Info     | A captured key has no engine slot.                                        |
-| `OXE.INPUT.CREATE_FAILED`          | Error    | Creating a file failed; names the path and cause.                         |
+| Code                               | Severity | When                                                                                                           |
+| ---------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------- |
+| `OXE.INPUT.SOURCE_INVALID`         | Error    | The file fails its schema; row is Broken; editing is disabled.                                                 |
+| `OXE.INPUT.NAME_INVALID`           | Error    | Empty, longer than 63 characters or outside the name pattern (new names).                                      |
+| `OXE.INPUT.NAME_STEM_MISMATCH`     | Error    | A single-asset file's `name` differs from its file stem.                                                       |
+| `OXE.INPUT.IDENTITY_COLLISION`     | Error    | Two declarations produce the same virtual path, or an operation would write over an existing file or identity. |
+| `OXE.INPUT.ACTION_MISSING`         | Error    | A mapping, linked action or combo step reference resolves to no action.                                        |
+| `OXE.INPUT.SLOT_UNKNOWN`           | Error    | A slot name the engine does not know.                                                                          |
+| `OXE.INPUT.TRIGGER_FIELD_REQUIRED` | Error    | A schema-required trigger field is missing or out of range.                                                    |
+| `OXE.INPUT.COMBO_STEP_UNREACHABLE` | Error    | A step with no completion state, or a zero window after the first step.                                        |
+| `OXE.INPUT.VALUE_OUT_OF_RANGE`     | Error    | Non-finite or out-of-range number; the edit is rejected.                                                       |
+| `OXE.INPUT.LAST_CONTEXT_IN_FILE`   | Error    | Delete would leave an `*.input.json` without contexts.                                                         |
+| `OXE.INPUT.BINDING_CONFLICT`       | Warning  | The same or an overlapping slot is bound twice where both can fire.                                            |
+| `OXE.INPUT.CAPTURE_UNSUPPORTED`    | Info     | A captured key has no engine slot.                                                                             |
+| `OXE.INPUT.CREATE_FAILED`          | Error    | Creating a file failed; names the path and cause.                                                              |
 
 Diagnostics carry the document, file path, asset URI and property path.
 Engine `input.*` codes stay as reported.
@@ -633,6 +692,11 @@ Engine `input.*` codes stay as reported.
 | IA-3  | Key capture session tests with synthesized events: letters, digits, both-side modifiers, keypad and extended keys, mouse buttons, wheel, Escape, focus loss; Ctrl+S, Ctrl+Z, Delete and the Play and Stop shortcuts are swallowed and bind their first key; Alt, F10 and Tab are captured, not acted on. |
 | IA-4  | Every trigger type's fields edit, validate and round-trip; type change, reorder, combo steps and flags undo and redo as single entries.                                                                                                                                                                  |
 | IA-10 | Binding conflicts: a slot bound twice in a context, an overlapping pair (`MouseXY` and `MouseX`) and a same-priority pair of started contexts each show `OXE.INPUT.BINDING_CONFLICT` on the rows and in the key selector.                                                                                |
+| IA-11 | Rename file on a multi-asset file renames only the file, says that its assets keep their names, and rewrites no referrer.                                                                                                                                                                                |
+| IA-12 | Delete, Move asset and Split that leave a single-asset `*.input.json` with a mismatched stem offer the file rename in the confirmation; declining shows the mismatch and its fixes before writing; no operation produces the mismatch silently.                                                          |
+| IA-13 | Create, Rename, Rename file, Move file, Move asset, Split, Duplicate and Paste reject a file-name or identity collision before writing anything, naming both sources; Split next to an existing `Jump.input-action.json` is the case under test.                                                         |
+| IA-14 | Every emitted key maps to its file and declaration: Reveal source and Go To Property from a cooked row open the declaration; a declaration removed by rename, delete, Move asset, move file, hand edit or external file removal leaves the index at the next publication; Split keeps its keys.          |
+| IA-15 | Move asset extracts one declaration into its own file in the target folder, rewrites its referrers and turns references across the cut into paths; Move file moves the whole file with its confirmation.                                                                                                 |
 | IA-5  | Rename, move, delete and split change identities and retarget input files, Play sections and script overrides as in section 7.2; Undo restores all files.                                                                                                                                                |
 | IA-6  | Gesture, undo/redo, dirty, save-then-edit and external-change conflict behavior match the material document contract.                                                                                                                                                                                    |
 | IA-7  | Save cooks the file and its dependents; an action referenced by path from another folder and mount resolves; equal names in two folders stay distinct; a renamed action's old output leaves the index; cook errors navigate to the field.                                                                |
@@ -677,6 +741,7 @@ pull request; the user interface items await the owner at ED-M09.1.
 | IQ-9  | Default folder.                                                      | Decided 2026-10-11 (review): `Content/Input`, created by the project template and used by the creation target policy ([project layout](project-layout-and-templates.md)).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | IQ-10 | Text needed in documents this LLD does not own.                      | Decided 2026-10-11 (review): the ED-M08 owner amends the documents they own; this LLD needs: [script authoring](script-authoring.md) §4 says Edit on an input asset opens the input editor and Open in code editor remains, and §6 and §8 say the input action and context pickers offer New action and New context and the Play section's priority defaults to the context's own (M09.9 behavior, added when M09.1 closes); M09.4 retires `OXE.SCRIPT.INPUT_REFERENCE_UNSUPPORTED` when cross-file references are enabled. Owned here and amended at M09.1 close: [content browser §9.5](content-browser-asset-identity.md#95-asset-relocation) (input reference kinds; identity rule unchanged) and [content pipeline](content-pipeline.md) (input job layout at the source folder, `depends_on` from path references, multi-output provenance). |
 | IQ-11 | Mapping order.                                                       | Owner's UI decision at M09.1; reviewer recommends: evaluation order with contiguous action groups and an explicit Group by action (section 9.3).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| IQ-13 | Moving one asset out of a multi-asset file.                          | Owner's UI decision at M09.1 (decision 9). Recommended: Move and drag on an asset row move that asset (Move asset, section 8.4), with Move file as a separate command; the alternative, a drag that always moves the whole file with a confirmation, contradicts the row the user dragged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | IQ-12 | Schema augmentation (IF-2 to IF-6).                                  | Decided 2026-10-11 (review): part of M09.2 ([IF-2 to IF-6][mf]).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ### 15.3 Rejected alternatives
