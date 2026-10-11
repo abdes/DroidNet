@@ -44,8 +44,9 @@ auto Instantiate(const SceneInstantiationRequest&, IAssetLoader&)
 
 It creates nodes in index order with names, flags and transforms; attaches
 renderables with material overrides, cameras, lights, local fog volumes and
-the environment; applies the scene's start state (below); and then
-attaches scripts. It applies authored values only: no camera is invented and
+the environment; instantiates the model scenes the scene instances under
+their instance roots ([scene composition](scene-composition.md)); applies the
+scene's start state (below); and then attaches scripts. It applies authored values only: no camera is invented and
 no camera value is rewritten. Unsupported or failed records become issues
 with the node index; the rest of the scene loads.
 
