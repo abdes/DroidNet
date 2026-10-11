@@ -6,13 +6,21 @@
 
 #include <algorithm>
 #include <array>
+#include <memory>
 #include <string>
 #include <string_view>
 
 #include <lua.h>
 #include <lualib.h>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/InputContextHydration.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/InputMappingContextAsset.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Input/InputBindings.h>
@@ -108,8 +116,8 @@ namespace {
     return kLuaSingleResult;
   }
 
-  //! An action is named by its input action asset reference.
-  auto RequireActionArg(lua_State* state, const char* error_message)
+  //! Actions and contexts are named by their asset reference.
+  auto RequireAssetArg(lua_State* state, const char* error_message)
     -> data::AssetKey
   {
     const auto key
@@ -122,7 +130,7 @@ namespace {
 
   auto LuaInputEventName(lua_State* state) -> int
   {
-    const auto action = RequireActionArg(
+    const auto action = RequireAssetArg(
       state, "oxygen.input.event_name expects an input action asset");
     const auto edge_name = RequireStringArg(
       state, kLuaArg2, "oxygen.input.event_name expects edge name");
@@ -141,7 +149,7 @@ namespace {
   {
     // The action need not be hydrated yet: a context that maps it may be
     // activated later.
-    const auto action = RequireActionArg(
+    const auto action = RequireAssetArg(
       state, "oxygen.input.on_action expects an input action asset");
     const auto edge_name = RequireStringArg(
       state, kLuaArg2, "oxygen.input.on_action expects edge name");
@@ -156,6 +164,91 @@ namespace {
 
     const auto event_name = BuildActionEdgeEventName(action, edge_name);
     return CallEventsRegistration(state, event_name);
+  }
+
+  auto GetInputSystem(lua_State* state) -> observer_ptr<engine::InputSystem>
+  {
+    const auto engine = GetActiveEngine(state);
+    if (engine == nullptr) {
+      return nullptr;
+    }
+    const auto input = engine->GetModule<engine::InputSystem>();
+    return input.has_value() ? observer_ptr { &input->get() } : nullptr;
+  }
+
+  //! Hydrates a context from its asset, adds it with the asset's default
+  //! priority and activates it.
+  auto StartContext(engine::InputSystem& input, content::IAssetLoader& loader,
+    const data::InputMappingContextAsset& asset) -> bool
+  {
+    auto context = content::HydrateInputContext(asset, loader, input);
+    if (!context) {
+      return false;
+    }
+    input.AddMappingContext(context, asset.GetDefaultPriority());
+    input.ActivateMappingContext(context);
+    return true;
+  }
+
+  //! Activates a context; one not yet added is hydrated from its asset with
+  //! the asset's default priority, after loading it if needed.
+  auto LuaInputActivateContext(lua_State* state) -> int
+  {
+    const auto key = RequireAssetArg(
+      state, "oxygen.input.activate_context expects an input context asset");
+    const auto input = GetInputSystem(state);
+    const auto loader = GetAssetLoader(state);
+    if (input == nullptr) {
+      lua_pushboolean(state, 0);
+      return kLuaSingleResult;
+    }
+    if (auto context = input->GetMappingContextByKey(key)) {
+      input->ActivateMappingContext(context);
+      lua_pushboolean(state, 1);
+      return kLuaSingleResult;
+    }
+    if (loader == nullptr) {
+      lua_pushboolean(state, 0);
+      return kLuaSingleResult;
+    }
+    if (const auto asset = loader->GetInputMappingContextAsset(key)) {
+      lua_pushboolean(state, StartContext(*input, *loader, *asset) ? 1 : 0);
+      return kLuaSingleResult;
+    }
+    // Not loaded yet: the context starts when its load completes. The input
+    // system and the loader are engine services that outlive the load.
+    loader->StartLoadInputMappingContextAsset(key,
+      [input, loader, key](
+        const std::shared_ptr<data::InputMappingContextAsset>& asset) -> void {
+        if (asset == nullptr) {
+          LOG_F(WARNING,
+            "oxygen.input.activate_context: input context {} is not available",
+            data::to_string(key));
+          return;
+        }
+        if (input->GetMappingContextByKey(asset->GetAssetKey()) == nullptr) {
+          (void)StartContext(*input, *loader, *asset);
+        }
+      });
+    lua_pushboolean(state, 1);
+    return kLuaSingleResult;
+  }
+
+  //! Deactivates an added context; returns false when it was never added.
+  auto LuaInputDeactivateContext(lua_State* state) -> int
+  {
+    const auto key = RequireAssetArg(
+      state, "oxygen.input.deactivate_context expects an input context asset");
+    const auto input = GetInputSystem(state);
+    const auto context
+      = input != nullptr ? input->GetMappingContextByKey(key) : nullptr;
+    if (!context) {
+      lua_pushboolean(state, 0);
+      return kLuaSingleResult;
+    }
+    input->DeactivateMappingContext(context);
+    lua_pushboolean(state, 1);
+    return kLuaSingleResult;
   }
 
   auto LuaInputOnAction(lua_State* state) -> int
@@ -177,6 +270,12 @@ auto RegisterInputBindings(lua_State* state, const int oxygen_table_index)
 
   lua_pushcfunction(state, LuaInputEventName, "input.event_name");
   lua_setfield(state, module_index, "event_name");
+  lua_pushcfunction(
+    state, LuaInputActivateContext, "oxygen.input.activate_context");
+  lua_setfield(state, module_index, "activate_context");
+  lua_pushcfunction(
+    state, LuaInputDeactivateContext, "oxygen.input.deactivate_context");
+  lua_setfield(state, module_index, "deactivate_context");
 
   lua_getfield(state, oxygen_table_index, "events");
   if (lua_istable(state, -1) == 0) {

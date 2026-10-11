@@ -400,6 +400,34 @@ namespace {
       state, scene_ref->Query(), std::string(pattern_ptr, len));
   }
 
+  //! The node the scene is viewed through, or nil.
+  auto LuaSceneActiveCamera(lua_State* state) -> int
+  {
+    const auto scene_ref = GetScene(state);
+    const auto camera = scene_ref != nullptr
+      ? scene_ref->ActiveCamera()
+      : std::optional<scene::SceneNode> {};
+    if (!camera.has_value()) {
+      lua_pushnil(state);
+      return 1;
+    }
+    return PushSceneNode(state, *camera);
+  }
+
+  //! Views the scene through `node`; false, changing nothing, when the node
+  //! is not a live camera node of the active scene.
+  auto LuaSceneSetActiveCamera(lua_State* state) -> int
+  {
+    const auto scene_ref = GetScene(state);
+    auto* node = TryCheckSceneNode(state, 1);
+    if (node == nullptr || !IsNodeInActiveScene(*node, scene_ref)) {
+      lua_pushboolean(state, 0);
+      return 1;
+    }
+    lua_pushboolean(state, scene_ref->SetActiveCamera(*node) ? 1 : 0);
+    return 1;
+  }
+
   auto LuaSceneHasEnvironment(lua_State* state) -> int
   {
     auto scene_ref = GetScene(state);
@@ -507,6 +535,10 @@ auto RegisterSceneBindings(lua_State* state, const int oxygen_table_index)
   lua_setfield(state, module_index, "reparent");
   lua_pushcfunction(state, LuaSceneRootNodes, "scene.root_nodes");
   lua_setfield(state, module_index, "root_nodes");
+  lua_pushcfunction(state, LuaSceneActiveCamera, "scene.active_camera");
+  lua_setfield(state, module_index, "active_camera");
+  lua_pushcfunction(state, LuaSceneSetActiveCamera, "scene.set_active_camera");
+  lua_setfield(state, module_index, "set_active_camera");
 
   lua_pushcfunction(state, LuaSceneFindOne, "scene.find_one");
   lua_setfield(state, module_index, "find_one");

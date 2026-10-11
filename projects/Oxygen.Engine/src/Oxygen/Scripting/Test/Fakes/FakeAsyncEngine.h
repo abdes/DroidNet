@@ -39,7 +39,13 @@ public:
   auto GetAssetLoader() const noexcept
     -> observer_ptr<content::IAssetLoader> override
   {
-    return {};
+    return asset_loader_;
+  }
+
+  //! Serves `loader` from GetAssetLoader(); null by default.
+  auto SetAssetLoader(const observer_ptr<content::IAssetLoader> loader) -> void
+  {
+    asset_loader_ = loader;
   }
 
   auto GetScriptCompilationService() noexcept
@@ -158,6 +164,7 @@ private:
   console::Console console_ {};
   FakeScriptCompilationService compilation_service_ {};
   bool running_ { true };
+  observer_ptr<content::IAssetLoader> asset_loader_;
   std::unordered_map<oxygen::TypeId,
     std::reference_wrapper<engine::EngineModule>>
     modules_ {};

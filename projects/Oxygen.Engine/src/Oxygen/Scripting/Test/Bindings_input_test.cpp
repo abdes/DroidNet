@@ -4,24 +4,32 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
+#include <string_view>
 #include <vector>
 
 #include "ScriptingModule_test_fixture.h"
 #include <fmt/format.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/Test/Fakes/StubAssetLoader.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/InputMappingContextAsset.h>
+#include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSnapshot.h>
+#include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
@@ -306,6 +314,78 @@ end
     .chunk_name = ScriptChunkName { "input_on_action_by_asset_check" },
   });
   EXPECT_TRUE(checked.ok) << checked.message;
+}
+
+namespace {
+  //! Serves one cached context and loads another on request.
+  class ContextLoader final : public content::testing::StubAssetLoader {
+  public:
+    ContextLoader(data::AssetKey cached, data::AssetKey loadable)
+      : cached_(MakeContext(cached, "Cached"))
+      , loadable_(MakeContext(loadable, "Loadable"))
+    {
+    }
+
+    [[nodiscard]] auto GetInputMappingContextAsset(const data::AssetKey& key)
+      -> std::shared_ptr<data::InputMappingContextAsset> override
+    {
+      return key == cached_->GetAssetKey() ? cached_ : nullptr;
+    }
+
+    void StartLoadInputMappingContextAsset(const data::AssetKey& key,
+      InputMappingContextCallback on_complete) override
+    {
+      on_complete(key == loadable_->GetAssetKey() ? loadable_ : nullptr);
+    }
+
+  private:
+    static auto MakeContext(const data::AssetKey& key, std::string_view name)
+      -> std::shared_ptr<data::InputMappingContextAsset>
+    {
+      auto desc = data::pak::input::InputMappingContextAssetDesc {};
+      std::ranges::copy(name, std::begin(desc.header.name));
+      return std::make_shared<data::InputMappingContextAsset>(key, desc);
+    }
+
+    std::shared_ptr<data::InputMappingContextAsset> cached_;
+    std::shared_ptr<data::InputMappingContextAsset> loadable_;
+  };
+} // namespace
+
+//! activate_context starts a context by asset reference, whether its asset
+//! is already loaded or still has to be; deactivate_context needs an added
+//! context.
+NOLINT_TEST_F(InputBindingsTest, ContextsSwitchByAssetReference)
+{
+  const auto cached = data::AssetKey::FromVirtualPath("/Content/Menu.oimap");
+  const auto loadable = data::AssetKey::FromVirtualPath("/Content/Fly.oimap");
+  auto loader = ContextLoader(cached, loadable);
+  co::BroadcastChannel<platform::InputEvent> channel;
+  engine::InputSystem input(channel.ForRead());
+  FakeEngine().AddModule(input);
+  FakeEngine().SetAssetLoader(observer_ptr<content::IAssetLoader> { &loader });
+
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+  const auto result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { fmt::format(R"lua(
+local input = oxygen.input
+assert(input.activate_context("{0}"), "a loaded context starts")
+assert(input.deactivate_context("{0}"), "an added context stops")
+assert(input.activate_context("{0}"), "an added context restarts")
+assert(input.activate_context("{1}"), "a context starts once loaded")
+assert(not input.deactivate_context("{2}"), "an unknown context is not stopped")
+assert(not pcall(input.activate_context, "Menu"), "a name is not a context")
+)lua",
+      data::to_string(cached), data::to_string(loadable),
+      data::to_string(
+        data::AssetKey::FromVirtualPath("/Content/None.oimap"))) },
+    .chunk_name = ScriptChunkName { "input_context_switching" },
+  });
+
+  EXPECT_TRUE(result.ok) << result.message;
+  EXPECT_NE(input.GetMappingContextByKey(cached), nullptr);
+  EXPECT_NE(input.GetMappingContextByKey(loadable), nullptr);
 }
 
 } // namespace oxygen::scripting::test

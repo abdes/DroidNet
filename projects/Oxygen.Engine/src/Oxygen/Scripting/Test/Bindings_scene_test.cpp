@@ -23,6 +23,7 @@
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 
@@ -1107,6 +1108,53 @@ end
     FAIL() << (errors.empty() ? std::string("unknown scripting error")
                               : errors.front().message);
   }
+}
+
+//! Scripts view the scene through any camera node; a node without a camera
+//! is rejected and changes nothing.
+NOLINT_TEST_F(SceneBindingsTest, ActiveCameraSwitchesBetweenCameraNodes)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local nodes = {}
+  for _, node in ipairs(oxygen.scene.root_nodes()) do
+    nodes[node:get_name()] = node
+  end
+  local scene = oxygen.scene
+  assert(scene.active_camera():get_name() == "First", "initial camera")
+  assert(scene.set_active_camera(nodes.Second), "switch to a camera node")
+  assert(scene.active_camera():get_name() == "Second", "camera switched")
+  assert(not scene.set_active_camera(nodes.Plain), "plain node rejected")
+  assert(scene.active_camera():get_name() == "Second", "camera unchanged")
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "active_camera_switch" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene
+    = std::make_shared<scene::Scene>("active_camera", kDefaultSceneCapacity);
+  auto first = scene->CreateNode("First");
+  auto second = scene->CreateNode("Second");
+  (void)scene->CreateNode("Plain");
+  ASSERT_TRUE(first.AttachCamera(std::make_unique<scene::PerspectiveCamera>()));
+  ASSERT_TRUE(
+    second.AttachCamera(std::make_unique<scene::PerspectiveCamera>()));
+  ASSERT_TRUE(scene->SetActiveCamera(first));
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+
+  EXPECT_FALSE(context.HasErrors());
+  const auto active = scene->ActiveCamera();
+  ASSERT_TRUE(active.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  EXPECT_EQ(active.value().GetName(), "Second");
 }
 
 } // namespace oxygen::scripting::test
