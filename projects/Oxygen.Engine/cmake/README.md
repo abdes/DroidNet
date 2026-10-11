@@ -80,10 +80,9 @@ No global shortcut registry or auxiliary-target renaming is introduced.
 
 `test_build_helpers.py` checks metadata, all production declaration preambles,
 hierarchy isolation, argument errors, inventory exclusions and generated Visual
-Studio header projects. Set `OXYGEN_RUN_HELPER_BUILD_TESTS=1` to additionally build
-and run a C++23 shortcut fixture with Ninja, Ninja Multi-Config and Visual Studio
-on Windows, checking unchanged object/executable timestamps across both names.
-These checks remain available locally; GitHub CI is intentionally disabled.
+Studio header projects. It also builds and runs a C++23 shortcut fixture with
+Ninja, Ninja Multi-Config and Visual Studio on Windows, checking unchanged
+object/executable timestamps across both names.
 
 ## Full-engine build contract
 
@@ -262,16 +261,9 @@ Local dirty packages are allowed and identified. B04 adds no official-release
 mode or publication gate. Release automation must eventually apply its own policy
 to this factual metadata; CMake `Release` is only a build configuration.
 
-`test_source_provenance.py` runs script/Git/export checks without invoking a
-compiler. Its native incremental, runtime and install tests are opt-in:
-
-```powershell
-$env:OXYGEN_RUN_PROVENANCE_BUILD_TESTS = '1'
-python -m unittest discover -s tools/cmake/tests -p test_source_provenance.py -v
-```
-
-Obtain build permission first on shared hosts. The native fixtures build the
-production version implementation sequentially, without engine dependencies.
+`test_source_provenance.py` runs script/Git/export checks, then builds the
+production version implementation in a temporary fixture, without engine
+dependencies, to check incremental, runtime and install behavior.
 
 ## Selecting reusable modules
 
