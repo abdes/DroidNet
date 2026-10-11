@@ -39,8 +39,6 @@
   "contexts": [
     {
       "name": "RotateRuntimeInputContext",
-      "auto_load": true,
-      "auto_activate": true,
       "mappings": [
         {
           "action": "RotateSpeedUpAction",

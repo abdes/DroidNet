@@ -147,7 +147,8 @@
         "character_capsule.geometry",
         "softbody_sphere.geometry",
         "softbody_cube.geometry",
-        "stack_cube.geometry"
+        "stack_cube.geometry",
+        "input.physics_domains"
       ]
     },
     {
@@ -165,7 +166,8 @@
         "character_capsule.geometry",
         "softbody_sphere.geometry",
         "softbody_cube.geometry",
-        "stack_cube.geometry"
+        "stack_cube.geometry",
+        "input.physics_domains"
       ]
     },
     {

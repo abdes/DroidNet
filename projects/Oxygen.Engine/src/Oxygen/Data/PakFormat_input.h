@@ -34,10 +34,10 @@ enum class InputActionAssetFlags : uint32_t { // NOLINT(*-enum-size)
 OXYGEN_DEFINE_FLAGS_OPERATORS(InputActionAssetFlags)
 OXGN_DATA_NDAPI auto to_string(InputActionAssetFlags value) -> std::string;
 
+//! Reserved: no context flag is defined and cooked contexts store kNone. A
+//! scene starts its contexts (SceneAssetDesc starting input contexts).
 enum class InputMappingContextFlags : uint32_t { // NOLINT(*-enum-size)
   kNone = 0,
-  kAutoLoad = OXYGEN_FLAG(0),
-  kAutoActivate = OXYGEN_FLAG(1),
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(InputMappingContextFlags)
 OXGN_DATA_NDAPI auto to_string(InputMappingContextFlags value) -> std::string;

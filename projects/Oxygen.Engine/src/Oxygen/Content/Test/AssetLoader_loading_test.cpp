@@ -138,8 +138,7 @@ auto WriteLooseCookedInputAssets(const std::filesystem::path& cooked_root,
     std::begin(context_desc.header.name));
   context_desc.header.version
     = oxygen::data::pak::input::kInputMappingContextAssetVersion;
-  context_desc.flags = InputMappingContextFlags::kAutoLoad
-    | InputMappingContextFlags::kAutoActivate;
+  context_desc.flags = InputMappingContextFlags::kNone;
   constexpr int32_t kInputPriority = 77;
   context_desc.default_priority = kInputPriority;
 
@@ -246,13 +245,8 @@ NOLINT_TEST_F(AssetLoaderBasicTest,
   ASSERT_NE(found, mounted_contexts.end());
   EXPECT_EQ(found->name, "HydratedContext");
   EXPECT_EQ(found->default_priority, 77);
-  EXPECT_EQ((found->flags
-              & oxygen::data::pak::input::InputMappingContextFlags::kAutoLoad),
-    oxygen::data::pak::input::InputMappingContextFlags::kAutoLoad);
   EXPECT_EQ(
-    (found->flags
-      & oxygen::data::pak::input::InputMappingContextFlags::kAutoActivate),
-    oxygen::data::pak::input::InputMappingContextFlags::kAutoActivate);
+    found->flags, oxygen::data::pak::input::InputMappingContextFlags::kNone);
 }
 
 NOLINT_TEST_F(AssetLoaderBasicTest,

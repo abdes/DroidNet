@@ -9,6 +9,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -383,33 +384,11 @@ auto oxygen::data::pak::input::to_string(
 auto oxygen::data::pak::input::to_string(
   const oxygen::data::pak::input::InputMappingContextFlags value) -> std::string
 {
-  using Flags = oxygen::data::pak::input::InputMappingContextFlags;
-
-  if (value == Flags::kNone) {
+  // No context flag is defined; any set bit is reserved.
+  if (value == oxygen::data::pak::input::InputMappingContextFlags::kNone) {
     return "None";
   }
-
-  std::string result;
-  bool first = true;
-  [[maybe_unused]] auto checked = Flags::kNone;
-
-  const auto check_and_append
-    = [&](const Flags flag, const char* name) -> void {
-    if ((value & flag) == flag) {
-      if (!first) {
-        result += " | ";
-      }
-      result += name;
-      first = false;
-      checked |= flag;
-    }
-  };
-
-  check_and_append(Flags::kAutoLoad, "AutoLoad");
-  check_and_append(Flags::kAutoActivate, "AutoActivate");
-  DCHECK_EQ_F(checked, value,
-    "to_string: Unchecked InputMappingContextFlags value detected");
-  return result;
+  return "Reserved(" + std::to_string(static_cast<uint32_t>(value)) + ")";
 }
 
 auto oxygen::data::pak::input::to_string(

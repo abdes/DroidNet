@@ -14,8 +14,6 @@
   "contexts": [
     {
       "name": "RotateInputContext",
-      "auto_load": true,
-      "auto_activate": true,
       "priority": 100,
       "mappings": [
         {

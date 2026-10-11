@@ -35,17 +35,12 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
-#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Content/InputContextHydration.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Data/InputMappingContextAsset.h>
-#include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
@@ -133,8 +128,12 @@ namespace {
     scene_stem = ToLowerAscii(std::move(scene_stem));
 
     return scene_name == desired || scene_stem == desired
-      || scene_key == desired || scene_name.find(desired) != std::string::npos;
+      || scene_key == desired || scene_name.contains(desired);
   }
+
+  //! The fallback camera's pose when a scene brings none.
+  constexpr auto kFallbackCameraPosition = Vec3 { 0.0F, -6.0F, 3.0F };
+  constexpr auto kFallbackCameraPitchDegrees = -20.0F;
 
   auto LooseIndexPathForRoot(const std::filesystem::path& root_path)
     -> std::filesystem::path
@@ -142,98 +141,12 @@ namespace {
     return root_path / std::string(kLooseCookedIndexFileName);
   }
 
-  auto CollectMountedSourceKeysForPath(
-    const content::IAssetLoader& asset_loader,
-    const content::IAssetLoader::ContentSourceKind source_kind,
-    const std::filesystem::path& source_path) -> std::vector<data::SourceKey>
-  {
-    const auto normalized = runtime::NormalizePath(source_path);
-    auto keys = std::vector<data::SourceKey> {};
-    for (const auto& source : asset_loader.EnumerateMountedSources()) {
-      if (source.source_kind != source_kind) {
-        continue;
-      }
-      if (runtime::NormalizePath(source.source_path) != normalized) {
-        continue;
-      }
-      keys.push_back(source.source_key);
-    }
-    return keys;
-  }
-
-  auto SourceKeyMatchesAny(const data::SourceKey& source_key,
-    const std::vector<data::SourceKey>& source_keys) -> bool
-  {
-    return std::ranges::any_of(source_keys,
-      [&](const data::SourceKey& key) -> bool { return key == source_key; });
-  }
-
-  auto HydrateMountedInputContextsForSource(content::AssetLoader& asset_loader,
-    observer_ptr<engine::InputSystem> input_system,
-    const content::IAssetLoader::ContentSourceKind source_kind,
-    const std::filesystem::path& source_path) -> co::Co<>
-  {
-    if (!input_system) {
-      co_return;
-    }
-
-    const auto source_keys
-      = CollectMountedSourceKeysForPath(asset_loader, source_kind, source_path);
-    if (source_keys.empty()) {
-      co_return;
-    }
-
-    constexpr auto kAutoLoadMask = static_cast<uint32_t>(
-      data::pak::input::InputMappingContextFlags::kAutoLoad);
-    constexpr auto kAutoActivateMask = static_cast<uint32_t>(
-      data::pak::input::InputMappingContextFlags::kAutoActivate);
-
-    for (const auto& entry : asset_loader.EnumerateMountedInputContexts()) {
-      if (!SourceKeyMatchesAny(entry.source_key, source_keys)) {
-        continue;
-      }
-
-      const auto flags = static_cast<uint32_t>(entry.flags);
-      if ((flags & kAutoLoadMask) == 0U) {
-        continue;
-      }
-
-      auto context_asset
-        = co_await asset_loader.LoadAssetAsync<data::InputMappingContextAsset>(
-          entry.asset_key, entry.source_key);
-      if (!context_asset) {
-        LOG_F(WARNING,
-          "RenderScene: Failed to load mounted input context asset {}",
-          data::to_string(entry.asset_key));
-        continue;
-      }
-
-      auto hydrated = content::HydrateInputContext(
-        *context_asset, asset_loader, *input_system);
-      if (!hydrated) {
-        LOG_F(WARNING,
-          "RenderScene: Failed to hydrate mounted input context asset {}",
-          data::to_string(entry.asset_key));
-        continue;
-      }
-
-      if (!input_system->GetMappingContextByKey(hydrated->GetAssetKey())) {
-        input_system->AddMappingContext(hydrated, entry.default_priority);
-      }
-      if ((flags & kAutoActivateMask) != 0U) {
-        input_system->ActivateMappingContext(hydrated);
-      }
-    }
-
-    co_return;
-  }
-
 } // namespace
 
 MainModule::MainModule(const examples::DemoAppContext& app,
   const bool preview_sun_enabled, const std::optional<int> environment_profile)
   : Base(app)
-  , last_viewport_({ 0, 0 })
+  , last_viewport_({ .width = 0, .height = 0 })
   , preview_sun_enabled_(preview_sun_enabled)
   , environment_profile_(environment_profile)
 {
@@ -285,6 +198,8 @@ auto MainModule::BuildDefaultWindowProperties() const
   return props;
 }
 
+// Setup failures here are unrecoverable; the engine aborts on them.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
 {
@@ -332,7 +247,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   shell_config.on_scene_load_cancel_requested
     = [this] -> void { scene_load_cancel_requested_ = true; };
   shell_config.on_dump_texture_memory
-    = [this](const std::size_t /*top_n*/) -> void {
+    = [](const std::size_t /*top_n*/) -> void {
     LOG_F(INFO,
       "RenderScene: Vortex runtime path does not expose legacy texture-memory "
       "dump telemetry");
@@ -411,8 +326,9 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   const bool attached = main_camera_.AttachCamera(std::move(camera));
   CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
   auto tf = main_camera_.GetTransform();
-  tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-  tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+  tf.SetLocalPosition(kFallbackCameraPosition);
+  tf.SetLocalRotation(
+    glm::quat(glm::radians(Vec3 { kFallbackCameraPitchDegrees, 0.0F, 0.0F })));
   shell->SetStagedMainCamera(main_camera_);
 
   // Create Main View ID
@@ -621,10 +537,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
                   "mounted source",
                   normalized.string());
                 asset_loader->AddPakFile(normalized);
-                co_await HydrateMountedInputContextsForSource(
-                  static_cast<content::AssetLoader&>(*asset_loader),
-                  app_.input_system,
-                  content::IAssetLoader::ContentSourceKind::kPak, normalized);
                 mounted_pak_write_times_.insert_or_assign(
                   normalized, *write_time);
                 refresh_library = true;
@@ -640,10 +552,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
               }
             } else {
               asset_loader->AddPakFile(normalized);
-              co_await HydrateMountedInputContextsForSource(
-                static_cast<content::AssetLoader&>(*asset_loader),
-                app_.input_system,
-                content::IAssetLoader::ContentSourceKind::kPak, normalized);
               if (write_time.has_value()) {
                 mounted_pak_write_times_.insert_or_assign(
                   normalized, *write_time);
@@ -685,11 +593,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
                   "refreshing mounted source",
                   normalized_index.string());
                 asset_loader->AddLooseCookedRoot(normalized);
-                co_await HydrateMountedInputContextsForSource(
-                  static_cast<content::AssetLoader&>(*asset_loader),
-                  app_.input_system,
-                  content::IAssetLoader::ContentSourceKind::kLooseCooked,
-                  normalized);
                 mounted_loose_index_write_times_.insert_or_assign(
                   normalized, *write_time);
                 refresh_library = true;
@@ -699,11 +602,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
                   "index timestamp; refreshing once to bind latest index",
                   normalized.string());
                 asset_loader->AddLooseCookedRoot(normalized);
-                co_await HydrateMountedInputContextsForSource(
-                  static_cast<content::AssetLoader&>(*asset_loader),
-                  app_.input_system,
-                  content::IAssetLoader::ContentSourceKind::kLooseCooked,
-                  normalized);
                 mounted_loose_index_write_times_.insert_or_assign(
                   normalized, *write_time);
                 refresh_library = true;
@@ -719,11 +617,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
               }
             } else {
               asset_loader->AddLooseCookedRoot(normalized);
-              co_await HydrateMountedInputContextsForSource(
-                static_cast<content::AssetLoader&>(*asset_loader),
-                app_.input_system,
-                content::IAssetLoader::ContentSourceKind::kLooseCooked,
-                normalized);
               if (write_time.has_value()) {
                 mounted_loose_index_write_times_.insert_or_assign(
                   normalized, *write_time);
@@ -836,10 +729,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
                 "load; refreshing source",
                 normalized.string());
               asset_loader->AddPakFile(normalized);
-              co_await HydrateMountedInputContextsForSource(
-                static_cast<content::AssetLoader&>(*asset_loader),
-                app_.input_system,
-                content::IAssetLoader::ContentSourceKind::kPak, normalized);
               mounted_pak_write_times_.insert_or_assign(
                 normalized, *write_time);
             } else {
@@ -854,10 +743,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
             }
           } else {
             asset_loader->AddPakFile(normalized);
-            co_await HydrateMountedInputContextsForSource(
-              static_cast<content::AssetLoader&>(*asset_loader),
-              app_.input_system, content::IAssetLoader::ContentSourceKind::kPak,
-              normalized);
             if (write_time.has_value()) {
               mounted_pak_write_times_.insert_or_assign(
                 normalized, *write_time);
@@ -888,11 +773,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
                 "refreshing mounted source",
                 LooseIndexPathForRoot(normalized).string());
               asset_loader->AddLooseCookedRoot(normalized);
-              co_await HydrateMountedInputContextsForSource(
-                static_cast<content::AssetLoader&>(*asset_loader),
-                app_.input_system,
-                content::IAssetLoader::ContentSourceKind::kLooseCooked,
-                normalized);
               mounted_loose_index_write_times_.insert_or_assign(
                 normalized, *write_time);
             } else if (!has_known_time && write_time.has_value()) {
@@ -901,11 +781,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
                 "with unknown timestamp; refreshing once",
                 normalized.string());
               asset_loader->AddLooseCookedRoot(normalized);
-              co_await HydrateMountedInputContextsForSource(
-                static_cast<content::AssetLoader&>(*asset_loader),
-                app_.input_system,
-                content::IAssetLoader::ContentSourceKind::kLooseCooked,
-                normalized);
               mounted_loose_index_write_times_.insert_or_assign(
                 normalized, *write_time);
             } else {
@@ -920,11 +795,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
             }
           } else {
             asset_loader->AddLooseCookedRoot(normalized);
-            co_await HydrateMountedInputContextsForSource(
-              static_cast<content::AssetLoader&>(*asset_loader),
-              app_.input_system,
-              content::IAssetLoader::ContentSourceKind::kLooseCooked,
-              normalized);
             if (write_time.has_value()) {
               mounted_loose_index_write_times_.insert_or_assign(
                 normalized, *write_time);
@@ -1063,7 +933,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       }
       active_scene_load_key_.reset();
       scene_loader_.reset();
-    } else if ((scene_loader_->IsConsumed()) && (scene_loader_->Tick())) {
+    } else if (scene_loader_->IsConsumed() && scene_loader_->Tick()) {
       scene_loader_.reset();
     }
   }
@@ -1212,8 +1082,9 @@ auto MainModule::StageFallbackScene() -> void
   const bool attached = camera_node.AttachCamera(std::move(camera));
   CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
   auto tf = camera_node.GetTransform();
-  tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-  tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+  tf.SetLocalPosition(kFallbackCameraPosition);
+  tf.SetLocalRotation(
+    glm::quat(glm::radians(Vec3 { kFallbackCameraPitchDegrees, 0.0F, 0.0F })));
   shell.SetStagedMainCamera(std::move(camera_node));
 }
 

@@ -97,6 +97,10 @@ inline auto LoadInputMappingContextAsset(const LoaderContext& context)
     throw std::runtime_error(
       "invalid asset type for input mapping context descriptor");
   }
+  if (desc.flags != data::pak::input::InputMappingContextFlags::kNone) {
+    throw std::runtime_error(
+      "input mapping context descriptor sets reserved flags");
+  }
 
   const auto mappings_bytes
     = static_cast<size_t>(desc.mappings.count) * desc.mappings.entry_size;

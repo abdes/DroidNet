@@ -59,8 +59,6 @@ INSTANTIATE_TEST_SUITE_P(Cases, InputSchemaCaseTest,
     "contexts": [
       {
         "name": "Gameplay",
-        "auto_load": true,
-        "auto_activate": true,
         "priority": 100,
         "mappings": [
           { "action": "Jump", "slot": "Space", "trigger": "pressed" },

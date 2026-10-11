@@ -470,4 +470,33 @@ NOLINT_TEST_F(
     { (void)LoadInputMappingContextAsset(context); }, std::runtime_error);
 }
 
+//! Context flags are reserved: a descriptor that sets one is rejected.
+NOLINT_TEST_F(InputLoadersTest, LoadInputMappingContextAssetReservedFlagsThrow)
+{
+  using oxygen::content::loaders::LoadInputMappingContextAsset;
+  using oxygen::data::AssetType;
+  using oxygen::data::pak::input::InputMappingContextAssetDesc;
+  using oxygen::data::pak::input::InputMappingContextFlags;
+
+  InputMappingContextAssetDesc desc {};
+  desc.header.asset_type
+    = static_cast<uint8_t>(AssetType::kInputMappingContext);
+  desc.header.version
+    = oxygen::data::pak::input::kInputMappingContextAssetVersion;
+  desc.flags = static_cast<InputMappingContextFlags>(1U);
+  desc.strings.offset = sizeof(InputMappingContextAssetDesc);
+  desc.strings.count = 1;
+  desc.strings.entry_size = 1;
+
+  static constexpr char kStrings[] = "\0";
+  WriteBlob(desc);
+  ASSERT_TRUE(writer_.WriteBlob(
+    std::as_bytes(std::span(kStrings, sizeof(kStrings) - 1))));
+  ASSERT_TRUE(writer_.Flush());
+
+  auto context = MakeParseOnlyContext();
+  EXPECT_THROW(
+    { (void)LoadInputMappingContextAsset(context); }, std::runtime_error);
+}
+
 } // namespace

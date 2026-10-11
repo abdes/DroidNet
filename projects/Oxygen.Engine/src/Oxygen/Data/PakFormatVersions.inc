@@ -15,7 +15,7 @@ OXDAT_ASSET_VERSION(kSceneAssetVersion, kScene, scene, 13)
 OXDAT_ASSET_VERSION(kScriptAssetVersion, kScript, script, 3)
 OXDAT_ASSET_VERSION(kInputActionAssetVersion, kInputAction, input_action, 1)
 OXDAT_ASSET_VERSION(kInputMappingContextAssetVersion, kInputMappingContext,
-  input_mapping_context, 1)
+  input_mapping_context, 2)
 OXDAT_ASSET_VERSION(
   kPhysicsMaterialAssetVersion, kPhysicsMaterial, physics_material, 1)
 OXDAT_ASSET_VERSION(

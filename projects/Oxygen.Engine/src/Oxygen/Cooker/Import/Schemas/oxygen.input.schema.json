@@ -437,14 +437,6 @@
           "minLength": 1,
           "maxLength": 63
         },
-        "auto_load": {
-          "type": "boolean",
-          "default": false
-        },
-        "auto_activate": {
-          "type": "boolean",
-          "default": false
-        },
         "priority": {
           "type": "integer",
           "minimum": -2147483648,
@@ -459,25 +451,7 @@
           "default": []
         }
       },
-      "required": ["name", "mappings"],
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "auto_activate": {
-                "const": true
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "auto_load": {
-                "const": true
-              }
-            }
-          }
-        }
-      ]
+      "required": ["name", "mappings"]
     }
   }
 }

@@ -100,8 +100,6 @@ namespace {
 
   struct ContextSource final {
     std::string name;
-    bool auto_load = false;
-    bool auto_activate = false;
     int32_t default_priority = 0;
     std::vector<MappingSource> mappings;
   };
@@ -926,8 +924,6 @@ namespace {
     const auto parse_context = [&](const json& node, const std::string& path,
                                  ContextSource& out_context) {
       out_context.name = node.at("name").get<std::string>();
-      out_context.auto_load = node.value("auto_load", false);
-      out_context.auto_activate = node.value("auto_activate", false);
       if (node.contains("priority")) {
         out_context.default_priority = node.at("priority").get<int32_t>();
       }
@@ -1020,12 +1016,6 @@ namespace {
       auto context = BuiltContextAsset {};
       context.name = source_ctx.name;
       context.flags = InputMappingContextFlags::kNone;
-      if (source_ctx.auto_load) {
-        context.flags |= InputMappingContextFlags::kAutoLoad;
-      }
-      if (source_ctx.auto_activate) {
-        context.flags |= InputMappingContextFlags::kAutoActivate;
-      }
       context.default_priority = source_ctx.default_priority;
       context.descriptor_relpath
         = request.loose_cooked_layout.InputMappingContextDescriptorRelPath(

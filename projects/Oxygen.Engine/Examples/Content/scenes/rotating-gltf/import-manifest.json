@@ -8,14 +8,16 @@
       "source": "../../glb/backpack.glb",
       "material_slot_source_identity": "01a0e7c7-f432-7586-8f04-2133688a61d0",
       "name": "backpack_scene",
-      "content_hashing": true
+      "content_hashing": true,
+      "id": "scene.backpack"
     },
     {
       "type": "gltf",
       "source": "../../glb/chest.glb",
       "material_slot_source_identity": "01a0e7c7-f432-7586-8f04-213466d9981f",
       "name": "chest_scene",
-      "content_hashing": true
+      "content_hashing": true,
+      "id": "scene.chest"
     },
     {
       "type": "script",
@@ -32,13 +34,21 @@
       "source": "./rotate.input.json"
     },
     {
+      "id": "scene.rotating_gltf",
+      "type": "scene-descriptor",
+      "source": "./rotating_gltf.scene.json",
+      "name": "rotating_gltf",
+      "content_hashing": true,
+      "depends_on": ["scene.backpack", "scene.chest", "rotate.input"]
+    },
+    {
       "type": "script-sidecar",
-      "name": "backpack_sidecar",
-      "target_scene_virtual_path": "/.cooked/Scenes/backpack.oscene",
+      "name": "rotating_gltf_sidecar",
+      "target_scene_virtual_path": "/.cooked/Scenes/rotating_gltf.oscene",
       "content_hashing": true,
       "bindings": [
         {
-          "node_index": 0,
+          "node_index": 1,
           "slot_id": "rotate",
           "script_virtual_path": "/.cooked/Scripts/rotate.oscript",
           "execution_order": 0,
@@ -59,18 +69,9 @@
               "value": "/.cooked/Input/RotateSpeedDownAction.oiact"
             }
           ]
-        }
-      ],
-      "depends_on": ["script.rotate", "rotate.input"]
-    },
-    {
-      "type": "script-sidecar",
-      "name": "chest_sidecar",
-      "target_scene_virtual_path": "/.cooked/Scenes/chest.oscene",
-      "content_hashing": true,
-      "bindings": [
+        },
         {
-          "node_index": 0,
+          "node_index": 2,
           "slot_id": "rotate",
           "script_virtual_path": "/.cooked/Scripts/rotate.oscript",
           "execution_order": 0,
@@ -93,7 +94,7 @@
           ]
         }
       ],
-      "depends_on": ["script.rotate", "rotate.input"]
+      "depends_on": ["scene.rotating_gltf", "script.rotate", "rotate.input"]
     }
   ]
 }

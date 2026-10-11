@@ -1,6 +1,12 @@
 {
   "version": 13,
   "name": "multi_script_scene",
+  "starting_input_contexts": [
+    {
+      "context_ref": "/.cooked/Input/RotateRuntimeInputContext.oimap",
+      "priority": 0
+    }
+  ],
   "nodes": [
     {
       "name": "Root",

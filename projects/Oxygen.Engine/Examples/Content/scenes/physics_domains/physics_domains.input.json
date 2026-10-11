@@ -34,8 +34,6 @@
   "contexts": [
     {
       "name": "PhysicsDomainsVehicleContext",
-      "auto_load": true,
-      "auto_activate": true,
       "priority": 120,
       "mappings": [
         {

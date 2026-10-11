@@ -1,0 +1,78 @@
+{
+  "version": 13,
+  "name": "rotating_gltf",
+  "starting_camera": 3,
+  "starting_input_contexts": [
+    {
+      "context_ref": "/.cooked/Input/RotateInputContext.oimap",
+      "priority": 100
+    }
+  ],
+  "nodes": [
+    {
+      "name": "Root"
+    },
+    {
+      "name": "Backpack",
+      "parent": 0,
+      "transform": {
+        "translation": [-1.0, 0.0, 0.0]
+      },
+      "instance": { "scene_ref": "/.cooked/Scenes/backpack.oscene" }
+    },
+    {
+      "name": "Chest",
+      "parent": 0,
+      "transform": {
+        "translation": [1.0, 0.0, 0.0]
+      },
+      "instance": { "scene_ref": "/.cooked/Scenes/chest.oscene" }
+    },
+    {
+      "name": "MainCamera",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, -4.0, 0.5],
+        "rotation": [0.70710678, 0.0, 0.0, 0.70710678]
+      }
+    },
+    {
+      "name": "Sun",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 5.0, 8.0],
+        "rotation": [0.5, 0.0, 0.0, 0.8660254]
+      }
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 3,
+        "fov_y": 0.785398,
+        "aspect_ratio": 1.777778,
+        "aspect_mode": "fixed",
+        "near_plane": 0.1,
+        "far_plane": 100.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 4,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 0.98, 0.92],
+          "casts_shadows": true,
+          "shadow": {
+            "bias": 0.03
+          }
+        },
+        "angular_size_radians": 0.00935,
+        "atmosphere_light_slot": 1,
+        "intensity_lux": 120000.0
+      }
+    ]
+  }
+}

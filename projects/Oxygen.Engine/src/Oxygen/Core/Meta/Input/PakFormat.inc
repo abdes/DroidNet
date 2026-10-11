@@ -47,7 +47,7 @@ OXNPUT_PAK_ASSET_TYPE(kInputAction, 5)
 OXNPUT_PAK_ASSET_TYPE(kInputMappingContext, 6)
 
 OXNPUT_PAK_VERSION(kInputActionAssetVersion, 1)
-OXNPUT_PAK_VERSION(kInputMappingContextAssetVersion, 1)
+OXNPUT_PAK_VERSION(kInputMappingContextAssetVersion, 2)
 
 OXNPUT_PAK_ACTION_FLAG(kNone, 0)
 OXNPUT_PAK_ACTION_FLAG(kConsumesInput, 0)
