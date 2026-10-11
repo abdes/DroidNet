@@ -4,15 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/StringUtils.h>
-
 #include <array>
 #include <variant>
 
-#include <Oxygen/Testing/GTest.h>
 #include <gmock/gmock-matchers.h>
 
 #include <Oxygen/Base/Platforms.h>
+#include <Oxygen/Base/StringUtils.h>
+#include <Oxygen/Testing/GTest.h>
 
 #if defined(OXYGEN_WINDOWS)
 using oxygen::windows::WindowsException;
@@ -75,7 +74,7 @@ NOLINT_TEST_F(ToWideTest, RejectsInvalidUtf8Sequence)
   std::wstring output {};
   try {
     Utf8ToWide(&invalid_utf8[0], output);
-    FAIL() << "Expected oxygen::windows::WindowsException";
+    FAIL() << "Expected an invalid-sequence exception";
 #if defined(OXYGEN_WINDOWS)
   } catch (const WindowsException& ex) {
     static_assert(ERROR_NO_UNICODE_TRANSLATION >= 0);
@@ -83,9 +82,12 @@ NOLINT_TEST_F(ToWideTest, RejectsInvalidUtf8Sequence)
       static_cast<DWORD>(
         ERROR_NO_UNICODE_TRANSLATION)); // Replace with the expected error code
     EXPECT_THAT(ex.what(), testing::StartsWith("1113"));
+#else
+  } catch (const std::runtime_error& ex) {
+    EXPECT_THAT(ex.what(), testing::HasSubstr("Invalid"));
 #endif
   } catch (...) {
-    FAIL() << "Expected oxygen::windows::WindowsException";
+    FAIL() << "Expected an invalid-sequence exception";
   }
 
   EXPECT_TRUE(output.empty());
@@ -147,11 +149,8 @@ INSTANTIATE_TEST_SUITE_P( // NOLINT
       std::wstring(L"Hello, World!"), u8"Hello, World!" },
     WideStringConversionTestParam {
       std::wstring(L"こんにちは世界"), u8"こんにちは世界" },
-    WideStringConversionTestParam {
-      reinterpret_cast<const char16_t*>(L"Hello, World!"), u8"Hello, World!" },
-    WideStringConversionTestParam {
-      reinterpret_cast<const char16_t*>(L"こんにちは世界"),
-      u8"こんにちは世界" }),
+    WideStringConversionTestParam { u"Hello, World!", u8"Hello, World!" },
+    WideStringConversionTestParam { u"こんにちは世界", u8"こんにちは世界" }),
   [](const ::testing::TestParamInfo<ToUtf8Test::ParamType>& info) {
     // Return a simple name based on the index
     return std::to_string(info.index);
@@ -163,16 +162,19 @@ NOLINT_TEST_F(ToUtf8Test, RejectsInvalidWideSequence)
   std::string output {};
   try {
     WideToUtf8(&invalid_wide[0], output);
-    FAIL() << "Expected oxygen::windows::WindowsException";
+    FAIL() << "Expected an invalid-sequence exception";
 #if defined(OXYGEN_WINDOWS)
   } catch (const WindowsException& ex) {
     static_assert(ERROR_NO_UNICODE_TRANSLATION >= 0);
     EXPECT_EQ(
       ex.GetErrorCode(), static_cast<DWORD>(ERROR_NO_UNICODE_TRANSLATION));
     EXPECT_THAT(ex.what(), testing::StartsWith("1113"));
+#else
+  } catch (const std::runtime_error& ex) {
+    EXPECT_THAT(ex.what(), testing::HasSubstr("Invalid"));
 #endif
   } catch (...) {
-    FAIL() << "Expected oxygen::windows::WindowsException";
+    FAIL() << "Expected an invalid-sequence exception";
   }
   EXPECT_TRUE(output.empty());
 }

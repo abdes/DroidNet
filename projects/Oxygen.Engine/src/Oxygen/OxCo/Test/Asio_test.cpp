@@ -5,23 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #define ASIO_NO_TYPEID
+#include <random>
+
 #include <asio/ip/address.hpp>
 #include <asio/ip/tcp.hpp>
 #include <asio/read.hpp>
 #include <asio/write.hpp>
-
-#include <Oxygen/Testing/GTest.h>
-#include <random>
 
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Semaphore.h>
-
-#include <Oxygen/OxCo/asio.h>
-
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/OxCo/asio.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::co;
 
@@ -213,7 +211,7 @@ NOLINT_TEST_F(AsioThreadPoolTest, Stress)
         while (count--) {
           n.Start([&sem, &ret, this, length]() -> Co<> {
             auto lk = co_await sem.Lock(); // limit concurrency
-            ret += co_await tp_->Run([this, length] { return DoWork(length); });
+            ret += co_await tp_->Run([length] { return DoWork(length); });
           });
         }
         co_return kJoin;

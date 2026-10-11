@@ -70,7 +70,7 @@ private:
 #define OXYGEN_POOLED_COMPONENT(type, type_list)                               \
   OXYGEN_COMPONENT(type)                                                       \
 public:                                                                        \
-  static constexpr bool is_pooled = true;                                      \
+  [[maybe_unused]] static constexpr bool is_pooled = true;                     \
   using ResourceTypeList = type_list;                                          \
   static constexpr auto GetResourceType() noexcept                             \
     -> oxygen::ResourceHandle::ResourceTypeT                                   \

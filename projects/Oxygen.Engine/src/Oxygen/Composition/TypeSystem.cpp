@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <mutex>
 #include <unordered_map>
 
 #include <Oxygen/Base/Logging.h>

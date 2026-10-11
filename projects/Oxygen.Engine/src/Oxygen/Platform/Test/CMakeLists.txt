@@ -16,24 +16,46 @@ find_package(GTest REQUIRED CONFIG)
 
 # -- Library Link Test ---------------------------------------------------------
 
-add_executable("Oxygen.Platform.LinkTest" "Link_test.cpp")
+# -- Input vocabulary (oxygen::platform-input) ---------------------------------
+
+add_executable("Oxygen.Platform.Input.LinkTest" "Link_test.cpp")
 set_target_properties(
-  "Oxygen.Platform.LinkTest"
+  "Oxygen.Platform.Input.LinkTest"
   PROPERTIES
     FOLDER
       "Testing"
 )
-target_link_libraries("Oxygen.Platform.LinkTest" PRIVATE oxygen::platform)
-add_test(NAME "Oxygen.Platform.LinkTest" COMMAND "Oxygen.Platform.LinkTest")
-
-# -- GTest Test Programs -------------------------------------------------------
+target_link_libraries(
+  "Oxygen.Platform.Input.LinkTest"
+  PRIVATE
+    oxygen::platform-input
+)
+add_test(
+  NAME "Oxygen.Platform.Input.LinkTest"
+  COMMAND
+    "Oxygen.Platform.Input.LinkTest"
+)
 
 include(GTestHelpers)
 
-m_gtest_program(
-  Input
+gtest_program(
+  "Oxygen.Platform.Input.Tests"
   SOURCES
     "Input_test.cpp"
+  DEPS
+    oxygen::platform-input
+    oxygen::testing
+)
+
+if(NOT OXYGEN_BUILD_FULL_ENGINE)
+  return()
+endif()
+
+# -- SDL backend (oxygen::platform) --------------------------------------------
+
+m_gtest_program(
+  Backend
+  SOURCES
     "InputEvents_test.cpp"
     "Window_test.cpp"
 )

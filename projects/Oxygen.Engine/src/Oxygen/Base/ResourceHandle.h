@@ -153,13 +153,13 @@ private:
   HandleT handle_ { kHandleMask };
   constexpr auto SetGeneration(GenerationT generation) -> void;
   static constexpr HandleT kCustomSetMask
-    = (HandleT { 1 } << (kIndexBits + kGenerationBits)) - 1
-    | kHandleMask << (kIndexBits + kGenerationBits + kCustomBits);
+    = ((HandleT { 1 } << (kIndexBits + kGenerationBits)) - 1)
+    | (kHandleMask << (kIndexBits + kGenerationBits + kCustomBits));
 
   static constexpr HandleT kResourceTypeSetMask
-    = (HandleT { 1 } << (kIndexBits + kGenerationBits + kCustomBits)) - 1
-    | kHandleMask << (kIndexBits + kGenerationBits + kCustomBits
-        + kResourceTypeBits);
+    = ((HandleT { 1 } << (kIndexBits + kGenerationBits + kCustomBits)) - 1)
+    | (kHandleMask << (kIndexBits + kGenerationBits + kCustomBits
+         + kResourceTypeBits));
 
   static constexpr HandleT kGenerationSetMask
     = kHandleMask << (kIndexBits + kGenerationBits) | kIndexMask;

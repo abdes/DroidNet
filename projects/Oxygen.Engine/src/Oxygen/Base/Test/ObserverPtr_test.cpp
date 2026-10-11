@@ -4,13 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
-#include <Oxygen/Base/ObserverPtr.h>
-
 #include <compare>
 #include <unordered_map>
 #include <unordered_set>
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::make_observer;
 using oxygen::observer_ptr;
@@ -198,7 +197,7 @@ NOLINT_TEST(ObserverPtrTest, ThreeWayComparison)
 {
   // Arrange
   int x = 1, y = 2;
-  observer_ptr<int> a(&x), b(&y), c(&x), n(nullptr);
+  observer_ptr<int> a(&x), b(&y), c(&x);
 
   // Act / Assert - Three-way comparison
   auto ordering_equal = a <=> c;
@@ -296,15 +295,15 @@ NOLINT_TEST(ObserverPtrTest, ConceptConstraintsCompliance)
   // Arrange & Act & Assert - These should all compile and work correctly
 
   // Valid types that should work:
-  observer_ptr<int> int_ptr;
-  observer_ptr<void> void_ptr;
-  observer_ptr<const int> const_int_ptr;
-  observer_ptr<volatile int> volatile_int_ptr;
-  observer_ptr<const volatile int> cv_int_ptr;
+  [[maybe_unused]] observer_ptr<int> int_ptr;
+  [[maybe_unused]] observer_ptr<void> void_ptr;
+  [[maybe_unused]] observer_ptr<const int> const_int_ptr;
+  [[maybe_unused]] observer_ptr<volatile int> volatile_int_ptr;
+  [[maybe_unused]] observer_ptr<const volatile int> cv_int_ptr;
 
   // Test incomplete types (forward declaration should work)
   struct IncompleteType;
-  observer_ptr<IncompleteType> incomplete_ptr;
+  [[maybe_unused]] observer_ptr<IncompleteType> incomplete_ptr;
 
   // Test array types
   int arr[5] = { 1, 2, 3, 4, 5 };

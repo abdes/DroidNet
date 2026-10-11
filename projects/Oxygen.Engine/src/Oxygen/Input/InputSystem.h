@@ -17,7 +17,7 @@
 #include <Oxygen/Input/InputSnapshot.h>
 #include <Oxygen/Input/api_export.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
-#include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Platform/InputEvent.h>
 
 namespace oxygen {
 class IAsyncEngine;

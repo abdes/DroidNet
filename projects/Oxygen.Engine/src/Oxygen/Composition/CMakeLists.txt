@@ -83,7 +83,7 @@ set(
   "ComponentPoolRegistry.h"
   "Named.h"
   "Object.h"
-  "ObjectMetaData.h"
+  "ObjectMetadata.h"
   "Typed.h"
   "TypedObject.h"
   "TypeSystem.h"
@@ -92,7 +92,7 @@ set(
   OXYGEN_COMPOSITION_PRIVATE_SOURCES
   "Composition.cpp"
   "Object.cpp"
-  "ObjectMetaData.cpp"
+  "ObjectMetadata.cpp"
   "TypeSystem.cpp"
   "cs_init.cpp"
   "ComponentPoolRegistry.cpp"
@@ -215,7 +215,8 @@ if(OXYGEN_BUILD_DOCS AND OXYGEN_WITH_DOXYGEN)
     VERSION ${META_VERSION}
     TITLE "\"Composition\""
     BRIEF "\"Composition System for Oxygen\""
-    INPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}"
+    INPUT_PATH
+      "${CMAKE_CURRENT_SOURCE_DIR}"
   )
 endif()
 

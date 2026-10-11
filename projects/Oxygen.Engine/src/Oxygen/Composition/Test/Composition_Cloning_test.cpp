@@ -4,19 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/Object.h>
 #include <memory>
 #include <string>
 
 #include "./BaseCompositionTest.h"
+
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Object.h>
 
 using oxygen::TypeId;
 
 namespace {
 
 class CloneablePooledComponent;
-using ResourceTypeList = oxygen::TypeList<CloneablePooledComponent>;
+using TestResourceTypeList = oxygen::TypeList<CloneablePooledComponent>;
 
 //=== CloningTest Components ===----------------------------------------------//
 
@@ -48,7 +49,7 @@ public:
 };
 
 class CloneablePooledComponent final : public oxygen::Component {
-  OXYGEN_POOLED_COMPONENT(CloneablePooledComponent, ResourceTypeList)
+  OXYGEN_POOLED_COMPONENT(CloneablePooledComponent, TestResourceTypeList)
 public:
   double data_ = 0.0;
   std::string tag_;

@@ -30,8 +30,13 @@ find_package(glm CONFIG REQUIRED)
 # Bindless generation and Tools integration
 # ------------------------------------------------------------------------------
 
-add_subdirectory("Tools")
-add_subdirectory("Bindless")
+# The generated bindless headers are committed. Only the full engine, which owns
+# the GPU binding layouts and the pinned formatter, regenerates them; reusable
+# module builds consume the committed outputs.
+if(OXYGEN_BUILD_FULL_ENGINE)
+  add_subdirectory("Tools")
+  add_subdirectory("Bindless")
+endif()
 
 # ------------------------------------------------------------------------------
 # Main module target

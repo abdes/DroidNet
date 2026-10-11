@@ -378,9 +378,6 @@ public:
 
   void ClearEventFilter() { event_filter_ = {}; }
 
-  static OXGN_PLAT_API auto GetInputSlotForKey(platform::Key key)
-    -> platform::InputSlot;
-
   [[nodiscard]] auto GetPhysicalClock() const noexcept
     -> const time::PhysicalClock&
   {

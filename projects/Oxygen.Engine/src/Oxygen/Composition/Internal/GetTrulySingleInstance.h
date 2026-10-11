@@ -66,12 +66,11 @@ auto GetTrulySingleInstance(std::string_view type_name) -> InstanceT&
 {
   static InstanceT* instance { nullptr };
   static std::mutex instance_mutex;
-  // Maximum number of modules to enumerate
-  constexpr size_t kMaxModules = 1024;
-
   std::lock_guard lock(instance_mutex);
   if (instance == nullptr) {
 #if defined(OXYGEN_WINDOWS)
+    // Maximum number of modules to enumerate
+    constexpr size_t kMaxModules = 1024;
     std::array<HMODULE, kMaxModules> modules {};
     DWORD bytes_needed { 0 };
 
