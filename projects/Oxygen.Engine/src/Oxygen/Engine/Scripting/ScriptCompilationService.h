@@ -62,7 +62,7 @@ public:
 
   OXGN_NGIN_API explicit ScriptCompilationService(
     observer_ptr<co::ThreadPool> thread_pool,
-    std::filesystem::path persistent_cache_path = {}) noexcept;
+    std::filesystem::path persistent_cache_path = {});
   OXGN_NGIN_API ~ScriptCompilationService() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(ScriptCompilationService)
@@ -124,7 +124,7 @@ private:
   OXGN_NGIN_API auto TryGetCachedBytecode(CompileKey compile_key)
     -> std::shared_ptr<const ScriptBytecodeBlob>;
   OXGN_NGIN_API auto StoreCachedBytecode(CompileKey compile_key,
-    std::shared_ptr<const ScriptBytecodeBlob> bytecode) -> void;
+    const std::shared_ptr<const ScriptBytecodeBlob>& bytecode) -> void;
   OXGN_NGIN_API auto TryGetPersistentBytecode(CompileKey compile_key)
     -> std::shared_ptr<const ScriptBytecodeBlob>;
   OXGN_NGIN_API auto StorePersistentBytecode(CompileKey compile_key,

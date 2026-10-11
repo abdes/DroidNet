@@ -44,6 +44,10 @@ auto FormatSummary(const ScriptDiagnostic& diagnostic) -> std::string
 {
   auto header = fmt::format("{}[{}]: {}", to_string(diagnostic.severity),
     to_string(diagnostic.code), diagnostic.message);
+  if (const auto& slot = diagnostic.slot; slot.has_value()) {
+    header += fmt::format(" (in {}, node \"{}\", slot {})", slot->hook,
+      slot->node, slot->slot_index + 1);
+  }
   const auto* const span = diagnostic.PrimarySpan();
   if (span == nullptr) {
     return header;

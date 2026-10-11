@@ -27,12 +27,19 @@ OXGN_SCAN_NDAPI auto to_string(DiagnosticSeverity value) noexcept
 
 //! Stable script diagnostic code; the value is the number after `S`.
 /*!
- Codes are grouped by family: S01xx syntax, S03xx declarations. Retired codes
- are never reused.
+ Codes are grouped by family (see `DiagnosticFamily`): the hundreds digit
+ names the family. Every code has an entry in the diagnostic catalog. Retired
+ codes are never reused.
 */
 enum class DiagnosticCode : uint16_t {
   // Syntax
   kSyntaxError = 101,
+
+  // Compile
+  kCompileError = 201,
+  kNoCompiler = 202,
+  kCompileStopped = 203,
+  kEmptySource = 204,
 
   // Declarations
   kDeclarationNotTopLevelLocal = 301,
@@ -51,6 +58,13 @@ enum class DiagnosticCode : uint16_t {
   kValueTooLong = 314,
   kInvalidRange = 315,
   kFieldTypeMismatch = 316,
+
+  // Binding and attachment
+  kNotAScript = 601,
+  kLoadFailed = 602,
+
+  // Runtime
+  kRuntimeError = 701,
 };
 
 //! Returns the code as written in diagnostics, for example `S0302`.
@@ -79,6 +93,8 @@ struct DiagnosticLabel {
   std::string message;
   //! Exactly one label is primary when any span is known.
   bool primary = false;
+
+  auto operator==(const DiagnosticLabel&) const -> bool = default;
 };
 
 //! Help attached to a diagnostic, optionally machine-applicable.
@@ -86,6 +102,17 @@ struct Suggestion {
   std::string message;
   std::optional<SourceSpan> span; //!< Replaced range, if applicable.
   std::optional<std::string> replacement;
+
+  auto operator==(const Suggestion&) const -> bool = default;
+};
+
+//! The script slot a binding or runtime diagnostic belongs to.
+struct SlotContext {
+  std::string node; //!< Name of the node that owns the slot.
+  uint32_t slot_index = 0; //!< Zero-based slot position on the node.
+  std::string hook; //!< Hook or stage, such as `on_gameplay` or `load`.
+
+  auto operator==(const SlotContext&) const -> bool = default;
 };
 
 //! One script problem, from any producer, in renderer-neutral form.
@@ -97,15 +124,20 @@ struct ScriptDiagnostic {
   std::vector<DiagnosticLabel> labels;
   std::vector<std::string> notes;
   std::optional<Suggestion> help;
+  //! Set for binding and runtime diagnostics of a script slot.
+  std::optional<SlotContext> slot;
 
   //! Returns the primary label's span, if any.
   OXGN_SCAN_NDAPI auto PrimarySpan() const -> const SourceSpan*;
+
+  auto operator==(const ScriptDiagnostic&) const -> bool = default;
 };
 
 //! Formats a one-line summary: `source:line:column: error[S0302]: message`.
 /*!
- Used where only a single line fits, such as cook reports and logs. The full
- multi-line rendering belongs to the diagnostic renderer.
+ A slot diagnostic ends with its context, as in `(in on_gameplay, node "Rig",
+ slot 1)`. Used where only a single line fits, such as cook reports and logs.
+ The full multi-line rendering belongs to the diagnostic renderer.
 */
 OXGN_SCAN_NDAPI auto FormatSummary(const ScriptDiagnostic& diagnostic)
   -> std::string;

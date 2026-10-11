@@ -398,17 +398,27 @@ namespace {
     const AsyncImportService::ScriptCompileCallback& script_compile_callback)
     -> std::optional<std::vector<std::byte>>
   {
+    const auto source_name
+      = script_import::BuildExternalSourcePath(req).value_or(
+        req.source_path.generic_string());
     auto compile_result
       = script_compile_callback(AsyncImportService::ScriptCompileRequest {
+        .source_name = source_name,
         .source_bytes = source_bytes,
         .compile_mode = req.options.scripting.compile_mode,
       });
     if (!compile_result.success) {
-      const auto message = compile_result.diagnostics.empty()
-        ? std::string { "Script compile failed with no diagnostic text" }
-        : compile_result.diagnostics;
-      script_import::AddDiagnostic(session, req, ImportSeverity::kError,
-        "script.asset.compile_failed", message);
+      if (compile_result.diagnostics.empty()) {
+        script_import::AddDiagnostic(session, req, ImportSeverity::kError,
+          "script.asset.compile_failed",
+          "Script compile failed with no diagnostic");
+      }
+      for (const auto& diagnostic : compile_result.diagnostics) {
+        script_import::AddDiagnostic(session, req,
+          ToImportSeverity(diagnostic.severity),
+          "script." + scripting::to_string(diagnostic.code),
+          scripting::FormatSummary(diagnostic));
+      }
       return std::nullopt;
     }
     if (compile_result.bytecode.empty()) {

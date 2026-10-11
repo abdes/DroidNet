@@ -7,7 +7,7 @@
 #pragma once
 
 #include <memory>
-#include <string>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
@@ -15,13 +15,15 @@
 #include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
 #include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Engine/api_export.h>
+#include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 
 namespace oxygen::scripting {
 
 struct ScriptCompileResult {
   bool success { false };
   std::shared_ptr<const ScriptBytecodeBlob> bytecode;
-  std::string diagnostics;
+  //! Why compilation failed; empty on success.
+  std::vector<ScriptDiagnostic> diagnostics;
 
   [[nodiscard]] auto HasBytecode() const noexcept -> bool
   {

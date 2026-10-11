@@ -102,9 +102,7 @@ public:
             }
           } else {
             if (callbacks.on_failed) {
-              callbacks.on_failed(result.diagnostics.empty()
-                  ? std::string("script compilation failed")
-                  : result.diagnostics);
+              callbacks.on_failed(result.diagnostics);
             }
           }
         }),
@@ -148,7 +146,17 @@ private:
       return Result {
         .success = false,
         .bytecode = nullptr,
-        .diagnostics = "no compiler registered for requested script language",
+        .diagnostics = {
+          ScriptDiagnostic {
+            .severity = DiagnosticSeverity::kError,
+            .code = DiagnosticCode::kNoCompiler,
+            .message = "no compiler is registered for the script language",
+            .labels = {},
+            .notes = {},
+            .help = std::nullopt,
+            .slot = std::nullopt,
+          },
+        },
       };
     }
 

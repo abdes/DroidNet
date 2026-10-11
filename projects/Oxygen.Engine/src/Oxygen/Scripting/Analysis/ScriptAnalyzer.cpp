@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -21,29 +20,6 @@
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 
 namespace oxygen::scripting {
-
-namespace {
-
-  auto ToSyntaxDiagnostic(const std::string_view source_name,
-    const Luau::ParseError& error) -> ScriptDiagnostic
-  {
-    return ScriptDiagnostic {
-      .severity = DiagnosticSeverity::kError,
-      .code = DiagnosticCode::kSyntaxError,
-      .message = error.getMessage(),
-      .labels = {
-        DiagnosticLabel {
-          .span = detail::ToSpan(source_name, error.getLocation()),
-          .message = {},
-          .primary = true,
-        },
-      },
-      .notes = {},
-      .help = std::nullopt,
-    };
-  }
-
-} // namespace
 
 auto ScriptAnalysis::HasErrors() const noexcept -> bool
 {
@@ -71,7 +47,7 @@ auto ScriptAnalyzer::Analyze(const ScriptAnalysisRequest& request) const
     // A chunk with syntax errors has no reliable declaration.
     for (const auto& error : parsed.errors) {
       analysis.diagnostics.push_back(
-        ToSyntaxDiagnostic(request.source_name, error));
+        detail::ToSyntaxDiagnostic(request.source_name, error));
     }
     return analysis;
   }

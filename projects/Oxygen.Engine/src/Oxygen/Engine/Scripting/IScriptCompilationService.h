@@ -10,13 +10,14 @@
 #include <functional>
 #include <memory>
 #include <optional>
-#include <string>
+#include <vector>
 
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Engine/Scripting/IScriptCompiler.h>
 #include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 
 namespace oxygen::scripting {
 
@@ -57,7 +58,7 @@ public:
 
   struct SlotAcquireCallbacks {
     std::function<void(std::shared_ptr<const ScriptBytecodeBlob>)> on_ready;
-    std::function<void(std::string)> on_failed;
+    std::function<void(const std::vector<ScriptDiagnostic>&)> on_failed;
   };
 
   struct SlotAcquireHandle {

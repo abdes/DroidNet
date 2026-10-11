@@ -174,7 +174,11 @@ Standard `submitted`, `completed`, `failed` counts track atomic states effective
 The pipeline throws deterministic `ImportDiagnostic` logs strictly mapping precise failure causes safely. It does NOT generate unhandled C++ exceptions globally.
 Key diagnostic behaviors track precisely mapped contexts to provide clear tooling feedback:
 
-- `script.asset.compile_failed`: Identifies explicit issues with native compilation boundaries.
+- `script.S0101`, `script.S0201` and the other script diagnostic codes: each
+  syntax or compile diagnostic from the compile callback, with its source
+  location.
+- `script.asset.compile_failed`: the compiler failed without a diagnostic or
+  produced no bytecode.
 - `script.sidecar.payload_invalid`: Emits detailed contextual keys dynamically pointing directly mapping back sequentially like `bindings[0].node_index` enabling exact issue correction directly mapped into UI elements.
 - `script.sidecar.patch_map_invariant_failure`: Bounds verifications isolating global pointer alignment mismatches isolating race conflicts cleanly.
 - Pipeline gracefully catches `nlohmann::json` parsing failures via safe try-blocks isolating structural anomalies deterministically emitting `script.sidecar.parse_failed`.

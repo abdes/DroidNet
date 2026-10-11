@@ -14,6 +14,7 @@
 
 namespace Luau {
 class AstStatBlock;
+class ParseError;
 struct Location;
 } // namespace Luau
 
@@ -28,6 +29,10 @@ struct ExtractedDeclarations {
 //! Converts a 0-based Luau location to a 1-based diagnostic span.
 auto ToSpan(std::string_view source_name, const Luau::Location& location)
   -> SourceSpan;
+
+//! Converts a Luau parse error to an S0101 syntax diagnostic.
+auto ToSyntaxDiagnostic(std::string_view source_name,
+  const Luau::ParseError& error) -> ScriptDiagnostic;
 
 //! Extracts the `oxygen.script` declaration of a parsed chunk.
 /*!

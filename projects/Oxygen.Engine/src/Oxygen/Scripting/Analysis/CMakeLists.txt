@@ -19,6 +19,7 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 
 find_package(Luau CONFIG REQUIRED)
+find_package(nlohmann_json REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -50,6 +51,10 @@ set_target_properties(
 set(
   OXYGEN_SCRIPTING_ANALYSIS_HEADERS
   "api_export.h"
+  "DiagnosticCatalog.h"
+  "DiagnosticJson.h"
+  "DiagnosticRenderer.h"
+  "LuauCompiler.h"
   "ScriptAnalyzer.h"
   "ScriptDiagnostic.h"
 )
@@ -57,6 +62,10 @@ set(
   OXYGEN_SCRIPTING_ANALYSIS_PRIVATE_SOURCES
   "DeclarationExtractor.cpp"
   "DeclarationExtractor.h"
+  "DiagnosticCatalog.cpp"
+  "DiagnosticJson.cpp"
+  "DiagnosticRenderer.cpp"
+  "LuauCompiler.cpp"
   "ScriptAnalyzer.cpp"
   "ScriptDiagnostic.cpp"
 )
@@ -88,6 +97,8 @@ target_link_libraries(
     oxygen::data
   PRIVATE
     Luau::Ast
+    Luau::Compiler
+    nlohmann_json::nlohmann_json
 )
 
 # ------------------------------------------------------------------------------

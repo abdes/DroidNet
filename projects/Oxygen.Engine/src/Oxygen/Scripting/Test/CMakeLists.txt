@@ -43,6 +43,7 @@ m_gtest_program(
     "ScriptingModule_slot_helpers.h"
     "ScriptingModule_scene_observer_test.cpp"
     "ScriptingModule_instances_test.cpp"
+    "ScriptingModule_diagnostics_test.cpp"
 )
 
 m_gtest_program(CompilationService SOURCES "ScriptCompilationService_test.cpp")

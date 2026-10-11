@@ -13,10 +13,12 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include <Luau/Compiler.h>
@@ -37,6 +39,7 @@
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
 #include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
 #include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
@@ -46,6 +49,8 @@
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 #include <Oxygen/Scene/Types/ScriptSlotIndex.h>
+#include <Oxygen/Scripting/Analysis/DiagnosticRenderer.h>
+#include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 #include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingPack.h>
@@ -59,6 +64,7 @@
 #include <Oxygen/Scripting/Compilers/LuauScriptCompiler.h>
 #include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
 #include <Oxygen/Scripting/Input/InputScriptEventBridge.h>
+#include <Oxygen/Scripting/Module/RuntimeDiagnostics.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 
 namespace oxygen::scripting {
@@ -170,6 +176,59 @@ namespace {
   }
 
   auto IsValidLuaRef(const int ref) noexcept -> bool { return ref >= 0; }
+
+  //! A slot diagnostic without a source location.
+  auto SlotDiagnostic(const DiagnosticCode code, std::string message,
+    std::vector<std::string> notes = {}) -> ScriptDiagnostic
+  {
+    return ScriptDiagnostic {
+      .severity = DiagnosticSeverity::kError,
+      .code = code,
+      .message = std::move(message),
+      .labels = {},
+      .notes = std::move(notes),
+      .help = std::nullopt,
+      .slot = std::nullopt,
+    };
+  }
+
+  //! Chunk name of a slot script, without `@`: its source path, else its
+  //! asset name, else its asset key.
+  auto SlotSourceName(const scene::ScriptingComponent::Slot& slot)
+    -> std::string
+  {
+    const auto& asset = slot.Asset();
+    if (!asset) {
+      return "script";
+    }
+    if (const auto path = asset->TryGetExternalSourcePath(); path) {
+      return std::string(*path);
+    }
+    if (const auto name = asset->GetAssetName(); !name.empty()) {
+      return std::string(name);
+    }
+    return data::to_string(asset->GetAssetKey());
+  }
+
+  //! True when `name` is a node or asset parameter of `slot` without a value.
+  auto IsUnsetReference(const scene::ScriptingComponent::Slot& slot,
+    const std::string_view name) -> bool
+  {
+    for (const auto& entry : slot.Parameters()) {
+      if (entry.key != name) {
+        continue;
+      }
+      const auto& value = entry.value.get();
+      if (const auto* node = std::get_if<data::ScriptNodeParam>(&value)) {
+        return node->node_index == data::pak::scripting::kUnsetNodeParam;
+      }
+      if (const auto* asset = std::get_if<data::ScriptAssetParam>(&value)) {
+        return asset->key == data::AssetKey {};
+      }
+      return false;
+    }
+    return false;
+  }
 
   auto ExecutableFingerprint(const ScriptExecutable& executable) -> uint64_t
   {
@@ -799,6 +858,28 @@ auto ScriptingModule::SubmitMainThreadTask(
   task_queue_.Submit(std::move(task), session_id);
 }
 
+auto ScriptingModule::AddDiagnosticHandler(ScriptDiagnosticHandler handler)
+  -> ScriptDiagnosticHandlerId
+{
+  const auto id = ScriptDiagnosticHandlerId { next_diagnostic_handler_id_++ };
+  diagnostic_handlers_.emplace_back(id, std::move(handler));
+  return id;
+}
+
+auto ScriptingModule::RemoveDiagnosticHandler(
+  const ScriptDiagnosticHandlerId id) -> bool
+{
+  return std::erase_if(diagnostic_handlers_, [id](const auto& entry) -> bool {
+    return entry.first == id;
+  }) > 0;
+}
+
+auto ScriptingModule::SetDiagnosticSources(
+  std::shared_ptr<const SourceProvider> sources) -> void
+{
+  diagnostic_sources_ = std::move(sources);
+}
+
 auto ScriptingModule::GetSessionId() const -> ScriptingSessionId
 {
   return task_queue_.GetSessionId();
@@ -1131,11 +1212,10 @@ auto ScriptingModule::RunInstances(
       if (runtime == nullptr || runtime->started) {
         continue;
       }
-      const auto result = CallInstanceHook(*runtime, "on_start", std::nullopt);
-      if (result.ok) {
-        runtime->started = true;
+      if (auto failure = CallInstanceHook(*runtime, "on_start", std::nullopt)) {
+        FaultInstance(*runtime, context, "on_start", std::move(*failure));
       } else {
-        FaultInstance(key, *runtime, context, "on_start", result);
+        runtime->started = true;
       }
     }
   }
@@ -1156,9 +1236,8 @@ auto ScriptingModule::RunInstances(
     if (runtime == nullptr || !runtime->started) {
       continue;
     }
-    const auto result = CallInstanceHook(*runtime, hook_name, dt_seconds);
-    if (!result.ok) {
-      FaultInstance(key, *runtime, context, hook_name, result);
+    if (auto failure = CallInstanceHook(*runtime, hook_name, dt_seconds)) {
+      FaultInstance(*runtime, context, hook_name, std::move(*failure));
     }
   }
 }
@@ -1188,9 +1267,8 @@ auto ScriptingModule::PrepareInstance(const SlotRuntimeKey& key,
       != ExecutableFingerprint(*slot.Executable())
     || !IsCurrentSlotRuntime(key, runtime)) {
     EndInstance(runtime);
-    const auto result = CreateInstance(key, runtime, *node, slot);
-    if (!result.ok) {
-      FaultInstance(key, runtime, context, "load", result);
+    if (auto failure = CreateInstance(key, runtime, *node, slot)) {
+      FaultInstance(runtime, context, "load", std::move(*failure));
     }
   }
   return runtime.faulted ? nullptr : &runtime;
@@ -1198,7 +1276,8 @@ auto ScriptingModule::PrepareInstance(const SlotRuntimeKey& key,
 
 auto ScriptingModule::CreateInstance(const SlotRuntimeKey& key,
   SlotRuntimeState& state, scene::SceneNode& node,
-  const scene::ScriptingComponent::Slot& slot) -> ScriptExecutionResult
+  const scene::ScriptingComponent::Slot& slot)
+  -> std::optional<ScriptDiagnostic>
 {
   const ScopedLuaStackTop stack_guard(lua_state_, "CreateInstance");
 
@@ -1206,15 +1285,19 @@ auto ScriptingModule::CreateInstance(const SlotRuntimeKey& key,
   state.last_known_fingerprint = ExecutableFingerprint(*state.executable);
   state.asset_key
     = slot.Asset() ? slot.Asset()->GetAssetKey() : data::AssetKey {};
+  state.source_name = SlotSourceName(slot);
+  state.node_name = std::string(node.GetName());
+  state.slot_index = static_cast<uint32_t>(key.slot_index.get());
+  state.slot_identity = slot;
   const auto owner_impl = node.GetImpl();
   if (!owner_impl) {
-    return ErrorResult("slot_binding", "script owner is no longer alive");
+    return SlotDiagnostic(
+      DiagnosticCode::kLoadFailed, "the node that owns the slot is destroyed");
   }
   const auto incarnation = owner_impl->get()
                              .GetComponent<scene::ScriptingComponent>()
                              .IncarnationId();
   state.component_incarnation = incarnation;
-  state.slot_identity = slot;
   state.event_owner_id = bindings::CreateEventListenerOwner(lua_state_,
     [scene = observed_scene_, key, incarnation, slot_identity = slot,
       executable = std::weak_ptr<const ScriptExecutable>(state.executable),
@@ -1257,35 +1340,52 @@ auto ScriptingModule::CreateInstance(const SlotRuntimeKey& key,
     = CreateInstanceEnvironment(lua_state_, global_env_ref_);
   const auto bytecode = state.executable->BytecodeView();
   if (bytecode.empty()) {
-    return ErrorResult(
-      "slot_binding", "slot executable has no bytecode payload");
+    return SlotDiagnostic(DiagnosticCode::kLoadFailed,
+      "the slot's executable has no bytecode",
+      { fmt::format("script: {}", state.source_name) });
   }
 
+  detail::PushErrorFrameCollector(lua_state_, &error_frames_);
+  const auto handler_index = lua_gettop(lua_state_);
   lua_getref(lua_state_, state.instance_env_ref);
   const auto env_index = lua_gettop(lua_state_);
-  const std::string chunk_name = "scene_slot_" + std::to_string(key.slot_index);
+  const auto chunk_name = "@" + state.source_name;
   const auto load_status = luau_load(lua_state_, chunk_name.c_str(),
     // NOLINTNEXTLINE(*-reinterpret-cast)
     reinterpret_cast<const char*>(bytecode.data()), bytecode.size(), env_index);
   if (load_status != LUA_OK) {
-    const auto error_message = LuaToString(lua_state_, kLuaStackTop);
-    lua_settop(lua_state_, env_index - 1); // drop env and load error
-    return ErrorResult("slot_load", error_message);
+    auto error_message = LuaToString(lua_state_, kLuaStackTop);
+    lua_settop(lua_state_, handler_index - 1); // drop handler, env and error
+    return SlotDiagnostic(DiagnosticCode::kLoadFailed,
+      "the script bytecode could not be loaded",
+      {
+        std::move(error_message),
+        fmt::format("script: {}", state.source_name),
+      });
   }
   lua_remove(lua_state_, env_index); // keep chunk only
 
-  const auto call_status = lua_pcall(lua_state_, kLuaNoArgs, 1, 0);
+  const auto call_status = lua_pcall(lua_state_, kLuaNoArgs, 1, handler_index);
   CHECK_F(call_status != LUA_ERRERR,
     "lua_pcall returned LUA_ERRERR in CreateInstance");
   if (call_status != LUA_OK) {
-    const auto error_message = BuildLuaErrorWithTraceback(lua_state_);
-    lua_pop(lua_state_, 1); // original error object
-    return ErrorResult("slot_runtime", error_message);
+    auto diagnostic = RuntimeDiagnostic(state, "load");
+    lua_pop(lua_state_, 2); // error object and handler
+    return diagnostic;
   }
+  lua_remove(lua_state_, handler_index); // keep the returned value
   if (!bindings::IsScriptTable(lua_state_, kLuaStackTop)) {
     lua_pop(lua_state_, 1); // returned value
-    return ErrorResult(
-      "slot_binding", "script must return the table created by oxygen.script");
+    auto diagnostic = SlotDiagnostic(DiagnosticCode::kNotAScript,
+      "the script does not return its `oxygen.script` table",
+      { fmt::format("script: {}", state.source_name) });
+    diagnostic.help = Suggestion {
+      .message = "end the script with `return` of the table created by "
+                 "`oxygen.script`",
+      .span = std::nullopt,
+      .replacement = std::nullopt,
+    };
+    return diagnostic;
   }
   state.script_ref = lua_ref(lua_state_, kLuaStackTop);
   lua_pop(lua_state_, 1); // script table
@@ -1301,7 +1401,7 @@ auto ScriptingModule::CreateInstance(const SlotRuntimeKey& key,
   lua_setmetatable(lua_state_, kLuaStackSecondTop);
   state.self_ref = lua_ref(lua_state_, kLuaStackTop);
   lua_pop(lua_state_, 1); // self
-  return OkResult();
+  return std::nullopt;
 }
 
 auto ScriptingModule::PushInstanceParams(
@@ -1318,21 +1418,24 @@ auto ScriptingModule::PushInstanceParams(
 
 auto ScriptingModule::CallInstanceHook(SlotRuntimeState& state,
   const std::string_view hook_name, const std::optional<float> dt_seconds)
-  -> ScriptExecutionResult
+  -> std::optional<ScriptDiagnostic>
 {
   const ScopedLuaStackTop stack_guard(lua_state_, "CallInstanceHook");
   if (!IsValidLuaRef(state.script_ref) || !IsValidLuaRef(state.self_ref)) {
-    return ErrorResult("slot_binding", "script instance is not loaded");
+    return SlotDiagnostic(
+      DiagnosticCode::kLoadFailed, "the script instance is not loaded");
   }
 
   const bindings::ScopedEventListenerOwner owner_scope(
     lua_state_, state.event_owner_id);
+  detail::PushErrorFrameCollector(lua_state_, &error_frames_);
+  const auto handler_index = lua_gettop(lua_state_);
   lua_getref(lua_state_, state.script_ref);
   lua_getfield(lua_state_, kLuaStackTop, std::string(hook_name).c_str());
   lua_remove(lua_state_, kLuaStackSecondTop); // keep the hook
   if (!lua_isfunction(lua_state_, kLuaStackTop)) {
-    lua_pop(lua_state_, kLuaSingleValueCount);
-    return OkResult(); // hooks are optional
+    lua_pop(lua_state_, 2); // non-function and handler
+    return std::nullopt; // hooks are optional
   }
 
   lua_getref(lua_state_, state.self_ref);
@@ -1341,38 +1444,68 @@ auto ScriptingModule::CallInstanceHook(SlotRuntimeState& state,
     lua_pushnumber(lua_state_, *dt_seconds);
     ++arg_count;
   }
-  const auto call_status = lua_pcall(lua_state_, arg_count, kLuaNoResults, 0);
+  const auto call_status
+    = lua_pcall(lua_state_, arg_count, kLuaNoResults, handler_index);
   CHECK_F(call_status != LUA_ERRERR,
     "lua_pcall returned LUA_ERRERR in CallInstanceHook");
   if (call_status != LUA_OK) {
-    const auto error_message = BuildLuaErrorWithTraceback(lua_state_);
-    lua_pop(lua_state_, 1); // original error object
-    return ErrorResult("slot_runtime", error_message);
+    auto diagnostic = RuntimeDiagnostic(state, hook_name);
+    lua_pop(lua_state_, 2); // error object and handler
+    return diagnostic;
   }
-  return OkResult();
+  lua_pop(lua_state_, 1); // handler
+  return std::nullopt;
 }
 
-auto ScriptingModule::FaultInstance(const SlotRuntimeKey& key,
-  SlotRuntimeState& state, const observer_ptr<engine::FrameContext> context,
-  const std::string_view hook_name, const ScriptExecutionResult& result) -> void
+auto ScriptingModule::RuntimeDiagnostic(const SlotRuntimeState& state,
+  const std::string_view hook_name) -> ScriptDiagnostic
+{
+  const auto error_message = LuaToString(lua_state_, kLuaStackTop);
+  return detail::MakeRuntimeDiagnostic(detail::RuntimeErrorInput {
+    .error_message = error_message,
+    .frames = error_frames_,
+    .entry_name = hook_name,
+    .sources = diagnostic_sources_.get(),
+    .is_unset_reference = [&state](const std::string_view name) -> bool {
+      return state.slot_identity.has_value()
+        && IsUnsetReference(*state.slot_identity, name);
+    },
+  });
+}
+
+auto ScriptingModule::FaultInstance(SlotRuntimeState& state,
+  const observer_ptr<engine::FrameContext> context,
+  const std::string_view hook_name, ScriptDiagnostic diagnostic) -> void
 {
   state.faulted = true;
   bindings::RetireEventListenerOwner(lua_state_, state.event_owner_id);
-  const auto message = std::string("script slot ")
-                         .append(hook_name)
-                         .append(" failed [")
-                         .append(result.stage)
-                         .append("] (node=")
-                         .append(nostd::to_string(key.node_handle))
-                         .append(" slot=")
-                         .append(std::to_string(key.slot_index.get()))
-                         .append("): ")
-                         .append(result.message);
-  LOG_SCOPE_F(ERROR, "Script Slot Error");
-  LOG_F(ERROR, "     hook: {}", hook_name);
-  LOG_F(ERROR, "    stage: {}", result.stage);
-  LOG_F(ERROR, "  message: {}", result.message);
-  ReportContentError(context, message);
+  PublishDiagnostic(state, hook_name, std::move(diagnostic), context);
+}
+
+auto ScriptingModule::PublishDiagnostic(const SlotRuntimeState& state,
+  const std::string_view hook_name, ScriptDiagnostic diagnostic,
+  const observer_ptr<engine::FrameContext> context) -> void
+{
+  diagnostic.slot = SlotContext {
+    .node = state.node_name,
+    .slot_index = state.slot_index,
+    .hook = std::string(hook_name),
+  };
+  static const auto kNoSources = SourceTextCache {};
+  auto text = RenderText(
+    diagnostic, diagnostic_sources_ ? *diagnostic_sources_ : kNoSources);
+  if (text.ends_with('\n')) {
+    text.pop_back();
+  }
+  LOG_F(ERROR, "{}", text);
+  if (context) {
+    ReportContentError(context, FormatSummary(diagnostic));
+  }
+  // A handler may add or remove handlers.
+  const auto handlers = diagnostic_handlers_;
+  for (const auto& handler : handlers | std::views::values) {
+    handler(diagnostic);
+  }
 }
 
 auto ScriptingModule::EndInstance(SlotRuntimeState& state) -> void
@@ -1380,10 +1513,8 @@ auto ScriptingModule::EndInstance(SlotRuntimeState& state) -> void
   if (lua_state_ != nullptr) {
     if (state.started && !state.faulted) {
       // The node may already be gone; on_destroy sees self.node as it is.
-      const auto result = CallInstanceHook(state, "on_destroy", std::nullopt);
-      if (!result.ok) {
-        LOG_F(ERROR, "script slot on_destroy failed [{}]: {}", result.stage,
-          result.message);
+      if (auto failure = CallInstanceHook(state, "on_destroy", std::nullopt)) {
+        PublishDiagnostic(state, "on_destroy", std::move(*failure), nullptr);
       }
     }
     // Listeners registered by the instance, on_destroy included, end here.

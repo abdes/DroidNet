@@ -1,0 +1,155 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Oxygen script diagnostic",
+  "description": "One script problem from any producer: parse, compile, declarations, lint, types, binding or runtime.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "severity",
+    "code",
+    "family",
+    "message",
+    "labels",
+    "notes"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "severity": {
+      "enum": ["error", "warning", "note"]
+    },
+    "code": {
+      "description": "Stable code, S followed by four digits; the hundreds digit is the family.",
+      "type": "string",
+      "pattern": "^S0[1-7][0-9]{2}$"
+    },
+    "family": {
+      "enum": [
+        "syntax",
+        "compile",
+        "declarations",
+        "lint",
+        "types",
+        "binding",
+        "runtime"
+      ]
+    },
+    "message": {
+      "description": "One line, lower case, no trailing period.",
+      "type": "string",
+      "minLength": 1
+    },
+    "labels": {
+      "description": "Source spans; exactly one is primary when any is present.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/label"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "help": {
+      "$ref": "#/definitions/suggestion"
+    },
+    "slot": {
+      "$ref": "#/definitions/slot"
+    }
+  },
+  "definitions": {
+    "position": {
+      "description": "1-based line and 1-based UTF-8 byte column.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["line", "column"],
+      "properties": {
+        "line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "span": {
+      "description": "Source range; end is exclusive.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "begin", "end"],
+      "properties": {
+        "source": {
+          "description": "Virtual or project-relative path.",
+          "type": "string"
+        },
+        "begin": {
+          "$ref": "#/definitions/position"
+        },
+        "end": {
+          "$ref": "#/definitions/position"
+        }
+      }
+    },
+    "label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["span", "message", "primary"],
+      "properties": {
+        "span": {
+          "$ref": "#/definitions/span"
+        },
+        "message": {
+          "type": "string"
+        },
+        "primary": {
+          "type": "boolean"
+        }
+      }
+    },
+    "suggestion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message"],
+      "properties": {
+        "message": {
+          "type": "string",
+          "minLength": 1
+        },
+        "span": {
+          "$ref": "#/definitions/span"
+        },
+        "replacement": {
+          "description": "Text that replaces span when the fix is machine-applicable.",
+          "type": "string"
+        }
+      }
+    },
+    "slot": {
+      "description": "The script slot a binding or runtime diagnostic belongs to.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["node", "slot_index", "hook"],
+      "properties": {
+        "node": {
+          "type": "string"
+        },
+        "slot_index": {
+          "description": "Zero-based slot position on the node.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "hook": {
+          "description": "Hook or stage, such as on_gameplay or load.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

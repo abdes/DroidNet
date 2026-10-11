@@ -20,6 +20,7 @@
 
 #include <Luau/Ast.h>
 #include <Luau/Location.h>
+#include <Luau/ParseResult.h>
 #include <fmt/format.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -420,6 +421,7 @@ namespace {
       },
       .notes = {},
       .help = std::nullopt,
+      .slot = std::nullopt,
     };
     if (!report.note.empty()) {
       diagnostic.notes.push_back(std::move(report.note));
@@ -1055,6 +1057,26 @@ namespace {
   }
 
 } // namespace
+
+auto ToSyntaxDiagnostic(const std::string_view source_name,
+  const Luau::ParseError& error) -> ScriptDiagnostic
+{
+  return ScriptDiagnostic {
+    .severity = DiagnosticSeverity::kError,
+    .code = DiagnosticCode::kSyntaxError,
+    .message = error.getMessage(),
+    .labels = {
+      DiagnosticLabel {
+        .span = detail::ToSpan(source_name, error.getLocation()),
+        .message = {},
+        .primary = true,
+      },
+    },
+    .notes = {},
+    .help = std::nullopt,
+    .slot = std::nullopt,
+  };
+}
 
 auto ToSpan(const std::string_view source_name, const Luau::Location& location)
   -> SourceSpan

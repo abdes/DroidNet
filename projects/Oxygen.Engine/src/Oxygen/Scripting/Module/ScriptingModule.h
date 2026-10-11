@@ -15,6 +15,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Detail/NamedType_skills.h>
@@ -30,8 +31,11 @@
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Scripting/Analysis/DiagnosticRenderer.h>
+#include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 #include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
 #include <Oxygen/Scripting/Input/InputScriptEventBridge.h>
+#include <Oxygen/Scripting/Module/RuntimeDiagnostics.h>
 #include <Oxygen/Scripting/api_export.h>
 
 struct lua_State;
@@ -66,6 +70,11 @@ using ScriptingSessionId
 constexpr ScriptingSessionId kInvalidScriptingSessionId { 0 };
 
 using Task = std::function<void(lua_State*)>;
+
+//! Receives the script diagnostics published by the scripting module.
+using ScriptDiagnosticHandler = std::function<void(const ScriptDiagnostic&)>;
+using ScriptDiagnosticHandlerId
+  = NamedType<uint64_t, struct ScriptDiagnosticHandlerIdTag, Comparable>;
 
 //! Main-thread task queue fed from any thread.
 /*!
@@ -182,6 +191,11 @@ private:
     Slot initialization and execution failures are content errors. A faulted
     slot stops executing until its executable changes; healthy slots and the
     compiler remain available.
+  - **Diagnostics**: Each load, binding or hook failure of an instance is
+    published once as a `ScriptDiagnostic` (S06xx, S07xx) with its slot
+    context: logged as rendered text and passed to the diagnostic handlers.
+    Slot chunks are named `@<source>`, the script asset's source path or
+    name, so runtime errors map back to source lines.
   - **Priority Contract**: Must run before
   `SceneObserverSyncModule` so
     gameplay registration is complete before
@@ -265,6 +279,24 @@ public:
 
   [[nodiscard]] OXGN_SCRP_API auto GetSessionId() const -> ScriptingSessionId;
 
+  //! Adds a receiver of every published script diagnostic.
+  /*!
+   Handlers run on the main thread, in the order they were added, when an
+   instance fails to load or a hook raises an error.
+  */
+  OXGN_SCRP_NDAPI auto AddDiagnosticHandler(ScriptDiagnosticHandler handler)
+    -> ScriptDiagnosticHandlerId;
+  //! Removes a handler; returns false when `id` is not registered.
+  OXGN_SCRP_API auto RemoveDiagnosticHandler(ScriptDiagnosticHandlerId id)
+    -> bool;
+  //! Sets the sources used to render diagnostics and locate their causes.
+  /*!
+   Without sources, diagnostics name the line but show no excerpt, and
+   unset-parameter help cannot be given.
+  */
+  OXGN_SCRP_API auto SetDiagnosticSources(
+    std::shared_ptr<const SourceProvider> sources) -> void;
+
 private:
   struct SlotRuntimeKey {
     scene::NodeHandle node_handle;
@@ -293,6 +325,11 @@ private:
   struct SlotRuntimeState {
     std::shared_ptr<const ScriptExecutable> executable;
     data::AssetKey asset_key;
+    //! Chunk name without `@`: the script's source path or asset name.
+    std::string source_name;
+    //! Slot context of the instance's diagnostics.
+    std::string node_name;
+    uint32_t slot_index { 0 };
     uint64_t last_known_fingerprint { 0 };
     int instance_env_ref { -1 };
     int script_ref { -1 };
@@ -321,15 +358,22 @@ private:
     observer_ptr<engine::FrameContext> context, InstanceHook hook) -> void;
   auto PrepareInstance(const SlotRuntimeKey& key,
     observer_ptr<engine::FrameContext> context) -> SlotRuntimeState*;
+  //! Loads the slot's chunk and creates `self`; returns why it failed.
   auto CreateInstance(const SlotRuntimeKey& key, SlotRuntimeState& state,
     scene::SceneNode& node, const scene::ScriptingComponent::Slot& slot)
-    -> ScriptExecutionResult;
+    -> std::optional<ScriptDiagnostic>;
   auto PushInstanceParams(const scene::ScriptingComponent::Slot& slot) -> void;
+  //! Calls an optional hook; returns the diagnostic of an error it raised.
   auto CallInstanceHook(SlotRuntimeState& state, std::string_view hook_name,
-    std::optional<float> dt_seconds) -> ScriptExecutionResult;
-  auto FaultInstance(const SlotRuntimeKey& key, SlotRuntimeState& state,
+    std::optional<float> dt_seconds) -> std::optional<ScriptDiagnostic>;
+  auto RuntimeDiagnostic(const SlotRuntimeState& state,
+    std::string_view hook_name) -> ScriptDiagnostic;
+  auto FaultInstance(SlotRuntimeState& state,
     observer_ptr<engine::FrameContext> context, std::string_view hook_name,
-    const ScriptExecutionResult& result) -> void;
+    ScriptDiagnostic diagnostic) -> void;
+  auto PublishDiagnostic(const SlotRuntimeState& state,
+    std::string_view hook_name, ScriptDiagnostic diagnostic,
+    observer_ptr<engine::FrameContext> context) -> void;
   auto EndInstance(SlotRuntimeState& state) -> void;
   [[nodiscard]] auto IsCurrentSlotRuntime(
     const SlotRuntimeKey& key, const SlotRuntimeState& state) const -> bool;
@@ -371,6 +415,12 @@ private:
     active_slot_indices_;
   bool active_slots_sorted_ { true };
   std::weak_ptr<scene::Scene> observed_scene_;
+  //! Script frames of the last error raised in an instance.
+  std::vector<detail::ScriptFrame> error_frames_;
+  std::shared_ptr<const SourceProvider> diagnostic_sources_;
+  std::vector<std::pair<ScriptDiagnosticHandlerId, ScriptDiagnosticHandler>>
+    diagnostic_handlers_;
+  uint64_t next_diagnostic_handler_id_ { 1 };
 
   ScriptTaskQueue task_queue_;
 };

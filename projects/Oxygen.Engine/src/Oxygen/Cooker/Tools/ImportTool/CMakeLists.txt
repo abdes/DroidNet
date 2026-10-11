@@ -24,8 +24,6 @@ find_package(fmt CONFIG REQUIRED)
 find_package(nlohmann_json REQUIRED)
 find_package(nlohmann_json_schema_validator REQUIRED)
 find_package(ftxui REQUIRED)
-find_package(Luau CONFIG REQUIRED)
-
 # ------------------------------------------------------------------------------
 # Build instructions
 # ------------------------------------------------------------------------------
@@ -96,7 +94,7 @@ target_link_libraries(
     ftxui::dom
     ftxui::component
     nlohmann_json::nlohmann_json
-    Luau::Compiler
+    oxygen::scripting-analysis
 )
 target_compile_definitions(
   oxygen-cooker-importtool-core

@@ -12,28 +12,44 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <iterator>
 #include <limits>
 #include <memory>
 #include <span>
+#include <string>
+#include <system_error>
 #include <thread>
+#include <utility>
+#include <vector>
 
 #ifdef _WIN32
-#  include <Windows.h>
+#  include <Windows.h> // IWYU pragma: keep
+
+#  include <fileapi.h>
+#  include <handleapi.h>
+#  include <minwindef.h>
+#  include <winnt.h>
 #endif
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Engine/Scripting/IScriptCompiler.h>
+#include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
 #include <Oxygen/Engine/Scripting/ScriptCompilationService.h>
+#include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 
@@ -56,6 +72,7 @@ using oxygen::scripting::IScriptCompiler;
 using oxygen::scripting::ScriptBytecodeBlob;
 using oxygen::scripting::ScriptCompilationService;
 using oxygen::scripting::ScriptCompileResult;
+using oxygen::scripting::ScriptDiagnostic;
 using oxygen::scripting::ScriptSourceBlob;
 
 auto MakeSourceBlob(std::vector<uint8_t> bytes) -> ScriptSourceBlob
@@ -167,7 +184,7 @@ NOLINT_TEST(ScriptCompilationServiceTest, MissingCompilerReturnsFailure)
   ScriptCompilationService service(observer_ptr<ThreadPool> {});
 
   // NOLINTNEXTLINE(*capturing-lambda-*)
-  oxygen::co::Run(loop, [&]() -> Co<> {
+  oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -200,7 +217,7 @@ NOLINT_TEST(
     std::make_shared<CountingCompiler>(compile_calls)));
 
   // NOLINTNEXTLINE(*capturing-lambda-*)
-  oxygen::co::Run(loop, [&]() -> Co<> {
+  oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -244,15 +261,15 @@ NOLINT_TEST(ScriptCompilationServiceTest, CompletionSubscribersArePublishedOnce)
     std::make_shared<CountingCompiler>(compile_calls)));
 
   // NOLINTNEXTLINE(*capturing-lambda-*)
-  oxygen::co::Run(loop, [&]() -> Co<> {
+  oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
       service.Run();
 
       constexpr ScriptCompilationService::CompileKey kCompileKey { 9001 };
-      const auto subscription = service.Subscribe(
-        kCompileKey, [&subscriber_calls](const ScriptCompileResult& result) {
+      const auto subscription = service.Subscribe(kCompileKey,
+        [&subscriber_calls](const ScriptCompileResult& result) -> void {
           EXPECT_TRUE(result.success);
           ++subscriber_calls;
         });
@@ -294,16 +311,19 @@ auto MakeTempCachePath() -> std::filesystem::path
 auto WriteCacheVersion(
   const std::filesystem::path& path, const uint32_t version) -> void
 {
+  // NOLINTNEXTLINE(*-signed-bitwise)
   std::fstream stream(path, std::ios::binary | std::ios::in | std::ios::out);
   ASSERT_TRUE(stream.is_open());
   constexpr std::streamoff kVersionOffset = 8;
   stream.seekp(kVersionOffset, std::ios::beg);
-  stream.write(reinterpret_cast<const char*>(&version), sizeof(version));
+  const auto bytes = std::bit_cast<std::array<char, sizeof(version)>>(version);
+  stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
   stream.flush();
 }
 
 auto CorruptCacheMagic(const std::filesystem::path& path) -> void
 {
+  // NOLINTNEXTLINE(*-signed-bitwise)
   std::fstream stream(path, std::ios::binary | std::ios::in | std::ios::out);
   ASSERT_TRUE(stream.is_open());
   constexpr char kCorruptByte = 'X';
@@ -318,7 +338,7 @@ auto CompileAndStop(ScriptCompilationService& service, TestEventLoop& loop,
 {
   ScriptCompileResult result;
   // NOLINTNEXTLINE(*capturing-lambda-*)
-  oxygen::co::Run(loop, [&]() -> Co<> {
+  oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -359,6 +379,7 @@ template <typename T>
 auto OverwriteCacheField(const std::filesystem::path& path,
   const uint64_t offset, const T value) -> void
 {
+  // NOLINTNEXTLINE(*-signed-bitwise)
   std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
   ASSERT_TRUE(file.is_open());
   file.seekp(static_cast<std::streamoff>(offset));
@@ -376,7 +397,7 @@ NOLINT_TEST(ScriptCompilationServiceTest,
     const auto path = MakeTempCachePath();
     std::atomic<int> calls = 0;
     ASSERT_TRUE(CompileIntoPersistentCache(path, 100U, { 1 }, calls).success);
-    const auto read_file = [&path]() -> std::vector<char> {
+    const auto read_file = [&path] -> std::vector<char> {
       std::ifstream input(path, std::ios::binary);
       return { std::istreambuf_iterator<char>(input),
         std::istreambuf_iterator<char>() };
@@ -392,19 +413,18 @@ NOLINT_TEST(ScriptCompilationServiceTest,
 
     // A reader that permits reads/writes but not deletion deterministically
     // prevents MoveFileEx replacement while leaving the old cache readable.
-    auto blocker = CreateFileW(path.c_str(), GENERIC_READ,
+    auto* blocker = CreateFileW(path.c_str(), GENERIC_READ,
       FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
       FILE_ATTRIBUTE_NORMAL, nullptr);
     ASSERT_NE(blocker, INVALID_HANDLE_VALUE);
-    const auto close_blocker
-      = oxygen::ScopeGuard([&blocker]() noexcept -> void {
-          if (blocker != INVALID_HANDLE_VALUE) {
-            CloseHandle(blocker);
-          }
-        });
+    const auto close_blocker = oxygen::ScopeGuard([&blocker] noexcept -> void {
+      if (blocker != INVALID_HANDLE_VALUE) {
+        CloseHandle(blocker);
+      }
+    });
 
     // NOLINTNEXTLINE(*capturing-lambda-*)
-    oxygen::co::Run(loop, [&]() -> Co<> {
+    oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -588,7 +608,7 @@ NOLINT_TEST(ScriptCompilationServiceTest, SequentialSameKeyHitsL1Cache)
     std::make_shared<CountingCompiler>(compile_calls)));
 
   // NOLINTNEXTLINE(*capturing-lambda-*)
-  oxygen::co::Run(loop, [&]() -> Co<> {
+  oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -635,7 +655,7 @@ NOLINT_TEST(ScriptCompilationServiceTest, L1CacheEvictsOldestEntries)
     std::make_shared<SourceSizedCountingCompiler>(compile_calls)));
 
   // NOLINTNEXTLINE(*capturing-lambda-*)
-  oxygen::co::Run(loop, [&]() -> Co<> {
+  oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -680,7 +700,7 @@ NOLINT_TEST(ScriptCompilationServiceTest, L1CacheKeepsRecentEntries)
     std::make_shared<SourceSizedCountingCompiler>(compile_calls)));
 
   // NOLINTNEXTLINE(*capturing-lambda-*)
-  oxygen::co::Run(loop, [&]() -> Co<> {
+  oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -727,7 +747,7 @@ NOLINT_TEST(ScriptCompilationServiceTest, PersistentCacheRoundtripAcrossRestart)
       std::make_shared<ImmediateCountingCompiler>(compile_calls)));
 
     // NOLINTNEXTLINE(*capturing-lambda-*)
-    oxygen::co::Run(loop, [&]() -> Co<> {
+    oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -755,7 +775,7 @@ NOLINT_TEST(ScriptCompilationServiceTest, PersistentCacheRoundtripAcrossRestart)
     ScriptCompilationService service(observer_ptr<ThreadPool> {}, cache_path);
 
     // NOLINTNEXTLINE(*capturing-lambda-*)
-    oxygen::co::Run(loop, [&]() -> Co<> {
+    oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -797,7 +817,7 @@ NOLINT_TEST(
       std::make_shared<ImmediateCountingCompiler>(compile_calls)));
 
     // NOLINTNEXTLINE(*capturing-lambda-*)
-    oxygen::co::Run(loop, [&]() -> Co<> {
+    oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -823,7 +843,7 @@ NOLINT_TEST(
     ScriptCompilationService service(observer_ptr<ThreadPool> {}, cache_path);
 
     // NOLINTNEXTLINE(*capturing-lambda-*)
-    oxygen::co::Run(loop, [&]() -> Co<> {
+    oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -862,7 +882,7 @@ NOLINT_TEST(
       std::make_shared<ImmediateCountingCompiler>(compile_calls)));
 
     // NOLINTNEXTLINE(*capturing-lambda-*)
-    oxygen::co::Run(loop, [&]() -> Co<> {
+    oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -891,7 +911,7 @@ NOLINT_TEST(
       std::make_shared<ImmediateCountingCompiler>(compile_calls)));
 
     // NOLINTNEXTLINE(*capturing-lambda-*)
-    oxygen::co::Run(loop, [&]() -> Co<> {
+    oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -927,15 +947,15 @@ NOLINT_TEST(ScriptCompilationServiceTest, UnsubscribePreventsCompletionCallback)
     std::make_shared<CountingCompiler>(compile_calls)));
 
   // NOLINTNEXTLINE(*capturing-lambda-*)
-  oxygen::co::Run(loop, [&]() -> Co<> {
+  oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
       service.Run();
 
       constexpr ScriptCompilationService::CompileKey kCompileKey { 42 };
-      const auto subscription = service.Subscribe(
-        kCompileKey, [&subscriber_calls](const ScriptCompileResult&) {
+      const auto subscription = service.Subscribe(kCompileKey,
+        [&subscriber_calls](const ScriptCompileResult& /*result*/) -> void {
           ++subscriber_calls;
         });
       EXPECT_TRUE(service.Unsubscribe(subscription));
@@ -969,7 +989,7 @@ NOLINT_TEST(ScriptCompilationServiceTest, CountersTrackCompileAndL1Hit)
     std::make_shared<ImmediateCountingCompiler>(compile_calls)));
 
   // NOLINTNEXTLINE(*capturing-lambda-*)
-  oxygen::co::Run(loop, [&]() -> Co<> {
+  oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -1017,7 +1037,7 @@ NOLINT_TEST(ScriptCompilationServiceTest, CountersTrackL2Hit)
       std::make_shared<ImmediateCountingCompiler>(compile_calls)));
 
     // NOLINTNEXTLINE(*capturing-lambda-*)
-    oxygen::co::Run(loop, [&]() -> Co<> {
+    oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -1039,7 +1059,7 @@ NOLINT_TEST(ScriptCompilationServiceTest, CountersTrackL2Hit)
     ScriptCompilationService service(observer_ptr<ThreadPool> {}, cache_path);
 
     // NOLINTNEXTLINE(*capturing-lambda-*)
-    oxygen::co::Run(loop, [&]() -> Co<> {
+    oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -1082,7 +1102,7 @@ NOLINT_TEST(ScriptCompilationServiceTest,
     std::make_shared<CountingCompiler>(compile_calls)));
 
   // NOLINTNEXTLINE(*capturing-lambda-*)
-  oxygen::co::Run(loop, [&]() -> Co<> {
+  oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -1096,27 +1116,30 @@ NOLINT_TEST(ScriptCompilationServiceTest,
 
       auto acquire = service.AcquireForSlot(std::move(request),
         ScriptCompilationService::SlotAcquireCallbacks {
-          .on_ready =
-            [&ready_calls, &ready_bytecode, &completion](
-              std::shared_ptr<const ScriptBytecodeBlob> bytecode) {
-              ++ready_calls;
-              ready_bytecode = std::move(bytecode);
-              completion.Trigger();
-            },
-          .on_failed =
-            [&failed_calls, &completion](const std::string& /*diagnostic*/) {
-              ++failed_calls;
-              completion.Trigger();
-            },
+          .on_ready
+          = [&ready_calls, &ready_bytecode, &completion](
+              std::shared_ptr<const ScriptBytecodeBlob> bytecode) -> void {
+            ++ready_calls;
+            ready_bytecode = std::move(bytecode);
+            completion.Trigger();
+          },
+          .on_failed
+          = [&failed_calls, &completion](
+              const std::vector<ScriptDiagnostic>& /*diagnostics*/) -> void {
+            ++failed_calls;
+            completion.Trigger();
+          },
         });
 
       EXPECT_EQ(acquire.placeholder, nullptr);
-      n.Start([&]() -> Co<> {
+      // NOLINTNEXTLINE(*capturing-lambda-*)
+      n.Start([&] -> Co<> {
         while (!completion.Triggered()) {
           service.OnFrameStart(
             oxygen::engine::internal::EngineTagFactory::Get());
-          co_await pool.Run(
-            [](ThreadPool::CancelToken) { std::this_thread::sleep_for(1ms); });
+          co_await pool.Run([](ThreadPool::CancelToken /*token*/) -> void {
+            std::this_thread::sleep_for(1ms);
+          });
         }
         co_return;
       });
@@ -1144,7 +1167,7 @@ NOLINT_TEST(ScriptCompilationServiceTest, AcquireForSlotPublishesFailure)
   std::atomic<int> failed_calls = 0;
 
   // NOLINTNEXTLINE(*capturing-lambda-*)
-  oxygen::co::Run(loop, [&]() -> Co<> {
+  oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&ScriptCompilationService::ActivateAsync, &service);
@@ -1158,22 +1181,25 @@ NOLINT_TEST(ScriptCompilationServiceTest, AcquireForSlotPublishesFailure)
 
       auto acquire = service.AcquireForSlot(std::move(request),
         ScriptCompilationService::SlotAcquireCallbacks {
-          .on_ready =
-            [&ready_calls, &completion](
-              std::shared_ptr<const ScriptBytecodeBlob>) {
-              ++ready_calls;
-              completion.Trigger();
-            },
-          .on_failed =
-            [&failed_calls, &completion](const std::string& diagnostic) {
-              EXPECT_FALSE(diagnostic.empty());
-              ++failed_calls;
-              completion.Trigger();
-            },
+          .on_ready
+          = [&ready_calls, &completion](
+              const std::shared_ptr<const ScriptBytecodeBlob>& /*bytecode*/)
+            -> void {
+            ++ready_calls;
+            completion.Trigger();
+          },
+          .on_failed
+          = [&failed_calls, &completion](
+              const std::vector<ScriptDiagnostic>& diagnostics) -> void {
+            EXPECT_FALSE(diagnostics.empty());
+            ++failed_calls;
+            completion.Trigger();
+          },
         });
 
       EXPECT_EQ(acquire.placeholder, nullptr);
-      n.Start([&]() -> Co<> {
+      // NOLINTNEXTLINE(*capturing-lambda-*)
+      n.Start([&] -> Co<> {
         while (!completion.Triggered()) {
           service.OnFrameStart(
             oxygen::engine::internal::EngineTagFactory::Get());

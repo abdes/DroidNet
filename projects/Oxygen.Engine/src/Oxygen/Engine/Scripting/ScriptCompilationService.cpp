@@ -15,20 +15,27 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <bit>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <istream>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <ostream>
 #include <span>
+#include <string>
 #include <system_error>
+#include <type_traits>
 #include <utility>
 #include <vector>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
@@ -51,9 +58,25 @@
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/ThreadPool.h>
+#include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 
 namespace oxygen::scripting {
 namespace {
+  //! A diagnostic about compiling `source` that has no source location.
+  auto ServiceDiagnostic(const DiagnosticCode code, std::string message,
+    const ScriptSourceBlob& source) -> ScriptDiagnostic
+  {
+    return ScriptDiagnostic {
+      .severity = DiagnosticSeverity::kError,
+      .code = code,
+      .message = std::move(message),
+      .labels = {},
+      .notes = { fmt::format("source: {}", source.GetCanonicalName().get()) },
+      .help = std::nullopt,
+      .slot = std::nullopt,
+    };
+  }
+
   constexpr std::array<char, 8> kPersistentCacheMagic {
     'O',
     'X',
@@ -114,6 +137,30 @@ namespace {
     return ComputeFNV1a64(words.data(), sizeof(words));
   }
 
+  constexpr size_t kBytesPerMebibyte = size_t { 1024 } * 1024;
+
+  //! Reads one trivially copyable record; returns false on a short read.
+  template <typename T>
+    requires std::is_trivially_copyable_v<T>
+  auto ReadRecord(std::istream& input, T& record) -> bool
+  {
+    auto bytes = std::array<char, sizeof(T)> {};
+    input.read(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+    if (!input) {
+      return false;
+    }
+    record = std::bit_cast<T>(bytes);
+    return true;
+  }
+
+  template <typename T>
+    requires std::is_trivially_copyable_v<T>
+  auto WriteRecord(std::ostream& output, const T& record) -> void
+  {
+    const auto bytes = std::bit_cast<std::array<char, sizeof(T)>>(record);
+    output.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+  }
+
   auto ReadPayload(std::ifstream& input, const uint64_t key, const auto& entry)
     -> std::optional<std::vector<uint8_t>>
   {
@@ -122,10 +169,15 @@ namespace {
     if (!input) {
       return std::nullopt;
     }
-    std::vector<uint8_t> payload(entry.data_size);
-    input.read(reinterpret_cast<char*>(payload.data()),
-      static_cast<std::streamsize>(payload.size()));
-    if (!input || PayloadChecksum(key, payload) != entry.payload_checksum) {
+    auto buffer = std::vector<char>(entry.data_size);
+    input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+    if (!input) {
+      return std::nullopt;
+    }
+    auto payload = std::vector<uint8_t>(buffer.size());
+    std::ranges::transform(buffer, payload.begin(),
+      [](const char byte) -> uint8_t { return static_cast<uint8_t>(byte); });
+    if (PayloadChecksum(key, payload) != entry.payload_checksum) {
       return std::nullopt;
     }
     return payload;
@@ -149,7 +201,7 @@ namespace {
 
 ScriptCompilationService::ScriptCompilationService(
   const observer_ptr<co::ThreadPool> thread_pool,
-  std::filesystem::path persistent_cache_path) noexcept
+  std::filesystem::path persistent_cache_path)
   : thread_pool_(thread_pool)
   , l1_cache_(kL1ByteBudget)
   , persistent_cache_path_(std::move(persistent_cache_path))
@@ -181,9 +233,8 @@ ScriptCompilationService::ScriptCompilationService(
           load_failed = true;
         } else {
           PersistentCacheHeader header {};
-          input.read(
-            reinterpret_cast<char*>(&header), sizeof(PersistentCacheHeader));
-          if (!input || header.magic != kPersistentCacheMagic
+          if (!ReadRecord(input, header)
+            || header.magic != kPersistentCacheMagic
             || header.version != kPersistentCacheVersion) {
             load_failed = true;
           } else {
@@ -204,9 +255,7 @@ ScriptCompilationService::ScriptCompilationService(
                 = uint64_t { sizeof(PersistentCacheHeader) };
               for (uint32_t i = 0; i < header.entry_count; ++i) {
                 PersistentCacheEntry entry {};
-                input.read(reinterpret_cast<char*>(&entry),
-                  sizeof(PersistentCacheEntry));
-                if (!input) {
+                if (!ReadRecord(input, entry)) {
                   load_failed = true;
                   break;
                 }
@@ -285,27 +334,27 @@ auto ScriptCompilationService::Stop() -> void
   size_t subscribers_cleared = 0;
   size_t completions_cleared = 0;
   {
-    std::lock_guard lock(subscribers_mutex_);
+    std::scoped_lock lock(subscribers_mutex_);
     for (const auto& [_, list] : subscribers_) {
       subscribers_cleared += list.size();
     }
     subscribers_.clear();
   }
   {
-    std::lock_guard lock(completions_mutex_);
+    std::scoped_lock lock(completions_mutex_);
     completions_cleared = pending_completions_.size();
     pending_completions_.clear();
   }
   {
-    std::lock_guard lock(in_flight_mutex_);
+    std::scoped_lock lock(in_flight_mutex_);
     in_flight_.clear();
   }
   {
-    std::lock_guard lock(l1_cache_mutex_);
+    std::scoped_lock lock(l1_cache_mutex_);
     l1_cache_.Clear();
   }
   {
-    std::lock_guard lock(compilers_mutex_);
+    std::scoped_lock lock(compilers_mutex_);
     compilers_.clear();
   }
   if (nursery_ != nullptr) {
@@ -352,7 +401,7 @@ auto ScriptCompilationService::RegisterCompiler(
   if (!compiler) {
     return false;
   }
-  std::lock_guard lock(compilers_mutex_);
+  std::scoped_lock lock(compilers_mutex_);
   const auto language = compiler->Language();
   const auto inserted
     = compilers_.insert_or_assign(language, std::move(compiler)).second;
@@ -363,7 +412,7 @@ auto ScriptCompilationService::RegisterCompiler(
 auto ScriptCompilationService::UnregisterCompiler(
   const data::pak::scripting::ScriptLanguage language) -> bool
 {
-  std::lock_guard lock(compilers_mutex_);
+  std::scoped_lock lock(compilers_mutex_);
   const auto erased = compilers_.erase(language) > 0;
   if (erased) {
     LOG_F(INFO, "compiler unregistered (language={})", language);
@@ -374,7 +423,7 @@ auto ScriptCompilationService::UnregisterCompiler(
 auto ScriptCompilationService::HasCompiler(
   const data::pak::scripting::ScriptLanguage language) const -> bool
 {
-  std::lock_guard lock(compilers_mutex_);
+  std::scoped_lock lock(compilers_mutex_);
   return compilers_.contains(language);
 }
 
@@ -384,7 +433,10 @@ auto ScriptCompilationService::CompileAsync(Request request) -> co::Co<Result>
     co_return Result {
       .success = false,
       .bytecode = nullptr,
-      .diagnostics = "ScriptCompilationService is shut down",
+      .diagnostics = { ServiceDiagnostic(DiagnosticCode::kCompileStopped,
+        "compilation stopped because the compilation service is shut down",
+        request.source),
+      },
     };
   }
 
@@ -417,7 +469,7 @@ auto ScriptCompilationService::CompileAsync(Request request) -> co::Co<Result>
 
   co::Shared<co::Co<Result>> shared;
   {
-    std::lock_guard lock(in_flight_mutex_);
+    std::scoped_lock lock(in_flight_mutex_);
     if (const auto it = in_flight_.find(compile_key); it != in_flight_.end()) {
       shared = it->second;
       DLOG_F(2, "joining in-flight compile request (key={})", compile_key);
@@ -442,7 +494,7 @@ auto ScriptCompilationService::CompileAsync(Request request) -> co::Co<Result>
 
 auto ScriptCompilationService::InFlightCount() const -> size_t
 {
-  std::lock_guard lock(in_flight_mutex_);
+  std::scoped_lock lock(in_flight_mutex_);
   return in_flight_.size();
 }
 
@@ -470,7 +522,7 @@ auto ScriptCompilationService::Subscribe(const CompileKey compile_key,
     LOG_F(WARNING, "ignoring empty compilation subscriber");
     return {};
   }
-  std::lock_guard lock(subscribers_mutex_);
+  std::scoped_lock lock(subscribers_mutex_);
   const auto subscriber_id = next_subscriber_id_++;
   subscribers_[compile_key].emplace_back(subscriber_id, std::move(subscriber));
   LOG_F(INFO, "subscriber attached (key={}, subscriber={})", compile_key,
@@ -484,12 +536,12 @@ auto ScriptCompilationService::Subscribe(const CompileKey compile_key,
 auto ScriptCompilationService::Unsubscribe(const SubscriptionHandle& handle)
   -> bool
 {
-  std::lock_guard lock(subscribers_mutex_);
+  std::scoped_lock lock(subscribers_mutex_);
   if (const auto it = subscribers_.find(handle.compile_key);
     it != subscribers_.end()) {
     auto& list = it->second;
     const auto before = list.size();
-    std::erase_if(list, [&handle](const auto& entry) {
+    std::erase_if(list, [&handle](const auto& entry) -> bool {
       return entry.first == handle.subscriber_id;
     });
     const auto removed = (list.size() != before);
@@ -509,8 +561,8 @@ auto ScriptCompilationService::AcquireForSlot(
   Request request, SlotAcquireCallbacks callbacks) -> SlotAcquireHandle
 {
   const auto compile_key = request.compile_key;
-  auto subscription = Subscribe(
-    compile_key, [callbacks = std::move(callbacks)](const Result& result) {
+  auto subscription = Subscribe(compile_key,
+    [callbacks = std::move(callbacks)](const Result& result) -> void {
       if (result.success && result.bytecode != nullptr) {
         if (callbacks.on_ready) {
           callbacks.on_ready(result.bytecode);
@@ -550,7 +602,7 @@ auto ScriptCompilationService::OnFrameStart(engine::EngineTag /*tag*/) -> void
 
 auto ScriptCompilationService::SetCacheBudget(const size_t budget_bytes) -> void
 {
-  std::lock_guard lock(l1_cache_mutex_);
+  std::scoped_lock lock(l1_cache_mutex_);
   l1_cache_.SetBudget(budget_bytes);
 }
 
@@ -574,7 +626,7 @@ auto ScriptCompilationService::RegisterConsoleBindings(
   (void)console->RegisterCVar(console::CVarDefinition {
     .name = "scripting.cache_budget_mb",
     .help = "Script bytecode L1 memory cache budget in MB",
-    .default_value = static_cast<int64_t>(kL1ByteBudget / (1024 * 1024)),
+    .default_value = static_cast<int64_t>(kL1ByteBudget / kBytesPerMebibyte),
     .flags = console::CVarFlags::kArchive,
   });
 
@@ -585,43 +637,49 @@ auto ScriptCompilationService::RegisterConsoleBindings(
     .flags = console::CVarFlags::kArchive,
   });
 
-  (void)console->RegisterCommand(
-    console::CommandDefinition { .name = "scripting.stats",
-      .help = "Print scripting compilation and cache statistics",
-      .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
-        const auto counters = GetCounters();
-        LOG_F(INFO, "Scripting Statistics:");
-        LOG_F(INFO, "  L1 Hits: {}", counters.l1_hits);
-        LOG_F(INFO, "  L2 Hits: {}", counters.l2_hits);
-        LOG_F(INFO, "  Compile Started: {}", counters.compile_started);
-        LOG_F(INFO, "  Compile Succeeded: {}", counters.compile_succeeded);
-        LOG_F(INFO, "  Compile Failed: {}", counters.compile_failed);
-        LOG_F(INFO, "  Avg Latency: {} us",
-          counters.compile_latency_samples == 0
-            ? 0
-            : counters.compile_latency_total_us
-              / counters.compile_latency_samples);
-        LOG_F(INFO, "  Max Latency: {} us", counters.compile_latency_max_us);
-        return { .status = console::ExecutionStatus::kOk };
-      } });
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = "scripting.stats",
+    .help = "Print scripting compilation and cache statistics",
+    .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
+      const auto counters = GetCounters();
+      LOG_F(INFO, "Scripting Statistics:");
+      LOG_F(INFO, "  L1 Hits: {}", counters.l1_hits);
+      LOG_F(INFO, "  L2 Hits: {}", counters.l2_hits);
+      LOG_F(INFO, "  Compile Started: {}", counters.compile_started);
+      LOG_F(INFO, "  Compile Succeeded: {}", counters.compile_succeeded);
+      LOG_F(INFO, "  Compile Failed: {}", counters.compile_failed);
+      LOG_F(INFO, "  Avg Latency: {} us",
+        counters.compile_latency_samples == 0
+          ? 0
+          : counters.compile_latency_total_us
+            / counters.compile_latency_samples);
+      LOG_F(INFO, "  Max Latency: {} us", counters.compile_latency_max_us);
+      return {
+        .status = console::ExecutionStatus::kOk,
+      };
+    },
+  });
 
-  (void)console->RegisterCommand(
-    console::CommandDefinition { .name = "scripting.flush_cache",
-      .help = "Manually trigger a flush of the persistent bytecode cache",
-      .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
-        FlushPersistentCache();
-        return { .status = console::ExecutionStatus::kOk,
-          .output = "Script cache flushed" };
-      } });
+  (void)console->RegisterCommand(console::CommandDefinition {
+    .name = "scripting.flush_cache",
+    .help = "Manually trigger a flush of the persistent bytecode cache",
+    .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
+      FlushPersistentCache();
+      return {
+        .status = console::ExecutionStatus::kOk,
+        .output = "Script cache flushed",
+      };
+    },
+  });
 }
 
 auto ScriptCompilationService::ApplyConsoleCVars(
   const console::Console& console) -> void
 {
-  int64_t budget_mb = kL1ByteBudget / (1024 * 1024);
+  auto budget_mb = static_cast<int64_t>(kL1ByteBudget / kBytesPerMebibyte);
   if (console.TryGetCVarValue<int64_t>(
         "scripting.cache_budget_mb", budget_mb)) {
-    SetCacheBudget(static_cast<size_t>(budget_mb) * 1024 * 1024);
+    SetCacheBudget(static_cast<size_t>(budget_mb) * kBytesPerMebibyte);
   }
 
   bool deferred = true;
@@ -635,8 +693,8 @@ auto ScriptCompilationService::ExecuteCompileRequest(
   const CompileKey compile_key, ScriptSourceBlob source,
   const core::meta::scripting::ScriptCompileMode compile_mode) -> co::Co<Result>
 {
-  auto erase = ScopeGuard([this, compile_key]() noexcept {
-    std::lock_guard lock(in_flight_mutex_);
+  auto erase = ScopeGuard([this, compile_key] noexcept -> void {
+    std::scoped_lock lock(in_flight_mutex_);
     in_flight_.erase(compile_key);
   });
 
@@ -662,10 +720,11 @@ auto ScriptCompilationService::ExecuteCompileRequest(
       compile_key, result.bytecode->Size(), latency_us);
   } else {
     compile_failed_.fetch_add(1, std::memory_order_relaxed);
-    LOG_F(ERROR,
-      "compile failed (key={}, diagnostics_size={}, latency_us={}, "
-      "diagnostics={})",
-      compile_key, result.diagnostics.size(), latency_us, result.diagnostics);
+    LOG_F(ERROR, "compile failed (key={}, diagnostics={}, latency_us={})",
+      compile_key, result.diagnostics.size(), latency_us);
+    for (const auto& diagnostic : result.diagnostics) {
+      LOG_F(ERROR, "  {}", FormatSummary(diagnostic));
+    }
   }
   EnqueueCompletion(compile_key, result);
   co_return result;
@@ -685,7 +744,7 @@ auto ScriptCompilationService::CompileOnWorkerThread(ScriptSourceBlob source,
   const auto language = source.Language();
   std::shared_ptr<const IScriptCompiler> compiler;
   {
-    std::lock_guard lock(compilers_mutex_);
+    std::scoped_lock lock(compilers_mutex_);
     if (const auto it = compilers_.find(language); it != compilers_.end()) {
       compiler = it->second;
     }
@@ -710,16 +769,21 @@ auto ScriptCompilationService::CompileOnWorkerThread(ScriptSourceBlob source,
   }
 
   LOG_F(ERROR, "no compiler registered for language={}", language);
-  Result result {};
-  result.success = false;
-  result.diagnostics = "No compiler registered for script language";
-  co_return result;
+  co_return Result {
+    .success = false,
+    .bytecode = nullptr,
+    .diagnostics = { ServiceDiagnostic(DiagnosticCode::kNoCompiler,
+      fmt::format("no compiler is registered for {} scripts",
+        data::pak::scripting::to_string(language)),
+      source),
+    },
+  };
 }
 
 auto ScriptCompilationService::TryGetCachedBytecode(
   const CompileKey compile_key) -> std::shared_ptr<const ScriptBytecodeBlob>
 {
-  std::lock_guard lock(l1_cache_mutex_);
+  std::scoped_lock lock(l1_cache_mutex_);
   auto cached = l1_cache_.Acquire<const ScriptBytecodeBlob>(
     compile_key.get(), oxygen::CheckoutOwner::kInternal);
   if (!cached) {
@@ -730,7 +794,7 @@ auto ScriptCompilationService::TryGetCachedBytecode(
 }
 
 auto ScriptCompilationService::StoreCachedBytecode(const CompileKey compile_key,
-  std::shared_ptr<const ScriptBytecodeBlob> bytecode) -> void
+  const std::shared_ptr<const ScriptBytecodeBlob>& bytecode) -> void
 {
   if (bytecode == nullptr || bytecode->IsEmpty()) {
     return;
@@ -738,12 +802,10 @@ auto ScriptCompilationService::StoreCachedBytecode(const CompileKey compile_key,
 
   auto mutable_view = std::const_pointer_cast<ScriptBytecodeBlob>(bytecode);
 
-  std::lock_guard lock(l1_cache_mutex_);
-  if (!l1_cache_.Store(compile_key.get(), mutable_view)) {
-    if (!l1_cache_.Replace(compile_key.get(), mutable_view)) {
-      LOG_F(WARNING, "cache store skipped (key={})", compile_key);
-      return;
-    }
+  std::scoped_lock lock(l1_cache_mutex_);
+  if (!l1_cache_.Store(compile_key.get(), mutable_view)
+    && !l1_cache_.Replace(compile_key.get(), mutable_view)) {
+    LOG_F(WARNING, "cache store skipped (key={})", compile_key);
   }
 }
 
@@ -872,7 +934,7 @@ auto ScriptCompilationService::PersistCacheSnapshot(const std::vector<
   // processes that share the same engine cache path.
   const auto temp_path = std::filesystem::path { persistent_cache_path_.string()
     + ".tmp." + Uuid::Generate().ToString() };
-  const auto cleanup = ScopeGuard([&temp_path]() noexcept -> void {
+  const auto cleanup = ScopeGuard([&temp_path] noexcept -> void {
     std::error_code ignored;
     std::filesystem::remove(temp_path, ignored);
   });
@@ -883,8 +945,9 @@ auto ScriptCompilationService::PersistCacheSnapshot(const std::vector<
     return false;
   }
 
-  std::ranges::sort(sorted_snapshot,
-    [](const auto& a, const auto& b) { return a.first.get() < b.first.get(); });
+  std::ranges::sort(sorted_snapshot, [](const auto& a, const auto& b) -> bool {
+    return a.first.get() < b.first.get();
+  });
 
   std::error_code ec {};
   const auto parent_path = persistent_cache_path_.parent_path();
@@ -897,7 +960,8 @@ auto ScriptCompilationService::PersistCacheSnapshot(const std::vector<
     }
   }
 
-  std::ofstream output(temp_path, std::ios::binary | std::ios::trunc);
+  // Opening for output truncates the file.
+  std::ofstream output(temp_path, std::ios::binary);
   if (!output) {
     LOG_F(WARNING, "failed to open temporary persistent cache file");
     return false;
@@ -906,7 +970,7 @@ auto ScriptCompilationService::PersistCacheSnapshot(const std::vector<
   PersistentCacheHeader header {};
   header.magic = kPersistentCacheMagic;
   header.version = kPersistentCacheVersion;
-  output.write(reinterpret_cast<const char*>(&header), sizeof(header));
+  WriteRecord(output, header);
 
   std::vector<PersistentCacheEntry> index_entries;
   index_entries.reserve(sorted_snapshot.size());
@@ -920,8 +984,9 @@ auto ScriptCompilationService::PersistCacheSnapshot(const std::vector<
       return false;
     }
     const auto data_offset = static_cast<uint64_t>(output.tellp());
-    output.write(reinterpret_cast<const char*>(payload_bytes.data()),
-      static_cast<std::streamsize>(payload_bytes.size()));
+    for (const auto byte : payload_bytes) {
+      output.put(static_cast<char>(byte));
+    }
     index_entries.push_back(PersistentCacheEntry {
       .key = key.get(),
       .data_offset = data_offset,
@@ -938,12 +1003,11 @@ auto ScriptCompilationService::PersistCacheSnapshot(const std::vector<
   header.index_offset = static_cast<uint64_t>(output.tellp());
   header.entry_count = static_cast<uint32_t>(index_entries.size());
   for (const auto& entry : index_entries) {
-    output.write(
-      reinterpret_cast<const char*>(&entry), sizeof(PersistentCacheEntry));
+    WriteRecord(output, entry);
   }
 
   output.seekp(0, std::ios::beg);
-  output.write(reinterpret_cast<const char*>(&header), sizeof(header));
+  WriteRecord(output, header);
   output.flush();
   output.close();
   if (!output) {
@@ -980,7 +1044,7 @@ auto ScriptCompilationService::EnqueueCompletion(
   if (!active_.load(std::memory_order_acquire)) {
     return;
   }
-  std::lock_guard lock(completions_mutex_);
+  std::scoped_lock lock(completions_mutex_);
   DLOG_F(
     3, "queue completion (key={}, success={})", compile_key, result.success);
   pending_completions_.emplace_back(compile_key, result);
@@ -990,7 +1054,7 @@ auto ScriptCompilationService::DrainCompletions() -> void
 {
   std::vector<std::pair<CompileKey, Result>> completions;
   {
-    std::lock_guard lock(completions_mutex_);
+    std::scoped_lock lock(completions_mutex_);
     completions.swap(pending_completions_);
   }
   if (!completions.empty()) {
@@ -1001,7 +1065,7 @@ auto ScriptCompilationService::DrainCompletions() -> void
   for (const auto& [compile_key, result] : completions) {
     std::vector<CompletionSubscriber> subscribers;
     {
-      std::lock_guard lock(subscribers_mutex_);
+      std::scoped_lock lock(subscribers_mutex_);
       if (const auto it = subscribers_.find(compile_key);
         it != subscribers_.end()) {
         subscribers.reserve(it->second.size());

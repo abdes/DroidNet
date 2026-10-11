@@ -11,6 +11,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -22,6 +23,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
+#include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 
 namespace oxygen::co {
 class Event;
@@ -126,6 +128,8 @@ class AsyncImportService final {
 public:
   //! Script compile request payload used by optional compile callback wiring.
   struct ScriptCompileRequest final {
+    //! Virtual or project-relative path used in diagnostic spans.
+    std::string_view source_name;
     std::span<const std::byte> source_bytes;
     core::meta::scripting::ScriptCompileMode compile_mode
       = core::meta::scripting::ScriptCompileMode::kDebug;
@@ -135,7 +139,8 @@ public:
   struct ScriptCompileResult final {
     bool success = false;
     std::vector<std::byte> bytecode;
-    std::string diagnostics;
+    //! Why compilation failed; each becomes an import diagnostic.
+    std::vector<scripting::ScriptDiagnostic> diagnostics;
   };
 
   //! Optional callback used by script asset import for compile-enabled

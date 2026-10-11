@@ -32,6 +32,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -401,7 +402,17 @@ namespace {
       return AsyncImportService::ScriptCompileResult {
         .success = false,
         .bytecode = {},
-        .diagnostics = "forced test compile failure",
+        .diagnostics = {
+          scripting::ScriptDiagnostic {
+            .severity = scripting::DiagnosticSeverity::kError,
+            .code = scripting::DiagnosticCode::kCompileError,
+            .message = "forced test compile failure",
+            .labels = {},
+            .notes = {},
+            .help = std::nullopt,
+            .slot = std::nullopt,
+          },
+        },
       };
     };
 
@@ -416,8 +427,7 @@ namespace {
         source_path, cooked_root, ScriptStorageMode::kEmbedded, true));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
-    EXPECT_TRUE(
-      HasDiagnosticCode(report->diagnostics, "script.asset.compile_failed"));
+    EXPECT_TRUE(HasDiagnosticCode(report->diagnostics, "script.S0201"));
 
     const auto descriptor_path
       = cooked_root / "Scripts" / "compile_fail.oscript";

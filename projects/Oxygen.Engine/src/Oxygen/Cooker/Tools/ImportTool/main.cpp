@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <any>
 #include <array>
 #include <atomic>
 #include <cctype>
@@ -20,7 +21,8 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <stdio.h>
+#include <span>
+#include <stdio.h> // NOLINT(*-deprecated-headers): declares MSVC _fileno
 #include <stop_token>
 #include <string_view>
 #include <system_error>
@@ -33,19 +35,18 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/ImportConcurrency.h>
-#include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 
 #ifdef _WIN32
 #else
 #  include <unistd.h>
 #endif
 
-#include <Luau/Compiler.h>
 #include <fmt/color.h>
 #include <fmt/format.h>
 #include <ftxui/screen/terminal.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
@@ -66,6 +67,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/SourceAnalysisCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/SourceInspectionCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/TextureCommand.h>
+#include <Oxygen/Scripting/Analysis/LuauCompiler.h>
 
 // Create and inject concrete writers. The concrete implementations live
 // only in main and are owned here; GlobalOptions holds non-owning
@@ -86,10 +88,13 @@ using oxygen::content::import::tool::GlobalOptions;
 using oxygen::content::import::tool::ImportCommand;
 using oxygen::content::import::tool::InputCommand;
 
+// The signal handler reaches only objects with static storage duration.
+// NOLINTBEGIN(cppcoreguidelines-avoid-non-const-global-variables)
 std::atomic<bool> g_stop_requested { false };
 std::atomic<bool> g_stop_handled { false };
 std::atomic<int> g_stop_signal { 0 };
 std::atomic<int> g_stop_count { 0 };
+// NOLINTEND(cppcoreguidelines-avoid-non-const-global-variables)
 
 auto HandleStopSignal(const int signal) -> void
 {
@@ -161,8 +166,8 @@ auto Trim(std::string_view value) -> std::string_view
 auto ParseUnsigned(std::string_view value, uint32_t& out) -> bool
 {
   uint32_t parsed = 0U;
-  const auto* begin = value.data();
-  const auto* end = value.data() + value.size();
+  const auto* begin = std::to_address(value.begin());
+  const auto* end = std::to_address(value.end());
   const auto result = std::from_chars(begin, end, parsed);
   if (result.ec != std::errc {} || result.ptr != end) {
     return false;
@@ -261,33 +266,42 @@ auto ParseConcurrencySpec(const std::string_view spec)
   return result;
 }
 
+//! Service settings given on the command line, which override a command's.
+struct ServiceOverrides {
+  bool thread_pool_size = false;
+  bool concurrency = false;
+};
+
 auto ApplyServiceConfigOverrides(const CommandLineContext& context,
   const GlobalOptions& global_options,
-  AsyncImportService::Config& service_config, int& exit_code,
-  bool& thread_pool_size_set, bool& concurrency_override_set) -> bool
+  AsyncImportService::Config& service_config, ServiceOverrides& overrides,
+  int& exit_code) -> bool
 {
-  thread_pool_size_set = context.ovm.HasOption("thread-pool-size");
-  concurrency_override_set = context.ovm.HasOption("concurrency");
+  overrides.thread_pool_size = context.ovm.HasOption("thread-pool-size");
+  overrides.concurrency = context.ovm.HasOption("concurrency");
 
-  if (thread_pool_size_set) {
+  if (overrides.thread_pool_size) {
     const auto& values = context.ovm.ValuesOf("thread-pool-size");
     if (!values.empty()) {
-      service_config.thread_pool_size = values.back().GetAs<uint32_t>();
+      if (const auto* size = std::any_cast<uint32_t>(&values.back().Value())) {
+        service_config.thread_pool_size = *size;
+      }
     }
   }
 
-  if (!concurrency_override_set) {
+  if (!overrides.concurrency) {
     return true;
   }
 
   const auto& values = context.ovm.ValuesOf("concurrency");
   if (values.empty()) {
-    concurrency_override_set = false;
+    overrides.concurrency = false;
     return true;
   }
 
-  const auto& spec = values.back().GetAs<std::string>();
-  const auto parsed = ParseConcurrencySpec(spec);
+  const auto* spec = std::any_cast<std::string>(&values.back().Value());
+  const auto parsed = ParseConcurrencySpec(
+    spec != nullptr ? std::string_view(*spec) : std::string_view {});
   if (!parsed.has_value()) {
     constexpr std::string_view kMessage
       = "ERROR: invalid --concurrency specification";
@@ -305,17 +319,16 @@ auto ApplyServiceConfigOverrides(const CommandLineContext& context,
   return true;
 }
 
+//! Creates the command's import service, or returns the exit status of a
+//! configuration error.
 auto CreateImportService(ImportCommand& active_command,
-  const AsyncImportService::Config& service_config, bool thread_pool_size_set,
-  bool concurrency_override_set, int& exit_code, bool& options_valid)
-  -> std::unique_ptr<AsyncImportService>
+  const AsyncImportService::Config& service_config,
+  const ServiceOverrides& overrides)
+  -> std::expected<std::unique_ptr<AsyncImportService>, int>
 {
-  std::unique_ptr<AsyncImportService> service_owner;
   const auto config = active_command.PrepareImportServiceConfig();
   if (!config.has_value()) {
-    exit_code = ExitStatusFromError(config.error());
-    options_valid = false;
-    return nullptr;
+    return std::unexpected(ExitStatusFromError(config.error()));
   }
   auto final_config = *config;
   if (service_config.script_compile_callback
@@ -323,15 +336,13 @@ auto CreateImportService(ImportCommand& active_command,
     final_config.script_compile_callback
       = service_config.script_compile_callback;
   }
-  if (thread_pool_size_set) {
+  if (overrides.thread_pool_size) {
     final_config.thread_pool_size = service_config.thread_pool_size;
   }
-  if (concurrency_override_set) {
+  if (overrides.concurrency) {
     final_config.concurrency = service_config.concurrency;
   }
-  service_owner = std::make_unique<AsyncImportService>(final_config);
-
-  return service_owner;
+  return std::make_unique<AsyncImportService>(final_config);
 }
 
 auto StopReasonMessage(const int signal) -> std::string_view
@@ -354,10 +365,12 @@ auto ResetStopState() -> void
   g_stop_count.store(0, std::memory_order_relaxed);
 }
 
+constexpr auto kStopPollInterval = std::chrono::milliseconds(50);
+
 auto StartStopWatcher(AsyncImportService* service,
   oxygen::observer_ptr<IMessageWriter> writer) -> std::jthread
 {
-  return std::jthread([service, writer](std::stop_token st) -> void {
+  return std::jthread([service, writer](const std::stop_token& st) -> void {
     while (!st.stop_requested()) {
       if (g_stop_requested.load(std::memory_order_relaxed)) {
         if (g_stop_handled.exchange(true, std::memory_order_acq_rel)) {
@@ -374,7 +387,7 @@ auto StartStopWatcher(AsyncImportService* service,
         }
         break;
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(50));
+      std::this_thread::sleep_for(kStopPollInterval);
     }
   });
 }
@@ -411,22 +424,26 @@ auto IsInteractiveStdout() noexcept -> bool
 
 class ConsoleMessageWriter final : public IMessageWriter {
 public:
+  OXYGEN_MAKE_NON_COPYABLE(ConsoleMessageWriter)
+  OXYGEN_MAKE_NON_MOVABLE(ConsoleMessageWriter)
+
   explicit ConsoleMessageWriter(bool quiet, bool no_color)
     : quiet_(quiet)
     , interactive_(IsInteractiveStdout())
     , no_color_(no_color || !interactive_)
   {
     if (interactive_) {
-      fmt::print(stdout, "\x1b[?25l");
-      std::cout.flush();
+      std::fputs("\x1b[?25l", stdout); // hides the cursor
+      std::fflush(stdout);
     }
   }
 
   ~ConsoleMessageWriter() override
   {
     if (interactive_) {
-      fmt::print(stdout, "\x1b[?25h");
-      std::cout.flush();
+      // Restores the cursor; C stdio cannot throw from the destructor.
+      std::fputs("\x1b[?25h", stdout);
+      std::fflush(stdout);
     }
   }
 
@@ -438,8 +455,8 @@ public:
       std::cerr << (interactive_ ? "\r" : "") << kErrorGlyph << ' ' << message
                 << '\n';
     } else {
-      fmt::print(stderr, fmt::fg(fmt::rgb(220, 38, 38)), "\r{} {}\r\n",
-        kErrorGlyph, std::string(message));
+      fmt::print(stderr, fmt::fg(kErrorColor), "\r{} {}\r\n", kErrorGlyph,
+        std::string(message));
     }
     last_was_progress_ = false;
     return true;
@@ -560,7 +577,7 @@ private:
     return sanitized;
   }
 
-  auto ClearProgressLine() -> void
+  auto ClearProgressLine() const -> void
   {
     if (last_was_progress_) {
       fmt::print(stdout, "\r");
@@ -584,6 +601,7 @@ private:
     return kFrames.at(index);
   }
 
+  static constexpr auto kErrorColor = fmt::rgb(220, 38, 38);
   static constexpr std::string_view kErrorGlyph = "×";
   static constexpr std::string_view kWarningGlyph = "▲";
   static constexpr std::string_view kSuccessGlyph = "✓";
@@ -609,9 +627,9 @@ public:
     std::cerr << message << "\n";
     return true;
   }
-  auto Info(std::string_view) -> bool override { return false; }
-  auto Report(std::string_view) -> bool override { return false; }
-  auto Progress(std::string_view) -> bool override { return false; }
+  auto Info(std::string_view /*message*/) -> bool override { return false; }
+  auto Report(std::string_view /*message*/) -> bool override { return false; }
+  auto Progress(std::string_view /*message*/) -> bool override { return false; }
 };
 
 auto CreateMessageWriter(const GlobalOptions& global_options)
@@ -627,12 +645,14 @@ auto CreateMessageWriter(const GlobalOptions& global_options)
 auto BuildCommandLineString(const int argc, char** argv) -> std::string
 {
   std::string line;
-  for (int index = 0; index < argc; ++index) {
-    if (index > 0) {
+  auto first = true;
+  for (const char* arg : std::span(argv, static_cast<std::size_t>(argc))) {
+    if (!first) {
       line.append(" ");
     }
-    if (argv[index] != nullptr) {
-      line.append(argv[index]);
+    first = false;
+    if (arg != nullptr) {
+      line.append(arg);
     }
   }
   return line;
@@ -642,74 +662,17 @@ auto CompileScriptWithLuau(
   const AsyncImportService::ScriptCompileRequest& request)
   -> AsyncImportService::ScriptCompileResult
 {
-  using oxygen::core::meta::scripting::ScriptCompileMode;
-  constexpr int kLuauNoOptimizationLevel = 0;
-  constexpr int kLuauMaxOptimizationLevel = 2;
-  constexpr int kLuauNoDebugLevel = 0;
-  constexpr int kLuauMaxDebugLevel = 2;
-  constexpr char kLuauErrorPrefix = '\0';
-  constexpr auto kErrorPrefixLength = size_t { 1 };
-
-  auto luau_options = Luau::CompileOptions {};
-  switch (request.compile_mode) {
-  case ScriptCompileMode::kDebug:
-    luau_options.optimizationLevel = kLuauNoOptimizationLevel;
-    luau_options.debugLevel = kLuauMaxDebugLevel;
-    break;
-  case ScriptCompileMode::kOptimized:
-    luau_options.optimizationLevel = kLuauMaxOptimizationLevel;
-    luau_options.debugLevel = kLuauNoDebugLevel;
-    break;
-  default:
-    luau_options.optimizationLevel = kLuauNoOptimizationLevel;
-    luau_options.debugLevel = kLuauMaxDebugLevel;
-    break;
-  }
-
-  auto source_text = std::string {};
-  source_text.reserve(request.source_bytes.size());
-  for (const auto byte : request.source_bytes) {
-    source_text.push_back(static_cast<char>(std::to_integer<uint8_t>(byte)));
-  }
-
-  try {
-    const auto compiled = Luau::compile(source_text, luau_options);
-    if (compiled.empty()) {
-      return AsyncImportService::ScriptCompileResult {
-        .success = false,
-        .bytecode = {},
-        .diagnostics = "compiler returned empty output",
-      };
-    }
-    if (compiled.front() == kLuauErrorPrefix) {
-      const auto diagnostics = compiled.size() > kErrorPrefixLength
-        ? compiled.substr(kErrorPrefixLength)
-        : std::string { "compile failed without diagnostics" };
-      return AsyncImportService::ScriptCompileResult {
-        .success = false,
-        .bytecode = {},
-        .diagnostics = diagnostics,
-      };
-    }
-
-    auto bytecode = std::vector<std::byte> {};
-    bytecode.reserve(compiled.size());
-    for (const auto ch : compiled) {
-      bytecode.push_back(std::byte { static_cast<uint8_t>(ch) });
-    }
-
-    return AsyncImportService::ScriptCompileResult {
-      .success = true,
-      .bytecode = std::move(bytecode),
-      .diagnostics = {},
-    };
-  } catch (const std::exception& ex) {
-    return AsyncImportService::ScriptCompileResult {
-      .success = false,
-      .bytecode = {},
-      .diagnostics = ex.what(),
-    };
-  }
+  auto output = oxygen::scripting::CompileLuau({
+    .source_name = request.source_name,
+    .source = request.source_bytes,
+    .mode = request.compile_mode,
+  });
+  const auto success = output.Succeeded();
+  return AsyncImportService::ScriptCompileResult {
+    .success = success,
+    .bytecode = std::move(output.bytecode),
+    .diagnostics = std::move(output.diagnostics),
+  };
 }
 } // namespace
 
@@ -774,8 +737,7 @@ auto main(int argc, char** argv) -> int
 
     AsyncImportService::Config service_config {};
     service_config.script_compile_callback = CompileScriptWithLuau;
-    bool thread_pool_size_set = false;
-    bool concurrency_override_set = false;
+    auto overrides = ServiceOverrides {};
 
     const auto cli = BuildCli(commands, global_options);
     const auto context = cli->Parse(argc, const_cast<const char**>(argv));
@@ -801,12 +763,11 @@ auto main(int argc, char** argv) -> int
     if (is_meta_command) {
       exit_code = 0;
     } else {
-      options_valid
-        = ApplyServiceConfigOverrides(context, global_options, service_config,
-          exit_code, thread_pool_size_set, concurrency_override_set);
+      options_valid = ApplyServiceConfigOverrides(
+        context, global_options, service_config, overrides, exit_code);
 
       batch_command.SetServiceConfigOverrides(
-        &service_config, concurrency_override_set);
+        &service_config, overrides.concurrency);
 
       if (options_valid && active_command == nullptr) {
         std::cerr << "ERROR: Unknown command\n";
@@ -817,9 +778,14 @@ auto main(int argc, char** argv) -> int
 
     if (options_valid && !is_meta_command) {
       if (active_command->RequiresImportService()) {
-        service_owner = CreateImportService(*active_command, service_config,
-          thread_pool_size_set, concurrency_override_set, exit_code,
-          options_valid);
+        auto created
+          = CreateImportService(*active_command, service_config, overrides);
+        if (created.has_value()) {
+          service_owner = std::move(*created);
+        } else {
+          exit_code = created.error();
+          options_valid = false;
+        }
       }
 
       if (service_owner != nullptr) {
@@ -840,7 +806,10 @@ auto main(int argc, char** argv) -> int
       }
     }
   } catch (const std::exception& ex) {
-    std::cerr << "ERROR: " << ex.what() << "\n";
+    // C stdio: reporting the failure must not throw out of main.
+    std::fputs("ERROR: ", stderr);
+    std::fputs(ex.what(), stderr);
+    std::fputs("\n", stderr);
     exit_code = 2;
   }
 

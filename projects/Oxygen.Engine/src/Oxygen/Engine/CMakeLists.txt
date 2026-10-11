@@ -97,6 +97,7 @@ target_link_libraries(
     oxygen::platform
     oxygen::graphics-common
     oxygen::content
+    oxygen::scripting-analysis
 )
 
 # ------------------------------------------------------------------------------

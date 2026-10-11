@@ -475,10 +475,10 @@ target_link_libraries(
     oxygen::console
     oxygen::data
     oxygen::content
+    oxygen::scripting-analysis
   PRIVATE
     oxygen::scene
     oxygen::physics
-    oxygen::scripting-analysis
     glm::glm
     spng::spng_static
     tinyexr::tinyexr

@@ -90,6 +90,7 @@
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 #include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
 #include <Oxygen/Scripting/IScriptSourceResolver.h>
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
@@ -3072,13 +3073,23 @@ void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
         }
       },
       .on_failed
-      = [node, slot = shared_slot](std::string diagnostic) mutable -> void {
-        if (node.IsAlive()) {
-          auto scripting = node.GetScripting();
-          LOG_F(ERROR, "script compilation failed: {}", diagnostic);
-          (void)scripting.MarkSlotCompilationFailed(
-            *slot, std::move(diagnostic));
+      = [node, slot = shared_slot](
+          const std::vector<scripting::ScriptDiagnostic>& diagnostics) mutable
+        -> void {
+        if (!node.IsAlive()) {
+          return;
         }
+        auto summary = std::string {};
+        for (const auto& diagnostic : diagnostics) {
+          LOG_F(ERROR, "script compilation failed: {}",
+            scripting::FormatSummary(diagnostic));
+          if (!summary.empty()) {
+            summary += '\n';
+          }
+          summary += scripting::FormatSummary(diagnostic);
+        }
+        auto scripting = node.GetScripting();
+        (void)scripting.MarkSlotCompilationFailed(*slot, std::move(summary));
       },
     });
   (void)acquire;
