@@ -495,6 +495,31 @@
           "x-editor-renderer": "numberbox",
           "x-editor-step": 1.0,
           "x-editor-unit": "m"
+        },
+        "aperture_f": {
+          "x-editor-label": "Aperture",
+          "x-editor-group": "Physical Camera",
+          "x-editor-order": 40,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.1,
+          "x-editor-tooltip": "Lens aperture as an f-number. Used by ManualCamera exposure."
+        },
+        "shutter_rate": {
+          "x-editor-label": "Shutter Rate",
+          "x-editor-group": "Physical Camera",
+          "x-editor-order": 50,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 1.0,
+          "x-editor-unit": "1/s",
+          "x-editor-tooltip": "Reciprocal exposure time. Used by ManualCamera exposure."
+        },
+        "iso": {
+          "x-editor-label": "ISO",
+          "x-editor-group": "Physical Camera",
+          "x-editor-order": 60,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 1.0,
+          "x-editor-tooltip": "Sensor sensitivity. Used by ManualCamera exposure."
         }
       }
     },
@@ -536,6 +561,31 @@
           "x-editor-renderer": "numberbox",
           "x-editor-step": 1.0,
           "x-editor-unit": "m"
+        },
+        "aperture_f": {
+          "x-editor-label": "Aperture",
+          "x-editor-group": "Physical Camera",
+          "x-editor-order": 40,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 0.1,
+          "x-editor-tooltip": "Lens aperture as an f-number. Used by ManualCamera exposure."
+        },
+        "shutter_rate": {
+          "x-editor-label": "Shutter Rate",
+          "x-editor-group": "Physical Camera",
+          "x-editor-order": 50,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 1.0,
+          "x-editor-unit": "1/s",
+          "x-editor-tooltip": "Reciprocal exposure time. Used by ManualCamera exposure."
+        },
+        "iso": {
+          "x-editor-label": "ISO",
+          "x-editor-group": "Physical Camera",
+          "x-editor-order": 60,
+          "x-editor-renderer": "numberbox",
+          "x-editor-step": 1.0,
+          "x-editor-tooltip": "Sensor sensitivity. Used by ManualCamera exposure."
         }
       }
     },

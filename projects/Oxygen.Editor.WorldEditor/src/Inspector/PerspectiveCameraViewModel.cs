@@ -37,6 +37,9 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
         this.Register(this.AspectRatio);
         this.Register(this.NearPlane);
         this.Register(this.FarPlane);
+        this.Register(this.ApertureF);
+        this.Register(this.ShutterRate);
+        this.Register(this.Iso);
     }
 
     /// <summary>Gets the degree-valued FOV binding and its mixed state.</summary>
@@ -61,6 +64,15 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     /// <summary>Gets the far-plane binding and its mixed state.</summary>
     public PropertyBinding<float> FarPlane { get; } = new(SceneDocumentCommandService.PerspectiveCamera.FarPlaneDescriptor);
 
+    /// <summary>Gets the aperture f-number binding and its mixed state.</summary>
+    public PropertyBinding<float> ApertureF { get; } = new(SceneDocumentCommandService.PerspectiveCamera.ApertureFDescriptor);
+
+    /// <summary>Gets the shutter-rate binding and its mixed state.</summary>
+    public PropertyBinding<float> ShutterRate { get; } = new(SceneDocumentCommandService.PerspectiveCamera.ShutterRateDescriptor);
+
+    /// <summary>Gets the ISO binding and its mixed state.</summary>
+    public PropertyBinding<float> Iso { get; } = new(SceneDocumentCommandService.PerspectiveCamera.IsoDescriptor);
+
     /// <summary>Gets FOV feedback.</summary>
     public InspectorFieldDiagnostic FieldOfViewDiagnostic => this.edits?.Diagnostics.Get(this.FieldOfView.Id.Id) ?? this.unboundDiagnostic;
 
@@ -73,6 +85,15 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     /// <summary>Gets related far-plane feedback.</summary>
     public InspectorFieldDiagnostic FarPlaneDiagnostic => this.edits?.Diagnostics.Get(this.FarPlane.Id.Id) ?? this.unboundDiagnostic;
 
+    /// <summary>Gets aperture feedback.</summary>
+    public InspectorFieldDiagnostic ApertureFDiagnostic => this.edits?.Diagnostics.Get(this.ApertureF.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets shutter-rate feedback.</summary>
+    public InspectorFieldDiagnostic ShutterRateDiagnostic => this.edits?.Diagnostics.Get(this.ShutterRate.Id.Id) ?? this.unboundDiagnostic;
+
+    /// <summary>Gets ISO feedback.</summary>
+    public InspectorFieldDiagnostic IsoDiagnostic => this.edits?.Diagnostics.Get(this.Iso.Id.Id) ?? this.unboundDiagnostic;
+
     /// <inheritdoc />
     public Guid EditScopeId => this.edits?.ScopeId ?? Guid.Empty;
 
@@ -80,7 +101,7 @@ public sealed partial class PerspectiveCameraViewModel : ComponentPropertyEditor
     public override string Header => "Perspective Camera";
 
     /// <inheritdoc />
-    public override string Description => "Defines projection, clipping planes, and aspect ratio.";
+    public override string Description => "Defines projection, clipping planes, aspect ratio, and physical exposure.";
 
     /// <summary>Gets completion of submitted camera edits.</summary>
     internal Task PendingEdits => this.edits?.Pending ?? Task.CompletedTask;

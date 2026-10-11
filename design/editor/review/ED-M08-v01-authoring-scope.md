@@ -89,8 +89,9 @@ products are invalidated. Background colour retains its display-colour meaning.
 
 Manual/Auto exposure and retained grading parameters have defined equations,
 ordering and conditional UI in the environment contract. None bypasses the tone
-curve only; it does not silently disable other active controls. Physical-camera
-editor controls are outside V0.1 even though native camera exposure already exists.
+curve only; it does not silently disable other active controls. Both camera
+sections author aperture, shutter rate and ISO for ManualCamera exposure
+(ED-M08.10).
 
 ## 3. Development-only qualification
 

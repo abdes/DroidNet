@@ -79,6 +79,44 @@
                 NumberValue="{x:Bind ViewModel.FarPlane.Value, Mode=TwoWay}"
                 Qualifier="m"
                 Tag="FarPlane" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.ApertureFDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.ApertureFDiagnostic.HasError, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.ApertureF.IsMixed, Mode=OneWay}"
+                Label="Aperture"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.ApertureF.Value, Mode=TwoWay}"
+                Qualifier="f"
+                Tag="ApertureF" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.ShutterRateDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.ShutterRateDiagnostic.HasError, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.ShutterRate.IsMixed, Mode=OneWay}"
+                Label="Shutter rate"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.ShutterRate.Value, Mode=TwoWay}"
+                Qualifier="1/s"
+                Tag="ShutterRate" />
+            <editorcontrols:InspectorNumberField
+                CardStyle="{StaticResource ScenePropertyCardStyle}"
+                EditSessionCompleted="NumberEditCompleted"
+                EditSessionStarted="NumberEditStarted"
+                ErrorText="{x:Bind ViewModel.IsoDiagnostic.Message, Mode=OneWay}"
+                FontSize="14"
+                HasError="{x:Bind ViewModel.IsoDiagnostic.HasError, Mode=OneWay}"
+                IsMixed="{x:Bind ViewModel.Iso.IsMixed, Mode=OneWay}"
+                Label="ISO"
+                NumberStyle="{StaticResource SceneNumberBoxStyle}"
+                NumberValue="{x:Bind ViewModel.Iso.Value, Mode=TwoWay}"
+                Tag="Iso" />
         </editorcontrols:PropertiesExpander.Items>
     </editorcontrols:PropertiesExpander>
 </UserControl>

@@ -45,6 +45,9 @@ public static class SceneDiagnosticCodes
     /// <summary>Orthographic camera near/far planes are invalid.</summary>
     public const string OrthographicCameraNearFarInvalid = DiagnosticCodes.ScenePrefix + "OrthographicCamera.NearFar.Invalid";
 
+    /// <summary>A camera aperture, shutter rate or ISO is not positive.</summary>
+    public const string CameraExposureNonPositive = DiagnosticCodes.ScenePrefix + "Camera.Exposure.NonPositive";
+
     /// <summary>A point or spot light candidate failed the canonical light contract.</summary>
     public const string LocalLightInvalid = DiagnosticCodes.ScenePrefix + "LocalLight.Invalid";
 

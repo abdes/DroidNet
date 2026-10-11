@@ -140,6 +140,9 @@ public sealed partial class SceneDocumentCommandService
         AddFloat(entries, edit, OrthographicCamera.AspectRatio, EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.AspectRatio);
         AddFloat(entries, edit, OrthographicCamera.NearPlane, EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.NearPlane);
         AddFloat(entries, edit, OrthographicCamera.FarPlane, EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.FarPlane);
+        AddFloat(entries, edit, OrthographicCamera.ApertureF, EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.ApertureF);
+        AddFloat(entries, edit, OrthographicCamera.ShutterRate, EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.ShutterRate);
+        AddFloat(entries, edit, OrthographicCamera.Iso, EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.Iso);
         if (edit.GetTyped(OrthographicCamera.AspectMode, out var mode))
         {
             entries.Add(new(EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.AspectMode, (float)mode));
@@ -156,6 +159,9 @@ public sealed partial class SceneDocumentCommandService
             new(EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.AspectRatio, camera.AspectRatio),
             new(EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.NearPlane, camera.NearPlane),
             new(EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.FarPlane, camera.FarPlane),
+            new(EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.ApertureF, camera.ApertureF),
+            new(EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.ShutterRate, camera.ShutterRate),
+            new(EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.Iso, camera.Iso),
             new(EngineComponentId.OrthographicCamera, (ushort)OrthographicCameraField.AspectMode, (float)camera.AspectMode),
         ];
 

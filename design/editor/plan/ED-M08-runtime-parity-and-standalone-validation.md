@@ -2,7 +2,8 @@
 
 Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.9
 validated; rescoped on 2026-10-08; M08.10 added on 2026-10-09, M08.10a–d
-delivered on 2026-10-09, M08.10e on 2026-10-10 and M08.10f next**
+delivered on 2026-10-09, M08.10e on 2026-10-10, M08.10g on 2026-10-11 and
+M08.10f next**
 
 Current: **M08.10 Engine capability parity in the editor**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
@@ -1320,7 +1321,8 @@ Implementation, in build order:
 | M08.10c–d | Validated on 2026-10-09 by owner review in the running editor: backdrop, Sky Sphere, Sky Light, calibration.   |
 | M08.10e   | Delivered on 2026-10-10: per-user ground grid settings in the Settings flyout, applied to every pane.          |
 | M08.10f   | Next: per-pane view state and exposure-adaptation settling.                                                    |
-| M08.10g–i | Open.                                                                                                          |
+| M08.10g   | Delivered on 2026-10-11: aperture, shutter rate and ISO in both camera sections, with undo and live sync.      |
+| M08.10h–i | Open.                                                                                                          |
 
 Checks: each authored capability survives save, reopen and cook, and the
 cooked project renders it in RenderScene as in the editor; the grid

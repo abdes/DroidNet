@@ -742,7 +742,8 @@ public sealed partial class SceneDocumentCommandService(
            edit.ScaleZ.HasValue;
 
     private static bool HasAnyPerspectiveCameraField(PerspectiveCameraEdit edit)
-        => edit.FieldOfViewDegrees.HasValue || edit.AspectRatio.HasValue || edit.NearPlane.HasValue || edit.FarPlane.HasValue || edit.AspectMode.HasValue;
+        => edit.FieldOfViewDegrees.HasValue || edit.AspectRatio.HasValue || edit.NearPlane.HasValue || edit.FarPlane.HasValue || edit.AspectMode.HasValue ||
+           edit.ApertureF.HasValue || edit.ShutterRate.HasValue || edit.Iso.HasValue;
 
     private static bool HasAnyDirectionalLightField(DirectionalLightEdit edit)
         => edit.Color.HasValue ||
@@ -823,7 +824,10 @@ public sealed partial class SceneDocumentCommandService(
         if ((edit.FieldOfViewDegrees.HasValue && !float.IsFinite(Get(edit.FieldOfViewDegrees))) ||
             (edit.AspectRatio.HasValue && !float.IsFinite(Get(edit.AspectRatio))) ||
             (edit.NearPlane.HasValue && !float.IsFinite(Get(edit.NearPlane))) ||
-            (edit.FarPlane.HasValue && !float.IsFinite(Get(edit.FarPlane))))
+            (edit.FarPlane.HasValue && !float.IsFinite(Get(edit.FarPlane))) ||
+            (edit.ApertureF.HasValue && !float.IsFinite(Get(edit.ApertureF))) ||
+            (edit.ShutterRate.HasValue && !float.IsFinite(Get(edit.ShutterRate))) ||
+            (edit.Iso.HasValue && !float.IsFinite(Get(edit.Iso))))
         {
             return new(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera was not edited", "Camera values must be finite numbers.", IsFailure: true);
         }
@@ -836,6 +840,13 @@ public sealed partial class SceneDocumentCommandService(
         if (edit.NearPlane.HasValue && Get(edit.NearPlane) <= 0f)
         {
             return new(SceneDiagnosticCodes.PerspectiveCameraNearPlaneNonPositive, "Camera was not edited", "Near plane must be greater than zero.", IsFailure: true);
+        }
+
+        if ((edit.ApertureF.HasValue && Get(edit.ApertureF) <= 0f) ||
+            (edit.ShutterRate.HasValue && Get(edit.ShutterRate) <= 0f) ||
+            (edit.Iso.HasValue && Get(edit.Iso) <= 0f))
+        {
+            return new(SceneDiagnosticCodes.CameraExposureNonPositive, "Camera was not edited", "Aperture, shutter rate and ISO must be greater than zero.", IsFailure: true);
         }
 
         foreach (var camera in ResolveNodes(scene, nodeIds).Select(static node => node.Components.OfType<PerspectiveCamera>().FirstOrDefault()).OfType<PerspectiveCamera>())
@@ -970,6 +981,21 @@ public sealed partial class SceneDocumentCommandService(
         if (edit.AspectMode.HasValue)
         {
             camera.AspectMode = Get(edit.AspectMode);
+        }
+
+        if (edit.ApertureF.HasValue)
+        {
+            camera.ApertureF = Get(edit.ApertureF);
+        }
+
+        if (edit.ShutterRate.HasValue)
+        {
+            camera.ShutterRate = Get(edit.ShutterRate);
+        }
+
+        if (edit.Iso.HasValue)
+        {
+            camera.Iso = Get(edit.Iso);
         }
     }
 
@@ -2030,10 +2056,20 @@ public sealed partial class SceneDocumentCommandService(
             => this.Geometry.Geometry = this.GeometryUri is null ? null : new AssetReference<GeometryAsset>(this.GeometryUri);
     }
 
-    private sealed record CameraState(SceneNode Node, PerspectiveCamera Camera, float FieldOfView, float AspectRatio, float NearPlane, float FarPlane, Oxygen.Managed.Core.CameraAspectMode AspectMode)
+    private sealed record CameraState(
+        SceneNode Node,
+        PerspectiveCamera Camera,
+        float FieldOfView,
+        float AspectRatio,
+        float NearPlane,
+        float FarPlane,
+        Oxygen.Managed.Core.CameraAspectMode AspectMode,
+        float ApertureF,
+        float ShutterRate,
+        float Iso)
     {
         public static CameraState Capture(SceneNode node, PerspectiveCamera camera)
-            => new(node, camera, camera.FieldOfView, camera.AspectRatio, camera.NearPlane, camera.FarPlane, camera.AspectMode);
+            => new(node, camera, camera.FieldOfView, camera.AspectRatio, camera.NearPlane, camera.FarPlane, camera.AspectMode, camera.ApertureF, camera.ShutterRate, camera.Iso);
 
         public void Apply()
         {
@@ -2042,6 +2078,9 @@ public sealed partial class SceneDocumentCommandService(
             this.Camera.AspectMode = this.AspectMode;
             this.Camera.NearPlane = this.NearPlane;
             this.Camera.FarPlane = this.FarPlane;
+            this.Camera.ApertureF = this.ApertureF;
+            this.Camera.ShutterRate = this.ShutterRate;
+            this.Camera.Iso = this.Iso;
         }
     }
 

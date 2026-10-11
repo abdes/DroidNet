@@ -21,13 +21,19 @@ internal sealed class OrthographicCameraDescriptors
         PropertyDescriptor<CameraAspectMode> aspectMode,
         PropertyDescriptor<float> aspectRatio,
         PropertyDescriptor<float> nearPlane,
-        PropertyDescriptor<float> farPlane)
+        PropertyDescriptor<float> farPlane,
+        PropertyDescriptor<float> apertureF,
+        PropertyDescriptor<float> shutterRate,
+        PropertyDescriptor<float> iso)
     {
         this.OrthographicSizeDescriptor = orthographicSize;
         this.AspectModeDescriptor = aspectMode;
         this.AspectRatioDescriptor = aspectRatio;
         this.NearPlaneDescriptor = nearPlane;
         this.FarPlaneDescriptor = farPlane;
+        this.ApertureFDescriptor = apertureF;
+        this.ShutterRateDescriptor = shutterRate;
+        this.IsoDescriptor = iso;
         this.ById = new Dictionary<PropertyId, PropertyDescriptor>
         {
             [orthographicSize.Id] = orthographicSize,
@@ -35,6 +41,9 @@ internal sealed class OrthographicCameraDescriptors
             [aspectRatio.Id] = aspectRatio,
             [nearPlane.Id] = nearPlane,
             [farPlane.Id] = farPlane,
+            [apertureF.Id] = apertureF,
+            [shutterRate.Id] = shutterRate,
+            [iso.Id] = iso,
         };
     }
 
@@ -53,6 +62,15 @@ internal sealed class OrthographicCameraDescriptors
     /// <summary>Gets the typed property id for the far clipping plane.</summary>
     internal PropertyId<float> FarPlane => new(this.FarPlaneDescriptor.Id);
 
+    /// <summary>Gets the typed property id for the aperture f-number.</summary>
+    internal PropertyId<float> ApertureF => new(this.ApertureFDescriptor.Id);
+
+    /// <summary>Gets the typed property id for the shutter rate.</summary>
+    internal PropertyId<float> ShutterRate => new(this.ShutterRateDescriptor.Id);
+
+    /// <summary>Gets the typed property id for the ISO sensitivity.</summary>
+    internal PropertyId<float> Iso => new(this.IsoDescriptor.Id);
+
     /// <summary>Gets the descriptor for the orthographic size.</summary>
     internal PropertyDescriptor<float> OrthographicSizeDescriptor { get; }
 
@@ -67,6 +85,15 @@ internal sealed class OrthographicCameraDescriptors
 
     /// <summary>Gets the descriptor for the far clipping plane.</summary>
     internal PropertyDescriptor<float> FarPlaneDescriptor { get; }
+
+    /// <summary>Gets the descriptor for the aperture f-number.</summary>
+    internal PropertyDescriptor<float> ApertureFDescriptor { get; }
+
+    /// <summary>Gets the descriptor for the shutter rate.</summary>
+    internal PropertyDescriptor<float> ShutterRateDescriptor { get; }
+
+    /// <summary>Gets the descriptor for the ISO sensitivity.</summary>
+    internal PropertyDescriptor<float> IsoDescriptor { get; }
 
     /// <summary>Gets descriptors indexed by property id.</summary>
     internal IReadOnlyDictionary<PropertyId, PropertyDescriptor> ById { get; }
@@ -109,7 +136,25 @@ internal sealed class OrthographicCameraDescriptors
                 static (camera, value) => camera.FarPlane = value,
                 static value => float.IsFinite(value)
                     ? ValidationResult.Ok
-                    : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")));
+                    : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")),
+            apertureF: FloatDescriptor(
+                "/aperture_f",
+                "Aperture",
+                static camera => camera.ApertureF,
+                static (camera, value) => camera.ApertureF = value,
+                Positive(SceneDiagnosticCodes.CameraExposureNonPositive, "Aperture must be greater than zero.")),
+            shutterRate: FloatDescriptor(
+                "/shutter_rate",
+                "Shutter Rate",
+                static camera => camera.ShutterRate,
+                static (camera, value) => camera.ShutterRate = value,
+                Positive(SceneDiagnosticCodes.CameraExposureNonPositive, "Shutter rate must be greater than zero.")),
+            iso: FloatDescriptor(
+                "/iso",
+                "ISO",
+                static camera => camera.Iso,
+                static (camera, value) => camera.Iso = value,
+                Positive(SceneDiagnosticCodes.CameraExposureNonPositive, "ISO must be greater than zero.")));
 
     private static Func<float, ValidationResult> Positive(string code, string message)
         => value => !float.IsFinite(value)

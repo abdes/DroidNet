@@ -397,11 +397,14 @@ public sealed partial class SceneDocumentCommandService
     {
         ArgumentNullException.ThrowIfNull(edit);
 
-        var entries = new List<EnginePropertyValueEntry>(capacity: 5);
+        var entries = new List<EnginePropertyValueEntry>(capacity: 8);
         AddOptional(entries, edit.FieldOfViewDegrees, PerspectiveCameraField.FieldOfViewYRadians, DegreesToRadians);
         AddOptional(entries, edit.AspectRatio, PerspectiveCameraField.AspectRatio);
         AddOptional(entries, edit.NearPlane, PerspectiveCameraField.NearPlane);
         AddOptional(entries, edit.FarPlane, PerspectiveCameraField.FarPlane);
+        AddOptional(entries, edit.ApertureF, PerspectiveCameraField.ApertureF);
+        AddOptional(entries, edit.ShutterRate, PerspectiveCameraField.ShutterRate);
+        AddOptional(entries, edit.Iso, PerspectiveCameraField.Iso);
         if (edit.AspectMode.HasValue)
         {
             entries.Add(new(EngineComponentId.PerspectiveCamera, (ushort)PerspectiveCameraField.AspectMode, (float)edit.AspectMode.Value));

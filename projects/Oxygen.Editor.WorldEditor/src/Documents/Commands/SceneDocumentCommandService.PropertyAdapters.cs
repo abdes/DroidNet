@@ -56,7 +56,10 @@ public sealed partial class SceneDocumentCommandService
             GetOptional(edit, PerspectiveCamera.AspectRatio),
             GetOptional(edit, PerspectiveCamera.NearPlane),
             GetOptional(edit, PerspectiveCamera.FarPlane),
-            GetOptional(edit, PerspectiveCamera.AspectMode));
+            GetOptional(edit, PerspectiveCamera.AspectMode),
+            GetOptional(edit, PerspectiveCamera.ApertureF),
+            GetOptional(edit, PerspectiveCamera.ShutterRate),
+            GetOptional(edit, PerspectiveCamera.Iso));
 
     private static DirectionalLightEdit BuildDirectionalLightEditFromPropertyEdit(PropertyEdit edit)
         => new(

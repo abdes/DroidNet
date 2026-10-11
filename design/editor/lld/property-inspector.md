@@ -18,8 +18,8 @@ state, [environment authoring](environment-authoring.md) owns scene settings,
 [live sync](live-engine-sync.md) owns revision-aware runtime convergence.
 
 This covers REQ-005 through REQ-009, REQ-022/024/026/037 and SUCCESS-002/003.
-Import UI, topology editing, general simulation activation, physical-camera
-controls and transform gizmos are outside this inspector slice. Native capabilities outside this surface remain with their engine owners.
+Import UI, topology editing, general simulation activation and transform
+gizmos are outside this inspector slice. Native capabilities outside this surface remain with their engine owners.
 
 ## 2. Ownership and mutation flow
 

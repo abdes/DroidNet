@@ -33,4 +33,32 @@ public sealed class CameraBindingOwnershipTests
         await model.PendingEdits.ConfigureAwait(false);
         _ = fixture.Context.History.UndoStack.Should().ContainSingle();
     }
+
+    [TestMethod]
+    public async Task CameraBinding_EditsPhysicalExposureRejectsNonPositiveAndUndoes()
+    {
+        using var fixture = new SceneAuthoringFixture();
+        using var model = new PerspectiveCameraViewModel(fixture.Commands, () => fixture.Context);
+        model.UpdateValues([fixture.Node]);
+        var originalAperture = fixture.Camera.ApertureF;
+
+        model.ApertureF.Value = 2.8f;
+        model.ShutterRate.Value = 60f;
+        await model.PendingEdits.ConfigureAwait(false);
+        model.Iso.Value = 0f;
+        await model.PendingEdits.ConfigureAwait(false);
+
+        _ = fixture.Camera.ApertureF.Should().Be(2.8f);
+        _ = fixture.Camera.ShutterRate.Should().Be(60f);
+        _ = fixture.Camera.Iso.Should().Be(100f);
+        _ = model.IsoDiagnostic.HasError.Should().BeTrue();
+
+        while (fixture.Context.History.UndoStack.Count > 0)
+        {
+            await fixture.Context.History.UndoAsync(CancellationToken.None).ConfigureAwait(false);
+        }
+
+        _ = fixture.Camera.ApertureF.Should().Be(originalAperture);
+        _ = fixture.Camera.ShutterRate.Should().Be(125f);
+    }
 }

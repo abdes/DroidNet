@@ -21,7 +21,10 @@ internal sealed class PerspectiveCameraDescriptors
         PropertyDescriptor<float> aspectRatio,
         PropertyDescriptor<float> nearPlane,
         PropertyDescriptor<float> farPlane,
-        PropertyDescriptor<CameraAspectMode> aspectMode)
+        PropertyDescriptor<CameraAspectMode> aspectMode,
+        PropertyDescriptor<float> apertureF,
+        PropertyDescriptor<float> shutterRate,
+        PropertyDescriptor<float> iso)
     {
         this.FieldOfViewDegrees = new PropertyId<float>(fieldOfViewDegrees.Id);
         this.AspectRatio = new PropertyId<float>(aspectRatio.Id);
@@ -32,6 +35,9 @@ internal sealed class PerspectiveCameraDescriptors
         this.NearPlaneDescriptor = nearPlane;
         this.FarPlaneDescriptor = farPlane;
         this.AspectModeDescriptor = aspectMode;
+        this.ApertureFDescriptor = apertureF;
+        this.ShutterRateDescriptor = shutterRate;
+        this.IsoDescriptor = iso;
         this.ById = new Dictionary<PropertyId, PropertyDescriptor>
         {
             [aspectMode.Id] = aspectMode,
@@ -39,6 +45,9 @@ internal sealed class PerspectiveCameraDescriptors
             [aspectRatio.Id] = aspectRatio,
             [nearPlane.Id] = nearPlane,
             [farPlane.Id] = farPlane,
+            [apertureF.Id] = apertureF,
+            [shutterRate.Id] = shutterRate,
+            [iso.Id] = iso,
         };
     }
 
@@ -57,6 +66,15 @@ internal sealed class PerspectiveCameraDescriptors
     /// <summary>Gets the typed property id for the framing policy.</summary>
     internal PropertyId<CameraAspectMode> AspectMode => new(this.AspectModeDescriptor.Id);
 
+    /// <summary>Gets the typed property id for the aperture f-number.</summary>
+    internal PropertyId<float> ApertureF => new(this.ApertureFDescriptor.Id);
+
+    /// <summary>Gets the typed property id for the shutter rate.</summary>
+    internal PropertyId<float> ShutterRate => new(this.ShutterRateDescriptor.Id);
+
+    /// <summary>Gets the typed property id for the ISO sensitivity.</summary>
+    internal PropertyId<float> Iso => new(this.IsoDescriptor.Id);
+
     /// <summary>Gets the descriptor for the framing policy.</summary>
     internal PropertyDescriptor<CameraAspectMode> AspectModeDescriptor { get; }
 
@@ -71,6 +89,15 @@ internal sealed class PerspectiveCameraDescriptors
 
     /// <summary>Gets the descriptor for the far clipping plane.</summary>
     internal PropertyDescriptor<float> FarPlaneDescriptor { get; }
+
+    /// <summary>Gets the descriptor for the aperture f-number.</summary>
+    internal PropertyDescriptor<float> ApertureFDescriptor { get; }
+
+    /// <summary>Gets the descriptor for the shutter rate.</summary>
+    internal PropertyDescriptor<float> ShutterRateDescriptor { get; }
+
+    /// <summary>Gets the descriptor for the ISO sensitivity.</summary>
+    internal PropertyDescriptor<float> IsoDescriptor { get; }
 
     /// <summary>Gets descriptors indexed by property id.</summary>
     internal IReadOnlyDictionary<PropertyId, PropertyDescriptor> ById { get; }
@@ -131,7 +158,35 @@ internal sealed class PerspectiveCameraDescriptors
                 annotation: SceneEditorSchemaAnnotations.Get(
                     "#/definitions/perspective_camera/aspect_mode",
                     new EditorAnnotation { Group = "Projection", Label = "Aspect Mode", Renderer = "combobox" }),
-                engineCommandKey: "perspective_camera.aspect_mode"));
+                engineCommandKey: "perspective_camera.aspect_mode"),
+            apertureF: FloatDescriptor(
+                "/aperture_f",
+                "Aperture",
+                static camera => camera.ApertureF,
+                static (camera, value) => camera.ApertureF = value,
+                Positive("Aperture must be greater than zero."),
+                "perspective_camera.aperture_f"),
+            shutterRate: FloatDescriptor(
+                "/shutter_rate",
+                "Shutter Rate",
+                static camera => camera.ShutterRate,
+                static (camera, value) => camera.ShutterRate = value,
+                Positive("Shutter rate must be greater than zero."),
+                "perspective_camera.shutter_rate"),
+            iso: FloatDescriptor(
+                "/iso",
+                "ISO",
+                static camera => camera.Iso,
+                static (camera, value) => camera.Iso = value,
+                Positive("ISO must be greater than zero."),
+                "perspective_camera.iso"));
+
+    private static Func<float, ValidationResult> Positive(string message)
+        => value => !float.IsFinite(value)
+            ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")
+            : value <= 0f
+                ? ValidationResult.Fail(SceneDiagnosticCodes.CameraExposureNonPositive, message)
+                : ValidationResult.Ok;
 
     private static PropertyDescriptor<float> FloatDescriptor(
         string pointer,
@@ -157,6 +212,9 @@ internal sealed class PerspectiveCameraDescriptors
             "perspective_camera.aspect_ratio" => "#/definitions/perspective_camera/aspect_ratio",
             "perspective_camera.near_plane" => "#/definitions/perspective_camera/near_plane",
             "perspective_camera.far_plane" => "#/definitions/perspective_camera/far_plane",
+            "perspective_camera.aperture_f" => "#/definitions/perspective_camera/aperture_f",
+            "perspective_camera.shutter_rate" => "#/definitions/perspective_camera/shutter_rate",
+            "perspective_camera.iso" => "#/definitions/perspective_camera/iso",
             _ => throw new ArgumentOutOfRangeException(nameof(engineCommandKey), engineCommandKey, "Unknown perspective camera command key."),
         };
 }

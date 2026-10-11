@@ -37,6 +37,9 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
         this.Register(this.AspectRatio);
         this.Register(this.NearPlane);
         this.Register(this.FarPlane);
+        this.Register(this.ApertureF);
+        this.Register(this.ShutterRate);
+        this.Register(this.Iso);
     }
 
     /// <summary>Gets the half-height binding and its mixed state.</summary>
@@ -58,6 +61,15 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
     /// <summary>Gets the far-plane binding and its mixed state.</summary>
     public PropertyBinding<float> FarPlane { get; } = new(SceneDocumentCommandService.OrthographicCamera.FarPlaneDescriptor);
 
+    /// <summary>Gets the aperture f-number binding and its mixed state.</summary>
+    public PropertyBinding<float> ApertureF { get; } = new(SceneDocumentCommandService.OrthographicCamera.ApertureFDescriptor);
+
+    /// <summary>Gets the shutter-rate binding and its mixed state.</summary>
+    public PropertyBinding<float> ShutterRate { get; } = new(SceneDocumentCommandService.OrthographicCamera.ShutterRateDescriptor);
+
+    /// <summary>Gets the ISO binding and its mixed state.</summary>
+    public PropertyBinding<float> Iso { get; } = new(SceneDocumentCommandService.OrthographicCamera.IsoDescriptor);
+
     /// <summary>Gets the framing policies offered by the inspector.</summary>
     public IReadOnlyList<CameraAspectMode> AspectModeOptions { get; } = Enum.GetValues<CameraAspectMode>();
 
@@ -73,6 +85,15 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
     /// <summary>Gets related far-plane feedback.</summary>
     public InspectorFieldDiagnostic FarPlaneDiagnostic => this.Diagnostic(this.FarPlane.Id.Id);
 
+    /// <summary>Gets aperture feedback.</summary>
+    public InspectorFieldDiagnostic ApertureFDiagnostic => this.Diagnostic(this.ApertureF.Id.Id);
+
+    /// <summary>Gets shutter-rate feedback.</summary>
+    public InspectorFieldDiagnostic ShutterRateDiagnostic => this.Diagnostic(this.ShutterRate.Id.Id);
+
+    /// <summary>Gets ISO feedback.</summary>
+    public InspectorFieldDiagnostic IsoDiagnostic => this.Diagnostic(this.Iso.Id.Id);
+
     /// <inheritdoc />
     public Guid EditScopeId => this.edits?.ScopeId ?? Guid.Empty;
 
@@ -80,7 +101,7 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
     public override string Header => "Orthographic Camera";
 
     /// <inheritdoc />
-    public override string Description => "Defines the orthographic volume, clipping planes, and framing.";
+    public override string Description => "Defines the orthographic volume, clipping planes, framing, and physical exposure.";
 
     /// <inheritdoc />
     internal override InspectorFieldDiagnostics? ValidationFeedback => this.edits?.Diagnostics;
