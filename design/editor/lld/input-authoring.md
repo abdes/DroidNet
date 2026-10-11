@@ -1,6 +1,6 @@
 # Input Authoring LLD
 
-Status: `design draft; IQ-1 decided; awaiting owner review (ED-M09.1)`;
+Status: `design; UI approved by the owner (ED-M09.1); awaiting re-review`;
 delivered by [ED-M09](../plan/ED-M09-input-authoring.md).
 
 Summary: users create input actions and input mapping contexts from the
@@ -386,7 +386,10 @@ scene Play sections, and input asset URIs in script parameter overrides.
   and no referrer is rewritten. Single-asset files have no separate file
   rename, because Rename keeps file and name equal.
 - **Move** on an asset row, by command or drag, moves that asset
-  ([IQ-13](#152-open-questions)). From a single-asset file it moves the file.
+  ([IQ-13](#152-open-questions)). The row stands for one asset, so a user
+  who drags one action expects only that action to move; moving the whole
+  file would silently change the identity of assets the user never touched.
+  From a single-asset file it moves the file.
   From a multi-asset file it is **Move asset**: the declaration is removed
   from its file and written to `<target>/<Name>.input-action.json` or
   `<target>/<Name>.input.json`; its identity changes and its referrers are
@@ -472,7 +475,10 @@ Errors block that file's cook with the same messages.
   source file. When a file holds more than one asset, rows show "in
   Player.input.json" under the name, and their context menu adds Rename
   file…, Move file…, Split into asset files and Reveal source (opens the file
-  at the declaration). Rename, Move and drag act on the asset (section 8.4).
+  at the declaration). Rename, Move and drag act on the asset the row shows,
+  because that is what the user picked: dragging one action row moves only
+  that action (Move asset, section 8.4); Move file… is the explicit way to
+  move all of a file's assets.
   A file that fails schema validation shows one Broken row named after the
   file, with the schema messages and **Open in code editor**.
 - **Tiles.** Generated, no renderer: the action tile shows its value-type
@@ -748,7 +754,7 @@ pull request; the user interface items await the owner at ED-M09.1.
 | IQ-9  | Default folder.                                   | Decided 2026-10-11 (review): `Content/Input`, created by the project template and used by the creation target policy ([project layout](project-layout-and-templates.md)).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | IQ-10 | Text needed in documents this LLD does not own.   | Decided 2026-10-11 (review): the ED-M08 owner amends the documents they own; this LLD needs: [script authoring](script-authoring.md) §4 says Edit on an input asset opens the input editor and Open in code editor remains, and §6 and §8 say the input action and context pickers offer New action and New context and the Play section's priority defaults to the context's own (M09.9 behavior, added when M09.1 closes); M09.4 retires `OXE.SCRIPT.INPUT_REFERENCE_UNSUPPORTED` when cross-file references are enabled. Owned here and amended at M09.1 close: [content browser §9.5](content-browser-asset-identity.md#95-asset-relocation) (input reference kinds; identity rule unchanged) and [content pipeline](content-pipeline.md) (input job layout at the source folder, `depends_on` from path references, multi-output provenance). |
 | IQ-11 | Mapping order.                                    | Decided 2026-10-11 (owner): evaluation order with contiguous action groups and an explicit Group by action, plus the input overlap rule that marks where order changes behavior (section 9.3).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| IQ-13 | Moving one asset out of a multi-asset file.       | Owner's UI decision at M09.1 (decision 9). Recommended: Move and drag on an asset row move that asset (Move asset, section 8.4), with Move file as a separate command; the alternative, a drag that always moves the whole file with a confirmation, contradicts the row the user dragged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| IQ-13 | Moving one asset out of a multi-asset file.       | Decided 2026-10-11 (owner, decision 9): Move and drag on an asset row move that asset (Move asset, section 8.4); Move file is a separate command. Dragging one row should move only what the row shows.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | IQ-12 | Schema augmentation (IF-2 to IF-6).               | Decided 2026-10-11 (review): part of M09.2 ([IF-2 to IF-6][mf]).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ### 15.3 Rejected alternatives
