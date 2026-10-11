@@ -45,6 +45,15 @@ public:
       == pak::input::InputActionAssetFlags::kConsumesInput;
   }
 
+  //! True when the action sums its bindings' values instead of keeping the
+  //! one with the highest magnitude per component.
+  [[nodiscard]] auto AccumulatesCumulatively() const noexcept -> bool
+  {
+    return (desc_.flags
+             & pak::input::InputActionAssetFlags::kCumulativeAccumulation)
+      == pak::input::InputActionAssetFlags::kCumulativeAccumulation;
+  }
+
   [[nodiscard]] auto GetValueTypeId() const noexcept -> uint8_t
   {
     return desc_.value_type;

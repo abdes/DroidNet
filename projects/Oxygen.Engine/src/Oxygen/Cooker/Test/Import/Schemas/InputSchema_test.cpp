@@ -48,7 +48,12 @@ INSTANTIATE_TEST_SUITE_P(Cases, InputSchemaCaseTest,
       R"({
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input.schema.json",
     "actions": [
-      { "name": "Move", "type": "axis2d", "consumes_input": true },
+      {
+        "name": "Move",
+        "type": "axis2d",
+        "consumes_input": true,
+        "accumulation": "cumulative"
+      },
       { "name": "Jump", "type": "bool" }
     ],
     "contexts": [
@@ -115,10 +120,21 @@ INSTANTIATE_TEST_SUITE_P(Cases, InputActionSchemaCaseTest,
     "$schema": "./src/Oxygen/Cooker/Import/Schemas/oxygen.input-action.schema.json",
     "name": "Move",
     "type": "axis2d",
-    "consumes_input": true
+    "consumes_input": true,
+    "accumulation": "highest_absolute"
   })",
       true,
       "",
+    },
+    SchemaCase {
+      "ActionSchemaRejectsInvalidAccumulation",
+      R"({
+    "name": "Move",
+    "type": "axis2d",
+    "accumulation": "average"
+  })",
+      false,
+      "/accumulation: ",
     },
     SchemaCase {
       "ActionSchemaRejectsInvalidType",
