@@ -96,7 +96,7 @@ public:
   }
 
   void StartLoadMaterialAsset(const data::AssetKey&, data::SourceKey,
-    content::LoadRequest, MaterialCallback on_complete) override
+    const content::LoadRequest&, MaterialCallback on_complete) override
   {
     on_complete(nullptr);
   }
@@ -108,7 +108,7 @@ public:
   }
 
   void StartLoadGeometryAsset(const data::AssetKey&, data::SourceKey,
-    content::LoadRequest, GeometryCallback on_complete) override
+    const content::LoadRequest&, GeometryCallback on_complete) override
   {
     on_complete(nullptr);
   }
@@ -120,7 +120,7 @@ public:
   }
 
   void StartLoadScene(const data::AssetKey&, data::SourceKey,
-    content::LoadRequest, SceneCallback on_complete) override
+    const content::LoadRequest&, SceneCallback on_complete) override
   {
     on_complete(nullptr);
   }
@@ -132,7 +132,7 @@ public:
   }
 
   void StartLoadScriptAsset(const data::AssetKey&, data::SourceKey,
-    content::LoadRequest, ScriptCallback on_complete) override
+    const content::LoadRequest&, ScriptCallback on_complete) override
   {
     on_complete(nullptr);
   }
@@ -144,7 +144,7 @@ public:
   }
 
   void StartLoadPhysicsSceneAsset(const data::AssetKey&, data::SourceKey,
-    content::LoadRequest, PhysicsSceneCallback on_complete) override
+    const content::LoadRequest&, PhysicsSceneCallback on_complete) override
   {
     on_complete(nullptr);
   }
@@ -168,7 +168,7 @@ public:
   {
   }
 
-  auto MountLooseCookedGeneration(const std::filesystem::path&,
+  auto DoMountLooseCookedGeneration(const std::filesystem::path&,
     std::optional<data::SourceKey>) -> data::SourceKey override
   {
     throw std::logic_error("GPU test loader does not mount disk generations");
@@ -511,7 +511,7 @@ public:
   auto SubscribeResourceEvictions(TypeId resource_type, EvictionHandler handler)
     -> EvictionSubscription override
   {
-    const auto id = next_subscription_id_++;
+    const content::EvictionSubscriptionId id { next_subscription_id_++ };
     eviction_handlers_[resource_type].insert_or_assign(id, std::move(handler));
     return MakeEvictionSubscription(resource_type, id,
       observer_ptr<IAssetLoader> {
@@ -628,8 +628,7 @@ public:
 private:
   // Signature is prescribed by IAssetLoader.
   void UnsubscribeResourceEvictions(
-    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-    TypeId resource_type, uint64_t id) noexcept override
+    TypeId resource_type, content::EvictionSubscriptionId id) noexcept override
   {
     const auto it = eviction_handlers_.find(resource_type);
     if (it == eviction_handlers_.end()) {
@@ -687,7 +686,8 @@ private:
   std::unordered_map<content::ResourceKey,
     std::vector<std::function<void(std::shared_ptr<data::TextureResource>)>>>
     held_textures_;
-  std::unordered_map<TypeId, std::unordered_map<std::uint64_t, EvictionHandler>>
+  std::unordered_map<TypeId,
+    std::unordered_map<content::EvictionSubscriptionId, EvictionHandler>>
     eviction_handlers_;
   std::uint64_t next_subscription_id_ {
     1U,

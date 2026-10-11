@@ -16,6 +16,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/EvictionEvents.h>
@@ -46,6 +47,10 @@ class Console;
 } // namespace oxygen::console
 
 namespace oxygen::content {
+
+//! Identifies one eviction or script-reload subscription; zero means none.
+using EvictionSubscriptionId = NamedType<uint64_t,
+  struct EvictionSubscriptionIdTag, DefaultInitialized, Comparable, Hashable>;
 
 //! Cooked bytes input for decoding a resource from an in-memory buffer.
 /*!
@@ -159,7 +164,7 @@ public:
       , owner_(other.owner_)
       , alive_token_(std::move(other.alive_token_))
     {
-      other.id_ = 0;
+      other.id_ = EvictionSubscriptionId {};
       other.resource_type_ = kInvalidTypeId;
       other.owner_ = nullptr;
       other.alive_token_.reset();
@@ -174,7 +179,7 @@ public:
         resource_type_ = other.resource_type_;
         owner_ = other.owner_;
         alive_token_ = std::move(other.alive_token_);
-        other.id_ = 0;
+        other.id_ = EvictionSubscriptionId {};
         other.resource_type_ = kInvalidTypeId;
         other.owner_ = nullptr;
         other.alive_token_.reset();
@@ -185,24 +190,24 @@ public:
     //! Cancel this subscription early.
     void Cancel() noexcept
     {
-      if (id_ == 0 || !owner_) {
+      if (id_ == EvictionSubscriptionId {} || !owner_) {
         return;
       }
       if (alive_token_.expired()) {
-        id_ = 0;
+        id_ = EvictionSubscriptionId {};
         resource_type_ = kInvalidTypeId;
         owner_ = nullptr;
         return;
       }
       owner_->UnsubscribeResourceEvictions(resource_type_, id_);
-      id_ = 0;
+      id_ = EvictionSubscriptionId {};
       resource_type_ = kInvalidTypeId;
       owner_ = nullptr;
     }
 
   private:
     friend class IAssetLoader;
-    uint64_t id_ { 0 };
+    EvictionSubscriptionId id_ {};
     TypeId resource_type_ { kInvalidTypeId };
     observer_ptr<IAssetLoader> owner_ { nullptr };
     std::weak_ptr<int> alive_token_;
@@ -234,7 +239,7 @@ public:
   virtual void StartLoadTexture(ResourceKey key, TextureCallback on_complete)
     = 0;
   virtual void StartLoadTexture(
-    ResourceKey key, LoadRequest request, TextureCallback on_complete)
+    ResourceKey key, const LoadRequest& request, TextureCallback on_complete)
   {
     static_cast<void>(request);
     StartLoadTexture(key, std::move(on_complete));
@@ -245,8 +250,8 @@ public:
     CookedResourceData<data::TextureResource> cooked,
     TextureCallback on_complete) = 0;
   virtual void StartLoadTexture(
-    CookedResourceData<data::TextureResource> cooked, LoadRequest request,
-    TextureCallback on_complete)
+    CookedResourceData<data::TextureResource> cooked,
+    const LoadRequest& request, TextureCallback on_complete)
   {
     static_cast<void>(request);
     StartLoadTexture(cooked, std::move(on_complete));
@@ -255,7 +260,7 @@ public:
   //! Begin loading a buffer resource and invoke `on_complete` on completion.
   virtual void StartLoadBuffer(ResourceKey key, BufferCallback on_complete) = 0;
   virtual void StartLoadBuffer(
-    ResourceKey key, LoadRequest request, BufferCallback on_complete)
+    ResourceKey key, const LoadRequest& request, BufferCallback on_complete)
   {
     static_cast<void>(request);
     StartLoadBuffer(key, std::move(on_complete));
@@ -265,7 +270,7 @@ public:
   virtual void StartLoadBuffer(CookedResourceData<data::BufferResource> cooked,
     BufferCallback on_complete) = 0;
   virtual void StartLoadBuffer(CookedResourceData<data::BufferResource> cooked,
-    LoadRequest request, BufferCallback on_complete)
+    const LoadRequest& request, BufferCallback on_complete)
   {
     static_cast<void>(request);
     StartLoadBuffer(cooked, std::move(on_complete));
@@ -273,12 +278,12 @@ public:
 
   //! Begin loading a material asset and invoke `on_complete` on completion.
   virtual void StartLoadMaterialAsset(const data::AssetKey& key,
-    data::SourceKey source_key, LoadRequest request,
+    data::SourceKey source_key, const LoadRequest& request,
     MaterialCallback on_complete) = 0;
   virtual void StartLoadMaterialAsset(
     const data::AssetKey& key, MaterialCallback on_complete) = 0;
   virtual void StartLoadMaterialAsset(const data::AssetKey& key,
-    LoadRequest request, MaterialCallback on_complete)
+    const LoadRequest& request, MaterialCallback on_complete)
   {
     static_cast<void>(request);
     StartLoadMaterialAsset(key, std::move(on_complete));
@@ -286,12 +291,12 @@ public:
 
   //! Begin loading a geometry asset and invoke `on_complete` on completion.
   virtual void StartLoadGeometryAsset(const data::AssetKey& key,
-    data::SourceKey source_key, LoadRequest request,
+    data::SourceKey source_key, const LoadRequest& request,
     GeometryCallback on_complete) = 0;
   virtual void StartLoadGeometryAsset(
     const data::AssetKey& key, GeometryCallback on_complete) = 0;
   virtual void StartLoadGeometryAsset(const data::AssetKey& key,
-    LoadRequest request, GeometryCallback on_complete)
+    const LoadRequest& request, GeometryCallback on_complete)
   {
     static_cast<void>(request);
     StartLoadGeometryAsset(key, std::move(on_complete));
@@ -299,12 +304,12 @@ public:
 
   //! Begin loading a scene asset and invoke `on_complete` on completion.
   virtual void StartLoadScene(const data::AssetKey& key,
-    data::SourceKey source_key, LoadRequest request, SceneCallback on_complete)
-    = 0;
+    data::SourceKey source_key, const LoadRequest& request,
+    SceneCallback on_complete) = 0;
   virtual void StartLoadScene(
     const data::AssetKey& key, SceneCallback on_complete) = 0;
-  virtual void StartLoadScene(
-    const data::AssetKey& key, LoadRequest request, SceneCallback on_complete)
+  virtual void StartLoadScene(const data::AssetKey& key,
+    const LoadRequest& request, SceneCallback on_complete)
   {
     static_cast<void>(request);
     StartLoadScene(key, std::move(on_complete));
@@ -313,12 +318,12 @@ public:
   //! Begin loading a physics scene sidecar and invoke `on_complete` on
   //! completion.
   virtual void StartLoadPhysicsSceneAsset(const data::AssetKey& key,
-    data::SourceKey source_key, LoadRequest request,
+    data::SourceKey source_key, const LoadRequest& request,
     PhysicsSceneCallback on_complete) = 0;
   virtual void StartLoadPhysicsSceneAsset(
     const data::AssetKey& key, PhysicsSceneCallback on_complete) = 0;
   virtual void StartLoadPhysicsSceneAsset(const data::AssetKey& key,
-    LoadRequest request, PhysicsSceneCallback on_complete)
+    const LoadRequest& request, PhysicsSceneCallback on_complete)
   {
     static_cast<void>(request);
     StartLoadPhysicsSceneAsset(key, std::move(on_complete));
@@ -326,8 +331,8 @@ public:
   //! Begin loading a physics resource and invoke `on_complete` on completion.
   virtual void StartLoadPhysicsResource(
     ResourceKey key, PhysicsResourceCallback on_complete) = 0;
-  virtual void StartLoadPhysicsResource(
-    ResourceKey key, LoadRequest request, PhysicsResourceCallback on_complete)
+  virtual void StartLoadPhysicsResource(ResourceKey key,
+    const LoadRequest& request, PhysicsResourceCallback on_complete)
   {
     static_cast<void>(request);
     StartLoadPhysicsResource(key, std::move(on_complete));
@@ -335,12 +340,12 @@ public:
 
   //! Begin loading a script asset and invoke `on_complete` on completion.
   virtual void StartLoadScriptAsset(const data::AssetKey& key,
-    data::SourceKey source_key, LoadRequest request, ScriptCallback on_complete)
-    = 0;
+    data::SourceKey source_key, const LoadRequest& request,
+    ScriptCallback on_complete) = 0;
   virtual void StartLoadScriptAsset(
     const data::AssetKey& key, ScriptCallback on_complete) = 0;
-  virtual void StartLoadScriptAsset(
-    const data::AssetKey& key, LoadRequest request, ScriptCallback on_complete)
+  virtual void StartLoadScriptAsset(const data::AssetKey& key,
+    const LoadRequest& request, ScriptCallback on_complete)
   {
     static_cast<void>(request);
     StartLoadScriptAsset(key, std::move(on_complete));
@@ -354,9 +359,11 @@ public:
     = 0;
 
   //! Mount an immutable generation at the replaced source's priority.
-  virtual auto MountLooseCookedGeneration(const std::filesystem::path& path,
+  auto MountLooseCookedGeneration(const std::filesystem::path& path,
     std::optional<data::SourceKey> replaces = std::nullopt) -> data::SourceKey
-    = 0;
+  {
+    return DoMountLooseCookedGeneration(path, replaces);
+  }
 
   //! Exclude a generation from lookup; existing assets retain its storage.
   virtual auto RetireLooseCookedGeneration(data::SourceKey source_key) -> bool
@@ -596,12 +603,16 @@ public:
   [[nodiscard]] virtual auto MintSyntheticScriptKey() -> ResourceKey = 0;
 
 protected:
-  virtual void UnsubscribeResourceEvictions(
-    TypeId resource_type, uint64_t id) noexcept = 0;
+  //! Implements MountLooseCookedGeneration.
+  virtual auto DoMountLooseCookedGeneration(const std::filesystem::path& path,
+    std::optional<data::SourceKey> replaces) -> data::SourceKey = 0;
 
-  [[nodiscard]] auto MakeEvictionSubscription(TypeId resource_type, uint64_t id,
-    observer_ptr<IAssetLoader> owner, const std::shared_ptr<int>& alive_token)
-    -> EvictionSubscription
+  virtual void UnsubscribeResourceEvictions(
+    TypeId resource_type, EvictionSubscriptionId id) noexcept = 0;
+
+  [[nodiscard]] auto MakeEvictionSubscription(TypeId resource_type,
+    EvictionSubscriptionId id, observer_ptr<IAssetLoader> owner,
+    const std::shared_ptr<int>& alive_token) -> EvictionSubscription
   {
     EvictionSubscription subscription;
     subscription.id_ = id;

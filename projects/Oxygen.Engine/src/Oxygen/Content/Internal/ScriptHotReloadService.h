@@ -45,8 +45,9 @@ public:
 
   explicit ScriptHotReloadService(std::optional<PathFinder> path_finder);
 
-  auto Subscribe(uint64_t id, ScriptReloadCallback callback) -> void;
-  auto Unsubscribe(uint64_t id) -> void;
+  auto Subscribe(EvictionSubscriptionId id, ScriptReloadCallback callback)
+    -> void;
+  auto Unsubscribe(EvictionSubscriptionId id) -> void;
   auto Reset() -> void;
 
   auto ReloadScript(const std::filesystem::path& changed_path,
@@ -55,7 +56,7 @@ public:
 
 private:
   struct Subscriber final {
-    uint64_t id { 0 };
+    EvictionSubscriptionId id {};
     ScriptReloadCallback handler;
   };
 

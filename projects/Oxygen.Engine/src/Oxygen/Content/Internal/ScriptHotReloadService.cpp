@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -15,9 +14,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Internal/ScriptHotReloadService.h>
 #include <Oxygen/Data/AssetKey.h>
-#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/AssetReferences.h>
 
 namespace oxygen::content::internal {
 
@@ -28,7 +28,7 @@ ScriptHotReloadService::ScriptHotReloadService(
 }
 
 auto ScriptHotReloadService::Subscribe(
-  const uint64_t id, ScriptReloadCallback callback) -> void
+  const EvictionSubscriptionId id, ScriptReloadCallback callback) -> void
 {
   subscribers_.push_back(Subscriber {
     .id = id,
@@ -36,12 +36,11 @@ auto ScriptHotReloadService::Subscribe(
   });
 }
 
-auto ScriptHotReloadService::Unsubscribe(const uint64_t id) -> void
+auto ScriptHotReloadService::Unsubscribe(const EvictionSubscriptionId id)
+  -> void
 {
-  const auto erase_from
-    = std::remove_if(subscribers_.begin(), subscribers_.end(),
-      [id](const Subscriber& subscriber) { return subscriber.id == id; });
-  subscribers_.erase(erase_from, subscribers_.end());
+  std::erase_if(subscribers_,
+    [id](const Subscriber& subscriber) -> bool { return subscriber.id == id; });
 }
 
 auto ScriptHotReloadService::Reset() -> void
@@ -179,7 +178,8 @@ auto ScriptHotReloadService::ReloadScript(
     return;
   }
   callbacks.start_load_script_asset(target_key,
-    [this, target_key, callbacks](std::shared_ptr<data::ScriptAsset> asset) {
+    [this, target_key, callbacks](
+      const std::shared_ptr<data::ScriptAsset>& asset) -> void {
       if (callbacks.is_current()) {
         NotifyReloadedScript(target_key, asset, callbacks);
       }
@@ -196,8 +196,9 @@ auto ScriptHotReloadService::ReloadAllScripts(const ReloadCallbacks& callbacks)
     if (!callbacks.is_current()) {
       return;
     }
-    callbacks.start_load_script_asset(
-      key, [this, key, callbacks](std::shared_ptr<data::ScriptAsset> asset) {
+    callbacks.start_load_script_asset(key,
+      [this, key, callbacks](
+        const std::shared_ptr<data::ScriptAsset>& asset) -> void {
         if (callbacks.is_current()) {
           NotifyReloadedScript(key, asset, callbacks);
         }

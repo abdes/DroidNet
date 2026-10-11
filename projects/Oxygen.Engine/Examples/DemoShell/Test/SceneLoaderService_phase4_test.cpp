@@ -36,6 +36,7 @@
 #include <Oxygen/Content/TextureResourceLocator.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/ComponentType.h>
@@ -76,6 +77,52 @@ namespace {
   namespace pakw = data::pak::world;
   namespace pakp = data::pak::physics;
 
+  // Scene string tables used by the descriptor builders start with the empty
+  // name; each node name offset points just past the previous name.
+  constexpr uint32_t kRootNameOffset = 1U;
+  constexpr uint32_t kSecondNameOffset = 6U; // after "\0Root\0"
+  constexpr uint32_t kThirdNameOffset = 16U; // after "\0Root\0Inherited\0"
+
+  // Values the descriptor builders write and the hydration tests read back.
+  constexpr float kFogRadialExtinction = 0.3F;
+  constexpr float kFogHeightExtinction = 0.2F;
+  constexpr float kFogHeightFalloff = 0.15F;
+  constexpr float kFogHeightOffset = 1.25F;
+  constexpr float kFogPhaseG = 0.4F;
+  constexpr auto kFogAlbedo = std::array { 0.7F, 0.8F, 0.9F };
+  constexpr auto kFogEmissive = std::array { 0.1F, 0.2F, 0.3F };
+  constexpr int32_t kFogSortPriority = 2;
+
+  constexpr float kSunShadowBias = 0.0007F;
+  constexpr float kSunShadowNormalBias = 0.03F;
+  constexpr float kSunAngularSizeRadians = 0.00951F;
+  constexpr auto kSunCascadeDistances
+    = std::array { 250.0F, 900.0F, 2200.0F, 4200.0F };
+  constexpr float kSunDistributionExponent = 2.5F;
+  constexpr float kSunMaxShadowDistance = 4200.0F;
+  constexpr float kSunTransitionFraction = 0.12F;
+  constexpr float kSunFadeoutFraction = 0.18F;
+  constexpr float kSunIntensityLux = 95000.0F;
+
+  constexpr auto kViewportExtent = Extent<uint32_t> {
+    .width = 1280U,
+    .height = 720U,
+  };
+  constexpr auto kRuntimeSceneCapacity = 64U;
+
+  template <typename T>
+  auto AppendRecord(std::vector<std::byte>& bytes, const T& record) -> void
+  {
+    const auto view = std::as_bytes(std::span(&record, 1));
+    bytes.insert(bytes.end(), view.begin(), view.end());
+  }
+
+  auto AppendText(std::vector<std::byte>& bytes, std::string_view text) -> void
+  {
+    const auto view = std::as_bytes(std::span(text));
+    bytes.insert(bytes.end(), view.begin(), view.end());
+  }
+
   auto BuildMinimalSceneDescriptorBytes(const uint32_t node_count)
     -> std::vector<std::byte>
   {
@@ -93,21 +140,11 @@ namespace {
     desc.scene_strings.size = 1;
 
     auto bytes = std::vector<std::byte> {};
-    bytes.resize(
-      static_cast<size_t>(desc.scene_strings.offset + desc.scene_strings.size),
-      std::byte { 0 });
-    std::memcpy(bytes.data(), &desc, sizeof(desc));
-
+    AppendRecord(bytes, desc);
     for (uint32_t i = 0; i < node_count; ++i) {
-      auto node = pakw::NodeRecord {};
-      node.parent_index = (i == 0U) ? 0U : 0U;
-      node.scene_name_offset = 0U;
-      const auto node_offset
-        = static_cast<size_t>(desc.nodes.offset) + (i * sizeof(node));
-      std::memcpy(bytes.data() + node_offset, &node, sizeof(node));
+      AppendRecord(bytes, pakw::NodeRecord {});
     }
-
-    bytes.at(desc.scene_strings.offset) = std::byte { 0 };
+    AppendText(bytes, std::string_view("\0", 1));
     return bytes;
   }
 
@@ -122,13 +159,13 @@ namespace {
 
     auto root = pakw::NodeRecord {};
     root.parent_index = 0U;
-    root.scene_name_offset = 1U;
+    root.scene_name_offset = kRootNameOffset;
 
     auto fog_node = pakw::NodeRecord {};
     fog_node.parent_index = 0U;
-    fog_node.scene_name_offset = 6U;
+    fog_node.scene_name_offset = kSecondNameOffset;
 
-    const auto strings = std::string("\0Root\0FogNode\0", 14);
+    constexpr auto strings = std::string_view("\0Root\0FogNode\0", 14);
     const auto nodes_bytes = sizeof(root) + sizeof(fog_node);
     desc.scene_strings.offset
       = static_cast<data::pak::core::StringTableOffsetT>(
@@ -150,35 +187,22 @@ namespace {
     auto local_fog = pakw::LocalFogVolumeRecord {};
     local_fog.node_index = 1U;
     local_fog.enabled = 1U;
-    local_fog.radial_fog_extinction = 0.3F;
-    local_fog.height_fog_extinction = 0.2F;
-    local_fog.height_fog_falloff = 0.15F;
-    local_fog.height_fog_offset = 1.25F;
-    local_fog.fog_phase_g = 0.4F;
-    local_fog.fog_albedo[0] = 0.7F;
-    local_fog.fog_albedo[1] = 0.8F;
-    local_fog.fog_albedo[2] = 0.9F;
-    local_fog.fog_emissive[0] = 0.1F;
-    local_fog.fog_emissive[1] = 0.2F;
-    local_fog.fog_emissive[2] = 0.3F;
-    local_fog.sort_priority = 2;
+    local_fog.radial_fog_extinction = kFogRadialExtinction;
+    local_fog.height_fog_extinction = kFogHeightExtinction;
+    local_fog.height_fog_falloff = kFogHeightFalloff;
+    local_fog.height_fog_offset = kFogHeightOffset;
+    local_fog.fog_phase_g = kFogPhaseG;
+    std::ranges::copy(kFogAlbedo, std::begin(local_fog.fog_albedo));
+    std::ranges::copy(kFogEmissive, std::begin(local_fog.fog_emissive));
+    local_fog.sort_priority = kFogSortPriority;
 
     auto bytes = std::vector<std::byte> {};
-    bytes.resize(sizeof(desc) + nodes_bytes + strings.size()
-      + sizeof(table_desc) + sizeof(local_fog));
-
-    auto* cursor = bytes.data();
-    std::memcpy(cursor, &desc, sizeof(desc));
-    cursor += sizeof(desc);
-    std::memcpy(cursor, &root, sizeof(root));
-    cursor += sizeof(root);
-    std::memcpy(cursor, &fog_node, sizeof(fog_node));
-    cursor += sizeof(fog_node);
-    std::memcpy(cursor, strings.data(), strings.size());
-    cursor += strings.size();
-    std::memcpy(cursor, &table_desc, sizeof(table_desc));
-    cursor += sizeof(table_desc);
-    std::memcpy(cursor, &local_fog, sizeof(local_fog));
+    AppendRecord(bytes, desc);
+    AppendRecord(bytes, root);
+    AppendRecord(bytes, fog_node);
+    AppendText(bytes, strings);
+    AppendRecord(bytes, table_desc);
+    AppendRecord(bytes, local_fog);
     return bytes;
   }
 
@@ -192,21 +216,19 @@ namespace {
     descriptor.nodes.count = 3U;
     descriptor.nodes.entry_size = sizeof(pakw::NodeRecord);
     auto nodes = std::array<pakw::NodeRecord, 3> {};
-    nodes.at(0).scene_name_offset = 1U;
-    nodes.at(1).scene_name_offset = 6U;
+    nodes.at(0).scene_name_offset = kRootNameOffset;
+    nodes.at(1).scene_name_offset = kSecondNameOffset;
     nodes.at(1).inherited_flags = pakw::kSceneNodeFlags_Inheritable;
-    nodes.at(2).scene_name_offset = 16U;
+    nodes.at(2).scene_name_offset = kThirdNameOffset;
     nodes.at(2).node_flags = pakw::kSceneNodeFlag_Visible;
     nodes.at(2).inherited_flags = pakw::kSceneNodeFlag_ReceivesShadows;
-    const auto strings = std::string("\0Root\0Inherited\0Local\0", 22);
+    constexpr auto strings = std::string_view("\0Root\0Inherited\0Local\0", 22);
     descriptor.scene_strings.offset = sizeof(descriptor) + sizeof(nodes);
     descriptor.scene_strings.size = static_cast<uint32_t>(strings.size());
-    auto bytes = std::vector<std::byte>(
-      sizeof(descriptor) + sizeof(nodes) + strings.size());
-    std::memcpy(bytes.data(), &descriptor, sizeof(descriptor));
-    std::memcpy(bytes.data() + sizeof(descriptor), nodes.data(), sizeof(nodes));
-    std::memcpy(bytes.data() + sizeof(descriptor) + sizeof(nodes),
-      strings.data(), strings.size());
+    auto bytes = std::vector<std::byte> {};
+    AppendRecord(bytes, descriptor);
+    AppendRecord(bytes, nodes);
+    AppendText(bytes, strings);
     return bytes;
   }
 
@@ -221,13 +243,13 @@ namespace {
 
     auto root = pakw::NodeRecord {};
     root.parent_index = 0U;
-    root.scene_name_offset = 1U;
+    root.scene_name_offset = kRootNameOffset;
 
     auto sun_node = pakw::NodeRecord {};
     sun_node.parent_index = 0U;
-    sun_node.scene_name_offset = 6U;
+    sun_node.scene_name_offset = kSecondNameOffset;
 
-    const auto strings = std::string("\0Root\0SunNode\0", 14);
+    constexpr auto strings = std::string_view("\0Root\0SunNode\0", 14);
     const auto nodes_bytes = sizeof(root) + sizeof(sun_node);
     desc.scene_strings.offset
       = static_cast<data::pak::core::StringTableOffsetT>(
@@ -249,45 +271,41 @@ namespace {
     auto directional = pakw::DirectionalLightRecord {};
     directional.node_index = 1U;
     directional.common.casts_shadows = 1U;
-    directional.common.shadow.bias = 0.0007F;
-    directional.common.shadow.normal_bias = 0.03F;
-    directional.angular_size_radians = 0.00951F;
+    directional.common.shadow.bias = kSunShadowBias;
+    directional.common.shadow.normal_bias = kSunShadowNormalBias;
+    directional.angular_size_radians = kSunAngularSizeRadians;
     directional.atmosphere_light_slot = 1U;
-    directional.cascade_count = 4U;
-    directional.cascade_distances[0] = 250.0F;
-    directional.cascade_distances[1] = 900.0F;
-    directional.cascade_distances[2] = 2200.0F;
-    directional.cascade_distances[3] = 4200.0F;
-    directional.distribution_exponent = 2.5F;
+    directional.cascade_count
+      = static_cast<uint32_t>(kSunCascadeDistances.size());
+    std::ranges::copy(
+      kSunCascadeDistances, std::begin(directional.cascade_distances));
+    directional.distribution_exponent = kSunDistributionExponent;
     directional.split_mode
       = static_cast<uint8_t>(scene::DirectionalCsmSplitMode::kManualDistances);
-    directional.max_shadow_distance = 4200.0F;
-    directional.transition_fraction = 0.12F;
-    directional.distance_fadeout_fraction = 0.18F;
-    directional.intensity_lux = 95000.0F;
+    directional.max_shadow_distance = kSunMaxShadowDistance;
+    directional.transition_fraction = kSunTransitionFraction;
+    directional.distance_fadeout_fraction = kSunFadeoutFraction;
+    directional.intensity_lux = kSunIntensityLux;
 
     auto bytes = std::vector<std::byte> {};
-    bytes.resize(sizeof(desc) + nodes_bytes + strings.size()
-      + sizeof(table_desc) + sizeof(directional));
-
-    auto* cursor = bytes.data();
-    std::memcpy(cursor, &desc, sizeof(desc));
-    cursor += sizeof(desc);
-    std::memcpy(cursor, &root, sizeof(root));
-    cursor += sizeof(root);
-    std::memcpy(cursor, &sun_node, sizeof(sun_node));
-    cursor += sizeof(sun_node);
-    std::memcpy(cursor, strings.data(), strings.size());
-    cursor += strings.size();
-    std::memcpy(cursor, &table_desc, sizeof(table_desc));
-    cursor += sizeof(table_desc);
-    std::memcpy(cursor, &directional, sizeof(directional));
+    AppendRecord(bytes, desc);
+    AppendRecord(bytes, root);
+    AppendRecord(bytes, sun_node);
+    AppendText(bytes, strings);
+    AppendRecord(bytes, table_desc);
+    AppendRecord(bytes, directional);
     return bytes;
   }
 
+  //! Assets a renderable material override scene refers to.
+  struct RenderableOverrideKeys final {
+    data::AssetKey geometry;
+    data::AssetKey material;
+  };
+
   auto BuildSceneDescriptorBytesWithRenderableMaterialOverride(
-    const data::AssetKey& geometry_key, const data::AssetKey& material_key,
-    const data::GeometryAsset& geometry) -> std::vector<std::byte>
+    const RenderableOverrideKeys& keys, const data::GeometryAsset& geometry)
+    -> std::vector<std::byte>
   {
     auto desc = pakw::SceneAssetDesc {};
     desc.header.asset_type = static_cast<uint8_t>(data::AssetType::kScene);
@@ -298,11 +316,11 @@ namespace {
       .entry_size = sizeof(pakw::NodeRecord),
     };
     auto root = pakw::NodeRecord {};
-    root.scene_name_offset = 1;
+    root.scene_name_offset = kRootNameOffset;
     auto mesh_node = pakw::NodeRecord {};
     mesh_node.parent_index = 0;
-    mesh_node.scene_name_offset = 6;
-    const auto strings = std::string("\0Root\0MeshNode\0", 15);
+    mesh_node.scene_name_offset = kSecondNameOffset;
+    constexpr auto strings = std::string_view("\0Root\0MeshNode\0", 15);
     desc.scene_strings = {
       .offset = static_cast<data::pak::core::StringTableOffsetT>(
         desc.nodes.offset + sizeof(root) + sizeof(mesh_node)),
@@ -331,34 +349,29 @@ namespace {
     };
     const auto renderable = pakw::RenderableRecord {
       .node_index = 1,
-      .geometry_key = geometry_key,
+      .geometry_key = keys.geometry,
       .visible = 1,
     };
     const auto& inventory = geometry.MaterialSlots();
     const auto assignment = pakw::MaterialOverrideRecord {
       .node_index = 1,
       .slot_id = inventory.slots.at(0).slot_id,
-      .material_key = material_key,
+      .material_key = keys.material,
       .layout_revision = inventory.layout_revision,
     };
     auto environment = pakw::SceneEnvironmentBlockHeader {};
     environment.byte_size = sizeof(environment);
     auto bytes = std::vector<std::byte> {};
-    const auto append = [&bytes](const auto& record) -> auto {
-      const auto view = std::as_bytes(std::span(&record, 1));
-      bytes.insert(bytes.end(), view.begin(), view.end());
-    };
-    append(desc);
-    append(root);
-    append(mesh_node);
-    const auto text = std::as_bytes(std::span(strings));
-    bytes.insert(bytes.end(), text.begin(), text.end());
+    AppendRecord(bytes, desc);
+    AppendRecord(bytes, root);
+    AppendRecord(bytes, mesh_node);
+    AppendText(bytes, strings);
     for (const auto& table : tables) {
-      append(table);
+      AppendRecord(bytes, table);
     }
-    append(renderable);
-    append(assignment);
-    append(environment);
+    AppendRecord(bytes, renderable);
+    AppendRecord(bytes, assignment);
+    AppendRecord(bytes, environment);
     return bytes;
   }
 
@@ -402,7 +415,7 @@ namespace {
     std::vector<std::shared_ptr<data::Mesh>> lods;
     lods.push_back(std::shared_ptr<data::Mesh>(std::move(mesh)));
     return std::make_shared<GeometryAsset>(
-      data::AssetKey {}, std::move(desc), std::move(lods));
+      data::AssetKey {}, desc, std::move(lods));
   }
 
   auto BuildTestMaterial(const data::AssetKey& key)
@@ -452,8 +465,7 @@ namespace {
     desc.header.version = pakp::kPhysicsSceneAssetVersion;
     desc.target_scene_key = scene_key;
     desc.target_node_count = node_count;
-    std::copy(scene_hash.begin(), scene_hash.end(),
-      std::begin(desc.target_scene_content_hash));
+    std::ranges::copy(scene_hash, std::begin(desc.target_scene_content_hash));
     desc.component_table_count = 0;
     desc.component_table_directory_offset = 0;
 
@@ -497,7 +509,7 @@ namespace {
     }
 
     void StartLoadMaterialAsset(const data::AssetKey& key,
-      data::SourceKey source, content::LoadRequest,
+      data::SourceKey source, const content::LoadRequest& /*request*/,
       MaterialCallback on_complete) override
     {
       const auto asset = GetMaterialAsset(key);
@@ -505,7 +517,7 @@ namespace {
     }
 
     void StartLoadGeometryAsset(const data::AssetKey& key,
-      data::SourceKey source, content::LoadRequest,
+      data::SourceKey source, const content::LoadRequest& /*request*/,
       GeometryCallback on_complete) override
     {
       const auto asset = GetGeometryAsset(key);
@@ -513,7 +525,8 @@ namespace {
     }
 
     void StartLoadScene(const data::AssetKey& key, data::SourceKey source,
-      content::LoadRequest, SceneCallback on_complete) override
+      const content::LoadRequest& /*request*/,
+      SceneCallback on_complete) override
     {
       const auto found = scenes_.find(key);
       on_complete(
@@ -522,14 +535,15 @@ namespace {
           : nullptr);
     }
 
-    void StartLoadScriptAsset(const data::AssetKey&, data::SourceKey,
-      content::LoadRequest, ScriptCallback on_complete) override
+    void StartLoadScriptAsset(const data::AssetKey& /*key*/,
+      data::SourceKey /*source*/, const content::LoadRequest& /*request*/,
+      ScriptCallback on_complete) override
     {
       on_complete(nullptr);
     }
 
     void StartLoadPhysicsSceneAsset(const data::AssetKey& key,
-      data::SourceKey source, content::LoadRequest,
+      data::SourceKey source, const content::LoadRequest& /*request*/,
       PhysicsSceneCallback on_complete) override
     {
       last_physics_source_ = source;
@@ -542,19 +556,22 @@ namespace {
       return last_physics_source_;
     }
 
-    [[nodiscard]] auto GetMaterialAsset(const data::AssetKey& key,
-      const data::Asset&) -> std::shared_ptr<data::MaterialAsset> override
+    [[nodiscard]] auto GetMaterialAsset(
+      const data::AssetKey& key, const data::Asset& /*context_asset*/)
+      -> std::shared_ptr<data::MaterialAsset> override
     {
       return GetMaterialAsset(key);
     }
 
-    [[nodiscard]] auto GetGeometryAsset(const data::AssetKey& key,
-      const data::Asset&) -> std::shared_ptr<data::GeometryAsset> override
+    [[nodiscard]] auto GetGeometryAsset(
+      const data::AssetKey& key, const data::Asset& /*context_asset*/)
+      -> std::shared_ptr<data::GeometryAsset> override
     {
       return GetGeometryAsset(key);
     }
 
-    [[nodiscard]] auto GetScriptAsset(const data::AssetKey&, const data::Asset&)
+    [[nodiscard]] auto GetScriptAsset(
+      const data::AssetKey& /*key*/, const data::Asset& /*context_asset*/)
       -> std::shared_ptr<data::ScriptAsset> override
     {
       return nullptr;
@@ -631,27 +648,30 @@ namespace {
       -> void override
     {
     }
-    auto MountLooseCookedGeneration(const std::filesystem::path&,
-      std::optional<data::SourceKey>) -> data::SourceKey override
+    auto DoMountLooseCookedGeneration(const std::filesystem::path& /*path*/,
+      std::optional<data::SourceKey> /*replaces*/) -> data::SourceKey override
     {
       throw std::logic_error(
         "Scene hydration test loader does not mount disk generations");
     }
-    auto RetireLooseCookedGeneration(data::SourceKey) -> bool override
+    auto RetireLooseCookedGeneration(data::SourceKey /*source_key*/)
+      -> bool override
     {
       return false;
     }
     auto ClearMounts() -> void override { }
     auto WaitForPendingLoadsAsync() -> co::Co<> override { co_return; }
-    auto PrepareLooseCookedRootsAsync(std::vector<std::filesystem::path>)
+    auto PrepareLooseCookedRootsAsync(
+      std::vector<std::filesystem::path> /*roots*/)
       -> co::Co<content::PreparedMountSet> override
     {
       throw std::logic_error(
         "Scene hydration test loader does not prepare disk mounts");
     }
-    auto CommitPreparedMounts(content::PreparedMountSet&&)
+    auto CommitPreparedMounts(content::PreparedMountSet&& prepared)
       -> content::MountRetirement override
     {
+      [[maybe_unused]] const auto discarded = std::move(prepared);
       throw std::logic_error(
         "Scene hydration test loader does not commit disk mounts");
     }
@@ -705,7 +725,7 @@ namespace {
     {
     }
 
-    [[nodiscard]] auto PeekTexture(content::ResourceKey) const
+    [[nodiscard]] auto PeekTexture(content::ResourceKey /*key*/) const
       -> observer_ptr<const data::TextureResource> override
     {
       return {};
@@ -749,14 +769,14 @@ namespace {
       co_return nullptr;
     }
     [[nodiscard]] auto ResolveTextureResourceKey(
-      const content::TextureResourceLocator&)
+      const content::TextureResourceLocator& /*locator*/)
       -> std::optional<content::ResourceKey> override
     {
       return std::nullopt;
     }
 
-    auto MakeTextureResourceKey(
-      oxygen::data::SourceKey, oxygen::data::pak::core::ResourceIndexT)
+    auto MakeTextureResourceKey(oxygen::data::SourceKey /*source_key*/,
+      oxygen::data::pak::core::ResourceIndexT /*resource_index*/)
       -> std::optional<oxygen::content::ResourceKey> override
     {
       return std::nullopt;
@@ -836,8 +856,9 @@ namespace {
       return std::nullopt;
     }
 
-    [[nodiscard]] auto GetInputActionAsset(const data::AssetKey& key,
-      const data::Asset&) -> std::shared_ptr<data::InputActionAsset> override
+    [[nodiscard]] auto GetInputActionAsset(
+      const data::AssetKey& key, const data::Asset& /*context_asset*/)
+      -> std::shared_ptr<data::InputActionAsset> override
     {
       return GetInputActionAsset(key);
     }
@@ -861,7 +882,7 @@ namespace {
       return {};
     }
     [[nodiscard]] auto FindPhysicsSidecarAssetKeyForScene(
-      const data::Asset& scene, const content::ContentLoadScope&)
+      const data::Asset& scene, const content::ContentLoadScope& /*scope*/)
       -> std::optional<data::AssetKey> override
     {
       const auto it = sidecar_keys_by_scene_.find(scene.GetAssetKey());
@@ -926,7 +947,7 @@ namespace {
     auto SubscribeResourceEvictions(TypeId resource_type,
       EvictionHandler handler) -> EvictionSubscription override
     {
-      const auto id = next_subscription_id_++;
+      const content::EvictionSubscriptionId id { next_subscription_id_++ };
       eviction_handlers_[resource_type].insert_or_assign(
         id, std::move(handler));
       return MakeEvictionSubscription(resource_type, id,
@@ -949,8 +970,8 @@ namespace {
     }
 
   private:
-    void UnsubscribeResourceEvictions(
-      TypeId resource_type, const uint64_t id) noexcept override
+    void UnsubscribeResourceEvictions(TypeId resource_type,
+      const content::EvictionSubscriptionId id) noexcept override
     {
       const auto it = eviction_handlers_.find(resource_type);
       if (it == eviction_handlers_.end()) {
@@ -961,22 +982,38 @@ namespace {
 
     content::ResidencyPolicy residency_policy_ {};
     std::unordered_map<data::AssetKey, std::shared_ptr<data::SceneAsset>>
-      scenes_ {};
-    std::unordered_map<data::AssetKey, data::AssetKey>
-      sidecar_keys_by_scene_ {};
+      scenes_;
+    std::unordered_map<data::AssetKey, data::AssetKey> sidecar_keys_by_scene_;
     std::unordered_map<data::AssetKey, std::shared_ptr<data::PhysicsSceneAsset>>
-      sidecars_ {};
+      sidecars_;
     std::unordered_map<data::AssetKey, std::shared_ptr<data::GeometryAsset>>
-      geometries_ {};
+      geometries_;
     std::unordered_map<data::AssetKey, std::shared_ptr<data::MaterialAsset>>
-      materials_ {};
-    std::unordered_map<TypeId, std::unordered_map<uint64_t, EvictionHandler>>
-      eviction_handlers_ {};
+      materials_;
+    std::unordered_map<TypeId,
+      std::unordered_map<content::EvictionSubscriptionId, EvictionHandler>>
+      eviction_handlers_;
     uint64_t next_subscription_id_ { 1U };
     std::shared_ptr<int> eviction_alive_token_ { std::make_shared<int>(0) };
     uint64_t next_resource_key_ { 1U };
     data::SourceKey last_physics_source_ {};
   };
+
+  auto MakeService(content::IAssetLoader& loader)
+    -> std::shared_ptr<SceneLoaderService>
+  {
+    return std::make_shared<SceneLoaderService>(loader, kViewportExtent,
+      std::filesystem::path {}, nullptr, nullptr, nullptr,
+      PathFinder(std::make_shared<const PathFinderConfig>(),
+        std::filesystem::current_path()));
+  }
+
+  auto BuildScene(SceneLoaderService& service, scene::Scene& runtime_scene,
+    const data::SceneAsset& asset) -> void
+  {
+    co::testing::TestEventLoop loop;
+    co::Run(loop, service.BuildSceneAsync(runtime_scene, asset));
+  }
 } // namespace
 
 NOLINT_TEST(SceneLoaderServicePhase4Test,
@@ -992,7 +1029,7 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   auto scene_asset = std::make_shared<data::SceneAsset>(scene_key, scene_bytes);
   const auto scene_hash = base::ComputeSha256(scene_asset->GetRawData());
   auto mismatched_hash = scene_hash;
-  mismatched_hash.at(0) ^= 0xFFU;
+  mismatched_hash.at(0) = static_cast<std::uint8_t>(~mismatched_hash.at(0));
 
   auto sidecar_asset = std::make_shared<data::PhysicsSceneAsset>(sidecar_key,
     BuildMinimalPhysicsSidecarDescriptorBytes(scene_key, 1U, mismatched_hash));
@@ -1000,11 +1037,7 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   loader.PutScene(scene_key, scene_asset);
   loader.PutPhysicsSidecar(scene_key, sidecar_key, sidecar_asset);
 
-  auto path_finder = PathFinder(std::make_shared<const PathFinderConfig>(),
-    std::filesystem::current_path());
-  auto service = std::make_shared<SceneLoaderService>(loader,
-    Extent<uint32_t> { 1280U, 720U }, std::filesystem::path {}, nullptr,
-    nullptr, nullptr, std::move(path_finder));
+  auto service = MakeService(loader);
 
   service->StartLoad(scene_key);
 
@@ -1034,11 +1067,7 @@ NOLINT_TEST(
   loader.PutScene(scene_key, scene_asset);
   loader.PutPhysicsSidecar(scene_key, sidecar_key, sidecar_asset);
 
-  auto path_finder = PathFinder(std::make_shared<const PathFinderConfig>(),
-    std::filesystem::current_path());
-  auto service = std::make_shared<SceneLoaderService>(loader,
-    Extent<uint32_t> { 1280U, 720U }, std::filesystem::path {}, nullptr,
-    nullptr, nullptr, std::move(path_finder));
+  auto service = MakeService(loader);
 
   service->StartLoad(scene_key);
 
@@ -1065,11 +1094,7 @@ NOLINT_TEST(
   loader.PutScene(scene_key, scene_asset);
   loader.PutPhysicsSidecar(scene_key, sidecar_key, sidecar_asset);
 
-  auto path_finder = PathFinder(std::make_shared<const PathFinderConfig>(),
-    std::filesystem::current_path());
-  auto service = std::make_shared<SceneLoaderService>(loader,
-    Extent<uint32_t> { 1280U, 720U }, std::filesystem::path {}, nullptr,
-    nullptr, nullptr, std::move(path_finder));
+  auto service = MakeService(loader);
 
   service->StartLoad(scene_key);
 
@@ -1102,11 +1127,7 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   loader.PutScene(scene_key, scene_asset);
   loader.PutPhysicsSidecar(scene_key, sidecar_key, sidecar_asset);
 
-  auto path_finder = PathFinder(std::make_shared<const PathFinderConfig>(),
-    std::filesystem::current_path());
-  auto service = std::make_shared<SceneLoaderService>(loader,
-    Extent<uint32_t> { 1280U, 720U }, std::filesystem::path {}, nullptr,
-    nullptr, nullptr, std::move(path_finder));
+  auto service = MakeService(loader);
 
   service->StartLoad(scene_key);
 
@@ -1127,16 +1148,10 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   const auto asset = std::make_shared<data::SceneAsset>(
     key, BuildSceneDescriptorBytesWithFlagModes());
   loader.PutScene(key, asset);
-  auto path_finder = PathFinder(std::make_shared<const PathFinderConfig>(),
-    std::filesystem::current_path());
-  auto service = std::make_shared<SceneLoaderService>(loader,
-    Extent<uint32_t> { 1280U, 720U }, std::filesystem::path {}, nullptr,
-    nullptr, nullptr, std::move(path_finder));
-  auto runtime_scene = std::make_shared<scene::Scene>("FlagsHydration", 64U);
-  oxygen::co::testing::TestEventLoop loop;
-  oxygen::co::Run(loop, [&] -> oxygen::co::Co<> {
-    co_await service->BuildSceneAsync(*runtime_scene, *asset);
-  });
+  auto service = MakeService(loader);
+  auto runtime_scene
+    = std::make_shared<scene::Scene>("FlagsHydration", kRuntimeSceneCapacity);
+  BuildScene(*service, *runtime_scene, *asset);
   runtime_scene->Update();
   auto root = FindNodeByName(*runtime_scene, "Root");
   auto inherited = FindNodeByName(*runtime_scene, "Inherited");
@@ -1202,18 +1217,11 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
     scene_key, BuildSceneDescriptorBytesWithDirectionalLight());
   loader.PutScene(scene_key, scene_asset);
 
-  auto path_finder = PathFinder(std::make_shared<const PathFinderConfig>(),
-    std::filesystem::current_path());
-  auto service = std::make_shared<SceneLoaderService>(loader,
-    Extent<uint32_t> { 1280U, 720U }, std::filesystem::path {}, nullptr,
-    nullptr, nullptr, std::move(path_finder));
+  auto service = MakeService(loader);
 
-  auto runtime_scene
-    = std::make_shared<scene::Scene>("DemoShell.DirectionalCsmHydration", 64U);
-  oxygen::co::testing::TestEventLoop loop;
-  oxygen::co::Run(loop, [&] -> oxygen::co::Co<> {
-    co_await service->BuildSceneAsync(*runtime_scene, *scene_asset);
-  });
+  auto runtime_scene = std::make_shared<scene::Scene>(
+    "DemoShell.DirectionalCsmHydration", kRuntimeSceneCapacity);
+  BuildScene(*service, *runtime_scene, *scene_asset);
 
   auto sun_node = FindNodeByName(*runtime_scene, "SunNode");
   if (!sun_node.has_value()) {
@@ -1225,24 +1233,24 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   }
 
   EXPECT_TRUE(light->get().Common().casts_shadows);
-  EXPECT_FLOAT_EQ(light->get().Common().shadow.bias, 0.0007F);
-  EXPECT_FLOAT_EQ(light->get().Common().shadow.normal_bias, 0.03F);
+  EXPECT_FLOAT_EQ(light->get().Common().shadow.bias, kSunShadowBias);
+  EXPECT_FLOAT_EQ(
+    light->get().Common().shadow.normal_bias, kSunShadowNormalBias);
 
   EXPECT_TRUE(light->get().GetAtmosphereLightSlot()
     == scene::AtmosphereLightSlot::kPrimary);
-  EXPECT_FLOAT_EQ(light->get().GetIntensityLux(), 95000.0F);
+  EXPECT_FLOAT_EQ(light->get().GetIntensityLux(), kSunIntensityLux);
 
   const auto& csm = light->get().CascadedShadows();
-  EXPECT_EQ(csm.cascade_count, 4U);
+  EXPECT_EQ(csm.cascade_count, kSunCascadeDistances.size());
   EXPECT_EQ(csm.split_mode, scene::DirectionalCsmSplitMode::kManualDistances);
-  EXPECT_FLOAT_EQ(csm.max_shadow_distance, 4200.0F);
-  EXPECT_FLOAT_EQ(csm.cascade_distances.at(0), 250.0F);
-  EXPECT_FLOAT_EQ(csm.cascade_distances.at(1), 900.0F);
-  EXPECT_FLOAT_EQ(csm.cascade_distances.at(2), 2200.0F);
-  EXPECT_FLOAT_EQ(csm.cascade_distances.at(3), 4200.0F);
-  EXPECT_FLOAT_EQ(csm.distribution_exponent, 2.5F);
-  EXPECT_FLOAT_EQ(csm.transition_fraction, 0.12F);
-  EXPECT_FLOAT_EQ(csm.distance_fadeout_fraction, 0.18F);
+  EXPECT_FLOAT_EQ(csm.max_shadow_distance, kSunMaxShadowDistance);
+  for (size_t i = 0; i < kSunCascadeDistances.size(); ++i) {
+    EXPECT_FLOAT_EQ(csm.cascade_distances.at(i), kSunCascadeDistances.at(i));
+  }
+  EXPECT_FLOAT_EQ(csm.distribution_exponent, kSunDistributionExponent);
+  EXPECT_FLOAT_EQ(csm.transition_fraction, kSunTransitionFraction);
+  EXPECT_FLOAT_EQ(csm.distance_fadeout_fraction, kSunFadeoutFraction);
 }
 
 NOLINT_TEST(
@@ -1255,18 +1263,11 @@ NOLINT_TEST(
     scene_key, BuildSceneDescriptorBytesWithLocalFog());
   loader.PutScene(scene_key, scene_asset);
 
-  auto path_finder = PathFinder(std::make_shared<const PathFinderConfig>(),
-    std::filesystem::current_path());
-  auto service = std::make_shared<SceneLoaderService>(loader,
-    Extent<uint32_t> { 1280U, 720U }, std::filesystem::path {}, nullptr,
-    nullptr, nullptr, std::move(path_finder));
+  auto service = MakeService(loader);
 
-  auto runtime_scene
-    = std::make_shared<scene::Scene>("DemoShell.LocalFogHydration", 64U);
-  oxygen::co::testing::TestEventLoop loop;
-  oxygen::co::Run(loop, [&] -> oxygen::co::Co<> {
-    co_await service->BuildSceneAsync(*runtime_scene, *scene_asset);
-  });
+  auto runtime_scene = std::make_shared<scene::Scene>(
+    "DemoShell.LocalFogHydration", kRuntimeSceneCapacity);
+  BuildScene(*service, *runtime_scene, *scene_asset);
 
   auto fog_node = FindNodeByName(*runtime_scene, "FogNode");
   if (!fog_node.has_value()) {
@@ -1282,14 +1283,16 @@ NOLINT_TEST(
   const auto& local_fog
     = impl_opt->get().GetComponent<scene::environment::LocalFogVolume>();
   EXPECT_TRUE(local_fog.IsEnabled());
-  EXPECT_FLOAT_EQ(local_fog.GetRadialFogExtinction(), 0.3F);
-  EXPECT_FLOAT_EQ(local_fog.GetHeightFogExtinction(), 0.2F);
-  EXPECT_FLOAT_EQ(local_fog.GetHeightFogFalloff(), 0.15F);
-  EXPECT_FLOAT_EQ(local_fog.GetHeightFogOffset(), 1.25F);
-  EXPECT_FLOAT_EQ(local_fog.GetFogPhaseG(), 0.4F);
-  EXPECT_EQ(local_fog.GetFogAlbedo(), glm::vec3(0.7F, 0.8F, 0.9F));
-  EXPECT_EQ(local_fog.GetFogEmissive(), glm::vec3(0.1F, 0.2F, 0.3F));
-  EXPECT_EQ(local_fog.GetSortPriority(), 2);
+  EXPECT_FLOAT_EQ(local_fog.GetRadialFogExtinction(), kFogRadialExtinction);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogExtinction(), kFogHeightExtinction);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogFalloff(), kFogHeightFalloff);
+  EXPECT_FLOAT_EQ(local_fog.GetHeightFogOffset(), kFogHeightOffset);
+  EXPECT_FLOAT_EQ(local_fog.GetFogPhaseG(), kFogPhaseG);
+  EXPECT_EQ(local_fog.GetFogAlbedo(),
+    glm::vec3(kFogAlbedo.at(0), kFogAlbedo.at(1), kFogAlbedo.at(2)));
+  EXPECT_EQ(local_fog.GetFogEmissive(),
+    glm::vec3(kFogEmissive.at(0), kFogEmissive.at(1), kFogEmissive.at(2)));
+  EXPECT_EQ(local_fog.GetSortPriority(), kFogSortPriority);
 }
 
 NOLINT_TEST(SceneLoaderServicePhase4Test,
@@ -1309,23 +1312,16 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
 
   auto scene_asset = std::make_shared<data::SceneAsset>(scene_key,
     BuildSceneDescriptorBytesWithRenderableMaterialOverride(
-      geometry_key, material_key, *geometry));
+      { .geometry = geometry_key, .material = material_key }, *geometry));
   loader.PutScene(scene_key, scene_asset);
   loader.PutGeometry(geometry_key, geometry);
   loader.PutMaterial(material_key, override_material);
 
-  auto path_finder = PathFinder(std::make_shared<const PathFinderConfig>(),
-    std::filesystem::current_path());
-  auto service = std::make_shared<SceneLoaderService>(loader,
-    Extent<uint32_t> { 1280U, 720U }, std::filesystem::path {}, nullptr,
-    nullptr, nullptr, std::move(path_finder));
+  auto service = MakeService(loader);
 
-  auto runtime_scene
-    = std::make_shared<scene::Scene>("DemoShell.RenderableOverride", 64U);
-  oxygen::co::testing::TestEventLoop loop;
-  oxygen::co::Run(loop, [&] -> oxygen::co::Co<> {
-    co_await service->BuildSceneAsync(*runtime_scene, *scene_asset);
-  });
+  auto runtime_scene = std::make_shared<scene::Scene>(
+    "DemoShell.RenderableOverride", kRuntimeSceneCapacity);
+  BuildScene(*service, *runtime_scene, *scene_asset);
 
   auto mesh_node = FindNodeByName(*runtime_scene, "MeshNode");
   if (!mesh_node.has_value()) {

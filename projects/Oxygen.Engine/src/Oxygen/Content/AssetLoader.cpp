@@ -1118,7 +1118,8 @@ auto AssetLoader::AddLooseCookedRoot(const std::filesystem::path& path) -> void
   AssertSourceKeyConsistency("AddLooseCookedRoot.mount");
 }
 
-auto AssetLoader::MountLooseCookedGeneration(const std::filesystem::path& path,
+auto AssetLoader::DoMountLooseCookedGeneration(
+  const std::filesystem::path& path,
   const std::optional<data::SourceKey> replaces) -> data::SourceKey
 {
   AssertOwningThread();
@@ -2044,14 +2045,14 @@ auto AssetLoader::SubscribeResourceEvictions(
   const TypeId resource_type, EvictionHandler handler) -> EvictionSubscription
 {
   AssertOwningThread();
-  const auto id = next_eviction_subscriber_id_++;
+  const EvictionSubscriptionId id { next_eviction_subscriber_id_++ };
   eviction_registry_->AddSubscriber(resource_type, id, std::move(handler));
   return MakeEvictionSubscription(resource_type, id,
     observer_ptr<IAssetLoader> { this }, eviction_alive_token_);
 }
 
 void AssetLoader::UnsubscribeResourceEvictions(
-  const TypeId resource_type, const uint64_t id) noexcept
+  const TypeId resource_type, const EvictionSubscriptionId id) noexcept
 {
   if (resource_type == data::ScriptAsset::ClassTypeId()) {
     script_hot_reload_service_->Unsubscribe(id);
@@ -2217,7 +2218,7 @@ auto AssetLoader::SubscribeScriptReload(ScriptReloadCallback callback)
   -> EvictionSubscription
 {
   AssertOwningThread();
-  const auto id = next_eviction_subscriber_id_++;
+  const EvictionSubscriptionId id { next_eviction_subscriber_id_++ };
   script_hot_reload_service_->Subscribe(id, std::move(callback));
 
   return MakeEvictionSubscription(data::ScriptAsset::ClassTypeId(), id,

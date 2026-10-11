@@ -7,6 +7,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -21,7 +22,6 @@
 #include "DemoShell/Services/SkyboxService.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResidencyPin.h>
@@ -42,6 +42,26 @@ struct EngineTagFactory {
 namespace oxygen::examples::testing {
 
 namespace {
+
+  // Uncompressed 12x2 RGB TGA: six square faces in a horizontal strip.
+  constexpr std::size_t kTgaHeaderSize = 18;
+  constexpr std::size_t kTgaImageTypeOffset = 2;
+  constexpr std::size_t kTgaWidthOffset = 12;
+  constexpr std::size_t kTgaHeightOffset = 14;
+  constexpr std::size_t kTgaPixelDepthOffset = 16;
+  constexpr std::size_t kTgaDescriptorOffset = 17;
+  constexpr char kTgaUncompressedTrueColor = 2;
+  constexpr char kStripWidth = 12;
+  constexpr char kStripHeight = 2;
+  constexpr char kRgbBitsPerPixel = 24;
+  constexpr char kTgaTopLeftOrigin = 0x20;
+  constexpr std::size_t kStripPixelBytes = std::size_t { kStripWidth }
+    * std::size_t { kStripHeight } * (kRgbBitsPerPixel / 8);
+
+  constexpr std::uint64_t kFirstSyntheticKey = 100;
+  constexpr float kOlderIntensity = 1.0F;
+  constexpr float kNewestIntensity = 2.5F;
+  constexpr float kCancelledIntensity = 3.0F;
 
   //! Delays only the public texture completion boundary; all other loader
   //! interfaces retain their production implementation.
@@ -87,8 +107,8 @@ namespace {
       auto state = std::make_shared<PinState>();
       state->key = key;
       pin_states_.push_back(state);
-      std::shared_ptr<void> control(
-        state.get(), [state](void*) noexcept { state->released.store(true); });
+      std::shared_ptr<void> control(state.get(),
+        [state](void*) noexcept -> void { state->released.store(true); });
       return content::ResidencyPin(std::move(control));
     }
 
@@ -111,22 +131,18 @@ namespace {
       callback(success ? requests.at(index).texture : nullptr);
     }
 
+    // NOLINTBEGIN(*-non-private-member-variables-in-classes)
     std::vector<Request> requests;
     std::vector<content::ResourceKey> pins;
+    // NOLINTEND(*-non-private-member-variables-in-classes)
 
   private:
-    auto UnsubscribeResourceEvictions(
-      TypeId /*resource_type*/, std::uint64_t /*id*/) noexcept -> void override
-    {
-      ADD_FAILURE() << "Skybox tests do not create eviction subscriptions";
-    }
-
     struct PinState final {
       content::ResourceKey key {};
       std::atomic<bool> released { false };
     };
     std::vector<std::shared_ptr<PinState>> pin_states_;
-    std::uint64_t next_key_ { 100 };
+    std::uint64_t next_key_ { kFirstSyntheticKey };
   };
 
   class SkyboxServiceTest : public ::testing::Test {
@@ -142,16 +158,15 @@ namespace {
       std::ofstream image(image_path_, std::ios::binary);
       ASSERT_TRUE(image.is_open());
       owns_image_ = true;
-      // Uncompressed 12x2 RGB TGA: six square faces in a horizontal strip.
-      std::array<std::uint8_t, 18> header {};
-      header.at(2) = 2;
-      header.at(12) = 12;
-      header.at(14) = 2;
-      header.at(16) = 24;
-      header.at(17) = 0x20;
-      image.write(reinterpret_cast<const char*>(header.data()), header.size());
-      const std::array<std::uint8_t, 72> pixels {};
-      image.write(reinterpret_cast<const char*>(pixels.data()), pixels.size());
+      std::array<char, kTgaHeaderSize> header {};
+      header.at(kTgaImageTypeOffset) = kTgaUncompressedTrueColor;
+      header.at(kTgaWidthOffset) = kStripWidth;
+      header.at(kTgaHeightOffset) = kStripHeight;
+      header.at(kTgaPixelDepthOffset) = kRgbBitsPerPixel;
+      header.at(kTgaDescriptorOffset) = kTgaTopLeftOrigin;
+      image.write(header.data(), static_cast<std::streamsize>(header.size()));
+      const std::array<char, kStripPixelBytes> pixels {};
+      image.write(pixels.data(), static_cast<std::streamsize>(pixels.size()));
       ASSERT_TRUE(image.good());
       service_ = std::make_unique<SkyboxService>(
         observer_ptr { &loader_ }, observer_ptr { scene_.get() });
@@ -171,11 +186,12 @@ namespace {
     {
       service_->LoadAndEquip(image_path_.string(), options_,
         SkyboxService::SkyLightParams { .intensity_mul = intensity },
-        [this](const SkyboxService::LoadResult result) {
+        [this](const SkyboxService::LoadResult& result) -> void {
           completed_.push_back(result);
         });
     }
 
+    // NOLINTBEGIN(*-non-private-member-variables-in-classes)
     DeferredTextureLoader loader_;
     std::shared_ptr<scene::Scene> scene_
       = std::make_shared<scene::Scene>("Skybox Lifetime", 16);
@@ -187,14 +203,15 @@ namespace {
       .cube_face_size = 2,
     };
     std::vector<SkyboxService::LoadResult> completed_;
+    // NOLINTEND(*-non-private-member-variables-in-classes)
   };
 
 } // namespace
 
 NOLINT_TEST_F(SkyboxServiceTest, NewestCompletionWinsWhenLoadsFinishOutOfOrder)
 {
-  Load(1.0F);
-  Load(2.5F);
+  Load(kOlderIntensity);
+  Load(kNewestIntensity);
   ASSERT_EQ(loader_.requests.size(), 2U);
   const auto newest_key = loader_.requests.at(1).key;
   EXPECT_EQ(scene_->GetEnvironmentAuthoringRevision(), 0U);
@@ -212,7 +229,7 @@ NOLINT_TEST_F(SkyboxServiceTest, NewestCompletionWinsWhenLoadsFinishOutOfOrder)
     = scene_->GetEnvironment()->TryGetSystem<scene::environment::SkyLight>();
   ASSERT_TRUE(sky_light);
   EXPECT_EQ(sky_light->GetCubemapResource(), newest_key);
-  EXPECT_FLOAT_EQ(sky_light->GetIntensityMul(), 2.5F);
+  EXPECT_FLOAT_EQ(sky_light->GetIntensityMul(), kNewestIntensity);
   service_.reset();
   EXPECT_EQ(loader_.UnpinnedKeys(), std::vector { newest_key });
 }
@@ -267,7 +284,7 @@ NOLINT_TEST_F(
   ASSERT_EQ(loader_.requests.size(), 1U);
   loader_.Complete(0);
   const auto equipped_key = loader_.requests.at(0).key;
-  Load(3.0F);
+  Load(kCancelledIntensity);
   ASSERT_EQ(loader_.requests.size(), 2U);
   service_->CancelPendingLoads();
 
@@ -284,7 +301,7 @@ NOLINT_TEST_F(SkyboxServiceTest, RejectedNewRequestStillInvalidatesPreviousLoad)
   Load();
   ASSERT_EQ(loader_.requests.size(), 1U);
   service_->StartLoadSkybox(
-    {}, options_, [this](SkyboxService::LoadResult result) {
+    {}, options_, [this](SkyboxService::LoadResult result) -> void {
       completed_.push_back(std::move(result));
     });
   ASSERT_EQ(completed_.size(), 1U);

@@ -19,7 +19,7 @@ namespace oxygen::content::internal {
 class EvictionRegistry final {
 public:
   struct Subscriber final {
-    uint64_t id { 0 };
+    EvictionSubscriptionId id {};
     IAssetLoader::EvictionHandler handler;
   };
 
@@ -28,13 +28,13 @@ public:
     ActiveEviction* previous = nullptr;
   };
 
-  auto AddSubscriber(
-    TypeId type_id, uint64_t id, IAssetLoader::EvictionHandler handler) -> void;
-  auto RemoveSubscriber(TypeId type_id, uint64_t id) -> void;
+  auto AddSubscriber(TypeId type_id, EvictionSubscriptionId id,
+    IAssetLoader::EvictionHandler handler) -> void;
+  auto RemoveSubscriber(TypeId type_id, EvictionSubscriptionId id) -> void;
   [[nodiscard]] auto SnapshotSubscribers(TypeId type_id) const
     -> std::vector<Subscriber>;
-  [[nodiscard]] auto IsSubscribed(TypeId type_id, uint64_t id) const noexcept
-    -> bool;
+  [[nodiscard]] auto IsSubscribed(
+    TypeId type_id, EvictionSubscriptionId id) const noexcept -> bool;
 
   auto TryEnterEviction(ActiveEviction& scope) noexcept -> bool;
   auto ExitEviction(const ActiveEviction& scope) noexcept -> void;

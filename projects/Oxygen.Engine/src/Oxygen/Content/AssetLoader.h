@@ -263,10 +263,6 @@ public:
     -> void override;
   OXGN_CNTT_NDAPI auto BeginLoadScope() -> ContentLoadScope override;
 
-  OXGN_CNTT_API auto MountLooseCookedGeneration(
-    const std::filesystem::path& path,
-    std::optional<data::SourceKey> replaces = std::nullopt)
-    -> data::SourceKey override;
   OXGN_CNTT_API auto RetireLooseCookedGeneration(data::SourceKey source_key)
     -> bool override;
 
@@ -534,8 +530,8 @@ public:
     // intent/priority. Canonical path is the request-aware overload below.
     StartLoadTexture(key, LoadRequest {}, std::move(on_complete));
   }
-  OXGN_CNTT_API void StartLoadTexture(
-    ResourceKey key, LoadRequest request, TextureCallback on_complete) override
+  OXGN_CNTT_API void StartLoadTexture(ResourceKey key,
+    const LoadRequest& request, TextureCallback on_complete) override
   {
     StartLoadResource<data::TextureResource>(
       key, request, std::move(on_complete));
@@ -550,8 +546,8 @@ public:
     StartLoadTexture(cooked, LoadRequest {}, std::move(on_complete));
   }
   OXGN_CNTT_API void StartLoadTexture(
-    CookedResourceData<data::TextureResource> cooked, LoadRequest request,
-    TextureCallback on_complete) override
+    CookedResourceData<data::TextureResource> cooked,
+    const LoadRequest& request, TextureCallback on_complete) override
   {
     StartLoadResource<data::TextureResource>(
       cooked, request, std::move(on_complete));
@@ -564,8 +560,8 @@ public:
     // intent/priority. Canonical path is the request-aware overload below.
     StartLoadBuffer(key, LoadRequest {}, std::move(on_complete));
   }
-  OXGN_CNTT_API void StartLoadBuffer(
-    ResourceKey key, LoadRequest request, BufferCallback on_complete) override
+  OXGN_CNTT_API void StartLoadBuffer(ResourceKey key,
+    const LoadRequest& request, BufferCallback on_complete) override
   {
     StartLoadResource<data::BufferResource>(
       key, request, std::move(on_complete));
@@ -580,7 +576,7 @@ public:
     StartLoadBuffer(cooked, LoadRequest {}, std::move(on_complete));
   }
   OXGN_CNTT_API void StartLoadBuffer(
-    CookedResourceData<data::BufferResource> cooked, LoadRequest request,
+    CookedResourceData<data::BufferResource> cooked, const LoadRequest& request,
     BufferCallback on_complete) override
   {
     StartLoadResource<data::BufferResource>(
@@ -595,14 +591,14 @@ public:
     StartLoadPhysicsResource(key, LoadRequest {}, std::move(on_complete));
   }
   OXGN_CNTT_API void StartLoadPhysicsResource(ResourceKey key,
-    LoadRequest request, PhysicsResourceCallback on_complete) override
+    const LoadRequest& request, PhysicsResourceCallback on_complete) override
   {
     StartLoadResource<data::PhysicsResource>(
       key, request, std::move(on_complete));
   }
 
   OXGN_CNTT_API void StartLoadMaterialAsset(const data::AssetKey& key,
-    data::SourceKey source_key, LoadRequest request,
+    data::SourceKey source_key, const LoadRequest& request,
     MaterialCallback on_complete) override
   {
     StartLoadAsset<data::MaterialAsset>(
@@ -615,13 +611,13 @@ public:
     StartLoadAsset<data::MaterialAsset>(key, std::move(on_complete));
   }
   OXGN_CNTT_API void StartLoadMaterialAsset(const data::AssetKey& key,
-    LoadRequest request, MaterialCallback on_complete) override
+    const LoadRequest& request, MaterialCallback on_complete) override
   {
     StartLoadAsset<data::MaterialAsset>(key, request, std::move(on_complete));
   }
 
   OXGN_CNTT_API void StartLoadGeometryAsset(const data::AssetKey& key,
-    data::SourceKey source_key, LoadRequest request,
+    data::SourceKey source_key, const LoadRequest& request,
     GeometryCallback on_complete) override
   {
     StartLoadAsset<data::GeometryAsset>(
@@ -634,13 +630,13 @@ public:
     StartLoadAsset<data::GeometryAsset>(key, std::move(on_complete));
   }
   OXGN_CNTT_API void StartLoadGeometryAsset(const data::AssetKey& key,
-    LoadRequest request, GeometryCallback on_complete) override
+    const LoadRequest& request, GeometryCallback on_complete) override
   {
     StartLoadAsset<data::GeometryAsset>(key, request, std::move(on_complete));
   }
 
   OXGN_CNTT_API void StartLoadScene(const data::AssetKey& key,
-    data::SourceKey source_key, LoadRequest request,
+    data::SourceKey source_key, const LoadRequest& request,
     SceneCallback on_complete) override
   {
     StartLoadAsset<data::SceneAsset>(
@@ -653,13 +649,13 @@ public:
     StartLoadAsset<data::SceneAsset>(key, std::move(on_complete));
   }
   OXGN_CNTT_API void StartLoadScene(const data::AssetKey& key,
-    LoadRequest request, SceneCallback on_complete) override
+    const LoadRequest& request, SceneCallback on_complete) override
   {
     StartLoadAsset<data::SceneAsset>(key, request, std::move(on_complete));
   }
 
   OXGN_CNTT_API void StartLoadPhysicsSceneAsset(const data::AssetKey& key,
-    data::SourceKey source_key, LoadRequest request,
+    data::SourceKey source_key, const LoadRequest& request,
     PhysicsSceneCallback on_complete) override
   {
     StartLoadAsset<data::PhysicsSceneAsset>(
@@ -672,14 +668,14 @@ public:
     StartLoadAsset<data::PhysicsSceneAsset>(key, std::move(on_complete));
   }
   OXGN_CNTT_API void StartLoadPhysicsSceneAsset(const data::AssetKey& key,
-    LoadRequest request, PhysicsSceneCallback on_complete) override
+    const LoadRequest& request, PhysicsSceneCallback on_complete) override
   {
     StartLoadAsset<data::PhysicsSceneAsset>(
       key, request, std::move(on_complete));
   }
 
   OXGN_CNTT_API void StartLoadScriptAsset(const data::AssetKey& key,
-    data::SourceKey source_key, LoadRequest request,
+    data::SourceKey source_key, const LoadRequest& request,
     ScriptCallback on_complete) override
   {
     StartLoadAsset<data::ScriptAsset>(
@@ -692,7 +688,7 @@ public:
     StartLoadAsset<data::ScriptAsset>(key, std::move(on_complete));
   }
   OXGN_CNTT_API void StartLoadScriptAsset(const data::AssetKey& key,
-    LoadRequest request, ScriptCallback on_complete) override
+    const LoadRequest& request, ScriptCallback on_complete) override
   {
     StartLoadAsset<data::ScriptAsset>(key, request, std::move(on_complete));
   }
@@ -1564,8 +1560,11 @@ private:
   auto PeekCachedAsset(uint64_t key) const
     -> std::shared_ptr<const data::Asset>;
 #endif
-  void UnsubscribeResourceEvictions(
-    TypeId resource_type, uint64_t id) noexcept override;
+  OXGN_CNTT_API auto DoMountLooseCookedGeneration(
+    const std::filesystem::path& path, std::optional<data::SourceKey> replaces)
+    -> data::SourceKey override;
+  OXGN_CNTT_API void UnsubscribeResourceEvictions(
+    TypeId resource_type, EvictionSubscriptionId id) noexcept override;
 };
 
 auto to_string(AssetLoader::LoadTelemetryEvent event) noexcept

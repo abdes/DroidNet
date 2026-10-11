@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cstdint>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -17,8 +16,9 @@
 
 namespace oxygen::content::internal {
 
-auto EvictionRegistry::AddSubscriber(const TypeId type_id, const uint64_t id,
-  IAssetLoader::EvictionHandler handler) -> void
+auto EvictionRegistry::AddSubscriber(const TypeId type_id,
+  const EvictionSubscriptionId id, IAssetLoader::EvictionHandler handler)
+  -> void
 {
   auto& list = subscribers_[type_id];
   list.push_back(Subscriber {
@@ -27,8 +27,8 @@ auto EvictionRegistry::AddSubscriber(const TypeId type_id, const uint64_t id,
   });
 }
 
-auto EvictionRegistry::RemoveSubscriber(const TypeId type_id, const uint64_t id)
-  -> void
+auto EvictionRegistry::RemoveSubscriber(
+  const TypeId type_id, const EvictionSubscriptionId id) -> void
 {
   auto it = subscribers_.find(type_id);
   if (it == subscribers_.end()) {
@@ -36,9 +36,7 @@ auto EvictionRegistry::RemoveSubscriber(const TypeId type_id, const uint64_t id)
   }
 
   auto& list = it->second;
-  const auto erase_from = std::remove_if(
-    list.begin(), list.end(), [id](const Subscriber& s) { return s.id == id; });
-  list.erase(erase_from, list.end());
+  std::erase_if(list, [id](const Subscriber& s) -> bool { return s.id == id; });
   if (list.empty()) {
     subscribers_.erase(it);
   }
@@ -55,12 +53,14 @@ auto EvictionRegistry::SnapshotSubscribers(const TypeId type_id) const
 }
 
 auto EvictionRegistry::IsSubscribed(
-  const TypeId type_id, const uint64_t id) const noexcept -> bool
+  const TypeId type_id, const EvictionSubscriptionId id) const noexcept -> bool
 {
   const auto found = subscribers_.find(type_id);
   return found != subscribers_.end()
-    && std::ranges::any_of(found->second,
-      [id](const Subscriber& subscriber) { return subscriber.id == id; });
+    && std::ranges::any_of(
+      found->second, [id](const Subscriber& subscriber) -> bool {
+        return subscriber.id == id;
+      });
 }
 
 auto EvictionRegistry::TryEnterEviction(ActiveEviction& scope) noexcept -> bool
