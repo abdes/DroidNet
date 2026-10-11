@@ -693,6 +693,12 @@ public:
     StartLoadAsset<data::ScriptAsset>(key, request, std::move(on_complete));
   }
 
+  OXGN_CNTT_API void StartLoadInputMappingContextAsset(
+    const data::AssetKey& key, InputMappingContextCallback on_complete) override
+  {
+    StartLoadAsset<data::InputMappingContextAsset>(key, std::move(on_complete));
+  }
+
   //! Start an async resource load and invoke a callback on completion.
   /*!
    This is the callback bridge for non-coroutine callers.

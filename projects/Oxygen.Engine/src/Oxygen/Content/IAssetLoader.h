@@ -143,6 +143,8 @@ public:
   using SceneCallback = std::function<void(std::shared_ptr<data::SceneAsset>)>;
   using ScriptCallback
     = std::function<void(std::shared_ptr<data::ScriptAsset>)>;
+  using InputMappingContextCallback
+    = std::function<void(std::shared_ptr<data::InputMappingContextAsset>)>;
   using PhysicsSceneCallback
     = std::function<void(std::shared_ptr<data::PhysicsSceneAsset>)>;
   using PhysicsResourceCallback
@@ -350,6 +352,11 @@ public:
     static_cast<void>(request);
     StartLoadScriptAsset(key, std::move(on_complete));
   }
+
+  //! Begin loading an input mapping context asset, with the input action
+  //! assets it maps, and invoke `on_complete` on completion.
+  virtual void StartLoadInputMappingContextAsset(
+    const data::AssetKey& key, InputMappingContextCallback on_complete) = 0;
 
   //! Mount a pak file for asset loading.
   virtual auto AddPakFile(const std::filesystem::path& path) -> void = 0;

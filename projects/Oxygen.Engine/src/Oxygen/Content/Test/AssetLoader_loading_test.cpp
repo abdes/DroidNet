@@ -13,10 +13,12 @@
 #include <cstring>
 #include <filesystem>
 #include <iterator>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include "./AssetLoader_test.h"
@@ -41,6 +43,7 @@
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
@@ -311,6 +314,63 @@ NOLINT_TEST_F(AssetLoaderBasicTest,
             EXPECT_TRUE(action->ConsumesInput());
           }
         }
+
+        loader.Stop();
+        co_return oxygen::co::kJoin;
+      };
+    }(InputKeys { .action = action_key, .context = context_key }, cooked_root,
+                             &el));
+}
+
+//! StartLoadInputMappingContextAsset loads a context with the actions it maps
+//! and reports it to the callback.
+NOLINT_TEST_F(
+  AssetLoaderBasicTest, StartLoadInputMappingContextAssetLoadsContextAndActions)
+{
+  const auto action_key = oxygen::data::AssetKey::FromVirtualPath(
+    "/Test/loose_input_action_start_load.asset");
+  const auto context_key = oxygen::data::AssetKey::FromVirtualPath(
+    "/Test/loose_input_context_start_load.asset");
+  const auto cooked_root = temp_dir_ / "start_load_input_context_loose";
+  WriteLooseCookedInputAssets(cooked_root, action_key, context_key);
+
+  struct InputKeys {
+    oxygen::data::AssetKey action;
+    oxygen::data::AssetKey context;
+  };
+  TestEventLoop el;
+  oxygen::co::Run(el,
+    [](InputKeys keys, std::filesystem::path cooked_root,
+      TestEventLoop* loop) -> Co<> {
+      using oxygen::content::AssetLoader;
+      using oxygen::content::AssetLoaderConfig;
+
+      oxygen::co::ThreadPool pool(*loop, 2);
+      AssetLoaderConfig config {};
+      config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
+      AssetLoader loader(Tag::Get(), config);
+
+      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      {
+        co_await n.Start(&AssetLoader::ActivateAsync, &loader);
+        loader.Run();
+        loader.AddLooseCookedRoot(cooked_root);
+
+        auto loaded = std::shared_ptr<InputMappingContextAsset> {};
+        oxygen::co::Event done;
+        loader.StartLoadInputMappingContextAsset(keys.context,
+          [&loaded, &done](
+            std::shared_ptr<InputMappingContextAsset> asset) -> void {
+            loaded = std::move(asset);
+            done.Trigger();
+          });
+        co_await done;
+
+        EXPECT_THAT(loaded, NotNull());
+        if (loaded) {
+          EXPECT_EQ(loaded->GetAssetKey(), keys.context);
+        }
+        EXPECT_THAT(loader.GetInputActionAsset(keys.action), NotNull());
 
         loader.Stop();
         co_return oxygen::co::kJoin;

@@ -116,8 +116,11 @@ public:
   auto GetResult() -> PendingSceneSwap { return std::move(swap_); }
 
   //! Build the runtime scene from a loaded asset.
-  auto BuildSceneAsync(scene::Scene& scene, const data::SceneAsset& asset)
-    -> co::Co<scene::SceneNode>;
+  //! Instantiates `asset` into `scene` (engine scene instantiation with
+  //! scripts and starting input contexts) and returns the camera to view
+  //! through, creating a fallback camera when the scene has none.
+  auto BuildSceneAsync(scene::Scene& scene,
+    std::shared_ptr<const data::SceneAsset> asset) -> co::Co<scene::SceneNode>;
   //! Hydrate physics sidecar after scene graph/runtime components are built.
   auto HydratePhysicsSidecar(const data::PhysicsSceneAsset& physics_asset)
     -> co::Co<>;
@@ -214,31 +217,6 @@ private:
   //! Clear local pin bookkeeping (non-destructive).
   void ClearGeometryReadiness();
 
-  //! Build environment systems from the scene asset.
-  auto BuildEnvironment(const data::SceneAsset& asset)
-    -> std::unique_ptr<scene::SceneEnvironment>;
-  //! Instantiate scene nodes with transforms.
-  void InstantiateNodes(scene::Scene& scene, const data::SceneAsset& asset);
-  //! Apply parent/child relationships to instantiated nodes.
-  void ApplyHierarchy(scene::Scene& scene, const data::SceneAsset& asset);
-  //! Attach renderable components to nodes.
-  void AttachRenderables(const data::SceneAsset& asset);
-  //! Attach light components to nodes.
-  void AttachLights(const data::SceneAsset& asset);
-  //! Attach local fog volume components to nodes.
-  void AttachLocalFogVolumes(const data::SceneAsset& asset);
-  //! Attach scripting components to nodes.
-  void AttachScripting(const data::SceneAsset& asset);
-  //! Apply script parameter overrides for one slot.
-  void ApplySlotParameters(scene::SceneNode::Scripting& scripting,
-    const scene::SceneNode::Scripting::Slot& slot,
-    std::span<const data::pak::scripting::ScriptParamRecord> params);
-  //! Queue script compilation for a slot when source is available.
-  void QueueSlotCompilation(scene::SceneNode node,
-    const scene::SceneNode::Scripting::Slot& slot,
-    const std::shared_ptr<const data::ScriptAsset>& script_asset);
-  //! Choose an active camera based on the asset content.
-  void SelectActiveCamera(const data::SceneAsset& asset);
   //! Ensure active camera is valid and viewport is applied.
   void EnsureCameraAndViewport(scene::Scene& scene);
   //! Log a summary of scene contents.
@@ -275,10 +253,6 @@ private:
   observer_ptr<engine::InputSystem> input_system_;
   observer_ptr<scripting::IScriptCompilationService> compilation_service_;
   std::unique_ptr<scripting::IScriptSourceResolver> source_resolver_;
-
-  auto ReadScriptResource(data::ResourceReferenceIndex index,
-    const data::ScriptAsset& context_asset) const
-    -> std::shared_ptr<const data::ScriptResource>;
 };
 
 } // namespace oxygen::examples

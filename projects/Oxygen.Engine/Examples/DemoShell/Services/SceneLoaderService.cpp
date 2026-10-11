@@ -18,13 +18,10 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <unordered_set>
 #include <utility>
-#include <variant>
 #include <vector>
 
-#include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SceneLoaderService.h"
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/quaternion_float.hpp>
@@ -32,7 +29,6 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
@@ -45,24 +41,16 @@
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Core/Constants.h>
-#include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/ViewPort.h>
-#include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
-#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
-#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/ModuleEvent.h>
 #include <Oxygen/Engine/Scripting/IScriptCompilationService.h>
-#include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
-#include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/Co.h>
@@ -79,20 +67,10 @@
 #include <Oxygen/PhysicsModule/ScenePhysics.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/Environment/LocalFogVolume.h>
-#include <Oxygen/Scene/Environment/SceneEnvironment.h>
-#include <Oxygen/Scene/Light/DirectionalLight.h>
-#include <Oxygen/Scene/Light/DirectionalLightResolver.h>
-#include <Oxygen/Scene/Light/LightCommon.h>
-#include <Oxygen/Scene/Light/PointLight.h>
-#include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
-#include <Oxygen/Scene/Types/Flags.h>
-#include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
-#include <Oxygen/Scripting/Execution/CompiledScriptExecutable.h>
-#include <Oxygen/Scripting/IScriptSourceResolver.h>
+#include <Oxygen/SceneInstantiation/SceneInstantiation.h>
+#include <Oxygen/Scripting/Attachment/SceneScriptAttachment.h>
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
 
 namespace oxygen::examples {
@@ -100,15 +78,6 @@ namespace oxygen::examples {
 namespace {
 
   constexpr std::string_view kSceneName = "RenderScene";
-
-  auto MakeNodeName(std::string_view name_view, const size_t index)
-    -> std::string
-  {
-    if (name_view.empty()) {
-      return "Node" + std::to_string(index);
-    }
-    return std::string(name_view);
-  }
 
   //! Squared length below which a direction is degenerate.
   constexpr float kDegenerateLengthSquared = 1e-8F;
@@ -157,41 +126,6 @@ namespace {
     // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
 
     return glm::quat_cast(look_matrix);
-  }
-
-  auto DecodeNodeFlags(const data::pak::world::NodeRecord& node)
-    -> scene::SceneNode::Flags
-  {
-    using data::pak::world::kSceneNodeFlag_CastsShadows;
-    using data::pak::world::kSceneNodeFlag_IgnoreParentTransform;
-    using data::pak::world::kSceneNodeFlag_RayCastingSelectable;
-    using data::pak::world::kSceneNodeFlag_ReceivesShadows;
-    using data::pak::world::kSceneNodeFlag_Static;
-    using data::pak::world::kSceneNodeFlag_Visible;
-    using scene::SceneFlag;
-    using scene::SceneNodeFlags;
-
-    scene::SceneNode::Flags flags {};
-    const auto apply
-      = [&](const SceneNodeFlags flag, const uint32_t mask) -> void {
-      const auto inherited = (node.inherited_flags & mask) != 0U;
-      const auto local_value = (node.node_flags & mask) != 0U;
-      flags = flags.SetFlag(flag,
-        SceneFlag {}
-          .SetInheritedBit(inherited)
-          .SetEffectiveValueBit(local_value)
-          .SetPendingValueBit(local_value));
-    };
-
-    apply(SceneNodeFlags::kVisible, kSceneNodeFlag_Visible);
-    apply(SceneNodeFlags::kStatic, kSceneNodeFlag_Static);
-    apply(SceneNodeFlags::kCastsShadows, kSceneNodeFlag_CastsShadows);
-    apply(SceneNodeFlags::kReceivesShadows, kSceneNodeFlag_ReceivesShadows);
-    apply(SceneNodeFlags::kRayCastingSelectable,
-      kSceneNodeFlag_RayCastingSelectable);
-    apply(SceneNodeFlags::kIgnoreParentTransform,
-      kSceneNodeFlag_IgnoreParentTransform);
-    return flags;
   }
 
   auto IsNearlyEqual(const float lhs, const float rhs) noexcept -> bool
@@ -409,119 +343,6 @@ namespace {
     member_node_indices.erase(std::ranges::unique(member_node_indices).begin(),
       member_node_indices.end());
     return member_node_indices;
-  }
-
-  constexpr uint64_t kLuauCompilerFingerprint = 0x6C7561755F7631ULL;
-  constexpr uint64_t kLuauVmBytecodeVersion = 1ULL;
-  constexpr uint64_t kUnknownCompilerFingerprint = 0x756E6B6E6F776E31ULL;
-  constexpr uint64_t kUnknownVmBytecodeVersion = 0ULL;
-#ifdef _WIN64
-  constexpr uint64_t kPlatformAbiSalt = 0x77696E36345F6D73ULL;
-#elif defined(__linux__) && defined(__x86_64__)
-  constexpr uint64_t kPlatformAbiSalt = 0x6C6E7836345F6763ULL;
-#elif defined(__APPLE__) && defined(__aarch64__)
-  constexpr uint64_t kPlatformAbiSalt = 0x6D61635F61726D36ULL;
-#else
-  constexpr uint64_t kPlatformAbiSalt = 0x756E6B6E6F776E5FULL;
-#endif
-
-  auto CompilerFingerprintForLanguage(
-    const data::pak::scripting::ScriptLanguage language) -> uint64_t
-  {
-    return language == data::pak::scripting::ScriptLanguage::kLuau
-      ? kLuauCompilerFingerprint
-      : kUnknownCompilerFingerprint;
-  }
-
-  auto VmBytecodeVersionForLanguage(
-    const data::pak::scripting::ScriptLanguage language) -> uint64_t
-  {
-    return language == data::pak::scripting::ScriptLanguage::kLuau
-      ? kLuauVmBytecodeVersion
-      : kUnknownVmBytecodeVersion;
-  }
-
-  auto ComputeCompileKey(const data::AssetKey asset_key,
-    const scripting::ScriptSourceBlob& blob,
-    const core::meta::scripting::ScriptCompileMode compile_mode)
-    -> scripting::IScriptCompilationService::CompileKey
-  {
-    const auto bytes = blob.BytesView();
-    uint64_t seed = 0;
-    oxygen::HashCombine(seed, asset_key);
-    oxygen::HashCombine(seed, compile_mode);
-    oxygen::HashCombine(seed, blob.Language());
-    oxygen::HashCombine(seed, blob.Compression());
-    oxygen::HashCombine(seed, blob.GetOrigin());
-    oxygen::HashCombine(seed, blob.GetCanonicalName().get());
-    oxygen::HashCombine(seed, blob.ContentHash());
-    oxygen::HashCombine(seed, CompilerFingerprintForLanguage(blob.Language()));
-    oxygen::HashCombine(seed, VmBytecodeVersionForLanguage(blob.Language()));
-    oxygen::HashCombine(seed, kPlatformAbiSalt);
-    for (const auto byte : bytes) {
-      oxygen::HashCombine(seed, byte);
-    }
-    return scripting::IScriptCompilationService::CompileKey { seed };
-  }
-
-  auto HexPreview(std::span<const uint8_t> bytes, const size_t max_bytes)
-    -> std::string
-  {
-    constexpr std::string_view kHexDigits = "0123456789abcdef";
-    constexpr unsigned kNibbleBits = 4U;
-    constexpr unsigned kNibbleMask = 0x0FU;
-    const auto count = std::min(bytes.size(), max_bytes);
-    if (count == 0) {
-      return "<empty>";
-    }
-
-    std::string out;
-    out.reserve(count * 3);
-    for (size_t i = 0; i < count; ++i) {
-      const auto value = oxygen::base::CheckedAt(bytes, i);
-      out.push_back(kHexDigits.at(
-        (static_cast<unsigned>(value) >> kNibbleBits) & kNibbleMask));
-      out.push_back(kHexDigits.at(static_cast<unsigned>(value) & kNibbleMask));
-      if (i + 1 < count) {
-        out.push_back(' ');
-      }
-    }
-    return out;
-  }
-
-  auto AssetNameView(const data::pak::core::AssetHeader& header)
-    -> std::string_view
-  {
-    const auto* const begin = std::begin(header.name);
-    const auto* const end = std::end(header.name);
-    const auto* const nul = std::ranges::find(header.name, '\0');
-    return { begin, static_cast<size_t>((nul == end ? end : nul) - begin) };
-  }
-
-  auto JoinScriptRoots(const std::vector<std::filesystem::path>& roots)
-    -> std::string
-  {
-    if (roots.empty()) {
-      return "<none>";
-    }
-    std::string out;
-    for (size_t i = 0; i < roots.size(); ++i) {
-      if (i > 0) {
-        out.append("; ");
-      }
-      out.append(roots.at(i).lexically_normal().generic_string());
-    }
-    return out;
-  }
-
-  auto NormalizeExternalProbePath(std::string_view path_text)
-    -> std::filesystem::path
-  {
-    std::filesystem::path path { path_text };
-    if (path.extension().empty()) {
-      path.replace_extension(".luau");
-    }
-    return path.lexically_normal();
   }
 
 } // namespace
@@ -2337,8 +2158,11 @@ void SceneLoaderService::ClearGeometryReadiness()
   pending_geometry_keys_.clear();
 }
 
+// NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
+// The caller awaits at once and owns the referenced arguments.
 auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
-  const data::SceneAsset& asset) -> co::Co<scene::SceneNode>
+  std::shared_ptr<const data::SceneAsset> asset) -> co::Co<scene::SceneNode>
+// NOLINTEND(*-avoid-reference-coroutine-parameters)
 {
   LOG_F(INFO, "SceneLoader: Instantiating runtime scene '{}'", kSceneName);
   scene.CollectMutationsStart();
@@ -2349,16 +2173,25 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
   hydration_window_active_ = false;
   hydration_transforms_resolved_ = false;
 
-  scene.SetEnvironment(BuildEnvironment(asset));
-  LogSceneSummary(asset);
-  InstantiateNodes(scene, asset);
-  ApplyHierarchy(scene, asset);
-  AttachRenderables(asset);
-  AttachLights(asset);
-  scene.GetDirectionalLightResolver().Validate();
-  AttachLocalFogVolumes(asset);
-  AttachScripting(asset);
-  SelectActiveCamera(asset);
+  LogSceneSummary(*asset);
+  const auto scripts = scripting::SceneScriptAttachment(
+    loader_, *source_resolver_, compilation_service_);
+  auto instance = co_await instantiation::Instantiate(
+    instantiation::SceneInstantiationRequest {
+      .asset = std::move(asset),
+      .target = observer_ptr { &scene },
+      .scripts = observer_ptr { &scripts },
+      .input = input_system_,
+    },
+    loader_);
+  runtime_nodes_ = std::move(instance.nodes);
+  if (!instance.issues.empty()) {
+    LOG_F(WARNING, "SceneLoader: {} scene record(s) were not applied",
+      instance.issues.size());
+  }
+  if (const auto active = scene.ActiveCamera(); active.has_value()) {
+    active_camera_ = *active;
+  }
   EnsureCameraAndViewport(scene);
   // Geometry pins are only needed until scene instantiation finishes.
   ClearGeometryReadiness();
@@ -2378,8 +2211,11 @@ auto SceneLoaderService::FindHydrationPayload(
   };
 }
 
+// NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
+// The caller awaits at once and owns the referenced arguments.
 auto SceneLoaderService::PreloadPhysicsDependencyResources(
   const data::PhysicsSceneAsset& physics_asset) -> co::Co<PhysicsPayloads>
+// NOLINTEND(*-avoid-reference-coroutine-parameters)
 {
   std::unordered_set<data::AssetKey> payload_asset_keys {};
   auto collect_payload_ref = [&](const data::AssetKey& shape_asset_key,
@@ -2451,8 +2287,11 @@ auto SceneLoaderService::PreloadPhysicsDependencyResources(
   co_return owners;
 }
 
+// NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
+// The caller awaits at once and owns the referenced arguments.
 auto SceneLoaderService::HydratePhysicsSidecar(
   const data::PhysicsSceneAsset& physics_asset) -> co::Co<>
+// NOLINTEND(*-avoid-reference-coroutine-parameters)
 {
   BeginHydrationWindow();
   current_physics_context_ = observer_ptr { &physics_asset };
@@ -2466,45 +2305,6 @@ auto SceneLoaderService::HydratePhysicsSidecar(
     = co_await PreloadPhysicsDependencyResources(physics_asset);
   HydratePhysicsBindings(physics_asset);
   co_return;
-}
-
-auto SceneLoaderService::BuildEnvironment(const data::SceneAsset& asset)
-  -> std::unique_ptr<scene::SceneEnvironment>
-{
-  const auto resolve
-    = [this, &asset](const data::ResourceReferenceIndex reference,
-        const char* what) -> content::ResourceKey {
-    if (reference == data::kNoResourceReference) {
-      return {};
-    }
-    const auto key = loader_.MakeTextureResourceKeyForAsset(asset, reference);
-    if (!key) {
-      throw std::runtime_error(std::string("Scene ") + what
-        + " binding failed: scene=" + data::to_string(asset.GetAssetKey())
-        + " texture_reference=" + std::to_string(reference.get()));
-    }
-    return *key;
-  };
-  auto textures = EnvironmentTextureKeys {};
-  if (const auto post = asset.TryGetPostProcessVolumeEnvironment()) {
-    textures.metering_mask
-      = resolve(post->auto_exposure_metering_mask, "exposure mask");
-  }
-  if (const auto fog = asset.TryGetFogEnvironment()) {
-    textures.fog_cubemap
-      = resolve(fog->inscattering_color_cubemap, "fog cubemap");
-  }
-  if (const auto sky_light = asset.TryGetSkyLightEnvironment()) {
-    textures.sky_light_cubemap
-      = resolve(sky_light->cubemap, "sky light cubemap");
-  }
-  if (const auto sky_sphere = asset.TryGetSkySphereEnvironment()) {
-    textures.sky_sphere_cubemap
-      = resolve(sky_sphere->cubemap, "sky sphere cubemap");
-  }
-  auto environment = std::make_unique<scene::SceneEnvironment>();
-  EnvironmentSettingsService::HydrateEnvironment(*environment, asset, textures);
-  return environment;
 }
 
 void SceneLoaderService::LogSceneSummary(const data::SceneAsset& asset) const
@@ -2531,615 +2331,6 @@ void SceneLoaderService::LogSceneSummary(const data::SceneAsset& asset) const
     asset.GetComponents<PointLightRecord>().size(),
     asset.GetComponents<SpotLightRecord>().size(),
     asset.GetComponents<LocalFogVolumeRecord>().size());
-}
-
-void SceneLoaderService::InstantiateNodes(
-  scene::Scene& scene, const data::SceneAsset& asset)
-{
-  using data::pak::world::NodeRecord;
-
-  const auto nodes = asset.GetNodes();
-  runtime_nodes_.reserve(nodes.size());
-
-  for (const auto i : std::views::iota(size_t { 0 }, nodes.size())) {
-    const NodeRecord& node = oxygen::base::CheckedAt(nodes, i);
-    const std::string name = MakeNodeName(asset.GetNodeName(node), i);
-
-    auto n = scene.CreateNode(name, DecodeNodeFlags(node));
-    auto tf = n.GetTransform();
-    tf.SetLocalPosition(
-      glm::vec3(node.translation[0], node.translation[1], node.translation[2]));
-    tf.SetLocalRotation(glm::quat(
-      node.rotation[3], node.rotation[0], node.rotation[1], node.rotation[2]));
-    tf.SetLocalScale(glm::vec3(node.scale[0], node.scale[1], node.scale[2]));
-
-    runtime_nodes_.push_back(std::move(n));
-  }
-}
-
-void SceneLoaderService::ApplyHierarchy(
-  scene::Scene& scene, const data::SceneAsset& asset)
-{
-  const auto nodes = asset.GetNodes();
-
-  for (const auto i : std::views::iota(size_t { 0 }, nodes.size())) {
-    const auto parent_index
-      = static_cast<size_t>(oxygen::base::CheckedAt(nodes, i).parent_index);
-    if (parent_index == i) {
-      continue;
-    }
-    if (parent_index >= runtime_nodes_.size()) {
-      LOG_F(WARNING, "Invalid parent_index {} for node {}", parent_index, i);
-      continue;
-    }
-
-    const bool ok = scene.ReparentNode(runtime_nodes_.at(i),
-      runtime_nodes_.at(parent_index), /*preserve_world_transform=*/false);
-    if (!ok) {
-      LOG_F(WARNING, "Failed to reparent node {} under {}", i, parent_index);
-    }
-  }
-}
-
-void SceneLoaderService::AttachRenderables(const data::SceneAsset& asset)
-{
-  using data::pak::world::RenderableRecord;
-
-  const auto assignments
-    = asset.GetComponents<data::pak::world::MaterialOverrideRecord>();
-  std::unordered_multimap<data::pak::world::SceneNodeIndexT,
-    const data::pak::world::MaterialOverrideRecord*>
-    assignments_by_node;
-  assignments_by_node.reserve(assignments.size());
-  for (const auto& assignment : assignments) {
-    assignments_by_node.emplace(assignment.node_index, &assignment);
-  }
-
-  const auto renderables = asset.GetComponents<RenderableRecord>();
-  int valid_renderables = 0;
-  int material_overrides = 0;
-  for (const RenderableRecord& r : renderables) {
-    if (r.visible == 0) {
-      continue;
-    }
-    const auto node_index = static_cast<size_t>(r.node_index);
-    if (node_index >= runtime_nodes_.size()) {
-      continue;
-    }
-
-    // AssetLoader guarantees dependencies are loaded (or placeholders are
-    // ready). We retrieve the asset directly to support placeholders and
-    // avoid redundant async waits.
-    auto geo = loader_.GetGeometryAsset(r.geometry_key, asset);
-    if (geo) {
-      auto renderable = runtime_nodes_.at(node_index).GetRenderable();
-      renderable.SetGeometry(geo);
-      const auto [begin, end] = assignments_by_node.equal_range(r.node_index);
-      for (auto current = begin; current != end; ++current) {
-        const auto& assignment = *current->second;
-        auto material
-          = loader_.GetMaterialAsset(assignment.material_key, asset);
-        if (!material
-          || assignment.layout_revision != geo->MaterialSlots().layout_revision
-          || !renderable.SetMaterialOverride(
-            assignment.slot_id, std::move(material))) {
-          throw std::runtime_error(
-            "Scene material slot assignment is unavailable or stale");
-        }
-        ++material_overrides;
-      }
-      valid_renderables++;
-    } else {
-      LOG_F(WARNING, "SceneLoader: Missing geometry dependency for node {}",
-        node_index);
-    }
-  }
-
-  if (valid_renderables > 0) {
-    LOG_F(INFO,
-      "SceneLoader: Assigned {} geometries from cache and {} material "
-      "overrides.",
-      valid_renderables, material_overrides);
-  }
-}
-
-void SceneLoaderService::AttachLights(const data::SceneAsset& asset)
-{
-  using data::pak::world::DirectionalLightRecord;
-  using data::pak::world::PointLightRecord;
-  using data::pak::world::SpotLightRecord;
-
-  const auto ApplyCommonLight
-    = [](scene::CommonLightProperties& dst,
-        const data::pak::world::LightCommonRecord& src) -> void {
-    dst.affects_world = (src.affects_world != 0U);
-    dst.color_rgb = { src.color_rgb[0], src.color_rgb[1], src.color_rgb[2] };
-    // intensity REMOVED from common - set via specific light class methods
-    dst.casts_shadows = (src.casts_shadows != 0U);
-    dst.shadow.bias = src.shadow.bias;
-    dst.shadow.normal_bias = src.shadow.normal_bias;
-    dst.shadow.contact_shadows = (src.shadow.contact_shadows != 0U);
-    dst.shadow.resolution_hint
-      = static_cast<scene::ShadowResolutionHint>(src.shadow.resolution_hint);
-    dst.exposure_compensation_ev = src.exposure_compensation_ev;
-  };
-
-  int attached_directional = 0;
-  for (const DirectionalLightRecord& rec :
-    asset.GetComponents<DirectionalLightRecord>()) {
-    const auto node_index = static_cast<size_t>(rec.node_index);
-    if (node_index >= runtime_nodes_.size()) {
-      continue;
-    }
-
-    auto light = std::make_unique<scene::DirectionalLight>();
-    ApplyCommonLight(light->Common(), rec.common);
-    light->SetIntensityLux(rec.intensity_lux);
-    light->SetAngularSizeRadians(rec.angular_size_radians);
-    light->SetAtmosphereLightSlot(
-      static_cast<scene::AtmosphereLightSlot>(rec.atmosphere_light_slot));
-    light->SetUsePerPixelAtmosphereTransmittance(
-      rec.use_per_pixel_atmosphere_transmittance != 0U);
-    light->SetAtmosphereDiskLuminanceScale(
-      { rec.atmosphere_disk_luminance_scale_rgb[0],
-        rec.atmosphere_disk_luminance_scale_rgb[1],
-        rec.atmosphere_disk_luminance_scale_rgb[2] });
-
-    auto& csm = light->CascadedShadows();
-    csm.cascade_count = std::clamp<std::uint32_t>(
-      rec.cascade_count, 1U, scene::kMaxShadowCascades);
-    csm.split_mode
-      = static_cast<scene::DirectionalCsmSplitMode>(rec.split_mode);
-    csm.max_shadow_distance = rec.max_shadow_distance;
-    for (std::uint32_t i = 0U; i < scene::kMaxShadowCascades; ++i) {
-      // NOLINTNEXTLINE(*-pro-bounds-constant-array-index)
-      csm.cascade_distances.at(i) = rec.cascade_distances[i];
-    }
-    csm.distribution_exponent = rec.distribution_exponent;
-    csm.transition_fraction = rec.transition_fraction;
-    csm.distance_fadeout_fraction = rec.distance_fadeout_fraction;
-    light->CascadedShadows() = scene::CanonicalizeCascadedShadowSettings(csm);
-
-    const bool attached
-      = runtime_nodes_.at(node_index).ReplaceLight(std::move(light));
-    if (attached) {
-      attached_directional++;
-    } else {
-      LOG_F(WARNING,
-        "SceneLoader: Failed to attach DirectionalLight to node_index={}",
-        node_index);
-    }
-  }
-
-  int attached_point = 0;
-  for (const PointLightRecord& rec : asset.GetComponents<PointLightRecord>()) {
-    const auto node_index = static_cast<size_t>(rec.node_index);
-    if (node_index >= runtime_nodes_.size()) {
-      continue;
-    }
-
-    auto light = std::make_unique<scene::PointLight>();
-    ApplyCommonLight(light->Common(), rec.common);
-    light->SetLuminousFluxLm(rec.luminous_flux_lm);
-    light->SetRange(std::abs(rec.range));
-    light->SetSourceRadius(std::abs(rec.source_radius));
-
-    const bool attached
-      = runtime_nodes_.at(node_index).ReplaceLight(std::move(light));
-    if (attached) {
-      attached_point++;
-    } else {
-      LOG_F(WARNING,
-        "SceneLoader: Failed to attach PointLight to node_index={}",
-        node_index);
-    }
-  }
-
-  int attached_spot = 0;
-  for (const SpotLightRecord& rec : asset.GetComponents<SpotLightRecord>()) {
-    const auto node_index = static_cast<size_t>(rec.node_index);
-    if (node_index >= runtime_nodes_.size()) {
-      continue;
-    }
-
-    auto light = std::make_unique<scene::SpotLight>();
-    ApplyCommonLight(light->Common(), rec.common);
-    light->SetLuminousFluxLm(rec.luminous_flux_lm);
-    light->SetRange(std::abs(rec.range));
-    light->SetInnerConeAngleRadians(rec.inner_cone_angle_radians);
-    light->SetOuterConeAngleRadians(rec.outer_cone_angle_radians);
-    light->SetSourceRadius(std::abs(rec.source_radius));
-
-    const bool attached
-      = runtime_nodes_.at(node_index).ReplaceLight(std::move(light));
-    if (attached) {
-      attached_spot++;
-    } else {
-      LOG_F(WARNING, "SceneLoader: Failed to attach SpotLight to node_index={}",
-        node_index);
-    }
-  }
-
-  if (attached_directional + attached_point + attached_spot > 0) {
-    LOG_F(INFO,
-      "SceneLoader: Attached lights: directional={} point={} spot={} "
-      "(total={})",
-      attached_directional, attached_point, attached_spot,
-      attached_directional + attached_point + attached_spot);
-  }
-}
-
-void SceneLoaderService::AttachLocalFogVolumes(const data::SceneAsset& asset)
-{
-  using data::pak::world::LocalFogVolumeRecord;
-
-  int attached_local_fog_volumes = 0;
-  for (const LocalFogVolumeRecord& rec :
-    asset.GetComponents<LocalFogVolumeRecord>()) {
-    const auto node_index = static_cast<size_t>(rec.node_index);
-    if (node_index >= runtime_nodes_.size()) {
-      continue;
-    }
-
-    const auto impl_opt = runtime_nodes_.at(node_index).GetImpl();
-    if (!impl_opt.has_value()) {
-      continue;
-    }
-
-    auto& node_impl = impl_opt->get();
-    if (!node_impl.HasComponent<scene::environment::LocalFogVolume>()) {
-      node_impl.AddComponent<scene::environment::LocalFogVolume>();
-    }
-
-    auto& local_fog
-      = node_impl.GetComponent<scene::environment::LocalFogVolume>();
-    local_fog.SetEnabled(rec.enabled != 0U);
-    local_fog.SetRadialFogExtinction(rec.radial_fog_extinction);
-    local_fog.SetHeightFogExtinction(rec.height_fog_extinction);
-    local_fog.SetHeightFogFalloff(rec.height_fog_falloff);
-    local_fog.SetHeightFogOffset(rec.height_fog_offset);
-    local_fog.SetFogPhaseG(rec.fog_phase_g);
-    local_fog.SetFogAlbedo(
-      { rec.fog_albedo[0], rec.fog_albedo[1], rec.fog_albedo[2] });
-    local_fog.SetFogEmissive(
-      { rec.fog_emissive[0], rec.fog_emissive[1], rec.fog_emissive[2] });
-    local_fog.SetSortPriority(rec.sort_priority);
-    attached_local_fog_volumes++;
-  }
-
-  if (attached_local_fog_volumes > 0) {
-    LOG_F(INFO, "SceneLoader: Attached {} local fog volume components.",
-      attached_local_fog_volumes);
-  }
-}
-
-void SceneLoaderService::AttachScripting(const data::SceneAsset& asset)
-{
-  using data::pak::scripting::ScriptingComponentRecord;
-
-  const auto scripting_components
-    = asset.GetComponents<ScriptingComponentRecord>();
-  if (scripting_components.empty()) {
-    return;
-  }
-  LOG_F(INFO, "hydrating scripting components (count={})",
-    scripting_components.size());
-
-  for (const ScriptingComponentRecord& component : scripting_components) {
-    const auto node_index = static_cast<size_t>(component.node_index);
-    if (node_index >= runtime_nodes_.size()) {
-      LOG_F(WARNING, "invalid scripting component node index {}", node_index);
-      continue;
-    }
-
-    if (!runtime_nodes_.at(node_index).HasScripting()) {
-      const bool attached = runtime_nodes_.at(node_index).AttachScripting();
-      if (!attached && !runtime_nodes_.at(node_index).HasScripting()) {
-        LOG_F(
-          ERROR, "failed to attach scripting component to node {}", node_index);
-        continue;
-      }
-    }
-    auto scripting = runtime_nodes_.at(node_index).GetScripting();
-    auto slot_records = loader_.GetHydratedScriptSlots(asset, component);
-    LOG_F(INFO, "hydrated script slots (node_index={}, slots={})", node_index,
-      slot_records.size());
-
-    for (const auto& slot_record : slot_records) {
-      if (slot_record.script_asset_key == data::AssetKey {}) {
-        LOG_F(WARNING,
-          "skipping hydrated script slot with empty script asset key "
-          "(node_index={})",
-          node_index);
-        continue;
-      }
-
-      auto script_asset
-        = loader_.GetScriptAsset(slot_record.script_asset_key, asset);
-      if (!script_asset) {
-        LOG_F(ERROR, "missing script asset {}",
-          data::to_string(slot_record.script_asset_key));
-        continue;
-      }
-
-      if (!scripting.AddSlot(script_asset, slot_record.execution_order)) {
-        LOG_F(ERROR, "failed to attach script slot to node {}", node_index);
-        continue;
-      }
-      LOG_F(INFO, "attached script slot (node_index={}, script_asset={})",
-        node_index, data::to_string(slot_record.script_asset_key));
-
-      const auto slots = scripting.Slots();
-      if (slots.empty()) {
-        continue;
-      }
-      const auto& slot = slots.back();
-
-      if (!slot_record.params.empty()) {
-        ApplySlotParameters(scripting, slot, slot_record.params);
-        LOG_F(INFO, "applied slot parameters (node_index={}, count={})",
-          node_index, slot_record.params.size());
-      }
-
-      QueueSlotCompilation(runtime_nodes_.at(node_index), slot, script_asset);
-    }
-  }
-}
-
-void SceneLoaderService::ApplySlotParameters(
-  scene::SceneNode::Scripting& scripting,
-  const scene::SceneNode::Scripting::Slot& slot,
-  std::span<const data::pak::scripting::ScriptParamRecord> params)
-{
-  for (const auto& param : params) {
-    const auto* const key_begin = std::begin(param.key);
-    const auto* const key_end = std::ranges::find(param.key, '\0');
-    if (key_end == std::end(param.key)) {
-      LOG_F(WARNING, "script parameter key is not null-terminated");
-      continue;
-    }
-    const std::string_view key(
-      key_begin, static_cast<size_t>(key_end - key_begin));
-    const auto value = data::ToScriptParam(param);
-    if (!value.has_value()) {
-      LOG_F(WARNING, "skipping unsupported script parameter type");
-      continue;
-    }
-    if (!scripting.SetParameter(slot, key, *value)) {
-      LOG_F(WARNING, "failed to set script parameter '{}'", key);
-    }
-  }
-}
-
-void SceneLoaderService::QueueSlotCompilation(scene::SceneNode node,
-  const scene::SceneNode::Scripting::Slot& slot,
-  const std::shared_ptr<const data::ScriptAsset>& script_asset)
-{
-  if (!script_asset) {
-    LOG_F(ERROR, "script compilation skipped because script asset is null");
-    return;
-  }
-  if (!compilation_service_) {
-    LOG_F(ERROR,
-      "script compilation skipped because compilation service is unavailable");
-    return;
-  }
-
-  auto load_script_resource
-    = [this, script_asset](const data::ResourceReferenceIndex index)
-    -> std::shared_ptr<const data::ScriptResource> {
-    return ReadScriptResource(index, *script_asset);
-  };
-
-  auto map_origin
-    = [this, script_asset](const data::ResourceReferenceIndex index)
-    -> std::optional<scripting::ScriptBlobOrigin> {
-    if (auto res = ReadScriptResource(index, *script_asset)) {
-      return scripting::ScriptBlobOrigin::kEmbeddedResource;
-    }
-    return std::nullopt;
-  };
-
-  auto resolve_result = source_resolver_->Resolve(
-    scripting::IScriptSourceResolver::ResolveRequest {
-      .asset = *script_asset,
-      .load_script_resource = std::move(load_script_resource),
-      .map_resource_origin = std::move(map_origin),
-    });
-  if (!resolve_result.ok) {
-    const auto external_path = script_asset->TryGetExternalSourcePath();
-    const auto script_roots = path_finder_.ScriptSourceRoots();
-    LOG_F(ERROR,
-      "failed to resolve script source: {} (asset_key={}, script_name='{}', "
-      "allows_external={}, has_embedded={}, bytecode_index={}, "
-      "source_index={}, external_source_path='{}')",
-      resolve_result.error_message,
-      data::to_string(script_asset->GetAssetKey()),
-      AssetNameView(script_asset->GetHeader()),
-      script_asset->AllowsExternalSource() ? "true" : "false",
-      script_asset->HasEmbeddedResource() ? "true" : "false",
-      script_asset->GetBytecodeResourceIndex(),
-      script_asset->GetSourceResourceIndex(),
-      external_path.has_value() ? std::string(*external_path) : "<none>");
-    LOG_F(ERROR,
-      "script source resolve context (asset_key={}, workspace_root='{}', "
-      "source_pak='{}', script_roots={})",
-      data::to_string(script_asset->GetAssetKey()),
-      path_finder_.WorkspaceRoot().lexically_normal().generic_string(),
-      source_pak_path_.lexically_normal().generic_string(),
-      JoinScriptRoots(script_roots));
-    if (external_path.has_value()) {
-      const auto external_relative = NormalizeExternalProbePath(*external_path);
-      for (const auto& root : script_roots) {
-        const auto candidate = (root / external_relative).lexically_normal();
-        const auto exists = std::filesystem::exists(candidate);
-        LOG_F(ERROR,
-          "script source resolve probe (asset_key={}, root='{}', "
-          "relative='{}', candidate='{}', exists={})",
-          data::to_string(script_asset->GetAssetKey()),
-          root.lexically_normal().generic_string(),
-          external_relative.generic_string(), candidate.generic_string(),
-          exists ? "true" : "false");
-      }
-    } else {
-      LOG_F(ERROR,
-        "script source resolve probe skipped (asset_key={}): no external "
-        "source path is set",
-        data::to_string(script_asset->GetAssetKey()));
-    }
-    return;
-  }
-  if (!resolve_result.blob.has_value()) {
-    LOG_F(ERROR, "resolved script blob is missing (asset_key={})",
-      data::to_string(script_asset->GetAssetKey()));
-    return;
-  }
-  auto resolved_blob = std::move(*resolve_result.blob);
-  const auto is_bytecode
-    = std::holds_alternative<scripting::ScriptBytecodeBlob>(resolved_blob);
-  const auto origin = std::visit(
-    [](const auto& blob) -> auto {
-      return static_cast<uint32_t>(blob.GetOrigin());
-    },
-    resolved_blob);
-  const auto size = std::visit(
-    [](const auto& blob) -> auto { return blob.Size(); }, resolved_blob);
-  const auto bytes = std::visit(
-    [](const auto& blob) -> auto { return blob.BytesView(); }, resolved_blob);
-  LOG_F(INFO,
-    "resolved script source (asset_key={}, origin={}, bytecode={}, size={})",
-    data::to_string(script_asset->GetAssetKey()), origin,
-    is_bytecode ? "yes" : "no", size);
-  LOG_F(INFO, "resolved script source preview (asset_key={}, first_bytes={})",
-    data::to_string(script_asset->GetAssetKey()), HexPreview(bytes, 16));
-  if (size == 0) {
-    LOG_F(ERROR, "resolved script source is empty (asset_key={})",
-      data::to_string(script_asset->GetAssetKey()));
-    auto scripting = node.GetScripting();
-    (void)scripting.MarkSlotCompilationFailed(
-      slot, "resolved script source is empty");
-    return;
-  }
-
-  if (is_bytecode) {
-    auto bytecode_blob
-      = std::get<scripting::ScriptBytecodeBlob>(std::move(resolved_blob));
-    auto executable_blob
-      = std::make_shared<const scripting::ScriptBytecodeBlob>(
-        std::move(bytecode_blob));
-    auto scripting = node.GetScripting();
-    (void)scripting.MarkSlotReady(slot,
-      std::make_shared<const scripting::CompiledScriptExecutable>(
-        std::move(executable_blob)));
-    LOG_F(INFO, "slot ready from embedded bytecode (asset_key={})",
-      data::to_string(script_asset->GetAssetKey()));
-    return;
-  }
-
-  auto source_blob
-    = std::get<scripting::ScriptSourceBlob>(std::move(resolved_blob));
-  constexpr auto kCompileMode
-    = core::meta::scripting::ScriptCompileMode::kDebug;
-  const auto compile_key
-    = ComputeCompileKey(script_asset->GetAssetKey(), source_blob, kCompileMode);
-  const auto source_size = source_blob.Size();
-  const auto source_hash = source_blob.ContentHash();
-  LOG_F(INFO,
-    "submitting compile request (asset_key={}, compile_key={}, source_size={}, "
-    "source_hash={})",
-    data::to_string(script_asset->GetAssetKey()), compile_key, source_size,
-    source_hash);
-  // The callbacks share one immutable copy of the slot, so copying or moving
-  // them never copies its parameters.
-  const auto shared_slot
-    = std::make_shared<const scene::SceneNode::Scripting::Slot>(slot);
-  auto acquire = compilation_service_->AcquireForSlot(
-    scripting::IScriptCompilationService::Request {
-      .compile_key = compile_key,
-      .source = std::move(source_blob),
-      .compile_mode = kCompileMode,
-    },
-    scripting::IScriptCompilationService::SlotAcquireCallbacks {
-      .on_ready
-      = [node, slot = shared_slot](
-          std::shared_ptr<const scripting::ScriptBytecodeBlob> bytecode) mutable
-        -> void {
-        if (node.IsAlive()) {
-          auto scripting = node.GetScripting();
-          (void)scripting.MarkSlotReady(*slot,
-            std::make_shared<const scripting::CompiledScriptExecutable>(
-              std::move(bytecode)));
-          LOG_F(INFO, "slot ready from compilation");
-        }
-      },
-      .on_failed
-      = [node, slot = shared_slot](
-          const std::vector<scripting::ScriptDiagnostic>& diagnostics) mutable
-        -> void {
-        if (!node.IsAlive()) {
-          return;
-        }
-        auto summary = std::string {};
-        for (const auto& diagnostic : diagnostics) {
-          LOG_F(ERROR, "script compilation failed: {}",
-            scripting::FormatSummary(diagnostic));
-          if (!summary.empty()) {
-            summary += '\n';
-          }
-          summary += scripting::FormatSummary(diagnostic);
-        }
-        auto scripting = node.GetScripting();
-        (void)scripting.MarkSlotCompilationFailed(*slot, std::move(summary));
-      },
-    });
-  (void)acquire;
-  LOG_F(INFO,
-    "queued script compilation (asset_key={}, compile_key={}, source_hash={})",
-    data::to_string(script_asset->GetAssetKey()), compile_key, source_hash);
-}
-
-void SceneLoaderService::SelectActiveCamera(const data::SceneAsset& asset)
-{
-  using data::pak::world::OrthographicCameraRecord;
-  using data::pak::world::PerspectiveCameraRecord;
-
-  for (const auto& record : asset.GetComponents<PerspectiveCameraRecord>()) {
-    auto& node = runtime_nodes_.at(record.node_index);
-    auto camera = std::make_unique<scene::PerspectiveCamera>();
-    camera->SetFieldOfView(record.fov_y);
-    camera->SetAspectRatio(record.aspect_ratio);
-    camera->SetAspectMode(record.aspect_mode);
-    camera->SetNearPlane(record.near_plane);
-    camera->SetFarPlane(record.far_plane);
-    camera->SetExposure({
-      .aperture_f = record.aperture_f,
-      .shutter_rate = record.shutter_rate,
-      .iso = record.iso,
-    });
-    const bool attached = node.AttachCamera(std::move(camera));
-    CHECK_F(attached, "Failed to hydrate perspective camera");
-    if (!active_camera_.IsAlive()) {
-      active_camera_ = node;
-    }
-  }
-
-  for (const auto& record : asset.GetComponents<OrthographicCameraRecord>()) {
-    auto& node = runtime_nodes_.at(record.node_index);
-    auto camera = std::make_unique<scene::OrthographicCamera>();
-    camera->SetExtents(record.left, record.right, record.bottom, record.top,
-      record.near_plane, record.far_plane);
-    camera->SetAspectMode(record.aspect_mode);
-    camera->SetExposure({
-      .aperture_f = record.aperture_f,
-      .shutter_rate = record.shutter_rate,
-      .iso = record.iso,
-    });
-    const bool attached = node.AttachCamera(std::move(camera));
-    CHECK_F(attached, "Failed to hydrate orthographic camera");
-    if (!active_camera_.IsAlive()) {
-      active_camera_ = node;
-    }
-  }
 }
 
 void SceneLoaderService::EnsureCameraAndViewport(scene::Scene& scene)
@@ -3176,6 +2367,8 @@ void SceneLoaderService::EnsureCameraAndViewport(scene::Scene& scene)
     auto camera = std::make_unique<scene::PerspectiveCamera>();
     active_camera_.AttachCamera(std::move(camera));
   }
+  // The demo views through its fallback camera like an authored one.
+  (void)scene.SetActiveCamera(active_camera_);
 
   if (auto cam_ref = active_camera_.GetCameraAs<scene::PerspectiveCamera>();
     cam_ref) {
@@ -3245,33 +2438,6 @@ void SceneLoaderService::LogSceneHierarchy(const scene::Scene& scene)
     LOG_F(INFO, "SceneLoader: Hierarchy traversal covered all {} nodes.",
       runtime_nodes_.size());
   }
-}
-
-auto SceneLoaderService::ReadScriptResource(data::ResourceReferenceIndex index,
-  const data::ScriptAsset& context_asset) const
-  -> std::shared_ptr<const data::ScriptResource>
-{
-  const auto resource_key_opt
-    = loader_.MakeScriptResourceKeyForAsset(context_asset, index);
-  if (!resource_key_opt.has_value()) {
-    LOG_F(WARNING,
-      "failed to resolve script resource key (context_asset={} index={})",
-      data::to_string(context_asset.GetAssetKey()), index);
-    return nullptr;
-  }
-
-  auto resource = loader_.GetScriptResource(*resource_key_opt);
-  if (!resource) {
-    resource = std::const_pointer_cast<data::ScriptResource>(
-      loader_.ReadScriptResourceForAsset(context_asset, index));
-  }
-  if (!resource) {
-    LOG_F(WARNING,
-      "script resource unavailable (context_asset={} index={} key={:#x})",
-      data::to_string(context_asset.GetAssetKey()), index,
-      resource_key_opt->get());
-  }
-  return resource;
 }
 
 } // namespace oxygen::examples

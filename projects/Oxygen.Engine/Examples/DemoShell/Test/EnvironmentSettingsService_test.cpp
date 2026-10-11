@@ -54,6 +54,7 @@
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/SceneInstantiation/EnvironmentHydration.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
@@ -1753,7 +1754,7 @@ NOLINT_TEST_F(EnvironmentSettingsServiceTest, HydratesAuthoredMieAbsorption)
   ASSERT_TRUE(writer.WriteBlob(std::as_bytes(std::span(&atmosphere, 1))));
   const auto asset = data::SceneAsset(data::AssetKey {}, stream.Data());
   auto environment = scene::SceneEnvironment {};
-  EnvironmentSettingsService::HydrateEnvironment(environment, asset, {});
+  instantiation::HydrateEnvironment(environment, asset, {});
   const auto sky
     = environment.TryGetSystem<scene::environment::SkyAtmosphere>();
   ASSERT_TRUE(sky);
@@ -1832,12 +1833,11 @@ NOLINT_TEST_F(
   }
   const auto asset = data::SceneAsset(data::AssetKey {}, stream.Data());
   auto environment = scene::SceneEnvironment {};
-  EXPECT_THROW(
-    EnvironmentSettingsService::HydrateEnvironment(environment, asset, {}),
+  EXPECT_THROW(instantiation::HydrateEnvironment(environment, asset, {}),
     std::invalid_argument);
   EXPECT_FALSE(environment.TryGetSystem<scene::environment::Background>());
   const auto mask = content::ResourceKey { 0x0001000000000004ULL };
-  EnvironmentSettingsService::HydrateEnvironment(
+  instantiation::HydrateEnvironment(
     environment, asset, { .metering_mask = mask });
   const auto volume
     = environment.TryGetSystem<scene::environment::PostProcessVolume>();

@@ -219,6 +219,7 @@ target_link_libraries(
     oxygen::platform
     oxygen::physicsmodule
     oxygen::scene
+    oxygen::sceneinstantiation
     oxygen::scripting
     oxygen::vortex
     fmt::fmt-header-only

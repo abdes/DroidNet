@@ -998,7 +998,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         scene::SceneNode staged_main_camera;
         try {
           staged_main_camera
-            = co_await loader->BuildSceneAsync(*staged_scene, *swap.asset);
+            = co_await loader->BuildSceneAsync(*staged_scene, swap.asset);
           pending_physics_sidecar_ = swap.physics_asset;
         } catch (const std::exception& ex) {
           shell.DiscardStagedScene();

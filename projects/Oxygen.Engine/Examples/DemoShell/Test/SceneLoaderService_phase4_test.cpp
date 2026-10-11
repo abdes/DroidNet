@@ -630,6 +630,12 @@ namespace {
       on_complete(nullptr);
     }
 
+    void StartLoadInputMappingContextAsset(const data::AssetKey& /*key*/,
+      InputMappingContextCallback on_complete) override
+    {
+      on_complete(nullptr);
+    }
+
     void StartLoadPhysicsSceneAsset(
       const data::AssetKey& key, PhysicsSceneCallback on_complete) override
     {
@@ -1009,10 +1015,10 @@ namespace {
   }
 
   auto BuildScene(SceneLoaderService& service, scene::Scene& runtime_scene,
-    const data::SceneAsset& asset) -> void
+    std::shared_ptr<const data::SceneAsset> asset) -> void
   {
     co::testing::TestEventLoop loop;
-    co::Run(loop, service.BuildSceneAsync(runtime_scene, asset));
+    co::Run(loop, service.BuildSceneAsync(runtime_scene, std::move(asset)));
   }
 } // namespace
 
@@ -1151,7 +1157,7 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
   auto service = MakeService(loader);
   auto runtime_scene
     = std::make_shared<scene::Scene>("FlagsHydration", kRuntimeSceneCapacity);
-  BuildScene(*service, *runtime_scene, *asset);
+  BuildScene(*service, *runtime_scene, asset);
   runtime_scene->Update();
   auto root = FindNodeByName(*runtime_scene, "Root");
   auto inherited = FindNodeByName(*runtime_scene, "Inherited");
@@ -1221,7 +1227,7 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
 
   auto runtime_scene = std::make_shared<scene::Scene>(
     "DemoShell.DirectionalCsmHydration", kRuntimeSceneCapacity);
-  BuildScene(*service, *runtime_scene, *scene_asset);
+  BuildScene(*service, *runtime_scene, scene_asset);
 
   auto sun_node = FindNodeByName(*runtime_scene, "SunNode");
   if (!sun_node.has_value()) {
@@ -1267,7 +1273,7 @@ NOLINT_TEST(
 
   auto runtime_scene = std::make_shared<scene::Scene>(
     "DemoShell.LocalFogHydration", kRuntimeSceneCapacity);
-  BuildScene(*service, *runtime_scene, *scene_asset);
+  BuildScene(*service, *runtime_scene, scene_asset);
 
   auto fog_node = FindNodeByName(*runtime_scene, "FogNode");
   if (!fog_node.has_value()) {
@@ -1321,7 +1327,7 @@ NOLINT_TEST(SceneLoaderServicePhase4Test,
 
   auto runtime_scene = std::make_shared<scene::Scene>(
     "DemoShell.RenderableOverride", kRuntimeSceneCapacity);
-  BuildScene(*service, *runtime_scene, *scene_asset);
+  BuildScene(*service, *runtime_scene, scene_asset);
 
   auto mesh_node = FindNodeByName(*runtime_scene, "MeshNode");
   if (!mesh_node.has_value()) {

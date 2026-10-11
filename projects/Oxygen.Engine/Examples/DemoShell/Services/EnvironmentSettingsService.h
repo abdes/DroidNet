@@ -52,15 +52,6 @@ namespace oxygen::examples {
 class SettingsService;
 class SkyboxService;
 
-//! Source texture keys resolved for a scene's environment records. A zero key
-//! means the record binds no texture.
-struct EnvironmentTextureKeys {
-  content::ResourceKey metering_mask {};
-  content::ResourceKey fog_cubemap {};
-  content::ResourceKey sky_light_cubemap {};
-  content::ResourceKey sky_sphere_cubemap {};
-};
-
 //! Runtime dependencies for environment settings application.
 struct EnvironmentRuntimeConfig {
   observer_ptr<scene::Scene> scene { nullptr };
@@ -100,11 +91,6 @@ public:
 
   OXYGEN_MAKE_NON_COPYABLE(EnvironmentSettingsService)
   OXYGEN_MAKE_NON_MOVABLE(EnvironmentSettingsService)
-
-  //! Hydrate runtime environment systems from a scene asset.
-  static void HydrateEnvironment(scene::SceneEnvironment& target,
-    const data::SceneAsset& source_asset,
-    const EnvironmentTextureKeys& textures);
 
   //! Updates the runtime configuration used for applying settings.
   virtual auto SetRuntimeConfig(const EnvironmentRuntimeConfig& config) -> void;

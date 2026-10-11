@@ -143,6 +143,12 @@ public:
     on_complete(nullptr);
   }
 
+  void StartLoadInputMappingContextAsset(const data::AssetKey& /*key*/,
+    InputMappingContextCallback on_complete) override
+  {
+    on_complete(nullptr);
+  }
+
   void StartLoadPhysicsSceneAsset(const data::AssetKey&, data::SourceKey,
     const content::LoadRequest&, PhysicsSceneCallback on_complete) override
   {

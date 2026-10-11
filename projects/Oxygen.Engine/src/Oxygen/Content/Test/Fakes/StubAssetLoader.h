@@ -18,8 +18,8 @@
 namespace oxygen::content::testing {
 
 //! An asset loader that has nothing: every query returns an empty result and
-//! every load request is dropped. Tests derive from it and override only the
-//! queries their code under test makes.
+//! every load completes with nothing. Tests derive from it and override only
+//! the queries their code under test makes.
 // NOLINTBEGIN(*-convert-member-functions-to-static, *-identifier-length)
 class StubAssetLoader : public IAssetLoader {
 public:
@@ -50,69 +50,88 @@ public:
     return {};
   }
   void StartLoadTexture(
-    ResourceKey /*key*/, TextureCallback /*on_complete*/) override
+    ResourceKey /*key*/, TextureCallback on_complete) override
   {
+    on_complete(nullptr);
   }
   void StartLoadTexture(CookedResourceData<data::TextureResource> /*cooked*/,
-    TextureCallback /*on_complete*/) override
+    TextureCallback on_complete) override
   {
+    on_complete(nullptr);
   }
-  void StartLoadBuffer(
-    ResourceKey /*key*/, BufferCallback /*on_complete*/) override
+  void StartLoadBuffer(ResourceKey /*key*/, BufferCallback on_complete) override
   {
+    on_complete(nullptr);
   }
   void StartLoadBuffer(CookedResourceData<data::BufferResource> /*cooked*/,
-    BufferCallback /*on_complete*/) override
+    BufferCallback on_complete) override
   {
+    on_complete(nullptr);
   }
   void StartLoadMaterialAsset(const data::AssetKey& /*key*/,
     data::SourceKey /*source_key*/, const LoadRequest& /*request*/,
-    MaterialCallback /*on_complete*/) override
+    MaterialCallback on_complete) override
   {
+    on_complete(nullptr);
   }
   void StartLoadMaterialAsset(
-    const data::AssetKey& /*key*/, MaterialCallback /*on_complete*/) override
+    const data::AssetKey& /*key*/, MaterialCallback on_complete) override
   {
+    on_complete(nullptr);
   }
   void StartLoadGeometryAsset(const data::AssetKey& /*key*/,
     data::SourceKey /*source_key*/, const LoadRequest& /*request*/,
-    GeometryCallback /*on_complete*/) override
+    GeometryCallback on_complete) override
   {
+    on_complete(nullptr);
   }
   void StartLoadGeometryAsset(
-    const data::AssetKey& /*key*/, GeometryCallback /*on_complete*/) override
+    const data::AssetKey& /*key*/, GeometryCallback on_complete) override
   {
+    on_complete(nullptr);
   }
   void StartLoadScene(const data::AssetKey& /*key*/,
     data::SourceKey /*source_key*/, const LoadRequest& /*request*/,
-    SceneCallback /*on_complete*/) override
+    SceneCallback on_complete) override
   {
+    on_complete(nullptr);
   }
   void StartLoadScene(
-    const data::AssetKey& /*key*/, SceneCallback /*on_complete*/) override
+    const data::AssetKey& /*key*/, SceneCallback on_complete) override
   {
+    on_complete(nullptr);
   }
   void StartLoadPhysicsSceneAsset(const data::AssetKey& /*key*/,
     data::SourceKey /*source_key*/, const LoadRequest& /*request*/,
-    PhysicsSceneCallback /*on_complete*/) override
+    PhysicsSceneCallback on_complete) override
   {
+    on_complete(nullptr);
   }
-  void StartLoadPhysicsSceneAsset(const data::AssetKey& /*key*/,
-    PhysicsSceneCallback /*on_complete*/) override
+  void StartLoadPhysicsSceneAsset(
+    const data::AssetKey& /*key*/, PhysicsSceneCallback on_complete) override
   {
+    on_complete(nullptr);
   }
   void StartLoadPhysicsResource(
-    ResourceKey /*key*/, PhysicsResourceCallback /*on_complete*/) override
+    ResourceKey /*key*/, PhysicsResourceCallback on_complete) override
   {
+    on_complete(nullptr);
   }
   void StartLoadScriptAsset(const data::AssetKey& /*key*/,
     data::SourceKey /*source_key*/, const LoadRequest& /*request*/,
-    ScriptCallback /*on_complete*/) override
+    ScriptCallback on_complete) override
   {
+    on_complete(nullptr);
   }
   void StartLoadScriptAsset(
-    const data::AssetKey& /*key*/, ScriptCallback /*on_complete*/) override
+    const data::AssetKey& /*key*/, ScriptCallback on_complete) override
   {
+    on_complete(nullptr);
+  }
+  void StartLoadInputMappingContextAsset(const data::AssetKey& /*key*/,
+    InputMappingContextCallback on_complete) override
+  {
+    on_complete(nullptr);
   }
   auto AddPakFile(const std::filesystem::path& /*path*/) -> void override { }
   auto AddLooseCookedRoot(const std::filesystem::path& /*path*/)
