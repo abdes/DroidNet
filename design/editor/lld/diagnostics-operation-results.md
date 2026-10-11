@@ -255,6 +255,12 @@ prefix for post-cook catalog refresh failures. It may continue to use
 `OXE.CONTENTPIPELINE.MATERIAL.*` for the ED-M05 material cook slice when the
 operation is still material-document scoped.
 
+ED-M09 prefix allocations:
+
+| Prefix        | Owner                                                                                                                                                |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OXE.INPUT.*` | Input action and mapping context authoring, validation and key capture ([input authoring](input-authoring.md#12-operation-results-and-diagnostics)). |
+
 ### Failure Domain
 
 Domains are stable vocabulary, not class names.
@@ -285,6 +291,7 @@ Domains are stable vocabulary, not class names.
 | `AssetImport`          | ED-M05                                      | Asset import.                                                        |
 | `AssetCook`            | ED-M07                                      | Cook execution.                                                      |
 | `StandaloneRuntime`    | ED-M08                                      | Standalone load validation.                                          |
+| `InputAuthoring`       | ED-M09                                      | Input action and mapping context authoring and validation.           |
 
 `ProjectSettings` is reserved for project-scoped settings. `Settings` is the
 global editor settings domain and is active in ED-M02 for runtime FPS/logging
