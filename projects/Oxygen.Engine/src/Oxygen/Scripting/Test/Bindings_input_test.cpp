@@ -352,9 +352,8 @@ namespace {
   };
 } // namespace
 
-//! activate_context starts a context by asset reference, whether its asset
-//! is already loaded or still has to be; deactivate_context needs an added
-//! context.
+//! activate_context starts a loaded context by asset reference and refuses
+//! one that is not loaded; deactivate_context needs an added context.
 NOLINT_TEST_F(InputBindingsTest, ContextsSwitchByAssetReference)
 {
   const auto cached = data::AssetKey::FromVirtualPath("/Content/Menu.oimap");
@@ -373,7 +372,7 @@ local input = oxygen.input
 assert(input.activate_context("{0}"), "a loaded context starts")
 assert(input.deactivate_context("{0}"), "an added context stops")
 assert(input.activate_context("{0}"), "an added context restarts")
-assert(input.activate_context("{1}"), "a context starts once loaded")
+assert(not input.activate_context("{1}"), "a context not loaded is refused")
 assert(not input.deactivate_context("{2}"), "an unknown context is not stopped")
 assert(not pcall(input.activate_context, "Menu"), "a name is not a context")
 )lua",
@@ -385,7 +384,7 @@ assert(not pcall(input.activate_context, "Menu"), "a name is not a context")
 
   EXPECT_TRUE(result.ok) << result.message;
   EXPECT_NE(input.GetMappingContextByKey(cached), nullptr);
-  EXPECT_NE(input.GetMappingContextByKey(loadable), nullptr);
+  EXPECT_EQ(input.GetMappingContextByKey(loadable), nullptr);
 }
 
 } // namespace oxygen::scripting::test

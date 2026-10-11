@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <array>
-#include <memory>
 #include <string>
 #include <string_view>
 
@@ -190,8 +189,9 @@ namespace {
     return true;
   }
 
-  //! Activates a context; one not yet added is hydrated from its asset with
-  //! the asset's default priority, after loading it if needed.
+  //! Activates a context; one not yet added is hydrated from its loaded
+  //! asset with the asset's default priority. Returns false, changing
+  //! nothing, when the context asset is not loaded.
   auto LuaInputActivateContext(lua_State* state) -> int
   {
     const auto key = RequireAssetArg(
@@ -215,22 +215,15 @@ namespace {
       lua_pushboolean(state, StartContext(*input, *loader, *asset) ? 1 : 0);
       return kLuaSingleResult;
     }
-    // Not loaded yet: the context starts when its load completes. The input
-    // system and the loader are engine services that outlive the load.
-    loader->StartLoadInputMappingContextAsset(key,
-      [input, loader, key](
-        const std::shared_ptr<data::InputMappingContextAsset>& asset) -> void {
-        if (asset == nullptr) {
-          LOG_F(WARNING,
-            "oxygen.input.activate_context: input context {} is not available",
-            data::to_string(key));
-          return;
-        }
-        if (input->GetMappingContextByKey(asset->GetAssetKey()) == nullptr) {
-          (void)StartContext(*input, *loader, *asset);
-        }
-      });
-    lua_pushboolean(state, 1);
+    // Contexts a script names are asset parameters, so they load with the
+    // scene. Activation is synchronous: a context that is not loaded is an
+    // error rather than a pending activation that could land after a later
+    // deactivate_context.
+    LOG_F(WARNING,
+      "oxygen.input.activate_context: input context {} is not loaded; "
+      "reference it from a script asset parameter so the scene loads it",
+      data::to_string(key));
+    lua_pushboolean(state, 0);
     return kLuaSingleResult;
   }
 
