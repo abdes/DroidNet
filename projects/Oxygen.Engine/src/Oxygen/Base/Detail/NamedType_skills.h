@@ -97,43 +97,50 @@ namespace nt_detail {
   inline constexpr bool always_false_v = false;
 } // namespace nt_detail
 
+// The increment and decrement skills are hidden friends rather than member
+// operators: a NamedType may list the prefix and postfix skills as separate
+// bases, and member lookup of `operator++` across two bases is ambiguous in
+// standard C++. Friends are found by argument-dependent lookup instead.
+
 //! Provides prefix increment operator (++x) for NamedType
 template <typename T>
 struct OXYGEN_EBCO PreIncrementable : Crtp<T, PreIncrementable> {
-  constexpr T& operator++() noexcept(noexcept(++this->underlying().get()))
+  friend constexpr auto operator++(T& value) noexcept(noexcept(++value.get()))
+    -> T&
   {
-    ++this->underlying().get();
-    return this->underlying();
+    ++value.get();
+    return value;
   }
 };
 
 //! Provides postfix increment operator (x++) for NamedType
 template <typename T>
 struct OXYGEN_EBCO PostIncrementable : Crtp<T, PostIncrementable> {
-  constexpr T operator++(int) noexcept(noexcept(this->underlying().get()++))
+  friend constexpr auto operator++(T& value, int) noexcept(
+    noexcept(value.get()++)) -> T
   {
-    return T(this->underlying().get()++);
+    return T(value.get()++);
   }
 };
 
 //! Provides prefix decrement operator (--x) for NamedType
 template <typename T>
 struct OXYGEN_EBCO PreDecrementable : Crtp<T, PreDecrementable> {
-  [[nodiscard]] constexpr T& operator--() noexcept(
-    noexcept(--this->underlying().get()))
+  [[nodiscard]] friend constexpr auto operator--(T& value) noexcept(
+    noexcept(--value.get())) -> T&
   {
-    --this->underlying().get();
-    return this->underlying();
+    --value.get();
+    return value;
   }
 };
 
 //! Provides postfix decrement operator (x--) for NamedType
 template <typename T>
 struct OXYGEN_EBCO PostDecrementable : Crtp<T, PostDecrementable> {
-  [[nodiscard]] constexpr T operator--(int) noexcept(
-    noexcept(this->underlying().get()--))
+  [[nodiscard]] friend constexpr auto operator--(T& value, int) noexcept(
+    noexcept(value.get()--)) -> T
   {
-    return T(this->underlying().get()--);
+    return T(value.get()--);
   }
 };
 
@@ -458,15 +465,11 @@ struct OXYGEN_EBCO Callable : FunctionCallable<NamedType_>,
 //! Combines prefix and postfix increment operators for NamedType
 template <typename T>
 struct OXYGEN_EBCO Incrementable : PreIncrementable<T>, PostIncrementable<T> {
-  using PostIncrementable<T>::operator++;
-  using PreIncrementable<T>::operator++;
 };
 
 //! Combines prefix and postfix decrement operators for NamedType
 template <typename T>
 struct OXYGEN_EBCO Decrementable : PreDecrementable<T>, PostDecrementable<T> {
-  using PostDecrementable<T>::operator--;
-  using PreDecrementable<T>::operator--;
 };
 
 //! Comprehensive arithmetic operations skill combining all arithmetic operators

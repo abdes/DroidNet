@@ -322,10 +322,9 @@ static_assert(oxygen::co::detail::Cancellable<
 namespace oxygen::co {
 template <> class ThreadNotification<testing::TestEventLoop> {
 public:
-  ThreadNotification(testing::TestEventLoop& loop, void (*fn)(void*), void* arg)
-    : loop_(loop)
-    , fn_(fn)
-    , arg_(arg)
+  // Post() receives the loop and callback again, so nothing is stored here.
+  ThreadNotification(testing::TestEventLoop& /*loop*/, void (* /*fn*/)(void*),
+    void* /*arg*/) noexcept
   {
   }
 
@@ -357,10 +356,5 @@ public:
   {
     loop.Schedule(std::chrono::milliseconds(0), [fn, arg] { fn(arg); });
   }
-
-private:
-  testing::TestEventLoop& loop_;
-  void (*fn_)(void*);
-  void* arg_;
 };
 } // namespace oxygen::co

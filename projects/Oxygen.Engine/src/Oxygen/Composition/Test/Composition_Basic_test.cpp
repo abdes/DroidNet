@@ -9,11 +9,11 @@
 #include <ranges>
 #include <thread>
 
+#include "./BaseCompositionTest.h"
+
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Testing/GTest.h>
-
-#include "./BaseCompositionTest.h"
 
 using oxygen::TypeId;
 using oxygen::composition::testing::BaseCompositionTest;
@@ -22,7 +22,7 @@ namespace {
 
 // TypeList for the test suite
 class PooledLocalValueComponent;
-using ResourceTypeList = oxygen::TypeList<PooledLocalValueComponent>;
+using TestResourceTypeList = oxygen::TypeList<PooledLocalValueComponent>;
 
 class SimpleComponent final : public oxygen::Component {
   OXYGEN_COMPONENT(SimpleComponent)
@@ -43,7 +43,7 @@ private:
 using LocalComponent = LocalValueComponent;
 
 class PooledLocalValueComponent final : public oxygen::Component {
-  OXYGEN_POOLED_COMPONENT(PooledLocalValueComponent, ResourceTypeList)
+  OXYGEN_POOLED_COMPONENT(PooledLocalValueComponent, TestResourceTypeList)
 public:
   explicit PooledLocalValueComponent(int v)
     : value_(v)

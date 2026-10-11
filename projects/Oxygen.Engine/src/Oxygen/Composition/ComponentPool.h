@@ -390,7 +390,7 @@ private:
         comp_ptr->GetTypeNamePretty());
 #if !defined(NDEBUG)
       // In DEBUG builds, we will assert to force fixing this programming error.
-      ABORT_F(msg.c_str());
+      ABORT_F("{}", msg);
 #else
       throw std::invalid_argument(std::move(msg));
 #endif // NDEBUG

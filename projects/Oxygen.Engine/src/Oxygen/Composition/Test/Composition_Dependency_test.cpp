@@ -4,12 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/Object.h>
-#include <Oxygen/Testing/GTest.h>
 #include <functional>
 
 #include "./BaseCompositionTest.h"
+
+#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Composition/Object.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::TypeId;
 
@@ -39,7 +40,6 @@ class SimplePooledComponent final : public oxygen::Component {
   OXYGEN_POOLED_COMPONENT(SimplePooledComponent, PooledTestResourceTypeList);
 
 public:
-  using ResourceTypeList = PooledTestResourceTypeList;
   SimplePooledComponent() = default;
 };
 class DependentPooledComponent final : public oxygen::Component {
@@ -47,7 +47,6 @@ class DependentPooledComponent final : public oxygen::Component {
   OXYGEN_COMPONENT_REQUIRES(SimplePooledComponent);
 
 public:
-  using ResourceTypeList = PooledTestResourceTypeList;
   DependentPooledComponent() = default;
   auto UpdateDependencies(
     const std::function<Component&(TypeId)>& get_component) noexcept
@@ -63,7 +62,6 @@ class ComplexPooledComponent final : public oxygen::Component {
   OXYGEN_COMPONENT_REQUIRES(SimplePooledComponent, DependentPooledComponent);
 
 public:
-  using ResourceTypeList = PooledTestResourceTypeList;
   ComplexPooledComponent() = default;
   auto UpdateDependencies(
     const std::function<Component&(TypeId)>& get_component) noexcept
@@ -81,7 +79,6 @@ class PooledDep final : public oxygen::Component {
   OXYGEN_POOLED_COMPONENT(PooledDep, PooledTestResourceTypeList);
 
 public:
-  using ResourceTypeList = PooledTestResourceTypeList;
   ~PooledDep() override { PooledTracker::destroyed.push_back("Dep"); }
 };
 class PooledDependent final : public oxygen::Component {
@@ -89,7 +86,6 @@ class PooledDependent final : public oxygen::Component {
   OXYGEN_COMPONENT_REQUIRES(PooledDep);
 
 public:
-  using ResourceTypeList = PooledTestResourceTypeList;
   ~PooledDependent() override
   {
     PooledTracker::destroyed.push_back("Dependent");
@@ -100,7 +96,6 @@ class PooledA final : public oxygen::Component {
   OXYGEN_COMPONENT_REQUIRES(PooledA);
 
 public:
-  using ResourceTypeList = PooledTestResourceTypeList;
 };
 
 //=== DependencyIntegrityTest ===---------------------------------------------//

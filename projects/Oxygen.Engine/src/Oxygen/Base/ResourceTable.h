@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <cstddef>
+#include <cstring>
 #include <iostream>
 #include <span>
 #include <stdexcept>
@@ -560,54 +562,58 @@ auto ResourceTable<T>::Defragment(Compare comp, const size_t max_swaps)
   }
   size_t swaps = 0;
 
-  int index = 1;
-  // NOLINTNEXTLINE(clang-diagnostic-sign-compare)
+  // Insertion sort over the dense arrays; `i` walks backwards and may reach -1.
+  using SignedIndex = std::ptrdiff_t;
+  const auto at = [](const SignedIndex k) { return static_cast<size_t>(k); };
+  size_t index = 1;
   for (; index < items_.size() && (max_swaps == 0 || swaps < max_swaps);
     ++index) {
     T tmp = items_[index];
     Meta tmp_meta = meta_[index];
 
-    int i = index - 1;
-    int j1 = i + 1;
+    const auto current = static_cast<SignedIndex>(index);
+    SignedIndex i = current - 1;
+    SignedIndex j1 = i + 1;
 
-    // trivially copyable implementation
-    if (std::is_trivially_copyable_v<T>) {
-      while (i >= 0 && comp(items_[i], tmp)) {
-        sparse_table_[meta_[i].dense_to_sparse].SetIndex(j1);
+    if constexpr (std::is_trivially_copyable_v<T>) {
+      while (i >= 0 && comp(items_[at(i)], tmp)) {
+        sparse_table_[meta_[at(i)].dense_to_sparse].SetIndex(
+          static_cast<ResourceHandle::IndexT>(j1));
         --i;
         --j1;
       }
-      if (j1 != index) {
-        std::memmove(&items_[j1 + 1], &items_[j1], sizeof(T) * (index - j1));
-        std::memmove(&meta_[j1 + 1], &meta_[j1], sizeof(Meta) * (index - j1));
+      if (j1 != current) {
+        const auto count = at(current - j1);
+        std::memmove(&items_[at(j1) + 1], &items_[at(j1)], sizeof(T) * count);
+        std::memmove(&meta_[at(j1) + 1], &meta_[at(j1)], sizeof(Meta) * count);
         ++swaps;
 
-        items_[j1] = std::move(tmp);
-        meta_[j1] = tmp_meta;
-        sparse_table_[meta_[j1].dense_to_sparse].SetIndex(j1);
+        items_[at(j1)] = std::move(tmp);
+        meta_[at(j1)] = tmp_meta;
+        sparse_table_[meta_[at(j1)].dense_to_sparse].SetIndex(
+          static_cast<ResourceHandle::IndexT>(j1));
       }
-    }
-    // standard implementation
-    else {
+    } else {
       while (i >= 0 && (max_swaps == 0 || swaps < max_swaps)
-        && comp(items_[i], tmp)) {
-        items_[j1] = std::move(items_[i]);
-        meta_[j1] = std::move(meta_[i]);
-        sparse_table_[meta_[j1].dense_to_sparse].SetIndex(j1);
+        && comp(items_[at(i)], tmp)) {
+        items_[at(j1)] = std::move(items_[at(i)]);
+        meta_[at(j1)] = std::move(meta_[at(i)]);
+        sparse_table_[meta_[at(j1)].dense_to_sparse].SetIndex(
+          static_cast<ResourceHandle::IndexT>(j1));
         --i;
         --j1;
         ++swaps;
       }
 
-      if (j1 != index) {
-        items_[j1] = std::move(tmp);
-        meta_[j1] = std::move(tmp_meta);
-        sparse_table_[meta_[j1].dense_to_sparse].SetIndex(j1);
+      if (j1 != current) {
+        items_[at(j1)] = std::move(tmp);
+        meta_[at(j1)] = std::move(tmp_meta);
+        sparse_table_[meta_[at(j1)].dense_to_sparse].SetIndex(
+          static_cast<ResourceHandle::IndexT>(j1));
       }
     }
   }
 
-  // NOLINTNEXTLINE(clang-diagnostic-sign-compare)
   if (index == items_.size()) {
     fragmented_ = false;
   }

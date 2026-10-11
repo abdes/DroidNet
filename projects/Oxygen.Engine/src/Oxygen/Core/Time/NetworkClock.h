@@ -6,10 +6,11 @@
 
 #pragma once
 
+#include <array>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Core/api_export.h>
-#include <array>
 
 namespace oxygen::time {
 
@@ -78,13 +79,13 @@ public:
   ~NetworkClock() noexcept = default;
 
   // Offset management
-  OXGN_CORE_NDAPI void SetPeerOffset(
+  OXGN_CORE_API void SetPeerOffset(
     CanonicalDuration offset, double confidence = 1.0) noexcept;
   OXGN_CORE_NDAPI auto GetPeerOffset() const noexcept -> CanonicalDuration;
   OXGN_CORE_NDAPI auto GetOffsetConfidence() const noexcept -> double;
 
   // RTT management
-  OXGN_CORE_NDAPI void SetRoundTripTime(CanonicalDuration rtt) noexcept;
+  OXGN_CORE_API void SetRoundTripTime(CanonicalDuration rtt) noexcept;
   OXGN_CORE_NDAPI auto GetRoundTripTime() const noexcept -> CanonicalDuration;
 
   // Conversions
@@ -99,7 +100,7 @@ public:
     CanonicalDuration prediction_window) const noexcept -> NetworkTime;
 
   // Smoothing
-  OXGN_CORE_NDAPI void SetSmoothingFactor(double factor) noexcept; // [0.0,1.0]
+  OXGN_CORE_API void SetSmoothingFactor(double factor) noexcept; // [0.0,1.0]
   OXGN_CORE_NDAPI auto GetSmoothingFactor() const noexcept -> double;
 
   struct SyncEvent {
@@ -109,7 +110,7 @@ public:
     double confidence;
   };
 
-  OXGN_CORE_NDAPI void ProcessSyncEvent(const SyncEvent& event) noexcept;
+  OXGN_CORE_API void ProcessSyncEvent(const SyncEvent& event) noexcept;
 
 private:
   CanonicalDuration peer_offset_ {};

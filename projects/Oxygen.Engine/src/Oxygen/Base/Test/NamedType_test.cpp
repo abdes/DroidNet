@@ -18,9 +18,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Testing/GTest.h>
 
 // Usage examples
 
@@ -1219,7 +1218,12 @@ NOLINT_TEST_F(NamedTypeSkillsTest, PreIncrementableConstexpr)
   using StrongInt
     = oxygen::NamedType<int, struct StrongIntTag, oxygen::PreIncrementable>;
   static_assert(
-    (++StrongInt { 1 }).get() == 2, "PreIncrementable is not constexpr");
+    [] {
+      StrongInt value { 1 };
+      return (++value).get();
+    }()
+      == 2,
+    "PreIncrementable is not constexpr");
   StrongInt a { 1 };
   EXPECT_TRUE(noexcept(++a));
 }
@@ -1241,7 +1245,12 @@ NOLINT_TEST_F(NamedTypeSkillsTest, PostIncrementableConstexpr)
   using StrongInt
     = oxygen::NamedType<int, struct StrongIntTag, oxygen::PostIncrementable>;
   static_assert(
-    (StrongInt { 1 } ++).get() == 1, "PostIncrementable is not constexpr");
+    [] {
+      StrongInt value { 1 };
+      return (value++).get();
+    }()
+      == 1,
+    "PostIncrementable is not constexpr");
 }
 
 //! PreDecrementable supports --prefix.
@@ -1261,7 +1270,12 @@ NOLINT_TEST_F(NamedTypeSkillsTest, PreDecrementableConstexpr)
   using StrongInt
     = oxygen::NamedType<int, struct StrongIntTag, oxygen::PreDecrementable>;
   static_assert(
-    (--StrongInt { 1 }).get() == 0, "PreDecrementable is not constexpr");
+    [] {
+      StrongInt value { 1 };
+      return (--value).get();
+    }()
+      == 0,
+    "PreDecrementable is not constexpr");
 }
 
 //! PostDecrementable supports postfix--.
@@ -1281,7 +1295,12 @@ NOLINT_TEST_F(NamedTypeSkillsTest, PostDecrementableConstexpr)
   using StrongInt
     = oxygen::NamedType<int, struct StrongIntTag, oxygen::PostDecrementable>;
   static_assert(
-    (StrongInt { 1 } --).get() == 1, "PostDecrementable is not constexpr");
+    [] {
+      StrongInt value { 1 };
+      return (value--).get();
+    }()
+      == 1,
+    "PostDecrementable is not constexpr");
 }
 
 //! Incrementable aggregates both pre and post increment.

@@ -9,11 +9,10 @@
 #include <string>
 #include <type_traits>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ResourceHandle.h>
 #include <Oxygen/Base/ResourceTable.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::HandleSet;
 using oxygen::ResourceHandle;
@@ -496,7 +495,9 @@ NOLINT_TEST(ResourceTableTest, SparseArrayWithHoles)
   const auto handle_4 = table.Emplace("4");
   EXPECT_TRUE(table.Contains(handle_4));
   EXPECT_EQ(table.Size(), 4);
-  EXPECT_EQ(table.Capacity(), 4);
+  // Growth beyond the initial capacity follows std::vector's growth policy,
+  // which is implementation-defined (1.5x on MSVC, 2x on libstdc++).
+  EXPECT_GE(table.Capacity(), 4);
 }
 
 NOLINT_TEST(ResourceTableTest, Defragment)

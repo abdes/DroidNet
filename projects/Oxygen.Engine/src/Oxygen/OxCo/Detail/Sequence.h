@@ -13,6 +13,13 @@
 #include <Oxygen/OxCo/Detail/Result.h>
 #include <Oxygen/OxCo/Detail/SanitizedAwaiter.h>
 
+namespace oxygen::co {
+// Defined in Awaitables.h, which includes this header. Declared here so the
+// call below is found by ordinary (two-phase) lookup on every compiler.
+template <ImmediateAwaitable T, class... Args>
+auto MakeAwaitable(Args... args) -> Awaitable auto;
+} // namespace oxygen::co
+
 namespace oxygen::co::detail {
 
 template <Awaitable First, class ThenFn>

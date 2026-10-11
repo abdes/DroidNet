@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/OxCo/Detail/IntrusivePtr.h>
-
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::co::detail::IntrusivePtr;
@@ -18,7 +17,7 @@ public:
   TestObject() = default;
   ~TestObject() { destroyed_ = true; }
 
-  OXYGEN_DEFAULT_COPYABLE(TestObject)
+  OXYGEN_MAKE_NON_COPYABLE(TestObject)
   OXYGEN_DEFAULT_MOVABLE(TestObject)
 
   inline static bool destroyed_;

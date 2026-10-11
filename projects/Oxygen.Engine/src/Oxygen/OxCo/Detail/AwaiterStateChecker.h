@@ -123,8 +123,9 @@ struct AwaiterStateChecker : ProxyFrame {
   }
   ~AwaiterStateChecker() { Reset(); }
 
-  OXYGEN_DEFAULT_COPYABLE(AwaiterStateChecker)
-  OXYGEN_DEFAULT_MOVABLE(AwaiterStateChecker)
+  // ProxyFrame is neither copyable nor movable.
+  OXYGEN_MAKE_NON_COPYABLE(AwaiterStateChecker)
+  OXYGEN_MAKE_NON_MOVABLE(AwaiterStateChecker)
 
   void Reset() noexcept
   {

@@ -14,7 +14,9 @@
 #  define EXPORT_SYMBOL
 #endif
 
-extern "C" bool initialize_called { false };
+extern "C" {
+bool initialize_called { false };
+}
 
 namespace {
 extern "C" EXPORT_SYMBOL auto InitializeTypeRegistry() -> oxygen::TypeRegistry*

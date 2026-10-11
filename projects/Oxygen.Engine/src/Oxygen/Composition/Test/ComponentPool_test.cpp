@@ -9,11 +9,10 @@
 #include <thread>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/Resource.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/ComponentPool.h>
+#include <Oxygen/Testing/GTest.h>
 
 using testing::AllOf;
 using testing::Contains;
@@ -37,8 +36,6 @@ using TestResourceTypeList = oxygen::TypeList<TestTransformComponent,
 class TestTransformComponent : public oxygen::Component {
   OXYGEN_POOLED_COMPONENT(TestTransformComponent, TestResourceTypeList)
 public:
-  static constexpr std::size_t kExpectedPoolSize = 512;
-
   explicit TestTransformComponent(int x = 0, int y = 0, int z = 0)
     : x_(x)
     , y_(y)
@@ -437,7 +434,7 @@ NOLINT_TEST_F(ComponentPoolThreadingTest, ConcurrentAllocations_ThreadSafe)
 
   // Act - allocate from multiple threads
   for (std::size_t t = 0; t < thread_count; ++t) {
-    threads.emplace_back([this, t, allocations_per_thread, &thread_handles]() {
+    threads.emplace_back([this, t, &thread_handles]() {
       for (std::size_t i = 0; i < allocations_per_thread; ++i) {
         auto mass = static_cast<double>(t * 1000 + i);
         thread_handles[t].push_back(physics_pool_->Allocate(mass));

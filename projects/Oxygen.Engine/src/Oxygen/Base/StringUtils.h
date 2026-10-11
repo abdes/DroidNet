@@ -6,20 +6,107 @@
 
 #pragma once
 
+#include <concepts>
+#include <cstdint>
+#include <string>
+#include <string_view>
+
 #include <Oxygen/Base/Platforms.h>
 
 #if defined(OXYGEN_WINDOWS)
-#  include <Oxygen/Base/Windows/Exceptions.h>
 #  include <windows.h>
+
+#  include <Oxygen/Base/Windows/Exceptions.h>
 #else
-#  include <cstdlib>
-#  include <cwchar>
-#  include <locale>
-#  include <string>
-#  include <vector>
+#  include <stdexcept>
 #endif
 
 namespace oxygen::string_utils {
+
+#if !defined(OXYGEN_WINDOWS)
+namespace detail {
+  // Strict, locale-independent UTF-8 / UTF-16 / UTF-32 codec for platforms
+  // where wchar_t holds one Unicode scalar value. Rejects overlong forms,
+  // surrogate code points, values above U+10FFFF and truncated sequences.
+  static_assert(sizeof(wchar_t) == 4, "POSIX wide strings are UTF-32");
+
+  inline constexpr char32_t kMaxCodePoint = 0x10FFFF;
+
+  [[nodiscard]] constexpr auto IsScalarValue(const char32_t cp) noexcept
+  {
+    return cp <= kMaxCodePoint && (cp < 0xD800 || cp > 0xDFFF);
+  }
+
+  //! Decode one UTF-8 sequence starting at `pos`; advances `pos`.
+  [[nodiscard]] inline auto DecodeUtf8(std::string_view in, size_t& pos)
+    -> char32_t
+  {
+    const auto fail
+      = [] { throw std::runtime_error("Invalid UTF-8 sequence"); };
+    const auto lead = static_cast<unsigned char>(in[pos++]);
+    if (lead < 0x80) {
+      return lead;
+    }
+    size_t extra = 0;
+    char32_t cp = 0;
+    char32_t min = 0;
+    if ((lead & 0xE0U) == 0xC0U) {
+      extra = 1;
+      cp = lead & 0x1FU;
+      min = 0x80;
+    } else if ((lead & 0xF0U) == 0xE0U) {
+      extra = 2;
+      cp = lead & 0x0FU;
+      min = 0x800;
+    } else if ((lead & 0xF8U) == 0xF0U) {
+      extra = 3;
+      cp = lead & 0x07U;
+      min = 0x10000;
+    } else {
+      fail();
+    }
+    if (in.size() - pos < extra) {
+      fail();
+    }
+    for (size_t i = 0; i < extra; ++i) {
+      const auto next = static_cast<unsigned char>(in[pos++]);
+      if ((next & 0xC0U) != 0x80U) {
+        fail();
+      }
+      cp = (cp << 6U) | (next & 0x3FU);
+    }
+    if (cp < min || !IsScalarValue(cp)) {
+      fail();
+    }
+    return cp;
+  }
+
+  //! Append the UTF-8 encoding of a Unicode scalar value.
+  template <typename OutputType>
+  void AppendUtf8(OutputType& out, const char32_t cp)
+  {
+    using CharT = typename OutputType::value_type;
+    if (!IsScalarValue(cp)) {
+      throw std::runtime_error("Invalid wide character sequence");
+    }
+    if (cp < 0x80) {
+      out.push_back(static_cast<CharT>(cp));
+    } else if (cp < 0x800) {
+      out.push_back(static_cast<CharT>(0xC0U | (cp >> 6U)));
+      out.push_back(static_cast<CharT>(0x80U | (cp & 0x3FU)));
+    } else if (cp < 0x10000) {
+      out.push_back(static_cast<CharT>(0xE0U | (cp >> 12U)));
+      out.push_back(static_cast<CharT>(0x80U | ((cp >> 6U) & 0x3FU)));
+      out.push_back(static_cast<CharT>(0x80U | (cp & 0x3FU)));
+    } else {
+      out.push_back(static_cast<CharT>(0xF0U | (cp >> 18U)));
+      out.push_back(static_cast<CharT>(0x80U | ((cp >> 12U) & 0x3FU)));
+      out.push_back(static_cast<CharT>(0x80U | ((cp >> 6U) & 0x3FU)));
+      out.push_back(static_cast<CharT>(0x80U | (cp & 0x3FU)));
+    }
+  }
+} // namespace detail
+#endif
 
 // Concept to ensure the output type has clear(), resize(), and data() methods
 // and that T::value_type is convertible to char
@@ -58,24 +145,12 @@ void Utf8ToWide(const InputType& in, std::wstring& out)
     windows::WindowsException::ThrowFromLastError();
   }
 #else
-  // Save the current locale
-  std::string currentLocale = std::setlocale(LC_ALL, nullptr);
-
-  // Set the locale to UTF-8
-  std::setlocale(LC_ALL, "en_US.UTF-8");
-
-  size_t len = std::mbstowcs(nullptr, sv_in.data(), 0);
-  if (len == static_cast<size_t>(-1)) {
-    // Restore the previous locale before throwing an exception
-    std::setlocale(LC_ALL, currentLocale.c_str());
-    throw std::runtime_error("Invalid UTF-8 sequence");
+  std::wstring decoded;
+  decoded.reserve(sv_in.size());
+  for (size_t pos = 0; pos < sv_in.size();) {
+    decoded.push_back(static_cast<wchar_t>(detail::DecodeUtf8(sv_in, pos)));
   }
-
-  out.resize(len);
-  std::mbstowcs(&out[0], sv_in.data(), len);
-
-  // Restore the previous locale
-  std::setlocale(LC_ALL, currentLocale.c_str());
+  out = std::move(decoded);
 #endif
 }
 
@@ -126,24 +201,12 @@ void WideToUtf8(const std::wstring_view& in, OutputType& out)
     windows::WindowsException::ThrowFromLastError();
   }
 #else
-  // Save the current locale
-  std::string currentLocale = std::setlocale(LC_ALL, nullptr);
-
-  // Set the locale to UTF-8
-  std::setlocale(LC_ALL, "en_US.UTF-8");
-
-  size_t len = std::wcstombs(nullptr, in.data(), 0);
-  if (len == static_cast<size_t>(-1)) {
-    // Restore the previous locale before throwing an exception
-    std::setlocale(LC_ALL, currentLocale.c_str());
-    throw std::runtime_error("Invalid wide character sequence");
+  OutputType encoded;
+  encoded.reserve(in.size());
+  for (const wchar_t wc : in) {
+    detail::AppendUtf8(encoded, static_cast<char32_t>(wc));
   }
-
-  out.resize(len);
-  std::wcstombs(reinterpret_cast<char*>(out.data()), in.data(), len);
-
-  // Restore the previous locale
-  std::setlocale(LC_ALL, currentLocale.c_str());
+  out = std::move(encoded);
 #endif
 }
 
@@ -160,8 +223,24 @@ inline void WideToUtf8(const wchar_t* in, std::string& out)
 
 inline void WideToUtf8(const char16_t* in, std::string& out)
 {
+#if defined(OXYGEN_WINDOWS)
+  // wchar_t is UTF-16 on Windows.
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   WideToUtf8(std::wstring_view(reinterpret_cast<const wchar_t*>(in)), out);
+#else
+  const std::u16string_view utf16(in);
+  std::string encoded;
+  encoded.reserve(utf16.size());
+  for (size_t i = 0; i < utf16.size(); ++i) {
+    char32_t cp = utf16[i];
+    if (cp >= 0xD800 && cp <= 0xDBFF && i + 1 < utf16.size()
+      && utf16[i + 1] >= 0xDC00 && utf16[i + 1] <= 0xDFFF) {
+      cp = 0x10000 + ((cp - 0xD800) << 10U) + (utf16[++i] - 0xDC00);
+    }
+    detail::AppendUtf8(encoded, cp);
+  }
+  out = std::move(encoded);
+#endif
 }
 
 inline void WideToUtf8(const std::wstring& in, std::u8string& out)
