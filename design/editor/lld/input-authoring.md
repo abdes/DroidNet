@@ -1,7 +1,7 @@
 # Input Authoring LLD
 
-Status: `design draft; awaiting owner review (ED-M09.1)`; delivered by
-[ED-M09](../plan/ED-M09-input-authoring.md).
+Status: `design draft; IQ-1 decided; awaiting owner review (ED-M09.1)`;
+delivered by [ED-M09](../plan/ED-M09-input-authoring.md).
 
 Summary: users create input actions and input mapping contexts from the
 Content Browser and edit them in two focused editors. A context lists its
@@ -80,7 +80,7 @@ Engine, verified in source:
 - **Mapping order is evaluation order.** When a consuming action triggers,
   every later mapping in its context is cancelled and lower-priority contexts
   are not updated that frame, whatever input they are bound to
-  ([EG-13](#151-engine-gaps)).
+  ([IF-9](../plan/ED-M09-input-authoring.md#engine-behavior-to-confirm)).
 - **Triggers.** Hydration reads `hold_time` for hold, hold-and-release and
   tap (tap's release window), `interval` for pulse, `chord_action` for chord
   and action chain (both become the same runtime `ActionTriggerChain`), and
@@ -89,7 +89,8 @@ Engine, verified in source:
   After the first step, a step's window must be positive or the combo resets.
 - **A mapping without triggers never fires.**
 - **Scale and bias are cooked but not applied**: hydration and
-  `InputActionMapping` ignore them ([EG-1](#151-engine-gaps)). A key drives an
+  `InputActionMapping` ignore them
+  ([IF-1](../plan/ED-M09-input-authoring.md#engine-defects)). A key drives an
   axis action's X component with 1 while pressed.
 - **Flags.** `auto_load`/`auto_activate` are honored by RenderScene's
   showcase loader; the player and scene instantiation ignore them and start
@@ -188,7 +189,7 @@ for contexts, because the runtime registers both by name. An action declared
 identically in two files is one asset with two sources (warning); with
 different types it is an error, as in the cooker. Two contexts with the same
 name are an error (the cooker would silently let one overwrite the other,
-[EG-3](#151-engine-gaps)).
+[IF-7](../plan/ED-M09-input-authoring.md#engine-defects)).
 
 A name is 1–63 characters matching `[A-Za-z_][A-Za-z0-9_]*`, which keeps
 virtual paths, file names and script references simple
@@ -252,7 +253,7 @@ the editor creates; reading keeps the engine defaults for omitted fields.
 
 Rules the schema does not express are editor checks with `OXE.INPUT.*`
 codes (section 12) and are proposed as schema additions
-([EG-2](#151-engine-gaps)).
+([IF-2 to IF-6](../plan/ED-M09-input-authoring.md#engine-defects)).
 
 ## 8. Commands, Services, Or Adapters
 
@@ -517,8 +518,9 @@ panel lists cook failures with Go To Property.
 - **Failures.** The cooker's `input.*` diagnostics keep their codes and map to
   properties through their object path; both forms the cooker emits
   (`$.contexts[0].mappings[2]` and `contexts.Gameplay.mappings[2]`) resolve
-  ([EG-11](#151-engine-gaps)). A dirty input document in a cook closure follows
-  the Save listed and Cook flow.
+  ([IF-14](../plan/ED-M09-input-authoring.md#documentation-and-editor-design-inconsistencies)).
+  A dirty input document in a cook closure follows the Save listed and Cook
+  flow.
 - **Play.** The Play section's contexts and script references resolve to the
   cooked assets; the player hydrates them by key. Nothing in Play reads the
   Load and Activate flags.
@@ -543,7 +545,7 @@ relocation its existing domain.
 | `OXE.INPUT.TRIGGER_FIELD_REQUIRED` | Error    | Hold, tap or pulse time not positive; chord action or combo steps missing. |
 | `OXE.INPUT.COMBO_STEP_UNREACHABLE` | Error    | A step with no completion state, or a zero window after the first step.    |
 | `OXE.INPUT.VALUE_OUT_OF_RANGE`     | Error    | Non-finite or out-of-range number; the edit is rejected.                   |
-| `OXE.INPUT.SCALE_BIAS_IGNORED`     | Info     | Non-default scale or bias, which the runtime does not apply (until EG-1).  |
+| `OXE.INPUT.SCALE_BIAS_IGNORED`     | Info     | Non-default scale or bias, which the runtime does not apply (IF-1).        |
 | `OXE.INPUT.LAST_CONTEXT_IN_FILE`   | Error    | Delete would leave an `*.input.json` without contexts.                     |
 | `OXE.INPUT.CAPTURE_UNSUPPORTED`    | Info     | A captured key has no engine slot.                                         |
 | `OXE.INPUT.CREATE_FAILED`          | Error    | Creating a file failed; names the path and cause.                          |
@@ -582,42 +584,40 @@ Engine `input.*` codes stay as reported.
 ### 15.1 Engine gaps
 
 Capabilities the engine does not provide, which this design therefore does
-not offer, and engine facts that limit authoring.
+not offer. Engine defects and inconsistencies found during the analysis
+(scale and bias ignored at runtime, unusable schema defaults, silent
+overwrites and others) are tracked with fixes and pass/fail checks in the
+plan's [findings](../plan/ED-M09-input-authoring.md#findings-from-the-analysis).
 
-| ID    | Gap                                                                                                                                                                         | Editor handling                                              | Matters for V0.1                                                                                             |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| EG-1  | Scale and bias are cooked but not applied by hydration or mappings.                                                                                                         | Per IQ-2; non-default values kept and flagged.               | Yes: without them keys cannot build a 2D move axis or a negative 1D axis, and mouse look has no sensitivity. |
-| EG-2  | The schema omits rules the runtime depends on: tap time, chord link for `action_chain`, combo step states and windows, threshold sign, non-empty triggers.                  | Editor checks with `OXE.INPUT.*` codes.                      | Yes, schema-only: hand-written files and cooks should fail the same way the editor does.                     |
-| EG-3  | The cooker does not detect two contexts of the same name in different files; the later one overwrites.                                                                      | Editor error.                                                | Low: the editor prevents it.                                                                                 |
-| EG-4  | Runtime trigger options absent from the cooked format: hold one-shot; pulse trigger-on-start, limit, jitter, phase, ramp; chain max delay and require-held; combo breakers. | Not offered.                                                 | No; combo breakers and hold one-shot are the first candidates after V0.1.                                    |
-| EG-5  | No input modifiers beyond scale and bias (dead zone, smoothing, response curves).                                                                                           | Not offered.                                                 | No; negate and swizzle follow from EG-1.                                                                     |
-| EG-6  | No triggers on the action itself shared by all its mappings.                                                                                                                | Not offered; per-binding triggers only.                      | No.                                                                                                          |
-| EG-7  | No 3D axis value type.                                                                                                                                                      | Not offered.                                                 | No.                                                                                                          |
-| EG-8  | No gamepad slots.                                                                                                                                                           | Not offered; the key selector has no gamepad section.        | No (out of scope).                                                                                           |
-| EG-9  | No player-remappable bindings or runtime rebinding.                                                                                                                         | Not offered.                                                 | No (out of scope).                                                                                           |
-| EG-10 | No description field for authors' notes (the schemas reject extra properties).                                                                                              | None.                                                        | Low.                                                                                                         |
-| EG-11 | Cooker object paths use two forms (`$.contexts[i]...` and `contexts.<name>...`).                                                                                            | Both resolve to properties.                                  | Low.                                                                                                         |
-| EG-12 | No API to evaluate a context against synthetic input outside a running game.                                                                                                | No in-editor preview (IQ-7).                                 | No.                                                                                                          |
-| EG-13 | Consumption is not scoped to the consumed input: a consuming trigger skips every later mapping and lower-priority context for the frame.                                    | Stated in the Consume input help and the mapping list order. | Worth confirming: authors usually expect only the same key to be consumed.                                   |
+| ID   | Gap                                                                                                                                                                         | Editor handling                                       | Matters for V0.1                                                          |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
+| EG-1 | Runtime trigger options absent from the cooked format: hold one-shot; pulse trigger-on-start, limit, jitter, phase, ramp; chain max delay and require-held; combo breakers. | Not offered.                                          | No; combo breakers and hold one-shot are the first candidates after V0.1. |
+| EG-2 | No input modifiers beyond scale and bias (dead zone, smoothing, response curves).                                                                                           | Not offered.                                          | No; negate and swizzle follow from IF-1.                                  |
+| EG-3 | No triggers on the action itself shared by all its mappings.                                                                                                                | Not offered; per-binding triggers only.               | No.                                                                       |
+| EG-4 | No 3D axis value type.                                                                                                                                                      | Not offered.                                          | No.                                                                       |
+| EG-5 | No gamepad slots.                                                                                                                                                           | Not offered; the key selector has no gamepad section. | No (out of scope).                                                        |
+| EG-6 | No player-remappable bindings or runtime rebinding.                                                                                                                         | Not offered.                                          | No (out of scope).                                                        |
+| EG-7 | No description field for authors' notes (the schemas reject extra properties).                                                                                              | None.                                                 | Low.                                                                      |
+| EG-8 | No API to evaluate a context against synthetic input outside a running game.                                                                                                | No in-editor preview (IQ-7).                          | No.                                                                       |
 
 ### 15.2 Open questions
 
-In priority order. Each needs the owner's decision at ED-M09.1.
+In priority order. Each open row needs the owner's decision at ED-M09.1.
 
 | ID    | Question                                                             | Recommendation                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ----- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| IQ-1  | Authoring format and file granularity.                               | Engine formats unchanged; the editor creates one asset per file; hand-written multi-asset files are edited in place, with explicit Split (sections 7.1, 8.4).                                                                                                                                                                                                                                                                     |
-| IQ-2  | Scale and bias have no runtime effect (EG-1).                        | Schedule the engine fix (apply scale and bias in mappings) in ED-M09.2 and show Scale X/Y and Bias X/Y per binding in the details pane. If declined: hide them, keep hand-written values and show `SCALE_BIAS_IGNORED`.                                                                                                                                                                                                           |
+| IQ-1  | Authoring format and file granularity.                               | Decided 2026-10-11: Engine formats unchanged; the editor creates one asset per file; hand-written multi-asset files are edited in place, with explicit Split (sections 7.1, 8.4).                                                                                                                                                                                                                                                 |
+| IQ-2  | Scale and bias have no runtime effect (IF-1).                        | Schedule the engine fix (apply scale and bias in mappings) in ED-M09.2 and show Scale X/Y and Bias X/Y per binding in the details pane. If declined: hide them, keep hand-written values and show `SCALE_BIAS_IGNORED`.                                                                                                                                                                                                           |
 | IQ-3  | Input asset identity and name scope.                                 | Name-derived virtual path (section 7.2); names unique project-wide per kind; moves within a mount rewrite nothing.                                                                                                                                                                                                                                                                                                                |
 | IQ-4  | Name pattern.                                                        | `[A-Za-z_][A-Za-z0-9_]*`, 1–63 characters, for new names and renames; hand-written exceptions kept with a warning.                                                                                                                                                                                                                                                                                                                |
-| IQ-5  | Chord and action chain behave identically at runtime.                | One "Chord" type in the picker, written as `chord`; hand-written `action_chain` shows as Chord and is kept until its type is changed.                                                                                                                                                                                                                                                                                             |
+| IQ-5  | Chord and action chain behave identically at runtime (IF-10).        | One "Chord" type in the picker, written as `chord`; hand-written `action_chain` shows as Chord and is kept until its type is changed.                                                                                                                                                                                                                                                                                             |
 | IQ-6  | Show Load when mounted and Activate when loaded, which Play ignores? | Show, collapsed under Standalone loading, with the one-line explanation. Alternative: hide and preserve.                                                                                                                                                                                                                                                                                                                          |
-| IQ-7  | In-editor live preview of a context.                                 | Defer past V0.1; Play is the test path (EG-12).                                                                                                                                                                                                                                                                                                                                                                                   |
+| IQ-7  | In-editor live preview of a context.                                 | Defer past V0.1; Play is the test path (EG-8).                                                                                                                                                                                                                                                                                                                                                                                    |
 | IQ-8  | Module placement.                                                    | New `Oxygen.Editor.InputEditor` project beside MaterialEditor; ARCHITECTURE and project layout list it.                                                                                                                                                                                                                                                                                                                           |
 | IQ-9  | Default folder.                                                      | `Content/Input`, created by the project template and used by the creation target policy ([project layout](project-layout-and-templates.md)).                                                                                                                                                                                                                                                                                      |
 | IQ-10 | Touch points in other LLDs (not edited here).                        | At ED-M09.1 close, amend: [script authoring](script-authoring.md) §4 (Edit opens the input editor; Open in code editor remains), §6 and §8 (pickers offer New action and New context; Play priority default reads the source); [content browser §9.5](content-browser-asset-identity.md#95-asset-relocation) (input reference kinds); [content pipeline](content-pipeline.md) (name-based `depends_on`, multi-output provenance). |
 | IQ-11 | Mapping order.                                                       | Show evaluation order with contiguous action groups and an explicit Group by action (section 9.3), rather than a grouped view that hides order.                                                                                                                                                                                                                                                                                   |
-| IQ-12 | Schema augmentation (EG-2).                                          | Engine schema-only change in ED-M09.2 so the cooker rejects what the editor rejects.                                                                                                                                                                                                                                                                                                                                              |
+| IQ-12 | Schema augmentation (IF-2 to IF-6).                                  | Engine schema-only change in ED-M09.2 so the cooker rejects what the editor rejects.                                                                                                                                                                                                                                                                                                                                              |
 
 ### 15.3 Rejected alternatives
 
