@@ -146,8 +146,9 @@ for (const auto& t : snapshot.GetActionTransitions("attack")) {
 
 ### Relative axes (look, wheel zoom)
 
-GetActionValue() of a mouse or wheel action is the whole-frame delta. Do not
-sum transition values.
+GetActionValue() of a mouse or wheel action is the whole-frame delta its
+triggers accepted; a look gated by a chord is zero while the chord is not
+held. Do not sum transition values.
 
 ```cpp
 const auto look = snapshot.GetActionValue("look").GetAs<oxygen::Axis2D>();

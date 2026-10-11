@@ -97,6 +97,23 @@ sequenceDiagram
   Note over Chain: Triggered
 ```
 
+### Implicit gate (chord)
+
+Made implicit, a Chain gates another binding on a held prerequisite instead
+of firing on its own press. The DemoShell fly camera binds its look action to
+`MouseXY` with an explicit Down trigger (actuation threshold 0) and an
+implicit Chain linked to a right-button action, with `RequirePrerequisiteHeld`
+enabled:
+
+- Button up: the Chain is not armed, the binding is neither triggered nor
+  ongoing, and the look value is (0, 0) however the mouse moves.
+- Button held: the Chain is armed, motion triggers the binding, and the look
+  value is the frame's mouse delta.
+- Button released: the Chain disarms and the value returns to (0, 0).
+
+The gated binding contributes no value while the Chain rejects it; see
+[Actions](../Actions.md#only-accepted-input-counts).
+
 ## Configuration (C++)
 
 ```cpp

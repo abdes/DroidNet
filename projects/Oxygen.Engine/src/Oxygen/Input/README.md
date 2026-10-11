@@ -109,7 +109,9 @@ sequenceDiagram
   game time when the engine provides none. Hold-to-confirm works in a paused
   menu, and a 0.5 s hold takes 0.5 s in slow motion.
 - **Relative axes.** Mouse motion and wheel bindings sum every event of the
-  frame: `GetValue()` is the whole-frame delta, at any frame rate.
+  frame that their triggers accept: `GetValue()` is the whole-frame delta, at
+  any frame rate. Rejected input never reaches the value: a look gated by a
+  right-button chord reads zero while the button is up.
 - **Context deactivation.** `DeactivateMappingContext` stops routing at once
   and cancels the context's active bindings at the start of the next `kInput`,
   so the Canceled edge is visible to gameplay. `RemoveMappingContext` cancels

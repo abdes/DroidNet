@@ -46,7 +46,7 @@ axis: W with scale (0, 1) gives (0, 1); D with scale (1, 0) gives (1, 0).
 An unscaled key bound to a 2D action gives (1, 1).
 
 Relative sources (`IsRelative()`: mouse axes and every wheel slot) accumulate
-the samples of the current frame; see
+the samples of the current frame that the triggers accept; see
 [Actions.md](Actions.md#relative-values).
 
 ### Trigger aggregation
@@ -62,6 +62,10 @@ to its action:
 - The binding is ongoing while an explicit trigger is ongoing and the
   implicits are satisfied.
 - A trigger that reports Canceled cancels the binding's activation.
+- The contributed value is the binding's value while it is triggered or
+  ongoing, and zero otherwise; a relative binding contributes the motion
+  accepted in the current frame
+  ([only accepted input counts](Actions.md#only-accepted-input-counts)).
 
 Implicit and blocker triggers are evaluated on every update, without fresh
 input, so they react to time and to other actions. Chain triggers are also

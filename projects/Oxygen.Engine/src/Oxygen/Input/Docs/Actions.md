@@ -32,7 +32,7 @@ After every contribution the action recombines all of them:
 | Ongoing   | Any contribution is ongoing.                                                                                                                                          |
 | Triggered | Any contribution triggered **in the current frame**. Older contributions keep their ongoing bit but not their edges.                                                  |
 | Canceled  | Some contribution canceled in the current frame **and** the combined action is not active. A cancel from one binding does not cancel an action another binding holds. |
-| Value     | Combined per component by the accumulation mode. `kBool`: any true.                                                                                                   |
+| Value     | Combined per component by the accumulation mode. `kBool`: any true. A contribution's value is zero while its binding is neither triggered nor ongoing.                |
 
 Accumulation modes (`ActionAccumulation`):
 
@@ -54,9 +54,24 @@ Mouse motion and wheel bindings are relative: their value is the sum of every
 event received in the current frame, and returns to zero in the next frame
 without motion. `GetValue()` of a look action is therefore the whole-frame
 delta, independent of how many events the device sent or the frame rate.
-Only motion the binding's triggers accept counts: a look bound to MouseXY
-with a right-button chord reads zero while the button is up. An absolute
-binding likewise contributes its value only while it is triggered or ongoing.
+
+### Only accepted input counts
+
+A binding contributes its value only while its triggers accept the input,
+that is while the binding is triggered or ongoing:
+
+- A relative binding reports the motion its triggers accepted in the
+  current frame. Motion they reject is dropped, not deferred.
+- An absolute binding (a key, a button, a stick) contributes zero while it
+  is neither triggered nor ongoing.
+
+So gated input never leaks into the value. A camera look bound to `MouseXY`
+with an implicit Chain on a right-button action (see
+[Chain](Triggers/Chain.md#implicit-gate-chord)) reads (0, 0) while the button
+is up, the frame's mouse delta while it is held, and (0, 0) again once it is
+released, so gameplay can read `GetValue()` without checking the state. This
+matches Enhanced Input, which resets an action's value when its trigger state
+is None.
 Do not sum `GetFrameTransitions()` values to recover a delta; transitions
 record state changes, not samples.
 
