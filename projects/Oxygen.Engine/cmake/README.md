@@ -140,14 +140,16 @@ Update external profiles that still use the former `Oxygen/*` package pattern.
 No module selection builds the full engine, including its four core cooker
 tools, ShaderBake, RenderScene, DemoShell, schemas and showcase content. To build
 only reusable modules, set `oxygen/*:modules=OxCo,Clap`, for example. Supported
-names are `Base`, `Composition`, `OxCo`, `Serio`, `TextWrap` and `Clap`.
-Dependencies are added automatically: this example builds Base, OxCo, TextWrap
-and Clap, and requires only fmt, Asio and magic_enum. Order and redundant names
+names are `Base`, `Composition`, `OxCo`, `Serio`, `TextWrap`, `Clap`, `Config`,
+`Console`, `Core`, `Platform` and `Input`. Dependencies are added automatically:
+this example builds Base, OxCo, TextWrap and Clap, and requires only fmt, Asio
+and magic_enum; `Input` builds Base, Composition, OxCo, Config, Console, Core,
+Platform and Input, and requires fmt, Asio, glm and nlohmann_json. Order and redundant names
 do not create different package IDs. The former inert `base` and `oxco` Boolean
 options have been replaced by this explicit selection.
 
 `shared=True` is the Conan default. Full-engine packages require shared libraries
-because the showcase dynamically loads its graphics backend DLL. The six reusable
+because the showcase dynamically loads its graphics backend DLL. The reusable
 modules also support `shared=False`. This package restriction does not remove
 static-library development through CMake; a fully static showcase needs a separate
 loader design and is not advertised as a supported SDK configuration.
@@ -167,7 +169,7 @@ find_package(Oxygen CONFIG REQUIRED COMPONENTS OxCo Clap)
 target_link_libraries(my_game PRIVATE oxygen::oxco oxygen::clap)
 ```
 
-Use a C++23-capable toolchain. The six reusable modules support Windows, Linux
+Use a C++23-capable toolchain. The reusable modules support Windows, Linux
 and macOS; the full engine retains its Windows x64/MSVC baseline. Ordinary Conan
 consumers need no Oxygen-specific `settings_user.yml`. Dependencies stay in the
 Conan graph; use Conan's run environment for packaged tools. The separately
@@ -267,16 +269,38 @@ dependencies, to check incremental, runtime and install behavior.
 
 ## Selecting reusable modules
 
-The reusable set is `Base`, `Composition`, `OxCo`, `Serio`, `TextWrap`, and `Clap`.
-These modules support Windows, Linux and macOS; the full-engine Windows/MSVC
-restriction is applied only when building the full engine. Public target compile
-features determine module language requirements (currently C++23 through Base).
-CMake 4.2 remains the common infrastructure minimum.
+The reusable set is `Base`, `Composition`, `OxCo`, `Serio`, `TextWrap`, `Clap`,
+`Config`, `Console`, `Core`, `Platform` and `Input`. These modules support
+Windows, Linux and macOS; the full-engine Windows/MSVC restriction is applied
+only when building the full engine. Public target compile features determine
+module language requirements (currently C++23 through Base). CMake 4.2 remains
+the common infrastructure minimum.
 
-Validation of this infrastructure change covers Windows module builds and Linux
-configuration. Linux C++ compilation has existing source portability blockers;
-macOS execution has not been exercised. Those limits do not change the intended
-three-platform module contract.
+| Module   | Also selects                                 | External dependencies    |
+| -------- | -------------------------------------------- | ------------------------ |
+| Clap     | TextWrap                                     | magic_enum               |
+| Console  | Config                                       | nlohmann_json            |
+| Core     | Composition, OxCo                            | Asio, glm                |
+| Platform | Config, Core, Composition, OxCo              | Asio, glm                |
+| Input    | Console, Platform, Core (and their closures) | Asio, glm, nlohmann_json |
+
+Every module also selects Base (fmt). In a reusable selection, Platform builds
+only `oxygen::platform-input`: keys, mouse buttons, input slots and input events,
+with no SDL or ImGui dependency. The SDL backend (`oxygen::platform`) and Core's
+bindless code generation are full-engine only; reusable builds consume Core's
+committed generated headers.
+
+Linux validation: the `Input` selection, with tests, builds without warnings and
+passes its tests with GCC 14 (`profiles/Linux-gcc.ini`, static) and Clang 18
+(`profiles/Linux-clang.ini`, shared). macOS execution has not been exercised.
+
+```sh
+conan install . -pr:a profiles/Linux-gcc.ini -s build_type=Debug \
+  -o "&:modules=Input" -o "&:tests=True" --build=missing
+cmake --preset oxygen-ninja-default
+cmake --build --preset oxygen-ninja-debug
+ctest --preset oxygen-ninja-debug
+```
 
 A standalone configure without `OXYGEN_MODULES` builds the full engine. An
 embedded configure must select modules explicitly:
@@ -290,8 +314,9 @@ target_link_libraries(my_app PRIVATE oxygen::clap oxygen::oxco)
 ```
 
 This selects Clap, OxCo, TextWrap and Base. It does not configure graphics,
-physics, ShaderBake, or unrelated engine modules. The other five modules require Base;
-Clap additionally requires TextWrap. Unknown names fail configuration.
+physics, ShaderBake, or unrelated engine modules. Every module requires Base;
+the table above lists the other modules each selection adds. Unknown names fail
+configuration.
 Consumers can select an equivalent module-only standalone build with
 `-DOXYGEN_MODULES="Clap;OxCo"`.
 

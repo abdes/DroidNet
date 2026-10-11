@@ -14,7 +14,7 @@ if(NOT PROJECT_IS_TOP_LEVEL AND OXYGEN_MODULES STREQUAL "")
   message(
     FATAL_ERROR
     "Embedding Oxygen requires an explicit OXYGEN_MODULES selection: "
-    "Base;Composition;OxCo;Serio;TextWrap;Clap."
+    "Base;Composition;OxCo;Serio;TextWrap;Clap;Config;Console;Core;Platform;Input."
   )
 endif()
 
@@ -22,7 +22,8 @@ set(OXYGEN_BUILD_FULL_ENGINE TRUE)
 set(OXYGEN_ENABLED_MODULES "")
 if(NOT OXYGEN_MODULES STREQUAL "")
   set(OXYGEN_BUILD_FULL_ENGINE FALSE)
-  # Dependency order: Clap requires TextWrap; all other reusable modules require Base.
+  # Dependency order. Every module requires Base; the closure below adds the
+  # other modules each one links against.
   set(
     _oxygen_available_modules
     Base
@@ -31,6 +32,11 @@ if(NOT OXYGEN_MODULES STREQUAL "")
     Serio
     TextWrap
     Clap
+    Config
+    Console
+    Core
+    Platform
+    Input
   )
   foreach(_module IN LISTS OXYGEN_MODULES)
     if(NOT _module IN_LIST _oxygen_available_modules)
@@ -45,6 +51,38 @@ if(NOT OXYGEN_MODULES STREQUAL "")
     ${OXYGEN_MODULES}
     Base
   )
+  # Direct module dependencies, applied in reverse dependency order so the
+  # closure is complete after one pass.
+  if("Input" IN_LIST _oxygen_requested_modules)
+    list(
+      APPEND
+      _oxygen_requested_modules
+      Console
+      Platform
+      Core
+    )
+  endif()
+  if("Platform" IN_LIST _oxygen_requested_modules)
+    list(
+      APPEND
+      _oxygen_requested_modules
+      Config
+      Core
+      Composition
+      OxCo
+    )
+  endif()
+  if("Core" IN_LIST _oxygen_requested_modules)
+    list(
+      APPEND
+      _oxygen_requested_modules
+      Composition
+      OxCo
+    )
+  endif()
+  if("Console" IN_LIST _oxygen_requested_modules)
+    list(APPEND _oxygen_requested_modules Config)
+  endif()
   if("Clap" IN_LIST _oxygen_requested_modules)
     list(APPEND _oxygen_requested_modules TextWrap)
   endif()

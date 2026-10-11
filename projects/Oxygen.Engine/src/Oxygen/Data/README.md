@@ -152,7 +152,7 @@ for (uint32_t idx : view.IndexBuffer().Widened()) { /* ... */ }
 ## 7. Building This Module
 
 Run from Oxygen.Engine in an initialized compiler shell. Data is part of the
-full-engine build; it is not one of the six source-embeddable reusable modules.
+full-engine build; it is not one of the source-embeddable reusable modules.
 
 ```powershell
 # One-time setup, or repeat when Conan/Python dependency inputs change:
