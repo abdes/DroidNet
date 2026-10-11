@@ -2419,9 +2419,11 @@ void SceneLoaderService::LogSceneHierarchy(const scene::Scene& scene)
     PrintSubtree(PrintSubtree, root, 0);
   }
 
-  if (visited_nodes.size() != runtime_nodes_.size()) {
+  // Instanced scenes add nodes beyond the scene's own, so compare against
+  // every node of the runtime scene: a gap means nodes hang off no root.
+  if (visited_nodes.size() != scene.GetNodeCount()) {
     LOG_F(WARNING, "SceneLoader: Hierarchy traversal visited {} of {} nodes.",
-      visited_nodes.size(), runtime_nodes_.size());
+      visited_nodes.size(), scene.GetNodeCount());
     for (auto& node : runtime_nodes_) {
       if (!node.IsAlive() || visited_nodes.contains(node.GetHandle())) {
         continue;
