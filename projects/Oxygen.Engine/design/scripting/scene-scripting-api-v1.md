@@ -101,6 +101,13 @@ when that design is implemented.
 
 5. `scene.root_nodes() -> {SceneNode}`
 
+6. `scene.active_camera() -> SceneNode?`
+   The camera node the scene is viewed through, or nil.
+
+7. `scene.set_active_camera(node: SceneNode) -> boolean`
+   Views the scene through `node`. Returns false, changing nothing, when
+   `node` is not a live node of the scene with a camera.
+
 ## 3.3 Path Queries
 
 Canonical API is `scene.query(...)`.

@@ -24,23 +24,36 @@ shipped game would, and reports to whoever launched it.
 
 ## 2. `Oxygen.SceneInstantiation`
 
-Depends on Data, Content, Scene and Scripting; links no renderer.
+Depends on Data, Content, Input, Scene and Scripting; links no renderer.
 
 ```cpp
+struct SceneInstantiationIssue {
+  data::AssetKey scene;               // the scene or an instanced one
+  std::optional<uint32_t> node_index; // when the record belongs to a node
+  std::string message;
+};
+
 struct SceneInstantiationRequest {
   std::shared_ptr<const data::SceneAsset> asset;
   observer_ptr<scene::Scene> target;
-  observer_ptr<scripting::SceneScriptAttachment> scripts; // null: no scripts
+  observer_ptr<const scripting::SceneScriptAttachment> scripts; // null: none
+  observer_ptr<engine::InputSystem> input; // null: no starting contexts
 };
 
 struct SceneInstance {
   std::vector<scene::SceneNode> nodes; // index = cooked node index
   std::vector<SceneInstantiationIssue> issues;
+  std::vector<scripting::SceneScriptSlotOutcome> scripts;
 };
 
-auto Instantiate(const SceneInstantiationRequest&, IAssetLoader&)
+auto Instantiate(SceneInstantiationRequest, IAssetLoader&)
   -> co::Co<SceneInstance>;
 ```
+
+Instanced scenes and starting contexts are references, not dependencies, so
+instantiation loads them through `IAssetLoader::StartLoadScene` and
+`StartLoadInputMappingContextAsset`. Instanced scenes contribute nodes and
+scripts, never start state or environment.
 
 It creates nodes in index order with names, flags and transforms; attaches
 renderables with material overrides, cameras, lights, local fog volumes and

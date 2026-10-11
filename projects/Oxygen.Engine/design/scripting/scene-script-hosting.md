@@ -162,8 +162,10 @@ when a source root contains it (development), and otherwise runs the
 bytecode (shipped content). Embedded-source storage remains for content that
 must not depend on files.
 
-1. `ScriptHotReloadService` detects a changed `.lua`/`.luau` file and maps it
-   to the script asset keys whose recorded source path resolves to it.
+1. The engine's `ScriptHotReloadService` detects a changed `.lua`/`.luau`
+   file and hands it to the scripting module
+   (`IAsyncEngine::SetScriptSourceChangedHandler`), which maps it to the
+   scene's script assets whose recorded source path resolves to it.
 2. Scripting re-reads and recompiles the source through the analyzer and
    compiler (declarations and diagnostics included).
 3. On success, every slot using the asset receives the new executable through

@@ -67,11 +67,11 @@ Conclusion:
 
 Input mapping contexts are standalone assets. Scene component `INPT` is not authoritative for runtime behavior.
 
-Default behavior for simple scenarios moves to mapping-context descriptor metadata:
-
-1. `auto-load`
-2. `auto-activate`
-3. `default-priority`
+A mapping-context descriptor carries one start-up value, its default priority.
+Which contexts start is a property of the scene: a scene lists its starting
+contexts with their priorities, and instantiating the scene adds and activates
+them ([scene start state](../runtime-core/scene-instantiation-and-player.md#scene-start-state)).
+Contexts carry no auto-load or auto-activate flag.
 
 ## 5. Target Architecture
 
@@ -269,8 +269,6 @@ Schema deltas:
    - asset-semantic fields are invalid in manifest jobs:
      - `type` (action type — `bool`/`axis1d`/`axis2d`; do not confuse with job `type: "input"`)
      - `consumes_input`
-     - `auto_load`
-     - `auto_activate`
      - `priority`
      - `mappings`
      - `triggers`
@@ -499,7 +497,6 @@ Canonical document (`PlayerInput.input.json`):
   "contexts": [
     {
       "name": "Gameplay",
-      "auto_activate": true,
       "priority": 100,
 
       "mappings": [
@@ -598,30 +595,26 @@ Binary mapping:
 Each `contexts[]` item:
 
 1. `name`: required string (1..63 UTF-8 bytes).
-2. `auto_load`: optional bool, default `false`.
-3. `auto_activate`: optional bool, default `false`. Implies `auto_load=true`.
-4. `priority`: optional int32, default `0`.
-5. `description`: optional string. Ignored by pipeline, for editor hover docs.
-6. `mappings`: required array (Section 7.4.3.4).
+2. `priority`: optional int32, default `0`; the priority used when a context
+   is activated without one.
+3. `description`: optional string. Ignored by pipeline, for editor hover docs.
+4. `mappings`: required array (Section 7.4.3.4).
 
 Each context is emitted as a separate `InputMappingContextAssetDesc` binary asset.
 
 Validation rules:
 
 1. unknown context fields are rejected.
-2. if `auto_activate` is true, `auto_load` is forced true regardless of its explicit value.
-3. `priority` must be int32.
-4. context `name` must be unique within the file and by asset identity in mounted view.
-5. duplicate context names within the same `contexts` array are rejected.
+2. `priority` must be int32.
+3. context `name` must be unique within the file and by asset identity in mounted view.
+4. duplicate context names within the same `contexts` array are rejected.
 
 Binary mapping:
 
-| JSON field      | Binary field (`InputMappingContextAssetDesc`) | Mapping                              |
-| --------------- | --------------------------------------------- | ------------------------------------ |
-| `name`          | `name[64]`                                    | UTF-8, null-terminated, max 63 bytes |
-| `auto_load`     | `flags`                                       | `true` → `kAutoLoad` bit set         |
-| `auto_activate` | `flags`                                       | `true` → `kAutoActivate` bit set     |
-| `priority`      | `default_priority`                            | direct int32 copy                    |
+| JSON field | Binary field (`InputMappingContextAssetDesc`) | Mapping                              |
+| ---------- | --------------------------------------------- | ------------------------------------ |
+| `name`     | `name[64]`                                    | UTF-8, null-terminated, max 63 bytes |
+| `priority` | `default_priority`                            | direct int32 copy                    |
 
 ### 7.4.3.3 Mapping Record Contract
 
@@ -800,10 +793,10 @@ Alternatively, use workspace-level settings for automatic association (Section 7
 
 ## 8.1 `InputMappingContextFlags`
 
-`InputMappingContextFlags` adds:
-
-1. `kAutoLoad = OXYGEN_FLAG(0)`
-2. `kAutoActivate = OXYGEN_FLAG(1)`
+`InputMappingContextFlags` defines no flag: the field is reserved, cooked
+contexts store `kNone`, and the loader rejects a descriptor that sets a bit.
+The descriptor version is 2; version 1 descriptors carried start flags and
+must be recooked.
 
 ## 8.2 `InputMappingContextAssetDesc`
 
@@ -891,23 +884,24 @@ Enumerate  →  Hydrate  →  AddMappingContext  →  ActivateMappingContext
                                          RemoveMappingContext
 ```
 
-**Scenario A — Static auto-activate contexts (e.g. global UI bindings):**
+**Scenario A — Contexts a scene starts with (e.g. gameplay bindings):**
 
-1. After mounting content, call `EnumerateMountedInputContexts()`.
-2. Filter entries where `flags` has `kAutoLoad` set.
-3. For each, call `IAssetLoader::GetInputMappingContextAsset(key)` to load the asset.
-4. Call `HydrateInputContext(asset, loader, input_system)` to get a live context.
-5. Call `InputSystem::AddMappingContext(context, entry.default_priority)`.
-6. If `flags` has `kAutoActivate`, call `InputSystem::ActivateMappingContext(context)`.
+1. The scene lists them as starting input contexts, each with a priority.
+2. Scene instantiation loads each context, hydrates it with
+   `HydrateInputContext(asset, loader, input_system)`, adds it with its
+   priority and activates it.
 
 **Scenario B — Mode-switching contexts (e.g. camera orbit ↔ fly):**
 
-1. Same enumeration and hydration as Scenario A, but only `kAutoLoad` (not `kAutoActivate`).
-2. Application code activates/deactivates contexts based on game state (identical to existing `CameraRigController` pattern).
+1. Scripts call `oxygen.input.activate_context(context)` and
+   `deactivate_context(context)` with a context asset reference; a context
+   not yet added is hydrated on first activation with its default priority.
+2. Application code can do the same through `InputSystem`.
 
-**Scenario C — On-demand contexts (neither auto flag set):**
+**Scenario C — On-demand contexts:**
 
-1. Application loads the asset explicitly via `IAssetLoader::GetInputMappingContextAsset(key)`.
+1. Application loads the asset explicitly
+   (`IAssetLoader::StartLoadInputMappingContextAsset`).
 2. Hydrates and activates when needed; removes when done.
 
 ### 9.4 `InputMappingContextAsset` Accessor
@@ -977,7 +971,6 @@ Per-structure validation:
    - context names unique within the file
    - each context's mapping/trigger/aux/slot ranges valid
    - all `action` names in every context resolve (declared first, then mounted/inflight)
-   - per-context bootstrap metadata invariants valid (`auto_activate` implies `auto_load`)
    - `trigger` shorthand and `triggers` array are mutually exclusive per mapping
 
 ## 11. Diagnostics Contract
@@ -994,29 +987,28 @@ Required diagnostics:
 
 1. `input.request.invalid_job_type`
 2. `input.context.action_unresolved` (action name not found in actions array or mounted content)
-3. `input.context.flags_invalid` (auto_activate without auto_load — auto-corrected with warning)
-4. `input.context.name_duplicate` (duplicate context names within one file)
-5. `input.context.trigger_ambiguous` (both `trigger` and `triggers` present on same mapping)
-6. `input.context.slot_unknown` (slot name not in registered InputSlots)
-7. `input.context.hydration_failed` (descriptor decode or construction error during hydration)
-8. `input.asset.action_conflict` (same name, different type across files)
-9. `input.import.index_registration_failed`
-10. `input.import.unknown_document_structure` (source JSON matches neither primary nor standalone format)
-11. `input.import.skipped_predecessor_failed`
-12. `input.manifest.job_id_missing`
-13. `input.manifest.job_id_duplicate`
-14. `input.manifest.dep_missing_target`
-15. `input.manifest.dep_cycle`
-16. `input.manifest.dep_wrong_type` (reserved — not emitted; kept for code stability)
-17. `input.manifest.key_not_allowed`
+3. `input.context.name_duplicate` (duplicate context names within one file)
+4. `input.context.trigger_ambiguous` (both `trigger` and `triggers` present on same mapping)
+5. `input.context.slot_unknown` (slot name not in registered InputSlots)
+6. `input.context.hydration_failed` (descriptor decode or construction error during hydration)
+7. `input.asset.action_conflict` (same name, different type across files)
+8. `input.import.index_registration_failed`
+9. `input.import.unknown_document_structure` (source JSON matches neither primary nor standalone format)
+10. `input.import.skipped_predecessor_failed`
+11. `input.manifest.job_id_missing`
+12. `input.manifest.job_id_duplicate`
+13. `input.manifest.dep_missing_target`
+14. `input.manifest.dep_cycle`
+15. `input.manifest.dep_wrong_type` (reserved — not emitted; kept for code stability)
+16. `input.manifest.key_not_allowed`
 
 ## 12. Current-format contract
 
 Native Cooker, runtime loaders and inspection tools use the current versions
 from `Oxygen.Data`. There are no compatibility readers. Rebuild tools and recook
-content after a format change. Input activation belongs to mapping-context
-`auto_load`, `auto_activate` and `priority` fields or gameplay code; scene input
-binding records are not authored or emitted.
+content after a format change. A scene's starting input contexts, scripts and
+gameplay code activate contexts; a context only carries its default priority.
+Scene input binding records are not authored or emitted.
 
 ## 14. Test Strategy
 
@@ -1036,7 +1028,7 @@ binding records are not authored or emitted.
 4. Runtime:
    - `EnumerateMountedInputContexts` returns correct entries for mounted sources.
    - `HydrateInputContext` resolves actions, builds triggers, returns live context.
-   - auto-load/auto-activate scenario works end-to-end without scene bindings.
+   - a scene's starting contexts are added and activated by instantiation.
 5. Compatibility checks:
    - verify generated descriptors are consumable by existing runtime and existing tooling.
 6. Schema:
