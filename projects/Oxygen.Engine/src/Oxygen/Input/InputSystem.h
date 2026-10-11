@@ -15,6 +15,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Input/InputSnapshot.h>
 #include <Oxygen/Input/api_export.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
@@ -88,8 +89,13 @@ public:
   OXGN_NPUT_API void AddAction(const std::shared_ptr<input::Action>& action);
   OXGN_NPUT_API void RemoveAction(const std::shared_ptr<input::Action>& action);
   OXGN_NPUT_API void ClearAllActions();
+  //! First action with this name. Names are labels: actions hydrated from
+  //! different assets may share one; find those with GetActionByKey().
   [[nodiscard]] OXGN_NPUT_API auto GetActionByName(std::string_view name) const
     -> std::shared_ptr<input::Action>;
+  //! The action hydrated from the asset with this key, if added.
+  [[nodiscard]] OXGN_NPUT_API auto GetActionByKey(
+    const data::AssetKey& key) const -> std::shared_ptr<input::Action>;
 
   OXGN_NPUT_API void AddMappingContext(
     const std::shared_ptr<input::InputMappingContext>& context,
@@ -97,8 +103,13 @@ public:
   OXGN_NPUT_API void RemoveMappingContext(
     const std::shared_ptr<input::InputMappingContext>& context);
   OXGN_NPUT_API void ClearAllMappingContexts();
+  //! First context with this name; see GetActionByName().
   [[nodiscard]] OXGN_NPUT_API auto GetMappingContextByName(
     std::string_view name) const -> std::shared_ptr<input::InputMappingContext>;
+  //! The context hydrated from the asset with this key, if added.
+  [[nodiscard]] OXGN_NPUT_API auto GetMappingContextByKey(
+    const data::AssetKey& key) const
+    -> std::shared_ptr<input::InputMappingContext>;
   OXGN_NPUT_API void ActivateMappingContext(
     const std::shared_ptr<input::InputMappingContext>& context);
   OXGN_NPUT_API void DeactivateMappingContext(

@@ -11,6 +11,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -207,6 +208,40 @@ NOLINT_TEST_F(InputSystemTest, ContextActivationToggle)
     System().OnFrameEnd(Context());
     co_return;
   });
+}
+
+//! Actions and contexts hydrated from assets are identified by asset key:
+//! equal names from different assets stay distinct, and adding the same
+//! asset context twice keeps one entry.
+NOLINT_TEST_F(InputSystemTest, AssetKeyIdentifiesActionsAndContexts)
+{
+  // Arrange
+  using oxygen::data::AssetKey;
+  const auto action_a = AssetKey::FromVirtualPath("/Content/A/Jump.oiact");
+  const auto action_b = AssetKey::FromVirtualPath("/Content/B/Jump.oiact");
+  const auto context_a = AssetKey::FromVirtualPath("/Content/A/Play.oimap");
+  const auto context_b = AssetKey::FromVirtualPath("/Content/B/Play.oimap");
+  auto jump_a
+    = std::make_shared<Action>("Jump", ActionValueType::kBool, action_a);
+  auto jump_b
+    = std::make_shared<Action>("Jump", ActionValueType::kBool, action_b);
+  auto play_a = std::make_shared<InputMappingContext>("Play", context_a);
+  auto play_b = std::make_shared<InputMappingContext>("Play", context_b);
+
+  // Act
+  System().AddAction(jump_a);
+  System().AddAction(jump_b);
+  System().AddMappingContext(play_a, 0);
+  System().AddMappingContext(play_b, 0);
+  System().AddMappingContext(
+    std::make_shared<InputMappingContext>("Play", context_a), 0);
+
+  // Assert
+  EXPECT_EQ(System().GetActionByKey(action_a), jump_a);
+  EXPECT_EQ(System().GetActionByKey(action_b), jump_b);
+  EXPECT_EQ(System().GetActionByKey(AssetKey {}), nullptr);
+  EXPECT_EQ(System().GetMappingContextByKey(context_a), play_a);
+  EXPECT_EQ(System().GetMappingContextByKey(context_b), play_b);
 }
 
 } // namespace

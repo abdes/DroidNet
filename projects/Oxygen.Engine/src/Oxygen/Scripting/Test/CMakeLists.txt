@@ -88,6 +88,7 @@ m_gtest_program(
 target_link_libraries(
   Oxygen.Scripting.Bindings.Tests
   PRIVATE
+    oxygen::input
     oxygen::physicsmodule
 )
 

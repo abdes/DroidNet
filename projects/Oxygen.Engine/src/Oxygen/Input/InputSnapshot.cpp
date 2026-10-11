@@ -10,12 +10,14 @@
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionState.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputSnapshot.h>
 
 using oxygen::input::Action;
+using oxygen::input::ActionLookup;
 using oxygen::input::ActionState;
 using oxygen::input::ActionValue;
 using oxygen::input::InputSnapshot;
@@ -23,14 +25,13 @@ using oxygen::input::InputSnapshot;
 InputSnapshot::InputSnapshot(
   const std::vector<std::shared_ptr<Action>>& actions)
 {
-  // Build a thin lookup from name to action pointer. We deliberately do not
-  // copy state or transitions to avoid redundancy. Actions won't change after
-  // kInput, so querying them is stable during the remainder of the frame.
+  actions_.reserve(actions.size());
   for (const auto& a : actions) {
     if (a) {
       const auto t = a->GetFrameTransitions();
-      actions_.emplace(a->GetName(),
-        Entry {
+      actions_.push_back(Entry {
+          .name = a->GetName(),
+          .asset_key = a->GetAssetKey(),
           .state = Action::State {
             .triggered = a->IsTriggered(),
             .ongoing = a->IsOngoing(),
@@ -45,49 +46,47 @@ InputSnapshot::InputSnapshot(
   }
 }
 
-auto InputSnapshot::IsActionTriggered(std::string_view action_name) const
-  -> bool
+auto InputSnapshot::IsActionTriggered(const ActionLookup& action) const -> bool
 {
-  const auto* a = FindAction(action_name);
+  const auto* a = FindAction(action);
   return (a != nullptr) ? a->state.triggered : false;
 }
 
-auto InputSnapshot::IsActionOngoing(std::string_view action_name) const -> bool
+auto InputSnapshot::IsActionOngoing(const ActionLookup& action) const -> bool
 {
-  const auto* a = FindAction(action_name);
+  const auto* a = FindAction(action);
   return (a != nullptr) ? a->state.ongoing : false;
 }
 
-auto InputSnapshot::IsActionCompleted(std::string_view action_name) const
-  -> bool
+auto InputSnapshot::IsActionCompleted(const ActionLookup& action) const -> bool
 {
-  const auto* a = FindAction(action_name);
+  const auto* a = FindAction(action);
   return (a != nullptr) ? a->state.completed : false;
 }
 
-auto InputSnapshot::IsActionCanceled(std::string_view action_name) const -> bool
+auto InputSnapshot::IsActionCanceled(const ActionLookup& action) const -> bool
 {
-  const auto* a = FindAction(action_name);
+  const auto* a = FindAction(action);
   return (a != nullptr) ? a->state.canceled : false;
 }
 
-auto InputSnapshot::IsActionIdle(std::string_view action_name) const -> bool
+auto InputSnapshot::IsActionIdle(const ActionLookup& action) const -> bool
 {
-  const auto* a = FindAction(action_name);
+  const auto* a = FindAction(action);
   return (a != nullptr) ? !(a->state.ongoing || a->state.triggered)
                         : true; // Default to idle if action not found
 }
 
-auto InputSnapshot::GetActionValue(std::string_view action_name) const
+auto InputSnapshot::GetActionValue(const ActionLookup& action) const
   -> ActionValue
 {
-  const auto* a = FindAction(action_name);
+  const auto* a = FindAction(action);
   return (a != nullptr) ? a->value : ActionValue {};
 }
 
-auto InputSnapshot::DidActionStart(std::string_view action_name) const -> bool
+auto InputSnapshot::DidActionStart(const ActionLookup& action) const -> bool
 {
-  const auto* a = FindAction(action_name);
+  const auto* a = FindAction(action);
   if (a == nullptr) {
     return false;
   }
@@ -114,36 +113,35 @@ auto InputSnapshot::DidActionStart(std::string_view action_name) const -> bool
   return false;
 }
 
-auto InputSnapshot::DidActionComplete(std::string_view action_name) const
-  -> bool
+auto InputSnapshot::DidActionComplete(const ActionLookup& action) const -> bool
 {
   return DidActionTransition(
-           action_name, ActionState::kOngoing, ActionState::kCompleted)
+           action, ActionState::kOngoing, ActionState::kCompleted)
     || DidActionTransition(
-      action_name, ActionState::kTriggered, ActionState::kCompleted);
+      action, ActionState::kTriggered, ActionState::kCompleted);
 }
 
-auto InputSnapshot::DidActionCancel(std::string_view action_name) const -> bool
+auto InputSnapshot::DidActionCancel(const ActionLookup& action) const -> bool
 {
   return DidActionTransition(
-           action_name, ActionState::kOngoing, ActionState::kCanceled)
+           action, ActionState::kOngoing, ActionState::kCanceled)
     || DidActionTransition(
-      action_name, ActionState::kTriggered, ActionState::kCanceled);
+      action, ActionState::kTriggered, ActionState::kCanceled);
 }
 
-auto InputSnapshot::GetActionStateFlags(std::string_view action_name) const
+auto InputSnapshot::GetActionStateFlags(const ActionLookup& action) const
   -> ActionState
 {
-  const auto* a = FindAction(action_name);
+  const auto* a = FindAction(action);
   if (a == nullptr) {
     return ActionState::kNone;
   }
   return a->state.ToActionState();
 }
 
-auto InputSnapshot::DidActionTrigger(std::string_view action_name) const -> bool
+auto InputSnapshot::DidActionTrigger(const ActionLookup& action) const -> bool
 {
-  const auto* a = FindAction(action_name);
+  const auto* a = FindAction(action);
   if (a == nullptr) {
     return false;
   }
@@ -154,9 +152,9 @@ auto InputSnapshot::DidActionTrigger(std::string_view action_name) const -> bool
     });
 }
 
-auto InputSnapshot::DidActionRelease(std::string_view action_name) const -> bool
+auto InputSnapshot::DidActionRelease(const ActionLookup& action) const -> bool
 {
-  const auto* a = FindAction(action_name);
+  const auto* a = FindAction(action);
   if (a == nullptr) {
     return false;
   }
@@ -171,17 +169,17 @@ auto InputSnapshot::DidActionRelease(std::string_view action_name) const -> bool
     });
 }
 
-auto InputSnapshot::DidActionValueUpdate(std::string_view action_name) const
+auto InputSnapshot::DidActionValueUpdate(const ActionLookup& action) const
   -> bool
 {
-  const auto* a = FindAction(action_name);
+  const auto* a = FindAction(action);
   return (a != nullptr) ? a->value_updated : false;
 }
 
 auto InputSnapshot::DidActionTransition(
-  std::string_view action_name, ActionState from, ActionState to) const -> bool
+  const ActionLookup& action, ActionState from, ActionState to) const -> bool
 {
-  const auto* a = FindAction(action_name);
+  const auto* a = FindAction(action);
   if (a == nullptr) {
     return false;
   }
@@ -193,18 +191,43 @@ auto InputSnapshot::DidActionTransition(
     });
 }
 
-auto InputSnapshot::GetActionTransitions(std::string_view action_name) const
+auto InputSnapshot::GetActionTransitions(const ActionLookup& action) const
   -> std::span<const Action::FrameTransition>
 {
-  const auto* a = FindAction(action_name);
+  const auto* a = FindAction(action);
   return (a != nullptr)
     ? std::span<const Action::FrameTransition>(a->transitions)
     : std::span<const Action::FrameTransition> {};
 }
 
-auto InputSnapshot::FindAction(std::string_view action_name) const
-  -> const Entry*
+auto InputSnapshot::GetActionNames() const -> std::vector<std::string_view>
 {
-  const auto it = actions_.find(action_name);
-  return it != actions_.end() ? &it->second : nullptr;
+  std::vector<std::string_view> names;
+  names.reserve(actions_.size());
+  for (const auto& entry : actions_) {
+    names.emplace_back(entry.name);
+  }
+  return names;
+}
+
+auto InputSnapshot::GetActionKeys() const -> std::vector<data::AssetKey>
+{
+  std::vector<data::AssetKey> keys;
+  for (const auto& entry : actions_) {
+    if (!entry.asset_key.IsNil()) {
+      keys.push_back(entry.asset_key);
+    }
+  }
+  return keys;
+}
+
+auto InputSnapshot::FindAction(const ActionLookup& action) const -> const Entry*
+{
+  const auto it
+    = std::ranges::find_if(actions_, [&action](const Entry& entry) -> bool {
+        return action.ByKey()
+          ? (!action.Key().IsNil() && entry.asset_key == action.Key())
+          : entry.name == action.Name();
+      });
+  return it != actions_.end() ? &*it : nullptr;
 }

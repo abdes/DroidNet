@@ -10,6 +10,7 @@
 #include <utility>
 
 #include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionState.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -44,6 +45,15 @@ auto HasFlag(const ActionState states, const ActionState flag) noexcept
 
 Action::Action(std::string name, const ActionValueType value_type)
   : name_(std::move(name))
+  , value_type_(value_type)
+  , value_(ZeroValue())
+{
+}
+
+Action::Action(std::string name, const ActionValueType value_type,
+  const data::AssetKey asset_key)
+  : name_(std::move(name))
+  , asset_key_(asset_key)
   , value_type_(value_type)
   , value_(ZeroValue())
 {

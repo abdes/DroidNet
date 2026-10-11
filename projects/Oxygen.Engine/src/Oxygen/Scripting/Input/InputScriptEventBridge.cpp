@@ -4,10 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Input/InputSnapshot.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Input/InputScriptEventBridge.h>
@@ -15,33 +21,28 @@
 namespace oxygen::scripting::input {
 
 namespace {
-  auto BuildEventName(
-    std::string_view action_name, std::string_view edge_suffix) -> std::string
+  //! Logging settings for one frame's edge events.
+  struct EdgeEventLog {
+    bool enabled { false };
+    int verbosity { 0 };
+    frame::SequenceNumber frame_seq;
+  };
+
+  //! Queue `input.action.<key>.<edge>` for scripts in the gameplay phase.
+  auto QueueEdgeEvent(lua_State* state, const EdgeEventLog& log,
+    const std::string_view action_key, const std::string_view edge) -> void
   {
     std::string event_name("input.action.");
-    event_name.append(action_name);
+    event_name.append(action_key);
     event_name.push_back('.');
-    event_name.append(edge_suffix);
-    return event_name;
-  }
+    event_name.append(edge);
 
-  auto QueueEdgeEventNoLog(lua_State* state, std::string_view action_name,
-    std::string_view edge_suffix) -> void
-  {
-    bindings::QueueEngineEvent(
-      state, BuildEventName(action_name, edge_suffix), "gameplay");
-  }
-
-  auto QueueEdgeEvent(lua_State* state, const frame::SequenceNumber frame_seq,
-    std::string_view action_name, std::string_view edge_suffix,
-    std::string_view edge_label, const int log_verbosity) -> void
-  {
-    const auto event_name = BuildEventName(action_name, edge_suffix);
-
-    VLOG_F(log_verbosity,
-      "ScriptingModule: action edge detected "
-      "(frame={} action='{}' edge='{}') -> queue event '{}'",
-      frame_seq, action_name, edge_label, event_name);
+    if (log.enabled) {
+      VLOG_F(log.verbosity,
+        "ScriptingModule: action edge detected "
+        "(frame={} action='{}' edge='{}') -> queue event '{}'",
+        log.frame_seq, action_key, edge, event_name);
+    }
     bindings::QueueEngineEvent(state, event_name, "gameplay");
   }
 } // namespace
@@ -65,59 +66,40 @@ auto InputScriptEventBridge::QueueActionEdgeEvents(lua_State* state,
     return;
   }
 
-  const auto action_names = snapshot->GetActionNames();
-  const bool should_log = logging_enabled;
-  if (should_log) {
-    LogActionInventoryOnce(action_names, log_verbosity);
+  // Scripts name actions by asset reference, so only actions hydrated from
+  // assets raise events, one stream per asset key.
+  const auto action_keys = snapshot->GetActionKeys();
+  if (logging_enabled) {
+    LogActionInventoryOnce(action_keys, log_verbosity);
   }
-  const auto frame_seq = context->GetFrameSequenceNumber();
+  const auto log = EdgeEventLog {
+    .enabled = logging_enabled,
+    .verbosity = log_verbosity,
+    .frame_seq = context->GetFrameSequenceNumber(),
+  };
 
-  for (const auto action_name : action_names) {
-    if (snapshot->DidActionTrigger(action_name)) {
-      if (should_log) {
-        QueueEdgeEvent(state, frame_seq, action_name, "triggered", "triggered",
-          log_verbosity);
-      } else {
-        QueueEdgeEventNoLog(state, action_name, "triggered");
-      }
+  for (const auto& action_key : action_keys) {
+    const auto key_text = data::to_string(action_key);
+    if (snapshot->DidActionTrigger(action_key)) {
+      QueueEdgeEvent(state, log, key_text, "triggered");
     }
-    if (snapshot->DidActionComplete(action_name)) {
-      if (should_log) {
-        QueueEdgeEvent(state, frame_seq, action_name, "completed", "completed",
-          log_verbosity);
-      } else {
-        QueueEdgeEventNoLog(state, action_name, "completed");
-      }
+    if (snapshot->DidActionComplete(action_key)) {
+      QueueEdgeEvent(state, log, key_text, "completed");
     }
-    if (snapshot->DidActionCancel(action_name)) {
-      if (should_log) {
-        QueueEdgeEvent(
-          state, frame_seq, action_name, "canceled", "canceled", log_verbosity);
-      } else {
-        QueueEdgeEventNoLog(state, action_name, "canceled");
-      }
+    if (snapshot->DidActionCancel(action_key)) {
+      QueueEdgeEvent(state, log, key_text, "canceled");
     }
-    if (snapshot->DidActionRelease(action_name)) {
-      if (should_log) {
-        QueueEdgeEvent(
-          state, frame_seq, action_name, "released", "released", log_verbosity);
-      } else {
-        QueueEdgeEventNoLog(state, action_name, "released");
-      }
+    if (snapshot->DidActionRelease(action_key)) {
+      QueueEdgeEvent(state, log, key_text, "released");
     }
-    if (snapshot->DidActionValueUpdate(action_name)) {
-      if (should_log) {
-        QueueEdgeEvent(state, frame_seq, action_name, "value_updated",
-          "value_updated", log_verbosity);
-      } else {
-        QueueEdgeEventNoLog(state, action_name, "value_updated");
-      }
+    if (snapshot->DidActionValueUpdate(action_key)) {
+      QueueEdgeEvent(state, log, key_text, "value_updated");
     }
   }
 }
 
 auto InputScriptEventBridge::LogActionInventoryOnce(
-  const std::vector<std::string_view>& action_names, const int log_verbosity)
+  const std::vector<data::AssetKey>& action_keys, const int log_verbosity)
   -> void
 {
   if (logged_action_inventory_) {
@@ -126,16 +108,16 @@ auto InputScriptEventBridge::LogActionInventoryOnce(
   logged_action_inventory_ = true;
 
   std::string joined;
-  for (size_t i = 0; i < action_names.size(); ++i) {
-    if (i > 0) {
+  for (const auto& key : action_keys) {
+    if (!joined.empty()) {
       joined.append(", ");
     }
-    joined.append(action_names[i]);
+    joined.append(data::to_string(key));
   }
 
   VLOG_F(log_verbosity,
-    "ScriptingModule: input snapshot actions discovered (count={}): {}",
-    action_names.size(), joined);
+    "ScriptingModule: input snapshot asset actions discovered (count={}): {}",
+    action_keys.size(), joined);
 }
 
 } // namespace oxygen::scripting::input

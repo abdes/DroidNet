@@ -12,8 +12,7 @@
 #include <lua.h>
 #include <lualib.h>
 
-#include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Data/InputActionAsset.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Input/InputBindings.h>
@@ -39,10 +38,10 @@ namespace {
   };
 
   auto BuildActionEdgeEventName(
-    std::string_view action_name, std::string_view edge_name) -> std::string
+    const data::AssetKey& action, std::string_view edge_name) -> std::string
   {
     std::string event_name(kInputEventPrefix);
-    event_name.append(action_name);
+    event_name.append(data::to_string(action));
     event_name.push_back('.');
     event_name.append(edge_name);
     return event_name;
@@ -109,10 +108,22 @@ namespace {
     return kLuaSingleResult;
   }
 
+  //! An action is named by its input action asset reference.
+  auto RequireActionArg(lua_State* state, const char* error_message)
+    -> data::AssetKey
+  {
+    const auto key
+      = TryParseAssetGuid(RequireStringArg(state, kLuaArg1, error_message));
+    if (!key.has_value() || key->IsNil()) {
+      (void)luaL_error(state, "%s", error_message);
+    }
+    return key.value_or(data::AssetKey {});
+  }
+
   auto LuaInputEventName(lua_State* state) -> int
   {
-    const auto action_name = RequireStringArg(
-      state, kLuaArg1, "oxygen.input.event_name expects action name");
+    const auto action = RequireActionArg(
+      state, "oxygen.input.event_name expects an input action asset");
     const auto edge_name = RequireStringArg(
       state, kLuaArg2, "oxygen.input.event_name expects edge name");
 
@@ -121,36 +132,17 @@ namespace {
         std::string(edge_name).c_str());
     }
 
-    const auto event_name = BuildActionEdgeEventName(action_name, edge_name);
+    const auto event_name = BuildActionEdgeEventName(action, edge_name);
     lua_pushlstring(state, event_name.data(), event_name.size());
     return kLuaSingleResult;
   }
 
-  //! An action asset reference names the action the asset declares; any
-  //! other string is an action name.
-  auto ResolveActionName(lua_State* state, const std::string_view action)
-    -> std::string
-  {
-    const auto key = TryParseAssetGuid(action);
-    if (!key.has_value()) {
-      return std::string(action);
-    }
-    const auto loader = GetAssetLoader(state);
-    const auto asset
-      = loader != nullptr ? loader->GetInputActionAsset(*key) : nullptr;
-    if (asset == nullptr) {
-      (void)luaL_error(state,
-        "oxygen.input.on_action: input action asset %s is not loaded",
-        std::string(action).c_str());
-    }
-    return std::string(asset->GetAssetName());
-  }
-
   auto LuaInputOnActionImpl(lua_State* state) -> int
   {
-    const auto action_name = ResolveActionName(state,
-      RequireStringArg(state, kLuaArg1,
-        "oxygen.input.on_action expects an action asset or action name"));
+    // The action need not be hydrated yet: a context that maps it may be
+    // activated later.
+    const auto action = RequireActionArg(
+      state, "oxygen.input.on_action expects an input action asset");
     const auto edge_name = RequireStringArg(
       state, kLuaArg2, "oxygen.input.on_action expects edge name");
     if (lua_isfunction(state, kLuaArg3) == 0) {
@@ -162,7 +154,7 @@ namespace {
         std::string(edge_name).c_str());
     }
 
-    const auto event_name = BuildActionEdgeEventName(action_name, edge_name);
+    const auto event_name = BuildActionEdgeEventName(action, edge_name);
     return CallEventsRegistration(state, event_name);
   }
 

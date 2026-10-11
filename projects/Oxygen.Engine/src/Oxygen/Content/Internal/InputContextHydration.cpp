@@ -9,7 +9,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -112,15 +111,16 @@ namespace {
     return it != all_slots.end() ? &(*it) : nullptr;
   }
 
-  auto NanosecondsToSecondsClamped(const uint64_t nanoseconds) -> float
+  //! ActionState flags occupy the low byte of a combo step's completion
+  //! states.
+  constexpr uint32_t kCompletionStatesMask = 0xFFU;
+
+  //! Even the largest nanosecond count (about 1.8e10 s) fits a float.
+  auto NanosecondsToSeconds(const uint64_t nanoseconds) -> float
   {
-    constexpr auto kNanosPerSecond = 1000000000.0L;
-    const auto seconds
-      = static_cast<long double>(nanoseconds) / kNanosPerSecond;
-    if (seconds > static_cast<long double>(std::numeric_limits<float>::max())) {
-      return std::numeric_limits<float>::max();
-    }
-    return static_cast<float>(seconds);
+    constexpr auto kNanosPerSecond = 1'000'000'000.0;
+    return static_cast<float>(
+      static_cast<double>(nanoseconds) / kNanosPerSecond);
   }
 
 } // namespace
@@ -138,11 +138,12 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
       return data::to_string(asset.GetAssetKey());
     }();
 
-    auto context = input_system.GetMappingContextByName(context_name);
+    auto context = input_system.GetMappingContextByKey(asset.GetAssetKey());
     if (context) {
       return context;
     }
-    context = std::make_shared<input::InputMappingContext>(context_name);
+    context = std::make_shared<input::InputMappingContext>(
+      context_name, asset.GetAssetKey());
 
     const auto mappings = asset.GetMappings();
     const auto triggers = asset.GetTriggers();
@@ -165,6 +166,14 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
       if (const auto it = action_cache.find(action_asset_key);
         it != action_cache.end()) {
         return it->second;
+      }
+
+      // An action asset hydrates once; every context that maps it shares
+      // the runtime action. Actions from different assets stay distinct
+      // even when they share a name.
+      if (auto existing = input_system.GetActionByKey(action_asset_key)) {
+        action_cache.emplace(action_asset_key, existing);
+        return existing;
       }
 
       auto action_asset = loader.GetInputActionAsset(action_asset_key, asset);
@@ -196,28 +205,8 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
         return nullptr;
       }
 
-      auto existing = input_system.GetActionByName(action_name);
-      if (existing) {
-        if (existing->GetValueType() != *value_type_opt) {
-          LOG_F(ERROR,
-            "ERROR [input.context.hydration_failed]: action '{}' value type "
-            "mismatch (existing={} incoming={})",
-            action_name, static_cast<uint8_t>(existing->GetValueType()),
-            static_cast<uint8_t>(*value_type_opt));
-          return nullptr;
-        }
-        if (action_asset->ConsumesInput()) {
-          existing->SetConsumesInput(true);
-        }
-        if (action_asset->AccumulatesCumulatively()) {
-          existing->SetAccumulation(input::ActionAccumulation::kCumulative);
-        }
-        action_cache.emplace(action_asset_key, existing);
-        return existing;
-      }
-
-      auto action
-        = std::make_shared<input::Action>(action_name, *value_type_opt);
+      auto action = std::make_shared<input::Action>(
+        action_name, *value_type_opt, action_asset_key);
       action->SetConsumesInput(action_asset->ConsumesInput());
       action->SetAccumulation(action_asset->AccumulatesCumulatively()
           ? input::ActionAccumulation::kCumulative
@@ -374,9 +363,9 @@ auto HydrateInputContext(const data::InputMappingContextAsset& asset,
               continue;
             }
             typed->AddComboStep(aux_action,
-              static_cast<input::ActionState>(
-                static_cast<uint8_t>(aux_record.completion_states & 0xFFU)),
-              NanosecondsToSecondsClamped(aux_record.time_to_complete_ns));
+              static_cast<input::ActionState>(static_cast<uint8_t>(
+                aux_record.completion_states & kCompletionStatesMask)),
+              NanosecondsToSeconds(aux_record.time_to_complete_ns));
           }
           trigger = std::move(typed);
           break;

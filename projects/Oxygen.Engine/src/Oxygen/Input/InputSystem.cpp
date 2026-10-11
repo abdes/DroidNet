@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
-#include <cstdlib>
 #include <list>
 #include <memory>
 #include <optional>
@@ -24,6 +23,7 @@
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSnapshot.h>
@@ -314,10 +314,26 @@ auto InputSystem::GetActionByName(std::string_view name) const
   return found != actions_.cend() ? *found : std::shared_ptr<Action>();
 }
 
+auto InputSystem::GetActionByKey(const data::AssetKey& key) const
+  -> std::shared_ptr<Action>
+{
+  if (key.IsNil()) {
+    return {};
+  }
+  const auto found = std::ranges::find_if(
+    actions_, [&key](const std::shared_ptr<Action>& entry) -> bool {
+      return entry->GetAssetKey() == key;
+    });
+  return found != actions_.cend() ? *found : std::shared_ptr<Action>();
+}
+
 void InputSystem::AddMappingContext(
   const std::shared_ptr<InputMappingContext>& context, const int32_t priority)
 {
-  if (GetMappingContextByName(context->GetName())) {
+  // An asset context is identified by its key; a code context by its name.
+  const auto& key = context->GetAssetKey();
+  if (key.IsNil() ? GetMappingContextByName(context->GetName()) != nullptr
+                  : GetMappingContextByKey(key) != nullptr) {
     DLOG_F(
       1, "Input mapping context with [{}] already exists", context->GetName());
     return;
@@ -363,6 +379,21 @@ auto InputSystem::GetMappingContextByName(std::string_view name) const
   const auto found = std::ranges::find_if(
     mapping_contexts_, [&name](const InputMappingContextEntry& entry) -> bool {
       return name == entry.mapping_context->GetName();
+    });
+  return found != std::ranges::cend(mapping_contexts_)
+    ? found->mapping_context
+    : std::shared_ptr<InputMappingContext>();
+}
+
+auto InputSystem::GetMappingContextByKey(const data::AssetKey& key) const
+  -> std::shared_ptr<InputMappingContext>
+{
+  if (key.IsNil()) {
+    return {};
+  }
+  const auto found = std::ranges::find_if(
+    mapping_contexts_, [&key](const InputMappingContextEntry& entry) -> bool {
+      return entry.mapping_context->GetAssetKey() == key;
     });
   return found != std::ranges::cend(mapping_contexts_)
     ? found->mapping_context

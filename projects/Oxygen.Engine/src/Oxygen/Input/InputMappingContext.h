@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Input/api_export.h>
 
 namespace oxygen {
@@ -44,9 +45,21 @@ namespace input {
 
     OXGN_NPUT_API explicit InputMappingContext(std::string name);
 
+    //! A context hydrated from an input mapping context asset. The asset key
+    //! is its identity; the name is a label that other contexts may share.
+    OXGN_NPUT_API InputMappingContext(
+      std::string name, data::AssetKey asset_key);
+
     OXGN_NPUT_API void AddMapping(std::shared_ptr<InputActionMapping> mapping);
 
     [[nodiscard]] auto GetName() const -> const std::string& { return name_; }
+
+    //! Key of the asset this context was hydrated from; nil for a context
+    //! created in code.
+    [[nodiscard]] auto GetAssetKey() const noexcept -> const data::AssetKey&
+    {
+      return asset_key_;
+    }
 
     [[nodiscard]] auto GetMappings() const
       -> const std::vector<std::shared_ptr<InputActionMapping>>&
@@ -81,6 +94,7 @@ namespace input {
 
   private:
     std::string name_;
+    data::AssetKey asset_key_;
     std::vector<std::shared_ptr<InputActionMapping>> mappings_;
   };
 

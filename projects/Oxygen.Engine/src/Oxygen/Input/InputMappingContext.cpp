@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cmath>
 #include <memory>
 #include <string>
 #include <utility>
@@ -13,6 +12,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
@@ -110,6 +110,13 @@ auto IsClaimed(const InputSlot& slot, const InputSlot* event_slot,
 
 InputMappingContext::InputMappingContext(std::string name)
   : name_(std::move(name))
+{
+}
+
+InputMappingContext::InputMappingContext(
+  std::string name, const data::AssetKey asset_key)
+  : name_(std::move(name))
+  , asset_key_(asset_key)
 {
 }
 

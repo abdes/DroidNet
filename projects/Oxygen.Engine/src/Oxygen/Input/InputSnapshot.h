@@ -6,13 +6,13 @@
 
 #pragma once
 
-#include <map>
 #include <memory>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionState.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -24,6 +24,50 @@ class InputEvent; // forward decl kept for compatibility if needed elsewhere
 
 namespace oxygen::input {
 
+//! Names the action a snapshot query reads.
+/*!
+ An action created in code is found by its name. An action hydrated from an
+ asset is found by its asset key; its name is only a label, which actions
+ from different assets may share, and a name query reads the first of them.
+ Converts implicitly from either, like a string view.
+*/
+class ActionLookup {
+public:
+  // NOLINTBEGIN(*-explicit-constructor, *-explicit-conversions)
+  // Implicit by design: queries accept a name or a key directly.
+  ActionLookup(const std::string_view name) noexcept
+    : name_(name)
+  {
+  }
+  ActionLookup(const char* name) noexcept
+    : name_(name)
+  {
+  }
+  ActionLookup(const std::string& name) noexcept
+    : name_(name)
+  {
+  }
+  ActionLookup(const data::AssetKey& key) noexcept
+    : key_(key)
+    , by_key_(true)
+  {
+  }
+  // NOLINTEND(*-explicit-constructor, *-explicit-conversions)
+
+  //! True if this lookup names an asset key rather than a name.
+  [[nodiscard]] auto ByKey() const noexcept { return by_key_; }
+  [[nodiscard]] auto Name() const noexcept -> std::string_view { return name_; }
+  [[nodiscard]] auto Key() const noexcept -> const data::AssetKey&
+  {
+    return key_;
+  }
+
+private:
+  std::string_view name_;
+  data::AssetKey key_;
+  bool by_key_ { false };
+};
+
 //! Consolidated input snapshot capturing all frame activity
 /*!
  The InputSnapshot provides a read-only view of input state for a single frame,
@@ -32,11 +76,9 @@ namespace oxygen::input {
  (FixedSim, Gameplay, etc.) in the same frame, and later published at kSnapshot
  without being rebuilt.
 
- Thin-view design: this snapshot does NOT duplicate per-action state or raw
- input events. It holds a name->Action pointer lookup and answers queries by
- reading the captured Actions directly. Actions are not modified after the end
- of kInput, so the view is stable for the remainder of the frame. The snapshot
- becomes invalid once the next frame begins.
+ The snapshot copies each action's final state, value and transitions at
+ construction, so it does not depend on the actions' lifetime or on later
+ frames. Queries name an action by name or by asset key (ActionLookup).
 
  This design eliminates the need for signal/slot callbacks and avoids data
  redundancy, providing a clean, query-based API.
@@ -56,82 +98,78 @@ public:
   /*! Returns the bitfield of the final action state at the end of the frame.
    Prefer DidAction* methods for edge queries within the frame window. */
   [[nodiscard]] OXGN_NPUT_API auto GetActionStateFlags(
-    std::string_view action_name) const -> ActionState;
+    const ActionLookup& action) const -> ActionState;
 
   //! Check if action is in triggered state NOTE: Final snapshot flag (level at
   //! frame end). For edges, prefer DidActionTrigger().
   [[nodiscard]] OXGN_NPUT_API auto IsActionTriggered(
-    std::string_view action_name) const -> bool;
+    const ActionLookup& action) const -> bool;
 
   //! Check if action is in ongoing state
   [[nodiscard]] OXGN_NPUT_API auto IsActionOngoing(
-    std::string_view action_name) const -> bool;
+    const ActionLookup& action) const -> bool;
 
   //! Check if action is in completed state NOTE: Final snapshot flag (level at
   //! frame end). For edges, prefer DidActionComplete().
   [[nodiscard]] OXGN_NPUT_API auto IsActionCompleted(
-    std::string_view action_name) const -> bool;
+    const ActionLookup& action) const -> bool;
 
   //! Check if action is in canceled state NOTE: Final snapshot flag (level at
   //! frame end). For edges, prefer DidActionCancel().
   [[nodiscard]] OXGN_NPUT_API auto IsActionCanceled(
-    std::string_view action_name) const -> bool;
+    const ActionLookup& action) const -> bool;
 
   //! Check if action is in idle state
   [[nodiscard]] OXGN_NPUT_API auto IsActionIdle(
-    std::string_view action_name) const -> bool;
+    const ActionLookup& action) const -> bool;
 
   //! Get current action value
   [[nodiscard]] OXGN_NPUT_API auto GetActionValue(
-    std::string_view action_name) const -> ActionValue;
+    const ActionLookup& action) const -> ActionValue;
 
   // -- Transition queries for animations --------------------------------------
 
   //! Check if action transitioned from idle/none to triggered this frame
   [[nodiscard]] OXGN_NPUT_API auto DidActionStart(
-    std::string_view action_name) const -> bool;
+    const ActionLookup& action) const -> bool;
 
   //! EDGE: Did the action produce a Triggered transition in this frame
   [[nodiscard]] OXGN_NPUT_API auto DidActionTrigger(
-    std::string_view action_name) const -> bool;
+    const ActionLookup& action) const -> bool;
 
   //! Check if action completed this frame
   [[nodiscard]] OXGN_NPUT_API auto DidActionComplete(
-    std::string_view action_name) const -> bool;
+    const ActionLookup& action) const -> bool;
 
   //! Check if action was canceled this frame
   [[nodiscard]] OXGN_NPUT_API auto DidActionCancel(
-    std::string_view action_name) const -> bool;
+    const ActionLookup& action) const -> bool;
 
   //! EDGE: Did the action release (Ongoing -> not Ongoing) this frame
   [[nodiscard]] OXGN_NPUT_API auto DidActionRelease(
-    std::string_view action_name) const -> bool;
+    const ActionLookup& action) const -> bool;
 
   //! EDGE: Was the action value updated at least once this frame
   [[nodiscard]] OXGN_NPUT_API auto DidActionValueUpdate(
-    std::string_view action_name) const -> bool;
+    const ActionLookup& action) const -> bool;
 
   //! Check if a specific state transition occurred this frame
   [[nodiscard]] OXGN_NPUT_API auto DidActionTransition(
-    std::string_view action_name, ActionState from, ActionState to) const
-    -> bool;
+    const ActionLookup& action, ActionState from, ActionState to) const -> bool;
 
   //! Get all transitions for an action during this frame
   [[nodiscard]] OXGN_NPUT_API auto GetActionTransitions(
-    std::string_view action_name) const
+    const ActionLookup& action) const
     -> std::span<const Action::FrameTransition>;
 
-  //! Get all action names available in this snapshot.
-  [[nodiscard]] auto GetActionNames() const -> std::vector<std::string_view>
-  {
-    std::vector<std::string_view> names;
-    names.reserve(actions_.size());
-    for (const auto& [name, action] : actions_) {
-      (void)action;
-      names.push_back(name);
-    }
-    return names;
-  }
+  //! Names of every action in this snapshot, in insertion order; actions
+  //! hydrated from different assets may share a name.
+  [[nodiscard]] OXGN_NPUT_NDAPI auto GetActionNames() const
+    -> std::vector<std::string_view>;
+
+  //! Asset keys of the actions hydrated from assets, in insertion order.
+  [[nodiscard]] OXGN_NPUT_NDAPI auto GetActionKeys() const
+    -> std::vector<data::AssetKey>;
 
   // -- Raw event access -------------------------------------------------------
   // Intentionally omitted: raw input events are not part of the snapshot.
@@ -142,19 +180,21 @@ public:
 private:
   //! Frozen copy of one action at snapshot time.
   struct Entry {
+    std::string name;
+    data::AssetKey asset_key;
     Action::State state {};
     ActionValue value;
     bool value_updated { false };
     std::vector<Action::FrameTransition> transitions;
   };
 
-  //! Find action by name, returns nullptr if not found
-  [[nodiscard]] auto FindAction(std::string_view action_name) const
+  //! Find the action a lookup names; nullptr if there is none.
+  [[nodiscard]] auto FindAction(const ActionLookup& action) const
     -> const Entry*;
 
   // Value copies: the snapshot does not depend on Action lifetime or on
   // later frames mutating the actions.
-  std::map<std::string, Entry, std::less<>> actions_;
+  std::vector<Entry> actions_;
 };
 
 } // namespace oxygen::input

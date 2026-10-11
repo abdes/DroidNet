@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Input/ActionState.h>
 #include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/api_export.h>
@@ -97,7 +98,19 @@ public:
 
   OXGN_NPUT_API Action(std::string name, ActionValueType value_type);
 
+  //! An action hydrated from an input action asset. The asset key is its
+  //! identity; the name is a label that other actions may share.
+  OXGN_NPUT_API Action(
+    std::string name, ActionValueType value_type, data::AssetKey asset_key);
+
   [[nodiscard]] auto GetName() const -> const std::string& { return name_; }
+
+  //! Key of the asset this action was hydrated from; nil for an action
+  //! created in code.
+  [[nodiscard]] auto GetAssetKey() const noexcept -> const data::AssetKey&
+  {
+    return asset_key_;
+  }
 
   [[nodiscard]] auto GetValueType() const -> ActionValueType
   {
@@ -215,6 +228,7 @@ private:
   [[nodiscard]] auto ZeroValue() const -> ActionValue;
 
   std::string name_;
+  data::AssetKey asset_key_;
   ActionValueType value_type_;
   ActionValue value_;
   bool consume_input_ { false };

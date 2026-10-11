@@ -301,11 +301,13 @@ NOLINT_TEST_F(AssetLoaderBasicTest,
           EXPECT_THAT(hydrated, NotNull());
           if (hydrated) {
             EXPECT_EQ(hydrated->GetName(), "HydratedContext");
+            EXPECT_EQ(hydrated->GetAssetKey(), keys.context);
           }
 
-          const auto action = input_system.GetActionByName("Move");
+          const auto action = input_system.GetActionByKey(keys.action);
           EXPECT_THAT(action, NotNull());
           if (action) {
+            EXPECT_EQ(action->GetName(), "Move");
             EXPECT_TRUE(action->ConsumesInput());
           }
         }

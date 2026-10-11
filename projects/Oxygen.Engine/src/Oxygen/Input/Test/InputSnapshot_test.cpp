@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionState.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -338,6 +339,35 @@ NOLINT_TEST(InputSnapshot, OutlivesItsActions)
   // Assert
   EXPECT_TRUE(snap.DidActionTrigger("jump"));
   EXPECT_TRUE(snap.GetActionValue("jump").GetAs<bool>());
+}
+
+//! Actions hydrated from different assets may share a name; a query by
+//! asset key reads only its own action.
+NOLINT_TEST(InputSnapshot, ActionsSharingANameStayDistinctByKey)
+{
+  // Arrange
+  using oxygen::data::AssetKey;
+  const auto key_a = AssetKey::FromVirtualPath("/Content/A/Jump.oiact");
+  const auto key_b = AssetKey::FromVirtualPath("/Content/B/Jump.oiact");
+  auto a = std::make_shared<Action>(
+    "Jump", oxygen::input::ActionValueType::kBool, key_a);
+  auto b = std::make_shared<Action>(
+    "Jump", oxygen::input::ActionValueType::kBool, key_b);
+  ActionTestAccess::BeginFrame(*a);
+  ActionTestAccess::BeginFrame(*b);
+  ActionTestAccess::UpdateState(
+    *a, Action::State { .triggered = true }, ActionValue { true });
+
+  // Act
+  const InputSnapshot snap { std::vector { a, b } };
+
+  // Assert
+  EXPECT_TRUE(snap.DidActionTrigger(key_a));
+  EXPECT_FALSE(snap.DidActionTrigger(key_b));
+  EXPECT_FALSE(snap.GetActionValue(key_b).GetAs<bool>());
+  EXPECT_FALSE(snap.DidActionTrigger(AssetKey {}));
+  EXPECT_EQ(snap.GetActionKeys(), (std::vector { key_a, key_b }));
+  EXPECT_EQ(snap.GetActionNames().size(), 2U);
 }
 
 } // namespace

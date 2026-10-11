@@ -217,7 +217,7 @@ namespace {
         continue;
       }
 
-      if (!input_system->GetMappingContextByName(hydrated->GetName())) {
+      if (!input_system->GetMappingContextByKey(hydrated->GetAssetKey())) {
         input_system->AddMappingContext(hydrated, entry.default_priority);
       }
       if ((flags & kAutoActivateMask) != 0U) {

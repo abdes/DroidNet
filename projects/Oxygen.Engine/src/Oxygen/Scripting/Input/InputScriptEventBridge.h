@@ -10,6 +10,7 @@
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 
 struct lua_State;
 
@@ -26,8 +27,8 @@ public:
     int log_verbosity) -> void;
 
 private:
-  auto LogActionInventoryOnce(const std::vector<std::string_view>& action_names,
-    int log_verbosity) -> void;
+  auto LogActionInventoryOnce(
+    const std::vector<data::AssetKey>& action_keys, int log_verbosity) -> void;
 
   bool logged_action_inventory_ { false };
 };
