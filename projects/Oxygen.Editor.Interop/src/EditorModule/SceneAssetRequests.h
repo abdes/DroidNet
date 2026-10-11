@@ -20,7 +20,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/TextureResourceLocator.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 

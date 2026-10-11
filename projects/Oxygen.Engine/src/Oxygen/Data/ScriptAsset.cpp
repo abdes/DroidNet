@@ -20,8 +20,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/SourceOrigin.h>

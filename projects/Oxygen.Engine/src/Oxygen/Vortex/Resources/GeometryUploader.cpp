@@ -31,8 +31,8 @@
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>

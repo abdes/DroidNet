@@ -9,7 +9,7 @@
 #include <type_traits>
 #include <unordered_set>
 
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Testing/GTest.h>
 

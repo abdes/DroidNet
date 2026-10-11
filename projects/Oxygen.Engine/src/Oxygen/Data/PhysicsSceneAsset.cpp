@@ -14,8 +14,8 @@
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>

@@ -13,7 +13,7 @@
 #include <memory>
 
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Testing/GTest.h>

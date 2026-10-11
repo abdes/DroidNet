@@ -20,7 +20,7 @@
 
 #include <Oxygen/Content/Internal/ContentSourceView.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::content::internal {

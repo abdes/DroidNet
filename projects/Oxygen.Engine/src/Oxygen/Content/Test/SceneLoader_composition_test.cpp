@@ -17,7 +17,7 @@
 #include <Oxygen/Content/Internal/DependencyCollector.h>
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat_world.h>

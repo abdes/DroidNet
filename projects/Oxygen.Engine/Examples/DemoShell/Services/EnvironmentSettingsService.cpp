@@ -25,8 +25,8 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/PostProcess.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_world.h>

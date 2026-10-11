@@ -18,7 +18,7 @@
 
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/OxCo/Run.h>

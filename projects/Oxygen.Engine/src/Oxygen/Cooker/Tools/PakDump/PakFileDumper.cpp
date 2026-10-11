@@ -32,7 +32,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/PakFile.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/ComponentType.h>

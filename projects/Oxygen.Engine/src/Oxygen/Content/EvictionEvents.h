@@ -12,7 +12,7 @@
 
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 
 namespace oxygen::content {
 

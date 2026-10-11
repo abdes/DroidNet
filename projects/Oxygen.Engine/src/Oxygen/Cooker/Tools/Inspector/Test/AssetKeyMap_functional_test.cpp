@@ -18,7 +18,7 @@
 #include <Oxygen/Cooker/Test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/Test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/Tools/Inspector/AssetKeyMap.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {

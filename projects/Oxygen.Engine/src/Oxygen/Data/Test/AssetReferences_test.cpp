@@ -15,7 +15,7 @@
 #include <vector>
 
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_core.h>

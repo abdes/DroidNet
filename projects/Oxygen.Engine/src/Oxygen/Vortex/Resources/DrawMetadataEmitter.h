@@ -18,8 +18,8 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>

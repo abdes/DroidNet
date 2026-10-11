@@ -43,9 +43,9 @@
 #include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Cooker/Test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>

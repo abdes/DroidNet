@@ -8,7 +8,7 @@
 
 #include <memory>
 
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
 
 namespace oxygen::vortex::sceneprep {

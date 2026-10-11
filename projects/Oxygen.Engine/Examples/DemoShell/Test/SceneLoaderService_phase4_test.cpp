@@ -34,8 +34,8 @@
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/TextureResourceLocator.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>

@@ -24,7 +24,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Test/Support/SourceLayoutTestSupport.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MaterialSlotInventory.h>
 #include <Oxygen/Testing/GTest.h>

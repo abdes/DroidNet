@@ -34,7 +34,7 @@
 #include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Cooker/Test/Support/TestPaths.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>

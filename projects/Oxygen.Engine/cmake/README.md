@@ -144,7 +144,7 @@ names are `Base`, `Composition`, `OxCo`, `Serio`, `TextWrap`, `Clap`, `Config`,
 `Console`, `Core`, `Platform` and `Input`. Dependencies are added automatically:
 this example builds Base, OxCo, TextWrap and Clap, and requires only fmt, Asio
 and magic_enum; `Input` builds Base, Composition, OxCo, Config, Console, Core,
-Platform and Input, and requires fmt, Asio, glm and nlohmann_json. Order and redundant names
+Platform and Input, and requires fmt, Asio, glm, xxHash and nlohmann_json. Order and redundant names
 do not create different package IDs. The former inert `base` and `oxco` Boolean
 options have been replaced by this explicit selection.
 
@@ -276,13 +276,13 @@ only when building the full engine. Public target compile features determine
 module language requirements (currently C++23 through Base). CMake 4.2 remains
 the common infrastructure minimum.
 
-| Module   | Also selects                                 | External dependencies    |
-| -------- | -------------------------------------------- | ------------------------ |
-| Clap     | TextWrap                                     | magic_enum               |
-| Console  | Config                                       | nlohmann_json            |
-| Core     | Composition, OxCo                            | Asio, glm                |
-| Platform | Config, Core, Composition, OxCo              | Asio, glm                |
-| Input    | Console, Platform, Core (and their closures) | Asio, glm, nlohmann_json |
+| Module   | Also selects                                 | External dependencies            |
+| -------- | -------------------------------------------- | -------------------------------- |
+| Clap     | TextWrap                                     | magic_enum                       |
+| Console  | Config                                       | nlohmann_json                    |
+| Core     | Composition, OxCo                            | Asio, glm, xxHash                |
+| Platform | Config, Core, Composition, OxCo              | Asio, glm, xxHash                |
+| Input    | Console, Platform, Core (and their closures) | Asio, glm, xxHash, nlohmann_json |
 
 Every module also selects Base (fmt). In a reusable selection, Platform builds
 only `oxygen::platform-input`: keys, mouse buttons, input slots and input events,

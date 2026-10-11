@@ -82,8 +82,8 @@
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>

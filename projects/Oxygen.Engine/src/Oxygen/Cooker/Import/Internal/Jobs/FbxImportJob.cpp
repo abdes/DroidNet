@@ -37,7 +37,7 @@
 #include <Oxygen/Cooker/Import/Internal/WorkDispatcher.h>
 #include <Oxygen/Cooker/Import/Internal/WorkPayloadStore.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>

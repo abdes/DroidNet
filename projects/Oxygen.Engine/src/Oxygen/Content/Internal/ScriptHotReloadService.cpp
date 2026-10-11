@@ -16,7 +16,7 @@
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Internal/ScriptHotReloadService.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 
 namespace oxygen::content::internal {

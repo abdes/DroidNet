@@ -19,7 +19,7 @@
 
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Content/api_export.h> // For tests only
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>

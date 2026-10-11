@@ -14,7 +14,7 @@
 #include <vector>
 
 #include <Oxygen/Cooker/api_export.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/SourceKey.h>

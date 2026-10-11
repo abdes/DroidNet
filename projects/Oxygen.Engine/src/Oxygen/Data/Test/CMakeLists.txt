@@ -33,7 +33,6 @@ include(GTestHelpers)
 m_gtest_program(
   All
   SOURCES
-    "AssetKey_test.cpp"
     "AssetReferences_test.cpp"
     "PakCatalog_test.cpp"
     "BufferResource_test.cpp"

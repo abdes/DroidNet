@@ -21,9 +21,9 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Scene/Scene.h>
 

@@ -26,8 +26,8 @@
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Content/TextureResourceLocator.h>
 #include <Oxygen/Content/api_export.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputActionAsset.h>

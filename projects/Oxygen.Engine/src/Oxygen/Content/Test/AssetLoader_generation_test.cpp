@@ -42,7 +42,7 @@
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>

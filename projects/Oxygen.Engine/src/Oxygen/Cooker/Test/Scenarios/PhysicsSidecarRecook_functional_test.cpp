@@ -38,8 +38,8 @@
 #include <Oxygen/Cooker/Test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Core/Meta/Physics/Backend.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialSlotId.h>

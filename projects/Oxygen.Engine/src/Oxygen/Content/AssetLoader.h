@@ -38,8 +38,8 @@
 #include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/RefCountedEviction.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>

@@ -14,7 +14,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceTypeList.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SourceOrigin.h>

@@ -32,8 +32,8 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Console/Command.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>

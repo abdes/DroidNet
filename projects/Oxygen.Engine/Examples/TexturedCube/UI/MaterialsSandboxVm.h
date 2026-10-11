@@ -13,15 +13,15 @@
 #include <string>
 #include <vector>
 
-#include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Core/Types/TextureType.h>
-#include <Oxygen/Data/AssetKey.h>
-
 #include "DemoShell/Services/FileBrowserService.h"
 #include "TexturedCube/SceneSetup.h"
 #include "TexturedCube/TextureLoadingService.h"
+
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 
 namespace oxygen::examples::textured_cube::ui {
 

@@ -10,7 +10,7 @@
 #include <mutex>
 #include <unordered_map>
 
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BuiltinGeometry.h>
 #include <Oxygen/Data/GeometryAsset.h>

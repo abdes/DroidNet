@@ -21,6 +21,7 @@ asap_push_module("${META_MODULE_NAME}")
 
 find_package(fmt CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
+find_package(xxHash CONFIG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -81,6 +82,7 @@ set(
   "Scripting/ScriptExecutable.h"
   "Meta/Physics/Backend.h"
   "Meta/Scripting/ScriptCompileMode.h"
+  "Types/AssetKey.h"
   "Types/Atmosphere.h"
   "Types/Bool32.h"
   "Types/ByteUnits.h"
@@ -143,6 +145,7 @@ set(
   "Time/PresentationClock.cpp"
   "Time/SimulationClock.cpp"
   "Transforms/Decompose.cpp"
+  "Types/AssetKey.cpp"
   "Types/Frustum.cpp"
   "Types/ResolvedView.cpp"
   "Version.cpp"
@@ -199,6 +202,8 @@ target_link_libraries(
     oxygen::base
     oxygen::oxco
     oxygen::composition
+  PRIVATE
+    xxHash::xxhash
 )
 
 if(TARGET oxygen-core_bindless_gen)

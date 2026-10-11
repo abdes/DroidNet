@@ -24,7 +24,7 @@
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>
 #include <Oxygen/Cooker/Tools/PakTool/BuildReportJson.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/PakCatalog.h>

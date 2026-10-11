@@ -17,7 +17,7 @@
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/api_export.h>
 

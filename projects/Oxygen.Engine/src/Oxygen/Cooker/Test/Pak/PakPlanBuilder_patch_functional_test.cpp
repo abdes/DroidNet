@@ -34,7 +34,7 @@
 #include <Oxygen/Cooker/Test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/Test/Support/TestValues.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>

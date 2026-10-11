@@ -27,7 +27,7 @@
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>

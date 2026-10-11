@@ -24,7 +24,7 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Pak/PakManifestWriter.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/SourceKey.h>
 
 namespace {

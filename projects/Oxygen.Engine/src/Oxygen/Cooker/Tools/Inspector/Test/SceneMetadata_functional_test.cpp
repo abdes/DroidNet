@@ -27,7 +27,7 @@
 #include <Oxygen/Cooker/Test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/Test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/Tools/Inspector/SceneMetadata.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>

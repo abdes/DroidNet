@@ -26,7 +26,7 @@
 #include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/ScriptAsset.h>

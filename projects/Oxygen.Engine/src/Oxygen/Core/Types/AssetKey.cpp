@@ -14,7 +14,7 @@
 
 #include <xxhash.h>
 
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 
 namespace oxygen::data {
 

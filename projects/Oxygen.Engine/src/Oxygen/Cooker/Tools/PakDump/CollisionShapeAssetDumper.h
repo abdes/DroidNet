@@ -9,13 +9,12 @@
 #include <cstring>
 #include <iostream>
 
-#include <fmt/format.h>
-
-#include <Oxygen/Data/AssetKey.h>
-#include <Oxygen/Data/PakFormat.h>
-
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
+#include <fmt/format.h>
+
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::pakdump {
 

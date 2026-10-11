@@ -53,8 +53,8 @@
 #include <Oxygen/Cooker/Test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/Test/Support/TempDir.h>
 #include <Oxygen/Cooker/Test/Support/TestValues.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_geometry.h>

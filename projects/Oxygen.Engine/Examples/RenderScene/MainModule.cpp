@@ -39,8 +39,8 @@
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/InputContextHydration.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/SourceKey.h>

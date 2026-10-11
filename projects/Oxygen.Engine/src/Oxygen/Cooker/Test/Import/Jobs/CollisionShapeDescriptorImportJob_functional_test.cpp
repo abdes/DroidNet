@@ -26,7 +26,7 @@
 #include <Oxygen/Cooker/Test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/Test/Support/FileIo.h>
 #include <Oxygen/Cooker/Test/Support/ImportHarness.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/MemoryStream.h>

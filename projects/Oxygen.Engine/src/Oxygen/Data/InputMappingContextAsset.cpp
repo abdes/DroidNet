@@ -14,8 +14,8 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/SourceOrigin.h>

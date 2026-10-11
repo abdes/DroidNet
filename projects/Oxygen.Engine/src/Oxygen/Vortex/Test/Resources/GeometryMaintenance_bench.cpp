@@ -14,8 +14,8 @@
 #include <vector>
 
 #include <Oxygen/Content/EvictionEvents.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Testing/GTest.h>

@@ -11,7 +11,7 @@
 #include <string>
 
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 

@@ -11,7 +11,7 @@
 #include <utility>
 
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>

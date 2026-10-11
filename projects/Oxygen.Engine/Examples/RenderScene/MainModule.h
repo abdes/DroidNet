@@ -24,7 +24,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/CompositionView.h>

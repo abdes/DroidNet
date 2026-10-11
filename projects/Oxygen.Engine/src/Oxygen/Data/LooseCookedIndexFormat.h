@@ -13,7 +13,7 @@
 #include <string_view>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_references.h>
 #include <Oxygen/Data/api_export.h>

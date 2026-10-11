@@ -25,7 +25,7 @@
 #include <Oxygen/Cooker/Pak/PakMeasureStore.h>
 #include <Oxygen/Cooker/Pak/PakStreamingCrc32.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>

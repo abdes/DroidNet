@@ -18,8 +18,8 @@
 #include <glm/ext/quaternion_float.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_geometry.h>

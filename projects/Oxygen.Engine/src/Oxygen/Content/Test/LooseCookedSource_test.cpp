@@ -21,7 +21,7 @@
 
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Testing/GTest.h>

@@ -12,8 +12,8 @@
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Content/Internal/ContentBindingBundle.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
-#include <Oxygen/Data/AssetKey.h>
 
 namespace oxygen::content::internal {
 

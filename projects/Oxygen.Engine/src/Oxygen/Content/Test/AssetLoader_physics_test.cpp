@@ -28,7 +28,7 @@
 #include <Oxygen/Content/Loaders/PhysicsResourceLoader.h>
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>

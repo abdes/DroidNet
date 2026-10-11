@@ -12,7 +12,7 @@
 #include <span>
 #include <type_traits>
 
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/LightValidation.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/Reader.h>

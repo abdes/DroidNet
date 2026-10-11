@@ -18,7 +18,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/Scene.h>

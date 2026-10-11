@@ -11,7 +11,7 @@
 
 #include <glm/vec3.hpp>
 
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::cooker::test {

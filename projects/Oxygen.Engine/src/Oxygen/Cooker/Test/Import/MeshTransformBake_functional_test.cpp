@@ -46,7 +46,7 @@
 #include <Oxygen/Cooker/Test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/Test/Support/TestPaths.h>
 #include <Oxygen/Cooker/Test/Support/TestValues.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_core.h>

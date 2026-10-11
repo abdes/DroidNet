@@ -21,7 +21,7 @@
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/ResourceTable.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/ScriptResource.h>

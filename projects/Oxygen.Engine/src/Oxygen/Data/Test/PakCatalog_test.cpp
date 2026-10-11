@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>

@@ -14,7 +14,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/api_export.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 
 namespace oxygen::content {
 

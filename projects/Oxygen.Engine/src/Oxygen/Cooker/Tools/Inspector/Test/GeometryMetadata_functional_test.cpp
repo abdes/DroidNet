@@ -29,8 +29,8 @@
 #include <Oxygen/Cooker/Test/Pak/PakTestSupport.h>
 #include <Oxygen/Cooker/Test/Support/JsonSchema.h>
 #include <Oxygen/Cooker/Tools/Inspector/GeometryMetadata.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>

@@ -15,7 +15,7 @@
 #include <Oxygen/Testing/GTest.h>
 
 // Project
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 
 using oxygen::data::AssetKey;
 using oxygen::data::to_string;

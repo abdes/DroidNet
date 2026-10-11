@@ -10,7 +10,7 @@
 #include <lualib.h>
 
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentUserdataBindings.h>

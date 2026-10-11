@@ -20,7 +20,7 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Result.h>
-#include <Oxygen/Data/api_export.h>
+#include <Oxygen/Core/api_export.h>
 
 namespace oxygen::data {
 
@@ -52,11 +52,11 @@ public:
   }
 
   //! Parses canonical lowercase AssetKey text (`8-4-4-4-12`).
-  OXGN_DATA_NDAPI static auto FromString(std::string_view text)
+  OXGN_CORE_NDAPI static auto FromString(std::string_view text)
     -> Result<AssetKey>;
 
   //! Computes a deterministic AssetKey from a canonical virtual path.
-  OXGN_DATA_NDAPI static auto FromVirtualPath(std::string_view virtual_path)
+  OXGN_CORE_NDAPI static auto FromVirtualPath(std::string_view virtual_path)
     -> AssetKey;
 
   [[nodiscard]] constexpr auto data() const noexcept -> const value_type*
@@ -90,7 +90,7 @@ static_assert(std::is_trivially_copyable_v<AssetKey>);
 static_assert(std::is_standard_layout_v<AssetKey>);
 
 //! String representation of AssetKey.
-OXGN_DATA_NDAPI auto to_string(const AssetKey& value) -> std::string;
+OXGN_CORE_NDAPI auto to_string(const AssetKey& value) -> std::string;
 
 //! Read-only byte span view for binary serialization.
 [[nodiscard]] inline auto as_bytes(const AssetKey& key) noexcept

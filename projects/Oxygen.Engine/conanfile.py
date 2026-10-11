@@ -318,6 +318,7 @@ class OxygenConan(ConanFile):
         if not self._full_engine:
             if "Core" in self._modules:
                 self.requires("glm/1.0.1", transitive_headers=True)
+                self.requires("xxhash/0.8.3")
             if "Console" in self._modules:
                 self.requires("nlohmann_json/3.11.3", transitive_headers=True)
             # Reusable builds provide Platform's input vocabulary only

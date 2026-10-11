@@ -28,7 +28,7 @@
 #include <Oxygen/Content/Internal/ContentReleaseQueue.h>
 #include <Oxygen/Content/OperationCancelledException.h>
 #include <Oxygen/Core/AnyCache.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_core.h>

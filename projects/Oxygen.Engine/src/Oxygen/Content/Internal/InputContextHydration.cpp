@@ -22,7 +22,7 @@
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/InputContextHydration.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/InputActionAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/PakFormat_input.h>

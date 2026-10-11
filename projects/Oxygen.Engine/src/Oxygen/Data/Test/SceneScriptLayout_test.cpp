@@ -12,7 +12,7 @@
 #include <stdexcept>
 #include <vector>
 
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/PakFormat_scripting.h>

@@ -18,16 +18,15 @@
 #include <string_view>
 #include <vector>
 
+#include "DumpContext.h"
+#include "PrintUtils.h"
 #include <fmt/format.h>
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/PakFile.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
-
-#include "DumpContext.h"
-#include "PrintUtils.h"
 
 namespace oxygen::content::pakdump::asset_dump_helpers {
 

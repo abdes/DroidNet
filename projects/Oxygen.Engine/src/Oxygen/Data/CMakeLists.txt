@@ -20,7 +20,6 @@ asap_push_module("${META_MODULE_NAME}")
 
 find_package(glm CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
-find_package(xxHash CONFIG REQUIRED)
 
 # ==============================================================================
 # Build instructions
@@ -51,7 +50,6 @@ set(
   OXYGEN_DATA_HEADERS
   "api_export.h"
   "Asset.h"
-  "AssetKey.h"
   "AssetReferences.h"
   "AssetRuntimeBindings.h"
   "AssetType.h"
@@ -105,7 +103,6 @@ set(
 )
 set(
   OXYGEN_DATA_PRIVATE_SOURCES
-  "AssetKey.cpp"
   "AssetReferences.cpp"
   "BufferResource.cpp"
   "BuiltinGeometry.cpp"
@@ -169,8 +166,6 @@ target_link_libraries(
     oxygen::serio
     fmt::fmt-header-only
     glm::glm
-  PRIVATE
-    xxHash::xxhash
 )
 
 # ------------------------------------------------------------------------------

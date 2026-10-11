@@ -23,8 +23,8 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Base/Span.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_scripting.h>

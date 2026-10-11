@@ -19,7 +19,7 @@
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>

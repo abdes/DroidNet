@@ -4,12 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "AssetKeyMap.h"
-
 #include <fstream>
 #include <iostream>
 #include <stdexcept>
 
+#include "AssetKeyMap.h"
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
 
@@ -18,7 +17,7 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Tools/Inspector/AssetKeyMap_schema.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 
 namespace oxygen::content::inspection {
 

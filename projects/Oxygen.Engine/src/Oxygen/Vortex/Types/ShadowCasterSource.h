@@ -13,7 +13,7 @@
 #include <glm/vec2.hpp>
 #include <glm/vec4.hpp>
 
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>

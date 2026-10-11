@@ -9,7 +9,7 @@
 #include <array>
 #include <cstdint>
 
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 
 namespace oxygen::content::testing {
 

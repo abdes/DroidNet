@@ -9,7 +9,7 @@
 #include <tuple>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Testing/GTest.h>

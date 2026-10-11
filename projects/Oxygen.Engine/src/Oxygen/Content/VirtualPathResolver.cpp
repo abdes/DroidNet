@@ -20,7 +20,7 @@
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
-#include <Oxygen/Data/AssetKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
 
 namespace oxygen::content {

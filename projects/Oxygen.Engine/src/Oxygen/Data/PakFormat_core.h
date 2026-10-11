@@ -16,8 +16,8 @@
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Core/Meta/Data/ResourceIndex.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/PostProcess.h>
-#include <Oxygen/Data/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/HalfFloat.h>
