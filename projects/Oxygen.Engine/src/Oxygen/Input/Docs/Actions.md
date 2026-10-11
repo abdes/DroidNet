@@ -54,6 +54,9 @@ Mouse motion and wheel bindings are relative: their value is the sum of every
 event received in the current frame, and returns to zero in the next frame
 without motion. `GetValue()` of a look action is therefore the whole-frame
 delta, independent of how many events the device sent or the frame rate.
+Only motion the binding's triggers accept counts: a look bound to MouseXY
+with a right-button chord reads zero while the button is up. An absolute
+binding likewise contributes its value only while it is triggered or ongoing.
 Do not sum `GetFrameTransitions()` values to recover a delta; transitions
 record state changes, not samples.
 

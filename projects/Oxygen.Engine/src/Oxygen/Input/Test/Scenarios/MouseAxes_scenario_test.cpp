@@ -48,7 +48,7 @@ protected:
 NOLINT_TEST_F(MouseAxisScenario, LookReceivesWholeFrameDelta)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
-  oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
+  oxygen::co::Run(Loop(), [&] -> oxygen::co::Co<> {
     auto rmb = MakeAction("rmb", ActionValueType::kBool);
     auto look = MakeAction("look", ActionValueType::kAxis2D);
     auto ctx = MakeContext("camera fly", 0);
@@ -77,12 +77,51 @@ NOLINT_TEST_F(MouseAxisScenario, LookReceivesWholeFrameDelta)
   });
 }
 
+//! Fly camera (DemoShell layout): moving the mouse without holding RMB must
+//! not turn the camera; the look value is zero until the chord holds.
+NOLINT_TEST_F(MouseAxisScenario, LookWithoutChordReportsNoMotion)
+{
+  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
+  oxygen::co::Run(Loop(), [&] -> oxygen::co::Co<> {
+    auto rmb = MakeAction("rmb", ActionValueType::kBool);
+    auto look = MakeAction("look", ActionValueType::kAxis2D);
+    auto ctx = MakeContext("camera fly", 0);
+    Map(*ctx, rmb, InputSlots::RightMouseButton, Explicit<ActionTriggerDown>());
+    {
+      auto chain = std::make_shared<ActionTriggerChain>();
+      chain->SetLinkedAction(rmb);
+      chain->MakeImplicit();
+      chain->RequirePrerequisiteHeld(true);
+      Map(*ctx, look, InputSlots::MouseXY, AnyMotion())->AddTrigger(chain);
+    }
+
+    SendMouseMotion(4.0F, 2.0F);
+    co_await Frame();
+    EXPECT_FALSE(look->IsTriggered());
+    EXPECT_FLOAT_EQ(Vec(*look).x, 0.0F);
+    EXPECT_FLOAT_EQ(Vec(*look).y, 0.0F);
+
+    SendMouseButtonEvent(MouseButton::kRight, ButtonState::kPressed);
+    co_await Frame();
+    SendMouseMotion(4.0F, 2.0F);
+    co_await Frame();
+    EXPECT_FLOAT_EQ(Vec(*look).x, 4.0F);
+    EXPECT_FLOAT_EQ(Vec(*look).y, 2.0F);
+
+    SendMouseButtonEvent(MouseButton::kRight, ButtonState::kReleased);
+    co_await Frame();
+    SendMouseMotion(4.0F, 2.0F);
+    co_await Frame();
+    EXPECT_FLOAT_EQ(Vec(*look).x, 0.0F) << "chord released";
+  });
+}
+
 //! The same physical sweep (1000 counts at 1000 Hz) turns the camera by the
 //! same amount at any frame rate.
 NOLINT_TEST_F(MouseAxisScenario, LookDoesNotDependOnFrameRate)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
-  oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
+  oxygen::co::Run(Loop(), [&] -> oxygen::co::Co<> {
     auto look = MakeAction("look", ActionValueType::kAxis2D);
     auto ctx = MakeContext("camera", 0);
     Map(*ctx, look, InputSlots::MouseXY, AnyMotion());
@@ -112,7 +151,7 @@ NOLINT_TEST_F(MouseAxisScenario, LookDoesNotDependOnFrameRate)
 NOLINT_TEST_F(MouseAxisScenario, WheelAccumulatesAndReachesXYBindings)
 {
   // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
-  oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
+  oxygen::co::Run(Loop(), [&] -> oxygen::co::Co<> {
     auto zoom = MakeAction("zoom", ActionValueType::kAxis1D);
     auto scroll = MakeAction("scroll", ActionValueType::kAxis2D);
     auto ctx = MakeContext("camera", 0);

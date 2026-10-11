@@ -85,13 +85,19 @@ void InputActionMapping::SetSample(const Axis2D& sample)
   action_value_ = ToActionValue(v, action_->GetValueType());
 
   if (relative) {
-    if (relative_serial_ != action_->GetFrameSerial()) {
-      relative_sum_ = {};
-      relative_serial_ = action_->GetFrameSerial();
-    }
-    relative_sum_.x += v.x;
-    relative_sum_.y += v.y;
+    SyncRelativeFrame();
+    relative_pending_.x += v.x;
+    relative_pending_.y += v.y;
     clear_value_after_update_ = true;
+  }
+}
+
+void InputActionMapping::SyncRelativeFrame()
+{
+  if (relative_serial_ != action_->GetFrameSerial()) {
+    relative_sum_ = {};
+    relative_pending_ = {};
+    relative_serial_ = action_->GetFrameSerial();
   }
 }
 
@@ -154,17 +160,23 @@ void InputActionMapping::Contribute(
   const bool triggered, const bool ongoing, const bool canceled)
 {
   const auto type = action_->GetValueType();
+  const bool active = triggered || ongoing;
   ActionValue value = action_value_;
-  if (canceled) {
-    value = ToActionValue({}, type);
-  } else if (IsRelative()) {
-    if (relative_serial_ != action_->GetFrameSerial()) {
-      relative_sum_ = {};
-      relative_serial_ = action_->GetFrameSerial();
+  if (IsRelative() && !canceled) {
+    // A relative binding reports the motion its triggers accepted this
+    // frame: motion they reject (a look without its chord) moves nothing.
+    SyncRelativeFrame();
+    if (active) {
+      relative_sum_.x += relative_pending_.x;
+      relative_sum_.y += relative_pending_.y;
     }
+    relative_pending_ = {};
     value = ToActionValue(relative_sum_, type);
+  } else if (canceled || !active) {
+    // An absolute binding contributes its value only while it is active.
+    value = ToActionValue({}, type);
   }
-  active_ = triggered || ongoing;
+  active_ = active;
   action_->Contribute(this,
     Action::State {
       .triggered = triggered,

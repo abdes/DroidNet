@@ -103,6 +103,8 @@ namespace input {
     void SetSample(const Axis2D& sample);
     void Contribute(bool triggered, bool ongoing, bool canceled);
     void NotifyActionCanceled();
+    //! Starts a new frame's relative sums when the action's frame changed.
+    void SyncRelativeFrame();
 
     std::shared_ptr<Action> action_;
     platform::InputSlot slot_;
@@ -113,8 +115,10 @@ namespace input {
     // Transformed value of the latest event, seen by the triggers.
     ActionValue action_value_;
     ActionValue last_action_value_;
-    // Relative slots: transformed deltas summed over the current frame.
+    // Relative slots: deltas the triggers accepted in the current frame, and
+    // the delta of the latest event, not yet accepted or rejected.
     Axis2D relative_sum_ { .x = 0.0F, .y = 0.0F };
+    Axis2D relative_pending_ { .x = 0.0F, .y = 0.0F };
     uint64_t relative_serial_ { 0 };
 
     bool evaluation_ongoing_ { false };
