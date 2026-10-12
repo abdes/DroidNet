@@ -10,6 +10,9 @@ See [STATUS.md](STATUS.md) for progress and [OPEN_ITEMS.md](OPEN_ITEMS.md) for p
 - [Desktop renderer baseline](#desktop-renderer-baseline): VTX-M00 through VTX-M08.
 - [Exposure and LightBench](milestones/exposure/README.md): EX01–EX10, including
   the inserted performance, quality, console and widget-automation slices.
+- [VX-GPU-01 CPU→GPU data contract integrity](milestones/VX-GPU-01/README.md):
+  ordered uploads, receipt-retired descriptors, immutable per-pass inputs and
+  unwired-feature closure; completes before ED-M08 resumes.
 - [ED-M08 native editor extension](milestones/ED-M08/README.md): canonical data,
   remaining rendering parity and editor integration, reusing delivered captured-sky
   IBL; the editor plan owns its schedule, including the M08.F1 format cutover.

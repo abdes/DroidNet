@@ -191,6 +191,10 @@ linked to the engine scope record. Current M08 obligations are not future TODOs.
 
 ## 4. Execution sequence
 
+ED-M08 is paused until the Vortex milestone
+[VX-GPU-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-GPU-01/README.md)
+is validated; work resumes at the first open slice below.
+
 Each slice ends with focused checks and a buildable code/test/doc commit. Native
 contracts and rendered behavior pass before editor implementation relies on them.
 From M08.3 on, every slice closes only after the user has reviewed the running

@@ -65,7 +65,9 @@ Current execution:
    is validated: 148 engine and 33 editor request tests pass, native demo and
    editor rendering are verified, and material recovery survives cooking in the
    same scene session plus Undo/Redo and Save/reopen.
-2. Continue through the ED-M08 authoring-workspace slices, ED-M09 input
+2. Complete the Vortex milestone [VX-GPU-01](../../projects/Oxygen.Engine/design/vortex/milestones/VX-GPU-01/README.md)
+   (CPU→GPU data contract integrity) before ED-M08 work resumes.
+3. Continue through the ED-M08 authoring-workspace slices, ED-M09 input
    authoring and the ED-M10 release qualification plan. No later milestone is an entry dependency of an earlier one.
 
 [ED-M07A](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md) is validated

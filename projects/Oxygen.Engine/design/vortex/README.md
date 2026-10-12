@@ -17,7 +17,8 @@ owns scope, task status, acceptance and outcome. Large validation records and
 captured evidence live beside it. Technical contracts belong to the LLDs.
 
 The exposure package starts at [Exposure and LightBench](milestones/exposure/README.md).
-The next planned editor extension is [ED-M08](milestones/ED-M08/README.md).
+[VX-GPU-01](milestones/VX-GPU-01/README.md) runs next; the editor extension
+[ED-M08](milestones/ED-M08/README.md) resumes after it.
 [Capability boundaries](milestones/capabilities.md) distinguish the delivered
 baseline from future rendering families. Use the milestone index for current
 validation details.
