@@ -8,6 +8,8 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Core/Types/Format.h>
@@ -182,11 +184,19 @@ public:
   int end_count { 0 };
   int abort_count { 0 };
   bool throw_after_activate { false };
+  std::string last_label;
+  std::string last_name;
 
-  auto BeginScope(CommandRecorder&, const GpuProfileScopeInfo&,
+  auto BeginScope(CommandRecorder&, const GpuProfileScopeInfo& info,
     GpuProfileCollectorState& state) -> void override
   {
     ++begin_count;
+    last_label = std::string(info.base_label);
+    for (const auto& variable : info.desc.variables) {
+      if (std::string_view { variable.key.get() } == "name") {
+        last_name = variable.value;
+      }
+    }
     state.flags = kCollectorActiveFlag;
     if (throw_after_activate) {
       throw std::runtime_error("collector begin failure");
@@ -333,6 +343,42 @@ TEST(CommandRecorderProfileScopeDrain, BeginFailureAbortsOpenedCollectors)
 
   const auto list = recorder.End();
   ASSERT_NE(list, nullptr);
+}
+
+//! A command list timing scope spans the whole recording, carries the list's
+//! name, and ends with the recording.
+TEST(CommandRecorderProfileScopeDrain, CommandListTimingEndsWithRecording)
+{
+  auto recorder = TestRecorder {};
+  auto timing = CountingCollector {};
+  recorder.Begin();
+  recorder.BeginCommandListTiming(observer_ptr<IGpuProfileCollector>(&timing));
+  recorder.BeginCommandListTiming(observer_ptr<IGpuProfileCollector>(&timing));
+  EXPECT_EQ(timing.begin_count, 1);
+  EXPECT_EQ(timing.last_label, oxygen::graphics::kCommandListScopeLabel);
+  EXPECT_EQ(timing.last_name, "Recorder");
+  EXPECT_EQ(timing.end_count, 0);
+
+  const auto list = recorder.End();
+
+  ASSERT_NE(list, nullptr);
+  EXPECT_EQ(timing.end_count, 1);
+  EXPECT_EQ(timing.abort_count, 0);
+}
+
+TEST(CommandRecorderProfileScopeDrain, DestructorAbortsCommandListTiming)
+{
+  auto timing = CountingCollector {};
+  {
+    auto recorder = TestRecorder {};
+    recorder.Begin();
+    recorder.BeginCommandListTiming(
+      observer_ptr<IGpuProfileCollector>(&timing));
+  }
+
+  EXPECT_EQ(timing.begin_count, 1);
+  EXPECT_EQ(timing.end_count, 0);
+  EXPECT_EQ(timing.abort_count, 1);
 }
 
 } // namespace

@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -47,6 +48,7 @@ namespace graphics {
   class CommandQueue;
   class CommandRecorder;
   class FrameCaptureController;
+  class IGpuProfileCollector;
   struct FramebufferDesc;
   class Framebuffer;
   class IShaderByteCode;
@@ -212,6 +214,19 @@ public:
     const graphics::NativeResource& resource) const
     -> std::optional<graphics::ResourceStates>;
 
+  //! Times every graphics-queue command list acquired from now on.
+  /*!
+   The collector sees one `graphics::kCommandListScopeLabel` scope per list,
+   named by the list, from acquisition until the recording ends, so time with
+   no list running can be told from work no pass scope covers. Null stops it.
+   The collector must outlive the lists it times.
+  */
+  auto SetCommandListTimingCollector(
+    observer_ptr<graphics::IGpuProfileCollector> collector) noexcept -> void
+  {
+    command_list_timing_collector_.store(collector.get());
+  }
+
   //! Begins an owned recording; ordinary scope exit submits by default.
   [[nodiscard]] auto AcquireCommandRecorder(const graphics::QueueKey& queue_key,
     std::string_view command_list_name) -> graphics::CommandRecording
@@ -360,6 +375,9 @@ protected:
 private:
   // Declared first so native/module ownership outlasts other base members.
   std::shared_ptr<graphics::BackendLifetime> backend_lifetime_;
+  std::atomic<graphics::IGpuProfileCollector*> command_list_timing_collector_ {
+    nullptr
+  };
   std::shared_ptr<void> native_lifetime_;
   std::weak_ptr<Graphics> canonical_owner_;
   //! The platform abstraction layer. Provided by the upper layers (e.g., the

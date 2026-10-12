@@ -8,6 +8,8 @@
 #include <exception>
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <utility>
 
 #include <fmt/format.h>
 
@@ -76,6 +78,7 @@ CommandRecorder::~CommandRecorder()
 {
   ResolveSubmission(SubmissionOutcome::kDiscarded);
   DrainActiveProfileScopes(ScopeCloseKind::kAbort);
+  AbortCommandListTiming();
   DLOG_F(2, "recorder destroyed");
 }
 
@@ -123,9 +126,46 @@ void CommandRecorder::Begin()
   DLOG_F(2, "CommandRecorder::Begin() for: {}", command_list_->GetName());
   DCHECK_EQ_F(command_list_->GetState(), CommandList::State::kFree);
   DrainActiveProfileScopes(ScopeCloseKind::kAbort);
+  AbortCommandListTiming();
   scope_records_.clear();
   scope_stack_.clear();
   command_list_->OnBeginRecording();
+}
+
+auto CommandRecorder::BeginCommandListTiming(
+  const observer_ptr<IGpuProfileCollector> collector) -> void
+{
+  if (collector == nullptr || list_timing_collector_ != nullptr) {
+    return;
+  }
+  const auto desc = profiling::GpuProfileScopeDesc {
+    .label = std::string(kCommandListScopeLabel),
+    .variables
+    = profiling::Vars(profiling::Var("name", command_list_->GetName())),
+    .granularity = profiling::ProfileGranularity::kTelemetry,
+    .category = profiling::ProfileCategory::kGeneral,
+    .color = {},
+  };
+  list_timing_state_ = {};
+  collector->BeginScope(*this,
+    GpuProfileScopeInfo {
+      .desc = desc,
+      .base_label = desc.label,
+      .formatted_name = desc.label,
+    },
+    list_timing_state_);
+  list_timing_collector_ = collector;
+}
+
+auto CommandRecorder::AbortCommandListTiming() noexcept -> void
+{
+  if (const auto collector = std::exchange(list_timing_collector_, nullptr)) {
+    try {
+      collector->AbortScope(*this, list_timing_state_);
+    } catch (...) {
+      LOG_F(ERROR, "Failed to abort the command list timing scope");
+    }
+  }
 }
 
 auto CommandRecorder::RetainRegistration(ResourceRegistry& registry,
@@ -171,14 +211,20 @@ auto CommandRecorder::End() noexcept -> std::shared_ptr<CommandList>
     }
     command_list_->SetRecordedResourceStates(std::move(recorded_states));
 
+    // After the final barriers, which are the list's work too.
+    if (const auto collector = std::exchange(list_timing_collector_, nullptr)) {
+      collector->EndScope(*this, list_timing_state_);
+    }
     command_list_->OnEndRecording();
     return std::move(command_list_);
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Recording failed: {}", e.what());
+    AbortCommandListTiming();
     command_list_->Invalidate();
     command_list_.reset();
     return {};
   } catch (...) {
+    AbortCommandListTiming();
     command_list_->Invalidate();
     command_list_.reset();
     return {};

@@ -807,8 +807,14 @@ auto Graphics::AcquireCommandRecorder(const graphics::QueueKey& queue_key,
   // The returned value owns recording completion and submission policy.
   auto recorder = CreateCommandRecorder(command_list, queue);
   auto& cmdr = GetComponent<Commander>();
-  return cmdr.PrepareCommandRecorder(
+  auto recording = cmdr.PrepareCommandRecorder(
     std::move(recorder), policy, RetainBackendOwner(), backend_lifetime_);
+  if (auto* collector = command_list_timing_collector_.load();
+    collector != nullptr
+    && queue->GetQueueRole() == graphics::QueueRole::kGraphics) {
+    recording->BeginCommandListTiming(observer_ptr { collector });
+  }
+  return recording;
 }
 
 auto Graphics::AcquireCommandList(

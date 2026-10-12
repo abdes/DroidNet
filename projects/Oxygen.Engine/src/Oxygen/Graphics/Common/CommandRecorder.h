@@ -68,6 +68,10 @@ struct GpuProfileScopeToken {
 
 inline constexpr uint32_t kInvalidGpuProfileScopeId = 0xFFFFFFFFU;
 inline constexpr uint8_t kGpuScopeTokenFlagActive = 1U << 0U;
+//! The scope a command list timing collector sees around a whole list; its
+//! `name` variable is the list's name.
+inline constexpr std::string_view kCommandListScopeLabel
+  = "Graphics.CommandList";
 
 struct GpuProfileCollectorState {
   alignas(std::max_align_t) std::array<std::byte, 64> storage {};
@@ -227,6 +231,11 @@ public:
   {
     trace_collector_ = collector;
   }
+
+  //! Opens a `kCommandListScopeLabel` scope on `collector` that ends with the
+  //! recording, after its final barriers. Once per recording.
+  OXGN_GFX_API auto BeginCommandListTiming(
+    observer_ptr<IGpuProfileCollector> collector) -> void;
 
   //=== Pipeline State and Bindless Setup ===-------------------------------//
 
@@ -676,6 +685,7 @@ private:
     ScopeRecord& record, ScopeCloseKind close_kind) -> void;
   OXGN_GFX_API auto DrainActiveProfileScopes(ScopeCloseKind close_kind) noexcept
     -> void;
+  auto AbortCommandListTiming() noexcept -> void;
 
   //! @}
 
@@ -683,6 +693,8 @@ private:
   observer_ptr<CommandQueue> target_queue_;
   observer_ptr<IGpuProfileCollector> telemetry_collector_ { nullptr };
   observer_ptr<IGpuProfileCollector> trace_collector_ { nullptr };
+  observer_ptr<IGpuProfileCollector> list_timing_collector_ { nullptr };
+  GpuProfileCollectorState list_timing_state_ {};
 
   std::unique_ptr<detail::ResourceStateTracker> resource_state_tracker_;
   std::vector<ScopeRecord> scope_records_ {};
