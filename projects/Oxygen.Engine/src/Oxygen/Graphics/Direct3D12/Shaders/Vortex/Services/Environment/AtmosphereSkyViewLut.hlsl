@@ -43,7 +43,7 @@ struct SkyViewDispatchHeader
 {
     uint multi_scattering_height;
     uint active_light_count;
-    uint exposure_status_uav;
+    uint reserved0;
     uint exposure_fp16_store;
 };
 
@@ -217,7 +217,7 @@ static VortexSingleScatteringResult IntegrateSkyLight(
 // record_hdr_bounds: the per-view entry records store bounds unless the view's
 // exposure is FP32-only; captures never do.
 static void GenerateSkyViewLut(uint3 dispatch_id, float pre_exposure,
-    float one_over_pre_exposure, bool record_hdr_bounds)
+    float one_over_pre_exposure, bool record_hdr_bounds, uint exposure_status_uav)
 {
     if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX)
     {
@@ -281,12 +281,12 @@ static void GenerateSkyViewLut(uint3 dispatch_id, float pre_exposure,
         scattering.Transmittance,
         float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
     CheckHdrStoreRange(float4(scattering.L, transmittance), 5u,
-        pass.dispatch_header.exposure_status_uav, pass.dispatch_header.exposure_fp16_store,
+        exposure_status_uav, pass.dispatch_header.exposure_fp16_store,
         pre_exposure);
     const float4 output_value = float4(max(scattering.L, 0.0f.xxx), saturate(transmittance));
     if (record_hdr_bounds) {
         RecordHdrStoreBounds(output_value, output_value, output_value, one_over_pre_exposure,
-            5u, pass.dispatch_header.exposure_status_uav, pass.dispatch_header.exposure_fp16_store);
+            5u, exposure_status_uav, pass.dispatch_header.exposure_fp16_store);
     }
     output_texture[dispatch_id.xy] = pass.dispatch_header.exposure_fp16_store != 0u
         ? HdrRoundToHalf(output_value) : output_value;
@@ -298,7 +298,7 @@ static void GenerateSkyViewLut(uint3 dispatch_id, float pre_exposure,
 void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
 {
     GenerateSkyViewLut(dispatch_id, GetPreExposure(), GetOneOverPreExposure(),
-        !IsFp32OnlyExposure());
+        !IsFp32OnlyExposure(), GetExposureStatusUav());
 }
 #endif
 
@@ -306,5 +306,5 @@ void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
 [numthreads(8, 8, 1)]
 void VortexAtmosphereCaptureSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
 {
-    GenerateSkyViewLut(dispatch_id, 1.0f, 1.0f, false);
+    GenerateSkyViewLut(dispatch_id, 1.0f, 1.0f, false, K_INVALID_BINDLESS_INDEX);
 }

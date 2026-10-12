@@ -110,8 +110,9 @@ protected:
   [[nodiscard]] static auto MakePreparedFrameInput()
     -> Renderer::PreparedFrameInput
   {
-    return Renderer::PreparedFrameInput { .value
-      = oxygen::vortex::PreparedSceneFrame {} };
+    return Renderer::PreparedFrameInput {
+      .value = oxygen::vortex::PreparedSceneFrame {},
+    };
   }
 
   [[nodiscard]] auto AcquireRecorder(std::string_view name) const
@@ -223,7 +224,7 @@ NOLINT_TEST_F(FacadePresetsTest,
       91U,
     }));
   EXPECT_NE(render_context.current_view.prepared_frame.get(), nullptr);
-  EXPECT_NE(render_context.view_constants.get(), nullptr);
+  EXPECT_TRUE(render_context.view_constants.IsValid());
 }
 
 NOLINT_TEST_F(
@@ -256,7 +257,7 @@ NOLINT_TEST_F(
         EXPECT_EQ(view_id, (ViewId { 91U, }));
         EXPECT_EQ(context.current_view.view_id, (ViewId { 91U, }));
         EXPECT_NE(context.current_view.prepared_frame.get(), nullptr);
-        EXPECT_NE(context.view_constants.get(), nullptr);
+        EXPECT_TRUE(context.view_constants.IsValid());
         co_return;
       });
 

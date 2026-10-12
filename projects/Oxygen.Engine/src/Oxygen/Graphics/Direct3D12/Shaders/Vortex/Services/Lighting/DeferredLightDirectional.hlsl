@@ -27,13 +27,6 @@ VortexFullscreenTriangleOutput DeferredLightDirectionalVS(uint vertex_id : SV_Ve
 [shader("pixel")]
 float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Target0
 {
-    if (g_PassConstantsIndex == INVALID_BINDLESS_INDEX) {
-        return 0.0f.xxxx;
-    }
-
-    ConstantBuffer<DeferredLightConstants> light_constants
-        = ResourceDescriptorHeap[g_PassConstantsIndex];
-
     const SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
     if (!HasDeferredLightingInputs(bindings)) return 0.0f.xxxx;
     const float scene_depth = SampleSceneDepth(input.uv, bindings);

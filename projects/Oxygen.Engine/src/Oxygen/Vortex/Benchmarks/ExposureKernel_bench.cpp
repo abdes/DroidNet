@@ -11,6 +11,8 @@
 #include <functional>
 #include <memory>
 #include <print>
+// MSVC declares the platform-specific _dupenv_s in the C runtime header.
+// NOLINTNEXTLINE(modernize-deprecated-headers)
 #include <stdlib.h>
 #include <utility>
 #include <vector>
@@ -42,6 +44,18 @@ namespace oxygen::vortex::testing::exposure {
 
 using graphics::BufferUsage;
 using graphics::ResourceStates;
+
+namespace {
+  constexpr double kMillisecondsPerSecond = 1000.0;
+  constexpr std::uint32_t kViewConstantsBytes = 256U;
+  constexpr unsigned kCanonicalLutWidth = 256U;
+  constexpr unsigned kCanonicalLutHeight = 64U;
+  constexpr std::uint32_t kDefaultTimingWidth = 960U;
+  constexpr int kDecimalBase = 10;
+  constexpr float kManualExposureKey = 12.5F;
+  constexpr std::uint32_t kSceneProductBit = 10U;
+  constexpr std::uint32_t kSceneProductId = 11U;
+} // namespace
 
 NOLINT_TEST_F(ExposureGpuTest, DISABLED_ProducerRangeAndCanonicalTiming)
 {
@@ -80,8 +94,8 @@ NOLINT_TEST_F(ExposureGpuTest, DISABLED_ProducerRangeAndCanonicalTiming)
     std::println(
       "producer_native case={} width={} height={} iteration={} queue_ms={:.6f}",
       name, width, height, iteration,
-      static_cast<double>(ticks.subspan(1, 1).front() - ticks.front()) * 1000.0
-        / static_cast<double>(frequency));
+      static_cast<double>(ticks.subspan(1, 1).front() - ticks.front())
+        * kMillisecondsPerSecond / static_cast<double>(frequency));
   };
   auto settings = scene::ExposureSettings {};
   settings.mode = engine::ExposureMode::kManual;
@@ -120,11 +134,11 @@ NOLINT_TEST_F(ExposureGpuTest, DISABLED_ProducerRangeAndCanonicalTiming)
   auto view = ViewConstants::GpuData {};
   auto constants = CreateUploadBuffer(
     SizeBytes {
-      256U,
+      kViewConstantsBytes,
     },
     BufferUsage::kConstant);
   constants->Update(&view, sizeof(view), 0U);
-  ctx_.view_constants = constants;
+  ctx_.view_constants = { .buffer = constants };
   auto cache = environment::internal::AtmosphereLutCache(*renderer_);
   auto transmittance = environment::AtmosphereTransmittanceLutPass(*renderer_);
   auto multiple = environment::AtmosphereMultiScatteringLutPass(*renderer_);
@@ -139,28 +153,30 @@ NOLINT_TEST_F(ExposureGpuTest, DISABLED_ProducerRangeAndCanonicalTiming)
     cache.RefreshForState(stable);
     transmittance.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
     multiple.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
-    measure("canonical_refresh", 256, 64, iteration, [&] -> void {
-      ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
-      ASSERT_TRUE(multiple.Record(ctx_, stable, cache).executed);
-    });
+    measure("canonical_refresh", kCanonicalLutWidth, kCanonicalLutHeight,
+      iteration, [&] -> void {
+        ASSERT_TRUE(transmittance.Record(ctx_, stable, cache).executed);
+        ASSERT_TRUE(multiple.Record(ctx_, stable, cache).executed);
+      });
   }
   if (capture) {
     EXPECT_TRUE(capture->EndCapture());
   }
-  ctx_.view_constants.reset();
+  ctx_.view_constants = {};
   WaitForQueueIdle();
 }
 
 NOLINT_TEST_F(ExposureGpuTest, DISABLED_ComposedAdmissionFullResolutionTiming)
 {
-  std::uint32_t width = 960U;
+  std::uint32_t width = kDefaultTimingWidth;
   char* width_text = nullptr;
   std::size_t width_size = 0U;
   if (_dupenv_s(&width_text, &width_size, "OXYGEN_EXPOSURE_TIMING_WIDTH") == 0
     && (width_text != nullptr)) {
     const auto owned
       = std::unique_ptr<char, decltype(&std::free)>(width_text, &std::free);
-    width = static_cast<std::uint32_t>(std::strtoul(owned.get(), nullptr, 10));
+    width = static_cast<std::uint32_t>(
+      std::strtoul(owned.get(), nullptr, kDecimalBase));
   }
   ASSERT_GE(width, 64U);
   ASSERT_LE(width, 3840U);
@@ -264,7 +280,7 @@ NOLINT_TEST_F(ExposureGpuTest, DISABLED_ComposedAdmissionFullResolutionTiming)
     background.SetColorRgb(test.neutral ? Vec3 { 0.0F, } : Vec3 { .25F, });
     auto settings = scene::ExposureSettings {};
     settings.mode = engine::ExposureMode::kManual;
-    settings.key = 12.5F;
+    settings.key = kManualExposureKey;
     settings.manual_ev = 0.0F;
     auto post_process = PostProcessConfig {};
     post_process.exposure = settings;
@@ -312,7 +328,7 @@ NOLINT_TEST_F(ExposureGpuTest, DISABLED_ComposedAdmissionFullResolutionTiming)
       error.candidate_rgb_relative = test.rgb_error;
       error.candidate_coverage_absolute = test.alpha_error;
       error.candidate_pre_exposure = 1.0F;
-      error.checked_products = (1U << 10U) | 1U;
+      error.checked_products = (1U << kSceneProductBit) | 1U;
       error.flags = 3U;
       auto upload = CreateUploadBuffer(SizeBytes {
         sizeof(error),
@@ -358,7 +374,7 @@ NOLINT_TEST_F(ExposureGpuTest, DISABLED_ComposedAdmissionFullResolutionTiming)
         auto scene_product = postprocess::ExposurePass::HdrProduct {};
         scene_product.texture = view.signal.texture.get();
         scene_product.srv = view.signal.srv;
-        scene_product.id = 11U;
+        scene_product.id = kSceneProductId;
         scene_product.coverage = true;
         scene_product.composed_error = true;
         const std::array products {
@@ -397,7 +413,7 @@ NOLINT_TEST_F(ExposureGpuTest, DISABLED_ComposedAdmissionFullResolutionTiming)
         "queue_ms={:.6f} first_flags={} second_flags={}",
         test.name, width, height, test.views, iteration,
         static_cast<double>(ticks.subspan(1, 1).front() - ticks.front())
-          * 1000.0 / static_cast<double>(frequency),
+          * kMillisecondsPerSecond / static_cast<double>(frequency),
         flags.at(0), flags.at(1));
     }
     ++case_index;

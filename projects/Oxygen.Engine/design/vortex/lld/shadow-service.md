@@ -245,7 +245,7 @@ class ShadowService : public ISubsystemService {
   /// CPU-side inspection hook for tests/diagnostics of one view's directional
   /// shadow publication.
   [[nodiscard]] auto InspectShadowData(ViewId view_id) const
-    -> const DirectionalShadowFrameData*;
+    -> observer_ptr<const ShadowFrameData>;
 
   /// VSM support check. Returns false in Phase 4C.
   [[nodiscard]] auto HasVsm() const -> bool;

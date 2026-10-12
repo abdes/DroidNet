@@ -12,12 +12,11 @@
 
 static const uint VIEW_HISTORY_FLAG_PREVIOUS_VIEW_VALID = (1u << 0u);
 
+// The current view and projection matrices live in the view constants; this
+// record adds the unjittered current projection and the previous view state.
 struct ViewHistoryFrameBindings
 {
-    float4x4 current_view_matrix;
-    float4x4 current_projection_matrix;
     float4x4 current_stable_projection_matrix;
-    float4x4 current_inverse_view_projection_matrix;
     float4x4 previous_view_matrix;
     float4x4 previous_projection_matrix;
     float4x4 previous_stable_projection_matrix;
@@ -35,10 +34,7 @@ struct ViewHistoryFrameBindings
 static ViewHistoryFrameBindings LoadViewHistoryFrameBindings(uint slot)
 {
     ViewHistoryFrameBindings history = (ViewHistoryFrameBindings)0;
-    history.current_view_matrix = view_matrix;
-    history.current_projection_matrix = projection_matrix;
     history.current_stable_projection_matrix = projection_matrix;
-    history.current_inverse_view_projection_matrix = inverse_view_projection_matrix;
     history.previous_view_matrix = view_matrix;
     history.previous_projection_matrix = projection_matrix;
     history.previous_stable_projection_matrix = projection_matrix;

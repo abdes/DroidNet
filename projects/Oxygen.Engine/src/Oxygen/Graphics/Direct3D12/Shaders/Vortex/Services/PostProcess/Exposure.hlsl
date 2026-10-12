@@ -6,6 +6,7 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/Lighting/LightingFrameBindings.hlsli"
+#include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Contracts/View/ExposureStateData.hlsli"
 #include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
 #include "Vortex/Services/PostProcess/HdrSceneComposition.hlsli"
@@ -82,7 +83,7 @@ struct AutoExposureAverageConstants {
     uint status_uav;
     uint borrowed_state_srv;
     uint2 view_lifetime;
-    uint lighting_frame_slot;
+    uint view_frame_bindings_slot;
     uint3 reserved;
 };
 
@@ -483,8 +484,8 @@ static void StoreState(RWByteAddressBuffer destination, ExposureStateData state)
 
 static uint2 LoadProducerFailure(AutoExposureAverageConstants pass)
 {
-    if (pass.lighting_frame_slot != K_INVALID_BINDLESS_INDEX
-        && !IsLightingPublicationReady(LoadLightingFrameBindings(pass.lighting_frame_slot))) {
+    if (IsLightingPublicationFailed(
+            LoadViewFrameBindings(pass.view_frame_bindings_slot).lighting_frame_slot)) {
         return uint2(12u, 64u); // Lighting publication failed in this GPU dependency chain.
     }
     if ((pass.control_flags & 128u) == 0u || pass.status_uav == K_INVALID_BINDLESS_INDEX)
@@ -524,8 +525,8 @@ void VortexExposureAverageCS(uint3 dispatch_thread_id : SV_DispatchThreadID)
     StructuredBuffer<ExposureTargetData> target_buffer = ResourceDescriptorHeap[pass.targets_srv];
     const ExposureTargetData targets = target_buffer[0];
     ExposureStateData previous = LoadPrevious(pass.previous_state_srv, targets);
-    if (pass.lighting_frame_slot != K_INVALID_BINDLESS_INDEX
-        && !IsLightingPublicationReady(LoadLightingFrameBindings(pass.lighting_frame_slot))) {
+    if (IsLightingPublicationFailed(
+            LoadViewFrameBindings(pass.view_frame_bindings_slot).lighting_frame_slot)) {
         // Keep accepted gains and transition acknowledgement. The failed frame
         // contributes neither a current meter measurement nor FP16 eligibility.
         previous.flags &= ~(EXPOSURE_LUMINANCE_VALID | EXPOSURE_METER_EV_VALID | EXPOSURE_FP16_ELIGIBLE);

@@ -437,32 +437,20 @@ Contract rules:
 
 ### 4.7 ViewConstants Contract
 
-Opaque velocity parity requires current and previous per-view projection data.
+`ViewConstants` at b1 carries the current camera: view, projection and inverse
+view-projection matrices, camera position, `reverse_z`, `is_orthographic`,
+frame slot, sequence and time, and the `ViewFrameBindings` slot. Camera passes
+read these values from b1 and nowhere else.
 
-Minimum shader-visible fields:
+`ViewHistoryFrameBindings`, reached through
+`ViewFrameBindings.history_frame_slot`, carries what b1 does not: the
+unjittered current projection, pixel jitter, view rectangles and the previous
+frame's matrices that stage-9 velocity needs.
 
-```hlsl
-cbuffer ViewConstants : register(b1, space0)
-{
-    // existing current-frame fields...
-    float4x4 view_matrix;
-    float4x4 projection_matrix;
-    float4x4 stable_projection_matrix;
-    float4x4 inverse_view_projection_matrix;
-
-    // required previous-frame fields for stage-9 velocity
-    float4x4 previous_view_matrix;
-    float4x4 previous_projection_matrix;
-    float4x4 previous_stable_projection_matrix;
-    float4x4 previous_inverse_view_projection_matrix;
-
-    float2 current_pixel_jitter;
-    float2 previous_pixel_jitter;
-};
-```
-
-The contract owner is the renderer. `ViewConstantsManager` is an upload helper,
-not the lifetime owner of previous-view history.
+The renderer owns the contract. Each write is a new record
+([§4.9](#49-pass-inputs-and-data-integrity)) placed by
+`upload::TransientConstantBuffer`; `PreviousViewHistoryCache`, not the upload
+path, owns previous-view history.
 
 ### 4.8 BasePass Velocity Auxiliary Contract
 
@@ -492,15 +480,22 @@ allocated at record time from the per-frame transient structured buffers.
 Root constant `[1]` (`g_PassConstantsIndex`) is its only entry point and is
 always a `StructuredBuffer` element. A pass without inputs passes
 `K_INVALID_BINDLESS_INDEX`, never a literal `0`. Root constant `[0]`
-(`g_DrawIndex`) carries the draw index only. Raw SRV indices travel inside the
-inputs record, not in root constants.
+(`g_DrawIndex`) carries the draw index only; a pass whose draws share one
+record array, such as deferred local lights, passes the array at `[1]` and
+each draw's element at `[0]`. Raw SRV indices travel inside the inputs record,
+not in root constants. Records are written through the Upload transient
+buffers (`TransientStructuredBuffer`, `PerViewStructuredPublisher`), never
+through pass-owned CBV descriptors.
 
 **Camera views.** Camera passes keep `ViewConstants` at b1. Each write
 allocates a new record bound by GPU address, so a pass reads the view values
 and the `ViewFrameBindings` slot current when it was recorded. A record is
 never rewritten after a pass binds it. One value has one source: view
 matrices, `reverse_z`, exposure and lighting slots come from the view records,
-not duplicated pass constants.
+not duplicated pass constants. `RenderContext::current_view` names the
+`ViewFrameBindings` record the current b1 record routes to; a non-camera pass
+that reads view values, such as tonemap or exposure, carries that slot in its
+inputs record instead of copies of the values.
 
 **Non-camera passes.** Shadow, contact-shadow, LUT, capture and compute passes
 do not bind b1. Their inputs record carries the view-projection, the draw-frame
@@ -527,9 +522,18 @@ camera and non-camera entries, such as the sky-view LUT with its capture entry,
 wraps the camera entry and its bound-view includes in
 `#ifdef OXYGEN_CAMERA_VIEW_ENTRY`.
 
-**Mesh position.** Depth prepass, base pass, shadow and contact-shadow passes
-compute world position through one helper, including material world-position
-offset, so every view rasterizes the same geometry.
+**Mesh position.** Depth prepass, base pass, velocity, shadow and
+contact-shadow passes position meshes through
+`Contracts/Draw/MeshPosition.hlsli`: `ResolveDrawWorldOffset` reads the draw's
+material world-position offset from its `DrawFrameBindings`, and
+`ComputeMeshWorldPosition` and `ComputeMeshClipPosition` apply it with
+`precise` math, so every view rasterizes the same geometry. Non-camera passes
+carry the view's `draw_frame_slot` in their inputs record, never copies of its
+slots.
+
+**Material once.** A pixel shader loads its draw's material once
+(`TryLoadDrawMaterialFromSlots`) and passes it to the alpha test, surface
+evaluation (`EvaluateMaterialSurfaceForMaterial`) and output packing.
 
 **Fail loudly.** A missing required slot is a CPU-side rejection with a logged
 reason, decided before recording. Shaders treat `K_INVALID_BINDLESS_INDEX` and

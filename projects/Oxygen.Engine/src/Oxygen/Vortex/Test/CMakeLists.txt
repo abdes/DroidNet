@@ -106,15 +106,12 @@ m_gtest_program(
     "LightingService_test.cpp"
     "Lighting/LightPhotometry_test.cpp"
     "Lighting/LightEvaluationRecords_test.cpp"
-    "Lighting/DeferredLightConstantsPublisher_test.cpp"
-    "Fixtures/UploadCoordinatorTest.cpp"
 )
 target_sources(
   Oxygen.Vortex.LightingService.Tests
   PRIVATE
     "../Lighting/Internal/LightGridBuilder.cpp"
     "../Lighting/Internal/LightEvaluationRecords.cpp"
-    "../Lighting/Internal/DeferredLightConstantsPublisher.cpp"
 )
 
 m_gtest_program(PostProcessService SOURCES "PostProcessService_test.cpp")
@@ -319,13 +316,6 @@ m_gtest_program(
 )
 
 m_gtest_program(
-  ViewConstantsManager
-  SOURCES
-    "Fakes/Graphics.h"
-    "Internal/ViewConstantsManager_test.cpp"
-)
-
-m_gtest_program(
   DeformationHistoryCache
   SOURCES
     "Internal/DeformationHistoryCache_test.cpp"
@@ -387,6 +377,16 @@ m_gtest_program(
   SOURCES
     "Fakes/Graphics.h"
     "Upload/TransientStructuredBuffer_test.cpp"
+    "Fixtures/RingBufferStagingFixture.h"
+    "Fixtures/UploadCoordinatorTest.cpp"
+    "Fixtures/UploadCoordinatorTest.h"
+)
+
+m_gtest_program(
+  TransientConstantBuffer
+  SOURCES
+    "Fakes/Graphics.h"
+    "Upload/TransientConstantBuffer_test.cpp"
     "Fixtures/RingBufferStagingFixture.h"
     "Fixtures/UploadCoordinatorTest.cpp"
     "Fixtures/UploadCoordinatorTest.h"
@@ -551,6 +551,7 @@ if(WIN32)
       "Exposure/Suitability_test.cpp"
       "Exposure/Tonemap_test.cpp"
       "Exposure/Transitions_test.cpp"
+      "Exposure/ViewConstantsRecords_test.cpp"
     DEPS
       oxygen-vortex-exposure-test-support
   )
@@ -577,68 +578,22 @@ if(WIN32)
     PUBLIC
       $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
   )
-  # Compile the arithmetic probe separately; it must not enter shaders.bin.
-  # It reaches camera helpers, so it compiles as a camera view entry.
-  set(
-    exposure_shader_root
-    "${PROJECT_SOURCE_DIR}/src/Oxygen/Graphics/Direct3D12/Shaders"
-  )
-  set(
-    exposure_probe_output
-    "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/ToneBoundsProbe.dxil"
-  )
-  add_custom_command(
-    OUTPUT
-      "${exposure_probe_output}"
-    COMMAND
-      ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
-    COMMAND
-      "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_8 -E CS -O3 -HV 2021 -D
-      OXYGEN_CAMERA_VIEW_ENTRY=1 -I "${exposure_shader_root}" -I
-      "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo "${exposure_probe_output}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/ToneBoundsProbe.hlsl"
-    # DXC dependency generation is a separate preprocessing action; -MD does
-    # not compile DXIL, even when -Fo is supplied.
-    COMMAND
-      "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_8 -E CS -O3 -HV 2021 -D
-      OXYGEN_CAMERA_VIEW_ENTRY=1 -I "${exposure_shader_root}" -I
-      "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF "${exposure_probe_output}.d"
-      -Fo "${exposure_probe_output}"
-      "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/ToneBoundsProbe.hlsl"
-    DEPENDS
-      "${OXYGEN_DXC_EXECUTABLE}"
-      "Shaders/ToneBoundsProbe.hlsl"
-      "${exposure_shader_root}/Vortex/Contracts/View/HdrHardwareSampling.hlsli"
-      "${exposure_shader_root}/Vortex/Contracts/View/HdrIntervalMath.hlsli"
-      "${exposure_shader_root}/Vortex/Contracts/View/HdrRadianceRange.hlsli"
-      "${exposure_shader_root}/Vortex/Services/Environment/TransmittanceMath.hlsli"
-      "${exposure_shader_root}/Vortex/Services/Environment/LocalFogVolumeCommon.hlsli"
-      "${exposure_shader_root}/Vortex/Services/Environment/VolumetricFog.hlsl"
-      "${exposure_shader_root}/Vortex/Services/Environment/AtmosphereSampling.hlsli"
-      "${exposure_shader_root}/Vortex/Contracts/View/ExposureStateData.hlsli"
-      "${exposure_shader_root}/Vortex/Services/PostProcess/HdrSceneComposition.hlsli"
-      "${exposure_shader_root}/Vortex/Services/PostProcess/ToneMappingBounds.hlsli"
-      "${exposure_shader_root}/Vortex/Services/PostProcess/ToneMappingFastBounds.hlsli"
-      "${exposure_shader_root}/Vortex/Services/PostProcess/ToneMapping.hlsli"
-      "${exposure_shader_root}/Vortex/Shared/ColorSpace.hlsli"
-      "${exposure_shader_root}/Vortex/Shared/CubemapGeometry.hlsli"
-      "${exposure_shader_root}/Vortex/Shared/GroupReduction.hlsli"
-    DEPFILE "${exposure_probe_output}.d"
-    VERBATIM
-  )
-  add_custom_target(
+  # The arithmetic probe reaches camera helpers.
+  oxygen_add_dxc_compute_probe(
     oxygen-vortex-tone-bounds-probe
-    DEPENDS
-      "${exposure_probe_output}"
+    SOURCE "Shaders/ToneBoundsProbe.hlsl"
+    PROFILE cs_6_8
+    CONSUMER oxygen-vortex-exposure-test-support
+    DEFINITION OXYGEN_EXPOSURE_TONE_PROBE
+    CAMERA_VIEW_ENTRY
   )
-  add_dependencies(
-    oxygen-vortex-exposure-test-support
-    oxygen-vortex-tone-bounds-probe
-  )
-  target_compile_definitions(
-    oxygen-vortex-exposure-test-support
-    PRIVATE
-      OXYGEN_EXPOSURE_TONE_PROBE="${exposure_probe_output}"
+  oxygen_add_dxc_compute_probe(
+    oxygen-vortex-view-record-probe
+    SOURCE "Shaders/ViewRecordProbe.hlsl"
+    PROFILE cs_6_8
+    CONSUMER "Oxygen.Vortex.Exposure.Tests"
+    DEFINITION OXYGEN_VIEW_RECORD_PROBE
+    CAMERA_VIEW_ENTRY
   )
   # The ExecuteIndirect reference draws also stay out of shaders.bin.
   set(

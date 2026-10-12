@@ -7,7 +7,7 @@
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Shared/MaskedAlphaTestView.hlsli"
-#include "Vortex/Shared/MeshClipPosition.hlsli"
+#include "Vortex/Contracts/Draw/MeshPosition.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 

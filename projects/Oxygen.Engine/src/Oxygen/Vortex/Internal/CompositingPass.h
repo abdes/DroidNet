@@ -19,6 +19,7 @@
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Vortex/Passes/GraphicsRenderPass.h>
+#include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::graphics {
 class Buffer;
@@ -32,6 +33,10 @@ class Texture;
 namespace oxygen {
 class Graphics;
 } // namespace oxygen
+
+namespace oxygen::vortex {
+class Renderer;
+} // namespace oxygen::vortex
 
 namespace oxygen::vortex::internal {
 
@@ -50,8 +55,9 @@ class CompositingPass final : public GraphicsRenderPass {
 public:
   using Config = CompositingPassConfig;
 
-  explicit CompositingPass(std::shared_ptr<CompositingPassConfig> config);
-  ~CompositingPass() override;
+  //! Pass inputs come from `renderer`'s per-frame transient records.
+  CompositingPass(
+    std::shared_ptr<CompositingPassConfig> config, Renderer& renderer);
 
 protected:
   auto DoPrepareResources(graphics::CommandRecorder& recorder)
@@ -62,26 +68,6 @@ protected:
   auto NeedRebuildPipelineState() const -> bool override;
 
 private:
-  static constexpr uint32_t kPassConstantsStride = 256u;
-  static constexpr uint32_t kPassConstantsChunkSlots = 16u;
-  static constexpr size_t kFrameSlotCount
-    = static_cast<size_t>(frame::kFramesInFlight.get());
-
-  struct PassConstantsChunk {
-    std::shared_ptr<graphics::Buffer> buffer;
-    std::byte* mapped_ptr { nullptr };
-    std::array<ShaderVisibleIndex, kPassConstantsChunkSlots> indices {};
-    uint32_t used_slots { 0u };
-  };
-
-  struct FramePassConstantsState {
-    frame::SequenceNumber frame_sequence { frame::kInvalidSequenceNumber };
-    std::vector<PassConstantsChunk> chunks;
-  };
-
-  auto ReleasePassConstantsBuffer() -> void;
-  auto ReleasePassConstantsFrameState(FramePassConstantsState& state) -> void;
-
   auto SetupRenderTargets(graphics::CommandRecorder& recorder) const -> void;
   auto SetupViewPortAndScissors(graphics::CommandRecorder& recorder) const
     -> void;
@@ -93,17 +79,12 @@ private:
   [[nodiscard]] auto GetSourceTexture() const -> const graphics::Texture&;
   [[nodiscard]] auto GetClampedViewport() const -> ViewPort;
 
-  auto EnsurePassConstantsBuffer() -> void;
-  auto CreatePassConstantsChunk(FramePassConstantsState& state) -> void;
-  auto GetCurrentFramePassConstantsState() -> FramePassConstantsState&;
   auto EnsureSourceTextureSrv(const graphics::Texture& texture)
     -> ShaderVisibleIndex;
   auto UpdatePassConstants(ShaderVisibleIndex source_texture_index) -> void;
 
   std::shared_ptr<Config> config_;
-  observer_ptr<Graphics> graphics_ { nullptr };
-  std::array<FramePassConstantsState, kFrameSlotCount>
-    pass_constants_frames_ {};
+  upload::TransientStructuredBuffer pass_constants_;
   ViewPort clamped_viewport_ {};
   bool has_drawable_region_ { true };
 };

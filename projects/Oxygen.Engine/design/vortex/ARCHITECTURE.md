@@ -860,7 +860,7 @@ Within Oxygen, these concerns must plug into a second established distinction:
 2. typed per-view published products (`ViewFrameBindings`, `LightingFrameBindings`,
    `EnvironmentFrameBindings`, `ShadowFrameBindings`, etc.)
 3. bindless indirection and publication helpers (`PerViewStructuredPublisher`,
-   `ViewConstantsManager`)
+   `upload::TransientConstantBuffer`)
 
 Section 7 defines the Vortex contract first, then uses UE 5.7 and the current
 Oxygen renderer as evidence for why that contract is the right one.
@@ -1055,7 +1055,8 @@ Current Oxygen evidence:
 
 - renderer-owned shared routing/publication:
   `ViewFrameBindings`, `LightingFrameBindings`, `EnvironmentFrameBindings`,
-  `ShadowFrameBindings`, `PerViewStructuredPublisher`, `ViewConstantsManager`
+  `ShadowFrameBindings`, `PerViewStructuredPublisher`,
+  `upload::TransientConstantBuffer`
 - pass-owned local binding work:
   `ToneMapPass`, `CompositingPass`, and `SkyPass` allocate pass-local CBV/SRV
   or RTV/DSV handles for their own execution
@@ -1101,7 +1102,7 @@ Architectural rule:
 Legacy Oxygen already has the right architectural shape here:
 
 - `PerViewStructuredPublisher`
-- `ViewConstantsManager`
+- `upload::TransientConstantBuffer`
 - `ViewFrameBindings`
 - `DrawFrameBindings`
 - `LightingFrameBindings`

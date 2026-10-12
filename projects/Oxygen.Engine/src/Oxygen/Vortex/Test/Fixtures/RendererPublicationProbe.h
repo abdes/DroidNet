@@ -418,10 +418,14 @@ struct RendererPublicationProbe {
     return renderer.view_const_cpu_;
   }
 
-  static auto GetViewConstantsManager(const Renderer& renderer)
-    -> const internal::ViewConstantsManager*
+  //! Publish the current view constants routed to `view_frame_bindings_slot`,
+  //! as each staged view-frame publication does.
+  static auto WriteCurrentViewConstants(Renderer& renderer,
+    RenderContext& render_context,
+    const ShaderVisibleIndex view_frame_bindings_slot) -> void
   {
-    return renderer.view_const_manager_.get();
+    renderer.WriteCurrentViewConstants(
+      render_context, *renderer.GetGraphics(), view_frame_bindings_slot);
   }
 
   static auto PopulateRenderContextViewState(Renderer& renderer,

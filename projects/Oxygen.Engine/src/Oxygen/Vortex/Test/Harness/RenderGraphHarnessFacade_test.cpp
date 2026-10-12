@@ -357,7 +357,8 @@ NOLINT_TEST_F(RenderGraphHarnessFacadeTest,
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetResolvedView(MakeResolvedViewInput());
   facade.SetPreparedFrame(Renderer::PreparedFrameInput {
-    .value = oxygen::vortex::PreparedSceneFrame {} });
+    .value = oxygen::vortex::PreparedSceneFrame {},
+  });
   facade.SetCoreShaderInputs(Renderer::CoreShaderInputsInput {
     .view_id = ViewId { 61U, },
     .value = oxygen::vortex::ViewConstants {},
@@ -385,7 +386,7 @@ NOLINT_TEST_F(RenderGraphHarnessFacadeTest,
         }));
       EXPECT_NE(context.current_view.resolved_view.get(), nullptr);
       EXPECT_NE(context.current_view.prepared_frame.get(), nullptr);
-      EXPECT_NE(context.view_constants.get(), nullptr);
+      EXPECT_TRUE(context.view_constants.IsValid());
       co_return;
     });
 

@@ -7,8 +7,6 @@
 #ifndef OXYGEN_D3D12_SHADERS_VORTEX_MATERIALS_MATERIALTEMPLATEADAPTER_HLSLI
 #define OXYGEN_D3D12_SHADERS_VORTEX_MATERIALS_MATERIALTEMPLATEADAPTER_HLSLI
 
-#include "Vortex/Shared/MaskedAlphaTestView.hlsli"
-
 #include "GBufferMaterialOutput.hlsli"
 
 struct BasePassMaterialTemplateInput
@@ -22,21 +20,9 @@ struct BasePassMaterialTemplateInput
     uint is_front_face;
 };
 
-static inline void ApplyBasePassAlphaClip(float2 uv0, uint draw_index)
-{
-#if defined(ALPHA_TEST)
-    const SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    ApplyMaskedAlphaClip(EvaluateMaskedAlphaTest(uv0, draw_index, linear_sampler));
-#else
-    (void)uv0;
-    (void)draw_index;
-#endif
-}
-
 static inline GBufferOutput EvaluateBasePassMaterialOutput(
     BasePassMaterialTemplateInput input)
 {
-    ApplyBasePassAlphaClip(input.uv0, input.draw_index);
     return EvaluateGBufferMaterialOutput(input.world_pos, input.world_normal,
         input.world_tangent, input.world_bitangent, input.uv0,
         input.draw_index, input.is_front_face != 0u);

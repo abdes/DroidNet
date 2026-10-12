@@ -32,6 +32,7 @@
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/ext/quaternion_float.hpp>
 #include <glm/ext/quaternion_trigonometric.hpp>
+#include <glm/ext/vector_double3.hpp>
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
 #include <glm/gtc/constants.hpp>
@@ -68,6 +69,8 @@
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 // Completes the traversal returned by Scene::Traverse().
 #include <Oxygen/Scene/SceneTraversal.h> // IWYU pragma: keep
 #include <Oxygen/Scene/Types/Traversal.h>
@@ -725,8 +728,9 @@ struct AtmosphereLightOptions {
     0.0F,
     0.0F,
   };
-  float angular_size { 2.0F
-    * oxygen::engine::atmos::kDefaultSunDiskAngularRadiusRad };
+  float angular_size {
+    2.0F * oxygen::engine::atmos::kDefaultSunDiskAngularRadiusRad,
+  };
   //! Creates the light as a child, inheriting visibility, when set.
   oxygen::scene::SceneNode* parent {};
 };
@@ -1687,7 +1691,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
       .illuminance_lux = 20000.0F,
     });
   EXPECT_FALSE(
-    second.EditLight<oxygen::scene::DirectionalLight>([](auto& light) {
+    second.EditLight<oxygen::scene::DirectionalLight>([](auto& light) -> auto {
       light.SetAtmosphereLightSlot(
         oxygen::scene::AtmosphereLightSlot::kPrimary);
     }));
@@ -1864,10 +1868,12 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
       service.InspectAtmosphereState());
   scene->NotifyEnvironmentAuthoringChange();
   scene->NotifyEnvironmentAuthoringChange();
-  std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
-    "Authoring intent", [&](oxygen::graphics::CommandRecorder& recorder) {
-      return service.PublishEnvironmentBindings(ctx, recorder);
-    });
+  std::ignore
+    = oxygen::graphics::testing::SubmitCommands(*graphics_, "Authoring intent",
+      [&](oxygen::graphics::CommandRecorder& recorder)
+        -> oxygen::ShaderVisibleIndex {
+        return service.PublishEnvironmentBindings(ctx, recorder);
+      });
   EXPECT_EQ(service.InspectAtmosphereState().authoring_revision, 2U);
   EXPECT_EQ(
     service.InspectAtmosphereState().stable_revision, base_stable_revision);
@@ -1896,8 +1902,10 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_EQ(
     service.InspectAtmosphereState().stable_revision, base_stable_revision);
 
-  ASSERT_TRUE(primary.EditLight<oxygen::scene::DirectionalLight>(
-    [](auto& light) { light.SetUsePerPixelAtmosphereTransmittance(true); }));
+  ASSERT_TRUE(
+    primary.EditLight<oxygen::scene::DirectionalLight>([](auto& light) -> auto {
+      light.SetUsePerPixelAtmosphereTransmittance(true);
+    }));
   scene->SyncObservers();
 
   std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
@@ -1960,18 +1968,18 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   composition_view.with_atmosphere = true;
   auto ctx = MakeRenderContext(ViewId { 25U }, resolved_view, composition_view);
   ctx.scene = oxygen::observer_ptr { scene.get() };
-  const auto publish = [&]() -> void {
+  const auto publish = [&] -> void {
     std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
       "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
         return service.PublishEnvironmentBindings(ctx, recorder);
       });
   };
-  const auto apply_edit = [&]() -> void {
+  const auto apply_edit = [&] -> void {
     scene->Update(false);
     scene->SyncObservers();
     publish();
   };
-  const auto capture_key = [&]() -> std::uint64_t {
+  const auto capture_key = [&] -> std::uint64_t {
     return HashSkyCaptureInputs(service.InspectAtmosphereState());
   };
   const auto slot_enabled = [&](const std::size_t slot) -> bool {
@@ -1984,25 +1992,30 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ASSERT_TRUE(slot_enabled(0U));
   const auto lit_key = capture_key();
 
+  auto group_flags = group.GetFlags();
+  ASSERT_HAS_VALUE(group_flags);
+  auto primary_flags = primary.GetFlags();
+  ASSERT_HAS_VALUE(primary_flags);
+
   // Hiding an ancestor while the light still inherits its visibility.
-  group.GetFlags()->get().SetLocalValue(SceneNodeFlags::kVisible, false);
+  group_flags->get().SetLocalValue(SceneNodeFlags::kVisible, false);
   apply_edit();
   EXPECT_FALSE(slot_enabled(0U));
   const auto unlit_key = capture_key();
   EXPECT_NE(unlit_key, lit_key);
 
-  group.GetFlags()->get().SetLocalValue(SceneNodeFlags::kVisible, true);
+  group_flags->get().SetLocalValue(SceneNodeFlags::kVisible, true);
   apply_edit();
   EXPECT_TRUE(slot_enabled(0U));
   EXPECT_EQ(capture_key(), lit_key);
 
   // Hiding the light node itself.
-  primary.GetFlags()->get().SetLocalValue(SceneNodeFlags::kVisible, false);
+  primary_flags->get().SetLocalValue(SceneNodeFlags::kVisible, false);
   apply_edit();
   EXPECT_FALSE(slot_enabled(0U));
   EXPECT_EQ(capture_key(), unlit_key);
 
-  primary.GetFlags()->get().SetLocalValue(SceneNodeFlags::kVisible, true);
+  primary_flags->get().SetLocalValue(SceneNodeFlags::kVisible, true);
   apply_edit();
   EXPECT_TRUE(slot_enabled(0U));
   EXPECT_EQ(capture_key(), lit_key);
@@ -2101,14 +2114,16 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ctx.scene = oxygen::observer_ptr {
     scene.get(),
   };
-  ctx.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name
-    = "EnvironmentLightingServiceBehaviorTest.AtmosphereProducts.ViewConstants",
-  });
-  ASSERT_NE(ctx.view_constants, nullptr);
+  ctx.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "EnvironmentLightingServiceBehaviorTes"
+                    "t.AtmosphereProducts.ViewConstants",
+    }),
+  };
+  ASSERT_TRUE(ctx.view_constants.IsValid());
 
   graphics_->dispatch_log_.dispatches.clear();
   graphics_->compute_pipeline_log_.binds.clear();
@@ -2305,14 +2320,16 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ctx.scene = oxygen::observer_ptr {
     scene.get(),
   };
-  ctx.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name
-    = "EnvironmentLightingServiceBehaviorTest.AerialPerspective.ViewConstants",
-  });
-  ASSERT_NE(ctx.view_constants, nullptr);
+  ctx.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "EnvironmentLightingServiceBehaviorTes"
+                    "t.AerialPerspective.ViewConstants",
+    }),
+  };
+  ASSERT_TRUE(ctx.view_constants.IsValid());
 
   std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
     "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
@@ -2425,14 +2442,16 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ctx.scene = oxygen::observer_ptr {
     scene.get(),
   };
-  ctx.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "EnvironmentLightingServiceBehaviorTest."
-                  "AerialPerspectiveCvars.ViewConstants",
-  });
-  ASSERT_NE(ctx.view_constants, nullptr);
+  ctx.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "EnvironmentLightingServiceBehaviorTest."
+                    "AerialPerspectiveCvars.ViewConstants",
+    }),
+  };
+  ASSERT_TRUE(ctx.view_constants.IsValid());
 
   std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
     "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
@@ -2556,14 +2575,16 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ctx.scene = oxygen::observer_ptr {
     scene.get(),
   };
-  ctx.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name
-    = "EnvironmentLightingServiceBehaviorTest.AtmosphereCache.ViewConstants",
-  });
-  ASSERT_NE(ctx.view_constants, nullptr);
+  ctx.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name
+      = "EnvironmentLightingServiceBehaviorTest.AtmosphereCache.ViewConstants",
+    }),
+  };
+  ASSERT_TRUE(ctx.view_constants.IsValid());
 
   graphics_->dispatch_log_.dispatches.clear();
   std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
@@ -3339,14 +3360,16 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ctx.scene = oxygen::observer_ptr {
     scene.get(),
   };
-  ctx.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name
-    = "EnvironmentLightingServiceBehaviorTest.VolumetricFog.ViewConstants",
-  });
-  ASSERT_NE(ctx.view_constants, nullptr);
+  ctx.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name
+      = "EnvironmentLightingServiceBehaviorTest.VolumetricFog.ViewConstants",
+    }),
+  };
+  ASSERT_TRUE(ctx.view_constants.IsValid());
 
   graphics_->dispatch_log_.dispatches.clear();
 
@@ -3482,14 +3505,16 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ctx.scene = oxygen::observer_ptr {
     scene.get(),
   };
-  ctx.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "EnvironmentLightingServiceBehaviorTest."
-                  "NoVolumetrics.ViewConstants",
-  });
-  ASSERT_NE(ctx.view_constants, nullptr);
+  ctx.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "EnvironmentLightingServiceBehaviorTest."
+                    "NoVolumetrics.ViewConstants",
+    }),
+  };
+  ASSERT_TRUE(ctx.view_constants.IsValid());
 
   const auto slot = oxygen::graphics::testing::SubmitCommands(*graphics_,
     "Vortex test", [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
@@ -3603,14 +3628,16 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ctx.scene = oxygen::observer_ptr {
     scene.get(),
   };
-  ctx.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name
-    = "EnvironmentLightingServiceBehaviorTest.VolumetricHistory.ViewConstants",
-  });
-  ASSERT_NE(ctx.view_constants, nullptr);
+  ctx.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "EnvironmentLightingServiceBehaviorTes"
+                    "t.VolumetricHistory.ViewConstants",
+    }),
+  };
+  ASSERT_TRUE(ctx.view_constants.IsValid());
 
   service.OnFrameStart(
     oxygen::frame::SequenceNumber {
@@ -3769,14 +3796,16 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ctx.scene = oxygen::observer_ptr {
     scene.get(),
   };
-  ctx.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name
-    = "EnvironmentLightingServiceBehaviorTest.VolumetricLocalFog.ViewConstants",
-  });
-  ASSERT_NE(ctx.view_constants, nullptr);
+  ctx.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "EnvironmentLightingServiceBehaviorTes"
+                    "t.VolumetricLocalFog.ViewConstants",
+    }),
+  };
+  ASSERT_TRUE(ctx.view_constants.IsValid());
 
   graphics_->dispatch_log_.dispatches.clear();
 
@@ -4215,12 +4244,14 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ctx.scene = oxygen::observer_ptr {
     scene.get(),
   };
-  ctx.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "HdrFormatFixture.ViewConstants",
-  });
+  ctx.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "HdrFormatFixture.ViewConstants",
+    }),
+  };
   for (unsigned index = 0U; const auto format : {
                               Format::kRGBA16Float,
                               Format::kRGBA32Float,
@@ -4373,7 +4404,7 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   namespace internal = oxygen::vortex::environment::internal;
   auto state = internal::StableAtmosphereState {};
   state.view_products.atmosphere.enabled = true;
-  state.view_products.atmosphere_lights[0].enabled = true;
+  state.view_products.atmosphere_lights.at(0).enabled = true;
   const auto original = internal::HashSkyCaptureInputs(state);
   state.view_products.sky_light.intensity_mul = 0x1p50F;
   state.view_products.sky_light.tint_rgb = glm::vec3(0.5F);
@@ -4389,7 +4420,7 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   state.view_products.atmosphere.aerial_scattering_strength = 5.0F;
   state.view_products.atmosphere.aerial_perspective_start_depth_m = 5000.0F;
   EXPECT_EQ(internal::HashSkyCaptureInputs(state), original);
-  state.view_products.atmosphere_lights[0].illuminance_rgb_lux
+  state.view_products.atmosphere_lights.at(0).illuminance_rgb_lux
     = glm::vec3(1000.0F);
   EXPECT_NE(internal::HashSkyCaptureInputs(state), original);
 }
@@ -4400,15 +4431,15 @@ NOLINT_TEST(EnvironmentLightingServiceSurfaceTest,
   namespace internal = oxygen::vortex::environment::internal;
   auto state = internal::StableAtmosphereState {};
   state.view_products.atmosphere.enabled = true;
-  state.view_products.atmosphere_lights[0].enabled = true;
-  state.capture_light_nodes[0] = oxygen::scene::NodeHandle { 7U, 1U };
+  state.view_products.atmosphere_lights.at(0).enabled = true;
+  state.capture_light_nodes.at(0) = oxygen::scene::NodeHandle { 7U, 1U };
   const auto first = internal::HashSkyCaptureInputs(state);
-  state.capture_light_nodes[0].NewGeneration();
+  state.capture_light_nodes.at(0).NewGeneration();
   EXPECT_NE(internal::HashSkyCaptureInputs(state), first);
   const auto active = internal::HashSkyCaptureInputs(state);
-  state.capture_light_nodes[1] = oxygen::scene::NodeHandle { 9U, 1U };
+  state.capture_light_nodes.at(1) = oxygen::scene::NodeHandle { 9U, 1U };
   EXPECT_EQ(internal::HashSkyCaptureInputs(state), active);
-  state.view_products.atmosphere_lights[1].enabled = true;
+  state.view_products.atmosphere_lights.at(1).enabled = true;
   EXPECT_NE(internal::HashSkyCaptureInputs(state), active);
 }
 
@@ -4421,7 +4452,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   scene->GetEnvironment()
     ->AddSystem<oxygen::scene::environment::SkyAtmosphere>()
     .SetEnabled(true);
-  const auto make_sun = [&] {
+  const auto make_sun = [&] -> oxygen::scene::SceneNode {
     auto node = scene->CreateNode("Sun");
     auto light = std::make_unique<oxygen::scene::DirectionalLight>();
     light->SetAtmosphereLightSlot(oxygen::scene::AtmosphereLightSlot::kPrimary);
@@ -4508,12 +4539,14 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ctx.scene = oxygen::observer_ptr {
     scene.get(),
   };
-  ctx.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "RadiancePublication.ViewConstants",
-  });
+  ctx.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "RadiancePublication.ViewConstants",
+    }),
+  };
   const auto publish = [&](unsigned sequence)
     -> const EnvironmentLightingService::ViewRadianceResources* {
     ctx.frame_sequence = oxygen::frame::SequenceNumber {
@@ -4575,16 +4608,20 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
   auto scene = MakeSceneWithAtmosphereEnvironment();
   auto primary = AddAtmosphereDirectionalLight(*scene, "Fog primary",
-    { .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
+    {
+      .slot = oxygen::scene::AtmosphereLightSlot::kPrimary,
       .disk_scale = { 1.0F, 1.0F, 1.0F },
       .color_rgb = { 1.0F, 1.0F, 1.0F },
       .illuminance_lux = 12000.0F,
-      .angular_size = 0.0F });
+      .angular_size = 0.0F,
+    });
   auto secondary = AddAtmosphereDirectionalLight(*scene, "Fog secondary",
-    { .slot = oxygen::scene::AtmosphereLightSlot::kSecondary,
+    {
+      .slot = oxygen::scene::AtmosphereLightSlot::kSecondary,
       .disk_scale = { 1.0F, 1.0F, 1.0F },
       .color_rgb = { 1.0F, 1.0F, 1.0F },
-      .illuminance_lux = 2000.0F });
+      .illuminance_lux = 2000.0F,
+    });
   auto atmosphere
     = scene->GetEnvironment()
         ->TryGetSystem<oxygen::scene::environment::SkyAtmosphere>();
@@ -4599,7 +4636,9 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   auto ctx = MakeRenderContext(composition.id, resolved, composition);
   ctx.scene = oxygen::observer_ptr { scene.get() };
   std::ignore = oxygen::graphics::testing::SubmitCommands(*graphics_,
-    "Fog light publication", [&](oxygen::graphics::CommandRecorder& recorder) {
+    "Fog light publication",
+    [&](oxygen::graphics::CommandRecorder& recorder)
+      -> oxygen::ShaderVisibleIndex {
       return service.PublishEnvironmentBindings(ctx, recorder);
     });
   const auto* data = service.InspectEnvironmentViewData(composition.id);

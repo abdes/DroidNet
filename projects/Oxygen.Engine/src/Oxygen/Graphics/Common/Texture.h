@@ -60,7 +60,7 @@ struct TextureDesc {
   // created at the time of memory binding. bool is_virtual = false; bool
   // is_tiled = false;
 
-  Color clear_value; //!< Optional clear value for RTV/DSV.
+  Color clear_value {}; //!< Optional clear value for RTV/DSV.
   bool use_clear_value = false;
 
   ResourceStates initial_state = ResourceStates::kUndefined;

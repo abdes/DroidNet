@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <optional>
@@ -211,7 +212,7 @@ namespace postprocess {
       const FrameLease& frame, std::uint32_t product) const -> bool;
 
     //! Evaluate FP32 reference products without granting normal-mode admission.
-    enum class SuitabilityScale { kCandidate, kCurrentFrame };
+    enum class SuitabilityScale : std::uint8_t { kCandidate, kCurrentFrame };
     [[nodiscard]] OXGN_VRTX_API auto EvaluateFp16Products(RenderContext& ctx,
       graphics::CommandRecorder& recorder, const FrameLease& frame,
       const ResolvedPostProcessConfig& config,
@@ -260,7 +261,8 @@ namespace postprocess {
     OXGN_VRTX_API auto RemoveViewState(
       CompositionView::ViewStateHandle view_state_handle) -> void;
     OXGN_VRTX_API auto PreserveRemovedSource(
-      std::shared_ptr<const ExposureSourceLoss> loss, const Source& source,
+      const std::shared_ptr<const ExposureSourceLoss>& loss,
+      const Source& source,
       CompositionView::ViewStateHandle only_consumer
       = CompositionView::kInvalidViewStateHandle) -> void;
 
@@ -320,9 +322,9 @@ namespace postprocess {
       StateLease fallback) -> bool;
     auto RecordState(RenderContext& ctx, graphics::CommandRecorder& recorder,
       const ResolvedPostProcessConfig& config, const Inputs& inputs,
-      StateLease previous, StateLease borrowed, bool bootstrap = false,
-      bool source_loss = false, std::shared_ptr<StateResources> reserved = {})
-      -> StateLease;
+      const StateLease& previous, const StateLease& borrowed,
+      bool bootstrap = false, bool source_loss = false,
+      std::shared_ptr<StateResources> reserved = {}) -> StateLease;
     auto AcquireState() -> std::shared_ptr<StateResources>;
     auto EnsureHistogramBuffer(StateResources& state) -> void;
     auto PublishHistogramConstants(RenderContext& ctx, const Inputs& inputs,

@@ -84,7 +84,7 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto InspectPreparationFailure(
     ViewId view_id) const -> const LightingPreparationFailure*;
   [[nodiscard]] OXGN_VRTX_API auto InspectShadowData(ViewId view_id) const
-    -> const ShadowFrameData*;
+    -> observer_ptr<const ShadowFrameData>;
   [[nodiscard]] OXGN_VRTX_API auto InspectDirectionalShadowSurfaces(
     ViewId view_id) const
     -> std::span<const std::shared_ptr<graphics::Texture>>;

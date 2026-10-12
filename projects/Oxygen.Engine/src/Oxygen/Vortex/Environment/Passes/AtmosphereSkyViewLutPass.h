@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -112,27 +113,27 @@ namespace environment {
     struct alignas(16) DispatchHeader {
       std::uint32_t multi_scattering_height { 0U };
       std::uint32_t active_light_count { 0U };
-      std::uint32_t exposure_status_uav { kInvalidShaderVisibleIndex.get() };
+      std::uint32_t reserved0 { 0U };
       std::uint32_t exposure_fp16_store { 0U };
     };
 
     struct alignas(16) SamplingAtmosphere0 {
-      float sample_count_min { 4.0F };
-      float sample_count_max { 32.0F };
-      float distance_to_sample_count_max_inv { 1.0F / 150.0F };
-      float planet_radius_km { 6360.0F };
+      float sample_count_min { 0.0F };
+      float sample_count_max { 0.0F };
+      float distance_to_sample_count_max_inv { 0.0F };
+      float planet_radius_km { 0.0F };
     };
 
     struct alignas(16) SamplingAtmosphere1 {
-      float atmosphere_height_km { 100.0F };
+      float atmosphere_height_km { 0.0F };
       float camera_altitude_km { 0.0F };
-      float rayleigh_scale_height_km { 8.0F };
-      float mie_scale_height_km { 1.2F };
+      float rayleigh_scale_height_km { 0.0F };
+      float mie_scale_height_km { 0.0F };
     };
 
     struct alignas(16) PhaseFactors0 {
-      float multi_scattering_factor { 1.0F };
-      float mie_anisotropy { 0.8F };
+      float multi_scattering_factor { 0.0F };
+      float mie_anisotropy { 0.0F };
       float _pad0 { 0.0F };
       float _pad1 { 0.0F };
     };
@@ -144,32 +145,22 @@ namespace environment {
       SamplingAtmosphere0 sampling_atmosphere0 {};
       SamplingAtmosphere1 sampling_atmosphere1 {};
       PhaseFactors0 phase_factors0 {};
-      float ground_albedo_rgb[4] { 0.4F, 0.4F, 0.4F, 0.0F };
-      float rayleigh_scattering_per_km_rgb[4] {
-        5.8e-3F,
-        13.5e-3F,
-        33.1e-3F,
-        0.0F,
-      };
-      float mie_scattering_per_km_rgb[4] { 2.0e-2F, 2.0e-2F, 2.0e-2F, 0.0F };
-      float mie_absorption_per_km_rgb[4] { 4.4e-3F, 4.4e-3F, 4.4e-3F, 0.0F };
-      float ozone_absorption_per_km_rgb[4] {
-        0.65e-3F,
-        1.88e-3F,
-        0.08e-3F,
-        0.0F,
-      };
-      float ozone_density_layer0[4] { 25.0F, 0.0F, 0.0F, 0.0F };
-      float ozone_density_layer1[4] { 0.0F, 0.0F, 0.0F, 0.0F };
-      float sky_view_lut_referential_row0[4] { 1.0F, 0.0F, 0.0F, 0.0F };
-      float sky_view_lut_referential_row1[4] { 0.0F, 1.0F, 0.0F, 0.0F };
-      float sky_view_lut_referential_row2[4] { 0.0F, 0.0F, 1.0F, 0.0F };
-      float sky_luminance_factor_rgb[4] { 1.0F, 1.0F, 1.0F, 0.0F };
-      float sky_and_aerial_luminance_factor_rgb[4] { 1.0F, 1.0F, 1.0F, 0.0F };
-      float light0_direction_enabled[4] { 0.0F, 0.0F, 1.0F, 0.0F };
-      float light0_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
-      float light1_direction_enabled[4] { 0.0F, 0.0F, 1.0F, 0.0F };
-      float light1_illuminance_rgb[4] { 0.0F, 0.0F, 0.0F, 0.0F };
+      std::array<float, 4> ground_albedo_rgb {};
+      std::array<float, 4> rayleigh_scattering_per_km_rgb {};
+      std::array<float, 4> mie_scattering_per_km_rgb {};
+      std::array<float, 4> mie_absorption_per_km_rgb {};
+      std::array<float, 4> ozone_absorption_per_km_rgb {};
+      std::array<float, 4> ozone_density_layer0 {};
+      std::array<float, 4> ozone_density_layer1 {};
+      std::array<float, 4> sky_view_lut_referential_row0 {};
+      std::array<float, 4> sky_view_lut_referential_row1 {};
+      std::array<float, 4> sky_view_lut_referential_row2 {};
+      std::array<float, 4> sky_luminance_factor_rgb {};
+      std::array<float, 4> sky_and_aerial_luminance_factor_rgb {};
+      std::array<float, 4> light0_direction_enabled {};
+      std::array<float, 4> light0_illuminance_rgb {};
+      std::array<float, 4> light1_direction_enabled {};
+      std::array<float, 4> light1_illuminance_rgb {};
     };
 
     Renderer& renderer_;

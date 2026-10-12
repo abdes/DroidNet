@@ -134,8 +134,11 @@ NOLINT_TEST_F(
       auto* service
         = vortex::testing::RendererPublicationProbe::GetPostProcessService(
           *owner);
+      const auto& exposure_override
+        = hook.render_context.current_view.exposure_override;
+      ASSERT_HAS_VALUE(exposure_override);
       auto cfg = PostProcessConfig {};
-      cfg.exposure = *hook.render_context.current_view.exposure_override;
+      cfg.exposure = *exposure_override;
       service->SetConfig(cfg);
       const auto gfx = renderer->GetGraphics();
       auto recording = gfx->AcquireCommandRecorder(
@@ -392,7 +395,7 @@ NOLINT_TEST_F(
       },
       BufferUsage::kConstant);
     constants->Update(&view, sizeof(view), 0U);
-    ctx_.view_constants = constants;
+    ctx_.view_constants = { .buffer = constants };
     {
       auto recorder = AcquireRecorder("Height fog source initialization");
       for (const auto& texture : {
@@ -441,7 +444,7 @@ NOLINT_TEST_F(
   if (capture) {
     EXPECT_TRUE(capture->EndCapture());
   }
-  ctx_.view_constants.reset();
+  ctx_.view_constants = {};
   ctx_.current_view.frame_exposure.reset();
   ctx_.scene.reset();
   WaitForQueueIdle();
@@ -578,7 +581,7 @@ NOLINT_TEST_F(ExposureGpuTest, FogCompositionClampsViewportAndDepthEdges)
           },
           BufferUsage::kConstant);
         constants->Update(&view, sizeof(view), 0U);
-        ctx_.view_constants = constants;
+        ctx_.view_constants = { .buffer = constants };
         {
           auto recorder = AcquireRecorder("Fog edge initialization");
           for (const auto& texture : {
@@ -629,7 +632,7 @@ NOLINT_TEST_F(ExposureGpuTest, FogCompositionClampsViewportAndDepthEdges)
   if (capture) {
     EXPECT_TRUE(capture->EndCapture());
   }
-  ctx_.view_constants.reset();
+  ctx_.view_constants = {};
   ctx_.scene.reset();
   WaitForQueueIdle();
 }
@@ -865,7 +868,7 @@ NOLINT_TEST_F(ExposureGpuTest, DeferredApPreservesInscatterAtLowAndZeroOpacity)
             },
             BufferUsage::kConstant);
           constants->Update(&view, sizeof(view), 0U);
-          ctx_.view_constants = constants;
+          ctx_.view_constants = { .buffer = constants };
           ASSERT_TRUE(SubmitCommands("Vortex test",
             [&](oxygen::graphics::CommandRecorder& recorder) -> auto {
               return compose.Record(ctx_, recorder, textures);
@@ -911,7 +914,7 @@ NOLINT_TEST_F(ExposureGpuTest, DeferredApPreservesInscatterAtLowAndZeroOpacity)
   if (capture) {
     EXPECT_TRUE(capture->EndCapture());
   }
-  ctx_.view_constants.reset();
+  ctx_.view_constants = {};
   ctx_.scene.reset();
   WaitForQueueIdle();
 }

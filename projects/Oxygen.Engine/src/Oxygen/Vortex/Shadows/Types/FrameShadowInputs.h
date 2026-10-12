@@ -29,8 +29,9 @@ struct PreparedViewShadowInput {
   const LightingFrameBindings* lighting_bindings { nullptr };
   observer_ptr<const PreparedSceneFrame> prepared_scene;
   observer_ptr<const ResolvedView> resolved_view;
-  //! The view's published DrawFrameBindings. Contact-shadow caster depth reads
-  //! its draws through it, never through the camera view constants.
+  //! The view's published DrawFrameBindings. Shadow and contact-shadow depth
+  //! read draws, transforms, materials and world-position offsets through it,
+  //! never through the camera view constants.
   ShaderVisibleIndex draw_frame_slot { kInvalidShaderVisibleIndex };
   observer_ptr<const CompositionView> composition_view;
 };

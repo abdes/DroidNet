@@ -14,6 +14,7 @@
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Vortex/Lighting/Types/DeferredShadowInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridResources.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
@@ -107,12 +108,7 @@ public:
   OXGN_VRTX_API auto RenderDeferredLighting(RenderContext& ctx,
     graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
     const FrameLightSelection& frame_light_set,
-    const ShadowFrameData* shadow_data,
-    std::span<const std::shared_ptr<graphics::Texture>>
-      directional_shadow_surfaces,
-    std::span<const std::shared_ptr<graphics::Texture>> spot_shadow_surfaces,
-    std::span<const std::shared_ptr<graphics::Texture>> point_shadow_surfaces)
-    -> bool;
+    const DeferredShadowInputs& shadows) -> bool;
 
   [[nodiscard]] OXGN_VRTX_API auto InspectForwardLightBindings(
     ViewId view_id) const -> const LightingFrameBindings*;

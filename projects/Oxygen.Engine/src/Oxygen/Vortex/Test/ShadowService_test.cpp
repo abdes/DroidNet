@@ -702,6 +702,7 @@ protected:
       .shadow_dependencies_available = true,
       .prepared_scene = {},
       .resolved_view = {},
+      .draw_frame_slot = oxygen::ShaderVisibleIndex { 41U },
       .composition_view = {},
     };
     LocalShadowRequest request;
@@ -787,6 +788,7 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
       .lighting_bindings = &lighting,
       .prepared_scene = {},
       .resolved_view = oxygen::observer_ptr { &resolved_view },
+      .draw_frame_slot = oxygen::ShaderVisibleIndex { 41U },
       .composition_view = {},
     },
   };
@@ -795,7 +797,7 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
     .active_views = views,
     .preparation_views = {},
   });
-  const auto* data = service.InspectShadowData(views.front().view_id);
+  const auto data = service.InspectShadowData(views.front().view_id);
   ASSERT_NE(data, nullptr);
   EXPECT_TRUE(service.ResolveShadowFrameSlot(views.front().view_id).IsValid());
   EXPECT_TRUE(data->bindings.directional_records_srv.IsValid());
@@ -860,7 +862,7 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
     .active_views = views,
     .preparation_views = {},
   });
-  const auto* data = service.InspectShadowData(input.view_id);
+  const auto data = service.InspectShadowData(input.view_id);
   ASSERT_NE(data, nullptr);
   ASSERT_EQ(data->directional_records.size(), 2U);
   EXPECT_EQ(data->directional_records.at(0).selection_index,
@@ -902,6 +904,7 @@ NOLINT_TEST_F(
       .shadow_caster_dependencies = {},
       .prepared_scene = {},
       .resolved_view = oxygen::observer_ptr { &resolved_view },
+      .draw_frame_slot = oxygen::ShaderVisibleIndex { 41U },
       .composition_view = {},
     },
   };
@@ -968,6 +971,7 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
       = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
           &frame,
         };
+    input.draw_frame_slot = oxygen::ShaderVisibleIndex { 41U };
     graphics_->draw_log_.draws.clear();
     graphics_->indirect_log_.draws.clear();
     const auto result = pass.RecordSlices(input, texture, slices);
@@ -1029,6 +1033,7 @@ NOLINT_TEST_F(
   auto input = oxygen::vortex::PreparedViewShadowInput {};
   input.view_id = oxygen::ViewId { 1U };
   input.prepared_scene = oxygen::observer_ptr { &frame };
+  input.draw_frame_slot = oxygen::ShaderVisibleIndex { 41U };
   const auto slices = std::array {
     ShadowDepthPass::DepthSlice { .target_slice = 0U, .light_source = {} },
   };
@@ -1038,6 +1043,44 @@ NOLINT_TEST_F(
   EXPECT_EQ(result.submitted_draw_count, 5U);
   EXPECT_FALSE(graphics_->indirect_log_.draws.empty());
   EXPECT_EQ(CountCameraViewConstantBinds(graphics_->root_cbv_log_), 0U);
+}
+
+//! Shadow depth reads draws, transforms, materials and world-position offsets
+//! through the view's draw publication; without it, it draws nothing.
+NOLINT_TEST_F(ShadowServiceBehaviorTest, ShadowDepthNeedsTheViewDrawPublication)
+{
+  using oxygen::vortex::shadows::ShadowDepthPass;
+  auto pass = ShadowDepthPass(*renderer_);
+  pass.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto texture_desc = oxygen::graphics::TextureDesc {};
+  texture_desc.width = 64U;
+  texture_desc.height = 64U;
+  texture_desc.format = oxygen::Format::kDepth32;
+  texture_desc.debug_name = "NoDrawPublication.ShadowDepth";
+  texture_desc.is_shader_resource = true;
+  texture_desc.is_render_target = true;
+  texture_desc.is_typeless = true;
+  const auto texture = graphics_->CreateTexture(texture_desc);
+  graphics_->GetResourceRegistry().Register(texture);
+  auto metadata = oxygen::vortex::testing::MakeRasterStateDraws(
+    oxygen::vortex::PassMaskBit::kOpaque);
+  for (auto& draw : metadata) {
+    draw.flags.Set(oxygen::vortex::PassMaskBit::kShadowCaster);
+  }
+  auto frame = oxygen::vortex::PreparedSceneFrame {};
+  frame.draw_metadata_bytes = std::as_bytes(std::span(metadata));
+  auto input = oxygen::vortex::PreparedViewShadowInput {};
+  input.view_id = oxygen::ViewId { 1U };
+  input.prepared_scene = oxygen::observer_ptr { &frame };
+  const auto slices = std::array {
+    ShadowDepthPass::DepthSlice { .target_slice = 0U, .light_source = {} },
+  };
+
+  const auto result = pass.RecordSlices(input, texture, slices);
+
+  EXPECT_EQ(result.submitted_draw_count, 0U);
+  EXPECT_TRUE(graphics_->indirect_log_.draws.empty());
 }
 
 //! Contact-shadow caster depth draws the view's casters through its own inputs
@@ -1395,7 +1438,7 @@ NOLINT_TEST_F(
     .active_views = views,
     .preparation_views = {},
   });
-  const auto* data = service.InspectShadowData(input.view_id);
+  const auto data = service.InspectShadowData(input.view_id);
   ASSERT_NE(data, nullptr);
   EXPECT_EQ(data->cube_local_records.size(), 5U);
   EXPECT_EQ(data->local_shadow_references.size(), 5U);
@@ -1562,6 +1605,7 @@ NOLINT_TEST_F(
       .shadow_caster_dependencies = {},
       .prepared_scene = oxygen::observer_ptr { &frame },
       .resolved_view = oxygen::observer_ptr { &view },
+      .draw_frame_slot = oxygen::ShaderVisibleIndex { 41U },
       .composition_view = {},
     },
   };
@@ -1863,6 +1907,7 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
       .shadow_caster_dependencies = {},
       .prepared_scene = {},
       .resolved_view = oxygen::observer_ptr { &view },
+      .draw_frame_slot = oxygen::ShaderVisibleIndex { 41U },
       .composition_view = {},
     },
   };
@@ -1951,6 +1996,7 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
       .shadow_caster_dependencies = {},
       .prepared_scene = oxygen::observer_ptr { &scene },
       .resolved_view = oxygen::observer_ptr { &view },
+      .draw_frame_slot = oxygen::ShaderVisibleIndex { 41U },
       .composition_view = {},
     },
   };
@@ -1973,7 +2019,7 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
         .active_views = views,
         .preparation_views = {},
       });
-      const auto* data = service.InspectShadowData(views.at(0).view_id);
+      const auto data = service.InspectShadowData(views.at(0).view_id);
       ASSERT_NE(data, nullptr);
       ASSERT_EQ(data->cube_local_records.size(), 1U);
       ASSERT_EQ(data->projected_local_records.size(), 1U);
@@ -2086,8 +2132,7 @@ protected:
   }
   [[nodiscard]] auto Record(size_t view_index) const -> CubeLocalShadowRecord
   {
-    const auto* data
-      = service->InspectShadowData(inputs.at(view_index).view_id);
+    const auto data = service->InspectShadowData(inputs.at(view_index).view_id);
     if (!data || data->cube_local_records.empty()) {
       throw std::runtime_error("Missing test publication");
     }

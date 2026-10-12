@@ -169,8 +169,8 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 | S1  | Ordered material uploads                                               | N1                          | S0      | `validated` | —      |
 | S2  | Receipt-retired descriptors; no live descriptor rewrites               | C1, M2, N2, H2, H3, L10     | S0      | `validated` | —      |
 | S3  | Non-camera passes own their inputs; pure shader helpers                | C2, H4, H5, L9              | S0      | `validated` | —      |
-| S4  | Versioned view constants; one source per view value                    | H1, M7                      | S3      | `planned`   | —      |
-| S5  | One pass-input convention; shared mesh position with WPO               | H7, M6, M7                  | S3, S4  | `planned`   | —      |
+| S4  | Versioned view constants; one source per view value                    | H1, M7                      | S3      | `validated` | —      |
+| S5  | One pass-input convention; shared mesh position with WPO               | H7, M6, M7                  | S3, S4  | `validated` | —      |
 | S6  | Fail loudly                                                            | M1, M5, H6, H8              | S4      | `planned`   | —      |
 | S7  | Frame and view lifecycle                                               | M3, M4                      | S4      | `planned`   | —      |
 | S8  | Generated shared contracts                                             | M8, H8                      | S5, S6  | `planned`   | —      |
@@ -295,29 +295,66 @@ Update the owning designs, record the [answered decisions](#decisions).
 
 ## S4 — Versioned view constants
 
-- [ ] `Vortex/Internal/ViewConstantsManager.cpp`, `Renderer.cpp`: each write
-      allocates a new transient record bound by GPU address (GD-3); passes see the values
-      current at record time.
-- [ ] One source each for view matrices, `reverse_z`, `exposure_status_uav`
-      and `lighting_frame_slot`; remove the duplicates from pass constants
-      (Tonemap, Compositing, SelectionOutline, atmosphere LUT passes).
-- [ ] **Tests.** A list submitted mid-view reads the bindings published before
-      it, not later ones; the staged-publication CHECK is backed by a GPU
-      assertion.
+- [x] **Versioned b1.** Each view-constants write is a new record placed by
+      `upload::TransientConstantBuffer` (new, reusable for any root-CBV
+      record) in the renderer's shared staging ring; `RenderContext` holds a
+      `ConstantBufferRecord` (buffer and offset) bound by GPU address. Passes
+      see the values current at record time. `ViewConstantsManager`, its
+      per-view buffers and its removal bookkeeping are gone.
+      `StagingProvider::AllocateAligned` is the one aligned sub-allocation
+      both transient types use (stride or 256-byte placement).
+- [x] **One source per view value.** Camera entries read `reverse_z`
+      (SelectionOutline) and `exposure_status_uav` (aerial perspective,
+      volumetric fog, sky-view LUT, sky, local fog) from the bound view
+      through `GetExposureStatusUav()`; the capture sky-view entry has none.
+      View history no longer copies the current view, projection and inverse
+      view-projection matrices. Tonemap and exposure records carry the view's
+      `ViewFrameBindings` slot, set beside each b1 record, and read the
+      lighting slot from it; the `current_view.lighting_frame_slot` mirror is
+      removed. Compositing runs outside view recording and keeps resolving the
+      lighting slot from `LightingService`, its owner, so its record's slot
+      has that one source.
+- [x] **Reuse.** The 14 per-pass copies of the root-binding builder use
+      `internal::BuildVortexRootBindings`; atmosphere passes share
+      `AtmosphereGpuPacking.h` (vector, light and ozone-layer rows) and no
+      longer default their records to Earth values. DXC test probes build
+      through one `oxygen_add_dxc_compute_probe` CMake function.
+- [x] **Tests.** `ExposureGpuTest.PassRecordedMidViewReadsTheBindingsPublishedBeforeIt`:
+      two probe dispatches in one command list, around a republish that
+      mirrors Stage 9 → Stage 10, read the Stage 9 bindings (no SceneColor)
+      and then the Stage 10 ones on the GPU, backing the staged-publication
+      CHECK. `TransientConstantBuffer` unit tests (aligned new record per
+      write, records outlive ring growth, empty write rejected); runtime view
+      publication writes a new record per materialization.
 
 ## S5 — Pass-input convention and mesh position
 
-- [ ] **Convention.** `g_PassConstantsIndex` is a StructuredBuffer record in
-      every pass; `K_INVALID_BINDLESS_INDEX` when a pass has none; a named
-      root-constant layout for `BasePassVelocityMerge.hlsl`; DeferredIbl binds
-      b2.
-- [ ] **Mesh position.** One `ComputeMeshWorldPosition` (with material WPO)
-      shared by depth prepass, base pass, shadow and contact-shadow passes;
-      shadow constants carry `draw_frame_slot` instead of copied slots.
-- [ ] **Material once.** The masked base pass loads the material once per
-      pixel and passes it down.
-- [ ] **Tests.** A WPO-animated caster's shadow matches its camera geometry;
-      ShaderBake catalog passes; existing image-producing GPU suites unchanged.
+- [x] **Convention.** `g_PassConstantsIndex` is a `StructuredBuffer` record in
+      every pass, written through the Upload transient buffers;
+      `K_INVALID_BINDLESS_INDEX` when a pass has none (Sky, Fog,
+      AtmosphereCompose, ViewPick, DeferredIbl, which now binds b2).
+      Compositing and deferred lights lose their hand-rolled CBV publishers:
+      compositing writes a `TransientStructuredBuffer` record; deferred local
+      lights publish one record array per Record, each draw selecting its
+      element at `[0]`, and directional lights read no inputs (L4). The
+      velocity merge reads its SRVs from an inputs record instead of raw root
+      constants.
+- [x] **Mesh position.** `Contracts/Draw/MeshPosition.hlsli`
+      (`ResolveDrawWorldOffset`, `ComputeMeshWorldPosition`,
+      `ComputeMeshClipPosition`) is shared by depth prepass, base pass,
+      velocity, shadow and contact-shadow passes. Shadow constants carry the
+      view's `draw_frame_slot` instead of five copied slots; shadow depth
+      records nothing without it, and its biased depth comes from a local
+      (L6).
+- [x] **Material once.** The masked base pass loads the draw material once
+      (`TryLoadDrawMaterialFromSlots`) and feeds the alpha clip, surface
+      evaluation, shading model and GBuffer packing from it.
+- [x] **Tests.** `GrazingDirectionalShadowTest.WorldPositionOffsetMovesShadow`:
+      a material WPO offset moves the shadow exactly as the same transform
+      offset does. `ShadowDepthNeedsTheViewDrawPublication`. The shader bake,
+      ShadowService (53), the deferred-core, lighting-image, shadow-admission
+      and exposure GPU cases covering composition, tonemap, fog, sky and
+      deferred lights pass.
 
 ## S6 — Fail loudly
 
@@ -364,9 +401,9 @@ Update the owning designs, record the [answered decisions](#decisions).
       evaluation path with a test, per the ground-grid design.
 - [ ] Replace `post_process_frame_slot` as a CPU flag with explicit state;
       drop the field unless a shader consumes it.
-- [ ] Remove DeferredLightDirectional's unused constants and their CPU record.
+- [x] Remove DeferredLightDirectional's unused constants and their CPU record.
 - [ ] Replace `EncodeStaticVelocity` with a direct zero.
-- [ ] Shadow VS: compute the biased depth from a local.
+- [x] Shadow VS: compute the biased depth from a local.
 - [ ] Delete `ComputeRenderPass` and its CMake entries.
 - [ ] Remove the skinned/morph publication slots from DrawFrameBindings (C++,
       HLSL, `InitViewsModule.cpp`); #48 reintroduces them with their producer.

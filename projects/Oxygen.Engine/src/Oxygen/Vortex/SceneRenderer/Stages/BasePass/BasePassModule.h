@@ -99,6 +99,10 @@ private:
   friend struct testing::RendererPublicationProbe;
   OXGN_VRTX_API auto WriteWireframeConstants(Graphics& gfx,
     const RenderContext& ctx, bool write_pre_exposed) -> ShaderVisibleIndex;
+  //! The velocity merge inputs record for this view.
+  auto WriteVelocityMergeInputs(Graphics& gfx, const RenderContext& ctx,
+    std::uint32_t base_velocity_srv, std::uint32_t aux_velocity_srv)
+    -> ShaderVisibleIndex;
 
   Renderer& renderer_;
   BasePassConfig config_ {};
@@ -108,6 +112,10 @@ private:
   std::unique_ptr<internal::PerViewStructuredPublisher<std::array<float, 8>>>
     wireframe_constants_publisher_;
   std::optional<frame::SequenceNumber> wireframe_constants_frame_;
+  //! Inputs records of the velocity merge: base and auxiliary velocity SRVs.
+  std::unique_ptr<
+    internal::PerViewStructuredPublisher<std::array<std::uint32_t, 4>>>
+    velocity_merge_inputs_publisher_;
   std::shared_ptr<oxygen::graphics::Framebuffer> framebuffer_;
   std::shared_ptr<oxygen::graphics::Framebuffer> color_clear_framebuffer_;
   std::shared_ptr<oxygen::graphics::Framebuffer> forward_framebuffer_;

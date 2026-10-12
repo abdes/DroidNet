@@ -199,7 +199,7 @@ void DepthPrepassModule::ExecutePhase1(RenderContext& ctx,
     && ctx.current_view.prepared_frame->IsValid();
   writes_velocity_
     = config_.write_velocity && scene_textures.GetVelocity() != nullptr;
-  if (ctx.view_constants == nullptr) {
+  if (!ctx.view_constants.IsValid()) {
     return;
   }
 
@@ -302,7 +302,7 @@ void DepthPrepassModule::DrawList(const RenderContext& ctx,
                          : Format::kUnknown,
         raster_state, reverse_z));
       recorder.SetGraphicsRootConstantBufferView(
-        view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
+        view_constants_param, ctx.view_constants.GpuAddress());
       recorder.SetGraphicsRoot32BitConstant(
         root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
     });

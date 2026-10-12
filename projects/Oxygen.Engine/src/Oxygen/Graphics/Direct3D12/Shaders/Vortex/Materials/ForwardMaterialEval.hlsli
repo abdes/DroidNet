@@ -10,6 +10,7 @@
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
+#include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Shared/PristineGrid.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 #include "Vortex/Contracts/Draw/ProceduralGridMaterialConstants.hlsli"
@@ -98,13 +99,17 @@ static inline float4 EvaluateProceduralGrid(
     return color_xy * w.z + color_xz * w.y + color_yz * w.x;
 }
 
-MaterialSurface EvaluateMaterialSurface(
+// Surface of an already loaded draw material; without one (`has_material`
+// false) the surface keeps its defaults.
+MaterialSurface EvaluateMaterialSurfaceForMaterial(
     float3 world_pos,
     float3 world_normal,
     float3 world_tangent,
     float3 world_bitangent,
     float2 uv0,
-    uint   draw_index,
+    bool   has_material,
+    DrawMaterial draw_material,
+    uint   procedural_grid_material_constants_slot,
     bool   is_front_face)
 {
     MaterialSurface s = (MaterialSurface)0;
@@ -127,28 +132,10 @@ MaterialSurface EvaluateMaterialSurface(
     s.V = ResolveSurfaceViewDirection(world_pos, camera_position,
         inverse_view_projection_matrix, is_orthographic, reverse_z);
 
-    const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
-    if (draw_bindings.draw_metadata_slot != K_INVALID_BINDLESS_INDEX &&
-        draw_bindings.material_shading_constants_slot != K_INVALID_BINDLESS_INDEX) {
-        StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
-        uint draw_count = 0u;
-        uint draw_stride = 0u;
-        draw_meta_buffer.GetDimensions(draw_count, draw_stride);
-        if (draw_index >= draw_count) {
-            return s;
-        }
-        DrawMetadata meta = draw_meta_buffer[draw_index];
-        s.receives_shadows = (meta.primitive_flags
+    if (has_material) {
+        s.receives_shadows = (draw_material.primitive_flags
             & DRAW_PRIMITIVE_DISABLE_SHADOW_RECEPTION) == 0u;
-
-        StructuredBuffer<MaterialShadingConstants> materials = ResourceDescriptorHeap[draw_bindings.material_shading_constants_slot];
-        uint material_count = 0u;
-        uint material_stride = 0u;
-        materials.GetDimensions(material_count, material_stride);
-        if (meta.material_handle >= material_count) {
-            return s;
-        }
-        MaterialShadingConstants mat = materials[meta.material_handle];
+        const MaterialShadingConstants mat = draw_material.constants;
 
         s.base_rgb  = mat.base_color.rgb;
         s.base_a    = mat.base_color.a;
@@ -306,12 +293,12 @@ MaterialSurface EvaluateMaterialSurface(
         }
 
         if ((mat.flags & MATERIAL_FLAG_PROCEDURAL_GRID) != 0u
-            && draw_bindings.procedural_grid_material_constants_slot
+            && procedural_grid_material_constants_slot
                 != K_INVALID_BINDLESS_INDEX) {
             StructuredBuffer<ProceduralGridMaterialConstants> procedural_grid_materials =
-                ResourceDescriptorHeap[draw_bindings.procedural_grid_material_constants_slot];
+                ResourceDescriptorHeap[procedural_grid_material_constants_slot];
             const ProceduralGridMaterialConstants grid_mat =
-                procedural_grid_materials[meta.material_handle];
+                procedural_grid_materials[draw_material.material_handle];
             const float4 grid_color = EvaluateProceduralGrid(
                 grid_mat, world_pos, world_normal);
             s.base_rgb = lerp(s.base_rgb, grid_color.rgb, grid_color.a);
@@ -329,6 +316,26 @@ MaterialSurface EvaluateMaterialSurface(
     }
 
     return s;
+}
+
+// Camera-view surface: loads the draw's material through the bound view.
+MaterialSurface EvaluateMaterialSurface(
+    float3 world_pos,
+    float3 world_normal,
+    float3 world_tangent,
+    float3 world_bitangent,
+    float2 uv0,
+    uint   draw_index,
+    bool   is_front_face)
+{
+    const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
+    DrawMaterial draw_material;
+    const bool has_material = TryLoadDrawMaterialFromSlots(
+        draw_bindings.draw_metadata_slot,
+        draw_bindings.material_shading_constants_slot, draw_index, draw_material);
+    return EvaluateMaterialSurfaceForMaterial(world_pos, world_normal,
+        world_tangent, world_bitangent, uv0, has_material, draw_material,
+        draw_bindings.procedural_grid_material_constants_slot, is_front_face);
 }
 
 #endif // OXYGEN_PASSES_FORWARD_FORWARDMATERIALEVAL_HLSLI

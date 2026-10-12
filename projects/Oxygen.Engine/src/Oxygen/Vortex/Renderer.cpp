@@ -45,7 +45,6 @@
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/AllocationBudgetTag.h>
-#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -80,7 +79,6 @@
 #include <Oxygen/Vortex/Internal/RenderContextMaterializer.h>
 #include <Oxygen/Vortex/Internal/RenderContextPool.h>
 #include <Oxygen/Vortex/Internal/RigidTransformHistoryCache.h>
-#include <Oxygen/Vortex/Internal/ViewConstantsManager.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -111,6 +109,7 @@
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Vortex/Upload/RingBufferStaging.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
+#include <Oxygen/Vortex/Upload/TransientConstantBuffer.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/Upload/UploadPolicy.h>
 #include <Oxygen/Vortex/Upload/UploaderTag.h>
@@ -142,6 +141,7 @@ struct RendererPublicationState {
     screen_hzb_bindings_publisher;
   std::unique_ptr<internal::PerViewStructuredPublisher<ViewFrameBindings>>
     view_frame_bindings_publisher;
+  std::unique_ptr<upload::TransientConstantBuffer> view_constants_writer;
   frame::SequenceNumber prepared_frame_sequence { 0U };
   frame::Slot prepared_frame_slot { frame::kInvalidSlot };
 };
@@ -1517,7 +1517,6 @@ auto Renderer::OnShutdown() noexcept -> void
   if (graphics_uploader_) {
     [[maybe_unused]] const auto result = graphics_uploader_->Shutdown();
   }
-  view_const_manager_.reset();
   render_context_pool_.reset();
   gpu_timeline_profiler_.reset();
   diagnostics_service_.reset();
@@ -1586,6 +1585,11 @@ auto Renderer::EnsurePublicationState(Graphics& gfx)
       observer_ptr { &gfx }, GetStagingProvider(),
       observer_ptr { &GetInlineTransfersCoordinator() }, "ViewFrameBindings");
   }
+  if (!state.view_constants_writer) {
+    state.view_constants_writer
+      = std::make_unique<upload::TransientConstantBuffer>(GetStagingProvider(),
+        observer_ptr { &GetInlineTransfersCoordinator() }, "ViewConstants");
+  }
   return state;
 }
 
@@ -1626,8 +1630,6 @@ auto Renderer::PublishCurrentViewHistoryFrameBindings(
 auto Renderer::WriteCurrentViewConstants(RenderContext& render_context,
   Graphics& gfx, const ShaderVisibleIndex view_frame_bindings_slot) -> void
 {
-  EnsureViewConstantsManager(gfx);
-  view_const_manager_->OnFrameStart(render_context.frame_slot);
   if (render_context.current_view.resolved_view != nullptr) {
     UpdateViewConstantsFromView(*render_context.current_view.resolved_view);
   }
@@ -1639,11 +1641,24 @@ auto Renderer::WriteCurrentViewConstants(RenderContext& render_context,
     .SetBindlessViewFrameBindingsSlot(
       BindlessViewFrameBindingsSlot { view_frame_bindings_slot },
       ViewConstants::kRenderer);
+  render_context.current_view.view_frame_bindings_slot
+    = view_frame_bindings_slot;
+  PublishViewConstantsRecord(render_context, gfx);
+}
 
+auto Renderer::PublishViewConstantsRecord(
+  RenderContext& render_context, Graphics& gfx) -> void
+{
+  auto& publication_state = EnsurePublicationState(gfx);
   const auto snapshot = view_const_cpu_.GetSnapshot();
-  const auto buffer_info = view_const_manager_->WriteViewConstants(
-    render_context.current_view.view_id, &snapshot, sizeof(snapshot));
-  render_context.view_constants = buffer_info.buffer;
+  auto record = publication_state.view_constants_writer->Write(snapshot);
+  if (!record) {
+    LOG_F(ERROR, "View {}: view constants were not published: {}",
+      render_context.current_view.view_id.get(), record.error().message());
+    render_context.view_constants = {};
+    return;
+  }
+  render_context.view_constants = *record;
 }
 
 auto Renderer::RefreshCurrentViewFrameBindings(
@@ -1968,9 +1983,6 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
     inline_transfers_->OnFrameStart(
       tag, context->GetFrameSequenceNumber(), frame_slot_);
   }
-  if (view_const_manager_) {
-    view_const_manager_->OnFrameStart(frame_slot_);
-  }
 
   if (scene_renderer_) {
     scene_renderer_->OnFrameStart(*context);
@@ -2075,8 +2087,8 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
     compositing_pass_config_
       = std::make_shared<internal::CompositingPassConfig>();
     compositing_pass_config_->debug_name = "VortexCompositingPass";
-    compositing_pass_
-      = std::make_shared<internal::CompositingPass>(compositing_pass_config_);
+    compositing_pass_ = std::make_shared<internal::CompositingPass>(
+      compositing_pass_config_, *this);
   }
 
   const auto has_work = std::ranges::any_of(
@@ -3013,9 +3025,6 @@ auto Renderer::RemovePublishedRuntimeView(const ViewId intent_view_id) -> void
       detached.published_view_id, detached.view_state_handle);
   }
   UnregisterViewRenderGraph(detached.published_view_id);
-  if (view_const_manager_) {
-    view_const_manager_->RemoveView(detached.published_view_id);
-  }
 }
 
 auto Renderer::RemovePublishedRuntimeView(
@@ -3037,9 +3046,6 @@ auto Renderer::RemovePublishedRuntimeView(
       detached.published_view_id, detached.view_state_handle);
   }
   UnregisterViewRenderGraph(detached.published_view_id);
-  if (view_const_manager_) {
-    view_const_manager_->RemoveView(detached.published_view_id);
-  }
 }
 
 auto Renderer::ReleaseOffscreenViewState(const ViewId view_id,
@@ -3066,9 +3072,6 @@ auto Renderer::ReleaseOffscreenViewState(const ViewId view_id,
     scene_renderer_->RemoveViewState(view_id, view_state_handle);
   }
   UnregisterViewRenderGraph(view_id);
-  if (view_const_manager_) {
-    view_const_manager_->RemoveView(view_id);
-  }
   return true;
 }
 
@@ -3128,9 +3131,6 @@ auto Renderer::PruneStalePublishedRuntimeViews(
         stale.published_view_id, stale.view_state_handle);
     }
     UnregisterViewRenderGraph(stale.published_view_id);
-    if (view_const_manager_) {
-      view_const_manager_->RemoveView(stale.published_view_id);
-    }
   }
 
   return stale_intent_ids;
@@ -3564,15 +3564,6 @@ auto Renderer::GetAssetLoader() const noexcept
   return engine_ != nullptr ? engine_->GetAssetLoader() : nullptr;
 }
 
-auto Renderer::EnsureViewConstantsManager(Graphics& gfx) -> void
-{
-  if (!view_const_manager_) {
-    view_const_manager_
-      = std::make_unique<internal::ViewConstantsManager>(observer_ptr { &gfx },
-        static_cast<std::uint32_t>(sizeof(ViewConstants::GpuData)));
-  }
-}
-
 auto Renderer::PopulateRenderContextViewState(RenderContext& render_context,
   engine::FrameContext& context, const bool prefer_composite_source) const
   -> void
@@ -3826,12 +3817,8 @@ auto Renderer::BuildViewHistoryFrameBindings(
     : previous_view_history_cache_->TouchCurrent(view_state_handle, current);
 
   auto history = ViewHistoryFrameBindings {
-    .current_view_matrix = snapshot.current.view_matrix,
-    .current_projection_matrix = snapshot.current.projection_matrix,
     .current_stable_projection_matrix
     = snapshot.current.stable_projection_matrix,
-    .current_inverse_view_projection_matrix
-    = snapshot.current.inverse_view_projection_matrix,
     .previous_view_matrix = snapshot.previous.view_matrix,
     .previous_projection_matrix = snapshot.previous.projection_matrix,
     .previous_stable_projection_matrix
@@ -3860,8 +3847,7 @@ auto Renderer::BuildViewHistoryFrameBindings(
   return history;
 }
 
-auto Renderer::WireContext(RenderContext& context,
-  const std::shared_ptr<graphics::Buffer>& view_constants) -> void
+auto Renderer::WireContext(RenderContext& context) -> void
 {
   auto gfx = gfx_weak_.lock();
   CHECK_F(gfx != nullptr, "Renderer requires a live Graphics backend");
@@ -3869,7 +3855,7 @@ auto Renderer::WireContext(RenderContext& context,
   context.frame_slot = frame_slot_;
   context.frame_sequence = frame::SequenceNumber { frame_seq_num_ };
   context.delta_time = last_frame_dt_seconds_;
-  context.view_constants = view_constants;
+  context.view_constants = {};
   context.shader_debug_mode = GetShaderDebugMode();
   context.render_mode = GetRenderMode();
   context.wireframe_color = GetWireframeColor();
@@ -3903,9 +3889,6 @@ auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
   if (inline_transfers_) {
     inline_transfers_->OnFrameStart(tag, session.frame_sequence, frame_slot_);
   }
-  if (view_const_manager_) {
-    view_const_manager_->OnFrameStart(frame_slot_);
-  }
 }
 
 auto Renderer::InitializeStandaloneCurrentView(RenderContext& render_context,
@@ -3927,9 +3910,6 @@ auto Renderer::InitializeStandaloneCurrentView(RenderContext& render_context,
     return;
   }
 
-  EnsureViewConstantsManager(*gfx);
-  view_const_manager_->OnFrameStart(frame_slot_);
-
   view_const_cpu_ = view_constants_override.value_or(ViewConstants {});
   if (!view_constants_override.has_value()) {
     UpdateViewConstantsFromView(resolved_view);
@@ -3940,10 +3920,7 @@ auto Renderer::InitializeStandaloneCurrentView(RenderContext& render_context,
     .SetFrameSequenceNumber(
       frame::SequenceNumber { frame_seq_num_ }, ViewConstants::kRenderer);
 
-  const auto snapshot = view_const_cpu_.GetSnapshot();
-  const auto buffer_info = view_const_manager_->WriteViewConstants(
-    view_id, &snapshot, sizeof(snapshot));
-  render_context.view_constants = buffer_info.buffer;
+  PublishViewConstantsRecord(render_context, *gfx);
 }
 
 auto Renderer::EndOffscreenFrame() noexcept -> void
@@ -4051,7 +4028,7 @@ auto Renderer::DispatchSceneRendererRender(
     }
   };
 
-  WireContext(render_context, {});
+  WireContext(render_context);
   render_context.scene = context->GetScene();
   PopulateRenderContextViewState(render_context, *context, false);
   DispatchViewExtensionsOnFamilyAssembled(*context, render_context);
@@ -4090,7 +4067,7 @@ auto Renderer::DispatchSceneRendererCompositing(
     }
   };
 
-  WireContext(render_context, {});
+  WireContext(render_context);
   render_context.scene = context->GetScene();
   PopulateRenderContextViewState(render_context, *context, true);
   scene_renderer.OnCompositing(render_context);
@@ -4108,7 +4085,7 @@ Renderer::ValidatedSinglePassHarnessContext::ValidatedSinglePassHarnessContext(
   renderer.BeginStandaloneFrameExecution(session);
   try {
     renderer.EnsureSceneRenderer();
-    renderer.WireContext(*render_context_, {});
+    renderer.WireContext(*render_context_);
     render_context_->scene = session.scene;
     render_context_->pass_target = pass_target;
     renderer.InitializeStandaloneCurrentView(*render_context_,
@@ -4551,7 +4528,7 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> bool
     ResolveFramebufferExtent(*output_target_.framebuffer));
 
   auto render_context = RenderContext {};
-  renderer_->WireContext(render_context, {});
+  renderer_->WireContext(render_context);
   render_context.scene = scene_source_.scene;
   render_context.pass_target = output_target_.framebuffer;
   render_context.view_outputs.insert_or_assign(
@@ -4643,7 +4620,7 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
     frame_context.GetFrameSlot(), std::nullopt);
 
   auto render_context = RenderContext {};
-  renderer_->WireContext(render_context, {});
+  renderer_->WireContext(render_context);
   render_context.frame_slot = frame_context.GetFrameSlot();
   render_context.frame_sequence = frame_context.GetFrameSequenceNumber();
   render_context.scene = scene_source_.scene;

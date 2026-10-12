@@ -201,19 +201,14 @@ namespace {
     glm::vec4 shadow_bias_parameters { 0.0F };
     glm::vec4 light_direction_to_source { 0.0F, -1.0F, 0.0F, 0.0F };
     glm::vec4 light_position_and_inv_range { 0.0F };
-    std::uint32_t draw_metadata_slot { kInvalidShaderVisibleIndex.get() };
-    std::uint32_t current_worlds_slot { kInvalidShaderVisibleIndex.get() };
-    std::uint32_t instance_data_slot { kInvalidShaderVisibleIndex.get() };
-    std::uint32_t normal_matrices_slot { kInvalidShaderVisibleIndex.get() };
-    std::uint32_t material_shading_constants_slot {
-      kInvalidShaderVisibleIndex.get(),
-    };
+    //! The view's published DrawFrameBindings, as the camera passes see it.
+    std::uint32_t draw_frame_slot { kInvalidShaderVisibleIndex.get() };
     std::uint32_t pad0 { 0U };
     std::uint32_t pad1 { 0U };
     std::uint32_t pad2 { 0U };
   };
 
-  static_assert(sizeof(ShadowPassConstants) == 144U); // NOLINT(*-magic-numbers)
+  static_assert(sizeof(ShadowPassConstants) == 128U); // NOLINT(*-magic-numbers)
   static_assert(offsetof(ShadowPassConstants, light_view_projection) == 0U);
   static_assert(offsetof(ShadowPassConstants, shadow_bias_parameters)
     == 64U); // NOLINT(*-magic-numbers)
@@ -221,16 +216,8 @@ namespace {
     == 80U); // NOLINT(*-magic-numbers)
   static_assert(offsetof(ShadowPassConstants, light_position_and_inv_range)
     == 96U); // NOLINT(*-magic-numbers)
-  static_assert(offsetof(ShadowPassConstants, draw_metadata_slot)
+  static_assert(offsetof(ShadowPassConstants, draw_frame_slot)
     == 112U); // NOLINT(*-magic-numbers)
-  static_assert(offsetof(ShadowPassConstants, current_worlds_slot)
-    == 116U); // NOLINT(*-magic-numbers)
-  static_assert(offsetof(ShadowPassConstants, instance_data_slot)
-    == 120U); // NOLINT(*-magic-numbers)
-  static_assert(offsetof(ShadowPassConstants, normal_matrices_slot)
-    == 124U); // NOLINT(*-magic-numbers)
-  static_assert(offsetof(ShadowPassConstants, material_shading_constants_slot)
-    == 128U); // NOLINT(*-magic-numbers)
   constexpr std::uint32_t kShadowPassConstantsStride
     = sizeof(ShadowPassConstants);
 
@@ -485,11 +472,17 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
 
   auto pass_constants_srvs = std::vector<ShaderVisibleIndex>(
     depth_slices.size(), kInvalidShaderVisibleIndex);
+  if (has_draws && !view_input.draw_frame_slot.IsValid()) {
+    LOG_F(ERROR,
+      "ShadowDepthPass: view {} has casters but no published draw bindings",
+      view_input.view_id.get());
+    return last_render_state_;
+  }
   if (has_draws) {
     for (const auto& [slice_index, slice] :
       std::views::enumerate(depth_slices)) {
       auto& srv = pass_constants_srvs.at(static_cast<std::size_t>(slice_index));
-      srv = PublishPassConstants(*view_input.prepared_scene, slice);
+      srv = PublishPassConstants(view_input.draw_frame_slot, slice);
       if (!srv.IsValid()) {
         LOG_F(ERROR,
           "ShadowDepthPass: failed to allocate pass constants for shadow slice "
@@ -570,7 +563,7 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
 }
 
 auto ShadowDepthPass::PublishPassConstants(
-  const PreparedSceneFrame& prepared_scene, const DepthSlice& slice)
+  const ShaderVisibleIndex draw_frame_slot, const DepthSlice& slice)
   -> ShaderVisibleIndex
 {
   const auto constants = ShadowPassConstants {
@@ -578,12 +571,7 @@ auto ShadowDepthPass::PublishPassConstants(
     .shadow_bias_parameters = slice.shadow_bias_parameters,
     .light_direction_to_source = slice.light_direction_to_source,
     .light_position_and_inv_range = slice.light_position_and_inv_range,
-    .draw_metadata_slot = prepared_scene.bindless_draw_metadata_slot.get(),
-    .current_worlds_slot = prepared_scene.bindless_worlds_slot.get(),
-    .instance_data_slot = prepared_scene.bindless_instance_data_slot.get(),
-    .normal_matrices_slot = prepared_scene.bindless_normals_slot.get(),
-    .material_shading_constants_slot
-    = prepared_scene.bindless_material_shading_slot.get(),
+    .draw_frame_slot = draw_frame_slot.get(),
   };
   auto allocation = pass_constants_buffer_.Allocate(1U);
   if (!allocation.has_value() || !allocation->IsValid(current_sequence_)

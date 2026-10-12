@@ -7,7 +7,6 @@
 #pragma once
 
 #include <cstdint>
-#include <limits>
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
@@ -55,10 +54,7 @@ inline auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
         table.view_type = RangeTypeToViewType(
           static_cast<bindless_d3d12::RangeType>(range.range_type));
         table.base_index = range.base_register;
-        table.count
-          = range.num_descriptors == (std::numeric_limits<std::uint32_t>::max)()
-          ? (std::numeric_limits<std::uint32_t>::max)()
-          : range.num_descriptors;
+        table.count = range.num_descriptors;
       }
       binding.data = table;
       break;

@@ -30,11 +30,18 @@ static inline float ResolveMaskedAlphaCutoff(MaterialShadingConstants material)
                                       : kDefaultMaskedAlphaCutoff;
 }
 
-static inline bool TryLoadMaterialFromSlots(uint draw_metadata_slot,
+// A draw's material with the draw-metadata fields material evaluation needs.
+struct DrawMaterial {
+  MaterialShadingConstants constants;
+  uint material_handle;
+  uint primitive_flags;
+};
+
+static inline bool TryLoadDrawMaterialFromSlots(uint draw_metadata_slot,
   uint material_shading_constants_slot, uint draw_index,
-  out MaterialShadingConstants material)
+  out DrawMaterial material)
 {
-  material = (MaterialShadingConstants)0;
+  material = (DrawMaterial)0;
 
   if (draw_metadata_slot == K_INVALID_BINDLESS_INDEX
     || material_shading_constants_slot == K_INVALID_BINDLESS_INDEX) {
@@ -61,8 +68,21 @@ static inline bool TryLoadMaterialFromSlots(uint draw_metadata_slot,
     return false;
   }
 
-  material = materials[meta.material_handle];
+  material.constants = materials[meta.material_handle];
+  material.material_handle = meta.material_handle;
+  material.primitive_flags = meta.primitive_flags;
   return true;
+}
+
+static inline bool TryLoadMaterialFromSlots(uint draw_metadata_slot,
+  uint material_shading_constants_slot, uint draw_index,
+  out MaterialShadingConstants material)
+{
+  DrawMaterial draw_material;
+  const bool loaded = TryLoadDrawMaterialFromSlots(draw_metadata_slot,
+    material_shading_constants_slot, draw_index, draw_material);
+  material = draw_material.constants;
+  return loaded;
 }
 
 static inline float SampleMaskedMaterialAlpha(

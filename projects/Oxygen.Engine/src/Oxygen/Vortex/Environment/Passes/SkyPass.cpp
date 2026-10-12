@@ -5,12 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdint>
-#include <limits>
 #include <span>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -20,7 +20,6 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -30,6 +29,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Environment/Passes/SkyPass.h>
 #include <Oxygen/Vortex/Environment/SceneBackground.h>
+#include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -42,67 +42,6 @@ namespace oxygen::vortex::environment {
 namespace {
 
   namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
-
-  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-    -> graphics::ResourceViewType
-  {
-    using graphics::ResourceViewType;
-
-    switch (type) {
-    case bindless_d3d12::RangeType::SRV:
-      return ResourceViewType::kRawBuffer_SRV;
-    case bindless_d3d12::RangeType::Sampler:
-      return ResourceViewType::kSampler;
-    case bindless_d3d12::RangeType::UAV:
-      return ResourceViewType::kRawBuffer_UAV;
-    default:
-      return ResourceViewType::kNone;
-    }
-  }
-
-  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-  {
-    std::vector<graphics::RootBindingItem> bindings;
-    bindings.reserve(bindless_d3d12::kRootParamTableCount);
-
-    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-      ++index) {
-      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-      graphics::RootBindingDesc binding {};
-      binding.binding_slot_desc.register_index = desc.shader_register;
-      binding.binding_slot_desc.register_space = desc.register_space;
-      binding.visibility = graphics::ShaderStageFlags::kAll;
-
-      switch (desc.kind) {
-      case bindless_d3d12::RootParamKind::DescriptorTable: {
-        graphics::DescriptorTableBinding table {};
-        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-          const auto& range = desc.ranges.front();
-          table.view_type = RangeTypeToViewType(
-            static_cast<bindless_d3d12::RangeType>(range.range_type));
-          table.base_index = range.base_register;
-          table.count = range.num_descriptors
-              == (std::numeric_limits<std::uint32_t>::max)()
-            ? (std::numeric_limits<std::uint32_t>::max)()
-            : range.num_descriptors;
-        }
-        binding.data = table;
-        break;
-      }
-      case bindless_d3d12::RootParamKind::CBV:
-        binding.data = graphics::DirectBufferBinding {};
-        break;
-      case bindless_d3d12::RootParamKind::RootConstants:
-        binding.data
-          = graphics::PushConstantsBinding { .size = desc.constants_count };
-        break;
-      }
-
-      bindings.emplace_back(binding);
-    }
-
-    return bindings;
-  }
 
   auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
     const graphics::Texture& texture) -> void
@@ -169,7 +108,7 @@ namespace {
   auto BuildSkyPipelineDesc(const SceneTextures& scene_textures)
     -> graphics::GraphicsPipelineDesc
   {
-    auto root_bindings = BuildVortexRootBindings();
+    auto root_bindings = vortex::internal::BuildVortexRootBindings();
     return graphics::GraphicsPipelineDesc::Builder {}
     .SetVertexShader(graphics::ShaderRequest {
       .stage = ShaderType::kVertex,
@@ -193,7 +132,7 @@ namespace {
       .dest_blend = graphics::BlendFactor::kInvSrcAlpha,
       .blend_op = graphics::BlendOp::kAdd, .src_blend_alpha = graphics::BlendFactor::kOne,
       .dest_blend_alpha = graphics::BlendFactor::kInvSrcAlpha,
-      .blend_op_alpha = graphics::BlendOp::kAdd, .write_mask = graphics::ColorWriteMask::kAll } })
+      .blend_op_alpha = graphics::BlendOp::kAdd, .write_mask = graphics::ColorWriteMask::kAll, }, })
     .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
       .color_target_formats = {
         scene_textures.GetSceneColor().GetDescriptor().format,
@@ -305,17 +244,17 @@ auto SkyPass::Record(RenderContext& ctx, graphics::CommandRecorder& recorder,
   recorder.BindFrameBuffer(*framebuffer);
   SetViewportAndScissor(recorder, ctx, scene_textures);
   recorder.SetPipelineState(BuildSkyPipelineDesc(scene_textures));
-  if (ctx.view_constants != nullptr) {
+  if (ctx.view_constants.IsValid()) {
     recorder.SetGraphicsRootConstantBufferView(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-      ctx.view_constants->GetGPUVirtualAddress());
+      ctx.view_constants.GpuAddress());
   }
   recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
   recorder.SetGraphicsRoot32BitConstant(
-    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
-    1U);
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
+    kInvalidShaderVisibleIndex.get(), 1U);
   recorder.Draw(3U, 1U, 0U, 0U);
   recorder.RequireResourceState(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);

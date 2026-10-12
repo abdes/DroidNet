@@ -165,13 +165,13 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         sky_color *= env_data.sky_sphere.tint_rgb
             * max(env_data.sky_sphere.intensity, 0.0f);
         CheckHdrStoreRange(float4(sky_color, 1.0), 7u,
-            LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav, 0u, 1.0);
+            GetExposureStatusUav(), 0u, 1.0);
         // The store-range check above records a non-finite texel; the view
         // shows it black rather than letting Inf or NaN reach exposure.
         if (!all(isfinite(sky_color))) sky_color = 0.0.xxx;
         sky_color = (max(sky_color, 0.0.xxx) * height_fog.a + height_fog.rgb) * view_pre_exposure;
         CheckHdrStoreRange(float4(sky_color, 1.0), 7u,
-            LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav, 0u, view_pre_exposure);
+            GetExposureStatusUav(), 0u, view_pre_exposure);
         return float4(sky_color, 1.0);
     }
 
@@ -184,7 +184,7 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         // behind this fog without admitting that background to sky lighting.
         const float3 fog_color = height_fog.rgb * view_pre_exposure;
         CheckHdrStoreRange(float4(fog_color, 1.0), 7u,
-            LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav, 0u, view_pre_exposure);
+            GetExposureStatusUav(), 0u, view_pre_exposure);
         return float4(fog_color, 1.0 - height_fog.a);
     }
 
@@ -245,7 +245,7 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     const float coverage = atmosphere_holdout
         ? saturate(1.0f - saturate(sky_sample.a) * height_fog.a) : 1.0f;
     CheckHdrStoreRange(float4(sky_color, coverage), 7u,
-        LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav,
+        GetExposureStatusUav(),
         0u, view_pre_exposure);
     return float4(sky_color, coverage);
 }

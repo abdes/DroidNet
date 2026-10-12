@@ -66,7 +66,7 @@ TEST(RenderContextTest, ResetClearsPhase1PerViewAndFrameState)
   EXPECT_EQ(
     context.delta_time, oxygen::time::SimulationClock::kMinDeltaTimeSeconds);
   EXPECT_EQ(context.pass_target.get(), nullptr);
-  EXPECT_EQ(context.view_constants.get(), nullptr);
+  EXPECT_FALSE(context.view_constants.IsValid());
   EXPECT_EQ(context.material_constants.get(), nullptr);
   EXPECT_EQ(context.scene.get(), nullptr);
 }

@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <span>
 #include <utility>
 #include <vector>
@@ -16,6 +15,7 @@
 #include <glm/geometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ShaderType.h>
@@ -27,11 +27,11 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
+#include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -44,66 +44,6 @@ namespace oxygen::vortex::environment {
 namespace {
 
   namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
-
-  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-    -> graphics::ResourceViewType
-  {
-    using graphics::ResourceViewType;
-    switch (type) {
-    case bindless_d3d12::RangeType::SRV:
-      return ResourceViewType::kRawBuffer_SRV;
-    case bindless_d3d12::RangeType::Sampler:
-      return ResourceViewType::kSampler;
-    case bindless_d3d12::RangeType::UAV:
-      return ResourceViewType::kRawBuffer_UAV;
-    default:
-      return ResourceViewType::kNone;
-    }
-  }
-
-  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-  {
-    std::vector<graphics::RootBindingItem> bindings;
-    bindings.reserve(bindless_d3d12::kRootParamTableCount);
-
-    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-      ++index) {
-      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-      graphics::RootBindingDesc binding {};
-      binding.binding_slot_desc.register_index = desc.shader_register;
-      binding.binding_slot_desc.register_space = desc.register_space;
-      binding.visibility = graphics::ShaderStageFlags::kAll;
-
-      switch (desc.kind) {
-      case bindless_d3d12::RootParamKind::DescriptorTable: {
-        graphics::DescriptorTableBinding table {};
-        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-          const auto& range = desc.ranges.front();
-          table.view_type = RangeTypeToViewType(
-            static_cast<bindless_d3d12::RangeType>(range.range_type));
-          table.base_index = range.base_register;
-          table.count = range.num_descriptors
-              == (std::numeric_limits<std::uint32_t>::max)()
-            ? (std::numeric_limits<std::uint32_t>::max)()
-            : range.num_descriptors;
-        }
-        binding.data = table;
-        break;
-      }
-      case bindless_d3d12::RootParamKind::CBV:
-        binding.data = graphics::DirectBufferBinding {};
-        break;
-      case bindless_d3d12::RootParamKind::RootConstants:
-        binding.data
-          = graphics::PushConstantsBinding { .size = desc.constants_count };
-        break;
-      }
-
-      bindings.emplace_back(binding);
-    }
-
-    return bindings;
-  }
 
   auto TrackBufferFromKnownOrInitial(
     graphics::CommandRecorder& recorder, const graphics::Buffer& buffer) -> void
@@ -181,7 +121,7 @@ namespace {
   auto BuildPipelineDesc(const SceneTextures& scene_textures,
     const bool reverse_z) -> graphics::GraphicsPipelineDesc
   {
-    auto root_bindings = BuildVortexRootBindings();
+    auto root_bindings = vortex::internal::BuildVortexRootBindings();
     const auto fog_blend = graphics::BlendTargetDesc {
       .blend_enable = true,
       .src_blend = graphics::BlendFactor::kOne,
@@ -227,10 +167,13 @@ namespace {
     .Build();
   }
 
+  //! Distances, lengths and clip w at or below this are degenerate.
+  constexpr float kDegenerateEpsilon = 1.0e-6F;
+
   auto ComputeLocalFogStartDepthZ(const ResolvedView& resolved_view,
     const float global_start_distance_meters) -> float
   {
-    if (global_start_distance_meters <= 1.0e-6F) {
+    if (global_start_distance_meters <= kDegenerateEpsilon) {
       return resolved_view.ReverseZ() ? 1.0F : 0.0F;
     }
 
@@ -238,7 +181,7 @@ namespace {
       = resolved_view.InverseProjection() * glm::vec4(1.0F, 1.0F, 1.0F, 1.0F);
     const auto corner = glm::vec3(view_space_corner);
     const auto corner_length = glm::length(corner);
-    if (corner_length <= 1.0e-6F) {
+    if (corner_length <= kDegenerateEpsilon) {
       return 0.0F;
     }
 
@@ -247,7 +190,7 @@ namespace {
       = glm::vec4(0.0F, 0.0F, -global_start_distance_meters * ratio, 1.0F);
     const auto clip_space
       = resolved_view.ProjectionMatrix() * view_space_start_fog_point;
-    if (std::abs(clip_space.w) <= 1.0e-6F) {
+    if (std::abs(clip_space.w) <= kDegenerateEpsilon) {
       return 0.0F;
     }
 
@@ -266,26 +209,26 @@ LocalFogVolumeComposePass::~LocalFogVolumeComposePass() = default;
 auto LocalFogVolumeComposePass::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
-  if (EnsurePassConstantsBuffer()) {
-    pass_constants_buffer_->OnFrameStart(sequence, slot);
+  if (const auto buffer = EnsurePassConstantsBuffer(); buffer != nullptr) {
+    buffer->OnFrameStart(sequence, slot);
   }
 }
 
-auto LocalFogVolumeComposePass::EnsurePassConstantsBuffer() -> bool
+auto LocalFogVolumeComposePass::EnsurePassConstantsBuffer()
+  -> observer_ptr<upload::TransientStructuredBuffer>
 {
   if (pass_constants_buffer_.has_value()) {
-    return true;
+    return observer_ptr { &*pass_constants_buffer_ };
   }
   auto gfx = renderer_.GetGraphics();
   if (gfx == nullptr) {
-    return false;
+    return nullptr;
   }
-  pass_constants_buffer_.emplace(observer_ptr { gfx.get() },
-    renderer_.GetStagingProvider(),
+  return observer_ptr { &pass_constants_buffer_.emplace(
+    observer_ptr { gfx.get() }, renderer_.GetStagingProvider(),
     static_cast<std::uint32_t>(sizeof(PassConstants)),
     observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
-    "Environment.LocalFogCompose.PassConstants");
-  return true;
+    "Environment.LocalFogCompose.PassConstants") };
 }
 
 auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
@@ -308,7 +251,8 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
   }
 
   auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr || !EnsurePassConstantsBuffer()) {
+  const auto constants_buffer = EnsurePassConstantsBuffer();
+  if (gfx == nullptr || constants_buffer == nullptr) {
     return state;
   }
 
@@ -349,7 +293,7 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
     .global_start_distance_meters = global_start_distance_meters,
     .start_depth_z = start_depth_z,
   };
-  auto constants_alloc = pass_constants_buffer_->Allocate(1U);
+  auto constants_alloc = constants_buffer->Allocate(1U);
   if (!constants_alloc.has_value()
     || !constants_alloc->TryWriteObject(constants)) {
     return state;
@@ -386,10 +330,10 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
   recorder.BindFrameBuffer(*framebuffer);
   SetViewportAndScissor(recorder, ctx, scene_textures);
   recorder.SetPipelineState(BuildPipelineDesc(scene_textures, reverse_z));
-  if (ctx.view_constants != nullptr) {
+  if (ctx.view_constants.IsValid()) {
     recorder.SetGraphicsRootConstantBufferView(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-      ctx.view_constants->GetGPUVirtualAddress());
+      ctx.view_constants.GpuAddress());
   }
   recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,

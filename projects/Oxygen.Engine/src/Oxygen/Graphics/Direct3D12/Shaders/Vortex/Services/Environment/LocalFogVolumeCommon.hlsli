@@ -12,6 +12,7 @@
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
 #include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 #include "Vortex/Contracts/Scene/ScreenHzbBindings.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
@@ -554,7 +555,7 @@ static inline float4 GetLocalFogVolumeInstanceContribution(
     const float3 luminance = EvaluateLocalFogVolumeInScattering(
         instance, fog_data, linear_sampler, ray_dir_world);
     CheckHdrStoreRange(float4(luminance, fog_data.coverage), 9u,
-        LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav, 0u, 1.0);
+        GetExposureStatusUav(), 0u, 1.0);
     return float4(luminance, 1.0f - fog_data.coverage);
 }
 

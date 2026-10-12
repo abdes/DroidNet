@@ -86,7 +86,7 @@ namespace environment {
       bool local_fog_injection_requested { false };
       bool local_fog_injection_executed { false };
       std::uint32_t local_fog_instance_count { 0U };
-      float grid_z_params[3] { 0.0F, 1.0F, 1.0F };
+      std::array<float, 3> grid_z_params { 0.0F, 1.0F, 1.0F };
     };
 
     OXGN_VRTX_API explicit VolumetricFogPass(Renderer& renderer);
@@ -119,23 +119,23 @@ namespace environment {
 
     struct alignas(16) GridControl {
       float start_distance_m { 0.0F };
-      float end_distance_m { 1000.0F };
+      float end_distance_m { 0.0F };
       float near_fade_in_distance_m { 0.0F };
       float global_extinction_scale { 0.0F };
     };
 
     struct alignas(16) MediaControl0 {
-      float albedo_rgb[3] { 1.0F, 1.0F, 1.0F };
+      std::array<float, 3> albedo_rgb { 1.0F, 1.0F, 1.0F };
       float scattering_distribution { 0.0F };
     };
 
     struct alignas(16) GridZControl {
-      float grid_z_params[3] { 0.0F, 1.0F, 1.0F };
+      std::array<float, 3> grid_z_params { 0.0F, 1.0F, 1.0F };
       std::uint32_t directional_shadows_enabled { 0U };
     };
 
     struct alignas(16) MediaControl1 {
-      float emissive_rgb[3] { 0.0F, 0.0F, 0.0F };
+      std::array<float, 3> emissive_rgb { 0.0F, 0.0F, 0.0F };
       float static_lighting_scattering_intensity { 1.0F };
     };
 
@@ -184,7 +184,7 @@ namespace environment {
     };
 
     struct alignas(16) SkyLightControl1 {
-      float tint_rgb[3] { 1.0F, 1.0F, 1.0F };
+      std::array<float, 3> tint_rgb { 1.0F, 1.0F, 1.0F };
       float intensity_mul { 1.0F };
     };
 
@@ -193,7 +193,7 @@ namespace environment {
         kInvalidShaderVisibleIndex.get(),
       };
       std::uint32_t enabled { 0U }; // Enabled=1, sampled history is FP16=2.
-      float history_weight { 0.9F };
+      float history_weight { 0.0F };
       std::uint32_t history_miss_supersample_count { 1U };
     };
 
@@ -223,7 +223,7 @@ namespace environment {
       std::uint32_t previous_frame_exposure_srv {
         kInvalidShaderVisibleIndex.get(),
       };
-      std::uint32_t exposure_status_uav { kInvalidShaderVisibleIndex.get() };
+      std::uint32_t reserved0 { 0U };
       std::uint32_t exposure_fp16_store { 0U };
       std::uint32_t previous_error_bounds_srv {
         kInvalidShaderVisibleIndex.get(),
@@ -245,7 +245,7 @@ namespace environment {
       std::uint32_t depth { 0U };
       float start_distance_m { 0.0F };
       float end_distance_m { 0.0F };
-      float grid_z_params[3] { 0.0F, 1.0F, 1.0F };
+      std::array<float, 3> grid_z_params { 0.0F, 1.0F, 1.0F };
       bool valid { false };
     };
     std::unordered_map<ViewId, HistoryEntry> history_by_view_;

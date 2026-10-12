@@ -442,7 +442,7 @@ protected:
     context.current_view.with_atmosphere = with_atmosphere;
     context.current_view.with_height_fog = with_height_fog;
     context.current_view.with_local_fog = with_local_fog;
-    context.view_constants = view_constants_buffer_;
+    context.view_constants = { .buffer = view_constants_buffer_ };
     renderer_->SetShaderDebugMode(debug_mode);
     context.shader_debug_mode = renderer_->GetShaderDebugMode();
 
@@ -755,7 +755,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   context.frame_sequence = oxygen::frame::SequenceNumber {
     1U,
   };
-  context.view_constants = view_constants_buffer_;
+  context.view_constants = { .buffer = view_constants_buffer_ };
   {
     auto& view_entry = context.frame_views.emplace_back();
     view_entry.view_id = first_view_id_;
@@ -811,7 +811,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   context.scene = oxygen::observer_ptr<Scene> { scene_.get() };
   context.frame_slot = oxygen::frame::Slot { 1U };
   context.frame_sequence = oxygen::frame::SequenceNumber { 1U };
-  context.view_constants = view_constants_buffer_;
+  context.view_constants = { .buffer = view_constants_buffer_ };
   for (auto [id, view] : {
          std::pair { first_view_id_, &first_resolved_view_ },
          std::pair { second_view_id_, &second_resolved_view_ },
@@ -872,7 +872,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   context.frame_sequence = oxygen::frame::SequenceNumber {
     1U,
   };
-  context.view_constants = view_constants_buffer_;
+  context.view_constants = { .buffer = view_constants_buffer_ };
   {
     auto& view_entry = context.frame_views.emplace_back();
     view_entry.view_id = first_view_id_;
@@ -1033,12 +1033,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     = oxygen::observer_ptr<const ResolvedView> {
         &first_resolved_view_,
       };
-  context.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "SceneRendererDeferredCoreTest.DepthPrepassViewConstants",
-  });
+  context.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "SceneRendererDeferredCoreTest.DepthPrepassViewConstants",
+    }),
+  };
 
   graphics_->draw_log_.draws.clear();
   graphics_->indirect_log_.draws.clear();
@@ -1117,7 +1119,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     = oxygen::observer_ptr<const ResolvedView> {
         &first_resolved_view_,
       };
-  stage10_context.view_constants = view_constants_buffer_;
+  stage10_context.view_constants = { .buffer = view_constants_buffer_ };
   scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context);
 
   bindings = scene_renderer.GetSceneTextureBindings();
@@ -1206,12 +1208,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
         &first_resolved_view_,
       };
   context.current_view.shading_mode_override = ShadingMode::kForward;
-  context.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "SceneRendererDeferredCoreTest.ForwardModeViewConstants",
-  });
+  context.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "SceneRendererDeferredCoreTest.ForwardModeViewConstants",
+    }),
+  };
   auto published_bindings = ViewFrameBindings {};
   published_bindings.scene_texture_frame_slot = oxygen::ShaderVisibleIndex {
     9001U,
@@ -1277,12 +1281,14 @@ NOLINT_TEST_F(
     = oxygen::observer_ptr<const ResolvedView> {
         &first_resolved_view_,
       };
-  context.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "SceneRendererDeferredCoreTest.ForwardBasePassConstants",
-  });
+  context.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "SceneRendererDeferredCoreTest.ForwardBasePassConstants",
+    }),
+  };
 
   graphics_->draw_log_.draws.clear();
   graphics_->indirect_log_.draws.clear();
@@ -1356,12 +1362,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, BasePassWireframeRunsInForwardMode)
     = oxygen::observer_ptr<const ResolvedView> {
         &first_resolved_view_,
       };
-  context.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "SceneRendererDeferredCoreTest.ForwardWireframeConstants",
-  });
+  context.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "SceneRendererDeferredCoreTest.ForwardWireframeConstants",
+    }),
+  };
 
   graphics_->draw_log_.draws.clear();
   graphics_->indirect_log_.draws.clear();
@@ -1426,12 +1434,14 @@ NOLINT_TEST_F(
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
         &prepared_frame,
       };
-  context.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "SceneRendererDeferredCoreTest.BasePassViewConstants",
-  });
+  context.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "SceneRendererDeferredCoreTest.BasePassViewConstants",
+    }),
+  };
 
   base_pass.SetConfig(oxygen::vortex::BasePassConfig {
     .write_velocity = true,
@@ -1532,12 +1542,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
         &prepared_frame,
       };
-  context.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "SceneRendererDeferredCoreTest.MvwoAux.ViewConstants",
-  });
+  context.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "SceneRendererDeferredCoreTest.MvwoAux.ViewConstants",
+    }),
+  };
 
   graphics_->draw_log_.draws.clear();
   graphics_->texture_copy_log_.copies.clear();
@@ -1643,12 +1655,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   context.frame_slot = oxygen::frame::Slot {
     1U,
   };
-  context.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "SceneRendererDeferredCoreTest.BasePassGuardViewConstants",
-  });
+  context.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "SceneRendererDeferredCoreTest.BasePassGuardViewConstants",
+    }),
+  };
 
   base_pass.SetConfig(oxygen::vortex::BasePassConfig {
     .write_velocity = true,
@@ -3361,12 +3375,14 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
         &prepared_frame,
       };
-  context.view_constants = graphics->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "SceneRendererDeferredCoreTest.TranslucencyViewConstants",
-  });
+  context.view_constants = {
+    .buffer = graphics->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "SceneRendererDeferredCoreTest.TranslucencyViewConstants",
+    }),
+  };
 
   const auto reverse_z_view = MakePerspectiveResolvedView(64.0F, 64.0F, true);
   context.current_view.resolved_view
@@ -3470,12 +3486,14 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
         &prepared_frame,
       };
-  context.view_constants = graphics->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "SceneRendererDeferredCoreTest.BasePassMaskedViewConstants",
-  });
+  context.view_constants = {
+    .buffer = graphics->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "SceneRendererDeferredCoreTest.BasePassMaskedViewConstants",
+    }),
+  };
 
   base_pass.SetConfig(oxygen::vortex::BasePassConfig {
     .write_velocity = false,
@@ -3517,12 +3535,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     = oxygen::observer_ptr<const ResolvedView> {
         &first_resolved_view_,
       };
-  context.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "RasterState.ViewConstants",
-  });
+  context.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "RasterState.ViewConstants",
+    }),
+  };
   for (const auto kind : {
          oxygen::vortex::PassMaskBit::kOpaque,
          oxygen::vortex::PassMaskBit::kMasked,
@@ -3619,12 +3639,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   context.frame_slot = oxygen::frame::Slot {
     1U,
   };
-  context.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "RasterState.VelocityConstants",
-  });
+  context.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "RasterState.VelocityConstants",
+    }),
+  };
   base_pass.SetConfig(oxygen::vortex::BasePassConfig {
     .write_velocity = true,
     .early_z_pass_done = true,
@@ -3678,12 +3700,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
         &frame,
       };
-  context.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "RasterState.TranslucencyConstants",
-  });
+  context.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "RasterState.TranslucencyConstants",
+    }),
+  };
   for (const auto reverse_z : {
          true,
          false,

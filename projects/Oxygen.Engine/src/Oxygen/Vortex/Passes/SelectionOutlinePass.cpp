@@ -66,8 +66,8 @@ namespace {
   struct alignas(16) SelectionOutlineMaskConstants {
     std::uint32_t scene_depth_srv { kInvalidShaderVisibleIndex.get() };
     float level { 0.0F };
-    std::uint32_t reverse_z { 1U };
     std::uint32_t test_occlusion { 0U };
+    std::uint32_t _pad0 { 0U };
   };
   static_assert(sizeof(SelectionOutlineMaskConstants) == 16U);
 
@@ -245,7 +245,7 @@ auto SelectionOutlinePass::Record(RenderContext& ctx,
   if (outline.IsEmpty() || inputs.target == nullptr || view_id == kInvalidViewId
     || ctx.current_view.resolved_view == nullptr
     || ctx.current_view.prepared_frame == nullptr
-    || ctx.view_constants == nullptr
+    || !ctx.view_constants.IsValid()
     || inputs.target->GetDescriptor().color_attachments.empty()) {
     return 0U;
   }
@@ -315,7 +315,6 @@ auto SelectionOutlinePass::Record(RenderContext& ctx,
     auto constants = MaskConstants {};
     constants.scene_depth_srv = inputs.scene_depth_srv.get();
     constants.level = level;
-    constants.reverse_z = inputs.reverse_z ? 1U : 0U;
     constants.test_occlusion = test_occlusion ? 1U : 0U;
     return mask_constants_->Publish(view_id, constants);
   };
@@ -366,7 +365,7 @@ auto SelectionOutlinePass::Record(RenderContext& ctx,
     if (current_alpha_test != raster.alpha_test) {
       recorder.SetPipelineState(BuildMaskPipelineDesc(raster.alpha_test));
       recorder.SetGraphicsRootConstantBufferView(
-        view_constants, ctx.view_constants->GetGPUVirtualAddress());
+        view_constants, ctx.view_constants.GpuAddress());
       current_alpha_test = raster.alpha_test;
     }
     const auto& dm = metadata.subspan(draw.draw_index, 1).front();

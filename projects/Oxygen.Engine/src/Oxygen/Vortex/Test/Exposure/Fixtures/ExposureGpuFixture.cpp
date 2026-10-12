@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <ios>
 #include <limits>
 #include <memory>
@@ -20,11 +22,13 @@
 // NOLINTNEXTLINE(modernize-deprecated-headers)
 #include <stdlib.h>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 #include <d3d12.h>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -189,28 +193,29 @@ auto ExposureGpuTest::BackendConfigJson() const -> std::string
   // an integrated GPU that does not drive the desktop.
   auto config = nlohmann::json::object();
   if (const auto adapter = environment_value("OXYGEN_GPU_ADAPTER")) {
-    config["preferred_card_name"] = *adapter;
+    config.emplace("preferred_card_name", *adapter);
   }
   // External GPU crash analysis (e.g. Radeon GPU Detective) needs the device
   // without the debug layer and DRED, which otherwise intercept removal.
   if (environment_flag("OXYGEN_GPU_CRASH_ANALYSIS")) {
-    config["enable_debug_layer"] = false;
+    config.emplace("enable_debug_layer", false);
     return config.dump();
   }
-  config["enable_debug_layer"] = true;
+  config.emplace("enable_debug_layer", true);
   // DRED instruments every command list; enable it only to diagnose a
   // device removal (OXYGEN_GPU_DRED). The debug layer itself stays on.
-  config["enable_dred"] = environment_flag("OXYGEN_GPU_DRED");
+  config.emplace("enable_dred", environment_flag("OXYGEN_GPU_DRED"));
   // GPU-based validation checks resources and indirect arguments as the GPU
   // executes; enable it only to diagnose (OXYGEN_GPU_VALIDATION).
   if (environment_flag("OXYGEN_GPU_VALIDATION")) {
-    config["enable_validation"] = true;
+    config.emplace("enable_validation", true);
   }
   if (!CapturePath().empty()) {
-    config["frame_capture"] = {
-      { "provider", "renderdoc" },
-      { "init_mode", "search" },
-    };
+    config.emplace("frame_capture",
+      nlohmann::json {
+        { "provider", "renderdoc" },
+        { "init_mode", "search" },
+      });
   }
   return config.dump();
 }
@@ -425,9 +430,10 @@ auto ExposureGpuTest::WriteTexels(Texture& texture,
                        / D3D12_TEXTURE_DATA_PITCH_ALIGNMENT)
     * D3D12_TEXTURE_DATA_PITCH_ALIGNMENT;
   std::vector<std::byte> bytes(static_cast<std::size_t>(pitch) * desc.height);
+  const auto row_size = static_cast<std::size_t>(row_bytes);
   for (std::uint32_t y = 0U; y < desc.height; ++y) {
-    std::memcpy(bytes.data() + (y * pitch), texels.data() + (y * row_bytes),
-      static_cast<std::size_t>(row_bytes));
+    std::ranges::copy(texels.subspan(y * row_size, row_size),
+      std::span { bytes }.subspan(y * static_cast<std::size_t>(pitch)).begin());
   }
   auto upload = CreateUploadBuffer(SizeBytes { bytes.size() });
   upload->Update(bytes.data(), bytes.size(), 0U);
@@ -470,15 +476,10 @@ auto ExposureGpuTest::Uniform(
   return MakeSignal(width, height, pixels);
 }
 
-auto ExposureGpuTest::RunToneProbe(std::span<const std::byte> inputs_data,
-  std::uint32_t record_count, std::uint32_t mode, bool capture_enabled,
-  const std::function<void(graphics::CommandRecorder&)>& attach)
-  -> std::vector<std::array<float, 8>>
+auto ExposureGpuTest::InstallProbeShader(
+  const std::string_view dxil_path, const ShaderRequest& request) -> void
 {
-  if (mode == 16384U) {
-    CHECK_EQ_F(record_count, 64U);
-  }
-  std::ifstream shader(OXYGEN_EXPOSURE_TONE_PROBE, std::ios::binary);
+  std::ifstream shader(std::string { dxil_path }, std::ios::binary);
   CHECK_F(shader.good());
   shader.seekg(0, std::ios::end);
   const auto file_size = shader.tellg();
@@ -496,14 +497,25 @@ auto ExposureGpuTest::RunToneProbe(std::span<const std::byte> inputs_data,
     // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     reinterpret_cast<char*>(code.data()), static_cast<std::streamsize>(bytes));
   CHECK_F(shader.good());
-  FailureBackend().SetShaderOverride(
+  FailureBackend().SetShaderOverride(request,
+    std::make_shared<ShaderByteCode<std::vector<std::uint32_t>>>(
+      std::move(code)));
+}
+
+auto ExposureGpuTest::RunToneProbe(std::span<const std::byte> inputs_data,
+  std::uint32_t record_count, std::uint32_t mode, bool capture_enabled,
+  const std::function<void(graphics::CommandRecorder&)>& attach)
+  -> std::vector<std::array<float, 8>>
+{
+  if (mode == 16384U) {
+    CHECK_EQ_F(record_count, 64U);
+  }
+  InstallProbeShader(OXYGEN_EXPOSURE_TONE_PROBE,
     ShaderRequest {
       .stage = ShaderType::kCompute,
       .source_path = "Tests/ToneBoundsProbe.hlsl",
       .entry_point = "CS",
-    },
-    std::make_shared<ShaderByteCode<std::vector<std::uint32_t>>>(
-      std::move(code)));
+    });
 
   const auto input_size = inputs_data.size_bytes();
   auto inputs = CreateRegisteredBuffer({

@@ -15,8 +15,8 @@ struct SelectionOutlineMaskConstants
 {
     uint scene_depth_srv;
     float level;
-    uint reverse_z;
     uint test_occlusion;
+    uint _pad0;
 };
 
 [shader("pixel")]
@@ -43,7 +43,7 @@ float2 VortexSelectionOutlineMaskPS(DepthPrepassVSOutput input) : SV_Target0
         // The scene depth came from a different shader: accept a small
         // relative difference as the same surface.
         const float tolerance = 1.0e-5f + abs(scene_z) * 2.0e-3f;
-        visible = pc.reverse_z != 0u
+        visible = reverse_z != 0u
             ? (input.position.z >= scene_z - tolerance ? 1.0f : 0.0f)
             : (input.position.z <= scene_z + tolerance ? 1.0f : 0.0f);
     }

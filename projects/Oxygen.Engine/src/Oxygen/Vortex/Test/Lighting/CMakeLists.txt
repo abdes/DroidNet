@@ -160,99 +160,25 @@ target_compile_definitions(
 )
 
 # The probes reach camera helpers, so they compile as camera view entries.
-set(
-  lighting_shader_root
-  "${PROJECT_SOURCE_DIR}/src/Oxygen/Graphics/Direct3D12/Shaders"
-)
-set(
-  lighting_probe_output
-  "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/LightingGpuAbiProbe.dxil"
-)
-set(
-  lighting_probe_source
-  "${CMAKE_CURRENT_SOURCE_DIR}/../Shaders/LightingGpuAbiProbe.hlsl"
-)
-add_custom_command(
-  OUTPUT
-    "${lighting_probe_output}"
-  COMMAND
-    ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
-  COMMAND
-    "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -D
-    OXYGEN_CAMERA_VIEW_ENTRY=1 -I "${lighting_shader_root}" -I
-    "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo "${lighting_probe_output}"
-    "${lighting_probe_source}"
-  COMMAND
-    "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -D
-    OXYGEN_CAMERA_VIEW_ENTRY=1 -I "${lighting_shader_root}" -I
-    "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF "${lighting_probe_output}.d" -Fo
-    "${lighting_probe_output}" "${lighting_probe_source}"
-  DEPENDS
-    "${OXYGEN_DXC_EXECUTABLE}"
-    "${lighting_probe_source}"
-    "${lighting_shader_root}/Vortex/Shared/CubemapGeometry.hlsli"
-    "${lighting_shader_root}/Vortex/Contracts/Lighting/LightGridData.hlsli"
-    "${lighting_shader_root}/Vortex/Contracts/Shadows/ShadowRecords.hlsli"
-  DEPFILE "${lighting_probe_output}.d"
-  VERBATIM
-)
-add_custom_target(
+oxygen_add_dxc_compute_probe(
   oxygen-vortex-lighting-abi-probe
-  DEPENDS
-    "${lighting_probe_output}"
-)
-add_dependencies(
-  Oxygen.Vortex.LightingGpuAbi.Tests
-  oxygen-vortex-lighting-abi-probe
+  SOURCE "../Shaders/LightingGpuAbiProbe.hlsl"
+  PROFILE cs_6_6
+  CONSUMER Oxygen.Vortex.LightingGpuAbi.Tests
+  DEFINITION OXYGEN_LIGHTING_ABI_PROBE
+  CAMERA_VIEW_ENTRY
 )
 target_compile_definitions(
   Oxygen.Vortex.LightingGpuAbi.Tests
   PRIVATE
-    OXYGEN_LIGHTING_ABI_PROBE="${lighting_probe_output}"
     OXYGEN_LIGHTING_ABI_WORKSPACE="${PROJECT_SOURCE_DIR}"
     OXYGEN_GGX_MEAN_CERTIFICATE_FILE="${CMAKE_CURRENT_SOURCE_DIR}/Reference/GgxMeanMomentCertificates.json"
 )
-
-set(
-  unculled_probe_output
-  "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>/UnculledLightingReference.dxil"
-)
-set(
-  unculled_probe_source
-  "${CMAKE_CURRENT_SOURCE_DIR}/../Shaders/UnculledLightingReference.hlsl"
-)
-add_custom_command(
-  OUTPUT
-    "${unculled_probe_output}"
-  COMMAND
-    ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
-  COMMAND
-    "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -D
-    OXYGEN_CAMERA_VIEW_ENTRY=1 -I "${lighting_shader_root}" -I
-    "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo "${unculled_probe_output}"
-    "${unculled_probe_source}"
-  COMMAND
-    "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -D
-    OXYGEN_CAMERA_VIEW_ENTRY=1 -I "${lighting_shader_root}" -I
-    "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF "${unculled_probe_output}.d" -Fo
-    "${unculled_probe_output}" "${unculled_probe_source}"
-  DEPENDS
-    "${OXYGEN_DXC_EXECUTABLE}"
-    "${unculled_probe_source}"
-  DEPFILE "${unculled_probe_output}.d"
-  VERBATIM
-)
-add_custom_target(
+oxygen_add_dxc_compute_probe(
   oxygen-vortex-unculled-lighting-probe
-  DEPENDS
-    "${unculled_probe_output}"
-)
-add_dependencies(
-  Oxygen.Vortex.LightingImageReference.Tests
-  oxygen-vortex-unculled-lighting-probe
-)
-target_compile_definitions(
-  Oxygen.Vortex.LightingImageReference.Tests
-  PRIVATE
-    OXYGEN_UNCULLED_LIGHTING_PROBE="${unculled_probe_output}"
+  SOURCE "../Shaders/UnculledLightingReference.hlsl"
+  PROFILE cs_6_6
+  CONSUMER Oxygen.Vortex.LightingImageReference.Tests
+  DEFINITION OXYGEN_UNCULLED_LIGHTING_PROBE
+  CAMERA_VIEW_ENTRY
 )

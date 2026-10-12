@@ -5,10 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <span>
 #include <utility>
@@ -18,6 +16,7 @@
 #include <glm/ext/vector_double2.hpp>
 #include <glm/ext/vector_float4.hpp>
 #include <glm/geometric.hpp>
+#include <glm/gtc/matrix_access.hpp>
 #include <glm/matrix.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -26,7 +25,6 @@
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -35,9 +33,9 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/Passes/GroundGridPass.h>
@@ -64,92 +62,32 @@ namespace {
   constexpr double kCritDampCoeff2 = 0.235;
 
   struct alignas(16) GroundGridPassConstants {
-    glm::mat4 inv_view_proj { 1.0F };
-    float plane_height { 0.0F };
-    float spacing { 1.0F };
-    float major_every { 10.0F };
-    float fade_start { 0.0F };
-    float line_thickness { 0.02F };
-    float major_thickness { 0.04F };
-    float axis_thickness { 0.06F };
-    float fade_power { 2.0F };
-    float origin_x { 0.0F };
-    float origin_y { 0.0F };
-    float horizon_boost { 0.35F };
-    float pad0 { 0.0F };
-    float grid_offset_x { 0.0F };
-    float grid_offset_y { 0.0F };
-    std::uint32_t reserved0 { 0U };
-    std::uint32_t reserved1 { 0U };
-    glm::vec4 minor_color { 0.16F, 0.16F, 0.16F, 1.0F };
-    glm::vec4 major_color { 0.20F, 0.20F, 0.20F, 1.0F };
-    glm::vec4 axis_color_x { 0.7F, 0.23F, 0.23F, 1.0F };
-    glm::vec4 axis_color_y { 0.23F, 0.7F, 0.23F, 1.0F };
-    glm::vec4 origin_color { 1.0F, 1.0F, 1.0F, 1.0F };
+    glm::mat4 inv_view_proj {};
+    float plane_height {};
+    float spacing {};
+    float major_every {};
+    float fade_start {};
+    float line_thickness {};
+    float major_thickness {};
+    float axis_thickness {};
+    float fade_power {};
+    float origin_x {};
+    float origin_y {};
+    float horizon_boost {};
+    float pad0 {};
+    float grid_offset_x {};
+    float grid_offset_y {};
+    std::uint32_t reserved0 {};
+    std::uint32_t reserved1 {};
+    glm::vec4 minor_color {};
+    glm::vec4 major_color {};
+    glm::vec4 axis_color_x {};
+    glm::vec4 axis_color_y {};
+    glm::vec4 origin_color {};
   };
 
-  static_assert(sizeof(GroundGridPassConstants) == 208U);
-
-  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-    -> graphics::ResourceViewType
-  {
-    using graphics::ResourceViewType;
-
-    switch (type) {
-    case bindless_d3d12::RangeType::SRV:
-      return ResourceViewType::kRawBuffer_SRV;
-    case bindless_d3d12::RangeType::Sampler:
-      return ResourceViewType::kSampler;
-    case bindless_d3d12::RangeType::UAV:
-      return ResourceViewType::kRawBuffer_UAV;
-    default:
-      return ResourceViewType::kNone;
-    }
-  }
-
-  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-  {
-    std::vector<graphics::RootBindingItem> bindings;
-    bindings.reserve(bindless_d3d12::kRootParamTableCount);
-
-    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-      ++index) {
-      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-      graphics::RootBindingDesc binding {};
-      binding.binding_slot_desc.register_index = desc.shader_register;
-      binding.binding_slot_desc.register_space = desc.register_space;
-      binding.visibility = graphics::ShaderStageFlags::kAll;
-
-      switch (desc.kind) {
-      case bindless_d3d12::RootParamKind::DescriptorTable: {
-        graphics::DescriptorTableBinding table {};
-        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-          const auto& range = desc.ranges.front();
-          table.view_type = RangeTypeToViewType(
-            static_cast<bindless_d3d12::RangeType>(range.range_type));
-          table.base_index = range.base_register;
-          table.count = range.num_descriptors
-              == (std::numeric_limits<std::uint32_t>::max)()
-            ? (std::numeric_limits<std::uint32_t>::max)()
-            : range.num_descriptors;
-        }
-        binding.data = table;
-        break;
-      }
-      case bindless_d3d12::RootParamKind::CBV:
-        binding.data = graphics::DirectBufferBinding {};
-        break;
-      case bindless_d3d12::RootParamKind::RootConstants:
-        binding.data
-          = graphics::PushConstantsBinding { .size = desc.constants_count };
-        break;
-      }
-
-      bindings.emplace_back(binding);
-    }
-
-    return bindings;
-  }
+  static_assert(
+    sizeof(GroundGridPassConstants) == 208U); // NOLINT(*-magic-numbers)
 
   auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
     const graphics::Texture& texture) -> void
@@ -216,7 +154,7 @@ namespace {
   auto BuildGroundGridPipelineDesc(const SceneTextures& scene_textures,
     const graphics::Framebuffer& target) -> graphics::GraphicsPipelineDesc
   {
-    auto root_bindings = BuildVortexRootBindings();
+    auto root_bindings = vortex::internal::BuildVortexRootBindings();
     const auto alpha_blend = graphics::BlendTargetDesc {
       .blend_enable = true,
       .src_blend = graphics::BlendFactor::kSrcAlpha,
@@ -237,6 +175,12 @@ namespace {
     if (graphics::detail::IsHdr(target_color_desc.format)) {
       pixel_defines.push_back({ .name = "OXYGEN_HDR_OUTPUT", .value = "1" });
     }
+    // Depth-tested against reverse-Z scene depth, never written.
+    auto depth_state = graphics::DepthStencilStateDesc {};
+    depth_state.depth_test_enable = true;
+    depth_state.depth_write_enable = false;
+    depth_state.depth_func = graphics::CompareOp::kGreaterOrEqual;
+    depth_state.stencil_enable = false;
     return graphics::GraphicsPipelineDesc::Builder {}
     .SetVertexShader(graphics::ShaderRequest {
       .stage = ShaderType::kVertex,
@@ -251,14 +195,7 @@ namespace {
     })
     .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
     .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
-    .SetDepthStencilState(graphics::DepthStencilStateDesc {
-      .depth_test_enable = true,
-      .depth_write_enable = false,
-      .depth_func = graphics::CompareOp::kGreaterOrEqual,
-      .stencil_enable = false,
-      .stencil_read_mask = 0xFF,
-      .stencil_write_mask = 0xFF,
-    })
+    .SetDepthStencilState(depth_state)
     .SetBlendState({ alpha_blend })
     .SetFramebufferLayout(graphics::FramebufferLayoutDesc {
       .color_target_formats = {
@@ -327,10 +264,10 @@ auto GroundGridPass::Record(RenderContext& ctx,
   SetViewportAndScissor(recorder, ctx, scene_textures);
   recorder.SetPipelineState(
     BuildGroundGridPipelineDesc(scene_textures, *target));
-  if (ctx.view_constants != nullptr) {
+  if (ctx.view_constants.IsValid()) {
     recorder.SetGraphicsRootConstantBufferView(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-      ctx.view_constants->GetGPUVirtualAddress());
+      ctx.view_constants.GpuAddress());
   }
   const auto pass_constants_index = UpdatePassConstants(ctx, state.settling);
   recorder.SetGraphicsRoot32BitConstant(
@@ -387,8 +324,9 @@ auto GroundGridPass::ComputeInvViewProj(const RenderContext& ctx) const
   }
 
   const auto& view = ctx.current_view.resolved_view->ViewMatrix();
-  auto view_no_trans = view;
-  view_no_trans[3] = glm::vec4(0.0F, 0.0F, 0.0F, 1.0F);
+  // Camera-relative: the grid shader works around the view origin.
+  const auto view_no_trans
+    = glm::column(view, 3, glm::vec4(0.0F, 0.0F, 0.0F, 1.0F));
   const auto& proj = ctx.current_view.resolved_view->ProjectionMatrix();
   return glm::inverse(proj * view_no_trans);
 }
@@ -450,7 +388,7 @@ auto GroundGridPass::ComputeGridOffset(
       const double omega = 2.0 / smooth_time;
       const double x = omega * dt;
       const double exp = 1.0
-        / (1.0 + x + kCritDampCoeff1 * x * x + kCritDampCoeff2 * x * x * x);
+        / (1.0 + x + (kCritDampCoeff1 * x * x) + (kCritDampCoeff2 * x * x * x));
 
       glm::dvec2 target = snapped_grid_offset;
       target.x = smooth_state.grid_offset.x

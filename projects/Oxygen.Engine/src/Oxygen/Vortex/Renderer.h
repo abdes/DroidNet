@@ -95,7 +95,6 @@ class GpuTimelineProfiler;
 class ImGuiRuntime;
 class PreviousViewHistoryCache;
 class RigidTransformHistoryCache;
-class ViewConstantsManager;
 template <typename RendererT> class BasicRenderContextMaterializer;
 } // namespace oxygen::vortex::internal
 
@@ -944,7 +943,6 @@ private:
     60
   };
 
-  auto EnsureViewConstantsManager(Graphics& gfx) -> void;
   auto EnsureImGuiRuntime() -> internal::ImGuiRuntime*;
   OXGN_VRTX_API auto PopulateRenderContextViewState(
     RenderContext& render_context, engine::FrameContext& context,
@@ -976,8 +974,12 @@ private:
   [[nodiscard]] auto PublishCurrentViewHistoryFrameBindings(
     RenderContext& render_context, RendererPublicationState& publication_state)
     -> ShaderVisibleIndex;
-  auto WriteCurrentViewConstants(RenderContext& render_context, Graphics& gfx,
-    ShaderVisibleIndex view_frame_bindings_slot) -> void;
+  OXGN_VRTX_API auto WriteCurrentViewConstants(RenderContext& render_context,
+    Graphics& gfx, ShaderVisibleIndex view_frame_bindings_slot) -> void;
+  //! Write the current view constants as a new b1 record; earlier records
+  //! stay intact for work already recorded against them.
+  auto PublishViewConstantsRecord(RenderContext& render_context, Graphics& gfx)
+    -> void;
   auto RefreshCurrentViewFrameBindings(
     RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
   auto PublishCurrentViewPreSceneFrameBindings(RenderContext& render_context,
@@ -988,8 +990,7 @@ private:
   auto DetachPublishedRuntimeViewState(ViewId intent_view_id)
     -> DetachedPublishedRuntimeViewState;
   auto ReleasePooledRenderContext(frame::Slot slot) noexcept -> void;
-  auto WireContext(RenderContext& context,
-    const std::shared_ptr<graphics::Buffer>& view_constants) -> void;
+  auto WireContext(RenderContext& context) -> void;
   auto BeginStandaloneFrameExecution(const FrameSessionInput& session) -> void;
   auto InitializeStandaloneCurrentView(RenderContext& render_context,
     std::optional<ResolvedView>& current_resolved_view,
@@ -1026,7 +1027,6 @@ private:
   };
 
   ViewConstants view_const_cpu_;
-  std::unique_ptr<internal::ViewConstantsManager> view_const_manager_;
   std::unique_ptr<upload::UploadCoordinator> uploader_;
   std::shared_ptr<upload::StagingProvider> upload_staging_provider_;
   std::unique_ptr<upload::UploadCoordinator> graphics_uploader_;

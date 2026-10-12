@@ -10,9 +10,11 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <numbers>
+#include <optional>
 #include <span>
 #include <string>
 #include <utility>
@@ -23,6 +25,8 @@
 #include <glm/geometric.hpp>
 #include <glm/trigonometric.hpp>
 
+#include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Scene/Types/Flags.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
@@ -32,8 +36,11 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Console/Command.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
@@ -43,6 +50,8 @@
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
@@ -50,12 +59,16 @@
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
+// ON_CALL names the GetModuleByType mock this header declares.
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestEngine.h> // IWYU pragma: keep
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/Photometry.h>
 #include <Oxygen/Vortex/Test/Lighting/UnculledLightingFixture.h>
@@ -660,6 +673,85 @@ namespace {
         visibility, [](const float v) -> bool { return v < 0.5F; });
       EXPECT_GT(occluded, kSize * kSize / 128U);
     }
+  }
+
+  //! A caster's material world-position offset moves its shadow exactly as a
+  //! transform does: shadow depth positions meshes with the camera passes'
+  //! helper, including the offset, so both views rasterize the same geometry.
+  NOLINT_TEST_F(GrazingDirectionalShadowTest, WorldPositionOffsetMovesShadow)
+  {
+    SetSunDirection(60.0F, 0.0F);
+    AddBlocker(1.0F, 0.25F, 0.5F);
+    const auto rest = blocker.GetTransform().GetLocalPosition();
+    ASSERT_HAS_VALUE(rest);
+    constexpr auto kOffset = glm::vec3 { 0.2F, 0.0F, 0.0F };
+
+    std::vector<float> at_rest;
+    ASSERT_NO_FATAL_FAILURE(RenderVisibility(false, at_rest));
+    blocker.GetTransform().SetLocalPosition(*rest + kOffset);
+    std::vector<float> moved;
+    ASSERT_NO_FATAL_FAILURE(RenderVisibility(false, moved));
+    blocker.GetTransform().SetLocalPosition(*rest);
+
+    auto motion = scenesync::RuntimeMotionProducerModule {};
+    ON_CALL(*owned_test_engine_,
+      GetModuleByType(scenesync::RuntimeMotionProducerModule::ClassTypeId()))
+      .WillByDefault(::testing::Return(
+        std::optional<std::reference_wrapper<engine::EngineModule>> {
+          motion,
+        }));
+    motion.UpsertMaterialMotionInput(observer_ptr<const scene::Scene> {
+                                       scene.get(),
+                                     },
+      scenesync::RuntimeMaterialMotionInputState {
+        .key = scenesync::RuntimeMaterialMotionKey {
+          .node_handle = blocker.GetHandle(),
+          .geometry_asset_key
+          = blocker.GetRenderable().GetGeometry()->GetAssetKey(),
+          .lod_index = data::LodIndex { 0U },
+          .submesh_index = data::SubmeshIndex { 0U },
+        },
+        .resolved_material_asset_key = {},
+        .contract_hash = 1U,
+        .has_runtime_wpo_input = true,
+        .has_runtime_motion_vector_input = false,
+        .capabilities = { .uses_world_position_offset = true,
+          .uses_motion_vector_world_offset = true,
+          .uses_temporal_responsiveness = false,
+          .has_pixel_animation = false, },
+        .wpo_parameter_block0 = { kOffset.x, kOffset.y, kOffset.z, 0.0F },
+        .motion_vector_parameter_block0 = {},
+      });
+    auto publish_frame = engine::FrameContext {};
+    publish_frame.SetScene(observer_ptr { scene.get() });
+    publish_frame.SetCurrentPhase(
+      core::PhaseId::kPublishViews, engine::internal::EngineTagFactory::Get());
+    auto loop = co::testing::TestEventLoop {};
+    co::Run(loop, motion.OnPublishViews(observer_ptr { &publish_frame }));
+    std::vector<float> offset;
+    ASSERT_NO_FATAL_FAILURE(RenderVisibility(false, offset));
+    ON_CALL(*owned_test_engine_, GetModuleByType(::testing::_))
+      .WillByDefault(::testing::Return(std::nullopt));
+
+    const auto differ = [](const std::vector<float>& lhs,
+                          const std::vector<float>& rhs) -> std::ptrdiff_t {
+      constexpr float kTolerance = 0.05F;
+      auto count = std::ptrdiff_t { 0 };
+      for (std::size_t i = 0; i < lhs.size(); ++i) {
+        const bool lhs_lit = !std::isnan(lhs.at(i));
+        const bool rhs_lit = !std::isnan(rhs.at(i));
+        if (lhs_lit != rhs_lit
+          || (lhs_lit && std::abs(lhs.at(i) - rhs.at(i)) > kTolerance)) {
+          ++count;
+        }
+      }
+      return count;
+    };
+    // The offset must move the shadow; allow edge pixels where the two
+    // placements round differently.
+    constexpr auto kEdgePixels = std::ptrdiff_t { kSize * kSize / 512U };
+    ASSERT_GT(differ(at_rest, moved), kEdgePixels);
+    EXPECT_LE(differ(offset, moved), kEdgePixels);
   }
 
   //! Occlusion culling changes no shadowed pixel. A small caster sits between

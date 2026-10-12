@@ -88,6 +88,19 @@ public:
     //! Access the backing buffer.
     [[nodiscard]] auto Buffer() const noexcept -> auto& { return *buffer; }
 
+    //! Share ownership of the backing buffer, e.g. with a root-CBV binding
+    //! that must keep it alive while recorded work references it.
+    [[nodiscard]] auto SharedBuffer() const noexcept
+      -> std::shared_ptr<const graphics::Buffer>
+    {
+      return buffer;
+    }
+
+    //! The `sub_size` bytes starting `sub_offset` bytes into this
+    //! allocation.
+    OXGN_VRTX_NDAPI auto Subrange(
+      OffsetBytes sub_offset, SizeBytes sub_size) && -> Allocation;
+
     //! Keep the native backing alive through submission, discard or fault.
     OXGN_VRTX_API auto Attach(graphics::CommandRecorder& recorder) const
       -> void;
@@ -151,6 +164,16 @@ public:
   //! Allocate a persistently mapped upload region of at least 'size' bytes.
   virtual auto Allocate(SizeBytes size, std::string_view debug_name)
     -> std::expected<Allocation, UploadError> = 0;
+
+  //! Allocate `size` bytes whose buffer offset is a multiple of `alignment`.
+  /*!
+   Over-allocates by `alignment - 1` bytes and returns the aligned subrange,
+   so callers whose placement rule is stricter than the provider's own
+   alignment (structured-buffer strides, which need not be powers of two;
+   256-byte root-CBV records) can share one provider.
+  */
+  OXGN_VRTX_API auto AllocateAligned(SizeBytes size, std::uint64_t alignment,
+    std::string_view debug_name) -> std::expected<Allocation, UploadError>;
 
   //! Retire allocations whose GPU fence has completed (for recycling).
   virtual auto RetireCompleted(UploaderTag, FenceValue completed) -> void = 0;

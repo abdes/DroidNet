@@ -15,7 +15,7 @@
 #include "Vortex/Contracts/Draw/VelocityPublications.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
-#include "Vortex/Shared/MeshClipPosition.hlsli"
+#include "Vortex/Contracts/Draw/MeshPosition.hlsli"
 
 #define BX_VERTEX_TYPE Vertex
 #include "Core/Bindless/BindlessHelpers.hlsl"
@@ -89,15 +89,12 @@ ContactShadowCasterDepthVSOutput VortexContactShadowCasterDepthVS(
     const Vertex vertex
         = BX_LoadVertex(metadata.vertex_buffer_index, actual_vertex_index);
     output.uv = vertex.texcoord;
-    VelocityDrawMetadata velocity_metadata = MakeInvalidVelocityDrawMetadata();
-    LoadVelocityDrawMetadata(
-        draw_bindings.velocity_draw_metadata_slot, draw_index, velocity_metadata);
 
     const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
         draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot,
         metadata, instance_id);
     output.position = ComputeMeshClipPosition(world_matrix, vertex.position,
-        ResolveCurrentMaterialWpoOffset(draw_bindings, velocity_metadata),
+        ResolveDrawWorldOffset(draw_bindings, draw_index),
         pass_constants.view_matrix, pass_constants.projection_matrix);
     return output;
 }

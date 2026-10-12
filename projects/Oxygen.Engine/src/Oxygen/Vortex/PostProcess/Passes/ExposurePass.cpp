@@ -11,7 +11,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <expected>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -43,6 +42,7 @@
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
@@ -243,34 +243,36 @@ namespace {
 
   struct alignas(packing::kShaderDataFieldAlignment)
     AutoExposureAverageConstants {
-    std::uint32_t histogram_buffer_index;
-    std::uint32_t exposure_buffer_index;
-    float min_log_luminance;
-    float log_luminance_range;
-    float low_percentile;
-    float high_percentile;
-    float min_ev;
-    float log2_transition_distance;
-    float log2_speed_up;
-    float log2_speed_down;
-    float log2_delta_time;
-    std::uint32_t targets_srv;
-    std::array<std::uint32_t, 2> settings_revision;
-    std::array<std::uint32_t, 2> frame_sequence;
-    std::uint32_t previous_state_srv;
-    float fixed_scale;
-    std::uint32_t exposure_mode;
-    std::uint32_t control_flags;
-    std::array<std::uint32_t, 2> requested_generation;
-    std::uint32_t transition_policy;
-    float seed_log_gain;
-    std::uint32_t status_uav;
-    std::uint32_t borrowed_state_srv;
-    std::array<std::uint32_t, 2> view_lifetime;
-    std::uint32_t lighting_frame_slot;
+    std::uint32_t histogram_buffer_index {};
+    std::uint32_t exposure_buffer_index {};
+    float min_log_luminance {};
+    float log_luminance_range {};
+    float low_percentile {};
+    float high_percentile {};
+    float min_ev {};
+    float log2_transition_distance {};
+    float log2_speed_up {};
+    float log2_speed_down {};
+    float log2_delta_time {};
+    std::uint32_t targets_srv {};
+    std::array<std::uint32_t, 2> settings_revision {};
+    std::array<std::uint32_t, 2> frame_sequence {};
+    std::uint32_t previous_state_srv {};
+    float fixed_scale {};
+    std::uint32_t exposure_mode {};
+    std::uint32_t control_flags {};
+    std::array<std::uint32_t, 2> requested_generation {};
+    std::uint32_t transition_policy {};
+    float seed_log_gain {};
+    std::uint32_t status_uav {};
+    std::uint32_t borrowed_state_srv {};
+    std::array<std::uint32_t, 2> view_lifetime {};
+    std::uint32_t view_frame_bindings_slot {};
     std::array<std::uint32_t, 3> reserved {};
   };
 
+  // HLSL layout offsets; the bindless schema generates these in time.
+  // NOLINTBEGIN(*-magic-numbers)
   static_assert(sizeof(AutoExposureAverageConstants) == 128U);
   static_assert(
     offsetof(AutoExposureAverageConstants, previous_state_srv) == 64U);
@@ -281,6 +283,7 @@ namespace {
   static_assert(
     offsetof(AutoExposureAverageConstants, borrowed_state_srv) == 100U);
   static_assert(offsetof(AutoExposureAverageConstants, view_lifetime) == 104U);
+  // NOLINTEND(*-magic-numbers)
 
   struct alignas(packing::kShaderDataFieldAlignment) ExposureFrameConstants {
     std::uint32_t output_uav;
@@ -296,11 +299,13 @@ namespace {
     std::uint32_t current_state_srv;
     std::uint32_t status_uav;
   };
+  // NOLINTBEGIN(*-magic-numbers)
   static_assert(sizeof(ExposureFrameConstants) == 48U);
   static_assert(offsetof(ExposureFrameConstants, fixed_scale) == 16U);
   static_assert(offsetof(ExposureFrameConstants, flags) == 32U);
   static_assert(offsetof(ExposureFrameConstants, current_state_srv) == 40U);
   static_assert(offsetof(ExposureFrameConstants, status_uav) == 44U);
+  // NOLINTEND(*-magic-numbers)
 
   // Mirrors SuitabilityConstants in Exposure.hlsl; publish the same raw words.
   struct SuitabilityConstants {
@@ -2066,7 +2071,7 @@ auto ExposurePass::Execute(RenderContext& ctx,
 
 auto ExposurePass::RecordState(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const ResolvedPostProcessConfig& config,
-  const Inputs& inputs, StateLease previous, StateLease borrowed,
+  const Inputs& inputs, const StateLease& previous, const StateLease& borrowed,
   const bool bootstrap, const bool source_loss,
   std::shared_ptr<StateResources> reserved) -> StateLease
 {
@@ -2236,7 +2241,7 @@ auto ExposurePass::RecordState(RenderContext& ctx,
 }
 
 auto ExposurePass::PreserveRemovedSource(
-  std::shared_ptr<const ExposureSourceLoss> loss, const Source& source,
+  const std::shared_ptr<const ExposureSourceLoss>& loss, const Source& source,
   CompositionView::ViewStateHandle only_consumer) -> void
 {
   StateLease fallback;
@@ -2482,10 +2487,11 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
 {
   DCHECK_NOTNULL_F(average_constants_publisher_.get());
   const auto log_rate = [](const float value) -> float {
-    // -256 is outside log2 of every positive finite binary32 input.
+    // Outside log2 of every positive finite binary32 input.
+    constexpr float kNoRateLog2 = -256.0F;
     return std::isfinite(value) && value > 0.0F
       ? static_cast<float>(std::log2(static_cast<double>(value)))
-      : -256.0F;
+      : kNoRateLog2;
   };
   const auto& resolved = config.Exposure();
   const auto seed = inputs.transition
@@ -2563,7 +2569,7 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
     .borrowed_state_srv = borrowed_srv.get(),
     .view_lifetime = { static_cast<std::uint32_t>(view_lifetime),
       static_cast<std::uint32_t>(view_lifetime >> 32U), },
-    .lighting_frame_slot = ctx.current_view.lighting_frame_slot.get(),
+    .view_frame_bindings_slot = ctx.current_view.view_frame_bindings_slot.get(),
   };
 
   const auto slot

@@ -190,6 +190,14 @@ while an earlier frame may still read it
   read the binder's current index when they serialize or publish:
   MaterialBinder re-serializes a material whose texture indices changed, and
   per-frame bindings read the index each frame.
+- **Transient records.** Per-frame records (view constants, view-frame
+  bindings, pass inputs) are written once into the current frame partition of
+  a shared staging ring; a later write in the same frame takes a new range, so
+  work recorded against an earlier record keeps reading it.
+  `TransientStructuredBuffer` publishes such records as structured SRVs and
+  `TransientConstantBuffer` as root-CBV records bound by GPU address. Both
+  place records with `StagingProvider::AllocateAligned` (stride or 256-byte
+  placement) and recycle with the ring's frame slot.
 - **Retirement.** Releasing a shader-visible resource uses Graphics
   retirement, which unregisters views and releases the resource after the
   frames that could read it complete. Immediate unregistration is reserved for

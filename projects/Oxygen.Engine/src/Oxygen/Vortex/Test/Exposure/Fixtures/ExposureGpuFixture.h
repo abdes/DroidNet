@@ -15,6 +15,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -27,6 +28,7 @@
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ReadbackTypes.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Test/Fixtures/ReadbackTestFixture.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
@@ -189,6 +191,9 @@ protected:
       });
     return index;
   }
+  //! Serve the DXIL at `dxil_path` for `request` instead of the archive.
+  auto InstallProbeShader(
+    std::string_view dxil_path, const graphics::ShaderRequest& request) -> void;
   auto RunToneProbe(std::span<const std::byte> inputs_data,
     std::uint32_t record_count, std::uint32_t mode = 0U,
     bool capture_enabled = true,

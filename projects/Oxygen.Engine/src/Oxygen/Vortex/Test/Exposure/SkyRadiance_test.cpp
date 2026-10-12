@@ -19,22 +19,31 @@
 #include <utility>
 #include <vector>
 
+#include <combaseapi.h>
 #include <d3d12.h>
 #include <dxgiformat.h>
+#include <glm/ext/vector_float4.hpp>
 #include <glm/geometric.hpp>
+#include <winerror.h>
 #include <wrl/client.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/HalfFloat.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Internal/SubmissionFaultTestAccess.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -50,12 +59,17 @@
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereView.h>
 #include <Oxygen/Vortex/Environment/Internal/CapturedSkySource.h>
+#include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereMultiScatteringLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereTransmittanceLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/DistantSkyLightLutPass.h>
+#include <Oxygen/Vortex/Environment/Types/AtmosphereModel.h>
+#include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
 #include <Oxygen/Vortex/Environment/Types/IblProductMetadata.h>
+#include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
+#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -64,6 +78,7 @@
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
@@ -77,6 +92,14 @@ using graphics::FramebufferDesc;
 using graphics::FrameCaptureController;
 using graphics::ResourceStates;
 using graphics::Texture;
+
+namespace {
+  //! The components of an SH row, for bounds-checked access.
+  auto Components(const glm::vec4& value) -> std::array<float, 4>
+  {
+    return std::bit_cast<std::array<float, 4>>(value);
+  }
+} // namespace
 
 NOLINT_TEST_F(ExposureGpuTest,
   SceneSkyRadianceIsInvariantToNumericalDomainAndPreservesHighRange)
@@ -187,10 +210,10 @@ NOLINT_TEST_F(ExposureGpuTest,
           .delta_time_seconds = 0.0F, });
       facade.SetSceneSource({ .scene = observer_ptr {
                                 scene.get(),
-                              } });
+                              }, });
       facade.SetOutputTarget({ .framebuffer = observer_ptr {
                                  framebuffer.get(),
-                               } });
+                               }, });
       facade.SetViewIntent(input);
       auto session = facade.Finalize();
       if (!session.has_value()) {
@@ -254,7 +277,7 @@ NOLINT_TEST_F(ExposureGpuTest, DistantSkyRadiancePreservesLinearRange)
     },
     BufferUsage::kConstant);
   view_buffer->Update(&view_data, sizeof(view_data), 0U);
-  ctx_.view_constants = view_buffer;
+  ctx_.view_constants = { .buffer = view_buffer };
   auto stable = environment::internal::StableAtmosphereState {};
   stable.atmosphere_revision = 1;
   stable.view_products.atmosphere.enabled = true;
@@ -341,7 +364,7 @@ NOLINT_TEST_F(ExposureGpuTest, DistantSkyRadiancePreservesLinearRange)
       ++cases;
     }
   }
-  ctx_.view_constants.reset();
+  ctx_.view_constants = {};
   RecordProperty("distant_sky_range_cases", cases);
   WaitForQueueIdle();
 }
@@ -488,7 +511,7 @@ NOLINT_TEST_F(
     },
     BufferUsage::kConstant);
   view_buffer->Update(&view_data, sizeof(view_data), 0U);
-  ctx_.view_constants = view_buffer;
+  ctx_.view_constants = { .buffer = view_buffer };
   auto cache = environment::internal::AtmosphereLutCache(*renderer_);
   auto transmittance = environment::AtmosphereTransmittanceLutPass(*renderer_);
   auto scattering = environment::AtmosphereMultiScatteringLutPass(*renderer_);
@@ -642,7 +665,7 @@ NOLINT_TEST_F(
       .channel = channel,
     },
     tiny.at(brightest));
-  ctx_.view_constants.reset();
+  ctx_.view_constants = {};
   WaitForQueueIdle();
 }
 
@@ -725,7 +748,7 @@ NOLINT_TEST_F(ExposureGpuTest, SkyProducerPreservesThinBrightScattering)
     },
     BufferUsage::kConstant);
   view_buffer->Update(&view_data, sizeof(view_data), 0U);
-  ctx_.view_constants = view_buffer;
+  ctx_.view_constants = { .buffer = view_buffer };
   auto cache = environment::internal::AtmosphereLutCache(*renderer_);
   auto transmittance = environment::AtmosphereTransmittanceLutPass(*renderer_);
   auto multiple = environment::AtmosphereMultiScatteringLutPass(*renderer_);
@@ -869,7 +892,7 @@ NOLINT_TEST_F(ExposureGpuTest, SkyProducerPreservesThinBrightScattering)
   }
   RecordProperty("sky_scattering_endpoint_cases", cases);
   ctx_.current_view.frame_exposure.reset();
-  ctx_.view_constants.reset();
+  ctx_.view_constants = {};
   WaitForQueueIdle();
 }
 
@@ -969,12 +992,14 @@ NOLINT_TEST_F(
   view.viewport = { .width = 4.0F, .height = 4.0F };
   lens->SetViewport(view.viewport);
   ASSERT_TRUE(camera.AttachCamera(std::move(lens)));
-  auto output = CreateRegisteredTexture({ .width = 4U,
+  auto output = CreateRegisteredTexture({
+    .width = 4U,
     .height = 4U,
     .format = Format::kRGBA32Float,
     .is_shader_resource = true,
     .is_render_target = true,
-    .initial_state = ResourceStates::kCommon });
+    .initial_state = ResourceStates::kCommon,
+  });
   auto framebuffer = Backend().CreateFramebuffer(
     FramebufferDesc {}.AddColorAttachment(output));
   const auto capture = BeginOptionalCapture();
@@ -994,10 +1019,11 @@ NOLINT_TEST_F(
         input.SetViewStateHandle(CompositionView::ViewStateHandle { 8120U });
         input.SetWithAtmosphere(false).SetWithHeightFog(true);
         auto facade = renderer_->ForOffscreenScene();
-        facade.SetFrameSession(
-          { .frame_slot = frame::Slot { (sequence - 1U) % 3U },
-            .frame_sequence = frame::SequenceNumber { sequence },
-            .delta_time_seconds = 0.0F });
+        facade.SetFrameSession({
+          .frame_slot = frame::Slot { (sequence - 1U) % 3U },
+          .frame_sequence = frame::SequenceNumber { sequence },
+          .delta_time_seconds = 0.0F,
+        });
         facade.SetSceneSource({ .scene = observer_ptr { scene.get() } });
         facade.SetOutputTarget(
           { .framebuffer = observer_ptr { framebuffer.get() } });
@@ -1017,30 +1043,32 @@ NOLINT_TEST_F(
         const auto pixels = ReadFloatTexture(*product.texture, true);
         const auto expected = std::array { 0.1F, 0.2F, 0.3F };
         for (const auto& pixel : pixels) {
-          for (auto c = 0U; c < 3U; ++c)
-            EXPECT_NEAR(pixel[c],
-              main_pass ? expected[c] * domain.pre_exposure : 0.0F, 0.0005F);
-          if (display_background)
-            EXPECT_NEAR(pixel[3], main_pass ? 0.5F : 0.0F, 1.0e-5F);
+          for (auto c = 0U; c < 3U; ++c) {
+            EXPECT_NEAR(pixel.at(c),
+              main_pass ? expected.at(c) * domain.pre_exposure : 0.0F, 0.0005F);
+          }
+          if (display_background) {
+            EXPECT_NEAR(pixel.at(3), main_pass ? 0.5F : 0.0F, 1.0e-5F);
+          }
         }
         // Pixel (1, 0) has zero display dither. Background is authored in
         // display-linear space and must remain independent of camera exposure.
         const auto display = ReadFloatTexture(*output);
-        const auto srgb_to_linear = [](const float value) {
+        const auto srgb_to_linear = [](const float value) -> float {
           return value <= 0.04045F ? value / 12.92F
                                    : std::pow((value + 0.055F) / 1.055F, 2.4F);
         };
-        const auto linear_to_srgb = [](const float value) {
+        const auto linear_to_srgb = [](const float value) -> float {
           return value <= 0.0031308F
             ? 12.92F * value
-            : 1.055F * std::pow(value, 1.0F / 2.4F) - 0.055F;
+            : (1.055F * std::pow(value, 1.0F / 2.4F)) - 0.055F;
         };
         for (auto c = 0U; c < 3U; ++c) {
           const float coverage = main_pass ? 0.5F : 0.0F;
-          const float fog_display = 2.0F * expected[c] * std::exp2(-ev);
+          const float fog_display = 2.0F * expected.at(c) * std::exp2(-ev);
           const float composed = display_background
-            ? linear_to_srgb(coverage * srgb_to_linear(fog_display)
-                + (1.0F - coverage) * expected[c])
+            ? linear_to_srgb((coverage * srgb_to_linear(fog_display))
+                + ((1.0F - coverage) * expected.at(c)))
             : coverage * fog_display;
           EXPECT_NEAR(display.at(1).at(c), composed, 0.0005F)
             << "EV=" << ev << " background=" << display_background
@@ -1049,8 +1077,9 @@ NOLINT_TEST_F(
       }
     }
   }
-  if (capture)
+  if (capture) {
     EXPECT_TRUE(capture->EndCapture());
+  }
   FlushBackend();
 }
 
@@ -1077,7 +1106,7 @@ NOLINT_TEST_F(
   atmosphere.sun_disk_enabled = true;
   state.view_products.atmosphere_light_count = 2U;
   for (unsigned i = 0U; i < 2U; ++i) {
-    auto& light = state.view_products.atmosphere_lights[i];
+    auto& light = state.view_products.atmosphere_lights.at(i);
     light.direction_to_light_ws
       = glm::normalize(glm::vec3(i == 0U ? 1.0F : -1.0F, 0.0F, 1.0F));
     light.illuminance_rgb_lux = glm::vec3(1000.0F);
@@ -1085,7 +1114,7 @@ NOLINT_TEST_F(
   }
   ctx_.current_view.with_atmosphere = false;
   ctx_.current_view.view_id = kInvalidViewId;
-  ctx_.view_constants.reset();
+  ctx_.view_constants = {};
   ctx_.frame_sequence = frame::SequenceNumber { 1U };
   ctx_.frame_slot = frame::Slot { 0U };
   FailureBackend().fail_recorder_name
@@ -1097,12 +1126,12 @@ NOLINT_TEST_F(
   EXPECT_EQ(failed.error(), env::IblProcessError::kRecordingFailed);
   EXPECT_EQ(processor.GetStats().storage_creations, 0U);
   unsigned sequence = 0U;
-  const auto produce = [&](bool first, bool second) {
+  const auto produce = [&](bool first, bool second) -> auto {
     ctx_.frame_sequence = frame::SequenceNumber { ++sequence };
     ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
     state.light_revision = sequence;
-    state.view_products.atmosphere_lights[0].enabled = first;
-    state.view_products.atmosphere_lights[1].enabled = second;
+    state.view_products.atmosphere_lights.at(0).enabled = first;
+    state.view_products.atmosphere_lights.at(1).enabled = second;
     const auto products = source->Process(ctx_, state, {}, processor, *brdf,
       { .face_size = 128U, .lower_hemisphere_solid_color = false }, sequence);
     CHECK_F(products.has_value());
@@ -1112,9 +1141,10 @@ NOLINT_TEST_F(
   auto secondary = produce(false, true);
   const auto capture = BeginOptionalCapture();
   const auto combined = produce(true, true);
-  if (capture)
+  if (capture) {
     EXPECT_TRUE(capture->EndCapture());
-  const auto read_sh = [&](const auto& product) {
+  }
+  const auto read_sh = [&](const auto& product) -> auto {
     const auto metadata = Read<environment::IblProductMetadata>(
       *product->metadata, ResourceStates::kShaderResource);
     EXPECT_EQ(metadata.processing_flags, 3U);
@@ -1133,16 +1163,22 @@ NOLINT_TEST_F(
   secondary.reset();
   // Atmospheric transport and SH are linear in incident illuminance. Both
   // native slots must contribute without a role-None fallback or disk energy.
-  for (unsigned row = 0U; row < 8U; ++row)
+  for (unsigned row = 0U; row < 8U; ++row) {
+    const auto first = Components(sh0.at(row));
+    const auto second = Components(sh1.at(row));
+    const auto sum = Components(sh_sum.at(row));
     for (unsigned c = 0U; c < (row == 6U ? 3U : 4U); ++c) {
-      const float expected = sh0[row][c] + sh1[row][c];
+      const float expected = first.at(c) + second.at(c);
       EXPECT_NEAR(
-        sh_sum[row][c], expected, 0.002F * std::max(1.0F, std::abs(expected)));
+        sum.at(c), expected, 0.002F * std::max(1.0F, std::abs(expected)));
     }
+  }
 
   auto bindings = ViewFrameBindings {};
   bindings.frame_exposure_slot = PublishFixtureData(FrameExposureData {
-    .pre_exposure = 0.125F, .one_over_pre_exposure = 8.0F });
+    .pre_exposure = 0.125F,
+    .one_over_pre_exposure = 8.0F,
+  });
   auto view = ViewConstants::GpuData {};
   view.camera_position = { 1234.0F, -5678.0F, 9000.0F };
   view.view_matrix = glm::mat4(2.0F);
@@ -1152,7 +1188,7 @@ NOLINT_TEST_F(
   auto camera_buffer
     = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
   camera_buffer->Update(&view, sizeof(view), 0U);
-  ctx_.view_constants = camera_buffer;
+  ctx_.view_constants = { .buffer = camera_buffer };
   ctx_.current_view.view_id = ViewId { 999U };
   ctx_.current_view.with_atmosphere = true;
   ctx_.current_view.hdr_color_format = Format::kRGBA16Float;
@@ -1180,36 +1216,41 @@ NOLINT_TEST_F(
   const auto clear_pixels = ReadFloatTexture(*combined->processed_cube, true);
   const auto fog_pixels = ReadFloatTexture(*(*fogged)->processed_cube, true);
   ASSERT_EQ(clear_pixels.size(), fog_pixels.size());
-  for (std::size_t i = 0U; i < clear_pixels.size(); ++i)
+  for (std::size_t i = 0U; i < clear_pixels.size(); ++i) {
     for (unsigned c = 0U; c < 3U; ++c) {
-      const auto expected
-        = 0.5F * (clear_pixels[i][c] + fog.fog_inscattering_luminance_rgb[c]);
+      const auto expected = 0.5F
+        * (clear_pixels.at(i).at(c) + fog.fog_inscattering_luminance_rgb.at(c));
       EXPECT_NEAR(
-        fog_pixels[i][c], expected, 0.002F * std::max(1.0F, expected));
+        fog_pixels.at(i).at(c), expected, 0.002F * std::max(1.0F, expected));
     }
+  }
   // Submit once more, then release the source without a readback or queue
   // wait. LUT constants/descriptors must survive their CPU pass owners.
   ctx_.frame_sequence = frame::SequenceNumber { ++sequence };
   ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
   state.light_revision = sequence;
-  state.view_products.atmosphere_lights[0].illuminance_rgb_lux *= 2.0F;
-  state.view_products.atmosphere_lights[1].illuminance_rgb_lux *= 2.0F;
+  state.view_products.atmosphere_lights.at(0).illuminance_rgb_lux *= 2.0F;
+  state.view_products.atmosphere_lights.at(1).illuminance_rgb_lux *= 2.0F;
   auto final = source->Process(ctx_, state, {}, processor, *brdf,
     { .face_size = 128U, .lower_hemisphere_solid_color = false }, sequence);
   ASSERT_TRUE(final.has_value());
   source.reset();
   const auto final_sh = read_sh(*final);
-  for (unsigned row = 0U; row < 8U; ++row)
-    for (unsigned c = 0U; c < (row == 6U ? 3U : 4U); ++c)
-      EXPECT_NEAR(final_sh[row][c], 2.0F * sh_sum[row][c],
-        0.002F * std::max(1.0F, std::abs(2.0F * sh_sum[row][c])));
+  for (unsigned row = 0U; row < 8U; ++row) {
+    const auto doubled = Components(final_sh.at(row));
+    const auto sum = Components(sh_sum.at(row));
+    for (unsigned c = 0U; c < (row == 6U ? 3U : 4U); ++c) {
+      EXPECT_NEAR(doubled.at(c), 2.0F * sum.at(c),
+        0.002F * std::max(1.0F, std::abs(2.0F * sum.at(c))));
+    }
+  }
   const auto retained_primary = Read<std::array<glm::vec4, 8>>(
     *primary_capture->DiffuseSh(), ResourceStates::kShaderResource);
   const auto retained_secondary = Read<std::array<glm::vec4, 8>>(
     *secondary_capture->DiffuseSh(), ResourceStates::kShaderResource);
   EXPECT_EQ(retained_primary, sh0);
   EXPECT_EQ(retained_secondary, sh1);
-  ctx_.view_constants.reset();
+  ctx_.view_constants = {};
   FlushBackend();
 }
 
@@ -1325,8 +1366,10 @@ NOLINT_TEST_F(
   using graphics::internal::SubmissionFaultTestAccess;
   auto scene = std::make_shared<scene::Scene>("IBL scheduler faults", 8U);
   ctx_.scene = observer_ptr { scene.get() };
-  for (const auto point : { SubmissionFailurePoint::kBeforeIssue,
-         SubmissionFailurePoint::kAfterIssueBeforeMarker }) {
+  for (const auto point : {
+         SubmissionFailurePoint::kBeforeIssue,
+         SubmissionFailurePoint::kAfterIssueBeforeMarker,
+       }) {
     const bool benign = point == SubmissionFailurePoint::kBeforeIssue;
     SCOPED_TRACE(benign);
     auto processor = env::IblProcessor(*renderer_);
@@ -1343,7 +1386,7 @@ NOLINT_TEST_F(
       | kGpuFogFlagVisibleInRealTimeSkyCaptures;
     fog.primary_density = 0.01F;
     fog.fog_inscattering_luminance_rgb = { 1, 1, 1 };
-    const auto refresh = [&](unsigned sequence) {
+    const auto refresh = [&](unsigned sequence) -> auto {
       ctx_.frame_sequence = frame::SequenceNumber { sequence };
       ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
       return processor.RefreshSkyLightProducts({}, ctx_, state, fog, {});
@@ -1363,7 +1406,7 @@ NOLINT_TEST_F(
     SubmissionFaultTestAccess::FailNext(*GetQueue(), point);
     const auto backend = Backend().GetBackendLifetime();
     const ScopeGuard restore(
-      [backend]() noexcept { backend->ClearSubmissionFault(); });
+      [backend] noexcept -> void { backend->ClearSubmissionFault(); });
     const auto failed = refresh(3U);
     EXPECT_EQ(failed.probe_state.valid, benign);
     EXPECT_EQ(failed.probe_state.static_sky_light.unavailable_reason,
@@ -1395,12 +1438,14 @@ NOLINT_TEST_F(
       continue;
     }
     EXPECT_EQ(processor.GetPublishedProducts(), original);
-    for (unsigned sequence = 4U; sequence <= 7U; ++sequence)
+    for (unsigned sequence = 4U; sequence <= 7U; ++sequence) {
       EXPECT_TRUE(refresh(sequence).probe_state.valid);
+    }
     EXPECT_NE(processor.GetPublishedProducts(), original);
     EXPECT_NEAR(
       ReadFloatTexture(*processor.GetPublishedProducts()->processed_cube, true)
-        .front()[0],
+        .front()
+        .at(0),
       2.0F, 0.001F);
     height_fog.fog_inscattering_luminance = glm::vec3(4.0F);
     fog.fog_inscattering_luminance_rgb = { 4, 4, 4 };
@@ -1413,7 +1458,8 @@ NOLINT_TEST_F(
     EXPECT_TRUE(refresh(9U).refreshed);
     EXPECT_NEAR(
       ReadFloatTexture(*processor.GetPublishedProducts()->processed_cube, true)
-        .front()[0],
+        .front()
+        .at(0),
       4.0F, 0.001F);
     WaitForQueueIdle();
   }
@@ -1439,7 +1485,7 @@ NOLINT_TEST_F(
     | kGpuFogFlagVisibleInRealTimeSkyCaptures;
   fog.primary_density = 0.01F;
   fog.fog_inscattering_luminance_rgb = { 1, 1, 1 };
-  const auto refresh = [&](unsigned sequence) {
+  const auto refresh = [&](unsigned sequence) -> auto {
     ctx_.frame_sequence = frame::SequenceNumber { sequence };
     ctx_.frame_slot = frame::Slot { (sequence - 1U) % 3U };
     return processor.RefreshSkyLightProducts({}, ctx_, state, fog, {});
@@ -1468,11 +1514,11 @@ NOLINT_TEST_F(
   WaitForQueueIdle();
   profiler.OnFrameStart(frame::SequenceNumber { 4U });
   const auto invalid = profiler.GetLastPublishedFrame();
-  ASSERT_TRUE(invalid);
+  ASSERT_HAS_VALUE(invalid);
   EXPECT_EQ(invalid->frame_sequence, 3U);
   EXPECT_FALSE(invalid->profiling_enabled);
   EXPECT_TRUE(std::ranges::none_of(
-    invalid->scopes, [](const auto& scope) { return scope.valid; }));
+    invalid->scopes, [](const auto& scope) -> bool { return scope.valid; }));
   profiler.OnFrameRecordTailResolve();
   WaitForQueueIdle();
 }
@@ -1498,7 +1544,7 @@ NOLINT_TEST_F(
   state.atmosphere_revision = 1U;
   state.view_products.atmosphere_light_count = 2U;
   for (unsigned index = 0U; index < 2U; ++index) {
-    auto& light = state.view_products.atmosphere_lights[index];
+    auto& light = state.view_products.atmosphere_lights.at(index);
     light.enabled = true;
     light.direction_to_light_ws
       = glm::normalize(glm::vec3(index == 0U ? 1.0F : -1.0F, 0, 1));
@@ -1516,40 +1562,45 @@ NOLINT_TEST_F(
   unsigned sequence = 0U;
   env::IblProcessor::RefreshState last;
   std::uint32_t revision = 0U;
-  const auto submit =
-    [&](bool authoring,
-      const std::shared_ptr<graphics::GpuBufferReadback>& readback = {}) {
-      const auto number = frame::SequenceNumber { ++sequence };
-      const auto slot
-        = frame::Slot { (sequence - 1U) % frame::kFramesInFlight.get() };
-      Backend().BeginFrame(number, slot);
-      const ScopeGuard end_frame(
-        [&]() noexcept { Backend().EndFrame(number, slot); });
-      ctx_.frame_sequence = number;
-      ctx_.frame_slot = slot;
-      static_cast<void>(processor.OnFrameStart(ctx_.frame_sequence));
-      height_fog.fog_inscattering_luminance = glm::vec3(float(sequence));
-      fog.fog_inscattering_luminance_rgb
-        = { float(sequence), float(sequence), float(sequence) };
-      if (authoring)
-        ++state.authoring_revision;
-      last = processor.RefreshSkyLightProducts({}, ctx_, state, fog, {});
-      ASSERT_TRUE(last.probe_state.valid);
-      const auto product = processor.GetPublishedProducts();
-      ASSERT_TRUE(product);
-      revision = product->revision;
-      if (readback) {
-        auto reader = AcquireRecorder("IBL queued scene consumer",
-          graphics::QueueRole::kGraphics,
-          graphics::SubmissionPolicy::kExplicit);
-        ASSERT_TRUE(product->Attach(*reader, Backend().GetResourceRegistry()));
-        ASSERT_TRUE(readback->EnqueueCopy(*reader, *product->metadata,
-          { 0U, sizeof(environment::IblProductMetadata) }));
-        reader->RequireResourceStateFinal(
-          *product->metadata, ResourceStates::kShaderResource);
-        ASSERT_TRUE(reader.Submit());
-      }
+  const auto submit
+    = [&](bool authoring,
+        const std::shared_ptr<graphics::GpuBufferReadback>& readback
+        = {}) -> void {
+    const auto number = frame::SequenceNumber { ++sequence };
+    const auto slot
+      = frame::Slot { (sequence - 1U) % frame::kFramesInFlight.get() };
+    Backend().BeginFrame(number, slot);
+    const ScopeGuard end_frame(
+      [&] noexcept -> void { Backend().EndFrame(number, slot); });
+    ctx_.frame_sequence = number;
+    ctx_.frame_slot = slot;
+    static_cast<void>(processor.OnFrameStart(ctx_.frame_sequence));
+    height_fog.fog_inscattering_luminance
+      = glm::vec3(static_cast<float>(sequence));
+    fog.fog_inscattering_luminance_rgb = {
+      static_cast<float>(sequence),
+      static_cast<float>(sequence),
+      static_cast<float>(sequence),
     };
+    if (authoring) {
+      ++state.authoring_revision;
+    }
+    last = processor.RefreshSkyLightProducts({}, ctx_, state, fog, {});
+    ASSERT_TRUE(last.probe_state.valid);
+    const auto product = processor.GetPublishedProducts();
+    ASSERT_TRUE(product);
+    revision = product->revision;
+    if (readback) {
+      auto reader = AcquireRecorder("IBL queued scene consumer",
+        graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
+      ASSERT_TRUE(product->Attach(*reader, Backend().GetResourceRegistry()));
+      ASSERT_TRUE(readback->EnqueueCopy(*reader, *product->metadata,
+        { 0U, sizeof(environment::IblProductMetadata) }));
+      reader->RequireResourceStateFinal(
+        *product->metadata, ResourceStates::kShaderResource);
+      ASSERT_TRUE(reader.Submit());
+    }
+  };
   ASSERT_NO_FATAL_FAILURE(submit(true));
   auto first = processor.AcquireCapture(processor.GetPublishedProducts());
   ASSERT_TRUE(first);
@@ -1569,23 +1620,29 @@ NOLINT_TEST_F(
     std::array<std::shared_ptr<graphics::GpuBufferReadback>,
       frame::kFramesInFlight.get()>
       readbacks;
-    std::array<std::uint32_t, frame::kFramesInFlight.get()> expected;
-    for (auto& readback : readbacks)
+    std::array<std::uint32_t, frame::kFramesInFlight.get()> expected {};
+    for (auto& readback : readbacks) {
       readback = GetReadbackManager()->CreateBufferReadback(
         "IBL in-flight generation");
+    }
     Microsoft::WRL::ComPtr<ID3D12Fence> gate;
     ASSERT_TRUE(SUCCEEDED(Backend().GetCurrentDevice()->CreateFence(
       0U, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gate.GetAddressOf()))));
     const ScopeGuard release_gate(
-      [gate]() noexcept { static_cast<void>(gate->Signal(1U)); });
-    auto* queue = static_cast<graphics::d3d12::CommandQueue*>(GetQueue().get());
+      [gate] noexcept -> void { static_cast<void>(gate->Signal(1U)); });
+    // Oxygen builds without RTTI; the fixture always runs the D3D12 backend.
+    // NOLINTBEGIN(cppcoreguidelines-pro-type-static-cast-downcast)
+    const auto queue = observer_ptr {
+      static_cast<graphics::d3d12::CommandQueue*>(GetQueue().get()),
+    };
+    // NOLINTEND(cppcoreguidelines-pro-type-static-cast-downcast)
     const auto completed_before = queue->GetCompletedValue();
     ASSERT_TRUE(SUCCEEDED(queue->GetCommandQueue()->Wait(gate.Get(), 1U)));
     const auto previous = revision;
     for (unsigned flight = 0U; flight < frame::kFramesInFlight.get();
       ++flight) {
-      ASSERT_NO_FATAL_FAILURE(submit(flight != 0U, readbacks[flight]));
-      expected[flight] = revision;
+      ASSERT_NO_FATAL_FAILURE(submit(flight != 0U, readbacks.at(flight)));
+      expected.at(flight) = revision;
       EXPECT_EQ(last.refreshed, flight != 0U);
       EXPECT_EQ(revision, flight == 0U ? previous : previous + flight + 1U);
     }
@@ -1598,11 +1655,11 @@ NOLINT_TEST_F(
     ASSERT_TRUE(SUCCEEDED(gate->Signal(1U)));
     WaitForQueueIdle();
     for (unsigned flight = 0U; flight < readbacks.size(); ++flight) {
-      auto mapped = readbacks[flight]->MapNow();
+      auto mapped = readbacks.at(flight)->MapNow();
       ASSERT_TRUE(mapped);
       environment::IblProductMetadata metadata;
       std::memcpy(&metadata, mapped->Bytes().data(), sizeof(metadata));
-      EXPECT_EQ(metadata.product_revision, expected[flight]);
+      EXPECT_EQ(metadata.product_revision, expected.at(flight));
       EXPECT_EQ(metadata.processing_flags, 3U);
     }
     readbacks = {};
@@ -1655,7 +1712,7 @@ NOLINT_TEST_F(
   state.atmosphere_revision = 1U;
   state.view_products.atmosphere.enabled = true;
   state.view_products.atmosphere_light_count = 1U;
-  auto& light = state.view_products.atmosphere_lights[0];
+  auto& light = state.view_products.atmosphere_lights.at(0);
   light.enabled = true;
   light.direction_to_light_ws = glm::normalize(glm::vec3(1.0F, 0.0F, 1.0F));
   light.illuminance_rgb_lux = glm::vec3(1000.0F);
@@ -1665,14 +1722,16 @@ NOLINT_TEST_F(
     = env::ResolveSkyCaptureOrigin(state.view_products.atmosphere);
   const auto view
     = env::BuildAtmosphereViewData(state, quality, anchor, true, true);
-  auto captured = Backend().CreateTexture({ .width = quality.sky_view_width,
+  auto captured = Backend().CreateTexture({
+    .width = quality.sky_view_width,
     .height = quality.sky_view_height,
     .format = Format::kRGBA32Float,
     .texture_type = TextureType::kTexture2D,
     .debug_name = "Capture parity reference",
     .is_shader_resource = true,
     .is_uav = true,
-    .initial_state = ResourceStates::kCommon });
+    .initial_state = ResourceStates::kCommon,
+  });
   auto registration = Backend().GetResourceRegistry().RegisterManaged(captured);
   ASSERT_TRUE(registration.has_value());
   unsigned sequence = 0U;
@@ -1684,27 +1743,30 @@ NOLINT_TEST_F(
     multiple.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
     sky.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
     auto bindings = ViewFrameBindings {};
-    bindings.frame_exposure_slot
-      = PublishFixtureData(FrameExposureData { .pre_exposure = pre_exposure,
-        .one_over_pre_exposure = 1.0F / pre_exposure });
+    bindings.frame_exposure_slot = PublishFixtureData(FrameExposureData {
+      .pre_exposure = pre_exposure,
+      .one_over_pre_exposure = 1.0F / pre_exposure,
+    });
     auto data = ViewConstants::GpuData {};
     data.view_frame_bindings_bslot
       = BindlessViewFrameBindingsSlot { PublishFixtureData(bindings) };
     auto camera_buffer
       = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
     camera_buffer->Update(&data, sizeof(data), 0U);
-    ctx_.view_constants = camera_buffer;
-    if (cache.NeedsTransmittanceBuild())
+    ctx_.view_constants = { .buffer = camera_buffer };
+    if (cache.NeedsTransmittanceBuild()) {
       ASSERT_TRUE(transmittance.Record(ctx_, state, cache).executed);
-    if (cache.NeedsMultiScatteringBuild())
+    }
+    if (cache.NeedsMultiScatteringBuild()) {
       ASSERT_TRUE(multiple.Record(ctx_, state, cache).executed);
+    }
     const auto visible = SubmitCommands(
-      "Sky LUT parity", [&](graphics::CommandRecorder& recorder) {
+      "Sky LUT parity", [&](graphics::CommandRecorder& recorder) -> auto {
         return sky.Record(ctx_, recorder, view, state, cache);
       });
     ASSERT_TRUE(visible.executed);
     const auto capture = SubmitCommands(
-      "Capture LUT parity", [&](graphics::CommandRecorder& recorder) {
+      "Capture LUT parity", [&](graphics::CommandRecorder& recorder) -> auto {
         return sky.RecordCapture(
           ctx_, recorder, view, state, cache, captured, *registration);
       });
@@ -1712,14 +1774,15 @@ NOLINT_TEST_F(
     const auto a = ReadFloatTexture(*visible.texture);
     const auto b = ReadFloatTexture(*capture.texture);
     ASSERT_EQ(a.size(), b.size());
-    for (std::size_t i = 0U; i < a.size(); ++i)
+    for (std::size_t i = 0U; i < a.size(); ++i) {
       for (unsigned c = 0U; c < 4U; ++c) {
-        const float expected = b[i][c] * (c == 3U ? 1.0F : pre_exposure);
-        EXPECT_NEAR(
-          a[i][c], expected, std::max(1.0e-7F, std::abs(expected) * 2.0e-5F));
+        const float expected = b.at(i).at(c) * (c == 3U ? 1.0F : pre_exposure);
+        EXPECT_NEAR(a.at(i).at(c), expected,
+          std::max(1.0e-7F, std::abs(expected) * 2.0e-5F));
       }
+    }
   }
-  ctx_.view_constants.reset();
+  ctx_.view_constants = {};
   FlushBackend();
 }
 
@@ -1732,10 +1795,11 @@ NOLINT_TEST(
   atmosphere.planet_radius_m = 1000.0F;
   atmosphere.planet_anchor_position_ws = { 10.0F, 20.0F, 30.0F };
   for (const auto mode :
-    { environment::AtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin,
+    {
+      environment::AtmosphereTransformMode::kPlanetTopAtAbsoluteWorldOrigin,
       environment::AtmosphereTransformMode::kPlanetTopAtComponentTransform,
-      environment::AtmosphereTransformMode::
-        kPlanetCenterAtComponentTransform }) {
+      environment::AtmosphereTransformMode::kPlanetCenterAtComponentTransform,
+    }) {
     atmosphere.transform_mode = mode;
     const auto origin = env::ResolveSkyCaptureOrigin(atmosphere);
     const auto expected = mode

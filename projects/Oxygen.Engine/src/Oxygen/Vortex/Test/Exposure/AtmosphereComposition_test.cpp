@@ -38,7 +38,6 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -118,7 +117,7 @@ namespace {
     {
       WaitForQueueIdle();
       ctx_.scene.reset();
-      ctx_.view_constants.reset();
+      ctx_.view_constants = {};
       fog_.reset();
       sky_.reset();
       ap_.reset();
@@ -209,7 +208,7 @@ namespace {
       auto constants = CreateUploadBuffer(
         SizeBytes { 256U }, graphics::BufferUsage::kConstant);
       constants->Update(&view, sizeof(view), 0U);
-      ctx_.view_constants = constants;
+      ctx_.view_constants = { .buffer = constants };
     }
 
     //! Writes the case's color and depth by copy: clears could only use the

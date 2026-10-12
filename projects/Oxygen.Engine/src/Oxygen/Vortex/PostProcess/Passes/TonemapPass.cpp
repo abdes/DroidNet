@@ -9,7 +9,6 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <span>
 #include <vector>
@@ -27,9 +26,9 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PostProcess/Passes/TonemapPass.h>
@@ -55,7 +54,7 @@ namespace {
     std::uint32_t background_enabled {};
     std::uint32_t fallback_texture_index {};
     std::uint32_t conversion_report_index {};
-    std::uint32_t lighting_frame_slot {};
+    std::uint32_t view_frame_bindings_slot {};
     float saturation {};
     float contrast {};
     float vignette_intensity {};
@@ -64,7 +63,7 @@ namespace {
     std::array<float, 4> content_uv_rect {};
   };
 
-  // Mirrors the HLSL constant layout: grading follows the lighting slot and
+  // Mirrors the HLSL constant layout: grading follows the view record slot and
   // the content rectangle starts the last 16-byte row.
   constexpr std::size_t kWord = sizeof(std::uint32_t);
   constexpr std::size_t kRow = 4U * kWord;
@@ -76,70 +75,9 @@ namespace {
   static_assert(offsetof(TonemapPassConstants, conversion_report_index)
     == (3U * kRow) + kWord);
   static_assert(offsetof(TonemapPassConstants, saturation)
-    == offsetof(TonemapPassConstants, lighting_frame_slot) + kWord);
+    == offsetof(TonemapPassConstants, view_frame_bindings_slot) + kWord);
   static_assert(
     offsetof(TonemapPassConstants, content_uv_rect) == kContentRectRow * kRow);
-
-  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-    -> graphics::ResourceViewType
-  {
-    using graphics::ResourceViewType;
-
-    switch (type) {
-    case bindless_d3d12::RangeType::SRV:
-      return ResourceViewType::kRawBuffer_SRV;
-    case bindless_d3d12::RangeType::Sampler:
-      return ResourceViewType::kSampler;
-    case bindless_d3d12::RangeType::UAV:
-      return ResourceViewType::kRawBuffer_UAV;
-    default:
-      return ResourceViewType::kNone;
-    }
-  }
-
-  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-  {
-    std::vector<graphics::RootBindingItem> bindings;
-    bindings.reserve(bindless_d3d12::kRootParamTableCount);
-
-    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-      ++index) {
-      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-      graphics::RootBindingDesc binding {};
-      binding.binding_slot_desc.register_index = desc.shader_register;
-      binding.binding_slot_desc.register_space = desc.register_space;
-      binding.visibility = graphics::ShaderStageFlags::kAll;
-
-      switch (desc.kind) {
-      case bindless_d3d12::RootParamKind::DescriptorTable: {
-        graphics::DescriptorTableBinding table {};
-        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-          const auto& range = desc.ranges.front();
-          table.view_type = RangeTypeToViewType(
-            static_cast<bindless_d3d12::RangeType>(range.range_type));
-          table.base_index = range.base_register;
-          table.count
-            = range.num_descriptors == std::numeric_limits<std::uint32_t>::max()
-            ? std::numeric_limits<std::uint32_t>::max()
-            : range.num_descriptors;
-        }
-        binding.data = table;
-        break;
-      }
-      case bindless_d3d12::RootParamKind::CBV:
-        binding.data = graphics::DirectBufferBinding {};
-        break;
-      case bindless_d3d12::RootParamKind::RootConstants:
-        binding.data
-          = graphics::PushConstantsBinding { .size = desc.constants_count };
-        break;
-      }
-
-      bindings.emplace_back(binding);
-    }
-
-    return bindings;
-  }
 
   auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
     const graphics::Texture& texture) -> void
@@ -218,7 +156,7 @@ namespace {
     const auto& target_desc = target.GetDescriptor()
                                 .color_attachments.front()
                                 .texture->GetDescriptor();
-    auto root_bindings = BuildVortexRootBindings();
+    auto root_bindings = vortex::internal::BuildVortexRootBindings();
     return graphics::GraphicsPipelineDesc::Builder {}
       .SetVertexShader(graphics::ShaderRequest {
         .stage = ShaderType::kVertex,
@@ -372,7 +310,7 @@ auto TonemapPass::UpdatePassConstants(RenderContext& ctx, const Inputs& inputs)
     .background_enabled = inputs.background_color.has_value() ? 1U : 0U,
     .fallback_texture_index = inputs.scene_fallback_srv.get(),
     .conversion_report_index = inputs.conversion_report_srv.get(),
-    .lighting_frame_slot = ctx.current_view.lighting_frame_slot.get(),
+    .view_frame_bindings_slot = ctx.current_view.view_frame_bindings_slot.get(),
     .saturation = std::max(inputs.saturation, 0.0F),
     .contrast = std::max(inputs.contrast, 0.0F),
     .vignette_intensity = std::clamp(inputs.vignette_intensity, 0.0F, 1.0F),

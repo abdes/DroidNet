@@ -16,30 +16,38 @@
 #include <utility>
 #include <vector>
 
-#include <glm/mat4x4.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <glm/matrix.hpp>
-#include <glm/vec4.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/TextureType.h>
-#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/ReadbackErrors.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Passes/RenderPass.h>
 #include <Oxygen/Vortex/Passes/ViewPickPass.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Types/AcceptedDrawView.h>
+#include <Oxygen/Vortex/Types/PassMask.h>
+#include <Oxygen/Vortex/Types/ViewPick.h>
 
 namespace oxygen::vortex {
 
@@ -133,7 +141,7 @@ auto ViewPickPass::Record(RenderContext& ctx,
   if (request == nullptr) {
     return;
   }
-  const auto fail = [&request]() -> void {
+  const auto fail = [&request] -> void {
     request->Complete(ViewPickResult {
       .status = ViewPickResult::Status::kFailed,
       .hits = {},
@@ -145,7 +153,7 @@ auto ViewPickPass::Record(RenderContext& ctx,
   const auto readbacks = gfx ? gfx->GetReadbackManager() : nullptr;
   const auto* resolved_view = ctx.current_view.resolved_view.get();
   if (gfx == nullptr || readbacks == nullptr || resolved_view == nullptr
-    || ctx.view_constants == nullptr) {
+    || !ctx.view_constants.IsValid()) {
     fail();
     return;
   }
@@ -178,7 +186,8 @@ auto ViewPickPass::Record(RenderContext& ctx,
     recorder.BindFrameBuffer(*framebuffer);
     recorder.ClearFramebuffer(*framebuffer,
       std::vector<std::optional<graphics::Color>> {
-        graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F } },
+        graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F },
+      },
       reverse_z ? 0.0F : 1.0F);
 
     // The view's projection, with the pick rectangle moved to the origin.
@@ -221,10 +230,11 @@ auto ViewPickPass::Record(RenderContext& ctx,
           recorder.SetPipelineState(
             BuildPickPipelineDesc(alpha_test, reverse_z));
           recorder.SetGraphicsRootConstantBufferView(
-            view_constants, ctx.view_constants->GetGPUVirtualAddress());
+            view_constants, ctx.view_constants.GpuAddress());
           current_alpha_test = alpha_test;
         }
-        recorder.SetGraphicsRoot32BitConstant(root_constants, 0U, 1U);
+        recorder.SetGraphicsRoot32BitConstant(
+          root_constants, kInvalidShaderVisibleIndex.get(), 1U);
         recorder.Draw(
           draw->is_indexed != 0U ? draw->index_count : draw->vertex_count,
           (std::max)(draw->instance_count, 1U), 0U, draw_index);
@@ -315,17 +325,19 @@ auto ViewPickPass::ResolveHits(const PickImage& image,
   const auto center_y = (static_cast<float>(image.height) - 1.0F) * 0.5F;
   for (std::uint32_t y = 0U; y < image.height; ++y) {
     for (std::uint32_t x = 0U; x < image.width; ++x) {
-      const auto offset = static_cast<std::size_t>(y) * image.row_stride
-        + static_cast<std::size_t>(x) * 2U;
+      const auto offset = (static_cast<std::size_t>(y) * image.row_stride)
+        + (static_cast<std::size_t>(x) * 2U);
       if (offset + 1U >= image.texels.size()) {
         continue;
       }
-      const auto id = image.texels[offset];
+      // Each texel is an (id, depth) word pair.
+      const auto texel = image.texels.subspan(offset, 2U);
+      const auto id = texel.front();
       if (id == 0U || id > sources.size()) {
         continue;
       }
-      const auto& source = sources[id - 1U];
-      const auto depth = std::bit_cast<float>(image.texels[offset + 1U]);
+      const auto& source = sources.subspan(id - 1U, 1U).front();
+      const auto depth = std::bit_cast<float>(texel.back());
       const auto distance = std::hypot(
         static_cast<float>(x) - center_x, static_cast<float>(y) - center_y);
       auto [it, inserted] = by_node.try_emplace(source.node);
@@ -358,12 +370,13 @@ auto ViewPickPass::ResolveHits(const PickImage& image,
   for (auto& [_, entry] : by_node) {
     ordered.push_back(entry);
   }
-  std::ranges::sort(ordered, [&geometry](const NodeHit& a, const NodeHit& b) {
-    if (a.hit.center_distance != b.hit.center_distance) {
-      return a.hit.center_distance < b.hit.center_distance;
-    }
-    return IsNearer(a.hit.depth, b.hit.depth, geometry.reverse_z);
-  });
+  std::ranges::sort(
+    ordered, [&geometry](const NodeHit& a, const NodeHit& b) -> bool {
+      if (a.hit.center_distance != b.hit.center_distance) {
+        return a.hit.center_distance < b.hit.center_distance;
+      }
+      return IsNearer(a.hit.depth, b.hit.depth, geometry.reverse_z);
+    });
 
   auto result = ViewPickResult {
     .status = ViewPickResult::Status::kCompleted,
@@ -378,20 +391,23 @@ auto ViewPickPass::ResolveHits(const PickImage& image,
     && geometry.viewport.height > 0.0F) {
     // Depth of the first hit's chosen pixel, not its nearest one.
     const auto& first = ordered.front();
-    const auto offset = static_cast<std::size_t>(first.y) * image.row_stride
-      + static_cast<std::size_t>(first.x) * 2U;
-    const auto depth = std::bit_cast<float>(image.texels[offset + 1U]);
+    const auto offset = (static_cast<std::size_t>(first.y) * image.row_stride)
+      + (static_cast<std::size_t>(first.x) * 2U);
+    const auto depth
+      = std::bit_cast<float>(image.texels.subspan(offset, 2U).back());
     const auto pixel_x = static_cast<float>(geometry.rect.x + first.x) + 0.5F;
     const auto pixel_y = static_cast<float>(geometry.rect.y + first.y) + 0.5F;
-    const auto ndc_x = (pixel_x - geometry.viewport.top_left_x)
-        / geometry.viewport.width * 2.0F
+    const auto ndc_x = ((pixel_x - geometry.viewport.top_left_x)
+                         / geometry.viewport.width * 2.0F)
       - 1.0F;
     const auto ndc_y = 1.0F
-      - (pixel_y - geometry.viewport.top_left_y) / geometry.viewport.height
-        * 2.0F;
+      - ((pixel_y - geometry.viewport.top_left_y) / geometry.viewport.height
+        * 2.0F);
     const auto world
       = geometry.inv_view_proj * glm::vec4(ndc_x, ndc_y, depth, 1.0F);
-    if (std::isfinite(world.w) && std::abs(world.w) > 1.0e-12F) {
+    // A clip-space w this small has no finite world position.
+    constexpr float kMinClipW = 1.0e-12F;
+    if (std::isfinite(world.w) && std::abs(world.w) > kMinClipW) {
       result.world_position = glm::vec3(world) / world.w;
     }
   }

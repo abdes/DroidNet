@@ -198,7 +198,7 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest,
     (ViewId {
       77U,
     }));
-  EXPECT_NE(render_context.view_constants.get(), nullptr);
+  EXPECT_TRUE(render_context.view_constants.IsValid());
 }
 
 NOLINT_TEST_F(SinglePassHarnessFacadeTest,
@@ -239,7 +239,8 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest,
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetResolvedView(MakeResolvedViewInput());
   facade.SetPreparedFrame(Renderer::PreparedFrameInput {
-    .value = oxygen::vortex::PreparedSceneFrame {} });
+    .value = oxygen::vortex::PreparedSceneFrame {},
+  });
   facade.SetCoreShaderInputs(Renderer::CoreShaderInputsInput {
     .view_id = ViewId { 51U, },
     .value = oxygen::vortex::ViewConstants {},
@@ -266,7 +267,7 @@ NOLINT_TEST_F(SinglePassHarnessFacadeTest,
     }));
   EXPECT_NE(render_context.current_view.resolved_view.get(), nullptr);
   EXPECT_NE(render_context.current_view.prepared_frame.get(), nullptr);
-  EXPECT_NE(render_context.view_constants.get(), nullptr);
+  EXPECT_TRUE(render_context.view_constants.IsValid());
 }
 
 NOLINT_TEST_F(SinglePassHarnessFacadeTest, PausedFrameSessionPreservesZeroDelta)

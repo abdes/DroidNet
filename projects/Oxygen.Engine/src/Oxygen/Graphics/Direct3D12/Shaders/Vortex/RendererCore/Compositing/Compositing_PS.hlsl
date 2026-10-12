@@ -17,7 +17,7 @@ struct CompositingVSOutput
 // Root constants b2 (shared root param index with engine)
 // ABI layout:
 //   g_DrawIndex          : unused for draw
-//   g_PassConstantsIndex : heap index of a CBV holding pass constants
+//   g_PassConstantsIndex : the pass inputs record (StructuredBuffer element)
 cbuffer RootConstants : register(b2, space0) {
     uint g_DrawIndex;
     uint g_PassConstantsIndex;
@@ -42,14 +42,14 @@ float4 PS(CompositingVSOutput input) : SV_TARGET
         return float4(0.0, 0.0, 0.0, 0.0);
     }
 
-    ConstantBuffer<CompositingPassConstants> pass
+    StructuredBuffer<CompositingPassConstants> pass_buffer
         = ResourceDescriptorHeap[g_PassConstantsIndex];
+    const CompositingPassConstants pass = pass_buffer[0];
 
     if (pass.fill != 0u) {
         return pass.fill_color;
     }
-    if (pass.failed_view != 0u || (pass.lighting_frame_slot != K_INVALID_BINDLESS_INDEX
-        && !IsLightingPublicationReady(LoadLightingFrameBindings(pass.lighting_frame_slot)))) {
+    if (pass.failed_view != 0u || IsLightingPublicationFailed(pass.lighting_frame_slot)) {
         return FailedViewColor(input.position.xy);
     }
     if (pass.source_texture_index == K_INVALID_BINDLESS_INDEX) {

@@ -69,4 +69,11 @@ static bool IsLightingPublicationReady(LightingFrameBindings lighting)
         && all(status.selection_revision == lighting.selection_revision);
 }
 
+// A view with no lighting publication has none to fail.
+static bool IsLightingPublicationFailed(uint lighting_frame_slot)
+{
+    return lighting_frame_slot != K_INVALID_BINDLESS_INDEX
+        && !IsLightingPublicationReady(LoadLightingFrameBindings(lighting_frame_slot));
+}
+
 #endif

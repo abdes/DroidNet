@@ -8,7 +8,7 @@
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
-#include "Vortex/Shared/MeshClipPosition.hlsli"
+#include "Vortex/Contracts/Draw/MeshPosition.hlsli"
 
 #include "Vortex/Materials/MaterialTemplateAdapter.hlsli"
 
@@ -171,11 +171,11 @@ GBufferOutput BasePassGBufferPS(
 void BasePassValidateRadiancePS(
     BasePassGBufferVSOutput input, bool is_front_face : SV_IsFrontFace)
 {
-    ApplyBasePassAlphaClip(input.uv, input.draw_index);
-    const MaterialSurface surface = EvaluateMaterialSurface(input.world_pos,
-        input.world_normal, input.world_tangent, input.world_bitangent, input.uv,
-        input.draw_index, is_front_face);
-    const ViewFrameBindings bindings = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    const BasePassMaterial material
+        = LoadClippedBasePassMaterial(input.uv, input.draw_index);
+    const MaterialSurface surface = EvaluateBasePassSurface(material,
+        input.world_pos, input.world_normal, input.world_tangent,
+        input.world_bitangent, input.uv, is_front_face);
     CheckHdrStoreRange(float4(surface.emissive, 1.0f), 1u,
-        bindings.exposure_status_uav, 0u, 1.0f);
+        GetExposureStatusUav(), 0u, 1.0f);
 }

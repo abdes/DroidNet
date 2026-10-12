@@ -7,22 +7,27 @@
 #include <array>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
+#include <utility>
 #include <vector>
 
-#include <glm/vec2.hpp>
+#include <glm/ext/vector_float2.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/Passes/RenderPass.h>
@@ -154,7 +159,7 @@ auto ViewOverlayPass::Record(RenderContext& ctx,
   const auto view_id = ctx.current_view.view_id;
   if (overlay.IsEmpty() || inputs.target == nullptr || view_id == kInvalidViewId
     || ctx.current_view.resolved_view == nullptr
-    || ctx.view_constants == nullptr
+    || !ctx.view_constants.IsValid()
     || inputs.target->GetDescriptor().color_attachments.empty()) {
     return 0U;
   }
@@ -238,13 +243,13 @@ auto ViewOverlayPass::Record(RenderContext& ctx,
 
   auto draws = std::uint32_t { 0U };
   const auto record = [&](const Primitive primitive, const LayerDraw& layer,
-                        const std::uint32_t vertex_count) {
+                        const std::uint32_t vertex_count) -> void {
     if (vertex_count == 0U || !layer.constants.IsValid()) {
       return;
     }
     recorder.SetPipelineState(BuildPipelineDesc(*target_color, primitive));
     recorder.SetGraphicsRootConstantBufferView(
-      view_constants, ctx.view_constants->GetGPUVirtualAddress());
+      view_constants, ctx.view_constants.GpuAddress());
     recorder.SetGraphicsRoot32BitConstant(root_constants, 0U, 0U);
     recorder.SetGraphicsRoot32BitConstant(
       root_constants, layer.constants.get(), 1U);

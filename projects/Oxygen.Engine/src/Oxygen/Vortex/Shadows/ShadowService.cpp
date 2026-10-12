@@ -547,10 +547,11 @@ auto ShadowService::InspectPreparationFailure(ViewId view_id) const
 }
 
 auto ShadowService::InspectShadowData(const ViewId view_id) const
-  -> const ShadowFrameData*
+  -> observer_ptr<const ShadowFrameData>
 {
   const auto it = published_views_.find(view_id);
-  return it != published_views_.end() ? &it->second.data : nullptr;
+  return it != published_views_.end() ? make_observer(&it->second.data)
+                                      : nullptr;
 }
 
 auto ShadowService::InspectDirectionalShadowSurfaces(const ViewId view_id) const

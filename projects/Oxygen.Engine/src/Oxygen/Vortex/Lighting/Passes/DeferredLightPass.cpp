@@ -10,10 +10,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
-#include <limits>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -22,13 +23,12 @@
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
-#include <glm/ext/vector_uint4.hpp>
 #include <glm/geometric.hpp>
+#include <glm/gtc/matrix_access.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/Frustum.h>
 #include <Oxygen/Core/Types/ShaderType.h>
@@ -47,12 +47,13 @@
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
-#include <Oxygen/Vortex/Lighting/Internal/DeferredLightConstantsPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightProxyGeometry.h>
 #include <Oxygen/Vortex/Lighting/Passes/DeferredLightPass.h>
 #include <Oxygen/Vortex/Lighting/Types/DeferredLightConstants.h>
+#include <Oxygen/Vortex/Lighting/Types/DeferredShadowInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -62,7 +63,6 @@
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
-#include <Oxygen/Vortex/Upload/Errors.h>
 
 namespace oxygen::vortex::lighting {
 
@@ -99,84 +99,34 @@ namespace {
       && draw.packet.light->source_radius_m == 0.0F;
   }
 
-  constexpr std::size_t kPipelineCount = 10U;
+  //! Local-light pipelines: one per draw mode for each local family.
+  constexpr std::size_t kLocalDrawModeCount = 3U;
+  //! Area point, punctual point and spot lights.
+  constexpr std::size_t kLocalFamilyCount = 3U;
+  //! The directional pipeline, then the local families.
+  constexpr std::size_t kPipelineCount
+    = 1U + (kLocalFamilyCount * kLocalDrawModeCount);
+
+  auto LocalFamilyIndex(const DeferredLightDraw& draw) -> std::size_t
+  {
+    if (draw.kind == DeferredLightKind::kSpot) {
+      return 2U;
+    }
+    return IsPunctualPoint(draw) ? 1U : 0U;
+  }
 
   auto PipelineIndex(const DeferredLightDraw& draw) -> std::size_t
   {
     if (draw.kind == DeferredLightKind::kDirectional) {
       return 0U;
     }
-    return 1U
-      + (draw.kind == DeferredLightKind::kSpot ? 6U
-          : IsPunctualPoint(draw)              ? 3U
-                                               : 0U)
+    return 1U + (LocalFamilyIndex(draw) * kLocalDrawModeCount)
       + static_cast<std::size_t>(draw.draw_mode);
   }
 
   auto DrawOrderBucket(const DeferredLightDraw& draw) -> std::size_t
   {
     return PipelineIndex(draw);
-  }
-
-  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-    -> graphics::ResourceViewType
-  {
-    using graphics::ResourceViewType;
-
-    switch (type) {
-    case bindless_d3d12::RangeType::SRV:
-      return ResourceViewType::kRawBuffer_SRV;
-    case bindless_d3d12::RangeType::Sampler:
-      return ResourceViewType::kSampler;
-    case bindless_d3d12::RangeType::UAV:
-      return ResourceViewType::kRawBuffer_UAV;
-    default:
-      return ResourceViewType::kNone;
-    }
-  }
-
-  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-  {
-    std::vector<graphics::RootBindingItem> bindings;
-    bindings.reserve(bindless_d3d12::kRootParamTableCount);
-
-    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-      ++index) {
-      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-      graphics::RootBindingDesc binding {};
-      binding.binding_slot_desc.register_index = desc.shader_register;
-      binding.binding_slot_desc.register_space = desc.register_space;
-      binding.visibility = graphics::ShaderStageFlags::kAll;
-
-      switch (desc.kind) {
-      case bindless_d3d12::RootParamKind::DescriptorTable: {
-        graphics::DescriptorTableBinding table {};
-        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-          const auto& range = desc.ranges.front();
-          table.view_type = RangeTypeToViewType(
-            static_cast<bindless_d3d12::RangeType>(range.range_type));
-          table.base_index = range.base_register;
-          table.count = range.num_descriptors
-              == (std::numeric_limits<std::uint32_t>::max)()
-            ? (std::numeric_limits<std::uint32_t>::max)()
-            : range.num_descriptors;
-        }
-        binding.data = table;
-        break;
-      }
-      case bindless_d3d12::RootParamKind::CBV:
-        binding.data = graphics::DirectBufferBinding {};
-        break;
-      case bindless_d3d12::RootParamKind::RootConstants:
-        binding.data
-          = graphics::PushConstantsBinding { .size = desc.constants_count };
-        break;
-      }
-
-      bindings.emplace_back(binding);
-    }
-
-    return bindings;
   }
 
   auto RegisterBufferViewIndex(Graphics& gfx, graphics::Buffer& buffer,
@@ -258,7 +208,8 @@ namespace {
 
   auto IsPerspectiveProjection(const ResolvedView& view) -> bool
   {
-    return std::abs(view.ProjectionMatrix()[2][3]) > 0.5F;
+    // Perspective projections carry -1 in w's z coefficient, orthographic 0.
+    return std::abs(glm::column(view.ProjectionMatrix(), 2).w) > 0.5F;
   }
 
   auto IsCameraInsidePointLightVolume(const glm::vec3 camera,
@@ -279,7 +230,7 @@ namespace {
     const auto outer_cosine
       = std::clamp(light.outer_cone_cosine, 0.001F, 0.999999F);
     const auto outer_sine
-      = std::sqrt((std::max)(0.0F, 1.0F - outer_cosine * outer_cosine));
+      = std::sqrt((std::max)(0.0F, 1.0F - (outer_cosine * outer_cosine)));
     const auto outer_tangent = outer_sine / (std::max)(outer_cosine, 1.0e-4F);
     const auto to_camera = camera - position;
     const auto axial_distance = glm::dot(to_camera, direction);
@@ -288,10 +239,10 @@ namespace {
     }
 
     const auto radial_sq = (std::max)(glm::dot(to_camera, to_camera)
-        - axial_distance * axial_distance,
+        - (axial_distance * axial_distance),
       0.0F);
     const auto expanded_radius
-      = (std::max)(axial_distance + near_clip, 0.0F) * outer_tangent
+      = ((std::max)(axial_distance + near_clip, 0.0F) * outer_tangent)
       + near_clip;
     return radial_sq <= expanded_radius * expanded_radius;
   }
@@ -412,7 +363,7 @@ namespace {
 
     const auto& desc = framebuffer->GetDescriptor();
     return desc.color_attachments.size() != 1U
-      || desc.color_attachments[0].texture.get()
+      || desc.color_attachments.front().texture.get()
       != scene_textures.GetSceneColorResource().get()
       || desc.depth_attachment.texture != nullptr;
   }
@@ -427,7 +378,7 @@ namespace {
 
     const auto& desc = framebuffer->GetDescriptor();
     return desc.color_attachments.size() != 1U
-      || desc.color_attachments[0].texture.get()
+      || desc.color_attachments.front().texture.get()
       != scene_textures.GetSceneColorResource().get()
       || desc.depth_attachment.texture.get()
       != scene_textures.GetSceneDepthResource().get()
@@ -437,7 +388,8 @@ namespace {
   auto BuildDeferredDirectionalPipelineDesc(const SceneTextures& scene_textures,
     const ShaderDebugMode debug_mode) -> graphics::GraphicsPipelineDesc
   {
-    static const auto root_bindings = BuildVortexRootBindings();
+    static const auto root_bindings
+      = vortex::internal::BuildVortexRootBindings();
     auto pixel_defines = std::vector<graphics::ShaderDefine> {};
     AddBooleanDefine(IsDirectionalDebugMode(debug_mode),
       GetShaderDebugDefineName(debug_mode), pixel_defines);
@@ -476,7 +428,8 @@ namespace {
     const DeferredLocalLightDrawMode draw_mode, const bool punctual_point)
     -> graphics::GraphicsPipelineDesc
   {
-    static const auto root_bindings = BuildVortexRootBindings();
+    static const auto root_bindings
+      = vortex::internal::BuildVortexRootBindings();
     const auto direct_local_light
       = draw_mode != DeferredLocalLightDrawMode::kOutsideVolume;
     const auto* const source_path = light_kind == DeferredLightKind::kPoint
@@ -509,14 +462,12 @@ namespace {
       ? inside_volume_name
       : exterior_lighting_name;
 
-    auto depth_stencil = graphics::DepthStencilStateDesc {
-      .depth_test_enable = true,
-      .depth_write_enable = false,
-      .depth_func = graphics::CompareOp::kAlways,
-      .stencil_enable = false,
-      .stencil_read_mask = 0xFF,
-      .stencil_write_mask = 0x00,
-    };
+    auto depth_stencil = graphics::DepthStencilStateDesc {};
+    depth_stencil.depth_test_enable = true;
+    depth_stencil.depth_write_enable = false;
+    depth_stencil.depth_func = graphics::CompareOp::kAlways;
+    depth_stencil.stencil_enable = false;
+    depth_stencil.stencil_write_mask = 0U;
     if (!direct_local_light) {
       depth_stencil.depth_func = reverse_z
         ? graphics::CompareOp::kGreaterOrEqual
@@ -583,7 +534,7 @@ DeferredLightPass::~DeferredLightPass()
   }
 
   auto& registry = gfx->GetResourceRegistry();
-  constants_publisher_.reset();
+  local_light_records_.reset();
   for (auto* buffer : {
          point_geometry_buffer_.get(),
          spot_geometry_buffer_.get(),
@@ -597,20 +548,15 @@ DeferredLightPass::~DeferredLightPass()
 auto DeferredLightPass::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
-  if (constants_publisher_) {
-    constants_publisher_->OnFrameStart(sequence, slot);
+  if (local_light_records_) {
+    local_light_records_->OnFrameStart(sequence, slot);
   }
 }
 
 auto DeferredLightPass::Record(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
   const internal::DeferredLightPacketSet& packets,
-  const ShadowFrameData* shadow_data,
-  std::span<const std::shared_ptr<graphics::Texture>>
-    directional_shadow_surfaces,
-  std::span<const std::shared_ptr<graphics::Texture>> spot_shadow_surfaces,
-  std::span<const std::shared_ptr<graphics::Texture>> point_shadow_surfaces)
-  -> ExecutionState
+  const DeferredShadowInputs& shadows) -> ExecutionState
 {
   // Cache the owning label; steady-state scope entry needs no label allocation.
   static const auto kProfile = profiling::CpuProfileScopeDesc {
@@ -619,12 +565,13 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   };
   const auto profile = profiling::CpuProfileScope(kProfile);
   auto state = ExecutionState {};
-  if (ctx.view_constants == nullptr) {
+  if (!ctx.view_constants.IsValid()) {
     return state;
   }
   if (packets.directional.empty() && packets.local_lights.empty()) {
     return state;
   }
+  const auto shadow_data = shadows.data;
   if (shadow_data != nullptr && !shadow_data->cascades.empty()) {
     state.consumed_directional_shadow_product = true;
     state.directional_shadow_cascade_count
@@ -724,10 +671,14 @@ auto DeferredLightPass::Record(RenderContext& ctx,
         // Model 2 range is center-based for both punctual and finite sources.
         // A sphere is conservative for spots as well as points and retains
         // off-screen sources whose influence reaches a visible receiver.
-        const auto magnitude
-          = (std::max)({ 1.0F, light.range_m, std::abs(light.position_ws.x),
-            std::abs(light.position_ws.y), std::abs(light.position_ws.z) });
-        const auto radius = light.range_m + 1.0e-4F * magnitude;
+        const auto magnitude = (std::max)({
+          1.0F,
+          light.range_m,
+          std::abs(light.position_ws.x),
+          std::abs(light.position_ws.y),
+          std::abs(light.position_ws.z),
+        });
+        const auto radius = light.range_m + (1.0e-4F * magnitude);
         if (std::isfinite(radius) && radius > 0.0F
           && !frustum->IntersectsSphere(light.position_ws, radius)) {
           continue;
@@ -777,17 +728,24 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       = gfx->CreateFramebuffer(BuildLocalFramebuffer(scene_textures));
   }
 
-  if (!constants_publisher_) {
-    constants_publisher_
-      = std::make_unique<internal::DeferredLightConstantsPublisher>(gfx,
-        renderer_.GetLightingStagingProvider(),
-        observer_ptr { &renderer_.GetInlineTransfersCoordinator() });
+  if (!local_light_records_) {
+    local_light_records_.emplace(observer_ptr { gfx.get() },
+      renderer_.GetLightingStagingProvider(),
+      static_cast<std::uint32_t>(sizeof(DeferredLightConstants)),
+      observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+      "LightingService.DeferredLight.Constants");
   }
-  constants_publisher_->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+  local_light_records_->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
   auto& constants_records = constants_scratch_;
   constants_records.clear();
   constants_records.reserve(draws.size());
-  for (const auto& draw : draws) {
+  record_index_scratch_.assign(draws.size(), 0U);
+  for (const auto& [draw_index, draw] : std::views::enumerate(draws)) {
+    if (draw.kind == DeferredLightKind::kDirectional) {
+      continue;
+    }
+    record_index_scratch_.at(static_cast<std::size_t>(draw_index))
+      = static_cast<std::uint32_t>(constants_records.size());
     auto constants = DeferredLightConstants {};
     constants.light_type = static_cast<std::uint32_t>(draw.kind);
     constants.light_geometry_vertices_srv = draw.geometry_srv;
@@ -798,14 +756,24 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     }
     constants_records.push_back(constants);
   }
-  const auto publication = constants_publisher_->Publish(constants_records);
-  if (!publication) {
-    LOG_F(ERROR, "Deferred draw constants could not be published: {}",
-      upload::make_error_code(publication.error()).message());
-    state.recording_succeeded = false;
-    return state;
+  auto local_records_srv = kInvalidShaderVisibleIndex;
+  if (!constants_records.empty()) {
+    const auto records = local_light_records_->Allocate(
+      static_cast<std::uint32_t>(constants_records.size()));
+    if (!records) {
+      LOG_F(ERROR, "Deferred light records could not be allocated: {}",
+        records.error().message());
+      state.recording_succeeded = false;
+      return state;
+    }
+    if (!records->TryWriteRange(
+          std::span { std::as_const(constants_records) })) {
+      LOG_F(ERROR, "Deferred light records could not be written");
+      state.recording_succeeded = false;
+      return state;
+    }
+    local_records_srv = records->srv;
   }
-  const auto& pass_constants_indices = *publication;
 
   // Owning labels are initialized once, even when GPU tracing is disabled.
   // The string-view constructor allocates before checking capture policy.
@@ -849,7 +817,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     recorder.RequireResourceState(
       status, graphics::ResourceStates::kUnorderedAccess);
   }
-  const auto prepare_shadows = [&](const auto surfaces) {
+  const auto prepare_shadows = [&](const auto surfaces) -> auto {
     for (const auto& surface : surfaces) {
       if (surface) {
         const auto managed
@@ -864,9 +832,9 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       }
     }
   };
-  prepare_shadows(directional_shadow_surfaces);
-  prepare_shadows(spot_shadow_surfaces);
-  prepare_shadows(point_shadow_surfaces);
+  prepare_shadows(shadows.directional_surfaces);
+  prepare_shadows(shadows.spot_surfaces);
+  prepare_shadows(shadows.point_surfaces);
 
   const auto root_constants_param
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);
@@ -878,7 +846,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
       kPipelineCount> {};
   auto bound_pipeline = std::optional<std::size_t> {};
   const graphics::Framebuffer* bound_framebuffer = nullptr;
-  const auto bind_pipeline = [&](const DeferredLightDraw& draw) {
+  const auto bind_pipeline = [&](const DeferredLightDraw& draw) -> void {
     const bool local = draw.kind == DeferredLightKind::kPoint
       || draw.kind == DeferredLightKind::kSpot;
     const auto index = PipelineIndex(draw);
@@ -896,11 +864,11 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     recorder.SetPipelineState(*description);
     ++state.pipeline_bind_count;
     recorder.SetGraphicsRootConstantBufferView(
-      view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
-    recorder.SetGraphicsRoot32BitConstant(root_constants_param, 0U, 0U);
+      view_constants_param, ctx.view_constants.GpuAddress());
     bound_pipeline = index;
   };
-  const auto bind_framebuffer = [&](const graphics::Framebuffer& framebuffer) {
+  const auto bind_framebuffer
+    = [&](const graphics::Framebuffer& framebuffer) -> void {
     if (bound_framebuffer == &framebuffer) {
       return;
     }
@@ -909,9 +877,12 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     SetViewportAndScissor(recorder, ctx, scene_textures);
     bound_framebuffer = &framebuffer;
   };
-  const auto bind_draw_constants = [&](const ShaderVisibleIndex index) {
+  // Root constant [0] selects the draw's element of the inputs record [1].
+  const auto bind_draw_inputs = [&](const std::uint32_t element,
+                                  const ShaderVisibleIndex records) -> void {
+    recorder.SetGraphicsRoot32BitConstant(root_constants_param, element, 0U);
     recorder.SetGraphicsRoot32BitConstant(
-      root_constants_param, index.get(), 1U);
+      root_constants_param, records.get(), 1U);
   };
 
   recorder.RequireResourceState(
@@ -928,7 +899,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   // selection and shadow-reference identities are unchanged.
   auto cursors = std::array<std::size_t, kPipelineCount + 1U> {};
   for (const auto& draw : draws) {
-    ++cursors[DrawOrderBucket(draw)];
+    ++cursors.at(DrawOrderBucket(draw));
   }
   std::size_t offset = 0U;
   for (auto& cursor : cursors) {
@@ -938,18 +909,17 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   }
   draw_order_scratch_.resize(draws.size());
   for (std::size_t i = 0; i < draws.size(); ++i) {
-    draw_order_scratch_[cursors[DrawOrderBucket(draws[i])]++] = i;
+    draw_order_scratch_.at(cursors.at(DrawOrderBucket(draws.at(i)))++) = i;
   }
   for (const auto i : draw_order_scratch_) {
-    const auto& draw = draws[i];
-    const auto pass_index = pass_constants_indices[i];
+    const auto& draw = draws.at(i);
     graphics::GpuEventScope light_scope(
-      recorder, kLightProfiles[static_cast<std::size_t>(draw.kind)]);
+      recorder, kLightProfiles.at(static_cast<std::size_t>(draw.kind)));
 
     if (draw.kind == DeferredLightKind::kDirectional) {
       bind_framebuffer(*directional_framebuffer_);
       bind_pipeline(draw);
-      bind_draw_constants(pass_index);
+      bind_draw_inputs(0U, kInvalidShaderVisibleIndex);
       recorder.Draw(3U, 1U, 0U, 0U);
       state.accumulated_into_scene_color = true;
       continue;
@@ -964,7 +934,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
     }
     bind_framebuffer(*local_framebuffer_);
     bind_pipeline(draw);
-    bind_draw_constants(pass_index);
+    bind_draw_inputs(record_index_scratch_.at(i), local_records_srv);
     recorder.Draw(draw.geometry_vertex_count, 1U, 0U, 0U);
     ++state.local_light_draw_count;
     if (IsPunctualPoint(draw)) {

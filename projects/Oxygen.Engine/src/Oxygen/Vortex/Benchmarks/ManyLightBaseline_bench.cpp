@@ -3,17 +3,30 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
-#include <algorithm>
+#include <chrono>
 #include <cstdlib>
+#include <filesystem>
 #include <fstream>
-#include <stdexcept>
+#include <memory>
+#include <optional>
+#include <ratio>
+// MSVC declares the platform-specific _dupenv_s in the C runtime header.
+// NOLINTNEXTLINE(modernize-deprecated-headers)
+#include <stdlib.h>
+#include <string>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Profiling/CpuScopeObserver.h>
@@ -21,14 +34,62 @@
 #include <Oxygen/Vortex/Benchmarks/ManyLightBaseline.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
+#include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
+#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Test/Support/CpuTimingCapture.h>
+#include <Oxygen/Vortex/Test/Support/LightingWorkload.h>
+#include <Oxygen/Vortex/Test/Support/LightingWorkloadScene.h>
 
 namespace oxygen::vortex::testing {
+
+namespace {
+  //! One 60 Hz frame of game time.
+  constexpr auto kFrameDuration = std::chrono::nanoseconds { 16'666'667 };
+  //! Frames in one period of the moving-light animation.
+  constexpr unsigned kMotionCycleFrames = 240U;
+  //! Frames that touch every frame slot more than once.
+  constexpr unsigned kSlotWarmupFrames = 12U;
+  //! Composition view ids and view-state handles start here.
+  constexpr unsigned kFirstViewId = 100U;
+  //! Timeline scopes and CPU records a frame needs besides its lights.
+  constexpr unsigned kFixedScopesPerFrame = 256U;
+  //! CPU records each shadow request adds per view.
+  constexpr unsigned kRecordsPerShadowRequest = 32U;
+
+  auto ParseSecondaryLayout(const std::string& name) -> WorkloadSecondaryLayout
+  {
+    if (name == "matched") {
+      return WorkloadSecondaryLayout::kMatched;
+    }
+    if (name == "offset-full") {
+      return WorkloadSecondaryLayout::kOffsetFull;
+    }
+    if (name == "partial-overlap") {
+      return WorkloadSecondaryLayout::kPartialOverlap;
+    }
+    return WorkloadSecondaryLayout::kOffsetHalf;
+  }
+
+  auto ParseDistribution(const std::string& name) -> WorkloadDistribution
+  {
+    if (name == "dense") {
+      return WorkloadDistribution::kDense;
+    }
+    if (name == "irrelevant") {
+      return WorkloadDistribution::kMostlyIrrelevant;
+    }
+    return WorkloadDistribution::kSparse;
+  }
+} // namespace
 
 auto ManyLightBaseline::BackendConfigJson() const -> std::string
 {
@@ -75,11 +136,7 @@ auto ManyLightBaseline::SetUp() -> void
   options_.secondary_view = request_.at("secondary_view").get<bool>();
   const auto layout
     = request_.value("secondary_view_layout", std::string("offset-half"));
-  options_.secondary_layout = layout == "matched"
-    ? WorkloadSecondaryLayout::kMatched
-    : layout == "offset-full"     ? WorkloadSecondaryLayout::kOffsetFull
-    : layout == "partial-overlap" ? WorkloadSecondaryLayout::kPartialOverlap
-                                  : WorkloadSecondaryLayout::kOffsetHalf;
+  options_.secondary_layout = ParseSecondaryLayout(layout);
   options_.point_shadow_requests = request_.at("point_shadows").get<unsigned>();
   options_.spot_shadow_requests = request_.at("spot_shadows").get<unsigned>();
   options_.source_radius_m = request_.at("source_radius_m").get<float>();
@@ -88,9 +145,7 @@ auto ManyLightBaseline::SetUp() -> void
   const auto distribution = request_.at("distribution").get<std::string>();
   ASSERT_TRUE(distribution == "sparse" || distribution == "dense"
     || distribution == "irrelevant");
-  options_.distribution = distribution == "dense" ? WorkloadDistribution::kDense
-    : distribution == "irrelevant" ? WorkloadDistribution::kMostlyIrrelevant
-                                   : WorkloadDistribution::kSparse;
+  options_.distribution = ParseDistribution(distribution);
   const auto projection = request_.at("projection").get<std::string>();
   ASSERT_TRUE(projection == "perspective" || projection == "orthographic");
   options_.projection = projection == "orthographic"
@@ -98,13 +153,13 @@ auto ManyLightBaseline::SetUp() -> void
     : WorkloadProjection::kPerspective;
   warmup_frames_ = request_.at("warmup_frames").get<unsigned>();
   sample_frames_ = request_.at("sample_frames").get<unsigned>();
-  ASSERT_GE(warmup_frames_, 12U);
+  ASSERT_GE(warmup_frames_, kSlotWarmupFrames);
   ASSERT_LE(warmup_frames_, 960U);
   ASSERT_GE(sample_frames_, 120U);
   ASSERT_LE(sample_frames_, 1920U);
   ASSERT_EQ(sample_frames_ % 120U, 0U);
   if (options_.moving) {
-    ASSERT_EQ(sample_frames_ % 240U, 0U);
+    ASSERT_EQ(sample_frames_ % kMotionCycleFrames, 0U);
   }
   directory_ = request_.at("output").get<std::string>();
   ASSERT_FALSE(std::filesystem::exists(directory_ / "manifest.json"));
@@ -132,35 +187,36 @@ auto ManyLightBaseline::SetupCase() -> void
   mesh_node = scene_owner_.floor;
   frame.SetScene(observer_ptr { scene.get() });
   auto timing = frame.GetModuleTimingData();
-  timing.game_delta_time
-    = time::CanonicalDuration { std::chrono::nanoseconds { 16'666'667 } };
+  timing.game_delta_time = time::CanonicalDuration { kFrameDuration };
   frame.SetModuleTimingData(timing, engine::internal::EngineTagFactory::Get());
   for (const auto& recipe : workload_.views) {
-    auto output = CreateRegisteredTexture({ .width = recipe.width,
+    auto output = CreateRegisteredTexture({
+      .width = recipe.width,
       .height = recipe.height,
       .format = Format::kRGBA32Float,
       .debug_name = "ManyLight.Output." + std::to_string(recipe.id.get()),
       .is_render_target = true,
-      .initial_state = graphics::ResourceStates::kCommon });
+      .initial_state = graphics::ResourceStates::kCommon,
+    });
     targets_.push_back(Backend().CreateFramebuffer(
       graphics::FramebufferDesc {}.AddColorAttachment(output)));
   }
   captured_.resize(workload_.views.size());
   if (options_.moving) {
-    motion_cycle_.reserve(240U);
-    for (unsigned phase = 0; phase < 240U; ++phase) {
+    motion_cycle_.reserve(kMotionCycleFrames);
+    for (unsigned phase = 0; phase < kMotionCycleFrames; ++phase) {
       auto moving = options_;
       moving.motion_frame = phase;
       motion_cycle_.push_back(BuildLightingWorkload(moving));
     }
   }
-  probe->prepare = [](RenderContext& context) {
+  probe->prepare = [](RenderContext& context) -> void {
     context.current_view.depth_prepass_mode
       = DepthPrePassMode::kOpaqueAndMasked;
   };
-  probe->inspect = [this](const RenderContext& context,
-                     const SceneTextureExtractRef& color,
-                     const unsigned draws) {
+  probe->inspect
+    = [this](const RenderContext& context, const SceneTextureExtractRef& color,
+        const unsigned draws) -> void {
     if (!capture_ && !recording_) {
       return;
     }
@@ -179,7 +235,8 @@ auto ManyLightBaseline::SetupCase() -> void
     if (!capture_) {
       return;
     }
-    const auto index = context.current_view.view_state_handle.get() - 100U;
+    const auto index
+      = context.current_view.view_state_handle.get() - kFirstViewId;
     auto& output = captured_.at(index);
     output.hdr = color.texture->shared_from_this();
     output.exposure = context.current_view.frame_exposure;
@@ -193,7 +250,7 @@ auto ManyLightBaseline::SetupCase() -> void
     output.grid = lighting->InspectGridResources(context.current_view.view_id);
     const auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
     const auto* shadows = RendererPublicationProbe::GetShadowService(*owner);
-    if (const auto* data
+    if (const auto data
       = shadows->InspectShadowData(context.current_view.view_id)) {
       output.point_shadows
         = static_cast<unsigned>(data->cube_local_records.size());
@@ -206,7 +263,8 @@ auto ManyLightBaseline::SetupCase() -> void
   auto& diagnostics = renderer_->GetDiagnosticsService();
   diagnostics.SetHdrPrecisionControl(HdrPrecisionControl::kProduction);
   diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
-  diagnostics.SetGpuTimelineMaxScopesPerFrame(options_.light_count * 2U + 256U);
+  diagnostics.SetGpuTimelineMaxScopesPerFrame(
+    (options_.light_count * 2U) + kFixedScopesPerFrame);
   diagnostics.SetGpuTimelineRetainLatestFrame(false);
   diagnostics.SetGpuTimelineEnabled(measure_);
 }
@@ -233,7 +291,8 @@ auto ManyLightBaseline::RenderFrame(
   frame.SetFrameSequenceNumber(
     current, engine::internal::EngineTagFactory::Get());
   if (options_.moving) {
-    scene_owner_.ApplyMotion(motion_cycle_.at(motion_frame % 240U));
+    scene_owner_.ApplyMotion(
+      motion_cycle_.at(motion_frame % kMotionCycleFrames));
   }
   const auto updated = Clock::now();
   renderer_->OnFrameStart(observer_ptr { &frame });
@@ -247,9 +306,9 @@ auto ManyLightBaseline::RenderFrame(
     sized_view.viewport.width = static_cast<float>(recipe.width);
     sized_view.viewport.height = static_cast<float>(recipe.height);
     auto input = CompositionView::ForScene(
-      ViewId { 100U + static_cast<unsigned>(index) }, sized_view,
+      ViewId { kFirstViewId + static_cast<unsigned>(index) }, sized_view,
       scene_owner_.cameras.at(index));
-    input.view_state_handle = CompositionView::ViewStateHandle { 100U
+    input.view_state_handle = CompositionView::ViewStateHandle { kFirstViewId
       + static_cast<unsigned>(index) };
     input.render_settings.exposure = settings;
     CHECK_F(renderer_->PublishRuntimeCompositionView(frame,
@@ -270,10 +329,16 @@ auto ManyLightBaseline::RenderFrame(
   renderer_->OnFrameEnd(observer_ptr { &frame });
   Backend().EndFrame(current, slot);
   const auto ended = Clock::now();
-  return { sequence, Milliseconds(ended - started),
-    Milliseconds(began - started), Milliseconds(updated - began),
-    Milliseconds(ended - updated), frame_shadow_writers_,
-    frame_shadow_map_uses_, frame_shadow_backing_uses_ };
+  return {
+    .sequence = sequence,
+    .wall_ms = Milliseconds(ended - started),
+    .frame_start_ms = Milliseconds(began - started),
+    .scene_update_ms = Milliseconds(updated - began),
+    .submission_ms = Milliseconds(ended - updated),
+    .shadow_writers = frame_shadow_writers_,
+    .shadow_map_uses = frame_shadow_map_uses_,
+    .shadow_backing_uses = frame_shadow_backing_uses_,
+  };
 }
 auto ManyLightBaseline::RunBaseline() -> void
 {
@@ -286,7 +351,7 @@ auto ManyLightBaseline::RunBaseline() -> void
   ASSERT_NO_FATAL_FAILURE(SetupCase());
   const auto verbosity = loguru::g_global_verbosity;
   loguru::g_global_verbosity = loguru::Verbosity_WARNING;
-  const auto restore = ScopeGuard([&] noexcept {
+  const auto restore = ScopeGuard([&] noexcept -> void {
     FailureBackend().count_resource_creations = false;
     loguru::g_global_verbosity = verbosity;
   });
@@ -310,19 +375,21 @@ auto ManyLightBaseline::RunBaseline() -> void
   captured_.assign(captured_.size(), {});
   // Warm all frame slots again after untimed readbacks, before taking the
   // baseline.
-  for (unsigned index = 0; index < 12U; ++index) {
+  for (unsigned index = 0; index < kSlotWarmupFrames; ++index) {
     (void)RenderFrame(index);
   }
   snapshots_.push_back(SnapshotResources());
   if (measure_) {
     samples_.reserve(sample_frames_);
     cpu_ = std::make_unique<CpuTimingCapture>(CpuTimingOptions {
-      .record_capacity = CpuTimingRecordCapacity { sample_frames_
-        * (256U
-          + 32U
+      .record_capacity
+      = CpuTimingRecordCapacity { std::size_t { sample_frames_ }
+        * (kFixedScopesPerFrame
+          + (kRecordsPerShadowRequest
             * (options_.point_shadow_requests + options_.spot_shadow_requests)
-            * static_cast<unsigned>(workload_.views.size())) },
-      .detailed = true });
+            * static_cast<unsigned>(workload_.views.size()))) },
+      .detailed = true,
+    });
     recording_ = true;
     FailureBackend().count_resource_creations = true;
     auto previous = Clock::now();

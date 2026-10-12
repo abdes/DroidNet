@@ -115,7 +115,7 @@ NOLINT_TEST_F(ExposureGpuTest, DistantSkyPreservesSlotsFactorsAndFogAmbient)
   auto view_buffer
     = CreateUploadBuffer(SizeBytes { 256U }, graphics::BufferUsage::kConstant);
   view_buffer->Update(&view_data, sizeof(view_data), 0U);
-  ctx_.view_constants = view_buffer;
+  ctx_.view_constants = { .buffer = view_buffer };
   ctx_.current_view.resolved_view = observer_ptr { &resolved_view };
   ctx_.current_view.view_state_handle
     = CompositionView::kInvalidViewStateHandle;

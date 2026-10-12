@@ -412,22 +412,14 @@ NOLINT_TEST_F(ExposureGpuTest, LocalFogInjectionMatchesMixedMediumIntegral)
         .global_start_distance_m = 0,
       };
       params.local_fog2.max_density_into_volumetric_fog = 100;
-      params.light0_direction_enabled[2] = 1;
-      params.light0_direction_enabled[3] = 1;
-      std::ranges::fill(
-        std::span {
-          params.light0_illuminance_rgb,
-        }
-          .first<3>(),
+      params.light0_direction_enabled.at(2) = 1;
+      params.light0_direction_enabled.at(3) = 1;
+      std::ranges::fill(std::span { params.light0_illuminance_rgb }.first<3>(),
         test.illuminance);
       std::ranges::fill(
-        std::span {
-          params.temporal_history1.frame_jitter_offsets[0],
-        }
+        std::span { params.temporal_history1.frame_jitter_offsets.front() }
           .first<3>(),
         .5F);
-      params.exposure_status_uav
-        = exposure->current_state->status_uav_index.get();
       const auto constants = PublishFixtureData(params);
       // The single froxel samples exactly at the authored local-volume center.
       // Independent double Beer-Lambert solution for mixed source coefficients.
@@ -902,7 +894,7 @@ NOLINT_TEST_F(ExposureGpuTest, AuthoredLocalFogPreservesRadiometryThroughUpload)
       },
       BufferUsage::kConstant);
     constants->Update(&view, sizeof(view), 0U);
-    ctx_.view_constants = constants;
+    ctx_.view_constants = { .buffer = constants };
     {
       auto recorder = AcquireRecorder("Local fog compose initialization");
       for (const auto& texture : {
@@ -973,7 +965,7 @@ NOLINT_TEST_F(ExposureGpuTest, AuthoredLocalFogPreservesRadiometryThroughUpload)
       EXPECT_EQ(status.flags & 16U, 0U);
     }
     ctx_.current_view.frame_exposure.reset();
-    ctx_.view_constants.reset();
+    ctx_.view_constants = {};
   }
   RecordProperty("authored_local_fog_cases", cases.size() * 4);
   ctx_.current_view.resolved_view.reset();

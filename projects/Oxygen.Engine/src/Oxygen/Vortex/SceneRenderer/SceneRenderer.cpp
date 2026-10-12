@@ -75,6 +75,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
+#include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
@@ -97,6 +98,7 @@
 #include <Oxygen/Vortex/Internal/PerViewScope.h>
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
+#include <Oxygen/Vortex/Lighting/Types/DeferredShadowInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Passes/GroundGridPass.h>
 #include <Oxygen/Vortex/Passes/SelectionOutlinePass.h>
@@ -164,67 +166,6 @@ namespace {
     22,
     23,
   };
-
-  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-    -> graphics::ResourceViewType
-  {
-    using graphics::ResourceViewType;
-
-    switch (type) {
-    case bindless_d3d12::RangeType::SRV:
-      return ResourceViewType::kRawBuffer_SRV;
-    case bindless_d3d12::RangeType::Sampler:
-      return ResourceViewType::kSampler;
-    case bindless_d3d12::RangeType::UAV:
-      return ResourceViewType::kRawBuffer_UAV;
-    default:
-      return ResourceViewType::kNone;
-    }
-  }
-
-  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-  {
-    std::vector<graphics::RootBindingItem> bindings;
-    bindings.reserve(bindless_d3d12::kRootParamTableCount);
-
-    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-      ++index) {
-      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-      graphics::RootBindingDesc binding {};
-      binding.binding_slot_desc.register_index = desc.shader_register;
-      binding.binding_slot_desc.register_space = desc.register_space;
-      binding.visibility = graphics::ShaderStageFlags::kAll;
-
-      switch (desc.kind) {
-      case bindless_d3d12::RootParamKind::DescriptorTable: {
-        graphics::DescriptorTableBinding table {};
-        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-          const auto& range = desc.ranges.front();
-          table.view_type = RangeTypeToViewType(
-            static_cast<bindless_d3d12::RangeType>(range.range_type));
-          table.base_index = range.base_register;
-          table.count
-            = range.num_descriptors == std::numeric_limits<std::uint32_t>::max()
-            ? std::numeric_limits<std::uint32_t>::max()
-            : range.num_descriptors;
-        }
-        binding.data = table;
-        break;
-      }
-      case bindless_d3d12::RootParamKind::CBV:
-        binding.data = graphics::DirectBufferBinding {};
-        break;
-      case bindless_d3d12::RootParamKind::RootConstants:
-        binding.data
-          = graphics::PushConstantsBinding { .size = desc.constants_count };
-        break;
-      }
-
-      bindings.emplace_back(binding);
-    }
-
-    return bindings;
-  }
 
   auto AddBooleanDefine(const bool enabled, std::string_view name,
     std::vector<graphics::ShaderDefine>& defines) -> void
@@ -904,7 +845,7 @@ namespace {
       "SceneRenderer: unsupported deferred debug visualization mode '{}'",
       to_string(mode));
 
-    auto root_bindings = BuildVortexRootBindings();
+    auto root_bindings = vortex::internal::BuildVortexRootBindings();
     auto pixel_defines = std::vector<graphics::ShaderDefine> {};
     AddBooleanDefine(true, GetShaderDebugDefineName(mode), pixel_defines);
 
@@ -1561,7 +1502,9 @@ auto SceneRenderer::DescribeExposureProductLayout(const RenderContext& ctx)
 auto SceneRenderer::PrepareExposureDomain(
   RenderContext& ctx, graphics::CommandRecorder& recorder) -> bool
 {
-  ctx.current_view.lighting_frame_slot = kInvalidShaderVisibleIndex;
+  // Nothing of this view's frame is published yet: exposure work recorded
+  // here must not read an earlier view record's lighting.
+  ctx.current_view.view_frame_bindings_slot = kInvalidShaderVisibleIndex;
   profiling::CpuProfileScope cpu_scope(
     "Vortex.SceneRenderer.PrepareExposureDomain",
     profiling::ProfileCategory::kPass);
@@ -2047,7 +1990,6 @@ auto SceneRenderer::RenderCurrentView(
   RenderContext& ctx, graphics::CommandRecorder& recorder) -> bool
 {
   deferred_lighting_state_ = {};
-  ctx.current_view.lighting_frame_slot = kInvalidShaderVisibleIndex;
   auto& scene_textures = ActiveSceneTextures();
   if (!ctx.current_view.frame_exposure) {
     ctx.current_view.hdr_color_format
@@ -2191,8 +2133,6 @@ auto SceneRenderer::RenderCurrentView(
     published_view_frame_bindings_.lighting_view_generation
       = lighting_bindings->view_generation;
     deferred_lighting_state_.published_lighting_frame_slot
-      = published_view_frame_bindings_.lighting_frame_slot;
-    ctx.current_view.lighting_frame_slot
       = published_view_frame_bindings_.lighting_frame_slot;
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
@@ -2397,7 +2337,7 @@ auto SceneRenderer::RenderCurrentView(
         : 0,
       recorder);
     if (lighting_ != nullptr && wants_scene_lighting) {
-      const auto* shadow_data
+      const auto shadow_data
         = shadows_->InspectShadowData(ctx.current_view.view_id);
       if (shadow_data == nullptr) {
         LogViewRejection(ctx.current_view.view_id, "shadow data is missing");
@@ -2434,10 +2374,8 @@ auto SceneRenderer::RenderCurrentView(
       "Vortex.Stage8.ShadowDepth",
       published_view_frame_bindings_.shadow_frame_slot);
   }
-  ctx.current_view.lighting_frame_slot
-    = published_view_frame_bindings_.lighting_frame_slot;
   // This recording consumes lighting in base, deferred and translucent passes.
-  if (lighting_ && ctx.current_view.lighting_frame_slot.IsValid()
+  if (lighting_ && published_view_frame_bindings_.lighting_frame_slot.IsValid()
     && !lighting_->AttachResources(ctx.current_view.view_id, recorder)) {
     LogViewRejection(
       ctx.current_view.view_id, "lighting resources could not be attached");
@@ -3059,7 +2997,6 @@ auto SceneRenderer::RenderCurrentView(
         .target = ResolveViewOutputTarget(ctx),
         .scene_depth = {},
         .scene_depth_srv = kInvalidShaderVisibleIndex,
-        .reverse_z = IsReverseZ(ctx),
       };
       // Wireframe views have no complete depth: nothing counts as hidden.
       if (!wireframe_only) {
@@ -3659,7 +3596,7 @@ auto SceneRenderer::RenderDebugVisualization(RenderContext& ctx,
   if (ResolveShadingModeForCurrentView(ctx) != ShadingMode::kDeferred) {
     return false;
   }
-  if (ctx.view_constants == nullptr) {
+  if (!ctx.view_constants.IsValid()) {
     return false;
   }
   if (published_view_id_ == kInvalidViewId
@@ -3737,7 +3674,7 @@ auto SceneRenderer::RenderDebugVisualization(RenderContext& ctx,
     BuildDebugVisualizationPipelineDesc(scene_textures, mode));
   recorder.SetGraphicsRootConstantBufferView(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-    ctx.view_constants->GetGPUVirtualAddress());
+    ctx.view_constants.GpuAddress());
   recorder.Draw(3U, 1U, 0U, 0U);
 
   recorder.RequireResourceState(
@@ -3782,7 +3719,7 @@ auto SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
   if (ResolveShadingModeForCurrentView(ctx) != ShadingMode::kDeferred) {
     return true;
   }
-  if (ctx.view_constants == nullptr) {
+  if (!ctx.view_constants.IsValid()) {
     return true;
   }
   if (published_view_id_ == kInvalidViewId
@@ -3808,21 +3745,19 @@ auto SceneRenderer::RenderDeferredLighting(RenderContext& ctx,
   if (lighting_ == nullptr) {
     return true;
   }
-  const auto* shadow_bindings = shadows_ != nullptr
-    ? shadows_->InspectShadowData(ctx.current_view.view_id)
-    : nullptr;
-  const auto directional_shadow_surfaces = shadows_ != nullptr
-    ? shadows_->InspectDirectionalShadowSurfaces(ctx.current_view.view_id)
-    : std::span<const std::shared_ptr<graphics::Texture>> {};
-  const auto spot_shadow_surfaces = shadows_ != nullptr
-    ? shadows_->InspectSpotShadowSurfaces(ctx.current_view.view_id)
-    : std::span<const std::shared_ptr<graphics::Texture>> {};
-  const auto point_shadow_surfaces = shadows_ != nullptr
-    ? shadows_->InspectPointShadowSurfaces(ctx.current_view.view_id)
-    : std::span<const std::shared_ptr<graphics::Texture>> {};
-  if (!lighting_->RenderDeferredLighting(ctx, recorder, scene_textures,
-        frame_light_selection_, shadow_bindings, directional_shadow_surfaces,
-        spot_shadow_surfaces, point_shadow_surfaces)) {
+  auto shadow_inputs = DeferredShadowInputs {};
+  if (shadows_ != nullptr) {
+    const auto view_id = ctx.current_view.view_id;
+    shadow_inputs = DeferredShadowInputs {
+      .data = shadows_->InspectShadowData(view_id),
+      .directional_surfaces
+      = shadows_->InspectDirectionalShadowSurfaces(view_id),
+      .spot_surfaces = shadows_->InspectSpotShadowSurfaces(view_id),
+      .point_surfaces = shadows_->InspectPointShadowSurfaces(view_id),
+    };
+  }
+  if (!lighting_->RenderDeferredLighting(
+        ctx, recorder, scene_textures, frame_light_selection_, shadow_inputs)) {
     return false;
   }
   const auto& lighting_state = lighting_->GetLastDeferredLightingState();

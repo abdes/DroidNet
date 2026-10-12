@@ -56,6 +56,7 @@
 #include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
+#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 
 namespace oxygen::vortex::testing::exposure {
@@ -644,6 +645,13 @@ NOLINT_TEST_F(ExposureGpuTest,
 NOLINT_TEST_F(
   ExposureGpuTest, FailedLightingHoldsExposureMarksOutputAndRecovers)
 {
+  // Tonemap and exposure reach the lighting slot through the view record.
+  const auto publish_view_lighting
+    = [this](const LightingFrameBindings& lighting) -> ShaderVisibleIndex {
+    auto view = ViewFrameBindings {};
+    view.lighting_frame_slot = PublishFixtureData(lighting);
+    return PublishFixtureData(view);
+  };
   auto settings = scene::ExposureSettings {};
   settings.mode = engine::ExposureMode::kAuto;
   const auto dim = Uniform(0.25F, 4U, 4U);
@@ -659,7 +667,7 @@ NOLINT_TEST_F(
   lighting.publication_state = kLightingPublicationRecorded;
   lighting.selection_revision = grid.selection_revision;
   lighting.build_status_srv = PublishFixtureData(grid);
-  ctx_.current_view.lighting_frame_slot = PublishFixtureData(lighting);
+  ctx_.current_view.view_frame_bindings_slot = publish_view_lighting(lighting);
   const auto failed = Run(bright, settings, 1.0F).state;
   EXPECT_FLOAT_EQ(failed.displayed_scale, accepted.displayed_scale);
   EXPECT_FLOAT_EQ(failed.latent_scale, accepted.latent_scale);
@@ -675,7 +683,7 @@ NOLINT_TEST_F(
   grid.state = kLightGridBuildValid;
   grid.reason = kLightGridReasonNone;
   lighting.build_status_srv = PublishFixtureData(grid);
-  ctx_.current_view.lighting_frame_slot = PublishFixtureData(lighting);
+  ctx_.current_view.view_frame_bindings_slot = publish_view_lighting(lighting);
   const auto recovered = Run(bright, settings, 1.0F).state;
   EXPECT_NE(recovered.displayed_scale, accepted.displayed_scale);
   EXPECT_NE(recovered.flags & 12U, 0U);
@@ -850,11 +858,11 @@ NOLINT_TEST_F(
       .delta_time_seconds = 1.0F, });
     facade.SetSceneSource({ .scene = observer_ptr {
                               scene.get(),
-                            } });
+                            }, });
     facade.SetViewIntent(input);
     facade.SetOutputTarget({ .framebuffer = observer_ptr {
                                target.get(),
-                             } });
+                             }, });
     auto session = facade.Finalize();
     if (!session.has_value()) {
       FAIL() << "Expected session to contain a value";

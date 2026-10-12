@@ -4,14 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <utility>
+
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
-#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/IndirectLighting/IndirectLightingService.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
@@ -28,70 +33,87 @@ auto IndirectLightingService::Record(RenderContext& ctx,
   constexpr auto required = kEnvironmentContractFlagSkyLightAuthoredEnabled
     | kEnvironmentContractFlagSkyLightIblValid;
   if ((bindings.contract_flags & required) != required
-    || !bindings.brdf_lut_srv.IsValid() || !ctx.view_constants
-    || textures.GetGBufferCount() < 3U)
+    || !bindings.brdf_lut_srv.IsValid() || !ctx.view_constants.IsValid()
+    || textures.GetGBufferCount() < 3U) {
     return false;
+  }
   auto graphics = renderer_.GetGraphics();
-  if (!graphics)
+  if (!graphics) {
     return false;
+  }
   if (!framebuffer_
-    || framebuffer_->GetDescriptor().color_attachments[0].texture.get()
+    || framebuffer_->GetDescriptor().color_attachments.at(0).texture.get()
       != textures.GetSceneColorResource().get()) {
-    if (framebuffer_)
+    if (framebuffer_) {
       graphics->RegisterDeferredRelease(std::move(framebuffer_));
+    }
     framebuffer_ = graphics->CreateFramebuffer(
       graphics::FramebufferDesc {}.AddColorAttachment(
         textures.GetSceneColorResource()));
   }
-  if (!framebuffer_)
+  if (!framebuffer_) {
     return false;
+  }
   namespace root = bindless::generated::d3d12;
   using graphics::ResourceStates;
   const auto track
-    = [&](const graphics::Texture& texture, ResourceStates desired) {
-        if (!recorder.IsResourceTracked(texture)
-          && !recorder.AdoptKnownResourceState(texture))
-          recorder.BeginTrackingResourceState(
-            texture, texture.GetDescriptor().initial_state, true);
-        recorder.RequireResourceState(texture, desired);
-      };
+    = [&](const graphics::Texture& texture, ResourceStates desired) -> void {
+    if (!recorder.IsResourceTracked(texture)
+      && !recorder.AdoptKnownResourceState(texture)) {
+      recorder.BeginTrackingResourceState(
+        texture, texture.GetDescriptor().initial_state, true);
+    }
+    recorder.RequireResourceState(texture, desired);
+  };
   track(textures.GetSceneColor(), ResourceStates::kRenderTarget);
   track(textures.GetSceneDepth(), ResourceStates::kShaderResource);
-  for (unsigned i = 0; i < textures.GetGBufferCount(); ++i)
+  for (unsigned i = 0; i < textures.GetGBufferCount(); ++i) {
     track(textures.GetGBuffer(static_cast<GBufferIndex>(i)),
       ResourceStates::kShaderResource);
+  }
   if (const auto& exposure = ctx.current_view.frame_exposure) {
     const auto& status = *exposure->current_state->status_buffer;
     if (!recorder.IsResourceTracked(status)
-      && !recorder.AdoptKnownResourceState(status))
+      && !recorder.AdoptKnownResourceState(status)) {
       recorder.BeginTrackingResourceState(
         status, ResourceStates::kCommon, false);
+    }
     recorder.RequireResourceState(status, ResourceStates::kUnorderedAccess);
   }
   const auto root_bindings = internal::BuildVortexRootBindings();
   const auto pipeline
     = graphics::GraphicsPipelineDesc::Builder {}
-        .SetVertexShader({ .stage = ShaderType::kVertex,
+        .SetVertexShader({
+          .stage = ShaderType::kVertex,
           .source_path = "Vortex/Services/IndirectLighting/DeferredIbl.hlsl",
-          .entry_point = "DeferredIblVS" })
-        .SetPixelShader({ .stage = ShaderType::kPixel,
+          .entry_point = "DeferredIblVS",
+        })
+        .SetPixelShader({
+          .stage = ShaderType::kPixel,
           .source_path = "Vortex/Services/IndirectLighting/DeferredIbl.hlsl",
-          .entry_point = "DeferredIblPS" })
+          .entry_point = "DeferredIblPS",
+        })
         .SetPrimitiveTopology(graphics::PrimitiveType::kTriangleList)
         .SetRasterizerState(graphics::RasterizerStateDesc::NoCulling())
         .SetDepthStencilState(graphics::DepthStencilStateDesc::Disabled())
-        .SetBlendState({ graphics::BlendTargetDesc { .blend_enable = true,
-          .src_blend = graphics::BlendFactor::kOne,
-          .dest_blend = graphics::BlendFactor::kOne,
-          .blend_op = graphics::BlendOp::kAdd,
-          .src_blend_alpha = graphics::BlendFactor::kZero,
-          .dest_blend_alpha = graphics::BlendFactor::kOne,
-          .blend_op_alpha = graphics::BlendOp::kAdd } })
-        .SetFramebufferLayout({ .color_target_formats
+        .SetBlendState({
+          graphics::BlendTargetDesc {
+            .blend_enable = true,
+            .src_blend = graphics::BlendFactor::kOne,
+            .dest_blend = graphics::BlendFactor::kOne,
+            .blend_op = graphics::BlendOp::kAdd,
+            .src_blend_alpha = graphics::BlendFactor::kZero,
+            .dest_blend_alpha = graphics::BlendFactor::kOne,
+            .blend_op_alpha = graphics::BlendOp::kAdd,
+          },
+        })
+        .SetFramebufferLayout({
+          .color_target_formats
           = { textures.GetSceneColor().GetDescriptor().format },
           .sample_count = textures.GetSceneColor().GetDescriptor().sample_count,
           .sample_quality
-          = textures.GetSceneColor().GetDescriptor().sample_quality })
+          = textures.GetSceneColor().GetDescriptor().sample_quality,
+        })
         .SetRootBindings(root_bindings)
         .SetDebugName("Vortex.Stage13.IndirectLighting")
         .Build();
@@ -109,16 +131,26 @@ auto IndirectLightingService::Record(RenderContext& ctx,
     recorder.SetViewport(viewport.viewport);
     recorder.SetScissors(viewport.scissors);
   } else {
-    recorder.SetViewport({ .width = static_cast<float>(extent.x),
+    recorder.SetViewport({
+      .width = static_cast<float>(extent.x),
       .height = static_cast<float>(extent.y),
-      .max_depth = 1.0F });
-    recorder.SetScissors({ .right = static_cast<std::int32_t>(extent.x),
-      .bottom = static_cast<std::int32_t>(extent.y) });
+      .max_depth = 1.0F,
+    });
+    recorder.SetScissors({
+      .right = static_cast<std::int32_t>(extent.x),
+      .bottom = static_cast<std::int32_t>(extent.y),
+    });
   }
   recorder.SetPipelineState(pipeline);
   recorder.SetGraphicsRootConstantBufferView(
     static_cast<std::uint32_t>(root::RootParam::kViewConstants),
-    ctx.view_constants->GetGPUVirtualAddress());
+    ctx.view_constants.GpuAddress());
+  // Deferred IBL reads only the bound view: no draw index, no inputs record.
+  const auto root_constants
+    = static_cast<std::uint32_t>(root::RootParam::kRootConstants);
+  recorder.SetGraphicsRoot32BitConstant(root_constants, 0U, 0U);
+  recorder.SetGraphicsRoot32BitConstant(
+    root_constants, kInvalidShaderVisibleIndex.get(), 1U);
   recorder.Draw(3U, 1U, 0U, 0U);
   return true;
 }

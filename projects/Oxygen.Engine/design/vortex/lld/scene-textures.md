@@ -1040,8 +1040,10 @@ stage module and subsystem service that needs it:
 void XxxModule::Execute(RenderContext& ctx, SceneTextures& scene_textures);
 
 // Subsystem service domain methods
-void LightingService::RenderDeferredLighting(
-  RenderContext& ctx, const SceneTextures& scene_textures);
+auto LightingService::RenderDeferredLighting(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
+  const FrameLightSelection& frame_light_set,
+  const DeferredShadowInputs& shadows) -> bool;
 ```
 
 **Null-safe behavior:** SceneTextures is never null — it exists from

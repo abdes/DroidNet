@@ -6,24 +6,50 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <functional>
 #include <memory>
 #include <span>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <d3d12.h>
+#include <glm/common.hpp>
+#include <glm/geometric.hpp>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/Vertex.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
@@ -31,16 +57,26 @@
 #include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
+#include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
+#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowContentLease.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Support/CpuAllocationCounter.h>
+#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 
 namespace oxygen::vortex::testing {
 namespace {
@@ -79,31 +115,58 @@ namespace {
     }
   };
 
+  //! The probe's comparison result for one sample: the bias sign decides it,
+  //! except that an unbiased sample on the depth edge (`offset` 0) blends
+  //! both sides, and other unbiased samples take their side's depth.
+  struct CubeComparisonCase {
+    float bias { 0.0F };
+    float offset { 0.0F };
+    unsigned cube { 0U };
+  };
+
+  auto ExpectedCubeComparison(const CubeComparisonCase& sample) -> float
+  {
+    const auto [bias, offset, cube] = sample;
+    if (bias < 0.0F) {
+      return 0.0F;
+    }
+    if (bias > 0.0F) {
+      return 1.0F;
+    }
+    if (offset == 0.0F) {
+      return 0.5F;
+    }
+    return (offset < 0.0F) == (cube == 0U) ? 1.0F : 0.0F;
+  }
+
   NOLINT_TEST_F(ShadowAdmissionGpuTest,
     CubeComparisonFiltersVisibilityAndAppliesReversedDepthBias)
   {
     constexpr unsigned size = 8U;
     constexpr unsigned row_pitch = 256U;
     constexpr unsigned layer_bytes = row_pitch * size;
-    auto texture = CreateRegisteredTexture({ .width = size,
+    auto texture = CreateRegisteredTexture({
+      .width = size,
       .height = size,
       .array_size = 12U,
       .format = Format::kR32Float,
       .texture_type = TextureType::kTextureCubeArray,
       .is_shader_resource = true,
-      .initial_state = graphics::ResourceStates::kCommon });
-    auto upload = CreateUploadBuffer(SizeBytes { layer_bytes * 12U });
+      .initial_state = graphics::ResourceStates::kCommon,
+    });
+    auto upload = CreateUploadBuffer(
+      SizeBytes { static_cast<std::uint64_t>(layer_bytes) * 12U });
     for (unsigned layer = 0; layer < 12U; ++layer) {
       for (unsigned y = 0; y < size; ++y) {
         for (unsigned x = 0; x < size; ++x) {
           const float depth = ((x < size / 2U) == (layer < 6U)) ? 0.25F : 0.75F;
           upload->Update(&depth, sizeof(depth),
-            layer * layer_bytes + y * row_pitch + x * sizeof(float));
+            (layer * layer_bytes) + (y * row_pitch) + (x * sizeof(float)));
         }
       }
     }
-    SubmitCommands(
-      "Cube comparison fixture", [&](graphics::CommandRecorder& recorder) {
+    SubmitCommands("Cube comparison fixture",
+      [&](graphics::CommandRecorder& recorder) -> void {
         EnsureTracked(recorder, upload, graphics::ResourceStates::kGenericRead);
         EnsureTracked(recorder, texture, graphics::ResourceStates::kCommon);
         recorder.RequireResourceState(
@@ -111,15 +174,15 @@ namespace {
         recorder.FlushBarriers();
         for (unsigned layer = 0; layer < 12U; ++layer) {
           recorder.CopyBufferToTexture(*upload,
-            { .buffer_offset = layer * layer_bytes,
+            { .buffer_offset = static_cast<std::uint64_t>(layer) * layer_bytes,
               .buffer_row_pitch = row_pitch,
               .buffer_slice_pitch = layer_bytes,
               .dst_slice = { .width = size,
                 .height = size,
                 .depth = 1,
-                .array_slice = layer },
+                .array_slice = layer, },
               .dst_subresources
-              = { .base_array_slice = layer, .num_array_slices = 1U } },
+              = { .base_array_slice = layer, .num_array_slices = 1U }, },
             *texture);
         }
         recorder.RequireResourceStateFinal(
@@ -134,31 +197,43 @@ namespace {
     const auto srv = allocator.GetShaderVisibleIndex(handle);
     const auto view_handle = Backend().GetResourceRegistry().RegisterView(
       *texture, std::move(handle),
-      graphics::TextureViewDescription { .format = Format::kR32Float,
+      graphics::TextureViewDescription {
+        .format = Format::kR32Float,
         .dimension = TextureType::kTextureCubeArray,
-        .sub_resources = graphics::TextureSubResourceSet::EntireTexture() });
+        .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
+      });
     ASSERT_TRUE(view_handle->IsValid());
     auto inputs = std::vector<std::array<std::uint32_t, 12>> {};
     auto expected = std::vector<float> {};
     for (unsigned cube = 0; cube < 2U; ++cube) {
       for (unsigned face = 0; face < 6U; ++face) {
         for (const float s : { -0.5F, 0.0F, 0.5F }) {
-          const auto directions
-            = std::array { glm::vec3 { 1, 0, -s }, glm::vec3 { -1, 0, s },
-                glm::vec3 { s, 1, 0 }, glm::vec3 { s, -1, 0 },
-                glm::vec3 { s, 0, 1 }, glm::vec3 { -s, 0, -1 } };
+          const auto directions = std::array {
+            glm::vec3 { 1, 0, -s },
+            glm::vec3 { -1, 0, s },
+            glm::vec3 { s, 1, 0 },
+            glm::vec3 { s, -1, 0 },
+            glm::vec3 { s, 0, 1 },
+            glm::vec3 { -s, 0, -1 },
+          };
           for (const float bias : { -0.3F, 0.0F, 0.3F }) {
-            const auto direction = directions[face];
-            inputs.push_back({ srv.get(), cube, 1U, size,
+            const auto direction = directions.at(face);
+            inputs.push_back({
+              srv.get(),
+              cube,
+              1U,
+              size,
               std::bit_cast<std::uint32_t>(direction.x),
               std::bit_cast<std::uint32_t>(direction.y),
               std::bit_cast<std::uint32_t>(direction.z),
               std::bit_cast<std::uint32_t>(0.5F),
-              std::bit_cast<std::uint32_t>(bias), 0, 0, 0 });
-            expected.push_back(bias < 0 ? 0.0F
-                : bias > 0              ? 1.0F
-                : s == 0                ? 0.5F
-                         : ((s < 0) == (cube == 0) ? 1.0F : 0.0F));
+              std::bit_cast<std::uint32_t>(bias),
+              0,
+              0,
+              0,
+            });
+            expected.push_back(ExpectedCubeComparison(
+              { .bias = bias, .offset = s, .cube = cube }));
           }
         }
       }
@@ -167,7 +242,7 @@ namespace {
       static_cast<unsigned>(inputs.size()), 65536U, false);
     ASSERT_EQ(result.size(), expected.size());
     for (std::size_t index = 0; index < result.size(); ++index) {
-      EXPECT_NEAR(result[index][0], expected[index], 1.0e-6F) << index;
+      EXPECT_NEAR(result.at(index).at(0), expected.at(index), 1.0e-6F) << index;
     }
     RecordProperty(
       "bilinear_comparison_cases", static_cast<int>(result.size()));
@@ -180,16 +255,18 @@ namespace {
     for (unsigned index = 0; index < 3U; ++index) {
       auto light = AddPoint(index);
       light_sources.push_back(light.GetHandle());
-      ASSERT_TRUE(light.EditLight<scene::PointLight>([index](auto& value) {
-        value.Common().shadow.bias = static_cast<float>(index) * 0.25F;
-        if (index == 1U) {
-          value.Common().shadow.resolution_hint
-            = scene::ShadowResolutionHint::kHigh;
-        }
-      }));
+      ASSERT_TRUE(
+        light.EditLight<scene::PointLight>([index](auto& value) -> void {
+          value.Common().shadow.bias = static_cast<float>(index) * 0.25F;
+          if (index == 1U) {
+            value.Common().shadow.resolution_hint
+              = scene::ShadowResolutionHint::kHigh;
+          }
+        }));
     }
     SetSurface(data::MaterialDomain::kOpaque);
     const glm::vec3 extent { 1.0F, 1.3F, 1.6F };
+    const auto extent_axes = std::array { extent.x, extent.y, extent.z };
     auto vertices = std::vector<data::Vertex> {};
     auto indices = std::vector<std::uint32_t> {};
     for (unsigned axis = 0; axis < 3U; ++axis) {
@@ -197,20 +274,27 @@ namespace {
         const auto first = static_cast<std::uint32_t>(vertices.size());
         const unsigned u = (axis + 1U) % 3U;
         const unsigned v = (axis + 2U) % 3U;
-        glm::vec3 normal { 0 };
-        normal[axis] = -sign;
-        for (const auto corner : std::array { glm::vec2 { -1, -1 },
-               glm::vec2 { 1, -1 }, glm::vec2 { 1, 1 }, glm::vec2 { -1, 1 } }) {
-          glm::vec3 position {};
-          position[axis] = extent[axis] * sign;
-          position[u] = extent[u] * corner.x;
-          position[v] = extent[v] * corner.y;
-          vertices.push_back({ .position = position,
+        auto normal_axes = std::array<float, 3> {};
+        normal_axes.at(axis) = -sign;
+        const auto normal = std::bit_cast<glm::vec3>(normal_axes);
+        for (const auto corner : std::array {
+               glm::vec2 { -1, -1 },
+               glm::vec2 { 1, -1 },
+               glm::vec2 { 1, 1 },
+               glm::vec2 { -1, 1 },
+             }) {
+          auto position = std::array<float, 3> {};
+          position.at(axis) = extent_axes.at(axis) * sign;
+          position.at(u) = extent_axes.at(u) * corner.x;
+          position.at(v) = extent_axes.at(v) * corner.y;
+          vertices.push_back({
+            .position = std::bit_cast<glm::vec3>(position),
             .normal = normal,
             .texcoord = { 0.5F, 0.5F },
             .tangent = { 1, 0, 0 },
             .bitangent = { 0, 1, 0 },
-            .color = { 1, 1, 1, 1 } });
+            .color = { 1, 1, 1, 1 },
+          });
         }
         const auto corners = sign < 0 ? std::array { 0U, 1U, 2U, 0U, 2U, 3U }
                                       : std::array { 0U, 2U, 1U, 0U, 3U, 2U };
@@ -224,18 +308,19 @@ namespace {
           .WithVertices(vertices)
           .WithIndices(indices)
           .BeginSubMesh("Box", data::MaterialAsset::CreateDefault())
-          .WithMeshView({ .first_index = 0,
+          .WithMeshView({
+            .first_index = 0,
             .index_count = 36,
             .first_vertex = 0,
-            .vertex_count = 24 })
+            .vertex_count = 24,
+          })
           .EndSubMesh()
           .Build();
     data::pak::geometry::GeometryAssetDesc desc {};
     desc.lod_count = 1U;
-    for (unsigned axis = 0; axis < 3U; ++axis) {
-      desc.bounding_box_min[axis] = -extent[axis];
-      desc.bounding_box_max[axis] = extent[axis];
-    }
+    std::ranges::transform(
+      extent_axes, std::begin(desc.bounding_box_min), std::negate {});
+    std::ranges::copy(extent_axes, std::begin(desc.bounding_box_max));
     mesh_node.GetRenderable().SetGeometry(std::make_shared<data::GeometryAsset>(
       data::AssetKey::FromVirtualPath("/Test/PointPcf/Box.ogeo"), desc,
       std::vector<std::shared_ptr<data::Mesh>> { mesh }));
@@ -244,9 +329,9 @@ namespace {
       oxygen::data::SubmeshIndex { 0 }, data::MaterialAsset::CreateDefault());
     auto records = std::vector<CubeLocalShadowRecord> {};
     std::vector<ShadowContentLease> retained_maps;
-    probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
+    probe->inspect = [&](const auto& ctx, const auto&, unsigned) -> void {
       auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
-      const auto* data
+      const auto data
         = RendererPublicationProbe::GetShadowService(*owner)->InspectShadowData(
           ctx.current_view.view_id);
       ASSERT_NE(data, nullptr);
@@ -262,21 +347,22 @@ namespace {
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
     ASSERT_EQ(records.size(), 3U);
     // Physical grouping follows resolution, independently of selection order.
-    std::vector<const CubeLocalShadowRecord*> low_resolution;
-    const CubeLocalShadowRecord* high_resolution = nullptr;
+    std::vector<observer_ptr<const CubeLocalShadowRecord>> low_resolution;
+    observer_ptr<const CubeLocalShadowRecord> high_resolution;
     for (const auto& record : records) {
       if (record.inverse_resolution.x == 1.0F / 512.0F) {
-        low_resolution.push_back(&record);
+        low_resolution.emplace_back(&record);
       } else {
-        high_resolution = &record;
+        high_resolution = observer_ptr { &record };
       }
     }
     ASSERT_EQ(low_resolution.size(), 2U);
     ASSERT_NE(high_resolution, nullptr);
-    EXPECT_EQ(low_resolution[0]->surface_srv, low_resolution[1]->surface_srv);
-    EXPECT_NE(low_resolution[0]->first_array_layer,
-      low_resolution[1]->first_array_layer);
-    EXPECT_NE(low_resolution[0]->surface_srv, high_resolution->surface_srv);
+    const auto& first_low = *low_resolution.front();
+    const auto& second_low = *low_resolution.back();
+    EXPECT_EQ(first_low.surface_srv, second_low.surface_srv);
+    EXPECT_NE(first_low.first_array_layer, second_low.first_array_layer);
+    EXPECT_NE(first_low.surface_srv, high_resolution->surface_srv);
     auto rays = std::vector<glm::vec3> {};
     for (int x = -1; x <= 1; ++x) {
       for (int y = -1; y <= 1; ++y) {
@@ -288,9 +374,15 @@ namespace {
       }
     }
     rays.insert(rays.end(),
-      { { 1, 0.21F, -0.37F }, { -0.31F, 1, 0.47F }, { 0.27F, -0.39F, 1 },
-        { 1, 0.999F, 0 }, { 0.999F, 1, 0 }, { 0, 0.00001F, 1 },
-        { 0, 0.00001F, -1 } });
+      {
+        { 1, 0.21F, -0.37F },
+        { -0.31F, 1, 0.47F },
+        { 0.27F, -0.39F, 1 },
+        { 1, 0.999F, 0 },
+        { 0.999F, 1, 0 },
+        { 0, 0.00001F, 1 },
+        { 0, 0.00001F, -1 },
+      });
     auto inputs = std::vector<std::array<std::uint32_t, 12>> {};
     auto expected = std::vector<float> {};
     auto expected_depth = std::vector<float> {};
@@ -298,8 +390,11 @@ namespace {
       const auto direction = glm::normalize(ray);
       const auto abs_direction = glm::abs(direction);
       const auto hit = 1.0F
-        / (std::max)({ abs_direction.x / extent.x, abs_direction.y / extent.y,
-          abs_direction.z / extent.z });
+        / (std::max)({
+          abs_direction.x / extent.x,
+          abs_direction.y / extent.y,
+          abs_direction.z / extent.z,
+        });
       const auto axial
         = (std::max)({ abs_direction.x, abs_direction.y, abs_direction.z });
       for (const unsigned count : { 1U, 5U, 29U }) {
@@ -307,26 +402,32 @@ namespace {
           // Interleave backing descriptors and nonzero cube indices per lane.
           for (const auto& record : records) {
             EXPECT_EQ(record.pcf_sample_count, 29U);
-            const auto depth = [&](float distance) {
+            const auto depth = [&](float distance) -> float {
               return record.near_plane_m * (record.far_plane_m - distance)
                 / (distance * (record.far_plane_m - record.near_plane_m));
             };
-            inputs.push_back({ record.surface_srv.get(),
-              record.first_array_layer.get() / 6U, count,
+            inputs.push_back({
+              record.surface_srv.get(),
+              record.first_array_layer.get() / 6U,
+              count,
               static_cast<unsigned>(
                 std::lround(1 / record.inverse_resolution.x)),
               std::bit_cast<std::uint32_t>(-direction.x),
               std::bit_cast<std::uint32_t>(-direction.y),
               std::bit_cast<std::uint32_t>(-direction.z),
-              std::bit_cast<std::uint32_t>(depth(hit * axial * scale)), 0, 0, 0,
-              0 });
+              std::bit_cast<std::uint32_t>(depth(hit * axial * scale)),
+              0,
+              0,
+              0,
+              0,
+            });
             expected.push_back(scale < 1 ? 1.0F : 0.0F);
             expected_depth.push_back(depth(hit * axial));
           }
         }
       }
     }
-    const auto attach = [&](graphics::CommandRecorder& recorder) {
+    const auto attach = [&](graphics::CommandRecorder& recorder) -> void {
       for (const auto& lease : retained_maps) {
         CHECK_F(
           lease.Attach(recorder, Backend().GetResourceRegistry()).has_value());
@@ -336,8 +437,9 @@ namespace {
       static_cast<unsigned>(inputs.size()), 65536U, false, attach);
     ASSERT_EQ(result.size(), inputs.size());
     for (std::size_t index = 0; index < result.size(); ++index) {
-      EXPECT_NEAR(result[index][0], expected[index], 1.0e-6F) << index;
-      EXPECT_NEAR(result[index][1], expected_depth[index], 5.0e-4F) << index;
+      EXPECT_NEAR(result.at(index).at(0), expected.at(index), 1.0e-6F) << index;
+      EXPECT_NEAR(result.at(index).at(1), expected_depth.at(index), 5.0e-4F)
+        << index;
     }
     RecordProperty(
       "cube_hardware_pcf_samples", static_cast<int>(result.size()));
@@ -348,10 +450,11 @@ namespace {
       SetSurface(data::MaterialDomain::kMasked, 0.0F, rejected);
       ASSERT_NO_FATAL_FAILURE(RenderSurface(!rejected, 0.0F, 2U));
       for (size_t index = 0; index < inputs.size(); ++index) {
-        const auto& record = records[index % records.size()];
-        inputs[index][0] = record.surface_srv.get();
-        inputs[index][1] = record.first_array_layer.get() / 6U;
-        inputs[index][3]
+        const auto& record = records.at(index % records.size());
+        auto& input = inputs.at(index);
+        input.at(0) = record.surface_srv.get();
+        input.at(1) = record.first_array_layer.get() / 6U;
+        input.at(3)
           = static_cast<unsigned>(std::lround(1 / record.inverse_resolution.x));
       }
       const auto masked = RunToneProbe(std::as_bytes(std::span { inputs }),
@@ -359,10 +462,10 @@ namespace {
       ASSERT_EQ(masked.size(), inputs.size());
       for (std::size_t index = 0; index < masked.size(); ++index) {
         EXPECT_NEAR(
-          masked[index][0], rejected ? 1.0F : expected[index], 1.0e-6F)
+          masked.at(index).at(0), rejected ? 1.0F : expected.at(index), 1.0e-6F)
           << index;
-        EXPECT_NEAR(
-          masked[index][1], rejected ? 0.0F : expected_depth[index], 5.0e-4F)
+        EXPECT_NEAR(masked.at(index).at(1),
+          rejected ? 0.0F : expected_depth.at(index), 5.0e-4F)
           << index;
       }
     }
@@ -388,10 +491,10 @@ namespace {
     std::shared_ptr<const graphics::Texture> surface;
     std::uint32_t layer = 0U;
     std::uint32_t surface_srv = kInvalidShaderVisibleIndex.get();
-    probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
+    probe->inspect = [&](const auto& ctx, const auto&, unsigned) -> void {
       auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
       auto* shadows = RendererPublicationProbe::GetShadowService(*owner);
-      const auto* data = shadows->InspectShadowData(ctx.current_view.view_id);
+      const auto data = shadows->InspectShadowData(ctx.current_view.view_id);
       ASSERT_NE(data, nullptr);
       ASSERT_EQ(data->projected_local_records.size(), 1U);
       const auto surfaces
@@ -422,22 +525,26 @@ namespace {
         if (baked) {
           position.x *= 2.0F;
         }
-        vertices.push_back({ .position = position,
+        vertices.push_back({
+          .position = position,
           .normal = normal,
           .texcoord = { 0.5F, 0.5F },
           .tangent = { 0, 1, 0 },
           .bitangent = { 1, 0, 0 },
-          .color = { 1, 1, 1, 1 } });
+          .color = { 1, 1, 1, 1 },
+        });
       }
       std::shared_ptr<data::Mesh> mesh
         = data::MeshBuilder()
             .WithVertices(vertices)
             .WithIndices(std::vector<std::uint32_t> { 0, 1, 2 })
             .BeginSubMesh("Slope", data::MaterialAsset::CreateDefault())
-            .WithMeshView({ .first_index = 0,
+            .WithMeshView({
+              .first_index = 0,
               .index_count = 3,
               .first_vertex = 0,
-              .vertex_count = 3 })
+              .vertex_count = 3,
+            })
             .EndSubMesh()
             .Build();
       auto desc = data::pak::geometry::GeometryAssetDesc {};
@@ -459,11 +566,16 @@ namespace {
       ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
       ASSERT_NE(surface, nullptr);
       const auto& texture = surface->GetDescriptor();
-      const auto sample = std::array { surface_srv, texture.width / 2U,
-        texture.height / 2U, layer };
+      const auto sample = std::array {
+        surface_srv,
+        texture.width / 2U,
+        texture.height / 2U,
+        layer,
+      };
       constexpr auto depth_array_probe = 32768U;
       const auto readback = RunToneProbe(std::as_bytes(std::span { sample }),
-        1U, depth_array_probe, false, [&](graphics::CommandRecorder& recorder) {
+        1U, depth_array_probe, false,
+        [&](graphics::CommandRecorder& recorder) -> void {
           CHECK_F(
             retained_shadow.Attach(recorder, Backend().GetResourceRegistry())
               .has_value());
@@ -473,7 +585,7 @@ namespace {
       EXPECT_GT(depths.at(static_cast<unsigned>(baked)), 0.0F);
       EXPECT_LT(depths.at(static_cast<unsigned>(baked)), 1.0F);
     }
-    EXPECT_NEAR(depths[0], depths[1], 1.0e-6F);
+    EXPECT_NEAR(depths.front(), depths.back(), 1.0e-6F);
     surface.reset();
   }
 
@@ -501,7 +613,7 @@ namespace {
     probe->inspect = [&](const auto& ctx, const auto&, unsigned) -> void {
       auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
       auto* shadows = RendererPublicationProbe::GetShadowService(*owner);
-      const auto* data = shadows->InspectShadowData(ctx.current_view.view_id);
+      const auto data = shadows->InspectShadowData(ctx.current_view.view_id);
       ASSERT_NE(data, nullptr);
       EXPECT_EQ(data->cube_local_records.size(), 5U);
       EXPECT_EQ(data->projected_local_records.size(), 9U);
@@ -537,10 +649,10 @@ namespace {
   {
     auto light_node = AddPoint(0U);
     bool expected_contact = false;
-    probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
+    probe->inspect = [&](const auto& ctx, const auto&, unsigned) -> void {
       auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
       auto* shadows = RendererPublicationProbe::GetShadowService(*owner);
-      const auto* data = shadows->InspectShadowData(ctx.current_view.view_id);
+      const auto data = shadows->InspectShadowData(ctx.current_view.view_id);
       ASSERT_NE(data, nullptr);
       EXPECT_EQ(data->bindings.contact_enabled, expected_contact ? 1U : 0U);
       EXPECT_EQ(data->bindings.contact_depth_srv.IsValid(), expected_contact);
@@ -556,8 +668,9 @@ namespace {
       SetSurface(data::MaterialDomain::kOpaque);
       float baseline = 0.0F;
       for (const bool contact : { false, true, false }) {
-        auto light = std::make_unique<scene::PointLight>(
-          light_node.GetLightAs<scene::PointLight>()->get());
+        const auto current = light_node.GetLightAs<scene::PointLight>();
+        ASSERT_HAS_VALUE(current);
+        auto light = std::make_unique<scene::PointLight>(current->get());
         light->Common().shadow.contact_shadows = contact;
         ASSERT_TRUE(light_node.ReplaceLight(std::move(light)));
         expected_contact = contact;
@@ -565,18 +678,18 @@ namespace {
         const auto measured = ReadFloatTexture(*probe->color).at(0).at(0);
         ASSERT_GT(measured, 1.0e-6F);
         if (contact) {
-          EXPECT_NEAR(measured, baseline, baseline * 0.005F + 2.0e-5F);
+          EXPECT_NEAR(measured, baseline, (baseline * 0.005F) + 2.0e-5F);
         } else {
           baseline = measured;
         }
       }
     }
     ASSERT_TRUE(light_node.EditLight<scene::PointLight>(
-      [](auto& light) { light.Common().affects_world = false; }));
+      [](auto& light) -> void { light.Common().affects_world = false; }));
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
     const auto empty
       = renderer_->InspectViewRenderStatus(ViewId { surface_view_id });
-    ASSERT_TRUE(empty);
+    ASSERT_HAS_VALUE(empty);
     EXPECT_TRUE(empty->IsCaptureEligible(frame::SequenceNumber { sequence }));
   }
 
@@ -584,20 +697,23 @@ namespace {
     ContactOccluderUsesCasterMaskAndReceiverGateInBothPaths)
   {
     constexpr unsigned extent = 129U;
-    constexpr unsigned center = extent / 2U * extent + extent / 2U;
-    view.viewport.width = view.viewport.height = float(extent);
-    camera.GetCameraAs<scene::PerspectiveCamera>()->get().SetViewport(
-      view.viewport);
-    auto output = CreateRegisteredTexture({ .width = extent,
+    constexpr unsigned center = (extent / 2U * extent) + (extent / 2U);
+    view.viewport.width = view.viewport.height = static_cast<float>(extent);
+    const auto perspective = camera.GetCameraAs<scene::PerspectiveCamera>();
+    ASSERT_HAS_VALUE(perspective);
+    perspective->get().SetViewport(view.viewport);
+    auto output = CreateRegisteredTexture({
+      .width = extent,
       .height = extent,
       .format = Format::kRGBA32Float,
       .is_render_target = true,
-      .initial_state = graphics::ResourceStates::kCommon });
+      .initial_state = graphics::ResourceStates::kCommon,
+    });
     framebuffer = Backend().CreateFramebuffer(
       graphics::FramebufferDesc {}.AddColorAttachment(output));
     auto light = AddPoint(0U);
     ASSERT_TRUE(light.GetTransform().SetLocalPosition({ 1.0F, 0.0F, 0.0F }));
-    ASSERT_TRUE(light.EditLight<scene::PointLight>([](auto& candidate) {
+    ASSERT_TRUE(light.EditLight<scene::PointLight>([](auto& candidate) -> void {
       // Keep the small blocker partly visible through the map filter so the
       // contact pass has a measurable contribution of its own.
       candidate.Common().shadow.bias = 1.0F;
@@ -610,11 +726,15 @@ namespace {
     ASSERT_TRUE(blocker.GetTransform().SetLocalScale({ 0.05F, 0.05F, 0.05F }));
     ASSERT_TRUE(
       blocker.GetTransform().SetLocalPosition({ 0.09F, 0.0F, -0.8606F }));
-    mesh_node.GetFlags()->get().SetLocalValue(
+    auto mesh_flags = mesh_node.GetFlags();
+    ASSERT_HAS_VALUE(mesh_flags);
+    auto blocker_flags = blocker.GetFlags();
+    ASSERT_HAS_VALUE(blocker_flags);
+    mesh_flags->get().SetLocalValue(
       scene::SceneNodeFlags::kCastsShadows, false);
     expected_draws = 2U;
     std::shared_ptr<const graphics::Texture> contact_depth;
-    probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
+    probe->inspect = [&](const auto& ctx, const auto&, unsigned) -> void {
       const auto* owner
         = RendererPublicationProbe::GetSceneRenderer(*renderer_);
       contact_depth = RendererPublicationProbe::GetShadowService(*owner)
@@ -622,24 +742,26 @@ namespace {
     };
     for (const bool forward : { false, true }) {
       SetSurface(data::MaterialDomain::kOpaque);
-      mesh_node.GetFlags()->get().SetLocalValue(
+      mesh_flags->get().SetLocalValue(
         scene::SceneNodeFlags::kReceivesShadows, true);
-      blocker.GetFlags()->get().SetLocalValue(
+      blocker_flags->get().SetLocalValue(
         scene::SceneNodeFlags::kCastsShadows, false);
-      ASSERT_TRUE(light.EditLight<scene::PointLight>([](auto& candidate) {
-        candidate.Common().shadow.contact_shadows = false;
-      }));
+      ASSERT_TRUE(
+        light.EditLight<scene::PointLight>([](auto& candidate) -> void {
+          candidate.Common().shadow.contact_shadows = false;
+        }));
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 2U));
       const auto unshadowed = ReadFloatTexture(*probe->color).at(center).at(0);
-      blocker.GetFlags()->get().SetLocalValue(
+      blocker_flags->get().SetLocalValue(
         scene::SceneNodeFlags::kCastsShadows, true);
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 1U));
       const auto baseline = ReadFloatTexture(*probe->color).at(center).at(0);
       ASSERT_GT(baseline, 1.0e-6F);
       EXPECT_LE(baseline, unshadowed);
-      ASSERT_TRUE(light.EditLight<scene::PointLight>([](auto& candidate) {
-        candidate.Common().shadow.contact_shadows = true;
-      }));
+      ASSERT_TRUE(
+        light.EditLight<scene::PointLight>([](auto& candidate) -> void {
+          candidate.Common().shadow.contact_shadows = true;
+        }));
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 1U));
       ASSERT_NE(contact_depth, nullptr);
       EXPECT_EQ(contact_depth->GetDescriptor().format, Format::kDepth32);
@@ -647,14 +769,14 @@ namespace {
       EXPECT_EQ(contact_depth->GetDescriptor().height, extent);
       EXPECT_LT(
         ReadFloatTexture(*probe->color).at(center).at(0), baseline * 0.8F);
-      blocker.GetFlags()->get().SetLocalValue(
+      blocker_flags->get().SetLocalValue(
         scene::SceneNodeFlags::kCastsShadows, false);
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 1U));
       EXPECT_NEAR(ReadFloatTexture(*probe->color).at(center).at(0), unshadowed,
         unshadowed * 0.005F);
-      blocker.GetFlags()->get().SetLocalValue(
+      blocker_flags->get().SetLocalValue(
         scene::SceneNodeFlags::kCastsShadows, true);
-      mesh_node.GetFlags()->get().SetLocalValue(
+      mesh_flags->get().SetLocalValue(
         scene::SceneNodeFlags::kReceivesShadows, false);
       ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 1U));
       EXPECT_NEAR(ReadFloatTexture(*probe->color).at(center).at(0), unshadowed,
@@ -666,15 +788,18 @@ namespace {
     OffscreenLightAndCasterStillShadowVisibleReceiverInBothPaths)
   {
     constexpr unsigned extent = 129U;
-    constexpr unsigned center = extent / 2U * extent + extent / 2U;
-    view.viewport.width = view.viewport.height = float(extent);
-    camera.GetCameraAs<scene::PerspectiveCamera>()->get().SetViewport(
-      view.viewport);
-    auto output = CreateRegisteredTexture({ .width = extent,
+    constexpr unsigned center = (extent / 2U * extent) + (extent / 2U);
+    view.viewport.width = view.viewport.height = static_cast<float>(extent);
+    const auto perspective = camera.GetCameraAs<scene::PerspectiveCamera>();
+    ASSERT_HAS_VALUE(perspective);
+    perspective->get().SetViewport(view.viewport);
+    auto output = CreateRegisteredTexture({
+      .width = extent,
       .height = extent,
       .format = Format::kRGBA32Float,
       .is_render_target = true,
-      .initial_state = graphics::ResourceStates::kCommon });
+      .initial_state = graphics::ResourceStates::kCommon,
+    });
     framebuffer = Backend().CreateFramebuffer(
       graphics::FramebufferDesc {}.AddColorAttachment(output));
     auto light = AddPoint(0U);
@@ -686,12 +811,16 @@ namespace {
       oxygen::data::SubmeshIndex { 0 }, MakeEmissiveMaterial(0.0F));
     ASSERT_TRUE(blocker.GetTransform().SetLocalScale({ 0.2F, 0.2F, 0.2F }));
     ASSERT_TRUE(blocker.GetTransform().SetLocalPosition({ 1.0F, 0.0F, -0.3F }));
-    mesh_node.GetFlags()->get().SetLocalValue(
+    auto mesh_flags = mesh_node.GetFlags();
+    ASSERT_HAS_VALUE(mesh_flags);
+    auto blocker_flags = blocker.GetFlags();
+    ASSERT_HAS_VALUE(blocker_flags);
+    mesh_flags->get().SetLocalValue(
       scene::SceneNodeFlags::kCastsShadows, false);
     expected_draws = 2U;
     bool is_forward = false;
     bool is_spot = false;
-    probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
+    probe->inspect = [&](const auto& ctx, const auto&, unsigned) -> void {
       const auto frustum = ctx.current_view.resolved_view->GetFrustum();
       EXPECT_FALSE(frustum.IntersectsSphere({ 2.0F, 0.0F, 0.0F }, 0.0F));
       EXPECT_TRUE(frustum.IntersectsSphere({ 2.0F, 0.0F, 0.0F }, 3.0F));
@@ -699,7 +828,7 @@ namespace {
       // the light-to-receiver ray halfway between its endpoints.
       EXPECT_FALSE(frustum.IntersectsSphere({ 1.0F, 0.0F, -0.5F }, 0.57F));
       auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
-      const auto* shadows
+      const auto shadows
         = RendererPublicationProbe::GetShadowService(*owner)->InspectShadowData(
           ctx.current_view.view_id);
       ASSERT_NE(shadows, nullptr);
@@ -733,15 +862,15 @@ namespace {
           SCOPED_TRACE(range);
           if (spot) {
             ASSERT_TRUE(light.EditLight<scene::SpotLight>(
-              [range](auto& candidate) { candidate.SetRange(range); }));
+              [range](auto& candidate) -> void { candidate.SetRange(range); }));
           } else {
             ASSERT_TRUE(light.EditLight<scene::PointLight>(
-              [range](auto& candidate) { candidate.SetRange(range); }));
+              [range](auto& candidate) -> void { candidate.SetRange(range); }));
           }
           auto lit = 0.0F;
           for (const bool casts : { false, true, false }) {
             expected_draws = casts ? 2U : 1U;
-            blocker.GetFlags()->get().SetLocalValue(
+            blocker_flags->get().SetLocalValue(
               scene::SceneNodeFlags::kCastsShadows, casts);
             ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
             const auto measured
@@ -752,7 +881,7 @@ namespace {
               lit = measured;
               ASSERT_GT(lit, 1.0e-6F);
             } else {
-              EXPECT_NEAR(measured, lit, lit * 0.005F + 2.0e-5F);
+              EXPECT_NEAR(measured, lit, (lit * 0.005F) + 2.0e-5F);
             }
           }
         }
@@ -786,7 +915,7 @@ namespace {
       RenderSurface(false, 0.0F, 1U, ExpectedViewOutcome::kRejected));
     const auto failure
       = renderer_->InspectViewRenderStatus(ViewId { surface_view_id });
-    ASSERT_TRUE(failure);
+    ASSERT_HAS_VALUE(failure);
     EXPECT_EQ(failure->state, ViewRenderState::kFailed);
     EXPECT_EQ(failure->failure, ViewRenderFailure::kLighting);
     EXPECT_FALSE(
@@ -804,7 +933,7 @@ namespace {
     EXPECT_GT(ReadFloatTexture(*probe->color).at(0).at(0), 1.0e-6F);
     const auto recovery
       = renderer_->InspectViewRenderStatus(ViewId { surface_view_id });
-    ASSERT_TRUE(recovery);
+    ASSERT_HAS_VALUE(recovery);
     EXPECT_TRUE(
       recovery->IsCaptureEligible(frame::SequenceNumber { sequence }));
     EXPECT_EQ(
@@ -831,44 +960,50 @@ namespace {
       ASSERT_TRUE(node.GetTransform().SetLocalRotation(
         glm::quat { 0.70710678F, 0.70710678F, 0, 0 }));
     }
-    auto output = CreateRegisteredTexture({ .width = 1,
+    auto output = CreateRegisteredTexture({
+      .width = 1,
       .height = 1,
       .format = Format::kRGBA32Float,
       .is_render_target = true,
-      .initial_state = graphics::ResourceStates::kCommon });
-    const std::array targets { framebuffer,
+      .initial_state = graphics::ResourceStates::kCommon,
+    });
+    const std::array targets {
+      framebuffer,
       Backend().CreateFramebuffer(
-        graphics::FramebufferDesc {}.AddColorAttachment(output)) };
-    const std::array handles { CompositionView::ViewStateHandle { 9101 },
-      CompositionView::ViewStateHandle { 9102 } };
+        graphics::FramebufferDesc {}.AddColorAttachment(output)),
+    };
+    const std::array handles {
+      CompositionView::ViewStateHandle { 9101 },
+      CompositionView::ViewStateHandle { 9102 },
+    };
     const std::array intents { ViewId { 9101 }, ViewId { 9102 } };
     std::array<std::shared_ptr<const graphics::Texture>, 2> colors;
     std::array<postprocess::ExposurePass::FrameLease, 2> exposures;
     std::array<ShadowFrameData, 2> shadow_records;
     std::array<bool, 2> seen {};
     uint32_t writers = 0;
-    probe->prepare = [](RenderContext&) { };
+    probe->prepare = [](RenderContext&) -> void { };
     probe->inspect = [&](const RenderContext& ctx,
-                       const SceneTextureExtractRef& color, unsigned) {
+                       const SceneTextureExtractRef& color, unsigned) -> void {
       const auto index
-        = ctx.current_view.view_state_handle == handles[0] ? 0U : 1U;
+        = ctx.current_view.view_state_handle == handles.front() ? 0U : 1U;
       auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
       auto* shadows = RendererPublicationProbe::GetShadowService(*owner);
-      const auto* data = shadows->InspectShadowData(ctx.current_view.view_id);
+      const auto data = shadows->InspectShadowData(ctx.current_view.view_id);
       ASSERT_NE(data, nullptr);
-      shadow_records[index] = *data;
+      shadow_records.at(index) = *data;
       ASSERT_TRUE(color.valid);
-      colors[index] = color.texture->shared_from_this();
-      exposures[index] = color.exposure;
-      seen[index] = true;
+      colors.at(index) = color.texture->shared_from_this();
+      exposures.at(index) = color.exposure;
+      seen.at(index) = true;
       EXPECT_EQ(shadows->GetLastRenderState().attached_map_uses, 14U);
       EXPECT_EQ(shadows->GetLastRenderState().attached_backing_uses, 2U);
       writers += shadows->GetLastRenderState().rendered_point_shadow_count
         + shadows->GetLastRenderState().rendered_spot_shadow_count;
     };
     const auto verbosity = loguru::g_global_verbosity;
-    const auto restore_verbosity
-      = ScopeGuard([&] noexcept { loguru::g_global_verbosity = verbosity; });
+    const auto restore_verbosity = ScopeGuard(
+      [&] noexcept -> void { loguru::g_global_verbosity = verbosity; });
     loguru::g_global_verbosity = loguru::Verbosity_WARNING;
     settings.mode = engine::ExposureMode::kManual;
     settings.manual_ev = 0;
@@ -894,21 +1029,25 @@ namespace {
           engine::internal::EngineTagFactory::Get());
         renderer_->OnFrameStart(observer_ptr { &frame });
         for (unsigned publish = 0; publish < 2; ++publish) {
-          const auto index = repeat % 2 ? 1U - publish : publish;
-          auto input = CompositionView::ForScene(intents[index], view, camera);
-          input.view_state_handle = handles[index];
+          const auto index = repeat % 2 != 0U ? 1U - publish : publish;
+          auto input
+            = CompositionView::ForScene(intents.at(index), view, camera);
+          input.view_state_handle = handles.at(index);
           input.render_settings.exposure = settings;
           input.render_settings.exposure->manual_ev
             = static_cast<float>(index * 2);
           ASSERT_NE(
             renderer_->PublishRuntimeCompositionView(frame,
               { .composition_view = input,
-                .render_target = observer_ptr { targets[index].get() },
-                .composite_source = observer_ptr { targets[index].get() } },
+                .render_target = observer_ptr { targets.at(index).get() },
+                .composite_source = observer_ptr { targets.at(index).get() } },
               forward ? ShadingMode::kForward : ShadingMode::kDeferred),
             kInvalidViewId);
         }
         auto loop = co::testing::TestEventLoop {};
+        // Run completes synchronously before the coroutine closure leaves
+        // scope.
+        // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
         co::Run(loop, [&] -> co::Co<void> {
           co_await renderer_->OnPreRender(observer_ptr { &frame });
           co_await renderer_->OnRender(observer_ptr { &frame });
@@ -927,50 +1066,51 @@ namespace {
         }
 #endif
         WaitForQueueIdle();
-        ASSERT_TRUE(seen[0] && seen[1]);
-        for (unsigned index = 0; index < 2; ++index) {
-          EXPECT_EQ(shadow_records[index].cube_local_records.size(), 5U);
-          EXPECT_EQ(shadow_records[index].projected_local_records.size(), 9U);
-          EXPECT_EQ(shadow_records[index].local_shadow_references.size(), 14U);
+        ASSERT_TRUE(seen.front() && seen.back());
+        for (const auto& record : shadow_records) {
+          EXPECT_EQ(record.cube_local_records.size(), 5U);
+          EXPECT_EQ(record.projected_local_records.size(), 9U);
+          EXPECT_EQ(record.local_shadow_references.size(), 14U);
         }
+        const auto& [first_view, second_view] = shadow_records;
         for (size_t index = 0; index < 5; ++index) {
-          EXPECT_EQ(shadow_records[0].cube_local_records[index].surface_srv,
-            shadow_records[1].cube_local_records[index].surface_srv);
-          EXPECT_EQ(
-            shadow_records[0].cube_local_records[index].first_array_layer,
-            shadow_records[1].cube_local_records[index].first_array_layer);
+          const auto& first = first_view.cube_local_records.at(index);
+          const auto& second = second_view.cube_local_records.at(index);
+          EXPECT_EQ(first.surface_srv, second.surface_srv);
+          EXPECT_EQ(first.first_array_layer, second.first_array_layer);
         }
         for (size_t index = 0; index < 9; ++index) {
-          EXPECT_EQ(
-            shadow_records[0].projected_local_records[index].surface_srv,
-            shadow_records[1].projected_local_records[index].surface_srv);
-          EXPECT_EQ(
-            shadow_records[0].projected_local_records[index].array_layer,
-            shadow_records[1].projected_local_records[index].array_layer);
+          const auto& first = first_view.projected_local_records.at(index);
+          const auto& second = second_view.projected_local_records.at(index);
+          EXPECT_EQ(first.surface_srv, second.surface_srv);
+          EXPECT_EQ(first.array_layer, second.array_layer);
         }
         EXPECT_LE(writers, 14U);
         if (repeat < 3) {
           continue;
         }
         EXPECT_EQ(writers, 0U);
-        ASSERT_TRUE(exposures[0] && exposures[1]);
+        const auto& [first_exposure, second_exposure] = exposures;
+        ASSERT_TRUE(first_exposure && second_exposure);
         const auto first_domain = Read<FrameExposureData>(
-          *exposures[0]->buffer, graphics::ResourceStates::kShaderResource);
+          *first_exposure->buffer, graphics::ResourceStates::kShaderResource);
         const auto second_domain = Read<FrameExposureData>(
-          *exposures[1]->buffer, graphics::ResourceStates::kShaderResource);
+          *second_exposure->buffer, graphics::ResourceStates::kShaderResource);
         ASSERT_GT(first_domain.pre_exposure, 0.0F);
         ASSERT_GT(second_domain.pre_exposure, 0.0F);
-        const auto first = ReadFloatTexture(*colors[0], true);
-        const auto second = ReadFloatTexture(*colors[1], true);
+        const auto first = ReadFloatTexture(*colors.front(), true);
+        const auto second = ReadFloatTexture(*colors.back(), true);
         ASSERT_EQ(first.size(), second.size());
         ASSERT_FALSE(first.empty());
-        EXPECT_GT(first[0][0], 0.0F);
+        EXPECT_GT(first.front().front(), 0.0F);
         for (size_t pixel = 0; pixel < first.size(); ++pixel) {
+          const auto& lhs = first.at(pixel);
+          const auto& rhs = second.at(pixel);
           for (unsigned channel = 0; channel < 3; ++channel) {
-            EXPECT_NEAR(first[pixel][channel] / first_domain.pre_exposure,
-              second[pixel][channel] / second_domain.pre_exposure, 1.0e-5F);
+            EXPECT_NEAR(lhs.at(channel) / first_domain.pre_exposure,
+              rhs.at(channel) / second_domain.pre_exposure, 1.0e-5F);
           }
-          EXPECT_EQ(first[pixel][3], second[pixel][3]);
+          EXPECT_EQ(lhs.at(3), rhs.at(3));
         }
       }
     }
@@ -990,7 +1130,7 @@ namespace {
       glm::quat { 0.70710678F, 0.70710678F, 0, 0 }));
     SetSurface(data::MaterialDomain::kOpaque);
     ShadowContentLease current;
-    probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
+    probe->inspect = [&](const auto& ctx, const auto&, unsigned) -> void {
       auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
       current
         = RendererPublicationProbe::GetShadowService(*owner)
@@ -1003,11 +1143,12 @@ namespace {
                            const std::function<void()>& delay) -> float {
       const auto texture = lease.Texture();
       const auto& desc = texture->GetDescriptor();
-      const auto row_pitch
-        = (uint64_t { desc.width } * sizeof(float) + 255U) & ~uint64_t { 255 };
-      auto readback
-        = CreateRegisteredBuffer({ .size_bytes = row_pitch * desc.height,
-          .memory = graphics::BufferMemory::kReadBack });
+      const auto row_pitch = ((uint64_t { desc.width } * sizeof(float)) + 255U)
+        & ~uint64_t { 255 };
+      auto readback = CreateRegisteredBuffer({
+        .size_bytes = row_pitch * desc.height,
+        .memory = graphics::BufferMemory::kReadBack,
+      });
       auto recording = AcquireRecorder("Retained shadow readback",
         graphics::QueueRole::kGraphics, graphics::SubmissionPolicy::kExplicit);
       CHECK_F(lease.AttachReadback(*recording, Backend().GetResourceRegistry())
@@ -1023,19 +1164,25 @@ namespace {
       // The general readback facade intentionally rejects typeless depth.
       // Use the existing native copy primitive with an owned, aligned buffer.
       recording->CopyTextureToBuffer(*readback, *texture,
-        { .buffer_row_pitch = SizeBytes { row_pitch },
+        {
+          .buffer_offset = OffsetBytes { 0U },
+          .buffer_row_pitch = SizeBytes { row_pitch },
           .buffer_slice_pitch = SizeBytes { row_pitch * desc.height },
-          .texture_slice = { .array_slice = lease.FirstLayer() } });
+          .texture_slice = { .array_slice = lease.FirstLayer() },
+        });
       recording->RequireResourceStateFinal(
         *texture, graphics::ResourceStates::kShaderResource);
       CHECK_F(recording.SubmitWithReceipt().outcome
         == graphics::SubmissionOutcome::kSubmitted);
       WaitForQueueIdle();
-      const auto offset
-        = (desc.height / 2U) * row_pitch + (desc.width / 2U) * sizeof(float);
-      const auto* bytes = static_cast<const std::byte*>(readback->Map());
+      const auto offset = ((desc.height / 2U) * row_pitch)
+        + ((desc.width / 2U) * sizeof(float));
+      const auto bytes = std::span {
+        static_cast<const std::byte*>(readback->Map()),
+        static_cast<std::size_t>(row_pitch * desc.height),
+      };
       float depth = 0;
-      std::memcpy(&depth, bytes + offset, sizeof(depth));
+      std::memcpy(&depth, bytes.subspan(offset).data(), sizeof(depth));
       readback->UnMap();
       return depth;
     };
@@ -1046,7 +1193,7 @@ namespace {
       = shadows->InspectLocalSharing().copy_on_write_reader;
     const auto original = capture(retained, {});
     EXPECT_GT(original, 0.0F);
-    const auto delayed = capture(retained, [&] {
+    const auto delayed = capture(retained, [&] -> void {
       CHECK_F(mesh_node.GetTransform().SetLocalPosition({ 0, 0, -0.3F }));
       RenderSurface(false, 0, frame::kFramesInFlight.get() + 2U);
     });
@@ -1056,7 +1203,8 @@ namespace {
       retained.Texture()); // unsubmitted exclusive backing interval
     const auto changed = capture(current, {});
     EXPECT_GT(std::abs(changed - original), 0.05F);
-    const auto shadow_bytes = [&](const ShadowSharingDiagnostics& diagnostic) {
+    const auto shadow_bytes
+      = [&](const ShadowSharingDiagnostics& diagnostic) -> std::uint64_t {
       std::uint64_t bytes = 0;
       for (const auto& backing : diagnostic.backings) {
         const auto desc = backing.texture->GetNativeResource()
@@ -1097,7 +1245,7 @@ namespace {
     SetSurface(data::MaterialDomain::kOpaque);
     std::shared_ptr<const graphics::Texture> retained;
     bool enabled = true;
-    probe->inspect = [&](const auto& ctx, const auto&, unsigned) {
+    probe->inspect = [&](const auto& ctx, const auto&, unsigned) -> void {
       auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
       auto* shadows = RendererPublicationProbe::GetShadowService(*owner);
       const auto surfaces
@@ -1122,7 +1270,7 @@ namespace {
                                 ->GetResourceAllocationInfo(0, 1, &native)
                                 .SizeInBytes;
     ASSERT_TRUE(light.EditLight<scene::PointLight>(
-      [](auto& value) { value.Common().affects_world = false; }));
+      [](auto& value) -> void { value.Common().affects_world = false; }));
     enabled = false;
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0, 5));
     Backend().Flush();

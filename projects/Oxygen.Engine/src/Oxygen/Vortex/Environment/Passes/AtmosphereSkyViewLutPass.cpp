@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -15,7 +14,6 @@
 #include <vector>
 
 #include <glm/ext/vector_float3.hpp>
-#include <glm/geometric.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
@@ -32,6 +30,7 @@
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
@@ -41,85 +40,38 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereGpuPacking.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
 #include <Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h>
+#include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
+#include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex::environment {
 
 namespace {
 
   namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
+  using internal::PackAtmosphereLight;
+  using internal::PackFloat4;
+  using internal::PackOzoneDensityLayer;
+
+  //! Byte offset of `exposure_fp16_store` in the HLSL pass constants.
+  constexpr std::size_t kHlslExposureFp16StoreOffset = 44U;
+  //! Opaque-use tag that keeps capture pass constants alive with the capture.
+  constexpr std::uint64_t kCapturePassConstantsUse = 0x49424c434f4e5354ULL;
+  //! Shorter sample-count distances are degenerate; their reciprocal is 0.
+  constexpr float kMinSampleCountDistanceM = 1.0e-6F;
 
   constexpr std::uint32_t kThreadGroupSizeX = 8U;
   constexpr std::uint32_t kThreadGroupSizeY = 8U;
-
-  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-    -> graphics::ResourceViewType
-  {
-    using graphics::ResourceViewType;
-    switch (type) {
-    case bindless_d3d12::RangeType::SRV:
-      return ResourceViewType::kRawBuffer_SRV;
-    case bindless_d3d12::RangeType::Sampler:
-      return ResourceViewType::kSampler;
-    case bindless_d3d12::RangeType::UAV:
-      return ResourceViewType::kRawBuffer_UAV;
-    default:
-      return ResourceViewType::kNone;
-    }
-  }
-
-  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-  {
-    std::vector<graphics::RootBindingItem> bindings;
-    bindings.reserve(bindless_d3d12::kRootParamTableCount);
-
-    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-      ++index) {
-      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-      graphics::RootBindingDesc binding {};
-      binding.binding_slot_desc.register_index = desc.shader_register;
-      binding.binding_slot_desc.register_space = desc.register_space;
-      binding.visibility = graphics::ShaderStageFlags::kAll;
-
-      switch (desc.kind) {
-      case bindless_d3d12::RootParamKind::DescriptorTable: {
-        graphics::DescriptorTableBinding table {};
-        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-          const auto& range = desc.ranges.front();
-          table.view_type = RangeTypeToViewType(
-            static_cast<bindless_d3d12::RangeType>(range.range_type));
-          table.base_index = range.base_register;
-          table.count = range.num_descriptors
-              == (std::numeric_limits<std::uint32_t>::max)()
-            ? (std::numeric_limits<std::uint32_t>::max)()
-            : range.num_descriptors;
-        }
-        binding.data = table;
-        break;
-      }
-      case bindless_d3d12::RootParamKind::CBV:
-        binding.data = graphics::DirectBufferBinding {};
-        break;
-      case bindless_d3d12::RootParamKind::RootConstants:
-        binding.data
-          = graphics::PushConstantsBinding { .size = desc.constants_count };
-        break;
-      }
-
-      bindings.emplace_back(binding);
-    }
-
-    return bindings;
-  }
 
   auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
     const graphics::Texture& texture) -> void
@@ -140,7 +92,7 @@ namespace {
   auto BuildPipelineDesc(const bool capture = false)
     -> graphics::ComputePipelineDesc
   {
-    auto root_bindings = BuildVortexRootBindings();
+    auto root_bindings = vortex::internal::BuildVortexRootBindings();
     return graphics::ComputePipelineDesc::Builder {}
       .SetComputeShader(graphics::ShaderRequest {
         .stage = ShaderType::kCompute,
@@ -165,36 +117,6 @@ namespace {
       .sub_resources = graphics::TextureSubResourceSet::EntireTexture(),
       .is_read_only_dsv = false,
     };
-  }
-
-  auto SetVec4(float (&target)[4], const glm::vec3 value, const float w = 0.0F)
-    -> void
-  {
-    target[0] = value.x;
-    target[1] = value.y;
-    target[2] = value.z;
-    target[3] = w;
-  }
-
-  auto PopulateLight(float (&direction_enabled)[4], float (&illuminance_rgb)[4],
-    const environment::AtmosphereLightModel& light) -> void
-  {
-    auto direction = glm::vec3 { 0.0F, 0.0F, 1.0F };
-    if (light.enabled) {
-      const auto length_sq
-        = glm::dot(light.direction_to_light_ws, light.direction_to_light_ws);
-      if (length_sq > 1.0e-6F) {
-        direction = glm::normalize(light.direction_to_light_ws);
-      }
-    }
-
-    SetVec4(direction_enabled, direction, light.enabled ? 1.0F : 0.0F);
-    // UE passes GetOuterSpaceIlluminance() here. In Vortex the atmosphere
-    // light payload already stores intensity-scaled RGB illuminance in lux,
-    // which is the equivalent physical quantity for the LUT builders.
-    SetVec4(illuminance_rgb,
-      light.enabled ? light.illuminance_rgb_lux
-                    : glm::vec3 { 0.0F, 0.0F, 0.0F });
   }
 
 } // namespace
@@ -241,16 +163,15 @@ auto AtmosphereSkyViewLutPass::Record(RenderContext& ctx,
   const internal::AtmosphereLutCache& cache) -> RecordState
 {
   const auto& cache_state = cache.GetState();
-  auto state = RecordState {
-    .requested = ctx.current_view.view_id != kInvalidViewId
-      && ctx.current_view.with_atmosphere
-      && stable_state.view_products.atmosphere.enabled
-      && cache_state.transmittance_lut_valid
-      && cache_state.multi_scattering_lut_valid,
-  };
+  auto state = RecordState {};
+  state.requested = ctx.current_view.view_id != kInvalidViewId
+    && ctx.current_view.with_atmosphere
+    && stable_state.view_products.atmosphere.enabled
+    && cache_state.transmittance_lut_valid
+    && cache_state.multi_scattering_lut_valid;
   if (!state.requested
     || !renderer_.HasCapability(RendererCapabilityFamily::kEnvironmentLighting)
-    || ctx.view_constants == nullptr) {
+    || !ctx.view_constants.IsValid()) {
     RemoveViewState(ctx.current_view.view_id);
     return state;
   }
@@ -353,8 +274,9 @@ auto AtmosphereSkyViewLutPass::RecordCapture(RenderContext& ctx,
   auto gfx = renderer_.GetGraphics();
   if (!gfx || !target || !registration
     || !stable_state.view_products.atmosphere.enabled
-    || !state.transmittance_lut_valid || !state.multi_scattering_lut_valid)
+    || !state.transmittance_lut_valid || !state.multi_scattering_lut_valid) {
     return {};
+  }
   const auto& desc = target->GetDescriptor();
   auto& registry = gfx->GetResourceRegistry();
   if (desc.format != Format::kRGBA32Float
@@ -362,15 +284,17 @@ auto AtmosphereSkyViewLutPass::RecordCapture(RenderContext& ctx,
     || desc.width != state.internal_parameters.sky_view_width
     || desc.height != state.internal_parameters.sky_view_height || !desc.is_uav
     || !desc.is_shader_resource
-    || registry.InspectManagedIdentity(*target) != registration.Identity())
+    || registry.InspectManagedIdentity(*target) != registration.Identity()) {
     return {};
+  }
   const auto srv = registry.AcquireManagedView<graphics::Texture>(registration,
     MakeTextureViewDesc(graphics::ResourceViewType::kTexture_SRV, desc.format),
     bindless::generated::kTexturesDomain);
   const auto uav = registry.AcquireManagedView<graphics::Texture>(registration,
     MakeTextureViewDesc(graphics::ResourceViewType::kTexture_UAV, desc.format));
-  if (!srv || !uav || !recorder.RetainRegistration(registry, registration))
+  if (!srv || !uav || !recorder.RetainRegistration(registry, registration)) {
     return {};
+  }
   return RecordToTarget(ctx, recorder, view_data, stable_state, cache, target,
     srv->shader_visible_index, uav->shader_visible_index, true);
 }
@@ -383,24 +307,19 @@ auto AtmosphereSkyViewLutPass::RecordToTarget(RenderContext& ctx,
   const ShaderVisibleIndex sky_view_srv, const ShaderVisibleIndex sky_view_uav,
   const bool capture) -> RecordState
 {
-  auto state = RecordState { .requested = true };
-  if (capture)
-    recorder.RetainOpaqueUse(pass_constants_buffer_, 0x49424c434f4e5354ULL);
+  auto state = RecordState {};
+  state.requested = true;
+  if (capture) {
+    recorder.RetainOpaqueUse(pass_constants_buffer_, kCapturePassConstantsUse);
+  }
   const auto& cache_state = cache.GetState();
   const auto width = texture->GetDescriptor().width;
   const auto height = texture->GetDescriptor().height;
   const auto& atmosphere = stable_state.view_products.atmosphere;
   static_assert(offsetof(PassConstants, dispatch_header)
-      + offsetof(DispatchHeader, exposure_status_uav)
-    == 40U);
-  static_assert(offsetof(PassConstants, dispatch_header)
       + offsetof(DispatchHeader, exposure_fp16_store)
-    == 44U);
+    == kHlslExposureFp16StoreOffset);
   auto constants = PassConstants {};
-  constants.dispatch_header.exposure_status_uav
-    = !capture && ctx.current_view.frame_exposure
-    ? ctx.current_view.frame_exposure->current_state->status_uav_index.get()
-    : kInvalidShaderVisibleIndex.get();
   constants.dispatch_header.exposure_fp16_store
     = texture->GetDescriptor().format == Format::kRGBA16Float ? 1U : 0U;
   constants.output_header.output_texture_uav = sky_view_uav.get();
@@ -426,7 +345,7 @@ auto AtmosphereSkyViewLutPass::RecordToTarget(RenderContext& ctx,
     = cache_state.internal_parameters.sky_view_sample_count_max;
   constants.sampling_atmosphere0.distance_to_sample_count_max_inv
     = cache_state.internal_parameters.sky_view_distance_to_sample_count_max_m
-      > 1.0e-6F
+      > kMinSampleCountDistanceM
     ? 1.0F
       / engine::atmos::MetersToSkyUnit(
         cache_state.internal_parameters.sky_view_distance_to_sample_count_max_m)
@@ -446,61 +365,37 @@ auto AtmosphereSkyViewLutPass::RecordToTarget(RenderContext& ctx,
   constants.phase_factors0.multi_scattering_factor
     = atmosphere.multi_scattering_factor;
   constants.phase_factors0.mie_anisotropy = atmosphere.mie_anisotropy;
-  SetVec4(constants.ground_albedo_rgb, atmosphere.ground_albedo_rgb);
-  SetVec4(constants.rayleigh_scattering_per_km_rgb,
+  constants.ground_albedo_rgb = PackFloat4(atmosphere.ground_albedo_rgb);
+  constants.rayleigh_scattering_per_km_rgb = PackFloat4(
     atmosphere.rayleigh_scattering_rgb * engine::atmos::kSkyUnitToM);
-  SetVec4(constants.mie_scattering_per_km_rgb,
-    atmosphere.mie_scattering_rgb * engine::atmos::kSkyUnitToM);
-  SetVec4(constants.mie_absorption_per_km_rgb,
-    atmosphere.mie_absorption_rgb * engine::atmos::kSkyUnitToM);
-  SetVec4(constants.ozone_absorption_per_km_rgb,
-    atmosphere.ozone_absorption_rgb * engine::atmos::kSkyUnitToM);
-  constants.ozone_density_layer0[0] = engine::atmos::MetersToSkyUnit(
-    atmosphere.ozone_density_profile.layers[0].width_m);
-  constants.ozone_density_layer0[1]
-    = atmosphere.ozone_density_profile.layers[0].exp_term;
-  constants.ozone_density_layer0[2]
-    = atmosphere.ozone_density_profile.layers[0].linear_term
-    * engine::atmos::kSkyUnitToM;
-  constants.ozone_density_layer0[3]
-    = atmosphere.ozone_density_profile.layers[0].constant_term;
-  constants.ozone_density_layer1[0] = engine::atmos::MetersToSkyUnit(
-    atmosphere.ozone_density_profile.layers[1].width_m);
-  constants.ozone_density_layer1[1]
-    = atmosphere.ozone_density_profile.layers[1].exp_term;
-  constants.ozone_density_layer1[2]
-    = atmosphere.ozone_density_profile.layers[1].linear_term
-    * engine::atmos::kSkyUnitToM;
-  constants.ozone_density_layer1[3]
-    = atmosphere.ozone_density_profile.layers[1].constant_term;
-  constants.sky_view_lut_referential_row0[0]
-    = view_data.sky_view_lut_referential_row0.x;
-  constants.sky_view_lut_referential_row0[1]
-    = view_data.sky_view_lut_referential_row0.y;
-  constants.sky_view_lut_referential_row0[2]
-    = view_data.sky_view_lut_referential_row0.z;
-  constants.sky_view_lut_referential_row1[0]
-    = view_data.sky_view_lut_referential_row1.x;
-  constants.sky_view_lut_referential_row1[1]
-    = view_data.sky_view_lut_referential_row1.y;
-  constants.sky_view_lut_referential_row1[2]
-    = view_data.sky_view_lut_referential_row1.z;
-  constants.sky_view_lut_referential_row2[0]
-    = view_data.sky_view_lut_referential_row2.x;
-  constants.sky_view_lut_referential_row2[1]
-    = view_data.sky_view_lut_referential_row2.y;
-  constants.sky_view_lut_referential_row2[2]
-    = view_data.sky_view_lut_referential_row2.z;
-  SetVec4(
-    constants.sky_luminance_factor_rgb, atmosphere.sky_luminance_factor_rgb);
-  SetVec4(constants.sky_and_aerial_luminance_factor_rgb,
-    atmosphere.sky_and_aerial_perspective_luminance_factor_rgb);
-  PopulateLight(constants.light0_direction_enabled,
-    constants.light0_illuminance_rgb,
-    stable_state.view_products.atmosphere_lights[0]);
-  PopulateLight(constants.light1_direction_enabled,
-    constants.light1_illuminance_rgb,
-    stable_state.view_products.atmosphere_lights[1]);
+  constants.mie_scattering_per_km_rgb
+    = PackFloat4(atmosphere.mie_scattering_rgb * engine::atmos::kSkyUnitToM);
+  constants.mie_absorption_per_km_rgb
+    = PackFloat4(atmosphere.mie_absorption_rgb * engine::atmos::kSkyUnitToM);
+  constants.ozone_absorption_per_km_rgb
+    = PackFloat4(atmosphere.ozone_absorption_rgb * engine::atmos::kSkyUnitToM);
+  constants.ozone_density_layer0
+    = PackOzoneDensityLayer(atmosphere.ozone_density_profile.layers.at(0));
+  constants.ozone_density_layer1
+    = PackOzoneDensityLayer(atmosphere.ozone_density_profile.layers.at(1));
+  constants.sky_view_lut_referential_row0
+    = PackFloat4(glm::vec3 { view_data.sky_view_lut_referential_row0 });
+  constants.sky_view_lut_referential_row1
+    = PackFloat4(glm::vec3 { view_data.sky_view_lut_referential_row1 });
+  constants.sky_view_lut_referential_row2
+    = PackFloat4(glm::vec3 { view_data.sky_view_lut_referential_row2 });
+  constants.sky_luminance_factor_rgb
+    = PackFloat4(atmosphere.sky_luminance_factor_rgb);
+  constants.sky_and_aerial_luminance_factor_rgb
+    = PackFloat4(atmosphere.sky_and_aerial_perspective_luminance_factor_rgb);
+  const auto light0
+    = PackAtmosphereLight(stable_state.view_products.atmosphere_lights.at(0));
+  constants.light0_direction_enabled = light0.direction_enabled;
+  constants.light0_illuminance_rgb = light0.illuminance_rgb;
+  const auto light1
+    = PackAtmosphereLight(stable_state.view_products.atmosphere_lights.at(1));
+  constants.light1_direction_enabled = light1.direction_enabled;
+  constants.light1_illuminance_rgb = light1.illuminance_rgb;
 
   auto constants_alloc = pass_constants_buffer_->Allocate(1U);
   if (!constants_alloc.has_value()
@@ -524,10 +419,11 @@ auto AtmosphereSkyViewLutPass::RecordToTarget(RenderContext& ctx,
     *texture, graphics::ResourceStates::kUnorderedAccess);
 
   recorder.SetPipelineState(BuildPipelineDesc(capture));
-  if (!capture)
+  if (!capture) {
     recorder.SetComputeRootConstantBufferView(
       static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-      ctx.view_constants->GetGPUVirtualAddress());
+      ctx.view_constants.GpuAddress());
+  }
   recorder.SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);

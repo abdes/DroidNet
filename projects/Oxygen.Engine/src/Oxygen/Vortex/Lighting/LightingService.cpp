@@ -8,7 +8,6 @@
 #include <expected>
 #include <memory>
 #include <optional>
-#include <span>
 #include <utility>
 
 #include <Oxygen/Core/Bindless/Types.h>
@@ -22,6 +21,7 @@
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Lighting/Passes/DeferredLightPass.h>
+#include <Oxygen/Vortex/Lighting/Types/DeferredShadowInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridResources.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
@@ -152,12 +152,7 @@ auto LightingService::PublishShadowReferences(
 auto LightingService::RenderDeferredLighting(RenderContext& ctx,
   graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
   const FrameLightSelection& frame_light_set,
-  const ShadowFrameData* shadow_data,
-  std::span<const std::shared_ptr<graphics::Texture>>
-    directional_shadow_surfaces,
-  std::span<const std::shared_ptr<graphics::Texture>> spot_shadow_surfaces,
-  std::span<const std::shared_ptr<graphics::Texture>> point_shadow_surfaces)
-  -> bool
+  const DeferredShadowInputs& shadows) -> bool
 {
   if (!prepared_lighting_
     || prepared_lighting_->selection_epoch != frame_light_set.selection_epoch
@@ -169,9 +164,8 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
     = deferred_packets_->Build(frame_light_set, prepared_lighting_->evaluation);
   auto pass_state = lighting::DeferredLightPass::ExecutionState {};
   try {
-    pass_state = deferred_pass_->Record(ctx, recorder, scene_textures, packets,
-      shadow_data, directional_shadow_surfaces, spot_shadow_surfaces,
-      point_shadow_surfaces);
+    pass_state
+      = deferred_pass_->Record(ctx, recorder, scene_textures, packets, shadows);
   } catch (const std::exception&) {
     last_deferred_lighting_state_ = {};
     return false;

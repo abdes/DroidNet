@@ -9,7 +9,6 @@
 #include <bit>
 #include <cstdint>
 #include <iterator>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -39,6 +38,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
@@ -72,23 +72,6 @@ namespace {
   };
   static_assert(
     sizeof(WireframePassConstants) % packing::kShaderDataFieldAlignment == 0U);
-
-  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-    -> graphics::ResourceViewType
-  {
-    using graphics::ResourceViewType;
-
-    switch (type) {
-    case bindless_d3d12::RangeType::SRV:
-      return ResourceViewType::kRawBuffer_SRV;
-    case bindless_d3d12::RangeType::Sampler:
-      return ResourceViewType::kSampler;
-    case bindless_d3d12::RangeType::UAV:
-      return ResourceViewType::kRawBuffer_UAV;
-    default:
-      return ResourceViewType::kNone;
-    }
-  }
 
   auto AddBooleanDefine(const bool enabled, std::string_view name,
     std::vector<graphics::ShaderDefine>& defines) -> void
@@ -199,50 +182,6 @@ namespace {
     auto& registry = gfx.GetResourceRegistry();
     std::ignore = registry.AcquireRegistration(texture);
     return *texture;
-  }
-
-  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-  {
-    std::vector<graphics::RootBindingItem> bindings;
-    bindings.reserve(bindless_d3d12::kRootParamTableCount);
-
-    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-      ++index) {
-      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-      graphics::RootBindingDesc binding {};
-      binding.binding_slot_desc.register_index = desc.shader_register;
-      binding.binding_slot_desc.register_space = desc.register_space;
-      binding.visibility = graphics::ShaderStageFlags::kAll;
-
-      switch (desc.kind) {
-      case bindless_d3d12::RootParamKind::DescriptorTable: {
-        graphics::DescriptorTableBinding table {};
-        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-          const auto& range = desc.ranges.front();
-          table.view_type = RangeTypeToViewType(
-            static_cast<bindless_d3d12::RangeType>(range.range_type));
-          table.base_index = range.base_register;
-          table.count
-            = range.num_descriptors == std::numeric_limits<std::uint32_t>::max()
-            ? std::numeric_limits<std::uint32_t>::max()
-            : range.num_descriptors;
-        }
-        binding.data = table;
-        break;
-      }
-      case bindless_d3d12::RootParamKind::CBV:
-        binding.data = graphics::DirectBufferBinding {};
-        break;
-      case bindless_d3d12::RootParamKind::RootConstants:
-        binding.data
-          = graphics::PushConstantsBinding { .size = desc.constants_count };
-        break;
-      }
-
-      bindings.emplace_back(binding);
-    }
-
-    return bindings;
   }
 
   auto BuildBasePassFramebuffer(SceneTextures& scene_textures,
@@ -575,7 +514,7 @@ namespace {
     if (!color) {
       color = &scene_textures.GetSceneColor();
     }
-    auto root_bindings = BuildVortexRootBindings();
+    auto root_bindings = vortex::internal::BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {};
     AddBooleanDefine(alpha_test, "ALPHA_TEST", defines);
 
@@ -624,7 +563,7 @@ namespace {
     const bool reverse_z, const bool writes_velocity,
     const bool range_only = false) -> graphics::GraphicsPipelineDesc
   {
-    auto root_bindings = BuildVortexRootBindings();
+    auto root_bindings = vortex::internal::BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {};
     AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
     AddBooleanDefine(writes_velocity, "HAS_VELOCITY", defines);
@@ -699,7 +638,7 @@ namespace {
     const bool reverse_z, const bool range_only = false)
     -> graphics::GraphicsPipelineDesc
   {
-    auto root_bindings = BuildVortexRootBindings();
+    auto root_bindings = vortex::internal::BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {
       graphics::ShaderDefine {
         .name = "OXYGEN_OPAQUE_OUTPUT",
@@ -764,7 +703,7 @@ namespace {
     const internal::MeshRasterState raster_state, const bool reverse_z)
     -> graphics::GraphicsPipelineDesc
   {
-    auto root_bindings = BuildVortexRootBindings();
+    auto root_bindings = vortex::internal::BuildVortexRootBindings();
     auto defines = std::vector<graphics::ShaderDefine> {};
     AddBooleanDefine(raster_state.alpha_test, "ALPHA_TEST", defines);
     AddBooleanDefine(true, "USES_MOTION_VECTOR_WORLD_OFFSET", defines);
@@ -818,7 +757,7 @@ namespace {
 
   auto BuildVelocityMergePipelineDesc() -> graphics::ComputePipelineDesc
   {
-    auto root_bindings = BuildVortexRootBindings();
+    auto root_bindings = vortex::internal::BuildVortexRootBindings();
     return graphics::ComputePipelineDesc::Builder {}
       .SetComputeShader(graphics::ShaderRequest {
         .stage = ShaderType::kCompute,
@@ -1038,6 +977,23 @@ BasePassModule::~BasePassModule()
   }
 }
 
+auto BasePassModule::WriteVelocityMergeInputs(Graphics& gfx,
+  const RenderContext& ctx, const std::uint32_t base_velocity_srv,
+  const std::uint32_t aux_velocity_srv) -> ShaderVisibleIndex
+{
+  if (!velocity_merge_inputs_publisher_) {
+    velocity_merge_inputs_publisher_ = std::make_unique<
+      internal::PerViewStructuredPublisher<std::array<std::uint32_t, 4>>>(
+      observer_ptr { &gfx }, renderer_.GetStagingProvider(),
+      observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
+      "Vortex.Stage9.VelocityMerge.Inputs");
+  }
+  velocity_merge_inputs_publisher_->OnFrameStart(
+    ctx.frame_sequence, ctx.frame_slot);
+  return velocity_merge_inputs_publisher_->Publish(
+    ctx.current_view.view_id, { base_velocity_srv, aux_velocity_srv, 0U, 0U });
+}
+
 auto BasePassModule::WriteWireframeConstants(Graphics& gfx,
   const RenderContext& ctx, const bool write_pre_exposed) -> ShaderVisibleIndex
 {
@@ -1104,7 +1060,7 @@ auto BasePassModule::Execute(RenderContext& ctx,
     = static_cast<std::uint32_t>(mesh_processor_->GetDrawCommands().size());
 
   auto* gfx = renderer_.GetGraphics().get();
-  if (gfx == nullptr || ctx.view_constants == nullptr) {
+  if (gfx == nullptr || !ctx.view_constants.IsValid()) {
     return last_execution_result_;
   }
   const auto& prepared_frame = *ctx.current_view.prepared_frame;
@@ -1165,7 +1121,7 @@ auto BasePassModule::Execute(RenderContext& ctx,
         recorder.SetPipelineState(BuildWireframePipelineDesc(
           scene_textures, raster_state.alpha_test, reverse_z, true, false));
         recorder.SetGraphicsRootConstantBufferView(
-          view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
+          view_constants_param, ctx.view_constants.GpuAddress());
         recorder.SetGraphicsRoot32BitConstant(
           root_constants_param, wireframe_constants_index.get(), 1U);
       });
@@ -1228,7 +1184,7 @@ auto BasePassModule::Execute(RenderContext& ctx,
             : BuildBasePassPipelineDesc(scene_textures, range_config,
                 raster_state, reverse_z, writes_velocity, true));
         recorder.SetGraphicsRootConstantBufferView(
-          view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
+          view_constants_param, ctx.view_constants.GpuAddress());
         recorder.SetGraphicsRoot32BitConstant(
           root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
       });
@@ -1275,7 +1231,7 @@ auto BasePassModule::Execute(RenderContext& ctx,
         recorder.SetPipelineState(BuildForwardBasePassPipelineDesc(
           scene_textures, config_, raster_state, reverse_z));
         recorder.SetGraphicsRootConstantBufferView(
-          view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
+          view_constants_param, ctx.view_constants.GpuAddress());
         recorder.SetGraphicsRoot32BitConstant(
           root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
       });
@@ -1327,7 +1283,7 @@ auto BasePassModule::Execute(RenderContext& ctx,
         recorder.SetPipelineState(BuildBasePassPipelineDesc(
           scene_textures, config_, raster_state, reverse_z, writes_velocity));
         recorder.SetGraphicsRootConstantBufferView(
-          view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
+          view_constants_param, ctx.view_constants.GpuAddress());
         recorder.SetGraphicsRoot32BitConstant(
           root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
       });
@@ -1394,7 +1350,7 @@ auto BasePassModule::Execute(RenderContext& ctx,
           recorder.SetPipelineState(BuildVelocityAuxPipelineDesc(
             scene_textures, raster_state, reverse_z));
           recorder.SetGraphicsRootConstantBufferView(
-            view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
+            view_constants_param, ctx.view_constants.GpuAddress());
           recorder.SetGraphicsRoot32BitConstant(
             root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
         });
@@ -1404,6 +1360,12 @@ auto BasePassModule::Execute(RenderContext& ctx,
       *gfx, velocity_base_copy, MakeTextureSrvDesc(velocity_base_copy));
     const auto velocity_aux_srv = RegisterTextureView(
       *gfx, velocity_aux, MakeTextureSrvDesc(velocity_aux));
+    const auto merge_inputs = WriteVelocityMergeInputs(
+      *gfx, ctx, velocity_base_copy_srv, velocity_aux_srv);
+    if (!merge_inputs.IsValid()) {
+      LOG_F(ERROR, "BasePassModule: velocity merge inputs were not published");
+      return last_execution_result_;
+    }
 
     recorder.RequireResourceState(
       velocity_base_copy, graphics::ResourceStates::kShaderResource);
@@ -1420,11 +1382,10 @@ auto BasePassModule::Execute(RenderContext& ctx,
         profiling::ProfileCategory::kPass);
       recorder.SetPipelineState(BuildVelocityMergePipelineDesc());
       recorder.SetComputeRootConstantBufferView(
-        view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
+        view_constants_param, ctx.view_constants.GpuAddress());
+      recorder.SetComputeRoot32BitConstant(root_constants_param, 0U, 0U);
       recorder.SetComputeRoot32BitConstant(
-        root_constants_param, velocity_base_copy_srv, 0U);
-      recorder.SetComputeRoot32BitConstant(
-        root_constants_param, velocity_aux_srv, 1U);
+        root_constants_param, merge_inputs.get(), 1U);
       const auto extent = scene_textures.GetExtent();
       recorder.Dispatch((extent.x + (kVelocityMergeThreadGroupSize - 1U))
           / kVelocityMergeThreadGroupSize,
@@ -1457,7 +1418,7 @@ auto BasePassModule::ExecuteWireframeOverlay(RenderContext& ctx,
   }
 
   auto* gfx = renderer_.GetGraphics().get();
-  if (gfx == nullptr || ctx.view_constants == nullptr) {
+  if (gfx == nullptr || !ctx.view_constants.IsValid()) {
     return 0U;
   }
 
@@ -1513,7 +1474,7 @@ auto BasePassModule::ExecuteWireframeOverlay(RenderContext& ctx,
       recorder.SetPipelineState(BuildWireframePipelineDesc(scene_textures,
         raster_state.alpha_test, reverse_z, false, true, color.get()));
       recorder.SetGraphicsRootConstantBufferView(
-        view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
+        view_constants_param, ctx.view_constants.GpuAddress());
       recorder.SetGraphicsRoot32BitConstant(
         root_constants_param, wireframe_constants_index.get(), 1U);
     });

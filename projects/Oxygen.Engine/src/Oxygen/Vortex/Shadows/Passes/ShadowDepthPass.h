@@ -108,7 +108,7 @@ namespace shadows {
       ShaderVisibleIndex pass_constants { kInvalidShaderVisibleIndex };
     };
 
-    auto PublishPassConstants(const PreparedSceneFrame& prepared_scene,
+    auto PublishPassConstants(ShaderVisibleIndex draw_frame_slot,
       const DepthSlice& slice) -> ShaderVisibleIndex;
     //! Draws a slice in two culled phases, or one without occlusion.
     auto RecordSliceDraws(graphics::CommandRecorder& recorder,

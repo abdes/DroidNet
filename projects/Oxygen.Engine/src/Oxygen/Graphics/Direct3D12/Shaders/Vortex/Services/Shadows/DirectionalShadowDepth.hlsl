@@ -6,7 +6,9 @@
 
 // Shadow depth has no camera view: every input comes from the pass constants.
 
+#include "Vortex/Contracts/Draw/DrawFrameBindings.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
+#include "Vortex/Contracts/Draw/MeshPosition.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
 
@@ -27,11 +29,9 @@ struct ShadowPassConstants
     float4 shadow_bias_parameters;
     float4 light_direction_to_source;
     float4 light_position_and_inv_range;
-    uint draw_metadata_slot;
-    uint current_worlds_slot;
-    uint instance_data_slot;
-    uint normal_matrices_slot;
-    uint material_shading_constants_slot;
+    // The view's published DrawFrameBindings: draws, transforms, materials
+    // and world-position offsets, exactly as the camera passes see them.
+    uint draw_frame_slot;
     uint _pad0;
     uint _pad1;
     uint _pad2;
@@ -47,21 +47,17 @@ struct ShadowDepthVSOutput
     nointerpolation uint draw_index : DRAW_INDEX;
 };
 
-static inline ShadowPassConstants LoadShadowPassConstants(uint slot)
+static inline bool TryLoadShadowPassConstants(out ShadowPassConstants constants)
 {
-    ShadowPassConstants constants = (ShadowPassConstants)0;
-    constants.light_view_projection = float4x4(
-        1.0f, 0.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f, 0.0f,
-        0.0f, 0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 0.0f, 1.0f);
-    if (slot == K_INVALID_BINDLESS_INDEX) {
-        return constants;
+    constants = (ShadowPassConstants)0;
+    if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX) {
+        return false;
     }
 
     StructuredBuffer<ShadowPassConstants> constants_buffer =
-        ResourceDescriptorHeap[slot];
-    return constants_buffer[0];
+        ResourceDescriptorHeap[g_PassConstantsIndex];
+    constants = constants_buffer[0];
+    return constants.draw_frame_slot != K_INVALID_BINDLESS_INDEX;
 }
 
 [shader("vertex")]
@@ -73,12 +69,16 @@ ShadowDepthVSOutput VortexShadowDepthVS(uint vertex_id : SV_VertexID,
     output.position = float4(0.0f, 0.0f, 0.0f, 1.0f);
     output.draw_index = draw_index;
 
-    const ShadowPassConstants pass_constants =
-        LoadShadowPassConstants(g_PassConstantsIndex);
+    ShadowPassConstants pass_constants;
+    if (!TryLoadShadowPassConstants(pass_constants)) {
+        return output;
+    }
+    const DrawFrameBindings draw_bindings
+        = LoadDrawFrameBindings(pass_constants.draw_frame_slot);
 
     DrawMetadata metadata;
     if (!BX_LoadDrawMetadata(
-            pass_constants.draw_metadata_slot, draw_index, metadata)) {
+            draw_bindings.draw_metadata_slot, draw_index, metadata)) {
         return output;
     }
 
@@ -89,22 +89,22 @@ ShadowDepthVSOutput VortexShadowDepthVS(uint vertex_id : SV_VertexID,
     output.uv = vertex.texcoord;
 
     const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
-        pass_constants.current_worlds_slot, pass_constants.instance_data_slot, metadata,
-        instance_id);
-    float4 world_position = mul(world_matrix, float4(vertex.position, 1.0f));
+        draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot,
+        metadata, instance_id);
+    const float4 world_position = ComputeMeshWorldPosition(world_matrix,
+        vertex.position, ResolveDrawWorldOffset(draw_bindings, draw_index));
     output.position = mul(pass_constants.light_view_projection, world_position);
 #if !defined(CUBE_SHADOW)
-    const float4 unbiased_position = output.position;
     float slope_bias = 0.0f;
     if (pass_constants.shadow_bias_parameters.y > 0.0f) {
         // Reuse the inverse-transpose publication consumed by the base pass.
         // Multiplying normals by world is incorrect under nonuniform scale.
         float3x3 normal_matrix = (float3x3)world_matrix;
-        if (pass_constants.normal_matrices_slot != K_INVALID_BINDLESS_INDEX) {
+        if (draw_bindings.normal_matrices_slot != K_INVALID_BINDLESS_INDEX) {
             const uint transform_index = BX_ResolveTransformIndex(
-                metadata, pass_constants.instance_data_slot, instance_id);
+                metadata, draw_bindings.instance_data_slot, instance_id);
             StructuredBuffer<float4x4> normals =
-                ResourceDescriptorHeap[pass_constants.normal_matrices_slot];
+                ResourceDescriptorHeap[draw_bindings.normal_matrices_slot];
             normal_matrix = (float3x3)normals[transform_index];
         }
         const float3 transformed_normal = mul(normal_matrix, vertex.normal);
@@ -130,12 +130,12 @@ ShadowDepthVSOutput VortexShadowDepthVS(uint vertex_id : SV_VertexID,
             1.0f - axial_distance * pass_constants.light_position_and_inv_range.w
             - depth_bias;
     } else {
-        output.position.z -= depth_bias;
-        output.biased_depth = output.position.z / max(abs(output.position.w), 1.0e-6f);
+        // Bias the written depth only: moving SV_Position before
+        // rasterization would shift coverage, especially for perspective
+        // local-light shadows near the far end of the cone.
+        const float biased_z = output.position.z - depth_bias;
+        output.biased_depth = biased_z / max(abs(output.position.w), 1.0e-6f);
     }
-    // Bias must not move SV_Position before rasterization, especially for
-    // perspective local-light shadows near the far end of the cone.
-    output.position = unbiased_position;
 #endif
     return output;
 }
@@ -148,13 +148,17 @@ void VortexShadowDepthMaskedPS(ShadowDepthVSOutput input
 )
 {
 #if defined(ALPHA_TEST)
-    // The casters, like the vertex shader's, come from this pass's constants.
-    const ShadowPassConstants pass_constants =
-        LoadShadowPassConstants(g_PassConstantsIndex);
+    // The casters, like the vertex shader's, come from the view's draws.
+    ShadowPassConstants pass_constants;
+    if (!TryLoadShadowPassConstants(pass_constants)) {
+        discard;
+    }
+    const DrawFrameBindings draw_bindings
+        = LoadDrawFrameBindings(pass_constants.draw_frame_slot);
     const SamplerState linear_sampler = SamplerDescriptorHeap[0];
     ApplyMaskedAlphaClip(EvaluateMaskedAlphaTestFromSlots(input.uv,
-        pass_constants.draw_metadata_slot,
-        pass_constants.material_shading_constants_slot, input.draw_index,
+        draw_bindings.draw_metadata_slot,
+        draw_bindings.material_shading_constants_slot, input.draw_index,
         linear_sampler));
 #endif
 #if !defined(CUBE_SHADOW)

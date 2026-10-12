@@ -9,13 +9,16 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
-#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
+#include <Oxygen/Vortex/Lighting/Types/DeferredShadowInputs.h>
+#include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::graphics {
 class Buffer;
@@ -34,10 +37,6 @@ class Renderer;
 struct DeferredLightConstants;
 
 namespace lighting {
-
-  namespace internal {
-    class DeferredLightConstantsPublisher;
-  }
 
   class DeferredLightPass {
   public:
@@ -75,22 +74,21 @@ namespace lighting {
 
     explicit DeferredLightPass(Renderer& renderer);
     ~DeferredLightPass();
+
+    OXYGEN_MAKE_NON_COPYABLE(DeferredLightPass)
+    OXYGEN_MAKE_NON_MOVABLE(DeferredLightPass)
     auto OnFrameStart(frame::SequenceNumber sequence, frame::Slot slot) -> void;
 
     [[nodiscard]] auto Record(RenderContext& ctx,
       graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
       const internal::DeferredLightPacketSet& packets,
-      const ShadowFrameData* shadow_data,
-      std::span<const std::shared_ptr<graphics::Texture>>
-        directional_shadow_surfaces,
-      std::span<const std::shared_ptr<graphics::Texture>> spot_shadow_surfaces,
-      std::span<const std::shared_ptr<graphics::Texture>> point_shadow_surfaces)
-      -> ExecutionState;
+      const DeferredShadowInputs& shadows) -> ExecutionState;
 
   private:
     Renderer& renderer_;
-    std::unique_ptr<internal::DeferredLightConstantsPublisher>
-      constants_publisher_;
+    //! Local-light records, one array per Record; directional draws read
+    //! none.
+    std::optional<upload::TransientStructuredBuffer> local_light_records_;
     std::shared_ptr<graphics::Framebuffer> directional_framebuffer_;
     std::shared_ptr<graphics::Framebuffer> local_framebuffer_;
     std::shared_ptr<graphics::Buffer> point_geometry_buffer_;
@@ -102,6 +100,9 @@ namespace lighting {
     // CPU scratch is consumed synchronously during Record; staged GPU data
     // retains the existing frame-slot ownership contract.
     std::vector<DeferredLightConstants> constants_scratch_;
+    //! Each draw's element in the local-light records; unused for directional
+    //! draws.
+    std::vector<std::uint32_t> record_index_scratch_;
     std::vector<std::size_t> draw_order_scratch_;
   };
 

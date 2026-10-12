@@ -24,9 +24,9 @@
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
@@ -66,68 +66,6 @@ struct TranslucencyPipelineCache {
 
 namespace {
   namespace bindless_d3d12 = oxygen::bindless::generated::d3d12;
-
-  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-    -> graphics::ResourceViewType
-  {
-    using graphics::ResourceViewType;
-
-    switch (type) {
-    case bindless_d3d12::RangeType::SRV:
-      return ResourceViewType::kRawBuffer_SRV;
-    case bindless_d3d12::RangeType::Sampler:
-      return ResourceViewType::kSampler;
-    case bindless_d3d12::RangeType::UAV:
-      return ResourceViewType::kRawBuffer_UAV;
-    default:
-      return ResourceViewType::kNone;
-    }
-  }
-
-  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-  {
-    std::vector<graphics::RootBindingItem> bindings;
-    bindings.reserve(bindless_d3d12::kRootParamTableCount);
-
-    for (std::uint32_t index = 0U; index < bindless_d3d12::kRootParamTableCount;
-      ++index) {
-      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-      graphics::RootBindingDesc binding {};
-      binding.binding_slot_desc.register_index = desc.shader_register;
-      binding.binding_slot_desc.register_space = desc.register_space;
-      binding.visibility = graphics::ShaderStageFlags::kAll;
-
-      switch (desc.kind) {
-      case bindless_d3d12::RootParamKind::DescriptorTable: {
-        graphics::DescriptorTableBinding table {};
-        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-          const auto& range = desc.ranges.front();
-          table.view_type = RangeTypeToViewType(
-            static_cast<bindless_d3d12::RangeType>(range.range_type));
-          table.base_index = range.base_register;
-          table.count
-            = range.num_descriptors == std::numeric_limits<std::uint32_t>::max()
-            ? std::numeric_limits<std::uint32_t>::max()
-            : range.num_descriptors;
-        }
-        binding.data = table;
-        break;
-      }
-      case bindless_d3d12::RootParamKind::CBV:
-        binding.data = graphics::DirectBufferBinding {};
-        break;
-      case bindless_d3d12::RootParamKind::RootConstants:
-        binding.data = graphics::PushConstantsBinding {
-          .size = desc.constants_count,
-        };
-        break;
-      }
-
-      bindings.emplace_back(binding);
-    }
-
-    return bindings;
-  }
 
   auto BuildTranslucencyFramebuffer(SceneTextures& scene_textures)
     -> graphics::FramebufferDesc
@@ -319,7 +257,7 @@ namespace {
 } // namespace
 
 TranslucencyPipelineCache::TranslucencyPipelineCache()
-  : root_bindings(BuildVortexRootBindings())
+  : root_bindings(vortex::internal::BuildVortexRootBindings())
 {
 }
 
@@ -364,7 +302,7 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
     result.skip_reason = TranslucencySkipReason::kMissingGraphics;
     return result;
   }
-  if (ctx.view_constants == nullptr) {
+  if (!ctx.view_constants.IsValid()) {
     LOG_F(WARNING,
       "Vortex.Stage18.Translucency skipped: view constants unavailable");
     result.skip_reason = TranslucencySkipReason::kMissingViewConstants;
@@ -421,7 +359,7 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
       recorder.SetPipelineState(GetCachedTranslucencyPipelineDesc(
         *pipeline_cache_, scene_textures, reverse_z, raster_state));
       recorder.SetGraphicsRootConstantBufferView(
-        view_constants_param, ctx.view_constants->GetGPUVirtualAddress());
+        view_constants_param, ctx.view_constants.GpuAddress());
       recorder.SetGraphicsRoot32BitConstant(
         root_constants_param, kInvalidShaderVisibleIndex.get(), 1U);
     });

@@ -37,11 +37,11 @@ auto ComputeRenderPass::OnExecute(CommandRecorder& recorder) -> void
 
   recorder.SetPipelineState(*last_built_pso_desc_);
 
-  DCHECK_NOTNULL_F(Context().view_constants);
+  DCHECK_F(Context().view_constants.IsValid());
   recorder.SetComputeRootConstantBufferView(
     static_cast<uint32_t>(
       oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
-    Context().view_constants->GetGPUVirtualAddress());
+    Context().view_constants.GpuAddress());
 
   recorder.SetComputeRoot32BitConstant(
     static_cast<uint32_t>(

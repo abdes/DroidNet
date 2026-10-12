@@ -14,6 +14,8 @@
 #include <limits>
 #include <memory>
 #include <numbers>
+// MSVC declares the platform-specific _dupenv_s in the C runtime header.
+// NOLINTNEXTLINE(modernize-deprecated-headers)
 #include <stdlib.h>
 #include <string>
 #include <tuple>
@@ -41,6 +43,7 @@
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
@@ -207,9 +210,9 @@ NOLINT_TEST_F(
       .output_depth = 2U,
     };
     params.grid.end_distance_m = 10.0F;
-    params.grid_z.grid_z_params[0] = 1.0F;
-    params.grid_z.grid_z_params[1] = 0.0F;
-    params.grid_z.grid_z_params[2] = 1.0F;
+    params.grid_z.grid_z_params.at(0) = 1.0F;
+    params.grid_z.grid_z_params.at(1) = 0.0F;
+    params.grid_z.grid_z_params.at(2) = 1.0F;
     params.temporal_history0 = {
       .previous_integrated_light_scattering_srv = volume.srv.get(),
       .enabled = 1U,
@@ -480,7 +483,7 @@ NOLINT_TEST_F(ExposureGpuTest, FogStableCellsPreserveHistoryAndHomogeneousMedia)
                 offset.z,
                 offset.w,
               },
-              std::begin(params.temporal_history1.frame_jitter_offsets[0]));
+              params.temporal_history1.frame_jitter_offsets.front().begin());
             const auto pass_slot = PublishFixtureData(params);
             {
               auto recorder = AcquireRecorder("Fog stable cell dispatch");
@@ -505,7 +508,7 @@ NOLINT_TEST_F(ExposureGpuTest, FogStableCellsPreserveHistoryAndHomogeneousMedia)
             }
             const auto actual = ReadFloatTexture(*output);
             ASSERT_EQ(actual.size(), samples.size());
-            const auto emissive = std::to_array(params.media1.emissive_rgb);
+            const auto emissive = params.media1.emissive_rgb;
             for (unsigned i = 0; i < samples.size(); ++i) {
               // Independent fixed-depth Beer-Lambert oracle, including near
               // fade.
@@ -668,14 +671,15 @@ NOLINT_TEST_F(ExposureGpuTest,
   };
   auto probe = std::make_shared<Probe>(*renderer_);
   renderer_->RegisterViewExtension(probe);
-  const auto half_to_double = [](std::uint16_t bits) -> double {
+  const auto half_to_double = [](const std::uint16_t half) -> double {
+    const auto bits = static_cast<std::uint32_t>(half);
     const auto exponent = (bits >> 10U) & 31U;
     const auto mantissa = bits & 1023U;
     const double magnitude = exponent == 0U
       ? std::ldexp(static_cast<double>(mantissa), -24)
       : std::ldexp(static_cast<double>(1024U + mantissa),
           static_cast<int>(exponent) - 25);
-    return bits & 0x8000U ? -magnitude : magnitude;
+    return (bits & 0x8000U) != 0U ? -magnitude : magnitude;
   };
   const auto read_volume
     = [&](const Texture& texture) -> std::vector<std::array<double, 4>> {
@@ -794,11 +798,11 @@ NOLINT_TEST_F(ExposureGpuTest,
       .delta_time_seconds = 0.0F, });
     facade.SetSceneSource({ .scene = observer_ptr {
                               scene.get(),
-                            } });
+                            }, });
     facade.SetViewIntent(input);
     facade.SetOutputTarget({ .framebuffer = observer_ptr {
                                target.get(),
-                             } });
+                             }, });
     auto session = facade.Finalize();
     if (!session.has_value()) {
       FAIL() << "Expected session to contain a value";

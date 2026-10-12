@@ -9,7 +9,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <memory>
 #include <span>
 #include <stdexcept>
@@ -19,7 +18,6 @@
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
 #include <glm/ext/vector_uint3.hpp>
-#include <glm/geometric.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
@@ -46,10 +44,12 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereGpuPacking.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Passes/VolumetricFogPass.h>
 #include <Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h>
+#include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -77,7 +77,6 @@ namespace {
   constexpr std::uint32_t kHaltonBaseX = 2U;
   constexpr std::uint32_t kHaltonBaseY = 3U;
   constexpr std::uint32_t kHaltonBaseZ = 5U;
-  constexpr float kMinLightDirectionLengthSq = 1.0e-6F;
   constexpr float kGridParamTolerance = 1.0e-4F;
   // Henyey-Greenstein g stays inside (-1, 1).
   constexpr float kMaxScatteringDistribution = 0.99F;
@@ -107,69 +106,9 @@ namespace {
       0.0F };
   }
 
-  auto RangeTypeToViewType(const bindless_d3d12::RangeType type)
-    -> graphics::ResourceViewType
-  {
-    using graphics::ResourceViewType;
-    switch (type) {
-    case bindless_d3d12::RangeType::SRV:
-      return ResourceViewType::kRawBuffer_SRV;
-    case bindless_d3d12::RangeType::Sampler:
-      return ResourceViewType::kSampler;
-    case bindless_d3d12::RangeType::UAV:
-      return ResourceViewType::kRawBuffer_UAV;
-    default:
-      return ResourceViewType::kNone;
-    }
-  }
-
-  auto BuildVortexRootBindings() -> std::vector<graphics::RootBindingItem>
-  {
-    std::vector<graphics::RootBindingItem> bindings;
-    bindings.reserve(bindless_d3d12::kRootParamTableCount);
-
-    for (std::uint32_t index = 0; index < bindless_d3d12::kRootParamTableCount;
-      ++index) {
-      const auto& desc = bindless_d3d12::kRootParamTable.at(index);
-      graphics::RootBindingDesc binding {};
-      binding.binding_slot_desc.register_index = desc.shader_register;
-      binding.binding_slot_desc.register_space = desc.register_space;
-      binding.visibility = graphics::ShaderStageFlags::kAll;
-
-      switch (desc.kind) {
-      case bindless_d3d12::RootParamKind::DescriptorTable: {
-        graphics::DescriptorTableBinding table {};
-        if (desc.ranges_count > 0U && desc.ranges.data() != nullptr) {
-          const auto& range = desc.ranges.front();
-          table.view_type = RangeTypeToViewType(
-            static_cast<bindless_d3d12::RangeType>(range.range_type));
-          table.base_index = range.base_register;
-          table.count
-            = range.num_descriptors == std::numeric_limits<std::uint32_t>::max()
-            ? std::numeric_limits<std::uint32_t>::max()
-            : range.num_descriptors;
-        }
-        binding.data = table;
-        break;
-      }
-      case bindless_d3d12::RootParamKind::CBV:
-        binding.data = graphics::DirectBufferBinding {};
-        break;
-      case bindless_d3d12::RootParamKind::RootConstants:
-        binding.data
-          = graphics::PushConstantsBinding { .size = desc.constants_count };
-        break;
-      }
-
-      bindings.emplace_back(binding);
-    }
-
-    return bindings;
-  }
-
   auto BuildPipelineDesc() -> graphics::ComputePipelineDesc
   {
-    auto root_bindings = BuildVortexRootBindings();
+    auto root_bindings = vortex::internal::BuildVortexRootBindings();
     return graphics::ComputePipelineDesc::Builder {}
       .SetComputeShader(graphics::ShaderRequest {
         .stage = ShaderType::kCompute,
@@ -209,31 +148,6 @@ namespace {
       initial = graphics::ResourceStates::kCommon;
     }
     recorder.BeginTrackingResourceState(texture, initial, true);
-  }
-
-  auto SetVec4(std::array<float, 4>& target, const glm::vec3 value,
-    const float w = 0.0F) -> void
-  {
-    target = { value.x, value.y, value.z, w };
-  }
-
-  auto PopulateLight(std::array<float, 4>& direction_enabled,
-    std::array<float, 4>& illuminance_rgb, const AtmosphereLightModel& light)
-    -> void
-  {
-    auto direction = glm::vec3 { 0.0F, 0.0F, 1.0F };
-    if (light.enabled) {
-      const auto length_sq
-        = glm::dot(light.direction_to_light_ws, light.direction_to_light_ws);
-      if (length_sq > kMinLightDirectionLengthSq) {
-        direction = glm::normalize(light.direction_to_light_ws);
-      }
-    }
-
-    SetVec4(direction_enabled, direction, light.enabled ? 1.0F : 0.0F);
-    SetVec4(illuminance_rgb,
-      light.enabled ? light.illuminance_rgb_lux
-                    : glm::vec3 { 0.0F, 0.0F, 0.0F });
   }
 
   auto ResolveGridWidth(const ResolvedView& view) -> std::uint32_t
@@ -367,7 +281,7 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     RemoveViewState(ctx.current_view.view_id);
     return state;
   }
-  if (ctx.view_constants == nullptr) {
+  if (!ctx.view_constants.IsValid()) {
     RemoveViewState(ctx.current_view.view_id);
     return state;
   }
@@ -468,14 +382,11 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
 
   // Byte offsets mirror the HLSL VolumetricFogPassConstants layout.
   // NOLINTBEGIN(*-magic-numbers)
-  static_assert(offsetof(PassConstants, exposure_status_uav) == 532U);
+  static_assert(offsetof(PassConstants, reserved0) == 532U);
   static_assert(offsetof(PassConstants, exposure_fp16_store) == 536U);
   static_assert(offsetof(PassConstants, previous_error_bounds_srv) == 540U);
   // NOLINTEND(*-magic-numbers)
   auto constants = PassConstants {};
-  constants.exposure_status_uav = ctx.current_view.frame_exposure
-    ? ctx.current_view.frame_exposure->current_state->status_uav_index.get()
-    : kInvalidShaderVisibleIndex.get();
   constants.exposure_fp16_store
     = texture->GetDescriptor().format == Format::kRGBA16Float ? 1U : 0U;
   constants.output_header.output_texture_uav = integrated_uav.get();
@@ -527,9 +438,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     && history_entry.depth == depth
     && NearlyEqual(history_entry.start_distance_m, start_distance)
     && NearlyEqual(history_entry.end_distance_m, end_distance)
-    && NearlyEqual(history_entry.grid_z_params[0], grid_z_params.x)
-    && NearlyEqual(history_entry.grid_z_params[1], grid_z_params.y)
-    && NearlyEqual(history_entry.grid_z_params[2], grid_z_params.z);
+    && NearlyEqual(std::get<0>(history_entry.grid_z_params), grid_z_params.x)
+    && NearlyEqual(std::get<1>(history_entry.grid_z_params), grid_z_params.y)
+    && NearlyEqual(std::get<2>(history_entry.grid_z_params), grid_z_params.z);
   if (history_matches) {
     if (history_entry.frame_exposure) {
       constants.previous_frame_exposure_srv
@@ -549,20 +460,17 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   }
   constants.temporal_history0.history_miss_supersample_count
     = temporal_reprojection_enabled ? history_miss_supersample_count : 1U;
-  constants.grid_z.grid_z_params[0] = grid_z_params.x;
-  constants.grid_z.grid_z_params[1] = grid_z_params.y;
-  constants.grid_z.grid_z_params[2] = grid_z_params.z;
+  constants.grid_z.grid_z_params
+    = { grid_z_params.x, grid_z_params.y, grid_z_params.z };
   constants.grid_z.directional_shadows_enabled
     = renderer_.GetVolumetricFogDirectionalShadowsEnabled() ? 1U : 0U;
-  constants.media0.albedo_rgb[0] = volumetric.albedo.x;
-  constants.media0.albedo_rgb[1] = volumetric.albedo.y;
-  constants.media0.albedo_rgb[2] = volumetric.albedo.z;
+  constants.media0.albedo_rgb
+    = { volumetric.albedo.x, volumetric.albedo.y, volumetric.albedo.z };
   constants.media0.scattering_distribution
     = std::clamp(volumetric.scattering_distribution,
       -kMaxScatteringDistribution, kMaxScatteringDistribution);
-  constants.media1.emissive_rgb[0] = volumetric.emissive.x;
-  constants.media1.emissive_rgb[1] = volumetric.emissive.y;
-  constants.media1.emissive_rgb[2] = volumetric.emissive.z;
+  constants.media1.emissive_rgb
+    = { volumetric.emissive.x, volumetric.emissive.y, volumetric.emissive.z };
   constants.media1.static_lighting_scattering_intensity
     = std::max(volumetric.static_lighting_scattering_intensity, 0.0F);
   if (height_fog_media_requested) {
@@ -589,9 +497,8 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
       = std::max(sky_light.volumetric_scattering_intensity, 0.0F);
     constants.sky_light0.diffuse_intensity
       = std::max(sky_light.diffuse_intensity, 0.0F);
-    constants.sky_light1.tint_rgb[0] = sky_light.tint_rgb.x;
-    constants.sky_light1.tint_rgb[1] = sky_light.tint_rgb.y;
-    constants.sky_light1.tint_rgb[2] = sky_light.tint_rgb.z;
+    constants.sky_light1.tint_rgb
+      = { sky_light.tint_rgb.x, sky_light.tint_rgb.y, sky_light.tint_rgb.z };
     constants.sky_light1.intensity_mul
       = std::max(sky_light.intensity_mul, 0.0F);
   }
@@ -622,12 +529,14 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     constants.local_fog2.max_density_into_volumetric_fog
       = renderer_.GetLocalFogMaxDensityIntoVolumetricFog();
   }
-  PopulateLight(constants.light0_direction_enabled,
-    constants.light0_illuminance_rgb,
+  const auto light0 = internal::PackAtmosphereLight(
     stable_state.view_products.atmosphere_lights.at(0));
-  PopulateLight(constants.light1_direction_enabled,
-    constants.light1_illuminance_rgb,
+  constants.light0_direction_enabled = light0.direction_enabled;
+  constants.light0_illuminance_rgb = light0.illuminance_rgb;
+  const auto light1 = internal::PackAtmosphereLight(
     stable_state.view_products.atmosphere_lights.at(1));
+  constants.light1_direction_enabled = light1.direction_enabled;
+  constants.light1_illuminance_rgb = light1.illuminance_rgb;
 
   auto constants_alloc = pass_constants_buffer_.Allocate(1U);
   if (!constants_alloc.has_value()
@@ -673,7 +582,7 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   recorder.SetPipelineState(BuildPipelineDesc());
   recorder.SetComputeRootConstantBufferView(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-    ctx.view_constants->GetGPUVirtualAddress());
+    ctx.view_constants.GpuAddress());
   recorder.SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
@@ -727,9 +636,7 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   state.local_fog_injection_executed = local_fog_ready;
   state.local_fog_instance_count
     = local_fog_products != nullptr ? local_fog_products->instance_count : 0U;
-  state.grid_z_params[0] = grid_z_params.x;
-  state.grid_z_params[1] = grid_z_params.y;
-  state.grid_z_params[2] = grid_z_params.z;
+  state.grid_z_params = { grid_z_params.x, grid_z_params.y, grid_z_params.z };
   if (temporal_reprojection_enabled) {
     const auto next_history = HistoryEntry {
       .texture = texture,

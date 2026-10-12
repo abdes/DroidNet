@@ -147,7 +147,7 @@ struct VolumetricFogPassConstants
     float4 light1_direction_enabled;
     float4 light1_illuminance_rgb;
     uint previous_frame_exposure_srv;
-    uint exposure_status_uav;
+    uint reserved0;
     uint exposure_fp16_store;
     uint previous_error_bounds_srv;
 };
@@ -523,7 +523,7 @@ static float4 EvaluateVolumetricFogSample(
         : 0.0f.xxx;
     const float3 integrated_luminance = source_function * opacity;
     CheckHdrStoreRange(float4(integrated_luminance, transmittance), 10u,
-        pass.exposure_status_uav, 0u, 1.0);
+        GetExposureStatusUav(), 0u, 1.0);
     return float4(max(integrated_luminance, 0.0f.xxx) * GetPreExposure(), saturate(transmittance));
 }
 
@@ -566,7 +566,7 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
         // a producer-origin failure (bit 16) makes this history unusable.
         certified_history = (previous_status.Load(48u) & 16u) == 0u;
     }
-    if (certified_history && !fp32_only && pass.exposure_status_uav != K_INVALID_BINDLESS_INDEX) {
+    if (certified_history && !fp32_only && GetExposureStatusUav() != K_INVALID_BINDLESS_INDEX) {
         certified_history = pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX;
         if (certified_history) {
             ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
@@ -658,9 +658,9 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
 
     if (!fp32_only) {
         RecordHdrStoreBounds(output_value, reference_low, reference_high, GetOneOverPreExposure(),
-            10u, pass.exposure_status_uav, pass.exposure_fp16_store);
+            10u, GetExposureStatusUav(), pass.exposure_fp16_store);
     }
-    CheckHdrStoreRange(output_value, 10u, pass.exposure_status_uav, pass.exposure_fp16_store,
+    CheckHdrStoreRange(output_value, 10u, GetExposureStatusUav(), pass.exposure_fp16_store,
         GetPreExposure());
     output_texture[dispatch_id] = pass.exposure_fp16_store != 0u
         ? HdrRoundToHalf(output_value) : output_value;

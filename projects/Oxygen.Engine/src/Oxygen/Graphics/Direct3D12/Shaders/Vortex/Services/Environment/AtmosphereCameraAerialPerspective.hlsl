@@ -67,7 +67,7 @@ struct CameraAerialAtmosphereScales0
 {
     float atmosphere_height_km;
     float aerial_perspective_distance_scale;
-    uint exposure_status_uav;
+    uint reserved0;
     float rayleigh_scale_height_km;
 };
 
@@ -411,12 +411,12 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
     const float3 throughput = scattering.Transmittance;
     const float transmittance = dot(throughput, float3(1.0f / 3.0f, 1.0f / 3.0f, 1.0f / 3.0f));
     CheckHdrStoreRange(float4(luminance, transmittance), 6u,
-        pass.atmosphere_scales0.exposure_status_uav, pass.atmosphere_scales1.exposure_fp16_store,
+        GetExposureStatusUav(), pass.atmosphere_scales1.exposure_fp16_store,
         GetPreExposure());
     const float4 output_value = float4(max(luminance, 0.0f.xxx), saturate(transmittance));
     if (!IsFp32OnlyExposure()) {
         RecordHdrStoreBounds(output_value, output_value, output_value, GetOneOverPreExposure(),
-            6u, pass.atmosphere_scales0.exposure_status_uav, pass.atmosphere_scales1.exposure_fp16_store);
+            6u, GetExposureStatusUav(), pass.atmosphere_scales1.exposure_fp16_store);
     }
     output_texture[dispatch_id] = pass.atmosphere_scales1.exposure_fp16_store != 0u
         ? HdrRoundToHalf(output_value) : output_value;

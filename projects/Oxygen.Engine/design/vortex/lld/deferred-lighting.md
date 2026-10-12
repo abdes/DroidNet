@@ -58,14 +58,17 @@ This module must preserve the following invariants from
 ## 2. Interface Contracts
 
 `LightingService::RenderDeferredLighting` receives the current render context,
-command recorder, SceneTextures, immutable frame selection, indexed shadow data
-and shadow surfaces, and static-sky availability. Its boolean result propagates
+command recorder, SceneTextures, immutable frame selection and one
+`DeferredShadowInputs`: the view's shadow data, null when the view published
+none, and the shadow surfaces by light kind. Its boolean result propagates
 recording failure. The service owns publication and dispatch; `DeferredLightPass`
 owns draw preparation, PSOs, framebuffers and persistent sphere/cone geometry.
 
-Per-draw constants and CBV descriptors use the renderer's frame-safe allocation
-and retention infrastructure. Light records, per-view bindings and shadow
-references retain their published frame/view identity until GPU use completes.
+Each recording publishes its local-light constants as one Upload transient
+structured array; a local draw passes the array as its inputs record and its
+element as the draw index. Directional draws read no inputs record. Light
+records, per-view bindings and shadow references retain their published
+frame/view identity until GPU use completes.
 The exact interface and lifetimes are defined by the
 [service contract](lighting-service.md#2-canonical-data-and-interfaces) and
 [GPU ABI](lighting-gpu-abi.md).

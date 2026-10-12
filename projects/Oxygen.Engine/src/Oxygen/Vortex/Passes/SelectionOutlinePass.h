@@ -50,7 +50,6 @@ public:
     //! outlined surface counts as visible.
     observer_ptr<const graphics::Texture> scene_depth;
     ShaderVisibleIndex scene_depth_srv { kInvalidShaderVisibleIndex };
-    bool reverse_z { true };
   };
 
   OXGN_VRTX_API explicit SelectionOutlinePass(Renderer& renderer);

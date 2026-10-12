@@ -20,12 +20,11 @@ cbuffer RootConstants : register(b2, space0)
 DeferredLightVolumeVSOutput DeferredLightPointVS(uint vertex_id : SV_VertexID)
 {
     DeferredLightVolumeVSOutput output = (DeferredLightVolumeVSOutput)0;
-    if (g_PassConstantsIndex == INVALID_BINDLESS_INDEX) {
+    DeferredLightConstants light_constants;
+    if (!TryLoadDeferredLightConstants(
+            g_PassConstantsIndex, g_DrawIndex, light_constants)) {
         return output;
     }
-
-    ConstantBuffer<DeferredLightConstants> light_constants
-        = ResourceDescriptorHeap[g_PassConstantsIndex];
     return GenerateDeferredLightVolume(
         LoadDeferredLightGeometryVertex(
             light_constants.light_geometry_vertices_srv,
@@ -36,12 +35,11 @@ DeferredLightVolumeVSOutput DeferredLightPointVS(uint vertex_id : SV_VertexID)
 [shader("pixel")]
 float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
 {
-    if (g_PassConstantsIndex == INVALID_BINDLESS_INDEX) {
+    DeferredLightConstants light_constants;
+    if (!TryLoadDeferredLightConstants(
+            g_PassConstantsIndex, g_DrawIndex, light_constants)) {
         return 0.0f.xxxx;
     }
-
-    ConstantBuffer<DeferredLightConstants> light_constants
-        = ResourceDescriptorHeap[g_PassConstantsIndex];
 
     const SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
     if (!HasDeferredLightingInputs(bindings)) {

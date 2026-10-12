@@ -29,6 +29,13 @@ static float GetOneOverPreExposure()
     return GetFrameExposure().one_over_pre_exposure;
 }
 
+// The bound view's exposure status UAV; invalid when the view has no exposure
+// state to report HDR range failures to.
+static uint GetExposureStatusUav()
+{
+    return LoadViewFrameBindings(bindless_view_frame_bindings_slot).exposure_status_uav;
+}
+
 static bool IsFp32OnlyExposure()
 {
     return (GetFrameExposure().flags & 16u) != 0u;

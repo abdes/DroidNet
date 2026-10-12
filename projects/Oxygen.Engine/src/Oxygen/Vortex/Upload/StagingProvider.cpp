@@ -6,7 +6,11 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <expected>
+#include <limits>
 #include <memory>
+#include <span>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -16,6 +20,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 
 namespace oxygen::vortex::upload {
@@ -30,6 +35,42 @@ StagingProvider::Allocation::Allocation(std::shared_ptr<graphics::Buffer> buf,
   CHECK_NOTNULL_F(buffer);
   CHECK_NOTNULL_F(ptr);
   CHECK_F(size.get() > 0 && size.get() <= buffer->GetSize());
+}
+
+auto StagingProvider::Allocation::Subrange(
+  const OffsetBytes sub_offset, const SizeBytes sub_size) && -> Allocation
+{
+  CHECK_LE_F(sub_offset.get(), size.get(),
+    "Allocation subrange offset {} exceeds size {}", sub_offset.get(),
+    size.get());
+  CHECK_LE_F(sub_size.get(), size.get() - sub_offset.get(),
+    "Allocation subrange [{}, +{}) exceeds size {}", sub_offset.get(),
+    sub_size.get(), size.get());
+  auto* const sub_ptr = std::span(ptr, static_cast<std::size_t>(size.get()))
+                          .subspan(static_cast<std::size_t>(sub_offset.get()))
+                          .data();
+  return { std::move(buffer), OffsetBytes { offset.get() + sub_offset.get() },
+    sub_size, sub_ptr };
+}
+
+auto StagingProvider::AllocateAligned(const SizeBytes size,
+  const std::uint64_t alignment, const std::string_view debug_name)
+  -> std::expected<Allocation, UploadError>
+{
+  if (alignment == 0U || size.get() == 0U
+    || size.get() > std::numeric_limits<std::uint64_t>::max() - alignment) {
+    return std::unexpected(UploadError::kInvalidRequest);
+  }
+  auto allocation
+    = Allocate(SizeBytes { size.get() + (alignment - 1U) }, debug_name);
+  if (!allocation) {
+    return std::unexpected(allocation.error());
+  }
+  // Strides need not be powers of two, so align by remainder.
+  const auto base = allocation->Offset().get();
+  const auto remainder = base % alignment;
+  const auto delta = remainder == 0U ? 0U : alignment - remainder;
+  return std::move(*allocation).Subrange(OffsetBytes { delta }, size);
 }
 
 auto StagingProvider::AddFrameListener(std::weak_ptr<FrameListener> listener)

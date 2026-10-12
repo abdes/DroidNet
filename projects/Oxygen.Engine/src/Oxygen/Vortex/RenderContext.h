@@ -29,6 +29,7 @@
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
+#include <Oxygen/Vortex/Upload/TransientConstantBuffer.h>
 
 namespace oxygen {
 class Graphics;
@@ -151,7 +152,9 @@ struct RenderContext {
 
   std::unordered_map<size_t, bool> pass_enable_flags;
   observer_ptr<const graphics::Framebuffer> pass_target;
-  std::shared_ptr<const graphics::Buffer> view_constants;
+  //! The current view's camera constants, bound at b1. Each write is a new
+  //! record; work recorded earlier keeps the record it bound.
+  upload::ConstantBufferRecord view_constants;
   std::shared_ptr<const graphics::Buffer> material_constants;
   ShaderDebugMode shader_debug_mode { ShaderDebugMode::kDisabled };
   RenderMode render_mode { RenderMode::kSolid };
@@ -202,7 +205,10 @@ struct RenderContext {
     std::uint32_t screen_hzb_mip_count { 0U };
     bool screen_hzb_available { false };
     bool screen_hzb_has_previous { false };
-    ShaderVisibleIndex lighting_frame_slot { kInvalidShaderVisibleIndex };
+    //! The ViewFrameBindings record the current b1 record routes to. Passes
+    //! that do not bind b1 carry it in their inputs record to reach the same
+    //! view values.
+    ShaderVisibleIndex view_frame_bindings_slot { kInvalidShaderVisibleIndex };
     //! This view's per-draw visibility from occlusion culling, for list
     //! builds.
     DrawVisibilityProducts draw_visibility {};
@@ -306,7 +312,7 @@ struct RenderContext {
     ClearRegisteredPasses();
     renderer_.reset(nullptr);
     graphics_.reset(nullptr);
-    view_constants.reset();
+    view_constants = {};
     material_constants.reset();
     shader_debug_mode = ShaderDebugMode::kDisabled;
     render_mode = RenderMode::kSolid;

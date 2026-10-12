@@ -252,12 +252,14 @@ protected:
       = oxygen::observer_ptr<const ResolvedView> {
           &resolved_view,
         };
-    render_context.view_constants = graphics_->CreateBuffer({
-      .size_bytes = 1024U,
-      .usage = oxygen::graphics::BufferUsage::kConstant,
-      .memory = oxygen::graphics::BufferMemory::kUpload,
-      .debug_name = "SceneRendererPublicationTest.ViewConstants",
-    });
+    render_context.view_constants = {
+      .buffer = graphics_->CreateBuffer({
+        .size_bytes = 1024U,
+        .usage = oxygen::graphics::BufferUsage::kConstant,
+        .memory = oxygen::graphics::BufferMemory::kUpload,
+        .debug_name = "SceneRendererPublicationTest.ViewConstants",
+      }),
+    };
     return render_context;
   }
 
@@ -420,8 +422,6 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     published_bindings.draw_frame_slot, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(
     published_bindings.frame_exposure_slot, oxygen::kInvalidShaderVisibleIndex);
-  EXPECT_NE(
-    RendererPublicationProbe::GetViewConstantsManager(*renderer_), nullptr);
   EXPECT_NE(scene_renderer->GetPublishedViewId(), oxygen::kInvalidViewId);
   EXPECT_NE(scene_texture_bindings.scene_color_srv,
     SceneTextureBindings::kInvalidIndex);
@@ -822,12 +822,14 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     = oxygen::observer_ptr<const ResolvedView> {
         &resolved_view,
       };
-  render_context.view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "SceneRendererPublicationTest.ViewConstants",
-  });
+  render_context.view_constants = {
+    .buffer = graphics_->CreateBuffer({
+      .size_bytes = 1024U,
+      .usage = oxygen::graphics::BufferUsage::kConstant,
+      .memory = oxygen::graphics::BufferMemory::kUpload,
+      .debug_name = "SceneRendererPublicationTest.ViewConstants",
+    }),
+  };
 
   scene_renderer.OnFrameStart(frame_context);
   graphics_->texture_copy_log_.copies.clear();
@@ -1016,13 +1018,15 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
       = oxygen::observer_ptr<const ResolvedView> {
           &resolved_view,
         };
-    render_context.view_constants = graphics_->CreateBuffer({
-      .size_bytes = 1024U,
-      .usage = oxygen::graphics::BufferUsage::kConstant,
-      .memory = oxygen::graphics::BufferMemory::kUpload,
-      .debug_name
-      = "SceneRendererPublicationTest.DestructorCleanup.ViewConstants",
-    });
+    render_context.view_constants = {
+      .buffer = graphics_->CreateBuffer({
+        .size_bytes = 1024U,
+        .usage = oxygen::graphics::BufferUsage::kConstant,
+        .memory = oxygen::graphics::BufferMemory::kUpload,
+        .debug_name
+        = "SceneRendererPublicationTest.DestructorCleanup.ViewConstants",
+      }),
+    };
 
     scene_renderer.OnFrameStart(frame_context);
     graphics_->texture_copy_log_.copies.clear();

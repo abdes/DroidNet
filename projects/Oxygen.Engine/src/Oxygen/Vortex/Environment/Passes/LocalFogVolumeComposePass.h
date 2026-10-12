@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <optional>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -74,7 +75,10 @@ namespace environment {
       std::uint32_t _pad1 { 0U };
     };
 
-    auto EnsurePassConstantsBuffer() -> bool;
+    //! The pass constants buffer, created on first use; null without
+    //! Graphics.
+    auto EnsurePassConstantsBuffer()
+      -> observer_ptr<upload::TransientStructuredBuffer>;
 
     Renderer& renderer_;
     std::optional<upload::TransientStructuredBuffer> pass_constants_buffer_;

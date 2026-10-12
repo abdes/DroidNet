@@ -15,6 +15,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
@@ -44,6 +45,7 @@
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
+#include <Oxygen/Vortex/Upload/TransientConstantBuffer.h>
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {
@@ -137,8 +139,8 @@ protected:
     return graphics_->CreateFramebuffer(fb_desc);
   }
 
-  [[nodiscard]] auto MaterializeViewConstantsBuffer(const ViewId view_id) const
-    -> std::shared_ptr<const oxygen::graphics::Buffer>
+  [[nodiscard]] auto MaterializeViewConstants(const ViewId view_id) const
+    -> oxygen::vortex::upload::ConstantBufferRecord
   {
     if (!framebuffer_) {
       framebuffer_ = MakeFramebuffer();
@@ -390,7 +392,7 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(RuntimeViewPublicationTest,
-  RemovePublishedRuntimeViewReleasesTrackedViewConstantsForPublishedView)
+  EachViewConstantsWriteIsANewRecordAndKeepsEarlierRecords)
 {
   auto frame_context = FrameContext {};
   PrepareFrameContext(frame_context, 1U);
@@ -399,73 +401,18 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
     14U,
   };
   const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
-    frame_context, intent_view_id, MakeViewContext("removable-view-constants"));
+    frame_context, intent_view_id, MakeViewContext("versioned-view-constants"));
   ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
 
-  const auto first_buffer = MaterializeViewConstantsBuffer(published_view_id);
-  ASSERT_NE(first_buffer, nullptr);
+  const auto first = MaterializeViewConstants(published_view_id);
+  const auto second = MaterializeViewConstants(published_view_id);
 
-  renderer_->RemovePublishedRuntimeView(frame_context, intent_view_id);
-
-  const auto second_buffer = MaterializeViewConstantsBuffer(published_view_id);
-  ASSERT_NE(second_buffer, nullptr);
-  EXPECT_NE(second_buffer.get(), first_buffer.get());
-}
-
-NOLINT_TEST_F(RuntimeViewPublicationTest,
-  RemovePublishedRuntimeViewWithoutFrameContextReleasesTrackedViewConstants)
-{
-  auto frame_context = FrameContext {};
-  PrepareFrameContext(frame_context, 1U);
-
-  const auto intent_view_id = ViewId {
-    16U,
-  };
-  const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
-    frame_context, intent_view_id, MakeViewContext("shutdown-removable"));
-  ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
-
-  const auto first_buffer = MaterializeViewConstantsBuffer(published_view_id);
-  ASSERT_NE(first_buffer, nullptr);
-
-  renderer_->RemovePublishedRuntimeView(intent_view_id);
-
-  EXPECT_EQ(renderer_->ResolvePublishedRuntimeViewId(intent_view_id),
-    oxygen::kInvalidViewId);
-  const auto second_buffer = MaterializeViewConstantsBuffer(published_view_id);
-  ASSERT_NE(second_buffer, nullptr);
-  EXPECT_NE(second_buffer.get(), first_buffer.get());
-}
-
-NOLINT_TEST_F(RuntimeViewPublicationTest,
-  PruneStalePublishedRuntimeViewsReleasesTrackedViewConstantsForPublishedView)
-{
-  auto frame_context = FrameContext {};
-  PrepareFrameContext(frame_context, 1U);
-
-  const auto intent_view_id = ViewId {
-    15U,
-  };
-  const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
-    frame_context, intent_view_id, MakeViewContext("stale-view-constants"));
-  ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
-
-  const auto first_buffer = MaterializeViewConstantsBuffer(published_view_id);
-  ASSERT_NE(first_buffer, nullptr);
-
-  frame_context.SetFrameSequenceNumber(
-    oxygen::frame::SequenceNumber {
-      1000U,
-    },
-    oxygen::engine::internal::EngineTagFactory::Get());
-  const auto pruned = renderer_->PruneStalePublishedRuntimeViews(frame_context);
-
-  ASSERT_EQ(pruned.size(), 1U);
-  EXPECT_EQ(pruned.front(), intent_view_id);
-
-  const auto second_buffer = MaterializeViewConstantsBuffer(published_view_id);
-  ASSERT_NE(second_buffer, nullptr);
-  EXPECT_NE(second_buffer.get(), first_buffer.get());
+  ASSERT_TRUE(first.IsValid());
+  ASSERT_TRUE(second.IsValid());
+  EXPECT_NE(first.GpuAddress(), second.GpuAddress());
+  EXPECT_EQ(first.offset_bytes % oxygen::packing::kConstantBufferAlignment, 0U);
+  EXPECT_EQ(
+    second.offset_bytes % oxygen::packing::kConstantBufferAlignment, 0U);
 }
 
 NOLINT_TEST_F(RuntimeViewPublicationTest,
@@ -535,7 +482,7 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
     context.frame_slot = oxygen::frame::Slot {
       0U,
     };
-    context.view_constants = MaterializeViewConstantsBuffer(first_id);
+    context.view_constants = MaterializeViewConstants(first_id);
     RendererPublicationProbe::PopulateRenderContextViewState(
       *renderer_, context, frame, false);
     ASSERT_EQ(context.frame_views.size(), 2U);
@@ -568,8 +515,8 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   run(3U, 0x1p-10F);
 }
 
-NOLINT_TEST_F(RuntimeViewPublicationTest,
-  OnShutdownResetsViewConstantsManagerAfterRuntimeViewCleanup)
+NOLINT_TEST_F(
+  RuntimeViewPublicationTest, OnShutdownRemovesPublishedRuntimeViews)
 {
   auto frame_context = FrameContext {};
   PrepareFrameContext(frame_context, 1U);
@@ -580,14 +527,12 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   const auto published_view_id = renderer_->UpsertPublishedRuntimeView(
     frame_context, intent_view_id, MakeViewContext("shutdown-cleanup"));
   ASSERT_NE(published_view_id, oxygen::kInvalidViewId);
-  ASSERT_NE(MaterializeViewConstantsBuffer(published_view_id), nullptr);
+  ASSERT_TRUE(MaterializeViewConstants(published_view_id).IsValid());
 
   renderer_->OnShutdown();
 
   EXPECT_EQ(renderer_->ResolvePublishedRuntimeViewId(intent_view_id),
     oxygen::kInvalidViewId);
-  EXPECT_EQ(
-    RendererPublicationProbe::GetViewConstantsManager(*renderer_), nullptr);
 }
 
 NOLINT_TEST_F(RuntimeViewPublicationTest,
@@ -815,7 +760,7 @@ NOLINT_TEST_F(RuntimeViewPublicationTest,
   context.frame_slot = oxygen::frame::Slot {
     0U,
   };
-  context.view_constants = MaterializeViewConstantsBuffer(first);
+  context.view_constants = MaterializeViewConstants(first);
   RendererPublicationProbe::PopulateRenderContextViewState(
     *renderer_, context, frame, false);
   const auto render = [&](const float expected) -> void {

@@ -64,13 +64,13 @@ auto GraphicsRenderPass::RebindCommonRootParameters(
 auto GraphicsRenderPass::BindViewConstantsBuffer(
   CommandRecorder& recorder) const -> void
 {
-  DCHECK_NOTNULL_F(Context().view_constants);
+  DCHECK_F(Context().view_constants.IsValid());
   DCHECK_F(last_built_pso_desc_.has_value());
 
   recorder.SetGraphicsRootConstantBufferView(
     static_cast<uint32_t>(
       oxygen::bindless::generated::d3d12::RootParam::kViewConstants),
-    Context().view_constants->GetGPUVirtualAddress());
+    Context().view_constants.GpuAddress());
 }
 
 auto GraphicsRenderPass::BindIndicesBuffer(CommandRecorder& /*recorder*/) const

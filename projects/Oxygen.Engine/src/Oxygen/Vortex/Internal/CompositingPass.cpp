@@ -16,9 +16,8 @@
 #include <string_view>
 #include <utility>
 
-#include <fmt/format.h>
-
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -42,6 +41,7 @@
 #include <Oxygen/Vortex/Internal/CompositingPass.h>
 #include <Oxygen/Vortex/Passes/GraphicsRenderPass.h>
 #include <Oxygen/Vortex/RenderContext.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 namespace oxygen::vortex::internal {
 
@@ -134,13 +134,17 @@ namespace {
 
 } // namespace
 
-CompositingPass::CompositingPass(std::shared_ptr<Config> config)
+CompositingPass::CompositingPass(
+  std::shared_ptr<Config> config, Renderer& renderer)
   : GraphicsRenderPass(config ? config->debug_name : "CompositingPass", false)
   , config_(std::move(config))
+  , pass_constants_(observer_ptr { renderer.GetGraphics().get() },
+      renderer.GetStagingProvider(),
+      static_cast<std::uint32_t>(sizeof(CompositingPassConstants)),
+      observer_ptr { &renderer.GetInlineTransfersCoordinator() },
+      "Compositing.PassConstants")
 {
 }
-
-CompositingPass::~CompositingPass() { ReleasePassConstantsBuffer(); }
 
 auto CompositingPass::ValidateConfig() -> void
 {
@@ -196,8 +200,6 @@ auto CompositingPass::DoPrepareResources(graphics::CommandRecorder& recorder)
   recorder.RequireResourceState(
     output, graphics::ResourceStates::kRenderTarget);
   recorder.FlushBarriers();
-
-  EnsurePassConstantsBuffer();
 
   auto source_srv = kInvalidShaderVisibleIndex;
   const auto needs_source
@@ -308,128 +310,6 @@ auto CompositingPass::GetClampedViewport() const -> ViewPort
   return ClampViewport(config_->viewport, width, height);
 }
 
-auto CompositingPass::EnsurePassConstantsBuffer() -> void
-{
-  auto& state = GetCurrentFramePassConstantsState();
-  if (state.chunks.empty()) {
-    CreatePassConstantsChunk(state);
-  }
-}
-
-auto CompositingPass::CreatePassConstantsChunk(FramePassConstantsState& state)
-  -> void
-{
-  auto& graphics = Context().GetGraphics();
-  graphics_ = observer_ptr { &graphics };
-  auto& registry = graphics.GetResourceRegistry();
-  auto& allocator = graphics.GetDescriptorAllocator();
-
-  const size_t chunk_index = state.chunks.size();
-  const graphics::BufferDesc desc {
-    .size_bytes = static_cast<std::uint64_t>(kPassConstantsStride)
-      * kPassConstantsChunkSlots,
-    .usage = graphics::BufferUsage::kConstant,
-    .memory = graphics::BufferMemory::kUpload,
-    .debug_name = fmt::format("{}_PassConstants_Frame{}_Chunk{}", GetName(),
-      Context().frame_slot.get(), chunk_index),
-  };
-
-  PassConstantsChunk chunk {};
-  chunk.buffer = graphics.CreateBuffer(desc);
-  if (!chunk.buffer) {
-    throw std::runtime_error(
-      "CompositingPass: Failed to create pass constants buffer");
-  }
-  chunk.buffer->SetName(desc.debug_name);
-
-  chunk.mapped_ptr
-    = static_cast<std::byte*>(chunk.buffer->Map(0, desc.size_bytes));
-  if (chunk.mapped_ptr == nullptr) {
-    throw std::runtime_error(
-      "CompositingPass: Failed to map pass constants buffer");
-  }
-
-  chunk.indices.fill(kInvalidShaderVisibleIndex);
-  registry.Register(chunk.buffer);
-  for (uint32_t slot = 0; slot < kPassConstantsChunkSlots; ++slot) {
-    const uint32_t offset = slot * kPassConstantsStride;
-
-    graphics::BufferViewDescription cbv_view_desc;
-    cbv_view_desc.view_type = graphics::ResourceViewType::kConstantBuffer;
-    cbv_view_desc.visibility = graphics::DescriptorVisibility::kShaderVisible;
-    cbv_view_desc.range = { offset, kPassConstantsStride };
-
-    auto cbv_handle
-      = allocator.AllocateRaw(graphics::ResourceViewType::kConstantBuffer,
-        graphics::DescriptorVisibility::kShaderVisible);
-    if (!cbv_handle.IsValid()) {
-      throw std::runtime_error(
-        "CompositingPass: Failed to allocate CBV descriptor handle");
-    }
-    chunk.indices.at(slot) = allocator.GetShaderVisibleIndex(cbv_handle);
-
-    auto cbv_view = registry.RegisterView(
-      *chunk.buffer, std::move(cbv_handle), cbv_view_desc);
-    if (!cbv_view->IsValid()) {
-      throw std::runtime_error(
-        "CompositingPass: Failed to register pass constants CBV");
-    }
-  }
-
-  state.chunks.push_back(std::move(chunk));
-}
-
-auto CompositingPass::GetCurrentFramePassConstantsState()
-  -> FramePassConstantsState&
-{
-  CHECK_F(Context().frame_slot != frame::kInvalidSlot,
-    "frame_slot must be valid before allocating pass constants");
-  const auto slot_index = static_cast<size_t>(Context().frame_slot.get());
-  CHECK_LT_F(slot_index, pass_constants_frames_.size(),
-    "frame_slot {} out of bounds for pass constants",
-    Context().frame_slot.get());
-
-  auto& state = pass_constants_frames_.at(slot_index);
-  if (state.frame_sequence != Context().frame_sequence) {
-    ReleasePassConstantsFrameState(state);
-    state.frame_sequence = Context().frame_sequence;
-  }
-  return state;
-}
-
-auto CompositingPass::ReleasePassConstantsBuffer() -> void
-{
-  for (auto& state : pass_constants_frames_) {
-    ReleasePassConstantsFrameState(state);
-  }
-  SetPassConstantsIndex(kInvalidShaderVisibleIndex);
-}
-
-auto CompositingPass::ReleasePassConstantsFrameState(
-  FramePassConstantsState& state) -> void
-{
-  for (auto& chunk : state.chunks) {
-    if (!chunk.buffer) {
-      continue;
-    }
-    if (chunk.buffer->IsMapped()) {
-      chunk.buffer->UnMap();
-    }
-    if (graphics_ != nullptr) {
-      auto& registry = graphics_->GetResourceRegistry();
-      if (registry.Contains(*chunk.buffer)) {
-        registry.UnRegisterResource(*chunk.buffer);
-      }
-    }
-    chunk.buffer.reset();
-    chunk.mapped_ptr = nullptr;
-    chunk.indices.fill(kInvalidShaderVisibleIndex);
-    chunk.used_slots = 0U;
-  }
-  state.chunks.clear();
-  state.frame_sequence = frame::kInvalidSequenceNumber;
-}
-
 auto CompositingPass::EnsureSourceTextureSrv(const graphics::Texture& texture)
   -> ShaderVisibleIndex
 {
@@ -498,22 +378,12 @@ auto CompositingPass::UpdatePassConstants(
     .fill_color = { fill.r, fill.g, fill.b, fill.a * alpha },
   };
 
-  auto& state = GetCurrentFramePassConstantsState();
-  if (state.chunks.empty()
-    || state.chunks.back().used_slots >= kPassConstantsChunkSlots) {
-    CreatePassConstantsChunk(state);
+  pass_constants_.OnFrameStart(Context().frame_sequence, Context().frame_slot);
+  auto record = pass_constants_.Allocate(1U);
+  if (!record || !record->TryWriteObject(constants)) {
+    throw std::runtime_error("CompositingPass: pass constants not published");
   }
-
-  auto& chunk = state.chunks.back();
-  CHECK_NOTNULL_F(chunk.mapped_ptr);
-  CHECK_LT_F(chunk.used_slots, kPassConstantsChunkSlots);
-  const auto slot = chunk.used_slots++;
-  const auto mapped = std::span(chunk.mapped_ptr,
-    std::size_t { kPassConstantsStride } * kPassConstantsChunkSlots);
-  std::memcpy(
-    mapped.subspan(std::size_t { slot } * kPassConstantsStride).data(),
-    &constants, sizeof(constants));
-  SetPassConstantsIndex(chunk.indices.at(slot));
+  SetPassConstantsIndex(record->srv);
 }
 
 auto CompositingPass::CreatePipelineStateDesc()

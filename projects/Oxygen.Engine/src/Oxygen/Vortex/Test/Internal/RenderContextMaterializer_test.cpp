@@ -230,7 +230,7 @@ NOLINT_TEST_F(RenderContextMaterializerTest,
     (ViewId {
       77U,
     }));
-  EXPECT_NE(render_context.view_constants.get(), nullptr);
+  EXPECT_TRUE(render_context.view_constants.IsValid());
 }
 
 } // namespace
