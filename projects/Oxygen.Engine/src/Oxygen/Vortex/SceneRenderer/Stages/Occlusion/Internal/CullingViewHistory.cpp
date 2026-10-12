@@ -65,8 +65,8 @@ auto CullingViewHistory::Prepare(graphics::CommandRecorder& recorder,
   const std::uint32_t draw_count, const bool reset)
   -> std::optional<DrawCullHistory>
 {
-  const auto valid = written_ && !reset;
-  written_ = false;
+  const auto valid = *written_ && !reset;
+  *written_ = false;
 
   const auto assignments = slots_.Update(draws);
   slot_words_.assign(draw_count, kNoHistorySlot);
@@ -121,6 +121,19 @@ auto CullingViewHistory::EnsureCapacity(graphics::CommandRecorder& recorder,
   }
   history_ = std::move(grown);
   return true;
+}
+
+auto CullingViewHistory::SetWrittenOnSubmission(
+  graphics::CommandRecorder& recorder, const bool written) -> void
+{
+  *written_ = false;
+  if (!written) {
+    return;
+  }
+  recorder.OnSubmission(
+    [state = written_](const graphics::SubmissionOutcome outcome) -> void {
+      *state = outcome == graphics::SubmissionOutcome::kSubmitted;
+    });
 }
 
 } // namespace oxygen::vortex::occlusion::internal

@@ -109,8 +109,10 @@ struct ShadowDepthPass::Culling {
 
   //! Built in place in the map and never moved.
   struct HistoryEntry {
-    explicit HistoryEntry(const frame::SequenceNumber used)
+    HistoryEntry(const frame::SequenceNumber used,
+      std::weak_ptr<const graphics::Texture> owner)
       : last_used(used)
+      , surface(std::move(owner))
     {
     }
     ~HistoryEntry() = default;
@@ -122,6 +124,9 @@ struct ShadowDepthPass::Culling {
       "Vortex.Stage8.ShadowDepths.Occlusion"
     };
     frame::SequenceNumber last_used { 0U };
+    //! The surface the history was written for; the key's address alone could
+    //! name a recreated surface.
+    std::weak_ptr<const graphics::Texture> surface;
   };
 
   //! Frames a slice's history outlives its last use, so cached local maps
@@ -171,7 +176,13 @@ struct ShadowDepthPass::Culling {
       .light = slice.light_source,
       .generation = slice.slot_generation,
     };
-    auto& entry = histories.try_emplace(key, sequence).first->second;
+    const auto owner = surface.shared_from_this();
+    if (const auto found = histories.find(key);
+      found != histories.end() && found->second.surface.lock() != owner) {
+      // A recreated surface at a reused address starts without history.
+      histories.erase(found);
+    }
+    auto& entry = histories.try_emplace(key, sequence, owner).first->second;
     entry.last_used = sequence;
     return entry.history;
   }
@@ -692,7 +703,7 @@ auto ShadowDepthPass::RecordSliceDraws(graphics::CommandRecorder& recorder,
   }
   const auto phase2
     = culling_->cull.RunPhase2(recorder, inputs, phase1, binding);
-  history->SetWritten(phase2.phase2);
+  history->SetWrittenOnSubmission(recorder, phase2.phase2);
   draw(phase2, DrawVisibilityBit::kPhase2Drawn);
 }
 

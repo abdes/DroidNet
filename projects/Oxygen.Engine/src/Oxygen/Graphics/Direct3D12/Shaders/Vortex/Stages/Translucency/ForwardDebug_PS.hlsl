@@ -116,14 +116,15 @@ static inline bool TryLoadSceneDepth(
 {
   scene_depth = 0.0f;
 
-  const ViewFrameBindings view_bindings
-    = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
-  if (view_bindings.scene_depth_slot == K_INVALID_BINDLESS_INDEX) {
+  // Scene depth is published once, in the view's scene-texture record.
+  const SceneTextureBindingData scene_textures
+    = LoadSceneTextureBindings(bindless_view_frame_bindings_slot);
+  if (scene_textures.scene_depth_srv == K_INVALID_BINDLESS_INDEX) {
     return false;
   }
 
   Texture2D<float> scene_depth_texture
-    = ResourceDescriptorHeap[view_bindings.scene_depth_slot];
+    = ResourceDescriptorHeap[scene_textures.scene_depth_srv];
   uint scene_depth_width = 0u;
   uint scene_depth_height = 0u;
   scene_depth_texture.GetDimensions(scene_depth_width, scene_depth_height);

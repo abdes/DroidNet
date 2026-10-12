@@ -1778,8 +1778,7 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
         : nullptr;
       result.lighting_validated
         = lighting_bindings == nullptr || lighting_bindings->local_count == 0U;
-      result.output_checks_lighting
-        = published_view_frame_bindings_.post_process_frame_slot.IsValid();
+      result.output_checks_lighting = published_view_post_processed_;
       ++rendered_scene_view_count;
 
       for (const auto& output : entry.produced_aux_outputs) {
@@ -1952,8 +1951,7 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
       : nullptr;
     result.lighting_validated
       = lighting_bindings == nullptr || lighting_bindings->local_count == 0U;
-    result.output_checks_lighting
-      = published_view_frame_bindings_.post_process_frame_slot.IsValid();
+    result.output_checks_lighting = published_view_post_processed_;
     return true;
   } catch (const std::exception& error) {
     ResetPerViewSceneProducts();
@@ -2978,14 +2976,14 @@ auto SceneRenderer::RenderCurrentView(
           post_process_inputs, &*prepared_exposure)) {
       return false;
     }
-    published_view_frame_bindings_.post_process_frame_slot
+    const auto post_process_slot
       = post_process_->ResolveBindingSlot(ctx.current_view.view_id);
+    published_view_post_processed_ = post_process_slot.IsValid();
     RecordDiagnosticsPass(renderer_,
       DiagnosticsPassRecord {
         .name = "Vortex.Stage22.PostProcess",
         .kind = DiagnosticsPassKind::kGraphics,
-        .executed = published_view_frame_bindings_.post_process_frame_slot
-          != kInvalidShaderVisibleIndex,
+        .executed = published_view_post_processed_,
         .inputs = { std::string { "Vortex." } + std::string(scene_signal_kind),
           "Vortex.SceneDepth", },
         .outputs = { "Vortex.PostProcessFrameBindings" },
@@ -2993,8 +2991,7 @@ auto SceneRenderer::RenderCurrentView(
         .gpu_duration_ms = {},
       });
     RecordDiagnosticsViewProduct(renderer_, "Vortex.PostProcessFrameBindings",
-      "Vortex.Stage22.PostProcess",
-      published_view_frame_bindings_.post_process_frame_slot);
+      "Vortex.Stage22.PostProcess", post_process_slot);
     if (!renderer_.RefreshCurrentViewFrameBindings(ctx, *this)) {
       return false;
     }
@@ -3331,6 +3328,11 @@ auto SceneRenderer::GetPublishedViewId() const -> ViewId
   return published_view_id_;
 }
 
+auto SceneRenderer::IsPublishedViewPostProcessed() const -> bool
+{
+  return published_view_post_processed_;
+}
+
 auto SceneRenderer::GetLastDeferredLightingState() const
   -> const DeferredLightingState&
 {
@@ -3384,6 +3386,7 @@ void SceneRenderer::PublishViewFrameBindings(const ViewId view_id,
 void SceneRenderer::InvalidatePublishedViewFrameBindings()
 {
   published_view_id_ = kInvalidViewId;
+  published_view_post_processed_ = false;
   published_view_frame_bindings_ = {};
   published_screen_hzb_bindings_ = {};
   published_view_frame_bindings_slot_ = kInvalidShaderVisibleIndex;

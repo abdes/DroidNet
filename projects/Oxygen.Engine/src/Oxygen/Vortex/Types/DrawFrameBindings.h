@@ -42,8 +42,6 @@ OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessMaterialShadingConstantsSlot);
 OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(
   BindlessProceduralGridMaterialConstantsSlot);
 OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessInstanceDataSlot);
-OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessSkinnedPosePublicationsSlot);
-OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessMorphPublicationsSlot);
 OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(BindlessMaterialWpoPublicationsSlot);
 OXYGEN_DEFINE_DRAW_BINDLESS_SLOT_TYPE(
   BindlessMotionVectorStatusPublicationsSlot);
@@ -62,10 +60,6 @@ struct alignas(packing::kShaderDataFieldAlignment) DrawFrameBindings {
   BindlessProceduralGridMaterialConstantsSlot
     procedural_grid_material_constants_slot;
   BindlessInstanceDataSlot instance_data_slot;
-  BindlessSkinnedPosePublicationsSlot current_skinned_pose_slot;
-  BindlessSkinnedPosePublicationsSlot previous_skinned_pose_slot;
-  BindlessMorphPublicationsSlot current_morph_slot;
-  BindlessMorphPublicationsSlot previous_morph_slot;
   BindlessMaterialWpoPublicationsSlot current_material_wpo_slot;
   BindlessMaterialWpoPublicationsSlot previous_material_wpo_slot;
   BindlessMotionVectorStatusPublicationsSlot current_motion_vector_status_slot;
@@ -78,7 +72,7 @@ struct alignas(packing::kShaderDataFieldAlignment) DrawFrameBindings {
   std::uint32_t _pad2 { 0U };
 };
 
-static_assert(sizeof(DrawFrameBindings) == 80);
+static_assert(sizeof(DrawFrameBindings) == 64);
 static_assert(alignof(DrawFrameBindings) == packing::kShaderDataFieldAlignment);
 static_assert(
   sizeof(DrawFrameBindings) % packing::kShaderDataFieldAlignment == 0);

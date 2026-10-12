@@ -57,10 +57,6 @@ public:
     std::vector<ShadowCasterSource> shadow_caster_sources;
     std::vector<MaterialShadingConstants> shadow_materials;
     std::vector<std::uint64_t> shadow_texture_revisions;
-    std::vector<SkinnedPosePublication> current_skinned_pose_publications;
-    std::vector<SkinnedPosePublication> previous_skinned_pose_publications;
-    std::vector<MorphPublication> current_morph_publications;
-    std::vector<MorphPublication> previous_morph_publications;
     std::vector<MaterialWpoPublication> current_material_wpo_publications;
     std::vector<MaterialWpoPublication> previous_material_wpo_publications;
     std::vector<MotionVectorStatusPublication>
@@ -100,12 +96,6 @@ private:
   Renderer& renderer_;
   observer_ptr<PostProcessService> post_process_;
   std::unique_ptr<resources::TextureBinder> texture_binder_;
-  std::unique_ptr<upload::TransientStructuredBuffer>
-    current_skinned_pose_buffer_;
-  std::unique_ptr<upload::TransientStructuredBuffer>
-    previous_skinned_pose_buffer_;
-  std::unique_ptr<upload::TransientStructuredBuffer> current_morph_buffer_;
-  std::unique_ptr<upload::TransientStructuredBuffer> previous_morph_buffer_;
   std::unique_ptr<upload::TransientStructuredBuffer>
     current_material_wpo_buffer_;
   std::unique_ptr<upload::TransientStructuredBuffer>

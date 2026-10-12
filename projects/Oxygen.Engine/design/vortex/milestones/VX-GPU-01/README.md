@@ -174,7 +174,7 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 | S6  | Fail loudly                                                            | M1, M5, H6, H8              | S4      | `validated` | —      |
 | S7  | Frame and view lifecycle                                               | M3, M4                      | S4      | `validated` | —      |
 | S8  | Generated shared contracts                                             | M8, H8                      | S5, S6  | `planned`   | —      |
-| S9  | Unwired fields and dead code                                           | L2, L3, L4, L5, L6, L8, L11 | S3      | `planned`   | —      |
+| S9  | Unwired fields and dead code                                           | L2, L3, L4, L5, L6, L8, L11 | S3      | `validated` | —      |
 | S10 | Conventional shadow receiver analysis and receiver-mask caster culling | L1                          | S3, S5  | `planned`   | —      |
 | S11 | GPU debug primitives                                                   | L1, VX-DIAG-01              | S3, S6  | `planned`   | —      |
 | S12 | Closeout                                                               | all                         | S1–S11  | `planned`   | —      |
@@ -423,21 +423,33 @@ Notes:
 
 ## S9 — Unwired fields and dead code
 
-- [ ] Publish `scene_depth_slot`; the scene-depth debug modes render depth.
-- [ ] Wire `procedural_grid_material_constants_slot` and its forward
+- [x] Scene depth: the scene-depth debug modes read `scene_depth_srv` from the
+      view's scene-texture record, its single source; the duplicate
+      `scene_depth_slot` became padding.
+- [x] Wire `procedural_grid_material_constants_slot` and its forward
       evaluation path with a test, per the ground-grid design.
-- [ ] Replace `post_process_frame_slot` as a CPU flag with explicit state;
-      drop the field unless a shader consumes it.
+- [x] Replace `post_process_frame_slot` as a CPU flag with explicit state;
+      the field became padding.
 - [x] Remove DeferredLightDirectional's unused constants and their CPU record.
-- [ ] Replace `EncodeStaticVelocity` with a direct zero.
+- [x] Replace `EncodeStaticVelocity` with a direct zero.
 - [x] Shadow VS: compute the biased depth from a local.
-- [ ] Delete `ComputeRenderPass` and its CMake entries.
-- [ ] Remove the skinned/morph publication slots from DrawFrameBindings (C++,
+- [x] Delete `ComputeRenderPass` and its CMake entries.
+- [x] Remove the skinned/morph publication slots from DrawFrameBindings (C++,
       HLSL, `InitViewsModule.cpp`); #48 reintroduces them with their producer.
-- [ ] Shadow occlusion history keyed by texture generation and marked written
+- [x] Shadow occlusion history keyed by surface identity and marked written
       on submission (main view too).
-- [ ] **Tests.** Debug-mode image tests for scene depth; procedural-grid
-      material test; occlusion history reset on surface recreation.
+- [x] **Tests.** Debug-mode image test for scene depth (deferred path);
+      procedural-grid material test; history valid only after its recording
+      is submitted.
+
+Notes:
+
+- `ViewFrameBindings` keeps its layout: the two dropped fields are `_pad0`
+  and `_pad1`, so offsets and the lighting ABI probe are unchanged.
+- The shadow history map still uses the surface address in its key, but each
+  entry holds a `weak_ptr` to its surface; an entry whose surface is gone or
+  replaced is dropped instead of reused.
+- Per-draw velocity metadata keeps its skinned/morph index fields for #48.
 
 ## S10 — Conventional receiver analysis and caster culling
 

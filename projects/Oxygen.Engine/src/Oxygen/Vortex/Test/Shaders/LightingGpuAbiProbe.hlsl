@@ -377,9 +377,9 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         ViewFrameBindings value = inputs[element];
         output.Store4(address, uint4(value.draw_frame_slot, value.lighting_frame_slot,
             value.environment_frame_slot, value.frame_exposure_slot));
-        output.Store4(address + 16, uint4(value.scene_texture_frame_slot, value.scene_depth_slot,
+        output.Store4(address + 16, uint4(value.scene_texture_frame_slot, value._pad1,
             value.screen_hzb_frame_slot, value.shadow_frame_slot));
-        output.Store4(address + 32, uint4(value.virtual_shadow_frame_slot, value.post_process_frame_slot,
+        output.Store4(address + 32, uint4(value.virtual_shadow_frame_slot, value._pad0,
             value.debug_frame_slot, value.history_frame_slot));
         output.Store4(address + 48, uint4(value.ray_tracing_frame_slot, value.exposure_status_uav,
             value.lighting_view_generation));

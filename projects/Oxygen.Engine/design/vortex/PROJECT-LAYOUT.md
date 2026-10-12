@@ -97,7 +97,6 @@ src/Oxygen/Vortex/
 │
 ├── Passes/
 │   │  RenderPass.h/.cpp                  base: lifecycle, bindings, draw helpers
-│   │  ComputeRenderPass.h/.cpp           base: compute PSO management
 │   │  GraphicsRenderPass.h/.cpp          base: graphics PSO, render targets
 │
 │   ── Capability-Family Services ─────────────────────────────────────────
@@ -218,7 +217,8 @@ To add a new capability-family service:
 To add a new pass within an existing service:
 
 1. Create the pass header and source in `Xxx/Passes/`.
-2. Derive from `RenderPass`, `ComputeRenderPass`, or `GraphicsRenderPass`.
+2. Derive raster passes from `GraphicsRenderPass`; compute passes own their
+   pipeline and record through the command recorder.
 3. Register the pass in the owning service's initialization.
 4. Add to CMake source lists.
 

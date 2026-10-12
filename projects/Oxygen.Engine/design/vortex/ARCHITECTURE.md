@@ -1446,7 +1446,7 @@ Available substrate:
 - `SceneTextures` / `SceneTextureSetupMode` / `SceneTextureBindings`
 - typed per-view published products through `ViewFrameBindings`
 - `Upload/`, `Resources/`, and `ScenePrep/`
-- pass base classes: `RenderPass`, `ComputeRenderPass`, `GraphicsRenderPass`
+- pass base classes: `RenderPass`, `GraphicsRenderPass`
 - non-runtime facades where explicitly needed
 
 Design constraints:

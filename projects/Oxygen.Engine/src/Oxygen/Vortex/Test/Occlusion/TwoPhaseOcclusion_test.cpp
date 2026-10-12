@@ -392,7 +392,7 @@ protected:
           .width = kExtent,
           .height = kExtent,
         });
-        history.SetWritten(visibility.phase2);
+        history.SetWrittenOnSubmission(recorder, visibility.phase2);
       });
     WaitForQueueIdle();
     EXPECT_TRUE(visibility.phase2);
@@ -637,6 +637,41 @@ NOLINT_TEST_F(TwoPhaseOcclusionGpuTest, ViewsKeepIndependentVisibility)
 
   module.RemoveViewState(pane);
   EXPECT_EQ(RunFrame(module, pane, *walled), std::vector { kDrawnButOccluded });
+}
+
+//! A view's history is valid next frame only when the recording whose phase 2
+//! wrote it was submitted; a discarded recording leaves no history.
+NOLINT_TEST_F(TwoPhaseOcclusionGpuTest, HistoryNeedsItsRecordingSubmitted)
+{
+  PrepareScene(
+    std::array { TestDraw { .record = BehindWall(), .source = Source(1U) } });
+  auto history = CullingViewHistory { "Test.SubmittedHistory" };
+  const auto prepare_and_write = [&] -> bool {
+    NextFrame();
+    auto valid = false;
+    SubmitCommands(
+      "Submitted history frame", [&](CommandRecorder& recorder) -> void {
+        slot_words_->OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
+        const auto binding
+          = history.Prepare(recorder, renderer_->GetGraphics(), *slot_words_,
+            sources_, static_cast<std::uint32_t>(sources_.size()), false);
+        ASSERT_TRUE(binding.has_value());
+        valid = binding.value_or(DrawCullHistory {}).valid;
+        history.SetWrittenOnSubmission(recorder, true);
+      });
+    return valid;
+  };
+
+  EXPECT_FALSE(prepare_and_write());
+  EXPECT_TRUE(prepare_and_write());
+  {
+    auto discarded = AcquireRecorder("Discarded history frame",
+      oxygen::graphics::QueueRole::kGraphics,
+      oxygen::graphics::SubmissionPolicy::kExplicit);
+    ASSERT_TRUE(discarded);
+    history.SetWrittenOnSubmission(*discarded, true);
+  }
+  EXPECT_FALSE(prepare_and_write());
 }
 
 //! A list with the drawn predicate holds exactly the final set, in order.

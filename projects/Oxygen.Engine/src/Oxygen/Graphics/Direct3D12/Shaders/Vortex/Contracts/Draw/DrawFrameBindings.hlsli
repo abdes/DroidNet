@@ -18,10 +18,6 @@ struct DrawFrameBindings
     uint material_shading_constants_slot;
     uint procedural_grid_material_constants_slot;
     uint instance_data_slot;
-    uint current_skinned_pose_slot;
-    uint previous_skinned_pose_slot;
-    uint current_morph_slot;
-    uint previous_morph_slot;
     uint current_material_wpo_slot;
     uint previous_material_wpo_slot;
     uint current_motion_vector_status_slot;
@@ -43,10 +39,6 @@ static DrawFrameBindings LoadDrawFrameBindings(uint slot)
     invalid_bindings.material_shading_constants_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.procedural_grid_material_constants_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.instance_data_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.current_skinned_pose_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.previous_skinned_pose_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.current_morph_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.previous_morph_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.current_material_wpo_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.previous_material_wpo_slot = K_INVALID_BINDLESS_INDEX;
     invalid_bindings.current_motion_vector_status_slot = K_INVALID_BINDLESS_INDEX;

@@ -208,6 +208,8 @@ public:
   OXGN_VRTX_NDAPI auto GetPublishedViewFrameBindingsSlot() const
     -> ShaderVisibleIndex;
   OXGN_VRTX_NDAPI auto GetPublishedViewId() const -> ViewId;
+  //! Whether post-processing recorded the last published view's output.
+  OXGN_VRTX_NDAPI auto IsPublishedViewPostProcessed() const -> bool;
   OXGN_VRTX_NDAPI auto GetLastDeferredLightingState() const
     -> const DeferredLightingState&;
   [[nodiscard]] OXGN_VRTX_API auto InspectExposureSettings(
@@ -329,6 +331,7 @@ private:
   std::vector<PreparedViewShadowInput> frame_shadow_views_;
   std::vector<PreparedViewShadowInput> frame_shadow_preparation_views_;
   std::optional<frame::SequenceNumber> lighting_grid_built_sequence_;
+  bool published_view_post_processed_ { false };
   //! The frame BeginFrame last started; a second call in it is a no-op.
   frame::SequenceNumber begun_frame_sequence_ { frame::kInvalidSequenceNumber };
   frame::Slot begun_frame_slot_ { frame::kInvalidSlot };

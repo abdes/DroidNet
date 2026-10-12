@@ -275,7 +275,7 @@ void OcclusionModule::BuildPhase1(RenderContext& ctx,
       view.inputs.occlusion_enabled = false;
     }
   } else {
-    view.history.SetWritten(false);
+    view.history.ClearWritten();
   }
 
   view.counting = !stateless && impl_->PrepareCounters(view);
@@ -331,7 +331,7 @@ void OcclusionModule::BuildPhase2(RenderContext& ctx,
   const auto products
     = impl_->cull.RunPhase2(recorder, view.inputs, view.phase1, binding);
   ctx.current_view.draw_visibility = products;
-  view.history.SetWritten(products.phase2);
+  view.history.SetWrittenOnSubmission(recorder, products.phase2);
   Impl::EnqueueCounters(recorder, view, ctx);
 }
 

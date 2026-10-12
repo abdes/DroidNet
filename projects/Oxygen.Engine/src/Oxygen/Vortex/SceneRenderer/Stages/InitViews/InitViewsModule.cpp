@@ -93,10 +93,6 @@ namespace {
   }
 
   auto BeginResourceManagerFrame(resources::TextureBinder* const texture_binder,
-    upload::TransientStructuredBuffer* const current_skinned_pose_buffer,
-    upload::TransientStructuredBuffer* const previous_skinned_pose_buffer,
-    upload::TransientStructuredBuffer* const current_morph_buffer,
-    upload::TransientStructuredBuffer* const previous_morph_buffer,
     upload::TransientStructuredBuffer* const current_material_wpo_buffer,
     upload::TransientStructuredBuffer* const previous_material_wpo_buffer,
     upload::TransientStructuredBuffer* const
@@ -121,20 +117,6 @@ namespace {
     if (const auto draw_emitter = state.GetDrawMetadataEmitter();
       draw_emitter != nullptr) {
       draw_emitter->OnFrameStart(tag, ctx.frame_sequence, ctx.frame_slot);
-    }
-    if (current_skinned_pose_buffer != nullptr) {
-      current_skinned_pose_buffer->OnFrameStart(
-        ctx.frame_sequence, ctx.frame_slot);
-    }
-    if (previous_skinned_pose_buffer != nullptr) {
-      previous_skinned_pose_buffer->OnFrameStart(
-        ctx.frame_sequence, ctx.frame_slot);
-    }
-    if (current_morph_buffer != nullptr) {
-      current_morph_buffer->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
-    }
-    if (previous_morph_buffer != nullptr) {
-      previous_morph_buffer->OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
     }
     if (current_material_wpo_buffer != nullptr) {
       current_material_wpo_buffer->OnFrameStart(
@@ -250,13 +232,6 @@ namespace {
     const VelocityPublicationBuffers& buffers,
     InitViewsModule::PreparedSceneViewStorage& storage) -> void
   {
-    storage.current_skinned_pose_publications.clear();
-    storage.previous_skinned_pose_publications.clear();
-    storage.current_morph_publications.clear();
-    storage.previous_morph_publications.clear();
-    // TODO(vortex/skinned-morph): populate these families once the engine
-    // exposes real skinned pose / morph runtime payloads. Today the current
-    // engine feature envelope closes Phase 3 without those live streams.
     storage.current_material_wpo_publications.clear();
     storage.previous_material_wpo_publications.clear();
     storage.current_motion_vector_status_publications.clear();
@@ -264,21 +239,11 @@ namespace {
     storage.velocity_draw_metadata.clear();
 
     auto& prepared_frame = storage.prepared_frame;
-    prepared_frame.current_skinned_pose_publications = {};
-    prepared_frame.previous_skinned_pose_publications = {};
-    prepared_frame.current_morph_publications = {};
-    prepared_frame.previous_morph_publications = {};
     prepared_frame.current_material_wpo_publications = {};
     prepared_frame.previous_material_wpo_publications = {};
     prepared_frame.current_motion_vector_status_publications = {};
     prepared_frame.previous_motion_vector_status_publications = {};
     prepared_frame.velocity_draw_metadata = {};
-    prepared_frame.bindless_current_skinned_pose_slot
-      = kInvalidShaderVisibleIndex;
-    prepared_frame.bindless_previous_skinned_pose_slot
-      = kInvalidShaderVisibleIndex;
-    prepared_frame.bindless_current_morph_slot = kInvalidShaderVisibleIndex;
-    prepared_frame.bindless_previous_morph_slot = kInvalidShaderVisibleIndex;
     prepared_frame.bindless_current_material_wpo_slot
       = kInvalidShaderVisibleIndex;
     prepared_frame.bindless_previous_material_wpo_slot
@@ -549,6 +514,8 @@ namespace {
       material_binder != nullptr) {
       prepared_frame.bindless_material_shading_slot
         = material_binder->GetMaterialShadingSrvIndex();
+      prepared_frame.bindless_procedural_grid_material_slot
+        = material_binder->GetProceduralGridMaterialsSrvIndex();
       const auto constants = material_binder->GetMaterialShadingConstants();
       storage.shadow_materials.assign(constants.begin(), constants.end());
       prepared_frame.shadow_materials = storage.shadow_materials;
@@ -590,25 +557,6 @@ InitViewsModule::InitViewsModule(
         observer_ptr { geometry_uploader.get() },
         observer_ptr { material_binder.get() },
         observer_ptr { &inline_transfers });
-    current_skinned_pose_buffer_
-      = std::make_unique<upload::TransientStructuredBuffer>(
-        observer_ptr { gfx.get() }, staging_provider,
-        static_cast<std::uint32_t>(sizeof(SkinnedPosePublication)),
-        observer_ptr { &inline_transfers }, "InitViews.CurrentSkinnedPose");
-    previous_skinned_pose_buffer_
-      = std::make_unique<upload::TransientStructuredBuffer>(
-        observer_ptr { gfx.get() }, staging_provider,
-        static_cast<std::uint32_t>(sizeof(SkinnedPosePublication)),
-        observer_ptr { &inline_transfers }, "InitViews.PreviousSkinnedPose");
-    current_morph_buffer_ = std::make_unique<upload::TransientStructuredBuffer>(
-      observer_ptr { gfx.get() }, staging_provider,
-      static_cast<std::uint32_t>(sizeof(MorphPublication)),
-      observer_ptr { &inline_transfers }, "InitViews.CurrentMorph");
-    previous_morph_buffer_
-      = std::make_unique<upload::TransientStructuredBuffer>(
-        observer_ptr { gfx.get() }, staging_provider,
-        static_cast<std::uint32_t>(sizeof(MorphPublication)),
-        observer_ptr { &inline_transfers }, "InitViews.PreviousMorph");
     current_material_wpo_buffer_
       = std::make_unique<upload::TransientStructuredBuffer>(
         observer_ptr { gfx.get() }, staging_provider,
@@ -702,8 +650,6 @@ void InitViewsModule::Execute(RenderContext& ctx, SceneTextures& scene_textures)
   }
 
   BeginResourceManagerFrame(texture_binder_.get(),
-    current_skinned_pose_buffer_.get(), previous_skinned_pose_buffer_.get(),
-    current_morph_buffer_.get(), previous_morph_buffer_.get(),
     current_material_wpo_buffer_.get(), previous_material_wpo_buffer_.get(),
     current_motion_vector_status_buffer_.get(),
     previous_motion_vector_status_buffer_.get(),

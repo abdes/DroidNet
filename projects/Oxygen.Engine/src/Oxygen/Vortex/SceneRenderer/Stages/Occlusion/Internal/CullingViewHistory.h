@@ -39,7 +39,8 @@ namespace oxygen::vortex::occlusion::internal {
  Owns the view's history slots and its GPU history, one `uint` per slot.
  Each frame, `Prepare` assigns the draws' slots, uploads their slot words and
  grows the history, copying it so it survives. The history is valid for the
- next frame only when that frame's phase 2 wrote it (`SetWritten`).
+ next frame only when that frame's phase 2 wrote it and its recording was
+ submitted (`SetWrittenOnSubmission`).
 */
 class CullingViewHistory {
 public:
@@ -62,8 +63,12 @@ public:
     std::span<const PreparedSceneFrame::DrawSource> draws,
     std::uint32_t draw_count, bool reset) -> std::optional<DrawCullHistory>;
 
-  //! Records whether this frame's phase 2 wrote the history.
-  auto SetWritten(const bool written) noexcept -> void { written_ = written; }
+  //! The history is valid next frame only if `recorder`, whose phase 2
+  //! wrote it, is submitted.
+  OXGN_VRTX_API auto SetWrittenOnSubmission(
+    graphics::CommandRecorder& recorder, bool written) -> void;
+  //! This frame wrote no history.
+  auto ClearWritten() noexcept -> void { *written_ = false; }
 
 private:
   auto EnsureCapacity(graphics::CommandRecorder& recorder,
@@ -74,7 +79,8 @@ private:
   //! Replaced, with its contents copied, when the slot capacity grows.
   std::unique_ptr<vortex::internal::StructuredGpuBuffer> history_;
   std::vector<std::uint32_t> slot_words_;
-  bool written_ { false };
+  //! Shared with pending submission callbacks, which may outlive a move.
+  std::shared_ptr<bool> written_ { std::make_shared<bool>(false) };
 };
 
 } // namespace oxygen::vortex::occlusion::internal

@@ -31,13 +31,6 @@ struct DepthPrepassVSOutput
     nointerpolation uint draw_index : DRAW_INDEX;
 };
 
-float2 EncodeStaticVelocity(float4 clip_position)
-{
-    const float safe_w = max(abs(clip_position.w), 1.0e-5f);
-    const float2 ndc_position = clip_position.xy / safe_w;
-    return ndc_position - ndc_position;
-}
-
 [shader("vertex")]
 DepthPrepassVSOutput DepthPrepassVS(uint vertex_id : SV_VertexID,
     uint instance_id : SV_InstanceID,
@@ -88,8 +81,10 @@ DepthPrepassPSOutput DepthPrepassPS(DepthPrepassVSOutput input)
         EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
 #endif
 
+    // Prepass velocity is static; motion comes from the base-pass velocity
+    // passes.
     DepthPrepassPSOutput output;
-    output.velocity = EncodeStaticVelocity(input.position);
+    output.velocity = float2(0.0f, 0.0f);
     return output;
 }
 #else

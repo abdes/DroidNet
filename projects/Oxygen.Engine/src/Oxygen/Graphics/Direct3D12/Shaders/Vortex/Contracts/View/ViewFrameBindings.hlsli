@@ -18,11 +18,11 @@ struct ViewFrameBindings
     uint environment_frame_slot;
     uint frame_exposure_slot;
     uint scene_texture_frame_slot;
-    uint scene_depth_slot;
+    uint _pad1;
     uint screen_hzb_frame_slot;
     uint shadow_frame_slot;
     uint virtual_shadow_frame_slot;
-    uint post_process_frame_slot;
+    uint _pad0;
     uint debug_frame_slot;
     uint history_frame_slot;
     uint ray_tracing_frame_slot;
@@ -38,11 +38,11 @@ static inline ViewFrameBindings MakeInvalidViewFrameBindings()
     bindings.environment_frame_slot = K_INVALID_BINDLESS_INDEX;
     bindings.frame_exposure_slot = K_INVALID_BINDLESS_INDEX;
     bindings.scene_texture_frame_slot = K_INVALID_BINDLESS_INDEX;
-    bindings.scene_depth_slot = K_INVALID_BINDLESS_INDEX;
+    bindings._pad1 = 0u;
     bindings.screen_hzb_frame_slot = K_INVALID_BINDLESS_INDEX;
     bindings.shadow_frame_slot = K_INVALID_BINDLESS_INDEX;
     bindings.virtual_shadow_frame_slot = K_INVALID_BINDLESS_INDEX;
-    bindings.post_process_frame_slot = K_INVALID_BINDLESS_INDEX;
+    bindings._pad0 = 0u;
     bindings.debug_frame_slot = K_INVALID_BINDLESS_INDEX;
     bindings.history_frame_slot = K_INVALID_BINDLESS_INDEX;
     bindings.ray_tracing_frame_slot = K_INVALID_BINDLESS_INDEX;

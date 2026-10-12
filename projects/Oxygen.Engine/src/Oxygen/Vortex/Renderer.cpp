@@ -1630,21 +1630,12 @@ namespace {
       .material_shading_constants_slot = BindlessMaterialShadingConstantsSlot {
         prepared_frame.bindless_material_shading_slot,
       },
-      .procedural_grid_material_constants_slot = {},
+      .procedural_grid_material_constants_slot
+      = BindlessProceduralGridMaterialConstantsSlot {
+          prepared_frame.bindless_procedural_grid_material_slot,
+        },
       .instance_data_slot
       = BindlessInstanceDataSlot { prepared_frame.bindless_instance_data_slot },
-      .current_skinned_pose_slot = BindlessSkinnedPosePublicationsSlot {
-        prepared_frame.bindless_current_skinned_pose_slot,
-      },
-      .previous_skinned_pose_slot = BindlessSkinnedPosePublicationsSlot {
-        prepared_frame.bindless_previous_skinned_pose_slot,
-      },
-      .current_morph_slot = BindlessMorphPublicationsSlot {
-        prepared_frame.bindless_current_morph_slot,
-      },
-      .previous_morph_slot = BindlessMorphPublicationsSlot {
-        prepared_frame.bindless_previous_morph_slot,
-      },
       .current_material_wpo_slot = BindlessMaterialWpoPublicationsSlot {
         prepared_frame.bindless_current_material_wpo_slot,
       },
@@ -2172,10 +2163,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
     const auto resolve_composition_source
       = [&](const ViewId view_id) -> std::shared_ptr<graphics::Texture> {
       if (view_id == scene_renderer.GetPublishedViewId()) {
-        const auto& published_bindings
-          = scene_renderer.GetPublishedViewFrameBindings();
-        if (published_bindings.post_process_frame_slot
-          != kInvalidShaderVisibleIndex) {
+        if (scene_renderer.IsPublishedViewPostProcessed()) {
           auto post_processed = ResolveViewOutputTexture(*context, view_id);
           if (post_processed) {
             DLOG_F(1,

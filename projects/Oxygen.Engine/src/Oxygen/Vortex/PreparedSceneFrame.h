@@ -84,10 +84,6 @@ struct PreparedSceneFrame {
   std::span<const ShadowCasterSource> shadow_caster_sources;
   std::span<const MaterialShadingConstants> shadow_materials;
   std::span<const std::uint64_t> shadow_texture_revisions;
-  std::span<const SkinnedPosePublication> current_skinned_pose_publications;
-  std::span<const SkinnedPosePublication> previous_skinned_pose_publications;
-  std::span<const MorphPublication> current_morph_publications;
-  std::span<const MorphPublication> previous_morph_publications;
   std::span<const MaterialWpoPublication> current_material_wpo_publications;
   std::span<const MaterialWpoPublication> previous_material_wpo_publications;
   std::span<const MotionVectorStatusPublication>
@@ -110,6 +106,10 @@ struct PreparedSceneFrame {
   oxygen::ShaderVisibleIndex bindless_material_shading_slot {
     oxygen::kInvalidShaderVisibleIndex
   };
+  //! Procedural-grid material constants, indexed by material handle.
+  oxygen::ShaderVisibleIndex bindless_procedural_grid_material_slot {
+    oxygen::kInvalidShaderVisibleIndex
+  };
   oxygen::ShaderVisibleIndex bindless_draw_metadata_slot {
     oxygen::kInvalidShaderVisibleIndex
   };
@@ -120,18 +120,6 @@ struct PreparedSceneFrame {
     oxygen::kInvalidShaderVisibleIndex
   };
   oxygen::ShaderVisibleIndex bindless_instance_data_slot {
-    oxygen::kInvalidShaderVisibleIndex
-  };
-  oxygen::ShaderVisibleIndex bindless_current_skinned_pose_slot {
-    oxygen::kInvalidShaderVisibleIndex
-  };
-  oxygen::ShaderVisibleIndex bindless_previous_skinned_pose_slot {
-    oxygen::kInvalidShaderVisibleIndex
-  };
-  oxygen::ShaderVisibleIndex bindless_current_morph_slot {
-    oxygen::kInvalidShaderVisibleIndex
-  };
-  oxygen::ShaderVisibleIndex bindless_previous_morph_slot {
     oxygen::kInvalidShaderVisibleIndex
   };
   oxygen::ShaderVisibleIndex bindless_current_material_wpo_slot {
