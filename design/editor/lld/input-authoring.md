@@ -103,10 +103,9 @@ Engine, verified in source:
   or `cumulative` (sum; W and S cancel out).
 - **Starting contexts.** A scene's starting input contexts, authored in its
   Play section, are the only way contexts start
-  ([player][player-start]). ED-M08.10l removes the `auto_load` and
-  `auto_activate` context flags from the schema, cooker, cooked format and
-  their last users (RenderScene, DemoShell), so this design has no such
-  fields.
+  ([player][player-start]). Contexts have no `auto_load` or
+  `auto_activate` flags in the schema, cooker or cooked format, so this
+  design has no such fields.
 - **Slots.** 145 names: keyboard keys, mouse buttons, `MouseX`/`MouseY`/
   `MouseXY`, wheel directions and axes, `AnyKey`, `None`, plus 18 aliases the
   cooker normalizes (`UpArrow` to `Up`, `LeftControl` to `LeftCtrl`).
@@ -216,8 +215,8 @@ from it.
   ([IF-7][mf]). `Jump` declared in `Player.input.json` and in
   `Jump.input-action.json` of the same folder both produce
   `/Content/Gameplay/Jump.oiact`. Equal names in different folders are
-  different assets; the runtime keys them by asset key once ED-M08.10l
-  delivers IF-12 (c).
+  different assets, and the runtime keys them by asset key
+  ([IF-12][mf] (c)).
 
 Multi-asset files need four further rules so that what the user sees stays
 predictable:
@@ -657,8 +656,8 @@ panel lists cook failures with Go To Property.
   A dirty input document in a cook closure follows the Save listed and Cook
   flow.
 - **Play.** The Play section's contexts and script references resolve to the
-  cooked assets; the player hydrates them by key and, after ED-M08.10l
-  (IF-12 c), identifies them at runtime by key.
+  cooked assets; the player hydrates them and identifies them at runtime by
+  key.
 
 ## 12. Operation Results And Diagnostics
 
