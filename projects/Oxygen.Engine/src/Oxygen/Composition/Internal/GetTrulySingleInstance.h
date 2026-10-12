@@ -92,13 +92,6 @@ auto GetTrulySingleInstance(std::string_view type_name) -> InstanceT&
         auto symbol_name = "Initialize"s + type_name.data();
         func_cast.proc = GetProcAddress(module, symbol_name.c_str());
         if (func_cast.init != nullptr) {
-          // Get module name for debugging
-          std::array<char, MAX_PATH> module_name {};
-          if (GetModuleFileNameA(module, module_name.data(),
-                static_cast<DWORD>(module_name.size()))) {
-            std::cout << "Found " << symbol_name
-                      << " in module: " << module_name.data() << std::endl;
-          }
           instance = func_cast.init();
           break;
         }
@@ -117,8 +110,6 @@ auto GetTrulySingleInstance(std::string_view type_name) -> InstanceT&
         auto symbol_name = "Initialize"s + type_name.data();
         init_t init = (init_t)dlsym(handle, symbol_name.c_str());
         if (init) {
-          std::cout << "Found " << symbol_name << " in module: " << image_name
-                    << std::endl;
           instance = init();
           dlclose(handle);
           break;
@@ -133,9 +124,6 @@ auto GetTrulySingleInstance(std::string_view type_name) -> InstanceT&
     auto symbol_name = "Initialize"s + type_name.data();
     init_t init = (init_t)dlsym(RTLD_DEFAULT, symbol_name.c_str());
     if (init) {
-      std::cout << "Found " << symbol_name
-                << " in default scope (main executable or loaded libraries)"
-                << std::endl;
       instance = init();
     } else {
       // If not found in default scope, iterate through loaded modules
@@ -158,8 +146,6 @@ auto GetTrulySingleInstance(std::string_view type_name) -> InstanceT&
           typedef InstanceT* (*init_t)();
           init_t init = (init_t)dlsym(handle, cb_data->symbol_name.c_str());
           if (init) {
-            std::cout << "Found " << cb_data->symbol_name
-                      << " in module: " << info->dlpi_name << std::endl;
             *(cb_data->instance_ptr) = init();
             cb_data->found = true;
             dlclose(handle);
