@@ -37,8 +37,10 @@ protected:
   using UseFunction = std::function<Co<int>(std::chrono::milliseconds)>;
   using SharedProducer = std::function<Co<int>()>;
 
+  // NOLINTBEGIN(*-non-private-member-variables-in-classes)
   Shared<SharedProducer> shared_;
   std::unique_ptr<UseFunction> use_;
+  // NOLINTEND(*-non-private-member-variables-in-classes)
 
   void SetUp() override
   {
@@ -78,6 +80,19 @@ NOLINT_TEST_F(SharedTest, Smoke)
   });
 }
 
+//! The bool conversion agrees with Get(): true when an awaitable is held.
+NOLINT_TEST_F(SharedTest, BoolConversion)
+{
+  // Arrange
+  const decltype(shared_) empty;
+
+  // Act & Assert
+  EXPECT_TRUE(static_cast<bool>(shared_));
+  EXPECT_NE(shared_.Get(), nullptr);
+  EXPECT_FALSE(static_cast<bool>(empty));
+  EXPECT_EQ(empty.Get(), nullptr);
+}
+
 NOLINT_TEST_F(SharedTest, Cancellation)
 {
   oxygen::co::Run(*el_, [this] -> Co<> {
@@ -90,11 +105,13 @@ class SharedNoCancelTest : public OxCoTestFixture { };
 
 NOLINT_TEST_F(SharedNoCancelTest, Completes)
 {
-
+  // The producer frame is released with the last Shared handle, which happens
+  // when the run body returns at 5ms.
+  std::chrono::milliseconds producer_exit_time { 0 };
   oxygen::co::Run(*el_, [&] -> Co<> {
     auto shared = Shared([&] -> Co<> {
-      auto check
-        = ScopeGuard([&] noexcept -> void { EXPECT_EQ(el_->Now(), 5ms); });
+      auto record_exit
+        = ScopeGuard([&] noexcept -> void { producer_exit_time = el_->Now(); });
       co_await el_->Sleep(10ms);
     });
 
@@ -111,11 +128,12 @@ NOLINT_TEST_F(SharedNoCancelTest, Completes)
 
     co_await AllOf(first(), second());
   });
+  EXPECT_EQ(producer_exit_time, 5ms);
 }
 
 struct MyAwaitable {
   int value;
-  MyAwaitable(int v)
+  explicit MyAwaitable(const int v)
     : value(v)
   {
   }
@@ -164,10 +182,13 @@ NOLINT_TEST_F(SharedCancelWaitTest, CancelBeforeFirstWaiterStarts)
 
 struct ReadyAfterEarlyCancel final {
   auto await_early_cancel() noexcept -> bool { return false; }
-  auto await_ready() const noexcept -> bool { return true; }
-  auto await_suspend(oxygen::co::detail::Handle) noexcept -> void { }
-  auto await_must_resume() const noexcept -> bool { return false; }
-  auto await_resume() const noexcept -> int { return 0; }
+  [[nodiscard]] auto await_ready() const noexcept -> bool { return true; }
+  auto await_suspend(oxygen::co::detail::Handle /*h*/) noexcept -> void { }
+  [[nodiscard]] auto await_must_resume() const noexcept -> bool
+  {
+    return false;
+  }
+  [[nodiscard]] auto await_resume() const noexcept -> int { return 0; }
 };
 
 NOLINT_TEST_F(

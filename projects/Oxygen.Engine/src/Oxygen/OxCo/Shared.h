@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/OxCo/Coroutine.h>
 #include <Oxygen/OxCo/Detail/GetAwaiter.h>
 #include <Oxygen/OxCo/Detail/IntrusiveList.h>
@@ -62,7 +63,7 @@ public:
   explicit Shared(std::in_place_t tag, Args&&... args);
 
   [[nodiscard]] auto Get() const -> Awaitable*;
-  explicit operator bool() const { return !state_; }
+  explicit operator bool() const { return static_cast<bool>(state_); }
   auto operator*() const -> Awaitable& { return *Get(); }
   auto operator->() const -> Awaitable* { return Get(); }
 
@@ -77,7 +78,7 @@ public:
    there's no way to construct any meaningful return value). This function may
    be used to handle such cases, in which it will return an empty optional.
   */
-  co::Awaitable auto AsOptional();
+  auto AsOptional() -> co::Awaitable auto;
 
 private:
   detail::IntrusivePtr<State> state_;
@@ -107,8 +108,8 @@ private:
     std::exchange(parent_, std::noop_coroutine())();
   }
   friend class State;
+  template <class Ret> friend class Shared::Awaiter;
 
-protected:
   // The shared task state. If null, this awaitable is not associated with any
   // shared task; this can occur when awaiting a moved-from Shared, or after
   // cancellation of an awaitable that is not the last one for its task.
@@ -121,7 +122,7 @@ template <class Ret>
 class Shared<Awaitable>::Awaiter : public Shared<Awaitable>::AwaiterBase {
 public:
   using Awaiter::AwaiterBase::AwaiterBase;
-  Ret await_resume();
+  auto await_resume() -> Ret;
 };
 
 //
@@ -134,7 +135,7 @@ class Shared<Awaitable>::State : /*private*/ detail::ProxyFrame,
                                  public detail::RefCounted<State> {
 public:
   template <class... Args> explicit State(Args&&... args);
-  auto Get() -> Awaitable* { return &awaiter_; }
+  auto Get() -> Awaitable* { return &awaitable_; }
   [[nodiscard]] auto Closed() const noexcept -> bool
   {
     return result_.index() >= Cancelling;
@@ -149,7 +150,7 @@ public:
   auto Suspend(AwaiterBase* ptr) -> detail::Handle;
   auto Cancel(AwaiterBase* ptr) noexcept;
   auto MustResume() noexcept;
-  template <class Ret> Ret ResultAs();
+  template <class Ret> auto ResultAs() -> Ret;
 
 private:
   void Invoke();
@@ -158,7 +159,7 @@ private:
     static_cast<State*>(frame)->Invoke();
   }
 
-  [[no_unique_address]] Awaitable awaitable_;
+  OXYGEN_NO_UNIQUE_ADDRESS Awaitable awaitable_;
   detail::SanitizedAwaiter<Awaitable&> awaiter_;
   detail::IntrusiveList<AwaiterBase> parents_;
   std::variant<std::monostate, std::monostate, typename Storage::Type,
@@ -265,7 +266,7 @@ auto Shared<Awaitable>::State::Suspend(AwaiterBase* ptr) -> detail::Handle
 
 template <class Awaitable>
 template <class Ret>
-Ret Shared<Awaitable>::State::ResultAs()
+auto Shared<Awaitable>::State::ResultAs() -> Ret
 {
   // We can get here with result == CancelPending if early-cancel returned
   // false and the awaitable was then immediately ready. mustResume()
@@ -294,7 +295,8 @@ Ret Shared<Awaitable>::State::ResultAs()
   }
   if (result_.index() == Exception) {
     std::rethrow_exception(std::get<Exception>(result_));
-  } else if constexpr (std::is_same_v<Ret, OptionalRef>) {
+  }
+  if constexpr (std::is_same_v<Ret, OptionalRef>) {
     return std::nullopt;
   }
   // We get here if a new parent tries to join the shared operation after all of
@@ -438,7 +440,7 @@ auto Shared<Awaitable>::AwaiterBase::await_suspend(const detail::Handle h)
 
 template <class Awaitable>
 template <class Ret>
-Ret Shared<Awaitable>::Awaiter<Ret>::await_resume()
+auto Shared<Awaitable>::Awaiter<Ret>::await_resume() -> Ret
 {
   if (!this->state_) {
     if constexpr (std::is_same_v<Ret, void>) {
