@@ -9,11 +9,11 @@
 
 #  include <windows.h>
 
+#  include <gmock/gmock-matchers.h>
+
 #  include <Oxygen/Base/Compilers.h>
 #  include <Oxygen/Base/Windows/Exceptions.h>
-
 #  include <Oxygen/Testing/GTest.h>
-#  include <gmock/gmock-matchers.h>
 
 using oxygen::windows::WindowsException;
 using testing::StartsWith;
@@ -96,7 +96,6 @@ TEST(WindowsExceptionTest, ThrowFromLastError)
     OXYGEN_DIAGNOSTIC_PUSH
     OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4702)
     OXYGEN_DIAGNOSTIC_DISABLE_CLANG("-Wunreachable-code")
-    // ReSharper disable once CppUnreachableCode
     FAIL() << "Expected WindowsException";
     OXYGEN_DIAGNOSTIC_POP
   } catch (const WindowsException& ex) {
@@ -113,7 +112,6 @@ TEST(WindowsExceptionTest, ThrowFromErrorCode)
 {
   try {
     WindowsException::ThrowFromErrorCode(ERROR_INVALID_PARAMETER);
-    // ReSharper disable once CppUnreachableCode
     FAIL() << "Expected WindowsException";
   } catch (const WindowsException& ex) {
     static_assert(ERROR_INVALID_PARAMETER >= 0);

@@ -10,8 +10,6 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 
-/* ReSharper disable PrivateFieldCanBeConvertedToLocalVariable */
-
 namespace DroidNet.Hosting.Demo;
 
 /// <summary>The User Interface's main window.</summary>

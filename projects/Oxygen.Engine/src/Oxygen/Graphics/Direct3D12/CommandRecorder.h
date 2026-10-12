@@ -83,7 +83,6 @@ public:
   auto SetScissors(const Scissors& scissors) -> void override;
 
   auto SetVertexBuffers(uint32_t num,
-    // ReSharper disable once CppRedundantQualifier
     const std::shared_ptr<graphics::Buffer>* vertex_buffers,
     const uint32_t* strides) const -> void override;
 
@@ -97,7 +96,6 @@ public:
     const IndirectCommandDesc& command_desc,
     const IndirectExecutionDesc& execution_desc) -> void override;
 
-  // ReSharper disable once CppRedundantQualifier
   auto BindIndexBuffer(const graphics::Buffer& buffer, Format format)
     -> void override;
 
@@ -121,10 +119,7 @@ public:
     ClearFlags clear_flags, float depth, uint8_t stencil,
     std::span<const oxygen::Scissors> rects) -> void override;
 
-  auto CopyBuffer(
-    // ReSharper disable once CppRedundantQualifier
-    graphics::Buffer& dst, size_t dst_offset,
-    // ReSharper disable once CppRedundantQualifier
+  auto CopyBuffer(graphics::Buffer& dst, size_t dst_offset,
     const graphics::Buffer& src, size_t src_offset, size_t size)
     -> void override;
 
@@ -133,22 +128,15 @@ public:
   // subresource layout produced by GetCopyableFootprints). Partial-region
   // uploads or mismatching row-pitches are not fully supported and will
   // produce a warning.
-  auto CopyBufferToTexture(
-    // ReSharper disable once CppRedundantQualifier
-    const graphics::Buffer& src, const TextureUploadRegion& region,
-    Texture& dst) -> void override;
+  auto CopyBufferToTexture(const graphics::Buffer& src,
+    const TextureUploadRegion& region, Texture& dst) -> void override;
 
-  auto CopyBufferToTexture(
-    // ReSharper disable once CppRedundantQualifier
-    const graphics::Buffer& src, std::span<const TextureUploadRegion> regions,
-    Texture& dst) -> void override;
-
-  auto CopyTextureToBuffer(
-    // ReSharper disable once CppRedundantQualifier
-    graphics::Buffer& dst,
-    // ReSharper disable once CppRedundantQualifier
-    const graphics::Texture& src, const TextureBufferCopyRegion& region)
+  auto CopyBufferToTexture(const graphics::Buffer& src,
+    std::span<const TextureUploadRegion> regions, Texture& dst)
     -> void override;
+
+  auto CopyTextureToBuffer(graphics::Buffer& dst, const graphics::Texture& src,
+    const TextureBufferCopyRegion& region) -> void override;
 
   auto CopyTexture(const Texture& src, const TextureSlice& src_slice,
     const TextureSubResourceSet& src_subresources, Texture& dst,

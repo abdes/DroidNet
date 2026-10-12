@@ -17,7 +17,6 @@ PhysicalClock::PhysicalClock() noexcept
 {
 }
 
-// ReSharper disable once CppMemberFunctionMayBeStatic
 auto PhysicalClock::Now() const noexcept -> PhysicalTime
 {
   return PhysicalTime { time_point_cast<nanoseconds>(steady_clock::now()) };

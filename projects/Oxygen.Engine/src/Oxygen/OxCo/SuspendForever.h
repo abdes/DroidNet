@@ -17,7 +17,6 @@ namespace oxygen::co {
 //! support.
 class SuspendForever {
 public:
-  // ReSharper disable CppMemberFunctionMayBeStatic
   [[nodiscard]] auto await_ready() const noexcept { return false; }
   void await_suspend([[maybe_unused]] detail::Handle h) { }
   [[noreturn]] void await_resume() { Unreachable(); }
@@ -25,7 +24,6 @@ public:
   {
     return std::true_type {};
   }
-  // ReSharper restore CppMemberFunctionMayBeStatic
 };
 
 } // namespace oxygen::co

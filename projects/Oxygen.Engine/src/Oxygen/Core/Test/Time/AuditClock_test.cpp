@@ -4,17 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Core/Time/AuditClock.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::time;
 using namespace std::chrono_literals;
 
 namespace {
 
-// ReSharper disable once CppRedundantQualifier
 class AuditClockTest : public ::testing::Test { };
 
 //! Ensure conversion between physical steady time and wall-clock time is

@@ -428,7 +428,6 @@ public class EditorSettingsManagerTests : DatabaseTests
         }
     }
 
-    [SuppressMessage("ReSharper", "UnusedAutoPropertyAccessor.Local", Justification = "this is a test class")]
     private sealed class TestModel
     {
         public int Id { get; set; }

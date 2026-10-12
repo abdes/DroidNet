@@ -62,7 +62,6 @@ NOLINT_TEST_F(OxCoBasicTest, ReturnTypes)
 {
   ::Run(*el_, []() -> Co<> {
     int x = 42;
-    // ReSharper disable once CppVariableCanBeMadeConstexpr
     const int cx = 43; // no constexpr for test
 
     auto ref_task = [&]() -> Co<int&> { co_return x; };
@@ -156,8 +155,6 @@ NOLINT_TEST_F(OxCoBasicTest, NoOp)
     co_await mk_noop();
   });
 }
-// ReSharper disable CppMemberFunctionMayBeStatic
-// ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
 // NOLINTBEGIN(*-use-nodiscard,*-special-member-functions)
 
 struct NonMoveableAwaiter {
@@ -177,8 +174,6 @@ struct NonMoveableAwaitable {
 };
 
 // NOLINTEND(*-use-nodiscard,*-special-member-functions)
-// ReSharper restore CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
-// ReSharper restore CppMemberFunctionMayBeStatic
 
 NOLINT_TEST_F(OxCoBasicTest, NonMoveable)
 {

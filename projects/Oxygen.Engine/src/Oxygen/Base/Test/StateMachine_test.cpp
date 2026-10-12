@@ -67,13 +67,11 @@ NOLINT_TEST(
     std::shared_ptr<Action> mock;
   };
 
-  // ReSharper disable CppMemberFunctionMayBeConst
   // NOLINTBEGIN(*)
   struct MockState {
     MOCK_METHOD(TestAction, Handle, (const TestEvent&), ());
   };
   // NOLINTEND(*)
-  // ReSharper enable CppMemberFunctionMayBeConst
 
   struct FirstState : ByDefault<DoNothing> {
     using ByDefault::Handle;
@@ -89,14 +87,12 @@ NOLINT_TEST(
     std::shared_ptr<MockState> mock;
   };
 
-  // ReSharper disable CppMemberFunctionMayBeConst
   // NOLINTBEGIN(*)
   struct MockAction final : Action {
     MOCK_METHOD(
       Status, Execute, (Machine&, FirstState&, const TestEvent&), (override));
   };
   // NOLINTEND(*)
-  // ReSharper enable CppMemberFunctionMayBeConst
 
   const auto mock_state = std::make_shared<MockState>();
   const auto mock_action = std::make_shared<MockAction>();
@@ -145,13 +141,11 @@ NOLINT_TEST(StateMachine, MachineHandleEventCatchesUnhandledExceptions)
     std::shared_ptr<Action> mock;
   };
 
-  // ReSharper disable CppMemberFunctionMayBeConst
   // NOLINTBEGIN(*)
   struct MockState {
     MOCK_METHOD(TestAction, Handle, (const TestEvent&), ());
   };
   // NOLINTEND(*)
-  // ReSharper enable CppMemberFunctionMayBeConst
 
   struct FirstState : ByDefault<DoNothing> {
     using ByDefault::Handle;
@@ -167,14 +161,12 @@ NOLINT_TEST(StateMachine, MachineHandleEventCatchesUnhandledExceptions)
     std::shared_ptr<MockState> mock;
   };
 
-  // ReSharper disable CppMemberFunctionMayBeConst
   // NOLINTBEGIN(*)
   struct MockAction final : Action {
     MOCK_METHOD(
       Status, Execute, (Machine&, FirstState&, const TestEvent&), (override));
   };
   // NOLINTEND(*)
-  // ReSharper enable CppMemberFunctionMayBeConst
 
   auto mock_state = std::make_shared<MockState>();
   auto mock_action = std::make_shared<MockAction>();
@@ -412,14 +404,12 @@ NOLINT_TEST(StateMachine, TransitionToExample)
   //! [TransitionTo example]
   struct TransitionEvent { };
 
-  // ReSharper disable CppMemberFunctionMayBeConst
   // NOLINTBEGIN(*)
   struct ExampleMockState {
     MOCK_METHOD(Status, OnEnter, (const TransitionEvent&), ());
     MOCK_METHOD(Status, OnLeave, (const TransitionEvent&), ());
   };
   // NOLINTEND(*)
-  // ReSharper enable CppMemberFunctionMayBeConst
 
   struct FirstState;
   struct SecondState;
@@ -481,14 +471,12 @@ NOLINT_TEST(StateMachine, TransitionToWithDataExample)
   //! [TransitionTo with data example]
   struct TransitionEvent { };
 
-  // ReSharper disable CppMemberFunctionMayBeConst
   // NOLINTBEGIN(*)
   struct ExampleMockState {
     MOCK_METHOD(Status, OnEnter, (const TransitionEvent&, int), ());
     MOCK_METHOD(Status, OnLeave, (const TransitionEvent&), ());
   };
   // NOLINTEND(*)
-  // ReSharper enable CppMemberFunctionMayBeConst
 
   struct FirstState;
   struct SecondState;
@@ -561,14 +549,12 @@ NOLINT_TEST(StateMachine, TransitionToWithDataExample)
 struct StateMachineTransitionToErrors : testing::Test {
   struct TransitionEvent { };
 
-  // ReSharper disable CppMemberFunctionMayBeConst
   // NOLINTBEGIN(*)
   struct ExampleMockState {
     MOCK_METHOD(Status, OnEnter, (const TransitionEvent&), ());
     MOCK_METHOD(Status, OnLeave, (const TransitionEvent&), ());
   };
   // NOLINTEND(*)
-  // ReSharper enable CppMemberFunctionMayBeConst
 
   struct FirstState;
   struct SecondState;

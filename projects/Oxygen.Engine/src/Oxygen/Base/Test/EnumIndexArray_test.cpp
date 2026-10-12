@@ -9,9 +9,8 @@
 #include <ranges>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/EnumIndexedArray.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::EnumAsIndex;
 using oxygen::EnumIndexedArray;
@@ -103,7 +102,6 @@ NOLINT_TEST(EnumIndexedArrayTest, IteratorsAndSize)
 
 //! Named-index wrapper: simulate a strong-type index with get().
 struct MyIndex {
-  // ReSharper disable once CppDeclaratorNeverUsed
   std::size_t get() const noexcept { return value; }
   std::size_t value;
 };
@@ -337,7 +335,6 @@ enum class CTEnum : std::size_t {
   kFirst = 0,
   kSecond,
 
-  // ReSharper disable once CppEnumeratorNeverUsed
   kCount,
 };
 
@@ -363,9 +360,7 @@ consteval bool ConstevalEnumIndexedArrayChecks()
 
   // Test the enum_as_index view size and iterator distance in consteval
   auto viewSize = enum_as_index<CTEnum>.size();
-  // ReSharper disable once CppDFAConstantConditions
   if (viewSize != std::ranges::size(enum_as_index<CTEnum>)) {
-    // ReSharper disable once CppDFAUnreachableCode
     return false;
   }
 

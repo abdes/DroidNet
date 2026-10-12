@@ -8,14 +8,11 @@
 
 #include <d3d12.h>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::graphics::d3d12::testing {
 
-// ReSharper disable CppClangTidyModernizeUseTrailingReturnType
-// ReSharper disable once CppClassCanBeFinal - Mock class should not be final
 class MockDevice : public dx::IDevice {
 public:
   virtual ~MockDevice() = default;

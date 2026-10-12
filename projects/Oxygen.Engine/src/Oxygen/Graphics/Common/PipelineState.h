@@ -367,7 +367,6 @@ struct RootBindingItem {
     DescriptorTableBinding>
     data;
 
-  // ReSharper disable once CppNonExplicitConvertingConstructor
   RootBindingItem(const RootBindingDesc& desc)
     : binding_slot_desc(desc.binding_slot_desc)
     , visibility(desc.visibility)

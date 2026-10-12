@@ -27,7 +27,6 @@ namespace d3d12 {
    Each segment is associated with a specific D3D12 descriptor heap,
    corresponding to a particular ResourceViewType and DescriptorVisibility.
   */
-  // ReSharper disable once CppRedundantQualifier
   class DescriptorSegment final
     : public graphics::detail::FixedDescriptorSegment {
   public:

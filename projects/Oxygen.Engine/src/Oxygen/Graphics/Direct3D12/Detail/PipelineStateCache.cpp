@@ -134,8 +134,6 @@ auto ConvertViewTypeToRangeType(
 {
   using oxygen::graphics::ResourceViewType;
 
-  // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
-  // ReSharper disable once CppIncompleteSwitchStatement
   switch (view_type) { // NOLINT(clang-diagnostic-switch)
   case ResourceViewType::kTexture_SRV:
   case ResourceViewType::kTypedBuffer_SRV:

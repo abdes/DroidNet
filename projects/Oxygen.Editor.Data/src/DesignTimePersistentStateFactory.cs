@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.CommandLine;
-using System.Diagnostics.CodeAnalysis;
 using DroidNet.Config;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -61,7 +60,6 @@ namespace Oxygen.Editor.Data;
 /// ]]></code>
 /// </example>
 /// </remarks>
-[SuppressMessage("ReSharper", "UnusedMember.Global", Justification = "Used by EF Core tools")]
 public class DesignTimePersistentStateFactory : IDesignTimeDbContextFactory<PersistentState>
 {
     /// <summary>

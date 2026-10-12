@@ -12,8 +12,6 @@
 #include <Oxygen/OxCo/Coroutine.h>
 #include <Oxygen/OxCo/Detail/CoTag.h>
 
-// ReSharper disable CppMemberFunctionMayBeStatic
-
 namespace oxygen::co::detail {
 
 template <class T> struct RemoveRvalueReference {
@@ -75,8 +73,7 @@ template <class Callable> class AwaitableLambda {
   using AwaiterT = AwaiterType<TaskT>;
 
 public:
-  // ReSharper disable once CppPossiblyUninitializedMember - lazy init when
-  // appropriate
+  // The awaiter member is initialized lazily, when first needed.
   explicit AwaitableLambda(
     Callable&& c) // NOLINT(cppcoreguidelines-rvalue-reference-param-not-moved)
     : callable_(std::forward<Callable>(c))

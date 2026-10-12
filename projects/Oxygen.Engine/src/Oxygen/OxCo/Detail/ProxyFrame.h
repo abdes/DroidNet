@@ -40,7 +40,6 @@ public:
     DCHECK_EQ_F(h_address & frame_tags::kMask, 0ULL);
     // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
     const auto fn_address = reinterpret_cast<uintptr_t>(destroy_fn);
-    // ReSharper disable CppClangTidyPerformanceNoIntToPtr
     // NOLINTNEXTLINE(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
     destroy_fn = reinterpret_cast<decltype(destroy_fn)>(
       (h_address & ~frame_tags::kMask) | (fn_address & frame_tags::kMask));
@@ -54,7 +53,6 @@ public:
     // NOLINTNEXTLINE(*-pro-type-reinterpret-cast)
     const auto fn_address = reinterpret_cast<uintptr_t>(destroy_fn);
     const uintptr_t h_address = fn_address & ~frame_tags::kMask;
-    // ReSharper disable CppClangTidyPerformanceNoIntToPtr
     // NOLINTNEXTLINE(*-pro-type-reinterpret-cast, *-no-int-to-ptr)
     return Handle::from_address(reinterpret_cast<void*>(h_address));
   }

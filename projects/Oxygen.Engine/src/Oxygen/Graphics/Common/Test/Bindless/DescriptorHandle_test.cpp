@@ -6,15 +6,14 @@
 
 #include <memory>
 
-#include <Oxygen/Testing/GTest.h>
+#include "./Mocks/MockDescriptorAllocator.h"
+#include "./Mocks/MockDescriptorSegment.h"
+#include "./Mocks/TestDescriptorHandle.h"
 
 #include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
-
-#include "./Mocks/MockDescriptorAllocator.h"
-#include "./Mocks/MockDescriptorSegment.h"
-#include "./Mocks/TestDescriptorHandle.h"
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::kInvalidBindlessHeapIndex;
 using oxygen::graphics::DescriptorAllocationHandle;
@@ -65,7 +64,6 @@ protected:
     return segment;
   }
 
-  // ReSharper disable once CppMemberFunctionMayBeConst
   void SetSegmentFactory(MockDescriptorAllocator::SegmentFactory&& factory)
   {
     allocator_.segment_factory_ = std::move(factory);

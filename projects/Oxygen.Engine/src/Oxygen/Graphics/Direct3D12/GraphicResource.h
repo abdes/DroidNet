@@ -20,7 +20,6 @@
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/NativeLifetime.h>
 
-// ReSharper disable once CppInconsistentNaming
 namespace D3D12MA {
 class Allocation; // NOLINT(*-virtual-class-destructor)
 } // namespace D3D12MA
@@ -77,7 +76,6 @@ public:
   [[nodiscard]] auto GetResource() const { return resource_; }
   [[nodiscard]] auto GetLifetime() const -> const auto& { return lifetime_; }
 
-  // ReSharper disable once CppMemberFunctionMayBeConst
   auto SetName(const std::string_view name) noexcept -> void
   {
     NameObject(resource_, name);

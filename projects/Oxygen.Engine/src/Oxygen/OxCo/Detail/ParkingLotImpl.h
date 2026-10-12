@@ -7,6 +7,7 @@
 #pragma once
 
 #include "IntrusiveList.h"
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Coroutine.h>
 
@@ -88,7 +89,6 @@ protected:
   //! Returns true if no tasks are waiting, which implies `Front()` and
   //! `Back()` will return `nullptr` and `UnParkOne()` and `UnParkAll()` are
   //! no-ops.
-  // ReSharper disable once CppHiddenFunction
   [[nodiscard]] auto Empty() const { return parked_.Empty(); }
 
   //! Returns the number of tasks waiting.

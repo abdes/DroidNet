@@ -33,7 +33,6 @@ public abstract partial class AbstractRouteActivator(ILoggerFactory? loggerFacto
     /// <summary>
     /// Gets the logger used by the activator.
     /// </summary>
-    [SuppressMessage("ReSharper", "MemberCanBePrivate.Global", Justification = "may be used by derived classes")]
     protected ILogger Logger { get; } = loggerFactory?.CreateLogger<IRouteActivator>() ??
                                         NullLoggerFactory.Instance.CreateLogger<IRouteActivator>();
 

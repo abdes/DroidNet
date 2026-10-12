@@ -67,7 +67,6 @@ public class OutletNameTests
         // Arrange
         var comparer = OutletNameEqualityComparer.IgnoreCase;
 
-        // ReSharper disable once StringLiteralTypo
         var name1 = new OutletName { Name = "testoutlet" };
         var name2 = new OutletName { Name = "TestOutlet" };
 
@@ -98,7 +97,6 @@ public class OutletNameTests
         // Arrange
         var comparer = new OutletNameEqualityComparer(ignoreCase: false);
 
-        // ReSharper disable once StringLiteralTypo
         var name1 = new OutletName { Name = "testoutlet" };
         var name2 = new OutletName { Name = "TestOutlet" };
 

@@ -101,7 +101,6 @@ public class EventHandlerTestHelperTests
 #pragma warning restore CS0067 // Event is never used
     }
 
-    [SuppressMessage("ReSharper", "MemberCanBeMadeStatic.Local", Justification = "instance methods required for the test case")]
     private sealed class TestTarget
     {
         public void Handler1(object? sender, EventArgs args)

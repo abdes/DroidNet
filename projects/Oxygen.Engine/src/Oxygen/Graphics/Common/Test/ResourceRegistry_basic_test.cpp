@@ -45,7 +45,6 @@ namespace {
 // Basic Tests
 //===----------------------------------------------------------------------===//
 
-// ReSharper disable once CppRedundantQualifier
 class ResourceRegistryBasicTest : public ::testing::Test {
 protected:
   std::shared_ptr<MockDescriptorAllocator> allocator_;

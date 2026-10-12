@@ -148,6 +148,6 @@ public class RouteActivationObserverTests
     /// <summary>
     /// Used for mocking. Must be public.
     /// </summary>
-    /// ReSharper disable once MemberCanBePrivate.Global
+    /
     internal static class MockViewModel;
 }

@@ -211,7 +211,6 @@ Texture::Texture(
 
 Texture::~Texture() { DLOG_F(1, "destroying texture: {}", Base::GetName()); }
 
-// ReSharper disable CppClangTidyBugproneUseAfterMove
 Texture::Texture(Texture&& other) noexcept
   : Base(std::move(other))
   , gfx_(std::exchange(other.gfx_, nullptr))
@@ -241,7 +240,6 @@ auto Texture::operator=(Texture&& other) noexcept -> Texture&
   }
   return *this;
 }
-// ReSharper enable CppClangTidyBugproneUseAfterMove
 
 auto Texture::SetName(const std::string_view name) noexcept -> void
 {

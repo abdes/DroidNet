@@ -132,7 +132,6 @@ template <typename T>
 concept ResizableString = requires(T t) {
   { t.clear() } -> std::same_as<void>;
   { t.resize(std::declval<size_t>()) } -> std::same_as<void>;
-  // ReSharper disable once CppRedundantTypenameKeyword
   { t.data() } -> std::same_as<typename T::value_type*>;
   requires std::convertible_to<typename T::value_type, char>;
 };

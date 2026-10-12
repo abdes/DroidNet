@@ -349,7 +349,6 @@ public:
     requires(std::is_same_v<Ret, void>);
 
   // Required for constraints on `Nursery::Start()`.
-  // ReSharper disable once CppFunctionIsNotImplemented
   explicit(false) TaskStarted(detail::TaskStartedTag); // not defined
 
 protected:
@@ -472,7 +471,6 @@ public:
 
   //! @{
   //! Awaiter interface implementation.
-  // ReSharper disable CppMemberFunctionMayBeStatic
 
   auto await_early_cancel() noexcept -> bool
   {
@@ -527,7 +525,6 @@ public:
     return std::false_type {};
   }
 
-  // ReSharper restore CppMemberFunctionMayBeStatic
   //! @}
 
   ~StartAwaiter()
@@ -625,12 +622,10 @@ namespace detail {
   template <template <typename...> typename Template, typename... Args>
   struct IsSpecializationOf<Template, Template<Args...>> : std::true_type { };
 
-  // ReSharper disable once CppInconsistentNaming
   template <template <typename...> typename Template, typename T>
   constexpr inline bool IsSpecializationOf_v
     = IsSpecializationOf<Template, T>::value;
 
-  // ReSharper disable once CppInconsistentNaming
   template <typename T>
   constexpr bool IsReferenceWrapper_v
     = IsSpecializationOf_v<std::reference_wrapper, T>;
@@ -890,7 +885,6 @@ public:
 
   void await_set_executor(Executor* ex) noexcept { nursery_.executor_ = ex; }
 
-  // ReSharper disable once CppMemberFunctionMayBeStatic
   [[nodiscard]] auto await_ready() const noexcept { return false; }
 
   auto await_suspend(detail::Handle h) -> detail::Handle

@@ -41,7 +41,6 @@ public:
   [[nodiscard]] auto Get() noexcept -> T& { return value_; }
 
   [[nodiscard]] auto Get() const noexcept -> const T& { return value_; }
-  // ReSharper disable once CppNonExplicitConversionOperator
   // NOLINTNEXTLINE(*-explicit-constructor)
   operator const T&() const noexcept { return value_; }
 
@@ -341,10 +340,8 @@ public:
   {
   }
 
-  // ReSharper disable CppMemberFunctionMayBeStatic
   [[nodiscard]] auto await_ready() const noexcept -> bool { return false; }
   auto await_resume() && -> std::pair<T, T> { return std::move(*result_); }
-  // ReSharper restore CppMemberFunctionMayBeStatic
 
 private:
   bool Matches(const T& from, const T& to) override

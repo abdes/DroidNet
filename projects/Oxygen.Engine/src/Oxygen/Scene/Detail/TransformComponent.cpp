@@ -198,7 +198,6 @@ auto TransformComponent::GetWorldMatrix() const -> const Mat4&
  @param parent_world_matrix The parent object's world transformation matrix.
  @note Clears the dirty flag after computation.
  */
-// ReSharper disable once CppMemberFunctionMayBeConst
 void TransformComponent::UpdateWorldTransform(const Mat4& parent_world_matrix)
 {
   world_matrix_ = parent_world_matrix * GetLocalMatrix();
@@ -212,7 +211,6 @@ void TransformComponent::UpdateWorldTransform(const Mat4& parent_world_matrix)
 
  @note This should only be called for root nodes in the scene hierarchy.
  */
-// ReSharper disable once CppMemberFunctionMayBeConst
 void TransformComponent::UpdateWorldTransformAsRoot()
 {
   // For root nodes, world matrix equals local matrix (identity parent)
@@ -238,13 +236,11 @@ auto TransformComponent::GetWorldRotation() const -> Quat
   const Mat4& world = GetWorldMatrix();
 
   // Extract rotation from world matrix
-  // ReSharper disable CppTooWideScopeInitStatement
   Vec3 scale;
   Quat rotation;
   Vec3 translation;
   Vec3 skew;
   glm::vec4 perspective;
-  // ReSharper restore CppTooWideScopeInitStatement
 
   if (glm::decompose(world, scale, rotation, translation, skew, perspective)) {
     return rotation;
@@ -263,13 +259,11 @@ auto TransformComponent::GetWorldScale() const -> Vec3
   const Mat4& world = GetWorldMatrix();
 
   // Extract scale from world matrix
-  // ReSharper disable CppTooWideScopeInitStatement
   Vec3 scale;
   Quat rotation;
   Vec3 translation;
   Vec3 skew;
   glm::vec4 perspective;
-  // ReSharper restore CppTooWideScopeInitStatement
 
   if (glm::decompose(world, scale, rotation, translation, skew, perspective)) {
     return scale;

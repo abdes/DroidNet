@@ -4,9 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-/* ReSharper disable StringLiteralTypo */
 [assembly: SuppressMessage("Security", "CA5392:Use DefaultDllImportSearchPaths attribute for P/Invokes", Justification = "external code, not under our control", Scope = "member", Target = "~M:Microsoft.Windows.Foundation.UndockedRegFreeWinRTCS.NativeMethods.WindowsAppRuntime_EnsureIsLoaded~System.Int32")]
-/* ReSharper restore StringLiteralTypo */
 
 [assembly: SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Test method names are more readable with underscores", Scope = "module")]
 [assembly: SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1600:Elements should be documented", Justification = "Test cases do not require XMLDoc comments", Scope = "module")]

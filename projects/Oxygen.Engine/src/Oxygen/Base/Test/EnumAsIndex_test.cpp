@@ -12,9 +12,8 @@
 #include <string_view>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/EnumIndexedArray.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::EnumAsIndex;
 using oxygen::EnumIndexedArray;
@@ -266,7 +265,6 @@ enum class Color {
   kGreen,
   kBlue,
 
-  // ReSharper disable once CppEnumeratorNeverUsed
   kCount,
 };
 using ColorIndex = EnumAsIndex<Color>;

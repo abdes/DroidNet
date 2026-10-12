@@ -148,7 +148,6 @@ public:
 
   //! Sets the dirty flag to indicate that the world matrix cache is invalid
   //! and needs to be recomputed. Called automatically by setter methods.
-  // ReSharper disable once CppMemberFunctionMayBeConst
   auto MarkDirty() noexcept -> void { is_dirty_ = true; }
 
   //! Checks if the transform is dirty and needs matrix re-computation.

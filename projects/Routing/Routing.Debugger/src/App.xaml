@@ -13,7 +13,6 @@
                 <ResourceDictionary Source="ms-appx:///Styles/TextBlock.xaml" />
 
                 <!--  Other resources  -->
-                <!--  ReSharper disable once Xaml.PathError  -->
                 <ResourceDictionary Source="ms-appx:///DroidNet.Routing.Debugger.UI/Styles/Styles.xaml" />
                 <ResourceDictionary Source="ms-appx:///DroidNet.Docking/Themes/Generic.xaml" />
             </ResourceDictionary.MergedDictionaries>

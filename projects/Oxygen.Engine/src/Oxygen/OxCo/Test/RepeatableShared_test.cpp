@@ -57,8 +57,6 @@ protected:
   }
 };
 
-// ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
-
 NOLINT_TEST_F(RepeatableSharedTest, Smoke)
 {
   oxygen::co::Run(*el_, [this]() -> Co<> {

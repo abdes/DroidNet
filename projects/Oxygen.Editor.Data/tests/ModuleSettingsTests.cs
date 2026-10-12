@@ -309,10 +309,8 @@ public class ModuleSettingsTests : DatabaseTests
     {
         private string testProperty = "PrivateValue";
 
-        [SuppressMessage("ReSharper", "UnusedMember.Local", Justification = "needed for testing")]
         public static string ReadOnlyProperty => "ReadOnlyValue";
 
-        [SuppressMessage("ReSharper", "UnusedMember.Local", Justification = "needed for testing")]
         public string PrivateGetterProperty
         {
             get => throw new InvalidOperationException("exception created on purpose for testing");

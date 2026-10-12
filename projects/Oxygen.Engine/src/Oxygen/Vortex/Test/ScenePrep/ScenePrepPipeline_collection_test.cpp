@@ -104,7 +104,6 @@ protected:
   {
     return oxygen::observer_ptr<const oxygen::ResolvedView>(view_.get());
   }
-  // ReSharper disable once CppMemberFunctionMayBeConst
   auto StateRef() -> sceneprep::ScenePrepState& { return *state_; }
 
   static constexpr size_t kNodeCount = 3; // RootA, RootB, ChildOfA

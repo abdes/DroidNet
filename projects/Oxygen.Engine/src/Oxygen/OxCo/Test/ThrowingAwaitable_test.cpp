@@ -24,17 +24,13 @@ using namespace std::chrono_literals;
 namespace {
 
 struct ThrowingAwaitable {
-  // ReSharper disable CppMemberFunctionMayBeStatic
   [[nodiscard]] auto await_ready() const noexcept -> bool { return false; }
   [[noreturn]] void await_suspend(oxygen::co::detail::Handle /*unused*/)
   {
     throw std::runtime_error("test");
   }
   void await_resume() noexcept { }
-  // ReSharper restore CppMemberFunctionMayBeStatic
 };
-
-// ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
 
 class ThrowingAwaitableTest : public OxCoTestFixture { };
 

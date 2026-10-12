@@ -196,7 +196,6 @@ public:
   //=== Cloning Support ===---------------------------------------------------//
 
   [[nodiscard]] static auto IsCloneable() noexcept -> bool { return true; }
-  // ReSharper disable once CppHidingFunction
   OXGN_SCN_NDAPI auto Clone() const -> std::unique_ptr<SceneNodeImpl>;
 
   //=== Dynamic Components Support ===----------------------------------------//

@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
-
 namespace DroidNet.Routing;
 
 /// <inheritdoc cref="INavigationContext" />
@@ -48,9 +46,5 @@ public class NavigationContext(Target targetKey, object target, object? fromTarg
     /// <summary>
     /// Gets the observer for route activation lifecycle events.
     /// </summary>
-    [SuppressMessage(
-        "ReSharper",
-        "VirtualMemberNeverOverridden.Global",
-        Justification = "needs to be virtual for mocking")]
     public virtual IRouteActivationObserver? RouteActivationObserver { get; internal set; }
 }

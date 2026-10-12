@@ -10,12 +10,11 @@
 #include <type_traits>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
+#include "./Mocks/TestFlag.h"
 
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
-
-#include "./Mocks/TestFlag.h"
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::scene::AtomicSceneFlags;
 using oxygen::scene::SceneFlag;
@@ -308,7 +307,6 @@ NOLINT_TEST_F(
   flags_.SetLocalValue(TestFlag::kLocked, true);
 
   // Act: Process all dirty flags
-  // ReSharper disable once CppTooWideScope
   const auto result = flags_.ProcessDirtyFlags();
 
   // Assert: Should return true and apply all changes

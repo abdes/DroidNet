@@ -142,12 +142,6 @@ $tf/
 # Guidance Automation Toolkit
 *.gpState
 
-# ReSharper is a .NET coding add-in
-_ReSharper.Caches/
-_ReSharper*/
-*.[Rr]e[Ss]harper
-*.DotSettings.user
-
 # TeamCity is a build add-in
 _TeamCity*
 

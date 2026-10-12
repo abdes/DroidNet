@@ -58,7 +58,6 @@ auto SceneNodeImpl::GetName() const noexcept -> std::string_view
   return GetComponent<ObjectMetadata>().GetName();
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void SceneNodeImpl::SetName(const std::string_view name) noexcept
 {
   GetComponent<ObjectMetadata>().SetName(name);
@@ -97,13 +96,11 @@ auto SceneNodeImpl::GetFlags() noexcept -> Flags&
  @see UpdateTransforms(), ClearTransformDirty(), IsTransformDirty()
  @see Scene::Update() for automatic transform updates
 */
-// ReSharper disable once CppMemberFunctionMayBeConst
 void SceneNodeImpl::MarkTransformDirty() noexcept
 {
   GetComponent<TransformComponent>().MarkDirty();
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void SceneNodeImpl::ClearTransformDirty() noexcept
 {
   GetComponent<TransformComponent>().ForceClearDirty();
@@ -241,28 +238,24 @@ auto GraphNode::GetPrevSibling() const noexcept -> const NodeHandle&
   return graph_data_->GetPrevSibling();
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void GraphNode::SetParent(const NodeHandle& parent) noexcept
 {
   DCHECK_F(IsValid(), "GraphNode is invalidated - programming error");
   graph_data_->SetParent(parent);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void GraphNode::SetFirstChild(const NodeHandle& child) noexcept
 {
   DCHECK_F(IsValid(), "GraphNode is invalidated - programming error");
   graph_data_->SetFirstChild(child);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void GraphNode::SetNextSibling(const NodeHandle& sibling) noexcept
 {
   DCHECK_F(IsValid(), "GraphNode is invalidated - programming error");
   graph_data_->SetNextSibling(sibling);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void GraphNode::SetPrevSibling(const NodeHandle& sibling) noexcept
 {
   DCHECK_F(IsValid(), "GraphNode is invalidated - programming error");

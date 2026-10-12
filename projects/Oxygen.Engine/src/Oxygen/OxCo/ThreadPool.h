@@ -172,7 +172,6 @@ public:
   */
   template <class F, class... Args>
     requires(std::invocable<F, Args...>
-      // ReSharper disable once CppRedundantQualifier - Will break MSVC
       || std::invocable<F, Args..., ThreadPool::CancelToken>)
   auto Run(F&& f, Args&&... args) -> Awaitable auto;
 
@@ -358,7 +357,6 @@ public:
   {
   }
 
-  // ReSharper disable once CppMemberFunctionMayBeStatic
   auto await_ready() const noexcept -> bool { return false; }
   auto await_suspend(detail::Handle h) -> void
   {
@@ -557,10 +555,8 @@ inline auto ThreadPool::ThreadBody() -> void
 // prime with the queue capacity (to make sure all slots are used),
 // so the capacity is rounded up to a power of 2.
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 inline auto ThreadPool::PushToSubmitQueue(Task* task) -> bool
 {
-  // ReSharper disable once CppUseStructuredBinding
   Slot& slot = d_->sq[d_->sq_tail % d_->sq_capacity];
 
   Task* prev = nullptr;
@@ -575,7 +571,6 @@ inline auto ThreadPool::PushToSubmitQueue(Task* task) -> bool
   return true;
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 inline auto ThreadPool::PopFromSubmitQueue() -> Task*
 {
   const size_t head = d_->sq_head.fetch_add(kStride, std::memory_order_relaxed);
@@ -627,7 +622,6 @@ inline auto ThreadPool::PopFromSubmitQueue() -> Task*
 // The backoff queue is only accessed by the main thread, so no fancy
 // synchronization is needed.
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 inline auto ThreadPool::PushToBackoffSubmitQueue(Task* task) -> void
 {
   task->next_ = nullptr;
@@ -682,7 +676,6 @@ inline auto ThreadPool::PushToCompletionQueue(Task* task) -> void
   }
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 inline auto ThreadPool::DrainCompletionQueue() -> void
 {
   const detail::IntrusivePtr<Data> dd = d_;

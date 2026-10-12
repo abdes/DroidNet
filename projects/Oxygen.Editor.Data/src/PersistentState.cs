@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 
 /* Unmerged change from project 'Oxygen.Editor.Data (net9.0-windows10.0.26100.0)'
@@ -25,7 +24,6 @@ namespace Oxygen.Editor.Data;
 /// Represents the database context for the application.
 /// </summary>
 /// <param name="options">The options to be used by the DbContext.</param>
-[SuppressMessage("ReSharper", "UnusedAutoPropertyAccessor.Global", Justification = "properties are set by EF Core")]
 public class PersistentState(DbContextOptions<PersistentState> options) : DbContext(options)
 {
     /// <summary>

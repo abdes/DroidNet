@@ -4,12 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/ObjectRelease.h>
-
 #include <memory>
 
 #include <gmock/gmock.h>
 
+#include <Oxygen/Graphics/Common/ObjectRelease.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::graphics::ObjectRelease;
@@ -19,11 +18,7 @@ namespace {
 // Mock class with a Release() method
 class MockReleasable {
 public:
-  // ReSharper disable CppDeclaratorNeverUsed
-  // ReSharper disable CppMemberFunctionMayBeConst
   MOCK_METHOD(void, Release, ());
-  // ReSharper restore CppMemberFunctionMayBeConst
-  // ReSharper restore CppDeclaratorNeverUsed
 };
 
 // Test case for ObjectRelease with a raw pointer to an object with a Release()

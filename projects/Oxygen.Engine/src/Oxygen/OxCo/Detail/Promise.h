@@ -331,7 +331,6 @@ namespace detail {
       return ProxyHandle();
     }
 
-    // ReSharper disable once CppHiddenFunction
     [[nodiscard]] auto Parent() const noexcept { return parent_; }
 
     //! Cause this promise to not resume a coroutine when it is started.
@@ -488,10 +487,8 @@ namespace detail {
         DLOG_F(5, "pr {}: exception thrown from await_suspend", fmt::ptr(this));
         ExecutionState(Execution::kRunning);
         if (cancel_requested) {
-          // ReSharper disable once CppDFAUnreachableCode
           CancellationState(Cancellation::kRequested);
         }
-        // ReSharper disable once CppDFAUnreachableCode
         throw;
       }
     }
@@ -554,7 +551,6 @@ namespace detail {
     class FinalSuspendProxy : public std::suspend_always {
     public:
       template <class Promise>
-      // ReSharper disable once CppMemberFunctionMayBeStatic
       auto await_suspend(CoroutineHandle<Promise> h) noexcept -> Handle
       {
         return h.promise().HookFinalSuspend();
@@ -574,7 +570,6 @@ namespace detail {
       return std::suspend_always {};
     }
 
-    // ReSharper disable once CppMemberFunctionMayBeStatic
     auto final_suspend() noexcept { return FinalSuspendProxy(); }
 
     //! An implementation of `await_transform()` that stashes the awaitable
@@ -636,7 +631,6 @@ namespace detail {
       BasePromise::Parent()->StoreException();
     }
 
-    // ReSharper disable once CppFunctionIsNotImplemented
     auto get_return_object() -> Co<T>; // Implemented in Co.h
 
     auto Start(TaskParent<T>* parent, Handle caller) -> Handle
@@ -662,7 +656,6 @@ namespace detail {
   private:
     friend ReturnValueMixin<T>;
 
-    // ReSharper disable once CppHidingFunction
     [[nodiscard]] auto Parent() const noexcept
     {
       return static_cast<TaskParent<T>*>(BasePromise::Parent());

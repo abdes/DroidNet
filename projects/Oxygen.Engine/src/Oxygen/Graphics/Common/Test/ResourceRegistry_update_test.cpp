@@ -48,7 +48,6 @@ namespace {
 // UpdateView Tests
 //===----------------------------------------------------------------------===//
 
-// ReSharper disable once CppRedundantQualifier
 class ResourceRegistryUpdateViewTest : public ::testing::Test {
 protected:
   std::shared_ptr<MockDescriptorAllocator> allocator_;

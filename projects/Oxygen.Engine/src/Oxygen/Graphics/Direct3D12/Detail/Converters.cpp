@@ -101,8 +101,6 @@ auto ConvertResourceStates(ResourceStates states) -> D3D12_RESOURCE_STATES
 
 auto ConvertFillMode(const FillMode value) -> D3D12_FILL_MODE
 {
-  // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
-  // ReSharper disable once CppIncompleteSwitchStatement
   switch (value) { // NOLINT(clang-diagnostic-switch)
   case FillMode::kSolid:
     return D3D12_FILL_MODE_SOLID;
@@ -115,8 +113,6 @@ auto ConvertFillMode(const FillMode value) -> D3D12_FILL_MODE
 
 auto ConvertCullMode(const CullMode value) -> D3D12_CULL_MODE
 {
-  // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
-  // ReSharper disable once CppIncompleteSwitchStatement
   switch (value) { // NOLINT(clang-diagnostic-switch)
   case CullMode::kNone:
     return D3D12_CULL_MODE_NONE;
@@ -134,8 +130,6 @@ auto ConvertCullMode(const CullMode value) -> D3D12_CULL_MODE
 
 auto ConvertCompareOp(const CompareOp value) -> D3D12_COMPARISON_FUNC
 {
-  // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
-  // ReSharper disable once CppIncompleteSwitchStatement
   switch (value) { // NOLINT(clang-diagnostic-switch)
   case CompareOp::kNever:
     return D3D12_COMPARISON_FUNC_NEVER;
@@ -184,8 +178,6 @@ auto ConvertStencilOp(const StencilOp value) -> D3D12_STENCIL_OP
 
 auto ConvertBlendFactor(const BlendFactor value) -> D3D12_BLEND
 {
-  // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
-  // ReSharper disable once CppIncompleteSwitchStatement
   switch (value) { // NOLINT(clang-diagnostic-switch)
   case BlendFactor::kZero:
     return D3D12_BLEND_ZERO;
@@ -226,8 +218,6 @@ auto ConvertBlendFactor(const BlendFactor value) -> D3D12_BLEND
 
 auto ConvertBlendOp(const BlendOp value) -> D3D12_BLEND_OP
 {
-  // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
-  // ReSharper disable once CppIncompleteSwitchStatement
   switch (value) { // NOLINT(clang-diagnostic-switch)
   case BlendOp::kAdd:
     return D3D12_BLEND_OP_ADD;
@@ -265,8 +255,6 @@ auto ConvertColorWriteMask(const ColorWriteMask flags) -> UINT8
 auto ConvertPrimitiveType(const PrimitiveType value)
   -> D3D12_PRIMITIVE_TOPOLOGY_TYPE
 {
-  // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
-  // ReSharper disable once CppIncompleteSwitchStatement
   switch (value) { // NOLINT(clang-diagnostic-switch)
   case PrimitiveType::kPointList:
     return D3D12_PRIMITIVE_TOPOLOGY_TYPE_POINT;

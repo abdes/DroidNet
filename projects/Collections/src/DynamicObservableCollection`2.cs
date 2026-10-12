@@ -4,7 +4,6 @@
 
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
-using System.Diagnostics.CodeAnalysis;
 
 namespace DroidNet.Collections;
 
@@ -32,7 +31,6 @@ namespace DroidNet.Collections;
 /// result.Dispose();
 /// ]]></code>
 /// </example>
-[SuppressMessage("ReSharper", "ClassWithVirtualMembersNeverInherited.Global", Justification = "class maybe extended externally")]
 public class DynamicObservableCollection<TSource, TResult> : ObservableCollection<TResult>, IDisposable
 {
     private readonly ObservableCollection<TSource> source;

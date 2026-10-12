@@ -29,7 +29,6 @@ namespace oxygen {
  }
  \endcode
 */
-template <typename> // ReSharper disable once CppInconsistentNaming
-inline constexpr bool always_false_v = false;
+template <typename> inline constexpr bool always_false_v = false;
 
 } // namespace oxygen

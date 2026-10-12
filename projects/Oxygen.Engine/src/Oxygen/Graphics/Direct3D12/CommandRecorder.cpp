@@ -1305,7 +1305,6 @@ auto CommandRecorder::BindIndexBuffer(
     break;
   default:
     DCHECK_F(false, "Unsupported index buffer format");
-    // ReSharper disable once CppUnreachableCode
     ib_view.Format = DXGI_FORMAT_UNKNOWN;
     break;
   }

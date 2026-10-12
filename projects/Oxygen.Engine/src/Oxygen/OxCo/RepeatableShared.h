@@ -342,7 +342,6 @@ private:
     };
 
     // Default constructor - does not initialize shared_awaitable
-    // ReSharper disable once CppPossiblyUninitializedMember
     Slot() noexcept
       : ready(1)
     {

@@ -6,11 +6,11 @@
 
 #pragma once
 
+#include <utility>
+
 #include <Oxygen/Base/Unreachable.h>
 #include <Oxygen/OxCo/Coroutine.h>
 #include <Oxygen/OxCo/Detail/SanitizedAwaiter.h>
-
-#include <utility>
 
 namespace oxygen::co {
 
@@ -26,7 +26,6 @@ namespace detail {
     {
     }
 
-    // ReSharper disable CppMemberFunctionMayBeStatic
     void await_set_executor(Executor* ex) noexcept
     {
       awaiter_.await_set_executor(ex);
@@ -65,7 +64,6 @@ namespace detail {
       awaiter_.await_resume(); // terminate() on any pending exception
       return std::false_type {};
     }
-    // ReSharper restore CppMemberFunctionMayBeStatic
 
   protected:
     // NOLINTNEXTLINE(*-non-private-member-variables-in-classes)

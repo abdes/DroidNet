@@ -54,7 +54,6 @@ internal sealed class PropertiesTokenRenderer : TokenRenderer
         var isJson = false;
         if (token.Format != null)
         {
-            // ReSharper disable once ForCanBeConvertedToForeach
             for (var i = 0; i < token.Format.Length; ++i)
             {
                 if (token.Format[i] == 'j')

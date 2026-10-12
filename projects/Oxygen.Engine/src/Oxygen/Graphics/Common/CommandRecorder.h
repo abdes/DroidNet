@@ -25,7 +25,6 @@
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
-// ReSharper disable once CppUnusedIncludeDirective - For always_false_v
 #include <Oxygen/Base/VariantHelpers.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Scissors.h>

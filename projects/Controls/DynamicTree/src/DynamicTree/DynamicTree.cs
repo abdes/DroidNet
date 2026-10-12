@@ -1403,7 +1403,6 @@ public partial class DynamicTree : Control
         return false;
     }
 
-    // ReSharper disable once MemberCanBeMadeStatic.Local
     private void TreeItem_DoubleTapped(object sender, DoubleTappedRoutedEventArgs args)
     {
         if (FindTreeItemAncestor(args.OriginalSource as DependencyObject) is { } row

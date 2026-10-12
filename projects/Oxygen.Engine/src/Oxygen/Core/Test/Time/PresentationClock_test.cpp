@@ -4,17 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Core/Time/PresentationClock.h>
 #include <Oxygen/Core/Time/SimulationClock.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::time;
 using namespace std::chrono_literals;
 
 namespace {
 
-// ReSharper disable once CppRedundantQualifier
 class PresentationClockTest : public ::testing::Test { };
 
 NOLINT_TEST_F(PresentationClockTest, InterpolationClamping)

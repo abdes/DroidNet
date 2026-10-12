@@ -42,7 +42,6 @@ protected:
     return *uploader_;
   }
 
-  // ReSharper disable once CppMemberFunctionMayBeConst
   auto Staging() -> StagingProvider& { return *staging_provider_; }
 
   // Const overload to allow const helpers to read staging stats without

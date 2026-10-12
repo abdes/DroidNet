@@ -4,10 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/OxCo/Detail/IntrusiveList.h>
-
 #include <ranges>
 
+#include <Oxygen/OxCo/Detail/IntrusiveList.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::co::detail;
@@ -121,8 +120,6 @@ NOLINT_TEST(IntrusiveListTest, IteratorOperations)
   EXPECT_EQ(it->GetValue(), 1);
   ++it;
   EXPECT_EQ(it->GetValue(), 2);
-  // ReSharper disable once CppDFAUnreadVariable (for testing)
-  // ReSharper disable once CppDFAUnusedValue
   [[maybe_unused]] auto _ = it++;
   EXPECT_EQ(it->GetValue(), 3);
   ++it;

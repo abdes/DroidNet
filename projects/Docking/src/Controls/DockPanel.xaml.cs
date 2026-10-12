@@ -308,7 +308,6 @@ public sealed partial class DockPanel
                 this.ViewModel?.AcceptDockBeingDockedCommand.Execute(nameof(AnchorPosition.With));
                 break;
 
-            // ReSharper disable once RedundantEmptySwitchSection
             default:
                 /* Do nothing */
                 break;
@@ -318,7 +317,6 @@ public sealed partial class DockPanel
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0010:Add missing cases", Justification = "We're only interested in the keys we manage")]
     private void HandleRootDockingAccelerator(KeyboardAccelerator accelerator)
     {
-        // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
         switch (accelerator.Key)
         {
             case VirtualKey.Escape:
@@ -341,7 +339,6 @@ public sealed partial class DockPanel
                 this.ViewModel?.DockToRootCommand.Execute(nameof(AnchorPosition.Right));
                 break;
 
-            // ReSharper disable once RedundantEmptySwitchSection
             default:
                 /* Do nothing */
                 break;

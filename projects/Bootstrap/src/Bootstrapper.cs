@@ -273,7 +273,6 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
     ///     </list>
     /// </remarks>
     /// <exception cref="InvalidOperationException">Thrown if called after Build().</exception>
-    [SuppressMessage("ReSharper", "InconsistentNaming", Justification = "stay consistent with WinUI itself")]
     public Bootstrapper WithWinUI<TApplication>(bool isLifetimeLinked = true)
         where TApplication : Application
     {

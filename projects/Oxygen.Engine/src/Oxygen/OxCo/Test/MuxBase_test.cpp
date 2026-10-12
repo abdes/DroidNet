@@ -18,12 +18,10 @@ class TestCoroutine {
 public:
   struct promise_type {
     auto get_return_object() -> TestCoroutine { return TestCoroutine { this }; }
-    // ReSharper disable CppMemberFunctionMayBeStatic
     auto initial_suspend() noexcept -> std::suspend_never { return {}; }
     auto final_suspend() noexcept -> std::suspend_always { return {}; }
     [[noreturn]] auto unhandled_exception() -> void { std::terminate(); }
     void return_void() { }
-    // ReSharper restore CppMemberFunctionMayBeStatic
   };
 
   explicit TestCoroutine(promise_type* p)

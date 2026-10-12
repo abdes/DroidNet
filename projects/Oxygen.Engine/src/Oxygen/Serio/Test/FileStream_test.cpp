@@ -7,9 +7,8 @@
 #include <fstream>
 #include <random>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::serio::BackingStream;
 using oxygen::serio::FileStream;
@@ -18,8 +17,6 @@ namespace {
 
 class MockBackingStream {
 public:
-  // ReSharper disable CppDeclaratorNeverUsed
-
   auto set_force_fail(const bool value) noexcept -> void
   {
     force_fail_ = value;
@@ -137,8 +134,6 @@ public:
   {
     return buffer_;
   }
-
-  // ReSharper enable CppDeclaratorNeverUsed
 
 private:
   std::vector<std::byte> buffer_;
@@ -392,7 +387,6 @@ NOLINT_TEST_F(FileStreamBasicTest, PartialReadWrite_Success)
   EXPECT_TRUE(read1);
   EXPECT_EQ(first, "hello");
   EXPECT_TRUE(read2);
-  // ReSharper disable once StringLiteralTypo
   EXPECT_EQ(second, " worl");
 }
 

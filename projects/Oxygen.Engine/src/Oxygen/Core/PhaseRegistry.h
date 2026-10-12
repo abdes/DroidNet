@@ -13,8 +13,6 @@
 #include <Oxygen/Base/EnumIndexedArray.h>
 #include <Oxygen/Base/Macros.h>
 
-// ReSharper disable CppClangTidyPerformanceEnumSize
-
 namespace oxygen::core {
 
 //! ExecutionModel classification

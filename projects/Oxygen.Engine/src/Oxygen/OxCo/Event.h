@@ -67,7 +67,6 @@ public:
   class Awaiter final : public Parked {
   public:
     using Parked::Parked;
-    // ReSharper disable CppMemberFunctionMayBeStatic
     explicit operator bool() { return this->Object().Triggered(); }
     [[nodiscard]] auto await_ready() const noexcept
     {
@@ -75,7 +74,6 @@ public:
     }
     void await_suspend(const detail::Handle h) { this->DoSuspend(h); }
     void await_resume() { }
-    // ReSharper restore CppMemberFunctionMayBeStatic
   };
 
   //! Returns an awaitable which becomes ready when the event is triggered

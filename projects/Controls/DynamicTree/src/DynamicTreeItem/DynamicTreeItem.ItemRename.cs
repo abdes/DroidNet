@@ -295,7 +295,6 @@ public partial class DynamicTreeItem
 
 #pragma warning disable IDE0010 // Add missing cases
 
-        // ReSharper disable once SwitchStatementMissingSomeEnumCasesNoDefault
         switch (e.Key)
         {
             case VirtualKey.Escape:

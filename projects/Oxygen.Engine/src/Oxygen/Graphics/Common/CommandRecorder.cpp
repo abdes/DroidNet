@@ -441,13 +441,11 @@ auto CommandRecorder::DrainActiveProfileScopes(
 
 // -- Private non-template dispatch method implementations for Buffer
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 bool CommandRecorder::DoIsResourceTracked(const Buffer& resource) const
 {
   return resource_state_tracker_->IsResourceTracked(resource);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void CommandRecorder::DoBeginTrackingResourceState(const Buffer& resource,
   const ResourceStates initial_state, const bool keep_initial_state)
 {
@@ -467,26 +465,22 @@ void CommandRecorder::DoAdoptKnownResourceState(const Buffer& resource,
     resource, current_state, keep_initial_state);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void CommandRecorder::DoEnableAutoMemoryBarriers(const Buffer& resource)
 {
   resource_state_tracker_->EnableAutoMemoryBarriers(resource);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void CommandRecorder::DoDisableAutoMemoryBarriers(const Buffer& resource)
 {
   resource_state_tracker_->DisableAutoMemoryBarriers(resource);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void CommandRecorder::DoRequireResourceState(
   const Buffer& resource, const ResourceStates state)
 {
   resource_state_tracker_->RequireResourceState(resource, state);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void CommandRecorder::DoRequireResourceStateFinal(
   const Buffer& resource, const ResourceStates state)
 {
@@ -495,13 +489,11 @@ void CommandRecorder::DoRequireResourceStateFinal(
 
 // -- Private non-template dispatch method implementations for Texture
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 bool CommandRecorder::DoIsResourceTracked(const Texture& resource) const
 {
   return resource_state_tracker_->IsResourceTracked(resource);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void CommandRecorder::DoBeginTrackingResourceState(const Texture& resource,
   const ResourceStates initial_state, const bool keep_initial_state)
 {
@@ -521,26 +513,22 @@ void CommandRecorder::DoAdoptKnownResourceState(const Texture& resource,
     resource, current_state, keep_initial_state);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void CommandRecorder::DoEnableAutoMemoryBarriers(const Texture& resource)
 {
   resource_state_tracker_->EnableAutoMemoryBarriers(resource);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void CommandRecorder::DoDisableAutoMemoryBarriers(const Texture& resource)
 {
   resource_state_tracker_->DisableAutoMemoryBarriers(resource);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void CommandRecorder::DoRequireResourceState(
   const Texture& resource, const ResourceStates state)
 {
   resource_state_tracker_->RequireResourceState(resource, state);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void CommandRecorder::DoRequireResourceStateFinal(
   const Texture& resource, const ResourceStates state)
 {

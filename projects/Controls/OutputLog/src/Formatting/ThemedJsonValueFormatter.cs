@@ -142,7 +142,6 @@ internal sealed class ThemedJsonValueFormatter(Theme theme, IFormatProvider? for
 
         var delim = string.Empty;
 
-        // ReSharper disable once ForCanBeConvertedToForeach
         for (var index = 0; index < sequence.Elements.Count; ++index)
         {
             if (delim.Length != 0)
@@ -214,7 +213,6 @@ internal sealed class ThemedJsonValueFormatter(Theme theme, IFormatProvider? for
 
         var delim = string.Empty;
 
-        // ReSharper disable once ForCanBeConvertedToForeach
         for (var index = 0; index < structure.Properties.Count; ++index)
         {
             if (delim.Length != 0)

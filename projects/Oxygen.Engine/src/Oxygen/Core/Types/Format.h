@@ -13,10 +13,6 @@
 
 namespace oxygen {
 
-// ReSharper disable IdentifierTypo
-// ReSharper disable CppInconsistentNaming
-// ReSharper disable CommentTypo
-
 //! Data format enumeration for binary assets, GPU resources, and
 //! general-purpose buffers.
 /*!

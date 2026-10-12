@@ -150,7 +150,6 @@ public:
   OXYGEN_DEFAULT_COPYABLE(Resource)
   OXYGEN_DEFAULT_MOVABLE(Resource)
 
-  // ReSharper disable once CppHiddenFunction
   [[nodiscard]] constexpr auto GetHandle() const noexcept -> const HandleT&
   {
     return handle_;

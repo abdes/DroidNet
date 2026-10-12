@@ -403,7 +403,6 @@ struct ParseOptionsState {
     return ReissueEvent {};
   }
 
-  // ReSharper disable once CppMemberFunctionMayBeConst
   auto Handle(const TokenEvent<TokenType::kValue>& event)
     -> OneOf<DoNothing, TransitionTo<IdentifyCommandState>, ReportError>
   {
@@ -441,7 +440,6 @@ struct ParseOptionsState {
     return TransitionTo<ParseLongOptionState> { context };
   }
 
-  // ReSharper disable once CppMemberFunctionMayBeConst
   auto Handle(const TokenEvent<TokenType::kEqualSign>& /*event*/) -> ReportError
   {
     return ReportError(OptionSyntaxError(context));
@@ -725,7 +723,6 @@ struct ParseLongOptionState : Will<ByDefault<TransitionTo<ParseOptionsState>>> {
     return DoNothing {};
   }
 
-  // ReSharper disable once CppMemberFunctionMayBeConst
   auto Handle(const TokenEvent<TokenType::kValue>& event)
     -> OneOf<DoNothing, TransitionTo<ParseOptionsState>, ReportError>
   {

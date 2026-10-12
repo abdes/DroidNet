@@ -6,13 +6,12 @@
 
 #pragma once
 
-#include <d3d12.h>
 #include <string>
 #include <unordered_map>
 
-// ReSharper disable once CppUnusedIncludeDirective
-#include <Oxygen/Base/Compilers.h> // needed for OXYGEN_UNREACHABLE_RETURN
+#include <d3d12.h>
 
+#include <Oxygen/Base/Compilers.h> // needed for OXYGEN_UNREACHABLE_RETURN
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>

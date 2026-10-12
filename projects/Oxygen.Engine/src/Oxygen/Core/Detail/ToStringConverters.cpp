@@ -19,8 +19,6 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 
-// ReSharper disable StringLiteralTypo
-
 auto oxygen::to_string(const ColorSpace value) -> const char*
 {
   switch (value) {

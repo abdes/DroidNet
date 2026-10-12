@@ -387,7 +387,6 @@ NOLINT_TEST_F(SceneBasicTest, UnicodeCharacterNames)
   // Act: Create nodes with names containing various Unicode characters (e.g.,
   // Japanese, Cyrillic, Emojis).
   auto node1 = CreateNode("Node_こんにちは");
-  // ReSharper disable once StringLiteralTypo
   auto node2 = CreateNode("Node_Здравствуй");
   auto node3 = CreateNode("Node_🚀🌟");
 
@@ -396,7 +395,6 @@ NOLINT_TEST_F(SceneBasicTest, UnicodeCharacterNames)
   TRACE_GCHECK_F(
     ExpectNodeWithName(node1, "Node_こんにちは"), "japanese-chars");
 
-  // ReSharper disable once StringLiteralTypo
   TRACE_GCHECK_F(
     ExpectNodeWithName(node2, "Node_Здравствуй"), "cyrillic-chars");
   TRACE_GCHECK_F(ExpectNodeWithName(node3, "Node_🚀🌟"), "emoji-chars");

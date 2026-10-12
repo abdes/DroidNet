@@ -8,7 +8,6 @@
 #include <utility>
 
 #include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/TextWrap/Internal/Tokenizer.h>
 
 using testing::Eq;
@@ -18,8 +17,6 @@ using oxygen::wrap::internal::Token;
 using oxygen::wrap::internal::TokenConsumer;
 using oxygen::wrap::internal::Tokenizer;
 using oxygen::wrap::internal::TokenType;
-
-// ReSharper disable StringLiteralTypo
 
 namespace {
 

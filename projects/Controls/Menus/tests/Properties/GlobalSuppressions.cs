@@ -4,9 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-/* ReSharper disable StringLiteralTypo */
 [assembly: SuppressMessage("Security", "CA5392:Use DefaultDllImportSearchPaths attribute for P/Invokes", Justification = "external code, not under our control", Scope = "member", Target = "~M:Microsoft.Windows.Foundation.UndockedRegFreeWinRTCS.NativeMethods.WindowsAppRuntime_EnsureIsLoaded~System.Int32")]
-/* ReSharper restore StringLiteralTypo */
 
 [assembly: SuppressMessage("Style", "IDE0130:Namespace does not match folder structure", Justification = "all controls are under the namespace DroidNet.Controls", Scope = "namespace", Target = "~N:DroidNet.Controls.Menus.Tests")]
 [assembly: SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Test method names are more readable with underscores", Scope = "namespaceanddescendants", Target = "~N:DroidNet.Controls.Menus.Tests")]

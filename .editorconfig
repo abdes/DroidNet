@@ -72,9 +72,6 @@ trim_trailing_whitespace = false
 indent_size = 2
 indent_style = space
 
-[Oxygen.Editor.Interop/**]
-resharper_disable_code_formatter = true
-
 #### .NET Code Actions ####
 [*.cs]
 # Type members

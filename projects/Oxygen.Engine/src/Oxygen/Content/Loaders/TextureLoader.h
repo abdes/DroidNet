@@ -15,13 +15,12 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/LoaderFunctions.h>
+#include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Stream.h>
-// ReSharper disable once CppUnusedIncludeDirective
-#include <Oxygen/Content/Loaders/Helpers.h>
 
 namespace oxygen::content::loaders {
 

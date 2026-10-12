@@ -4,7 +4,6 @@
 
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 
 namespace DroidNet.Controls.Selection;
 
@@ -26,10 +25,6 @@ namespace DroidNet.Controls.Selection;
 ///         allowing the UI to update automatically when the selection changes.
 ///     </para>
 /// </remarks>
-[SuppressMessage(
-    "ReSharper",
-    "VirtualMemberNeverOverridden.Global",
-    Justification = "methods need to be overridable for testing and extension of the class")]
 public abstract class MultipleSelectionModel<T> : SelectionModel<T>
 {
     private readonly SelectionObservableCollection<T> selectedIndices;

@@ -4,23 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
+
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::co;
 using namespace oxygen::co::testing;
 using namespace std::chrono_literals;
 
 namespace {
-
-// ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
 
 class BasicCancelTest : public OxCoTestFixture { };
 NOLINT_TEST_F(BasicCancelTest, BasicCancel)

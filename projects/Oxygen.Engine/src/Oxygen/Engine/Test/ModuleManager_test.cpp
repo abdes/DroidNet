@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -14,6 +12,7 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -28,7 +27,6 @@ using oxygen::observer_ptr;
 // public ModuleManager API. This demonstrates how tests can derive filtered
 // module lists from ModuleManager::GetModules() without adding special APIs
 // to ModuleManager.
-// ReSharper disable once CppRedundantQualifier
 class ModuleManagerBasicTest : public ::testing::Test {
 protected:
   ModuleManager mgr_ { nullptr };

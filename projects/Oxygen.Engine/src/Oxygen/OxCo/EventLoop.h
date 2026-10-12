@@ -77,8 +77,6 @@ template <class T, class = void> struct EventLoopTraits {
   static_assert(!std::is_same_v<T, T>,
     "you must specialize EventLoopTraits for a specific event loop class");
 
-  // ReSharper disable CppFunctionIsNotImplemented
-
   //! Returns a unique identifier for the event loop. In general, you can use
   //! the address of the event loop object as its ID.
   static auto EventLoopId(T&) -> EventLoopID;
@@ -96,8 +94,6 @@ template <class T, class = void> struct EventLoopTraits {
    or leave undefined for the same effect.
   */
   static auto IsRunning(T&) noexcept -> bool;
-
-  // ReSharper restore CppFunctionIsNotImplemented
 };
 
 //! Specialize this class for an event loop type to allow ThreadPool

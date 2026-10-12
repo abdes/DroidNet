@@ -704,7 +704,6 @@ auto UploadCoordinator::RetireCompleted(const std::optional<frame::Slot> slot)
   }
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto UploadCoordinator::OnFrameStart(
   vortex::RendererTag /*tag*/, frame::Slot slot) -> void
 {

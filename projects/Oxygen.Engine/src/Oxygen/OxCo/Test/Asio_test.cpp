@@ -46,8 +46,6 @@ protected:
   }
 };
 
-// ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
-
 class AsioTest : public AsioTestFixture { };
 
 NOLINT_TEST_F(AsioTest, SmokeTest)

@@ -4,17 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/OxCo/Algorithms.h>
-
 #include <chrono>
 #include <ranges>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
+
+#include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 using namespace oxygen::co::detail;
@@ -22,8 +21,6 @@ using namespace oxygen::co;
 using namespace oxygen::co::testing;
 
 namespace {
-
-// ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
 
 class MuxRangeTest : public OxCoTestFixture {
 protected:

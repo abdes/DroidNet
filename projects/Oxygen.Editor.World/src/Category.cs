@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
 using DroidNet.Resources.Generator.Localized_8f7683a5;
 
 namespace Oxygen.Editor.World;
@@ -15,7 +14,6 @@ namespace Oxygen.Editor.World;
 /// includes properties for the category's ID, name, and description. The class also provides
 /// methods for retrieving categories by ID and for JSON serialization and deserialization.
 /// </remarks>
-[SuppressMessage("ReSharper", "MemberCanBePrivate.Global", Justification = "we provide public shortcuts for the known categories")]
 public class Category(string id, string name, string description)
 {
     /// <summary>

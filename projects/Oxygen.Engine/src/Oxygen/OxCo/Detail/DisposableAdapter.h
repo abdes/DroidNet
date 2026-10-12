@@ -25,7 +25,6 @@ public:
   {
     return AwaitCancel(this->awaiter_, h);
   }
-  // ReSharper disable once CppMemberFunctionMayBeStatic
   auto await_must_resume() const noexcept { return std::false_type {}; }
 };
 

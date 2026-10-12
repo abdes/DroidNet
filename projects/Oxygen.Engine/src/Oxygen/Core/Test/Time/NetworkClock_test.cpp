@@ -4,17 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Core/Time/NetworkClock.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::time;
 using namespace std::chrono_literals;
 
 namespace {
 
-// ReSharper disable once CppRedundantQualifier
 class NetworkClockTest : public ::testing::Test { };
 
 NOLINT_TEST_F(NetworkClockTest, OffsetConversionRoundTrip)

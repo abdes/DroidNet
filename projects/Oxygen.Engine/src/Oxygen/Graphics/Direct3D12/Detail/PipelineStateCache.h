@@ -62,7 +62,6 @@ namespace detail {
      \return Pair of pointers to the PSO and root signature.
     */
     template <typename TDesc>
-    // ReSharper disable once CppNotAllPathsReturnValue
     auto GetOrCreatePipeline(TDesc desc, size_t hash) -> Entry
     {
       if constexpr (std::same_as<TDesc, GraphicsPipelineDesc>) {

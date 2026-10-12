@@ -319,8 +319,6 @@ auto oxygen::graphics::to_string(const ResourceViewType value) -> const char*
 auto oxygen::graphics::to_string(const DescriptorVisibility value) -> const
   char*
 {
-  // ReSharper disable once CppIncompleteSwitchStatement
-  // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
   switch (value) { // NOLINT(clang-diagnostic-switch)
   case DescriptorVisibility::kNone:
     return "None";
@@ -370,8 +368,6 @@ auto oxygen::graphics::to_string(const ClearFlags value) -> std::string
 
 auto oxygen::graphics::to_string(const FillMode mode) -> std::string
 {
-  // ReSharper disable once CppIncompleteSwitchStatement
-  // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
   switch (mode) { // NOLINT(clang-diagnostic-switch)
   case FillMode::kSolid:
     return "Solid";
@@ -416,8 +412,6 @@ auto oxygen::graphics::to_string(const CullMode value) -> std::string
 
 auto oxygen::graphics::to_string(const CompareOp value) -> std::string
 {
-  // ReSharper disable once CppIncompleteSwitchStatement
-  // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
   switch (value) { // NOLINT(clang-diagnostic-switch)
   case CompareOp::kNever:
     return "Never";
@@ -442,8 +436,6 @@ auto oxygen::graphics::to_string(const CompareOp value) -> std::string
 
 auto oxygen::graphics::to_string(const BlendFactor value) -> std::string
 {
-  // ReSharper disable once CppIncompleteSwitchStatement
-  // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
   switch (value) { // NOLINT(clang-diagnostic-switch)
   case BlendFactor::kZero:
     return "Zero";
@@ -472,8 +464,6 @@ auto oxygen::graphics::to_string(const BlendFactor value) -> std::string
 
 auto oxygen::graphics::to_string(const BlendOp value) -> std::string
 {
-  // ReSharper disable once CppIncompleteSwitchStatement
-  // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
   switch (value) { // NOLINT(clang-diagnostic-switch)
   case BlendOp::kAdd:
     return "Add";
@@ -555,8 +545,6 @@ auto oxygen::graphics::to_string(const ColorWriteMask value) -> std::string
 
 auto oxygen::graphics::to_string(const PrimitiveType value) -> std::string
 {
-  // ReSharper disable once CppIncompleteSwitchStatement
-  // ReSharper disable once CppDefaultCaseNotHandledInSwitchStatement
   switch (value) { // NOLINT(clang-diagnostic-switch)
   case PrimitiveType::kPointList:
     return "PointList";

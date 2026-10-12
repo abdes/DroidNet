@@ -15,13 +15,11 @@ using oxygen::co::ParkingLot;
 class MockCoroutine {
 public:
   struct promise_type {
-    // ReSharper disable CppMemberFunctionMayBeStatic
     auto get_return_object() -> MockCoroutine { return {}; }
     auto initial_suspend() -> std::suspend_never { return {}; }
     auto final_suspend() noexcept -> std::suspend_never { return {}; }
     void unhandled_exception() { }
     void return_void() { }
-    // ReSharper restore CppMemberFunctionMayBeStatic
   };
 };
 

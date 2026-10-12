@@ -4,17 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <thread>
 
 #include <Oxygen/Core/Time/PhysicalClock.h>
-#include <thread>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::time;
 using namespace std::chrono_literals;
 
 namespace {
 
-// ReSharper disable once CppRedundantQualifier
 class PhysicalClockTest : public ::testing::Test { };
 
 //! Verify that Now() returns a valid time and Uptime() is non-negative.

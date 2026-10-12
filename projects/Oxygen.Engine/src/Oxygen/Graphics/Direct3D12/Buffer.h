@@ -13,7 +13,6 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/api_export.h>
 
-// ReSharper disable once CppInconsistentNaming
 namespace D3D12MA {
 class Allocator;
 } // namespace D3D12MA

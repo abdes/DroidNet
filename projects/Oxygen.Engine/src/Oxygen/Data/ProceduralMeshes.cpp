@@ -26,8 +26,6 @@
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
-// ReSharper disable CppClangTidyModernizeUseDesignatedInitializers
-
 namespace {
 
 namespace recipe = oxygen::data::procedural;

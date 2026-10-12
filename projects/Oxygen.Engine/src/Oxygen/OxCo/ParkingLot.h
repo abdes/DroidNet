@@ -22,11 +22,9 @@ public:
   class Awaiter final : public Parked {
   public:
     using Parked::Parked;
-    // ReSharper disable CppMemberFunctionMayBeStatic
     [[nodiscard]] auto await_ready() const noexcept { return false; }
     void await_suspend(const detail::Handle h) { this->DoSuspend(h); }
     void await_resume() { }
-    // ReSharper restore CppMemberFunctionMayBeStatic
   };
 
   //! Returns an `Awaiter` which, when `co_await`'ed, suspends the caller

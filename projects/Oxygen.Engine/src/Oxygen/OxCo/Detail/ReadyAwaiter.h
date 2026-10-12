@@ -26,7 +26,6 @@ public:
 
   //! @{
   //! Implementation of the awaiter interface.
-  // ReSharper disable CppMemberFunctionMayBeStatic
   // NOLINTBEGIN(*-use-nodiscard)
 
   auto await_early_cancel() const noexcept { return false; }
@@ -36,11 +35,9 @@ public:
   auto await_must_resume() const noexcept { return true; }
   auto await_resume() && -> T { return std::forward<T>(value_); }
 
-  // ReSharper disable CppMemberFunctionMayBeStatic
   // NOLINTEND(*-use-nodiscard)
   //! @}
 
-  // ReSharper disable once CppNonExplicitConversionOperator
   template <std::constructible_from<T> U>
   // NOLINTNEXTLINE(*-explicit-constructor)
   operator Co<U>() &&
@@ -56,7 +53,6 @@ template <> class ReadyAwaiter<void> {
 public:
   //! @{
   //! Implementation of the awaiter interface.
-  // ReSharper disable CppMemberFunctionMayBeStatic
   // NOLINTBEGIN(*-use-nodiscard)
 
   auto await_early_cancel() const noexcept { return false; }
@@ -66,11 +62,9 @@ public:
   auto await_must_resume() const noexcept { return true; }
   auto await_resume() const noexcept { }
 
-  // ReSharper disable CppMemberFunctionMayBeStatic
   // NOLINTEND(*-use-nodiscard)
   //! @}
 
-  // ReSharper disable once CppNonExplicitConversionOperator
   // NOLINTNEXTLINE(*-explicit-constructor)
   operator Co<>() const { return Co(StubPromise<void>::Instance()); }
 };

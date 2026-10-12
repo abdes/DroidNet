@@ -5,7 +5,6 @@
 using System.Diagnostics.CodeAnalysis;
 
 // @formatter:off
-// ReSharper disable StringLiteralTypo
 [assembly:
     SuppressMessage(
         "Security",
@@ -14,7 +13,6 @@ using System.Diagnostics.CodeAnalysis;
         Scope = "member",
         Target = "~M:Microsoft.Windows.Foundation.UndockedRegFreeWinRTCS.NativeMethods.WindowsAppRuntime_EnsureIsLoaded~System.Int32")]
 
-// ReSharper disable StringLiteralTypo
 // @formatter:on
 [assembly:
     SuppressMessage(

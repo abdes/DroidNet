@@ -190,7 +190,6 @@ public:
     ScopeGuard guard([&]() noexcept { Drain(tmp); });
 
     Tasks* old_ready = ready_;
-    // ReSharper disable once CppDFALocalValueEscapesFunction
     ready_ = &tmp;
     ScopeGuard guard2([&old_ready, this]() noexcept { ready_ = old_ready; });
 
@@ -220,7 +219,6 @@ private:
     if (running_ == nullptr) {
       // `running_` will be reset before this method returns, via the scope
       // guard.
-      // ReSharper disable once CppDFALocalValueEscapesFunction
       running_ = &b;
     }
     const bool* running = running_;
@@ -267,7 +265,6 @@ namespace detail {
   public:
     //! @{
     //! Implementation of the awaiter interface.
-    // ReSharper disable CppMemberFunctionMayBeStatic
     // NOLINTBEGIN(*-use-nodiscard)
 
     void await_set_executor(Executor* executor) noexcept
@@ -281,7 +278,6 @@ namespace detail {
     auto await_suspend(const Handle h) -> Handle { return h; }
     [[nodiscard]] auto await_resume() const -> Executor* { return executor_; }
 
-    // ReSharper disable CppMemberFunctionMayBeStatic
     // NOLINTEND(*-use-nodiscard)
     //! @}
   };

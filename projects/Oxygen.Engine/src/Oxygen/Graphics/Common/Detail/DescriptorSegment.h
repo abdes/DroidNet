@@ -6,7 +6,6 @@
 
 #pragma once
 
-// ReSharper disable once CppUnusedIncludeDirective - OXYGEN_UNREACHABLE_RETURN
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Bindless/Types.h>

@@ -7,8 +7,6 @@
 #include <Oxygen/Clap/Fluent/OptionBuilder.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 
-// ReSharper disable CppClangTidyMiscUseInternalLinkage
-
 template <>
 auto oxygen::clap::OptionBuilder::WithValue<bool>() -> OptionValueBuilder<bool>
 {

@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -10,7 +9,6 @@ namespace Oxygen.Editor.World.Inspector;
 /// <summary>
 /// Represents the details of multiple selected items in the properties editor.
 /// </summary>
-[SuppressMessage("ReSharper", "MemberCanBePrivate.Global", Justification = "method may be used to implement mixed values in property editors")]
 public static class MixedValues
 {
     /// <summary>

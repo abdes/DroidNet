@@ -88,7 +88,6 @@ public:
     throw ComError(error_code, utf8_message);
   }
 
-  // ReSharper disable once CppInconsistentNaming
   [[nodiscard]] auto GetHR() const noexcept -> HRESULT
   {
     return code().value();

@@ -363,7 +363,6 @@ auto D3D12ImGuiGraphicsBackend::RecreateDeviceObjects() -> void
  @param out_gpu_handle Output GPU descriptor handle
 */
 auto D3D12ImGuiGraphicsBackend::SrvDescriptorAllocCallback(
-  // ReSharper disable once CppParameterMayBeConstPtrOrRef
   ImGui_ImplDX12_InitInfo* info, D3D12_CPU_DESCRIPTOR_HANDLE* out_cpu_handle,
   D3D12_GPU_DESCRIPTOR_HANDLE* out_gpu_handle) -> void
 {

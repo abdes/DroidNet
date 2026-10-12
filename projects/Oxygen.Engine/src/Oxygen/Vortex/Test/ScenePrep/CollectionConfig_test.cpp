@@ -15,7 +15,6 @@ namespace {
 //! Basic compile-time checks for CollectionConfig wiring.
 NOLINT_TEST(CollectionConfig, CollectionConfig_BasicFactory_StaticAsserts)
 {
-  // ReSharper disable CppIdenticalOperandsInBinaryExpression
   using oxygen::vortex::sceneprep::CreateBasicCollectionConfig;
   using oxygen::vortex::sceneprep::RenderItemDataExtractor;
 
@@ -39,7 +38,6 @@ NOLINT_TEST(CollectionConfig, CollectionConfig_BasicFactory_StaticAsserts)
     || RenderItemDataExtractor<std::decay_t<decltype(cfg.visibility_filter)>>);
   static_assert(RenderItemDataExtractor<std::decay_t<decltype(*cfg.producer)>>
     || RenderItemDataExtractor<std::decay_t<decltype(cfg.producer)>>);
-  // ReSharper restore CppIdenticalOperandsInBinaryExpression
 }
 
 } // namespace

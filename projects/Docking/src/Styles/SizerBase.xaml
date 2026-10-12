@@ -4,9 +4,6 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DroidNet.Docking.Controls">
 
-    <!--  ReSharper disable Xaml.InvalidResourceType  -->
-    <!--  ReSharper disable Xaml.StaticResourceNotResolved  -->
-
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Default">
             <StaticResource x:Key="SizerBaseBackground" ResourceKey="ControlAltFillColorTransparentBrush" />

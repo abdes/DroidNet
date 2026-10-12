@@ -188,7 +188,6 @@ auto Scene::GetDirectionalLightResolver() const noexcept
   return *directional_light_resolver_;
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void Scene::SetName(const std::string_view name) noexcept
 {
   GetComponent<ObjectMetadata>().SetName(name);
@@ -251,7 +250,6 @@ auto Scene::IsOwnerOf(const SceneNode& node) const -> bool
   return !node.scene_weak_.expired() && node.scene_weak_.lock().get() == this;
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 void Scene::DefragmentStorage()
 {
   // Defragment the underlying storage using a simple comparator
@@ -1055,7 +1053,6 @@ auto Scene::UpdateMutationCollectionState(const bool log_transition) -> void
 
 // Traversal failures here mean a corrupt node table; abort is the only
 // outcome.
-// ReSharper disable once CppMemberFunctionMayBeConst
 // NOLINTNEXTLINE(bugprone-exception-escape)
 void Scene::Update(const bool skip_dirty_flags) noexcept
 {

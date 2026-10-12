@@ -53,7 +53,6 @@ namespace {
 //=== Mock Classes for Commander Testing ===----------------------------------//
 
 // Mock CommandQueue that can simulate submission failures
-// ReSharper disable once CppClassCanBeFinal - mocks cannot be final
 class MockCommandQueue : public CommandQueue {
 public:
   explicit MockCommandQueue(const std::string_view name)
@@ -217,7 +216,6 @@ NOLINT_TEST(
 }
 
 // Mock CommandRecorder that can simulate End() failures
-// ReSharper disable once CppClassCanBeFinal - mocks cannot be final
 class MockCommandRecorder : public oxygen::graphics::CommandRecorder {
 public:
   explicit MockCommandRecorder(
@@ -264,7 +262,6 @@ public:
 };
 
 // Mock CommandList for testing
-// ReSharper disable once CppClassCanBeFinal - mocks cannot be final
 class MockCommandList : public CommandList {
 public:
   explicit MockCommandList(const std::string_view name)

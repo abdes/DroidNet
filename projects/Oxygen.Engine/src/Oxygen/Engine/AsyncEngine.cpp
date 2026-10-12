@@ -284,7 +284,6 @@ auto AsyncEngine::Shutdown() -> co::Co<>
 auto AsyncEngine::Stop() -> void { shutdown_requested_ = true; }
 
 // Register a module (takes ownership). Modules are sorted by priority.
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::RegisterModule(std::unique_ptr<EngineModule> module) noexcept
   -> bool
 {
@@ -295,7 +294,6 @@ auto AsyncEngine::RegisterModule(std::unique_ptr<EngineModule> module) noexcept
 }
 
 // Optional: unregister by name. Returns true if removed.
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::UnregisterModule(std::string_view name) noexcept -> void
 {
   if (!module_manager_) {
@@ -955,7 +953,6 @@ auto AsyncEngine::ApplyConsoleStateAtFrameStart(
   ApplyAllConsoleCVars();
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseInput(observer_ptr<FrameContext> context) -> co::Co<>
 {
   context->SetCurrentPhase(PhaseId::kInput, internal::EngineTagFactory::Get());
@@ -984,7 +981,6 @@ auto AsyncEngine::PhaseInput(observer_ptr<FrameContext> context) -> co::Co<>
   }
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseFixedSim(observer_ptr<FrameContext> context) -> co::Co<>
 {
   context->SetCurrentPhase(
@@ -1031,7 +1027,6 @@ auto AsyncEngine::PhaseFixedSim(observer_ptr<FrameContext> context) -> co::Co<>
   }
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseGameplay(observer_ptr<FrameContext> context) -> co::Co<>
 {
   context->SetCurrentPhase(
@@ -1047,7 +1042,6 @@ auto AsyncEngine::PhaseGameplay(observer_ptr<FrameContext> context) -> co::Co<>
   co_await module_manager_->ExecutePhase(PhaseId::kGameplay, context);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseNetworkReconciliation(observer_ptr<FrameContext> context)
   -> co::Co<>
 {
@@ -1066,7 +1060,6 @@ auto AsyncEngine::PhaseNetworkReconciliation(observer_ptr<FrameContext> context)
   co_return;
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseRandomSeedManagement(observer_ptr<FrameContext> context)
   -> void
 {
@@ -1102,7 +1095,6 @@ auto AsyncEngine::PhaseRandomSeedManagement(observer_ptr<FrameContext> context)
   // This is pure computation - no I/O, no waiting, deterministic timing
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseSceneMutation(observer_ptr<FrameContext> context)
   -> co::Co<>
 {
@@ -1120,7 +1112,6 @@ auto AsyncEngine::PhaseSceneMutation(observer_ptr<FrameContext> context)
   co_await module_manager_->ExecutePhase(PhaseId::kSceneMutation, context);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseTransforms(observer_ptr<FrameContext> context)
   -> co::Co<>
 {
@@ -1138,7 +1129,6 @@ auto AsyncEngine::PhaseTransforms(observer_ptr<FrameContext> context)
     PhaseId::kTransformPropagation, context);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhasePublishViews(observer_ptr<FrameContext> context)
   -> co::Co<>
 {
@@ -1150,7 +1140,6 @@ auto AsyncEngine::PhasePublishViews(observer_ptr<FrameContext> context)
   co_await module_manager_->ExecutePhase(PhaseId::kPublishViews, context);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseSnapshot(observer_ptr<FrameContext> context)
   -> co::Co<const UnifiedSnapshot&>
 {
@@ -1191,7 +1180,6 @@ auto AsyncEngine::PhaseSnapshot(observer_ptr<FrameContext> context)
 //   render_graph_builder_.reset();
 // }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseGuiUpdate(observer_ptr<FrameContext> context) -> co::Co<>
 {
   context->SetCurrentPhase(
@@ -1207,7 +1195,6 @@ auto AsyncEngine::PhaseGuiUpdate(observer_ptr<FrameContext> context) -> co::Co<>
 
 // Pre-render phase: perform renderer and module preparation work (no
 // command recording).
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhasePreRender(observer_ptr<FrameContext> context) -> co::Co<>
 {
   context->SetCurrentPhase(
@@ -1219,7 +1206,6 @@ auto AsyncEngine::PhasePreRender(observer_ptr<FrameContext> context) -> co::Co<>
 }
 
 // Render phase: modules record commands and perform per-view rendering.
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseRender(observer_ptr<FrameContext> context) -> co::Co<>
 {
   context->SetCurrentPhase(PhaseId::kRender, internal::EngineTagFactory::Get());
@@ -1233,7 +1219,6 @@ auto AsyncEngine::PhaseRender(observer_ptr<FrameContext> context) -> co::Co<>
     frame_number_);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseCompositing(observer_ptr<FrameContext> context)
   -> co::Co<>
 {
@@ -1246,7 +1231,6 @@ auto AsyncEngine::PhaseCompositing(observer_ptr<FrameContext> context)
   co_await module_manager_->ExecutePhase(PhaseId::kCompositing, context);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhasePresent(observer_ptr<FrameContext> context) -> void
 {
   context->SetCurrentPhase(
@@ -1274,7 +1258,6 @@ auto AsyncEngine::PhasePresent(observer_ptr<FrameContext> context) -> void
     frame_number_, presentable_surfaces.size());
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhaseAsyncPoll(observer_ptr<FrameContext> context) -> void
 {
   // Engine core sets the current phase for async work
@@ -1285,7 +1268,6 @@ auto AsyncEngine::PhaseAsyncPoll(observer_ptr<FrameContext> context) -> void
   auto async_work = module_manager_->ExecutePhase(PhaseId::kAsyncPoll, context);
 }
 
-// ReSharper disable once CppMemberFunctionMayBeStatic
 auto AsyncEngine::PhaseBudgetAdapt(observer_ptr<FrameContext> context) -> void
 {
   // Set default budget stats based on target FPS
@@ -1366,7 +1348,6 @@ auto AsyncEngine::PhaseFrameEnd(observer_ptr<FrameContext> context) -> co::Co<>
   }
 }
 
-// ReSharper disable once CppMemberFunctionMayBeStatic
 auto AsyncEngine::ParallelTasks(observer_ptr<FrameContext> context,
   const UnifiedSnapshot& snapshot) -> co::Co<>
 {
@@ -1439,7 +1420,6 @@ auto AsyncEngine::ParallelTasks(observer_ptr<FrameContext> context,
   co_return;
 }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto AsyncEngine::PhasePostParallel(observer_ptr<FrameContext> context)
   -> co::Co<>
 {
@@ -1455,7 +1435,6 @@ auto AsyncEngine::PhasePostParallel(observer_ptr<FrameContext> context)
   // TODO: execute engine's own post-parallel work
 }
 
-// ReSharper disable once CppMemberFunctionMayBeStatic
 auto AsyncEngine::InitializeDetachedServices() -> void
 {
   LOG_F(1, "Initializing detached services (Category D)");

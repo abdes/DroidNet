@@ -244,7 +244,6 @@ NOLINT_TEST(StaticVectorTest, AssignmentOperators)
 
     StaticVector<Counter, 5> vec4;
     Counter::reset();
-    // ReSharper disable once CppJoinDeclarationAndAssignment - for testing
     vec4 = std::move(vec3);
     EXPECT_EQ(vec4.size(), 2);
     // NOLINTNEXTLINE(bugprone-use-after-move) - leave other in good state

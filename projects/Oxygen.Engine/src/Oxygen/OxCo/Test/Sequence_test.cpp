@@ -38,7 +38,6 @@ using oxygen::co::testing::TestEventLoop;
 
 namespace {
 
-// ReSharper disable CppMemberFunctionMayBeStatic
 struct LValueQualifiedImm {
   [[nodiscard]] auto await_ready() const noexcept -> bool { return true; }
   [[noreturn]] auto await_suspend(oxygen::co::detail::Handle) noexcept -> void
@@ -56,7 +55,6 @@ struct RValueQualifiedImm {
   }
   auto await_resume() && -> int { return 42; }
 };
-// ReSharper restore CppMemberFunctionMayBeStatic
 
 struct LValueQualified {
   auto operator co_await() const& { return RValueQualifiedImm {}; }

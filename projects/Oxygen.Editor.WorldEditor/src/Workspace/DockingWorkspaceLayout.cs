@@ -100,7 +100,6 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
                         .Subscribe();
                     break;
 
-                // ReSharper disable once RedundantEmptySwitchSection
                 default: // Ignore
                     break;
             }

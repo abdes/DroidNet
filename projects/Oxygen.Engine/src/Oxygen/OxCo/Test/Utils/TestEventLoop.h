@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-// ReSharper disable CppClangTidyCppcoreguidelinesAvoidConstOrRefDataMembers
 #pragma once
 
 #include <chrono>
@@ -190,7 +189,6 @@ public:
     OXYGEN_MAKE_NON_COPYABLE(SleepAwaitable)
     OXYGEN_DEFAULT_MOVABLE(SleepAwaitable)
 
-    // ReSharper disable CppMemberFunctionMayBeStatic
     auto await_early_cancel() noexcept
     {
       if constexpr (Cancellable) {
@@ -246,7 +244,6 @@ public:
       return true;
     }
     void await_resume() { suspended_ = false; }
-    // ReSharper restore CppMemberFunctionMayBeStatic
 
   private:
     [[nodiscard]] auto DelayMilliseconds() const -> long
@@ -255,7 +252,6 @@ public:
     }
 
     TestEventLoop& event_loop_;
-    // ReSharper disable CppDFANotInitializedField (initialized by
     // SleepAwaitable)
     milliseconds delay_;
     detail::Handle parent_;

@@ -16,7 +16,6 @@
 
 namespace oxygen::graphics::testing {
 
-// ReSharper disable once CppClassCanBeFinal - mocks cannot be final
 class MockGraphics : public oxygen::Graphics {
 public:
   explicit MockGraphics(const std::string_view name)

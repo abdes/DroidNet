@@ -98,7 +98,6 @@ protected:
       rv, *scene_);
   }
 
-  // ReSharper disable once CppMemberFunctionMayBeConst
   auto UpdateScene() -> void { scene_->Update(); }
 
   // Helpers
@@ -174,7 +173,6 @@ protected:
   }
 
   // Accessors
-  // ReSharper disable CppMemberFunctionMayBeConst
   [[nodiscard]] auto Context() -> ScenePrepContext&
   {
     if (!ctx_.has_value()) {
@@ -208,7 +206,6 @@ protected:
     }
     return *matrix;
   }
-  // ReSharper restore CppMemberFunctionMayBeConst
 
   // Minimal default geometry used in many tests
   auto AddDefaultGeometry() -> void

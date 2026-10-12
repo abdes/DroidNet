@@ -21,7 +21,6 @@ namespace oxygen::co {
  */
 class Yield {
 public:
-  // ReSharper disable CppMemberFunctionMayBeStatic
   [[nodiscard]] auto await_ready() const noexcept { return false; }
 
 #ifdef __clang__
@@ -38,7 +37,6 @@ public:
   {
     return std::true_type {};
   }
-  // ReSharper restore CppMemberFunctionMayBeStatic
 };
 
 } // namespace oxygen::co

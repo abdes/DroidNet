@@ -12,8 +12,6 @@
 
 namespace oxygen::graphics::bindless::testing {
 
-// ReSharper disable once CppClassCanBeFinal - Mock class cannot be final
-// ReSharper disable CppClangTidyModernizeUseTrailingReturnType
 class MockDescriptorSegment : public detail::DescriptorSegment {
 public:
   // clang-format off

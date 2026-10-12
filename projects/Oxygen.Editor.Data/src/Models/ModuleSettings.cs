@@ -4,7 +4,6 @@
 
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using Oxygen.Editor.Data.Services;
@@ -62,7 +61,6 @@ public abstract class ModuleSettings(string moduleName) : INotifyPropertyChanged
     /// <summary>
     /// Gets the name of the module.
     /// </summary>
-    [SuppressMessage("ReSharper", "MemberCanBePrivate.Global", Justification = "helpful for debugging and UI display of settings")]
     public string ModuleName { get; } = moduleName;
 
     /// <summary>
@@ -171,7 +169,6 @@ public abstract class ModuleSettings(string moduleName) : INotifyPropertyChanged
     /// <summary>
     /// Called before the settings are saved.
     /// </summary>
-    [SuppressMessage("ReSharper", "VirtualMemberNeverOverridden.Global", Justification = "necessary for the derived classes")]
     protected virtual void OnSaving()
     {
     }
@@ -179,7 +176,6 @@ public abstract class ModuleSettings(string moduleName) : INotifyPropertyChanged
     /// <summary>
     /// Called after the settings are loaded.
     /// </summary>
-    [SuppressMessage("ReSharper", "VirtualMemberNeverOverridden.Global", Justification = "necessary for the derived classes")]
     protected virtual void OnLoaded()
     {
     }

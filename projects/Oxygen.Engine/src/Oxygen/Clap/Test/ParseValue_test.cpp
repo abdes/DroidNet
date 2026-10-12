@@ -6,10 +6,9 @@
 
 #include <optional>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Clap/Detail/ParseValue.h>
+#include <Oxygen/Testing/GTest.h>
 
 using testing::Eq;
 using testing::IsFalse;
@@ -387,7 +386,6 @@ struct ParseEnumTest
 // NOLINTNEXTLINE
 INSTANTIATE_TEST_SUITE_P(ValidAndInvalidInputs, ParseEnumTest,
   testing::Values(
-    // ReSharper disable StringLiteralTypo
     // clang-format off
     std::make_tuple("red", Color::kRed, true),
     std::make_tuple("green", Color::kGreen, true),
@@ -404,7 +402,6 @@ INSTANTIATE_TEST_SUITE_P(ValidAndInvalidInputs, ParseEnumTest,
     std::make_tuple("yellow", Color::kRed, false),
     std::make_tuple("0", Color::kRed, false)
     // clang-format on
-    // ReSharper restore StringLiteralTypo
     ));
 
 NOLINT_TEST_P(ParseEnumTest, ParsesExpectedEnumValue)
@@ -433,7 +430,6 @@ struct ParseChronoDurationTest
 // NOLINTNEXTLINE
 INSTANTIATE_TEST_SUITE_P(ValidAndInvalidInputs, ParseChronoDurationTest,
   testing::Values(
-    // ReSharper disable StringLiteralTypo
     // clang-format off
     // input, expected_value, unit, should_succeed
     std::make_tuple("1000ms", 1.0, "s", true),
@@ -449,7 +445,6 @@ INSTANTIATE_TEST_SUITE_P(ValidAndInvalidInputs, ParseChronoDurationTest,
     std::make_tuple("abcms", 0.0, "s", false), // invalid number
     std::make_tuple("", 0.0, "s", false)
     // clang-format on
-    // ReSharper restore StringLiteralTypo
     ));
 
 NOLINT_TEST_P(ParseChronoDurationTest, ParsesExpectedDuration)
@@ -473,7 +468,6 @@ struct ParseChronoIntDurationTest
 // NOLINTNEXTLINE
 INSTANTIATE_TEST_SUITE_P(ValidAndInvalidInputs, ParseChronoIntDurationTest,
   testing::Values(
-    // ReSharper disable StringLiteralTypo
     // clang-format off
     std::make_tuple("1500ms", 1, true), // rounds down
     std::make_tuple("2000ms", 2, true),
@@ -486,7 +480,6 @@ INSTANTIATE_TEST_SUITE_P(ValidAndInvalidInputs, ParseChronoIntDurationTest,
     std::make_tuple("abcms", 0, false), // invalid number
     std::make_tuple("", 0, false)
     // clang-format on
-    // ReSharper restore StringLiteralTypo
     ));
 
 NOLINT_TEST_P(ParseChronoIntDurationTest, ParsesExpectedIntDuration)

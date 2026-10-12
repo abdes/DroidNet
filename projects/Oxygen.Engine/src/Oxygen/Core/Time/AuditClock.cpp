@@ -20,7 +20,6 @@ AuditClock::AuditClock() noexcept
 {
 }
 
-// ReSharper disable once CppMemberFunctionMayBeStatic
 auto AuditClock::Now() const noexcept -> AuditTime
 {
   return AuditTime { time_point_cast<nanoseconds>(system_clock::now()) };

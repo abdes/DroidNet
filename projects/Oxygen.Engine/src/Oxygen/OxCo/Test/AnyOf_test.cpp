@@ -23,7 +23,6 @@ using namespace oxygen::co::testing;
 
 namespace {
 
-// ReSharper disable CppMemberFunctionMayBeStatic
 struct Ready {
   [[maybe_unused]] auto await_early_cancel() noexcept -> bool { return false; }
   [[nodiscard]] auto await_ready() const noexcept { return true; }
@@ -48,11 +47,8 @@ struct ReadyCancellable {
     return std::true_type {};
   }
 };
-// ReSharper restore CppMemberFunctionMayBeStatic
 
 class AnyOfTest : public OxCoTestFixture { };
-
-// ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
 
 NOLINT_TEST_F(AnyOfTest, Smoke)
 {

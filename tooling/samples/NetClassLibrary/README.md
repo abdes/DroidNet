@@ -87,7 +87,7 @@ To use this project template for a real library, follow these steps to customize
    - Update the namespace for exclusion to match your real library's namespace.
 
    ```csharp
-   [assembly: SuppressMessage("ReSharper", "UnusedAutoPropertyAccessor.Local", Justification = "Used in tests.", Scope = " DroidNet.YourLibrary.Tests")]
+   [assembly: SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Test method names are more readable with underscores", Scope = "namespaceanddescendants", Target = "~N:DroidNet.YourLibrary.Tests")]
    ```
 
 6. **Change the namespace in all source code files**:

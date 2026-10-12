@@ -6,8 +6,6 @@
 
 #include <Oxygen/OxCo/Coroutine.h>
 
-// ReSharper disable CppClangTidyClangDiagnosticUnneededMemberFunction
-
 namespace {
 struct BasicAwaiter {
   static auto await_ready() -> bool { return false; }

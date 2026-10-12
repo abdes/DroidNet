@@ -129,7 +129,6 @@ namespace detail::channel {
     OXYGEN_MAKE_NON_COPYABLE(MultiplexedReader)
     OXYGEN_MAKE_NON_MOVABLE(MultiplexedReader)
 
-    // ReSharper disable once CppHidingFunction
     [[nodiscard]] auto Empty() const noexcept { return buffer_.Empty(); }
     [[nodiscard]] auto Size() const noexcept { return buffer_.Size(); }
     [[nodiscard]] bool Closed() const noexcept { return channel_.Closed(); }

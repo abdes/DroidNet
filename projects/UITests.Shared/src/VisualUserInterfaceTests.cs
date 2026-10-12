@@ -279,7 +279,6 @@ public class VisualUserInterfaceTests
         _ = content.IsLoaded.Should().BeTrue();
         return;
 
-        // ReSharper disable once AsyncVoidMethod
         async void OnLoaded(object sender, RoutedEventArgs args)
         {
             _ = sender; // Unused

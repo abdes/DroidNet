@@ -9,10 +9,11 @@
 #include <memory>
 #include <vector>
 
+#include "./Mocks/MockDevice.h"
+#include "./Mocks/MockPipelineState.h"
+#include "./Mocks/MockRootSignature.h"
 #include <d3d12.h>
 #include <wrl/client.h>
-
-#include <Oxygen/Testing/GTest.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -27,10 +28,7 @@
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
-
-#include "./Mocks/MockDevice.h"
-#include "./Mocks/MockPipelineState.h"
-#include "./Mocks/MockRootSignature.h"
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::Format;
 using oxygen::ShaderType;
@@ -53,8 +51,6 @@ using testing::Return;
 
 namespace {
 
-// ReSharper disable CppClangTidyModernizeUseTrailingReturnType
-// ReSharper disable once CppClassCanBeFinal - Mock class should not be final
 class MockGraphics : public oxygen::graphics::d3d12::Graphics {
 public:
   explicit MockGraphics() = default;

@@ -9,8 +9,6 @@
 #include <Oxygen/OxCo/Config.h>
 #include <Oxygen/OxCo/Coroutine.h>
 
-// ReSharper disable CppMemberFunctionMayBeStatic
-
 #if !defined(OXCO_AWAITER_STATE_DEBUG)
 namespace oxygen::co::detail {
 

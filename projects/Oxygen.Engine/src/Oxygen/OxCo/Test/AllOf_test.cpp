@@ -6,15 +6,15 @@
 
 #include <chrono>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
+
 #include <Oxygen/Base/Unreachable.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 using namespace oxygen::co::detail;
@@ -24,8 +24,6 @@ using namespace oxygen::co::testing;
 namespace {
 
 class AllOfTest : public OxCoTestFixture { };
-
-// ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
 
 NOLINT_TEST_F(AllOfTest, Smoke)
 {

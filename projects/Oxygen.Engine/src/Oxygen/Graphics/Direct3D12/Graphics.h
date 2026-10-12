@@ -37,7 +37,6 @@ namespace oxygen::graphics::d3d12::detail {
 class PipelineStateCache;
 } // namespace oxygen::graphics::d3d12::detail
 
-// ReSharper disable once CppInconsistentNaming
 namespace D3D12MA {
 // D3D12MA objects are destroyed by Release(), not public deletion.
 class Allocator; // NOLINT(cppcoreguidelines-virtual-class-destructor)

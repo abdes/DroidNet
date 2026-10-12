@@ -6,12 +6,12 @@
 
 #pragma once
 
+#include <tuple>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/OxCo/Detail/MuxBase.h>
 #include <Oxygen/OxCo/Detail/Optional.h>
 #include <Oxygen/OxCo/Detail/Result.h>
-
-#include <tuple>
 
 namespace oxygen::co::detail {
 
@@ -165,18 +165,14 @@ public:
   static constexpr auto IsAbortable() -> bool { return true; }
   static constexpr auto IsSkippable() -> bool { return true; }
   static constexpr auto Size() noexcept -> size_t { return 0; }
-  // ReSharper disable CppMemberFunctionMayBeStatic
   auto InternalCancel() noexcept -> bool { return true; }
   [[nodiscard]] auto await_ready() const noexcept -> bool { return true; }
   auto await_suspend([[maybe_unused]] Handle h) -> bool { return false; }
   auto await_resume() && -> std::tuple<> { return {}; }
-  // ReSharper restore CppMemberFunctionMayBeStatic
 
 protected:
-  // ReSharper disable CppMemberFunctionMayBeStatic
   [[nodiscard]] auto GetAwaiters() const -> std::tuple<> { return {}; }
   void HandleResumeWithoutSuspend() { }
-  // ReSharper restore CppMemberFunctionMayBeStatic
 };
 
 template <class... Awaitables>

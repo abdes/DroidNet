@@ -39,7 +39,6 @@ namespace detail {
     co_await aw;
  \endcode
 */
-// ReSharper disable once CppInconsistentNaming (keep name consistent with asio)
 static constexpr detail::asio_awaitable_t<asio::executor, true> asio_awaitable;
 
 //! Same as `asio_awaitable`, but does not throw any exceptions, instead
@@ -51,7 +50,6 @@ static constexpr detail::asio_awaitable_t<asio::executor, true> asio_awaitable;
     auto ec = co_await aw;
  \endcode
 */
-// ReSharper disable once CppInconsistentNaming (keep name consistent with asio)
 static constexpr detail::asio_awaitable_t<asio::executor, false>
   asio_nothrow_awaitable;
 
@@ -118,7 +116,6 @@ namespace detail {
 
     //! @{
     //! Implementation of the awaiter interface.
-    // ReSharper disable CppMemberFunctionMayBeStatic
     // NOLINTBEGIN(*-use-nodiscard)
 
     auto await_ready() const noexcept { return false; }
@@ -165,7 +162,6 @@ namespace detail {
       return this->ec_ != asio::error::operation_aborted;
     }
 
-    // ReSharper disable CppMemberFunctionMayBeStatic
     // NOLINTEND(*-use-nodiscard)
     //! @}
 

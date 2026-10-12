@@ -52,7 +52,6 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(Sequence)
   OXYGEN_MAKE_NON_COPYABLE(Sequence)
 
-  // ReSharper disable CppMemberFunctionMayBeStatic
   auto await_ready() const noexcept -> bool { return false; }
 
   void await_set_executor(Executor* e) noexcept
@@ -130,7 +129,6 @@ public:
     }
     return second().awaiter.await_resume();
   }
-  // ReSharper restore CppMemberFunctionMayBeStatic
 
 private:
   struct FirstStage {

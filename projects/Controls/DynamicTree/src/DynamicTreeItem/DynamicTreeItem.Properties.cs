@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using System.Diagnostics.CodeAnalysis;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
@@ -16,10 +15,6 @@ namespace DroidNet.Controls;
 ///     Represents an item within a dynamic tree structure, supporting on-demand loading of child items,
 ///     expansion and collapse, selection handling, in-place renaming, and hierarchical indentation.
 /// </summary>
-[SuppressMessage(
-    "ReSharper",
-    "ClassWithVirtualMembersNeverInherited.Global",
-    Justification = "class is designed to be extended when needed")]
 public partial class DynamicTreeItem
 {
     /// <summary>

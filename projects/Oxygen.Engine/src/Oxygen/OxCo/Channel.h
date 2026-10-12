@@ -34,8 +34,6 @@ namespace detail::channel {
     friend Channel<T>;
     friend Writer<T>;
 
-    // ReSharper disable CppHiddenFunction
-
     [[nodiscard]] auto GetChannel() -> Channel<T>&
     {
       return static_cast<Channel<T>&>(*this);
@@ -109,7 +107,6 @@ namespace detail::channel {
     {
       return GetChannel().Size();
     }
-    // ReSharper disable once CppHidingFunction
     [[nodiscard]] auto Empty() const noexcept -> bool
     {
       return GetChannel().Empty();
@@ -262,7 +259,6 @@ namespace detail::channel {
 template <typename T>
 class Channel : public detail::channel::Reader<T>,
                 public detail::channel::Writer<T> {
-  // ReSharper disable CppHidingFunction
 public:
   //! Constructs an unbounded channel. No initial capacity is allocated;
   //! later channel operations will need to allocate to do their work.

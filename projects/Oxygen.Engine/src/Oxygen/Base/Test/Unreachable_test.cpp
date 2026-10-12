@@ -4,11 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
-#include <Oxygen/Base/Unreachable.h>
-
 #include <Oxygen/Base/Compilers.h>
+#include <Oxygen/Base/Unreachable.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -20,7 +18,6 @@ OXYGEN_DIAGNOSTIC_DISABLE_GCC("-Wunreachable-code")
 //! Tests that unreachable code paths are not taken.
 NOLINT_TEST(UnreachableTest, IsNeverReached)
 {
-  // ReSharper disable All
   bool unreachable = false;
   if (unreachable) {
     oxygen::Unreachable();

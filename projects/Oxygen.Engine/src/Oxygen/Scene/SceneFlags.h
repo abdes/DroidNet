@@ -109,7 +109,6 @@ public:
   //! Set the effective value bit.
   constexpr auto SetEffectiveValueBit(const bool value) noexcept -> SceneFlag&
   {
-    // ReSharper disable once CppRedundantParentheses
     bits_ = (bits_ & ~0b00001) | (value ? 0b00001 : 0);
     return *this;
   }
@@ -123,7 +122,6 @@ public:
   //! Set whether flag inherits its value from parent.
   constexpr auto SetInheritedBit(const bool value) noexcept -> SceneFlag&
   {
-    // ReSharper disable once CppRedundantParentheses
     bits_ = (bits_ & ~0b00010) | (value ? 0b00010 : 0);
     return *this;
   }
@@ -137,7 +135,6 @@ public:
   //! Set the pending value.
   constexpr auto SetPendingValueBit(const bool value) noexcept -> SceneFlag&
   {
-    // ReSharper disable once CppRedundantParentheses
     bits_ = (bits_ & ~0b00100) | (value ? 0b00100 : 0);
     return *this;
   }
@@ -151,7 +148,6 @@ public:
   //! Set dirty state for deferred processing.
   constexpr auto SetDirtyBit(const bool value) noexcept -> SceneFlag&
   {
-    // ReSharper disable once CppRedundantParentheses
     bits_ = (bits_ & ~0b01000) | (value ? 0b01000 : 0);
     return *this;
   }
@@ -165,7 +161,6 @@ public:
   //! Set previous value for transition detection.
   constexpr auto SetPreviousValueBit(const bool value) noexcept -> SceneFlag&
   {
-    // ReSharper disable once CppRedundantParentheses
     bits_ = (bits_ & ~0b10000) | (value ? 0b10000 : 0);
     return *this;
   }
@@ -645,7 +640,6 @@ private:
   {
     const auto shift = index * bits_per_flag;
     const auto mask = storage_type { flag_mask } << shift;
-    // ReSharper disable once CppRedundantParentheses
     data_ = (data_ & ~mask) | (storage_type { bits } & flag_mask) << shift;
   }
 

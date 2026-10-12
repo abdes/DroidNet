@@ -2,7 +2,6 @@
 
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
 
-    <!--  ReSharper disable Xaml.PathError  -->
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="ms-appx:///DroidNet.Aura/Controls/AppIcon/AppIcon.xaml" />
         <ResourceDictionary Source="ms-appx:///DroidNet.Aura/Controls/Tabs/TabStrip.xaml" />

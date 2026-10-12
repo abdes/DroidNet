@@ -19,6 +19,5 @@ public interface ICanBeLocked
     ///         When <see langword="true" />, the item cannot be deleted or moved within the tree.
     ///     </remarks>
     /// </summary>
-    // ReSharper disable once UnusedMember.Global
     public bool IsLocked { get; set; }
 }

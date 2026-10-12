@@ -8,7 +8,6 @@
 
 #include <cstdint>
 
-// ReSharper disable once CppUnusedIncludeDirective (unreachable code)
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Config/GraphicsConfig.h>
@@ -37,7 +36,6 @@ using DestroyBackendFunc = void (*)();
 
 //! Interface for the renderer module.
 struct GraphicsModuleApi {
-  // ReSharper disable CppInconsistentNaming
 
   //! Create the backend instance.
   /*!
@@ -63,8 +61,6 @@ struct GraphicsModuleApi {
    referring to the backend instance are invalidated.
   */
   DestroyBackendFunc DestroyBackend;
-
-  // ReSharper restore CppInconsistentNaming
 };
 
 }; // extern "C"

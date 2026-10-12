@@ -124,7 +124,6 @@ public partial class App
             .GetActivatedEventArgs();
 #pragma warning disable IDE0072 // Add missing cases
 
-        // ReSharper disable once SwitchExpressionHandlesSomeKnownEnumValuesWithExceptionInDefault
         var activationData = activationArgs.Kind switch
         {
             // For Launch activation, the activation args don't have the data,

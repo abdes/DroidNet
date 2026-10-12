@@ -60,10 +60,8 @@ ImGuiSdl3Backend::~ImGuiSdl3Backend()
   ImGui_ImplSDL3_Shutdown();
 }
 
-// ReSharper disable once CppMemberFunctionMayBeStatic
 auto ImGuiSdl3Backend::NewFrame() -> void { ImGui_ImplSDL3_NewFrame(); }
 
-// ReSharper disable once CppMemberFunctionMayBeConst
 auto ImGuiSdl3Backend::ProcessPlatformEvents(
   const platform::PlatformEvent& event) -> void
 {

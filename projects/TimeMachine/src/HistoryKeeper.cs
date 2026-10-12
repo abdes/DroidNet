@@ -34,7 +34,6 @@ namespace DroidNet.TimeMachine;
 /// historyKeeper.Redo();
 /// ]]></code>
 /// </example>
-[SuppressMessage("ReSharper", "ClassWithVirtualMembersNeverInherited.Global", Justification = "needed for mocking in unit tests")]
 public class HistoryKeeper : ITransactionManager
 {
     private readonly ObservableCollection<IChange> redoStack = [];
@@ -132,7 +131,6 @@ public class HistoryKeeper : ITransactionManager
     /// The <see cref="State"/> property represents the current state of the <see cref="HistoryKeeper"/>. It is used to
     /// manage the state transitions during undo, redo, commit, and rollback operations.
     /// </remarks>
-    [SuppressMessage("ReSharper", "MemberCanBePrivate.Global", Justification = "Must be accessible to the StateTransition class")]
     internal States State { get; set; } = States.Idle;
 
     /// <inheritdoc />
@@ -389,7 +387,6 @@ public class HistoryKeeper : ITransactionManager
 
         this.currentChangeSet = new ChangeSet { Key = key };
 
-        // ReSharper disable once SwitchStatementHandlesSomeKnownEnumValuesWithDefault
         switch (this.State)
         {
             case States.Undoing:

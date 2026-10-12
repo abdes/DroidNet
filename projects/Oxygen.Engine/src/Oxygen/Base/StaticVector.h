@@ -15,8 +15,6 @@
 
 #include <Oxygen/Base/ScopeGuard.h>
 
-// ReSharper disable CppMemberFunctionMayBeStatic
-
 namespace oxygen {
 
 //! A vector like container with a capacity defined at compile-time.
