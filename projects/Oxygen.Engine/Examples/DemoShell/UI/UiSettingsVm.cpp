@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/Logging.h>
-
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/UiSettingsService.h"
 #include "DemoShell/UI/UiSettingsVm.h"
+
+#include <Oxygen/Base/Logging.h>
 
 namespace oxygen::examples::ui {
 
@@ -29,7 +29,7 @@ auto UiSettingsVm::GetAxesVisible() -> bool
   return axes_visible_;
 }
 
-auto UiSettingsVm::GetStatsConfig() -> StatsOverlayConfig
+auto UiSettingsVm::GetStatsConfig() -> imgui::StatsOverlayConfig
 {
   std::lock_guard lock(mutex_);
   if (IsStale()) {

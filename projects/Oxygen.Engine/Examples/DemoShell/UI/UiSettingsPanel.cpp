@@ -4,13 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "DemoShell/UI/UiSettingsPanel.h"
+#include "DemoShell/UI/UiSettingsVm.h"
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
-
-#include "DemoShell/UI/UiSettingsPanel.h"
-#include "DemoShell/UI/UiSettingsVm.h"
 
 namespace oxygen::examples::ui {
 
@@ -82,8 +81,7 @@ void UiSettingsPanel::DrawStatsSection()
   if (ImGui::Checkbox("FPS", &config.show_fps)) {
     vm_->SetStatsShowFps(config.show_fps);
   }
-  if (ImGui::Checkbox(
-        "Frame timings detail", &config.show_frame_timing_detail)) {
+  if (ImGui::Checkbox("Phase timings", &config.show_frame_timing_detail)) {
     vm_->SetStatsShowFrameTimingDetail(config.show_frame_timing_detail);
   }
   if (ImGui::Checkbox("Engine timing", &config.show_engine_timing)) {

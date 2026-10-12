@@ -44,7 +44,6 @@
 #include "DemoShell/UI/PostProcessPanel.h"
 #include "DemoShell/UI/PostProcessVm.h"
 #include "DemoShell/UI/SidePanel.h"
-#include "DemoShell/UI/StatsOverlay.h"
 #include "DemoShell/UI/UiSettingsPanel.h"
 #include "DemoShell/UI/UiSettingsVm.h"
 #include <imgui.h>
@@ -56,10 +55,10 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
-#include <Oxygen/ImGui/Console/CommandPalette.h>
-#include <Oxygen/ImGui/Console/ConsolePanel.h>
+#include <Oxygen/ImGui/Console/ConsoleHost.h>
 #include <Oxygen/ImGui/Console/ConsoleUiState.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
+#include <Oxygen/ImGui/Widgets/StatsOverlay.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 
@@ -160,25 +159,6 @@ namespace {
     };
   }
 
-  auto HandleGlobalConsoleAccelerators(
-    imgui::consoleui::ConsoleUiState& console_ui_state) -> void
-  {
-    // "Hard" global accelerators: process regardless of ImGui capture flags.
-    if (ImGui::IsKeyPressed(ImGuiKey_GraveAccent, false)) {
-      if (!console_ui_state.IsConsoleVisible()) {
-        console_ui_state.SetConsoleVisible(true);
-      } else if (console_ui_state.ConsoleInput().empty()) {
-        console_ui_state.SetConsoleVisible(false);
-      } else {
-        console_ui_state.RequestConsoleFocus();
-      }
-    }
-    if (ImGui::GetIO().KeyCtrl && ImGui::GetIO().KeyShift
-      && ImGui::IsKeyPressed(ImGuiKey_P, false)) {
-      console_ui_state.TogglePalette();
-    }
-  }
-
   void DrawViewFailures(
     const engine::FrameContext& frame, const vortex::Renderer& renderer)
   {
@@ -236,13 +216,11 @@ struct DemoShellUi::Impl {
   observer_ptr<UiSettingsVm> ui_settings_vm_ptr { &ui_settings_vm };
 
   // Core UI components
-  imgui::consoleui::ConsoleUiState console_ui_state;
-  imgui::consoleui::ConsolePanel console_panel;
-  imgui::consoleui::CommandPalette command_palette;
+  imgui::consoleui::ConsoleHost console_host;
   PanelSideBar side_bar;
   SidePanel side_panel;
   AxesWidget axes_widget;
-  StatsOverlay stats_overlay;
+  imgui::StatsOverlay stats_overlay;
   std::shared_ptr<UiSettingsPanel> settings_panel;
   std::optional<imgui::consoleui::WindowPlacement> last_saved_console_window;
   std::optional<imgui::consoleui::WindowPlacement> last_saved_palette_window;
@@ -304,7 +282,6 @@ struct DemoShellUi::Impl {
     , side_bar(panel_registry, ui_settings_vm_ptr)
     , side_panel(panel_registry)
     , axes_widget(ui_settings_vm_ptr)
-    , stats_overlay(ui_settings_vm_ptr)
   {
     DCHECK_NOTNULL_F(panel_registry, "expecting valid PanelRegistry");
     DCHECK_NOTNULL_F(ui_settings_service, "expecting valid UiSettingsService");
@@ -386,19 +363,19 @@ struct DemoShellUi::Impl {
     if (const auto console_window
       = TryLoadPlacement(settings, kConsoleWindowKeys);
       console_window.has_value()) {
-      console_ui_state.SetConsoleWindowPlacement(*console_window);
+      console_host.State().SetConsoleWindowPlacement(*console_window);
       last_saved_console_window = console_window;
     }
     if (const auto palette_window
       = TryLoadPlacement(settings, kPaletteWindowKeys);
       palette_window.has_value()) {
-      console_ui_state.SetPaletteWindowPlacement(*palette_window);
+      console_host.State().SetPaletteWindowPlacement(*palette_window);
       last_saved_palette_window = palette_window;
     }
 
     last_saved_auto_scroll
       = settings->GetBool(kConsoleAutoScrollKey).value_or(true);
-    console_ui_state.SetAutoScrollEnabled(last_saved_auto_scroll);
+    console_host.State().SetAutoScrollEnabled(last_saved_auto_scroll);
 
     const std::array<imgui::consoleui::LogSeverity, 3> severities {
       imgui::consoleui::LogSeverity::kSuccess,
@@ -412,7 +389,7 @@ struct DemoShellUi::Impl {
     };
     for (std::size_t i = 0; i < severities.size(); ++i) {
       const bool value = settings->GetBool(keys[i]).value_or(true);
-      console_ui_state.SetSeverityEnabled(severities[i], value);
+      console_host.State().SetSeverityEnabled(severities[i], value);
       last_saved_severity_filters[i] = value;
     }
   }
@@ -424,7 +401,7 @@ struct DemoShellUi::Impl {
       return;
     }
 
-    if (const auto& current = console_ui_state.ConsoleWindowPlacement();
+    if (const auto& current = console_host.State().ConsoleWindowPlacement();
       current.has_value()) {
       const bool save_geometry = !last_saved_console_window.has_value()
         || IsPlacementDifferent(*current, *last_saved_console_window);
@@ -437,7 +414,7 @@ struct DemoShellUi::Impl {
       }
     }
 
-    if (const auto& current = console_ui_state.PaletteWindowPlacement();
+    if (const auto& current = console_host.State().PaletteWindowPlacement();
       current.has_value()) {
       const bool save_geometry = !last_saved_palette_window.has_value()
         || IsPlacementDifferent(*current, *last_saved_palette_window);
@@ -450,7 +427,7 @@ struct DemoShellUi::Impl {
       }
     }
 
-    const bool auto_scroll = console_ui_state.IsAutoScrollEnabled();
+    const bool auto_scroll = console_host.State().IsAutoScrollEnabled();
     if (auto_scroll != last_saved_auto_scroll) {
       settings->SetBool(kConsoleAutoScrollKey, auto_scroll);
       last_saved_auto_scroll = auto_scroll;
@@ -467,7 +444,8 @@ struct DemoShellUi::Impl {
       kConsoleFilterErrorKey,
     };
     for (std::size_t i = 0; i < severities.size(); ++i) {
-      const bool enabled = console_ui_state.IsSeverityEnabled(severities[i]);
+      const bool enabled
+        = console_host.State().IsSeverityEnabled(severities[i]);
       if (enabled != last_saved_severity_filters[i]) {
         settings->SetBool(keys[i], enabled);
         last_saved_severity_filters[i] = enabled;
@@ -554,11 +532,7 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
   ImGui::SetCurrentContext(imgui_context);
 
   const auto& io = ImGui::GetIO();
-  HandleGlobalConsoleAccelerators(impl_->console_ui_state);
-
-  auto& console = impl_->engine->GetConsole();
-  impl_->console_panel.Draw(console, impl_->console_ui_state, imgui_context);
-  impl_->command_palette.Draw(console, impl_->console_ui_state, imgui_context);
+  impl_->console_host.Draw(impl_->engine->GetConsole(), imgui_context);
   impl_->PersistConsoleUiSettingsToStorage();
 
   if (!io.WantCaptureMouse && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -573,8 +547,8 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
 
   // Settings now flow through UiSettingsVm instead of view-owned state.
   impl_->axes_widget.Draw(impl_->ui_settings_vm.GetActiveCamera());
-  impl_->stats_overlay.Draw(fc);
   if (fc) {
+    impl_->stats_overlay.Draw(*fc, impl_->ui_settings_vm.GetStatsConfig());
     DrawViewFailures(*fc, renderer);
   }
 

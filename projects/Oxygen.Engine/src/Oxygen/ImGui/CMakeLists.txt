@@ -51,23 +51,29 @@ set(
   "Console/ConsoleUiState.h"
   "Console/ConsolePanel.h"
   "Console/CommandPalette.h"
+  "Console/ConsoleHost.h"
   "Icons/IconsOxygenIcons.h"
   "Icons/OxygenIcons.h"
   "ImGuiModule.h"
   "Styles/FontAwesome-400.h"
   "Styles/IconsFontAwesome.h"
   "Styles/Spectrum.h"
+  "Widgets/StatsOverlay.h"
+  "Widgets/Toolbar.h"
 )
 set(
   OXYGEN_IMGUI_PRIVATE_SOURCES
   "Console/ConsoleUiState.cpp"
   "Console/ConsolePanel.cpp"
   "Console/CommandPalette.cpp"
+  "Console/ConsoleHost.cpp"
   "Icons/OxygenIcons.cpp"
   "ImGuiModule.cpp"
   "Styles/Spectrum.cpp"
   "Styles/SourceSansProRegular.cpp"
   "Styles/FontAwesome-400.cpp"
+  "Widgets/StatsOverlay.cpp"
+  "Widgets/Toolbar.cpp"
 )
 
 target_sources(

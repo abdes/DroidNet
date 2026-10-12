@@ -12,9 +12,8 @@
 #include <string>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/ImGui/Widgets/StatsOverlay.h>
 #include <Oxygen/Scene/SceneNode.h>
-
-#include "DemoShell/UI/StatsOverlayConfig.h"
 
 namespace oxygen::examples {
 class CameraSettingsService;
@@ -46,7 +45,7 @@ public:
   [[nodiscard]] auto GetAxesVisible() -> bool;
 
   //! Returns the cached stats overlay configuration.
-  [[nodiscard]] auto GetStatsConfig() -> StatsOverlayConfig;
+  [[nodiscard]] auto GetStatsConfig() -> imgui::StatsOverlayConfig;
 
   //! Returns the cached active panel name (empty if none).
   [[nodiscard]] auto GetActivePanelName() -> std::optional<std::string>;
@@ -89,7 +88,7 @@ private:
   observer_ptr<CameraSettingsService> camera_settings_;
   std::uint64_t epoch_ { 0 };
   bool axes_visible_ { true };
-  StatsOverlayConfig stats_config_ {};
+  imgui::StatsOverlayConfig stats_config_ {};
   std::optional<std::string> active_panel_name_ {};
   bool axes_dirty_ { false };
   bool stats_dirty_ { false };

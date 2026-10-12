@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/Logging.h>
-
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/UiSettingsService.h"
+
+#include <Oxygen/Base/Logging.h>
 
 namespace oxygen::examples {
 
@@ -25,12 +25,12 @@ auto UiSettingsService::SetAxesVisible(const bool visible) -> void
   SetBoolSetting(kAxesVisibleKey, visible, kDefaultAxesVisible);
 }
 
-auto UiSettingsService::GetStatsConfig() const -> ui::StatsOverlayConfig
+auto UiSettingsService::GetStatsConfig() const -> imgui::StatsOverlayConfig
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
 
-  ui::StatsOverlayConfig config {};
+  imgui::StatsOverlayConfig config {};
   if (const auto show_fps = settings->GetBool(kStatsShowFpsKey)) {
     config.show_fps = *show_fps;
   }

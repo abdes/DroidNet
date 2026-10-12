@@ -14,8 +14,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-
-#include "DemoShell/UI/StatsOverlayConfig.h"
+#include <Oxygen/ImGui/Widgets/StatsOverlay.h>
 
 namespace oxygen::examples {
 
@@ -49,7 +48,8 @@ public:
   virtual auto SetAxesVisible(bool visible) -> void;
 
   //! Returns the current stats overlay configuration.
-  [[nodiscard]] virtual auto GetStatsConfig() const -> ui::StatsOverlayConfig;
+  [[nodiscard]] virtual auto GetStatsConfig() const
+    -> imgui::StatsOverlayConfig;
 
   //! Sets FPS stats visibility.
   virtual auto SetStatsShowFps(bool visible) -> void;

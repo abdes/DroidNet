@@ -109,8 +109,6 @@ set(
   "UI/DiagnosticsPanel.h"
   "UI/DiagnosticsVm.h"
   "UI/SidePanel.h"
-  "UI/StatsOverlay.h"
-  "UI/StatsOverlayConfig.h"
   "UI/UiSettingsPanel.h"
   "UI/UiSettingsVm.h"
 )
@@ -166,7 +164,6 @@ set(
   "UI/PostProcessPanel.cpp"
   "UI/PostProcessVm.cpp"
   "UI/SidePanel.cpp"
-  "UI/StatsOverlay.cpp"
   "UI/UiSettingsPanel.cpp"
   "UI/UiSettingsVm.cpp"
 )
