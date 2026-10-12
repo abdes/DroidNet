@@ -171,3 +171,10 @@ add_dependencies(BindlessCodeGen_CompileCheck oxygen-core_bindless_outputs)
 # check before Core compilation can proceed.
 add_custom_target(oxygen-core_bindless_gen)
 add_dependencies(oxygen-core_bindless_gen BindlessCodeGen_CompileCheck)
+set_property(
+  GLOBAL
+  APPEND
+  PROPERTY
+    OXYGEN_SHADER_HEADER_GENERATORS
+      oxygen-core_bindless_gen
+)

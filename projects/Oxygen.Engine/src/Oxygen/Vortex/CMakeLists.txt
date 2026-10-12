@@ -74,6 +74,13 @@ add_custom_command(
 )
 add_custom_target(oxygen-vortex_contracts_gen DEPENDS "${_contracts_stamp}")
 add_dependencies(oxygen-vortex_contracts_gen oxygen-core_bindless_gen)
+set_property(
+  GLOBAL
+  APPEND
+  PROPERTY
+    OXYGEN_SHADER_HEADER_GENERATORS
+      oxygen-vortex_contracts_gen
+)
 if(TARGET oxygen-graphics-direct3d12_shaders)
   add_dependencies(
     oxygen-graphics-direct3d12_shaders

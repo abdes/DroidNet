@@ -62,6 +62,9 @@ endfunction()
 #
 # Builds `<name>.dxil` next to the calling directory's outputs, with a DXC
 # depfile for its includes, and gives <consumer> the DXIL path as <macro>.
+# The probe builds after every target registered in the global property
+# OXYGEN_SHADER_HEADER_GENERATORS, since a depfile cannot order a compile
+# after the generation of the headers it includes.
 # CAMERA_VIEW_ENTRY compiles it as a camera view entry, like a catalog entry
 # marked `.view_binding=kCamera`.
 function(oxygen_add_dxc_compute_probe name)
@@ -129,6 +132,10 @@ function(oxygen_add_dxc_compute_probe name)
     VERBATIM
   )
   add_custom_target(${name} DEPENDS "${output}")
+  get_property(generators GLOBAL PROPERTY OXYGEN_SHADER_HEADER_GENERATORS)
+  if(generators)
+    add_dependencies(${name} ${generators})
+  endif()
   add_dependencies(${arg_CONSUMER} ${name})
   target_compile_definitions(
     ${arg_CONSUMER}
