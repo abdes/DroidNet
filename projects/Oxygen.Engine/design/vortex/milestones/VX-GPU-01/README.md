@@ -168,7 +168,7 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 | S0  | Design updates and open decisions                                      | all                         | —       | `validated` | —      |
 | S1  | Ordered material uploads                                               | N1                          | S0      | `validated` | —      |
 | S2  | Receipt-retired descriptors; no live descriptor rewrites               | C1, M2, N2, H2, H3, L10     | S0      | `validated` | —      |
-| S3  | Non-camera passes own their inputs; pure shader helpers                | C2, H4, H5, L9              | S0      | `planned`   | —      |
+| S3  | Non-camera passes own their inputs; pure shader helpers                | C2, H4, H5, L9              | S0      | `validated` | —      |
 | S4  | Versioned view constants; one source per view value                    | H1, M7                      | S3      | `planned`   | —      |
 | S5  | One pass-input convention; shared mesh position with WPO               | H7, M6, M7                  | S3, S4  | `planned`   | —      |
 | S6  | Fail loudly                                                            | M1, M5, H6, H8              | S4      | `planned`   | —      |
@@ -263,19 +263,35 @@ Update the owning designs, record the [answered decisions](#decisions).
 
 ## S3 — Non-camera passes own their inputs
 
-- [ ] **Helpers.** Split `S/Contracts/Draw/DrawHelpers.hlsli`,
-      `S/Shared/MaskedAlphaTest.hlsli` and the exposure, environment and
-      lighting helpers into pure (slot/record) helpers and one bound-view
-      header guarded by `#error` outside camera entry points.
-- [ ] **Shadow pass.** `ShadowDepthPass.cpp`: drop the b1 bind and gate;
-      `DirectionalShadowDepth.hlsl` includes pure helpers only.
-- [ ] **Contact shadows.** `ContactShadowCasterDepthPass.cpp`: its own inputs
-      record and a depth shader that reads only that record.
-- [ ] **Dead binds.** `DistantSkyLightLutPass.cpp` (bind, gate and the unused
-      `device_z` parameter); `SelectionOutlinePass.cpp` composite bind.
-- [ ] **Tests.** ShaderBake fails a non-camera entry point that includes the
-      bound-view header; GPU test: contact-shadow and shadow depth are
-      unchanged when b1 is rewritten after their submission.
+- [x] **Helpers.** `ViewConstants.hlsli` is the bound-view header, guarded
+      by `#error` unless ShaderBake defines `OXYGEN_CAMERA_VIEW_ENTRY`, which
+      it does only for catalog entries marked `.view_binding=kCamera`. The
+      define is in the action key, not the request identity. Camera-only
+      helpers reach b1 through it; pure counterparts take slots or records:
+      `MaskedAlphaTest.hlsli` (bound part in `MaskedAlphaTestView.hlsli`),
+      `FrameExposure.hlsli`, `SkyDiffuseIrradiance.hlsli`,
+      `LightRecords.hlsli`, and `ComputeMeshClipPosition` with explicit
+      matrices. `SkyRadiance.hlsli` and `AtmosphereSampling.hlsli` no longer
+      include bound helpers.
+- [x] **Shadow pass.** `ShadowDepthPass` no longer binds or requires b1;
+      `DirectionalShadowDepth.hlsl` reaches only pure helpers.
+- [x] **Contact shadows.** `ContactShadowCasterDepth.hlsl` reads one inputs
+      record (view and projection matrices at record time, the view's
+      published `draw_frame_slot`); `PreparedViewShadowInput` carries that
+      slot instead of the view-constants buffer.
+- [x] **Dead binds.** `DistantSkyLightLutPass` bind and gate removed; the
+      unused `device_z` atmosphere parameter and its `reverse_z` read are gone,
+      so the multi-scattering, distant-sky and capture LUTs no longer read an
+      unbound b1. The sky-view LUT's camera entry passes exposure to the shared
+      generator, and its capture entry compiles without the bound view. The
+      `SelectionOutlinePass` composite bind is removed.
+- [x] **Tests.** ShaderBake compiles the bound-view header as a camera entry
+      and rejects it otherwise; the camera define changes the action key.
+      Shadow depth and contact-caster depth draw without binding b1, and the
+      caster depth records nothing without the view's draw publication. The
+      bake now rejects any non-camera entry that can read b1, so a b1 rewrite
+      after submission cannot reach these passes. That replaces the planned
+      GPU rewrite test, and the GPU contact-shadow image tests still pass.
 
 ## S4 — Versioned view constants
 
@@ -337,8 +353,8 @@ Update the owning designs, record the [answered decisions](#decisions).
       accessors with their domain checks.
 - [ ] Move DrawFrameBindings, ViewConstants, ViewFrameBindings,
       ViewHistoryFrameBindings, DrawMetadata, SceneTextureBindings, occlusion
-      records, shadow and atmosphere/fog pass constants and the
-      `HdrConsumerInputs` offsets to the schema.
+      records, shadow, contact-shadow caster and atmosphere/fog pass
+      constants and the `HdrConsumerInputs` offsets to the schema.
 - [ ] **Tests.** Generator tests; layout mismatch fails the build.
 
 ## S9 — Unwired fields and dead code

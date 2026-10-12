@@ -124,7 +124,6 @@ static float3 IntegrateSkyLuminanceForAtmosphereLights(
         0.0f.xx,
         sample_origin,
         integration_direction,
-        VortexResolveFarDepthReference(),
         false,
         sampling,
         false,

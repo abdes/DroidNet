@@ -4,15 +4,25 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
-
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <iomanip>
+#include <ios>
+#include <ranges>
+#include <span>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Shaders/ShaderCatalogBuilder.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
@@ -29,14 +39,13 @@ namespace {
   auto CompareDefines(
     std::span<const ShaderDefine> lhs, std::span<const ShaderDefine> rhs) -> int
   {
-    const size_t common_size = std::min(lhs.size(), rhs.size());
-    for (size_t i = 0; i < common_size; ++i) {
-      if (lhs[i].name != rhs[i].name) {
-        return lhs[i].name < rhs[i].name ? -1 : 1;
+    for (const auto& [lhs_define, rhs_define] : std::views::zip(lhs, rhs)) {
+      if (lhs_define.name != rhs_define.name) {
+        return lhs_define.name < rhs_define.name ? -1 : 1;
       }
 
-      const auto lhs_value = lhs[i].value.value_or("");
-      const auto rhs_value = rhs[i].value.value_or("");
+      const auto lhs_value = lhs_define.value.value_or("");
+      const auto rhs_value = rhs_define.value.value_or("");
       if (lhs_value != rhs_value) {
         return lhs_value < rhs_value ? -1 : 1;
       }
@@ -90,28 +99,29 @@ auto ExpandShaderCatalog(std::span<const ShaderEntry> entries)
     expanded.push_back(ExpandedShaderRequest {
       .request = std::move(request),
       .request_key = 0,
+      .view_binding = entry.view_binding,
     });
 
     auto& current = expanded.back();
     current.request_key = ComputeShaderRequestKey(current.request);
   }
 
-  std::sort(expanded.begin(), expanded.end(), CompareRequestsForBuildOrder);
+  std::ranges::sort(expanded, CompareRequestsForBuildOrder);
 
   std::unordered_map<uint64_t, size_t> seen_request_keys;
   seen_request_keys.reserve(expanded.size());
 
-  for (size_t i = 0; i < expanded.size(); ++i) {
-    const auto [it, inserted]
-      = seen_request_keys.emplace(expanded[i].request_key, i);
+  for (const auto& [index, current] : std::views::enumerate(expanded)) {
+    const auto [it, inserted] = seen_request_keys.emplace(
+      current.request_key, static_cast<size_t>(index));
     if (inserted) {
       continue;
     }
 
     throw std::runtime_error("duplicate shader request key "
-      + FormatRequestKeyHex(expanded[i].request_key) + ": "
-      + FormatShaderLogKey(expanded[it->second].request) + " and "
-      + FormatShaderLogKey(expanded[i].request));
+      + FormatRequestKeyHex(current.request_key) + ": "
+      + FormatShaderLogKey(expanded.at(it->second).request) + " and "
+      + FormatShaderLogKey(current.request));
   }
 
   return expanded;

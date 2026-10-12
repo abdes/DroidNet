@@ -310,7 +310,7 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
       continue;
     }
     auto view_input = *prepared;
-    view_input.view_constants = active.view_constants;
+    view_input.draw_frame_slot = active.draw_frame_slot;
     view_input.lighting_bindings = active.lighting_bindings;
     if (failed_views_.contains(view_input.view_id)) {
       continue;

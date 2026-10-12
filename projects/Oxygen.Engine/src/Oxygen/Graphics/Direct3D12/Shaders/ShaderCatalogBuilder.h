@@ -12,6 +12,8 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -23,6 +25,23 @@ namespace oxygen::graphics::d3d12 {
 //! Maximum number of defines per shader entry.
 inline constexpr size_t kMaxDefinesPerShader = 8;
 
+//! Whether an entry point reads the camera view constants bound at b1.
+//!
+//! Only passes that bind a camera view's constants may run a `kCamera` entry.
+//! Every other entry reads its pass inputs record instead.
+enum class ShaderViewBinding : std::uint8_t {
+  kNone,
+  kCamera,
+};
+
+//! Define the bake passes to `kCamera` entry points only.
+//!
+//! The bound-view header raises `#error` without it, so an entry that is not a
+//! camera entry fails to compile when it reaches the camera view constants.
+//! The define is not part of the request identity that runtime lookups use.
+inline constexpr std::string_view kCameraViewEntryDefine
+  = "OXYGEN_CAMERA_VIEW_ENTRY";
+
 //! A single shader entry in the catalog.
 //!
 //! Uses string_view for zero-allocation constexpr storage. The strings
@@ -33,12 +52,14 @@ struct ShaderEntry {
   std::string_view entry_point;
   std::array<std::string_view, kMaxDefinesPerShader> defines {};
   size_t define_count { 0 };
+  ShaderViewBinding view_binding { ShaderViewBinding::kNone };
 };
 
 //! An entry point specification: shader type and entry function name.
 struct EntryPoint {
   ShaderType type;
   std::string_view name;
+  ShaderViewBinding view_binding { ShaderViewBinding::kNone };
 };
 
 //! Specification for a shader file with its entry points and permutations.
@@ -119,18 +140,19 @@ consteval auto ExpandSpec(const ShaderFileSpec<E, P>& spec,
         .type = entry.type,
         .path = spec.path,
         .entry_point = entry.name,
+        .view_binding = entry.view_binding,
       };
 
       // Build defines from permutation mask
       size_t define_idx = 0;
       for (size_t i = 0; i < P; ++i) {
         if (mask & (size_t { 1 } << i)) {
-          shader_entry.defines[define_idx++] = spec.permutations[i];
+          shader_entry.defines.at(define_idx++) = spec.permutations.at(i);
         }
       }
       shader_entry.define_count = define_idx;
 
-      output[index++] = shader_entry;
+      output.at(index++) = shader_entry;
     }
   }
 
@@ -153,20 +175,21 @@ consteval auto ExpandSpec(const RequiredDefineShaderFileSpec<E, R, P>& spec,
         .type = entry.type,
         .path = spec.path,
         .entry_point = entry.name,
+        .view_binding = entry.view_binding,
       };
 
       size_t define_idx = 0;
       for (size_t i = 0; i < R; ++i) {
-        shader_entry.defines[define_idx++] = spec.required_defines[i];
+        shader_entry.defines.at(define_idx++) = spec.required_defines.at(i);
       }
       for (size_t i = 0; i < P; ++i) {
         if (mask & (size_t { 1 } << i)) {
-          shader_entry.defines[define_idx++] = spec.permutations[i];
+          shader_entry.defines.at(define_idx++) = spec.permutations.at(i);
         }
       }
       shader_entry.define_count = define_idx;
 
-      output[index++] = shader_entry;
+      output.at(index++) = shader_entry;
     }
   }
 
@@ -214,9 +237,9 @@ inline auto ToShaderInfo(const ShaderEntry& entry)
     .entry_point = std::string(entry.entry_point),
   };
 
-  for (size_t i = 0; i < entry.define_count; ++i) {
+  for (const auto define : std::span(entry.defines).first(entry.define_count)) {
     info.defines.push_back(oxygen::graphics::ShaderDefine {
-      .name = std::string(entry.defines[i]),
+      .name = std::string(define),
       .value = "1",
     });
   }

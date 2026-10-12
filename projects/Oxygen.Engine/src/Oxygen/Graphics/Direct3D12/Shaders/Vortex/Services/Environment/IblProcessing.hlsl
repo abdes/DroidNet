@@ -6,7 +6,7 @@
 
 #include "Vortex/Shared/CubemapGeometry.hlsli"
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
-#include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
 #include "Vortex/Contracts/Environment/IblProductMetadata.hlsli"
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 #include "Vortex/Shared/IblSampling.hlsli"

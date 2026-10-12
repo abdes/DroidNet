@@ -10,7 +10,7 @@
 #include "Vortex/Contracts/Definitions/MaterialFlags.hlsli"
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
-#include "Vortex/Shared/MaskedAlphaTest.hlsli"
+#include "Vortex/Shared/MaskedAlphaTestView.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"

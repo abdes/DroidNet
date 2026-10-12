@@ -5,15 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <utility>
 
+#include <glm/ext/matrix_float4x4.hpp>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -46,8 +52,40 @@
 
 namespace oxygen::vortex::shadows {
 
+namespace {
+
+  //! Mirrors ContactShadowCasterDepthPassConstants in
+  //! ContactShadowCasterDepth.hlsl.
+  struct alignas(packing::kShaderDataFieldAlignment)
+    ContactShadowCasterDepthPassConstants {
+    glm::mat4 view_matrix { 1.0F };
+    glm::mat4 projection_matrix { 1.0F };
+    std::uint32_t draw_frame_slot { kInvalidShaderVisibleIndex.get() };
+    std::uint32_t pad0 { 0U };
+    std::uint32_t pad1 { 0U };
+    std::uint32_t pad2 { 0U };
+  };
+
+  static_assert(sizeof(ContactShadowCasterDepthPassConstants)
+    == 144U); // NOLINT(*-magic-numbers)
+  static_assert(
+    offsetof(ContactShadowCasterDepthPassConstants, view_matrix) == 0U);
+  static_assert(offsetof(ContactShadowCasterDepthPassConstants,
+                  projection_matrix)
+    == 64U); // NOLINT(*-magic-numbers)
+  static_assert(offsetof(ContactShadowCasterDepthPassConstants, draw_frame_slot)
+    == 128U); // NOLINT(*-magic-numbers)
+  constexpr std::uint32_t kPassConstantsStride
+    = sizeof(ContactShadowCasterDepthPassConstants);
+
+} // namespace
+
 ContactShadowCasterDepthPass::ContactShadowCasterDepthPass(Renderer& renderer)
   : renderer_(renderer)
+  , pass_constants_buffer_(observer_ptr { renderer.GetGraphics().get() },
+      renderer.GetLightingStagingProvider(), kPassConstantsStride,
+      observer_ptr { &renderer.GetInlineTransfersCoordinator() },
+      "Vortex.ContactShadowCasterDepth.PassConstants")
   , mesh_processor_(std::make_unique<DepthPrepassMeshProcessor>(renderer))
   , draw_cull_(std::make_unique<occlusion::internal::DrawCullPass>(
       renderer, "Vortex.Stage8.ContactShadowCasterDepth.DrawCull"))
@@ -63,6 +101,7 @@ void ContactShadowCasterDepthPass::OnFrameStart(
 {
   sequence_ = sequence;
   slot_ = slot;
+  pass_constants_buffer_.OnFrameStart(sequence, slot);
   if (textures_) {
     textures_->OnFrameStart(sequence);
   }
@@ -80,7 +119,7 @@ auto ContactShadowCasterDepthPass::Record(const PreparedViewShadowInput& input,
 {
   const auto gfx = renderer_.GetGraphics();
   if (!gfx || !input.resolved_view || !input.prepared_scene
-    || !input.view_constants) {
+    || !input.draw_frame_slot.IsValid()) {
     return {};
   }
   const auto& view = *input.resolved_view;
@@ -142,6 +181,20 @@ auto ContactShadowCasterDepthPass::Record(const PreparedViewShadowInput& input,
   graphics::FramebufferDesc framebuffer_desc;
   framebuffer_desc.SetDepthAttachment(
     { .texture = texture, .format = desc.format, .is_read_only = false });
+  auto pass_constants = pass_constants_buffer_.Allocate(1U);
+  if (!pass_constants.has_value() || !pass_constants->IsValid(sequence_)
+    || !pass_constants->TryWriteObject(ContactShadowCasterDepthPassConstants {
+      .view_matrix = view.ViewMatrix(),
+      .projection_matrix = view.ProjectionMatrix(),
+      .draw_frame_slot = input.draw_frame_slot.get(),
+    })) {
+    LOG_F(ERROR,
+      "ContactShadowCasterDepthPass: failed to publish pass constants for view "
+      "{}",
+      input.view_id.get());
+    return {};
+  }
+  const auto pass_constants_srv = pass_constants->srv;
   const auto framebuffer = gfx->CreateFramebuffer(framebuffer_desc);
   auto recorder = gfx->AcquireCommandRecorder(
     gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
@@ -187,13 +240,11 @@ auto ContactShadowCasterDepthPass::Record(const PreparedViewShadowInput& input,
     const auto root = static_cast<std::uint32_t>(RootParam::kRootConstants);
     occlusion::internal::IndirectListBuilder::Draw(*recorder, draw_list,
       [&](const vortex::internal::MeshRasterState& raster) -> void {
-        recorder->SetPipelineState(vortex::internal::BuildMeshDepthPipeline(
-          desc, Format::kUnknown, raster, view.ReverseZ()));
-        recorder->SetGraphicsRootConstantBufferView(
-          static_cast<std::uint32_t>(RootParam::kViewConstants),
-          input.view_constants->GetGPUVirtualAddress());
+        recorder->SetPipelineState(
+          vortex::internal::BuildContactShadowCasterDepthPipeline(
+            desc, raster, view.ReverseZ()));
         recorder->SetGraphicsRoot32BitConstant(
-          root, kInvalidShaderVisibleIndex.get(), 1U);
+          root, pass_constants_srv.get(), 1U);
       });
     recorder->RequireResourceStateFinal(
       *texture, graphics::ResourceStates::kShaderResource);

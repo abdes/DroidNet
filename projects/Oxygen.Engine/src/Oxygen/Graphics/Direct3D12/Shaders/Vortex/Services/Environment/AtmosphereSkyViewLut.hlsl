@@ -8,10 +8,14 @@
 
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
-#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 #include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
-#include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
+
+// The capture entry has no camera view; only the per-view entry reads the
+// view's frame exposure.
+#ifdef OXYGEN_CAMERA_VIEW_ENTRY
+#include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
+#endif
 
 cbuffer RootConstants : register(b2, space0)
 {
@@ -187,7 +191,6 @@ static VortexSingleScatteringResult IntegrateSkyLight(
         0.0f.xx,
         ray_origin,
         ray_direction,
-        VortexResolveFarDepthReference(),
         false,
         sampling,
         true,
@@ -211,7 +214,10 @@ static VortexSingleScatteringResult IntegrateSkyLight(
         ray_length);
 }
 
-static void GenerateSkyViewLut(uint3 dispatch_id, float pre_exposure, bool capture)
+// record_hdr_bounds: the per-view entry records store bounds unless the view's
+// exposure is FP32-only; captures never do.
+static void GenerateSkyViewLut(uint3 dispatch_id, float pre_exposure,
+    float one_over_pre_exposure, bool record_hdr_bounds)
 {
     if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX)
     {
@@ -278,24 +284,27 @@ static void GenerateSkyViewLut(uint3 dispatch_id, float pre_exposure, bool captu
         pass.dispatch_header.exposure_status_uav, pass.dispatch_header.exposure_fp16_store,
         pre_exposure);
     const float4 output_value = float4(max(scattering.L, 0.0f.xxx), saturate(transmittance));
-    if (!capture && !IsFp32OnlyExposure()) {
-        RecordHdrStoreBounds(output_value, output_value, output_value, GetOneOverPreExposure(),
+    if (record_hdr_bounds) {
+        RecordHdrStoreBounds(output_value, output_value, output_value, one_over_pre_exposure,
             5u, pass.dispatch_header.exposure_status_uav, pass.dispatch_header.exposure_fp16_store);
     }
     output_texture[dispatch_id.xy] = pass.dispatch_header.exposure_fp16_store != 0u
         ? HdrRoundToHalf(output_value) : output_value;
 }
 
+#ifdef OXYGEN_CAMERA_VIEW_ENTRY
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void VortexAtmosphereSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
 {
-    GenerateSkyViewLut(dispatch_id, GetPreExposure(), false);
+    GenerateSkyViewLut(dispatch_id, GetPreExposure(), GetOneOverPreExposure(),
+        !IsFp32OnlyExposure());
 }
+#endif
 
 [shader("compute")]
 [numthreads(8, 8, 1)]
 void VortexAtmosphereCaptureSkyViewLutCS(uint3 dispatch_id : SV_DispatchThreadID)
 {
-    GenerateSkyViewLut(dispatch_id, 1.0, true);
+    GenerateSkyViewLut(dispatch_id, 1.0f, 1.0f, false);
 }

@@ -13,7 +13,7 @@
 #include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
 #include "Vortex/Services/IndirectLighting/IblEvaluation.hlsli"
 #include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
-#include "Vortex/Shared/MaskedAlphaTest.hlsli"
+#include "Vortex/Shared/MaskedAlphaTestView.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"

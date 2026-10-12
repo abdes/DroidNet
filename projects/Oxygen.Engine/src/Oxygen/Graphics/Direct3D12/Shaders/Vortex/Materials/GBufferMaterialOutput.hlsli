@@ -9,7 +9,7 @@
 
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
-#include "Vortex/Shared/MaskedAlphaTest.hlsli"
+#include "Vortex/Shared/MaskedAlphaTestView.hlsli"
 #include "Vortex/Materials/ForwardMaterialEval.hlsli"
 
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"

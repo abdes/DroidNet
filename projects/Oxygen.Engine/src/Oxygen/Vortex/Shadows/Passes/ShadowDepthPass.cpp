@@ -482,9 +482,6 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
   last_render_state_.shadow_caster_draw_count
     = static_cast<std::uint32_t>(candidates.size());
   const auto has_draws = !candidates.empty();
-  if (has_draws && view_input.view_constants == nullptr) {
-    return last_render_state_;
-  }
 
   auto pass_constants_srvs = std::vector<ShaderVisibleIndex>(
     depth_slices.size(), kInvalidShaderVisibleIndex);
@@ -531,12 +528,14 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
         : EnsureDepthStencilViewForCascade(
             *gfx, views->dsvs, *shadow_surface, slice.target_slice);
       // A local map is a managed registration: its owner made the views.
-      const auto depth_srv = !occlusion ? kInvalidShaderVisibleIndex
-        : local_map
-        ? local_map->slot->backing->layer_srvs.at(slice.target_slice)
-        : vortex::internal::EnsureTextureView(*gfx, *shadow_surface,
-            vortex::internal::ArraySliceSrvDesc(
-              *shadow_surface, slice.target_slice));
+      auto depth_srv = kInvalidShaderVisibleIndex;
+      if (occlusion) {
+        depth_srv = local_map
+          ? local_map->slot->backing->layer_srvs.at(slice.target_slice)
+          : vortex::internal::EnsureTextureView(*gfx, *shadow_surface,
+              vortex::internal::ArraySliceSrvDesc(
+                *shadow_surface, slice.target_slice));
+      }
       const auto target = SliceTarget {
         .surface
         = observer_ptr<const graphics::Texture> { shadow_surface.get() },
@@ -657,9 +656,6 @@ auto ShadowDepthPass::RecordSliceDraws(graphics::CommandRecorder& recorder,
       [&](const vortex::internal::MeshRasterState& raster_state) -> void {
         recorder.SetPipelineState(
           BuildShadowPipelineDesc(surface, raster_state));
-        recorder.SetGraphicsRootConstantBufferView(
-          static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-          view_input.view_constants->GetGPUVirtualAddress());
         recorder.SetGraphicsRoot32BitConstant(
           static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
           target.pass_constants.get(), 1U);

@@ -578,6 +578,7 @@ if(WIN32)
       $<$<CXX_COMPILER_ID:MSVC>:/bigobj>
   )
   # Compile the arithmetic probe separately; it must not enter shaders.bin.
+  # It reaches camera helpers, so it compiles as a camera view entry.
   set(
     exposure_shader_root
     "${PROJECT_SOURCE_DIR}/src/Oxygen/Graphics/Direct3D12/Shaders"
@@ -592,16 +593,17 @@ if(WIN32)
     COMMAND
       ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
     COMMAND
-      "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_8 -E CS -O3 -HV 2021 -I
-      "${exposure_shader_root}" -I "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo
-      "${exposure_probe_output}"
+      "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_8 -E CS -O3 -HV 2021 -D
+      OXYGEN_CAMERA_VIEW_ENTRY=1 -I "${exposure_shader_root}" -I
+      "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo "${exposure_probe_output}"
       "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/ToneBoundsProbe.hlsl"
     # DXC dependency generation is a separate preprocessing action; -MD does
     # not compile DXIL, even when -Fo is supplied.
     COMMAND
-      "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_8 -E CS -O3 -HV 2021 -I
-      "${exposure_shader_root}" -I "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF
-      "${exposure_probe_output}.d" -Fo "${exposure_probe_output}"
+      "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_8 -E CS -O3 -HV 2021 -D
+      OXYGEN_CAMERA_VIEW_ENTRY=1 -I "${exposure_shader_root}" -I
+      "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF "${exposure_probe_output}.d"
+      -Fo "${exposure_probe_output}"
       "${CMAKE_CURRENT_SOURCE_DIR}/Shaders/ToneBoundsProbe.hlsl"
     DEPENDS
       "${OXYGEN_DXC_EXECUTABLE}"

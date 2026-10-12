@@ -5,17 +5,25 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <system_error>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DirtyAnalysis.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
@@ -112,22 +120,6 @@ namespace {
     return current.content_hash == dependency.content_hash;
   }
 
-  auto MatchesPrimarySourceHash(const std::filesystem::path& workspace_root,
-    const std::filesystem::path& shader_source_root,
-    const ShaderRequest& request, const uint64_t stored_primary_hash) -> bool
-  {
-    const auto source_path
-      = (shader_source_root / request.source_path).lexically_normal();
-
-    std::error_code ec;
-    if (!std::filesystem::is_regular_file(source_path, ec) || ec) {
-      return false;
-    }
-
-    return ComputeFileFingerprint(source_path, workspace_root).content_hash
-      == stored_primary_hash;
-  }
-
   auto AnalyzeOneRequest(const std::filesystem::path& workspace_root,
     const std::filesystem::path& shader_source_root,
     std::span<const std::filesystem::path> include_dirs,
@@ -142,21 +134,22 @@ namespace {
   {
     RequestDirtyAnalysis analysis {
       .expanded_request = expanded_request,
-      .action_key
-      = ComputeShaderActionKey(expanded_request.request, include_dirs, profile),
+      .action_key = ComputeShaderActionKey(expanded_request.request,
+        expanded_request.view_binding, include_dirs, profile),
       .artifact_path
       = GetModuleArtifactPath(layout, expanded_request.request_key),
+      .reusable_artifact = std::nullopt,
+      .dirty_reasons = {},
     };
 
     if (has_previous_manifest
-      && previous_manifest_keys.find(expanded_request.request_key)
-        == previous_manifest_keys.end()) {
+      && !previous_manifest_keys.contains(expanded_request.request_key)) {
       analysis.dirty_reasons.push_back(DirtyReason::kNewManifestMembership);
     }
 
     const auto previous_it
       = previous_modules.find(expanded_request.request_key);
-    const auto artifact = TryReadModuleArtifactFile(analysis.artifact_path);
+    auto artifact = TryReadModuleArtifactFile(analysis.artifact_path);
     if (!artifact.has_value()) {
       analysis.dirty_reasons.push_back(previous_it == previous_modules.end()
           ? DirtyReason::kMissingArtifact
@@ -177,8 +170,8 @@ namespace {
     std::error_code ec;
     if (!std::filesystem::is_regular_file(source_path, ec) || ec) {
       analysis.dirty_reasons.push_back(DirtyReason::kMissingPrimarySource);
-    } else if (!MatchesPrimarySourceHash(workspace_root, shader_source_root,
-                 expanded_request.request, artifact->primary_hash)) {
+    } else if (ComputeFileFingerprint(source_path, workspace_root).content_hash
+      != artifact->primary_hash) {
       analysis.dirty_reasons.push_back(DirtyReason::kPrimarySourceChanged);
     }
 
@@ -235,6 +228,8 @@ auto AnalyzeDirtyRequests(const std::filesystem::path& workspace_root,
 
   DirtyAnalysisResult result {
     .current_manifest = current_manifest,
+    .requests = {},
+    .stale_artifact_paths = {},
     .manifest_changed = !previous_manifest.has_value()
       || (*previous_manifest != current_manifest),
     .final_archive_missing = !std::filesystem::exists(final_archive_path),
@@ -258,12 +253,9 @@ auto AnalyzeDirtyRequests(const std::filesystem::path& workspace_root,
         .lexically_normal());
   }
 
-  std::sort(
-    result.stale_artifact_paths.begin(), result.stale_artifact_paths.end());
-  result.stale_artifact_paths.erase(
-    std::unique(
-      result.stale_artifact_paths.begin(), result.stale_artifact_paths.end()),
-    result.stale_artifact_paths.end());
+  std::ranges::sort(result.stale_artifact_paths);
+  const auto duplicates = std::ranges::unique(result.stale_artifact_paths);
+  result.stale_artifact_paths.erase(duplicates.begin(), duplicates.end());
   return result;
 }
 

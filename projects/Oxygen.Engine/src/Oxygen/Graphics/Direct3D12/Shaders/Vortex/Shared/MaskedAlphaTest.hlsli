@@ -7,8 +7,11 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_MASKEDALPHATEST_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_MASKEDALPHATEST_HLSLI
 
+// Pure masked alpha test: callers pass the draw-metadata and material slots or
+// the material. Camera passes resolve them through MaskedAlphaTestView.hlsli.
+
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/Definitions/MaterialFlags.hlsli"
-#include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 
@@ -62,17 +65,6 @@ static inline bool TryLoadMaterialFromSlots(uint draw_metadata_slot,
   return true;
 }
 
-// Resolves the slots through the bound view's frame bindings. Passes that bind
-// another view's constants, such as shadow depth, pass their own slots to
-// EvaluateMaskedAlphaTestFromSlots instead.
-static inline bool TryLoadMaterialForDraw(
-  uint draw_index, out MaterialShadingConstants material)
-{
-  const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
-  return TryLoadMaterialFromSlots(draw_bindings.draw_metadata_slot,
-    draw_bindings.material_shading_constants_slot, draw_index, material);
-}
-
 static inline float SampleMaskedMaterialAlpha(
   float2 uv0, MaterialShadingConstants material, SamplerState linear_sampler)
 {
@@ -104,16 +96,6 @@ static inline MaskedAlphaTestResult EvaluateMaskedAlphaTestForMaterial(
   result.alpha = SampleMaskedMaterialAlpha(uv0, material, linear_sampler);
   result.cutoff = ResolveMaskedAlphaCutoff(material);
   return result;
-}
-
-static inline MaskedAlphaTestResult EvaluateMaskedAlphaTest(
-  float2 uv0, uint draw_index, SamplerState linear_sampler)
-{
-  MaterialShadingConstants material;
-  if (!TryLoadMaterialForDraw(draw_index, material)) {
-    return (MaskedAlphaTestResult)0;
-  }
-  return EvaluateMaskedAlphaTestForMaterial(uv0, material, linear_sampler);
 }
 
 static inline MaskedAlphaTestResult EvaluateMaskedAlphaTestFromSlots(

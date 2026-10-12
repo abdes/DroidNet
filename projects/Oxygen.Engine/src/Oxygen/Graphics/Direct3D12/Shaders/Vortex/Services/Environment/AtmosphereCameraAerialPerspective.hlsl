@@ -224,7 +224,6 @@ static VortexSingleScatteringResult IntegrateCameraAerialLight(
         pixel_position,
         ray_origin,
         ray_direction,
-        ResolveFarDepthReference(),
         false,
         sampling,
         true,

@@ -30,12 +30,12 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
-#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -62,6 +62,7 @@
 #include <Oxygen/Vortex/Shadows/Internal/ShadowReferenceBuilder.h>
 #include <Oxygen/Vortex/Shadows/Internal/SharedShadowMap.h>
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
+#include <Oxygen/Vortex/Shadows/Passes/ContactShadowCasterDepthPass.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
@@ -701,7 +702,6 @@ protected:
       .shadow_dependencies_available = true,
       .prepared_scene = {},
       .resolved_view = {},
-      .view_constants = {},
       .composition_view = {},
     };
     LocalShadowRequest request;
@@ -787,7 +787,6 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
       .lighting_bindings = &lighting,
       .prepared_scene = {},
       .resolved_view = oxygen::observer_ptr { &resolved_view },
-      .view_constants = {},
       .composition_view = {},
     },
   };
@@ -903,7 +902,6 @@ NOLINT_TEST_F(
       .shadow_caster_dependencies = {},
       .prepared_scene = {},
       .resolved_view = oxygen::observer_ptr { &resolved_view },
-      .view_constants = {},
       .composition_view = {},
     },
   };
@@ -942,12 +940,6 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
   texture_desc.is_typeless = true;
   const auto texture = graphics_->CreateTexture(texture_desc);
   graphics_->GetResourceRegistry().Register(texture);
-  const auto view_constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-    .debug_name = "RasterState.ShadowViewConstants",
-  });
   const auto slices = std::array {
     ShadowDepthPass::DepthSlice {
       .target_slice = 0U,
@@ -976,10 +968,6 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
       = oxygen::observer_ptr<const oxygen::vortex::PreparedSceneFrame> {
           &frame,
         };
-    input.view_constants
-      = oxygen::observer_ptr<const oxygen::graphics::Buffer> {
-          view_constants.get(),
-        };
     graphics_->draw_log_.draws.clear();
     graphics_->indirect_log_.draws.clear();
     const auto result = pass.RecordSlices(input, texture, slices);
@@ -995,6 +983,120 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
         indirect.subspan(slice * per_slice, per_slice), "Vortex.ShadowDepth.");
     }
   }
+}
+
+namespace {
+
+  auto CountCameraViewConstantBinds(
+    const oxygen::vortex::testing::RootConstantBufferViewLog& log)
+    -> std::size_t
+  {
+    using oxygen::bindless::generated::d3d12::RootParam;
+    return static_cast<std::size_t>(std::ranges::count(log.binds,
+      static_cast<std::uint32_t>(RootParam::kViewConstants),
+      &oxygen::vortex::testing::RootConstantBufferViewLog::Event::
+        root_parameter_index));
+  }
+
+} // namespace
+
+//! Shadow depth reads its casters from its own pass constants; it records and
+//! draws with no camera view constants and never binds them.
+NOLINT_TEST_F(
+  ShadowServiceBehaviorTest, ShadowDepthDrawsWithoutCameraViewConstants)
+{
+  using oxygen::vortex::shadows::ShadowDepthPass;
+  auto pass = ShadowDepthPass(*renderer_);
+  pass.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto texture_desc = oxygen::graphics::TextureDesc {};
+  texture_desc.width = 64U;
+  texture_desc.height = 64U;
+  texture_desc.format = oxygen::Format::kDepth32;
+  texture_desc.debug_name = "NoViewConstants.ShadowDepth";
+  texture_desc.is_shader_resource = true;
+  texture_desc.is_render_target = true;
+  texture_desc.is_typeless = true;
+  const auto texture = graphics_->CreateTexture(texture_desc);
+  graphics_->GetResourceRegistry().Register(texture);
+  auto metadata = oxygen::vortex::testing::MakeRasterStateDraws(
+    oxygen::vortex::PassMaskBit::kMasked);
+  for (auto& draw : metadata) {
+    draw.flags.Set(oxygen::vortex::PassMaskBit::kShadowCaster);
+  }
+  auto frame = oxygen::vortex::PreparedSceneFrame {};
+  frame.draw_metadata_bytes = std::as_bytes(std::span(metadata));
+  auto input = oxygen::vortex::PreparedViewShadowInput {};
+  input.view_id = oxygen::ViewId { 1U };
+  input.prepared_scene = oxygen::observer_ptr { &frame };
+  const auto slices = std::array {
+    ShadowDepthPass::DepthSlice { .target_slice = 0U, .light_source = {} },
+  };
+
+  const auto result = pass.RecordSlices(input, texture, slices);
+
+  EXPECT_EQ(result.submitted_draw_count, 5U);
+  EXPECT_FALSE(graphics_->indirect_log_.draws.empty());
+  EXPECT_EQ(CountCameraViewConstantBinds(graphics_->root_cbv_log_), 0U);
+}
+
+//! Contact-shadow caster depth draws the view's casters through its own inputs
+//! record and never binds the camera view constants, which may change after it
+//! records.
+NOLINT_TEST_F(
+  ShadowServiceBehaviorTest, ContactCasterDepthReadsOnlyItsPassInputs)
+{
+  auto pass = oxygen::vortex::shadows::ContactShadowCasterDepthPass(*renderer_);
+  pass.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto resolved_view = MakePerspectiveResolvedView();
+  auto metadata = oxygen::vortex::testing::MakeRasterStateDraws(
+    oxygen::vortex::PassMaskBit::kMasked);
+  for (auto& draw : metadata) {
+    draw.flags.Set(oxygen::vortex::PassMaskBit::kShadowCaster);
+  }
+  auto frame = oxygen::vortex::PreparedSceneFrame {};
+  frame.draw_metadata_bytes = std::as_bytes(std::span(metadata));
+  auto input = oxygen::vortex::PreparedViewShadowInput {};
+  input.view_id = oxygen::ViewId { 7U };
+  input.prepared_scene = oxygen::observer_ptr { &frame };
+  input.resolved_view = oxygen::observer_ptr { &resolved_view };
+  input.draw_frame_slot = oxygen::ShaderVisibleIndex { 41U };
+  auto bindings = ShadowFrameBindings {};
+
+  const auto texture = pass.Record(input, bindings);
+
+  ASSERT_NE(texture, nullptr);
+  EXPECT_EQ(bindings.contact_enabled, 1U);
+  oxygen::vortex::testing::ExpectRasterStateIndirectDraws(
+    graphics_->indirect_log_.draws, "Vortex.ContactShadowCasterDepth.");
+  EXPECT_EQ(CountCameraViewConstantBinds(graphics_->root_cbv_log_), 0U);
+}
+
+//! Without the view's draw publication the caster depth has nothing to read,
+//! so it records nothing and leaves contact shadows disabled.
+NOLINT_TEST_F(
+  ShadowServiceBehaviorTest, ContactCasterDepthNeedsTheViewDrawPublication)
+{
+  auto pass = oxygen::vortex::shadows::ContactShadowCasterDepthPass(*renderer_);
+  pass.OnFrameStart(
+    oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
+  auto resolved_view = MakePerspectiveResolvedView();
+  const auto metadata = oxygen::vortex::testing::MakeRasterStateDraws(
+    oxygen::vortex::PassMaskBit::kOpaque);
+  auto frame = oxygen::vortex::PreparedSceneFrame {};
+  frame.draw_metadata_bytes = std::as_bytes(std::span(metadata));
+  auto input = oxygen::vortex::PreparedViewShadowInput {};
+  input.view_id = oxygen::ViewId { 7U };
+  input.prepared_scene = oxygen::observer_ptr { &frame };
+  input.resolved_view = oxygen::observer_ptr { &resolved_view };
+  auto bindings = ShadowFrameBindings {};
+
+  const auto texture = pass.Record(input, bindings);
+
+  EXPECT_EQ(texture, nullptr);
+  EXPECT_EQ(bindings.contact_enabled, 0U);
+  EXPECT_TRUE(graphics_->indirect_log_.draws.empty());
 }
 
 NOLINT_TEST(ShadowServiceSurfaceTest,
@@ -1454,18 +1556,12 @@ NOLINT_TEST_F(
   texture_revisions.at(0) = 1U; // This fixture samples a known masked texture.
   frame.shadow_materials = materials;
   frame.shadow_texture_revisions = texture_revisions;
-  const auto constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-  });
   const auto inputs = std::array {
     oxygen::vortex::PreparedViewShadowInput {
       .view_id = oxygen::ViewId { 24U },
       .shadow_caster_dependencies = {},
       .prepared_scene = oxygen::observer_ptr { &frame },
       .resolved_view = oxygen::observer_ptr { &view },
-      .view_constants = oxygen::observer_ptr { constants.get() },
       .composition_view = {},
     },
   };
@@ -1767,7 +1863,6 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
       .shadow_caster_dependencies = {},
       .prepared_scene = {},
       .resolved_view = oxygen::observer_ptr { &view },
-      .view_constants = {},
       .composition_view = {},
     },
   };
@@ -1850,18 +1945,12 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
   scene.draw_bounding_spheres = bounds;
   scene.shadow_caster_sources = sources;
   scene.world_matrices = world;
-  const auto constants = graphics_->CreateBuffer({
-    .size_bytes = 1024U,
-    .usage = oxygen::graphics::BufferUsage::kConstant,
-    .memory = oxygen::graphics::BufferMemory::kUpload,
-  });
   const auto views = std::array {
     oxygen::vortex::PreparedViewShadowInput {
       .view_id = oxygen::ViewId { 93U },
       .shadow_caster_dependencies = {},
       .prepared_scene = oxygen::observer_ptr { &scene },
       .resolved_view = oxygen::observer_ptr { &view },
-      .view_constants = oxygen::observer_ptr { constants.get() },
       .composition_view = {},
     },
   };
@@ -1975,7 +2064,6 @@ protected:
         .shadow_caster_dependencies = {},
         .prepared_scene = oxygen::observer_ptr { &scenes.at(i) },
         .resolved_view = oxygen::observer_ptr { &view },
-        .view_constants = {},
         .composition_view = {},
       };
     }

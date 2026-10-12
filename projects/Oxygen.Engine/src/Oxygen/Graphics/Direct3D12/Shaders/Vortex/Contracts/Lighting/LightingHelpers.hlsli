@@ -8,10 +8,13 @@
 #define OXYGEN_VORTEX_LIGHTING_HELPERS_HLSLI
 
 #include "Vortex/Contracts/Lighting/LightingFrameBindings.hlsli"
-#include "Vortex/Contracts/Shadows/ShadowRecords.hlsli"
+#include "Vortex/Contracts/Lighting/LightRecords.hlsli"
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
+
+// Camera-view lighting: resolves the bound view's lighting publication. Pure
+// record loaders that take the bindings live in LightRecords.hlsli.
 
 static inline LightingFrameBindings LoadResolvedLightingFrameBindings()
 {
@@ -27,34 +30,6 @@ static inline LightingFrameBindings LoadResolvedLightingFrameBindings()
     return lighting;
 }
 
-static bool TryLoadDirectionalLight(LightingFrameBindings lighting, uint index,
-    out DirectionalLightForwardData light)
-{
-    light = (DirectionalLightForwardData)0;
-    if (!IsLightingPublicationReady(lighting) || index >= lighting.directional_count
-        || !BX_IN_GLOBAL_SRV(lighting.directional_records_srv)) return false;
-    StructuredBuffer<DirectionalLightForwardData> records = ResourceDescriptorHeap[lighting.directional_records_srv];
-    uint count, stride;
-    records.GetDimensions(count, stride);
-    if (index >= count) return false;
-    light = records[index];
-    return light.selection_index == index;
-}
-
-static bool TryLoadLocalLight(LightingFrameBindings lighting, uint index,
-    out ForwardLocalLightRecord light)
-{
-    light = (ForwardLocalLightRecord)0;
-    if (!IsLightingPublicationReady(lighting) || index >= lighting.local_count
-        || !BX_IN_GLOBAL_SRV(lighting.local_records_srv)) return false;
-    StructuredBuffer<ForwardLocalLightRecord> records = ResourceDescriptorHeap[lighting.local_records_srv];
-    uint count, stride;
-    records.GetDimensions(count, stride);
-    if (index >= count) return false;
-    light = records[index];
-    return light.selection_index == index;
-}
-
 static bool TryLoadAtmosphereDirectionalLight(uint atmosphere_slot,
     out DirectionalLightForwardData light)
 {
@@ -66,19 +41,6 @@ static bool TryLoadAtmosphereDirectionalLight(uint atmosphere_slot,
     }
     light = (DirectionalLightForwardData)0;
     return false;
-}
-
-static LightShadowReference LoadLightShadowReference(uint descriptor, uint index)
-{
-    LightShadowReference reference = (LightShadowReference)0;
-    reference.record_index = K_INVALID_BINDLESS_INDEX;
-    reference.selection_index = K_INVALID_BINDLESS_INDEX;
-    if (!BX_IN_GLOBAL_SRV(descriptor)) return reference;
-    StructuredBuffer<LightShadowReference> references = ResourceDescriptorHeap[descriptor];
-    uint count, stride;
-    references.GetDimensions(count, stride);
-    if (index < count) reference = references[index];
-    return reference;
 }
 
 static uint3 GetClusterDimensions()

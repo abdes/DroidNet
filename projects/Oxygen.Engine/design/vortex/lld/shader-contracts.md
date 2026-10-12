@@ -507,11 +507,25 @@ do not bind b1. Their inputs record carries the view-projection, the draw-frame
 slot and every value their shaders read.
 
 **Shader helpers.** Helpers under `Contracts/` and `Shared/` take records or
-slots as arguments. Helpers that resolve the bound view chain
-(`LoadResolvedDrawFrameBindings`, bound-view material, exposure, environment
-and lighting access) live in one bound-view header that compiles only in entry
-points declaring themselves camera-view entry points; any other inclusion is an
-`#error`.
+slots as arguments. `Contracts/View/ViewConstants.hlsli` is the bound-view
+header: the only declaration of b1. Helpers that read the bound view include it
+and are camera-only: `DrawHelpers.hlsli`, `MaskedAlphaTestView.hlsli`,
+`FrameExposureHelpers.hlsli`, `EnvironmentHelpers.hlsli`,
+`EnvironmentViewHelpers.hlsli` and `LightingHelpers.hlsli`, among others. Their
+pure counterparts take the slot or record instead: `LoadDrawFrameBindings`,
+`MaskedAlphaTest.hlsli`, `FrameExposure.hlsli`, `SkyDiffuseIrradiance.hlsli`,
+`LightRecords.hlsli`, and `ComputeMeshClipPosition`, which takes the view and
+projection matrices.
+
+The catalog, not the shader, decides which entry points are camera entries:
+`.view_binding=kCamera` on an `EntryPoint`. ShaderBake defines
+`OXYGEN_CAMERA_VIEW_ENTRY` for those entries only. The define is part of the
+action key but not of the request identity, so runtime lookups do not change.
+The bound-view header raises `#error` without it, so a non-camera entry that
+reaches b1, directly or through a helper, fails the bake. A file that mixes
+camera and non-camera entries, such as the sky-view LUT with its capture entry,
+wraps the camera entry and its bound-view includes in
+`#ifdef OXYGEN_CAMERA_VIEW_ENTRY`.
 
 **Mesh position.** Depth prepass, base pass, shadow and contact-shadow passes
 compute world position through one helper, including material world-position
@@ -823,45 +837,25 @@ All Phase 3 entrypoints must be registered in `EngineShaderCatalog.h`.
 Registration defines the shader request identity used by ShaderBake and
 runtime cache.
 
-### 7.1 Phase 3 Entrypoints
+### 7.1 Registration Pattern
 
-| Entrypoint                         | File                                              | Stage  | Profile        |
-| ---------------------------------- | ------------------------------------------------- | ------ | -------------- |
-| `VortexDepthPrepassVS`             | `Stages/DepthPrepass/DepthPrepass.hlsl`           | vs_6_0 | Vertex         |
-| `VortexDepthPrepassPS`             | `Stages/DepthPrepass/DepthPrepass.hlsl`           | ps_6_0 | Pixel          |
-| `VortexBasePassVS`                 | `Stages/BasePass/BasePassGBuffer.hlsl`            | vs_6_0 | Vertex         |
-| `VortexBasePassPS`                 | `Stages/BasePass/BasePassGBuffer.hlsl`            | ps_6_0 | Pixel          |
-| `VortexBasePassVelocityAuxVS`      | `Stages/BasePass/BasePassVelocityAux.hlsl`        | vs_6_0 | Vertex         |
-| `VortexBasePassVelocityAuxPS`      | `Stages/BasePass/BasePassVelocityAux.hlsl`        | ps_6_0 | Pixel          |
-| `VortexBasePassVelocityMergeCS`    | `Stages/BasePass/BasePassVelocityMerge.hlsl`      | cs_6_0 | Compute        |
-| `VortexDeferredLightDirectionalVS` | `Services/Lighting/DeferredLightDirectional.hlsl` | vs_6_0 | Fullscreen     |
-| `VortexDeferredLightDirectionalPS` | `Services/Lighting/DeferredLightDirectional.hlsl` | ps_6_0 | Pixel          |
-| `VortexDeferredLightPointVS`       | `Services/Lighting/DeferredLightPoint.hlsl`       | vs_6_0 | Stencil sphere |
-| `VortexDeferredLightPointPS`       | `Services/Lighting/DeferredLightPoint.hlsl`       | ps_6_0 | Pixel          |
-| `VortexDeferredLightSpotVS`        | `Services/Lighting/DeferredLightSpot.hlsl`        | vs_6_0 | Stencil cone   |
-| `VortexDeferredLightSpotPS`        | `Services/Lighting/DeferredLightSpot.hlsl`        | ps_6_0 | Pixel          |
-
-Deferred-light shaders live under `Services/Lighting/` even in Phase 3 because
-the shader-family owner is already the Lighting domain; only the CPU-side stage
-12 orchestration remains temporarily inline in `SceneRenderer` until Phase 4A.
-
-### 7.2 Catalog Registration Pattern
-
-Per Oxygen convention (ARCHITECTURE.md §10.3), entrypoints are registered
-through `EngineShaderCatalog.h`:
+`EngineShaderCatalog.h` is the list of entry points; this document does not
+duplicate it. Each `ShaderFileSpec` names a source file, its entry points and
+the boolean permutations that expand per entry. A
+`RequiredDefineShaderFileSpec` adds defines every variant carries. Entries
+that read the camera view constants are marked camera entries (§4.9):
 
 ```cpp
-// In EngineShaderCatalog.h — Phase 3 additions
-catalog.Register({
-  .name = "VortexDepthPrepassVS",
-  .source = "Vortex/Stages/DepthPrepass/DepthPrepass.hlsl",
-  .entry_point = "DepthPrepassVS",
-  .profile = ShaderProfile::kVS_6_0,
-});
-// ... repeat for each entrypoint
+ShaderFileSpec {
+  .path="Vortex/Stages/DepthPrepass/DepthPrepass.hlsl",
+  .entries=std::array {
+    EntryPoint { .type=kPixel, .name="DepthPrepassPS", .view_binding=kCamera },
+    EntryPoint { .type=kVertex, .name="DepthPrepassVS", .view_binding=kCamera } },
+  .permutations=std::array<std::string_view, 2> { "HAS_VELOCITY", "ALPHA_TEST" }
+},
 ```
 
-### 7.3 Permutation Strategy
+### 7.2 Permutation Strategy
 
 Phase 3 uses minimal permutations:
 

@@ -5,9 +5,14 @@
 //===----------------------------------------------------------------------===//
 #pragma once
 #include <array>
+#include <cstdint>
 #include <variant>
 #include <vector>
 
+#include <glm/mat4x4.hpp>
+
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
@@ -25,10 +30,16 @@ struct LocalShadowContentKey {
   std::uint32_t resolution { 0 };
   Format format { Format::kDepth32 };
   LocalShadowDepthContract contract {
-    LocalShadowDepthContract::kProjectedLinearReversedV1
+    LocalShadowDepthContract::kProjectedLinearReversedV1,
   };
-  std::array<glm::mat4, 6> matrices { glm::mat4(0), glm::mat4(0), glm::mat4(0),
-    glm::mat4(0), glm::mat4(0), glm::mat4(0) };
+  std::array<glm::mat4, CubeLocalShadowRecord::kFaceCount> matrices {
+    glm::mat4(0),
+    glm::mat4(0),
+    glm::mat4(0),
+    glm::mat4(0),
+    glm::mat4(0),
+    glm::mat4(0),
+  };
   glm::vec4 bias { 0 };
   glm::vec4 direction { 0 };
   glm::vec4 position_and_inverse_range { 0 };
@@ -53,4 +64,4 @@ OXGN_VRTX_API auto PrepareLocalShadowRequest(
   const PreparedViewShadowInput& view, const FrameLocalLightSelection& light,
   LightSelectionIndex selection, std::uint32_t resolution, float strength,
   LocalShadowRequest& request) -> void;
-}
+} // namespace oxygen::vortex::shadows::internal

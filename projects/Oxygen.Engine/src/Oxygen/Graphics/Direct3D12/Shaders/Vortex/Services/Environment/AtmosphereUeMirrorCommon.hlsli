@@ -10,7 +10,6 @@
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 
 #include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
-#include "Vortex/Contracts/View/ViewConstants.hlsli"
 #include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Shared/Math.hlsli"
 #include "Vortex/Services/Environment/AtmosphereConstants.hlsli"
@@ -119,16 +118,10 @@ static float3 VortexGetMultipleScattering(
     return multi_scat_lut.SampleLevel(linear_sampler, uv, 0.0f).rgb;
 }
 
-static float VortexResolveFarDepthReference()
-{
-    return reverse_z != 0u ? 0.0f : 1.0f;
-}
-
 static VortexSingleScatteringResult VortexIntegrateSingleScatteredLuminance(
     float2 sv_pos,
     float3 world_pos,
     float3 world_dir,
-    float device_z,
     bool ground,
     VortexSamplingSetup sampling,
     bool mie_ray_phase,

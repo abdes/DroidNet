@@ -805,7 +805,7 @@ namespace {
   }
 
   auto CollectCurrentShadowViewInput(const RenderContext& ctx,
-    const InitViewsModule* init_views,
+    const InitViewsModule* init_views, const ShaderVisibleIndex draw_frame_slot,
     std::vector<PreparedViewShadowInput>& out) -> void
   {
     out.clear();
@@ -823,9 +823,7 @@ namespace {
               init_views->GetPreparedSceneFrame(ctx.current_view.view_id),
             },
         .resolved_view = ctx.current_view.resolved_view,
-        .view_constants = observer_ptr<const graphics::Buffer> {
-          ctx.view_constants.get(),
-        },
+        .draw_frame_slot = draw_frame_slot,
         .composition_view = ctx.current_view.composition_view,
       });
     }
@@ -2350,7 +2348,11 @@ auto SceneRenderer::RenderCurrentView(
 
   // Stage 8: Shadow depth
   if (shadows_ != nullptr && wants_shadow_products) {
-    CollectCurrentShadowViewInput(ctx, init_views_.get(), frame_shadow_views_);
+    const auto draw_frame_slot = published_view_id_ == ctx.current_view.view_id
+      ? published_view_frame_bindings_.draw_frame_slot
+      : kInvalidShaderVisibleIndex;
+    CollectCurrentShadowViewInput(
+      ctx, init_views_.get(), draw_frame_slot, frame_shadow_views_);
     for (auto& input : frame_shadow_views_) {
       input.lighting_bindings = lighting_ != nullptr
         ? lighting_->InspectForwardLightBindings(input.view_id)
@@ -2367,7 +2369,6 @@ auto SceneRenderer::RenderCurrentView(
         .prepared_scene = observer_ptr<const PreparedSceneFrame> { init_views_
             ->GetPreparedSceneFrame(view.view_id) },
         .resolved_view = view.resolved_view,
-        .view_constants = {},
         .composition_view = view.composition_view,
       });
     }

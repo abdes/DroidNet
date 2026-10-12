@@ -18,6 +18,7 @@ namespace oxygen::graphics::d3d12::tools::shader_bake {
 struct ExpandedShaderRequest {
   ShaderRequest request;
   uint64_t request_key { 0 };
+  ShaderViewBinding view_binding { ShaderViewBinding::kNone };
 };
 
 [[nodiscard]] auto ExpandShaderCatalog(std::span<const ShaderEntry> entries)

@@ -11,24 +11,34 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <ios>
+#include <iterator>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/ShaderLibraryIO.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Execution.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FinalArchivePack.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/RequestCompilation.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>
 
@@ -82,8 +92,9 @@ auto ReadFileBytes(const std::filesystem::path& path) -> std::vector<std::byte>
 auto MakePayload(uint64_t first, uint64_t second) -> std::vector<std::byte>
 {
   std::vector<std::byte> bytes(sizeof(uint64_t) * 2U);
-  std::memcpy(bytes.data(), &first, sizeof(uint64_t));
-  std::memcpy(bytes.data() + sizeof(uint64_t), &second, sizeof(uint64_t));
+  const auto halves = std::span(bytes);
+  std::memcpy(halves.first(sizeof(uint64_t)).data(), &first, sizeof(uint64_t));
+  std::memcpy(halves.last(sizeof(uint64_t)).data(), &second, sizeof(uint64_t));
   return bytes;
 }
 
@@ -137,6 +148,8 @@ public:
     if (const auto it = failure_messages_.find(request.request_key);
       it != failure_messages_.end()) {
       return RequestCompileOutcome {
+        .artifact = std::nullopt,
+        .pdb = {},
         .diagnostics = "request: " + request.request.source_path + ":"
           + request.request.entry_point + "\nerror: " + it->second + "\n",
       };
@@ -167,7 +180,8 @@ public:
       = oxygen::graphics::d3d12::tools::shader_bake::ModuleArtifact {
         .request_key = request.request_key,
         .action_key
-        = ComputeShaderActionKey(request.request, include_dirs_, profile_),
+        = ComputeShaderActionKey(
+          request.request, request.view_binding, include_dirs_, profile_),
         .toolchain_hash = toolchain_hash_,
         .request = request.request,
         .primary_hash = primary.content_hash,
@@ -176,6 +190,7 @@ public:
         .reflection = MakePayload(dependency_seed, toolchain_hash_),
       },
       .pdb = std::move(pdb),
+      .diagnostics = {},
     };
   }
 
@@ -225,7 +240,7 @@ protected:
     -> void
   {
     std::filesystem::create_directories(path.parent_path());
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    std::ofstream out(path, std::ios::binary);
     out << text;
   }
 
@@ -262,7 +277,9 @@ protected:
       .requests = requests,
       .compile_request
       = [&compiler](const ExpandedShaderRequest& request, size_t index,
-          size_t total_count) { return compiler(request, index, total_count); },
+          size_t total_count) -> RequestCompileOutcome {
+        return compiler(request, index, total_count);
+      },
     };
   }
 
@@ -329,9 +346,10 @@ NOLINT_TEST_F(ShaderBakeExecutionTest,
 NOLINT_TEST_F(ShaderBakeExecutionTest, UnchangedUpdateIsSilentUnlessVerbose)
 {
   const auto previous_verbosity = loguru::g_global_verbosity;
-  const oxygen::ScopeGuard restore_verbosity([previous_verbosity]() noexcept {
-    loguru::g_global_verbosity = previous_verbosity;
-  });
+  const oxygen::ScopeGuard restore_verbosity(
+    [previous_verbosity] noexcept -> void {
+      loguru::g_global_verbosity = previous_verbosity;
+    });
   loguru::g_global_verbosity = loguru::Verbosity_INFO;
   oxygen::testing::ScopedLogCapture capture(
     "ShaderBakeOutput", loguru::Verbosity_1);
@@ -344,21 +362,21 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, UnchangedUpdateIsSilentUnlessVerbose)
   FakeCompiler compiler(
     workspace_root_, shader_root_, include_dirs_, toolchain_hash_);
   const auto options = MakeOptions(requests, compiler);
-  ASSERT_TRUE(ExecuteUpdate(options).has_value());
+  ASSERT_HAS_VALUE(ExecuteUpdate(options));
   EXPECT_TRUE(capture.Contains("Wrote 1 modules"));
   EXPECT_FALSE(capture.Contains("[dirty:"));
   const auto archive_time = std::filesystem::last_write_time(out_file_);
 
   capture.Clear();
   const auto quiet = ExecuteUpdate(options);
-  ASSERT_TRUE(quiet.has_value());
+  ASSERT_HAS_VALUE(quiet);
   EXPECT_EQ(quiet->compiled_request_count, 0U);
   EXPECT_FALSE(quiet->repacked);
   EXPECT_TRUE(capture.Messages().empty());
 
   loguru::g_global_verbosity = loguru::Verbosity_1;
   const auto verbose = ExecuteUpdate(options);
-  ASSERT_TRUE(verbose.has_value());
+  ASSERT_HAS_VALUE(verbose);
   EXPECT_EQ(verbose->compiled_request_count, 0U);
   EXPECT_FALSE(verbose->repacked);
   EXPECT_TRUE(capture.Contains("[clean]"));
@@ -384,7 +402,7 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, UpdateRecompilesOnlyEditedLeafRequest)
     workspace_root_, shader_root_, include_dirs_, toolchain_hash_);
 
   const auto first_run = ExecuteUpdate(MakeOptions(requests, compiler));
-  ASSERT_TRUE(first_run.has_value());
+  ASSERT_HAS_VALUE(first_run);
   EXPECT_EQ(first_run->compiled_request_count, 2U);
   EXPECT_EQ(first_run->clean_request_count, 0U);
   EXPECT_TRUE(std::filesystem::exists(GetRequestDxilPath(out_file_,
@@ -405,7 +423,7 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, UpdateRecompilesOnlyEditedLeafRequest)
     "float4 PS() : SV_Target { return 3; }\n");
 
   const auto second_run = ExecuteUpdate(MakeOptions(requests, compiler));
-  ASSERT_TRUE(second_run.has_value());
+  ASSERT_HAS_VALUE(second_run);
   EXPECT_EQ(second_run->compiled_request_count, 1U);
   EXPECT_EQ(second_run->clean_request_count, 1U);
   EXPECT_EQ(compiler.CompileCount(first.request_key), 2U);
@@ -432,7 +450,7 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, UpdateRecompilesRequestWithMissingPdb)
   ASSERT_TRUE(std::filesystem::remove(pdb_path));
 
   const auto second_run = ExecuteUpdate(MakeOptions(requests, compiler));
-  ASSERT_TRUE(second_run.has_value());
+  ASSERT_HAS_VALUE(second_run);
   EXPECT_EQ(second_run->compiled_request_count, 1U);
   EXPECT_EQ(compiler.CompileCount(request.request_key), 2U);
   EXPECT_TRUE(std::filesystem::exists(pdb_path));
@@ -457,12 +475,12 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, ProfileWithoutPdbsRemovesStaleSidecars)
 
   compiler.SetProfile(MakeShaderCompileProfile(ShaderConfig::kRelease));
   const auto release_run = ExecuteUpdate(MakeOptions(requests, compiler));
-  ASSERT_TRUE(release_run.has_value());
+  ASSERT_HAS_VALUE(release_run);
   EXPECT_EQ(release_run->compiled_request_count, 1U);
   EXPECT_FALSE(std::filesystem::exists(pdb_path));
 
   const auto clean_run = ExecuteUpdate(MakeOptions(requests, compiler));
-  ASSERT_TRUE(clean_run.has_value());
+  ASSERT_HAS_VALUE(clean_run);
   EXPECT_EQ(clean_run->compiled_request_count, 0U);
 }
 
@@ -499,7 +517,7 @@ NOLINT_TEST_F(ShaderBakeExecutionTest,
   WriteTextFile(shared_include, "float3 EvalLight() { return 7; }\n");
 
   const auto second_run = ExecuteUpdate(MakeOptions(requests, compiler));
-  ASSERT_TRUE(second_run.has_value());
+  ASSERT_HAS_VALUE(second_run);
   EXPECT_EQ(second_run->compiled_request_count, 2U);
   EXPECT_EQ(second_run->clean_request_count, 1U);
   EXPECT_EQ(compiler.CompileCount(first.request_key), 2U);
@@ -532,7 +550,7 @@ NOLINT_TEST_F(
 
   const auto second_run
     = ExecuteUpdate(MakeOptions(reduced_requests, compiler));
-  ASSERT_TRUE(second_run.has_value());
+  ASSERT_HAS_VALUE(second_run);
   EXPECT_EQ(second_run->compiled_request_count, 0U);
   EXPECT_EQ(second_run->clean_request_count, 1U);
   EXPECT_EQ(second_run->stale_request_count, 1U);
@@ -587,14 +605,14 @@ NOLINT_TEST_F(
     .toolchain_hash = toolchain_hash_,
     .include_dirs = include_dirs_,
     .requests = requests,
-    .compile_request =
-      [&rebuild_compiler](const ExpandedShaderRequest& request, size_t index,
-        size_t total_count) {
-        return rebuild_compiler(request, index, total_count);
-      },
+    .compile_request
+    = [&rebuild_compiler](const ExpandedShaderRequest& request, size_t index,
+        size_t total_count) -> RequestCompileOutcome {
+      return rebuild_compiler(request, index, total_count);
+    },
   };
 
-  ASSERT_TRUE(ExecuteRebuild(rebuild_options).has_value());
+  ASSERT_HAS_VALUE(ExecuteRebuild(rebuild_options));
   const auto rebuild_bytes = ReadFileBytes(rebuild_out);
   EXPECT_EQ(update_bytes, rebuild_bytes);
 }
@@ -742,8 +760,8 @@ NOLINT_TEST_F(ShaderBakeExecutionTest,
     workspace_root_, shader_root_, include_dirs_, toolchain_hash_);
   const auto first_artifact = compiler(first, 1, 2).artifact;
   const auto second_artifact = compiler(second, 2, 2).artifact;
-  ASSERT_TRUE(first_artifact.has_value());
-  ASSERT_TRUE(second_artifact.has_value());
+  ASSERT_HAS_VALUE(first_artifact);
+  ASSERT_HAS_VALUE(second_artifact);
   const std::vector<std::string> expected_paths {
     "Pack/First_PS.hlsl:PS",
     "Pack/Second_PS.hlsl:PS",

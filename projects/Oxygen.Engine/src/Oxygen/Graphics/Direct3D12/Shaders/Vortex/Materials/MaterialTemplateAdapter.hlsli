@@ -7,7 +7,7 @@
 #ifndef OXYGEN_D3D12_SHADERS_VORTEX_MATERIALS_MATERIALTEMPLATEADAPTER_HLSLI
 #define OXYGEN_D3D12_SHADERS_VORTEX_MATERIALS_MATERIALTEMPLATEADAPTER_HLSLI
 
-#include "Vortex/Shared/MaskedAlphaTest.hlsli"
+#include "Vortex/Shared/MaskedAlphaTestView.hlsli"
 
 #include "GBufferMaterialOutput.hlsli"
 

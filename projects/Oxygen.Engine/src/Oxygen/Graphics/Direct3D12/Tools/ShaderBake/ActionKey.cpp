@@ -6,20 +6,24 @@
 
 #include <windows.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
-#include <string_view>
 #include <type_traits>
 #include <vector>
 
+#include <libloaderapi.h>
+#include <minwindef.h>
+
 #include <Oxygen/Base/Hash.h>
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Shaders/ShaderCatalogBuilder.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
@@ -60,14 +64,15 @@ namespace {
       return std::nullopt;
     }
 
-    VS_FIXEDFILEINFO* file_info = nullptr;
+    void* file_info_data = nullptr;
     UINT file_info_len = 0;
-    if (VerQueryValueW(data.data(), L"\\", reinterpret_cast<void**>(&file_info),
-          &file_info_len)
-        == 0
-      || file_info == nullptr || file_info_len < sizeof(VS_FIXEDFILEINFO)) {
+    if (VerQueryValueW(data.data(), L"\\", &file_info_data, &file_info_len) == 0
+      || file_info_data == nullptr
+      || file_info_len < sizeof(VS_FIXEDFILEINFO)) {
       return std::nullopt;
     }
+    const auto* const file_info
+      = static_cast<const VS_FIXEDFILEINFO*>(file_info_data);
 
     const uint16_t major = HIWORD(file_info->dwFileVersionMS);
     const uint16_t minor = LOWORD(file_info->dwFileVersionMS);
@@ -97,10 +102,15 @@ namespace {
   auto HashCombine(const uint64_t seed, const uint64_t value) -> uint64_t
   {
     constexpr uint64_t kGoldenRatio = 0x9e3779b97f4a7c15ULL;
-    return seed ^ (value + kGoldenRatio + (seed << 6U) + (seed >> 2U));
+    constexpr unsigned kShiftLeft = 6U;
+    constexpr unsigned kShiftRight = 2U;
+    return seed
+      ^ (value + kGoldenRatio + (seed << kShiftLeft) + (seed >> kShiftRight));
   }
 
-  constexpr uint64_t kShaderBakeActionSchemaVersion = 4;
+  constexpr uint64_t kShaderBakeActionSchemaVersion = 5;
+  //! Hashed in place of a define value, so `NAME` and `NAME=` differ.
+  constexpr uint64_t kValuelessDefineMarker = 0xA5A5A5A5U;
 
 } // namespace
 
@@ -114,6 +124,7 @@ auto ComputeToolchainHash(const ShaderCompileProfile& profile) -> uint64_t
 }
 
 auto ComputeShaderActionKey(const ShaderRequest& request,
+  const ShaderViewBinding view_binding,
   std::span<const std::filesystem::path> include_dirs,
   const ShaderCompileProfile& profile) -> uint64_t
 {
@@ -137,9 +148,11 @@ auto ComputeShaderActionKey(const ShaderRequest& request,
       seed = HashCombine(seed,
         oxygen::ComputeFNV1a64(define.value->data(), define.value->size()));
     } else {
-      seed = HashCombine(seed, uint64_t { 0xA5A5A5A5u });
+      seed = HashCombine(seed, kValuelessDefineMarker);
     }
   }
+
+  seed = HashCombine(seed, static_cast<uint64_t>(view_binding));
 
   const std::string dxc_version = GetDxcVersionString();
   seed = HashCombine(

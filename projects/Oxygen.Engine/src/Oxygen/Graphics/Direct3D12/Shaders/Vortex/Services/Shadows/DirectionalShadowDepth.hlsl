@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+// Shadow depth has no camera view: every input comes from the pass constants.
+
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
@@ -146,8 +148,7 @@ void VortexShadowDepthMaskedPS(ShadowDepthVSOutput input
 )
 {
 #if defined(ALPHA_TEST)
-    // The bound view constants belong to the camera view; the casters, like
-    // the vertex shader's, come from this pass's constants.
+    // The casters, like the vertex shader's, come from this pass's constants.
     const ShadowPassConstants pass_constants =
         LoadShadowPassConstants(g_PassConstantsIndex);
     const SamplerState linear_sampler = SamplerDescriptorHeap[0];

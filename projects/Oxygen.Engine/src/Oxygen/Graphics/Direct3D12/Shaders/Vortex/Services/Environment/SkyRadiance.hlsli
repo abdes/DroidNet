@@ -7,8 +7,10 @@
 #ifndef OXYGEN_VORTEX_SKY_RADIANCE_HLSLI
 #define OXYGEN_VORTEX_SKY_RADIANCE_HLSLI
 
-#include "Vortex/Contracts/Environment/EnvironmentHelpers.hlsli"
-#include "Vortex/Contracts/Environment/EnvironmentViewHelpers.hlsli"
+#include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Contracts/Environment/EnvironmentStaticData.hlsli"
+#include "Vortex/Contracts/Environment/EnvironmentViewData.hlsli"
+#include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Services/Environment/AtmosphereParityCommon.hlsli"
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 

@@ -6,14 +6,20 @@
 
 #pragma once
 
-#include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Vortex/Internal/MeshRasterState.h>
 
 namespace oxygen::vortex::internal {
 
-//! Shared opaque/masked depth pipeline for camera and contact-caster depth.
+//! Opaque/masked depth prepass pipeline; reads the bound camera view.
 [[nodiscard]] auto BuildMeshDepthPipeline(const graphics::TextureDesc& depth,
   Format velocity_format, MeshRasterState raster_state, bool reverse_z)
   -> graphics::GraphicsPipelineDesc;
+
+//! Opaque/masked contact-shadow caster depth pipeline; reads only its pass
+//! inputs record, never the bound view.
+[[nodiscard]] auto BuildContactShadowCasterDepthPipeline(
+  const graphics::TextureDesc& depth, MeshRasterState raster_state,
+  bool reverse_z) -> graphics::GraphicsPipelineDesc;
 
 } // namespace oxygen::vortex::internal

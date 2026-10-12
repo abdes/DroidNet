@@ -4,12 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <filesystem>
 #include <fstream>
 #include <ios>
+#include <iterator>
+#include <optional>
+#include <span>
 #include <stdexcept>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
@@ -17,13 +23,17 @@
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Shaders/ShaderCatalogBuilder.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DxcShaderCompiler.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Reflect.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/RequestCompilation.h>
 
+using oxygen::graphics::ShaderDefine;
 using oxygen::graphics::ShaderInfo;
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
@@ -38,10 +48,9 @@ namespace {
         fmt::format("failed to open shader source file: {}", file.string()));
     }
 
-    std::vector<char> bytes(
+    const std::string bytes(
       (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    return std::u8string(reinterpret_cast<const char8_t*>(bytes.data()),
-      reinterpret_cast<const char8_t*>(bytes.data()) + bytes.size());
+    return { bytes.begin(), bytes.end() };
   }
 
 } // namespace
@@ -51,12 +60,18 @@ auto CompileExpandedShaderRequest(const RequestCompilerConfig& config,
   const size_t total_count) -> RequestCompileOutcome
 {
   const auto& request = expanded_request.request;
-  const ShaderInfo shader {
+  ShaderInfo shader {
     .type = request.stage,
     .relative_path = request.source_path,
     .entry_point = request.entry_point,
     .defines = request.defines,
   };
+  if (expanded_request.view_binding == ShaderViewBinding::kCamera) {
+    shader.defines.push_back(ShaderDefine {
+      .name = std::string(kCameraViewEntryDefine),
+      .value = "1",
+    });
+  }
 
   LOG_F(INFO, "[{}/{}] {}", index, total_count, FormatShaderLogKey(request));
 
@@ -87,6 +102,8 @@ auto CompileExpandedShaderRequest(const RequestCompilerConfig& config,
       LOG_F(ERROR, "Failed to compile {}:{}", shader.relative_path,
         shader.entry_point);
       return RequestCompileOutcome {
+        .artifact = std::nullopt,
+        .pdb = {},
         .diagnostics = compile_result.diagnostics,
       };
     }
@@ -107,8 +124,8 @@ auto CompileExpandedShaderRequest(const RequestCompilerConfig& config,
       = ExtractAndSerializeReflection(shader, std::span<const std::byte>(dxil));
     const auto primary_hash
       = oxygen::ComputeFNV1a64(source.data(), source.size());
-    const auto action_key
-      = ComputeShaderActionKey(request, config.include_dirs, config.profile);
+    const auto action_key = ComputeShaderActionKey(request,
+      expanded_request.view_binding, config.include_dirs, config.profile);
 
     LOG_F(1, "  dxil={} bytes, reflection={} bytes", dxil.size(),
       reflection.size());
@@ -125,6 +142,7 @@ auto CompileExpandedShaderRequest(const RequestCompilerConfig& config,
         .reflection = std::move(reflection),
       },
       .pdb = std::move(compile_result.pdb),
+      .diagnostics = {},
     };
   } catch (const std::exception& ex) {
     const auto diagnostics = fmt::format(
@@ -132,6 +150,8 @@ auto CompileExpandedShaderRequest(const RequestCompilerConfig& config,
     LOG_F(ERROR, "Failed to compile {}: {}", FormatShaderLogKey(request),
       ex.what());
     return RequestCompileOutcome {
+      .artifact = std::nullopt,
+      .pdb = {},
       .diagnostics = diagnostics,
     };
   }

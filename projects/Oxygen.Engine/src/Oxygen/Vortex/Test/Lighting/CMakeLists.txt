@@ -159,6 +159,7 @@ target_compile_definitions(
     OXYGEN_GGX_MEAN_CERTIFICATE_FILE="${CMAKE_CURRENT_SOURCE_DIR}/Reference/GgxMeanMomentCertificates.json"
 )
 
+# The probes reach camera helpers, so they compile as camera view entries.
 set(
   lighting_shader_root
   "${PROJECT_SOURCE_DIR}/src/Oxygen/Graphics/Direct3D12/Shaders"
@@ -177,14 +178,15 @@ add_custom_command(
   COMMAND
     ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
   COMMAND
-    "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -I
-    "${lighting_shader_root}" -I "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo
-    "${lighting_probe_output}" "${lighting_probe_source}"
-  COMMAND
-    "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -I
-    "${lighting_shader_root}" -I "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF
-    "${lighting_probe_output}.d" -Fo "${lighting_probe_output}"
+    "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -D
+    OXYGEN_CAMERA_VIEW_ENTRY=1 -I "${lighting_shader_root}" -I
+    "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo "${lighting_probe_output}"
     "${lighting_probe_source}"
+  COMMAND
+    "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -D
+    OXYGEN_CAMERA_VIEW_ENTRY=1 -I "${lighting_shader_root}" -I
+    "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF "${lighting_probe_output}.d" -Fo
+    "${lighting_probe_output}" "${lighting_probe_source}"
   DEPENDS
     "${OXYGEN_DXC_EXECUTABLE}"
     "${lighting_probe_source}"
@@ -225,14 +227,15 @@ add_custom_command(
   COMMAND
     ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>"
   COMMAND
-    "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -I
-    "${lighting_shader_root}" -I "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo
-    "${unculled_probe_output}" "${unculled_probe_source}"
-  COMMAND
-    "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -I
-    "${lighting_shader_root}" -I "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF
-    "${unculled_probe_output}.d" -Fo "${unculled_probe_output}"
+    "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -D
+    OXYGEN_CAMERA_VIEW_ENTRY=1 -I "${lighting_shader_root}" -I
+    "${PROJECT_SOURCE_DIR}/src/Oxygen" -Fo "${unculled_probe_output}"
     "${unculled_probe_source}"
+  COMMAND
+    "${OXYGEN_DXC_EXECUTABLE}" -T cs_6_6 -E CS -O3 -HV 2021 -D
+    OXYGEN_CAMERA_VIEW_ENTRY=1 -I "${lighting_shader_root}" -I
+    "${PROJECT_SOURCE_DIR}/src/Oxygen" -MD -MF "${unculled_probe_output}.d" -Fo
+    "${unculled_probe_output}" "${unculled_probe_source}"
   DEPENDS
     "${OXYGEN_DXC_EXECUTABLE}"
     "${unculled_probe_source}"

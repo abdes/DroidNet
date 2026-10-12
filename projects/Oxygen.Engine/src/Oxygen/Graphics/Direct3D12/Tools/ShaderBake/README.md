@@ -42,6 +42,13 @@ shader catalog membership.
    include dependencies changed.
 5. Repack the final `shaders.bin` archive only when required.
 
+Catalog entries marked `.view_binding=kCamera` compile with
+`OXYGEN_CAMERA_VIEW_ENTRY` defined. The define is in the action key, not the
+request key, so runtime shader lookups are unchanged. The camera view-constants
+header raises `#error` without it, so any other entry that reaches b1 fails
+the bake (see
+[Vortex shader contracts §4.9](../../../../../../design/vortex/lld/shader-contracts.md)).
+
 Correctness does not rely on Ninja depfiles, Visual Studio tracking, or process
 working directory.
 

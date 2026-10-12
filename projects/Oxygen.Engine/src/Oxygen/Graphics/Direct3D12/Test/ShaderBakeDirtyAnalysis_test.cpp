@@ -10,14 +10,18 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
+#include <system_error>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Bake.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
@@ -89,7 +93,7 @@ protected:
     -> void
   {
     std::filesystem::create_directories(path.parent_path());
-    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    std::ofstream out(path, std::ios::binary);
     out << text;
   }
 
@@ -109,10 +113,13 @@ protected:
     };
   }
 
+  //! Artifact as the bake would write it, with `shader_root_` as the only
+  //! include root.
   auto MakeArtifact(const ExpandedShaderRequest& request,
-    std::span<const std::filesystem::path> include_dirs,
-    std::span<const std::filesystem::path> dependency_paths) -> ModuleArtifact
+    std::span<const std::filesystem::path> dependency_paths = {})
+    -> ModuleArtifact
   {
+    const std::array include_dirs { shader_root_ };
     const auto source_file = shader_root_ / request.request.source_path;
     const auto primary_hash
       = ComputeFileFingerprint(source_file, workspace_root_).content_hash;
@@ -126,14 +133,14 @@ protected:
 
     return ModuleArtifact {
       .request_key = request.request_key,
-      .action_key
-      = ComputeShaderActionKey(request.request, include_dirs, profile_),
+      .action_key = ComputeShaderActionKey(
+        request.request, request.view_binding, include_dirs, profile_),
       .toolchain_hash = 0x1234,
       .request = request.request,
       .primary_hash = primary_hash,
       .dependencies = std::move(dependencies),
       .dxil = { std::byte { 0x01 }, std::byte { 0x02 }, std::byte { 0x03 },
-        std::byte { 0x04 } },
+        std::byte { 0x04 }, },
       .reflection = { std::byte { 0x05 } },
     };
   }
@@ -162,8 +169,7 @@ protected:
   {
     EXPECT_EQ(result.requests.size(), 1U);
     const auto& request = result.requests.front();
-    return std::find(
-             request.dirty_reasons.begin(), request.dirty_reasons.end(), reason)
+    return std::ranges::find(request.dirty_reasons, reason)
       != request.dirty_reasons.end();
   }
 
@@ -193,8 +199,7 @@ NOLINT_TEST_F(ShaderBakeDirtyAnalysisTest, ReusesCleanArtifactWhenInputsMatch)
   WriteTextFile(dependency_file, "float3 EvaluateLighting() { return 1; }\n");
 
   const std::array include_dirs { shader_root_ };
-  const auto artifact
-    = MakeArtifact(request, include_dirs, std::array { dependency_file });
+  const auto artifact = MakeArtifact(request, std::array { dependency_file });
   WriteModuleArtifactFile(
     GetModuleArtifactPath(layout_, request.request_key), artifact);
   PersistState(std::array { request }, std::array { artifact });
@@ -206,7 +211,7 @@ NOLINT_TEST_F(ShaderBakeDirtyAnalysisTest, ReusesCleanArtifactWhenInputsMatch)
 
   ASSERT_EQ(analysis.requests.size(), 1U);
   EXPECT_FALSE(analysis.requests.front().IsDirty());
-  ASSERT_TRUE(analysis.requests.front().reusable_artifact.has_value());
+  ASSERT_HAS_VALUE(analysis.requests.front().reusable_artifact);
   EXPECT_EQ(*analysis.requests.front().reusable_artifact, artifact);
   EXPECT_TRUE(analysis.stale_artifact_paths.empty());
   EXPECT_FALSE(analysis.manifest_changed);
@@ -225,8 +230,7 @@ NOLINT_TEST_F(
   WriteTextFile(dependency_file, "float3 EvaluateLighting() { return 1; }\n");
 
   const std::array include_dirs { shader_root_ };
-  const auto artifact
-    = MakeArtifact(request, include_dirs, std::array { dependency_file });
+  const auto artifact = MakeArtifact(request, std::array { dependency_file });
   WriteModuleArtifactFile(
     GetModuleArtifactPath(layout_, request.request_key), artifact);
   PersistState(std::array { request }, std::array { artifact });
@@ -250,8 +254,7 @@ NOLINT_TEST_F(
   WriteTextFile(source_file, "float4 PS() : SV_Target { return 1; }\n");
 
   const std::array include_dirs { shader_root_ };
-  const auto artifact = MakeArtifact(
-    request, include_dirs, std::span<const std::filesystem::path> {});
+  const auto artifact = MakeArtifact(request);
   WriteModuleArtifactFile(
     GetModuleArtifactPath(layout_, request.request_key), artifact);
   WriteBuildStateFile(layout_.build_state_file,
@@ -281,10 +284,8 @@ NOLINT_TEST_F(
   WriteTextFile(stale_source, "float4 PS() : SV_Target { return 0; }\n");
 
   const std::array include_dirs { shader_root_ };
-  const auto current_artifact = MakeArtifact(
-    current_request, include_dirs, std::span<const std::filesystem::path> {});
-  const auto stale_artifact = MakeArtifact(
-    stale_request, include_dirs, std::span<const std::filesystem::path> {});
+  const auto current_artifact = MakeArtifact(current_request);
+  const auto stale_artifact = MakeArtifact(stale_request);
 
   WriteModuleArtifactFile(
     GetModuleArtifactPath(layout_, current_request.request_key),
@@ -316,8 +317,7 @@ NOLINT_TEST_F(
   WriteTextFile(source_file, "float4 PS() : SV_Target { return 1; }\n");
 
   const std::array include_dirs { shader_root_ };
-  const auto artifact = MakeArtifact(
-    request, include_dirs, std::span<const std::filesystem::path> {});
+  const auto artifact = MakeArtifact(request);
   WriteModuleArtifactFile(
     GetModuleArtifactPath(layout_, request.request_key), artifact);
   PersistState(std::array { request }, std::array { artifact });
@@ -339,8 +339,7 @@ NOLINT_TEST_F(
   WriteTextFile(source_file, "float4 PS() : SV_Target { return 1; }\n");
 
   const std::array include_dirs { shader_root_ };
-  const auto artifact = MakeArtifact(
-    request, include_dirs, std::span<const std::filesystem::path> {});
+  const auto artifact = MakeArtifact(request);
   WriteModuleArtifactFile(
     GetModuleArtifactPath(layout_, request.request_key), artifact);
   PersistState(std::array { request }, std::array { artifact });
@@ -360,8 +359,7 @@ NOLINT_TEST_F(ShaderBakeDirtyAnalysisTest, ProfileChangeInvalidatesArtifact)
   WriteTextFile(source_file, "float4 PS() : SV_Target { return 1; }\n");
 
   const std::array include_dirs { shader_root_ };
-  const auto artifact = MakeArtifact(
-    request, include_dirs, std::span<const std::filesystem::path> {});
+  const auto artifact = MakeArtifact(request);
   WriteModuleArtifactFile(
     GetModuleArtifactPath(layout_, request.request_key), artifact);
   PersistState(std::array { request }, std::array { artifact });

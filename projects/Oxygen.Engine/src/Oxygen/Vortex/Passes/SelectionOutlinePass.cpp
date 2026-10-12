@@ -394,8 +394,6 @@ auto SelectionOutlinePass::Record(RenderContext& ctx,
   recorder.BindFrameBuffer(*output);
   SetViewportAndScissor(recorder, ctx, width, height);
   recorder.SetPipelineState(BuildCompositePipelineDesc(*target_color));
-  recorder.SetGraphicsRootConstantBufferView(
-    view_constants, ctx.view_constants->GetGPUVirtualAddress());
   recorder.SetGraphicsRoot32BitConstant(root_constants, 0U, 0U);
   recorder.SetGraphicsRoot32BitConstant(
     root_constants, composite_constants.get(), 1U);

@@ -6,9 +6,10 @@
 
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
-#include "Vortex/Shared/MaskedAlphaTest.hlsli"
+#include "Vortex/Shared/MaskedAlphaTestView.hlsli"
 #include "Vortex/Shared/MeshClipPosition.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
+#include "Vortex/Contracts/View/ViewConstants.hlsli"
 
 #define BX_VERTEX_TYPE Vertex
 #include "Core/Bindless/BindlessHelpers.hlsl"
@@ -90,7 +91,8 @@ BasePassVelocityAuxVSOutput BasePassVelocityAuxVS(
         draw_bindings, velocity_metadata);
 
     output.position = ComputeMeshClipPosition(world_matrix, vertex.position,
-        ResolveCurrentMaterialWpoOffset(draw_bindings, velocity_metadata));
+        ResolveCurrentMaterialWpoOffset(draw_bindings, velocity_metadata),
+        view_matrix, projection_matrix);
     output.base_current_clip_position = output.position;
     output.base_previous_clip_position = mul(
         view_history.previous_projection_matrix,

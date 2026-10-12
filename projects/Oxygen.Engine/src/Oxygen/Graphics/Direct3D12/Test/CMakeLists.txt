@@ -189,6 +189,42 @@ gtest_program(
     oxygen::testing
     nlohmann_json::nlohmann_json
 )
+gtest_program(
+  "Oxygen.Graphics.Direct3D12.ShaderBakeRequestCompilation.Tests"
+  SOURCES
+    "ShaderBakeRequestCompilation_test.cpp"
+    "../Tools/ShaderBake/ActionKey.cpp"
+    "../Tools/ShaderBake/ActionKey.h"
+    "../Tools/ShaderBake/BuildPaths.cpp"
+    "../Tools/ShaderBake/BuildPaths.h"
+    "../Tools/ShaderBake/Catalog.h"
+    "../Tools/ShaderBake/DxcShaderCompiler.cpp"
+    "../Tools/ShaderBake/DxcShaderCompiler.h"
+    "../Tools/ShaderBake/FileFingerprint.cpp"
+    "../Tools/ShaderBake/FileFingerprint.h"
+    "../Tools/ShaderBake/ModuleArtifact.cpp"
+    "../Tools/ShaderBake/ModuleArtifact.h"
+    "../Tools/ShaderBake/Reflect.cpp"
+    "../Tools/ShaderBake/Reflect.h"
+    "../Tools/ShaderBake/RequestCompilation.cpp"
+    "../Tools/ShaderBake/RequestCompilation.h"
+    "../Tools/ShaderBake/TrackingIncludeHandler.cpp"
+    "../Tools/ShaderBake/TrackingIncludeHandler.h"
+  DEPS
+    oxygen::graphics-common
+    oxygen::serio
+    oxygen::testing
+    nlohmann_json::nlohmann_json
+    dxc::dxcompiler
+)
+target_compile_definitions(
+  Oxygen.Graphics.Direct3D12.ShaderBakeRequestCompilation.Tests
+  PRIVATE
+    "OXYGEN_ENGINE_SHADER_ROOT=\"${CMAKE_CURRENT_SOURCE_DIR}/../Shaders\""
+)
+oxygen_stage_dxc_runtime(
+  Oxygen.Graphics.Direct3D12.ShaderBakeRequestCompilation.Tests
+)
 m_gtest_program(
   TextureReadbackLayout
   SOURCES
