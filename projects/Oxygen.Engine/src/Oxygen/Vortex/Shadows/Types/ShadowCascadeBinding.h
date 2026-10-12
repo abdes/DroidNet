@@ -35,7 +35,9 @@ struct alignas(packing::kShaderDataFieldAlignment) ShadowCascadeBinding {
   float transition_width { 0.0F };
   float fade_begin { 0.0F };
   float fade_end { 0.0F };
-  glm::uvec2 reserved1 { 0U };
+  //! The loose cascade center in world-anchored light space: the light-view
+  //! rotation applied to the cascade center. Receiver fitting snaps to it.
+  glm::vec2 light_space_origin { 0.0F };
 };
 
 static_assert(std::is_standard_layout_v<ShadowCascadeBinding>);
@@ -55,6 +57,6 @@ static_assert(offsetof(ShadowCascadeBinding, world_texel_size) == 104U);
 static_assert(offsetof(ShadowCascadeBinding, transition_width) == 108U);
 static_assert(offsetof(ShadowCascadeBinding, fade_begin) == 112U);
 static_assert(offsetof(ShadowCascadeBinding, fade_end) == 116U);
-static_assert(offsetof(ShadowCascadeBinding, reserved1) == 120U);
+static_assert(offsetof(ShadowCascadeBinding, light_space_origin) == 120U);
 
 } // namespace oxygen::vortex

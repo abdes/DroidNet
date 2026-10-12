@@ -297,6 +297,12 @@ private:
     -> const graphics::Texture*;
   OXGN_VRTX_API auto RegisterSceneTextureView(graphics::Texture& texture,
     const graphics::TextureViewDescription& desc) -> std::uint32_t;
+  //! The current view's shadow receivers: its scene depth, once complete.
+  //! None while the depth prepass is incomplete or volumetric fog samples
+  //! shadows in the air; the view's cascades then stay loose.
+  auto ResolveShadowReceivers(
+    const RenderContext& ctx, const SceneTextures& scene_textures)
+    -> std::optional<shadows::ShadowReceiverView>;
   OXGN_VRTX_NDAPI auto ResolveShadingModeForCurrentView(
     const RenderContext& ctx) const -> ShadingMode;
   OXGN_VRTX_API auto RenderDebugVisualization(RenderContext& ctx,

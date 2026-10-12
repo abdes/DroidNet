@@ -133,6 +133,9 @@ namespace {
       .flags = flags,
       .depth_bias = inputs.depth_bias,
       .debug_bindings_srv = inputs.debug_bindings_srv,
+      .cascade_records_srv = inputs.cascade_records_srv,
+      .cascade_index = inputs.cascade_index,
+      .receiver_mask_srv = inputs.receiver_mask_srv,
     };
   }
 

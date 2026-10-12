@@ -59,8 +59,12 @@ struct alignas(16) OcclusionCullPassConstants {
   std::uint32_t flags { 0U };
   float depth_bias { 0.0F };
   ShaderVisibleIndex debug_bindings_srv { kInvalidShaderVisibleIndex };
+  ShaderVisibleIndex cascade_records_srv { kInvalidShaderVisibleIndex };
+  std::uint32_t cascade_index { 0U };
+  ShaderVisibleIndex receiver_mask_srv { kInvalidShaderVisibleIndex };
+  std::uint32_t _pad0 { 0U };
 };
-static_assert(sizeof(OcclusionCullPassConstants) == 192U);
+static_assert(sizeof(OcclusionCullPassConstants) == 208U);
 
 //! How a culling view's depth target stores depth, for the occlusion test.
 /*!
@@ -118,6 +122,13 @@ struct DrawCullInputs {
   //! The view's GPU debug record; phase 1 then draws the box of every draw in
   //! the frustum. Invalid draws nothing.
   ShaderVisibleIndex debug_bindings_srv { kInvalidShaderVisibleIndex };
+  //! A directional cascade fitted on the GPU: its record at `cascade_index`
+  //! replaces `view_projection`, whose depth encoding it shares.
+  ShaderVisibleIndex cascade_records_srv { kInvalidShaderVisibleIndex };
+  std::uint32_t cascade_index { 0U };
+  //! The cascade's receiver mask: phase 1 culls casters whose shadow lands on
+  //! no receiver.
+  ShaderVisibleIndex receiver_mask_srv { kInvalidShaderVisibleIndex };
 };
 
 //! The furthest pyramid of phase 1 depth, in `kShaderResource`.

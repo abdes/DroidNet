@@ -219,7 +219,7 @@ auto CascadeShadowPass::RetainDirectionalSources(
   allocator_->RetainDirectionalSurfaces(selected);
 }
 
-auto CascadeShadowPass::RenderDirectionalView(
+auto CascadeShadowPass::PrepareDirectionalView(
   const PreparedViewShadowInput& view_input,
   const FrameDirectionalLightSelection& directional_light,
   const LightSelectionIndex selection_index) -> ViewShadowPassState
@@ -231,18 +231,28 @@ auto CascadeShadowPass::RenderDirectionalView(
   state.frame_data = cascade_setup_->BuildDirectionalFrameData(
     view_input, directional_light, allocation);
   state.shadow_surface = allocation.surface;
+  return state;
+}
 
-  const auto render_state = allocation.surface != nullptr
-    ? depth_pass_->Record(view_input, allocation.surface, state.frame_data,
-        directional_light.direction, directional_light.source_node)
-    : ShadowDepthPass::RenderState {};
+auto CascadeShadowPass::RecordDirectionalView(
+  const PreparedViewShadowInput& view_input,
+  const FrameDirectionalLightSelection& directional_light,
+  ViewShadowPassState& state,
+  const std::optional<ShadowDepthPass::FittedCascadeSource>& fitted,
+  const observer_ptr<graphics::CommandRecorder> view_recorder) -> void
+{
+  if (state.shadow_surface == nullptr) {
+    return;
+  }
+  const auto render_state = depth_pass_->Record(view_input,
+    state.shadow_surface, state.frame_data, directional_light.direction,
+    directional_light.source_node, fitted, view_recorder);
   state.shadow_caster_draw_count = render_state.shadow_caster_draw_count;
-  if (allocation.surface && !render_state.recording_succeeded) {
+  if (!render_state.recording_succeeded) {
     throw std::runtime_error("Directional shadow submission failed");
   }
   state.rendered_cascade_count = render_state.rendered_cascade_count;
   state.submitted_draw_count = render_state.submitted_draw_count;
-  return state;
 }
 
 auto CascadeShadowPass::RenderSpotView(

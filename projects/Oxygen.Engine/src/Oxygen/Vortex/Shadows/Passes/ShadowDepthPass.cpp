@@ -214,9 +214,11 @@ namespace {
     glm::vec4 light_position_and_inv_range { 0.0F };
     //! The view's published DrawFrameBindings, as the camera passes see it.
     std::uint32_t draw_frame_slot { kInvalidShaderVisibleIndex.get() };
+    //! A cascade fitted on the GPU: its record replaces
+    //! light_view_projection.
+    std::uint32_t cascade_records_srv { kInvalidShaderVisibleIndex.get() };
+    std::uint32_t cascade_index { 0U };
     std::uint32_t pad0 { 0U };
-    std::uint32_t pad1 { 0U };
-    std::uint32_t pad2 { 0U };
   };
 
   static_assert(sizeof(ShadowPassConstants) == 128U);
@@ -421,11 +423,14 @@ auto ShadowDepthPass::OnFrameStart(
 auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
   const std::shared_ptr<graphics::Texture>& shadow_surface,
   const ShadowFrameData& frame_data, const glm::vec3& light_direction,
-  const scene::NodeHandle light_source) -> RenderState
+  const scene::NodeHandle light_source,
+  const std::optional<FittedCascadeSource>& fitted,
+  const observer_ptr<graphics::CommandRecorder> view_recorder) -> RenderState
 {
   auto depth_slices = std::vector<DepthSlice> {};
   depth_slices.reserve(frame_data.cascades.size());
-  for (const auto& cascade : frame_data.cascades) {
+  for (const auto& [index, cascade] :
+    std::views::enumerate(frame_data.cascades)) {
     depth_slices.push_back(DepthSlice {
       .light_view_projection = cascade.light_view_projection,
       .shadow_bias_parameters = glm::vec4(cascade.depth_bias,
@@ -436,16 +441,24 @@ auto ShadowDepthPass::Record(const PreparedViewShadowInput& view_input,
       .target_slice = cascade.array_layer.get(),
       .light_source = light_source,
       .slot_generation = 0U,
+      .cascade_records_srv
+      = fitted ? fitted->records_srv : kInvalidShaderVisibleIndex,
+      .cascade_index
+      = fitted ? fitted->first_cascade + static_cast<std::uint32_t>(index) : 0U,
+      .receiver_mask_srv
+      = fitted ? fitted->receiver_mask_srv : kInvalidShaderVisibleIndex,
     });
   }
 
-  return RecordSlices(view_input, shadow_surface, std::span(depth_slices));
+  return RecordSlices(
+    view_input, shadow_surface, std::span(depth_slices), {}, view_recorder);
 }
 
 auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
   const std::shared_ptr<graphics::Texture>& shadow_surface,
   const std::span<const DepthSlice> depth_slices,
-  const std::shared_ptr<internal::ShadowMapVersion>& local_map) -> RenderState
+  const std::shared_ptr<internal::ShadowMapVersion>& local_map,
+  const observer_ptr<graphics::CommandRecorder> view_recorder) -> RenderState
 {
   last_render_state_ = {};
   if (shadow_surface == nullptr || depth_slices.empty()) {
@@ -502,13 +515,24 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
     }
   }
 
-  const auto queue_key = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
-  auto recorder = gfx->AcquireCommandRecorder(queue_key,
-    "ShadowService ShadowDepth", graphics::SubmissionPolicy::kExplicit);
-  if (!recorder) {
-    return last_render_state_;
+  // A view's own cascades record after its earlier work; maps shared across
+  // views record and submit on their own.
+  CHECK_F(view_recorder == nullptr || !local_map,
+    "ShadowDepthPass: shared local maps never record on a view's list");
+  auto owned_recorder = graphics::CommandRecording {};
+  if (view_recorder == nullptr) {
+    owned_recorder = gfx->AcquireCommandRecorder(
+      gfx->QueueKeyFor(graphics::QueueRole::kGraphics),
+      "ShadowService ShadowDepth", graphics::SubmissionPolicy::kExplicit);
+    if (!owned_recorder) {
+      return last_render_state_;
+    }
+    renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(
+      *owned_recorder);
   }
-  renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
+  const auto recorder = view_recorder != nullptr
+    ? view_recorder
+    : observer_ptr<graphics::CommandRecorder> { &*owned_recorder };
   if (local_map) {
     internal::AttachShadowUse(local_map, internal::ShadowUseMode::kWrite,
       *recorder, gfx->GetResourceRegistry());
@@ -564,10 +588,15 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
     recorder->RequireResourceStateFinal(
       *shadow_surface, graphics::ResourceStates::kShaderResource);
   }
-  last_render_state_.recording_succeeded = local_map
-    ? recorder.SubmitWithReceipt().outcome
-      == graphics::SubmissionOutcome::kSubmitted
-    : recorder.Submit();
+  if (view_recorder != nullptr) {
+    // Submitted with the view.
+    last_render_state_.recording_succeeded = true;
+  } else {
+    last_render_state_.recording_succeeded = local_map
+      ? owned_recorder.SubmitWithReceipt().outcome
+        == graphics::SubmissionOutcome::kSubmitted
+      : owned_recorder.Submit();
+  }
   return last_render_state_;
 }
 
@@ -581,6 +610,8 @@ auto ShadowDepthPass::PublishPassConstants(
     .light_direction_to_source = slice.light_direction_to_source,
     .light_position_and_inv_range = slice.light_position_and_inv_range,
     .draw_frame_slot = draw_frame_slot.get(),
+    .cascade_records_srv = slice.cascade_records_srv.get(),
+    .cascade_index = slice.cascade_index,
   };
   auto allocation = pass_constants_buffer_.Allocate(1U);
   if (!allocation.has_value() || !allocation->IsValid(current_sequence_)
@@ -624,6 +655,9 @@ auto ShadowDepthPass::RecordSliceDraws(graphics::CommandRecorder& recorder,
     .scissors = scissors,
     .occlusion_enabled = occlusion,
     .depth_bias = kDefaultOcclusionDepthBias,
+    .cascade_records_srv = slice.cascade_records_srv,
+    .cascade_index = slice.cascade_index,
+    .receiver_mask_srv = slice.receiver_mask_srv,
   };
   auto* history = occlusion ? &culling_->History(surface, slice) : nullptr;
   if (history != nullptr) {

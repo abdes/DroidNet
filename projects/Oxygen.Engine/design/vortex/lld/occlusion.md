@@ -439,6 +439,11 @@ Differences from the camera view:
 - **Candidates.** Candidates are every shadow caster; the GPU frustum and
   coverage test of phase 1 removes those outside the light view. This
   replaces the CPU sphere tests of `ShadowCasterCulling`.
+- **Receiver mask.** A directional cascade fitted to the camera's receivers
+  ([shadow service §5.4](shadow-service.md#54-receiver-analysis-and-receiver-mask-caster-culling))
+  reads its matrix from the GPU cascade record, and phase 1 also removes
+  casters whose light-space footprint covers no receiver tile: their shadow
+  lands on nothing the camera sees.
 - **Pyramid.** The occlusion pyramid is built from the slice of phase 1
   shadow depth through the same `HzbPyramidBuilder`, which reads one array
   slice. Pyramids are transient: the shadow depth pass keeps one per extent

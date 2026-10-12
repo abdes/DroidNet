@@ -22,7 +22,9 @@ struct VortexShadowCascadeBinding {
     float transition_width;
     float fade_begin;
     float fade_end;
-    uint2 reserved1;
+    // The loose cascade center in world-anchored light space, for snapping
+    // receiver-fitted cascades to a stable texel grid.
+    float2 light_space_origin;
 };
 
 #endif

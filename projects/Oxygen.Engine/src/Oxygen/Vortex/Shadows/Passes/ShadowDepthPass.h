@@ -8,6 +8,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -67,6 +68,20 @@ namespace shadows {
       //! the light, and the generation of its map allocation.
       scene::NodeHandle light_source;
       std::uint32_t slot_generation { 0U };
+      //! A directional cascade fitted on the GPU: its record, at
+      //! `cascade_index`, replaces `light_view_projection` for drawing and
+      //! culling, and its receiver mask culls casters that shadow nothing.
+      ShaderVisibleIndex cascade_records_srv { kInvalidShaderVisibleIndex };
+      std::uint32_t cascade_index { 0U };
+      ShaderVisibleIndex receiver_mask_srv { kInvalidShaderVisibleIndex };
+    };
+
+    //! Where a light's directional cascades come from on the GPU.
+    struct FittedCascadeSource {
+      ShaderVisibleIndex records_srv { kInvalidShaderVisibleIndex };
+      ShaderVisibleIndex receiver_mask_srv { kInvalidShaderVisibleIndex };
+      //! The light's first cascade in the view's records.
+      std::uint32_t first_cascade { 0U };
     };
 
     OXGN_VRTX_API explicit ShadowDepthPass(Renderer& renderer);
@@ -79,16 +94,23 @@ namespace shadows {
 
     OXGN_VRTX_API auto OnFrameStart(
       frame::SequenceNumber sequence, frame::Slot slot) -> void;
+    //! Records a light's directional cascades. With `view_recorder` they
+    //! record there, after the view's earlier work, and are submitted with
+    //! it; otherwise on their own submitted command list.
     [[nodiscard]] OXGN_VRTX_API auto Record(
       const PreparedViewShadowInput& view_input,
       const std::shared_ptr<graphics::Texture>& shadow_surface,
       const ShadowFrameData& frame_data, const glm::vec3& light_direction,
-      scene::NodeHandle light_source) -> RenderState;
+      scene::NodeHandle light_source,
+      const std::optional<FittedCascadeSource>& fitted = std::nullopt,
+      observer_ptr<graphics::CommandRecorder> view_recorder = nullptr)
+      -> RenderState;
     [[nodiscard]] OXGN_VRTX_API auto RecordSlices(
       const PreparedViewShadowInput& view_input,
       const std::shared_ptr<graphics::Texture>& shadow_surface,
       std::span<const DepthSlice> depth_slices,
-      const std::shared_ptr<internal::ShadowMapVersion>& local_map = {})
+      const std::shared_ptr<internal::ShadowMapVersion>& local_map = {},
+      observer_ptr<graphics::CommandRecorder> view_recorder = nullptr)
       -> RenderState;
     [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastRenderState() const noexcept
       -> const RenderState&

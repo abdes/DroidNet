@@ -14,6 +14,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowCasterDependencies.h>
+#include <Oxygen/Vortex/Shadows/Passes/ShadowReceiverFitPass.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowContentLease.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
@@ -98,6 +99,10 @@ public:
     ViewId view_id) const -> std::shared_ptr<const graphics::Texture>;
   [[nodiscard]] OXGN_VRTX_API auto ResolveShadowFrameSlot(ViewId view_id) const
     -> ShaderVisibleIndex;
+  //! The GPU-fitted directional cascades of `view_id`'s latest render; none
+  //! when they kept the CPU's loose cascades.
+  [[nodiscard]] OXGN_VRTX_API auto InspectReceiverFit(ViewId view_id) const
+    -> std::optional<shadows::ShadowReceiverFitPass::Inspection>;
   [[nodiscard]] OXGN_VRTX_NDAPI auto HasVsm() const -> bool { return false; }
   [[nodiscard]] OXGN_VRTX_NDAPI auto GetLastRenderState() const noexcept
     -> const RenderState&
@@ -121,8 +126,10 @@ private:
   };
 
   auto EnsurePublishResources() -> bool;
-  auto PublishShadowBindings(ViewId view_id, ShadowFrameData& data)
-    -> ShaderVisibleIndex;
+  //! Publishes the view's records; `fitted_cascades` replaces the CPU
+  //! cascade records with the GPU-fitted ones.
+  auto PublishShadowBindings(ViewId view_id, ShadowFrameData& data,
+    ShaderVisibleIndex fitted_cascades) -> ShaderVisibleIndex;
 
   struct PreparedCasters {
     frame::SequenceNumber last_seen { 0 };
@@ -151,6 +158,7 @@ private:
   std::unordered_map<ViewId, LightingPreparationFailure> failed_views_;
   std::unique_ptr<shadows::CascadeShadowPass> cascade_shadow_pass_;
   std::unique_ptr<shadows::ContactShadowCasterDepthPass> contact_depth_pass_;
+  std::unique_ptr<shadows::ShadowReceiverFitPass> receiver_fit_pass_;
 };
 
 } // namespace oxygen::vortex

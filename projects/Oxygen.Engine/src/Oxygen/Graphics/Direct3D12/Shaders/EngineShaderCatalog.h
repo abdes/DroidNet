@@ -555,6 +555,22 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kVertex, .name="VortexViewOverlayLineVS", .view_binding=kCamera }, },
   },
   ShaderFileSpec {
+    .path="Vortex/Services/Shadows/Conventional/ConventionalShadowReceiverAnalysis.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="VortexShadowReceiverClearCS" },
+      EntryPoint { .type=kCompute, .name="VortexShadowReceiverDepthCS" },
+      EntryPoint { .type=kCompute, .name="VortexShadowReceiverTranslucentCS" },
+      EntryPoint { .type=kCompute, .name="VortexShadowReceiverFitCS" }, },
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/Shadows/Conventional/ConventionalShadowReceiverMask.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="VortexShadowReceiverMaskClearCS" },
+      EntryPoint { .type=kCompute, .name="VortexShadowReceiverMaskDepthCS" },
+      EntryPoint { .type=kCompute, .name="VortexShadowReceiverMaskTranslucentCS" },
+      EntryPoint { .type=kCompute, .name="VortexShadowReceiverMaskDilateCS" }, },
+  },
+  ShaderFileSpec {
     .path="Vortex/Services/Diagnostics/GpuDebugClear.hlsl",
     .entries=std::array {
       EntryPoint { .type=kCompute, .name="VortexGpuDebugClearCS" }, },
@@ -641,12 +657,13 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - VortexViewPick: 2 (PS x ALPHA_TEST)
 // - VortexViewOverlay: 3 (PS, triangle VS, line VS)
 // - VortexGpuDebug: 3 (clear CS, line draw VS + PS)
+// - VortexShadowReceiverFit: 8 (analysis and mask CS)
 // - VortexPostProcessBloomDownsample: 1 entry
 // - VortexPostProcessBloomUpsample: 1 entry
 // - VortexPostProcessExposure: 3 entries
 // - LightCulling: 1
 // - ImGui: 2 entries
 // - Compositing: 2 entries
-// Total: 121
+// Total: 129
 
 } // namespace oxygen::graphics::d3d12

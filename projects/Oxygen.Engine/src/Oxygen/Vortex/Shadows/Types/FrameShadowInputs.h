@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <optional>
 #include <span>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -13,7 +14,12 @@
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowReceiverView.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
+
+namespace oxygen::graphics {
+class CommandRecorder;
+} // namespace oxygen::graphics
 
 namespace oxygen::vortex {
 
@@ -42,6 +48,13 @@ struct FrameShadowInputs {
   //! Full CPU preparation family; active_views alone select the views to
   //! render.
   std::span<const PreparedViewShadowInput> preparation_views;
+  //! The rendered view's command list. Its directional cascades then record
+  //! on it, after its depth prepass, instead of on their own list.
+  observer_ptr<graphics::CommandRecorder> view_recorder { nullptr };
+  //! The rendered view's receivers. With `view_recorder`, its directional
+  //! cascades fit to them on the GPU; without, they keep the CPU's loose
+  //! cascades.
+  std::optional<shadows::ShadowReceiverView> receivers;
 
   [[nodiscard]] auto HasFrameLightSelection() const noexcept -> bool
   {

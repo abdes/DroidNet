@@ -175,7 +175,7 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 | S7  | Frame and view lifecycle                                               | M3, M4                      | S4      | `validated` | —      |
 | S8  | Generated shared contracts                                             | M8, H8                      | S5, S6  | `planned`   | —      |
 | S9  | Unwired fields and dead code                                           | L2, L3, L4, L5, L6, L8, L11 | S3      | `validated` | —      |
-| S10 | Conventional shadow receiver analysis and receiver-mask caster culling | L1                          | S3, S5  | `planned`   | —      |
+| S10 | Conventional shadow receiver analysis and receiver-mask caster culling | L1                          | S3, S5  | `validated` | —      |
 | S11 | GPU debug primitives                                                   | L1, VX-DIAG-01              | S3, S6  | `validated` | —      |
 | S12 | Closeout                                                               | all                         | S1–S11  | `planned`   | —      |
 
@@ -453,17 +453,33 @@ Notes:
 
 ## S10 — Conventional receiver analysis and caster culling
 
-Design: S0 shadows update (GD-6: GPU-driven, no readback).
+Design: [shadow service §5.4](../../lld/shadow-service.md#54-receiver-analysis-and-receiver-mask-caster-culling)
+(GD-6: GPU-driven, no readback).
 
-- [ ] Catalog `ConventionalShadowReceiverAnalysis.hlsl` and
+- [x] Catalog `ConventionalShadowReceiverAnalysis.hlsl` and
       `ConventionalShadowReceiverMask.hlsl`; port them to the S3/S5 input
-      model.
-- [ ] C++ passes and `ConventionalShadowDrawRecord` wiring in ShadowService:
-      tight per-cascade bounds from scene depth, tile receiver masks, caster
-      culling ahead of two-phase occlusion; shadow inputs records and shadow
-      occlusion read the cascade matrices from the GPU buffer.
-- [ ] **Tests.** CPU reference for bounds and masks; GPU test that culled
-      casters cast no visible shadow; image-producing shadow suites pass.
+      model: one `ShadowReceiverFitInputs` record, pure helpers, no b1.
+- [x] `ShadowReceiverFitPass` in ShadowService: per-cascade fit from scene
+      depth and translucent draw boxes, tile receiver masks, caster culling
+      in the shadow-view occlusion cull ahead of its two phases. Lighting
+      records, shadow-depth pass constants and the shadow occlusion cull
+      read the fitted cascades from the GPU buffer.
+- [x] **Tests.** GPU readback checked against a CPU reference of the fit
+      rules and the mask lookup; a caster whose shadow lands outside the view
+      is culled and leaves the image unchanged; the image-producing shadow
+      suites pass.
+
+Notes:
+
+- Directional depths now record on the view's command list, after its
+  depth prepass; they were on a list submitted ahead of it, which could not
+  read the view's scene depth.
+- The CPU cascades stay as they are when the depth prepass is incomplete or
+  the view renders volumetric fog, whose shadow samples lie in the air, not
+  on the scene depth.
+- Casters are culled with the existing draw cull records, so
+  `ConventionalShadowDrawRecord` and the unused conventional record shaders
+  are removed.
 
 ## S11 — GPU debug primitives
 

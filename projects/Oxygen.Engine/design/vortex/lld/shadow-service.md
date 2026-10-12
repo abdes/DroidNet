@@ -203,6 +203,7 @@ src/Oxygen/Vortex/
         |   `-- ConventionalShadowTargetAllocator.h/.cpp
         |-- Passes/
         |   |-- ShadowDepthPass.h/.cpp
+        |   |-- ShadowReceiverFitPass.h/.cpp
         |   `-- CascadeShadowPass.h/.cpp
         |-- Types/
         |   |-- FrameShadowInputs.h
@@ -525,25 +526,47 @@ float SampleDirectionalShadow(
 
 ### 5.4 Receiver Analysis And Receiver-Mask Caster Culling
 
-Delivered by [VX-GPU-01 S10](../milestones/VX-GPU-01/README.md#s10--conventional-receiver-analysis-and-caster-culling).
-Both stages run on the GPU with no CPU readback:
+Directional cascades fit to the receivers the camera sees, on the GPU and
+without readback. `ShadowReceiverFitPass` records on the view's command list
+after its depth prepass, before the cascades draw; directional depths record
+on that same list. Its compute shaders are
+`Conventional/ConventionalShadowReceiverAnalysis.hlsl` and
+`Conventional/ConventionalShadowReceiverMask.hlsl`; their inputs record and
+mask layout are in `Contracts/Shadows/ShadowReceiverFit.hlsli`.
 
-1. **Receiver analysis** (`ConventionalShadowReceiverAnalysis.hlsl`) reduces
-   the camera's scene depth into per-cascade light-space bounds of the visible
-   receivers and writes the fitted cascade view-projections to a GPU buffer.
-   The CPU cascade setup remains the conservative outer bound used for CPU
-   caster selection; the fitted bounds only tighten it.
-2. **Receiver mask** (`ConventionalShadowReceiverMask.hlsl`) marks light-space
-   tiles that contain visible receivers. Caster culling rejects draws whose
-   light-space footprint covers no marked tile, before two-phase occlusion.
-   Occlusion culls casters hidden inside the shadow map; the receiver mask
-   culls casters whose shadow lands on nothing visible. They compose.
+1. **Receivers.** Every scene-depth pixel of the view, and the box of every
+   translucent draw, which samples directional shadows but writes no depth.
+   A receiver belongs to each cascade it samples: the one whose split holds
+   its view depth, both cascades inside a transition overlap, and the first
+   cascade for depths nearer than its split.
+2. **Fit.** The receivers of each cascade reduce to a rect in the loose
+   cascade's clip space. The fitted half-extent covers that rect plus the
+   normal bias and three fitted texels of sampling reach. It steps through
+   quarter-octaves of the loose extent, and the fitted center snaps to the
+   fitted texel grid in light space anchored at the world origin
+   (`ShadowCascadeBinding::light_space_origin`). Moving cameras therefore do
+   not make shadow edges shimmer. The fitted matrix is the loose matrix scaled
+   and offset in light-space x and y; depth range, splits and bias keep the
+   CPU's values. The fitted texel size replaces `world_texel_size`.
+3. **Receiver mask.** Each cascade has 64 x 64 tiles over its fitted map.
+   Receivers mark the tile they project to; marks dilate by the same
+   sampling reach; one coarse tile per 8 x 8 tiles lets culling skip empty
+   regions.
+4. **Consumers.** The view's published `cascade_records_srv` routes to the
+   fitted records. Shadow-depth pass constants and the shadow-view occlusion
+   cull carry the record index, read the fitted matrix, and the cull removes
+   casters whose light-space footprint covers no receiver tile
+   ([occlusion §6.4](occlusion.md#64-shadow-views)). Occlusion culls casters
+   hidden inside the shadow map; the receiver mask culls casters whose shadow
+   lands on nothing visible. They compose.
 
-Shadow inputs records, shadow occlusion and receiver sampling read the fitted
-matrices from the GPU buffer. A cascade without receivers keeps its CPU bounds
-and draws nothing. UE5.7's conventional cascaded shadows fit on the CPU; its
-virtual shadow maps mark pages from visible receivers, which is the grounding
-for the receiver mask.
+A cascade without receivers keeps its loose record and an empty mask, so it
+draws no casters. The CPU cascades stay the conservative outer bound: they
+are used as they are when the view's scene depth is incomplete, and when the
+view renders volumetric fog, which samples shadows in the air between the
+camera and its surfaces. UE5.7's conventional cascaded shadows fit on the CPU;
+its virtual shadow maps mark pages from visible receivers, which grounds the
+receiver mask.
 
 ## 6. Stage Integration
 

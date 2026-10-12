@@ -7,12 +7,15 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <unordered_map>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Shadows/Internal/LocalShadowRequest.h>
+#include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowSharingDiagnostics.h>
@@ -25,8 +28,6 @@ namespace oxygen::vortex {
 class Renderer;
 
 namespace shadows {
-
-  class ShadowDepthPass;
 
   namespace internal {
     class CascadeShadowSetup;
@@ -87,10 +88,19 @@ namespace shadows {
       std::span<const FrameLocalLightSelection> lights) -> void;
     OXGN_VRTX_API auto RetainDirectionalSources(
       std::span<const FrameDirectionalLightSelection> lights) -> void;
-    [[nodiscard]] OXGN_VRTX_API auto RenderDirectionalView(
+    //! Acquires a light's directional surface and builds its loose cascades.
+    [[nodiscard]] OXGN_VRTX_API auto PrepareDirectionalView(
       const PreparedViewShadowInput& view_input,
       const FrameDirectionalLightSelection& directional_light,
       LightSelectionIndex selection_index) -> ViewShadowPassState;
+    //! Records the depths of a prepared light, from its GPU-fitted cascades
+    //! when `fitted` is set, on `view_recorder` when set.
+    OXGN_VRTX_API auto RecordDirectionalView(
+      const PreparedViewShadowInput& view_input,
+      const FrameDirectionalLightSelection& directional_light,
+      ViewShadowPassState& state,
+      const std::optional<ShadowDepthPass::FittedCascadeSource>& fitted,
+      observer_ptr<graphics::CommandRecorder> view_recorder) -> void;
     [[nodiscard]] OXGN_VRTX_API auto RenderSpotView(
       const PreparedViewShadowInput& view_input,
       std::span<const FrameLocalLightSelection> local_lights)

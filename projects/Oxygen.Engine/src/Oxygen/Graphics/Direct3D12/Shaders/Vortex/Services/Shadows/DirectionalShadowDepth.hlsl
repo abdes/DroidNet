@@ -11,6 +11,7 @@
 #include "Vortex/Contracts/Draw/MeshPosition.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
+#include "Vortex/Contracts/Shadows/ShadowCascadeBinding.hlsli"
 
 #define BX_VERTEX_TYPE Vertex
 #include "Core/Bindless/BindlessHelpers.hlsl"
@@ -32,9 +33,11 @@ struct ShadowPassConstants
     // The view's published DrawFrameBindings: draws, transforms, materials
     // and world-position offsets, exactly as the camera passes see them.
     uint draw_frame_slot;
+    // A directional cascade fitted on the GPU: its record replaces
+    // light_view_projection.
+    uint cascade_records_srv;
+    uint cascade_index;
     uint _pad0;
-    uint _pad1;
-    uint _pad2;
 };
 
 struct ShadowDepthVSOutput
@@ -57,6 +60,12 @@ static inline bool TryLoadShadowPassConstants(out ShadowPassConstants constants)
     StructuredBuffer<ShadowPassConstants> constants_buffer =
         ResourceDescriptorHeap[g_PassConstantsIndex];
     constants = constants_buffer[0];
+    if (constants.cascade_records_srv != K_INVALID_BINDLESS_INDEX) {
+        StructuredBuffer<VortexShadowCascadeBinding> cascades
+            = ResourceDescriptorHeap[constants.cascade_records_srv];
+        constants.light_view_projection
+            = cascades[constants.cascade_index].light_view_projection;
+    }
     return constants.draw_frame_slot != K_INVALID_BINDLESS_INDEX;
 }
 

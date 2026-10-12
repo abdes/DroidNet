@@ -396,7 +396,7 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         output.Store4(address + 80, uint4(value.surface_srv, value.array_layer, value.reserved0));
         output.Store4(address + 96, asuint(float4(value.inverse_resolution,
             value.world_texel_size, value.transition_width)));
-        output.Store4(address + 112, uint4(asuint(value.fade_begin), asuint(value.fade_end), value.reserved1));
+        output.Store4(address + 112, uint4(asuint(value.fade_begin), asuint(value.fade_end), asuint(value.light_space_origin)));
     } else if (g_RecordKind == 14) {
         StructuredBuffer<ProjectedLocalShadowRecord> inputs = ResourceDescriptorHeap[args.x];
         ProjectedLocalShadowRecord value = inputs[element];

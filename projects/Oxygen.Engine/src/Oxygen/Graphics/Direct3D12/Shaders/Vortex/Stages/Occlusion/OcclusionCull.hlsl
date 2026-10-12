@@ -19,6 +19,8 @@
 #include "Vortex/Contracts/Draw/DrawCullRecord.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Contracts/Draw/DrawVisibility.hlsli"
+#include "Vortex/Contracts/Shadows/ShadowCascadeBinding.hlsli"
+#include "Vortex/Contracts/Shadows/ShadowReceiverFit.hlsli"
 #include "Vortex/Services/Diagnostics/GpuDebug.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
@@ -87,6 +89,14 @@ struct OcclusionCullPassConstants
     float depth_bias;
     // The view's GpuDebugBindings record when draw bounds are requested.
     uint debug_bindings_srv;
+    // A directional cascade fitted on the GPU: its record replaces
+    // view_projection.
+    uint cascade_records_srv;
+    uint cascade_index;
+    // The cascade's receiver mask: casters whose shadow lands on no receiver
+    // are outside the frustum.
+    uint receiver_mask_srv;
+    uint _pad0;
 };
 
 struct ClipBox
@@ -99,7 +109,14 @@ OcclusionCullPassConstants LoadPassConstants()
 {
     StructuredBuffer<OcclusionCullPassConstants> constants
         = ResourceDescriptorHeap[g_PassConstantsIndex];
-    return constants[0];
+    OcclusionCullPassConstants c = constants[0];
+    if (c.cascade_records_srv != K_INVALID_BINDLESS_INDEX)
+    {
+        StructuredBuffer<VortexShadowCascadeBinding> cascades
+            = ResourceDescriptorHeap[c.cascade_records_srv];
+        c.view_projection = cascades[c.cascade_index].light_view_projection;
+    }
+    return c;
 }
 
 // The draw's world matrix; identity for world-space boxes.
@@ -360,6 +377,16 @@ void VortexOcclusionPhase1CS(uint3 dispatch_id : SV_DispatchThreadID)
             in_planes = !screen.outside;
             in_frustum = in_planes
                 && (screen.crosses_near || CoversPixelCenter(c, screen));
+            if (in_frustum && !screen.crosses_near
+                && c.receiver_mask_srv != K_INVALID_BINDLESS_INDEX)
+            {
+                const float2 uv_min
+                    = (screen.pixel_min - c.viewport.xy) / c.viewport.zw;
+                const float2 uv_max
+                    = (screen.pixel_max - c.viewport.xy) / c.viewport.zw;
+                in_frustum = ShadowReceiverMaskCovers(
+                    c.receiver_mask_srv, c.cascade_index, uv_min, uv_max);
+            }
         }
 
         const bool occlusion = (c.flags & OCCLUSION_CULL_OCCLUSION_ENABLED) != 0u;

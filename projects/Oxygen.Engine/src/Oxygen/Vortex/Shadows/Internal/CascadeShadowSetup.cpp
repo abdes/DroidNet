@@ -12,7 +12,9 @@
 
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/vector_float2.hpp>
 #include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
 #include <glm/geometric.hpp>
 #include <glm/matrix.hpp>
 
@@ -40,6 +42,7 @@ namespace {
 
   struct CascadeMatrixData {
     glm::mat4 light_view_projection { 1.0F };
+    glm::vec2 light_space_origin { 0.0F };
     float world_texel_size { 0.0F };
     float cascade_radius { 1.0F };
     float depth_span { 1.0F };
@@ -311,8 +314,12 @@ namespace {
       -cascade_radius, cascade_radius, -cascade_radius, cascade_radius, 0.1F,
       2.0F * depth_extent);
     const auto resolution = (std::max)(shadow_resolution, 1U);
+    // The view's rotation alone maps the center into world-anchored light
+    // space; its translation follows the camera.
+    const auto origin = light_view * glm::vec4 { snapped_center, 0.0F };
     return CascadeMatrixData {
       .light_view_projection = light_projection * light_view,
+      .light_space_origin = glm::vec2 { origin.x, origin.y },
       .world_texel_size
       = (2.0F * cascade_radius) / static_cast<float>(resolution),
       .cascade_radius = cascade_radius,
@@ -391,6 +398,7 @@ auto CascadeShadowSetup::BuildDirectionalFrameData(
     cascade.array_layer = ShadowArrayLayer { cascade_index };
     cascade.inverse_resolution = { inverse_resolution_x, inverse_resolution_y };
     cascade.world_texel_size = cascade_matrix.world_texel_size;
+    cascade.light_space_origin = cascade_matrix.light_space_origin;
     const auto depth_bias = ComputeDirectionalCsmDepthBias(
       directional_light.shadow_bias, cascade_matrix.cascade_radius,
       cascade_matrix.depth_span, allocation.resolution.x);

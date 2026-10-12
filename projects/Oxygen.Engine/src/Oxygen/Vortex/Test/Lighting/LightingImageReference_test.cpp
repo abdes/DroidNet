@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <memory>
@@ -20,9 +21,14 @@
 #include <utility>
 #include <vector>
 
+#include <glm/common.hpp>
 #include <glm/ext/quaternion_trigonometric.hpp>
+#include <glm/ext/vector_float2.hpp>
 #include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_uint2.hpp>
 #include <glm/geometric.hpp>
+#include <glm/matrix.hpp>
 #include <glm/trigonometric.hpp>
 
 #include <Oxygen/Core/EngineModule.h>
@@ -64,6 +70,9 @@
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/Shadows/ShadowService.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 // ON_CALL names the GetModuleByType mock this header declares.
@@ -660,6 +669,228 @@ namespace {
   //! The receiver bias must not hide real occlusion. Both receivers lie
   //! inside the shadow distance; with the earlier nearest-texel filter and no
   //! receiver-plane bias they occluded 44 and 63 pixels.
+  //! Reads back a view's GPU receiver fit: its loose and fitted cascades and
+  //! its receiver mask, mirroring `ShadowReceiverFit.hlsli`.
+  class ReceiverFitShadowTest : public GrazingDirectionalShadowTest {
+  protected:
+    static constexpr std::uint32_t kMaskResolution = 64U;
+    static constexpr std::uint32_t kMaskTiles
+      = kMaskResolution * kMaskResolution;
+    static constexpr std::uint32_t kMaskBlock = (2U * kMaskTiles) + 64U;
+
+    struct ReceiverFit {
+      std::vector<ShadowCascadeBinding> loose;
+      std::vector<ShadowCascadeBinding> fitted;
+      std::vector<std::uint32_t> mask;
+    };
+
+    auto SetUp() -> void override
+    {
+      GrazingDirectionalShadowTest::SetUp();
+      ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>(
+        [](auto& light) -> auto { light.Common().casts_shadows = true; }));
+    }
+
+    auto ReadReceiverFit() -> std::optional<ReceiverFit>
+    {
+      const auto* shadows = RendererPublicationProbe::GetShadowService(
+        *RendererPublicationProbe::GetSceneRenderer(*renderer_));
+      const auto view_id = ViewId { surface_view_id };
+      const auto data = shadows->InspectShadowData(view_id);
+      const auto inspection = shadows->InspectReceiverFit(view_id);
+      if (data == nullptr || !inspection.has_value()) {
+        return std::nullopt;
+      }
+      const auto count = inspection->cascade_count;
+      const auto records = GetReadbackManager()->ReadBufferNow(
+        *inspection->records, { 0U, count * sizeof(ShadowCascadeBinding) });
+      const auto mask
+        = GetReadbackManager()->ReadBufferNow(*inspection->receiver_mask,
+          { 0U, count * kMaskBlock * sizeof(std::uint32_t) });
+      if (!records.has_value() || !mask.has_value()) {
+        return std::nullopt;
+      }
+      auto fit = ReceiverFit {
+        .loose = data->cascades,
+        .fitted = std::vector<ShadowCascadeBinding>(count),
+        .mask = std::vector<std::uint32_t>(
+          static_cast<std::size_t>(count) * kMaskBlock),
+      };
+      std::memcpy(fit.fitted.data(), records->data(), records->size());
+      std::memcpy(fit.mask.data(), mask->data(), mask->size());
+      return fit;
+    }
+
+    //! The receiver tile `world_position` projects to in `cascade`.
+    static auto MaskTile(const ReceiverFit& fit, const std::size_t cascade,
+      const glm::vec3& world_position) -> std::uint32_t
+    {
+      const auto clip = fit.fitted.at(cascade).light_view_projection
+        * glm::vec4 { world_position, 1.0F };
+      const auto uv = glm::clamp(
+        glm::vec2 { (clip.x * 0.5F) + 0.5F, 0.5F - (clip.y * 0.5F) }, 0.0F,
+        1.0F);
+      const auto tile
+        = glm::min(glm::uvec2 { uv * static_cast<float>(kMaskResolution) },
+          glm::uvec2 { kMaskResolution - 1U });
+      return fit.mask.at((cascade * kMaskBlock) + kMaskTiles
+        + (tile.y * kMaskResolution) + tile.x);
+    }
+
+    //! Whether a receiver tile lies under the light-space footprint of the box
+    //! `center` +- `extent` in `cascade`, as caster culling tests it.
+    static auto MaskCovers(const ReceiverFit& fit, const std::size_t cascade,
+      const glm::vec3& center, const glm::vec3& extent) -> bool
+    {
+      auto lo = glm::vec2 { std::numeric_limits<float>::max() };
+      auto hi = glm::vec2 { std::numeric_limits<float>::lowest() };
+      for (unsigned corner = 0U; corner < 8U; ++corner) {
+        const auto signs = glm::vec3 { (corner & 1U) != 0U ? 1.0F : -1.0F,
+          (corner & 2U) != 0U ? 1.0F : -1.0F,
+          (corner & 4U) != 0U ? 1.0F : -1.0F };
+        const auto clip = fit.fitted.at(cascade).light_view_projection
+          * glm::vec4 { center + (signs * extent), 1.0F };
+        lo = glm::min(lo, glm::vec2 { clip });
+        hi = glm::max(hi, glm::vec2 { clip });
+      }
+      const auto uv_min
+        = glm::vec2 { (lo.x * 0.5F) + 0.5F, 0.5F - (hi.y * 0.5F) };
+      const auto uv_max
+        = glm::vec2 { (hi.x * 0.5F) + 0.5F, 0.5F - (lo.y * 0.5F) };
+      if (uv_max.x < 0.0F || uv_max.y < 0.0F || uv_min.x > 1.0F
+        || uv_min.y > 1.0F) {
+        return false;
+      }
+      const auto to_tile = [](const glm::vec2 uv) -> glm::uvec2 {
+        return glm::min(glm::uvec2 { glm::clamp(uv, 0.0F, 1.0F)
+                          * static_cast<float>(kMaskResolution) },
+          glm::uvec2 { kMaskResolution - 1U });
+      };
+      const auto tile_lo = to_tile(uv_min);
+      const auto tile_hi = to_tile(uv_max);
+      for (auto y = tile_lo.y; y <= tile_hi.y; ++y) {
+        for (auto x = tile_lo.x; x <= tile_hi.x; ++x) {
+          if (fit.mask.at(
+                (cascade * kMaskBlock) + kMaskTiles + (y * kMaskResolution) + x)
+            != 0U) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+  };
+
+  //! The receivers lie at view depth ~1, all in the first cascade. It narrows
+  //! to them in quarter-octave steps, snapped to its texel grid, and marks
+  //! them; cascades without receivers keep their loose bounds and stay empty.
+  NOLINT_TEST_F(ReceiverFitShadowTest, CascadesNarrowToTheVisibleReceivers)
+  {
+    SetSunDirection(60.0F, 0.0F);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+    const auto fit = ReadReceiverFit();
+    ASSERT_HAS_VALUE(fit);
+    ASSERT_EQ(fit->fitted.size(), fit->loose.size());
+    ASSERT_GE(fit->loose.size(), 2U);
+
+    const auto& loose = fit->loose.front();
+    const auto& fitted = fit->fitted.front();
+    // A narrower cascade: its texel shrinks by a whole number of quarter
+    // octaves, and only its light-space x and y change.
+    const auto ratio = loose.world_texel_size / fitted.world_texel_size;
+    const auto steps = 4.0F * std::log2(ratio);
+    EXPECT_GE(steps, 1.0F - 1.0e-3F);
+    EXPECT_NEAR(steps, std::round(steps), 1.0e-3F);
+    const auto narrow = fitted.light_view_projection
+      * glm::inverse(loose.light_view_projection);
+    EXPECT_NEAR(narrow[0][0], ratio, 1.0e-3F * ratio);
+    EXPECT_NEAR(narrow[1][1], ratio, 1.0e-3F * ratio);
+    EXPECT_NEAR(narrow[2][2], 1.0F, 1.0e-4F);
+    EXPECT_NEAR(narrow[1][0], 0.0F, 1.0e-4F);
+    EXPECT_NEAR(narrow[0][1], 0.0F, 1.0e-4F);
+    EXPECT_NEAR(narrow[3][2], 0.0F, 1.0e-4F);
+    // Its center sits on its own texel grid in world-anchored light space.
+    // The offset comes from a receiver projected through both matrices:
+    // fitted clip = ratio * loose clip + offset.
+    const auto resolution = 1.0F / loose.inverse_resolution.x;
+    const auto fitted_half = 0.5F * fitted.world_texel_size * resolution;
+    const auto probe_point = glm::vec4 { 0.0F, 0.0F, -1.0F, 1.0F };
+    const auto offset = glm::vec2 { fitted.light_view_projection * probe_point }
+      - (ratio * glm::vec2 { loose.light_view_projection * probe_point });
+    const auto center = -offset * fitted_half;
+    const auto anchored
+      = (loose.light_space_origin + center) / fitted.world_texel_size;
+    EXPECT_NEAR(anchored.x, std::round(anchored.x), 2.0e-2F);
+    EXPECT_NEAR(anchored.y, std::round(anchored.y), 2.0e-2F);
+    // The receiver at the view center is inside it and marked.
+    const auto receiver = glm::vec3 { 0.0F, 0.0F, -1.0F };
+    const auto clip
+      = fitted.light_view_projection * glm::vec4 { receiver, 1.0F };
+    EXPECT_LT(std::abs(clip.x), 1.0F);
+    EXPECT_LT(std::abs(clip.y), 1.0F);
+    EXPECT_NE(MaskTile(*fit, 0U, receiver), 0U);
+
+    for (std::size_t cascade = 1U; cascade < fit->loose.size(); ++cascade) {
+      SCOPED_TRACE(cascade);
+      EXPECT_EQ(fit->fitted.at(cascade).light_view_projection,
+        fit->loose.at(cascade).light_view_projection);
+      const auto tiles = std::span(fit->mask).subspan(
+        (cascade * kMaskBlock) + kMaskTiles, kMaskTiles);
+      EXPECT_TRUE(std::ranges::all_of(
+        tiles, [](const std::uint32_t tile) -> bool { return tile == 0U; }));
+    }
+  }
+
+  //! A caster whose shadow lands outside the view is culled by the receiver
+  //! mask and changes nothing in the image; a caster shadowing a visible
+  //! receiver still draws.
+  NOLINT_TEST_F(ReceiverFitShadowTest, CastersWithoutVisibleShadowsAreCulled)
+  {
+    SetSunDirection(60.0F, 0.0F);
+    AddBlocker(1.0F, 0.25F, 0.5F);
+    std::vector<float> without_far;
+    ASSERT_NO_FATAL_FAILURE(RenderVisibility(false, without_far));
+
+    // Same height, well beyond the view's half-width: its shadow, shifted
+    // toward -x by the 60 degree light, still lands outside the view.
+    auto lens = camera.GetCameraAs<scene::PerspectiveCamera>();
+    ASSERT_TRUE(lens.has_value());
+    const auto half_width = std::tan(0.5F * lens->get().GetFieldOfView());
+    const auto near_position = blocker.GetTransform().GetLocalPosition();
+    ASSERT_HAS_VALUE(near_position);
+    const auto far_position
+      = *near_position + glm::vec3 { 4.0F * half_width, 0.0F, 0.0F };
+    auto far_blocker = scene->CreateNode("Far shadow blocker");
+    far_blocker.GetRenderable().SetGeometry(
+      mesh_node.GetRenderable().GetGeometry());
+    far_blocker.GetTransform().SetLocalScale(glm::vec3 { 0.25F });
+    far_blocker.GetTransform().SetLocalPosition(far_position);
+    expected_draws = 3U;
+    std::vector<float> with_far;
+    ASSERT_NO_FATAL_FAILURE(RenderVisibility(false, with_far));
+
+    const auto occluded = std::ranges::count_if(
+      with_far, [](const float v) -> bool { return v < 0.5F; });
+    EXPECT_GT(occluded, kSize * kSize / 128U);
+    ASSERT_EQ(with_far.size(), without_far.size());
+    for (std::size_t i = 0; i < with_far.size(); ++i) {
+      if (!std::isnan(without_far.at(i))) {
+        EXPECT_NEAR(with_far.at(i), without_far.at(i), 1.0e-5F) << i;
+      }
+    }
+
+    const auto fit = ReadReceiverFit();
+    ASSERT_HAS_VALUE(fit);
+    // The blockers are the receiver triangle, [-2, 2] x [-2, 2] at local
+    // z = -1, scaled by 0.25 about their origin.
+    const auto box_extent = glm::vec3 { 0.5F, 0.5F, 0.0F };
+    const auto box_center = [](const glm::vec3& position) -> glm::vec3 {
+      return position + glm::vec3 { 0.0F, 0.0F, -0.25F };
+    };
+    EXPECT_TRUE(MaskCovers(*fit, 0U, box_center(*near_position), box_extent));
+    EXPECT_FALSE(MaskCovers(*fit, 0U, box_center(far_position), box_extent));
+  }
+
   NOLINT_TEST_F(GrazingDirectionalShadowTest, BlockerStillCastsItsShadow)
   {
     SetSunDirection(60.0F, 0.0F);

@@ -28,9 +28,11 @@
 #include <fmt/format.h>
 #include <glm/ext/quaternion_float.hpp>
 #include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
 #include <glm/ext/vector_uint2.hpp>
 #include <glm/ext/vector_uint3.hpp>
 #include <glm/geometric.hpp>
+#include <glm/matrix.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -98,6 +100,7 @@
 #include <Oxygen/Vortex/IndirectLighting/IndirectLightingService.h>
 #include <Oxygen/Vortex/Internal/PerViewScope.h>
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
+#include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Lighting/Types/DeferredShadowInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
@@ -1149,6 +1152,18 @@ namespace {
                     : ctx.current_view.view_state_handle);
   }
 
+  //! Whether the view renders volumetric fog, which samples directional
+  //! shadows in the air between the camera and its surfaces.
+  auto ViewRendersVolumetricFog(const RenderContext& ctx,
+    const EnvironmentLightingService& environment_service) -> bool
+  {
+    return ctx.current_view.with_height_fog
+      && ctx.current_view.feature_mask.Has(
+        CompositionView::ViewFeatureMask::kVolumetrics)
+      && environment_service.InspectAtmosphereState()
+           .view_products.volumetric_fog.enabled;
+  }
+
   auto CollectExposureProducts(const RenderContext& ctx,
     const graphics::Texture& accumulated, ShaderVisibleIndex accumulated_srv,
     const EnvironmentLightingService* environment_service)
@@ -1179,10 +1194,8 @@ namespace {
         && ctx.current_view.feature_mask.Has(
           CompositionView::ViewFeatureMask::kEnvironment)
         && authored.atmosphere.enabled;
-      const bool fog_required = ctx.current_view.with_height_fog
-        && ctx.current_view.feature_mask.Has(
-          CompositionView::ViewFeatureMask::kVolumetrics)
-        && authored.volumetric_fog.enabled;
+      const bool fog_required
+        = ViewRendersVolumetricFog(ctx, *environment_service);
       if (atmosphere_required) {
         products.push_back({
           .texture = radiance ? radiance->sky_view.get() : nullptr,
@@ -2030,6 +2043,42 @@ auto SceneRenderer::RenderDepthPrepass(RenderContext& ctx,
     = depth_prepass_->HasValidDepthProduct();
 }
 
+auto SceneRenderer::ResolveShadowReceivers(
+  const RenderContext& ctx, const SceneTextures& scene_textures)
+  -> std::optional<shadows::ShadowReceiverView>
+{
+  const auto& view = ctx.current_view;
+  if (!view.IsEarlyDepthComplete() || !view.HasValidSceneDepthProduct()
+    || view.resolved_view == nullptr
+    || (environment_ != nullptr
+      && ViewRendersVolumetricFog(ctx, *environment_))) {
+    return std::nullopt;
+  }
+  auto* depth = scene_textures.GetSceneDepthResource().get();
+  if (depth == nullptr) {
+    return std::nullopt;
+  }
+  const auto depth_srv = ShaderVisibleIndex { RegisterSceneTextureView(*depth,
+    MakeSrvDesc(
+      *depth, ResolveDepthSrvFormat(depth->GetDescriptor().format))) };
+  const auto& resolved = *view.resolved_view;
+  const auto extent = scene_textures.GetExtent();
+  const auto clamped = internal::ResolveClampedViewportState(
+    resolved.Viewport(), resolved.Scissor(), extent.x, extent.y);
+  return shadows::ShadowReceiverView {
+    .view_id = view.view_id,
+    .scene_depth = observer_ptr<const graphics::Texture> { depth },
+    .scene_depth_srv = depth_srv,
+    .inverse_view_projection
+    = glm::inverse(resolved.ProjectionMatrix() * resolved.ViewMatrix()),
+    .view_matrix = resolved.ViewMatrix(),
+    .viewport
+    = glm::vec4 { clamped.viewport.top_left_x, clamped.viewport.top_left_y,
+      clamped.viewport.width, clamped.viewport.height },
+    .near_plane = resolved.NearPlane(),
+  };
+}
+
 auto SceneRenderer::RenderCurrentView(
   RenderContext& ctx, graphics::CommandRecorder& recorder) -> bool
 {
@@ -2360,6 +2409,8 @@ auto SceneRenderer::RenderCurrentView(
       .frame_light_set = &frame_light_selection_,
       .active_views = std::span(frame_shadow_views_),
       .preparation_views = std::span(frame_shadow_preparation_views_),
+      .view_recorder = observer_ptr { &recorder },
+      .receivers = ResolveShadowReceivers(ctx, scene_textures),
     });
   }
   if (shadows_ != nullptr && wants_shadow_products) {
