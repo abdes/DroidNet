@@ -17,6 +17,7 @@
 
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 
 struct IDxcCompiler3;
@@ -30,7 +31,9 @@ public:
     std::filesystem::path workspace_root;
     std::vector<std::filesystem::path> include_dirs;
     std::vector<ShaderDefine> defines {};
+    ShaderCompileProfile profile {};
     std::string object_output_name;
+    //! PDB name recorded in the DXIL; used with external debug info only.
     std::string debug_output_name;
   };
 

@@ -11,13 +11,12 @@
 #include <optional>
 #include <vector>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -32,8 +31,12 @@ using oxygen::graphics::d3d12::tools::shader_bake::DependencyFingerprint;
 using oxygen::graphics::d3d12::tools::shader_bake::EnsureBuildRootLayout;
 using oxygen::graphics::d3d12::tools::shader_bake::GetBuildRootLayout;
 using oxygen::graphics::d3d12::tools::shader_bake::GetModuleArtifactPath;
+using oxygen::graphics::d3d12::tools::shader_bake::MakeShaderCompileProfile;
 using oxygen::graphics::d3d12::tools::shader_bake::ModuleArtifact;
 using oxygen::graphics::d3d12::tools::shader_bake::ReadModuleArtifactFile;
+using oxygen::graphics::d3d12::tools::shader_bake::ShaderCompileProfile;
+using oxygen::graphics::d3d12::tools::shader_bake::ShaderConfig;
+using oxygen::graphics::d3d12::tools::shader_bake::ShaderDebugInfo;
 using oxygen::graphics::d3d12::tools::shader_bake::TryReadModuleArtifactFile;
 using oxygen::graphics::d3d12::tools::shader_bake::WriteModuleArtifactFile;
 
@@ -87,8 +90,10 @@ protected:
         std::array {
           std::filesystem::path("H:/oxygen/shaders"),
           std::filesystem::path("H:/oxygen/includes"),
-        }),
-      .toolchain_hash = ComputeToolchainHash(),
+        },
+        MakeShaderCompileProfile(ShaderConfig::kDebug)),
+      .toolchain_hash
+      = ComputeToolchainHash(MakeShaderCompileProfile(ShaderConfig::kDebug)),
       .request = request,
       .primary_hash = 0xFEDCBA9876543210ULL,
       .dependencies = {
@@ -169,10 +174,35 @@ NOLINT_TEST(ShaderBakeActionKeyTest, ChangesWhenIncludeRootOrderChanges)
     std::filesystem::path("H:/oxygen/shaders"),
   };
 
-  const auto first = ComputeShaderActionKey(request, first_order);
-  const auto repeated = ComputeShaderActionKey(request, first_order);
-  const auto second = ComputeShaderActionKey(request, second_order);
+  const auto profile = MakeShaderCompileProfile(ShaderConfig::kRelease);
+  const auto first = ComputeShaderActionKey(request, first_order, profile);
+  const auto repeated = ComputeShaderActionKey(request, first_order, profile);
+  const auto second = ComputeShaderActionKey(request, second_order, profile);
 
   EXPECT_EQ(first, repeated);
   EXPECT_NE(first, second);
+}
+
+NOLINT_TEST(ShaderBakeActionKeyTest, EveryCompileProfileHasItsOwnKeys)
+{
+  const auto request = MakeCanonicalRequest();
+  const std::array include_dirs { std::filesystem::path("H:/oxygen/shaders") };
+  std::vector<ShaderCompileProfile> profiles;
+  for (const auto config : { ShaderConfig::kDebug, ShaderConfig::kRelease }) {
+    for (const auto debug_info : { ShaderDebugInfo::kNone,
+           ShaderDebugInfo::kExternal, ShaderDebugInfo::kEmbedded }) {
+      profiles.push_back(MakeShaderCompileProfile(config, debug_info));
+    }
+  }
+
+  for (size_t i = 0; i < profiles.size(); ++i) {
+    for (size_t j = i + 1; j < profiles.size(); ++j) {
+      EXPECT_NE(ComputeShaderActionKey(request, include_dirs, profiles[i]),
+        ComputeShaderActionKey(request, include_dirs, profiles[j]))
+        << i << " vs " << j;
+      EXPECT_NE(
+        ComputeToolchainHash(profiles[i]), ComputeToolchainHash(profiles[j]))
+        << i << " vs " << j;
+    }
+  }
 }

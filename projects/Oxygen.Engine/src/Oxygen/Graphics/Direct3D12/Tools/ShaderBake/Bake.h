@@ -10,6 +10,8 @@
 #include <filesystem>
 #include <vector>
 
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
+
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
 enum class ShaderBakeCommand : uint8_t {
@@ -18,14 +20,9 @@ enum class ShaderBakeCommand : uint8_t {
   kCleanCache,
 };
 
-enum class ShaderBakeMode : uint8_t {
-  kDev,
-  kProduction,
-};
-
 struct BakeArgs {
   ShaderBakeCommand command { ShaderBakeCommand::kUpdate };
-  ShaderBakeMode mode { ShaderBakeMode::kDev };
+  ShaderCompileProfile profile {};
   std::filesystem::path workspace_root;
   std::filesystem::path build_root;
   std::filesystem::path out_file;

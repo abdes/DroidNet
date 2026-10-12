@@ -67,10 +67,6 @@ namespace {
   auto WriteRequestDiagnosticsLog(const ExecutionOptions& options,
     const uint64_t request_key, std::string_view diagnostics) -> void
   {
-    if (options.mode != ShaderBakeMode::kDev) {
-      return;
-    }
-
     const auto log_path = GetRequestLogPath(options.layout, request_key);
     const auto contents = diagnostics.empty()
       ? std::string("request compilation failed\n")
@@ -165,14 +161,20 @@ namespace {
       WriteBinaryFileAtomically(dxil_path, artifact.dxil);
     }
 
-    if (pdb_bytes.empty()) {
-      return;
-    }
-
     const auto pdb_path = GetRequestPdbPath(options.final_archive_path,
       request.request.source_path, request.request.entry_point,
       request.request_key);
-    WriteBinaryFileAtomically(pdb_path, pdb_bytes);
+    if (!options.profile.WritesPdbSidecars()) {
+      // A sidecar left by another profile no longer matches this DXIL.
+      if (RemovePathIfPresent(pdb_path)) {
+        LOG_F(INFO, "removed debug sidecar {}", pdb_path.string());
+      }
+      return;
+    }
+    // A reused request has no new bytes; its sidecar is already current.
+    if (!pdb_bytes.empty()) {
+      WriteBinaryFileAtomically(pdb_path, pdb_bytes);
+    }
   }
 
   auto CollectStaleDeveloperArtifactPaths(const ExecutionOptions& options)
@@ -228,7 +230,7 @@ auto ExecuteUpdate(const ExecutionOptions& options)
 {
   auto dirty_analysis = AnalyzeDirtyRequests(options.workspace_root,
     options.shader_source_root, options.layout, options.final_archive_path,
-    options.requests, options.include_dirs);
+    options.requests, options.include_dirs, options.profile);
 
   size_t dirty_count = 0;
   for (const auto& request_analysis : dirty_analysis.requests) {

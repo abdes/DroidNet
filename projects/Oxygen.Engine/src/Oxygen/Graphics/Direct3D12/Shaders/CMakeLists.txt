@@ -15,6 +15,12 @@ set(OXYGEN_D3D12_SHADERBAKE_TARGET "oxygen-graphics-direct3d12-shaderbake")
 
 set(_OXYGEN_IS_ASAN_BUILD "${OXYGEN_WITH_ASAN}")
 
+# AUTO leaves debug info to the shader configuration's default.
+set(_shaderbake_debug_info "")
+if(NOT OXYGEN_SHADER_DEBUG_INFO STREQUAL "AUTO")
+  string(TOLOWER "${OXYGEN_SHADER_DEBUG_INFO}" _shaderbake_debug_info)
+endif()
+
 set(
   SHADER_LIBRARY_OUTPUT
   "${OXYGEN_PROJECT_SOURCE_DIR}/bin/Oxygen/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,Debug,Release>/$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,dev,production>/shaders.bin"
@@ -44,7 +50,8 @@ set(OXYGEN_SHADERBAKE_WORKSPACE [==[${OXYGEN_PROJECT_SOURCE_DIR}]==])
 set(OXYGEN_SHADERBAKE_CACHE [==[${SHADERBAKE_BUILD_ROOT}]==])
 set(OXYGEN_SHADERBAKE_OUTPUT [==[${SHADER_LIBRARY_OUTPUT}]==])
 set(OXYGEN_SHADERBAKE_OUTPUT_DIR [==[${SHADER_LIBRARY_OUTPUT_DIR}]==])
-set(OXYGEN_SHADERBAKE_MODE [==[$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,dev,production>]==])
+set(OXYGEN_SHADERBAKE_CONFIG [==[$<IF:$<OR:$<CONFIG:Debug>,$<BOOL:${_OXYGEN_IS_ASAN_BUILD}>>,debug,release>]==])
+set(OXYGEN_SHADERBAKE_DEBUG_INFO [==[${_shaderbake_debug_info}]==])
 include([==[${OXYGEN_PROJECT_SOURCE_DIR}/cmake/RunShaderBake.cmake]==])
 "
 )

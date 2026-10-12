@@ -194,7 +194,11 @@ Optional:
 - `--shader-root <path>`
 - `--oxygen-include-root <path>`
 - `--include-dir <path>` (repeatable)
-- `--mode dev|production` (default: `dev`)
+- `--debug-info none|external|embedded` (overrides the configuration default)
+
+Required by `update` and `rebuild`:
+
+- `--config debug|release`
 
 Resolution rules:
 
@@ -532,29 +536,43 @@ This is the path build integration must supply so that runtime PathFinder resolu
 
 ---
 
-## 15. Dev and Production Mode Contract
+## 15. Compile Profile Contract
 
-`--mode` changes policy only. It does not change request identity, dependency rules, artifact formats, or the final runtime contract.
+The compile profile is an input of the bake, never a property of the
+ShaderBake executable. A Debug or Release ShaderBake build compiles identical
+shaders for identical arguments.
 
-### 15.1 Dev Mode
+### 15.1 Configuration
 
-Required behavior:
+`--config` selects the optimization level and the default debug info:
 
-1. incremental `update` is the default expected command,
-2. failed compile diagnostics are written to `logs/`,
-3. debug-capable builds emit loose PDB sidecars beside the final archive and do not use DXC embedded debug info by default,
-4. stale module artifacts and stale developer-facing debug exports are removed on successful update.
+| Config    | DXC optimization | Default debug info |
+| --------- | ---------------- | ------------------ |
+| `debug`   | `-Od`            | `external`         |
+| `release` | `-O3`            | `none`             |
 
-### 15.2 Production Mode
+### 15.2 Debug Info
 
-Required behavior:
+`--debug-info` overrides the configuration default, so a release bake can keep
+optimized code generation and still carry debug information:
 
-1. request identity and dependency rules are identical to dev mode,
-2. successful compile logs may be omitted,
-3. `rebuild` is allowed and expected for packaging or CI clean-room builds,
-4. final archive content must be identical for identical inputs.
+1. `none`: no debug information.
+2. `external`: `-Zi` with one PDB sidecar per request at
+   `pdb/<source-path>/<entry-point>__<request-key>.pdb` beside the archive. The
+   DXIL records exactly that file name, so debuggers and crash analyzers find
+   the sidecar by searching the `pdb/` tree.
+3. `embedded`: `-Zi -Qembed_debug`; debug information lives in each DXIL and no
+   sidecar is written.
 
-Production mode is not a second pipeline.
+### 15.3 Invariants
+
+1. Every profile-dependent DXC argument is part of the action key and the
+   toolchain hash; switching profiles recompiles exactly the affected requests.
+2. A request compiled without external debug info has no PDB sidecar; switching
+   away from `external` removes the stale sidecars.
+3. Failed compile diagnostics are written to `logs/` in every configuration.
+4. Request identity, dependency rules and artifact formats do not depend on the
+   profile; final archive content is identical for identical inputs.
 
 ---
 

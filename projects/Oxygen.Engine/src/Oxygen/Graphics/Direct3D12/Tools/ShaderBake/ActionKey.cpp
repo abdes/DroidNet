@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
+#include <windows.h>
 
 #include <cstdint>
 #include <filesystem>
@@ -15,10 +15,9 @@
 #include <type_traits>
 #include <vector>
 
-#include <windows.h>
-
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 
@@ -101,22 +100,22 @@ namespace {
     return seed ^ (value + kGoldenRatio + (seed << 6U) + (seed >> 2U));
   }
 
-  constexpr uint64_t kShaderBakeActionSchemaVersion = 3;
+  constexpr uint64_t kShaderBakeActionSchemaVersion = 4;
 
 } // namespace
 
-auto ComputeToolchainHash() -> uint64_t
+auto ComputeToolchainHash(const ShaderCompileProfile& profile) -> uint64_t
 {
   const std::string version = GetDxcVersionString();
   const std::string schema = std::string("dxc;") + "version=" + version + ";"
-    + GetFixedDxcArgumentSchema()
-    + "mode=" + std::string(GetActiveShaderBuildConfigName()) + ";";
+    + GetDxcArgumentSchema(profile);
 
   return oxygen::ComputeFNV1a64(schema.data(), schema.size());
 }
 
 auto ComputeShaderActionKey(const ShaderRequest& request,
-  std::span<const std::filesystem::path> include_dirs) -> uint64_t
+  std::span<const std::filesystem::path> include_dirs,
+  const ShaderCompileProfile& profile) -> uint64_t
 {
   const auto canonical_request
     = oxygen::graphics::CanonicalizeShaderRequest(ShaderRequest { request });
@@ -146,13 +145,9 @@ auto ComputeShaderActionKey(const ShaderRequest& request,
   seed = HashCombine(
     seed, oxygen::ComputeFNV1a64(dxc_version.data(), dxc_version.size()));
 
-  const std::string fixed_schema = GetFixedDxcArgumentSchema();
-  seed = HashCombine(
-    seed, oxygen::ComputeFNV1a64(fixed_schema.data(), fixed_schema.size()));
-
-  constexpr auto build_mode = GetActiveShaderBuildConfigName();
-  seed = HashCombine(
-    seed, oxygen::ComputeFNV1a64(build_mode.data(), build_mode.size()));
+  const std::string argument_schema = GetDxcArgumentSchema(profile);
+  seed = HashCombine(seed,
+    oxygen::ComputeFNV1a64(argument_schema.data(), argument_schema.size()));
 
   for (const auto& include_dir : include_dirs) {
     const auto normalized = NormalizeIncludeRoot(include_dir);

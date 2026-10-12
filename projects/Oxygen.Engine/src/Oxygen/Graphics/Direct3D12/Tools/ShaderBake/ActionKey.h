@@ -11,12 +11,15 @@
 #include <span>
 
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
-[[nodiscard]] auto ComputeToolchainHash() -> uint64_t;
+[[nodiscard]] auto ComputeToolchainHash(const ShaderCompileProfile& profile)
+  -> uint64_t;
 
 [[nodiscard]] auto ComputeShaderActionKey(const ShaderRequest& request,
-  std::span<const std::filesystem::path> include_dirs) -> uint64_t;
+  std::span<const std::filesystem::path> include_dirs,
+  const ShaderCompileProfile& profile) -> uint64_t;
 
 } // namespace oxygen::graphics::d3d12::tools::shader_bake

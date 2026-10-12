@@ -24,7 +24,7 @@
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
 struct ExecutionOptions {
-  ShaderBakeMode mode { ShaderBakeMode::kDev };
+  ShaderCompileProfile profile {};
   std::filesystem::path workspace_root;
   std::filesystem::path shader_source_root;
   std::filesystem::path final_archive_path;

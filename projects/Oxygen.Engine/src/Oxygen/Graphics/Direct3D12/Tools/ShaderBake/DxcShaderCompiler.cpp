@@ -9,9 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
-#if !defined(NDEBUG)
-#  include <limits>
-#endif
+#include <limits>
 #include <map>
 #include <memory>
 #include <span>
@@ -128,9 +126,13 @@ auto MakeDxcArguments(IDxcUtils& utils, const std::wstring& source_name_w,
   std::span<const std::filesystem::path> include_dirs,
   const std::map<std::wstring, std::wstring>& global_defines,
   std::span<const oxygen::graphics::ShaderDefine> request_defines,
-  std::string_view object_output_name,
-  [[maybe_unused]] std::string_view debug_output_name) -> DxcCompileArgs
+  const oxygen::graphics::d3d12::tools::shader_bake::ShaderCompileProfile&
+    profile,
+  std::string_view object_output_name, std::string_view debug_output_name)
+  -> DxcCompileArgs
 {
+  using oxygen::graphics::d3d12::tools::shader_bake::ShaderConfig;
+  using oxygen::graphics::d3d12::tools::shader_bake::ShaderDebugInfo;
   using oxygen::windows::ThrowOnFailed;
 
   DxcCompileArgs args {};
@@ -207,18 +209,28 @@ auto MakeDxcArguments(IDxcUtils& utils, const std::wstring& source_name_w,
     }
   }
 
-#if !defined(NDEBUG)
-  args.option_storage.emplace_back(L"-Od");
-  args.option_storage.emplace_back(L"-Zi");
-  if (!debug_output_name.empty()) {
+  // Keep in sync with GetDxcArgumentSchema(), which the cache keys hash.
+  args.option_storage.emplace_back(
+    profile.config == ShaderConfig::kDebug ? L"-Od" : L"-O3");
+  switch (profile.debug_info) {
+  case ShaderDebugInfo::kNone:
+    break;
+  case ShaderDebugInfo::kExternal: {
+    if (debug_output_name.empty()) {
+      throw std::invalid_argument("external debug info needs a PDB name");
+    }
     std::wstring debug_output_name_w;
     oxygen::string_utils::Utf8ToWide(debug_output_name, debug_output_name_w);
+    args.option_storage.emplace_back(L"-Zi");
     args.option_storage.emplace_back(L"-Fd");
     args.option_storage.emplace_back(std::move(debug_output_name_w));
+    break;
   }
-#else
-  args.option_storage.emplace_back(L"-O3");
-#endif
+  case ShaderDebugInfo::kEmbedded:
+    args.option_storage.emplace_back(L"-Zi");
+    args.option_storage.emplace_back(L"-Qembed_debug");
+    break;
+  }
 
   std::vector<LPCWSTR> option_ptrs;
   option_ptrs.reserve(args.option_storage.size());
@@ -238,7 +250,7 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
   const DxcBuffer& source_buffer, DxcCompileArgs& args,
   const std::string& shader_identifier, const wchar_t* profile_name,
   std::string_view entry_point_utf8, std::string_view shader_source_utf8,
-  std::span<const std::filesystem::path> include_dirs)
+  std::span<const std::filesystem::path> include_dirs, const bool collect_pdb)
   -> DxcShaderCompiler::CompileResult
 {
   using oxygen::windows::ThrowOnFailed;
@@ -325,8 +337,7 @@ auto CompileDxc(IDxcCompiler3& compiler, IDxcIncludeHandler& include_handler,
   }
 
   std::vector<std::byte> pdb;
-  if (oxygen::graphics::d3d12::tools::shader_bake::
-        IsExternalShaderDebugInfoEnabled()) {
+  if (collect_pdb) {
     ComPtr<IDxcBlobWide> pdb_name_blob;
     ComPtr<IDxcBlob> pdb_blob;
     hr
@@ -501,7 +512,8 @@ auto DxcShaderCompiler::CompileFromSource(const std::u8string& shader_source,
 
   auto args = MakeDxcArguments(*utils_.Get(), source_name_w, profile_name,
     shader_info.entry_point, options.include_dirs, config_.global_defines,
-    options.defines, options.object_output_name, options.debug_output_name);
+    options.defines, options.profile, options.object_output_name,
+    options.debug_output_name);
 
   DxcBuffer source_buffer {
     .Ptr = src_blob->GetBufferPointer(),
@@ -523,5 +535,5 @@ auto DxcShaderCompiler::CompileFromSource(const std::u8string& shader_source,
     shader_identifier, profile_name, shader_info.entry_point,
     std::string_view(reinterpret_cast<const char*>(shader_source.data()),
       shader_source.size()),
-    options.include_dirs);
+    options.include_dirs, options.profile.WritesPdbSidecars());
 }

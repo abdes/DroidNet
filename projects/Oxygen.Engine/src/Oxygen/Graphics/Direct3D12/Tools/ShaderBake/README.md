@@ -22,7 +22,7 @@ For a given invocation, `ShaderBake` owns two output classes:
   - `state/build-state-v1.json`
   - `state/manifest-v1.json`
   - `modules/<xx>/<yy>/<request-key>.oxsm`
-  - `logs/<request-key>.log` in `dev` mode for failed requests
+  - `logs/<request-key>.log` for failed requests
   - `temp/` for atomic publication staging
 - Published developer-facing sidecars beside `shaders.bin`:
   - `dxil/<source-path>/<entry-point>__<request-key>.dxil`
@@ -102,8 +102,15 @@ Legacy compatibility alias for `update`.
 - `--include-dir <path>`: optional extra include directory; repeatable.
 - `--verbose`: include cache hits, dirty reasons, paths, reflection details and
   routine-check timing. The existing `-v=1` logging option also enables these.
-- `--mode dev|production`: optional policy mode.
-  Default: `dev`
+- `--config debug|release`: required by `update`, `rebuild` and `bake`.
+  `debug` compiles with `-Od` and PDB sidecars; `release` compiles with `-O3`
+  and no debug info. The ShaderBake executable's own build type never changes
+  the result.
+- `--debug-info none|external|embedded`: optional override of the
+  configuration's debug info. `external` publishes PDB sidecars under `pdb/`
+  whose names match the name each DXIL records; `embedded` keeps the debug info
+  inside the DXIL (`-Qembed_debug`). Use either with `--config release` to debug
+  or crash-analyze optimized shaders.
 
 `clean-cache` accepts the same path options. `--out` is optional for
 `clean-cache` and is never deleted by the command.
@@ -152,7 +159,8 @@ Incremental update:
 Oxygen.Graphics.Direct3D12.ShaderBake.exe update `
   --workspace-root <repo-root> `
   --build-root <build-dir>\shaderbake\Debug `
-  --out <repo-root>\bin\Oxygen\Debug\dev\shaders.bin
+  --out <repo-root>\bin\Oxygen\Debug\dev\shaders.bin `
+  --config debug
 ```
 
 Clean rebuild:
@@ -160,9 +168,24 @@ Clean rebuild:
 ```powershell
 Oxygen.Graphics.Direct3D12.ShaderBake.exe rebuild `
   --workspace-root <repo-root> `
-  --build-root <build-dir>\shaderbake\Debug `
-  --out <repo-root>\bin\Oxygen\Debug\dev\shaders.bin
+  --build-root <build-dir>\shaderbake\Release `
+  --out <repo-root>\bin\Oxygen\Release\production\shaders.bin `
+  --config release
 ```
+
+Optimized shaders with debug info, for a GPU crash in a Release run:
+
+```powershell
+Oxygen.Graphics.Direct3D12.ShaderBake.exe update `
+  --workspace-root <repo-root> `
+  --build-root <build-dir>\shaderbake\Release `
+  --out <repo-root>\bin\Oxygen\Release\production\shaders.bin `
+  --config release --debug-info embedded
+```
+
+Builds select the same through CMake: configure with
+`-DOXYGEN_SHADER_DEBUG_INFO=EMBEDDED` (or `EXTERNAL`, `NONE`); the default
+`AUTO` keeps each configuration's default.
 
 Inspect a baked archive:
 
@@ -187,8 +210,12 @@ The engine's shader build integrates `ShaderBake` from
 `src/Oxygen/Graphics/Direct3D12/Shaders/CMakeLists.txt` and currently invokes:
 
 ```text
-ShaderBake update --workspace-root <repo-root> --build-root <build-dir>/shaderbake/<configuration> --out <repo-root>/bin/Oxygen/<build-config>/<mode>/shaders.bin
+ShaderBake update --workspace-root <repo-root> --build-root <build-dir>/shaderbake/<configuration> --out <repo-root>/bin/Oxygen/<build-config>/<mode>/shaders.bin --config <debug|release> [--debug-info <kind>]
 ```
+
+`--config` is `debug` for Debug and ASan builds and `release` otherwise.
+`--debug-info` is passed only when the `OXYGEN_SHADER_DEBUG_INFO` cache option
+is not `AUTO`.
 
 That split is intentional:
 
@@ -218,11 +245,10 @@ shown above when cleaning the active cache.
 
 - A failed run never publishes a partial final archive.
 - Module artifacts are written only after a request compiles successfully.
-- Debug-capable builds publish loose DXIL and PDB sidecars beside `shaders.bin`.
-- ShaderBake uses external DXC PDB output for those sidecars rather than embedding debug info in the compiled DXIL by default.
-- In `dev` mode, failed requests write diagnostics to `logs/<request-key>.log`
-  under `--build-root`.
-- In `production` mode, per-request failure logs are not emitted.
+- Every bake publishes loose DXIL sidecars beside `shaders.bin`; PDB sidecars
+  are published only with `external` debug info, and removed otherwise.
+- Failed requests write diagnostics to `logs/<request-key>.log` under
+  `--build-root`.
 
 `ShaderBake` returns:
 

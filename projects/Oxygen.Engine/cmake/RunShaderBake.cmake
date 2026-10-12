@@ -7,12 +7,21 @@
 file(MAKE_DIRECTORY "${OXYGEN_SHADERBAKE_OUTPUT_DIR}")
 file(LOCK "${OXYGEN_SHADERBAKE_OUTPUT_DIR}/.shaderbake.lock" GUARD PROCESS)
 
+set(_debug_info_args "")
+if(NOT "${OXYGEN_SHADERBAKE_DEBUG_INFO}" STREQUAL "")
+  set(
+    _debug_info_args
+    --debug-info
+    "${OXYGEN_SHADERBAKE_DEBUG_INFO}"
+  )
+endif()
+
 execute_process(
   COMMAND
     ${OXYGEN_SHADERBAKE_RUNTIME} "${OXYGEN_SHADERBAKE_EXECUTABLE}" update
     --workspace-root "${OXYGEN_SHADERBAKE_WORKSPACE}" --build-root
-    "${OXYGEN_SHADERBAKE_CACHE}" --out "${OXYGEN_SHADERBAKE_OUTPUT}" --mode
-    "${OXYGEN_SHADERBAKE_MODE}"
+    "${OXYGEN_SHADERBAKE_CACHE}" --out "${OXYGEN_SHADERBAKE_OUTPUT}" --config
+    "${OXYGEN_SHADERBAKE_CONFIG}" ${_debug_info_args}
   RESULT_VARIABLE _result
 )
 if(NOT "${_result}" MATCHES "^[0-9]+$")

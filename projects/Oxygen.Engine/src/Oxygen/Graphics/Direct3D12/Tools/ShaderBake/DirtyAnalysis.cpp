@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DirtyAnalysis.h>
-
 #include <algorithm>
 #include <filesystem>
 #include <optional>
@@ -16,6 +14,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ActionKey.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DirtyAnalysis.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
@@ -138,12 +137,13 @@ namespace {
       previous_modules,
     const BuildRootLayout& layout,
     const std::filesystem::path& final_archive_path,
+    const ShaderCompileProfile& profile,
     const ExpandedShaderRequest& expanded_request) -> RequestDirtyAnalysis
   {
     RequestDirtyAnalysis analysis {
       .expanded_request = expanded_request,
       .action_key
-      = ComputeShaderActionKey(expanded_request.request, include_dirs),
+      = ComputeShaderActionKey(expanded_request.request, include_dirs, profile),
       .artifact_path
       = GetModuleArtifactPath(layout, expanded_request.request_key),
     };
@@ -198,7 +198,7 @@ namespace {
       }
     }
 
-    if (IsExternalShaderDebugInfoEnabled()) {
+    if (profile.WritesPdbSidecars()) {
       std::error_code debug_ec;
       const auto pdb_path = GetRequestPdbPath(final_archive_path,
         expanded_request.request.source_path,
@@ -221,7 +221,8 @@ auto AnalyzeDirtyRequests(const std::filesystem::path& workspace_root,
   const BuildRootLayout& layout,
   const std::filesystem::path& final_archive_path,
   std::span<const ExpandedShaderRequest> requests,
-  std::span<const std::filesystem::path> include_dirs) -> DirtyAnalysisResult
+  std::span<const std::filesystem::path> include_dirs,
+  const ShaderCompileProfile& profile) -> DirtyAnalysisResult
 {
   const auto current_manifest = BuildManifestSnapshot(requests);
   const auto previous_manifest = LoadPreviousManifest(layout.manifest_file);
@@ -244,7 +245,7 @@ auto AnalyzeDirtyRequests(const std::filesystem::path& workspace_root,
     result.requests.push_back(
       AnalyzeOneRequest(workspace_root, shader_source_root, include_dirs,
         previous_manifest.has_value(), previous_manifest_keys, previous_modules,
-        layout, final_archive_path, request));
+        layout, final_archive_path, profile, request));
   }
 
   for (const auto& previous_module : previous_state.modules) {

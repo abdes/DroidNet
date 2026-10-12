@@ -54,14 +54,14 @@ using oxygen::graphics::d3d12::tools::shader_bake::GetModuleArtifactPath;
 using oxygen::graphics::d3d12::tools::shader_bake::GetRequestDxilPath;
 using oxygen::graphics::d3d12::tools::shader_bake::GetRequestLogPath;
 using oxygen::graphics::d3d12::tools::shader_bake::GetRequestPdbPath;
-using oxygen::graphics::d3d12::tools::shader_bake::
-  IsExternalShaderDebugInfoEnabled;
+using oxygen::graphics::d3d12::tools::shader_bake::MakeShaderCompileProfile;
 using oxygen::graphics::d3d12::tools::shader_bake::PackFinalShaderArchive;
 using oxygen::graphics::d3d12::tools::shader_bake::ReadBuildStateFile;
 using oxygen::graphics::d3d12::tools::shader_bake::ReadManifestFile;
 using oxygen::graphics::d3d12::tools::shader_bake::RequestCompileOutcome;
 using oxygen::graphics::d3d12::tools::shader_bake::RequestKeyToHex;
-using oxygen::graphics::d3d12::tools::shader_bake::ShaderBakeMode;
+using oxygen::graphics::d3d12::tools::shader_bake::ShaderCompileProfile;
+using oxygen::graphics::d3d12::tools::shader_bake::ShaderConfig;
 
 auto ReadFileBytes(const std::filesystem::path& path) -> std::vector<std::byte>
 {
@@ -110,6 +110,16 @@ public:
     failure_messages_[request_key] = std::move(message);
   }
 
+  auto SetProfile(const ShaderCompileProfile& profile) -> void
+  {
+    profile_ = profile;
+  }
+
+  [[nodiscard]] auto Profile() const -> const ShaderCompileProfile&
+  {
+    return profile_;
+  }
+
   [[nodiscard]] auto CompileCount(uint64_t request_key) const -> size_t
   {
     if (const auto it = compile_counts_.find(request_key);
@@ -149,14 +159,15 @@ public:
     }
 
     auto pdb = std::vector<std::byte> {};
-    if (IsExternalShaderDebugInfoEnabled()) {
+    if (profile_.WritesPdbSidecars()) {
       pdb = MakePayload(request.request_key, dependency_seed);
     }
     return RequestCompileOutcome {
       .artifact
       = oxygen::graphics::d3d12::tools::shader_bake::ModuleArtifact {
         .request_key = request.request_key,
-        .action_key = ComputeShaderActionKey(request.request, include_dirs_),
+        .action_key
+        = ComputeShaderActionKey(request.request, include_dirs_, profile_),
         .toolchain_hash = toolchain_hash_,
         .request = request.request,
         .primary_hash = primary.content_hash,
@@ -173,6 +184,9 @@ private:
   std::filesystem::path shader_root_;
   std::vector<std::filesystem::path> include_dirs_;
   uint64_t toolchain_hash_ { 0 };
+  ShaderCompileProfile profile_ {
+    MakeShaderCompileProfile(ShaderConfig::kDebug),
+  };
   std::unordered_map<uint64_t, std::vector<std::filesystem::path>>
     dependencies_;
   std::unordered_map<uint64_t, std::string> failure_messages_;
@@ -232,12 +246,12 @@ protected:
   }
 
   auto MakeOptions(std::span<const ExpandedShaderRequest> requests,
-    FakeCompiler& compiler, const ShaderBakeMode mode = ShaderBakeMode::kDev,
+    FakeCompiler& compiler,
     const std::filesystem::path& out_file_override = {}) const
     -> ExecutionOptions
   {
     return ExecutionOptions {
-      .mode = mode,
+      .profile = compiler.Profile(),
       .workspace_root = workspace_root_,
       .shader_source_root = shader_root_,
       .final_archive_path
@@ -378,7 +392,7 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, UpdateRecompilesOnlyEditedLeafRequest)
   EXPECT_TRUE(std::filesystem::exists(
     GetRequestDxilPath(out_file_, second.request.source_path,
       second.request.entry_point, second.request_key)));
-  if (IsExternalShaderDebugInfoEnabled()) {
+  if (compiler.Profile().WritesPdbSidecars()) {
     EXPECT_TRUE(std::filesystem::exists(
       GetRequestPdbPath(out_file_, first.request.source_path,
         first.request.entry_point, first.request_key)));
@@ -399,8 +413,7 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, UpdateRecompilesOnlyEditedLeafRequest)
   EXPECT_EQ(ReadArchiveModuleCount(out_file_), 2U);
 }
 
-NOLINT_TEST_F(
-  ShaderBakeExecutionTest, UpdateMissingPdbFollowsBuildDebugInfoPolicy)
+NOLINT_TEST_F(ShaderBakeExecutionTest, UpdateRecompilesRequestWithMissingPdb)
 {
   const auto request
     = MakeExpandedRequest("Debug/Single_PS.hlsl", "PS", ShaderType::kPixel);
@@ -416,18 +429,41 @@ NOLINT_TEST_F(
   const auto pdb_path
     = GetRequestPdbPath(out_file_, request.request.source_path,
       request.request.entry_point, request.request_key);
-  const auto expects_pdb = IsExternalShaderDebugInfoEnabled();
-  ASSERT_EQ(std::filesystem::exists(pdb_path), expects_pdb);
-  if (expects_pdb) {
-    ASSERT_TRUE(std::filesystem::remove(pdb_path));
-  }
+  ASSERT_TRUE(std::filesystem::remove(pdb_path));
 
   const auto second_run = ExecuteUpdate(MakeOptions(requests, compiler));
   ASSERT_TRUE(second_run.has_value());
-  EXPECT_EQ(second_run->compiled_request_count, expects_pdb ? 1U : 0U);
-  EXPECT_EQ(second_run->clean_request_count, expects_pdb ? 0U : 1U);
-  EXPECT_EQ(compiler.CompileCount(request.request_key), expects_pdb ? 2U : 1U);
-  EXPECT_EQ(std::filesystem::exists(pdb_path), expects_pdb);
+  EXPECT_EQ(second_run->compiled_request_count, 1U);
+  EXPECT_EQ(compiler.CompileCount(request.request_key), 2U);
+  EXPECT_TRUE(std::filesystem::exists(pdb_path));
+}
+
+NOLINT_TEST_F(ShaderBakeExecutionTest, ProfileWithoutPdbsRemovesStaleSidecars)
+{
+  const auto request
+    = MakeExpandedRequest("Debug/Single_PS.hlsl", "PS", ShaderType::kPixel);
+  const std::array requests { request };
+
+  WriteTextFile(shader_root_ / request.request.source_path,
+    "float4 PS() : SV_Target { return 1; }\n");
+
+  FakeCompiler compiler(
+    workspace_root_, shader_root_, include_dirs_, toolchain_hash_);
+  ASSERT_TRUE(ExecuteUpdate(MakeOptions(requests, compiler)).has_value());
+  const auto pdb_path
+    = GetRequestPdbPath(out_file_, request.request.source_path,
+      request.request.entry_point, request.request_key);
+  ASSERT_TRUE(std::filesystem::exists(pdb_path));
+
+  compiler.SetProfile(MakeShaderCompileProfile(ShaderConfig::kRelease));
+  const auto release_run = ExecuteUpdate(MakeOptions(requests, compiler));
+  ASSERT_TRUE(release_run.has_value());
+  EXPECT_EQ(release_run->compiled_request_count, 1U);
+  EXPECT_FALSE(std::filesystem::exists(pdb_path));
+
+  const auto clean_run = ExecuteUpdate(MakeOptions(requests, compiler));
+  ASSERT_TRUE(clean_run.has_value());
+  EXPECT_EQ(clean_run->compiled_request_count, 0U);
 }
 
 NOLINT_TEST_F(ShaderBakeExecutionTest,
@@ -505,7 +541,7 @@ NOLINT_TEST_F(
   EXPECT_FALSE(std::filesystem::exists(
     GetRequestDxilPath(out_file_, second.request.source_path,
       second.request.entry_point, second.request_key)));
-  if (IsExternalShaderDebugInfoEnabled()) {
+  if (compiler.Profile().WritesPdbSidecars()) {
     EXPECT_FALSE(std::filesystem::exists(
       GetRequestPdbPath(out_file_, second.request.source_path,
         second.request.entry_point, second.request_key)));
@@ -543,7 +579,7 @@ NOLINT_TEST_F(
   FakeCompiler rebuild_compiler(
     workspace_root_, shader_root_, include_dirs_, toolchain_hash_);
   const ExecutionOptions rebuild_options {
-    .mode = ShaderBakeMode::kDev,
+    .profile = rebuild_compiler.Profile(),
     .workspace_root = workspace_root_,
     .shader_source_root = shader_root_,
     .final_archive_path = rebuild_out,
@@ -637,7 +673,7 @@ NOLINT_TEST_F(ShaderBakeExecutionTest,
     std::filesystem::exists(GetRequestLogPath(layout_, second.request_key)));
 }
 
-NOLINT_TEST_F(ShaderBakeExecutionTest, ProductionModeDoesNotWriteFailureLogs)
+NOLINT_TEST_F(ShaderBakeExecutionTest, ReleaseProfileWritesFailureLogs)
 {
   const auto request
     = MakeExpandedRequest("Prod/Failure_PS.hlsl", "PS", ShaderType::kPixel);
@@ -648,12 +684,12 @@ NOLINT_TEST_F(ShaderBakeExecutionTest, ProductionModeDoesNotWriteFailureLogs)
 
   FakeCompiler compiler(
     workspace_root_, shader_root_, include_dirs_, toolchain_hash_);
-  compiler.FailRequest(request.request_key, "synthetic production failure");
+  compiler.SetProfile(MakeShaderCompileProfile(ShaderConfig::kRelease));
+  compiler.FailRequest(request.request_key, "synthetic release failure");
 
-  const auto failed_run = ExecuteUpdate(
-    MakeOptions(requests, compiler, ShaderBakeMode::kProduction));
+  const auto failed_run = ExecuteUpdate(MakeOptions(requests, compiler));
   EXPECT_FALSE(failed_run.has_value());
-  EXPECT_FALSE(
+  EXPECT_TRUE(
     std::filesystem::exists(GetRequestLogPath(layout_, request.request_key)));
 }
 

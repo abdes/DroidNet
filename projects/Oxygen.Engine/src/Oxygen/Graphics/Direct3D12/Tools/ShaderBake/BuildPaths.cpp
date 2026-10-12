@@ -4,14 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
-
 #include <fstream>
 #include <system_error>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/StringUtils.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
@@ -78,10 +77,10 @@ namespace {
     auto request_path = std::filesystem::path(std::string(source_path));
     request_path = request_path.lexically_normal();
 
-    auto leaf_name = std::string(entry_point) + "__"
-      + RequestKeyToHex(request_key) + std::string(extension);
     return final_archive_path.parent_path() / std::string(category)
-      / request_path / std::move(leaf_name);
+      / request_path
+      / GetRequestPublishedArtifactFileName(
+        entry_point, request_key, extension);
   }
 
 } // namespace
@@ -104,6 +103,19 @@ auto GetBuildRootLayout(const std::filesystem::path& build_root)
 auto RequestKeyToHex(const uint64_t request_key) -> std::string
 {
   return fmt::format("{:016x}", request_key);
+}
+
+auto GetRequestPublishedArtifactFileName(const std::string_view entry_point,
+  const uint64_t request_key, const std::string_view extension) -> std::string
+{
+  return std::string(entry_point) + "__" + RequestKeyToHex(request_key)
+    + std::string(extension);
+}
+
+auto GetRequestPdbFileName(
+  const std::string_view entry_point, const uint64_t request_key) -> std::string
+{
+  return GetRequestPublishedArtifactFileName(entry_point, request_key, ".pdb");
 }
 
 auto GetModuleArtifactPath(const BuildRootLayout& layout,

@@ -13,6 +13,7 @@
 #include <string>
 
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
@@ -20,6 +21,7 @@ namespace oxygen::graphics::d3d12::tools::shader_bake {
 struct RequestCompilerConfig {
   std::filesystem::path workspace_root;
   std::filesystem::path shader_source_root;
+  ShaderCompileProfile profile {};
   uint64_t toolchain_hash { 0 };
   std::span<const std::filesystem::path> include_dirs;
 };

@@ -20,7 +20,6 @@
 
 using oxygen::graphics::d3d12::kEngineShaders;
 using oxygen::graphics::d3d12::tools::shader_bake::ShaderBakeCommand;
-using oxygen::graphics::d3d12::tools::shader_bake::ShaderBakeMode;
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
@@ -37,18 +36,6 @@ namespace {
       include_dirs.push_back(include_dir);
     }
     return include_dirs;
-  }
-
-  auto ModeToString(const ShaderBakeMode mode) -> std::string_view
-  {
-    switch (mode) {
-    case ShaderBakeMode::kDev:
-      return "dev";
-    case ShaderBakeMode::kProduction:
-      return "production";
-    default:
-      return "unknown";
-    }
   }
 
 } // namespace
@@ -71,17 +58,17 @@ auto BakeShaderLibrary(const BakeArgs& args) -> int
   ResetTempDirectory(layout);
   RemoveLegacyDebugExportTree(layout);
 
-  LOG_F(1, "command={} mode={} build_root={} out={}",
+  LOG_F(1, "command={} config={} debug_info={} build_root={} out={}",
     args.command == ShaderBakeCommand::kRebuild ? "rebuild" : "update",
-    ModeToString(args.mode), ToUtf8PathString(args.build_root),
-    ToUtf8PathString(args.out_file));
+    to_string(args.profile.config), to_string(args.profile.debug_info),
+    ToUtf8PathString(args.build_root), ToUtf8PathString(args.out_file));
 
   const auto expanded_requests = ExpandShaderCatalog(std::span(kEngineShaders));
   LOG_F(1, "expanded_requests={}", expanded_requests.size());
-  const uint64_t toolchain_hash = ComputeToolchainHash();
+  const uint64_t toolchain_hash = ComputeToolchainHash(args.profile);
   auto include_dirs = BuildIncludeDirs(args);
   const ExecutionOptions options {
-    .mode = args.mode,
+    .profile = args.profile,
     .workspace_root = args.workspace_root,
     .shader_source_root = args.shader_source_root,
     .final_archive_path = args.out_file,
@@ -96,6 +83,7 @@ auto BakeShaderLibrary(const BakeArgs& args) -> int
           RequestCompilerConfig {
             .workspace_root = args.workspace_root,
             .shader_source_root = args.shader_source_root,
+            .profile = args.profile,
             .toolchain_hash = toolchain_hash,
             .include_dirs = include_dirs,
           },

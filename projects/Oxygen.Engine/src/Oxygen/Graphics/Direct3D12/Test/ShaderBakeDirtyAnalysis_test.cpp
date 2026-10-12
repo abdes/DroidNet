@@ -47,11 +47,11 @@ using oxygen::graphics::d3d12::tools::shader_bake::ExpandedShaderRequest;
 using oxygen::graphics::d3d12::tools::shader_bake::GetBuildRootLayout;
 using oxygen::graphics::d3d12::tools::shader_bake::GetModuleArtifactPath;
 using oxygen::graphics::d3d12::tools::shader_bake::GetRequestPdbPath;
-using oxygen::graphics::d3d12::tools::shader_bake::
-  IsExternalShaderDebugInfoEnabled;
+using oxygen::graphics::d3d12::tools::shader_bake::MakeShaderCompileProfile;
 using oxygen::graphics::d3d12::tools::shader_bake::ManifestSnapshot;
 using oxygen::graphics::d3d12::tools::shader_bake::ModuleArtifact;
-using oxygen::graphics::d3d12::tools::shader_bake::ShaderBakeMode;
+using oxygen::graphics::d3d12::tools::shader_bake::ShaderCompileProfile;
+using oxygen::graphics::d3d12::tools::shader_bake::ShaderConfig;
 using oxygen::graphics::d3d12::tools::shader_bake::WriteBuildStateFile;
 using oxygen::graphics::d3d12::tools::shader_bake::WriteManifestFile;
 using oxygen::graphics::d3d12::tools::shader_bake::WriteModuleArtifactFile;
@@ -126,7 +126,8 @@ protected:
 
     return ModuleArtifact {
       .request_key = request.request_key,
-      .action_key = ComputeShaderActionKey(request.request, include_dirs),
+      .action_key
+      = ComputeShaderActionKey(request.request, include_dirs, profile_),
       .toolchain_hash = 0x1234,
       .request = request.request,
       .primary_hash = primary_hash,
@@ -147,7 +148,7 @@ protected:
 
   auto WriteExpectedPdb(const ExpandedShaderRequest& request) -> void
   {
-    if (!IsExternalShaderDebugInfoEnabled()) {
+    if (!profile_.WritesPdbSidecars()) {
       return;
     }
 
@@ -172,6 +173,11 @@ protected:
   std::filesystem::path build_root_;
   std::filesystem::path out_file_;
   BuildRootLayout layout_;
+  //! Debug shaders publish PDB sidecars; a test that needs another profile
+  //! assigns it before writing artifacts.
+  ShaderCompileProfile profile_ {
+    MakeShaderCompileProfile(ShaderConfig::kDebug),
+  };
 };
 
 } // namespace
@@ -196,7 +202,7 @@ NOLINT_TEST_F(ShaderBakeDirtyAnalysisTest, ReusesCleanArtifactWhenInputsMatch)
   WriteTextFile(out_file_, "existing");
 
   const auto analysis = AnalyzeDirtyRequests(workspace_root_, shader_root_,
-    layout_, out_file_, std::array { request }, include_dirs);
+    layout_, out_file_, std::array { request }, include_dirs, profile_);
 
   ASSERT_EQ(analysis.requests.size(), 1U);
   EXPECT_FALSE(analysis.requests.front().IsDirty());
@@ -230,7 +236,7 @@ NOLINT_TEST_F(
     dependency_file, "float3 EvaluateLighting() { return float3(2, 2, 2); }\n");
 
   const auto analysis = AnalyzeDirtyRequests(workspace_root_, shader_root_,
-    layout_, out_file_, std::array { request }, include_dirs);
+    layout_, out_file_, std::array { request }, include_dirs, profile_);
 
   EXPECT_TRUE(HasReason(analysis, DirtyReason::kDependencyChanged));
 }
@@ -254,7 +260,7 @@ NOLINT_TEST_F(
   WriteTextFile(out_file_, "existing");
 
   const auto analysis = AnalyzeDirtyRequests(workspace_root_, shader_root_,
-    layout_, out_file_, std::array { request }, include_dirs);
+    layout_, out_file_, std::array { request }, include_dirs, profile_);
 
   EXPECT_TRUE(HasReason(analysis, DirtyReason::kNewManifestMembership));
   EXPECT_TRUE(analysis.manifest_changed);
@@ -294,7 +300,7 @@ NOLINT_TEST_F(
   WriteTextFile(out_file_, "existing");
 
   const auto analysis = AnalyzeDirtyRequests(workspace_root_, shader_root_,
-    layout_, out_file_, std::array { current_request }, include_dirs);
+    layout_, out_file_, std::array { current_request }, include_dirs, profile_);
 
   ASSERT_EQ(analysis.stale_artifact_paths.size(), 1U);
   EXPECT_EQ(analysis.stale_artifact_paths.front(),
@@ -302,7 +308,7 @@ NOLINT_TEST_F(
 }
 
 NOLINT_TEST_F(
-  ShaderBakeDirtyAnalysisTest, MissingPdbFollowsBuildDebugInfoPolicy)
+  ShaderBakeDirtyAnalysisTest, MissingPdbIsDirtyWithExternalDebugInfo)
 {
   const auto request = MakeExpandedRequest(
     "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
@@ -318,13 +324,53 @@ NOLINT_TEST_F(
   WriteTextFile(out_file_, "existing");
 
   const auto analysis = AnalyzeDirtyRequests(workspace_root_, shader_root_,
-    layout_, out_file_, std::array { request }, include_dirs);
+    layout_, out_file_, std::array { request }, include_dirs, profile_);
 
-  EXPECT_EQ(HasReason(analysis, DirtyReason::kMissingDebugArtifact),
-    IsExternalShaderDebugInfoEnabled());
+  EXPECT_TRUE(HasReason(analysis, DirtyReason::kMissingDebugArtifact));
+}
 
-  const auto pdb_path
-    = GetRequestPdbPath(out_file_, request.request.source_path,
-      request.request.entry_point, request.request_key);
-  EXPECT_FALSE(std::filesystem::exists(pdb_path));
+NOLINT_TEST_F(
+  ShaderBakeDirtyAnalysisTest, MissingPdbIsCleanWithoutExternalDebugInfo)
+{
+  profile_ = MakeShaderCompileProfile(ShaderConfig::kRelease);
+  const auto request = MakeExpandedRequest(
+    "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
+  const auto source_file = shader_root_ / request.request.source_path;
+  WriteTextFile(source_file, "float4 PS() : SV_Target { return 1; }\n");
+
+  const std::array include_dirs { shader_root_ };
+  const auto artifact = MakeArtifact(
+    request, include_dirs, std::span<const std::filesystem::path> {});
+  WriteModuleArtifactFile(
+    GetModuleArtifactPath(layout_, request.request_key), artifact);
+  PersistState(std::array { request }, std::array { artifact });
+  WriteTextFile(out_file_, "existing");
+
+  const auto analysis = AnalyzeDirtyRequests(workspace_root_, shader_root_,
+    layout_, out_file_, std::array { request }, include_dirs, profile_);
+
+  EXPECT_FALSE(HasReason(analysis, DirtyReason::kMissingDebugArtifact));
+}
+
+NOLINT_TEST_F(ShaderBakeDirtyAnalysisTest, ProfileChangeInvalidatesArtifact)
+{
+  const auto request = MakeExpandedRequest(
+    "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl", "PS", ShaderType::kPixel);
+  const auto source_file = shader_root_ / request.request.source_path;
+  WriteTextFile(source_file, "float4 PS() : SV_Target { return 1; }\n");
+
+  const std::array include_dirs { shader_root_ };
+  const auto artifact = MakeArtifact(
+    request, include_dirs, std::span<const std::filesystem::path> {});
+  WriteModuleArtifactFile(
+    GetModuleArtifactPath(layout_, request.request_key), artifact);
+  PersistState(std::array { request }, std::array { artifact });
+  WriteExpectedPdb(request);
+  WriteTextFile(out_file_, "existing");
+
+  const auto analysis = AnalyzeDirtyRequests(workspace_root_, shader_root_,
+    layout_, out_file_, std::array { request }, include_dirs,
+    MakeShaderCompileProfile(ShaderConfig::kRelease));
+
+  EXPECT_TRUE(HasReason(analysis, DirtyReason::kActionKeyMismatch));
 }

@@ -28,6 +28,13 @@ struct BuildRootLayout {
 [[nodiscard]] auto GetBuildRootLayout(const std::filesystem::path& build_root)
   -> BuildRootLayout;
 [[nodiscard]] auto RequestKeyToHex(uint64_t request_key) -> std::string;
+//! Leaf name of a published request sidecar: `<entry-point>__<key><ext>`.
+[[nodiscard]] auto GetRequestPublishedArtifactFileName(
+  std::string_view entry_point, uint64_t request_key,
+  std::string_view extension) -> std::string;
+//! Leaf name of a request's PDB sidecar, also the name its DXIL records.
+[[nodiscard]] auto GetRequestPdbFileName(
+  std::string_view entry_point, uint64_t request_key) -> std::string;
 [[nodiscard]] auto GetModuleArtifactPath(
   const BuildRootLayout& layout, uint64_t request_key) -> std::filesystem::path;
 [[nodiscard]] auto GetRequestLogPath(

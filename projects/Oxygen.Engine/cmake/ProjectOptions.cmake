@@ -72,6 +72,29 @@ if(
   )
 endif()
 
+set(
+  OXYGEN_SHADER_DEBUG_INFO
+  AUTO
+  CACHE STRING
+  "Shader debug info: AUTO uses PDB sidecars for Debug and none for Release; NONE, EXTERNAL (PDB sidecars) or EMBEDDED (inside the DXIL) override every configuration."
+)
+set_property(
+  CACHE
+    OXYGEN_SHADER_DEBUG_INFO
+  PROPERTY
+    STRINGS
+      AUTO
+      NONE
+      EXTERNAL
+      EMBEDDED
+)
+if(NOT OXYGEN_SHADER_DEBUG_INFO MATCHES "^(AUTO|NONE|EXTERNAL|EMBEDDED)$")
+  message(
+    FATAL_ERROR
+    "OXYGEN_SHADER_DEBUG_INFO must be AUTO, NONE, EXTERNAL or EMBEDDED."
+  )
+endif()
+
 if(NOT PROJECT_IS_TOP_LEVEL AND OXYGEN_USE_CCACHE)
   message(
     FATAL_ERROR

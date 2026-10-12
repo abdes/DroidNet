@@ -71,10 +71,13 @@ auto CompileExpandedShaderRequest(const RequestCompilerConfig& config,
       .include_dirs = std::vector<std::filesystem::path>(
         config.include_dirs.begin(), config.include_dirs.end()),
       .defines = shader.defines,
+      .profile = config.profile,
       .object_output_name
       = RequestKeyToHex(expanded_request.request_key) + ".dxil",
-      .debug_output_name = IsExternalShaderDebugInfoEnabled()
-        ? RequestKeyToHex(expanded_request.request_key) + ".pdb"
+      // The DXIL records this name; it must equal the published sidecar's.
+      .debug_output_name = config.profile.WritesPdbSidecars()
+        ? GetRequestPdbFileName(
+            request.entry_point, expanded_request.request_key)
         : std::string {},
     };
 
@@ -105,7 +108,7 @@ auto CompileExpandedShaderRequest(const RequestCompilerConfig& config,
     const auto primary_hash
       = oxygen::ComputeFNV1a64(source.data(), source.size());
     const auto action_key
-      = ComputeShaderActionKey(request, config.include_dirs);
+      = ComputeShaderActionKey(request, config.include_dirs, config.profile);
 
     LOG_F(1, "  dxil={} bytes, reflection={} bytes", dxil.size(),
       reflection.size());

@@ -15,6 +15,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Bake.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 
@@ -57,7 +58,8 @@ struct DirtyAnalysisResult {
   const BuildRootLayout& layout,
   const std::filesystem::path& final_archive_path,
   std::span<const ExpandedShaderRequest> requests,
-  std::span<const std::filesystem::path> include_dirs) -> DirtyAnalysisResult;
+  std::span<const std::filesystem::path> include_dirs,
+  const ShaderCompileProfile& profile) -> DirtyAnalysisResult;
 
 [[nodiscard]] auto DirtyReasonToString(DirtyReason reason) -> const char*;
 

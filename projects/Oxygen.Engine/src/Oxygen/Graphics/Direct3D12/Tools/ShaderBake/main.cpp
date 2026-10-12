@@ -55,8 +55,12 @@ constexpr std::string_view kLegacyBakeCommand = "bake";
 
 using oxygen::graphics::d3d12::tools::shader_bake::BakeArgs;
 using oxygen::graphics::d3d12::tools::shader_bake::InspectArgs;
+using oxygen::graphics::d3d12::tools::shader_bake::MakeShaderCompileProfile;
+using oxygen::graphics::d3d12::tools::shader_bake::ParseShaderConfig;
+using oxygen::graphics::d3d12::tools::shader_bake::ParseShaderDebugInfo;
 using oxygen::graphics::d3d12::tools::shader_bake::ShaderBakeCommand;
-using oxygen::graphics::d3d12::tools::shader_bake::ShaderBakeMode;
+using oxygen::graphics::d3d12::tools::shader_bake::ShaderCompileProfile;
+using oxygen::graphics::d3d12::tools::shader_bake::ShaderDebugInfo;
 
 struct BakeCliStorage {
   bool verbose { false };
@@ -65,7 +69,8 @@ struct BakeCliStorage {
   std::string out_file_string;
   std::string shader_root_string;
   std::string oxygen_include_root_string;
-  std::string mode_string;
+  std::string config_string;
+  std::string debug_info_string;
 };
 
 struct InspectCliStorage {
@@ -133,11 +138,19 @@ auto AddBakeOptions(
         .WithValue<std::string>()
         .StoreTo(&storage.out_file_string)
         .Build())
-    .WithOption(OptionBuilder("mode")
-        .Long("mode")
-        .About("ShaderBake policy mode: dev or production.")
+    .WithOption(OptionBuilder("config")
+        .Long("config")
+        .About("Shader configuration: debug (-Od, PDB sidecars) or release "
+               "(-O3, no debug info). Required to build.")
         .WithValue<std::string>()
-        .StoreTo(&storage.mode_string)
+        .StoreTo(&storage.config_string)
+        .Build())
+    .WithOption(OptionBuilder("debug_info")
+        .Long("debug-info")
+        .About("Override the configuration's debug info: none, external "
+               "(PDB sidecars under pdb/) or embedded (inside the DXIL).")
+        .WithValue<std::string>()
+        .StoreTo(&storage.debug_info_string)
         .Build());
 }
 
@@ -206,16 +219,28 @@ auto AddInspectOptions(
       .Build());
 }
 
-auto ParseMode(const BakeCliStorage& storage) -> ShaderBakeMode
+auto ParseCompileProfile(const BakeCliStorage& storage,
+  const ShaderBakeCommand command) -> ShaderCompileProfile
 {
-  if (storage.mode_string.empty() || storage.mode_string == "dev") {
-    return ShaderBakeMode::kDev;
+  if (command == ShaderBakeCommand::kCleanCache) {
+    return ShaderCompileProfile {};
   }
-  if (storage.mode_string == "production") {
-    return ShaderBakeMode::kProduction;
+  if (storage.config_string.empty()) {
+    throw std::runtime_error("--config is required: debug or release");
   }
-
-  throw std::runtime_error("--mode must be one of: dev, production");
+  const auto config = ParseShaderConfig(storage.config_string);
+  if (!config.has_value()) {
+    throw std::runtime_error("--config must be one of: debug, release");
+  }
+  auto debug_info = std::optional<ShaderDebugInfo> {};
+  if (!storage.debug_info_string.empty()) {
+    debug_info = ParseShaderDebugInfo(storage.debug_info_string);
+    if (!debug_info.has_value()) {
+      throw std::runtime_error(
+        "--debug-info must be one of: none, external, embedded");
+    }
+  }
+  return MakeShaderCompileProfile(*config, debug_info);
 }
 
 auto ParseBakeArgs(const BakeCliStorage& storage,
@@ -275,7 +300,7 @@ auto ParseBakeArgs(const BakeCliStorage& storage,
 
   return BakeArgs {
     .command = command,
-    .mode = ParseMode(storage),
+    .profile = ParseCompileProfile(storage, command),
     .workspace_root = std::move(workspace_root),
     .build_root = std::move(build_root),
     .out_file = std::move(out_file),
@@ -472,6 +497,9 @@ auto main(int argc, char** argv) noexcept -> int
     loguru::g_preamble_thread = true;
     loguru::g_preamble_header = false;
     loguru::g_global_verbosity = loguru::Verbosity_0;
+    // A current archive produces no output; loguru's start and exit banners
+    // show with -v=1 like the other details.
+    loguru::g_internal_verbosity = loguru::Verbosity_1;
     loguru::g_colorlogtostderr = true;
     // Optional, but useful to time-stamp the start of the log.
     // Will also detect verbosity level on command line as -v.
