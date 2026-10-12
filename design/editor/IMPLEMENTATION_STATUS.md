@@ -956,7 +956,7 @@ Status: `in_progress; M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.8
 and M08.9 validated; rescoped 2026-10-08; M08.10 added 2026-10-09; M08.10a–d
 delivered 2026-10-09; M08.10e delivered 2026-10-10; M08.10f–g delivered
 2026-10-11; M08.10h scripting design and M08.10i–k delivered 2026-10-11;
-M08.10l delivered 2026-10-12; M08.10m next`
+M08.10l validated 2026-10-12; M08.10m next`
 
 Outcome: one canonical V0.1 authoring contract across engine and editor, and an
 editor workspace with viewport editing tools and a redesigned Content Browser.
@@ -1184,15 +1184,16 @@ readers. Primary/Secondary names remain unchanged.
       decisions SD-1–SD-7. M08.10i–k delivered on 2026-10-11: script
       parameter declarations and analyzer, slot instances with start/destroy
       hooks and execution order, and structured script diagnostics.
-      M08.10l delivered on 2026-10-12: the engine instantiates cooked scenes
+      M08.10l validated on 2026-10-12: the engine instantiates cooked scenes
       (`Oxygen.SceneInstantiation`) with their starting camera and input
       contexts and their model scene instances; scripts switch the active
       camera and input contexts by asset reference; input actions and
       contexts are identified by asset key; the `auto_load` and
       `auto_activate` context flags are gone; changed script sources reload
       into running slots. Instantiation, cooker, scripting and input tests
-      pass, and the owner saw the camera-switch scene's script switch cameras
-      in RenderScene. M08.10m is next.
+      pass. In RenderScene the owner loaded every maintained scene, saw the
+      camera-switch scene's script switch cameras, and saw two edits of its
+      source reload into the running scene. M08.10m is next.
 - [ ] M08.11 asset thumbnails and previews.
 - [ ] M08.12 drag-and-drop scene assembly and closeout walkthrough.
 - [x] M02 supported single-viewport resize/discovery evidence is recorded; the
