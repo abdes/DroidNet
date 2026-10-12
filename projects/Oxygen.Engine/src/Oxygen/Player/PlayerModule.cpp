@@ -591,8 +591,10 @@ auto PlayerModule::FinishLoad() -> void
   for (const auto& diagnostic : load->diagnostics) {
     events_->Diagnostic(diagnostic);
   }
-  LOG_F(INFO, "{}: scene '{}' loaded with {} issue(s)", GetName(),
-    session_scene_, load->issues.size());
+  const auto camera = scene_->ActiveCamera();
+  LOG_F(INFO, "{}: scene '{}' loaded with {} issue(s), viewed through '{}'",
+    GetName(), session_scene_, load->issues.size(),
+    camera.has_value() ? camera->GetName() : std::string {});
 }
 
 auto PlayerModule::ReportPauseChanges() -> void

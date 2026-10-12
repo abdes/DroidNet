@@ -5,7 +5,7 @@ validated 2026-10-12; H1 built and unit-tested 2026-10-12; E1 validated
 2026-10-12 (ahead of H2, so the host has a running consumer; the owner ran
 VortexBasic windowed, resized and fullscreen); H2 built and tested
 2026-10-12; H3 built: catalog, main-view variables, widgets and toolbar
-2026-10-12, GPU work overlay 2026-10-13; P1 built 2026-10-13**. Owner
+2026-10-12, GPU work overlay 2026-10-13; P1 built and its gate passed 2026-10-13**. Owner
 decisions are recorded in [§10](#10-owner-decisions) with the review's
 position beside each. [§11](#11-open-problems-for-review) gives a definite
 answer to every problem and marks the ones only the owner can close.
