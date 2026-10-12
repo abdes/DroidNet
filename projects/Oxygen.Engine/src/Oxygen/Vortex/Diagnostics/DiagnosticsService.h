@@ -11,6 +11,7 @@
 #include <mutex>
 #include <optional>
 #include <span>
+#include <utility>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -43,7 +44,8 @@ class DiagnosticsService;
  Move-only. Releasing the last lease turns collection off unless the user
  setting (`SetGpuTimelineEnabled`) is on. A default-constructed lease, or a
  viewer lease from a renderer without `kDiagnosticsAndProfiling`, is inert.
- The service must outlive its leases.
+ A lease that outlives its service becomes inert: modules shut down after
+ the renderer can still release theirs.
 */
 class GpuTimelineLease {
 public:
@@ -59,18 +61,21 @@ public:
   //! Whether this lease keeps collection on.
   [[nodiscard]] auto IsActive() const noexcept -> bool
   {
-    return service_ != nullptr;
+    return !service_.expired();
   }
 
 private:
   friend class DiagnosticsService;
-  GpuTimelineLease(observer_ptr<DiagnosticsService> service, bool viewer)
-    : service_(service)
+  //! Points to the service while it lives.
+  using Anchor = observer_ptr<DiagnosticsService>;
+
+  GpuTimelineLease(std::weak_ptr<const Anchor> service, const bool viewer)
+    : service_(std::move(service))
     , viewer_(viewer)
   {
   }
 
-  observer_ptr<DiagnosticsService> service_ { nullptr };
+  std::weak_ptr<const Anchor> service_;
   bool viewer_ { false };
 };
 
@@ -228,6 +233,8 @@ private:
   };
   std::uint64_t hdr_precision_control_revision_ { 0U };
   DiagnosticsFrameLedger frame_ledger_;
+  //! Leases see this expire when the service is destroyed.
+  std::shared_ptr<const GpuTimelineLease::Anchor> lease_anchor_;
 };
 
 } // namespace oxygen::vortex

@@ -55,11 +55,17 @@ DiagnosticsService::DiagnosticsService(
   : renderer_capabilities_(renderer_capabilities)
   , requested_features_(config.default_features)
   , enabled_features_(ComputeEffectiveFeatures())
+  , lease_anchor_(
+      std::make_shared<const GpuTimelineLease::Anchor>(observer_ptr { this }))
 {
   RefreshLedgerState();
 }
 
-DiagnosticsService::~DiagnosticsService() = default;
+DiagnosticsService::~DiagnosticsService()
+{
+  // Outstanding leases become inert before any member goes away.
+  lease_anchor_ = nullptr;
+}
 
 auto DiagnosticsService::SetRendererCapabilities(
   const CapabilitySet capabilities) -> void
@@ -270,7 +276,7 @@ auto DiagnosticsService::AcquireLease(const bool viewer) -> GpuTimelineLease
   ++(viewer ? viewer_leases_ : production_leases_);
   ApplyGpuTimelineEnabled();
   RefreshLedgerState();
-  return GpuTimelineLease { observer_ptr { this }, viewer };
+  return GpuTimelineLease { lease_anchor_, viewer };
 }
 
 auto DiagnosticsService::ReleaseLease(const bool viewer) noexcept -> void
@@ -468,7 +474,7 @@ auto DiagnosticsService::ReportGpuTimelineIssue(
 GpuTimelineLease::~GpuTimelineLease() { Release(); }
 
 GpuTimelineLease::GpuTimelineLease(GpuTimelineLease&& other) noexcept
-  : service_(std::exchange(other.service_, nullptr))
+  : service_(std::exchange(other.service_, {}))
   , viewer_(other.viewer_)
 {
 }
@@ -478,7 +484,7 @@ auto GpuTimelineLease::operator=(GpuTimelineLease&& other) noexcept
 {
   if (this != &other) {
     Release();
-    service_ = std::exchange(other.service_, nullptr);
+    service_ = std::exchange(other.service_, {});
     viewer_ = other.viewer_;
   }
   return *this;
@@ -486,8 +492,8 @@ auto GpuTimelineLease::operator=(GpuTimelineLease&& other) noexcept
 
 auto GpuTimelineLease::Release() noexcept -> void
 {
-  if (const auto service = std::exchange(service_, nullptr)) {
-    service->ReleaseLease(viewer_);
+  if (const auto service = std::exchange(service_, {}).lock()) {
+    (*service)->ReleaseLease(viewer_);
   }
 }
 

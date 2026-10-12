@@ -225,7 +225,9 @@ Diagnostics panel, `rndr.gpu_timestamps`); collection runs while it is on or
 any lease is held. Viewer leases need `kDiagnosticsAndProfiling`; without it
 the lease is inert and the summary stays null. IBL budgeting is production
 scheduling, not diagnostics, so its lease ([§8.2](#82-diagnosticsservice))
-is never capability-gated.
+is never capability-gated. A lease that outlives the service is inert:
+the engine shuts the renderer down before the host modules that hold
+viewer leases, and their release must not reach the destroyed service.
 
 `GetLatestIblGpuTiming()` and `IblGpuTiming` are removed; IBL time appears as
 the `kBackground` group's `ibl` item. Export and recording are unchanged.

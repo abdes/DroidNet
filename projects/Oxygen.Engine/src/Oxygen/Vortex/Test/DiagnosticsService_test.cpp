@@ -340,4 +340,20 @@ NOLINT_TEST(DiagnosticsServiceTest, ViewerLeaseNeedsDiagnosticsCapability)
   EXPECT_FALSE(profiler.IsEnabled());
 }
 
+//! Modules shut down after the renderer still hold their leases; releasing
+//! one then must not touch the destroyed service.
+NOLINT_TEST(DiagnosticsServiceTest, LeaseOutlivingTheServiceIsInert)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  auto renderer = MakeRenderer(graphics, kDiagnosticsCapability);
+  auto lease = renderer->GetDiagnosticsService().AcquireGpuTimeline();
+  ASSERT_TRUE(lease.IsActive());
+
+  renderer.reset();
+
+  EXPECT_FALSE(lease.IsActive());
+  lease.Release();
+}
+
 } // namespace
