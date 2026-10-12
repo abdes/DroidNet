@@ -175,6 +175,23 @@ public interface ISceneDocumentCommandService
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Clears material overrides that no longer resolve against the geometry each node uses.
+    /// </summary>
+    /// <remarks>
+    /// An override is unresolved when it targets another geometry, for example after the node's
+    /// geometry was replaced, or a slot the current geometry inventory no longer reports. Resolved
+    /// overrides are kept. The removal is one undoable edit.
+    /// </remarks>
+    /// <param name="context">The document command context.</param>
+    /// <param name="nodeIds">The node ids whose unresolved overrides are cleared.</param>
+    /// <param name="cancellationToken">Cancels metadata acquisition before any mutation.</param>
+    /// <returns>The command result.</returns>
+    public Task<SceneCommandResult> ClearUnresolvedMaterialSlotsAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Edits perspective camera component values on one or more nodes.
     /// </summary>
     /// <param name="context">The document command context.</param>

@@ -78,6 +78,91 @@ public sealed partial class SceneDocumentCommandService
         return await this.ApplySlotEditAsync(context, nodes, geometries, target, newMaterialUri).ConfigureAwait(true);
     }
 
+    /// <inheritdoc />
+    public async Task<SceneCommandResult> ClearUnresolvedMaterialSlotsAsync(
+        SceneDocumentCommandContext context,
+        IReadOnlyList<Guid> nodeIds,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(nodeIds);
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return new(Succeeded: false);
+        }
+
+        var project = projectContexts.ActiveProject;
+        if (project is null || project.ProjectId != context.Scene.Project.ProjectInfo.Id)
+        {
+            return this.SlotFailure(context, "The originating project is no longer active.");
+        }
+
+        var nodes = ResolveNodes(context.Scene, nodeIds);
+        if (nodes.Count != nodeIds.Count)
+        {
+            return this.SlotFailure(context, "Select existing nodes to clear their unresolved material assignments.");
+        }
+
+        if (this.RejectLockedTargets(context, SceneOperationKinds.EditMaterialSlot, nodes) is { } lockFailure)
+        {
+            return lockFailure;
+        }
+
+        var geometries = nodes.Select(static node => node.Components.OfType<GeometryComponent>().FirstOrDefault()).ToArray();
+        var inventories = await this.ReadCurrentInventoriesAsync(project, geometries, cancellationToken).ConfigureAwait(true);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!ReferenceEquals(projectContexts.ActiveProject, project) || SceneAuthoringGate.IsRetired(context.Scene)
+            || nodes.Where((node, index) => !ReferenceEquals(FindNode(context.Scene, node.Id), node)
+                || !ReferenceEquals(node.Components.OfType<GeometryComponent>().FirstOrDefault(), geometries[index])).Any())
+        {
+            return this.SlotFailure(context, "The selection or geometry changed while its material slots were being read.");
+        }
+
+        var removals = nodes.Select((node, index) => geometries[index] is { } geometry
+                ? new UnresolvedSlotRemoval(node, geometry, FindUnresolvedSlots(geometry, inventories)) : null)
+            .OfType<UnresolvedSlotRemoval>()
+            .Where(static removal => removal.Slots.Count != 0)
+            .ToArray();
+        if (removals.Length == 0)
+        {
+            return SceneCommandResult.Success;
+        }
+
+        // Unresolved overrides were never applied natively, so removing them changes only authored intent.
+        RemoveSlots(removals);
+        context.History.AddChange("Restore Unresolved Material Slots", async () => await this.RestoreUnresolvedSlotsForHistoryAsync(context, removals).ConfigureAwait(true));
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+        return SceneCommandResult.Success;
+    }
+
+    private static List<MaterialsSlot> FindUnresolvedSlots(GeometryComponent geometry, IReadOnlyDictionary<Uri, GeometryMaterialSlotMetadata> inventories)
+    {
+        var current = geometry.Geometry?.Uri;
+        var inventory = current is not null ? inventories.GetValueOrDefault(current) : null;
+        return [.. geometry.OverrideSlots.OfType<MaterialsSlot>().Where(slot => slot.Target.GeometryUri != current
+            || (inventory is not null && !inventory.Slots.Any(known => known.SlotId == slot.Target.SlotId)))];
+    }
+
+    private static void RemoveSlots(IEnumerable<UnresolvedSlotRemoval> removals)
+    {
+        foreach (var removal in removals)
+        {
+            foreach (var slot in removal.Slots)
+            {
+                _ = removal.Geometry.OverrideSlots.Remove(slot);
+            }
+        }
+    }
+
+    private static void RequireHistoryTargets(SceneDocumentCommandContext context, IEnumerable<UnresolvedSlotRemoval> removals)
+    {
+        if (removals.Any(removal => !ReferenceEquals(FindNode(context.Scene, removal.Node.Id), removal.Node)
+            || !removal.Node.Components.Contains(removal.Geometry)))
+        {
+            throw new InvalidOperationException("Material history no longer targets the same geometry components.");
+        }
+    }
+
     private static bool IsValidSlotRequest(MaterialSlotTarget target, Uri? newMaterialUri)
     {
         var validTarget = target.SlotId != Guid.Empty
@@ -266,6 +351,68 @@ public sealed partial class SceneDocumentCommandService
             return this.sceneEngineSync.RestoreMaterialSlotAsync(context.Scene, node, state.Target, state.MaterialUri);
         }).ConfigureAwait(true);
     }
+
+    /// <summary>Reads each current geometry's inventory; an unreadable one leaves only foreign targets provably unresolved.</summary>
+    private async Task<Dictionary<Uri, GeometryMaterialSlotMetadata>> ReadCurrentInventoriesAsync(
+        ProjectContext project,
+        IEnumerable<GeometryComponent?> geometries,
+        CancellationToken cancellationToken)
+    {
+        var inventories = new Dictionary<Uri, GeometryMaterialSlotMetadata>();
+        foreach (var uri in geometries.Select(static geometry => geometry?.Geometry?.Uri).OfType<Uri>().Distinct())
+        {
+            try
+            {
+                if (await materialSlots.ReadAsync(project, uri, cancellationToken).ConfigureAwait(true) is { } inventory)
+                {
+                    inventories[uri] = inventory;
+                }
+            }
+            catch (Exception error) when (error is IOException or InvalidDataException or FormatException or InvalidOperationException or ArgumentException)
+            {
+                // Same-geometry overrides stay until the inventory can prove they are unresolved.
+            }
+        }
+
+        return inventories;
+    }
+
+    private async Task RestoreUnresolvedSlotsForHistoryAsync(SceneDocumentCommandContext context, IReadOnlyList<UnresolvedSlotRemoval> removals)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
+        RequireHistoryTargets(context, removals);
+        foreach (var removal in removals)
+        {
+            foreach (var slot in removal.Slots)
+            {
+                removal.Geometry.OverrideSlots.Add(slot);
+            }
+        }
+
+        context.History.AddChange("Clear Unresolved Material Slots", async () => await this.RemoveUnresolvedSlotsForHistoryAsync(context, removals).ConfigureAwait(true));
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+    }
+
+    private async Task RemoveUnresolvedSlotsForHistoryAsync(SceneDocumentCommandContext context, IReadOnlyList<UnresolvedSlotRemoval> removals)
+    {
+        using var authoring = EnterAuthoring(context);
+        if (authoring is null)
+        {
+            return;
+        }
+
+        RequireHistoryTargets(context, removals);
+        RemoveSlots(removals);
+        context.History.AddChange("Restore Unresolved Material Slots", async () => await this.RestoreUnresolvedSlotsForHistoryAsync(context, removals).ConfigureAwait(true));
+        await this.MarkDirtyAsync(context).ConfigureAwait(true);
+    }
+
+    private sealed record UnresolvedSlotRemoval(SceneNode Node, GeometryComponent Geometry, IReadOnlyList<MaterialsSlot> Slots);
 
     private sealed record MaterialSlotState(SceneNode Node, GeometryComponent Geometry, MaterialSlotTarget Target, Uri? MaterialUri)
     {

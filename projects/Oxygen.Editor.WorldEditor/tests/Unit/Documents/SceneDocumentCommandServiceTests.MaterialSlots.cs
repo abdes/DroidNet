@@ -138,6 +138,37 @@ public sealed partial class SceneDocumentCommandServiceTests
         _ = context.Metadata.IsDirty.Should().BeFalse();
     }
 
+    [TestMethod]
+    public async Task ClearUnresolvedRemovesOnlyOverridesTheCurrentGeometryCannotResolve()
+    {
+        var fixture = CreateFixture();
+        var scene = CreateScene();
+        var node = AddSlotGeometry(scene, "Replaced", "Sphere");
+        var geometry = node.Components.OfType<GeometryComponent>().Single();
+        var material = new AssetReference<MaterialAsset>(new Uri("asset:///Content/Materials/Brick.omat.json"));
+        var foreign = new MaterialsSlot { Target = TestSlotTarget(AssetUris.BuildGeneratedUri("BasicShapes/Cube")), Material = material };
+        var resolved = new MaterialsSlot { Target = TestSlotTarget(geometry.Geometry!.Uri), Material = material };
+        var missing = new MaterialsSlot { Target = TestSlotTarget(geometry.Geometry.Uri) with { SlotId = Guid.NewGuid() }, Material = material };
+        geometry.OverrideSlots.Add(foreign);
+        geometry.OverrideSlots.Add(resolved);
+        geometry.OverrideSlots.Add(missing);
+        var context = CreateContext(scene);
+
+        var result = await fixture.Sut.ClearUnresolvedMaterialSlotsAsync(context, [node.Id], this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeTrue();
+        _ = geometry.OverrideSlots.Should().Equal(resolved);
+        _ = context.History.UndoStack.Should().ContainSingle();
+        _ = context.Metadata.IsDirty.Should().BeTrue();
+        await context.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = geometry.OverrideSlots.Should().BeEquivalentTo([foreign, resolved, missing]);
+        await context.History.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = geometry.OverrideSlots.Should().Equal(resolved);
+        fixture.Sync.Verify(
+            value => value.UpdateMaterialSlotAsync(It.IsAny<Scene>(), It.IsAny<SceneNode>(), It.IsAny<MaterialSlotTarget>(), It.IsAny<Uri?>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
     private static SceneNode AddSlotGeometry(Scene scene, string name, string primitive)
     {
         var node = new SceneNode(scene) { Name = name };

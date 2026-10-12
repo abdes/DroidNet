@@ -27,6 +27,10 @@ public sealed partial class GeometryViewModel
     [ObservableProperty]
     public partial string MaterialSlotNotice { get; set; } = string.Empty;
 
+    /// <summary>Gets whether the selection has overrides that no longer resolve against its geometry.</summary>
+    [ObservableProperty]
+    public partial bool HasUnresolvedMaterialSlots { get; set; }
+
     /// <summary>Gets whether current native inventory is being read.</summary>
     [ObservableProperty]
     public partial bool IsMaterialSlotLoading { get; set; }
@@ -39,6 +43,25 @@ public sealed partial class GeometryViewModel
 
     /// <summary>Gets whether an inventory/status message needs presentation.</summary>
     public bool HasMaterialSlotNotice => this.MaterialSlotNotice.Length != 0;
+
+    /// <summary>Clears the selection's unresolved material overrides as one undoable edit.</summary>
+    /// <returns>Completion after the edit and a fresh slot projection.</returns>
+    [RelayCommand]
+    public async Task ClearUnresolvedMaterialSlotsAsync()
+    {
+        if (this.disposed || !this.IsInputEnabled || this.commandService is null
+            || this.selectedItems is not { Count: > 0 } selected || this.commandContextProvider?.Invoke() is not { } context)
+        {
+            return;
+        }
+
+        var nodes = selected.ToList();
+        _ = await this.commandService.ClearUnresolvedMaterialSlotsAsync(context, nodes.ConvertAll(static node => node.Id)).ConfigureAwait(true);
+        if (this.IsCurrentSelection(nodes))
+        {
+            await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);
+        }
+    }
 
     /// <summary>Refreshes native inventory without changing authored assignments.</summary>
     /// <returns>Completion after current metadata or its unavailable state is presented.</returns>
@@ -103,6 +126,7 @@ public sealed partial class GeometryViewModel
             var slotIds = inventory.Slots.Select(static slot => slot.SlotId).ToHashSet();
             var unresolved = nodes.SelectMany(static node => node.Components.OfType<GeometryComponent>().SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>()))
                 .Count(slot => slot.Target.GeometryUri != geometryUri || !slotIds.Contains(slot.Target.SlotId));
+            this.HasUnresolvedMaterialSlots = unresolved != 0;
             this.MaterialSlotNotice = unresolved == 1 ? "One material assignment needs repair."
                 : unresolved > 1 ? $"{unresolved} material assignments need repair."
                 : this.MaterialSlots.Count == 0 ? "This geometry has no material slots." : string.Empty;
@@ -139,6 +163,7 @@ public sealed partial class GeometryViewModel
 
     private void SetMaterialSlotsUnavailable(string message)
     {
+        this.HasUnresolvedMaterialSlots = false;
         this.MaterialSlots = [];
         this.SelectedMaterialSlot = null;
         this.MaterialSlotNotice = message;

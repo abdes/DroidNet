@@ -138,11 +138,18 @@
                             Style="{ThemeResource CaptionTextBlockStyle}"
                             Text="{x:Bind ViewModel.MaterialSlotNotice, Mode=OneWay}"
                             TextWrapping="Wrap" />
-                        <HyperlinkButton
-                            Padding="0"
-                            HorizontalAlignment="Left"
-                            Command="{x:Bind ViewModel.RefreshMaterialSlotsCommand}"
-                            Content="Refresh slots" />
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <HyperlinkButton
+                                Padding="0"
+                                Command="{x:Bind ViewModel.RefreshMaterialSlotsCommand}"
+                                Content="Refresh slots" />
+                            <HyperlinkButton
+                                Padding="0"
+                                Command="{x:Bind ViewModel.ClearUnresolvedMaterialSlotsCommand}"
+                                Content="Clear unresolved"
+                                ToolTipService.ToolTip="Remove material assignments that target another geometry or a missing slot."
+                                Visibility="{x:Bind ViewModel.HasUnresolvedMaterialSlots, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
+                        </StackPanel>
                     </StackPanel>
                 </Grid>
             </editorcontrols:PropertyCard>
