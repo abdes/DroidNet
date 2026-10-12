@@ -9,7 +9,8 @@ owns implementation state, adopter migration and integration qualification.
 
 Read: [immutable initialization](#immutable-texture-initialization),
 [async ownership](#async-request-ownership), [result ownership](#result-ownership),
-[consumer maintenance](#consumer-maintenance), [frame retirement](#frame-retirement),
+[consumer maintenance](#consumer-maintenance), [ordering and versioning](#ordering-and-versioning),
+[frame retirement](#frame-retirement),
 [C++ guidance](../../../../../design/oxygen/RULES.md#c).
 
 ## Immutable texture initialization
@@ -147,9 +148,10 @@ accepted-revision leases remain usable, while unpinned pending evictions deny ne
 ready leases and upload work. Prepare deferred actions before releasing registry
 or entry ownership; failed preparation retains the work for retry.
 
-Graphics owns [view indexing and transactional repointing](../../../src/Oxygen/Graphics/Common/README.md#view-indexing-and-removal).
-Removal touches owned views only. Failed repointing preserves the original slot
-and binding, maintaining TextureBinder's lifetime-stable index contract.
+Graphics owns [view indexing](../../../src/Oxygen/Graphics/Common/README.md#view-indexing-and-removal)
+and [descriptor lifetime](../../../src/Oxygen/Graphics/Common/README.md#descriptor-lifetime).
+Removal touches owned views only. TextureBinder publishes a new index per
+texture version ([ordering and versioning](#ordering-and-versioning)).
 
 Tracy scopes separate geometry acceptance/reclamation/completion and texture
 eviction/publication. Measure native scene replacement and viewless cleanup;
@@ -163,6 +165,34 @@ versus physical completion; allocation failure after submission; highwater after
 all tickets are dropped; pending-only budget fairness; paused views; stale
 completion after reload; large multi-LOD eviction and existing texture leases.
 Replay the editor's automatic publication and scene replacement workflow.
+
+## Ordering and versioning
+
+Data a frame reads is complete before the frame reads it and is never rewritten
+while an earlier frame may still read it
+([VX-GPU-01](../milestones/VX-GPU-01/README.md)).
+
+- **Material constants.** MaterialBinder records material and procedural-grid
+  uploads on the graphics-queue inline transfer path before the frame's first
+  pass. Queue order orders them before every reader, and D3D12 serializes
+  separate submissions on one queue, so updating an element in place cannot
+  race an earlier frame. The transfer queue is reserved for producers that
+  publish only after their ticket completes (textures, geometry).
+- **Buffer growth.** Growth creates a new buffer and a new descriptor, copies
+  the old contents on the graphics queue, then publishes the new index. The old
+  buffer and its descriptor retire together through Graphics retirement.
+  Callers never re-upload after growth; the in-place `Replace` path does not
+  exist.
+- **Texture versions.** Each texture content version (placeholder, loaded,
+  error, evicted) has its own descriptor; the previous one retires through
+  Graphics retirement. Consumers read the binder's current index when they
+  serialize or publish: MaterialBinder re-serializes a material whose texture
+  indices changed, and per-frame bindings read the index each frame. A cube or
+  array entry falls back to a cube or array placeholder.
+- **Retirement.** Releasing a shader-visible resource uses Graphics
+  retirement, which unregisters views and releases the resource after the
+  frames that could read it complete. Immediate unregistration is reserved for
+  resources never published to shaders and for shutdown.
 
 ## Frame retirement
 

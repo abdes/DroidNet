@@ -163,9 +163,11 @@ InitViews publishes current/previous material WPO and motion-vector status,
 backed by `DeformationHistoryCache`. Rigid transform and camera history also
 exist. The old statement that no runtime WPO bridge exists is obsolete.
 
-Skinned and morph publication arrays are explicitly empty. The renderer has no
-live skinned/morph history maps; those producers, their runtime ownership and
-the matching vertex ABI remain [VX-MOTION-01](../OPEN_ITEMS.md).
+The renderer has no skinned/morph producers, history maps or vertex ABI. They
+arrive with the engine animation module
+([VX-MOTION-01](../OPEN_ITEMS.md), abdes/DroidNet#48), which also decides
+between vertex-shader deformation and a compute pre-pass. Until then
+DrawFrameBindings carries no skinned/morph publication slots.
 Soft-body deformation output is also outside the current producer set.
 
 The following producer-family sections specify both implemented contracts and

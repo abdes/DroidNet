@@ -53,6 +53,9 @@ binding. Resizing and view removal retire textures/descriptors through the
 existing retained-texture pool; allocations count against the lighting budget.
 The depth SRV belongs to the generated bindless texture domain, matching the
 shader's domain guard. A retained texture reuses its registered SRV.
+The pass is a non-camera pass: it records its own inputs record (camera
+view-projection, `reverse_z` and the view's `draw_frame_slot`) and never binds
+b1, because it submits before later Stage 8 work republishes the camera view.
 
 The shared contact shader implements the fixed 0.25 m/16-sample profile in the
 [editor rendering contract](editor-rendering.md#5-contactshadowcasterdepth-and-contact-attenuation).
@@ -461,41 +464,24 @@ architectural contract.
 
 ### 5.1 Shadow Depth Shader
 
-```hlsl
-// Services/Shadows/ShadowDepth.hlsl
+`Services/Shadows/DirectionalShadowDepth.hlsl` renders directional cascades and
+spot/point faces. It is a non-camera pass under the
+[pass inputs contract](shader-contracts.md#49-pass-inputs-and-data-integrity):
+no b1, one inputs record per cascade or face.
 
-cbuffer ShadowViewConstants : register(b0) {
-  float4x4 LightViewProjection;
-  float DepthBias;
-  float NormalBias;
-};
-
-struct ShadowVSOutput {
-  float4 position : SV_Position;
-};
-
-ShadowVSOutput ShadowDepthVS(float3 pos : POSITION,
-                             uint instance_id : SV_InstanceID) {
-  float4x4 world = LoadInstanceTransform(instance_id);
-  float4 world_pos = mul(world, float4(pos, 1.0));
-  ShadowVSOutput output;
-  output.position = mul(LightViewProjection, world_pos);
-  output.position.z -= ConstantDepthBias + SlopeDepthBias * ClampedSlope;
-  return output;
-}
-```
+The record carries the light view-projection (read from the GPU cascade buffer
+when receiver analysis fits the cascade, §5.4), UE-style CSM constant/slope
+depth-bias terms derived from `sampling_metadata1.z`, the light direction and
+the view's `draw_frame_slot`. Shaders resolve draw metadata, worlds, instance
+data and materials from that draw-frame record through pure helpers, and
+compute world position through the shared mesh-position helper, so material
+world-position offset moves shadows with the geometry. The masked pixel shader
+alpha-tests with the same material it would read in the camera view.
 
 Oxygen's conventional directional CSM path uses reversed-Z depth. The shadow
 surface clears to `0.0`, the depth compare is `GreaterOrEqual`, light-space
 orthographic projection is built with the engine reversed-Z helper, and the
 receiver comparison treats larger stored depth as closer to the light.
-
-The shadow-depth pass constants are bound as a per-cascade CBV through
-`g_PassConstantsIndex`. They carry the light view-projection matrix, UE-style
-CSM constant/slope depth-bias terms derived from `sampling_metadata1.z`, the
-light direction, and direct draw metadata/current-worlds/instance-data slots.
-The depth shader must not reload draw bindings through mutable per-view frame
-binding payloads.
 
 ### 5.2 Directional Shadow Sampling Contract
 
@@ -536,6 +522,28 @@ float SampleDirectionalShadow(
 | --------------------------- | ------- | ----------------------------------------------- |
 | `VortexShadowDepthVS`       | vs_6_0  | directional conventional shadow depth rendering |
 | `VortexShadowDepthMaskedPS` | ps_6_0  | alpha-tested directional shadow path            |
+
+### 5.4 Receiver Analysis And Receiver-Mask Caster Culling
+
+Delivered by [VX-GPU-01 S10](../milestones/VX-GPU-01/README.md#s10--conventional-receiver-analysis-and-caster-culling).
+Both stages run on the GPU with no CPU readback:
+
+1. **Receiver analysis** (`ConventionalShadowReceiverAnalysis.hlsl`) reduces
+   the camera's scene depth into per-cascade light-space bounds of the visible
+   receivers and writes the fitted cascade view-projections to a GPU buffer.
+   The CPU cascade setup remains the conservative outer bound used for CPU
+   caster selection; the fitted bounds only tighten it.
+2. **Receiver mask** (`ConventionalShadowReceiverMask.hlsl`) marks light-space
+   tiles that contain visible receivers. Caster culling rejects draws whose
+   light-space footprint covers no marked tile, before two-phase occlusion.
+   Occlusion culls casters hidden inside the shadow map; the receiver mask
+   culls casters whose shadow lands on nothing visible. They compose.
+
+Shadow inputs records, shadow occlusion and receiver sampling read the fitted
+matrices from the GPU buffer. A cascade without receivers keeps its CPU bounds
+and draws nothing. UE5.7's conventional cascaded shadows fit on the CPU; its
+virtual shadow maps mark pages from visible receivers, which is the grounding
+for the receiver mask.
 
 ## 6. Stage Integration
 

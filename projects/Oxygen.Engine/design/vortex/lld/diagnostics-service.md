@@ -203,7 +203,7 @@ src/Oxygen/Vortex/
       GpuTimelineDiagnosticsAdapter.h/.cpp
       ImGuiDiagnosticsPanelRegistry.h/.cpp
     Passes/
-      GpuDebugPrimitivePass.h/.cpp      # deferred unless the slice lands
+      GpuDebugPrimitivePass.h/.cpp      # VX-GPU-01 S11
 ```
 
 Shader assets remain under:
@@ -687,8 +687,10 @@ If a later slice enables them, the scope is deliberately small:
 - enabled-path runtime or RenderDoc proof that primitives appear and overflow is
   bounded
 
-The shader assets are present; the debug-primitive runtime remains deferred
-under [VX-DIAG-01](../OPEN_ITEMS.md).
+[VX-GPU-01 S11](../milestones/VX-GPU-01/README.md#s11--gpu-debug-primitives)
+delivers this scope under [VX-DIAG-01](../OPEN_ITEMS.md): the existing
+`GpuDebug*` shaders, `DebugFrameBindings`, `DiagnosticsFeature::kGpuDebugPrimitives`
+and the DemoShell toggle become one working path.
 
 ## 13. Contract Failures And Minimal Runtime Issues
 

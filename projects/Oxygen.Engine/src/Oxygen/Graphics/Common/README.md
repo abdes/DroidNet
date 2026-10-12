@@ -14,6 +14,7 @@
 - [Testing & validation](#testing--validation)
 - [Next steps / further reading](#next-steps--further-reading)
 - [Managed resources and views](#managed-resources-and-views)
+- [Descriptor lifetime](#descriptor-lifetime)
 - [View indexing and removal](#view-indexing-and-removal)
 
 ## Purpose
@@ -252,8 +253,10 @@ value API. There is no hidden pending-submission queue or flush-all operation.
   local index usable by descriptor tables bound for shaders. No indirection is
   needed, no offsetting is needed.
 - `ResourceRegistry` expects `GetNativeView()` to produce native, short-lived
-  view objects that can be stored in the registry. When replacing resources, the
-  registry may ask you to recreate views in-place; keep descriptor slots stable.
+  view objects that can be stored in the registry.
+- A shader-visible descriptor that recorded or in-flight work can reach is
+  never rewritten. New content gets a new descriptor; see
+  [descriptor lifetime](#descriptor-lifetime).
 - `CommandRecorder` implementations must be thread-safe where specified by the
   engine (the recorder is typically used by a single render thread but created
   on the render controller's thread). Follow the `SubmissionPolicy` semantics.
@@ -369,6 +372,23 @@ S7.1 uses these registry methods for LUT destinations and staging resources.
 SRV/UAV mip ranges, typeless-depth SRV and lazy DSVs, backend close and resource
 retention after the family owner disappears. Registration populations and
 Lighting budget fallback match the existing native tests.
+
+## Descriptor lifetime
+
+D3D12 cannot order CPU descriptor writes against GPU execution, and bindless
+shaders read descriptors at execution time. Therefore:
+
+- A published shader-visible descriptor is immutable. Resizing, repointing or
+  replacing a resource allocates a new descriptor and publishes its index.
+- `Graphics::RetireResource` releases a published resource: one deferred action
+  in the current frame slot forgets its tracked state, unregisters its views
+  (returning their descriptors to the allocator) and drops the resource after
+  every queue has completed the frames that could read it.
+- `ResourceRegistry::UnRegisterResource` and `UnRegisterView` release
+  descriptors immediately. Use them only for resources never published to
+  shaders, during construction rollback and at shutdown.
+- Debug builds recycle bindless slots first-in first-out, so an early release
+  surfaces as a stale read rather than a silent alias.
 
 ## View indexing and removal
 

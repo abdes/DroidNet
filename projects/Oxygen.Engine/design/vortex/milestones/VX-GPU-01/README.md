@@ -1,6 +1,6 @@
 # VX-GPU-01 — CPU→GPU data contract integrity
 
-Status: `planned`
+Status: `in_progress`
 
 | Field     | Summary                                                                                                                                  |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
@@ -85,21 +85,22 @@ Owner decisions, 2026-10-12:
 
 Design decisions, answered 2026-10-12; S0 records them in the owning designs:
 
-| ID   | Decision                                                                                                                                                                                    |
-| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GD-1 | Material and procedural-grid uploads use the graphics-queue inline path, recorded before the frame's first pass. Queue order gives ordering; no cross-queue wait.                           |
-| GD-2 | Buffer growth creates a new buffer and descriptor, GPU-copies the old content on the graphics queue, then publishes the new index. Callers never re-upload.                                 |
-| GD-3 | Camera view constants stay as b1, versioned: each write is a new transient record bound by GPU address. Non-camera passes use their own inputs records (S3).                                |
-| GD-4 | Skinned poses are deferred to the engine animation module (abdes/DroidNet#48).                                                                                                              |
-| GD-5 | Deformation execution (vertex shader or compute pre-pass) is decided with the animation module.                                                                                             |
-| GD-6 | Receiver analysis and receiver-mask caster culling both run GPU-driven: tight cascades from scene depth, shadow matrices read from a GPU buffer, CPU cascade culling kept as a loose bound. |
+| ID   | Decision                                                                                                                                                                                                                                     |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GD-1 | Material and procedural-grid uploads use the graphics-queue inline path, recorded before the frame's first pass. Queue order gives ordering; no cross-queue wait.                                                                            |
+| GD-2 | Buffer growth creates a new buffer and descriptor, GPU-copies the old content on the graphics queue, then publishes the new index. Callers never re-upload.                                                                                  |
+| GD-3 | Camera view constants stay as b1, versioned: each write is a new transient record bound by GPU address. Non-camera passes use their own inputs records (S3).                                                                                 |
+| GD-4 | Skinned poses are deferred to the engine animation module (abdes/DroidNet#48).                                                                                                                                                               |
+| GD-5 | Deformation execution (vertex shader or compute pre-pass) is decided with the animation module.                                                                                                                                              |
+| GD-6 | Receiver analysis and receiver-mask caster culling both run GPU-driven: tight cascades from scene depth, shadow matrices read from a GPU buffer, CPU cascade culling kept as a loose bound.                                                  |
+| GD-7 | Each texture content version (placeholder, loaded, error, evicted) gets its own descriptor; the old one retires by receipt. MaterialBinder re-serializes materials whose texture indices changed; per-frame bindings read the current index. |
 
 ## Working rules
 
 - **Commits.** One thematic commit per slice once its tests pass; no review
   pause. A slice may land as more than one commit only when its parts build
-  and pass independently. Work stops only at **Owner** boxes and at S0's
-  design review.
+  and pass independently. Work stops only at **Owner** boxes and for decisions I am not
+  confident about, presented with facts and pros/cons.
 - **GPU tests.** One GPU test process at a time, with `--gtest_filter` on the
   tests being worked on. A test that removes the D3D12 device is never rerun
   by me; the owner gets the command.
@@ -161,50 +162,47 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 
 ## Slices
 
-| ID  | Deliverable                                                            | Findings                    | Depends | State     | Commit |
-| --- | ---------------------------------------------------------------------- | --------------------------- | ------- | --------- | ------ |
-| S0  | Design updates and open decisions                                      | all                         | —       | `planned` | —      |
-| S1  | Ordered material uploads                                               | N1                          | S0      | `planned` | —      |
-| S2  | Receipt-retired descriptors; no live descriptor rewrites               | C1, M2, H2, H3, L10         | S0      | `planned` | —      |
-| S3  | Non-camera passes own their inputs; pure shader helpers                | C2, H4, H5, L9              | S0      | `planned` | —      |
-| S4  | Versioned view constants; one source per view value                    | H1, M7                      | S3      | `planned` | —      |
-| S5  | One pass-input convention; shared mesh position with WPO               | H7, M6, M7                  | S3, S4  | `planned` | —      |
-| S6  | Fail loudly                                                            | M1, M5, H6, H8              | S4      | `planned` | —      |
-| S7  | Frame and view lifecycle                                               | M3, M4                      | S4      | `planned` | —      |
-| S8  | Generated shared contracts                                             | M8, H8                      | S5, S6  | `planned` | —      |
-| S9  | Unwired fields and dead code                                           | L2, L3, L4, L5, L6, L8, L11 | S3      | `planned` | —      |
-| S10 | Conventional shadow receiver analysis and receiver-mask caster culling | L1                          | S3, S5  | `planned` | —      |
-| S11 | GPU debug primitives                                                   | L1, VX-DIAG-01              | S3, S6  | `planned` | —      |
-| S12 | Closeout                                                               | all                         | S1–S11  | `planned` | —      |
+| ID  | Deliverable                                                            | Findings                    | Depends | State       | Commit |
+| --- | ---------------------------------------------------------------------- | --------------------------- | ------- | ----------- | ------ |
+| S0  | Design updates and open decisions                                      | all                         | —       | `validated` | —      |
+| S1  | Ordered material uploads                                               | N1                          | S0      | `planned`   | —      |
+| S2  | Receipt-retired descriptors; no live descriptor rewrites               | C1, M2, H2, H3, L10         | S0      | `planned`   | —      |
+| S3  | Non-camera passes own their inputs; pure shader helpers                | C2, H4, H5, L9              | S0      | `planned`   | —      |
+| S4  | Versioned view constants; one source per view value                    | H1, M7                      | S3      | `planned`   | —      |
+| S5  | One pass-input convention; shared mesh position with WPO               | H7, M6, M7                  | S3, S4  | `planned`   | —      |
+| S6  | Fail loudly                                                            | M1, M5, H6, H8              | S4      | `planned`   | —      |
+| S7  | Frame and view lifecycle                                               | M3, M4                      | S4      | `planned`   | —      |
+| S8  | Generated shared contracts                                             | M8, H8                      | S5, S6  | `planned`   | —      |
+| S9  | Unwired fields and dead code                                           | L2, L3, L4, L5, L6, L8, L11 | S3      | `planned`   | —      |
+| S10 | Conventional shadow receiver analysis and receiver-mask caster culling | L1                          | S3, S5  | `planned`   | —      |
+| S11 | GPU debug primitives                                                   | L1, VX-DIAG-01              | S3, S6  | `planned`   | —      |
+| S12 | Closeout                                                               | all                         | S1–S11  | `planned`   | —      |
 
 S1 and S2 come first: they remove the remaining causes of garbage material
 reads. S9 can run in parallel with S4–S8.
 
 ## S0 — Designs
 
-Update the owning designs, record the [answered decisions](#decisions), and
-stop for owner approval of the design text before code depends on it.
+Update the owning designs, record the [answered decisions](#decisions).
 
-- [ ] **Graphics.** Descriptor lifetime contract in
-      `Graphics/Common/ResourceRegistry.h` and its module docs: retire by
-      receipt, no rewrite of a live shader-visible descriptor, debug FIFO
-      free-list mode to surface early frees.
-- [ ] **Upload.** [upload.md](../../lld/upload.md): binder uploads on the
+- [x] **Graphics.** [Descriptor lifetime](../../../../src/Oxygen/Graphics/Common/README.md#descriptor-lifetime):
+      published descriptors are immutable, `Graphics::RetireResource`, debug
+      FIFO slot reuse.
+- [x] **Upload.** [upload.md](../../lld/upload.md): binder uploads on the
       graphics-queue inline path (GD-1); growth by GPU copy into a new buffer
       and descriptor (GD-2).
-- [ ] **Shader contracts.** [shader-contracts.md](../../lld/shader-contracts.md):
+- [x] **Shader contracts.** [shader-contracts.md](../../lld/shader-contracts.md):
       per-pass inputs record, root-constant convention, pure helpers vs
       bound-view header, fail-loud rules, versioned b1 (GD-3).
-- [ ] **Shadows.** [shadow-service.md](../../lld/shadow-service.md): shadow and
+- [x] **Shadows.** [shadow-service.md](../../lld/shadow-service.md): shadow and
       contact-shadow inputs records, shared mesh position with WPO, receiver
       analysis and receiver-mask culling, GPU-driven cascades (GD-6), with
       UE5.7 grounding.
-- [ ] **Diagnostics.** [diagnostics-service.md](../../lld/diagnostics-service.md):
+- [x] **Diagnostics.** [diagnostics-service.md](../../lld/diagnostics-service.md):
       GPU debug primitive buffers, pass scheduling, budget and feature gate.
-- [ ] **Motion.** [runtime-motion-producers.md](../../lld/runtime-motion-producers.md):
+- [x] **Motion.** [runtime-motion-producers.md](../../lld/runtime-motion-producers.md):
       skinned/morph producers wait for the animation module (#48); their
       publication slots leave DrawFrameBindings until then.
-- [ ] **Owner.** Approve the design changes.
 
 ## S1 — Ordered material uploads
 

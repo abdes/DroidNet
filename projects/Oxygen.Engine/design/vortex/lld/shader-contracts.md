@@ -482,6 +482,56 @@ Required contract:
   - primary base-pass velocity output is not authoritative until the auxiliary
     path, when active, completes its merge/update step
 
+### 4.9 Pass inputs and data integrity
+
+Every pass follows these rules; [VX-GPU-01](../milestones/VX-GPU-01/README.md)
+owns their delivery and the findings they close.
+
+**Inputs record.** A pass invocation reads one immutable inputs record,
+allocated at record time from the per-frame transient structured buffers.
+Root constant `[1]` (`g_PassConstantsIndex`) is its only entry point and is
+always a `StructuredBuffer` element. A pass without inputs passes
+`K_INVALID_BINDLESS_INDEX`, never a literal `0`. Root constant `[0]`
+(`g_DrawIndex`) carries the draw index only. Raw SRV indices travel inside the
+inputs record, not in root constants.
+
+**Camera views.** Camera passes keep `ViewConstants` at b1. Each write
+allocates a new record bound by GPU address, so a pass reads the view values
+and the `ViewFrameBindings` slot current when it was recorded. A record is
+never rewritten after a pass binds it. One value has one source: view
+matrices, `reverse_z`, exposure and lighting slots come from the view records,
+not duplicated pass constants.
+
+**Non-camera passes.** Shadow, contact-shadow, LUT, capture and compute passes
+do not bind b1. Their inputs record carries the view-projection, the draw-frame
+slot and every value their shaders read.
+
+**Shader helpers.** Helpers under `Contracts/` and `Shared/` take records or
+slots as arguments. Helpers that resolve the bound view chain
+(`LoadResolvedDrawFrameBindings`, bound-view material, exposure, environment
+and lighting access) live in one bound-view header that compiles only in entry
+points declaring themselves camera-view entry points; any other inclusion is an
+`#error`.
+
+**Mesh position.** Depth prepass, base pass, shadow and contact-shadow passes
+compute world position through one helper, including material world-position
+offset, so every view rasterizes the same geometry.
+
+**Fail loudly.** A missing required slot is a CPU-side rejection with a logged
+reason, decided before recording. Shaders treat `K_INVALID_BINDLESS_INDEX` and
+out-of-domain slots as invalid and early out; they never substitute plausible
+data (identity matrices, depth 1.0, default environment, unit exposure, current
+as history, unclipped masked surfaces). Debug builds record invalid accesses in
+the diagnostics buffer.
+
+**Domains.** Slot checks use the domain the contract declares: draw metadata
+and materials are in the materials domain, so a global-SRV check is wrong for
+them. Typed accessors per contract perform the check.
+
+**Layouts.** Shared C++/HLSL structs, their offset assertions and sampler slots
+are generated from the bindless schema; hand-written mirrors and literal byte
+offsets are not allowed.
+
 ## 5. Shared — Renderer-Wide Utility Libraries
 
 ### 5.1 FullscreenTriangle.hlsli
