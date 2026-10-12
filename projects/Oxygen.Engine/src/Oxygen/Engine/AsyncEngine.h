@@ -154,7 +154,7 @@ public:
   using ModuleSubscription = ::oxygen::engine::ModuleManager::Subscription;
 
   OXGN_NGIN_API auto SubscribeModuleAttached(
-    ::oxygen::engine::ModuleAttachedCallback cb, bool replay_existing = false)
+    ::oxygen::engine::ModuleAttachedCallback cb, bool replay_existing)
     -> ModuleSubscription override;
 
   OXGN_NGIN_API auto SetScriptSourceChangedHandler(

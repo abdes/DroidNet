@@ -100,7 +100,7 @@ public:
   auto Stop() -> void override { running_ = false; }
 
   auto SubscribeModuleAttached(::oxygen::engine::ModuleAttachedCallback /*cb*/,
-    bool /*replay_existing*/ = false) -> ModuleSubscription override
+    bool /*replay_existing*/) -> ModuleSubscription override
   {
     return {};
   }
