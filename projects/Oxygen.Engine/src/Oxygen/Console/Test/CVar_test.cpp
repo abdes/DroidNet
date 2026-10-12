@@ -25,6 +25,7 @@ namespace {
 using oxygen::console::Console;
 using oxygen::console::CVarDefinition;
 using oxygen::console::CVarFlags;
+using oxygen::console::CVarValue;
 using oxygen::console::CVarValueOrigin;
 using oxygen::console::ExecutionStatus;
 using oxygen::testing::ScopedLogCapture;
@@ -143,6 +144,42 @@ NOLINT_TEST(ConsoleCVar, RejectsInvalidTypeAndClampsBounds)
     const auto result = console.Execute("sys.max_lights nope");
     EXPECT_EQ(result.status, ExecutionStatus::kInvalidArguments);
   }
+}
+
+//! Command lines give startup values as text; they are parsed for the
+//! variable's type when it registers, and unparsable text is ignored.
+NOLINT_TEST(ConsoleCVar, TextStartupValuesAreParsedForTheType)
+{
+  Console console {};
+  oxygen::console::ConsoleStartupPlan plan;
+  plan.Set("r.enabled", std::string_view { "true" });
+  plan.Set("r.count", std::string_view { "7" });
+  plan.Set("r.scale", std::string_view { "0.5" });
+  plan.Set("r.broken", std::string_view { "maybe" });
+  console.ApplyStartupPlan(plan);
+
+  const auto define = [&console](const char* name, CVarValue value) {
+    ASSERT_TRUE(console
+        .RegisterCVar(CVarDefinition {
+          .name = name,
+          .help = "test",
+          .default_value = std::move(value),
+          .flags = CVarFlags::kNone,
+          .min_value = std::nullopt,
+          .max_value = std::nullopt,
+        })
+        .IsValid());
+  };
+  define("r.enabled", false);
+  define("r.count", int64_t { 1 });
+  define("r.scale", 1.0);
+  define("r.broken", false);
+
+  EXPECT_TRUE(std::get<bool>(console.FindCVar("r.enabled")->current_value));
+  EXPECT_EQ(std::get<int64_t>(console.FindCVar("r.count")->current_value), 7);
+  EXPECT_DOUBLE_EQ(
+    std::get<double>(console.FindCVar("r.scale")->current_value), 0.5);
+  EXPECT_FALSE(std::get<bool>(console.FindCVar("r.broken")->current_value));
 }
 
 NOLINT_TEST(ConsoleCVar, StringWithAllowedValuesRejectsOthers)

@@ -689,6 +689,17 @@ auto Registry::ApplyCachedStartupValue(CVarEntry& cvar) -> bool
   if (it == startup_cvar_values_.end()) {
     return false;
   }
+  // A text value for a typed variable comes from a command line: parse it
+  // as the console would.
+  if (const auto* text = std::get_if<std::string>(&it->second.value);
+    text != nullptr
+    && !IsCompatibleValueType(cvar.snapshot.definition, it->second.value)) {
+    auto parsed = CVarValue {};
+    if (TryParseValue(cvar.snapshot.current_value, *text, parsed)
+      && IsAllowedValue(cvar.snapshot.definition, parsed)) {
+      it->second.value = std::move(parsed);
+    }
+  }
   if (!IsCompatibleValueType(cvar.snapshot.definition, it->second.value)) {
     LogIncompatibleStampedValue(
       "startup", cvar.snapshot.definition, it->second.value);
