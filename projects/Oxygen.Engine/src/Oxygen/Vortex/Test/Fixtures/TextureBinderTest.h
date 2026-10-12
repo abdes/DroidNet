@@ -76,6 +76,9 @@ protected:
 
   [[nodiscard]] auto AllocatedSrvCount() const -> uint32_t;
   auto DestroyBinder() -> void;
+  //! Runs the deferred actions of every frame slot, as when the frames that
+  //! may read retired textures and descriptors have completed.
+  auto CompleteRetiredFrames() const -> void;
   auto BeginVisibleFrame() -> void
   {
     TexBinder().OnFrameStart();

@@ -20,6 +20,8 @@
 #endif
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
@@ -36,6 +38,7 @@ using oxygen::content::EvictionReason;
 using oxygen::content::ResourceKey;
 using oxygen::vortex::testing::FakeGraphics;
 using oxygen::vortex::testing::MakeCookedTexture1x1Rgba8Payload;
+using oxygen::vortex::testing::MakeTightPackedTextureCube1x1Rgba8Payload;
 using oxygen::vortex::testing::TextureBinderTest;
 
 [[nodiscard]] auto GetTextureDebugName(const oxygen::graphics::Texture* texture)
@@ -45,6 +48,11 @@ using oxygen::vortex::testing::TextureBinderTest;
     return {};
   }
   return texture->GetDescriptor().debug_name;
+}
+
+[[nodiscard]] auto MakeTextureDebugName(const ResourceKey key) -> std::string
+{
+  return std::string("Texture(") + oxygen::content::to_string(key) + ")";
 }
 
 [[nodiscard]] auto CountSrvViewCreationsForIndex(
@@ -66,224 +74,188 @@ using oxygen::vortex::testing::TextureBinderTest;
   return nullptr;
 }
 
-class TextureBinderEvictionTest : public TextureBinderTest { };
+class TextureBinderEvictionTest : public TextureBinderTest {
+protected:
+  auto StartUploaderFrame(const std::uint32_t slot) const -> void
+  {
+    Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+      oxygen::frame::Slot { slot });
+  }
 
-//! Eviction repoints the descriptor to the global placeholder texture.
-NOLINT_TEST_F(TextureBinderEvictionTest, EvictionRepointsToFallback)
+  //! Requests `key`, completes its upload and publishes it.
+  auto LoadResident(const ResourceKey key) -> oxygen::ShaderVisibleIndex
+  {
+    StartUploaderFrame(1);
+    (void)TexBinder().GetOrAllocate(key);
+    BeginVisibleFrame();
+    StartUploaderFrame(2);
+    BeginVisibleFrame();
+    EXPECT_TRUE(TexBinder().IsResourceReady(key));
+    return TexBinder().GetOrAllocate(key);
+  }
+
+  [[nodiscard]] auto Placeholder() const -> oxygen::ShaderVisibleIndex
+  {
+    return TexBinder().GetOrAllocate(ResourceKey::kPlaceholder);
+  }
+};
+
+//! Eviction publishes the shared placeholder; the evicted version keeps its
+//! descriptor, unchanged, until the frames that may read it complete.
+NOLINT_TEST_F(TextureBinderEvictionTest, EvictionPublishesPlaceholder)
 {
   // Arrange
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
   const ResourceKey key
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
+  const auto loaded = LoadResident(key);
+  ASSERT_NE(loaded, Placeholder());
+  const auto descriptors = AllocatedSrvCount();
+  const auto revision = TexBinder().GetResidentContentRevision();
 
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      1,
-    });
-
-  Gfx().srv_view_log_.events.clear();
-  const auto srv_index = TexBinder().GetOrAllocate(key);
-  const auto u_srv_index = srv_index.get();
-
-  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
-  ASSERT_NE(q, nullptr);
-
-  q->CompleteThrough(q->GetCurrentValue());
-
-  BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      2,
-    });
+  // Act
+  Loader().EmitTextureEviction(key, EvictionReason::kRefCountZero);
   BeginVisibleFrame();
 
-  const auto* const resident_texture
-    = LastSrvViewTextureForIndex(Gfx(), u_srv_index);
-  ASSERT_NE(resident_texture, nullptr);
-  EXPECT_NE(GetTextureDebugName(resident_texture), "FallbackTexture");
+  // Assert: the placeholder is published; the old descriptor is untouched.
+  EXPECT_FALSE(TexBinder().IsResourceReady(key));
+  EXPECT_GT(TexBinder().GetResidentContentRevision(), revision);
+  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), loaded.get()), 1U);
+  EXPECT_EQ(
+    GetTextureDebugName(LastSrvViewTextureForIndex(Gfx(), loaded.get())),
+    MakeTextureDebugName(key));
+  EXPECT_EQ(AllocatedSrvCount(), descriptors);
+
+  // Assert: the descriptor returns to the allocator once frames complete.
+  CompleteRetiredFrames();
+  EXPECT_EQ(AllocatedSrvCount(), descriptors - 1U);
+  EXPECT_EQ(TexBinder().GetOrAllocate(key), Placeholder());
+}
+
+//! An evicted cube publishes the shared cube placeholder, so cube readers
+//! never sample a 2D view.
+NOLINT_TEST_F(TextureBinderEvictionTest, CubeEvictionPublishesCubePlaceholder)
+{
+  // Arrange
+  const auto payload = MakeTightPackedTextureCube1x1Rgba8Payload();
+  const ResourceKey key
+    = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
+  const auto loaded = LoadResident(key);
+  ASSERT_NE(loaded, Placeholder());
 
   // Act
   Loader().EmitTextureEviction(key, EvictionReason::kRefCountZero);
   BeginVisibleFrame();
 
   // Assert
-  const auto* const evicted_texture
-    = LastSrvViewTextureForIndex(Gfx(), u_srv_index);
-  ASSERT_NE(evicted_texture, nullptr);
-  EXPECT_EQ(GetTextureDebugName(evicted_texture), "FallbackTexture");
-  EXPECT_FALSE(TexBinder().IsResourceReady(key));
+  const auto evicted = TexBinder().GetOrAllocate(key);
+  EXPECT_NE(evicted, loaded);
+  EXPECT_NE(evicted, Placeholder());
+  const auto* const texture = LastSrvViewTextureForIndex(Gfx(), evicted.get());
+  ASSERT_NE(texture, nullptr);
+  EXPECT_EQ(
+    texture->GetDescriptor().texture_type, oxygen::TextureType::kTextureCube);
+  EXPECT_EQ(texture->GetDescriptor().array_size, 6U);
+  EXPECT_EQ(GetTextureDebugName(texture), "TextureBinder.PlaceholderCube");
 }
 
-//! Eviction suppresses late upload completions for in-flight uploads.
+//! Eviction discards late upload completions for in-flight uploads.
 NOLINT_TEST_F(TextureBinderEvictionTest, InFlightCompletionIsDiscarded)
 {
   // Arrange
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
   const ResourceKey key
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
-
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      1,
-    });
-
-  Gfx().srv_view_log_.events.clear();
-  const auto srv_index = TexBinder().GetOrAllocate(key);
-  const auto u_srv_index = srv_index.get();
-
+  StartUploaderFrame(1);
+  (void)TexBinder().GetOrAllocate(key);
   auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
-
   q->SetAutoComplete(false);
   q->CompleteThrough(0);
   BeginVisibleFrame();
-
-  const auto creations_after_submit
-    = CountSrvViewCreationsForIndex(Gfx(), u_srv_index);
+  const auto descriptors = AllocatedSrvCount();
 
   // Act
   Loader().EmitTextureEviction(key, EvictionReason::kRefCountZero);
   BeginVisibleFrame();
-
-  const auto creations_after_eviction
-    = CountSrvViewCreationsForIndex(Gfx(), u_srv_index);
-  ASSERT_GT(creations_after_eviction, creations_after_submit);
-
   q->CompleteThrough(q->GetCurrentValue());
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      2,
-    });
+  StartUploaderFrame(2);
   BeginVisibleFrame();
 
-  // Assert
-  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_srv_index),
-    creations_after_eviction);
-
-  const auto* const final_texture
-    = LastSrvViewTextureForIndex(Gfx(), u_srv_index);
-  ASSERT_NE(final_texture, nullptr);
-  EXPECT_EQ(GetTextureDebugName(final_texture), "FallbackTexture");
+  // Assert: nothing published for the discarded upload.
+  EXPECT_FALSE(TexBinder().IsResourceReady(key));
+  EXPECT_EQ(AllocatedSrvCount(), descriptors);
+  EXPECT_TRUE(std::ranges::none_of(
+    Gfx().srv_view_log_.events, [&](const auto& event) -> bool {
+      return GetTextureDebugName(event.texture) == MakeTextureDebugName(key);
+    }));
 }
 
-//! Evicted entries can be reloaded and repointed to fresh textures.
-NOLINT_TEST_F(TextureBinderEvictionTest, EvictionThenReloadRepoints)
+//! An evicted entry reloads into a new version with a new descriptor.
+NOLINT_TEST_F(TextureBinderEvictionTest, EvictionThenReloadPublishesNewVersion)
 {
   // Arrange
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
   const ResourceKey key
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
-
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      1,
-    });
-
-  Gfx().srv_view_log_.events.clear();
-  const auto srv_index = TexBinder().GetOrAllocate(key);
-  const auto u_srv_index = srv_index.get();
-
-  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
-  ASSERT_NE(q, nullptr);
-
-  q->CompleteThrough(q->GetCurrentValue());
-  BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      2,
-    });
-  BeginVisibleFrame();
-
-  // Act
+  const auto first = LoadResident(key);
+  const auto* const first_texture
+    = LastSrvViewTextureForIndex(Gfx(), first.get());
   Loader().EmitTextureEviction(key, EvictionReason::kRefCountZero);
   BeginVisibleFrame();
+  ASSERT_EQ(TexBinder().GetOrAllocate(key), Placeholder());
 
-  const auto* const evicted_texture
-    = LastSrvViewTextureForIndex(Gfx(), u_srv_index);
-  ASSERT_NE(evicted_texture, nullptr);
-  EXPECT_EQ(GetTextureDebugName(evicted_texture), "FallbackTexture");
-
-  (void)TexBinder().GetOrAllocate(key);
-
-  q->CompleteThrough(q->GetCurrentValue());
+  // Act: the request above started the reload; complete it.
   BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      3,
-    });
+  StartUploaderFrame(3);
   BeginVisibleFrame();
 
   // Assert
-  const auto* const final_texture
-    = LastSrvViewTextureForIndex(Gfx(), u_srv_index);
-  ASSERT_NE(final_texture, nullptr);
-  EXPECT_NE(GetTextureDebugName(final_texture), "FallbackTexture");
+  ASSERT_TRUE(TexBinder().IsResourceReady(key));
+  const auto second = TexBinder().GetOrAllocate(key);
+  EXPECT_NE(second, Placeholder());
+  const auto* const second_texture
+    = LastSrvViewTextureForIndex(Gfx(), second.get());
+  EXPECT_EQ(GetTextureDebugName(second_texture), MakeTextureDebugName(key));
+  EXPECT_NE(second_texture, first_texture);
 }
 
-//! Eviction is idempotent and does not repoint repeatedly.
+//! A repeated eviction of an evicted entry changes nothing.
 NOLINT_TEST_F(TextureBinderEvictionTest, EvictionIsIdempotent)
 {
   // Arrange
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
   const ResourceKey key
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
-
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      1,
-    });
-
-  Gfx().srv_view_log_.events.clear();
-  const auto srv_index = TexBinder().GetOrAllocate(key);
-  const auto u_srv_index = srv_index.get();
-
-  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
-  ASSERT_NE(q, nullptr);
-
-  q->CompleteThrough(q->GetCurrentValue());
+  (void)LoadResident(key);
+  Loader().EmitTextureEviction(key, EvictionReason::kRefCountZero);
   BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      2,
-    });
-  BeginVisibleFrame();
+  const auto views = Gfx().srv_view_log_.events.size();
+  const auto revision = TexBinder().GetResidentContentRevision();
 
   // Act
   Loader().EmitTextureEviction(key, EvictionReason::kRefCountZero);
   BeginVisibleFrame();
 
-  const auto creations_after_first
-    = CountSrvViewCreationsForIndex(Gfx(), u_srv_index);
-
-  Loader().EmitTextureEviction(key, EvictionReason::kRefCountZero);
-  BeginVisibleFrame();
-
   // Assert
-  EXPECT_EQ(
-    CountSrvViewCreationsForIndex(Gfx(), u_srv_index), creations_after_first);
+  EXPECT_EQ(Gfx().srv_view_log_.events.size(), views);
+  EXPECT_EQ(TexBinder().GetResidentContentRevision(), revision);
 }
 
+//! A resident lease keeps the version published until every reader releases
+//! it.
 NOLINT_TEST_F(
-  TextureBinderEvictionTest, ResidentLeasePinsDescriptorUntilAllReadersRetire)
+  TextureBinderEvictionTest, ResidentLeasePinsVersionUntilAllReadersRetire)
 {
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
   const auto key = Loader().PreloadCookedTexture(std::span(payload));
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      1,
-    });
-  const auto srv = TexBinder().GetOrAllocate(key);
+  StartUploaderFrame(1);
+  (void)TexBinder().GetOrAllocate(key);
   EXPECT_EQ(TexBinder().AcquireReadyTexture(key), nullptr);
-  auto queue
-    = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
-  ASSERT_NE(queue, nullptr);
-  queue->CompleteThrough(queue->GetCurrentValue());
   BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      2,
-    });
+  StartUploaderFrame(2);
   BeginVisibleFrame();
+  const auto srv = TexBinder().GetOrAllocate(key);
   auto accepted = TexBinder().AcquireReadyTexture(key);
   ASSERT_NE(accepted, nullptr);
   EXPECT_EQ(accepted->srv, srv);
@@ -294,22 +266,21 @@ NOLINT_TEST_F(
   const auto* texture = accepted->texture.get();
   Loader().EmitTextureEviction(key, EvictionReason::kRefCountZero);
   BeginVisibleFrame();
-  EXPECT_EQ(LastSrvViewTextureForIndex(Gfx(), srv.get()), texture);
+  EXPECT_EQ(TexBinder().GetOrAllocate(key), srv);
   accepted.reset();
   BeginVisibleFrame();
   EXPECT_TRUE(TexBinder().IsResourceReady(key));
-  EXPECT_EQ(LastSrvViewTextureForIndex(Gfx(), srv.get()), texture);
+  EXPECT_EQ(TexBinder().GetOrAllocate(key), srv);
   in_flight.reset();
   BeginVisibleFrame();
   EXPECT_FALSE(TexBinder().IsResourceReady(key));
   EXPECT_EQ(TexBinder().AcquireReadyTexture(key), nullptr);
-  EXPECT_EQ(GetTextureDebugName(LastSrvViewTextureForIndex(Gfx(), srv.get())),
-    "FallbackTexture");
+  EXPECT_EQ(LastSrvViewTextureForIndex(Gfx(), srv.get()), texture);
 }
 
-class TextureBinderEvictionBudgetTest : public TextureBinderTest {
+class TextureBinderEvictionBudgetTest : public TextureBinderEvictionTest {
 protected:
-  auto BinderLimits() const
+  [[nodiscard]] auto BinderLimits() const
     -> oxygen::vortex::resources::TextureBinder::UploadLimits override
   {
     auto limits = oxygen::vortex::resources::TextureBinder::UploadLimits {};
@@ -323,23 +294,17 @@ NOLINT_TEST_F(TextureBinderEvictionBudgetTest,
 {
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
   const auto key = Loader().PreloadCookedTexture(payload);
-  const auto index = TexBinder().GetOrAllocate(key);
-  BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
-  BeginVisibleFrame();
-  ASSERT_TRUE(TexBinder().IsResourceReady(key));
+  (void)LoadResident(key);
   Loader().EmitTextureEviction(key, EvictionReason::kRefCountZero);
   Loader().EmitTextureEviction(key, EvictionReason::kRefCountZero);
   BeginVisibleFrame();
   EXPECT_FALSE(TexBinder().IsResourceReady(key));
-  EXPECT_EQ(TexBinder().GetOrAllocate(key), index);
+  EXPECT_EQ(TexBinder().GetOrAllocate(key), Placeholder());
   BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 0 });
+  StartUploaderFrame(0);
   BeginVisibleFrame();
   EXPECT_TRUE(TexBinder().IsResourceReady(key));
-  EXPECT_EQ(TexBinder().GetOrAllocate(key), index);
+  EXPECT_NE(TexBinder().GetOrAllocate(key), Placeholder());
 }
 
 NOLINT_TEST_F(
@@ -351,25 +316,20 @@ NOLINT_TEST_F(
   Loader().SetCookedTexturePayload(pinned, payload);
   Loader().SetCookedTexturePayload(other, payload);
   (void)TexBinder().GetOrAllocate(pinned);
-  (void)TexBinder().GetOrAllocate(other);
-  BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
-  BeginVisibleFrame();
+  (void)LoadResident(other);
+  const auto other_loaded = TexBinder().GetOrAllocate(other);
   auto lease = TexBinder().AcquireReadyTexture(pinned);
   ASSERT_NE(lease, nullptr);
   Loader().EmitTextureEviction(pinned, EvictionReason::kRefCountZero);
   Loader().EmitTextureEviction(other, EvictionReason::kRefCountZero);
-  const auto events = Gfx().srv_view_log_.events.size();
   BeginVisibleFrame();
-  EXPECT_EQ(Gfx().srv_view_log_.events.size(), events);
   EXPECT_TRUE(TexBinder().IsResourceReady(pinned));
+  EXPECT_EQ(TexBinder().GetOrAllocate(other), other_loaded);
   BeginVisibleFrame();
-  EXPECT_EQ(Gfx().srv_view_log_.events.size(), events + 1U);
   EXPECT_TRUE(TexBinder().IsResourceReady(pinned));
+  EXPECT_EQ(TexBinder().GetOrAllocate(other), Placeholder());
   lease.reset();
   BeginVisibleFrame();
-  EXPECT_EQ(Gfx().srv_view_log_.events.size(), events + 2U);
   EXPECT_FALSE(TexBinder().IsResourceReady(pinned));
 }
 
@@ -379,12 +339,7 @@ NOLINT_TEST_F(
 {
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
   const auto key = Loader().PreloadCookedTexture(payload);
-  const auto index = TexBinder().GetOrAllocate(key);
-  BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
-  BeginVisibleFrame();
-  ASSERT_TRUE(TexBinder().IsResourceReady(key));
+  (void)LoadResident(key);
   const auto before = Gfx().GetResourceRegistry().GetRegisteredResourceCount();
   Loader().EmitTextureEviction(key, EvictionReason::kRefCountZero);
   bool failed = false;
@@ -400,9 +355,10 @@ NOLINT_TEST_F(
   EXPECT_EQ(Gfx().GetResourceRegistry().GetRegisteredResourceCount(), before);
   EXPECT_FALSE(TexBinder().IsResourceReady(key));
   BeginVisibleFrame();
+  CompleteRetiredFrames();
   EXPECT_EQ(
     Gfx().GetResourceRegistry().GetRegisteredResourceCount(), before - 1U);
-  EXPECT_EQ(TexBinder().GetOrAllocate(key), index);
+  EXPECT_EQ(TexBinder().GetOrAllocate(key), Placeholder());
 }
 #endif
 

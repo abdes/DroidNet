@@ -131,6 +131,7 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 | ID  | Finding                                                                                                                                                                                                        | Evidence                                                                                                                       | Verdict   | Slice    |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | --------- | -------- |
 | N1  | Material and procedural-grid constants upload on the transfer queue; tickets are discarded and no graphics list waits on them.                                                                                 | `Vortex/Resources/MaterialBinder.cpp:1437`; `Graphics/Common/CommandQueueSubmission.cpp:366-379`                               | CONFIRMED | S1       |
+| N2  | TextureBinder's shared placeholder and error textures upload on the transfer queue and are published at once; no graphics list waits on them.                                                                  | `Vortex/Resources/TextureBinder.cpp` (`CreateFallback`); `InitViewsModule.cpp:572`                                             | CONFIRMED | S2       |
 | C1  | Buffer growth recreates the SRV in the same live descriptor; in-flight frames read the new, empty buffer.                                                                                                      | `Vortex/Upload/UploadHelpers.cpp:143-157`; `Graphics/Common/ResourceRegistry.h:846-960`; `MaterialBinder.cpp:893-925`          | CONFIRMED | S2       |
 | C2  | ContactShadowCasterDepthPass binds the camera b1 on an early-submitted list; DepthPrepass resolves draws, WPO and materials through it.                                                                        | `Vortex/Shadows/Passes/ContactShadowCasterDepthPass.cpp:146-211`; `S/Stages/DepthPrepass/DepthPrepass.hlsl:49,70,86,100`       | CONFIRMED | S3       |
 | H1  | ViewConstants are one mapped buffer per (slot, view), `memcpy`'d about seven times per view per frame; lists see only the last write.                                                                          | `Vortex/Internal/ViewConstantsManager.cpp:50-126`; `SceneRenderer.cpp` refresh calls                                           | CONFIRMED | S4       |
@@ -166,7 +167,7 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 | --- | ---------------------------------------------------------------------- | --------------------------- | ------- | ----------- | ------ |
 | S0  | Design updates and open decisions                                      | all                         | —       | `validated` | —      |
 | S1  | Ordered material uploads                                               | N1                          | S0      | `validated` | —      |
-| S2  | Receipt-retired descriptors; no live descriptor rewrites               | C1, M2, H2, H3, L10         | S0      | `planned`   | —      |
+| S2  | Receipt-retired descriptors; no live descriptor rewrites               | C1, M2, N2, H2, H3, L10     | S0      | `planned`   | —      |
 | S3  | Non-camera passes own their inputs; pure shader helpers                | C2, H4, H5, L9              | S0      | `planned`   | —      |
 | S4  | Versioned view constants; one source per view value                    | H1, M7                      | S3      | `planned`   | —      |
 | S5  | One pass-input convention; shared mesh position with WPO               | H7, M6, M7                  | S3, S4  | `planned`   | —      |
@@ -236,30 +237,27 @@ Update the owning designs, record the [answered decisions](#decisions).
       oldest first.
 - [x] **Accessors.** `Graphics::GetDescriptorAllocator()`/`GetResourceRegistry()`
       are real overloads in every backend, mock and fake (no `const_cast`).
-- [ ] **TextureBinder (S2c).** New descriptor per texture version (GD-7),
-      built on existing primitives only (owner: no reinvented wheels):
-  - Entry identity moves from descriptor-slot generations to a Nexus
-    `FrameDrivenIndexReuse` entry handle (as MaterialBinder and
-    GeometryUploader use); async upload, completion, retry and eviction
-    callbacks validate that handle.
-  - No per-entry placeholder textures or home descriptors: a loading entry
-    publishes the shared placeholder index; a loaded version registers its
-    own SRV view on its texture; evicted entries publish a shared 2D, cube or
-    array placeholder index (#25); failures publish the error index.
-    Duplicate views of one resource are rejected by the registry, which is
-    why per-entry home descriptors are not used.
-  - Replaced versions retire with `Graphics::RetireResource`; no
-    `UpdateView`. Remove `ReleaseTextureNextFrame` and the per-entry
-    placeholder paths.
-  - Content revisions come from one global counter, so a new descriptor never
-    reuses an older revision value (IblProcessor compares revisions).
-  - MaterialBinder re-serializes a material whose texture indices changed.
-  - Update `Nexus/Docs/design.md`, which lists texture repointing as a
-    stable-index exception.
-- [ ] **Tests.** Done: retired buffer keeps views until slot reuse; atlas
-      growth copies, new SRV, no growth within capacity; geometry eviction and
-      update follow retirement. Open: TextureBinder versions and cube
-      placeholder.
+- [x] **TextureBinder (S2c).** A loaded texture version registers its own
+      SRV; nothing is repointed (`UpdateView` and the per-entry placeholders
+      are gone). Loading entries publish the shared placeholder, failures the
+      shared error binding; both exist per shape (2D, cube, 2D array), so an
+      evicted or rejected cube publishes a cube view (#25). Replaced and
+      evicted versions retire through `Graphics::RetireResource`. Entry
+      identity is a Nexus `IndexReuse` handle, finalized at once because no
+      GPU work reads it; loads, completions, retries and evictions validate
+      it. Descriptor revisions come from one counter. `IResourceBinder`
+      exposes `GetResidentContentRevision()`; MaterialBinder re-resolves a
+      material when it changes and uploads it only if an index changed. A
+      failed view registration keeps the completion queued for retry.
+- [ ] **Fallback ordering (N2).** Upload the shared placeholder and error
+      textures on the graphics queue (GD-1), so no pass samples them before
+      their copy lands.
+- [x] **Tests.** Retired buffer keeps views until slot reuse; atlas growth
+      copies, new SRV, no growth within capacity; geometry eviction and update
+      follow retirement; texture versions get new descriptors and never
+      rewrite the placeholder; cube eviction and cube rejection publish cube
+      views; failed publication retries; materials re-serialize on index
+      change.
 
 ## S3 — Non-camera passes own their inputs
 

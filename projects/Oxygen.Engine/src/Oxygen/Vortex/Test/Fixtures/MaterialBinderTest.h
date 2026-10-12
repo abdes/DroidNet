@@ -86,6 +86,10 @@ protected:
   // error.
   void SetTextureBinderErrorKey(const content::ResourceKey& key) const;
 
+  //! Test helper: the FakeTextureBinder publishes a new index for `key`.
+  void PublishTextureIndex(
+    const content::ResourceKey& key, ShaderVisibleIndex index) const;
+
 private:
   class FakeTextureBinder final : public resources::IResourceBinder {
   public:
@@ -103,6 +107,19 @@ private:
     }
 
     void SetErrorKey(content::ResourceKey key) { error_key_ = key; }
+
+    //! Publishes a new index for `key`, as when its texture version changes.
+    void PublishIndex(content::ResourceKey key, ShaderVisibleIndex index)
+    {
+      map_.insert_or_assign(key, index);
+      ++resident_content_revision_;
+    }
+
+    [[nodiscard]] auto GetResidentContentRevision() const noexcept
+      -> std::uint64_t override
+    {
+      return resident_content_revision_;
+    }
     void SetAllocateOnRequest(bool v) { allocate_on_request_ = v; }
 
     [[nodiscard]] auto GetOrAllocateTotalCalls() const -> uint32_t
@@ -176,6 +193,7 @@ private:
       1U,
     };
     std::optional<content::ResourceKey> error_key_;
+    std::uint64_t resident_content_revision_ { 0U };
     graphics::DescriptorAllocator* allocator_ {
       nullptr,
     };

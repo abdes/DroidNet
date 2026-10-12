@@ -100,10 +100,9 @@ descriptor allocator.
 - Intentional non-strategy cases:
   - Full-frame rewritten buffers (for example draw metadata streams) where
     indices are rewritten densely each frame and no slot release/reuse occurs.
-  - Stable-descriptor repointing systems (for example texture placeholder ->
-    final/error repointing) where descriptor index stability is a hard
-    contract; use Nexus generation/version primitives for stale async rejection,
-    but do not force slot reuse strategies.
+  - CPU-only identities that no GPU work reads (for example TextureBinder
+    entries, which async loads validate). Use the `IndexReuse` core directly
+    and finalize a retired identity at once; frame deferral protects nothing.
 
 #### Tracking scope
 
@@ -514,8 +513,9 @@ Renderer adoption snapshot (current):
 - `MaterialBinder`: Strategy A lifecycle with release/reclaim and telemetry.
 - `DrawMetadataEmitter`: Strategy A allocate-only usage by design (full-frame
   dense rewrite; no per-entry release/reclaim).
-- `TextureBinder`: Nexus generation/version usage by design (stable descriptor
-  index + descriptor repointing contract); not a slot-reuse strategy owner.
+- `TextureBinder`: `IndexReuse` core for CPU-only entry identities. Each
+  texture version gets its own descriptor, retired with its texture through
+  Graphics retirement; not a slot-reuse strategy owner.
 
 Operational Strategy B flow:
 

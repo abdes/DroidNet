@@ -48,72 +48,42 @@ namespace oxygen::vortex::resources {
  PAK files, loose cooked files, or in-memory buffers, via the `AssetLoader`
  abstraction.
 
- ### Primary behaviors
+ ### Versioned descriptors
 
- - **Stable SRV indices**: `GetOrAllocate()` returns a stable shader-visible SRV
-   index immediately. The SRV index is the value materials use in shaders and
-   must remain stable for the lifetime of the entry.
- - **Descriptor repointing model**: The implementation separates the shader
+ `GetOrAllocate()` returns the index the entry publishes now. Each texture
+ version gets its own descriptor; nothing recorded GPU work can read is
+ rewritten. A replaced version, with its descriptor, retires through
+ `Graphics::RetireResource` once the frames that may read it complete.
+ Consumers read the current index every frame, or re-resolve it when
+ `GetResidentContentRevision()` changes.
 
- visible SRV index from the descriptor backing that index. When a per-entry
+ An entry publishes, in turn:
 
- descriptor exists, the binder may `UpdateView` on that descriptor to point it
+ - the shared placeholder while its first load is in flight;
+ - its own descriptor once the upload completes;
+ - the shared error binding when loading fails;
+ - the shared placeholder of its shape (2D, cube or 2D array) once evicted.
 
- at a new `Texture` while keeping the same SRV index. This enables transparent
+ Placeholder and error bindings exist once per shape, so a shader always
+ reads a view of the dimension it declares. They live as long as the binder.
 
- replacement of placeholder textures with final textures.
- - **Versioned
- descriptor identity**: Each per-entry descriptor is tracked as a
-   Nexus-style
- versioned handle (index + generation). Async completions and
-   queued uploads
- are accepted only if their captured generation still matches.
+ ### Entry identity
 
- ### Placeholder / error strategy
-
- The binder uses three distinct cases by design:
- - **Global placeholder (fast fallback)**: a single shared placeholder created
-   in the constructor and used for the hot fast-path (e.g., opaque ResourceKey
-   `0`). This path does not allocate per-entry descriptors and therefore cannot
-   be transparently repointed per-entry.
- - **Per-entry placeholder (temporary, re-pointable)**: on normal allocation the
-   binder creates a per-entry placeholder texture and a descriptor view for that
-   entry. When the real texture finishes uploading the binder updates the
-   entry's descriptor to reference the final texture. The SRV index returned to
-   callers remains unchanged while the descriptor is repointed.
- - **Shared error texture (single sink)**: a single magenta/black error texture
-   is created once and reused for all failures. Entries may be repointed to this
-   shared error texture; the error texture itself is not recreated per-entry.
-
- These choices balance hot-path performance, predictable SRV indices, and
- transparent in-place replacement when desired.
-
- ### Failure policies
-
- The binder supports distinct failure behaviors (see `FailurePolicy`) such as
- binding the shared error texture immediately or keeping the per-entry
- placeholder bound when upload submission failed.
-
- ### Eviction policy
-
- On Content eviction, TextureBinder keeps the stable SRV index but repoints the
- descriptor to the global placeholder texture. Evicted entries are marked and
- will reload on the next `GetOrAllocate()` call. Late upload completions are
-
- discarded when the Nexus-tracked descriptor generation no longer matches.
+ Each entry life carries a Nexus `IndexReuse` handle. Async loads, upload
+ completions, retries and evictions capture it; eviction retires it, so work
+ issued for an earlier load is discarded instead of touching the reloaded
+ entry.
 
  ### Lifecycle (concise)
 
- 1. `OnFrameStart()` — begin frame; drain upload completions.
- 2. `GetOrAllocate()` — return stable SRV index, create per-entry state when
-    appropriate, and initiate async load.
- 3. Async upload completes — descriptor is updated or repointed; entry state
-    transitions accordingly.
+ 1. `OnFrameStart()` — process evictions and publish completed uploads.
+ 2. `GetOrAllocate()` — return the current index, create the entry when
+    needed, and initiate the async load.
+ 3. `EnsureFrameResources()` — submit queued uploads and deferred retries.
 
  @note Resource key `ResourceKey::kPlaceholder` is a valid, reserved fallback
    index used by the asset pipeline and fast-path code.
  @see MaterialBinder for integration example
- @see ResourceRegistry for stable index pattern
 */
 class TextureBinder : public IResourceBinder {
 public:
@@ -165,8 +135,8 @@ public:
   };
 
   //! Returns only the intended uploaded texture, never an error/placeholder.
-  //! While a lease is held, eviction cannot repoint its descriptor. Releasing
-  //! the last lease allows queued eviction on the next OnFrameStart().
+  //! While a lease is held, the entry is not evicted. Releasing the last lease
+  //! allows queued eviction on the next OnFrameStart().
   [[nodiscard]] OXGN_VRTX_API auto AcquireReadyTexture(
     const content::ResourceKey& key) -> std::shared_ptr<const ReadyTexture>;
 
@@ -210,12 +180,13 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto GetPendingUploadCount() const noexcept
     -> std::size_t;
-  //! Advances whenever any descriptor this binder serves is repointed, so a
-  //! host can tell that sampled texture content changed without a scene edit.
+  //! Advances whenever an entry publishes a different index, so a host can
+  //! tell that sampled texture content changed without a scene edit.
   [[nodiscard]] OXGN_VRTX_API auto GetResidentContentRevision() const noexcept
-    -> std::uint64_t;
-  //! Changes whenever an existing shader-visible texture descriptor is
-  //! repointed.
+    -> std::uint64_t override;
+  //! Revision of the content behind `descriptor`, assigned when the
+  //! descriptor is registered and never repeated by a recycled slot; zero
+  //! for a descriptor this binder does not serve.
   [[nodiscard]] OXGN_VRTX_API auto GetContentRevision(
     ShaderVisibleIndex descriptor) const noexcept -> std::uint64_t;
   [[nodiscard]] OXGN_VRTX_API auto GetPendingUploadBytes() const noexcept

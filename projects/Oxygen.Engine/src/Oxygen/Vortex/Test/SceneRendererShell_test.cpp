@@ -8,6 +8,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -31,7 +32,6 @@
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/Vertex.h>
@@ -396,7 +396,8 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   ASSERT_TRUE(
     renderer->OnAttached(observer_ptr<oxygen::IAsyncEngine> { &engine }));
   oxygen::engine::FrameContext frame;
-  const auto begin_renderer_frame = [&](SequenceNumber sequence, Slot slot) {
+  const auto begin_renderer_frame
+    = [&](SequenceNumber sequence, Slot slot) -> void {
     frame.SetCurrentPhase(oxygen::core::PhaseId::kFrameStart,
       oxygen::engine::internal::EngineTagFactory::Get());
     frame.SetFrameSequenceNumber(
@@ -437,10 +438,12 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
         .WithVertices(vertices)
         .WithIndices(std::vector<std::uint32_t> { 0U, 1U, 2U })
         .BeginSubMesh("Surface", material)
-        .WithMeshView({ .first_index = 0U,
+        .WithMeshView({
+          .first_index = 0U,
           .index_count = 3U,
           .first_vertex = 0U,
-          .vertex_count = 3U })
+          .vertex_count = 3U,
+        })
         .EndSubMesh()
         .Build();
   auto scene = std::make_shared<oxygen::scene::Scene>(
@@ -452,10 +455,10 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
       "/Test/Maintenance/" + std::to_string(index) + ".ogeo"));
     oxygen::data::pak::geometry::GeometryAssetDesc description {};
     description.lod_count = 1U;
-    std::ranges::copy(
-      std::array { -0.25F, -0.25F, 0.5F }, description.bounding_box_min);
-    std::ranges::copy(
-      std::array { 0.25F, 0.25F, 0.5F }, description.bounding_box_max);
+    std::ranges::copy(std::array { -0.25F, -0.25F, 0.5F },
+      std::begin(description.bounding_box_min));
+    std::ranges::copy(std::array { 0.25F, 0.25F, 0.5F },
+      std::begin(description.bounding_box_max));
     auto node = scene->CreateNode("Resident-" + std::to_string(index));
     ASSERT_TRUE(node.IsAlive());
     node.GetRenderable().SetGeometry(
@@ -464,12 +467,14 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   }
   scene->Update();
   auto parameters = oxygen::ResolvedView::Params {};
-  parameters.view_config.viewport = ViewPort { .top_left_x = 0.0F,
+  parameters.view_config.viewport = ViewPort {
+    .top_left_x = 0.0F,
     .top_left_y = 0.0F,
     .width = 64.0F,
     .height = 64.0F,
     .min_depth = 0.0F,
-    .max_depth = 1.0F };
+    .max_depth = 1.0F,
+  };
   parameters.near_plane = 0.0F;
   parameters.far_plane = 1.0F;
   const auto resolved = oxygen::ResolvedView(parameters);
@@ -485,6 +490,11 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   ASSERT_GE(
     graphics->buffer_log_.copies.size(), kAssetCount * kBuffersPerAsset);
   auto& registry = graphics->GetResourceRegistry();
+  // Retired resources leave the registry when their frame slot completes.
+  const auto complete_retired_frames = [&graphics] -> void {
+    graphics->GetDeferredReclaimer().ProcessAllDeferredReleases();
+  };
+  complete_retired_frames();
   const auto before = registry.GetRegisteredResourceCount();
   ASSERT_GE(before, kAssetCount * kBuffersPerAsset);
   const auto queue
@@ -499,7 +509,8 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   }
   begin_renderer_frame(SequenceNumber { 2U }, Slot { 1U });
   scene_renderer->OnFrameStart(frame);
-  const auto after_first = before - kLodBudget * kBuffersPerAsset;
+  complete_retired_frames();
+  const auto after_first = before - (kLodBudget * kBuffersPerAsset);
   EXPECT_EQ(registry.GetRegisteredResourceCount(), after_first);
   EXPECT_EQ(queue->submitted_batches, submissions);
   scene_renderer->OnStandaloneFrameStart(
@@ -508,14 +519,16 @@ NOLINT_TEST(SceneRendererShellProofSurfaceTest,
   context.frame_slot = Slot { 1U };
   scene_renderer->PrimePreparedViews(context);
   scene_renderer->OnFrameStart(frame);
+  complete_retired_frames();
   EXPECT_EQ(registry.GetRegisteredResourceCount(), after_first);
   EXPECT_EQ(queue->submitted_batches, submissions);
   context.scene.reset();
   scene.reset();
   begin_renderer_frame(SequenceNumber { 3U }, Slot { 2U });
   scene_renderer->OnFrameStart(frame);
+  complete_retired_frames();
   EXPECT_EQ(registry.GetRegisteredResourceCount(),
-    before - kAssetCount * kBuffersPerAsset);
+    before - (kAssetCount * kBuffersPerAsset));
   EXPECT_EQ(queue->submitted_batches, submissions);
   EXPECT_EQ(graphics->buffer_log_.copies.size(), copies);
 }

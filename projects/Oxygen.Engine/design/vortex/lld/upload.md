@@ -142,8 +142,8 @@ queued eviction, before reclamation or new geometry admission. Detached old asse
 admit new reads or publish late completions, and their cleanup cannot erase a
 reload. Reclamation budgets count resident LOD entries, not merely asset events.
 Existing Nexus handle generations and Graphics deferred release remain the
-physical lifetime authorities. Texture eviction work captures the descriptor
-generation at acceptance; delayed duplicates cannot evict a reload. Pinned
+physical lifetime authorities. Texture eviction work captures the entry identity
+at acceptance; delayed duplicates cannot evict a reload. Pinned
 accepted-revision leases remain usable, while unpinned pending evictions deny new
 ready leases and upload work. Prepare deferred actions before releasing registry
 or entry ownership; failed preparation retains the work for retry.
@@ -183,12 +183,13 @@ while an earlier frame may still read it
   buffer and its descriptor retire together through Graphics retirement.
   Callers never re-upload after growth; the in-place `Replace` path does not
   exist.
-- **Texture versions.** Each texture content version (placeholder, loaded,
-  error, evicted) has its own descriptor; the previous one retires through
-  Graphics retirement. Consumers read the binder's current index when they
-  serialize or publish: MaterialBinder re-serializes a material whose texture
-  indices changed, and per-frame bindings read the index each frame. A cube or
-  array entry falls back to a cube or array placeholder.
+- **Texture versions.** Each loaded texture version has its own descriptor; a
+  replaced version retires with its descriptor through Graphics retirement.
+  Placeholder and error bindings are shared, one per shape (2D, cube, 2D
+  array), and an entry falls back to the binding of its own shape. Consumers
+  read the binder's current index when they serialize or publish:
+  MaterialBinder re-serializes a material whose texture indices changed, and
+  per-frame bindings read the index each frame.
 - **Retirement.** Releasing a shader-visible resource uses Graphics
   retirement, which unregisters views and releases the resource after the
   frames that could read it complete. Immediate unregistration is reserved for

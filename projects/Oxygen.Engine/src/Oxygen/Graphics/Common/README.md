@@ -365,8 +365,8 @@ S7.1 uses these registry methods for LUT destinations and staging resources.
   acquisition for each used face rather than allocating all DSVs eagerly.
 - GPU state transitions and `RetainRegistration` remain at recording sites;
   constructing a bundle does not establish a GPU use or transition a resource.
-  Do not migrate TextureBinder's stable-descriptor replacement or unrelated
-  output pools in this slice.
+  TextureBinder registers one plain view per texture version and is not an
+  adopter; neither are unrelated output pools.
 
 **Checks:** failure at each initial-view index, retry/cleanup, correct domains,
 SRV/UAV mip ranges, typeless-depth SRV and lazy DSVs, backend close and resource

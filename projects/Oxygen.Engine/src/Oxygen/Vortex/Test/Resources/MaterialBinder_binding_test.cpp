@@ -558,4 +558,56 @@ NOLINT_TEST_F(MaterialBinderBindingTest, CacheHitDoesNotCallTextureBinder)
     TexBinderGetOrAllocateCallsForKey(normal_key), normal_calls_after_first);
 }
 
+//! A texture whose published index changes re-resolves the materials that
+//! use it on their next request; they upload again only if an index changed.
+NOLINT_TEST_F(
+  MaterialBinderBindingTest, ChangedTextureIndexReserializesItsMaterials)
+{
+  // Arrange
+  constexpr ResourceKey base_color_key { 9401U };
+  constexpr ResourceKey normal_key { 9402U };
+  constexpr ResourceKey unrelated_key { 9403U };
+  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+  MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 1 });
+  oxygen::vortex::sceneprep::MaterialRef ref;
+  ref.resolved_asset = MakeMaterial({
+    .base_color_key = base_color_key,
+    .normal_key = normal_key,
+    .raw_base_color_index = 7U,
+    .raw_normal_index = 8U,
+  });
+  ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+  ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
+  const auto handle = MatBinder().GetOrAllocate(ref);
+  ASSERT_TRUE(MatBinder().IsHandleValid(handle));
+  MatBinder().EnsureFrameResources();
+  const auto normal_index = MaterialConstants(handle).normal_texture_index;
+  const auto loaded = oxygen::ShaderVisibleIndex {
+    MaterialConstants(handle).base_color_texture_index.get() + 1000U,
+  };
+  auto& buffer_log = Gfx().buffer_log_;
+
+  // Act: the base color texture publishes its loaded version.
+  PublishTextureIndex(base_color_key, loaded);
+  buffer_log.copy_called = false;
+  EXPECT_EQ(MatBinder().GetOrAllocate(ref), handle);
+  MatBinder().EnsureFrameResources();
+
+  // Assert
+  EXPECT_EQ(MaterialConstants(handle).base_color_texture_index, loaded);
+  EXPECT_EQ(MaterialConstants(handle).normal_texture_index, normal_index);
+  EXPECT_TRUE(buffer_log.copy_called);
+
+  // Act: a texture this material does not use changes.
+  PublishTextureIndex(unrelated_key, oxygen::ShaderVisibleIndex { 5000U });
+  buffer_log.copy_called = false;
+  EXPECT_EQ(MatBinder().GetOrAllocate(ref), handle);
+  MatBinder().EnsureFrameResources();
+
+  // Assert: re-resolved, nothing to upload.
+  EXPECT_FALSE(buffer_log.copy_called);
+}
+
 } // namespace

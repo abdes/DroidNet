@@ -449,6 +449,23 @@ auto SerializeProceduralGridMaterialConstants(
   return constants;
 }
 
+constexpr std::size_t kMaterialTextureSlotCount = 6U;
+
+//! The texture slots of `constants`, in declaration order.
+[[nodiscard]] auto TextureIndices(
+  const oxygen::vortex::MaterialShadingConstants& constants) noexcept
+  -> std::array<oxygen::ShaderVisibleIndex, kMaterialTextureSlotCount>
+{
+  return {
+    constants.base_color_texture_index,
+    constants.normal_texture_index,
+    constants.metallic_texture_index,
+    constants.roughness_texture_index,
+    constants.ambient_occlusion_texture_index,
+    constants.emissive_texture_index,
+  };
+}
+
 } // namespace
 
 namespace oxygen::vortex::resources {
@@ -512,6 +529,10 @@ private:
   };
 
   auto MarkDirty(std::uint32_t index) -> void;
+  //! Re-resolves the texture indices of a material whose binder revision
+  //! changed; uploads it again only when an index changed.
+  auto RefreshTextureIndices(std::uint32_t index,
+    const vortex::sceneprep::MaterialRef& material) -> void;
   [[nodiscard]] auto FindIndexByHandle(
     vortex::sceneprep::MaterialHandle handle) const
     -> std::optional<std::uint32_t>;
@@ -531,6 +552,8 @@ private:
   std::vector<vortex::ProceduralGridMaterialConstants>
     procedural_grid_material_constants_;
   std::vector<std::uint64_t> material_keys_;
+  //! Texture binder revision each material's texture indices resolved at.
+  std::vector<std::uint64_t> texture_revisions_;
   std::vector<std::uint32_t> material_handle_generations_;
   //! Nonzero while the element waits for an upload submission.
   std::vector<std::uint8_t> dirty_pending_;
@@ -855,6 +878,19 @@ auto MaterialBinder::Impl::GetDirtyIndices() const noexcept
   return { dirty_indices_.data(), dirty_indices_.size() };
 }
 
+auto MaterialBinder::Impl::RefreshTextureIndices(const std::uint32_t index,
+  const vortex::sceneprep::MaterialRef& material) -> void
+{
+  const auto constants
+    = SerializeMaterialShadingConstants(material, *texture_binder_);
+  texture_revisions_.at(index) = texture_binder_->GetResidentContentRevision();
+  auto& current = material_shading_constants_.at(index);
+  if (TextureIndices(current) != TextureIndices(constants)) {
+    current = constants;
+    MarkDirty(index);
+  }
+}
+
 auto MaterialBinder::Impl::MarkDirty(const std::uint32_t index) -> void
 {
   if (index >= dirty_pending_.size()) {
@@ -987,35 +1023,9 @@ auto MaterialBinder::Impl::GetOrAllocate(
       materials_.at(idx) = material.resolved_asset;
       material_ptr_to_index_[material.resolved_asset.get()] = idx;
 
-      const auto& cached_asset = *material.resolved_asset;
-      const bool no_texture_sampling
-        = (cached_asset.GetFlags()
-            & oxygen::data::pak::render::kMaterialFlag_NoTextureSampling)
-        != 0U;
-      if (!no_texture_sampling) {
-        const auto needs_refresh
-          = [this](const content::ResourceKey key) -> bool {
-          return key.get() != 0U && !texture_binder_->IsResourceReady(key);
-        };
-
-        if (needs_refresh(cached_asset.GetBaseColorTextureKey())
-          || needs_refresh(cached_asset.GetNormalTextureKey())
-          || needs_refresh(cached_asset.GetMetallicTextureKey())
-          || needs_refresh(cached_asset.GetRoughnessTextureKey())
-          || needs_refresh(cached_asset.GetAmbientOcclusionTextureKey())
-          || needs_refresh(cached_asset.GetEmissiveTextureKey())
-          || needs_refresh(cached_asset.GetSpecularTextureKey())
-          || needs_refresh(cached_asset.GetSheenColorTextureKey())
-          || needs_refresh(cached_asset.GetClearcoatTextureKey())
-          || needs_refresh(cached_asset.GetClearcoatNormalTextureKey())
-          || needs_refresh(cached_asset.GetTransmissionTextureKey())
-          || needs_refresh(cached_asset.GetThicknessTextureKey())) {
-          material_shading_constants_.at(idx)
-            = SerializeMaterialShadingConstants(material, *texture_binder_);
-          procedural_grid_material_constants_.at(idx)
-            = SerializeProceduralGridMaterialConstants(material);
-          MarkDirty(idx);
-        }
+      if (texture_revisions_.at(idx)
+        != texture_binder_->GetResidentContentRevision()) {
+        RefreshTextureIndices(idx, material);
       }
 
       return it->second.handle;
@@ -1055,6 +1065,7 @@ auto MaterialBinder::Impl::GetOrAllocate(
       static_cast<std::size_t>(index) + 1U);
     material_refs_.resize(static_cast<std::size_t>(index) + 1U);
     procedural_grid_material_refs_.resize(static_cast<std::size_t>(index) + 1U);
+    texture_revisions_.resize(static_cast<std::size_t>(index) + 1U);
     // Publish the common size last; a failed earlier growth must be retried.
     materials_.resize(static_cast<std::size_t>(index) + 1U);
   }
@@ -1094,6 +1105,7 @@ auto MaterialBinder::Impl::GetOrAllocate(
 
   materials_.at(index) = material.resolved_asset;
   material_shading_constants_.at(index) = constants;
+  texture_revisions_.at(index) = texture_binder_->GetResidentContentRevision();
   procedural_grid_material_constants_.at(index) = procedural_grid_constants;
   material_refs_.at(index) = *ref;
   procedural_grid_material_refs_.at(index) = *grid_ref;
@@ -1154,6 +1166,7 @@ auto MaterialBinder::Impl::Update(
   material_ptr_to_index_[materials_.at(index).get()] = index;
 
   material_shading_constants_.at(index) = new_constants;
+  texture_revisions_.at(index) = texture_binder_->GetResidentContentRevision();
   procedural_grid_material_constants_.at(index) = new_procedural_grid_constants;
   UpdateKeyMappingForIndex(index, new_key);
   MarkDirty(index);

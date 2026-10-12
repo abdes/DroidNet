@@ -51,10 +51,9 @@ using oxygen::vortex::testing::TextureBinderTest;
   return texture->GetDescriptor().debug_name;
 }
 
-[[nodiscard]] auto MakePlaceholderDebugName(const ResourceKey key)
-  -> std::string
+[[nodiscard]] auto MakeTextureDebugName(const ResourceKey key) -> std::string
 {
-  return std::string("Placeholder(") + oxygen::content::to_string(key) + ")";
+  return std::string("Texture(") + oxygen::content::to_string(key) + ")";
 }
 
 [[nodiscard]] auto CountSrvViewCreationsForIndex(
@@ -91,7 +90,27 @@ using oxygen::vortex::testing::TextureBinderTest;
   return keys;
 }
 
-class TextureBinderUploadTest : public TextureBinderTest { };
+class TextureBinderUploadTest : public TextureBinderTest {
+protected:
+  auto StartUploaderFrame(const std::uint32_t slot) const -> void
+  {
+    Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+      oxygen::frame::Slot { slot });
+  }
+
+  //! Completes the submitted uploads and publishes them.
+  auto CompleteUploads() -> void
+  {
+    auto queue
+      = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
+    ASSERT_NE(queue, nullptr);
+    queue->CompleteThrough(queue->GetCurrentValue());
+    StartUploaderFrame(2);
+    BeginVisibleFrame();
+    StartUploaderFrame(3);
+    BeginVisibleFrame();
+  }
+};
 
 class TextureBinderBacklogTest : public TextureBinderTest {
 protected:
@@ -107,406 +126,203 @@ protected:
   }
 };
 
-//! Descriptor repoint must happen only after upload completion.
-/*! The binder stores an upload ticket and must not repoint the per-entry SRV
-    view until UploadCoordinator reports completion.
-
-    This test drives completion deterministically by controlling the fake
-    transfer queue's completed fence value.
-*/
-NOLINT_TEST_F(TextureBinderUploadTest, RepointOccursOnlyAfterCompletion)
+//! The loaded version is published only after upload completion, through a
+//! new descriptor; the shared placeholder descriptor is never rewritten.
+/*! Completion is driven deterministically by controlling the fake transfer
+    queue's completed fence value. */
+NOLINT_TEST_F(
+  TextureBinderUploadTest, NewDescriptorPublishedOnlyAfterCompletion)
 {
   // Arrange: preload a valid CPU-side texture resource so StartLoadTexture
   // completes immediately.
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
   const ResourceKey key
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
-
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      1,
-    });
-
-  const auto expected_placeholder_name = MakePlaceholderDebugName(key);
-
-  Gfx().srv_view_log_.events.clear();
-
-  const auto srv_index = TexBinder().GetOrAllocate(key);
-  const auto u_srv_index = srv_index.get();
-
+  StartUploaderFrame(1);
+  const auto placeholder = TexBinder().GetOrAllocate(ResourceKey::kPlaceholder);
+  const auto placeholder_views
+    = CountSrvViewCreationsForIndex(Gfx(), placeholder.get());
+  const auto revision_before = TexBinder().GetResidentContentRevision();
+  ASSERT_EQ(TexBinder().GetOrAllocate(key), placeholder);
   auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
 
-  const auto creations_after_allocate
-    = CountSrvViewCreationsForIndex(Gfx(), u_srv_index);
-  ASSERT_GE(creations_after_allocate, 1U);
-
-  const auto* const texture_before_completion
-    = LastSrvViewTextureForIndex(Gfx(), u_srv_index);
-  ASSERT_NE(texture_before_completion, nullptr);
-  EXPECT_EQ(
-    GetTextureDebugName(texture_before_completion), expected_placeholder_name);
-
-  // Simulate that the transfer queue has NOT completed yet.
+  // Act: the transfer queue has NOT completed yet.
   q->SetAutoComplete(false);
   q->CompleteThrough(0);
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      2,
-    });
-
-  // Act: binder frame start should not observe completion -> no repoint.
+  StartUploaderFrame(2);
   BeginVisibleFrame();
 
-  // Assert: no repoint while upload is incomplete.
-  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_srv_index),
-    creations_after_allocate);
+  // Assert: still the placeholder.
+  EXPECT_EQ(TexBinder().GetOrAllocate(key), placeholder);
+  EXPECT_FALSE(TexBinder().IsResourceReady(key));
 
-  // Complete exactly the submitted uploads; the maximum fence means device
-  // loss.
+  // Act: complete exactly the submitted uploads; the maximum fence means
+  // device loss.
   q->CompleteThrough(q->GetCurrentValue());
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      3,
-    });
-
-  // Act: binder should now observe completion and repoint.
+  StartUploaderFrame(3);
   BeginVisibleFrame();
 
-  // Assert: exactly one additional SRV view creation at the same index.
-  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_srv_index),
-    creations_after_allocate + 1U);
-
-  const auto* const texture_after_completion
-    = LastSrvViewTextureForIndex(Gfx(), u_srv_index);
-  ASSERT_NE(texture_after_completion, nullptr);
-  EXPECT_NE(
-    GetTextureDebugName(texture_after_completion), expected_placeholder_name);
-  EXPECT_NE(GetTextureDebugName(texture_after_completion), "ErrorTexture");
-  EXPECT_NE(texture_after_completion, texture_before_completion);
+  // Assert: a new descriptor for the loaded texture.
+  const auto loaded = TexBinder().GetOrAllocate(key);
+  EXPECT_NE(loaded, placeholder);
+  EXPECT_TRUE(TexBinder().IsResourceReady(key));
+  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), loaded.get()), 1U);
+  EXPECT_EQ(
+    GetTextureDebugName(LastSrvViewTextureForIndex(Gfx(), loaded.get())),
+    MakeTextureDebugName(key));
+  EXPECT_EQ(
+    CountSrvViewCreationsForIndex(Gfx(), placeholder.get()), placeholder_views);
+  EXPECT_GT(TexBinder().GetResidentContentRevision(), revision_before);
+  EXPECT_GT(TexBinder().GetContentRevision(loaded),
+    TexBinder().GetContentRevision(placeholder));
 }
 
 //! Upload completion must not be observed without OnFrameStart().
-/*! This verifies the contract that OnFrameStart() is the mechanism that drains
-    upload completions and triggers descriptor repointing.
-*/
+/*! OnFrameStart() is the mechanism that drains upload completions and
+    publishes the loaded version. */
 NOLINT_TEST_F(TextureBinderUploadTest, CompletionNotObservedWithoutOnFrameStart)
 {
   // Arrange
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
   const ResourceKey key
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
-
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      1,
-    });
-
-  Gfx().srv_view_log_.events.clear();
-  const auto index = TexBinder().GetOrAllocate(key);
-  const auto u_index = index.get();
-
-  const auto expected_placeholder_name = MakePlaceholderDebugName(key);
-
+  StartUploaderFrame(1);
+  const auto placeholder = TexBinder().GetOrAllocate(key);
   auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
   ASSERT_NE(q, nullptr);
 
-  const auto creations_after_allocate
-    = CountSrvViewCreationsForIndex(Gfx(), u_index);
-  ASSERT_GE(creations_after_allocate, 1U);
-
-  // Simulate completion but do NOT call BeginVisibleFrame().
+  // Act: complete, but do NOT call BeginVisibleFrame().
   q->CompleteThrough(q->GetCurrentValue());
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      2,
-    });
+  StartUploaderFrame(2);
+
+  // Assert
+  EXPECT_EQ(TexBinder().GetOrAllocate(key), placeholder);
+
+  // Act: drain. OnFrameStart() only submits and records an upload ticket;
+  // completion becomes observable after UploadCoordinator advances one frame
+  // with the ticket present.
+  BeginVisibleFrame();
+  StartUploaderFrame(3);
+  BeginVisibleFrame();
+
+  // Assert
+  const auto loaded = TexBinder().GetOrAllocate(key);
+  EXPECT_NE(loaded, placeholder);
+  EXPECT_EQ(
+    GetTextureDebugName(LastSrvViewTextureForIndex(Gfx(), loaded.get())),
+    MakeTextureDebugName(key));
+}
+
+//! A normal key allocates a descriptor only for its loaded version.
+NOLINT_TEST_F(TextureBinderUploadTest, NormalKeyAllocatesOnCompletionOnly)
+{
+  // Arrange
+  const auto before = AllocatedSrvCount();
+  const auto payload = MakeCookedTexture1x1Rgba8Payload();
+  const ResourceKey key
+    = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
+  StartUploaderFrame(1);
 
   // Act
   (void)TexBinder().GetOrAllocate(key);
 
-  // Assert: still no repoint without BeginVisibleFrame().
-  EXPECT_EQ(
-    CountSrvViewCreationsForIndex(Gfx(), u_index), creations_after_allocate);
-
-  const auto* const still_placeholder
-    = LastSrvViewTextureForIndex(Gfx(), u_index);
-  ASSERT_NE(still_placeholder, nullptr);
-  EXPECT_EQ(GetTextureDebugName(still_placeholder), expected_placeholder_name);
-
-  // Drain completions.
-  //
-  // Note: OnFrameStart() only submits and records an upload ticket. Upload
-  // completion becomes observable after UploadCoordinator advances at least
-  // one frame with the ticket present.
-  BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      3,
-    });
-  BeginVisibleFrame();
-
-  // Assert: repoint occurs once draining happens.
-  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_index),
-    creations_after_allocate + 1U);
-
-  const auto* const after_drain = LastSrvViewTextureForIndex(Gfx(), u_index);
-  ASSERT_NE(after_drain, nullptr);
-  EXPECT_NE(GetTextureDebugName(after_drain), expected_placeholder_name);
-  EXPECT_NE(GetTextureDebugName(after_drain), "ErrorTexture");
-}
-
-//! Reserved keys never use per-entry placeholders and never repoint.
-/*! Normal resource keys allocate a per-entry placeholder and later repoint the
-    descriptor once the upload completes. Reserved fast-path keys
-    (ResourceKey::kFallback and ResourceKey::kPlaceholder) must not allocate
-    per-entry descriptors and must not repoint, even as uploads complete.
-*/
-NOLINT_TEST_F(
-  TextureBinderUploadTest, NormalKeyAllocatesAndRepoinsAfterCompletion)
-{
-  // Arrange
-  const auto before = AllocatedSrvCount();
-
-  const auto payload = MakeCookedTexture1x1Rgba8Payload();
-  const ResourceKey normal_key
-    = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
-
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      1,
-    });
-
-  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
-  ASSERT_NE(q, nullptr);
+  // Assert: loading allocates nothing.
+  EXPECT_EQ(AllocatedSrvCount(), before);
 
   // Act
-  const auto normal_index = TexBinder().GetOrAllocate(normal_key);
+  CompleteUploads();
 
-  // Assert: normal key allocates a per-entry descriptor.
+  // Assert: one descriptor for the loaded version.
   EXPECT_EQ(AllocatedSrvCount(), before + 1U);
-
-  const auto u_normal = normal_index.get();
-  const auto normal_creations_before
-    = CountSrvViewCreationsForIndex(Gfx(), u_normal);
-
-  ASSERT_GE(normal_creations_before, 1U);
-
-  const auto* const normal_texture_before
-    = LastSrvViewTextureForIndex(Gfx(), u_normal);
-
-  ASSERT_NE(normal_texture_before, nullptr);
-  EXPECT_EQ(GetTextureDebugName(normal_texture_before),
-    MakePlaceholderDebugName(normal_key));
-
-  // Drive completion and drain.
-  q->CompleteThrough(q->GetCurrentValue());
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      2,
-    });
-  BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      3,
-    });
-  BeginVisibleFrame();
-
-  // Assert: normal key repoints once.
-  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_normal),
-    normal_creations_before + 1U);
-
-  const auto* const normal_texture_after
-    = LastSrvViewTextureForIndex(Gfx(), u_normal);
-
-  ASSERT_NE(normal_texture_after, nullptr);
-
-  EXPECT_NE(normal_texture_after, normal_texture_before);
-  EXPECT_NE(GetTextureDebugName(normal_texture_after), "ErrorTexture");
+  EXPECT_TRUE(TexBinder().IsResourceReady(key));
 }
 
-//! Tight-packed cooked layouts must upload and repoint correctly.
+//! Tight-packed cooked layouts must upload and publish correctly.
 /*! Verifies that TextureBinder consumes the payload layout table rather than
     enforcing D3D12-only alignment assumptions (row pitch 256, placement 512).
 */
-NOLINT_TEST_F(TextureBinderUploadTest, TightPackedPayload_UploadsAndRepoints)
+NOLINT_TEST_F(TextureBinderUploadTest, TightPackedPayload_UploadsAndPublishes)
 {
   // Arrange
   const auto payload = MakeTightPackedTexture1x1Rgba8Payload();
   const ResourceKey key
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
+  StartUploaderFrame(1);
+  const auto placeholder = TexBinder().GetOrAllocate(key);
 
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      1,
-    });
+  // Act
+  CompleteUploads();
 
-  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
-  ASSERT_NE(q, nullptr);
-
-  Gfx().srv_view_log_.events.clear();
-
-  const auto index = TexBinder().GetOrAllocate(key);
-  const auto u_index = index.get();
-
-  const auto expected_placeholder_name = MakePlaceholderDebugName(key);
-  const auto creations_after_allocate
-    = CountSrvViewCreationsForIndex(Gfx(), u_index);
-  ASSERT_GE(creations_after_allocate, 1U);
-
-  const auto* const texture_before = LastSrvViewTextureForIndex(Gfx(), u_index);
-  ASSERT_NE(texture_before, nullptr);
-  EXPECT_EQ(GetTextureDebugName(texture_before), expected_placeholder_name);
-
-  // Drive completion and drain.
-  q->CompleteThrough(q->GetCurrentValue());
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      2,
-    });
-  BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      3,
-    });
-  BeginVisibleFrame();
-
-  // Assert: repointed once and not to the error texture.
-  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_index),
-    creations_after_allocate + 1U);
-  const auto* const texture_after = LastSrvViewTextureForIndex(Gfx(), u_index);
-  ASSERT_NE(texture_after, nullptr);
-  EXPECT_NE(GetTextureDebugName(texture_after), expected_placeholder_name);
-  EXPECT_NE(GetTextureDebugName(texture_after), "ErrorTexture");
+  // Assert: published, not as the error texture.
+  const auto loaded = TexBinder().GetOrAllocate(key);
+  EXPECT_NE(loaded, placeholder);
+  EXPECT_FALSE(TexBinder().HasResourceFailed(key));
+  EXPECT_EQ(
+    GetTextureDebugName(LastSrvViewTextureForIndex(Gfx(), loaded.get())),
+    MakeTextureDebugName(key));
 }
 
-//! BC7 mip chains must upload and repoint correctly.
+//! BC7 mip chains must upload and publish correctly.
 /*! Ensures the binder supports block-compressed textures by consuming cooked
     layout tables and using full-subresource upload descriptors for all mips.
 */
-NOLINT_TEST_F(TextureBinderUploadTest, Bc7MipChain_UploadsAndRepoints)
+NOLINT_TEST_F(TextureBinderUploadTest, Bc7MipChain_UploadsAndPublishes)
 {
   // Arrange
   const auto payload = MakeCookedTexture8x8Bc7MipChainPayload();
   const ResourceKey key
     = Loader().PreloadCookedTexture(std::span(payload.data(), payload.size()));
+  StartUploaderFrame(1);
+  const auto placeholder = TexBinder().GetOrAllocate(key);
 
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      1,
-    });
+  // Act
+  CompleteUploads();
 
-  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
-  ASSERT_NE(q, nullptr);
-
-  Gfx().srv_view_log_.events.clear();
-
-  const auto index = TexBinder().GetOrAllocate(key);
-  const auto u_index = index.get();
-
-  const auto expected_placeholder_name = MakePlaceholderDebugName(key);
-  const auto creations_after_allocate
-    = CountSrvViewCreationsForIndex(Gfx(), u_index);
-  ASSERT_GE(creations_after_allocate, 1U);
-
-  const auto* const texture_before = LastSrvViewTextureForIndex(Gfx(), u_index);
-  ASSERT_NE(texture_before, nullptr);
-  EXPECT_EQ(GetTextureDebugName(texture_before), expected_placeholder_name);
-
-  // Drive completion and drain.
-  q->CompleteThrough(q->GetCurrentValue());
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      2,
-    });
-  BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      3,
-    });
-  BeginVisibleFrame();
-
-  // Assert: repointed once and not to the error texture.
-  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_index),
-    creations_after_allocate + 1U);
-  const auto* const texture_after = LastSrvViewTextureForIndex(Gfx(), u_index);
-  ASSERT_NE(texture_after, nullptr);
-  EXPECT_NE(GetTextureDebugName(texture_after), expected_placeholder_name);
-  EXPECT_NE(GetTextureDebugName(texture_after), "ErrorTexture");
+  // Assert: published with the full mip chain, not as the error texture.
+  const auto loaded = TexBinder().GetOrAllocate(key);
+  EXPECT_NE(loaded, placeholder);
+  EXPECT_FALSE(TexBinder().HasResourceFailed(key));
+  EXPECT_EQ(
+    GetTextureDebugName(LastSrvViewTextureForIndex(Gfx(), loaded.get())),
+    MakeTextureDebugName(key));
+  EXPECT_GT(TexBinder().TryGetMipLevels(key).value_or(0U), 1U);
 }
 
-//! Reserved keys do not allocate per-entry descriptors and never repoint.
+//! Reserved keys do not allocate descriptors and are never rewritten.
 /*! Reserved fast-path keys (ResourceKey::kFallback and
-   ResourceKey::kPlaceholder) must not allocate per-entry descriptors and must
-   never repoint, even as uploads complete.
-*/
+    ResourceKey::kPlaceholder) resolve to the shared placeholder, whatever
+    uploads complete. */
 NOLINT_TEST_F(TextureBinderUploadTest, ReservedKeysDoNotAllocateAndDoNotRepoint)
 {
   // Arrange
   const auto before = AllocatedSrvCount();
-
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      1,
-    });
-
-  auto q = Gfx().GetFakeCommandQueue(oxygen::graphics::QueueRole::kTransfer);
-  ASSERT_NE(q, nullptr);
+  StartUploaderFrame(1);
 
   // Act
   const auto fallback_index = TexBinder().GetOrAllocate(ResourceKey::kFallback);
   const auto placeholder_index
     = TexBinder().GetOrAllocate(ResourceKey::kPlaceholder);
 
-  // Assert: reserved keys do not allocate per-entry descriptors.
+  // Assert: reserved keys do not allocate descriptors.
   EXPECT_EQ(AllocatedSrvCount(), before);
+  EXPECT_EQ(fallback_index, placeholder_index);
+  const auto views_before
+    = CountSrvViewCreationsForIndex(Gfx(), placeholder_index.get());
+  ASSERT_EQ(views_before, 1U);
+  const auto* const texture_before
+    = LastSrvViewTextureForIndex(Gfx(), placeholder_index.get());
+  ASSERT_NE(texture_before, nullptr);
+  EXPECT_EQ(GetTextureDebugName(texture_before), "TextureBinder.Placeholder2D");
 
-  const auto u_fallback = fallback_index.get();
-  const auto u_placeholder = placeholder_index.get();
+  // Act
+  CompleteUploads();
 
-  const auto fallback_creations_before
-    = CountSrvViewCreationsForIndex(Gfx(), u_fallback);
-  const auto placeholder_creations_before
-    = CountSrvViewCreationsForIndex(Gfx(), u_placeholder);
-
-  ASSERT_GE(fallback_creations_before, 1U);
-  ASSERT_GE(placeholder_creations_before, 1U);
-
-  const auto* const fallback_texture_before
-    = LastSrvViewTextureForIndex(Gfx(), u_fallback);
-  const auto* const placeholder_texture_before
-    = LastSrvViewTextureForIndex(Gfx(), u_placeholder);
-
-  ASSERT_NE(fallback_texture_before, nullptr);
-  ASSERT_NE(placeholder_texture_before, nullptr);
-
-  EXPECT_EQ(GetTextureDebugName(fallback_texture_before), "FallbackTexture");
-  EXPECT_EQ(GetTextureDebugName(placeholder_texture_before), "FallbackTexture");
-
-  // Drive completion and drain.
-  q->CompleteThrough(q->GetCurrentValue());
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot {
-      2,
-    });
-  BeginVisibleFrame();
-
-  // Assert: no repoint for reserved keys.
-  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_fallback),
-    fallback_creations_before);
-  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), u_placeholder),
-    placeholder_creations_before);
-
-  const auto* const fallback_texture_after
-    = LastSrvViewTextureForIndex(Gfx(), u_fallback);
-  const auto* const placeholder_texture_after
-    = LastSrvViewTextureForIndex(Gfx(), u_placeholder);
-
-  ASSERT_NE(fallback_texture_after, nullptr);
-  ASSERT_NE(placeholder_texture_after, nullptr);
-
-  EXPECT_EQ(fallback_texture_after, fallback_texture_before);
-  EXPECT_EQ(placeholder_texture_after, placeholder_texture_before);
+  // Assert: never rewritten.
+  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), placeholder_index.get()),
+    views_before);
+  EXPECT_EQ(
+    LastSrvViewTextureForIndex(Gfx(), placeholder_index.get()), texture_before);
 }
 
 //! Pending decoded uploads must stay within a fixed byte budget; excess loads
@@ -596,7 +412,7 @@ NOLINT_TEST_F(TextureBinderBacklogTest,
 
 class TextureBinderCompletionBudgetTest : public TextureBinderTest {
 protected:
-  auto BinderLimits() const
+  [[nodiscard]] auto BinderLimits() const
     -> oxygen::vortex::resources::TextureBinder::UploadLimits override
   {
     auto limits = oxygen::vortex::resources::TextureBinder::UploadLimits {};
@@ -618,45 +434,48 @@ NOLINT_TEST_F(
     oxygen::frame::Slot { 1 });
   for (std::size_t completed = 1U; completed <= keys.size(); ++completed) {
     BeginVisibleFrame();
-    EXPECT_EQ(
-      std::ranges::count_if(
-        keys, [&](const auto key) { return TexBinder().IsResourceReady(key); }),
+    EXPECT_EQ(std::ranges::count_if(keys,
+                [&](const auto key) -> bool {
+                  return TexBinder().IsResourceReady(key);
+                }),
       completed);
   }
 }
 
-NOLINT_TEST_F(TextureBinderUploadTest,
-  FailedPublicationKeepsItsWorkAndStableDescriptorForRetry)
+//! A failed view registration keeps the completion queued; the next frame
+//! publishes the loaded version.
+NOLINT_TEST_F(TextureBinderUploadTest, FailedPublicationKeepsItsWorkForRetry)
 {
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
   const auto key = Loader().PreloadCookedTexture(payload);
-  const auto index = TexBinder().GetOrAllocate(key);
+  const auto placeholder = TexBinder().GetOrAllocate(key);
   BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
-  const auto before = CountSrvViewCreationsForIndex(Gfx(), index.get());
+  StartUploaderFrame(1);
+  const auto descriptors = AllocatedSrvCount();
   Gfx().SetThrowOnTextureViewCreation(true);
   EXPECT_THROW(BeginVisibleFrame(), std::runtime_error);
   EXPECT_FALSE(TexBinder().IsResourceReady(key));
-  EXPECT_EQ(TexBinder().GetOrAllocate(key), index);
-  EXPECT_EQ(CountSrvViewCreationsForIndex(Gfx(), index.get()), before);
+  EXPECT_EQ(TexBinder().GetOrAllocate(key), placeholder);
+  EXPECT_EQ(AllocatedSrvCount(), descriptors);
   Gfx().SetThrowOnTextureViewCreation(false);
   BeginVisibleFrame();
   EXPECT_TRUE(TexBinder().IsResourceReady(key));
-  EXPECT_EQ(TexBinder().GetOrAllocate(key), index);
+  EXPECT_NE(TexBinder().GetOrAllocate(key), placeholder);
 }
 
 #if defined(_MSC_VER) && defined(_DEBUG)
-NOLINT_TEST_F(TextureBinderUploadTest,
-  RetirementAllocationFailurePreservesPendingPublication)
+//! An allocation failure while publishing registers nothing; the next frame
+//! publishes the loaded version.
+NOLINT_TEST_F(
+  TextureBinderUploadTest, AllocationFailurePreservesPendingPublication)
 {
   const auto payload = MakeCookedTexture1x1Rgba8Payload();
   const auto key = Loader().PreloadCookedTexture(payload);
-  const auto index = TexBinder().GetOrAllocate(key);
+  const auto placeholder = TexBinder().GetOrAllocate(key);
   BeginVisibleFrame();
-  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
-    oxygen::frame::Slot { 1 });
+  StartUploaderFrame(1);
   const auto before = Gfx().GetResourceRegistry().GetRegisteredResourceCount();
+  const auto descriptors = AllocatedSrvCount();
   bool failed = false;
   {
     const oxygen::graphics::testing::HeapAllocationFailure deny_allocations;
@@ -668,16 +487,17 @@ NOLINT_TEST_F(TextureBinderUploadTest,
   }
   EXPECT_TRUE(failed);
   EXPECT_EQ(Gfx().GetResourceRegistry().GetRegisteredResourceCount(), before);
-  EXPECT_EQ(TexBinder().GetOrAllocate(key), index);
+  EXPECT_EQ(AllocatedSrvCount(), descriptors);
+  EXPECT_EQ(TexBinder().GetOrAllocate(key), placeholder);
   BeginVisibleFrame();
   EXPECT_TRUE(TexBinder().IsResourceReady(key));
-  EXPECT_EQ(TexBinder().GetOrAllocate(key), index);
+  EXPECT_NE(TexBinder().GetOrAllocate(key), placeholder);
 }
 #endif
 
 class TextureBinderDecodedBudgetTest : public TextureBinderTest {
 protected:
-  auto BinderLimits() const
+  [[nodiscard]] auto BinderLimits() const
     -> oxygen::vortex::resources::TextureBinder::UploadLimits override
   {
     auto limits = oxygen::vortex::resources::TextureBinder::UploadLimits {};
@@ -744,8 +564,6 @@ NOLINT_TEST_F(
   EXPECT_FALSE(TexBinder().IsResourceReady(keys.at(2)));
 }
 
-} // namespace
-
 NOLINT_TEST_F(
   TextureBinderDecodedBudgetTest, NewArrivalsCannotStarveCleanupOfEarlierItems)
 {
@@ -764,3 +582,5 @@ NOLINT_TEST_F(
   }
   EXPECT_EQ(TexBinder().GetPendingUploadCount(), keys.size() - 1U);
 }
+
+} // namespace

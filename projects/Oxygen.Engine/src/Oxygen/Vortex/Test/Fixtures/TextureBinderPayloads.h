@@ -266,6 +266,61 @@ namespace detail {
   return bytes;
 }
 
+//! A tight-packed 1x1 cube: six 4-byte faces, one mip each. `format` other
+//! than RGBA8 describes the same bytes, to exercise format rejection.
+[[nodiscard]] inline auto MakeTightPackedTextureCube1x1Rgba8Payload(
+  const Format format = Format::kRGBA8UNorm) -> std::vector<uint8_t>
+{
+  using data::pak::core::TextureResourceDesc;
+  using data::pak::render::SubresourceLayout;
+
+  constexpr std::uint32_t kFaceCount = 6U;
+  constexpr std::uint32_t kFaceBytes = 4U;
+
+  TextureResourceDesc desc {};
+  desc.data_offset = sizeof(desc);
+  // desc.size_bytes set after v4 payload is built.
+  desc.texture_type = static_cast<uint8_t>(TextureType::kTextureCube);
+  desc.compression_type = 0;
+  desc.width = 1U;
+  desc.height = 1U;
+  desc.depth = 1U;
+  desc.array_layers = kFaceCount;
+  desc.mip_levels = 1U;
+  desc.format = static_cast<uint8_t>(format);
+  desc.alignment = 256U;
+
+  const std::vector<std::uint8_t> data_region(
+    static_cast<std::size_t>(kFaceCount) * kFaceBytes, 0xFFU);
+  std::array<SubresourceLayout, kFaceCount> layouts {};
+  for (std::uint32_t face = 0U; face < kFaceCount; ++face) {
+    layouts.at(face) = SubresourceLayout {
+      .offset_bytes = face * kFaceBytes,
+      .row_pitch_bytes = kFaceBytes,
+      .size_bytes = kFaceBytes,
+    };
+  }
+
+  auto payload = detail::BuildV4TexturePayload(desc, layouts, data_region);
+  desc.size_bytes = static_cast<std::uint32_t>(payload.size());
+
+  std::vector<uint8_t> bytes;
+  bytes.resize(sizeof(desc) + payload.size());
+  const auto bytes_span = std::as_writable_bytes(std::span {
+    bytes,
+  });
+  detail::CopyBytes(bytes_span.subspan(0, sizeof(desc)),
+    std::as_bytes(std::span {
+      &desc,
+      1,
+    }));
+  detail::CopyBytes(bytes_span.subspan(sizeof(desc), payload.size()),
+    std::as_bytes(std::span {
+      payload,
+    }));
+  return bytes;
+}
+
 [[nodiscard]] inline auto MakeInvalidTexture1x1Rgba8Payload_RowPitchTooSmall()
   -> std::vector<uint8_t>
 {

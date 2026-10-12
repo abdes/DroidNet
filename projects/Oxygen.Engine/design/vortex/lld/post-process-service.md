@@ -980,8 +980,9 @@ no accepted revision, mark metering unavailable and retain Auto initialization;
 an independent locked solve still follows its normal precedence.
 
 TextureBinder's ready-texture lease retains the exact uploaded texture and SRV.
-A queued Content eviction may release CPU residency but cannot repoint the GPU
-descriptor until all leases retire. PostProcessService holds one lease per
+A queued Content eviction may release CPU residency but cannot evict the entry
+until all leases retire; the evicted version and its descriptor then retire
+through Graphics retirement. PostProcessService holds one lease per
 accepted view revision and keeps each frame's sampled leases in the existing
 frame-slot retirement cycle. Removing a view or changing a mask releases its
 accepted lease; frame readers still keep it alive. The binder outlives its

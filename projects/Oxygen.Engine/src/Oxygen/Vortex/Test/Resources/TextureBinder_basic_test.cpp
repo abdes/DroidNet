@@ -65,14 +65,14 @@ using oxygen::vortex::testing::TextureBinderTest;
 
 class TextureBinderBasicTest : public TextureBinderTest { };
 
-//! The same key must always map to the same bindless SRV index.
-/*! The TextureBinder must not allocate multiple descriptors for repeated
-    requests of the same resource key. */
-NOLINT_TEST_F(TextureBinderBasicTest, SameKey_IsStable)
+//! Repeated requests for a loading key return the same index and allocate no
+//! descriptor: the entry publishes the shared placeholder until it loads.
+NOLINT_TEST_F(TextureBinderBasicTest, LoadingKey_PublishesSharedPlaceholder)
 {
   // Arrange
   const auto before = AllocatedSrvCount();
   const ResourceKey key = Loader().MintSyntheticTextureKey();
+  const auto placeholder = TexBinder().GetOrAllocate(ResourceKey::kPlaceholder);
 
   // Act
   const auto index_0 = TexBinder().GetOrAllocate(key);
@@ -80,13 +80,13 @@ NOLINT_TEST_F(TextureBinderBasicTest, SameKey_IsStable)
 
   // Assert
   EXPECT_EQ(index_0, index_1);
-  EXPECT_EQ(AllocatedSrvCount(), before + 1U);
+  EXPECT_EQ(index_0, placeholder);
+  EXPECT_EQ(AllocatedSrvCount(), before);
 }
 
-//! Different keys must map to different SRV indices.
-/*! Allocating distinct resource keys must allocate distinct shader-visible
-    descriptors. */
-NOLINT_TEST_F(TextureBinderBasicTest, DifferentKeys_AreDistinct)
+//! Loading keys share the placeholder; they get distinct descriptors only
+//! when their own versions load.
+NOLINT_TEST_F(TextureBinderBasicTest, LoadingKeys_ShareThePlaceholder)
 {
   // Arrange
   const auto before = AllocatedSrvCount();
@@ -98,8 +98,8 @@ NOLINT_TEST_F(TextureBinderBasicTest, DifferentKeys_AreDistinct)
   const auto index_b = TexBinder().GetOrAllocate(key_b);
 
   // Assert
-  EXPECT_NE(index_a, index_b);
-  EXPECT_EQ(AllocatedSrvCount(), before + 2U);
+  EXPECT_EQ(index_a, index_b);
+  EXPECT_EQ(AllocatedSrvCount(), before);
 }
 
 //! Reserved placeholder key must not allocate per-entry descriptors.
@@ -120,7 +120,7 @@ NOLINT_TEST_F(TextureBinderBasicTest, PlaceholderKey_NoAllocation)
 
   const auto* const texture = LastSrvViewTextureForIndex(Gfx(), idx_0.get());
   ASSERT_NE(texture, nullptr);
-  EXPECT_EQ(GetTextureDebugName(texture), "FallbackTexture");
+  EXPECT_EQ(GetTextureDebugName(texture), "TextureBinder.Placeholder2D");
 }
 
 NOLINT_TEST_F(
@@ -135,7 +135,7 @@ NOLINT_TEST_F(
   EXPECT_FALSE(TexBinder().IsResourceReady(ResourceKey::kError));
   const auto* texture = LastSrvViewTextureForIndex(Gfx(), first.get());
   ASSERT_NE(texture, nullptr);
-  EXPECT_EQ(GetTextureDebugName(texture), "ErrorTexture");
+  EXPECT_EQ(GetTextureDebugName(texture), "TextureBinder.Error2D");
 }
 
 //! Reserved fallback key must not allocate per-entry descriptors.
@@ -156,7 +156,7 @@ NOLINT_TEST_F(TextureBinderBasicTest, FallbackKey_NoAllocation)
 
   const auto* const texture = LastSrvViewTextureForIndex(Gfx(), idx_0.get());
   ASSERT_NE(texture, nullptr);
-  EXPECT_EQ(GetTextureDebugName(texture), "FallbackTexture");
+  EXPECT_EQ(GetTextureDebugName(texture), "TextureBinder.Placeholder2D");
 }
 
 //! Reserved keys must never bind the shared error texture.
@@ -172,7 +172,7 @@ NOLINT_TEST_F(TextureBinderBasicTest, ReservedKeys_NeverBindErrorTexture)
   const auto before = AllocatedSrvCount();
 
   const auto* const error_texture
-    = FindLastTextureByDebugName(Gfx(), "ErrorTexture");
+    = FindLastTextureByDebugName(Gfx(), "TextureBinder.Error2D");
   ASSERT_NE(error_texture, nullptr);
 
   // Act
@@ -190,7 +190,8 @@ NOLINT_TEST_F(TextureBinderBasicTest, ReservedKeys_NeverBindErrorTexture)
     = LastSrvViewTextureForIndex(Gfx(), placeholder_index.get());
   ASSERT_NE(placeholder_texture, nullptr);
   EXPECT_NE(placeholder_texture, error_texture);
-  EXPECT_EQ(GetTextureDebugName(placeholder_texture), "FallbackTexture");
+  EXPECT_EQ(
+    GetTextureDebugName(placeholder_texture), "TextureBinder.Placeholder2D");
 }
 
 //! Cache hits must not recreate SRV views.
@@ -217,24 +218,26 @@ NOLINT_TEST_F(TextureBinderBasicTest, CacheHit_DoesNotRecreateView)
     CountSrvViewCreationsForIndex(Gfx(), u_index), creations_after_first);
 }
 
-//! Shared fallback textures must unregister their SRV descriptors on teardown.
-/*! TextureBinder owns global error/placeholder textures. Their registry entries
-    must be released before Graphics teardown, otherwise ResourceRegistry keeps
-    lingering resources alive at process exit. */
-NOLINT_TEST_F(
-  TextureBinderBasicTest, Teardown_ReleasesSharedFallbackDescriptors)
+//! Shared fallback textures retire their descriptors on teardown.
+/*! TextureBinder owns one placeholder and one error texture per shape (2D,
+    cube, 2D array). Teardown retires them; their descriptors return to the
+    allocator once the frames that may read them complete. */
+NOLINT_TEST_F(TextureBinderBasicTest, Teardown_RetiresSharedFallbackDescriptors)
 {
-  ASSERT_EQ(AllocatedSrvCount(), 2U);
+  constexpr uint32_t kFallbackDescriptors = 6U;
+  ASSERT_EQ(AllocatedSrvCount(), kFallbackDescriptors);
 
   DestroyBinder();
+  EXPECT_EQ(AllocatedSrvCount(), kFallbackDescriptors);
+  CompleteRetiredFrames();
 
   EXPECT_EQ(AllocatedSrvCount(), 0U);
 }
 
-//! A new descriptor advances the binder-wide resident revision; a cache hit
-//! leaves it unchanged.
+//! Allocating an entry publishes the existing placeholder, which is not a
+//! change of any published index.
 NOLINT_TEST_F(
-  TextureBinderBasicTest, ResidentContentRevision_AdvancesOnNewDescriptorOnly)
+  TextureBinderBasicTest, ResidentContentRevision_UnchangedByAllocation)
 {
   // Arrange
   const auto before = TexBinder().GetResidentContentRevision();
@@ -242,13 +245,11 @@ NOLINT_TEST_F(
 
   // Act
   const auto first = TexBinder().GetOrAllocate(key);
-  const auto allocated = TexBinder().GetResidentContentRevision();
   const auto second = TexBinder().GetOrAllocate(key);
 
   // Assert
   EXPECT_EQ(first, second);
-  EXPECT_GT(allocated, before);
-  EXPECT_EQ(TexBinder().GetResidentContentRevision(), allocated);
+  EXPECT_EQ(TexBinder().GetResidentContentRevision(), before);
 }
 
 } // namespace

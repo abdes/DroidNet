@@ -286,7 +286,7 @@ back to the lost device.
 | `ConventionalShadowTargetAllocator` | Use the core retirement ticket for shared physical slots; stable pool state owns slot metadata/free indices                                                                 |
 | `TransformUploader`                 | Use its dense counter and `GenerationTracker` directly; preserve current generation stamps and validity checks; remove frame-slot retirement machinery that has no releases |
 | `DrawMetadataEmitter`               | Use its existing dense counter directly; it does not consume the generated handle generation; remove its unused reuse strategy                                              |
-| `TextureBinder`                     | Keep direct `GenerationTracker` use, resident texture leases, descriptor repointing, and stale upload rejection unchanged                                                   |
+| `TextureBinder`                     | Use the `IndexReuse` core for CPU-only entry identities and stale upload rejection; keep resident texture leases; give each texture version its own descriptor              |
 | `TimelineGatedSlotReuse`            | Keep its existing API and scheduling; do not route managed shadow use through it                                                                                            |
 
 Update the two dense publishers' statistics to describe emitted records and

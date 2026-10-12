@@ -10,6 +10,7 @@
 #include <iterator>
 #include <memory>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -72,10 +73,14 @@ auto MaterialBinderTest::MakeMaterial(const MaterialRecipe& recipe)
     });
   auto references = data::AssetReferences::Create(
     {
-      { .kind = data::ResourceKind::kTexture,
-        .index = ResourceIndexT { recipe.raw_base_color_index } },
-      { .kind = data::ResourceKind::kTexture,
-        .index = ResourceIndexT { recipe.raw_normal_index } },
+      {
+        .kind = data::ResourceKind::kTexture,
+        .index = ResourceIndexT { recipe.raw_base_color_index },
+      },
+      {
+        .kind = data::ResourceKind::kTexture,
+        .index = ResourceIndexT { recipe.raw_normal_index },
+      },
     },
     {});
   if (!references) {
@@ -255,6 +260,12 @@ void MaterialBinderTest::SetTextureBinderErrorKey(
   const content::ResourceKey& key) const
 {
   texture_binder_->SetErrorKey(key);
+}
+
+void MaterialBinderTest::PublishTextureIndex(
+  const content::ResourceKey& key, const ShaderVisibleIndex index) const
+{
+  texture_binder_->PublishIndex(key, index);
 }
 
 } // namespace oxygen::vortex::testing
