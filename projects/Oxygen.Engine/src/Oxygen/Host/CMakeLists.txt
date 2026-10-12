@@ -79,7 +79,11 @@ target_sources(
     FILES ${OXYGEN_HOST_HEADERS}
 )
 
-arrange_target_files_for_ide(${META_MODULE_TARGET})
+arrange_target_files_for_ide(
+  ${META_MODULE_TARGET}
+  EXCLUDE_PATTERNS
+    "Main\\.cpp"
+)
 
 target_compile_definitions(
   ${META_MODULE_TARGET}
@@ -111,6 +115,30 @@ target_link_libraries(
 )
 
 # ------------------------------------------------------------------------------
+# Entry point
+# ------------------------------------------------------------------------------
+
+# The shared `main`: logging setup, the type registry and the call to the
+# application's `MainImpl`. Always static, so the linker takes `main` from it
+# for every executable that links it.
+add_library(oxygen-host-main STATIC "Main.cpp")
+add_library(oxygen::host-main ALIAS oxygen-host-main)
+set_target_properties(
+  oxygen-host-main
+  PROPERTIES
+    OUTPUT_NAME
+      "${META_MODULE_NAME}.Main"
+    FOLDER
+      "Libraries"
+)
+target_link_libraries(
+  oxygen-host-main
+  PUBLIC
+    oxygen::base
+    $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>
+)
+
+# ------------------------------------------------------------------------------
 # Tests
 # ------------------------------------------------------------------------------
 
@@ -126,6 +154,7 @@ oxygen_module_install(
   EXPORT ${META_MODULE_NAMESPACE}
   TARGETS
     ${META_MODULE_TARGET}
+    oxygen-host-main
 )
 
 asap_pop_module("${META_MODULE_NAME}")

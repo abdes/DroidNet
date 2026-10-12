@@ -25,11 +25,7 @@ asap_push_module("${META_MODULE_NAME}")
 
 # -- Input System Example ------------------------------------------------------
 
-add_executable(
-  ${META_MODULE_TARGET}
-  "main_impl.cpp"
-  "../main.cpp"
-)
+add_executable(${META_MODULE_TARGET} "main_impl.cpp")
 set_target_properties(
   ${META_MODULE_TARGET}
   PROPERTIES
@@ -46,6 +42,7 @@ target_include_directories(
 target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
+    oxygen::host-main
     oxygen::base
     oxygen::clap
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>

@@ -27,7 +27,6 @@ asap_push_module("${META_MODULE_NAME}")
 
 add_executable(
   ${META_MODULE_TARGET}
-  "../main.cpp"
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
@@ -57,6 +56,7 @@ target_include_directories(
 target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
+    oxygen::host-main
     oxygen::examples-demoshell
     oxygen::content
     oxygen::platform

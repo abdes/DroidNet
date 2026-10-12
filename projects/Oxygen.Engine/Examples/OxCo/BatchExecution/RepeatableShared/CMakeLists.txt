@@ -33,7 +33,6 @@ add_executable(
   ${META_MODULE_TARGET}
   ${OXCO_BATCH_COMMON_SOURCES}
   "repeatable_shared_example.cpp"
-  "${OXYGEN_EXAMPLES_SOURCE_DIR}/main.cpp"
 )
 set_target_properties(
   ${META_MODULE_TARGET}
@@ -51,6 +50,7 @@ target_include_directories(
 target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
+    oxygen::host-main
     oxygen::base
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>
     oxygen::oxco

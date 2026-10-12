@@ -4,14 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <crtdbg.h>
 #include <cstdlib>
 #include <exception>
 #include <span>
 #include <string_view>
 
-#if defined(_WIN32)
-#  include <Windows.h>
+#include <crtdbg.h>
+
+#ifdef _WIN32
+#  include <Windows.h> // IWYU pragma: keep
+
+#  include <fileapi.h>
+#  include <minwindef.h>
+#  include <processenv.h>
+#  include <winbase.h>
+#  include <winnt.h>
 #else
 #  include <unistd.h>
 #endif
@@ -35,6 +42,8 @@ class TypeRegistry;
 } // namespace oxygen
 extern "C" auto InitializeTypeRegistry() -> oxygen::TypeRegistry*;
 namespace {
+// A C function: it cannot throw.
+// NOLINTNEXTLINE(bugprone-throwing-static-initialization)
 [[maybe_unused]] const auto* const ts_registry_unused
   = InitializeTypeRegistry();
 } // namespace
@@ -58,8 +67,8 @@ auto main(int argc, char** argv) noexcept -> int
       "exception of unknown type\n";
 
   // Low-level error reporting function that won't allocate memory
-  auto report_error = [](std::string_view message) noexcept {
-#if defined(_WIN32)
+  auto report_error = [](std::string_view message) noexcept -> void {
+#ifdef _WIN32
     HANDLE stderr_handle = GetStdHandle(STD_ERROR_HANDLE);
     DWORD bytes_written { 0UL };
     WriteFile(stderr_handle, message.data(), static_cast<DWORD>(message.size()),

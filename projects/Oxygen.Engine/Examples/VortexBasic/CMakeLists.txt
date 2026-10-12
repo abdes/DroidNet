@@ -31,7 +31,6 @@ find_package(glm CONFIG REQUIRED)
 
 add_executable(
   ${META_MODULE_TARGET}
-  "../main.cpp"
   "main_impl.cpp"
   "MainModule.h"
   "MainModule.cpp"
@@ -62,6 +61,7 @@ target_include_directories(
 target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
+    oxygen::host-main
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>
     glm::glm
     oxygen::base

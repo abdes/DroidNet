@@ -60,7 +60,6 @@ oxygen_embed_json_schemas(
 
 add_executable(
   ${META_MODULE_TARGET}
-  "../main.cpp"
   "LightBenchPanel.h"
   "LightBenchPanel.cpp"
   "LightBenchConsoleBindings.cpp"
@@ -88,6 +87,7 @@ target_include_directories(
 target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
+    oxygen::host-main
     oxygen-lightbench-scene
     oxygen::examples-demoshell
     oxygen::platform

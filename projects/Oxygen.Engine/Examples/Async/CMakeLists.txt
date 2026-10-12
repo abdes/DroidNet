@@ -30,7 +30,6 @@ find_package(SDL3 CONFIG REQUIRED)
 
 add_executable(
   ${META_MODULE_TARGET}
-  "../main.cpp"
   "AsyncDemoPanel.cpp"
   "AsyncDemoPanel.h"
   "AsyncDemoSettingsService.cpp"
@@ -71,6 +70,7 @@ target_include_directories(
 target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
+    oxygen::host-main
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>
     glm::glm
     oxygen::base
