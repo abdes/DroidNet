@@ -78,6 +78,7 @@ set(
   "TaskCancelledException.h"
   "ThreadPool.h"
   "Value.h"
+  "With.h"
   "Yield.h"
   "Detail/SanitizedAwaiter.h"
   "Detail/AwaiterStateChecker.h"
@@ -108,6 +109,7 @@ set(
   "Detail/TaskFrame.h"
   "Detail/TaskParent.h"
   "Detail/Sequence.h"
+  "Detail/With.h"
 )
 
 target_sources(
@@ -184,7 +186,8 @@ if(OXYGEN_BUILD_DOCS AND OXYGEN_WITH_DOXYGEN)
     VERSION ${META_VERSION}
     TITLE "\"OxCo\""
     BRIEF "\"C++ coroutines for Oxygen base on `corral`\""
-    INPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}"
+    INPUT_PATH
+      "${CMAKE_CURRENT_SOURCE_DIR}"
   )
 endif()
 

@@ -206,3 +206,80 @@ class MyParentLiveClass {
 
 This results in an established hierarchy of tasks that resembles
 the hierarchy of the live objects in the program.
+
+## Running code inside a live object's lifetime: `With`
+
+Upon cancellation, every task in a nursery tree receives the request at the
+same time and handles it at its own pace. That backfires when code that uses a
+live object still needs the object while it is being cancelled. For example:
+
+```cpp
+co::Co<> MyObject::Foo() {
+    // Assumes Run() runs in the background and nursery_ is available.
+    co_await co::AnyOf(DoWork(), co::UntilCancelledAnd([this]() -> co::Co<> {
+        co_await Sleep(500ms);
+        nursery_->Start(Flush());
+    }));
+}
+```
+
+If this runs under `OXCO_WITH_NURSERY(n) { n.Start(...); co_await Body(); }`,
+`OpenNursery()` may process the cancellation first and close the nursery while
+the cleanup above still uses it.
+
+Handling this correctly needs cancellation to happen in sequence: first cancel
+the code that uses the object, and only after it has completed, cancel the
+object's background task. `co::With()` provides exactly that ordering. It takes
+two callables returning awaitables. It starts the first one and, once that one
+signals readiness through the `TaskStarted<T>` it receives, starts the second
+one concurrently. When the second one completes, or when the whole `With` is
+cancelled, the second task is fully completed and destroyed (with its locals
+and scope guards) before the first, enclosing, task is cancelled. Everything the
+enclosing task provides stays available to the inner task for as long as it
+runs.
+
+The example above becomes:
+
+```cpp
+auto MyObject::Run() {
+    return [this](co::TaskStarted<> started) -> co::Co<> {
+        OXCO_WITH_NURSERY(n) {
+            co_await n.Start(co::OpenNursery, std::ref(nursery_));
+            started(); // signal readiness
+            co_return co::kJoin;
+        };
+    };
+}
+
+co::Co<> SomeUserCode() {
+    MyObject obj;
+    co_await co::With(obj.Run(), [&]() -> co::Co<> {
+        co_await obj.Foo();
+    });
+
+    // Or the shorter block syntax:
+    OXCO_WITH(obj.Run()) {
+        co_await obj.Foo();
+    };
+}
+```
+
+The enclosing task can also hand a value to the body, which is how a live
+object that is constructed and torn down asynchronously can be lent to its
+users. With `ActivateAsync(co::TaskStarted<T&>)`, the object passes a reference
+to itself, or to a resource it owns, once it is ready:
+
+```cpp
+OXCO_WITH(service.Activate(), Connection& connection) {
+    co_await connection.Send(request);
+};
+```
+
+The connection is guaranteed to outlive every use in the body, including uses
+during the body's own cancellation. A hand-written `Event`, `AnyOf` and
+`NonCancellable` arrangement around `OXCO_WITH_NURSERY` can achieve the same
+ordering, but `With` expresses it directly.
+
+The enclosing task should normally run until cancelled. It may end with an
+exception, which propagates out of `With` after the body is cancelled; completing
+normally is a contract violation and aborts.
