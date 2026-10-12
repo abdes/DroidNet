@@ -533,8 +533,8 @@ Notes:
 
 ## S12 — Closeout
 
-- [ ] All findings closed or linked to an issue with an `OPEN_ITEMS` row.
-- [ ] Designs current; `CheckDocumentation.py` passes; `STATUS.md`
+- [x] All findings closed or linked to an issue with an `OPEN_ITEMS` row.
+- [x] Designs current; `CheckDocumentation.py` passes; `STATUS.md`
       regenerated.
 - [ ] **Owner.** RenderScene with BurgerPiz at `-r 30 --vsync on`, with GPU
       crash dumps enabled: no flicker and no device removal.
