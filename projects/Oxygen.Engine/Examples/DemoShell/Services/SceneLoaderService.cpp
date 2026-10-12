@@ -2186,8 +2186,13 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
     loader_);
   runtime_nodes_ = std::move(instance.nodes);
   if (!instance.issues.empty()) {
-    LOG_F(WARNING, "SceneLoader: {} scene record(s) were not applied",
-      instance.issues.size());
+    std::string problems;
+    for (const auto& issue : instance.issues) {
+      problems += problems.empty() ? "" : "; ";
+      problems += issue.message;
+    }
+    LOG_F(WARNING, "SceneLoader: The scene loaded with {} problem{}: {}",
+      instance.issues.size(), instance.issues.size() == 1 ? "" : "s", problems);
   }
   if (const auto active = scene.ActiveCamera(); active.has_value()) {
     active_camera_ = *active;
