@@ -7,9 +7,12 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include <string_view>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Host/GpuWorkOverlay.h>
 #include <Oxygen/Host/api_export.h>
 #include <Oxygen/ImGui/Widgets/StatsOverlay.h>
 #include <Oxygen/ImGui/Widgets/Toolbar.h>
@@ -32,7 +35,8 @@ namespace vortex {
 
 namespace oxygen::host {
 
-//! Shows the toolbar and the stats overlay; F1 toggles it.
+//! Shows the toolbar, the stats overlay and the GPU work overlay; F1 toggles
+//! it.
 inline constexpr std::string_view kUiVisibleCVar = "host.ui.visible";
 
 struct StatsCVarInfo {
@@ -62,19 +66,25 @@ inline constexpr auto kStatsCVars = std::array {
 */
 class ViewportToolbar final {
 public:
-  //! Registers `host.ui.visible` and the `host.ui.stats.*` variables.
+  //! Registers `host.ui.visible`, the `host.ui.stats.*` variables and
+  //! `host.ui.gpu_work`.
   OXGN_HOST_API static auto RegisterConsoleBindings(console::Console& console)
     -> void;
 
-  //! Draws the toolbar and the stats overlay. Call inside an ImGui frame.
+  //! Draws the toolbar and the overlays. Call inside an ImGui frame.
   /*!
    `renderer` may be null; the view-mode control then cannot label a
-   renderer-global mode.
+   renderer-global mode and the GPU work overlay draws nothing. The GPU
+   work overlay names `main_view` as the frame's main view.
   */
   OXGN_HOST_API auto Draw(IAsyncEngine& engine,
     const engine::FrameContext& context,
-    observer_ptr<const vortex::Renderer> renderer,
+    observer_ptr<vortex::Renderer> renderer, std::optional<ViewId> main_view,
     imgui::consoleui::ConsoleUiState& console_ui) -> void;
+
+  //! Releases the GPU work overlay's timeline lease; call before the
+  //! renderer goes away.
+  OXGN_HOST_API auto ReleaseGpuTimeline() noexcept -> void;
 
 private:
   auto DrawStrip(IAsyncEngine& engine,
@@ -85,6 +95,7 @@ private:
   imgui::DropdownMenuState show_menu_;
   imgui::DropdownMenuState stats_menu_;
   imgui::StatsOverlay stats_overlay_;
+  GpuWorkOverlay gpu_work_overlay_;
   float strip_height_ { 0.0F };
 };
 

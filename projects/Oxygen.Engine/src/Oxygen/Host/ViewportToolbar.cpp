@@ -22,6 +22,7 @@
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Host/GpuWorkOverlay.h>
 #include <Oxygen/Host/MainViewOptions.h>
 #include <Oxygen/Host/ViewportToolbar.h>
 #include <Oxygen/ImGui/Console/ConsoleUiState.h>
@@ -244,6 +245,16 @@ namespace {
         },
       });
     }
+    const bool gpu_work = ReadBool(console, kGpuWorkCVar, false);
+    items.push_back(MenuItem {
+      .kind = MenuItem::Kind::kCheck,
+      .label = "GPU Work",
+      .tooltip = std::string(kGpuWorkCVar),
+      .checked = gpu_work,
+      .action = [&console, gpu_work] -> void {
+        SetBool(console, kGpuWorkCVar, !gpu_work);
+      },
+    });
     return items;
   }
 
@@ -347,11 +358,13 @@ auto ViewportToolbar::RegisterConsoleBindings(console::Console& console) -> void
       .allowed_values = {},
     });
   }
+  GpuWorkOverlay::RegisterConsoleBindings(console);
 }
 
 auto ViewportToolbar::Draw(IAsyncEngine& engine,
   const engine::FrameContext& context,
-  const observer_ptr<const vortex::Renderer> renderer,
+  const observer_ptr<vortex::Renderer> renderer,
+  const std::optional<ViewId> main_view,
   imgui::consoleui::ConsoleUiState& console_ui) -> void
 {
   auto& console = engine.GetConsole();
@@ -365,10 +378,18 @@ auto ViewportToolbar::Draw(IAsyncEngine& engine,
   if (!ReadBool(console, kUiVisibleCVar, true)) {
     // Keep the overlay's averages warm while hidden.
     stats_overlay_.Draw(context, {});
+    gpu_work_overlay_.Draw(renderer, false, main_view, {}, 0.0F);
     return;
   }
   DrawStrip(engine, renderer, console_ui);
   stats_overlay_.Draw(context, stats_config, strip_height_);
+  gpu_work_overlay_.Draw(renderer, ReadBool(console, kGpuWorkCVar, false),
+    main_view, context.GetBudgetStats().gpu_budget, strip_height_);
+}
+
+auto ViewportToolbar::ReleaseGpuTimeline() noexcept -> void
+{
+  gpu_work_overlay_.Release();
 }
 
 auto ViewportToolbar::DrawStrip(IAsyncEngine& engine,

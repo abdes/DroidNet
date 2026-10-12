@@ -100,6 +100,7 @@ auto HostModule::OnAttached(const observer_ptr<IAsyncEngine> engine) noexcept
 auto HostModule::OnShutdown() noexcept -> void
 {
   try {
+    toolbar_.ReleaseGpuTimeline();
     publisher_.Shutdown();
     stage_.Clear();
     views_ = {};
@@ -175,8 +176,8 @@ auto HostModule::OnGuiUpdate(const observer_ptr<engine::FrameContext> context)
     co_return;
   }
   ImGui::SetCurrentContext(imgui_context);
-  toolbar_.Draw(
-    *host_.engine, *context, ResolveRenderer(), console_host_.State());
+  toolbar_.Draw(*host_.engine, *context, ResolveRenderer(), views_.main,
+    console_host_.State());
   console_host_.Draw(host_.engine->GetConsole(), imgui_context);
   co_return;
 }

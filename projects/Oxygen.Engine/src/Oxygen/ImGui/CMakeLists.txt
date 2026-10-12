@@ -58,6 +58,7 @@ set(
   "Styles/FontAwesome-400.h"
   "Styles/IconsFontAwesome.h"
   "Styles/Spectrum.h"
+  "Widgets/GpuWorkChart.h"
   "Widgets/StatsOverlay.h"
   "Widgets/Toolbar.h"
 )
@@ -72,6 +73,7 @@ set(
   "Styles/Spectrum.cpp"
   "Styles/SourceSansProRegular.cpp"
   "Styles/FontAwesome-400.cpp"
+  "Widgets/GpuWorkChart.cpp"
   "Widgets/StatsOverlay.cpp"
   "Widgets/Toolbar.cpp"
 )

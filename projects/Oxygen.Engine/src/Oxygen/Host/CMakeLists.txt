@@ -52,6 +52,7 @@ set(
   "RuntimeCli.h"
   "SceneStage.h"
   "ViewPublisher.h"
+  "GpuWorkOverlay.h"
   "ViewportToolbar.h"
 )
 set(
@@ -63,6 +64,7 @@ set(
   "RuntimeCli.cpp"
   "SceneStage.cpp"
   "ViewPublisher.cpp"
+  "GpuWorkOverlay.cpp"
   "ViewportToolbar.cpp"
 )
 

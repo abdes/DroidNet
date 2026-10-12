@@ -4,8 +4,8 @@ Status: **draft for owner review, 2026-10-11; reviewed 2026-10-12; I1
 validated 2026-10-12; H1 built and unit-tested 2026-10-12; E1 validated
 2026-10-12 (ahead of H2, so the host has a running consumer; the owner ran
 VortexBasic windowed, resized and fullscreen); H2 built and tested
-2026-10-12; H3 in progress: catalog, main-view variables, widgets and
-toolbar built 2026-10-12, GPU work overlay next**. Owner
+2026-10-12; H3 built: catalog, main-view variables, widgets and toolbar
+2026-10-12, GPU work overlay 2026-10-13**. Owner
 decisions are recorded in [§10](#10-owner-decisions) with the review's
 position beside each. [§11](#11-open-problems-for-review) gives a definite
 answer to every problem and marks the ones only the owner can close.
@@ -749,7 +749,7 @@ and `ConsoleHost`; its own copies are gone.
 | `ToolbarButton` | Icon button with tooltip and an optional dropdown arrow.                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `PlayControls`  | Play, Pause, Step and Stop as one centred group; enables each from the session state.                                                                                                                                                                                                                                                                                                                                                                             |
 | `StatsOverlay`  | A translucent panel at the top-right, below a given margin: the frame sequence number (always, so a screenshot names its frame), FPS and frame time, engine CPU and pacing time, the time of every engine phase that does work (slowest three highlighted) and CPU time against budget. Values are averaged over about half a second; the columns are sized for every row the enabled sections can show, so the panel keeps its width. Takes its config directly. |
-| `GpuWorkChart`  | One stacked horizontal bar of a total split into coloured segments with a budget marker, a legend sorted by cost (ms, %, max), expandable rows with up to four sub-items, and a sparkline. Takes its own row type.                                                                                                                                                                                                                                                |
+| `GpuWorkChart`  | One stacked horizontal bar of a total split into coloured segments with a budget marker, a legend in the bar's fixed order (ms, %, max), expandable rows with up to four sub-items, and a sparkline. Takes its own row type.                                                                                                                                                                                                                                      |
 | `ConsoleHost`   | The console panel and the command palette with their hotkeys (`` ` ``, Ctrl+Shift+P), extracted from `DemoShellUi.cpp:154-225`. Window placement is held in memory; DemoShell restores and saves it itself as today.                                                                                                                                                                                                                                              |
 
 ### 5.4 Viewport toolbar
@@ -794,10 +794,12 @@ Each frame it reads `DiagnosticsService::GetLatestGpuWorkSummary()` and
 rebuilds rows only when `revision` changes. Rows come from the summary in
 catalog order, labelled and coloured by `EnumerateGpuWorkBuckets()`:
 
-- the whole-frame GPU bar for the main view, with `unscoped` as a grey
-  segment and the budget marker at the engine's target frame time;
+- the whole-frame GPU bar: the main view's groups, then each further view,
+  shared work and GPU idle (grey) as one segment each, with the budget marker
+  at the engine's GPU budget;
 - one row per further view, collapsed by default;
-- frame work (IBL and other background work) as its own row;
+- shared work, done once per frame for all views (composition, IBL, uploads),
+  as its own row labelled "Shared";
 - the `frame_gpu` sparkline, and the valid and invalid frame counts.
 
 With no summary it shows "Waiting for GPU timing", or the reason the
