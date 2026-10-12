@@ -143,7 +143,7 @@ NOLINT_TEST_F(
   auto service = std::make_unique<LightingService>(*renderer_);
   ASSERT_TRUE(PrepareEnergyPublication(*service));
   const auto view = ViewId { 1U };
-  const auto* bindings = service->InspectForwardLightBindings(view);
+  const auto bindings = service->InspectForwardLightBindings(view);
   ASSERT_NE(bindings, nullptr);
   const auto texels = Texels(bindings->brdf_energy_srv, model->view_nodes,
     model->roughness_nodes, false);
@@ -302,7 +302,7 @@ NOLINT_TEST_F(ExposureGpuTest,
       ASSERT_TRUE(Backend().RecoverSubmissionFault());
     }
     ASSERT_TRUE(PrepareEnergyPublication(service));
-    const auto* published = service.InspectForwardLightBindings(ViewId { 1U });
+    const auto published = service.InspectForwardLightBindings(ViewId { 1U });
     ASSERT_NE(published, nullptr);
     EXPECT_TRUE(published->brdf_energy_srv.IsValid());
     WaitForQueueIdle();

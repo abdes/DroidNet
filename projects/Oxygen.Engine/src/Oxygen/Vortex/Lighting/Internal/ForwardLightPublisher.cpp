@@ -279,10 +279,11 @@ auto ForwardLightPublisher::PublishShadowReferences(
 }
 
 auto ForwardLightPublisher::InspectBindings(const ViewId view_id) const
-  -> const LightingFrameBindings*
+  -> observer_ptr<const LightingFrameBindings>
 {
   const auto it = published_views_.find(view_id);
-  return it != published_views_.end() ? &it->second.bindings : nullptr;
+  return it != published_views_.end() ? make_observer(&it->second.bindings)
+                                      : nullptr;
 }
 
 auto ForwardLightPublisher::AttachResources(

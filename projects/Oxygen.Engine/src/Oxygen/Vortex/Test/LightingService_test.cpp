@@ -16,6 +16,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
@@ -299,11 +300,11 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
   EXPECT_EQ(state.local_light_count, 2U);
   EXPECT_EQ(state.selection_epoch, 91U);
 
-  const auto* first_bindings
+  const auto first_bindings
     = service.InspectForwardLightBindings(oxygen::ViewId {
       11U,
     });
-  const auto* second_bindings
+  const auto second_bindings
     = service.InspectForwardLightBindings(oxygen::ViewId {
       22U,
     });
@@ -410,7 +411,7 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
   };
   ASSERT_TRUE(service.BuildLightGrid(
     { .frame_light_set = &selection, .active_views = views }));
-  const auto* initial
+  const auto initial
     = service.InspectForwardLightBindings(views.front().view_id);
   ASSERT_NE(initial, nullptr);
   const auto old_slot = service.ResolveLightingFrameSlot(views.front().view_id);
@@ -423,7 +424,7 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
   shadow.local_shadow_references.resize(1U);
   shadow.local_shadow_map_srv = oxygen::ShaderVisibleIndex { 101U };
   ASSERT_TRUE(service.PublishShadowReferences(views.front().view_id, shadow));
-  const auto* complete
+  const auto complete
     = service.InspectForwardLightBindings(views.front().view_id);
   ASSERT_NE(complete, nullptr);
   EXPECT_EQ(complete->local_shadow_map_srv, shadow.local_shadow_map_srv);
@@ -586,7 +587,7 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
     service.InspectForwardLightBindings(views.front().view_id), nullptr);
   selection.local_lights.clear();
   ASSERT_TRUE(service.BuildLightGrid(input));
-  const auto* bindings
+  const auto bindings
     = service.InspectForwardLightBindings(views.front().view_id);
   ASSERT_NE(bindings, nullptr);
   EXPECT_EQ(
@@ -607,10 +608,14 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
   }
   auto resolved = MakeResolvedView(3840.0F, 2160.0F);
   auto views = std::array {
-    PreparedViewLightingInput { .view_id = oxygen::ViewId { 1U },
-      .resolved_view = oxygen::observer_ptr { &resolved } },
-    PreparedViewLightingInput { .view_id = oxygen::ViewId { 2U },
-      .resolved_view = oxygen::observer_ptr { &resolved } },
+    PreparedViewLightingInput {
+      .view_id = oxygen::ViewId { 1U },
+      .resolved_view = oxygen::observer_ptr { &resolved },
+    },
+    PreparedViewLightingInput {
+      .view_id = oxygen::ViewId { 2U },
+      .resolved_view = oxygen::observer_ptr { &resolved },
+    },
   };
   const auto budget = renderer_->GetLightingAllocationBudget()
                         ->Snapshot()
@@ -623,7 +628,7 @@ NOLINT_TEST_F(LightingServiceBehaviorTest,
     ASSERT_TRUE(service.BuildLightGrid(
       { .frame_light_set = &selection, .active_views = views }));
     for (const auto& view : views) {
-      const auto* bindings = service.InspectForwardLightBindings(view.view_id);
+      const auto bindings = service.InspectForwardLightBindings(view.view_id);
       ASSERT_NE(bindings, nullptr);
       EXPECT_GT(bindings->index_capacity, 0U);
       EXPECT_LE(

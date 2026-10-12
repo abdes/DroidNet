@@ -20,9 +20,9 @@ struct CompositionView;
 
 struct PreparedViewLightingInput {
   ViewId view_id { kInvalidViewId };
-  observer_ptr<const PreparedSceneFrame> prepared_scene;
-  observer_ptr<const ResolvedView> resolved_view;
-  observer_ptr<const CompositionView> composition_view;
+  observer_ptr<const PreparedSceneFrame> prepared_scene { nullptr };
+  observer_ptr<const ResolvedView> resolved_view { nullptr };
+  observer_ptr<const CompositionView> composition_view { nullptr };
 };
 
 struct FrameLightingInputs {

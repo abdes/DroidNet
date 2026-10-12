@@ -153,7 +153,7 @@ auto UnculledLightingGpuTest::RecordUnculledReference(
   auto args = ReferenceArguments {};
   const auto* scene_renderer
     = RendererPublicationProbe::GetSceneRenderer(*renderer_);
-  const auto* lighting
+  const auto lighting
     = RendererPublicationProbe::GetLightingService(*renderer_)
         ->InspectForwardLightBindings(scene_renderer->GetPublishedViewId());
   ASSERT_NE(lighting, nullptr);

@@ -82,7 +82,7 @@ public:
     std::uint64_t preparation_revision, graphics::CommandRecorder& recorder)
     -> void;
   [[nodiscard]] OXGN_VRTX_API auto InspectPreparationFailure(
-    ViewId view_id) const -> const LightingPreparationFailure*;
+    ViewId view_id) const -> observer_ptr<const LightingPreparationFailure>;
   [[nodiscard]] OXGN_VRTX_API auto InspectShadowData(ViewId view_id) const
     -> observer_ptr<const ShadowFrameData>;
   [[nodiscard]] OXGN_VRTX_API auto InspectDirectionalShadowSurfaces(

@@ -10,41 +10,47 @@
 #include <cstdint>
 #include <cstring>
 #include <memory>
-#include <numbers>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include <glm/ext/quaternion_float.hpp>
-
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Types/Format.h>
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/PakFormat_geometry.h>
-#include <Oxygen/Data/PakFormat_render.h>
-#include <Oxygen/Data/ShaderReference.h>
-#include <Oxygen/Data/Unorm16.h>
-#include <Oxygen/Data/Vertex.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Lighting/Types/ClusterLightRange.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridResources.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Support/LightingWorkload.h>
 #include <Oxygen/Vortex/Test/Support/LightingWorkloadScene.h>
 #include <Oxygen/Vortex/Types/LightCullingConfig.h>
+#include <Oxygen/Vortex/Types/LightingFrameBindings.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace oxygen::vortex::testing {
 namespace {
+  //! The `index`-th `T` of a readback.
+  template <typename T>
+  auto ReadElement(std::span<const std::byte> bytes, const std::size_t index)
+    -> T
+  {
+    auto value = T {};
+    std::memcpy(
+      &value, bytes.subspan(index * sizeof(T), sizeof(T)).data(), sizeof(T));
+    return value;
+  }
+
   class SpatialLightGridGpuTest : public exposure::ExposureLightingGpuTest {
   protected:
     LightingFrameBindings grid_bindings {};
@@ -55,10 +61,10 @@ namespace {
     {
       initial_scene_capacity = 16U;
       ExposureLightingGpuTest::SetUp();
-      probe->inspect = [this](const auto& ctx, const auto&, unsigned) {
+      probe->inspect = [this](const auto& ctx, const auto&, unsigned) -> void {
         auto* lighting
           = RendererPublicationProbe::GetLightingService(*renderer_);
-        const auto* bindings
+        const auto bindings
           = lighting->InspectForwardLightBindings(ctx.current_view.view_id);
         ASSERT_NE(bindings, nullptr);
         grid_bindings = *bindings;
@@ -69,7 +75,7 @@ namespace {
           = RendererPublicationProbe::GetFrameLightSelection(*owner)
               .local_lights;
         for (std::uint32_t i = 0U; i < lights.size(); ++i) {
-          if (lights[i].source_node == near_light) {
+          if (lights.at(i).source_node == near_light) {
             near_light_index = i;
           }
         }
@@ -99,26 +105,26 @@ namespace {
       }
       SetSurface(data::MaterialDomain::kOpaque, 1.0F);
       ASSERT_NO_FATAL_FAILURE(RenderSurface(true, 0.0F, 3U));
-      const auto* bindings = &grid_bindings;
-      ASSERT_NE(bindings, nullptr);
-      ASSERT_EQ(bindings->local_count, 2U);
+      const auto& bindings = grid_bindings;
+      ASSERT_EQ(bindings.local_count, 2U);
       const auto resources = grid_resources;
       ASSERT_NE(resources.status, nullptr);
       const auto status = Read<LightGridBuildStatus>(
         *resources.status, graphics::ResourceStates::kShaderResource);
       EXPECT_EQ(status.state, kLightGridBuildValid);
-      EXPECT_EQ(status.required_index_count[1], 0U);
-      EXPECT_GT(status.required_index_count[0], 0U);
-      EXPECT_LT(status.required_index_count[0],
-        bindings->cluster_count * bindings->local_count);
+      EXPECT_EQ(status.required_index_count.at(1), 0U);
+      EXPECT_GT(status.required_index_count.at(0), 0U);
+      EXPECT_LT(status.required_index_count.at(0),
+        bindings.cluster_count * bindings.local_count);
       if (fallback) {
-        EXPECT_EQ(bindings->index_capacity, 0U);
+        EXPECT_EQ(bindings.index_capacity, 0U);
         EXPECT_GT(status.fallback_cell_count, 0U);
         EXPECT_EQ(status.written_index_count, 0U);
       } else {
         ASSERT_NE(resources.indices, nullptr);
         EXPECT_EQ(status.fallback_cell_count, 0U);
-        ASSERT_EQ(status.written_index_count, status.required_index_count[0]);
+        ASSERT_EQ(
+          status.written_index_count, status.required_index_count.at(0));
         const auto values
           = GetReadbackManager()->ReadBufferNow(*resources.indices,
             { 0U,
@@ -127,9 +133,8 @@ namespace {
         ASSERT_TRUE(values.has_value());
         for (std::uint32_t index = 0U; index < status.written_index_count;
           ++index) {
-          auto value = std::uint32_t {};
-          std::memcpy(
-            &value, values->data() + index * sizeof(value), sizeof(value));
+          const auto value
+            = ReadElement<std::uint32_t>(std::span { *values }, index);
           EXPECT_EQ(value, near_light_index)
             << "An out-of-frustum light entered a compact cell";
         }
@@ -148,16 +153,18 @@ namespace {
     constexpr auto extent = 2U * LightCullingConfig::kLightGridPixelSize;
     view.viewport.width = view.viewport.height = static_cast<float>(extent);
     auto lens = camera.GetCameraAs<scene::PerspectiveCamera>();
-    ASSERT_TRUE(lens.has_value());
+    ASSERT_HAS_VALUE(lens);
     lens->get().SetViewport(view.viewport);
     lens->get().SetAspectRatio(1.0F);
     lens->get().SetNearPlane(0.1F);
     lens->get().SetFarPlane(10.0F);
-    auto output = CreateRegisteredTexture({ .width = extent,
+    auto output = CreateRegisteredTexture({
+      .width = extent,
       .height = extent,
       .format = Format::kRGBA32Float,
       .is_render_target = true,
-      .initial_state = graphics::ResourceStates::kCommon });
+      .initial_state = graphics::ResourceStates::kCommon,
+    });
     framebuffer = Backend().CreateFramebuffer(
       graphics::FramebufferDesc {}.AddColorAttachment(output));
     auto point_node = scene->CreateNode("Boundary point");
@@ -182,14 +189,14 @@ namespace {
     ASSERT_EQ(status.fallback_cell_count, 0U);
     const auto bytes = GetReadbackManager()->ReadBufferNow(*resources.ranges,
       { 0U,
-        4U * LightCullingConfig::kLightGridSizeZ * sizeof(ClusterLightRange) });
+        std::size_t { 4U } * LightCullingConfig::kLightGridSizeZ
+          * sizeof(ClusterLightRange) });
     ASSERT_TRUE(bytes.has_value());
     auto contributing_slices = 0U;
     for (unsigned z = 0U; z < LightCullingConfig::kLightGridSizeZ; ++z) {
-      auto ranges = std::array<ClusterLightRange, 4> {};
-      std::memcpy(
-        ranges.data(), bytes->data() + z * sizeof(ranges), sizeof(ranges));
-      if (ranges[0].count == 0U) {
+      const auto ranges = ReadElement<std::array<ClusterLightRange, 4>>(
+        std::span { *bytes }, z);
+      if (ranges.front().count == 0U) {
         continue;
       }
       ++contributing_slices;
@@ -213,15 +220,14 @@ namespace {
     ASSERT_NO_FATAL_FAILURE(RenderSurface(true, 0.0F, 9U));
     for (unsigned slot = 0U; slot < 3U; ++slot) {
       ASSERT_NO_FATAL_FAILURE(RenderSurface(true, 0.0F, 1U));
-      const auto* bindings = &grid_bindings;
-      ASSERT_NE(bindings, nullptr);
+      const auto& bindings = grid_bindings;
       const auto resources = grid_resources;
       ASSERT_NE(resources.status, nullptr);
       const auto status = Read<LightGridBuildStatus>(
         *resources.status, graphics::ResourceStates::kShaderResource);
       EXPECT_EQ(status.state, kLightGridBuildValid);
-      EXPECT_GT(status.required_index_count[0], bindings->cluster_count * 4U);
-      EXPECT_LE(status.required_index_count[0], bindings->index_capacity);
+      EXPECT_GT(status.required_index_count.at(0), bindings.cluster_count * 4U);
+      EXPECT_LE(status.required_index_count.at(0), bindings.index_capacity);
       EXPECT_EQ(status.fallback_cell_count, 0U);
     }
   }
@@ -250,7 +256,7 @@ namespace {
       SCOPED_TRACE(moved);
       if (moved) {
         auto tail = scene->GetNode(near_light);
-        ASSERT_TRUE(tail.has_value());
+        ASSERT_HAS_VALUE(tail);
         tail->GetTransform().SetLocalPosition({ 100000.0F, 0.0F, 0.0F });
         ASSERT_NO_FATAL_FAILURE(RenderSurface(true, 0.0F, 3U));
       }
@@ -275,9 +281,8 @@ namespace {
       ASSERT_TRUE(ranges.has_value());
       ASSERT_TRUE(indices.has_value());
       for (unsigned cell = 0U; cell < grid_bindings.cluster_count; ++cell) {
-        auto range = ClusterLightRange {};
-        std::memcpy(
-          &range, ranges->data() + cell * sizeof(range), sizeof(range));
+        const auto range
+          = ReadElement<ClusterLightRange>(std::span { *ranges }, cell);
         ASSERT_EQ(range.count, expected_count);
         ASSERT_LE(range.offset.get() + range.count, status.written_index_count);
         unsigned ordinal = 0U;
@@ -285,10 +290,8 @@ namespace {
           if (moved && selected == near_light_index) {
             continue;
           }
-          std::uint32_t actual {};
-          std::memcpy(&actual,
-            indices->data() + (range.offset.get() + ordinal) * sizeof(actual),
-            sizeof(actual));
+          const auto actual = ReadElement<std::uint32_t>(
+            std::span { *indices }, range.offset.get() + ordinal);
           EXPECT_EQ(actual, selected) << "cell " << cell;
           ++ordinal;
         }

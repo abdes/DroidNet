@@ -785,7 +785,7 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
     oxygen::vortex::PreparedViewShadowInput {
       .view_id = oxygen::ViewId { 17U },
       .shadow_caster_dependencies = {},
-      .lighting_bindings = &lighting,
+      .lighting_bindings = oxygen::observer_ptr { &lighting },
       .prepared_scene = {},
       .resolved_view = oxygen::observer_ptr { &resolved_view },
       .draw_frame_slot = oxygen::ShaderVisibleIndex { 41U },

@@ -12,6 +12,7 @@
 #include <span>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Lighting/Types/DeferredShadowInputs.h>
@@ -111,7 +112,7 @@ public:
     const DeferredShadowInputs& shadows) -> bool;
 
   [[nodiscard]] OXGN_VRTX_API auto InspectForwardLightBindings(
-    ViewId view_id) const -> const LightingFrameBindings*;
+    ViewId view_id) const -> observer_ptr<const LightingFrameBindings>;
   [[nodiscard]] OXGN_VRTX_API auto ResolveLightingFrameSlot(
     ViewId view_id) const -> ShaderVisibleIndex;
   [[nodiscard]] OXGN_VRTX_API auto InspectCompletedGrid(ViewId view_id) const

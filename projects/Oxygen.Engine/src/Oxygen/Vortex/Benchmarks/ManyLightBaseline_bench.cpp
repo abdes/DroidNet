@@ -243,7 +243,7 @@ auto ManyLightBaseline::SetupCase() -> void
     output.draws = draws;
     const auto* lighting
       = RendererPublicationProbe::GetLightingService(*renderer_);
-    const auto* bindings
+    const auto bindings
       = lighting->InspectForwardLightBindings(context.current_view.view_id);
     CHECK_NOTNULL_F(bindings);
     output.bindings = *bindings;

@@ -26,7 +26,7 @@ struct PreparedViewShadowInput {
   std::span<const ShadowCasterDependency> shadow_caster_dependencies;
   bool shadow_dependencies_available { false };
   std::uint32_t shadow_caster_draw_count { 0U };
-  const LightingFrameBindings* lighting_bindings { nullptr };
+  observer_ptr<const LightingFrameBindings> lighting_bindings { nullptr };
   observer_ptr<const PreparedSceneFrame> prepared_scene;
   observer_ptr<const ResolvedView> resolved_view;
   //! The view's published DrawFrameBindings. Shadow and contact-shadow depth

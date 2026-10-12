@@ -540,10 +540,10 @@ auto ShadowService::RenderShadowDepths(const FrameShadowInputs& inputs) -> void
 }
 
 auto ShadowService::InspectPreparationFailure(ViewId view_id) const
-  -> const LightingPreparationFailure*
+  -> observer_ptr<const LightingPreparationFailure>
 {
   const auto it = failed_views_.find(view_id);
-  return it == failed_views_.end() ? nullptr : &it->second;
+  return it == failed_views_.end() ? nullptr : make_observer(&it->second);
 }
 
 auto ShadowService::InspectShadowData(const ViewId view_id) const

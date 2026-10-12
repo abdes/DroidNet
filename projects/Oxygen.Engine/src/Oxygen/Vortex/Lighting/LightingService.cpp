@@ -10,6 +10,7 @@
 #include <optional>
 #include <utility>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
@@ -217,7 +218,7 @@ auto LightingService::RenderDeferredLighting(RenderContext& ctx,
 }
 
 auto LightingService::InspectForwardLightBindings(const ViewId view_id) const
-  -> const LightingFrameBindings*
+  -> observer_ptr<const LightingFrameBindings>
 {
   return publisher_->InspectBindings(view_id);
 }

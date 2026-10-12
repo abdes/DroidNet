@@ -1756,7 +1756,7 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
       ctx.frame_views.at(view_index).rendered = true;
       result.state = ViewRenderState::kSubmitted;
       result.failure = ViewRenderFailure::kNone;
-      const auto* lighting_bindings = lighting_
+      const auto lighting_bindings = lighting_
         ? lighting_->InspectForwardLightBindings(entry.view_id)
         : nullptr;
       result.lighting_validated
@@ -1923,7 +1923,7 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
     }
     result.state = ViewRenderState::kSubmitted;
     result.failure = ViewRenderFailure::kNone;
-    const auto* lighting_bindings = lighting_
+    const auto lighting_bindings = lighting_
       ? lighting_->InspectForwardLightBindings(ctx.current_view.view_id)
       : nullptr;
     result.lighting_validated
@@ -2123,7 +2123,7 @@ auto SceneRenderer::RenderCurrentView(
   if (lighting_ != nullptr && wants_scene_lighting) {
     published_view_frame_bindings_.lighting_frame_slot
       = lighting_->ResolveLightingFrameSlot(ctx.current_view.view_id);
-    const auto* lighting_bindings
+    const auto lighting_bindings
       = lighting_->InspectForwardLightBindings(ctx.current_view.view_id);
     if (lighting_bindings == nullptr) {
       LogViewRejection(
@@ -2322,7 +2322,7 @@ auto SceneRenderer::RenderCurrentView(
     published_view_frame_bindings_.shadow_frame_slot
       = shadows_->ResolveShadowFrameSlot(ctx.current_view.view_id);
     if (!published_view_frame_bindings_.shadow_frame_slot.IsValid()) {
-      if (const auto* failure
+      if (const auto failure
         = shadows_->InspectPreparationFailure(ctx.current_view.view_id)) {
         ReportLightingFailure(*failure, ctx.current_view.view_id);
       } else {

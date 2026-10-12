@@ -11,6 +11,7 @@
 #include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
@@ -52,7 +53,7 @@ namespace lighting::internal {
       ViewId view_id, const ShadowFrameData& shadows)
       -> std::expected<void, LightingPreparationFailure>;
     [[nodiscard]] auto InspectBindings(ViewId view_id) const
-      -> const LightingFrameBindings*;
+      -> observer_ptr<const LightingFrameBindings>;
     [[nodiscard]] auto ResolveBindingSlot(ViewId view_id) const
       -> ShaderVisibleIndex;
     [[nodiscard]] auto InspectCompletedGrid(ViewId view_id) const
