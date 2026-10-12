@@ -105,7 +105,10 @@ constexpr glm::vec4 kTranslucentCylinderColor { 1.0F, 0.10F, 0.82F, 0.45F };
 constexpr glm::vec3 kSceneFocusPoint { 0.0F, 0.0F, 1.0F };
 //! Matches the bias DemoShell gives the suns it creates.
 constexpr float kSunShadowBias = 0.03F;
-constexpr glm::vec3 kSunPosition { -10.0F, 10.0F, 16.0F };
+// Behind and right of the subject as the camera sees it, about 43 degrees
+// up: lit and shadowed faces both face the camera, and shadows fall toward
+// it, while the sun stays above the view.
+constexpr glm::vec3 kSunPosition { 8.0F, -10.0F, 12.0F };
 constexpr float kPointLightOrbitRadius = 2.0F;
 constexpr float kPointLightOrbitPeriodSeconds = 4.0F;
 constexpr float kSpotlightOscillationAmplitude = 3.0F;
@@ -707,8 +710,9 @@ auto MainModule::EnsureScene() -> void
   }
 }
 
-//! Small blocks and a thin post on the floor in front of the cube. They are
-//! below the shadow maps' resolution, so only contact shadows ground them.
+//! Small blocks and a thin post on the floor in front of the cube. With
+//! contact shadows the sun's shadow map is coarse (see BuildSidednessScene),
+//! so contact shadows are what ground them.
 auto MainModule::AddContactShadowPebbles() -> void
 {
   struct Pebble {
@@ -1011,6 +1015,12 @@ auto MainModule::EnsureLighting() -> void
     light->Common().color_rgb = { 1.0F, 0.97F, 0.92F };
     light->Common().shadow.contact_shadows
       = scene_options_.with_contact_shadows;
+    // A coarse sun shadow map leaves small objects' contact detail to the
+    // contact shadows, the case they exist for.
+    if (scene_options_.with_contact_shadows) {
+      light->Common().shadow.resolution_hint
+        = scene::ShadowResolutionHint::kLow;
+    }
     light->SetAngularSizeRadians(glm::radians(0.53F));
     light->SetIntensityLux(100000.0F);
     light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
@@ -1023,6 +1033,8 @@ auto MainModule::EnsureLighting() -> void
     point_light_node_ = scene_->CreateNode("PointFillLight");
     auto light = std::make_unique<scene::PointLight>();
     light->Common().affects_world = true;
+    // Contact shadows apply only to lights that cast shadows.
+    light->Common().casts_shadows = scene_options_.with_contact_shadows;
     light->Common().color_rgb = { 0.35F, 0.60F, 1.0F };
     light->Common().shadow.contact_shadows
       = scene_options_.with_contact_shadows;
@@ -1035,6 +1047,8 @@ auto MainModule::EnsureLighting() -> void
     spot_light_node_ = scene_->CreateNode("SpotRimLight");
     auto light = std::make_unique<scene::SpotLight>();
     light->Common().affects_world = true;
+    // Contact shadows apply only to lights that cast shadows.
+    light->Common().casts_shadows = scene_options_.with_contact_shadows;
     light->Common().color_rgb = { 1.0F, 0.58F, 0.24F };
     light->Common().shadow.contact_shadows
       = scene_options_.with_contact_shadows;
