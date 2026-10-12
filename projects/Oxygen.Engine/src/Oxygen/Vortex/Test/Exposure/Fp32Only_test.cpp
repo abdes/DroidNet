@@ -203,11 +203,12 @@ NOLINT_TEST_F(
     auto& backend = FailureBackend();
     backend.recorder_names.clear();
     ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 3));
-    EXPECT_TRUE(std::ranges::none_of(
-      backend.recorder_names, [](const auto& name) -> bool {
-        return name.contains("Suitability") || name.contains("Gradient")
-          || name == "Exposure status readback";
-      }));
+    // No admission work runs. Auto exposure still reads its status every
+    // frame to observe adaptation.
+    for (const auto& name : backend.recorder_names) {
+      EXPECT_FALSE(name.contains("Suitability") || name.contains("Gradient"))
+        << name;
+    }
 
     diagnostics.SetHdrPrecisionControl(HdrPrecisionControl::kQualified);
     ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0, 1));
