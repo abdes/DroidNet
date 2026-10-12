@@ -80,9 +80,9 @@
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
-#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
+#include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
-#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 
 namespace oxygen::vortex::testing::exposure {
@@ -838,9 +838,10 @@ NOLINT_TEST_F(ExposureGpuTest, SkyProducerPreservesThinBrightScattering)
           bindings.frame_exposure_slot = exposure->srv_index;
           bindings.exposure_status_uav
             = exposure->current_state->status_uav_index;
-          view_data.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
-            PublishFixtureData(bindings),
-          };
+          view_data.bindless_view_frame_bindings_slot
+            = BindlessViewFrameBindingsSlot {
+                PublishFixtureData(bindings),
+              };
           view_buffer->Update(&view_data, sizeof(view_data), 0U);
           stable.atmosphere_revision = sequence;
           cache.OnFrameStart(ctx_.frame_sequence, ctx_.frame_slot);
@@ -1183,7 +1184,7 @@ NOLINT_TEST_F(
   view.camera_position = { 1234.0F, -5678.0F, 9000.0F };
   view.view_matrix = glm::mat4(2.0F);
   view.projection_matrix = glm::mat4(3.0F);
-  view.view_frame_bindings_bslot
+  view.bindless_view_frame_bindings_slot
     = BindlessViewFrameBindingsSlot { PublishFixtureData(bindings) };
   auto camera_buffer
     = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);
@@ -1746,7 +1747,7 @@ NOLINT_TEST_F(
       .one_over_pre_exposure = 1.0F / pre_exposure,
     });
     auto data = ViewConstants::GpuData {};
-    data.view_frame_bindings_bslot
+    data.bindless_view_frame_bindings_slot
       = BindlessViewFrameBindingsSlot { PublishFixtureData(bindings) };
     auto camera_buffer
       = CreateUploadBuffer(SizeBytes { 256U }, BufferUsage::kConstant);

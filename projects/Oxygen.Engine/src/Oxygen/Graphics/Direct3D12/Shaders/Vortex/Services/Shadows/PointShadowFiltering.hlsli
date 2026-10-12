@@ -39,7 +39,7 @@ static float SamplePointShadowHardwarePcf(TextureCubeArray<float> surface,
     float receiver_depth, float comparison_bias, uint sample_count)
 {
     SamplerComparisonState comparison_sampler =
-        SamplerDescriptorHeap[VORTEX_SAMPLER_SHADOW_COMPARISON];
+        SamplerDescriptorHeap[K_SAMPLER_SHADOW_COMPARISON];
     if (sample_count == 1u) {
         return surface.SampleCmpLevelZero(comparison_sampler,
             float4(receiver_to_light, cube_index), receiver_depth + comparison_bias);

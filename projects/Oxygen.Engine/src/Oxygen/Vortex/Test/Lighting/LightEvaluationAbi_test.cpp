@@ -18,9 +18,9 @@
 #include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/Test/Lighting/LightingGpuAbiFixture.h>
+#include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
-#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 
 namespace oxygen::vortex::testing {
 namespace {

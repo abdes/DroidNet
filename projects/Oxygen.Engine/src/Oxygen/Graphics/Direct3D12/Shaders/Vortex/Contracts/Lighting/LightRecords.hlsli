@@ -12,7 +12,8 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/Lighting/LightingFrameBindings.hlsli"
-#include "Vortex/Contracts/Shadows/ShadowRecords.hlsli"
+#include "Vortex/Contracts/Shadows/Generated.ShadowContracts.hlsli"
+#include "Vortex/Contracts/Lighting/LightingIndices.hlsli"
 
 static bool TryLoadDirectionalLight(LightingFrameBindings lighting, uint index,
     out DirectionalLightForwardData light)

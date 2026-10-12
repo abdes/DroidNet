@@ -81,7 +81,7 @@ static float4 SampleIntegratedVolumetricFog(
     }
     Texture3D<float4> integrated_light_scattering =
         ResourceDescriptorHeap[volumetric_fog.integrated_light_scattering_srv];
-    SamplerState linear_sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+    SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
     return integrated_light_scattering.SampleLevel(
         linear_sampler,
         float3(uv, depth_fraction),

@@ -54,8 +54,8 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
-#include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
+#include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
 
 namespace oxygen::vortex {
 

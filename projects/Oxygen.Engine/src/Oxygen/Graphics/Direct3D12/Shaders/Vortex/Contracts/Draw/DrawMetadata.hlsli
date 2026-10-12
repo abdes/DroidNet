@@ -7,27 +7,8 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_DRAWMETADATA_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_DRAWMETADATA_HLSLI
 
-static const uint DRAW_PRIMITIVE_DISABLE_SHADOW_RECEPTION = 1u << 2u;
+#include "Vortex/Contracts/Draw/Generated.DrawContracts.hlsli"
 
-// ABI: must match sizeof(oxygen::engine::DrawMetadata) == 64
-struct DrawMetadata
-{
-    uint vertex_buffer_index;
-    uint index_buffer_index;
-    uint first_index;
-    int base_vertex;
-    uint is_indexed;
-    uint instance_count;
-    uint index_count;
-    uint vertex_count;
-    uint material_handle;
-    uint transform_index;
-    uint instance_metadata_buffer_index;
-    uint instance_metadata_offset;
-    uint flags;
-    uint transform_generation;
-    uint submesh_index;
-    uint primitive_flags;
-};
+static const uint DRAW_PRIMITIVE_DISABLE_SHADOW_RECEPTION = 1u << 2u;
 
 #endif  // OXYGEN_D3D12_SHADERS_RENDERER_DRAWMETADATA_HLSLI

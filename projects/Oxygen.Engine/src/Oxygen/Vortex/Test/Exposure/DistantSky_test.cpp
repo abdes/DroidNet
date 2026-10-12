@@ -39,8 +39,8 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
+#include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
-#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 
 namespace oxygen::vortex::testing::exposure {
 namespace {
@@ -115,7 +115,7 @@ NOLINT_TEST_F(ExposureGpuTest, DistantSkyPreservesSlotsFactorsAndFogAmbient)
   auto view_bindings = ViewFrameBindings {};
   view_bindings.frame_exposure_slot = PublishUnitFrameExposure();
   auto view_data = ViewConstants::GpuData {};
-  view_data.view_frame_bindings_bslot
+  view_data.bindless_view_frame_bindings_slot
     = BindlessViewFrameBindingsSlot { PublishFixtureData(view_bindings) };
   auto view_buffer
     = CreateUploadBuffer(SizeBytes { 256U }, graphics::BufferUsage::kConstant);

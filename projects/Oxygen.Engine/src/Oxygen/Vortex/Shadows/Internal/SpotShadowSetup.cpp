@@ -23,7 +23,7 @@
 #include <Oxygen/Vortex/Shadows/Internal/LocalShadowProjection.h>
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
-#include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
+#include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 
 namespace oxygen::vortex::shadows::internal {

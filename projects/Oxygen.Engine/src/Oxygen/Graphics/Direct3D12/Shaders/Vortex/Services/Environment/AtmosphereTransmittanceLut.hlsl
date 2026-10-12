@@ -10,30 +10,13 @@
 #include "Vortex/Services/Environment/AtmosphereMedium.hlsli"
 #include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Shared/Math.hlsli"
+#include "Vortex/Services/Environment/Generated.AtmosphereContracts.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {
     uint g_DrawIndex;
     uint g_PassConstantsIndex;
 }
-
-struct AtmosphereTransmittanceLutPassConstants
-{
-    uint output_texture_uav;
-    uint output_width;
-    uint output_height;
-    uint integration_sample_count;
-    float planet_radius_km;
-    float atmosphere_height_km;
-    float rayleigh_scale_height_km;
-    float mie_scale_height_km;
-    float4 rayleigh_scattering_per_km_rgb;
-    float4 mie_scattering_per_km_rgb;
-    float4 mie_absorption_per_km_rgb;
-    float4 ozone_absorption_per_km_rgb;
-    float4 ozone_density_layer0;
-    float4 ozone_density_layer1;
-};
 
 static GpuSkyAtmosphereParams BuildAtmosphereParams(
     AtmosphereTransmittanceLutPassConstants pass)

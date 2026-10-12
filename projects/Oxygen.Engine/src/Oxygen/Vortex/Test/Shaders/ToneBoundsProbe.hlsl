@@ -122,7 +122,7 @@ void CS(uint3 thread : SV_DispatchThreadID)
         TextureCubeArray<float> surface = ResourceDescriptorHeap[NonUniformResourceIndex(settings.x)];
         const float visibility = SamplePointShadowHardwarePcf(surface, settings.y,
             sample.xyz, 1.0f / settings.w, sample.w, bias.x, settings.z);
-        SamplerState linear_sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+        SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
         const float depth = surface.SampleLevel(linear_sampler, float4(sample.xyz, settings.y), 0);
         output.Store4(thread.x * 32u, asuint(float4(visibility, depth, 0, 0)));
         output.Store4(thread.x * 32u + 16u, 0u.xxxx);
@@ -151,7 +151,7 @@ void CS(uint3 thread : SV_DispatchThreadID)
         } else {
             const LocalFogVolumeIntegralData integral = EvaluateLocalFogVolumeIntegral(
                 fog, float3(0, 0, ray.x), float3(0, 0, ray.y), ray.z);
-            SamplerState linear_sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+            SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
             const float3 scattering = EvaluateLocalFogVolumeInScattering(
                 fog, integral, linear_sampler, float3(0, 0, ray.y));
             const VolumetricLocalFogMedia media = EvaluateLocalFogVolumeFroxelMedia(

@@ -13,9 +13,8 @@
 
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
-#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
-#include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
+#include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
 
 namespace oxygen::vortex::shadows::internal {
 inline constexpr float kLocalShadowSlopeDepthBiasScale = 3.0F;
@@ -32,7 +31,7 @@ struct LocalShadowContentKey {
   LocalShadowDepthContract contract {
     LocalShadowDepthContract::kProjectedLinearReversedV1,
   };
-  std::array<glm::mat4, CubeLocalShadowRecord::kFaceCount> matrices {
+  std::array<glm::mat4, kCubeLocalShadowFaceCount> matrices {
     glm::mat4(0),
     glm::mat4(0),
     glm::mat4(0),

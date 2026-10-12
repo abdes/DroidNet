@@ -18,6 +18,7 @@
 // is 1, where the 2 x 2 block clamps to its first row or column.
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Stages/Occlusion/Generated.OcclusionContracts.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {
@@ -26,27 +27,6 @@ cbuffer RootConstants : register(b2, space0)
 }
 
 static const uint HZB_BUILD_THREADS_PER_AXIS = 16u;
-static const uint HZB_BUILD_MAX_MIPS = 16u;
-
-// Mirrors HzbBuildPassConstants in HzbPyramidBuilder.cpp.
-struct HzbBuildPassConstants
-{
-    uint source_depth_srv;
-    uint source_origin_x;
-    uint source_origin_y;
-    uint source_width;
-    uint source_height;
-    uint root_width;
-    uint root_height;
-    uint mip_count;
-    uint base_level;
-    uint _pad0;
-    uint _pad1;
-    uint _pad2;
-    uint closest_mip_uavs[HZB_BUILD_MAX_MIPS];
-    uint furthest_mip_uavs[HZB_BUILD_MAX_MIPS];
-};
-
 groupshared float2 gs_depths[HZB_BUILD_THREADS_PER_AXIS][HZB_BUILD_THREADS_PER_AXIS];
 
 uint2 MipExtent(HzbBuildPassConstants c, uint level)
@@ -144,13 +124,11 @@ void Store(HzbBuildPassConstants c, uint level, uint2 coord, float2 depths)
 void VortexScreenHzbBuildCS(
     uint3 group_id : SV_GroupID, uint3 thread_id : SV_GroupThreadID)
 {
-    if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX)
+    HzbBuildPassConstants c;
+    if (!TryLoadHzbBuildPassConstants(g_PassConstantsIndex, c))
     {
         return;
     }
-    StructuredBuffer<HzbBuildPassConstants> constants
-        = ResourceDescriptorHeap[g_PassConstantsIndex];
-    const HzbBuildPassConstants c = constants[0];
     const uint level0 = c.base_level;
     if (level0 >= c.mip_count)
     {

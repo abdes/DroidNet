@@ -79,7 +79,7 @@ struct DepthPrepassPSOutput
 DepthPrepassPSOutput DepthPrepassPS(DepthPrepassVSOutput input)
 {
 #if defined(ALPHA_TEST)
-    const SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     ApplyMaskedAlphaClip(
         EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
 #endif
@@ -95,7 +95,7 @@ DepthPrepassPSOutput DepthPrepassPS(DepthPrepassVSOutput input)
 void DepthPrepassPS(DepthPrepassVSOutput input)
 {
 #if defined(ALPHA_TEST)
-    const SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     ApplyMaskedAlphaClip(
         EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
 #endif

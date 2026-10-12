@@ -39,7 +39,7 @@ static inline float4 LoadWireframeColor()
 float4 BasePassWireframePS(BasePassGBufferVSOutput input) : SV_Target0
 {
 #if defined(ALPHA_TEST)
-    const SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     ApplyMaskedAlphaClip(
         EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
 #endif

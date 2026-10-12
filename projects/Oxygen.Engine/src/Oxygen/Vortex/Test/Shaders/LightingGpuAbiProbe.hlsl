@@ -9,11 +9,9 @@
 #include "Vortex/Contracts/Lighting/LightingFrameBindings.hlsli"
 #include "Vortex/Contracts/Lighting/DeferredLightConstants.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
-#include "Vortex/Contracts/Shadows/ShadowRecords.hlsli"
+#include "Vortex/Contracts/Shadows/Generated.ShadowContracts.hlsli"
+#include "Vortex/Contracts/Lighting/LightingIndices.hlsli"
 #include "Vortex/Contracts/Shadows/ShadowFrameBindings.hlsli"
-#include "Vortex/Contracts/Shadows/ShadowCascadeBinding.hlsli"
-#include "Vortex/Contracts/Shadows/ProjectedLocalShadowRecord.hlsli"
-#include "Vortex/Contracts/Shadows/CubeLocalShadowRecord.hlsli"
 #include "Vortex/Services/Lighting/ClusterLookup.hlsli"
 #include "Vortex/Contracts/Scene/GBufferHelpers.hlsli"
 #include "Vortex/Shared/BRDFCommon.hlsli"
@@ -212,7 +210,7 @@ void CS(uint3 thread : SV_DispatchThreadID) {
         StructuredBuffer<IblReferenceSample> inputs = ResourceDescriptorHeap[args.x];
         IblReferenceSample value = inputs[element];
         TextureCube<float4> source = ResourceDescriptorHeap[NonUniformResourceIndex(value.source)];
-        SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+        SamplerState linear_clamp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
         output.Store3(address, asuint(source.SampleLevel(linear_clamp, value.direction, value.lod).rgb));
     } else if (g_RecordKind == 32) {
         StructuredBuffer<IblSurfaceProbeInput> inputs = ResourceDescriptorHeap[args.x];

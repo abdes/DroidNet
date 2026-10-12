@@ -45,7 +45,7 @@
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
-#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
 
 namespace oxygen::vortex::testing::exposure {
 

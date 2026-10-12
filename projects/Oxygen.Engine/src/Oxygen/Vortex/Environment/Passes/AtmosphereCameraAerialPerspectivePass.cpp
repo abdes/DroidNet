@@ -255,7 +255,7 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
 
   const auto& atmosphere = stable_state.view_products.atmosphere;
   static_assert(offsetof(PassConstants, atmosphere_scales1)
-      + offsetof(AtmosphereScales1, exposure_fp16_store)
+      + offsetof(CameraAerialAtmosphereScales1, exposure_fp16_store)
     == kHlslExposureFp16StoreOffset);
   auto constants = PassConstants {};
   constants.atmosphere_scales1.exposure_fp16_store

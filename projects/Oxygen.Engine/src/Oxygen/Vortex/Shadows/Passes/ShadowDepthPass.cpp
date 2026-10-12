@@ -68,6 +68,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionConfig.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
 #include <Oxygen/Vortex/Shadows/Internal/SharedShadowMap.h>
+#include <Oxygen/Vortex/Shadows/Passes/Generated.ShadowPassContracts.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
@@ -207,28 +208,6 @@ namespace {
   constexpr float kUeDefaultUserShadowSlopeBias = 0.5F;
   constexpr float kUeShadowMaxSlopeScaleDepthBias = 1.0F;
 
-  struct alignas(packing::kShaderDataFieldAlignment) ShadowPassConstants {
-    glm::mat4 light_view_projection { 1.0F };
-    glm::vec4 shadow_bias_parameters { 0.0F };
-    glm::vec4 light_direction_to_source { 0.0F, -1.0F, 0.0F, 0.0F };
-    glm::vec4 light_position_and_inv_range { 0.0F };
-    //! The view's published DrawFrameBindings, as the camera passes see it.
-    std::uint32_t draw_frame_slot { kInvalidShaderVisibleIndex.get() };
-    //! A cascade fitted on the GPU: its record replaces
-    //! light_view_projection.
-    std::uint32_t cascade_records_srv { kInvalidShaderVisibleIndex.get() };
-    std::uint32_t cascade_index { 0U };
-    std::uint32_t pad0 { 0U };
-  };
-
-  static_assert(sizeof(ShadowPassConstants) == 128U);
-  static_assert(offsetof(ShadowPassConstants, light_view_projection) == 0U);
-  static_assert(offsetof(ShadowPassConstants, shadow_bias_parameters) == 64U);
-  static_assert(
-    offsetof(ShadowPassConstants, light_direction_to_source) == 80U);
-  static_assert(
-    offsetof(ShadowPassConstants, light_position_and_inv_range) == 96U);
-  static_assert(offsetof(ShadowPassConstants, draw_frame_slot) == 112U);
   constexpr std::uint32_t kShadowPassConstantsStride
     = sizeof(ShadowPassConstants);
 
@@ -609,8 +588,8 @@ auto ShadowDepthPass::PublishPassConstants(
     .shadow_bias_parameters = slice.shadow_bias_parameters,
     .light_direction_to_source = slice.light_direction_to_source,
     .light_position_and_inv_range = slice.light_position_and_inv_range,
-    .draw_frame_slot = draw_frame_slot.get(),
-    .cascade_records_srv = slice.cascade_records_srv.get(),
+    .draw_frame_slot = draw_frame_slot,
+    .cascade_records_srv = slice.cascade_records_srv,
     .cascade_index = slice.cascade_index,
   };
   auto allocation = pass_constants_buffer_.Allocate(1U);

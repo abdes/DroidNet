@@ -15,7 +15,7 @@
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
-#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
+#include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 
 namespace {
 
@@ -206,22 +206,22 @@ TEST(
     static_cast<std::size_t>(GBufferIndex::kCount));
   EXPECT_EQ(
     bindings.gbuffer_srvs.at(static_cast<std::size_t>(GBufferIndex::kNormal)),
-    SceneTextureBindings::kInvalidIndex);
+    oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(
     bindings.gbuffer_srvs.at(static_cast<std::size_t>(GBufferIndex::kMaterial)),
-    SceneTextureBindings::kInvalidIndex);
+    oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.gbuffer_srvs.at(
               static_cast<std::size_t>(GBufferIndex::kBaseColor)),
-    SceneTextureBindings::kInvalidIndex);
+    oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.gbuffer_srvs.at(
               static_cast<std::size_t>(GBufferIndex::kCustomData)),
-    SceneTextureBindings::kInvalidIndex);
+    oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.gbuffer_srvs.at(
               static_cast<std::size_t>(GBufferIndex::kShadowFactors)),
-    SceneTextureBindings::kInvalidIndex);
+    oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.gbuffer_srvs.at(
               static_cast<std::size_t>(GBufferIndex::kWorldTangent)),
-    SceneTextureBindings::kInvalidIndex);
+    oxygen::kInvalidShaderVisibleIndex);
 }
 
 TEST(SceneTexturesContractTest, Fp32ChangesOnlySceneRadianceStorage)

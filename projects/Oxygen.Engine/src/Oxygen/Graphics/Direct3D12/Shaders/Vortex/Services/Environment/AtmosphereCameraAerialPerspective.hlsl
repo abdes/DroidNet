@@ -14,92 +14,13 @@
 #include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 #include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
+#include "Vortex/Services/Environment/Generated.AtmosphereContracts.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {
     uint g_DrawIndex;
     uint g_PassConstantsIndex;
 }
-
-struct CameraAerialOutputHeader
-{
-    uint output_texture_uav;
-    uint output_width;
-    uint output_height;
-    uint output_depth;
-};
-
-struct CameraAerialLutHeader0
-{
-    uint transmittance_lut_srv;
-    uint multi_scattering_lut_srv;
-    uint transmittance_width;
-    uint transmittance_height;
-};
-
-struct CameraAerialLutHeader1
-{
-    uint multi_scattering_width;
-    uint multi_scattering_height;
-    uint active_light_count;
-    uint depth_resolution;
-};
-
-struct CameraAerialDepthControl0
-{
-    float fog_show_flag_factor;
-    float real_time_reflection_360_mode;
-    float depth_resolution_inv;
-    float depth_slice_length_km;
-};
-
-struct CameraAerialDepthControl1
-{
-    float depth_slice_length_km_inv;
-    float sample_count_per_slice;
-    float start_depth_km;
-    float planet_radius_km;
-};
-
-struct CameraAerialAtmosphereScales0
-{
-    float atmosphere_height_km;
-    float aerial_perspective_distance_scale;
-    uint holdout;
-    float rayleigh_scale_height_km;
-};
-
-struct CameraAerialAtmosphereScales1
-{
-    float mie_scale_height_km;
-    float multi_scattering_factor;
-    float mie_anisotropy;
-    uint exposure_fp16_store;
-};
-
-struct AtmosphereCameraAerialPerspectivePassConstants
-{
-    CameraAerialOutputHeader output_header;
-    CameraAerialLutHeader0 lut_header0;
-    CameraAerialLutHeader1 lut_header1;
-    CameraAerialDepthControl0 depth_control0;
-    CameraAerialDepthControl1 depth_control1;
-    CameraAerialAtmosphereScales0 atmosphere_scales0;
-    CameraAerialAtmosphereScales1 atmosphere_scales1;
-    float4 ground_albedo_rgb;
-    float4 rayleigh_scattering_per_km_rgb;
-    float4 mie_scattering_per_km_rgb;
-    float4 mie_absorption_per_km_rgb;
-    float4 ozone_absorption_per_km_rgb;
-    float4 ozone_density_layer0;
-    float4 ozone_density_layer1;
-    float4 camera_planet_position_km;
-    float4 sky_and_aerial_luminance_factor_rgb;
-    float4 light0_direction_enabled;
-    float4 light0_illuminance_rgb;
-    float4 light1_direction_enabled;
-    float4 light1_illuminance_rgb;
-};
 
 static uint PassOutputTextureUav(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.output_header.output_texture_uav; }
 static uint PassOutputWidth(AtmosphereCameraAerialPerspectivePassConstants pass) { return pass.output_header.output_width; }

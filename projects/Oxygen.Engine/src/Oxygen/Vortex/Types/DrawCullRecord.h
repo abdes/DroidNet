@@ -6,10 +6,9 @@
 
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 
-#include <glm/vec3.hpp>
+#include <Oxygen/Vortex/Types/Generated.DrawContracts.h>
 
 namespace oxygen::vortex {
 
@@ -31,25 +30,5 @@ enum class DrawCullFlagBits : std::uint8_t {
 {
   return static_cast<std::uint32_t>(bit);
 }
-
-//! Per-draw culling record, one per draw in draw-metadata order.
-/*!
- A single draw stores its mesh view's local box; the cull kernels transform it
- by the draw's world matrix into an oriented box. An instanced batch stores the
- world AABB union of its instances and sets `kWorldSpaceBox`. History slots
- are per culling view, so they live in each view's own slot buffer.
-
- ABI: mirrored by `Contracts/Draw/DrawCullRecord.hlsli`.
-*/
-struct DrawCullRecord {
-  glm::vec3 box_center { 0.0F };
-  std::uint32_t _pad0 { 0U };
-  glm::vec3 box_extent { 0.0F };
-  std::uint32_t flags { 0U };
-};
-
-static_assert(sizeof(DrawCullRecord) == 32);
-static_assert(offsetof(DrawCullRecord, box_extent) == 16);
-static_assert(offsetof(DrawCullRecord, flags) == 28);
 
 } // namespace oxygen::vortex

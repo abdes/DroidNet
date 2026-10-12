@@ -265,8 +265,8 @@ namespace {
         auto& textures = owner->GetSceneTextures();
         // Capture while the view scope is active; SceneRenderer restores its
         // default resources when RenderSurface returns.
-        packed_input_slots = { bindings.gbuffer_srvs[2],
-          bindings.gbuffer_srvs[1], bindings.gbuffer_srvs[0] };
+        packed_input_slots = { bindings.gbuffer_srvs[2].get(),
+          bindings.gbuffer_srvs[1].get(), bindings.gbuffer_srvs[0].get() };
         packed_input_textures
           = { textures.GetGBufferBaseColor().shared_from_this(),
               textures.GetGBufferMaterial().shared_from_this(),

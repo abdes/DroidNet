@@ -16,6 +16,7 @@
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Contracts/Draw/MeshPosition.hlsli"
+#include "Vortex/Contracts/Shadows/Generated.ShadowPassContracts.hlsli"
 
 #define BX_VERTEX_TYPE Vertex
 #include "Core/Bindless/BindlessHelpers.hlsl"
@@ -30,16 +31,6 @@ cbuffer RootConstants : register(b2, space0)
 
 // Mirrors ContactShadowCasterDepthPassConstants in
 // ContactShadowCasterDepthPass.cpp.
-struct ContactShadowCasterDepthPassConstants
-{
-    float4x4 view_matrix;
-    float4x4 projection_matrix;
-    uint draw_frame_slot;
-    uint _pad0;
-    uint _pad1;
-    uint _pad2;
-};
-
 struct ContactShadowCasterDepthVSOutput
 {
     float4 position : SV_POSITION;
@@ -50,14 +41,9 @@ struct ContactShadowCasterDepthVSOutput
 static inline bool TryLoadPassConstants(
     out ContactShadowCasterDepthPassConstants constants)
 {
-    constants = (ContactShadowCasterDepthPassConstants)0;
-    if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX) {
-        return false;
-    }
-    StructuredBuffer<ContactShadowCasterDepthPassConstants> buffer
-        = ResourceDescriptorHeap[g_PassConstantsIndex];
-    constants = buffer[0];
-    return constants.draw_frame_slot != K_INVALID_BINDLESS_INDEX;
+    return TryLoadContactShadowCasterDepthPassConstants(
+               g_PassConstantsIndex, constants)
+        && constants.draw_frame_slot != K_INVALID_BINDLESS_INDEX;
 }
 
 [shader("vertex")]
@@ -112,7 +98,7 @@ void VortexContactShadowCasterDepthPS(ContactShadowCasterDepthVSOutput input)
     }
     const DrawFrameBindings draw_bindings
         = LoadDrawFrameBindings(pass_constants.draw_frame_slot);
-    const SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     ApplyMaskedAlphaClip(EvaluateMaskedAlphaTestFromSlots(input.uv,
         draw_bindings.draw_metadata_slot,
         draw_bindings.material_shading_constants_slot, input.draw_index,

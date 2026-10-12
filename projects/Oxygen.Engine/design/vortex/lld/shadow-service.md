@@ -207,8 +207,7 @@ src/Oxygen/Vortex/
         |   `-- CascadeShadowPass.h/.cpp
         |-- Types/
         |   |-- FrameShadowInputs.h
-        |   |-- ShadowFrameBindings.h
-        |   `-- ShadowCascadeBinding.h
+        |   `-- Generated.ShadowContracts.h   <- ShaderContracts.yaml
         `-- Vsm/
             `-- Internal/   <- reserved and empty in Phase 4C
 ```
@@ -491,10 +490,11 @@ Lighting consumes the published directional conventional shadow product through
 know whether the underlying storage is atlas-backed, dedicated-per-cascade, or
 otherwise.
 
-`Contracts/Shadows/ShadowFrameBindings.hlsli` declares the GPU layout matching
-native `Vortex/Types/ShadowFrameBindings.h`, including the directional cascades
-and local-light arrays. Forward and deferred directional lighting both call
-`ComputeDirectionalShadowVisibility` from
+The shadow records, from `ShadowFrameBindings` to the directional cascades and
+local-light arrays, are generated shared contracts ([shader
+contracts](shader-contracts.md#410-generated-shared-contracts)); their loaders
+live in `Contracts/Shadows/ShadowFrameBindings.hlsli`. Forward and deferred
+directional lighting both call `ComputeDirectionalShadowVisibility` from
 `Services/Shadows/DirectionalShadowCommon.hlsli`. Both paths therefore use the
 same cascade selection, fixed 3x3 PCF, transitions and distance fade. Authored
 depth bias is applied once by the shadow-depth pass; receivers add only the

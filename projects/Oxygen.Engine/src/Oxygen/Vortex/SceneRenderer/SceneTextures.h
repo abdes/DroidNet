@@ -20,6 +20,7 @@
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Vortex/SceneRenderer/Generated.SceneTextureBindings.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex {
@@ -151,41 +152,8 @@ private:
   };
 }
 
-struct SceneTextureBindings {
-  static constexpr std::uint32_t kInvalidIndex
-    = std::numeric_limits<std::uint32_t>::max();
-
-  static constexpr auto MakeInvalidGBufferSrvs()
-    -> std::array<std::uint32_t, static_cast<std::size_t>(GBufferIndex::kCount)>
-  {
-    return {
-      kInvalidIndex,
-      kInvalidIndex,
-      kInvalidIndex,
-      kInvalidIndex,
-      kInvalidIndex,
-      kInvalidIndex,
-    };
-  }
-
-  std::uint32_t scene_color_srv { kInvalidIndex };
-  std::uint32_t scene_depth_srv { kInvalidIndex };
-  std::uint32_t partial_depth_srv { kInvalidIndex };
-  std::uint32_t velocity_srv { kInvalidIndex };
-  std::uint32_t stencil_srv { kInvalidIndex };
-  std::uint32_t custom_depth_srv { kInvalidIndex };
-  std::uint32_t custom_stencil_srv { kInvalidIndex };
-  // The published ABI reserves the full logical GBuffer family now. Phase 3
-  // only activates A-D; E/F remain stable invalid slots until their owning
-  // later phase publishes them.
-  std::array<std::uint32_t, static_cast<std::size_t>(GBufferIndex::kCount)>
-    gbuffer_srvs { MakeInvalidGBufferSrvs() };
-  std::uint32_t scene_color_uav { kInvalidIndex };
-  std::uint32_t velocity_uav { kInvalidIndex };
-  std::uint32_t valid_flags { 0 };
-
-  void Invalidate() noexcept;
-};
+static_assert(std::tuple_size_v<decltype(SceneTextureBindings::gbuffer_srvs)>
+  == static_cast<std::size_t>(GBufferIndex::kCount));
 
 struct SceneTextureAspectView {
   enum class Aspect : std::uint8_t {

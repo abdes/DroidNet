@@ -186,7 +186,7 @@ static void MeterSample(AutoExposureHistogramConstants pass, uint2 cell)
     float mask = 1.0;
     if (pass.mask_texture_index != K_INVALID_BINDLESS_INDEX) {
         Texture2D<float4> mask_texture = ResourceDescriptorHeap[pass.mask_texture_index];
-        SamplerState mask_sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+        SamplerState mask_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
         mask = mask_texture.SampleLevel(mask_sampler, uv, 0).r;
     }
     if (!all(isfinite(sample.rgb)) || !isfinite(mask)
@@ -449,37 +449,12 @@ static ExposureStateData LoadPrevious(uint slot, ExposureTargetData targets)
     state.fallback_reason = 1u;
     if (slot == K_INVALID_BINDLESS_INDEX) return state;
     ByteAddressBuffer source = ResourceDescriptorHeap[slot];
-    const float4 gains = asfloat(source.Load4(0u));
-    state.displayed_scale = gains.x;
-    state.target_scale = gains.y;
-    state.latent_scale = gains.z;
-    state.latent_target_scale = gains.w;
-    state.raw_metered_luminance = asfloat(source.Load(16u));
-    state.raw_metered_ev = asfloat(source.Load(20u));
-    state.flags = source.Load(24u);
-    state.fallback_reason = source.Load(28u);
-    state.settings_revision = source.Load2(32u);
-    state.requested_generation = source.Load2(40u);
-    state.applied_generation = source.Load2(48u);
-    state.frame_sequence = source.Load2(56u);
-    state.fp16_candidate_pre_exposure = asfloat(source.Load(64u));
-    state.fp16_eligible_streak = source.Load(68u);
-    state.product_layout_revision = source.Load2(72u);
-    return state;
+    return LoadExposureStateData(source, 0u);
 }
 
 static void StoreState(RWByteAddressBuffer destination, ExposureStateData state)
 {
-    destination.Store4(0u, asuint(float4(state.displayed_scale, state.target_scale,
-        state.latent_scale, state.latent_target_scale)));
-    destination.Store2(16u, asuint(float2(state.raw_metered_luminance, state.raw_metered_ev)));
-    destination.Store2(24u, uint2(state.flags, state.fallback_reason));
-    destination.Store2(32u, state.settings_revision);
-    destination.Store2(40u, state.requested_generation);
-    destination.Store2(48u, state.applied_generation);
-    destination.Store2(56u, state.frame_sequence);
-    destination.Store2(64u, uint2(asuint(state.fp16_candidate_pre_exposure), state.fp16_eligible_streak));
-    destination.Store2(72u, state.product_layout_revision);
+    StoreExposureStateData(destination, 0u, state);
 }
 
 static uint2 LoadProducerFailure(AutoExposureAverageConstants pass)
@@ -491,7 +466,9 @@ static uint2 LoadProducerFailure(AutoExposureAverageConstants pass)
     if ((pass.control_flags & 128u) == 0u || pass.status_uav == K_INVALID_BINDLESS_INDEX)
         return 0u.xx;
     RWByteAddressBuffer status = ResourceDescriptorHeap[pass.status_uav];
-    return (status.Load(48u) & 16u) != 0u ? status.Load2(52u) : 0u.xx;
+    return (status.Load(EXPOSURE_STATUS_COMPLETED_FLAGS_OFFSET) & 16u) != 0u
+        ? status.Load2(EXPOSURE_STATUS_COMPLETED_FIRST_FAILURE_PRODUCT_OFFSET)
+        : 0u.xx;
 }
 
 // Completed status flag 64: auto exposure is still easing toward its target, so
@@ -504,14 +481,20 @@ static void StoreSolved(RWByteAddressBuffer destination, ExposureStateData state
     StoreState(destination,state);
     if (pass.status_uav == K_INVALID_BINDLESS_INDEX) return;
     RWByteAddressBuffer status = ResourceDescriptorHeap[pass.status_uav];
-    status.Store4(0u,uint4(pass.view_lifetime,pass.frame_sequence));
-    status.Store4(16u,uint4(pass.settings_revision,state.requested_generation));
-    status.Store4(32u,uint4(state.applied_generation,state.product_layout_revision));
+    status.Store4(EXPOSURE_STATUS_COMPLETED_VIEW_STATE_IDENTITY_OFFSET,
+        uint4(pass.view_lifetime, pass.frame_sequence));
+    status.Store4(EXPOSURE_STATUS_COMPLETED_SETTINGS_REVISION_OFFSET,
+        uint4(pass.settings_revision, state.requested_generation));
+    status.Store4(EXPOSURE_STATUS_COMPLETED_APPLIED_GENERATION_OFFSET,
+        uint4(state.applied_generation, state.product_layout_revision));
     const uint flags = ((state.flags & EXPOSURE_HISTORY_VALID) != 0u ? 1u : 0u)
         | ((state.flags & EXPOSURE_REQUEST_REJECTED) != 0u ? 8u : 0u)
         | (producer_failure.y != 0u ? 18u : 0u) | (adapting ? 64u : 0u);
-    status.Store4(48u,uint4(flags,producer_failure,state.fp16_eligible_streak));
-    status.Store4(64u,uint4(pass.frame_sequence,(state.flags & EXPOSURE_REJECTION_MASK)>>EXPOSURE_REJECTION_SHIFT,0u));
+    status.Store4(EXPOSURE_STATUS_COMPLETED_FLAGS_OFFSET,
+        uint4(flags, producer_failure, state.fp16_eligible_streak));
+    status.Store4(EXPOSURE_STATUS_COMPLETED_CANDIDATE_STATE_GENERATION_OFFSET,
+        uint4(pass.frame_sequence,
+            (state.flags & EXPOSURE_REJECTION_MASK) >> EXPOSURE_REJECTION_SHIFT, 0u));
 }
 
 [numthreads(1, 1, 1)]
@@ -719,17 +702,7 @@ void VortexExposureFrameCS(uint3 dispatch_id : SV_DispatchThreadID)
     StructuredBuffer<ExposureFrameConstants> constants = ResourceDescriptorHeap[g_PassConstantsIndex];
     const ExposureFrameConstants pass = constants[0];
     RWByteAddressBuffer status = ResourceDescriptorHeap[pass.status_uav];
-    status.Store4(0u, 0u.xxxx);
-    status.Store4(16u, 0u.xxxx);
-    status.Store4(32u, 0u.xxxx);
-    status.Store4(48u, 0u.xxxx);
-    status.Store4(64u, 0u.xxxx);
-    status.Store4(80u, 0u.xxxx);
-    status.Store4(96u, 0u.xxxx);
-    status.Store4(112u, 0u.xxxx);
-    status.Store4(128u, 0u.xxxx);
-    status.Store4(144u, 0u.xxxx);
-    [unroll] for (uint offset = 160u; offset < 384u; offset += 16u) {
+    [unroll] for (uint offset = 0u; offset < EXPOSURE_STATUS_SIZE; offset += 16u) {
         status.Store4(offset, 0u.xxxx);
     }
     ExposureTargetData initial = (ExposureTargetData)0;
@@ -830,14 +803,14 @@ void VortexExposureFallbackCS(uint3 dispatch_id : SV_DispatchThreadID)
     const ExposureFrameConstants pass = constants[0];
     ByteAddressBuffer source = ResourceDescriptorHeap[pass.history_srv];
     RWByteAddressBuffer destination = ResourceDescriptorHeap[pass.current_state_uav];
-    uint4 gains = source.Load4(0u);
-    uint flags = destination.Load(EXPOSURE_FLAGS_OFFSET) & ~EXPOSURE_ZERO_TARGET;
+    uint4 gains = source.Load4(EXPOSURE_STATE_DISPLAYED_SCALE_OFFSET);
+    uint flags = destination.Load(EXPOSURE_STATE_FLAGS_OFFSET) & ~EXPOSURE_ZERO_TARGET;
     if ((pass.controls & 2u) != 0u) {
         gains.xy = 0u.xx;
         flags |= EXPOSURE_ZERO_TARGET;
     }
-    destination.Store4(0u, gains);
-    destination.Store(EXPOSURE_FLAGS_OFFSET, flags);
+    destination.Store4(EXPOSURE_STATE_DISPLAYED_SCALE_OFFSET, gains);
+    destination.Store(EXPOSURE_STATE_FLAGS_OFFSET, flags);
 }
 
 struct SuitabilityConstants {
@@ -857,7 +830,7 @@ static float4 SuitabilityProducerBounds(SuitabilityConstants pass)
         if (pass.producer_bounds_srv == K_INVALID_BINDLESS_INDEX)
             return float4(0.0, HdrBoundInfinity(), 0.0, HdrBoundInfinity());
         ByteAddressBuffer status = ResourceDescriptorHeap[pass.producer_bounds_srv];
-        return asfloat(status.Load4(256u));
+        return asfloat(status.Load4(EXPOSURE_STATUS_SCENE_ERROR_CURRENT_RGB_RELATIVE_OFFSET));
     }
     if (pass.product != 5u && pass.product != 6u && pass.product != 10u)
         return 0.0.xxxx;
@@ -901,20 +874,20 @@ void FinalizeFp16Suitability(uint3 pixel : SV_DispatchThreadID)
     ByteAddressBuffer report = ResourceDescriptorHeap[pass.report_srv];
     StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
     const ExposureStateData previous = LoadPrevious(pass.previous_srv, (ExposureTargetData)0);
-    const uint2 settings = state.Load2(32u);
-    const uint2 requested = state.Load2(40u);
-    const uint2 applied = state.Load2(48u);
-    const uint2 sequence = state.Load2(56u);
-    const float4 gains = asfloat(state.Load4(0u));
-    uint flags = state.Load(24u) & ~(EXPOSURE_FP16_ELIGIBLE | EXPOSURE_RANGE_FAILURE);
-    uint failure = report.Load(12u);
-    uint first_failure = report.Load(16u);
-    const uint producer_flags = status.Load(48u) & 16u;
-    const uint adapting = status.Load(48u) & 64u;
+    const uint2 settings = state.Load2(EXPOSURE_STATE_SETTINGS_REVISION_OFFSET);
+    const uint2 requested = state.Load2(EXPOSURE_STATE_REQUESTED_GENERATION_OFFSET);
+    const uint2 applied = state.Load2(EXPOSURE_STATE_APPLIED_GENERATION_OFFSET);
+    const uint2 sequence = state.Load2(EXPOSURE_STATE_FRAME_SEQUENCE_OFFSET);
+    const float4 gains = asfloat(state.Load4(EXPOSURE_STATE_DISPLAYED_SCALE_OFFSET));
+    uint flags = state.Load(EXPOSURE_STATE_FLAGS_OFFSET) & ~(EXPOSURE_FP16_ELIGIBLE | EXPOSURE_RANGE_FAILURE);
+    uint failure = report.Load(HDR_SUITABILITY_FAILURE_FLAGS_OFFSET);
+    uint first_failure = report.Load(HDR_SUITABILITY_FIRST_FAILURE_PRODUCT_OFFSET);
+    const uint producer_flags = status.Load(EXPOSURE_STATUS_COMPLETED_FLAGS_OFFSET) & 16u;
+    const uint adapting = status.Load(EXPOSURE_STATUS_COMPLETED_FLAGS_OFFSET) & 64u;
     bool conversion_failed = false;
     if (producer_flags != 0u) {
-        failure |= status.Load(56u);
-        first_failure = status.Load(52u);
+        failure |= status.Load(EXPOSURE_STATUS_COMPLETED_FIRST_FAILURE_KIND_OFFSET);
+        first_failure = status.Load(EXPOSURE_STATUS_COMPLETED_FIRST_FAILURE_PRODUCT_OFFSET);
     }
     if ((frame[0].flags & 1u) == 0u) {
         if (pass.conversion_report_srv == K_INVALID_BINDLESS_INDEX) {
@@ -925,20 +898,22 @@ void FinalizeFp16Suitability(uint3 pixel : SV_DispatchThreadID)
             ByteAddressBuffer conversion = ResourceDescriptorHeap[pass.conversion_report_srv];
             if (!IsCheckedSceneColorAccepted(conversion)) {
                 conversion_failed = true;
-                const uint conversion_failure = conversion.Load(12u);
+                const uint conversion_failure
+                    = conversion.Load(HDR_SUITABILITY_FAILURE_FLAGS_OFFSET);
                 failure |= conversion_failure != 0u ? conversion_failure : 16u;
                 if (first_failure == 0u) first_failure = 11u;
             }
         }
     }
-    const uint mismatch = (pass.expected_products ^ report.Load(8u))
-        | (pass.expected_products ^ report.Load(40u));
-    if (mismatch != 0u || report.Load(36u) == 0u) {
+    const uint mismatch
+        = (pass.expected_products ^ report.Load(HDR_SUITABILITY_CHECKED_PRODUCTS_OFFSET))
+        | (pass.expected_products ^ report.Load(HDR_SUITABILITY_EXPECTED_PRODUCTS_OFFSET));
+    if (mismatch != 0u || report.Load(HDR_SUITABILITY_CHECKED_SAMPLES_OFFSET) == 0u) {
         failure |= 16u;
         if (first_failure == 0u && mismatch != 0u)
             first_failure = uint(firstbitlow(mismatch)) + 1u;
     }
-    const float candidate = asfloat(report.Load(0u));
+    const float candidate = asfloat(report.Load(HDR_SUITABILITY_CANDIDATE_PRE_EXPOSURE_OFFSET));
     const bool valid_candidate = isfinite(candidate)
         && candidate >= exp2(-32.0) && candidate <= exp2(32.0);
     if (!valid_candidate) failure |= 2u;
@@ -962,16 +937,19 @@ void FinalizeFp16Suitability(uint3 pixel : SV_DispatchThreadID)
         ? (continuous ? min(previous.fp16_eligible_streak, 1u) + 1u : 1u) : 0u;
     if (failure != 0u) flags |= EXPOSURE_RANGE_FAILURE;
     if (streak >= 2u) flags |= EXPOSURE_FP16_ELIGIBLE;
-    state.Store(24u, flags);
-    state.Store4(64u, uint4(asuint(valid_candidate ? candidate : 1.0), streak, pass.layout));
+    state.Store(EXPOSURE_STATE_FLAGS_OFFSET, flags);
+    state.Store4(EXPOSURE_STATE_FP16_CANDIDATE_PRE_EXPOSURE_OFFSET, uint4(asuint(valid_candidate ? candidate : 1.0), streak, pass.layout));
     const uint status_flags = (valid ? 1u : 0u) | (failure != 0u ? 2u : 0u)
         | (streak >= 2u ? 4u : 0u) | ((flags & EXPOSURE_REQUEST_REJECTED) != 0u ? 8u : 0u)
         | producer_flags | (conversion_failed ? 32u : 0u) | adapting;
-    status.Store4(0u, uint4(pass.lifetime, pass.sequence));
-    status.Store4(16u, uint4(settings, requested));
-    status.Store4(32u, uint4(applied, pass.layout));
-    status.Store4(48u, uint4(status_flags, first_failure, failure, streak));
-    status.Store4(64u, uint4(sequence, (flags & EXPOSURE_REJECTION_MASK) >> EXPOSURE_REJECTION_SHIFT, 0u));
+    status.Store4(EXPOSURE_STATUS_COMPLETED_VIEW_STATE_IDENTITY_OFFSET,
+        uint4(pass.lifetime, pass.sequence));
+    status.Store4(EXPOSURE_STATUS_COMPLETED_SETTINGS_REVISION_OFFSET, uint4(settings, requested));
+    status.Store4(EXPOSURE_STATUS_COMPLETED_APPLIED_GENERATION_OFFSET, uint4(applied, pass.layout));
+    status.Store4(EXPOSURE_STATUS_COMPLETED_FLAGS_OFFSET,
+        uint4(status_flags, first_failure, failure, streak));
+    status.Store4(EXPOSURE_STATUS_COMPLETED_CANDIDATE_STATE_GENERATION_OFFSET,
+        uint4(sequence, (flags & EXPOSURE_REJECTION_MASK) >> EXPOSURE_REJECTION_SHIFT, 0u));
 }
 
 [numthreads(8, 8, 1)]
@@ -996,13 +974,14 @@ static void SuitabilityFailure(RWByteAddressBuffer report, uint product, uint fl
     const uint count = WaveActiveCountBits(true);
     if (WaveIsFirstLane()) {
         uint unused;
-        report.InterlockedOr(12u, flags, unused);
+        report.InterlockedOr(HDR_SUITABILITY_FAILURE_FLAGS_OFFSET, flags, unused);
         if (defer_first_product) {
             // The report's reserved word is transient and cleared by the
             // original-order publication dispatch before report consumption.
-            report.InterlockedOr(44u, 1u << (product - 1u), unused);
+            report.InterlockedOr(HDR_SUITABILITY_RESERVED_OFFSET, 1u << (product - 1u), unused);
         } else {
-            report.InterlockedCompareExchange(16u, 0u, product, unused);
+            report.InterlockedCompareExchange(
+                HDR_SUITABILITY_FIRST_FAILURE_PRODUCT_OFFSET, 0u, product, unused);
         }
         report.InterlockedAdd(counter, count, unused);
     }
@@ -1016,11 +995,6 @@ static void SuitabilityFailure(RWByteAddressBuffer report, uint product, uint fl
 static void CheckPointSuitability(SuitabilityConstants pass, uint3 pixel, float4 sample,
     RWByteAddressBuffer report, float4 bounds, float3 scene, float3 proposed,
     float3 restored, bool defer_first_product);
-
-static uint FilterGradientOffset(uint product)
-{
-    return product == 5u ? 160u : product == 6u ? 192u : 224u;
-}
 
 static float4 SuitabilitySample(SuitabilityConstants pass, uint3 pixel)
 {
@@ -1039,31 +1013,34 @@ void ClearSuitability(uint3 pixel : SV_DispatchThreadID)
     const SuitabilityConstants pass = constants[0];
     RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
     if ((pass.flags & 512u) != 0u) {
-        report.Store4(304u, 0u.xxxx);
-        report.Store4(320u, 0u.xxxx);
-        report.Store4(336u, 0u.xxxx);
+        [unroll] for (uint index = 0u; index < 3u; ++index) {
+            report.Store4(EXPOSURE_STATUS_CANDIDATE_ERRORS_OFFSET
+                    + index * EXPOSURE_STATUS_CANDIDATE_ERRORS_STRIDE,
+                0u.xxxx);
+        }
         if ((pass.flags & 1024u) != 0u) {
-            report.Store4(256u, 0u.xxxx);
-            report.Store4(272u, 0u.xxxx);
-            report.Store4(288u, 0u.xxxx);
+            [unroll] for (uint offset = 0u; offset < HDR_SCENE_ERROR_SIZE; offset += 16u) {
+                report.Store4(EXPOSURE_STATUS_SCENE_ERROR_OFFSET + offset, 0u.xxxx);
+            }
         }
         return;
     }
     if ((pass.flags & 128u) != 0u) {
-        const uint offset = FilterGradientOffset(pass.product);
+        const uint offset = HdrFilterGradientOffset(pass.product);
         report.Store4(offset, uint4(0u, 0u, 0u, 1u));
-        report.Store4(offset + 16u, 0u.xxxx);
-        report.Store(368u + (pass.product == 5u ? 0u : pass.product == 6u ? 4u : 8u), 0u);
+        report.Store4(offset + HDR_FILTER_GRADIENT_TRANSMITTANCE_OFFSET, 0u.xxxx);
+        report.Store(HdrProductReferenceMaximumOffset(pass.product), 0u);
         return;
     }
     if ((pass.flags & 32u) != 0u) {
-        report.Store4(128u, uint4(0u, 1u, 0u, 0u));
-        report.Store4(144u, uint4(0u, asuint(HdrBoundInfinity()), 0u, 0u));
+        report.Store4(EXPOSURE_STATUS_COMPOSITION_INPUT_OFFSET, uint4(0u, 1u, 0u, 0u));
+        report.Store4(EXPOSURE_STATUS_OPAQUE_AP_ERROR_OFFSET,
+            uint4(0u, asuint(HdrBoundInfinity()), 0u, 0u));
         return;
     }
-    report.Store4(0u, uint4(asuint(1.0), 0u, 0u, 0u));
-    report.Store4(16u, 0u.xxxx);
-    report.Store4(32u, uint4(0u, 0u, pass.expected_mask, 0u));
+    report.Store4(HDR_SUITABILITY_CANDIDATE_PRE_EXPOSURE_OFFSET, uint4(asuint(1.0), 0u, 0u, 0u));
+    report.Store4(HDR_SUITABILITY_FIRST_FAILURE_PRODUCT_OFFSET, 0u.xxxx);
+    report.Store4(HDR_SUITABILITY_OVERFLOW_FAILURES_OFFSET, uint4(0u, 0u, pass.expected_mask, 0u));
 }
 
 groupshared uint4 s_PreEnvironmentRange[64];
@@ -1107,10 +1084,10 @@ static void GatherCandidateProductBounds(SuitabilityConstants pass, uint3 pixel,
     float candidate_p;
     if (fused_point_check) {
         RWByteAddressBuffer report = ResourceDescriptorHeap[pass.reserved.x];
-        candidate_p = asfloat(report.Load(0u));
+        candidate_p = asfloat(report.Load(HDR_SUITABILITY_CANDIDATE_PRE_EXPOSURE_OFFSET));
     } else {
         ByteAddressBuffer report = ResourceDescriptorHeap[pass.reserved.x];
-        candidate_p = asfloat(report.Load(0u));
+        candidate_p = asfloat(report.Load(HDR_SUITABILITY_CANDIDATE_PRE_EXPOSURE_OFFSET));
     }
     const float p = frame[0].pre_exposure;
     const float inverse_p = frame[0].one_over_pre_exposure;
@@ -1165,19 +1142,23 @@ static void GatherCandidateProductBounds(SuitabilityConstants pass, uint3 pixel,
         uint unused;
         const uint checked = WaveActiveCountBits(true);
         if (WaveIsFirstLane()) {
-            report.InterlockedAdd(36u, checked, unused);
+            report.InterlockedAdd(HDR_SUITABILITY_CHECKED_SAMPLES_OFFSET, checked, unused);
         }
         CheckPointSuitability(pass, pixel, sample, report, bounds, scene, proposed, restored, true);
     }
     s_CandidateBounds[lane] = asuint(result);
     ReduceCandidateBounds(lane);
     if (lane == 0u) {
-        const uint offset = pass.product == 5u ? 304u : pass.product == 6u ? 320u : 336u;
+        const uint offset = HdrCandidateBoundOffset(pass.product);
         uint unused;
-        status.InterlockedMax(offset, s_CandidateBounds[0].x, unused);
-        status.InterlockedMax(offset + 4u, s_CandidateBounds[0].y, unused);
-        status.InterlockedMax(offset + 8u, s_CandidateBounds[0].z, unused);
-        status.InterlockedMax(offset + 12u, s_CandidateBounds[0].w, unused);
+        status.InterlockedMax(offset + HDR_ERROR_BOUNDS_RGB_RELATIVE_OFFSET,
+            s_CandidateBounds[0].x, unused);
+        status.InterlockedMax(offset + HDR_ERROR_BOUNDS_RGB_ABSOLUTE_OFFSET,
+            s_CandidateBounds[0].y, unused);
+        status.InterlockedMax(offset + HDR_ERROR_BOUNDS_TRANSMITTANCE_RELATIVE_OFFSET,
+            s_CandidateBounds[0].z, unused);
+        status.InterlockedMax(offset + HDR_ERROR_BOUNDS_TRANSMITTANCE_ABSOLUTE_OFFSET,
+            s_CandidateBounds[0].w, unused);
     }
 }
 
@@ -1256,15 +1237,18 @@ static void GatherFilterGradients(SuitabilityConstants pass, uint3 pixel, uint l
     s_FilterReferenceMaximum[lane] = maximum;
     ReduceFilterBounds(lane);
     if (lane == 0u) {
-        const uint offset = FilterGradientOffset(pass.product);
+        const uint offset = HdrFilterGradientOffset(pass.product);
         uint unused;
         [unroll] for (uint axis = 0u; axis < 3u; ++axis) {
-            status.InterlockedMax(offset + axis * 4u, s_FilterRgbGradient[0][axis], unused);
-            status.InterlockedMax(offset + 16u + axis * 4u, s_FilterTransmissionGradient[0][axis], unused);
+            status.InterlockedMax(offset + HDR_FILTER_GRADIENT_RGB_OFFSET + axis * 4u,
+                s_FilterRgbGradient[0][axis], unused);
+            status.InterlockedMax(offset + HDR_FILTER_GRADIENT_TRANSMITTANCE_OFFSET + axis * 4u,
+                s_FilterTransmissionGradient[0][axis], unused);
         }
-        status.InterlockedOr(offset + 12u, s_FilterFlagsCount[0].x, unused);
-        status.InterlockedAdd(offset + 28u, s_FilterFlagsCount[0].y, unused);
-        status.InterlockedMax(368u + (pass.product == 5u ? 0u : pass.product == 6u ? 4u : 8u),
+        status.InterlockedOr(offset + HDR_FILTER_GRADIENT_FLAGS_OFFSET, s_FilterFlagsCount[0].x, unused);
+        status.InterlockedAdd(offset + HDR_FILTER_GRADIENT_CHECKED_TEXELS_OFFSET,
+            s_FilterFlagsCount[0].y, unused);
+        status.InterlockedMax(HdrProductReferenceMaximumOffset(pass.product),
             s_FilterReferenceMaximum[0], unused);
     }
 }
@@ -1305,9 +1289,12 @@ static void GatherPreEnvironmentRange(SuitabilityConstants pass, uint3 pixel, ui
         RWByteAddressBuffer status = ResourceDescriptorHeap[pass.report_uav];
         uint unused;
         if ((pass.flags & 2048u) == 0u) {
-            status.InterlockedMax(128u, s_PreEnvironmentRange[0].x, unused);
-            status.InterlockedOr(132u, s_PreEnvironmentRange[0].y, unused);
-            status.InterlockedAdd(136u, s_PreEnvironmentRange[0].z, unused);
+            status.InterlockedMax(EXPOSURE_STATUS_COMPOSITION_INPUT_MAXIMUM_PRE_EXPOSED_RGB_OFFSET,
+                s_PreEnvironmentRange[0].x, unused);
+            status.InterlockedOr(EXPOSURE_STATUS_COMPOSITION_INPUT_FLAGS_OFFSET,
+                s_PreEnvironmentRange[0].y, unused);
+            status.InterlockedAdd(EXPOSURE_STATUS_COMPOSITION_INPUT_CHECKED_PIXELS_OFFSET,
+                s_PreEnvironmentRange[0].z, unused);
         }
         RecordHdrRangeFailure(s_PreEnvironmentRange[0].w, 11u, pass.report_uav);
     }
@@ -1337,16 +1324,16 @@ void GatherSuitabilityMaximum(uint3 pixel : SV_DispatchThreadID, uint lane : SV_
         && (pass.product == 6u || pass.product == 10u)
         && pass.producer_bounds_srv != K_INVALID_BINDLESS_INDEX) {
         ByteAddressBuffer status = ResourceDescriptorHeap[pass.producer_bounds_srv];
-        const uint offset = FilterGradientOffset(pass.product);
-        const uint maximum_bits = status.Load(pass.product == 6u ? 372u : 376u);
-        if (status.Load(offset + 12u) == 1u
-            && status.Load(offset + 28u) == pass.width * pass.height * pass.depth
+        const uint offset = HdrFilterGradientOffset(pass.product);
+        const uint maximum_bits = status.Load(HdrProductReferenceMaximumOffset(pass.product));
+        if (status.Load(offset + HDR_FILTER_GRADIENT_FLAGS_OFFSET) == 1u
+            && status.Load(offset + HDR_FILTER_GRADIENT_CHECKED_TEXELS_OFFSET) == pass.width * pass.height * pass.depth
             && maximum_bits <= 0x7f7fffffu) {
             if (all(pixel == 0u.xxx)) {
                 RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
                 uint unused;
-                report.InterlockedOr(8u, 1u << (pass.product - 1u), unused);
-                report.InterlockedMax(4u, maximum_bits, unused);
+                report.InterlockedOr(HDR_SUITABILITY_CHECKED_PRODUCTS_OFFSET, 1u << (pass.product - 1u), unused);
+                report.InterlockedMax(HDR_SUITABILITY_MAXIMUM_SCENE_RGB_OFFSET, maximum_bits, unused);
             }
             return;
         }
@@ -1354,10 +1341,10 @@ void GatherSuitabilityMaximum(uint3 pixel : SV_DispatchThreadID, uint lane : SV_
     if (pixel.x >= pass.width || pixel.y >= pass.height || pixel.z >= pass.depth) return;
     RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
     uint unused;
-    if (all(pixel == 0u.xxx)) report.InterlockedOr(8u, 1u << (pass.product - 1u), unused);
+    if (all(pixel == 0u.xxx)) report.InterlockedOr(HDR_SUITABILITY_CHECKED_PRODUCTS_OFFSET, 1u << (pass.product - 1u), unused);
     const float4 sample = SuitabilitySample(pass, pixel);
     if (!all(isfinite(sample))) {
-        SuitabilityFailure(report, pass.product, 1u, 20u);
+        SuitabilityFailure(report, pass.product, 1u, HDR_SUITABILITY_REJECTED_SAMPLES_OFFSET);
         return;
     }
     StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
@@ -1374,7 +1361,7 @@ void GatherSuitabilityMaximum(uint3 pixel : SV_DispatchThreadID, uint lane : SV_
         }
     }
     const uint maximum_bits = WaveActiveMax(asuint(maximum));
-    if (WaveIsFirstLane()) report.InterlockedMax(4u, maximum_bits, unused);
+    if (WaveIsFirstLane()) report.InterlockedMax(HDR_SUITABILITY_MAXIMUM_SCENE_RGB_OFFSET, maximum_bits, unused);
 }
 
 [numthreads(1, 1, 1)]
@@ -1388,8 +1375,8 @@ void SelectSuitabilityCandidate(uint3 pixel : SV_DispatchThreadID)
     }
     RWByteAddressBuffer report = ResourceDescriptorHeap[pass.report_uav];
     if ((pass.flags & 64u) != 0u) {
-        const float4 bounds = asfloat(report.Load4(96u));
-        const uint4 input = report.Load4(128u);
+        const float4 bounds = asfloat(report.Load4(HdrProducerBoundOffset(6u)));
+        const uint4 input = report.Load4(EXPOSURE_STATUS_COMPOSITION_INPUT_OFFSET);
         StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
         const float inverse_p = frame[0].one_over_pre_exposure;
         float2 result = float2(0.0, HdrBoundInfinity());
@@ -1411,22 +1398,26 @@ void SelectSuitabilityCandidate(uint3 pixel : SV_DispatchThreadID)
         } else {
             valid = false;
         }
-        report.Store4(144u, uint4(asuint(valid ? result : float2(0.0, HdrBoundInfinity())), valid ? 1u : 0u, 0u));
+        report.Store4(EXPOSURE_STATUS_OPAQUE_AP_ERROR_OFFSET, uint4(asuint(valid ? result : float2(0.0, HdrBoundInfinity())), valid ? 1u : 0u, 0u));
         return;
     }
-    const float maximum = asfloat(report.Load(4u));
+    const float maximum = asfloat(report.Load(HDR_SUITABILITY_MAXIMUM_SCENE_RGB_OFFSET));
     float p = maximum > 0.0 ? exp2(clamp(floor(log2(16376.0) - log2(maximum)), -32.0, 32.0)) : 1.0;
     if (maximum * p > 16376.0 && p > exp2(-32.0)) p *= 0.5;
     if ((pass.flags & 16u) != 0u) {
         StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
         p = frame[0].pre_exposure;
     }
-    report.Store(0u, asuint(p));
-    const uint missing = pass.expected_mask & ~report.Load(8u);
+    report.Store(HDR_SUITABILITY_CANDIDATE_PRE_EXPOSURE_OFFSET, asuint(p));
+    const uint missing
+        = pass.expected_mask & ~report.Load(HDR_SUITABILITY_CHECKED_PRODUCTS_OFFSET);
     if (pass.expected_mask == 0u || missing != 0u) {
         uint unused;
-        report.InterlockedOr(12u, 16u, unused);
-        if (missing != 0u) report.InterlockedCompareExchange(16u, 0u, uint(firstbitlow(missing)) + 1u, unused);
+        report.InterlockedOr(HDR_SUITABILITY_FAILURE_FLAGS_OFFSET, 16u, unused);
+        if (missing != 0u) {
+            report.InterlockedCompareExchange(HDR_SUITABILITY_FIRST_FAILURE_PRODUCT_OFFSET, 0u,
+                uint(firstbitlow(missing)) + 1u, unused);
+        }
     }
 }
 
@@ -1468,9 +1459,12 @@ static bool BuildSceneAdmissionIntervals(SuitabilityConstants pass, float4 sampl
     intervals = (SceneAdmissionIntervals)0;
     if (pass.producer_bounds_srv == K_INVALID_BINDLESS_INDEX) return false;
     ByteAddressBuffer status = ResourceDescriptorHeap[pass.producer_bounds_srv];
-    const float4 current = asfloat(status.Load4(256u));
-    const float4 candidate = asfloat(status.Load4(272u));
-    const uint4 identity = status.Load4(288u);
+    const float4 current
+        = asfloat(status.Load4(EXPOSURE_STATUS_SCENE_ERROR_CURRENT_RGB_RELATIVE_OFFSET));
+    const float4 candidate
+        = asfloat(status.Load4(EXPOSURE_STATUS_SCENE_ERROR_CANDIDATE_RGB_RELATIVE_OFFSET));
+    const uint4 identity
+        = status.Load4(EXPOSURE_STATUS_SCENE_ERROR_CANDIDATE_PRE_EXPOSURE_OFFSET);
     const bool current_store = (pass.flags & 16u) != 0u;
     const uint required_flags = current_store ? 1u : 3u;
     const uint required_products = pass.reserved.y != 0u
@@ -1604,24 +1598,24 @@ static void CheckComposedScene(SuitabilityConstants pass, uint3 pixel, float4 sa
     ByteAddressBuffer state = ResourceDescriptorHeap[pass.state_srv];
     SceneAdmissionIntervals intervals;
     if (!BuildSceneAdmissionIntervals(pass, sample, pixel.xy, frame[0].one_over_pre_exposure,
-        asfloat(report.Load(0u)), intervals)) {
-        SuitabilityFailure(report, pass.product, 16u, 28u);
+        asfloat(report.Load(HDR_SUITABILITY_CANDIDATE_PRE_EXPOSURE_OFFSET)), intervals)) {
+        SuitabilityFailure(report, pass.product, 16u, HDR_SUITABILITY_IMAGE_FAILURES_OFFSET);
         return;
     }
-    const float gain = asfloat(state.Load(0u));
+    const float gain = asfloat(state.Load(EXPOSURE_STATE_DISPLAYED_SCALE_OFFSET));
     if (!SceneImageIntervalsPass(intervals, gain)
         || !SceneDisplayIntervalsPass(intervals, pass, gain, pixel.xy))
-        SuitabilityFailure(report, pass.product, 4u, 28u);
+        SuitabilityFailure(report, pass.product, 4u, HDR_SUITABILITY_IMAGE_FAILURES_OFFSET);
     uint2 cell; float2 uv;
     if (!SuitabilityMeterCell(pass, pixel.xy, cell, uv)) return;
     float mask = 1.0;
     if (pass.mask_srv != K_INVALID_BINDLESS_INDEX) {
         Texture2D<float4> texture = ResourceDescriptorHeap[pass.mask_srv];
-        SamplerState sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+        SamplerState sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
         mask = texture.SampleLevel(sampler, uv, 0).r;
     }
     if (!isfinite(mask)) {
-        SuitabilityFailure(report, pass.product, 1u, 20u);
+        SuitabilityFailure(report, pass.product, 1u, HDR_SUITABILITY_REJECTED_SAMPLES_OFFSET);
         return;
     }
     const uint2 grid = min(uint2(pass.meter_width, pass.meter_height), METER_GRID_LIMIT);
@@ -1635,7 +1629,7 @@ static void CheckComposedScene(SuitabilityConstants pass, uint3 pixel, float4 sa
     }
     if (!SceneMeterIntervalsPass(intervals, profile * saturate(mask),
         pass.min_log_luminance, pass.black_influence))
-        SuitabilityFailure(report, pass.product, 8u, 24u);
+        SuitabilityFailure(report, pass.product, 8u, HDR_SUITABILITY_METERING_FAILURES_OFFSET);
 }
 
 static void CheckPointSuitability(SuitabilityConstants pass, uint3 pixel, float4 sample,
@@ -1643,7 +1637,7 @@ static void CheckPointSuitability(SuitabilityConstants pass, uint3 pixel, float4
     float3 restored, bool defer_first_product)
 {
     if (!isfinite(pass.consumer_rgb_gain) || pass.consumer_rgb_gain < 0.0) {
-        SuitabilityFailure(report, pass.product, 1u, 20u, defer_first_product);
+        SuitabilityFailure(report, pass.product, 1u, HDR_SUITABILITY_REJECTED_SAMPLES_OFFSET, defer_first_product);
         return;
     }
     if (!defer_first_product) {
@@ -1651,25 +1645,26 @@ static void CheckPointSuitability(SuitabilityConstants pass, uint3 pixel, float4
     }
     if (!SuitabilityBoundValid(bounds.xy)
         || ((pass.flags & 4u) != 0u && !SuitabilityBoundValid(bounds.zw))) {
-        SuitabilityFailure(report, pass.product, 4u, 28u, defer_first_product);
+        SuitabilityFailure(report, pass.product, 4u, HDR_SUITABILITY_IMAGE_FAILURES_OFFSET, defer_first_product);
         return;
     }
     ByteAddressBuffer state = ResourceDescriptorHeap[pass.state_srv];
-    const float s = asfloat(state.Load(0u));
+    const float s = asfloat(state.Load(EXPOSURE_STATE_DISPLAYED_SCALE_OFFSET));
     // Keep the separate path's validation and arithmetic order unchanged.
     if (!defer_first_product) {
         StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_srv];
         const float inverse_p = frame[0].one_over_pre_exposure;
-        const float candidate_p = asfloat(report.Load(0u));
+        const float candidate_p = asfloat(report.Load(HDR_SUITABILITY_CANDIDATE_PRE_EXPOSURE_OFFSET));
         scene = sample.rgb * inverse_p;
         proposed = scene * candidate_p;
     }
     if (any(abs(proposed) > 16376.0)) {
-        SuitabilityFailure(report, pass.product, 2u, 32u, defer_first_product);
+        SuitabilityFailure(report, pass.product, 2u, HDR_SUITABILITY_OVERFLOW_FAILURES_OFFSET, defer_first_product);
         return;
     }
     if (!defer_first_product) {
-        restored = HdrRoundToHalf(proposed) / asfloat(report.Load(0u));
+        restored = HdrRoundToHalf(proposed)
+            / asfloat(report.Load(HDR_SUITABILITY_CANDIDATE_PRE_EXPOSURE_OFFSET));
     }
     const float alpha = (pass.flags & 2u) != 0u ? saturate(sample.a) : 1.0;
     const float narrowed_alpha = (pass.flags & 2u) != 0u ? HdrRoundToHalf(alpha) : 1.0;
@@ -1682,7 +1677,7 @@ static void CheckPointSuitability(SuitabilityConstants pass, uint3 pixel, float4
         [unroll] for (uint c = 0u; c < 3u; ++c) {
             const float2 interval = SuitabilityReferenceInterval(scene[c], bounds.xy);
             if (!all(isfinite(interval))) {
-                SuitabilityFailure(report, pass.product, 4u, 28u, defer_first_product);
+                SuitabilityFailure(report, pass.product, 4u, HDR_SUITABILITY_IMAGE_FAILURES_OFFSET, defer_first_product);
                 return;
             }
             reference_low[c] = HdrBoundDown(interval.x / max(alpha, 1e-6));
@@ -1693,7 +1688,7 @@ static void CheckPointSuitability(SuitabilityConstants pass, uint3 pixel, float4
     // that was finite before those operations. Inf > Inf is not a rejection.
     if (!all(isfinite(reference_low)) || !all(isfinite(reference_high))
         || !all(isfinite(narrowed))) {
-        SuitabilityFailure(report, pass.product, 4u, 28u, defer_first_product);
+        SuitabilityFailure(report, pass.product, 4u, HDR_SUITABILITY_IMAGE_FAILURES_OFFSET, defer_first_product);
         return;
     }
     const float relative_budget = .0025 * pass.budget_share;
@@ -1711,18 +1706,18 @@ static void CheckPointSuitability(SuitabilityConstants pass, uint3 pixel, float4
         const float t = saturate(sample.a);
         float2 reference_t = SuitabilityReferenceInterval(t, bounds.zw);
         if (!all(isfinite(reference_t))) {
-            SuitabilityFailure(report, pass.product, 4u, 28u, defer_first_product);
+            SuitabilityFailure(report, pass.product, 4u, HDR_SUITABILITY_IMAGE_FAILURES_OFFSET, defer_first_product);
             return;
         }
         reference_t = saturate(reference_t);
         const float candidate_t = HdrRoundToHalf(t);
-        const float maximum = asfloat(report.Load(4u));
+        const float maximum = asfloat(report.Load(HDR_SUITABILITY_MAXIMUM_SCENE_RGB_OFFSET));
         const float transmission_absolute_budget = (absolute_budget / max(maximum, 1e-30)) / max(s, 1.0);
         image_failure = image_failure || any(abs(candidate_t.xx - reference_t)
             > reference_t * relative_budget + transmission_absolute_budget);
     }
     if (image_failure) {
-        SuitabilityFailure(report, pass.product, 4u, 28u, defer_first_product);
+        SuitabilityFailure(report, pass.product, 4u, HDR_SUITABILITY_IMAGE_FAILURES_OFFSET, defer_first_product);
     }
     uint2 cell; float2 uv;
     if (!SuitabilityMeterCell(pass, pixel.xy, cell, uv)) {
@@ -1731,11 +1726,11 @@ static void CheckPointSuitability(SuitabilityConstants pass, uint3 pixel, float4
     float mask = 1.0;
     if (pass.mask_srv != K_INVALID_BINDLESS_INDEX) {
         Texture2D<float4> mask_texture = ResourceDescriptorHeap[pass.mask_srv];
-        SamplerState mask_sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+        SamplerState mask_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
         mask = mask_texture.SampleLevel(mask_sampler, uv, 0).r;
     }
     if (!isfinite(mask)) {
-        SuitabilityFailure(report, pass.product, 1u, 20u, defer_first_product);
+        SuitabilityFailure(report, pass.product, 1u, HDR_SUITABILITY_REJECTED_SAMPLES_OFFSET, defer_first_product);
         return;
     }
     const uint2 grid = min(uint2(pass.meter_width, pass.meter_height), METER_GRID_LIMIT);
@@ -1785,7 +1780,7 @@ static void CheckPointSuitability(SuitabilityConstants pass, uint3 pixel, float4
         }
     }
     if (meter_failure) {
-        SuitabilityFailure(report, pass.product, 8u, 24u, defer_first_product);
+        SuitabilityFailure(report, pass.product, 8u, HDR_SUITABILITY_METERING_FAILURES_OFFSET, defer_first_product);
     }
 }
 
@@ -1799,10 +1794,11 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
         if (all(pixel == 0u.xxx)) {
             const uint bit = 1u << (pass.product - 1u);
             uint unused;
-            if ((report.Load(44u) & bit) != 0u) {
-                report.InterlockedCompareExchange(16u, 0u, pass.product, unused);
+            if ((report.Load(HDR_SUITABILITY_RESERVED_OFFSET) & bit) != 0u) {
+                report.InterlockedCompareExchange(
+                    HDR_SUITABILITY_FIRST_FAILURE_PRODUCT_OFFSET, 0u, pass.product, unused);
             }
-            report.InterlockedAnd(44u, ~bit, unused);
+            report.InterlockedAnd(HDR_SUITABILITY_RESERVED_OFFSET, ~bit, unused);
         }
         return;
     }
@@ -1816,7 +1812,7 @@ void CheckSuitabilityProduct(uint3 pixel : SV_DispatchThreadID)
     uint unused;
     const uint checked = WaveActiveCountBits(true);
     if (WaveIsFirstLane()) {
-        report.InterlockedAdd(36u, checked, unused);
+        report.InterlockedAdd(HDR_SUITABILITY_CHECKED_SAMPLES_OFFSET, checked, unused);
     }
     if ((pass.flags & 256u) != 0u) {
         CheckComposedScene(pass, pixel, sample, report);

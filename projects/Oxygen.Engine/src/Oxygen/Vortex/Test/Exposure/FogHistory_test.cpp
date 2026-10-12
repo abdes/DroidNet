@@ -66,9 +66,9 @@
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
-#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
+#include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
-#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewHistoryFrameBindings.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 
@@ -254,7 +254,7 @@ NOLINT_TEST_F(
         frame_bindings.history_frame_slot = PublishFixtureData(history);
         frame_bindings.frame_exposure_slot = PublishUnitFrameExposure();
         auto view = ViewConstants::GpuData {};
-        view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
+        view.bindless_view_frame_bindings_slot = BindlessViewFrameBindingsSlot {
           PublishFixtureData(frame_bindings),
         };
         view.inverse_view_projection_matrix = glm::mat4 {
@@ -380,7 +380,7 @@ NOLINT_TEST_F(ExposureGpuTest, FogStableCellsPreserveHistoryAndHomogeneousMedia)
   frame_bindings.history_frame_slot = PublishFixtureData(history);
   frame_bindings.frame_exposure_slot = PublishUnitFrameExposure();
   auto view = ViewConstants::GpuData {};
-  view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
+  view.bindless_view_frame_bindings_slot = BindlessViewFrameBindingsSlot {
     PublishFixtureData(frame_bindings),
   };
   view.projection_matrix = history.previous_projection_matrix;

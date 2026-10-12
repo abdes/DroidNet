@@ -38,7 +38,7 @@
 #include <Oxygen/Vortex/Shadows/Internal/LocalShadowRequest.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowEligibility.h>
 #include <Oxygen/Vortex/Shadows/Internal/SharedShadowMap.h>
-#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
+#include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
 #include <Oxygen/Vortex/Types/ShadowCasterSource.h>
@@ -686,7 +686,7 @@ auto ConventionalShadowTargetAllocator::InspectLocalSharing() const
       }
       spare = (backing->map_capacity - occupied) * backing->resolution
         * backing->resolution * sizeof(float)
-        * (backing->cube ? CubeLocalShadowRecord::kFaceCount : 1U);
+        * (backing->cube ? kCubeLocalShadowFaceCount : 1U);
     }
     result.backings.push_back({
       .texture = std::move(texture),
@@ -711,8 +711,7 @@ auto ConventionalShadowTargetAllocator::LocalChunkCapacity(
   // one more light becomes relevant. Existing chunks keep their allocations.
   constexpr std::uint64_t kTargetChunkBytes = 64ULL * 1024ULL * 1024ULL;
   const auto bytes_per_light = static_cast<std::uint64_t>(resolution)
-    * resolution * sizeof(float)
-    * (cube ? CubeLocalShadowRecord::kFaceCount : 1U);
+    * resolution * sizeof(float) * (cube ? kCubeLocalShadowFaceCount : 1U);
   if (bytes_per_light == 0U) {
     return 0U;
   }

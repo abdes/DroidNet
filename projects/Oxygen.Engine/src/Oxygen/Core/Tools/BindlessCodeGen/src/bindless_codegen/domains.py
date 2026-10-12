@@ -256,3 +256,74 @@ def validate_abi_domains(
             intervals,
             label=f"ABI shader-visible range in index_space '{index_space}'",
         )
+
+
+def validate_static_samplers(
+    samplers: List[Dict[str, Any]], domains: List[Dict[str, Any]]
+) -> None:
+    """Static samplers occupy distinct slots inside a sampler domain."""
+    by_id = {str(domain.get("id")): domain for domain in domains}
+    seen_ids: set[str] = set()
+    seen_slots: set[tuple[str, int]] = set()
+    for sampler in samplers:
+        sampler_id = str(sampler.get("id"))
+        domain_id = str(sampler.get("domain"))
+        slot = int(sampler.get("slot", -1))
+        domain = by_id.get(domain_id)
+        if domain is None or domain.get("shader_access_class") != "sampler":
+            raise ValueError(
+                f"static sampler '{sampler_id}' must name a sampler domain, "
+                f"not '{domain_id}'"
+            )
+        if not 0 <= slot < int(domain.get("capacity", 0)):
+            raise ValueError(
+                f"static sampler '{sampler_id}' slot {slot} is outside domain "
+                f"'{domain_id}'"
+            )
+        if sampler_id in seen_ids or (domain_id, slot) in seen_slots:
+            raise ValueError(f"static sampler '{sampler_id}' is not unique")
+        seen_ids.add(sampler_id)
+        seen_slots.add((domain_id, slot))
+
+
+def _static_sampler_index(
+    sampler: Dict[str, Any], domains: List[Dict[str, Any]]
+) -> int:
+    domain = next(d for d in domains if str(d.get("id")) == str(sampler.get("domain")))
+    return int(domain.get("shader_index_base", 0)) + int(sampler.get("slot", 0))
+
+
+def render_cpp_static_samplers(
+    samplers: List[Dict[str, Any]], domains: List[Dict[str, Any]]
+) -> str:
+    """Shader-visible indices of the static samplers, as C++ constants."""
+    lines: List[str] = []
+    for sampler in samplers:
+        comment = str(sampler.get("comment") or "").strip()
+        if comment:
+            lines.append(f"// {comment}")
+        name = _pascal_from_identifier(str(sampler.get("id")))
+        lines.append(
+            f"inline constexpr uint32_t k{name}SamplerIndex = "
+            f"{_static_sampler_index(sampler, domains)}U;"
+        )
+    return "\n".join(lines)
+
+
+def render_hlsl_static_samplers(
+    samplers: List[Dict[str, Any]], domains: List[Dict[str, Any]]
+) -> str:
+    """Shader-visible indices of the static samplers, as HLSL constants."""
+    lines: List[str] = []
+    if samplers:
+        lines.append("// Static samplers (SamplerDescriptorHeap indices)")
+        lines.append("")
+    for sampler in samplers:
+        comment = str(sampler.get("comment") or "").strip()
+        if comment:
+            lines.append(f"// {comment}")
+        lines.append(
+            f"static const uint K_SAMPLER_{str(sampler.get('id')).upper()} = "
+            f"{_static_sampler_index(sampler, domains)};"
+        )
+    return "\n".join(lines)

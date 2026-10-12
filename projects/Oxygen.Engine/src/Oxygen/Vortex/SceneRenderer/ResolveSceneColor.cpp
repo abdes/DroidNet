@@ -78,8 +78,7 @@ void SceneRenderer::ResolveSceneColor(RenderContext& ctx,
   auto& scene_textures = ActiveSceneTextures();
   const auto scene_color_ready
     = setup_mode_.IsSet(SceneTextureSetupMode::Flag::kSceneColor)
-    && scene_texture_bindings_.scene_color_srv
-      != SceneTextureBindings::kInvalidIndex;
+    && scene_texture_bindings_.scene_color_srv != kInvalidShaderVisibleIndex;
   const bool narrow = scene_color_ready && (prepared != nullptr)
     && ctx.current_view.hdr_color_format == Format::kRGBA16Float
     && active_scene_texture_lease_;
@@ -97,8 +96,7 @@ void SceneRenderer::ResolveSceneColor(RenderContext& ctx,
 
   const auto scene_depth_ready
     = setup_mode_.IsSet(SceneTextureSetupMode::Flag::kSceneDepth)
-    && scene_texture_bindings_.scene_depth_srv
-      != SceneTextureBindings::kInvalidIndex;
+    && scene_texture_bindings_.scene_depth_srv != kInvalidShaderVisibleIndex;
   graphics::Texture* resolved_depth = nullptr;
   if (scene_depth_ready) {
     resolved_depth = EnsureArtifactTexture(ctx, resolved_scene_depth_artifact_,
@@ -120,13 +118,13 @@ void SceneRenderer::ResolveSceneColor(RenderContext& ctx,
   if (narrow
     && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {
     auto& target = *scene_texture_extracts_.resolved_scene_color.texture;
-    const auto uav = ShaderVisibleIndex { RegisterSceneTextureView(target,
+    const auto uav = RegisterSceneTextureView(target,
       {
         .view_type = graphics::ResourceViewType::kTexture_UAV,
         .visibility = graphics::DescriptorVisibility::kShaderVisible,
         .format = target.GetDescriptor().format,
         .dimension = TextureType::kTexture2D,
-      }) };
+      });
     converted = post_process_->ConvertSceneColor(ctx, recorder, *prepared,
       {
         .scene_signal = scene_textures.GetSceneColorResource().get(),

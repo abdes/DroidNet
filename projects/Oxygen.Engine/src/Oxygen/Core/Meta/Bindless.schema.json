@@ -124,6 +124,31 @@
             },
             "additionalProperties": false
           }
+        },
+        "static_samplers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "domain", "slot"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              "domain": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+              },
+              "slot": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "comment": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false

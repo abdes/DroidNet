@@ -29,6 +29,7 @@ inline auto MakeRasterStateDraws(const PassMaskBit kind)
   auto draws = std::array<DrawMetadata, 5> {};
   for (std::size_t index = 0U; index < draws.size(); ++index) {
     auto& draw = draws.at(index);
+    draw.vertex_buffer_index = ShaderVisibleIndex { 1U };
     draw.vertex_count = (static_cast<std::uint32_t>(index) + 1U) * 3U;
     draw.instance_count = 1U;
     draw.material_handle = 1U;

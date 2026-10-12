@@ -70,8 +70,9 @@
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/Shadows/Passes/Generated.ShadowPassContracts.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
-#include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
+#include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
@@ -673,10 +674,12 @@ namespace {
   //! its receiver mask, mirroring `ShadowReceiverFit.hlsli`.
   class ReceiverFitShadowTest : public GrazingDirectionalShadowTest {
   protected:
-    static constexpr std::uint32_t kMaskResolution = 64U;
+    static constexpr std::uint32_t kMaskResolution
+      = shadows::kShadowReceiverMaskResolution;
     static constexpr std::uint32_t kMaskTiles
-      = kMaskResolution * kMaskResolution;
-    static constexpr std::uint32_t kMaskBlock = (2U * kMaskTiles) + 64U;
+      = shadows::kShadowReceiverMaskTiles;
+    static constexpr std::uint32_t kMaskBlock
+      = shadows::kShadowReceiverMaskBlock;
 
     struct ReceiverFit {
       std::vector<ShadowCascadeBinding> loose;

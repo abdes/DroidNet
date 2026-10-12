@@ -38,9 +38,9 @@ static void RecordHdrConsumerUsage(uint usage, float3 sky_gain = 1.0.xxx)
     if (WaveIsFirstLane()) {
         RWByteAddressBuffer status = ResourceDescriptorHeap[bindings.exposure_status_uav];
         uint unused;
-        status.InterlockedOr(360u, flags, unused);
+        status.InterlockedOr(EXPOSURE_STATUS_CONSUMER_INPUTS_FLAGS_OFFSET, flags, unused);
         if ((usage & HDR_CONSUMER_SKY) != 0u)
-            status.InterlockedMax(364u, gain, unused);
+            status.InterlockedMax(EXPOSURE_STATUS_CONSUMER_INPUTS_SKY_RGB_GAIN_MAX_OFFSET, gain, unused);
     }
 }
 
@@ -71,8 +71,10 @@ static void RecordHdrConsumerInput(float3 scene_rgb, uint input_kind, uint usage
     if (WaveIsFirstLane()) {
         RWByteAddressBuffer status = ResourceDescriptorHeap[bindings.exposure_status_uav];
         uint unused;
-        status.InterlockedMax(352u + input_kind * 4u, peak, unused);
-        status.InterlockedOr(360u, flags, unused);
+        status.InterlockedMax(
+            EXPOSURE_STATUS_CONSUMER_INPUTS_TRANSLUCENT_RGB_MAX_OFFSET + input_kind * 4u,
+            peak, unused);
+        status.InterlockedOr(EXPOSURE_STATUS_CONSUMER_INPUTS_FLAGS_OFFSET, flags, unused);
         RecordHdrRangeFailure(range_failure,
             input_kind == HDR_INPUT_TRANSLUCENCY ? 4u : 8u, bindings.exposure_status_uav);
     }

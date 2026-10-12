@@ -139,7 +139,7 @@ static ForwardLightingTerms ComputeForwardLightingTerms(VSOutput input,
 [earlydepthstencil]
 void ValidateRadiancePS(VSOutput input)
 {
-  SamplerState linear_sampler = SamplerDescriptorHeap[0];
+  SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
 #ifdef ALPHA_TEST
   ApplyMaskedAlphaClip(EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
 #endif
@@ -164,7 +164,7 @@ void ValidateRadiancePS(VSOutput input)
 float4 PS(VSOutput input)
   : SV_Target0
 {
-  SamplerState linear_sampler = SamplerDescriptorHeap[0];
+  SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
 
 #ifdef ALPHA_TEST
   ApplyMaskedAlphaClip(

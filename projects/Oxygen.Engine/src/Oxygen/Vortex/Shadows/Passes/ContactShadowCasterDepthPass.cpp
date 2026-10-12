@@ -47,32 +47,14 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/IndirectListBuilder.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
 #include <Oxygen/Vortex/Shadows/Passes/ContactShadowCasterDepthPass.h>
+#include <Oxygen/Vortex/Shadows/Passes/Generated.ShadowPassContracts.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
-#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
+#include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
 
 namespace oxygen::vortex::shadows {
 
 namespace {
 
-  //! Mirrors ContactShadowCasterDepthPassConstants in
-  //! ContactShadowCasterDepth.hlsl.
-  struct alignas(packing::kShaderDataFieldAlignment)
-    ContactShadowCasterDepthPassConstants {
-    glm::mat4 view_matrix { 1.0F };
-    glm::mat4 projection_matrix { 1.0F };
-    std::uint32_t draw_frame_slot { kInvalidShaderVisibleIndex.get() };
-    std::uint32_t pad0 { 0U };
-    std::uint32_t pad1 { 0U };
-    std::uint32_t pad2 { 0U };
-  };
-
-  static_assert(sizeof(ContactShadowCasterDepthPassConstants) == 144U);
-  static_assert(
-    offsetof(ContactShadowCasterDepthPassConstants, view_matrix) == 0U);
-  static_assert(
-    offsetof(ContactShadowCasterDepthPassConstants, projection_matrix) == 64U);
-  static_assert(
-    offsetof(ContactShadowCasterDepthPassConstants, draw_frame_slot) == 128U);
   constexpr std::uint32_t kPassConstantsStride
     = sizeof(ContactShadowCasterDepthPassConstants);
 
@@ -184,7 +166,7 @@ auto ContactShadowCasterDepthPass::Record(const PreparedViewShadowInput& input,
     || !pass_constants->TryWriteObject(ContactShadowCasterDepthPassConstants {
       .view_matrix = view.ViewMatrix(),
       .projection_matrix = view.ProjectionMatrix(),
-      .draw_frame_slot = input.draw_frame_slot.get(),
+      .draw_frame_slot = input.draw_frame_slot,
     })) {
     LOG_F(ERROR,
       "ContactShadowCasterDepthPass: failed to publish pass constants for view "

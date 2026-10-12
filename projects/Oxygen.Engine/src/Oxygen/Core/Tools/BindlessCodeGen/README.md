@@ -33,6 +33,18 @@ From `src/Oxygen/Core/Meta/Bindless.yaml`, the tool generates:
 - C++: `Generated.Strategy.D3D12.h` — constexpr-embedded copy of the D3D12
   strategy JSON
 
+`Generated.BindlessAbi.h` and `.hlsl` also name the static samplers listed under
+`abi.static_samplers` (`k<Name>SamplerIndex`, `K_SAMPLER_<NAME>`).
+
+From `src/Oxygen/Vortex/Meta/ShaderContracts.yaml`, the contracts generator
+(`bindless_codegen.contracts`) generates the structs shared by Vortex C++ and
+HLSL: one `Generated.*.h` header under `src/` and one `Generated.*.hlsli` header
+under the shader root per schema file. It computes each struct's HLSL layout
+(structured, constant or byte-address), rejects implicit padding, asserts
+every offset on the C++ side, and emits invalid-record makers, domain-checked
+loaders and byte-address offsets and accessors. See
+[shader contracts](../../../../../design/vortex/lld/shader-contracts.md#410-generated-shared-contracts).
+
 ### Example
 
 **ABI excerpt** (a complete input also declares `meta`, `defaults` and `backends`):
@@ -109,6 +121,15 @@ Run the packaged CLI from Oxygen.Engine with the repository environment active:
 python -m bindless_codegen.cli `
   --input src/Oxygen/Core/Meta/Bindless.yaml `
   --out-base src/Oxygen/Core/Bindless/Generated.
+```
+
+Generate, or check, the Vortex shared contracts:
+
+```powershell
+python -m bindless_codegen.contracts `
+  --spec src/Oxygen/Vortex/Meta/ShaderContracts.yaml `
+  --bindless src/Oxygen/Core/Meta/Bindless.yaml `
+  --cpp-root src --hlsl-root src/Oxygen/Graphics/Direct3D12/Shaders [--check]
 ```
 
 Notes:
@@ -189,6 +210,8 @@ BindlessCodeGen/
 │       ├── __init__.py
 │       ├── _version.py          # Tool version
 │       ├── cli.py               # Command-line interface
+│       ├── contracts.py         # Shared C++/HLSL contract generator
+│       ├── formatting.py        # clang-format and changed-only writes
 │       ├── generator.py         # Orchestrates parsing/validation/rendering
 │       ├── reporting.py         # Color/verbosity-aware Reporter
 │       ├── templates.py         # C++/HLSL/JSON templates
@@ -199,6 +222,8 @@ BindlessCodeGen/
 │       └── schema.py            # Schema loading/validation utilities
 └── tests/                       # Unit tests
   ├── test_generator_basic.py
+  ├── test_contracts.py
+  ├── test_static_samplers.py
   ├── test_cli_dry_run.py
   ├── test_bindless_validations.py
   ├── test_validation.py

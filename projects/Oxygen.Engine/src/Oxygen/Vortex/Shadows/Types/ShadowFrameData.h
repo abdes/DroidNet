@@ -9,12 +9,7 @@
 #include <cstdint>
 #include <vector>
 
-#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
-#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowRecord.h>
-#include <Oxygen/Vortex/Shadows/Types/LightShadowReference.h>
-#include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
-#include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
-#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
+#include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
 
 namespace oxygen::vortex {
 

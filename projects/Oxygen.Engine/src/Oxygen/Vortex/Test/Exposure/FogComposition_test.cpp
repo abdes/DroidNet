@@ -64,9 +64,9 @@
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
-#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
+#include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
-#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 
 namespace oxygen::vortex::testing::exposure {
@@ -325,7 +325,7 @@ NOLINT_TEST_F(
       .dimension = TextureType::kTexture2D,
     });
   auto scene_bindings = SceneTextureBindings {};
-  scene_bindings.scene_depth_srv = depth_slot.get();
+  scene_bindings.scene_depth_srv = depth_slot;
   const auto scene_slot = PublishFixtureData(scene_bindings);
   const auto environment_view_slot = PublishFixtureData(EnvironmentViewData {});
   auto compose = environment::FogPass(*renderer_);
@@ -373,7 +373,7 @@ NOLINT_TEST_F(
     view_bindings.frame_exposure_slot = frame->srv_index;
     view_bindings.exposure_status_uav = frame->current_state->status_uav_index;
     auto view = ViewConstants::GpuData {};
-    view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
+    view.bindless_view_frame_bindings_slot = BindlessViewFrameBindingsSlot {
       PublishFixtureData(view_bindings),
     };
     view.reverse_z = 0U;
@@ -489,7 +489,7 @@ NOLINT_TEST_F(ExposureGpuTest, FogCompositionClampsViewportAndDepthEdges)
       .dimension = TextureType::kTexture2D,
     });
   auto scene_bindings = SceneTextureBindings {};
-  scene_bindings.scene_depth_srv = depth_slot.get();
+  scene_bindings.scene_depth_srv = depth_slot;
   const auto scene_slot = PublishFixtureData(scene_bindings);
   const auto environment_view_slot = PublishFixtureData(EnvironmentViewData {});
   auto compose = environment::FogPass(*renderer_);
@@ -559,7 +559,7 @@ NOLINT_TEST_F(ExposureGpuTest, FogCompositionClampsViewportAndDepthEdges)
           continue;
         }
         auto view = ViewConstants::GpuData {};
-        view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
+        view.bindless_view_frame_bindings_slot = BindlessViewFrameBindingsSlot {
           view_slot,
         };
         view.reverse_z = 0U;
@@ -701,8 +701,7 @@ NOLINT_TEST_F(ExposureGpuTest, DeferredApPreservesInscatterAtLowAndZeroOpacity)
   };
   auto scene_bindings = SceneTextureBindings {};
   scene_bindings.scene_depth_srv = texture_srv(textures.GetSceneDepth(),
-    textures.GetSceneDepth().GetDescriptor().format, TextureType::kTexture2D)
-                                     .get();
+    textures.GetSceneDepth().GetDescriptor().format, TextureType::kTexture2D);
   const auto scene_slot = publish(scene_bindings);
   auto environment_view = EnvironmentViewData {};
   environment_view.sky_aerial_luminance_aerial_start_depth_km.w = 0.0F;
@@ -857,9 +856,10 @@ NOLINT_TEST_F(ExposureGpuTest, DeferredApPreservesInscatterAtLowAndZeroOpacity)
           view_bindings.environment_frame_slot = publish(environment_bindings);
           view_bindings.scene_texture_frame_slot = scene_slot;
           auto view = ViewConstants::GpuData {};
-          view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
-            publish(view_bindings),
-          };
+          view.bindless_view_frame_bindings_slot
+            = BindlessViewFrameBindingsSlot {
+                publish(view_bindings),
+              };
           view.reverse_z = 0U;
           auto constants = CreateUploadBuffer(
             SizeBytes {

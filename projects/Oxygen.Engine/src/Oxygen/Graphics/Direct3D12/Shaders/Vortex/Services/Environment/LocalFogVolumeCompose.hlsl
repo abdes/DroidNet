@@ -153,7 +153,7 @@ float4 VortexLocalFogVolumeComposePS(LocalFogTileVertexOutput input) : SV_Target
         = ResourceDescriptorHeap[pass.instance_buffer_slot];
     Texture2DArray<uint> tile_data_texture
         = ResourceDescriptorHeap[pass.tile_data_texture_slot];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     const float4 fog = GetLocalFogVolumeContribution(
         instances, tile_data_texture, pass, tile_coord, linear_sampler,
         camera_position, ray_origin, translated_world_position);

@@ -38,7 +38,7 @@
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/Test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/Test/Fixtures/TextureBinderPayloads.h>
-#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
 
 namespace oxygen::vortex::testing::exposure {
 

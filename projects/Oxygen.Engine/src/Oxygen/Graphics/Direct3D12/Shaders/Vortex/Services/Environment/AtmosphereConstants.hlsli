@@ -59,7 +59,7 @@ static const float kSunDiskEdgeSoftness = 0.0005;
 //! Do not replace with the default wrap sampler: transmittance and camera
 //! aerial LUTs are non-periodic, and wrap creates the below-horizon elliptical
 //! bands / bright artifacts that showed up around sunset.
-static const uint kAtmosphereLinearClampSampler = VORTEX_SAMPLER_LINEAR_CLAMP;
+static const uint kAtmosphereLinearClampSampler = K_SAMPLER_LINEAR_CLAMP;
 
 // =============================================================================
 // Physical Defaults (Artist Overridable via GpuSkyAtmosphereParams)

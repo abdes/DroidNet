@@ -27,8 +27,8 @@
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
-#include <Oxygen/Vortex/Types/ExposureStateData.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
+#include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
 
 namespace oxygen::vortex::testing::exposure {
 

@@ -19,14 +19,9 @@
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Testing/GTest.h>
-#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
-#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowRecord.h>
-#include <Oxygen/Vortex/Shadows/Types/LightShadowReference.h>
-#include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
-#include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
+#include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
 #include <Oxygen/Vortex/Test/Lighting/LightingGpuAbiFixture.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
-#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 
 namespace oxygen::vortex::testing {
 namespace {

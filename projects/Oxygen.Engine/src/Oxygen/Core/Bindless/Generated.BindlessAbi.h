@@ -9,7 +9,7 @@
 // Source-Version: 2.0.0
 // Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-04-21 10:29:41
+// Generated: 2026-10-12 12:46:05
 
 #pragma once
 
@@ -106,6 +106,16 @@ inline constexpr uint32_t kTexturesCapacity = 65536U;
 inline constexpr DomainToken kSamplersDomain { 3U };
 inline constexpr uint32_t kSamplersShaderIndexBase = 0U;
 inline constexpr uint32_t kSamplersCapacity = 256U;
+
+// Default trilinear wrap sampler
+inline constexpr uint32_t kLinearWrapSamplerIndex = 0U;
+// Reversed-Z PCF comparison sampler with a zero border
+inline constexpr uint32_t kShadowComparisonSamplerIndex = 1U;
+// Point clamp sampler for depth and GBuffer reads
+inline constexpr uint32_t kPointClampSamplerIndex = 2U;
+// Bilinear clamp sampler for the non-periodic atmosphere LUTs; wrap would pull
+// energy from the opposite edge
+inline constexpr uint32_t kLinearClampSamplerIndex = 3U;
 
 inline constexpr std::array<DomainDesc, 4> kDomainTable = { {
   DomainDesc { kGlobalSrvDomain, "srv_global", "GlobalSRV",

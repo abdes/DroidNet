@@ -8,7 +8,7 @@
 #define OXYGEN_VORTEX_FRAME_EXPOSURE_HELPERS_HLSLI
 
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
-#include "Vortex/Contracts/View/FrameExposure.hlsli"
+#include "Vortex/Contracts/View/ExposureStateData.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 // Camera-view exposure: the bound view's frame exposure publication.
@@ -20,7 +20,7 @@ static FrameExposureData GetFrameExposure()
     const ViewFrameBindings bindings
         = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
     FrameExposureData exposure;
-    TryLoadFrameExposure(bindings.frame_exposure_slot, exposure);
+    TryLoadFrameExposureData(bindings.frame_exposure_slot, exposure);
     return exposure;
 }
 

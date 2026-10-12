@@ -61,9 +61,9 @@
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
-#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
+#include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
-#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 
 namespace oxygen::vortex::testing::exposure {
 namespace {
@@ -187,7 +187,7 @@ namespace {
       float pre_exposure = 1.0F) -> void
     {
       auto scene_textures = SceneTextureBindings {};
-      scene_textures.scene_depth_srv = depth_slot_.get();
+      scene_textures.scene_depth_srv = depth_slot_;
       auto environment_bindings = EnvironmentFrameBindings {};
       environment_bindings.environment_static_slot
         = PublishFixtureData(environment);
@@ -202,7 +202,7 @@ namespace {
         .pre_exposure = pre_exposure,
         .one_over_pre_exposure = 1.0F / pre_exposure,
       });
-      view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
+      view.bindless_view_frame_bindings_slot = BindlessViewFrameBindingsSlot {
         PublishFixtureData(view_bindings),
       };
       auto constants = CreateUploadBuffer(

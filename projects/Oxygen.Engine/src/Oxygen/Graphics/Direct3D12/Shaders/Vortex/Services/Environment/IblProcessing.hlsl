@@ -60,7 +60,7 @@ static float3 SampleSourceCube(uint cube_srv, float3 direction, uint output_size
     uint width, height, levels;
     cube.GetDimensions(0u, width, height, levels);
     float lod = clamp(log2(float(width) / float(output_size)), 0.0, float(levels - 1u));
-    SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+    SamplerState linear_clamp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
     return cube.SampleLevel(linear_clamp, CubemapSamplingDirFromOxygenWS(direction), lod).rgb;
 }
 
@@ -309,7 +309,7 @@ void IblPrefilterCS(uint3 id : SV_DispatchThreadID)
     TextureCube<float4> source = ResourceDescriptorHeap[w.source_srv];
     RWTexture2DArray<float4> output = ResourceDescriptorHeap[w.output_uav];
     RWStructuredBuffer<IblProductMetadata> metadata = ResourceDescriptorHeap[w.metadata_uav];
-    SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+    SamplerState linear_clamp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
     float3 n = CubemapDirectionFromFaceUv(id.z, (float2(id.xy) + 0.5) / w.output_size);
     float3 radiance = IblPrefilter(source, linear_clamp, n,
         IblMipToRoughness(w.output_mip, w.maximum_mip), w.source_size, w.maximum_mip);

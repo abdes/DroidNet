@@ -26,7 +26,7 @@
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
-#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
+#include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -63,7 +63,7 @@ namespace {
   NOLINT_TEST_F(
     ExposureGpuTest, PassRecordedMidViewReadsTheBindingsPublishedBeforeIt)
   {
-    constexpr std::uint32_t kStage10SceneColorSrv = 0x5C0FU;
+    constexpr auto kStage10SceneColorSrv = ShaderVisibleIndex { 0x5C0FU };
     InstallProbeShader(OXYGEN_VIEW_RECORD_PROBE, ProbeRequest());
 
     auto stage10_textures = SceneTextureBindings {};
@@ -153,11 +153,11 @@ namespace {
     const auto& [before, after] = samples;
     EXPECT_EQ(before.view_frame_bindings_slot, stage9_view_slot.get());
     EXPECT_EQ(before.scene_texture_frame_slot, stage9_textures_slot.get());
-    EXPECT_EQ(before.scene_color_srv, SceneTextureBindings::kInvalidIndex);
+    EXPECT_EQ(before.scene_color_srv, kInvalidShaderVisibleIndex.get());
     EXPECT_EQ(before.frame_slot, frame_slot);
     EXPECT_EQ(after.view_frame_bindings_slot, stage10_view_slot.get());
     EXPECT_EQ(after.scene_texture_frame_slot, stage10_textures_slot.get());
-    EXPECT_EQ(after.scene_color_srv, kStage10SceneColorSrv);
+    EXPECT_EQ(after.scene_color_srv, kStage10SceneColorSrv.get());
     EXPECT_EQ(after.frame_slot, frame_slot);
   }
 

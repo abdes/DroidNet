@@ -9,7 +9,7 @@
 // Source-Version: 2.0.0
 // Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-04-21 10:29:41
+// Generated: 2026-10-12 12:46:05
 
 #ifndef OXYGEN_BINDLESS_ABI_HLSL
 #define OXYGEN_BINDLESS_ABI_HLSL
@@ -77,5 +77,15 @@ static const uint K_SAMPLERS_CAPACITY = 256;
 #define BX_IN_SAMPLERS(IDX)  BX_IsInDomain((IDX), BX_DOMAIN_SAMPLERS_BASE, BX_DOMAIN_SAMPLERS_CAPACITY)
 #define BX_TRY_SAMPLERS(IDX) BX_TryUseGlobalIndexInDomain((IDX), BX_DOMAIN_SAMPLERS_BASE, BX_DOMAIN_SAMPLERS_CAPACITY)
 
+// Static samplers (SamplerDescriptorHeap indices)
+
+// Default trilinear wrap sampler
+static const uint K_SAMPLER_LINEAR_WRAP = 0;
+// Reversed-Z PCF comparison sampler with a zero border
+static const uint K_SAMPLER_SHADOW_COMPARISON = 1;
+// Point clamp sampler for depth and GBuffer reads
+static const uint K_SAMPLER_POINT_CLAMP = 2;
+// Bilinear clamp sampler for the non-periodic atmosphere LUTs; wrap would pull energy from the opposite edge
+static const uint K_SAMPLER_LINEAR_CLAMP = 3;
 
 #endif // OXYGEN_BINDLESS_ABI_HLSL

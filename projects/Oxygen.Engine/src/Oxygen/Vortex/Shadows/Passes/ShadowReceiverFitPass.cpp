@@ -37,8 +37,9 @@
 #include <Oxygen/Vortex/Internal/StructuredGpuBuffer.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Shadows/Passes/Generated.ShadowPassContracts.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowReceiverFitPass.h>
-#include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
+#include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex::shadows {
@@ -54,30 +55,7 @@ namespace {
                                "ConventionalShadowReceiverMask.hlsl";
   constexpr std::uint32_t kLinearGroupSize = 64U;
   constexpr std::uint32_t kScreenGroupSize = 8U;
-  // Mirror ShadowReceiverFit.hlsli.
-  constexpr std::uint32_t kMaskTiles = 64U * 64U;
-  constexpr std::uint32_t kMaskBlock = 2U * kMaskTiles + 8U * 8U;
-  constexpr std::uint32_t kBoundsStride = 32U;
-
-  //! Mirrors `ShadowReceiverFitInputs` in `ShadowReceiverFit.hlsli`.
-  struct alignas(16) ShadowReceiverFitInputs {
-    glm::mat4 inverse_view_projection { 1.0F };
-    glm::mat4 view_matrix { 1.0F };
-    glm::vec4 viewport { 0.0F };
-    ShaderVisibleIndex scene_depth_srv { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex cascade_records_uav { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex loose_cascade_records_srv { kInvalidShaderVisibleIndex };
-    std::uint32_t cascade_count { 0U };
-    ShaderVisibleIndex bounds_uav { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex mask_uav { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex draw_cull_records_srv { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex draw_metadata_srv { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex worlds_srv { kInvalidShaderVisibleIndex };
-    std::uint32_t draw_count { 0U };
-    float near_plane { 0.0F };
-    std::uint32_t pad0 { 0U };
-  };
-  static_assert(sizeof(ShadowReceiverFitInputs) == 192U);
+  constexpr std::uint32_t kBoundsStride = sizeof(ShadowReceiverBounds);
 
   enum class Kernel : std::uint8_t {
     kClear,
@@ -253,7 +231,7 @@ auto ShadowReceiverFitPass::Record(graphics::CommandRecorder& recorder,
   view.cascade_count = 0U;
   if (!view.records.Ensure(gfx, cascade_count)
     || !view.bounds.Ensure(gfx, cascade_count)
-    || !view.mask.Ensure(gfx, cascade_count * kMaskBlock)) {
+    || !view.mask.Ensure(gfx, cascade_count * kShadowReceiverMaskBlock)) {
     LOG_F(WARNING, "{}: view {} keeps its loose cascades", kDebugName,
       view_id.get());
     return std::nullopt;
@@ -338,7 +316,7 @@ auto ShadowReceiverFitPass::Record(graphics::CommandRecorder& recorder,
 
   dispatch(Kernel::kClear, GroupCount(cascade_count, kLinearGroupSize), 1U);
   dispatch(Kernel::kMaskClear,
-    GroupCount(cascade_count * kMaskBlock, kLinearGroupSize), 1U);
+    GroupCount(cascade_count * kShadowReceiverMaskBlock, kLinearGroupSize), 1U);
   barrier();
   dispatch(Kernel::kDepth, screen_x, screen_y);
   dispatch(Kernel::kTranslucent, draw_groups, 1U);
@@ -349,7 +327,7 @@ auto ShadowReceiverFitPass::Record(graphics::CommandRecorder& recorder,
   dispatch(Kernel::kMaskTranslucent, draw_groups, 1U);
   barrier();
   dispatch(Kernel::kMaskDilate,
-    GroupCount(cascade_count * kMaskTiles, kLinearGroupSize), 1U);
+    GroupCount(cascade_count * kShadowReceiverMaskTiles, kLinearGroupSize), 1U);
 
   for (auto* buffer : buffers) {
     recorder.DisableAutoMemoryBarriers(*buffer);

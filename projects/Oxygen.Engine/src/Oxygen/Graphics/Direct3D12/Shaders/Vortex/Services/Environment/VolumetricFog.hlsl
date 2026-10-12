@@ -18,139 +18,13 @@
 #include "Vortex/Services/Environment/TransmittanceMath.hlsli"
 #include "Vortex/Services/Shadows/DirectionalShadowCommon.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
+#include "Vortex/Services/Environment/Generated.FogContracts.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {
     uint g_DrawIndex;
     uint g_PassConstantsIndex;
 }
-
-struct VolumetricFogOutputHeader
-{
-    uint output_texture_uav;
-    uint output_width;
-    uint output_height;
-    uint output_depth;
-};
-
-struct VolumetricFogGridControl
-{
-    float start_distance_m;
-    float end_distance_m;
-    float near_fade_in_distance_m;
-    float global_extinction_scale;
-};
-
-struct VolumetricFogMediaControl0
-{
-    float3 albedo_rgb;
-    float scattering_distribution;
-};
-
-struct VolumetricFogGridZControl
-{
-    float3 grid_z_params;
-    uint directional_shadows_enabled;
-};
-
-struct VolumetricFogMediaControl1
-{
-    float3 emissive_rgb;
-    float static_lighting_scattering_intensity;
-};
-
-struct VolumetricFogLocalFogControl0
-{
-    uint instance_buffer_slot;
-    uint tile_data_texture_slot;
-    uint instance_count;
-    uint enabled;
-};
-
-struct VolumetricFogLocalFogControl1
-{
-    uint tile_resolution_x;
-    uint tile_resolution_y;
-    uint max_instances_per_tile;
-    float global_start_distance_m;
-};
-
-struct VolumetricFogLocalFogControl2
-{
-    float max_density_into_volumetric_fog;
-    float _pad0;
-    float _pad1;
-    float _pad2;
-};
-
-struct VolumetricFogHeightFogMediaControl0
-{
-    float primary_density;
-    float primary_height_falloff;
-    float primary_height_offset_m;
-    float secondary_density;
-};
-
-struct VolumetricFogHeightFogMediaControl1
-{
-    float secondary_height_falloff;
-    float secondary_height_offset_m;
-    float match_height_fog_factor;
-    uint enabled;
-};
-
-struct VolumetricFogSkyLightControl0
-{
-    uint distant_sky_light_lut_slot;
-    uint enabled;
-    float volumetric_scattering_intensity;
-    float diffuse_intensity;
-};
-
-struct VolumetricFogSkyLightControl1
-{
-    float3 tint_rgb;
-    float intensity_mul;
-};
-
-struct VolumetricFogTemporalHistoryControl0
-{
-    uint previous_integrated_light_scattering_srv;
-    uint enabled;
-    float history_weight;
-    uint history_miss_supersample_count;
-};
-
-struct VolumetricFogTemporalHistoryControl1
-{
-    float4 frame_jitter_offsets[16];
-};
-
-struct VolumetricFogPassConstants
-{
-    VolumetricFogOutputHeader output_header;
-    VolumetricFogGridControl grid;
-    VolumetricFogGridZControl grid_z;
-    VolumetricFogMediaControl0 media0;
-    VolumetricFogMediaControl1 media1;
-    VolumetricFogHeightFogMediaControl0 height_fog0;
-    VolumetricFogHeightFogMediaControl1 height_fog1;
-    VolumetricFogSkyLightControl0 sky_light0;
-    VolumetricFogSkyLightControl1 sky_light1;
-    VolumetricFogTemporalHistoryControl0 temporal_history0;
-    VolumetricFogTemporalHistoryControl1 temporal_history1;
-    VolumetricFogLocalFogControl0 local_fog0;
-    VolumetricFogLocalFogControl1 local_fog1;
-    VolumetricFogLocalFogControl2 local_fog2;
-    float4 light0_direction_enabled;
-    float4 light0_illuminance_rgb;
-    float4 light1_direction_enabled;
-    float4 light1_illuminance_rgb;
-    uint previous_frame_exposure_srv;
-    uint reserved0;
-    uint exposure_fp16_store;
-    uint previous_error_bounds_srv;
-};
 
 struct VolumetricLocalFogMedia
 {
@@ -332,7 +206,7 @@ static bool TrySampleTemporalHistory(
     Texture3D<float4> history_texture =
         ResourceDescriptorHeap[
             pass.temporal_history0.previous_integrated_light_scattering_srv];
-    const SamplerState linear_sampler = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+    const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
     const float previous_w =
         previous_z_slice / max(float(pass.output_header.output_depth), 1.0f);
     history_value =
@@ -564,13 +438,13 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
         // Candidate FP16 rejection (bit 2) does not invalidate the produced
         // history. Retain its quantified error when recovering to FP32; only
         // a producer-origin failure (bit 16) makes this history unusable.
-        certified_history = (previous_status.Load(48u) & 16u) == 0u;
+        certified_history = (previous_status.Load(EXPOSURE_STATUS_COMPLETED_FLAGS_OFFSET) & 16u) == 0u;
     }
     if (certified_history && !fp32_only && GetExposureStatusUav() != K_INVALID_BINDLESS_INDEX) {
         certified_history = pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX;
         if (certified_history) {
             ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
-            const float4 previous_bounds = asfloat(previous_status.Load4(112u));
+            const float4 previous_bounds = asfloat(previous_status.Load4(HdrProducerBoundOffset(10u)));
             certified_history = all(isfinite(previous_bounds)) && all(previous_bounds >= 0.0)
                 && previous_bounds.x < 1.0 && previous_bounds.z < 1.0;
         }
@@ -589,15 +463,19 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
             float4 history_high = history_value;
             if (pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX) {
                 ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
-                const float4 bounds = asfloat(previous_status.Load4(112u));
+                const float4 bounds = asfloat(previous_status.Load4(HdrProducerBoundOffset(10u)));
                 const uint3 extent = uint3(pass.output_header.output_width,
                     pass.output_header.output_height, pass.output_header.output_depth);
-                const uint gradient_flags = previous_status.Load(236u);
+                const uint gradient_flags = previous_status.Load(
+                    HdrFilterGradientOffset(10u) + HDR_FILTER_GRADIENT_FLAGS_OFFSET);
                 const bool gradients_valid = (gradient_flags & 3u) == 1u
-                    && previous_status.Load(252u) == extent.x * extent.y * extent.z;
+                    && previous_status.Load(HdrFilterGradientOffset(10u)
+                           + HDR_FILTER_GRADIENT_CHECKED_TEXELS_OFFSET) == extent.x * extent.y * extent.z;
                 const bool half_history = (pass.temporal_history0.enabled & 2u) != 0u;
-                const float3 rgb_gradient = asfloat(previous_status.Load3(224u));
-                const float3 t_gradient = asfloat(previous_status.Load3(240u));
+                const float3 rgb_gradient = asfloat(previous_status.Load3(
+                    HdrFilterGradientOffset(10u) + HDR_FILTER_GRADIENT_RGB_OFFSET));
+                const float3 t_gradient = asfloat(previous_status.Load3(
+                    HdrFilterGradientOffset(10u) + HDR_FILTER_GRADIENT_TRANSMITTANCE_OFFSET));
                 [unroll] for (uint c = 0u; c < 3u; ++c) {
                     if (!half_history && all((asuint(bounds.xy) & 0x7fffffffu) == 0u.xx)) {
                         history_low[c] = history_high[c] = history_value[c] * (GetPreExposure() * inverse_previous_p);

@@ -14,6 +14,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Registration.h>
+#include <Oxygen/Vortex/Environment/Passes/Generated.AtmosphereContracts.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -96,72 +97,7 @@ namespace environment {
       ShaderVisibleIndex sky_view_srv, ShaderVisibleIndex sky_view_uav,
       bool capture) -> RecordState;
     friend struct ::oxygen::vortex::testing::RendererPublicationProbe;
-    struct alignas(16) OutputHeader {
-      std::uint32_t output_texture_uav { 0U };
-      std::uint32_t output_width { 0U };
-      std::uint32_t output_height { 0U };
-      std::uint32_t transmittance_lut_srv { 0U };
-    };
-
-    struct alignas(16) LutHeader {
-      std::uint32_t multi_scattering_lut_srv { 0U };
-      std::uint32_t transmittance_width { 0U };
-      std::uint32_t transmittance_height { 0U };
-      std::uint32_t multi_scattering_width { 0U };
-    };
-
-    struct alignas(16) DispatchHeader {
-      std::uint32_t multi_scattering_height { 0U };
-      std::uint32_t active_light_count { 0U };
-      std::uint32_t reserved0 { 0U };
-      std::uint32_t exposure_fp16_store { 0U };
-    };
-
-    struct alignas(16) SamplingAtmosphere0 {
-      float sample_count_min { 0.0F };
-      float sample_count_max { 0.0F };
-      float distance_to_sample_count_max_inv { 0.0F };
-      float planet_radius_km { 0.0F };
-    };
-
-    struct alignas(16) SamplingAtmosphere1 {
-      float atmosphere_height_km { 0.0F };
-      float camera_altitude_km { 0.0F };
-      float rayleigh_scale_height_km { 0.0F };
-      float mie_scale_height_km { 0.0F };
-    };
-
-    struct alignas(16) PhaseFactors0 {
-      float multi_scattering_factor { 0.0F };
-      float mie_anisotropy { 0.0F };
-      float _pad0 { 0.0F };
-      float _pad1 { 0.0F };
-    };
-
-    struct alignas(16) PassConstants {
-      OutputHeader output_header {};
-      LutHeader lut_header {};
-      DispatchHeader dispatch_header {};
-      SamplingAtmosphere0 sampling_atmosphere0 {};
-      SamplingAtmosphere1 sampling_atmosphere1 {};
-      PhaseFactors0 phase_factors0 {};
-      std::array<float, 4> ground_albedo_rgb {};
-      std::array<float, 4> rayleigh_scattering_per_km_rgb {};
-      std::array<float, 4> mie_scattering_per_km_rgb {};
-      std::array<float, 4> mie_absorption_per_km_rgb {};
-      std::array<float, 4> ozone_absorption_per_km_rgb {};
-      std::array<float, 4> ozone_density_layer0 {};
-      std::array<float, 4> ozone_density_layer1 {};
-      std::array<float, 4> sky_view_lut_referential_row0 {};
-      std::array<float, 4> sky_view_lut_referential_row1 {};
-      std::array<float, 4> sky_view_lut_referential_row2 {};
-      std::array<float, 4> sky_luminance_factor_rgb {};
-      std::array<float, 4> sky_and_aerial_luminance_factor_rgb {};
-      std::array<float, 4> light0_direction_enabled {};
-      std::array<float, 4> light0_illuminance_rgb {};
-      std::array<float, 4> light1_direction_enabled {};
-      std::array<float, 4> light1_illuminance_rgb {};
-    };
+    using PassConstants = AtmosphereSkyViewLutPassConstants;
 
     Renderer& renderer_;
     std::shared_ptr<upload::TransientStructuredBuffer> pass_constants_buffer_;

@@ -65,6 +65,31 @@ abi:
       view_types: [Sampler]
       comment: "Global sampler table"
 
+  # Samplers the graphics backend creates at startup, in slot order, at fixed
+  # indices of the sampler domain. Shaders index them by name.
+  static_samplers:
+    - id: linear_wrap
+      domain: samplers
+      slot: 0
+      comment: "Default trilinear wrap sampler"
+
+    - id: shadow_comparison
+      domain: samplers
+      slot: 1
+      comment: "Reversed-Z PCF comparison sampler with a zero border"
+
+    - id: point_clamp
+      domain: samplers
+      slot: 2
+      comment: "Point clamp sampler for depth and GBuffer reads"
+
+    - id: linear_clamp
+      domain: samplers
+      slot: 3
+      comment: >-
+        Bilinear clamp sampler for the non-periodic atmosphere LUTs; wrap would
+        pull energy from the opposite edge
+
 backends:
   d3d12:
     strategy:

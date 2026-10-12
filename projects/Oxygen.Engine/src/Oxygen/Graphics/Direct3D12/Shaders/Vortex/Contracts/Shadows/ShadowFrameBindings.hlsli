@@ -8,46 +8,9 @@
 #define OXYGEN_VORTEX_CONTRACTS_SHADOWS_SHADOWFRAMEBINDINGS_HLSLI
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
-#include "Vortex/Contracts/Shadows/ShadowCascadeBinding.hlsli"
-#include "Vortex/Contracts/Shadows/ProjectedLocalShadowRecord.hlsli"
-#include "Vortex/Contracts/Shadows/CubeLocalShadowRecord.hlsli"
-#include "Vortex/Contracts/Shadows/ShadowRecords.hlsli"
+#include "Vortex/Contracts/Shadows/Generated.ShadowContracts.hlsli"
+#include "Vortex/Contracts/Lighting/LightingIndices.hlsli"
 #include "Vortex/Contracts/Lighting/LightingHelpers.hlsli"
-
-struct VortexShadowFrameBindings {
-    uint directional_records_srv;
-    uint directional_record_count;
-    uint projected_local_records_srv;
-    uint projected_local_record_count;
-    uint cube_local_records_srv;
-    uint cube_local_record_count;
-    uint cascade_records_srv;
-    uint cascade_record_count;
-    uint contact_depth_srv;
-    uint view_status_srv;
-    uint contact_enabled;
-    uint sampling_flags;
-    float2 contact_content_origin_px;
-    float2 contact_content_extent_px;
-    uint2 scene_generation;
-    uint2 selection_revision;
-    uint2 frame_sequence;
-    uint2 view_generation;
-    uint2 contact_texture_extent_px;
-    uint2 reserved;
-};
-
-static inline VortexShadowFrameBindings MakeInvalidVortexShadowFrameBindings()
-{
-    VortexShadowFrameBindings bindings = (VortexShadowFrameBindings)0;
-    bindings.directional_records_srv = K_INVALID_BINDLESS_INDEX;
-    bindings.projected_local_records_srv = K_INVALID_BINDLESS_INDEX;
-    bindings.cube_local_records_srv = K_INVALID_BINDLESS_INDEX;
-    bindings.cascade_records_srv = K_INVALID_BINDLESS_INDEX;
-    bindings.contact_depth_srv = K_INVALID_BINDLESS_INDEX;
-    bindings.view_status_srv = K_INVALID_BINDLESS_INDEX;
-    return bindings;
-}
 
 static inline VortexShadowFrameBindings LoadVortexShadowFrameBindings()
 {

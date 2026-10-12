@@ -30,7 +30,7 @@ static float3 EvaluateIblSpecularSplit(float3 filtered_radiance,
 static float2 SampleIblBrdf(uint descriptor, float normal_dot_view, float roughness)
 {
     Texture2D<float2> lookup = ResourceDescriptorHeap[descriptor];
-    SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+    SamplerState linear_clamp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
     return lookup.SampleLevel(linear_clamp,
         float2(saturate(normal_dot_view), saturate(roughness)), 0.0);
 }
@@ -94,7 +94,7 @@ static IblSurfaceLighting EvaluateSkyIbl(GpuSkyLightParams light, uint brdf_srv,
         const float2 integrated_brdf = SampleIblBrdf(brdf_srv, dot(n, v), roughness);
         const uint descriptor = SelectIblSpecularSrv(light, generation, f0, integrated_brdf);
         TextureCube<float4> prefiltered = ResourceDescriptorHeap[NonUniformResourceIndex(descriptor)];
-        SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+        SamplerState linear_clamp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
         const float mip = IblRoughnessToMip(saturate(roughness), light.prefilter_max_mip);
         const float3 reflection = CubemapSamplingDirFromOxygenWS(reflect(-v, n));
         const float3 filtered = prefiltered.SampleLevel(linear_clamp, reflection, mip).rgb;

@@ -39,6 +39,48 @@ add_custom_command(
   VERBATIM
 )
 
+# Shared C++/HLSL contracts are generated from Meta/ShaderContracts.yaml into
+# the source tree, where they are versioned like the bindless ABI headers. The
+# stamp is the only declared output, so a clean never deletes them.
+set(_contracts_spec "${CMAKE_CURRENT_SOURCE_DIR}/Meta/ShaderContracts.yaml")
+set(
+  _contracts_bindless
+  "${PROJECT_SOURCE_DIR}/src/Oxygen/Core/Meta/Bindless.yaml"
+)
+set(
+  _contracts_generator_dir
+  "${PROJECT_SOURCE_DIR}/src/Oxygen/Core/Tools/BindlessCodeGen/src/bindless_codegen"
+)
+set(_contracts_stamp "${CMAKE_CURRENT_BINARY_DIR}/shader_contracts.stamp")
+add_custom_command(
+  OUTPUT
+    "${_contracts_stamp}"
+  COMMAND
+    "${Python3_EXECUTABLE}" -m bindless_codegen.contracts --spec
+    "${_contracts_spec}" --bindless "${_contracts_bindless}" --cpp-root
+    "${PROJECT_SOURCE_DIR}/src" --hlsl-root
+    "${PROJECT_SOURCE_DIR}/src/Oxygen/Graphics/Direct3D12/Shaders"
+  COMMAND
+    "${CMAKE_COMMAND}" -E touch "${_contracts_stamp}"
+  DEPENDS
+    "${_contracts_spec}"
+    "${_contracts_bindless}"
+    "${_contracts_generator_dir}/contracts.py"
+    "${_contracts_generator_dir}/formatting.py"
+    "${PROJECT_SOURCE_DIR}/.clang-format"
+  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+  COMMENT "Generating Vortex shader contracts"
+  VERBATIM
+)
+add_custom_target(oxygen-vortex_contracts_gen DEPENDS "${_contracts_stamp}")
+add_dependencies(oxygen-vortex_contracts_gen oxygen-core_bindless_gen)
+if(TARGET oxygen-graphics-direct3d12_shaders)
+  add_dependencies(
+    oxygen-graphics-direct3d12_shaders
+    oxygen-vortex_contracts_gen
+  )
+endif()
+
 # ==============================================================================
 # Build instructions
 # ==============================================================================
@@ -48,6 +90,7 @@ add_custom_command(
 # ------------------------------------------------------------------------------
 
 add_library(${META_MODULE_TARGET})
+add_dependencies(${META_MODULE_TARGET} oxygen-vortex_contracts_gen)
 target_sources(${META_MODULE_TARGET} PRIVATE "${ggx_embedded_header}")
 target_include_directories(
   ${META_MODULE_TARGET}
@@ -103,6 +146,7 @@ set(
   "SceneRenderer/SceneTextureLeasePool.h"
   "SceneRenderer/DepthPrePassPolicy.h"
   "SceneRenderer/ShadingMode.h"
+  "SceneRenderer/Generated.SceneTextureBindings.h"
   "SceneRenderer/SceneTextures.h"
   "SceneRenderer/Stages/BasePass/BasePassMeshProcessor.h"
   "SceneRenderer/Stages/BasePass/BasePassModule.h"
@@ -113,6 +157,7 @@ set(
   "SceneRenderer/Stages/Hzb/ScreenHzbModule.h"
   "SceneRenderer/Stages/Occlusion/Internal/CullingViewHistory.h"
   "SceneRenderer/Stages/Occlusion/Internal/DrawCullPass.h"
+  "SceneRenderer/Stages/Occlusion/Internal/Generated.OcclusionContracts.h"
   "SceneRenderer/Stages/Occlusion/Internal/HistorySlotAllocator.h"
   "SceneRenderer/Stages/Occlusion/Internal/IndirectListBuilder.h"
   "SceneRenderer/Stages/Occlusion/OcclusionConfig.h"
@@ -150,6 +195,8 @@ set(
   "Environment/Types/IblCaptureLease.h"
   "Environment/Passes/SkyPass.h"
   "Environment/Passes/AtmosphereComposePass.h"
+  "Environment/Passes/Generated.AtmosphereContracts.h"
+  "Environment/Passes/Generated.FogContracts.h"
   "Environment/Passes/AtmosphereTransmittanceLutPass.h"
   "Environment/Passes/AtmosphereMultiScatteringLutPass.h"
   "Environment/Passes/DistantSkyLightLutPass.h"
@@ -207,6 +254,7 @@ set(
   "Shadows/Passes/CascadeShadowPass.h"
   "Shadows/Passes/ShadowDepthPass.h"
   "Shadows/Passes/ShadowReceiverFitPass.h"
+  "Shadows/Passes/Generated.ShadowPassContracts.h"
   "Lighting/Types/DirectionalLightForwardData.h"
   "Lighting/Types/ClusterLightRange.h"
   "Lighting/Types/ForwardLocalLightRecord.h"
@@ -217,12 +265,8 @@ set(
   "Types/LightingIndices.h"
   "Shadows/Types/ShadowFrameData.h"
   "Shadows/Types/ShadowReceiverView.h"
-  "Shadows/Types/DirectionalShadowRecord.h"
   "Shadows/Types/FrameShadowInputs.h"
-  "Shadows/Types/LightShadowReference.h"
-  "Shadows/Types/CubeLocalShadowRecord.h"
-  "Shadows/Types/ShadowCascadeBinding.h"
-  "Shadows/Types/ProjectedLocalShadowRecord.h"
+  "Shadows/Types/Generated.ShadowContracts.h"
   "Types/CompositingTask.h"
   "Types/AcceptedDrawView.h"
   "Types/DrawCullRecord.h"
@@ -230,7 +274,8 @@ set(
   "Types/EnvironmentStaticData.h"
   "Types/EnvironmentViewData.h"
   "Types/DebugFrameBindings.h"
-  "Types/DrawFrameBindings.h"
+  "Types/BindlessSlots.h"
+  "Types/Generated.DrawContracts.h"
   "Types/EnvironmentFrameBindings.h"
   "Types/FrameLightSelection.h"
   "Types/GroundGridConfig.h"
@@ -243,7 +288,6 @@ set(
   "Types/PassMask.h"
   "Types/ProceduralGridMaterialConstants.h"
   "Types/ScreenHzbFrameBindings.h"
-  "Types/ShadowFrameBindings.h"
   "Types/SyntheticSunData.h"
   "Types/VelocityPublications.h"
   "Types/ExposureTransition.h"
@@ -252,10 +296,11 @@ set(
   "Types/SkyLightRuntimeState.h"
   "Types/ResidentContentRevision.h"
   "Types/ExposureTargetData.h"
-  "Types/ExposureStateData.h"
   "Types/ViewConstants.h"
   "Types/ViewRenderStatus.h"
-  "Types/ViewFrameBindings.h"
+  "Types/Generated.ExposureContracts.h"
+  "Types/Generated.ViewConstants.h"
+  "Types/Generated.ViewContracts.h"
   "Types/ViewHistoryFrameBindings.h"
   "Types/VsmFrameBindings.h"
   "ScenePrep/GeometryRef.h"

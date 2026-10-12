@@ -10,6 +10,7 @@
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 #include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
+#include "Vortex/Services/Environment/Generated.AtmosphereContracts.hlsli"
 
 // The capture entry has no camera view; only the per-view entry reads the
 // view's frame exposure.
@@ -22,80 +23,6 @@ cbuffer RootConstants : register(b2, space0)
     uint g_DrawIndex;
     uint g_PassConstantsIndex;
 }
-
-struct SkyViewOutputHeader
-{
-    uint output_texture_uav;
-    uint output_width;
-    uint output_height;
-    uint transmittance_lut_srv;
-};
-
-struct SkyViewLutHeader
-{
-    uint multi_scattering_lut_srv;
-    uint transmittance_width;
-    uint transmittance_height;
-    uint multi_scattering_width;
-};
-
-struct SkyViewDispatchHeader
-{
-    uint multi_scattering_height;
-    uint active_light_count;
-    uint reserved0;
-    uint exposure_fp16_store;
-};
-
-struct SkyViewSamplingAtmosphere0
-{
-    float sample_count_min;
-    float sample_count_max;
-    float distance_to_sample_count_max_inv;
-    float planet_radius_km;
-};
-
-struct SkyViewSamplingAtmosphere1
-{
-    float atmosphere_height_km;
-    float camera_altitude_km;
-    float rayleigh_scale_height_km;
-    float mie_scale_height_km;
-};
-
-struct SkyViewPhaseFactors0
-{
-    float multi_scattering_factor;
-    float mie_anisotropy;
-    float _pad0;
-    float _pad1;
-};
-
-struct AtmosphereSkyViewLutPassConstants
-{
-    SkyViewOutputHeader output_header;
-    SkyViewLutHeader lut_header;
-    SkyViewDispatchHeader dispatch_header;
-    SkyViewSamplingAtmosphere0 sampling_atmosphere0;
-    SkyViewSamplingAtmosphere1 sampling_atmosphere1;
-    SkyViewPhaseFactors0 phase_factors0;
-    float4 ground_albedo_rgb;
-    float4 rayleigh_scattering_per_km_rgb;
-    float4 mie_scattering_per_km_rgb;
-    float4 mie_absorption_per_km_rgb;
-    float4 ozone_absorption_per_km_rgb;
-    float4 ozone_density_layer0;
-    float4 ozone_density_layer1;
-    float4 sky_view_lut_referential_row0;
-    float4 sky_view_lut_referential_row1;
-    float4 sky_view_lut_referential_row2;
-    float4 sky_luminance_factor_rgb;
-    float4 sky_and_aerial_luminance_factor_rgb;
-    float4 light0_direction_enabled;
-    float4 light0_illuminance_rgb;
-    float4 light1_direction_enabled;
-    float4 light1_illuminance_rgb;
-};
 
 static uint PassOutputTextureUav(AtmosphereSkyViewLutPassConstants pass) { return pass.output_header.output_texture_uav; }
 static uint PassOutputWidth(AtmosphereSkyViewLutPassConstants pass) { return pass.output_header.output_width; }

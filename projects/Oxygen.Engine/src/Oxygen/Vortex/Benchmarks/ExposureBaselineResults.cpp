@@ -24,7 +24,7 @@
 #include <Oxygen/Vortex/Benchmarks/ExposureBaselineScenario.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Support/CpuTimingCapture.h>
-#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
 
 namespace oxygen::vortex::testing::exposure {
 

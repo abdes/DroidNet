@@ -173,7 +173,7 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 | S5  | One pass-input convention; shared mesh position with WPO               | H7, M6, M7                  | S3, S4  | `validated` | —      |
 | S6  | Fail loudly                                                            | M1, M5, H6, H8              | S4      | `validated` | —      |
 | S7  | Frame and view lifecycle                                               | M3, M4                      | S4      | `validated` | —      |
-| S8  | Generated shared contracts                                             | M8, H8                      | S5, S6  | `planned`   | —      |
+| S8  | Generated shared contracts                                             | M8, H8                      | S5, S6  | `validated` | —      |
 | S9  | Unwired fields and dead code                                           | L2, L3, L4, L5, L6, L8, L11 | S3      | `validated` | —      |
 | S10 | Conventional shadow receiver analysis and receiver-mask caster culling | L1                          | S3, S5  | `validated` | —      |
 | S11 | GPU debug primitives                                                   | L1, VX-DIAG-01              | S3, S6  | `validated` | —      |
@@ -269,7 +269,7 @@ Update the owning designs, record the [answered decisions](#decisions).
       define is in the action key, not the request identity. Camera-only
       helpers reach b1 through it; pure counterparts take slots or records:
       `MaskedAlphaTest.hlsli` (bound part in `MaskedAlphaTestView.hlsli`),
-      `FrameExposure.hlsli`, `SkyDiffuseIrradiance.hlsli`,
+      `TryLoadFrameExposureData`, `SkyDiffuseIrradiance.hlsli`,
       `LightRecords.hlsli`, and `ComputeMeshClipPosition` with explicit
       matrices. `SkyRadiance.hlsli` and `AtmosphereSampling.hlsli` no longer
       include bound helpers.
@@ -412,14 +412,31 @@ Notes:
 
 ## S8 — Generated shared contracts
 
-- [ ] Extend BindlessCodeGen (`Core/Meta/Bindless.yaml`) to emit shared
-      structs (C++ and HLSL with offset asserts), sampler slots and typed
-      accessors with their domain checks.
-- [ ] Move DrawFrameBindings, ViewConstants, ViewFrameBindings,
+Design:
+[shader contracts §4.10](../../lld/shader-contracts.md#410-generated-shared-contracts).
+
+- [x] Extend BindlessCodeGen to emit shared structs (C++ and HLSL with offset
+      asserts), sampler slots and typed accessors with their domain checks.
+- [x] Move DrawFrameBindings, ViewConstants, ViewFrameBindings,
       ViewHistoryFrameBindings, DrawMetadata, SceneTextureBindings, occlusion
       records, shadow, contact-shadow caster and atmosphere/fog pass
       constants and the `HdrConsumerInputs` offsets to the schema.
-- [ ] **Tests.** Generator tests; layout mismatch fails the build.
+- [x] **Tests.** Generator tests; layout mismatch fails the build.
+
+Notes:
+
+- The Vortex structs live in their own schema,
+  `Vortex/Meta/ShaderContracts.yaml`, validated against the domains of
+  `Core/Meta/Bindless.yaml`; Core stays free of renderer types. Static
+  sampler slots are part of the bindless ABI (`abi.static_samplers`).
+- The exposure state, status and HDR suitability records are byte records:
+  every literal offset in the exposure, HDR and fog shaders became a generated
+  name, not only the consumer-input offsets.
+- Generated records default every bindless slot to invalid, including
+  `DrawMetadata`'s geometry buffers, which were implicitly zero; scene-texture
+  slots are `ShaderVisibleIndex` like the other records.
+- The shadow test that parsed HLSL to compare offsets is gone: the generated
+  assertions enforce the same at build time.
 
 ## S9 — Unwired fields and dead code
 

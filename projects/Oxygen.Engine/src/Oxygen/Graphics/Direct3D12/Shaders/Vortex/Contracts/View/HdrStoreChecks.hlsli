@@ -8,6 +8,7 @@
 #define VORTEX_HDR_STORE_CHECKS_HLSLI
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Contracts/View/Generated.ExposureContracts.hlsli"
 #include "Vortex/Contracts/View/HdrRadianceRange.hlsli"
 
 void RecordHdrRangeFailure(uint failure, uint product, uint status_uav)
@@ -18,9 +19,10 @@ void RecordHdrRangeFailure(uint failure, uint product, uint status_uav)
     uint unused;
     // Failed qualification (2) plus producer-origin failure (16). The latter
     // distinguishes this verdict from later candidate-evaluation failures.
-    status.InterlockedOr(48u, 18u, unused);
-    status.InterlockedCompareExchange(52u, 0u, product, unused);
-    status.InterlockedOr(56u, failure, unused);
+    status.InterlockedOr(EXPOSURE_STATUS_COMPLETED_FLAGS_OFFSET, 18u, unused);
+    status.InterlockedCompareExchange(
+        EXPOSURE_STATUS_COMPLETED_FIRST_FAILURE_PRODUCT_OFFSET, 0u, product, unused);
+    status.InterlockedOr(EXPOSURE_STATUS_COMPLETED_FIRST_FAILURE_KIND_OFFSET, failure, unused);
 }
 
 // Original FP32 store input, before sanitization/narrowing. This is a range

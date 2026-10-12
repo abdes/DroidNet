@@ -20,6 +20,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/Generated.OcclusionContracts.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -35,36 +36,6 @@ class Renderer;
 } // namespace oxygen::vortex
 
 namespace oxygen::vortex::occlusion::internal {
-
-//! Mirrors OcclusionCullPassConstants in OcclusionCull.hlsl.
-struct alignas(16) OcclusionCullPassConstants {
-  glm::mat4 view_projection { 1.0F };
-  //! Viewport origin and size, in pixels.
-  glm::vec4 viewport { 0.0F };
-  //! Rasterized pixel rect: min x, min y, max x, max y (exclusive).
-  glm::vec4 clip_rect { 0.0F };
-  glm::vec4 depth_encoding { 0.0F };
-  glm::vec4 depth_linearize { 0.0F };
-  //! The pyramid's source rect: origin x, origin y, width, height.
-  glm::uvec4 pyramid_source { 0U };
-  ShaderVisibleIndex draw_metadata_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex cull_records_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex worlds_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex visibility_uav { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex history_slots_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex history_uav { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex stats_uav { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex pyramid_srv { kInvalidShaderVisibleIndex };
-  std::uint32_t draw_count { 0U };
-  std::uint32_t flags { 0U };
-  float depth_bias { 0.0F };
-  ShaderVisibleIndex debug_bindings_srv { kInvalidShaderVisibleIndex };
-  ShaderVisibleIndex cascade_records_srv { kInvalidShaderVisibleIndex };
-  std::uint32_t cascade_index { 0U };
-  ShaderVisibleIndex receiver_mask_srv { kInvalidShaderVisibleIndex };
-  std::uint32_t _pad0 { 0U };
-};
-static_assert(sizeof(OcclusionCullPassConstants) == 208U);
 
 //! How a culling view's depth target stores depth, for the occlusion test.
 /*!

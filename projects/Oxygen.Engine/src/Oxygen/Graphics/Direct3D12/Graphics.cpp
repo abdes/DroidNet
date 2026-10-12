@@ -282,23 +282,17 @@ protected:
       _ = allocator_->ReserveRaw(ResourceViewType::kSampler,
         DescriptorVisibility::kShaderVisible, oxygen::bindless::Count { 1 });
 
-      // Ensure stable default samplers exist for bindless sampling.
-      // Current contracts:
-      // - SamplerDescriptorHeap[0] = default linear wrap sampler
-      // - SamplerDescriptorHeap[1] = shadow comparison sampler
-      // - SamplerDescriptorHeap[2] = point clamp sampler for depth/GBuffer
-      // reads
-      // - SamplerDescriptorHeap[3] = linear clamp sampler for atmosphere LUTs
-      //
-      // Keep this ordering stable. The atmosphere shaders hardcode sampler slot
-      // 3 as the UE5.7-parity sampler for transmittance / sky-view / aerial
-      // perspective LUT sampling. Using the default wrap sampler there
-      // reintroduces the sunset below-horizon ellipse/banding artifacts because
-      // those LUT domains are not periodic.
+      // Create the static samplers of the bindless ABI (Bindless.yaml), in
+      // slot order; shaders index them by their generated K_SAMPLER_* names.
       if (!default_sampler_.IsValid()) {
         default_sampler_ = allocator_->AllocateBindless(
           oxygen::bindless::generated::kSamplersDomain,
           ResourceViewType::kSampler);
+        CHECK_F(!default_sampler_.IsValid()
+            || allocator_->GetShaderVisibleIndex(default_sampler_)
+              == oxygen::ShaderVisibleIndex { oxygen::bindless::generated::
+                  kLinearWrapSamplerIndex },
+          "Static sampler allocated out of its ABI slot");
         if (default_sampler_.IsValid()) {
           const auto sampler_desc = D3D12_SAMPLER_DESC {
             .Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR,
@@ -324,6 +318,11 @@ protected:
         shadow_comparison_sampler_ = allocator_->AllocateBindless(
           oxygen::bindless::generated::kSamplersDomain,
           ResourceViewType::kSampler);
+        CHECK_F(!shadow_comparison_sampler_.IsValid()
+            || allocator_->GetShaderVisibleIndex(shadow_comparison_sampler_)
+              == oxygen::ShaderVisibleIndex { oxygen::bindless::generated::
+                  kShadowComparisonSamplerIndex },
+          "Static sampler allocated out of its ABI slot");
         if (shadow_comparison_sampler_.IsValid()) {
           const auto sampler_desc = D3D12_SAMPLER_DESC {
             .Filter = D3D12_FILTER_COMPARISON_MIN_MAG_LINEAR_MIP_POINT,
@@ -349,6 +348,11 @@ protected:
         point_clamp_sampler_ = allocator_->AllocateBindless(
           oxygen::bindless::generated::kSamplersDomain,
           ResourceViewType::kSampler);
+        CHECK_F(!point_clamp_sampler_.IsValid()
+            || allocator_->GetShaderVisibleIndex(point_clamp_sampler_)
+              == oxygen::ShaderVisibleIndex { oxygen::bindless::generated::
+                  kPointClampSamplerIndex },
+          "Static sampler allocated out of its ABI slot");
         if (point_clamp_sampler_.IsValid()) {
           const auto sampler_desc = D3D12_SAMPLER_DESC {
             .Filter = D3D12_FILTER_MIN_MAG_MIP_POINT,
@@ -374,6 +378,11 @@ protected:
         linear_clamp_sampler_ = allocator_->AllocateBindless(
           oxygen::bindless::generated::kSamplersDomain,
           ResourceViewType::kSampler);
+        CHECK_F(!linear_clamp_sampler_.IsValid()
+            || allocator_->GetShaderVisibleIndex(linear_clamp_sampler_)
+              == oxygen::ShaderVisibleIndex { oxygen::bindless::generated::
+                  kLinearClampSamplerIndex },
+          "Static sampler allocated out of its ABI slot");
         if (linear_clamp_sampler_.IsValid()) {
           // Mirrors UE5.7's TStaticSamplerState<SF_Bilinear> use for the sky
           // atmosphere LUT family. Clamp is critical here: transmittance and

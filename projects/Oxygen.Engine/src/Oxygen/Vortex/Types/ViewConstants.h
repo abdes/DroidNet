@@ -15,31 +15,11 @@
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Vortex/Types/Generated.ViewConstants.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::vortex {
-
-// Strong slot wrapper for the top-level per-view routing payload.
-struct BindlessViewFrameBindingsSlot {
-  ShaderVisibleIndex value;
-  BindlessViewFrameBindingsSlot()
-    : BindlessViewFrameBindingsSlot(kInvalidShaderVisibleIndex)
-  {
-  }
-  explicit constexpr BindlessViewFrameBindingsSlot(const ShaderVisibleIndex v)
-    : value(v)
-  {
-  }
-  [[nodiscard]] constexpr auto IsValid() const noexcept
-  {
-    return value != kInvalidShaderVisibleIndex;
-  }
-  constexpr auto operator<=>(const BindlessViewFrameBindingsSlot&) const
-    = default;
-};
-static_assert(sizeof(BindlessViewFrameBindingsSlot) == 4);
 
 struct MonotonicVersion {
   uint64_t value { 0 };
@@ -102,36 +82,7 @@ public:
   };
   static constexpr RendererTag kRenderer {};
 
-  struct alignas(packing::kShaderDataFieldAlignment) GpuData {
-    frame::SequenceNumber frame_seq_num { 0 };
-    frame::Slot::UnderlyingType frame_slot { 0 };
-    float time_seconds { 0.0F };
-
-    // Aligned at 16 bytes here
-    glm::mat4 view_matrix { 1.0F };
-    glm::mat4 projection_matrix { 1.0F };
-    glm::mat4 inverse_view_projection_matrix { 1.0F };
-
-    // Aligned at 16 bytes here
-    glm::vec3 camera_position { 0.0F, 0.0F, 0.0F };
-    float _pad0 { 0.0F };
-
-    // Aligned at 16 bytes here
-    BindlessViewFrameBindingsSlot view_frame_bindings_bslot;
-    std::uint32_t reverse_z { 1 };
-    std::uint32_t is_orthographic { 0 };
-    std::uint32_t _pad3 { 0 };
-    glm::vec4 _pad_to_256_1 { 0.0F };
-  };
-  static_assert(sizeof(GpuData) <= packing::kRootConstantsMaxSize);
-  static_assert(sizeof(GpuData) % packing::kShaderDataFieldAlignment == 0);
-  // clang-format off
-  static_assert(offsetof(GpuData, view_matrix) % packing::kShaderDataFieldAlignment == 0);
-  static_assert(offsetof(GpuData, projection_matrix) % packing::kShaderDataFieldAlignment == 0);
-  static_assert(offsetof(GpuData, inverse_view_projection_matrix) % packing::kShaderDataFieldAlignment == 0);
-  static_assert(offsetof(GpuData, camera_position) % packing::kShaderDataFieldAlignment == 0);
-  static_assert(offsetof(GpuData, view_frame_bindings_bslot) % packing::kShaderDataFieldAlignment == 0);
-  // clang-format on
+  using GpuData = ViewConstantsGpuData;
 
   ViewConstants() = default;
   ~ViewConstants() = default;
@@ -207,7 +158,7 @@ private:
   auto RebuildCache() const noexcept -> void
   {
     cached_ = GpuData {
-      .frame_seq_num = frame_seq_num_,
+      .frame_seq_num = frame_seq_num_.get(),
       .frame_slot = frame_slot_.get(),
       .time_seconds = time_seconds_,
       .view_matrix = view_matrix_,
@@ -215,7 +166,7 @@ private:
       .inverse_view_projection_matrix
       = glm::inverse(projection_matrix_ * view_matrix_),
       .camera_position = camera_position_,
-      .view_frame_bindings_bslot = view_frame_bindings_bslot_,
+      .bindless_view_frame_bindings_slot = view_frame_bindings_bslot_,
       .reverse_z = reverse_z_ ? 1U : 0U,
       .is_orthographic = orthographic_ ? 1U : 0U,
     };

@@ -177,7 +177,7 @@ static inline float3 MakeDepthMismatchHeatmap(float depth_error)
 [shader("pixel")] float4 PS(VSOutput input)
   : SV_Target0
 {
-  SamplerState linear_sampler = SamplerDescriptorHeap[0];
+  SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
 #if defined(ALPHA_TEST) || defined(DEBUG_MASKED_ALPHA_COVERAGE)
   const MaskedAlphaTestResult alpha_test
     = EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler);

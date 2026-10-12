@@ -44,7 +44,7 @@ static inline float SampleDirectionalShadowSurface(
     Texture2DArray<float> shadow_surface =
         ResourceDescriptorHeap[NonUniformResourceIndex(cascade.surface_srv)];
     SamplerComparisonState comparison_sampler =
-        SamplerDescriptorHeap[VORTEX_SAMPLER_SHADOW_COMPARISON];
+        SamplerDescriptorHeap[K_SAMPLER_SHADOW_COMPARISON];
     const float layer = (float)cascade.array_layer;
     const float2 texel_size =
         max(cascade.inverse_resolution, float2(0.000001f, 0.000001f));

@@ -32,6 +32,7 @@
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/StructuredGpuBuffer.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/Generated.OcclusionContracts.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/IndirectListBuilder.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
@@ -45,41 +46,6 @@ namespace {
   constexpr std::uint32_t kGroupSize = 256U;
   constexpr std::uint32_t kCommandUints
     = sizeof(IndirectDrawCommand) / sizeof(std::uint32_t);
-
-  //! Mirrors IndirectCandidate in ListCompaction.hlsl.
-  struct GpuIndirectCandidate {
-    std::uint32_t draw_index { 0U };
-    std::uint32_t vertex_count { 0U };
-    std::uint32_t instance_count { 0U };
-    std::uint32_t segment { 0U };
-  };
-  static_assert(sizeof(GpuIndirectCandidate) == 16U);
-
-  //! Mirrors IndirectSegment in ListCompaction.hlsl.
-  struct GpuIndirectSegment {
-    std::uint32_t first_candidate { 0U };
-    std::uint32_t candidate_count { 0U };
-    std::uint32_t _pad0 { 0U };
-    std::uint32_t _pad1 { 0U };
-  };
-  static_assert(sizeof(GpuIndirectSegment) == 16U);
-
-  //! Mirrors ListCompactionPassConstants in ListCompaction.hlsl.
-  struct ListCompactionPassConstants {
-    ShaderVisibleIndex candidates_srv { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex segments_srv { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex visibility_srv { kInvalidShaderVisibleIndex };
-    std::uint32_t predicate_mask { 0U };
-    std::uint32_t candidate_count { 0U };
-    std::uint32_t group_count { 0U };
-    ShaderVisibleIndex scan_uav { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex arguments_uav { kInvalidShaderVisibleIndex };
-    ShaderVisibleIndex counts_uav { kInvalidShaderVisibleIndex };
-    std::uint32_t group_prefix_base { 0U };
-    std::uint32_t _pad0 { 0U };
-    std::uint32_t _pad1 { 0U };
-  };
-  static_assert(sizeof(ListCompactionPassConstants) == 48U);
 
   enum class Kernel : std::uint8_t { kScan, kGroups, kScatter };
 
@@ -193,9 +159,9 @@ struct IndirectListBuilder::Impl {
       make(static_cast<std::uint32_t>(sizeof(ListCompactionPassConstants)),
         ".PassConstants"));
     candidate_upload.emplace(make(
-      static_cast<std::uint32_t>(sizeof(GpuIndirectCandidate)), ".Candidates"));
-    segment_upload.emplace(make(
-      static_cast<std::uint32_t>(sizeof(GpuIndirectSegment)), ".Segments"));
+      static_cast<std::uint32_t>(sizeof(IndirectCandidate)), ".Candidates"));
+    segment_upload.emplace(
+      make(static_cast<std::uint32_t>(sizeof(IndirectSegment)), ".Segments"));
   }
 
   auto AcquireBuffers(const frame::SequenceNumber sequence) -> ListBuffers&
@@ -227,18 +193,18 @@ struct IndirectListBuilder::Impl {
     const std::span<const IndirectDrawSegment> segments,
     ListCompactionPassConstants& constants) -> ShaderVisibleIndex
   {
-    auto gpu_candidates = std::vector<GpuIndirectCandidate> {};
+    auto gpu_candidates = std::vector<IndirectCandidate> {};
     gpu_candidates.reserve(candidates.size());
-    auto gpu_segments = std::vector<GpuIndirectSegment> {};
+    auto gpu_segments = std::vector<IndirectSegment> {};
     gpu_segments.reserve(segments.size());
     for (const auto& [index, segment] : std::views::enumerate(segments)) {
-      gpu_segments.push_back(GpuIndirectSegment {
+      gpu_segments.push_back(IndirectSegment {
         .first_candidate = segment.first_candidate,
         .candidate_count = segment.candidate_count,
       });
       for (const auto& candidate :
         candidates.subspan(segment.first_candidate, segment.candidate_count)) {
-        gpu_candidates.push_back(GpuIndirectCandidate {
+        gpu_candidates.push_back(IndirectCandidate {
           .draw_index = candidate.draw_index,
           .vertex_count = candidate.vertex_count,
           .instance_count = candidate.instance_count,

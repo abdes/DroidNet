@@ -59,9 +59,9 @@
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
-#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
+#include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
-#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -351,7 +351,7 @@ NOLINT_TEST_F(ExposureGpuTest, LocalFogInjectionMatchesMixedMediumIntegral)
       bindings.frame_exposure_slot = exposure->srv_index;
       bindings.exposure_status_uav = exposure->current_state->status_uav_index;
       auto view = ViewConstants::GpuData {};
-      view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
+      view.bindless_view_frame_bindings_slot = BindlessViewFrameBindingsSlot {
         PublishFixtureData(bindings),
       };
       auto projection_depth = glm::column(view.projection_matrix, 2);
@@ -621,7 +621,7 @@ NOLINT_TEST_F(ExposureGpuTest, AuthoredLocalFogPreservesRadiometryThroughUpload)
   const auto tiles_slot = texture_srv(*tiles, TextureType::kTexture2DArray);
   auto scene_bindings = SceneTextureBindings {};
   scene_bindings.scene_depth_srv
-    = texture_srv(textures.GetSceneDepth(), TextureType::kTexture2D).get();
+    = texture_srv(textures.GetSceneDepth(), TextureType::kTexture2D);
   const auto scene_slot = PublishFixtureData(scene_bindings);
   const auto occupied_slot = PublishFixtureData(std::uint32_t {
     0U,
@@ -874,7 +874,7 @@ NOLINT_TEST_F(ExposureGpuTest, AuthoredLocalFogPreservesRadiometryThroughUpload)
     bindings.frame_exposure_slot = frame->srv_index;
     bindings.exposure_status_uav = frame->current_state->status_uav_index;
     auto view = ViewConstants::GpuData {};
-    view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
+    view.bindless_view_frame_bindings_slot = BindlessViewFrameBindingsSlot {
       PublishFixtureData(bindings),
     };
     view.inverse_view_projection_matrix = glm::mat4 {

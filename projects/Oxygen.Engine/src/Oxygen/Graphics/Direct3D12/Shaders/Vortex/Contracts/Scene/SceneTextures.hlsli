@@ -22,7 +22,7 @@ static inline bool TrySampleSceneDepth(
 
     Texture2D<float> depth_texture = ResourceDescriptorHeap[bindings.scene_depth_srv];
     SamplerState point_clamp_sampler
-        = SamplerDescriptorHeap[VORTEX_SAMPLER_POINT_CLAMP];
+        = SamplerDescriptorHeap[K_SAMPLER_POINT_CLAMP];
     depth = depth_texture.SampleLevel(point_clamp_sampler, uv, 0.0f);
     return true;
 }
@@ -34,7 +34,7 @@ static inline float4 SampleSceneColor(float2 uv, SceneTextureBindingData binding
     }
 
     Texture2D<float4> scene_color = ResourceDescriptorHeap[bindings.scene_color_srv];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     return scene_color.SampleLevel(linear_sampler, uv, 0.0f);
 }
 
@@ -62,7 +62,7 @@ static inline float4 SampleGBuffer(
 
     Texture2D<float4> gbuffer_texture = ResourceDescriptorHeap[slot];
     SamplerState point_clamp_sampler
-        = SamplerDescriptorHeap[VORTEX_SAMPLER_POINT_CLAMP];
+        = SamplerDescriptorHeap[K_SAMPLER_POINT_CLAMP];
     return gbuffer_texture.SampleLevel(point_clamp_sampler, uv, 0.0f);
 }
 

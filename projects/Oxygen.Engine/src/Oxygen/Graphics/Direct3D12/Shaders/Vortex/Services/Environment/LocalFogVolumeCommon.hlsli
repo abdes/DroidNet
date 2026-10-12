@@ -17,6 +17,7 @@
 #include "Vortex/Contracts/Scene/ScreenHzbBindings.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 #include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
+#include "Vortex/Services/Environment/Generated.FogContracts.hlsli"
 
 struct LocalFogVolumeInstanceData
 {
@@ -29,47 +30,6 @@ struct LocalFogVolumeInstanceData
 struct LocalFogVolumeCullingData
 {
     float4 sphere_world;
-};
-
-struct LocalFogComposePassConstants
-{
-    uint instance_buffer_slot;
-    uint tile_data_texture_slot;
-    uint occupied_tile_buffer_slot;
-    uint tile_resolution_x;
-    uint tile_resolution_y;
-    uint max_instances_per_tile;
-    uint instance_count;
-    uint tile_pixel_size;
-    uint view_width;
-    uint view_height;
-    float global_start_distance_meters;
-    float start_depth_z;
-    uint _pad0;
-    uint _pad1;
-};
-
-struct LocalFogTiledCullingPassConstants
-{
-    uint instance_buffer_slot;
-    uint instance_culling_buffer_slot;
-    uint tile_data_texture_slot;
-    uint occupied_tile_buffer_slot;
-    uint indirect_args_buffer_slot;
-    uint instance_count;
-    uint tile_resolution_x;
-    uint tile_resolution_y;
-    uint max_instances_per_tile;
-    uint use_hzb;
-    uint _pad0;
-    uint _pad1;
-    float4 left_plane;
-    float4 right_plane;
-    float4 top_plane;
-    float4 bottom_plane;
-    float4 near_plane;
-    float2 view_to_tile_space_ratio;
-    float2 _pad2;
 };
 
 struct LocalFogClipSphere

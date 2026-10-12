@@ -18,7 +18,7 @@ static const float kVortexMinimumRoughness = 0.045f;
 static float2 SampleGgxEnergyTexture(uint descriptor, float mu, float roughness)
 {
     Texture2D<float2> texture = ResourceDescriptorHeap[descriptor];
-    SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     const float2 coordinate = float2(sqrt(saturate(mu)),
         saturate((roughness - kVortexMinimumRoughness) / (1.0 - kVortexMinimumRoughness)));
     return texture.SampleLevel(linear_sampler, (coordinate * 31.0 + 0.5) / 32.0, 0);

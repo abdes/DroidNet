@@ -33,15 +33,12 @@
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
-#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowRecord.h>
-#include <Oxygen/Vortex/Shadows/Types/LightShadowReference.h>
-#include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
+#include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
-#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
-#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 
 namespace oxygen::vortex::testing::exposure {
 
@@ -284,7 +281,7 @@ NOLINT_TEST_F(ExposureGpuTest, FogShadowsFollowAtmosphereSourceIdentity)
     bindings.frame_exposure_slot = PublishUnitFrameExposure();
     bindings.shadow_frame_slot = PublishFixtureData(shadows);
     auto view = ViewConstants::GpuData {};
-    view.view_frame_bindings_bslot
+    view.bindless_view_frame_bindings_slot
       = BindlessViewFrameBindingsSlot { PublishFixtureData(bindings) };
     auto view_buffer = CreateUploadBuffer(
       SizeBytes { 256U }, graphics::BufferUsage::kConstant);
@@ -400,7 +397,7 @@ NOLINT_TEST_F(ExposureGpuTest, VolumetricPhaseScattersTowardEachAtmosphereLight)
   auto view_bindings = ViewFrameBindings {};
   view_bindings.frame_exposure_slot = PublishUnitFrameExposure();
   auto view = ViewConstants::GpuData {};
-  view.view_frame_bindings_bslot
+  view.bindless_view_frame_bindings_slot
     = BindlessViewFrameBindingsSlot { PublishFixtureData(view_bindings) };
   auto view_buffer
     = CreateUploadBuffer(SizeBytes { 256U }, graphics::BufferUsage::kConstant);

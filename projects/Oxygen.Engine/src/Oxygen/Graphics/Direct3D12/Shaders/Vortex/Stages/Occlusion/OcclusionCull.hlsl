@@ -19,9 +19,10 @@
 #include "Vortex/Contracts/Draw/DrawCullRecord.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Contracts/Draw/DrawVisibility.hlsli"
-#include "Vortex/Contracts/Shadows/ShadowCascadeBinding.hlsli"
+#include "Vortex/Contracts/Shadows/Generated.ShadowContracts.hlsli"
 #include "Vortex/Contracts/Shadows/ShadowReceiverFit.hlsli"
 #include "Vortex/Services/Diagnostics/GpuDebug.hlsli"
+#include "Vortex/Stages/Occlusion/Generated.OcclusionContracts.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {
@@ -59,46 +60,6 @@ static const uint OCCLUSION_STAT_OCCLUDED = 6u;
 static const uint OCCLUSION_STAT_TRANSLUCENT_CULLED = 7u;
 static const uint OCCLUSION_STAT_COUNT = 8u;
 
-// Mirrors oxygen::vortex::occlusion::internal::OcclusionCullPassConstants.
-struct OcclusionCullPassConstants
-{
-    // The matrix the rasterizer uses: projection (jitter included) times view.
-    float4x4 view_projection;
-    // Viewport origin and size, in pixels.
-    float4 viewport;
-    // Rasterized pixel rect: min x, min y, max x, max y (exclusive).
-    float4 clip_rect;
-    // How the view's depth target encodes a clip-space point:
-    // x * z / w + y * w + z.
-    float4 depth_encoding;
-    // Turns an encoded depth e into a linear depth:
-    // |(x + y * e) / (z + w * e)|.
-    float4 depth_linearize;
-    // The pyramid's source rect in pixels: origin x, origin y, width, height.
-    uint4 pyramid_source;
-    uint draw_metadata_srv;
-    uint cull_records_srv;
-    uint worlds_srv;
-    uint visibility_uav;
-    uint history_slots_srv;
-    uint history_uav;
-    uint stats_uav;
-    uint pyramid_srv;
-    uint draw_count;
-    uint flags;
-    float depth_bias;
-    // The view's GpuDebugBindings record when draw bounds are requested.
-    uint debug_bindings_srv;
-    // A directional cascade fitted on the GPU: its record replaces
-    // view_projection.
-    uint cascade_records_srv;
-    uint cascade_index;
-    // The cascade's receiver mask: casters whose shadow lands on no receiver
-    // are outside the frustum.
-    uint receiver_mask_srv;
-    uint _pad0;
-};
-
 struct ClipBox
 {
     float4 center;
@@ -107,14 +68,13 @@ struct ClipBox
 
 OcclusionCullPassConstants LoadPassConstants()
 {
-    StructuredBuffer<OcclusionCullPassConstants> constants
-        = ResourceDescriptorHeap[g_PassConstantsIndex];
-    OcclusionCullPassConstants c = constants[0];
-    if (c.cascade_records_srv != K_INVALID_BINDLESS_INDEX)
+    OcclusionCullPassConstants c;
+    TryLoadOcclusionCullPassConstants(g_PassConstantsIndex, c);
+    VortexShadowCascadeBinding cascade;
+    if (TryLoadVortexShadowCascadeBinding(
+            c.cascade_records_srv, c.cascade_index, cascade))
     {
-        StructuredBuffer<VortexShadowCascadeBinding> cascades
-            = ResourceDescriptorHeap[c.cascade_records_srv];
-        c.view_projection = cascades[c.cascade_index].light_view_projection;
+        c.view_projection = cascade.light_view_projection;
     }
     return c;
 }

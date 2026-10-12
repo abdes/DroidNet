@@ -36,10 +36,10 @@
 #include <Oxygen/Vortex/Types/EnvironmentLightingState.h>
 #include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 #include <Oxygen/Vortex/Types/ResidentContentRevision.h>
 #include <Oxygen/Vortex/Types/ScreenHzbFrameBindings.h>
 #include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
-#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -97,17 +97,13 @@ public:
     bool used_outside_volume_local_lights { false };
     bool used_camera_inside_local_lights { false };
     bool used_non_perspective_local_lights { false };
-    std::uint32_t consumed_scene_depth_srv {
-      SceneTextureBindings::kInvalidIndex,
-    };
-    std::uint32_t consumed_scene_color_uav {
-      SceneTextureBindings::kInvalidIndex,
-    };
-    std::array<std::uint32_t, 4> consumed_gbuffer_srvs {
-      SceneTextureBindings::kInvalidIndex,
-      SceneTextureBindings::kInvalidIndex,
-      SceneTextureBindings::kInvalidIndex,
-      SceneTextureBindings::kInvalidIndex,
+    ShaderVisibleIndex consumed_scene_depth_srv { kInvalidShaderVisibleIndex };
+    ShaderVisibleIndex consumed_scene_color_uav { kInvalidShaderVisibleIndex };
+    std::array<ShaderVisibleIndex, 4> consumed_gbuffer_srvs {
+      kInvalidShaderVisibleIndex,
+      kInvalidShaderVisibleIndex,
+      kInvalidShaderVisibleIndex,
+      kInvalidShaderVisibleIndex,
     };
     std::uint32_t directional_light_count { 0U };
     std::uint32_t point_light_count { 0U };
@@ -296,7 +292,7 @@ private:
   OXGN_VRTX_NDAPI auto ResolveVelocitySourceTexture() const
     -> const graphics::Texture*;
   OXGN_VRTX_API auto RegisterSceneTextureView(graphics::Texture& texture,
-    const graphics::TextureViewDescription& desc) -> std::uint32_t;
+    const graphics::TextureViewDescription& desc) -> ShaderVisibleIndex;
   //! The current view's shadow receivers: its scene depth, once complete.
   //! None while the depth prepass is incomplete or volumetric fog samples
   //! shadows in the air; the view's cascades then stay loose.

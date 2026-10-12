@@ -6,14 +6,9 @@
 
 #pragma once
 
-#include <array>
 #include <cstdint>
 
-#include <glm/mat4x4.hpp>
-#include <glm/vec2.hpp>
-
-#include <Oxygen/Base/Compilers.h>
-#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 
 namespace oxygen::vortex {
 
@@ -27,25 +22,5 @@ enum class ViewHistoryValidityFlagBits : std::uint32_t {
 {
   return (flags & static_cast<std::uint32_t>(bits)) != 0U;
 }
-
-//! Per-view history. The current view and projection matrices live in the
-//! view constants; this record adds what they do not carry: the unjittered
-//! current projection and the previous frame's view state.
-struct alignas(packing::kShaderDataFieldAlignment) ViewHistoryFrameBindings {
-  glm::mat4 current_stable_projection_matrix { 1.0F };
-  glm::mat4 previous_view_matrix { 1.0F };
-  glm::mat4 previous_projection_matrix { 1.0F };
-  glm::mat4 previous_stable_projection_matrix { 1.0F };
-  glm::mat4 previous_inverse_view_projection_matrix { 1.0F };
-  glm::vec2 current_pixel_jitter { 0.0F, 0.0F };
-  glm::vec2 previous_pixel_jitter { 0.0F, 0.0F };
-  glm::vec4 current_view_rect_min_and_size { 0.0F, 0.0F, 0.0F, 0.0F };
-  glm::vec4 previous_view_rect_min_and_size { 0.0F, 0.0F, 0.0F, 0.0F };
-  std::uint32_t validity_flags { 0U };
-  std::array<std::uint32_t, 3U> _pad_to_16 {};
-};
-
-static_assert(
-  sizeof(ViewHistoryFrameBindings) % packing::kShaderDataFieldAlignment == 0);
 
 } // namespace oxygen::vortex

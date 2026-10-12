@@ -317,7 +317,7 @@ auto AtmosphereSkyViewLutPass::RecordToTarget(RenderContext& ctx,
   const auto height = texture->GetDescriptor().height;
   const auto& atmosphere = stable_state.view_products.atmosphere;
   static_assert(offsetof(PassConstants, dispatch_header)
-      + offsetof(DispatchHeader, exposure_fp16_store)
+      + offsetof(SkyViewDispatchHeader, exposure_fp16_store)
     == kHlslExposureFp16StoreOffset);
   auto constants = PassConstants {};
   constants.dispatch_header.exposure_fp16_store

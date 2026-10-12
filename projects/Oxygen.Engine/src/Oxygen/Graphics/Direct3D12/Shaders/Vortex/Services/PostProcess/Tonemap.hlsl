@@ -94,7 +94,7 @@ float4 VortexTonemapPS(VortexFullscreenTriangleOutput input) : SV_Target0
     float exposure = max(pass.exposure, 0.0f);
     if (pass.exposure_buffer_index != K_INVALID_BINDLESS_INDEX) {
         ByteAddressBuffer exposure_buffer = ResourceDescriptorHeap[pass.exposure_buffer_index];
-        exposure = max(asfloat(exposure_buffer.Load(EXPOSURE_DISPLAYED_SCALE_OFFSET)), 0.0f);
+        exposure = max(asfloat(exposure_buffer.Load(EXPOSURE_STATE_DISPLAYED_SCALE_OFFSET)), 0.0f);
     }
     if (pass.frame_exposure_srv != K_INVALID_BINDLESS_INDEX) {
         StructuredBuffer<FrameExposureData> frame = ResourceDescriptorHeap[pass.frame_exposure_srv];

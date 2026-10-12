@@ -132,8 +132,9 @@ correct partitioning rather than applying one instance's value to the group.
 
 Targets: `Vortex/Shadows/ShadowService`, `Passes/CascadeShadowPass`,
 `Internal/CascadeShadowSetup`, `ConventionalShadowTargetAllocator`,
-`ShadowCasterCulling`, `Types/ShadowFrameBindings.h`; ScenePrep `RenderItemData`,
-`Extractors.h`, `Resources/DrawMetadataEmitter`; HLSL GBufferMaterialOutput,
+`ShadowCasterCulling`, `Generated.ShadowContracts.h`; ScenePrep
+`RenderItemData`, `Extractors.h`, `Resources/DrawMetadataEmitter`; HLSL
+GBufferMaterialOutput,
 BasePassGBuffer, directional/local direct-light and shadow receiver helpers.
 
 ## 5. ContactShadowCasterDepth and contact attenuation

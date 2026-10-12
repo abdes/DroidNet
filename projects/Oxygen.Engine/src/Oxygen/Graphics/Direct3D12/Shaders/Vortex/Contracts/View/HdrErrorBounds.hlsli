@@ -8,11 +8,38 @@
 #define VORTEX_HDR_ERROR_BOUNDS_HLSLI
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Contracts/View/Generated.ExposureContracts.hlsli"
 #include "Vortex/Contracts/View/HdrIntervalMath.hlsli"
+
+// The index of an HDR producer product (sky view 5, aerial perspective 6, fog
+// 10) in the exposure status record's per-product arrays.
+static uint HdrProductIndex(uint product)
+{
+    return product == 5u ? 0u : product == 6u ? 1u : 2u;
+}
 
 static uint HdrProducerBoundOffset(uint product)
 {
-    return product == 5u ? 80u : product == 6u ? 96u : 112u;
+    return EXPOSURE_STATUS_PRODUCER_ERRORS_OFFSET
+        + HdrProductIndex(product) * EXPOSURE_STATUS_PRODUCER_ERRORS_STRIDE;
+}
+
+static uint HdrCandidateBoundOffset(uint product)
+{
+    return EXPOSURE_STATUS_CANDIDATE_ERRORS_OFFSET
+        + HdrProductIndex(product) * EXPOSURE_STATUS_CANDIDATE_ERRORS_STRIDE;
+}
+
+static uint HdrFilterGradientOffset(uint product)
+{
+    return EXPOSURE_STATUS_FILTER_GRADIENTS_OFFSET
+        + HdrProductIndex(product) * EXPOSURE_STATUS_FILTER_GRADIENTS_STRIDE;
+}
+
+static uint HdrProductReferenceMaximumOffset(uint product)
+{
+    return EXPOSURE_STATUS_PRODUCT_REFERENCE_RGB_MAX_OFFSET
+        + HdrProductIndex(product) * 4u;
 }
 
 static void RecordHdrStoreBounds(float4 value, float4 reference_low, float4 reference_high,
@@ -30,10 +57,12 @@ static void RecordHdrStoreBounds(float4 value, float4 reference_low, float4 refe
     RWByteAddressBuffer status = ResourceDescriptorHeap[status_uav];
     const uint offset = HdrProducerBoundOffset(product);
     uint unused;
-    status.InterlockedMax(offset, asuint(rgb.x), unused);
-    status.InterlockedMax(offset + 4u, asuint(rgb.y), unused);
-    status.InterlockedMax(offset + 8u, asuint(transmission.x), unused);
-    status.InterlockedMax(offset + 12u, asuint(transmission.y), unused);
+    status.InterlockedMax(offset + HDR_ERROR_BOUNDS_RGB_RELATIVE_OFFSET, asuint(rgb.x), unused);
+    status.InterlockedMax(offset + HDR_ERROR_BOUNDS_RGB_ABSOLUTE_OFFSET, asuint(rgb.y), unused);
+    status.InterlockedMax(offset + HDR_ERROR_BOUNDS_TRANSMITTANCE_RELATIVE_OFFSET,
+        asuint(transmission.x), unused);
+    status.InterlockedMax(offset + HDR_ERROR_BOUNDS_TRANSMITTANCE_ABSOLUTE_OFFSET,
+        asuint(transmission.y), unused);
 }
 
 #endif

@@ -51,7 +51,7 @@
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/GgxBrdf.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/GgxMoments.h>
-#include <Oxygen/Vortex/Types/ExposureStateData.h>
+#include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
 
 namespace oxygen::examples::light_bench::testing {
 namespace {

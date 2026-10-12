@@ -73,21 +73,6 @@ namespace {
 
 } // namespace
 
-void SceneTextureBindings::Invalidate() noexcept
-{
-  scene_color_srv = kInvalidIndex;
-  scene_depth_srv = kInvalidIndex;
-  partial_depth_srv = kInvalidIndex;
-  velocity_srv = kInvalidIndex;
-  stencil_srv = kInvalidIndex;
-  custom_depth_srv = kInvalidIndex;
-  custom_stencil_srv = kInvalidIndex;
-  gbuffer_srvs.fill(kInvalidIndex);
-  scene_color_uav = kInvalidIndex;
-  velocity_uav = kInvalidIndex;
-  valid_flags = 0;
-}
-
 void SceneTextureExtracts::Reset() noexcept
 {
   resolved_scene_color = {};

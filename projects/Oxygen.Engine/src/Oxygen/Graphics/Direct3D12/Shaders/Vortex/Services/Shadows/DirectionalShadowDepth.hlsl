@@ -11,7 +11,8 @@
 #include "Vortex/Contracts/Draw/MeshPosition.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
-#include "Vortex/Contracts/Shadows/ShadowCascadeBinding.hlsli"
+#include "Vortex/Contracts/Shadows/Generated.ShadowContracts.hlsli"
+#include "Vortex/Contracts/Shadows/Generated.ShadowPassContracts.hlsli"
 
 #define BX_VERTEX_TYPE Vertex
 #include "Core/Bindless/BindlessHelpers.hlsl"
@@ -24,22 +25,6 @@ cbuffer RootConstants : register(b2, space0)
     uint g_PassConstantsIndex : packoffset(c0.y);
 }
 
-struct ShadowPassConstants
-{
-    float4x4 light_view_projection;
-    float4 shadow_bias_parameters;
-    float4 light_direction_to_source;
-    float4 light_position_and_inv_range;
-    // The view's published DrawFrameBindings: draws, transforms, materials
-    // and world-position offsets, exactly as the camera passes see them.
-    uint draw_frame_slot;
-    // A directional cascade fitted on the GPU: its record replaces
-    // light_view_projection.
-    uint cascade_records_srv;
-    uint cascade_index;
-    uint _pad0;
-};
-
 struct ShadowDepthVSOutput
 {
     float4 position : SV_POSITION;
@@ -50,21 +35,20 @@ struct ShadowDepthVSOutput
     nointerpolation uint draw_index : DRAW_INDEX;
 };
 
-static inline bool TryLoadShadowPassConstants(out ShadowPassConstants constants)
+// The pass constants, with a GPU-fitted cascade's matrix in place of the CPU
+// one; false when the constants or their draw routing are missing.
+static inline bool TryLoadShadowDepthInputs(out ShadowPassConstants constants)
 {
-    constants = (ShadowPassConstants)0;
-    if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX) {
+    if (!TryLoadShadowPassConstants(g_PassConstantsIndex, constants)) {
         return false;
     }
-
-    StructuredBuffer<ShadowPassConstants> constants_buffer =
-        ResourceDescriptorHeap[g_PassConstantsIndex];
-    constants = constants_buffer[0];
     if (constants.cascade_records_srv != K_INVALID_BINDLESS_INDEX) {
-        StructuredBuffer<VortexShadowCascadeBinding> cascades
-            = ResourceDescriptorHeap[constants.cascade_records_srv];
-        constants.light_view_projection
-            = cascades[constants.cascade_index].light_view_projection;
+        VortexShadowCascadeBinding cascade;
+        if (!TryLoadVortexShadowCascadeBinding(
+                constants.cascade_records_srv, constants.cascade_index, cascade)) {
+            return false;
+        }
+        constants.light_view_projection = cascade.light_view_projection;
     }
     return constants.draw_frame_slot != K_INVALID_BINDLESS_INDEX;
 }
@@ -79,7 +63,7 @@ ShadowDepthVSOutput VortexShadowDepthVS(uint vertex_id : SV_VertexID,
     output.draw_index = draw_index;
 
     ShadowPassConstants pass_constants;
-    if (!TryLoadShadowPassConstants(pass_constants)) {
+    if (!TryLoadShadowDepthInputs(pass_constants)) {
         return output;
     }
     const DrawFrameBindings draw_bindings
@@ -163,12 +147,12 @@ void VortexShadowDepthMaskedPS(ShadowDepthVSOutput input
 #if defined(ALPHA_TEST)
     // The casters, like the vertex shader's, come from the view's draws.
     ShadowPassConstants pass_constants;
-    if (!TryLoadShadowPassConstants(pass_constants)) {
+    if (!TryLoadShadowDepthInputs(pass_constants)) {
         discard;
     }
     const DrawFrameBindings draw_bindings
         = LoadDrawFrameBindings(pass_constants.draw_frame_slot);
-    const SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
     ApplyMaskedAlphaClip(EvaluateMaskedAlphaTestFromSlots(input.uv,
         draw_bindings.draw_metadata_slot,
         draw_bindings.material_shading_constants_slot, input.draw_index,

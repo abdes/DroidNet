@@ -92,7 +92,7 @@ C++ paths are under `src/Oxygen/Vortex/`; shaders are under
 | `Lighting/Internal/ForwardLightPublisher.*`, `Types/LightingFrameBindings.h`               | Own light/list allocations and per-view binding publication.                                 |
 | `Lighting/Types/{DirectionalLightForwardData,ForwardLocalLightRecord,LightGridMetadata}.h` | Canonical records/grid semantics and matching CPU/HLSL ABI.                                  |
 | `Lighting/Internal/DeferredLightPacketBuilder.*`, `Lighting/Passes/DeferredLightPass.*`    | Derive deferred work from the selection; own service geometry, PSOs and direct accumulation. |
-| `Shadows/`, `Types/ShadowFrameBindings.h`                                                  | Indexed per-light shadow products, status and lifetime.                                      |
+| `Shadows/`, `Shadows/Types/Generated.ShadowContracts.h`                                    | Indexed per-light shadow products, status and lifetime.                                      |
 | `Contracts/Lighting/`, `Services/Lighting/`                                                | Matching decoders, culling, physical evaluation and shader entry points.                     |
 
 Extend these owners in place; add a service-owned grid-recording pass where

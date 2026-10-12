@@ -38,12 +38,8 @@
 #include <Oxygen/Vortex/Shadows/Passes/ContactShadowCasterDepthPass.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowReceiverFitPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
-#include <Oxygen/Vortex/Shadows/Types/CubeLocalShadowRecord.h>
-#include <Oxygen/Vortex/Shadows/Types/DirectionalShadowRecord.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
-#include <Oxygen/Vortex/Shadows/Types/LightShadowReference.h>
-#include <Oxygen/Vortex/Shadows/Types/ProjectedLocalShadowRecord.h>
-#include <Oxygen/Vortex/Shadows/Types/ShadowCascadeBinding.h>
+#include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowContentLease.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowSharingDiagnostics.h>
@@ -51,7 +47,6 @@
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/Types/ShadowCasterSource.h>
-#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex {

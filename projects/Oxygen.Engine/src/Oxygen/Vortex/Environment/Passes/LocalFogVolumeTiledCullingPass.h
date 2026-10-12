@@ -16,6 +16,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
+#include <Oxygen/Vortex/Environment/Passes/Generated.FogContracts.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -63,33 +64,7 @@ namespace environment {
       internal::LocalFogVolumeState::ViewProducts& products) -> RecordState;
 
   private:
-    struct alignas(16) PassConstants {
-      std::uint32_t instance_buffer_slot { kInvalidShaderVisibleIndex.get() };
-      std::uint32_t instance_culling_buffer_slot {
-        kInvalidShaderVisibleIndex.get(),
-      };
-      std::uint32_t tile_data_texture_slot { kInvalidShaderVisibleIndex.get() };
-      std::uint32_t occupied_tile_buffer_slot {
-        kInvalidShaderVisibleIndex.get(),
-      };
-      std::uint32_t indirect_args_buffer_slot {
-        kInvalidShaderVisibleIndex.get(),
-      };
-      std::uint32_t instance_count { 0U };
-      std::uint32_t tile_resolution_x { 0U };
-      std::uint32_t tile_resolution_y { 0U };
-      std::uint32_t max_instances_per_tile { 0U };
-      std::uint32_t use_hzb { 1U };
-      std::uint32_t _pad0 { 0U };
-      std::uint32_t _pad1 { 0U };
-      std::array<float, 4> left_plane { 0.0F, 0.0F, 0.0F, 0.0F };
-      std::array<float, 4> right_plane { 0.0F, 0.0F, 0.0F, 0.0F };
-      std::array<float, 4> top_plane { 0.0F, 0.0F, 0.0F, 0.0F };
-      std::array<float, 4> bottom_plane { 0.0F, 0.0F, 0.0F, 0.0F };
-      std::array<float, 4> near_plane { 0.0F, 0.0F, 0.0F, 0.0F };
-      std::array<float, 2> view_to_tile_space_ratio { 1.0F, 1.0F };
-      std::array<float, 2> _pad2 { 0.0F, 0.0F };
-    };
+    using PassConstants = LocalFogTiledCullingPassConstants;
     static_assert(std::is_standard_layout_v<PassConstants>);
     //! Nine 16-byte rows, mirrored by the HLSL pass constants.
     static constexpr std::size_t kPassConstantsBytes = 144U;

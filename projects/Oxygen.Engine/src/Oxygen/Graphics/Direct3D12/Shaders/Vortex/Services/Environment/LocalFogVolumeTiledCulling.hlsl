@@ -57,8 +57,8 @@ void VortexLocalFogVolumeTiledCullingCS(uint3 dispatch_id : SV_DispatchThreadID)
     const bool use_hzb = pass.use_hzb != 0u;
     if (use_hzb)
     {
-        const ViewFrameBindingsData view_bindings
-            = LoadVortexViewFrameBindings(bindless_view_frame_bindings_slot);
+        const ViewFrameBindings view_bindings
+            = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
         screen_hzb = LoadScreenHzbBindings(view_bindings.screen_hzb_frame_slot);
         if (!IsScreenHzbAvailable(screen_hzb)
             || !IsScreenHzbFurthestValid(screen_hzb)

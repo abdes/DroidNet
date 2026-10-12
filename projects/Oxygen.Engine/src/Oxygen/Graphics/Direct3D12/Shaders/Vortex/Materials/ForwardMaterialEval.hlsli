@@ -157,7 +157,7 @@ MaterialSurface EvaluateMaterialSurfaceForMaterial(
         if (!no_texture_sampling
             && mat.base_color_texture_index != K_INVALID_BINDLESS_INDEX) {
             Texture2D<float4> base_tex = ResourceDescriptorHeap[mat.base_color_texture_index];
-            SamplerState samp = SamplerDescriptorHeap[0];
+            SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
             float4 texel = base_tex.Sample(samp, uv);
             // The cooked format determines transfer decoding: sRGB SRVs
             // decode in hardware; linear UNORM/float SRVs already yield linear RGB.
@@ -169,7 +169,7 @@ MaterialSurface EvaluateMaterialSurfaceForMaterial(
         if (!no_texture_sampling
             && mat.normal_texture_index != K_INVALID_BINDLESS_INDEX) {
             Texture2D<float4> nrm_tex = ResourceDescriptorHeap[mat.normal_texture_index];
-            SamplerState samp = SamplerDescriptorHeap[0];
+            SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
             float3 n_ts = DecodeNormalTS(nrm_tex.Sample(samp, uv).xyz);
             n_ts.xy *= mat.normal_scale;
             n_ts = SafeNormalize(float3(n_ts.xy, max(n_ts.z, 1e-4)));
@@ -240,7 +240,7 @@ MaterialSurface EvaluateMaterialSurfaceForMaterial(
         if (!no_texture_sampling && use_orm_packed
             && orm_tex_index != K_INVALID_BINDLESS_INDEX) {
             Texture2D<float4> orm_tex = ResourceDescriptorHeap[orm_tex_index];
-            SamplerState samp = SamplerDescriptorHeap[0];
+            SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
             const float3 orm = saturate(orm_tex.Sample(samp, uv).rgb);
 
             // glTF ORM packing:
@@ -263,19 +263,19 @@ MaterialSurface EvaluateMaterialSurfaceForMaterial(
             if (!no_texture_sampling
                 && mat.metallic_texture_index != K_INVALID_BINDLESS_INDEX) {
                 Texture2D<float4> m_tex = ResourceDescriptorHeap[mat.metallic_texture_index];
-                SamplerState samp = SamplerDescriptorHeap[0];
+                SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
                 s.metalness *= saturate(m_tex.Sample(samp, uv).r);
             }
             if (!no_texture_sampling
                 && mat.roughness_texture_index != K_INVALID_BINDLESS_INDEX) {
                 Texture2D<float4> r_tex = ResourceDescriptorHeap[mat.roughness_texture_index];
-                SamplerState samp = SamplerDescriptorHeap[0];
+                SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
                 s.roughness *= saturate(r_tex.Sample(samp, uv).r);
             }
             if (!no_texture_sampling
                 && mat.ambient_occlusion_texture_index != K_INVALID_BINDLESS_INDEX) {
                 Texture2D<float4> ao_tex = ResourceDescriptorHeap[mat.ambient_occlusion_texture_index];
-                SamplerState samp = SamplerDescriptorHeap[0];
+                SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
                 const float ao_sample = saturate(ao_tex.Sample(samp, uv).r);
                 s.ao = ao_is_strength ? lerp(1.0, ao_sample, ao_factor) : ao_factor * ao_sample;
             }
@@ -287,7 +287,7 @@ MaterialSurface EvaluateMaterialSurfaceForMaterial(
         if (!no_texture_sampling
             && mat.emissive_texture_index != K_INVALID_BINDLESS_INDEX) {
             Texture2D<float4> emissive_tex = ResourceDescriptorHeap[mat.emissive_texture_index];
-            SamplerState samp = SamplerDescriptorHeap[0];
+            SamplerState samp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_WRAP];
             // Preserve linear HDR values and avoid decoding sRGB SRVs twice.
             float3 emissive_sample = emissive_tex.Sample(samp, uv).rgb;
             s.emissive *= emissive_sample;

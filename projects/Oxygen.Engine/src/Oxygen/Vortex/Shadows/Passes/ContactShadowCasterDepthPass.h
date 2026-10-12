@@ -11,7 +11,7 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
-#include <Oxygen/Vortex/Types/ShadowFrameBindings.h>
+#include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
 

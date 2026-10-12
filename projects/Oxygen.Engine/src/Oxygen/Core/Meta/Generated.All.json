@@ -2,7 +2,7 @@
   "source": "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml",
   "source_version": "2.0.0",
   "tool_version": "1.2.2",
-  "generated": "2026-04-21 10:29:41",
+  "generated": "2026-10-12 12:46:05",
   "schema_version": "2.0.0",
   "defaults": {
     "invalid_index": 4294967295
@@ -56,6 +56,32 @@
         "shader_access_class": "sampler",
         "view_types": ["Sampler"],
         "comment": "Global sampler table"
+      }
+    ],
+    "static_samplers": [
+      {
+        "id": "linear_wrap",
+        "domain": "samplers",
+        "slot": 0,
+        "comment": "Default trilinear wrap sampler"
+      },
+      {
+        "id": "shadow_comparison",
+        "domain": "samplers",
+        "slot": 1,
+        "comment": "Reversed-Z PCF comparison sampler with a zero border"
+      },
+      {
+        "id": "point_clamp",
+        "domain": "samplers",
+        "slot": 2,
+        "comment": "Point clamp sampler for depth and GBuffer reads"
+      },
+      {
+        "id": "linear_clamp",
+        "domain": "samplers",
+        "slot": 3,
+        "comment": "Bilinear clamp sampler for the non-periodic atmosphere LUTs; wrap would pull energy from the opposite edge"
       }
     ]
   },

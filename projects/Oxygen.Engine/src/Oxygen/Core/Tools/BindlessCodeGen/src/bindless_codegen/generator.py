@@ -13,7 +13,6 @@ import json
 from pathlib import Path
 import importlib
 import shutil
-import subprocess
 
 try:
     # Normal package import when installed or run as package
@@ -40,6 +39,7 @@ from . import domains as domains_mod
 from . import root_signature as rs_mod
 from . import vulkan as vk_mod
 from . import model as model_mod
+from .formatting import format_cpp
 from .templates import (
     TEMPLATE_ABI_CPP,
     TEMPLATE_ABI_HLSL,
@@ -86,11 +86,8 @@ def _render_root_sig_cpp(root_sig: list[dict]) -> tuple[str, str, str]:
         reg = p.get("shader_register") or p.get("base_shader_register")
         space = p.get("register_space")
         if reg is not None:
-            # Extract the numeric and the letter prefix (b/t/s/u)
+            # Extract the register number (b/t/s/u prefixes alike)
             sreg = str(reg)
-            letter = (
-                "".join([c for c in sreg if c.isalpha()])[:1].lower() or "r"
-            )
             digits = "".join([c for c in sreg if c.isdigit()]) or "0"
             regs_lines.append(
                 f"static constexpr uint32_t k{_norm(str(name))}Register = {int(digits)}U; // '{sreg}'"
@@ -132,28 +129,6 @@ def _format_json(value):
         return match.group()
 
     return pattern.sub(compact, content) + "\n"
-
-
-def _format_cpp(content, path):
-    """Use the same engine style as oxyformat before comparing output bytes."""
-    style = next(
-        (parent / ".clang-format" for parent in Path(__file__).resolve().parents
-         if (parent / ".clang-format").is_file()),
-        None,
-    )
-    if style is None:
-        raise RuntimeError("BindlessCodeGen requires the engine .clang-format")
-    formatter = shutil.which("clang-format")
-    if formatter is None and os.name == "nt":
-        candidate = Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "LLVM/bin/clang-format.exe"
-        formatter = str(candidate) if candidate.is_file() else None
-    if formatter is None:
-        raise RuntimeError("BindlessCodeGen requires clang-format on PATH")
-    result = subprocess.run(
-        [formatter, f"--style=file:{style}", f"--assume-filename={path}"],
-        input=content, text=True, encoding="utf-8", capture_output=True, check=True,
-    )
-    return result.stdout
 
 
 def atomic_write(path, content):
@@ -289,6 +264,10 @@ def transactional_write_files(files: dict[str, str]) -> bool:
             raise RuntimeError(f"Transactional write failed: {e}") from e
 
 
+def _join_sections(*sections: str) -> str:
+    return "\n\n".join(section.rstrip() for section in sections if section.strip())
+
+
 def validate_input(doc, schema_path=None):
     """Normalize and validate the document against the JSON schema."""
     schema_mod.normalize_doc(doc)
@@ -305,6 +284,9 @@ def validate_authored_model(doc):
     index_spaces = abi.get("index_spaces", []) or []
     domains = abi.get("domains", []) or []
     domains_mod.validate_abi_domains(index_spaces, domains)
+    domains_mod.validate_static_samplers(
+        abi.get("static_samplers", []) or [], domains
+    )
     domains_by_id = {str(d.get("id")): d for d in domains}
 
     backends = doc.get("backends", {}) or {}
@@ -483,6 +465,7 @@ def generate(
 
     src_rel = _compute_repo_rel(input_yaml)
     rep.debug("Source path (repo-relative): %s", src_rel)
+    static_samplers = (doc.get("abi") or {}).get("static_samplers") or []
     rep.progress("Rendering C++ bindless ABI")
     abi_cpp = render_cpp_abi(
         ((doc.get("abi") or {}).get("index_spaces") or []), domains
@@ -497,12 +480,18 @@ def generate(
         index_space_constants=abi_cpp["index_space_constants"],
         index_space_entries=abi_cpp["index_space_entries"],
         index_space_count=abi_cpp["index_space_count"],
-        domain_constants=abi_cpp["domain_constants"],
+        domain_constants=_join_sections(
+            abi_cpp["domain_constants"],
+            domains_mod.render_cpp_static_samplers(static_samplers, domains),
+        ),
         domain_entries=abi_cpp["domain_entries"],
         domain_count=abi_cpp["domain_count"],
     )
     rep.progress("Rendering HLSL bindless ABI")
-    domain_defs = render_hlsl_abi(domains)
+    domain_defs = _join_sections(
+        render_hlsl_abi(domains),
+        domains_mod.render_hlsl_static_samplers(static_samplers, domains),
+    )
     content_hlsl = TEMPLATE_ABI_HLSL.format(
         src=src_rel,
         src_ver=src_ver,
@@ -714,7 +703,7 @@ def generate(
     # Format before timestamp comparison and transactional publication. A build
     # must never undo the formatting applied by the repository commit hooks.
     files = {
-        path: _format_cpp(content, path) if Path(path).suffix == ".h" else content
+        path: format_cpp(content, path) if Path(path).suffix == ".h" else content
         for path, content in files.items()
     }
 

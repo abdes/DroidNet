@@ -15,6 +15,7 @@
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
+#include <Oxygen/Vortex/Environment/Passes/Generated.FogContracts.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -110,125 +111,7 @@ namespace environment {
   private:
     friend struct ::oxygen::vortex::testing::RendererPublicationProbe;
     auto ClearHistory(ViewId view_id) -> void;
-    struct alignas(16) OutputHeader {
-      std::uint32_t output_texture_uav { 0U };
-      std::uint32_t output_width { 0U };
-      std::uint32_t output_height { 0U };
-      std::uint32_t output_depth { 0U };
-    };
-
-    struct alignas(16) GridControl {
-      float start_distance_m { 0.0F };
-      float end_distance_m { 0.0F };
-      float near_fade_in_distance_m { 0.0F };
-      float global_extinction_scale { 0.0F };
-    };
-
-    struct alignas(16) MediaControl0 {
-      std::array<float, 3> albedo_rgb { 1.0F, 1.0F, 1.0F };
-      float scattering_distribution { 0.0F };
-    };
-
-    struct alignas(16) GridZControl {
-      std::array<float, 3> grid_z_params { 0.0F, 1.0F, 1.0F };
-      std::uint32_t directional_shadows_enabled { 0U };
-    };
-
-    struct alignas(16) MediaControl1 {
-      std::array<float, 3> emissive_rgb { 0.0F, 0.0F, 0.0F };
-      float static_lighting_scattering_intensity { 1.0F };
-    };
-
-    struct alignas(16) LocalFogControl0 {
-      std::uint32_t instance_buffer_slot { kInvalidShaderVisibleIndex.get() };
-      std::uint32_t tile_data_texture_slot { kInvalidShaderVisibleIndex.get() };
-      std::uint32_t instance_count { 0U };
-      std::uint32_t enabled { 0U };
-    };
-
-    struct alignas(16) LocalFogControl1 {
-      std::uint32_t tile_resolution_x { 0U };
-      std::uint32_t tile_resolution_y { 0U };
-      std::uint32_t max_instances_per_tile { 0U };
-      float global_start_distance_m { 0.0F };
-    };
-
-    struct alignas(16) LocalFogControl2 {
-      float max_density_into_volumetric_fog { 0.0F };
-      float _pad0 { 0.0F };
-      float _pad1 { 0.0F };
-      float _pad2 { 0.0F };
-    };
-
-    struct alignas(16) HeightFogMediaControl0 {
-      float primary_density { 0.0F };
-      float primary_height_falloff { 0.0F };
-      float primary_height_offset_m { 0.0F };
-      float secondary_density { 0.0F };
-    };
-
-    struct alignas(16) HeightFogMediaControl1 {
-      float secondary_height_falloff { 0.0F };
-      float secondary_height_offset_m { 0.0F };
-      float match_height_fog_factor { 0.5F };
-      std::uint32_t enabled { 0U };
-    };
-
-    struct alignas(16) SkyLightControl0 {
-      std::uint32_t distant_sky_light_lut_slot {
-        kInvalidShaderVisibleIndex.get(),
-      };
-      std::uint32_t enabled { 0U };
-      float volumetric_scattering_intensity { 0.0F };
-      float diffuse_intensity { 0.0F };
-    };
-
-    struct alignas(16) SkyLightControl1 {
-      std::array<float, 3> tint_rgb { 1.0F, 1.0F, 1.0F };
-      float intensity_mul { 1.0F };
-    };
-
-    struct alignas(16) TemporalHistoryControl0 {
-      std::uint32_t previous_integrated_light_scattering_srv {
-        kInvalidShaderVisibleIndex.get(),
-      };
-      std::uint32_t enabled { 0U }; // Enabled=1, sampled history is FP16=2.
-      float history_weight { 0.0F };
-      std::uint32_t history_miss_supersample_count { 1U };
-    };
-
-    struct alignas(16) TemporalHistoryControl1 {
-      std::array<std::array<float, 4>, 16> frame_jitter_offsets {};
-    };
-
-    struct alignas(16) PassConstants {
-      OutputHeader output_header {};
-      GridControl grid {};
-      GridZControl grid_z {};
-      MediaControl0 media0 {};
-      MediaControl1 media1 {};
-      HeightFogMediaControl0 height_fog0 {};
-      HeightFogMediaControl1 height_fog1 {};
-      SkyLightControl0 sky_light0 {};
-      SkyLightControl1 sky_light1 {};
-      TemporalHistoryControl0 temporal_history0 {};
-      TemporalHistoryControl1 temporal_history1 {};
-      LocalFogControl0 local_fog0 {};
-      LocalFogControl1 local_fog1 {};
-      LocalFogControl2 local_fog2 {};
-      std::array<float, 4> light0_direction_enabled { 0.0F, 0.0F, 1.0F, 0.0F };
-      std::array<float, 4> light0_illuminance_rgb { 0.0F, 0.0F, 0.0F, 0.0F };
-      std::array<float, 4> light1_direction_enabled { 0.0F, 0.0F, 1.0F, 0.0F };
-      std::array<float, 4> light1_illuminance_rgb { 0.0F, 0.0F, 0.0F, 0.0F };
-      std::uint32_t previous_frame_exposure_srv {
-        kInvalidShaderVisibleIndex.get(),
-      };
-      std::uint32_t reserved0 { 0U };
-      std::uint32_t exposure_fp16_store { 0U };
-      std::uint32_t previous_error_bounds_srv {
-        kInvalidShaderVisibleIndex.get(),
-      };
-    };
+    using PassConstants = VolumetricFogPassConstants;
 
     Renderer& renderer_;
     upload::TransientStructuredBuffer pass_constants_buffer_;

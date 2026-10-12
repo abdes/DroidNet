@@ -80,8 +80,7 @@ void SceneRenderer::PostRenderCleanup(
   const auto* velocity_texture = ResolveVelocitySourceTexture();
   const auto velocity_ready
     = setup_mode_.IsSet(SceneTextureSetupMode::Flag::kSceneVelocity)
-    && scene_texture_bindings_.velocity_srv
-      != SceneTextureBindings::kInvalidIndex
+    && scene_texture_bindings_.velocity_srv != kInvalidShaderVisibleIndex
     && velocity_texture != nullptr;
   graphics::Texture* previous_velocity = nullptr;
   if (velocity_ready) {

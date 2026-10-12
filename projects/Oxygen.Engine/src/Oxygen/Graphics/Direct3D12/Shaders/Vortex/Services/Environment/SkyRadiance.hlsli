@@ -81,7 +81,7 @@ static float4 SampleSkyViewRadiance(EnvironmentStaticData environment,
     float height, bottom, top;
     float2 uv = ResolveSkyViewUv(environment, view, direction, local_direction, height, bottom, top);
     Texture2D<float4> sky = ResourceDescriptorHeap[environment.atmosphere.sky_view_lut_slot];
-    SamplerState linear_clamp = SamplerDescriptorHeap[VORTEX_SAMPLER_LINEAR_CLAMP];
+    SamplerState linear_clamp = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
     float4 sample_value = sky.SampleLevel(linear_clamp, uv, 0.0);
     sample_value.rgb *= view.sky_luminance_factor_height_fog_contribution.xyz;
     return sample_value;

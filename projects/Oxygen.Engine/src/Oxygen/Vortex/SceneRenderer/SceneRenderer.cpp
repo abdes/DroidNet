@@ -406,14 +406,6 @@ namespace {
     return "bindless:" + std::to_string(slot.get());
   }
 
-  auto SceneTextureDescriptor(const std::uint32_t slot) -> std::string
-  {
-    if (slot == SceneTextureBindings::kInvalidIndex) {
-      return "invalid";
-    }
-    return "bindless:" + std::to_string(slot);
-  }
-
   //! The latest counters read back for a view, or "pending" before the first.
   auto OcclusionStatsDescriptor(const std::optional<OcclusionStats>& stats)
     -> std::string
@@ -1239,8 +1231,8 @@ namespace {
     return std::ranges::all_of(bindings.gbuffer_srvs.begin(),
       bindings.gbuffer_srvs.begin()
         + static_cast<std::ptrdiff_t>(GBufferIndex::kActiveCount),
-      [](const std::uint32_t index) -> bool {
-        return index != SceneTextureBindings::kInvalidIndex;
+      [](const ShaderVisibleIndex index) -> bool {
+        return index != kInvalidShaderVisibleIndex;
       });
   }
 
@@ -1250,16 +1242,16 @@ namespace {
     return std::ranges::any_of(bindings.gbuffer_srvs.begin(),
       bindings.gbuffer_srvs.begin()
         + static_cast<std::ptrdiff_t>(GBufferIndex::kActiveCount),
-      [](const std::uint32_t index) -> bool {
-        return index != SceneTextureBindings::kInvalidIndex;
+      [](const ShaderVisibleIndex index) -> bool {
+        return index != kInvalidShaderVisibleIndex;
       });
   }
 
   auto HasPublishedDeferredLightingInputs(const SceneTextureBindings& bindings)
     -> bool
   {
-    return bindings.scene_depth_srv != SceneTextureBindings::kInvalidIndex
-      && bindings.scene_color_uav != SceneTextureBindings::kInvalidIndex
+    return bindings.scene_depth_srv != kInvalidShaderVisibleIndex
+      && bindings.scene_color_uav != kInvalidShaderVisibleIndex
       && HasPublishedGBufferBindings(bindings);
   }
 
@@ -2058,9 +2050,8 @@ auto SceneRenderer::ResolveShadowReceivers(
   if (depth == nullptr) {
     return std::nullopt;
   }
-  const auto depth_srv = ShaderVisibleIndex { RegisterSceneTextureView(*depth,
-    MakeSrvDesc(
-      *depth, ResolveDepthSrvFormat(depth->GetDescriptor().format))) };
+  const auto depth_srv = RegisterSceneTextureView(*depth,
+    MakeSrvDesc(*depth, ResolveDepthSrvFormat(depth->GetDescriptor().format)));
   const auto& resolved = *view.resolved_view;
   const auto extent = scene_textures.GetExtent();
   const auto clamped = internal::ResolveClampedViewportState(
@@ -2294,9 +2285,9 @@ auto SceneRenderer::RenderCurrentView(
         .resource_name
         = std::string { scene_textures.GetSceneDepth().GetName() },
         .descriptor
-        = SceneTextureDescriptor(scene_texture_bindings_.scene_depth_srv),
-        .published = scene_texture_bindings_.scene_depth_srv
-          != SceneTextureBindings::kInvalidIndex,
+        = ShaderVisibleDescriptor(scene_texture_bindings_.scene_depth_srv),
+        .published
+        = scene_texture_bindings_.scene_depth_srv != kInvalidShaderVisibleIndex,
         .valid = ctx.current_view.scene_depth_product_valid,
       });
   }
@@ -2592,11 +2583,11 @@ auto SceneRenderer::RenderCurrentView(
         .resource_name
         = std::string { scene_textures.GetSceneColor().GetName() },
         .descriptor
-        = SceneTextureDescriptor(scene_texture_bindings_.scene_color_srv),
-        .published = scene_texture_bindings_.scene_color_srv
-          != SceneTextureBindings::kInvalidIndex,
-        .valid = scene_texture_bindings_.scene_color_srv
-          != SceneTextureBindings::kInvalidIndex,
+        = ShaderVisibleDescriptor(scene_texture_bindings_.scene_color_srv),
+        .published
+        = scene_texture_bindings_.scene_color_srv != kInvalidShaderVisibleIndex,
+        .valid
+        = scene_texture_bindings_.scene_color_srv != kInvalidShaderVisibleIndex,
       });
     RecordDiagnosticsProduct(renderer_,
       DiagnosticsProductRecord {
@@ -2604,7 +2595,7 @@ auto SceneRenderer::RenderCurrentView(
         .producer_pass = "Vortex.Stage9.BasePass",
         .resource_name = {},
         .descriptor
-        = SceneTextureDescriptor(scene_texture_bindings_.gbuffer_srvs.at(0)),
+        = ShaderVisibleDescriptor(scene_texture_bindings_.gbuffer_srvs.at(0)),
         .published = HasPublishedGBufferBindings(scene_texture_bindings_),
         .valid = HasPublishedGBufferBindings(scene_texture_bindings_),
       });
@@ -2670,8 +2661,8 @@ auto SceneRenderer::RenderCurrentView(
     && base_pass_wrote_scene_color && !wireframe_only
     && !rendered_debug_visualization) {
     auto& source = scene_textures.GetSceneColor();
-    const auto source_srv = ShaderVisibleIndex { RegisterSceneTextureView(
-      source, MakeSrvDesc(source, source.GetDescriptor().format)) };
+    const auto source_srv = RegisterSceneTextureView(
+      source, MakeSrvDesc(source, source.GetDescriptor().format));
     std::ignore = post_process_->CapturePreEnvironmentRange(
       ctx, recorder, source, source_srv);
   }
@@ -2879,9 +2870,8 @@ auto SceneRenderer::RenderCurrentView(
       ResolveAuthoredPostProcessConfig(ctx, *post_process_));
     auto* accumulated = scene_textures.GetSceneColorResource().get();
     CHECK_NOTNULL_F(accumulated);
-    const auto accumulated_srv
-      = ShaderVisibleIndex { RegisterSceneTextureView(*accumulated,
-        MakeSrvDesc(*accumulated, accumulated->GetDescriptor().format)) };
+    const auto accumulated_srv = RegisterSceneTextureView(*accumulated,
+      MakeSrvDesc(*accumulated, accumulated->GetDescriptor().format));
     if (!ctx.current_view.hdr_fp32_only) {
       precision_products = CollectExposureProducts(
         ctx, *accumulated, accumulated_srv, environment_.get());
@@ -2939,9 +2929,9 @@ auto SceneRenderer::RenderCurrentView(
   // Certify current/candidate consumer error before checked narrowing.
   if (prepared_exposure && !precision_products.empty()) {
     auto* depth = scene_textures.GetSceneDepthResource().get();
-    const auto depth_srv = ShaderVisibleIndex { RegisterSceneTextureView(*depth,
+    const auto depth_srv = RegisterSceneTextureView(*depth,
       MakeSrvDesc(
-        *depth, ResolveDepthSrvFormat(depth->GetDescriptor().format))) };
+        *depth, ResolveDepthSrvFormat(depth->GetDescriptor().format)));
     const auto local_instances
       = environment_ && environment_->GetLastStage15State().local_fog_executed
       ? environment_->GetLastStage14State().local_fog_instance_count
@@ -3009,9 +2999,8 @@ auto SceneRenderer::RenderCurrentView(
     }
     CHECK_NOTNULL_F(scene_signal,
       "SceneRenderer Stage 22 requires a valid SceneColor source texture");
-    const auto scene_signal_srv
-      = ShaderVisibleIndex { RegisterSceneTextureView(*scene_signal,
-        MakeSrvDesc(*scene_signal, scene_signal->GetDescriptor().format)) };
+    const auto scene_signal_srv = RegisterSceneTextureView(*scene_signal,
+      MakeSrvDesc(*scene_signal, scene_signal->GetDescriptor().format));
 
     auto* scene_depth = scene_textures.GetSceneDepthResource().get();
     if (scene_texture_extracts_.resolved_scene_depth.valid
@@ -3020,9 +3009,8 @@ auto SceneRenderer::RenderCurrentView(
     }
     CHECK_NOTNULL_F(scene_depth,
       "SceneRenderer Stage 22 requires a valid SceneDepth source texture");
-    const auto scene_depth_srv
-      = ShaderVisibleIndex { RegisterSceneTextureView(*scene_depth,
-        MakeSrvDesc(*scene_depth, scene_depth->GetDescriptor().format)) };
+    const auto scene_depth_srv = RegisterSceneTextureView(*scene_depth,
+      MakeSrvDesc(*scene_depth, scene_depth->GetDescriptor().format));
     CHECK_NOTNULL_F(post_target.get(),
       "SceneRenderer Stage 22 requires a SceneRenderer-supplied post target");
 
@@ -3109,10 +3097,9 @@ auto SceneRenderer::RenderCurrentView(
       if (!wireframe_only) {
         auto* depth = scene_textures.GetSceneDepthResource().get();
         inputs.scene_depth = observer_ptr<const graphics::Texture> { depth };
-        inputs.scene_depth_srv
-          = ShaderVisibleIndex { RegisterSceneTextureView(*depth,
-            MakeSrvDesc(
-              *depth, ResolveDepthSrvFormat(depth->GetDescriptor().format))) };
+        inputs.scene_depth_srv = RegisterSceneTextureView(*depth,
+          MakeSrvDesc(
+            *depth, ResolveDepthSrvFormat(depth->GetDescriptor().format)));
       }
       const auto outlined_draws
         = selection_outline_pass_->Record(ctx, recorder, *outline, inputs);
@@ -3141,10 +3128,9 @@ auto SceneRenderer::RenderCurrentView(
       if (!wireframe_only) {
         auto* depth = scene_textures.GetSceneDepthResource().get();
         inputs.scene_depth = observer_ptr<const graphics::Texture> { depth };
-        inputs.scene_depth_srv
-          = ShaderVisibleIndex { RegisterSceneTextureView(*depth,
-            MakeSrvDesc(
-              *depth, ResolveDepthSrvFormat(depth->GetDescriptor().format))) };
+        inputs.scene_depth_srv = RegisterSceneTextureView(*depth,
+          MakeSrvDesc(
+            *depth, ResolveDepthSrvFormat(depth->GetDescriptor().format)));
       }
       const auto overlay_draws
         = view_overlay_pass_->Record(ctx, recorder, *overlay, inputs);
@@ -3286,10 +3272,8 @@ void SceneRenderer::PublishBasePassVelocity()
     setup_mode_.Set(SceneTextureSetupMode::Flag::kSceneVelocity);
     RefreshSceneTextureBindings();
   }
-  CHECK_F(scene_texture_bindings_.scene_color_srv
-        == SceneTextureBindings::kInvalidIndex
-      && scene_texture_bindings_.scene_color_uav
-        == SceneTextureBindings::kInvalidIndex
+  CHECK_F(scene_texture_bindings_.scene_color_srv == kInvalidShaderVisibleIndex
+      && scene_texture_bindings_.scene_color_uav == kInvalidShaderVisibleIndex
       && !HasAnyPublishedGBufferBinding(scene_texture_bindings_),
     "SceneRenderer: Stage 9 must not publish SceneColor or GBuffer bindings "
     "before the Stage 10 rebuild boundary");
@@ -3490,7 +3474,7 @@ void SceneRenderer::InvalidatePublishedViewFrameBindings()
 
 void SceneRenderer::RefreshSceneTextureBindings()
 {
-  scene_texture_bindings_.Invalidate();
+  scene_texture_bindings_ = {};
   if (setup_mode_.GetFlags() == 0U) {
     return;
   }
@@ -3590,7 +3574,7 @@ void SceneRenderer::ResizeSceneTextureFamily(const glm::uvec2 new_extent)
     inspected_scene_textures_ = &scene_textures_;
   }
   setup_mode_.Reset();
-  scene_texture_bindings_.Invalidate();
+  scene_texture_bindings_ = {};
   ResetExtractArtifacts();
   for (auto* artifact : {
          &resolved_scene_color_artifact_,
@@ -3634,7 +3618,7 @@ auto SceneRenderer::BuildSceneTextureLeaseKey(const RenderContext& ctx) const
 void SceneRenderer::ResetPerViewSceneProducts()
 {
   setup_mode_.Reset();
-  scene_texture_bindings_.Invalidate();
+  scene_texture_bindings_ = {};
   published_screen_hzb_bindings_ = {};
   InvalidatePublishedViewFrameBindings();
   ResetExtractArtifacts();
@@ -3696,13 +3680,13 @@ auto SceneRenderer::ResolveVelocitySourceTexture() const
 }
 
 auto SceneRenderer::RegisterSceneTextureView(graphics::Texture& texture,
-  const graphics::TextureViewDescription& desc) -> std::uint32_t
+  const graphics::TextureViewDescription& desc) -> ShaderVisibleIndex
 {
   auto& registry = gfx_.GetResourceRegistry();
   if (const auto existing_index
     = registry.FindShaderVisibleIndex(texture, desc);
     existing_index.has_value()) {
-    return existing_index->get();
+    return *existing_index;
   }
 
   auto& allocator = gfx_.GetDescriptorAllocator();
@@ -3721,7 +3705,7 @@ auto SceneRenderer::RegisterSceneTextureView(graphics::Texture& texture,
     "SceneRenderer: {} descriptor registration for '{}' did not yield a "
     "shader-visible index",
     graphics::to_string(desc.view_type), texture.GetName());
-  return index->get();
+  return *index;
 }
 
 auto SceneRenderer::ResolveShadingModeForCurrentView(
@@ -3774,8 +3758,7 @@ auto SceneRenderer::RenderDebugVisualization(RenderContext& ctx,
     return false;
   }
   if (requires_scene_depth
-    && scene_texture_bindings_.scene_depth_srv
-      == SceneTextureBindings::kInvalidIndex) {
+    && scene_texture_bindings_.scene_depth_srv == kInvalidShaderVisibleIndex) {
     return false;
   }
 

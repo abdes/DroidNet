@@ -1,0 +1,1932 @@
+# ------------------------------------------------------------------------------
+# Source of truth for the Vortex structs shared by C++ and HLSL.
+# ------------------------------------------------------------------------------
+# BindlessCodeGen (python -m bindless_codegen.contracts) generates, per file
+# below, a C++ header under src/ and an HLSL header under the shader root. The
+# Vortex build regenerates them when this file or the generator changes.
+#
+# Layouts:
+#   structured  StructuredBuffer element: members aligned to their scalar size.
+#   constant    cbuffer or ConstantBuffer<T>: no member straddles a 16-byte
+#               register; arrays, matrices and structs start one.
+#   bytes       ByteAddressBuffer record: 32-bit scalars, vectors and nested
+#               byte records; byte offsets and Load/Store functions are
+#               generated.
+# Every layout needs explicit padding: a member that would need implicit
+# padding, or fields that do not add up to `size`, fail generation.
+#
+# Fields:
+#   type     HLSL type, or a contract struct defined earlier.
+#   count    array length.
+#   slot     a bindless index into the named domain of Bindless.yaml, or `any`
+#            for descriptor kinds without a domain (UAVs); invalid by default
+#            and in the HLSL MakeInvalid<Struct>().
+#   cpp      C++ type when it is not the default mapping (strong types).
+#   default  C++ member initializer.
+# A `loader` emits a domain-checked HLSL TryLoad<Struct>; `array: true` adds
+# an element index checked against the buffer size.
+# ------------------------------------------------------------------------------
+meta:
+  version: "1.0.0"
+
+files:
+  # --- View -------------------------------------------------------------------
+  - id: view_constants
+    cpp: Oxygen/Vortex/Types/Generated.ViewConstants.h
+    hlsl: Vortex/Contracts/View/Generated.ViewConstants.hlsli
+    namespace: oxygen::vortex
+    cpp_includes:
+      - <Oxygen/Vortex/Types/BindlessSlots.h>
+    structs:
+      - name: ViewConstantsGpuData
+        hlsl_name: ViewConstants
+        doc: |-
+          Camera view constants, bound as b1 by every camera pass. Each write
+          is a new transient record; the routing slot leads to the view's
+          other per-frame records.
+        layout: constant
+        register: b1
+        size: 256
+        align: 16
+        fields:
+          - { name: frame_seq_num, type: uint64_t }
+          - { name: frame_slot, type: uint }
+          - { name: time_seconds, type: float }
+          - { name: view_matrix, type: float4x4 }
+          - { name: projection_matrix, type: float4x4 }
+          - { name: inverse_view_projection_matrix, type: float4x4 }
+          - { name: camera_position, type: float3 }
+          - { name: _pad0, type: float }
+          - {
+              name: bindless_view_frame_bindings_slot,
+              type: uint,
+              slot: srv_global,
+              cpp: BindlessViewFrameBindingsSlot,
+            }
+          - { name: reverse_z, type: uint, default: "1U" }
+          - { name: is_orthographic, type: uint }
+          - { name: _pad1, type: uint }
+          - { name: _pad2, type: float4 }
+
+  - id: view
+    cpp: Oxygen/Vortex/Types/Generated.ViewContracts.h
+    hlsl: Vortex/Contracts/View/Generated.ViewContracts.hlsli
+    namespace: oxygen::vortex
+    structs:
+      - name: ViewFrameBindings
+        doc: |-
+          Top-level routing record of one view, referenced from the view
+          constants. Lighting also carries the expected publication generation,
+          so a stale descriptor cannot authorize it.
+        layout: structured
+        size: 64
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - { name: draw_frame_slot, type: uint, slot: srv_global }
+          - { name: lighting_frame_slot, type: uint, slot: srv_global }
+          - { name: environment_frame_slot, type: uint, slot: srv_global }
+          - { name: frame_exposure_slot, type: uint, slot: srv_global }
+          - { name: scene_texture_frame_slot, type: uint, slot: srv_global }
+          - { name: _pad1, type: uint }
+          - { name: screen_hzb_frame_slot, type: uint, slot: srv_global }
+          - { name: shadow_frame_slot, type: uint, slot: srv_global }
+          - { name: virtual_shadow_frame_slot, type: uint, slot: srv_global }
+          - { name: _pad0, type: uint }
+          - { name: debug_frame_slot, type: uint, slot: srv_global }
+          - { name: history_frame_slot, type: uint, slot: srv_global }
+          - { name: ray_tracing_frame_slot, type: uint, slot: srv_global }
+          - { name: exposure_status_uav, type: uint, slot: any }
+          - name: lighting_view_generation
+            type: uint2
+            cpp: "std::array<std::uint32_t, 2>"
+            doc: Expected lighting publication identity, distinct from descriptor indices.
+
+      - name: ViewHistoryFrameBindings
+        doc: |-
+          A view's unjittered current projection and its previous view state;
+          the current view and projection matrices live in the view constants.
+          The renderer publishes history for every view with a resolved camera,
+          so a missing record is an error, never "history equals current".
+        layout: structured
+        size: 384
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - { name: current_stable_projection_matrix, type: float4x4 }
+          - { name: previous_view_matrix, type: float4x4 }
+          - { name: previous_projection_matrix, type: float4x4 }
+          - { name: previous_stable_projection_matrix, type: float4x4 }
+          - { name: previous_inverse_view_projection_matrix, type: float4x4 }
+          - { name: current_pixel_jitter, type: float2 }
+          - { name: previous_pixel_jitter, type: float2 }
+          - { name: current_view_rect_min_and_size, type: float4 }
+          - { name: previous_view_rect_min_and_size, type: float4 }
+          - { name: validity_flags, type: uint }
+          - { name: _pad0, type: uint }
+          - { name: _pad1, type: uint }
+          - { name: _pad2, type: uint }
+
+  # --- Exposure (byte-address records) ---------------------------------------
+  - id: exposure
+    cpp: Oxygen/Vortex/Types/Generated.ExposureContracts.h
+    hlsl: Vortex/Contracts/View/Generated.ExposureContracts.hlsli
+    namespace: oxygen::vortex
+    structs:
+      - name: FrameExposureData
+        doc: Immutable numerical-domain binding for one rendered frame.
+        layout: structured
+        size: 16
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - { name: pre_exposure, type: float, default: "1.0F" }
+          - { name: one_over_pre_exposure, type: float, default: "1.0F" }
+          - { name: global_exposure_state_slot, type: uint, slot: srv_global }
+          - { name: flags, type: uint }
+
+      - name: HdrSuitabilityData
+        doc: GPU qualification of reference products; this alone is not format admission.
+        layout: bytes
+        hlsl_prefix: HDR_SUITABILITY
+        size: 48
+        align: 16
+        fields:
+          - { name: candidate_pre_exposure, type: float, default: "1.0F" }
+          - { name: maximum_scene_rgb, type: float }
+          - { name: checked_products, type: uint }
+          - { name: failure_flags, type: uint }
+          - { name: first_failure_product, type: uint }
+          - { name: rejected_samples, type: uint }
+          - { name: metering_failures, type: uint }
+          - { name: image_failures, type: uint }
+          - { name: overflow_failures, type: uint }
+          - { name: checked_samples, type: uint }
+          - { name: expected_products, type: uint }
+          - { name: reserved, type: uint }
+
+      - name: ExposureStateData
+        doc: Shared GPU exposure state; uint64 identities use low/high uint32 words.
+        layout: bytes
+        hlsl_prefix: EXPOSURE_STATE
+        size: 80
+        align: 16
+        fields:
+          - { name: displayed_scale, type: float, default: "1.0F" }
+          - { name: target_scale, type: float, default: "1.0F" }
+          - { name: latent_scale, type: float, default: "1.0F" }
+          - { name: latent_target_scale, type: float, default: "1.0F" }
+          - { name: raw_metered_luminance, type: float }
+          - { name: raw_metered_ev, type: float }
+          - { name: flags, type: uint }
+          - { name: fallback_reason, type: uint, default: "1U" }
+          - {
+              name: settings_revision,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - {
+              name: requested_generation,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - {
+              name: applied_generation,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - {
+              name: frame_sequence,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - { name: fp16_candidate_pre_exposure, type: float, default: "1.0F" }
+          - { name: fp16_eligible_streak, type: uint }
+          - {
+              name: product_layout_revision,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+
+      - name: ExposureCompletedStatus
+        doc: Non-numerical asynchronous application/range status (low/high words).
+        layout: bytes
+        hlsl_prefix: EXPOSURE_COMPLETED
+        size: 80
+        align: 16
+        fields:
+          - {
+              name: view_state_identity,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - {
+              name: frame_sequence,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - {
+              name: settings_revision,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - {
+              name: requested_generation,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - {
+              name: applied_generation,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - {
+              name: product_layout_revision,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - { name: flags, type: uint }
+          - { name: first_failure_product, type: uint }
+          - { name: first_failure_kind, type: uint }
+          - { name: fp16_eligible_streak, type: uint }
+          - {
+              name: candidate_state_generation,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - { name: transition_rejection_reason, type: uint }
+          - { name: reserved, type: uint }
+
+      - name: HdrErrorBoundsData
+        doc: "GPU-only affine error data: abs(observed-reference) <= r*reference+a."
+        layout: bytes
+        hlsl_prefix: HDR_ERROR_BOUNDS
+        size: 16
+        align: 16
+        fields:
+          - { name: rgb_relative, type: float }
+          - { name: rgb_absolute, type: float }
+          - { name: transmittance_relative, type: float }
+          - { name: transmittance_absolute, type: float }
+
+      - name: HdrCompositionInputData
+        doc: GPU-only opaque SceneColor range before sky/AP/fog/translucency.
+        layout: bytes
+        hlsl_prefix: HDR_COMPOSITION_INPUT
+        size: 16
+        align: 16
+        fields:
+          - { name: maximum_pre_exposed_rgb, type: float }
+          - {
+              name: flags,
+              type: uint,
+              doc: "Recorded=1, nonfinite input=2, negative RGB=4.",
+            }
+          - { name: checked_pixels, type: uint }
+          - { name: reserved, type: uint }
+
+      - name: HdrOpaqueApErrorData
+        doc: |-
+          Retained store-error contribution to opaque I + C*T, before later
+          stages. Excludes filtering/arithmetic/coverage and prospective
+          candidate stores.
+        layout: bytes
+        hlsl_prefix: HDR_OPAQUE_AP_ERROR
+        size: 16
+        align: 16
+        fields:
+          - { name: rgb_relative, type: float }
+          - { name: rgb_absolute, type: float, doc: "Scene-referred units." }
+          - { name: valid, type: uint }
+          - { name: reserved, type: uint }
+
+      - name: HdrFilterGradientData
+        doc: GPU-only reference gradient maxima for linear-clamp sampling.
+        layout: bytes
+        hlsl_prefix: HDR_FILTER_GRADIENT
+        size: 32
+        align: 16
+        fields:
+          - {
+              name: rgb,
+              type: float3,
+              cpp: "std::array<float, 3>",
+              doc: "Scene-referred maximum adjacent differences.",
+            }
+          - {
+              name: flags,
+              type: uint,
+              doc: "Recorded=1, invalid input/interval=2.",
+            }
+          - { name: transmittance, type: float3, cpp: "std::array<float, 3>" }
+          - { name: checked_texels, type: uint }
+
+      - name: HdrSceneErrorData
+        doc: |-
+          Whole-scene affine bounds before the final resolve. RGB is scene
+          referred; coverage is dimensionless. Candidate bounds include
+          prospective upstream stores, but exclude the final store checked by
+          scene admission.
+        layout: bytes
+        hlsl_prefix: HDR_SCENE_ERROR
+        size: 48
+        align: 16
+        fields:
+          - { name: current_rgb_relative, type: float }
+          - { name: current_rgb_absolute, type: float }
+          - { name: current_coverage_relative, type: float }
+          - { name: current_coverage_absolute, type: float }
+          - { name: candidate_rgb_relative, type: float }
+          - { name: candidate_rgb_absolute, type: float }
+          - { name: candidate_coverage_relative, type: float }
+          - { name: candidate_coverage_absolute, type: float }
+          - { name: candidate_pre_exposure, type: float, default: "1.0F" }
+          - { name: checked_products, type: uint }
+          - {
+              name: flags,
+              type: uint,
+              doc: "Complete current=1, complete candidate=2.",
+            }
+          - { name: reserved, type: uint }
+
+      - name: HdrConsumerInputData
+        doc: Shader-observed nonnegative inputs before AP/fog attenuation, in scene units.
+        layout: bytes
+        hlsl_prefix: HDR_CONSUMER_INPUT
+        size: 16
+        align: 16
+        fields:
+          - { name: translucent_rgb_max, type: float }
+          - { name: height_fog_rgb_max, type: float }
+          - name: flags
+            type: uint
+            doc: |-
+              Translucency/height=1/2; invalid inputs=4/8; sky/opaque
+              AP/translucent AP consumers=16/32/64; invalid sky gain=128.
+          - { name: sky_rgb_gain_max, type: float }
+
+      - name: ExposureStatusStorage
+        doc: The readback prefix stays non-numerical; the tail remains GPU-owned.
+        layout: bytes
+        hlsl_prefix: EXPOSURE_STATUS
+        size: 384
+        align: 16
+        fields:
+          - { name: completed, type: ExposureCompletedStatus }
+          - {
+              name: producer_errors,
+              type: HdrErrorBoundsData,
+              count: 3,
+              doc: "Sky view, AP, fog.",
+            }
+          - { name: composition_input, type: HdrCompositionInputData }
+          - { name: opaque_ap_error, type: HdrOpaqueApErrorData }
+          - {
+              name: filter_gradients,
+              type: HdrFilterGradientData,
+              count: 3,
+              doc: "Sky, AP, fog.",
+            }
+          - { name: scene_error, type: HdrSceneErrorData }
+          - name: candidate_errors
+            type: HdrErrorBoundsData
+            count: 3
+            doc: |-
+              Prospective stores at the selected candidate P, including
+              retained error: sky, AP, fog.
+          - { name: consumer_inputs, type: HdrConsumerInputData }
+          - name: product_reference_rgb_max
+            type: float3
+            cpp: "std::array<float, 3>"
+            doc: Scene-referred reference RGB maxima for sky, AP and fog, respectively.
+          - { name: product_range_reserved, type: uint }
+
+  # --- Draw -------------------------------------------------------------------
+  - id: draw
+    cpp: Oxygen/Vortex/Types/Generated.DrawContracts.h
+    hlsl: Vortex/Contracts/Draw/Generated.DrawContracts.hlsli
+    namespace: oxygen::vortex
+    cpp_includes:
+      - <Oxygen/Vortex/Types/BindlessSlots.h>
+      - <Oxygen/Vortex/Types/PassMask.h>
+    structs:
+      - name: DrawFrameBindings
+        doc: Bindless draw-system routing record of one view.
+        layout: structured
+        size: 64
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - {
+              name: draw_metadata_slot,
+              type: uint,
+              slot: materials,
+              cpp: BindlessDrawMetadataSlot,
+            }
+          - {
+              name: current_worlds_slot,
+              type: uint,
+              slot: srv_global,
+              cpp: BindlessWorldsSlot,
+            }
+          - {
+              name: previous_worlds_slot,
+              type: uint,
+              slot: srv_global,
+              cpp: BindlessWorldsSlot,
+            }
+          - {
+              name: normal_matrices_slot,
+              type: uint,
+              slot: srv_global,
+              cpp: BindlessNormalsSlot,
+            }
+          - {
+              name: material_shading_constants_slot,
+              type: uint,
+              slot: materials,
+              cpp: BindlessMaterialShadingConstantsSlot,
+            }
+          - {
+              name: procedural_grid_material_constants_slot,
+              type: uint,
+              slot: materials,
+              cpp: BindlessProceduralGridMaterialConstantsSlot,
+            }
+          - {
+              name: instance_data_slot,
+              type: uint,
+              slot: srv_global,
+              cpp: BindlessInstanceDataSlot,
+            }
+          - {
+              name: current_material_wpo_slot,
+              type: uint,
+              slot: srv_global,
+              cpp: BindlessMaterialWpoPublicationsSlot,
+            }
+          - {
+              name: previous_material_wpo_slot,
+              type: uint,
+              slot: srv_global,
+              cpp: BindlessMaterialWpoPublicationsSlot,
+            }
+          - {
+              name: current_motion_vector_status_slot,
+              type: uint,
+              slot: srv_global,
+              cpp: BindlessMotionVectorStatusPublicationsSlot,
+            }
+          - {
+              name: previous_motion_vector_status_slot,
+              type: uint,
+              slot: srv_global,
+              cpp: BindlessMotionVectorStatusPublicationsSlot,
+            }
+          - {
+              name: velocity_draw_metadata_slot,
+              type: uint,
+              slot: srv_global,
+              cpp: BindlessVelocityDrawMetadataSlot,
+            }
+          - {
+              name: cull_records_slot,
+              type: uint,
+              slot: materials,
+              cpp: BindlessDrawCullRecordsSlot,
+              doc: "One DrawCullRecord per draw, in draw-metadata order.",
+            }
+          - { name: _pad0, type: uint }
+          - { name: _pad1, type: uint }
+          - { name: _pad2, type: uint }
+
+      - name: DrawMetadata
+        doc: |-
+          Per-draw metadata: geometry buffers, draw configuration and the
+          transform, instance and material indirections of one draw.
+          Populated on the CPU; shaders read it through
+          DrawFrameBindings::draw_metadata_slot. 64 bytes, so a 16-byte aligned
+          staging offset is always a multiple of the stride.
+        layout: structured
+        size: 64
+        loader: { domain: materials, array: true }
+        fields:
+          - {
+              name: vertex_buffer_index,
+              type: uint,
+              slot: srv_global,
+              doc: "Vertex buffer of the mesh.",
+            }
+          - {
+              name: index_buffer_index,
+              type: uint,
+              slot: srv_global,
+              doc: "Index buffer of the mesh.",
+            }
+          - {
+              name: first_index,
+              type: uint,
+              doc: "Start index within the mesh index buffer.",
+            }
+          - {
+              name: base_vertex,
+              type: int,
+              doc: "Base vertex offset (can be negative).",
+            }
+          - {
+              name: is_indexed,
+              type: uint,
+              doc: "0 = non-indexed, 1 = indexed.",
+            }
+          - {
+              name: instance_count,
+              type: uint,
+              doc: "Number of instances (at least 1).",
+            }
+          - {
+              name: index_count,
+              type: uint,
+              doc: "Number of indices of an indexed draw.",
+            }
+          - {
+              name: vertex_count,
+              type: uint,
+              doc: "Number of vertices of a non-indexed draw.",
+            }
+          - {
+              name: material_handle,
+              type: uint,
+              doc: "Stable MaterialRegistry handle (0 sentinel).",
+            }
+          - {
+              name: transform_index,
+              type: uint,
+              doc: "Index into the world and normal transform arrays.",
+            }
+          - {
+              name: instance_metadata_buffer_index,
+              type: uint,
+              doc: "Bindless index of the instance metadata buffer.",
+            }
+          - {
+              name: instance_metadata_offset,
+              type: uint,
+              doc: "Offset into the instance metadata buffer.",
+            }
+          - { name: flags, type: uint, cpp: PassMask, doc: "Pass mask." }
+          - {
+              name: transform_generation,
+              type: uint,
+              doc: "Transform-handle generation, for stable primitive identity.",
+            }
+          - {
+              name: submesh_index,
+              type: uint,
+              doc: "Stable submesh id within the geometry asset.",
+            }
+          - { name: primitive_flags, type: uint, doc: "DrawPrimitiveFlagBits." }
+
+      - name: DrawCullRecord
+        doc: |-
+          Per-draw culling record, one per draw in draw-metadata order. A
+          single draw stores its mesh view's local box; the cull kernels
+          transform it by the draw's world matrix into an oriented box. An
+          instanced batch stores the world AABB union of its instances and
+          sets kWorldSpaceBox. History slots are per culling view, so they live
+          in each view's own slot buffer.
+        layout: structured
+        size: 32
+        loader: { domain: materials, array: true }
+        fields:
+          - { name: box_center, type: float3 }
+          - { name: _pad0, type: uint }
+          - { name: box_extent, type: float3 }
+          - { name: flags, type: uint, doc: "DrawCullFlagBits." }
+
+  # --- Scene textures ---------------------------------------------------------
+  - id: scene
+    cpp: Oxygen/Vortex/SceneRenderer/Generated.SceneTextureBindings.h
+    hlsl: Vortex/Contracts/Scene/Generated.SceneTextureBindings.hlsli
+    namespace: oxygen::vortex
+    structs:
+      - name: SceneTextureBindings
+        hlsl_name: SceneTextureBindingData
+        doc: |-
+          A view's published scene textures. The record reserves the whole
+          logical GBuffer family; slots a view does not produce stay invalid.
+        layout: structured
+        size: 64
+        loader: { domain: srv_global }
+        fields:
+          - { name: scene_color_srv, type: uint, slot: textures }
+          - { name: scene_depth_srv, type: uint, slot: textures }
+          - { name: partial_depth_srv, type: uint, slot: textures }
+          - { name: velocity_srv, type: uint, slot: textures }
+          - { name: stencil_srv, type: uint, slot: textures }
+          - { name: custom_depth_srv, type: uint, slot: textures }
+          - { name: custom_stencil_srv, type: uint, slot: textures }
+          - name: gbuffer_srvs
+            type: uint
+            count: 6
+            slot: textures
+            default: "kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex"
+            doc: Indexed by GBufferIndex.
+          - { name: scene_color_uav, type: uint, slot: any }
+          - { name: velocity_uav, type: uint, slot: any }
+          - {
+              name: valid_flags,
+              type: uint,
+              doc: "SceneTextureSetupMode flags.",
+            }
+
+  # --- Shadows ----------------------------------------------------------------
+  - id: shadows
+    cpp: Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h
+    hlsl: Vortex/Contracts/Shadows/Generated.ShadowContracts.hlsli
+    namespace: oxygen::vortex
+    cpp_includes:
+      - <Oxygen/Vortex/Types/LightingIndices.h>
+    constants:
+      - {
+          cpp: kShadowProjectionNone,
+          hlsl: SHADOW_PROJECTION_NONE,
+          type: uint,
+          value: 0,
+        }
+      - {
+          cpp: kShadowProjectionCascaded2D,
+          hlsl: SHADOW_PROJECTION_CASCADED_2D,
+          type: uint,
+          value: 1,
+        }
+      - {
+          cpp: kShadowProjectionLocalCube,
+          hlsl: SHADOW_PROJECTION_LOCAL_CUBE,
+          type: uint,
+          value: 2,
+        }
+      - {
+          cpp: kShadowProjectionLocalProjected2D,
+          hlsl: SHADOW_PROJECTION_LOCAL_PROJECTED_2D,
+          type: uint,
+          value: 3,
+        }
+      - {
+          cpp: kShadowCoverageNoRequest,
+          hlsl: SHADOW_COVERAGE_NO_REQUEST,
+          type: uint,
+          value: 0,
+        }
+      - {
+          cpp: kShadowCoverageNoInfluence,
+          hlsl: SHADOW_COVERAGE_NO_INFLUENCE,
+          type: uint,
+          value: 1,
+        }
+      - {
+          cpp: kShadowCoverageComplete,
+          hlsl: SHADOW_COVERAGE_COMPLETE,
+          type: uint,
+          value: 2,
+        }
+      - {
+          cpp: kShadowCoverageOutsideAuthored,
+          hlsl: SHADOW_COVERAGE_OUTSIDE_AUTHORED,
+          type: uint,
+          value: 3,
+        }
+      - {
+          cpp: kShadowCoverageQualityOmitted,
+          hlsl: SHADOW_COVERAGE_QUALITY_OMITTED,
+          type: uint,
+          value: 4,
+        }
+      - {
+          cpp: kShadowSamplingReversedZPcf,
+          hlsl: SHADOW_SAMPLING_REVERSED_Z_PCF,
+          type: uint,
+          value: 1,
+        }
+      - {
+          cpp: kCubeLocalShadowFaceCount,
+          hlsl: CUBE_LOCAL_SHADOW_FACE_COUNT,
+          type: uint,
+          value: 6,
+        }
+    structs:
+      - name: ShadowCascadeBinding
+        hlsl_name: VortexShadowCascadeBinding
+        doc: One directional projection, with explicit surface identity and sampling units.
+        layout: structured
+        size: 128
+        align: 16
+        loader: { domain: srv_global, array: true }
+        fields:
+          - { name: light_view_projection, type: float4x4 }
+          - { name: split_near, type: float }
+          - { name: split_far, type: float }
+          - { name: depth_bias, type: float }
+          - { name: normal_bias_m, type: float }
+          - { name: surface_srv, type: uint, slot: textures }
+          - {
+              name: array_layer,
+              type: uint,
+              cpp: ShadowArrayLayer,
+              default: kInvalidShadowArrayLayer,
+            }
+          - { name: reserved0, type: uint2 }
+          - { name: inverse_resolution, type: float2 }
+          - { name: world_texel_size, type: float }
+          - { name: transition_width, type: float }
+          - { name: fade_begin, type: float }
+          - { name: fade_end, type: float }
+          - name: light_space_origin
+            type: float2
+            doc: |-
+              The loose cascade center in world-anchored light space: the
+              light-view rotation applied to the cascade center. Receiver
+              fitting snaps to it.
+
+      - name: DirectionalShadowRecord
+        doc: A directional light's contiguous range in the view's cascade record array.
+        layout: structured
+        size: 16
+        align: 16
+        loader: { domain: srv_global, array: true }
+        fields:
+          - {
+              name: selection_index,
+              type: uint,
+              cpp: LightSelectionIndex,
+              default: kInvalidLightSelectionIndex,
+            }
+          - {
+              name: first_cascade,
+              type: uint,
+              cpp: ShadowCascadeIndex,
+              default: kInvalidShadowCascadeIndex,
+            }
+          - { name: cascade_count, type: uint }
+          - { name: reserved, type: uint }
+
+      - name: LightShadowReference
+        doc: Per-view association from an immutable light selection to its shadow record.
+        layout: structured
+        size: 16
+        align: 16
+        loader: { domain: srv_global, array: true }
+        fields:
+          - {
+              name: projection_kind,
+              type: uint,
+              default: kShadowProjectionNone,
+            }
+          - {
+              name: record_index,
+              type: uint,
+              cpp: ShadowRecordIndex,
+              default: kInvalidShadowRecordIndex,
+            }
+          - {
+              name: selection_index,
+              type: uint,
+              cpp: LightSelectionIndex,
+              default: kInvalidLightSelectionIndex,
+            }
+          - {
+              name: coverage_state,
+              type: uint,
+              default: kShadowCoverageNoRequest,
+            }
+
+      - name: ProjectedLocalShadowRecord
+        doc: Derived local shadow projection, independent of the selected light kind.
+        layout: structured
+        size: 128
+        align: 16
+        loader: { domain: srv_global, array: true }
+        fields:
+          - { name: light_view_projection, type: float4x4 }
+          - { name: shadow_origin_ws, type: float3 }
+          - { name: near_plane_m, type: float }
+          - { name: far_plane_m, type: float }
+          - { name: normal_bias_m, type: float }
+          - { name: depth_bias, type: float }
+          - {
+              name: world_texel_size,
+              type: float,
+              doc: "Far-plane footprint; scale by receiver depth.",
+            }
+          - { name: surface_srv, type: uint, slot: textures }
+          - {
+              name: array_layer,
+              type: uint,
+              cpp: ShadowArrayLayer,
+              default: kInvalidShadowArrayLayer,
+            }
+          - {
+              name: selection_index,
+              type: uint,
+              cpp: LightSelectionIndex,
+              default: kInvalidLightSelectionIndex,
+            }
+          - { name: shadow_strength, type: float, default: "1.0F" }
+          - { name: inverse_resolution, type: float2 }
+          - { name: reserved1, type: uint2 }
+
+      - name: CubeLocalShadowRecord
+        doc: Derived cube shadow projection, independent of the selected light kind.
+        layout: structured
+        size: 448
+        align: 16
+        loader: { domain: srv_global, array: true }
+        fields:
+          - { name: face_light_view_projection, type: float4x4, count: 6 }
+          - { name: shadow_origin_ws, type: float3 }
+          - { name: near_plane_m, type: float }
+          - { name: far_plane_m, type: float }
+          - { name: normal_bias_m, type: float }
+          - {
+              name: depth_bias,
+              type: float,
+              doc: "Clip-space receiver bias; divide by clip W.",
+            }
+          - {
+              name: world_texel_size,
+              type: float,
+              doc: "Far-plane footprint; scale by receiver depth.",
+            }
+          - {
+              name: surface_srv,
+              type: uint,
+              slot: textures,
+              doc: "Cube array.",
+            }
+          - {
+              name: first_array_layer,
+              type: uint,
+              cpp: ShadowArrayLayer,
+              default: kInvalidShadowArrayLayer,
+            }
+          - {
+              name: selection_index,
+              type: uint,
+              cpp: LightSelectionIndex,
+              default: kInvalidLightSelectionIndex,
+            }
+          - { name: shadow_strength, type: float, default: "1.0F" }
+          - { name: inverse_resolution, type: float2 }
+          - { name: pcf_sample_count, type: uint, default: "29U" }
+          - { name: reserved1, type: uint }
+
+      - name: ShadowFrameBindings
+        hlsl_name: VortexShadowFrameBindings
+        doc: Per-view routing header for separately published canonical shadow records.
+        layout: structured
+        size: 112
+        align: 16
+        fields:
+          - { name: directional_records_srv, type: uint, slot: srv_global }
+          - { name: directional_record_count, type: uint }
+          - { name: projected_local_records_srv, type: uint, slot: srv_global }
+          - { name: projected_local_record_count, type: uint }
+          - { name: cube_local_records_srv, type: uint, slot: srv_global }
+          - { name: cube_local_record_count, type: uint }
+          - { name: cascade_records_srv, type: uint, slot: srv_global }
+          - { name: cascade_record_count, type: uint }
+          - { name: contact_depth_srv, type: uint, slot: textures }
+          - { name: view_status_srv, type: uint, slot: srv_global }
+          - { name: contact_enabled, type: uint }
+          - { name: sampling_flags, type: uint }
+          - { name: contact_content_origin_px, type: float2 }
+          - { name: contact_content_extent_px, type: float2 }
+          - {
+              name: scene_generation,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - {
+              name: selection_revision,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - {
+              name: frame_sequence,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - {
+              name: view_generation,
+              type: uint2,
+              cpp: "std::array<std::uint32_t, 2>",
+            }
+          - { name: contact_texture_extent_px, type: uint2 }
+          - { name: reserved, type: uint2 }
+
+  - id: shadow_passes
+    cpp: Oxygen/Vortex/Shadows/Passes/Generated.ShadowPassContracts.h
+    hlsl: Vortex/Contracts/Shadows/Generated.ShadowPassContracts.hlsli
+    namespace: oxygen::vortex::shadows
+    constants:
+      - {
+          cpp: kShadowReceiverMaskResolution,
+          hlsl: SHADOW_RECEIVER_MASK_RESOLUTION,
+          type: uint,
+          value: 64,
+          doc: "Receiver mask tiles per side of a cascade.",
+        }
+      - {
+          cpp: kShadowReceiverMaskCoarseReduction,
+          hlsl: SHADOW_RECEIVER_MASK_COARSE_REDUCTION,
+          type: uint,
+          value: 8,
+          doc: "Mask tiles per side of one coarse tile.",
+        }
+      - {
+          cpp: kShadowReceiverMaskCoarseResolution,
+          hlsl: SHADOW_RECEIVER_MASK_COARSE_RESOLUTION,
+          type: uint,
+          value: 8,
+        }
+      - {
+          cpp: kShadowReceiverMaskTiles,
+          hlsl: SHADOW_RECEIVER_MASK_TILES,
+          type: uint,
+          value: 4096,
+        }
+      - {
+          cpp: kShadowReceiverMaskMarkedOffset,
+          hlsl: SHADOW_RECEIVER_MASK_MARKED_OFFSET,
+          type: uint,
+          value: 0,
+          doc: "Per-cascade block: marked tiles, dilated tiles, coarse tiles (uint words).",
+        }
+      - {
+          cpp: kShadowReceiverMaskDilatedOffset,
+          hlsl: SHADOW_RECEIVER_MASK_DILATED_OFFSET,
+          type: uint,
+          value: 4096,
+        }
+      - {
+          cpp: kShadowReceiverMaskCoarseOffset,
+          hlsl: SHADOW_RECEIVER_MASK_COARSE_OFFSET,
+          type: uint,
+          value: 8192,
+        }
+      - {
+          cpp: kShadowReceiverMaskBlock,
+          hlsl: SHADOW_RECEIVER_MASK_BLOCK,
+          type: uint,
+          value: 8256,
+        }
+    structs:
+      - name: ShadowPassConstants
+        doc: Inputs of one directional or local shadow-depth pass.
+        layout: structured
+        size: 128
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - { name: light_view_projection, type: float4x4 }
+          - { name: shadow_bias_parameters, type: float4 }
+          - {
+              name: light_direction_to_source,
+              type: float4,
+              default: "0.0F, -1.0F, 0.0F, 0.0F",
+            }
+          - { name: light_position_and_inv_range, type: float4 }
+          - {
+              name: draw_frame_slot,
+              type: uint,
+              slot: srv_global,
+              doc: "The view's published DrawFrameBindings, as the camera passes see it.",
+            }
+          - {
+              name: cascade_records_srv,
+              type: uint,
+              slot: srv_global,
+              doc: "A cascade fitted on the GPU: its record replaces light_view_projection.",
+            }
+          - { name: cascade_index, type: uint }
+          - { name: _pad0, type: uint }
+
+      - name: ContactShadowCasterDepthPassConstants
+        doc: Inputs of the contact-shadow caster depth pass.
+        layout: structured
+        size: 144
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - { name: view_matrix, type: float4x4 }
+          - { name: projection_matrix, type: float4x4 }
+          - { name: draw_frame_slot, type: uint, slot: srv_global }
+          - { name: _pad0, type: uint }
+          - { name: _pad1, type: uint }
+          - { name: _pad2, type: uint }
+
+      - name: ShadowReceiverFitInputs
+        doc: Inputs of one view's receiver fit (analysis and mask kernels).
+        layout: structured
+        size: 192
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - {
+              name: inverse_view_projection,
+              type: float4x4,
+              doc: "The camera's projection (jitter included) times view, inverted.",
+            }
+          - { name: view_matrix, type: float4x4 }
+          - {
+              name: viewport,
+              type: float4,
+              doc: "The view rect in scene-depth pixels: origin x, origin y, width, height.",
+            }
+          - { name: scene_depth_srv, type: uint, slot: textures }
+          - {
+              name: cascade_records_uav,
+              type: uint,
+              slot: any,
+              doc: "The view's fitted cascade records, seeded from the CPU's loose records.",
+            }
+          - { name: loose_cascade_records_srv, type: uint, slot: srv_global }
+          - { name: cascade_count, type: uint }
+          - { name: bounds_uav, type: uint, slot: any }
+          - { name: mask_uav, type: uint, slot: any }
+          - { name: draw_cull_records_srv, type: uint, slot: materials }
+          - { name: draw_metadata_srv, type: uint, slot: materials }
+          - { name: worlds_srv, type: uint, slot: srv_global }
+          - { name: draw_count, type: uint }
+          - {
+              name: near_plane,
+              type: float,
+              doc: "The camera near plane: nearer receivers belong to the first cascade.",
+            }
+          - { name: _pad0, type: uint }
+
+      - name: ShadowReceiverBounds
+        doc: A cascade's receiver rect in loose clip space, as ordered floats.
+        layout: structured
+        size: 32
+        fields:
+          - { name: min_x, type: uint }
+          - { name: min_y, type: uint }
+          - { name: max_x, type: uint }
+          - { name: max_y, type: uint }
+          - { name: receiver_count, type: uint }
+          - { name: _pad0, type: uint }
+          - { name: _pad1, type: uint }
+          - { name: _pad2, type: uint }
+
+  # --- Occlusion --------------------------------------------------------------
+  - id: occlusion
+    cpp: Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/Generated.OcclusionContracts.h
+    hlsl: Vortex/Stages/Occlusion/Generated.OcclusionContracts.hlsli
+    namespace: oxygen::vortex::occlusion::internal
+    constants:
+      - {
+          cpp: kHzbBuildMaxMips,
+          hlsl: HZB_BUILD_MAX_MIPS,
+          type: uint,
+          value: 16,
+        }
+    structs:
+      - name: OcclusionCullPassConstants
+        doc: Inputs of one two-phase occlusion cull.
+        layout: structured
+        size: 208
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - {
+              name: view_projection,
+              type: float4x4,
+              doc: "The matrix the rasterizer uses: projection (jitter included) times view.",
+            }
+          - {
+              name: viewport,
+              type: float4,
+              doc: "Viewport origin and size, in pixels.",
+            }
+          - {
+              name: clip_rect,
+              type: float4,
+              doc: "Rasterized pixel rect: min x, min y, max x, max y (exclusive).",
+            }
+          - {
+              name: depth_encoding,
+              type: float4,
+              doc: "How the view's depth target encodes a clip-space point: x * z / w + y * w + z.",
+            }
+          - {
+              name: depth_linearize,
+              type: float4,
+              doc: "Turns an encoded depth e into a linear depth: |(x + y * e) / (z + w * e)|.",
+            }
+          - {
+              name: pyramid_source,
+              type: uint4,
+              doc: "The pyramid's source rect: origin x, origin y, width, height.",
+            }
+          - { name: draw_metadata_srv, type: uint, slot: materials }
+          - { name: cull_records_srv, type: uint, slot: materials }
+          - { name: worlds_srv, type: uint, slot: srv_global }
+          - { name: visibility_uav, type: uint, slot: any }
+          - { name: history_slots_srv, type: uint, slot: srv_global }
+          - { name: history_uav, type: uint, slot: any }
+          - { name: stats_uav, type: uint, slot: any }
+          - { name: pyramid_srv, type: uint, slot: textures }
+          - { name: draw_count, type: uint }
+          - { name: flags, type: uint }
+          - { name: depth_bias, type: float }
+          - {
+              name: debug_bindings_srv,
+              type: uint,
+              slot: srv_global,
+              doc: "The view's GpuDebugBindings record when draw bounds are requested.",
+            }
+          - {
+              name: cascade_records_srv,
+              type: uint,
+              slot: srv_global,
+              doc: "A directional cascade fitted on the GPU: its record replaces view_projection.",
+            }
+          - { name: cascade_index, type: uint }
+          - {
+              name: receiver_mask_srv,
+              type: uint,
+              slot: srv_global,
+              doc: "The cascade's receiver mask: casters whose shadow lands on no receiver are outside the frustum.",
+            }
+          - { name: _pad0, type: uint }
+
+      - name: ListCompactionPassConstants
+        doc: Inputs of the indirect draw-list compaction.
+        layout: structured
+        size: 48
+        loader: { domain: srv_global }
+        fields:
+          - { name: candidates_srv, type: uint, slot: srv_global }
+          - { name: segments_srv, type: uint, slot: srv_global }
+          - { name: visibility_srv, type: uint, slot: srv_global }
+          - { name: predicate_mask, type: uint }
+          - { name: candidate_count, type: uint }
+          - { name: group_count, type: uint }
+          - { name: scan_uav, type: uint, slot: any }
+          - { name: arguments_uav, type: uint, slot: any }
+          - { name: counts_uav, type: uint, slot: any }
+          - { name: group_prefix_base, type: uint }
+          - { name: _pad0, type: uint }
+          - { name: _pad1, type: uint }
+
+      - name: IndirectCandidate
+        doc: One draw that may enter an indirect list.
+        layout: structured
+        size: 16
+        fields:
+          - { name: draw_index, type: uint }
+          - { name: vertex_count, type: uint }
+          - { name: instance_count, type: uint }
+          - { name: segment, type: uint }
+
+      - name: IndirectSegment
+        doc: A contiguous run of candidates that compacts into one list.
+        layout: structured
+        size: 16
+        fields:
+          - { name: first_candidate, type: uint }
+          - { name: candidate_count, type: uint }
+          - { name: _pad0, type: uint }
+          - { name: _pad1, type: uint }
+
+      - name: HzbBuildPassConstants
+        doc: Inputs of one screen HZB pyramid build.
+        layout: structured
+        size: 176
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - { name: source_depth_srv, type: uint, slot: textures }
+          - { name: source_origin_x, type: uint }
+          - { name: source_origin_y, type: uint }
+          - { name: source_width, type: uint }
+          - { name: source_height, type: uint }
+          - { name: root_width, type: uint }
+          - { name: root_height, type: uint }
+          - { name: mip_count, type: uint }
+          - { name: base_level, type: uint }
+          - { name: _pad0, type: uint }
+          - { name: _pad1, type: uint }
+          - { name: _pad2, type: uint }
+          - { name: closest_mip_uavs, type: uint, count: 16, slot: any }
+          - { name: furthest_mip_uavs, type: uint, count: 16, slot: any }
+
+  # --- Environment ------------------------------------------------------------
+  - id: atmosphere
+    cpp: Oxygen/Vortex/Environment/Passes/Generated.AtmosphereContracts.h
+    hlsl: Vortex/Services/Environment/Generated.AtmosphereContracts.hlsli
+    namespace: oxygen::vortex::environment
+    structs:
+      - name: AtmosphereTransmittanceLutPassConstants
+        layout: structured
+        size: 128
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - { name: output_texture_uav, type: uint }
+          - { name: output_width, type: uint }
+          - { name: output_height, type: uint }
+          - { name: integration_sample_count, type: uint }
+          - { name: planet_radius_km, type: float, default: "6360.0F" }
+          - { name: atmosphere_height_km, type: float, default: "100.0F" }
+          - { name: rayleigh_scale_height_km, type: float, default: "8.0F" }
+          - { name: mie_scale_height_km, type: float, default: "1.2F" }
+          - {
+              name: rayleigh_scattering_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+              default: "5.8e-3F, 13.5e-3F, 33.1e-3F, 0.0F",
+            }
+          - {
+              name: mie_scattering_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+              default: "2.0e-2F, 2.0e-2F, 2.0e-2F, 0.0F",
+            }
+          - {
+              name: mie_absorption_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+              default: "4.4e-3F, 4.4e-3F, 4.4e-3F, 0.0F",
+            }
+          - {
+              name: ozone_absorption_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+              default: "0.65e-3F, 1.88e-3F, 0.08e-3F, 0.0F",
+            }
+          - {
+              name: ozone_density_layer0,
+              type: float4,
+              cpp: "std::array<float, 4>",
+              default: "25.0F, 0.0F, 0.0F, 0.0F",
+            }
+          - {
+              name: ozone_density_layer1,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+      - name: AtmosphereMultiScatteringLutPassConstants
+        layout: structured
+        size: 176
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - { name: output_texture_uav, type: uint }
+          - { name: output_width, type: uint }
+          - { name: output_height, type: uint }
+          - { name: integration_sample_count, type: uint }
+          - { name: transmittance_lut_srv, type: uint }
+          - { name: transmittance_width, type: uint }
+          - { name: transmittance_height, type: uint }
+          - { name: active_light_count, type: uint }
+          - { name: planet_radius_km, type: float, default: "6360.0F" }
+          - { name: atmosphere_height_km, type: float, default: "100.0F" }
+          - { name: rayleigh_scale_height_km, type: float, default: "8.0F" }
+          - { name: mie_scale_height_km, type: float, default: "1.2F" }
+          - { name: multi_scattering_factor, type: float, default: "1.0F" }
+          - { name: mie_anisotropy, type: float, default: "0.8F" }
+          - { name: _pad1, type: float }
+          - { name: _pad2, type: float }
+          - {
+              name: ground_albedo_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+              default: "0.4F, 0.4F, 0.4F, 0.0F",
+            }
+          - {
+              name: rayleigh_scattering_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+              default: "5.8e-3F, 13.5e-3F, 33.1e-3F, 0.0F",
+            }
+          - {
+              name: mie_scattering_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+              default: "2.0e-2F, 2.0e-2F, 2.0e-2F, 0.0F",
+            }
+          - {
+              name: mie_absorption_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+              default: "4.4e-3F, 4.4e-3F, 4.4e-3F, 0.0F",
+            }
+          - {
+              name: ozone_absorption_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+              default: "0.65e-3F, 1.88e-3F, 0.08e-3F, 0.0F",
+            }
+          - {
+              name: ozone_density_layer0,
+              type: float4,
+              cpp: "std::array<float, 4>",
+              default: "25.0F, 0.0F, 0.0F, 0.0F",
+            }
+          - {
+              name: ozone_density_layer1,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+      - name: SkyViewOutputHeader
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: output_texture_uav, type: uint }
+          - { name: output_width, type: uint }
+          - { name: output_height, type: uint }
+          - { name: transmittance_lut_srv, type: uint }
+      - name: SkyViewLutHeader
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: multi_scattering_lut_srv, type: uint }
+          - { name: transmittance_width, type: uint }
+          - { name: transmittance_height, type: uint }
+          - { name: multi_scattering_width, type: uint }
+      - name: SkyViewDispatchHeader
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: multi_scattering_height, type: uint }
+          - { name: active_light_count, type: uint }
+          - { name: reserved0, type: uint }
+          - { name: exposure_fp16_store, type: uint }
+      - name: SkyViewSamplingAtmosphere0
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: sample_count_min, type: float }
+          - { name: sample_count_max, type: float }
+          - { name: distance_to_sample_count_max_inv, type: float }
+          - { name: planet_radius_km, type: float }
+      - name: SkyViewSamplingAtmosphere1
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: atmosphere_height_km, type: float }
+          - { name: camera_altitude_km, type: float }
+          - { name: rayleigh_scale_height_km, type: float }
+          - { name: mie_scale_height_km, type: float }
+      - name: SkyViewPhaseFactors0
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: multi_scattering_factor, type: float }
+          - { name: mie_anisotropy, type: float }
+          - { name: _pad0, type: float }
+          - { name: _pad1, type: float }
+      - name: AtmosphereSkyViewLutPassConstants
+        layout: structured
+        size: 352
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - { name: output_header, type: SkyViewOutputHeader }
+          - { name: lut_header, type: SkyViewLutHeader }
+          - { name: dispatch_header, type: SkyViewDispatchHeader }
+          - { name: sampling_atmosphere0, type: SkyViewSamplingAtmosphere0 }
+          - { name: sampling_atmosphere1, type: SkyViewSamplingAtmosphere1 }
+          - { name: phase_factors0, type: SkyViewPhaseFactors0 }
+          - {
+              name: ground_albedo_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: rayleigh_scattering_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: mie_scattering_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: mie_absorption_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: ozone_absorption_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: ozone_density_layer0,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: ozone_density_layer1,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: sky_view_lut_referential_row0,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: sky_view_lut_referential_row1,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: sky_view_lut_referential_row2,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: sky_luminance_factor_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: sky_and_aerial_luminance_factor_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: light0_direction_enabled,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: light0_illuminance_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: light1_direction_enabled,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: light1_illuminance_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+      - name: CameraAerialOutputHeader
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: output_texture_uav, type: uint }
+          - { name: output_width, type: uint }
+          - { name: output_height, type: uint }
+          - { name: output_depth, type: uint }
+      - name: CameraAerialLutHeader0
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: transmittance_lut_srv, type: uint }
+          - { name: multi_scattering_lut_srv, type: uint }
+          - { name: transmittance_width, type: uint }
+          - { name: transmittance_height, type: uint }
+      - name: CameraAerialLutHeader1
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: multi_scattering_width, type: uint }
+          - { name: multi_scattering_height, type: uint }
+          - { name: active_light_count, type: uint }
+          - { name: depth_resolution, type: uint }
+      - name: CameraAerialDepthControl0
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: fog_show_flag_factor, type: float }
+          - { name: real_time_reflection_360_mode, type: float }
+          - { name: depth_resolution_inv, type: float }
+          - { name: depth_slice_length_km, type: float }
+      - name: CameraAerialDepthControl1
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: depth_slice_length_km_inv, type: float }
+          - { name: sample_count_per_slice, type: float }
+          - { name: start_depth_km, type: float }
+          - { name: planet_radius_km, type: float }
+      - name: CameraAerialAtmosphereScales0
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: atmosphere_height_km, type: float }
+          - { name: aerial_perspective_distance_scale, type: float }
+          - { name: holdout, type: uint }
+          - { name: rayleigh_scale_height_km, type: float }
+      - name: CameraAerialAtmosphereScales1
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: mie_scale_height_km, type: float }
+          - { name: multi_scattering_factor, type: float }
+          - { name: mie_anisotropy, type: float }
+          - { name: exposure_fp16_store, type: uint }
+      - name: AtmosphereCameraAerialPerspectivePassConstants
+        layout: structured
+        size: 320
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - { name: output_header, type: CameraAerialOutputHeader }
+          - { name: lut_header0, type: CameraAerialLutHeader0 }
+          - { name: lut_header1, type: CameraAerialLutHeader1 }
+          - { name: depth_control0, type: CameraAerialDepthControl0 }
+          - { name: depth_control1, type: CameraAerialDepthControl1 }
+          - { name: atmosphere_scales0, type: CameraAerialAtmosphereScales0 }
+          - { name: atmosphere_scales1, type: CameraAerialAtmosphereScales1 }
+          - {
+              name: ground_albedo_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: rayleigh_scattering_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: mie_scattering_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: mie_absorption_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: ozone_absorption_per_km_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: ozone_density_layer0,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: ozone_density_layer1,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: camera_planet_position_km,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: sky_and_aerial_luminance_factor_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: light0_direction_enabled,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: light0_illuminance_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: light1_direction_enabled,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: light1_illuminance_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+
+  - id: fog
+    cpp: Oxygen/Vortex/Environment/Passes/Generated.FogContracts.h
+    hlsl: Vortex/Services/Environment/Generated.FogContracts.hlsli
+    namespace: oxygen::vortex::environment
+    cpp_includes:
+      - <Oxygen/Core/Bindless/Types.h>
+    structs:
+      - name: VolumetricFogOutputHeader
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: output_texture_uav, type: uint }
+          - { name: output_width, type: uint }
+          - { name: output_height, type: uint }
+          - { name: output_depth, type: uint }
+      - name: VolumetricFogGridControl
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: start_distance_m, type: float }
+          - { name: end_distance_m, type: float }
+          - { name: near_fade_in_distance_m, type: float }
+          - { name: global_extinction_scale, type: float }
+      - name: VolumetricFogMediaControl0
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - {
+              name: albedo_rgb,
+              type: float3,
+              cpp: "std::array<float, 3>",
+              default: "1.0F, 1.0F, 1.0F",
+            }
+          - { name: scattering_distribution, type: float }
+      - name: VolumetricFogGridZControl
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - {
+              name: grid_z_params,
+              type: float3,
+              cpp: "std::array<float, 3>",
+              default: "0.0F, 1.0F, 1.0F",
+            }
+          - { name: directional_shadows_enabled, type: uint }
+      - name: VolumetricFogMediaControl1
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: emissive_rgb, type: float3, cpp: "std::array<float, 3>" }
+          - {
+              name: static_lighting_scattering_intensity,
+              type: float,
+              default: "1.0F",
+            }
+      - name: VolumetricFogLocalFogControl0
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - {
+              name: instance_buffer_slot,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+          - {
+              name: tile_data_texture_slot,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+          - { name: instance_count, type: uint }
+          - { name: enabled, type: uint }
+      - name: VolumetricFogLocalFogControl1
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: tile_resolution_x, type: uint }
+          - { name: tile_resolution_y, type: uint }
+          - { name: max_instances_per_tile, type: uint }
+          - { name: global_start_distance_m, type: float }
+      - name: VolumetricFogLocalFogControl2
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: max_density_into_volumetric_fog, type: float }
+          - { name: _pad0, type: float }
+          - { name: _pad1, type: float }
+          - { name: _pad2, type: float }
+      - name: VolumetricFogHeightFogMediaControl0
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: primary_density, type: float }
+          - { name: primary_height_falloff, type: float }
+          - { name: primary_height_offset_m, type: float }
+          - { name: secondary_density, type: float }
+      - name: VolumetricFogHeightFogMediaControl1
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - { name: secondary_height_falloff, type: float }
+          - { name: secondary_height_offset_m, type: float }
+          - { name: match_height_fog_factor, type: float, default: "0.5F" }
+          - { name: enabled, type: uint }
+      - name: VolumetricFogSkyLightControl0
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - {
+              name: distant_sky_light_lut_slot,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+          - { name: enabled, type: uint }
+          - { name: volumetric_scattering_intensity, type: float }
+          - { name: diffuse_intensity, type: float }
+      - name: VolumetricFogSkyLightControl1
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - {
+              name: tint_rgb,
+              type: float3,
+              cpp: "std::array<float, 3>",
+              default: "1.0F, 1.0F, 1.0F",
+            }
+          - { name: intensity_mul, type: float, default: "1.0F" }
+      - name: VolumetricFogTemporalHistoryControl0
+        layout: structured
+        size: 16
+        align: 16
+        fields:
+          - {
+              name: previous_integrated_light_scattering_srv,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+          - { name: enabled, type: uint }
+          - { name: history_weight, type: float }
+          - { name: history_miss_supersample_count, type: uint, default: "1U" }
+      - name: VolumetricFogTemporalHistoryControl1
+        layout: structured
+        size: 256
+        align: 16
+        fields:
+          - {
+              name: frame_jitter_offsets,
+              type: float4,
+              count: 16,
+              cpp: "std::array<float, 4>",
+            }
+      - name: VolumetricFogPassConstants
+        layout: structured
+        size: 544
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - { name: output_header, type: VolumetricFogOutputHeader }
+          - { name: grid, type: VolumetricFogGridControl }
+          - { name: grid_z, type: VolumetricFogGridZControl }
+          - { name: media0, type: VolumetricFogMediaControl0 }
+          - { name: media1, type: VolumetricFogMediaControl1 }
+          - { name: height_fog0, type: VolumetricFogHeightFogMediaControl0 }
+          - { name: height_fog1, type: VolumetricFogHeightFogMediaControl1 }
+          - { name: sky_light0, type: VolumetricFogSkyLightControl0 }
+          - { name: sky_light1, type: VolumetricFogSkyLightControl1 }
+          - {
+              name: temporal_history0,
+              type: VolumetricFogTemporalHistoryControl0,
+            }
+          - {
+              name: temporal_history1,
+              type: VolumetricFogTemporalHistoryControl1,
+            }
+          - { name: local_fog0, type: VolumetricFogLocalFogControl0 }
+          - { name: local_fog1, type: VolumetricFogLocalFogControl1 }
+          - { name: local_fog2, type: VolumetricFogLocalFogControl2 }
+          - {
+              name: light0_direction_enabled,
+              type: float4,
+              cpp: "std::array<float, 4>",
+              default: "0.0F, 0.0F, 1.0F, 0.0F",
+            }
+          - {
+              name: light0_illuminance_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: light1_direction_enabled,
+              type: float4,
+              cpp: "std::array<float, 4>",
+              default: "0.0F, 0.0F, 1.0F, 0.0F",
+            }
+          - {
+              name: light1_illuminance_rgb,
+              type: float4,
+              cpp: "std::array<float, 4>",
+            }
+          - {
+              name: previous_frame_exposure_srv,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+          - { name: reserved0, type: uint }
+          - { name: exposure_fp16_store, type: uint }
+          - {
+              name: previous_error_bounds_srv,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+      - name: LocalFogComposePassConstants
+        layout: structured
+        size: 56
+        loader: { domain: srv_global }
+        fields:
+          - {
+              name: instance_buffer_slot,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+          - {
+              name: tile_data_texture_slot,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+          - {
+              name: occupied_tile_buffer_slot,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+          - { name: tile_resolution_x, type: uint }
+          - { name: tile_resolution_y, type: uint }
+          - { name: max_instances_per_tile, type: uint }
+          - { name: instance_count, type: uint }
+          - { name: tile_pixel_size, type: uint }
+          - { name: view_width, type: uint }
+          - { name: view_height, type: uint }
+          - { name: global_start_distance_meters, type: float }
+          - { name: start_depth_z, type: float }
+          - { name: _pad0, type: uint }
+          - { name: _pad1, type: uint }
+      - name: LocalFogTiledCullingPassConstants
+        layout: structured
+        size: 144
+        align: 16
+        loader: { domain: srv_global }
+        fields:
+          - {
+              name: instance_buffer_slot,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+          - {
+              name: instance_culling_buffer_slot,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+          - {
+              name: tile_data_texture_slot,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+          - {
+              name: occupied_tile_buffer_slot,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+          - {
+              name: indirect_args_buffer_slot,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
+          - { name: instance_count, type: uint }
+          - { name: tile_resolution_x, type: uint }
+          - { name: tile_resolution_y, type: uint }
+          - { name: max_instances_per_tile, type: uint }
+          - { name: use_hzb, type: uint, default: "1U" }
+          - { name: _pad0, type: uint }
+          - { name: _pad1, type: uint }
+          - { name: left_plane, type: float4, cpp: "std::array<float, 4>" }
+          - { name: right_plane, type: float4, cpp: "std::array<float, 4>" }
+          - { name: top_plane, type: float4, cpp: "std::array<float, 4>" }
+          - { name: bottom_plane, type: float4, cpp: "std::array<float, 4>" }
+          - { name: near_plane, type: float4, cpp: "std::array<float, 4>" }
+          - {
+              name: view_to_tile_space_ratio,
+              type: float2,
+              cpp: "std::array<float, 2>",
+              default: "1.0F, 1.0F",
+            }
+          - { name: _pad2, type: float2, cpp: "std::array<float, 2>" }

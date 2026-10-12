@@ -7,55 +7,15 @@
 #ifndef OXYGEN_D3D12_SHADERS_RENDERER_DRAWFRAMEBINDINGS_HLSLI
 #define OXYGEN_D3D12_SHADERS_RENDERER_DRAWFRAMEBINDINGS_HLSLI
 
-#include "Core/Bindless/Generated.BindlessAbi.hlsl"
+#include "Vortex/Contracts/Draw/Generated.DrawContracts.hlsli"
 
-struct DrawFrameBindings
-{
-    uint draw_metadata_slot;
-    uint current_worlds_slot;
-    uint previous_worlds_slot;
-    uint normal_matrices_slot;
-    uint material_shading_constants_slot;
-    uint procedural_grid_material_constants_slot;
-    uint instance_data_slot;
-    uint current_material_wpo_slot;
-    uint previous_material_wpo_slot;
-    uint current_motion_vector_status_slot;
-    uint previous_motion_vector_status_slot;
-    uint velocity_draw_metadata_slot;
-    uint cull_records_slot;
-    uint _pad0;
-    uint _pad1;
-    uint _pad2;
-};
-
+// The view's draw routing record; all slots invalid when `slot` is outside the
+// global SRV domain.
 static DrawFrameBindings LoadDrawFrameBindings(uint slot)
 {
-    DrawFrameBindings invalid_bindings;
-    invalid_bindings.draw_metadata_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.current_worlds_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.previous_worlds_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.normal_matrices_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.material_shading_constants_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.procedural_grid_material_constants_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.instance_data_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.current_material_wpo_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.previous_material_wpo_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.current_motion_vector_status_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.previous_motion_vector_status_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.velocity_draw_metadata_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings.cull_records_slot = K_INVALID_BINDLESS_INDEX;
-    invalid_bindings._pad0 = 0u;
-    invalid_bindings._pad1 = 0u;
-    invalid_bindings._pad2 = 0u;
-
-    if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
-        return invalid_bindings;
-    }
-
-    StructuredBuffer<DrawFrameBindings> bindings_buffer =
-        ResourceDescriptorHeap[slot];
-    return bindings_buffer[0];
+    DrawFrameBindings bindings;
+    TryLoadDrawFrameBindings(slot, bindings);
+    return bindings;
 }
 
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_DRAWFRAMEBINDINGS_HLSLI

@@ -14,7 +14,7 @@
 
 #include "Vortex/Contracts/Draw/DrawCullRecord.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
-#include "Vortex/Contracts/Shadows/ShadowCascadeBinding.hlsli"
+#include "Vortex/Contracts/Shadows/Generated.ShadowContracts.hlsli"
 #include "Vortex/Contracts/Shadows/ShadowReceiverFit.hlsli"
 
 // g_PassConstantsIndex is the ShadowReceiverFitInputs record.

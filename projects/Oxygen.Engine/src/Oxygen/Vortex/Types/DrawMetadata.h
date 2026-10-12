@@ -8,8 +8,7 @@
 
 #include <cstdint>
 
-#include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Vortex/Types/PassMask.h>
+#include <Oxygen/Vortex/Types/Generated.DrawContracts.h>
 
 namespace oxygen::vortex {
 
@@ -25,63 +24,5 @@ enum class DrawPrimitiveFlagBits : uint32_t {
 {
   return (flags & static_cast<uint32_t>(bits)) != 0U;
 }
-
-//! Per-draw metadata for future-proof bindless rendering.
-/*!
- Comprehensive draw metadata that replaces the simple world transforms
- buffer approach. Contains indices into various binding buffers and draw
- configuration data for efficient GPU-driven rendering.
-
- ### Usage Notes
-
- - Populated on the CPU and uploaded to a structured buffer SRV.
- - Shaders read entries via the draw-system routing payload
- `DrawFrameBindings`
- (see `DrawFrameBindings.draw_metadata_slot`).
- - The slot value may change per
- frame; do not assume a fixed slot.
-
- @see RenderableBinding
- @see ViewConstants
-*/
-struct DrawMetadata {
-  // --- Geometry buffers ---
-  ShaderVisibleIndex
-    vertex_buffer_index; // Bindless index into vertex buffer table
-  ShaderVisibleIndex
-    index_buffer_index; // Bindless index into index buffer table
-  uint32_t first_index; // Start index within the mesh index buffer
-  int32_t base_vertex; // Base vertex offset (can be negative)
-
-  // --- Draw configuration ---
-  uint32_t is_indexed; // 0 = non-indexed, 1 = indexed
-  uint32_t instance_count; // Number of instances (>=1)
-  uint32_t index_count; // Number of indices for indexed draws (undefined for
-                        // non-indexed)
-  uint32_t vertex_count; // Number of vertices for non-indexed draws (undefined
-                         // for indexed)
-  uint32_t material_handle; // Stable MaterialRegistry handle (0 sentinel)
-                            // Formerly material_index (breaking rename)
-
-  // --- Transform & instance indirection ---
-  uint32_t transform_index; // Index into world/normal transform arrays
-  uint32_t instance_metadata_buffer_index; // Bindless index into instance
-                                           // metadata buffer
-  uint32_t instance_metadata_offset; // Offset into instance metadata buffer
-  PassMask flags; // uint32_t, Bitfield: visibility, pass mask, etc.
-  uint32_t transform_generation; // Transform-handle generation for stable
-                                 // primitive identity
-  uint32_t submesh_index; // Stable submesh id within the geometry asset
-  uint32_t primitive_flags; // DrawPrimitiveFlagBits
-};
-
-// Logical field bytes: 13 x 4 = 52 + 12 padding = 64.
-// We pad to 64 bytes to ensure that when allocated from a 16-byte aligned
-// RingBufferStaging, the offset is always a multiple of the stride (64).
-// This is required for D3D12 StructuredBuffer SRV creation where FirstElement
-// is offset / stride.
-static_assert(sizeof(DrawMetadata) == 64,
-  "Unexpected DrawMetadata size (expected 64); update HLSL DrawMetadata layout "
-  "accordingly");
 
 } // namespace oxygen::vortex

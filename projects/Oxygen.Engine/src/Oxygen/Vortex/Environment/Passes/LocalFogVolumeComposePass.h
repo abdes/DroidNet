@@ -11,6 +11,7 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
+#include <Oxygen/Vortex/Environment/Passes/Generated.FogContracts.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -56,24 +57,7 @@ namespace environment {
       -> RecordState;
 
   private:
-    struct PassConstants {
-      std::uint32_t instance_buffer_slot { kInvalidShaderVisibleIndex.get() };
-      std::uint32_t tile_data_texture_slot { kInvalidShaderVisibleIndex.get() };
-      std::uint32_t occupied_tile_buffer_slot {
-        kInvalidShaderVisibleIndex.get(),
-      };
-      std::uint32_t tile_resolution_x { 0U };
-      std::uint32_t tile_resolution_y { 0U };
-      std::uint32_t max_instances_per_tile { 0U };
-      std::uint32_t instance_count { 0U };
-      std::uint32_t tile_pixel_size { 0U };
-      std::uint32_t view_width { 0U };
-      std::uint32_t view_height { 0U };
-      float global_start_distance_meters { 0.0F };
-      float start_depth_z { 0.0F };
-      std::uint32_t _pad0 { 0U };
-      std::uint32_t _pad1 { 0U };
-    };
+    using PassConstants = LocalFogComposePassConstants;
 
     //! The pass constants buffer, created on first use; null without
     //! Graphics.

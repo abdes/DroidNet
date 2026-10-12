@@ -94,10 +94,10 @@
 #include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/Types/VelocityPublications.h>
-#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 #include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
@@ -240,6 +240,18 @@ auto MakeResolvedView(const float width, const float height) -> ResolvedView
   params.near_plane = 0.1F;
   params.far_plane = 1000.0F;
   return ResolvedView(params);
+}
+
+//! Draw metadata with bound geometry buffers, as the emitter publishes it.
+template <std::size_t Count>
+auto MakeBoundDrawMetadata() -> std::array<oxygen::vortex::DrawMetadata, Count>
+{
+  auto metadata = std::array<oxygen::vortex::DrawMetadata, Count> {};
+  for (auto& draw : metadata) {
+    draw.vertex_buffer_index = oxygen::ShaderVisibleIndex { 1U };
+    draw.index_buffer_index = oxygen::ShaderVisibleIndex { 2U };
+  }
+  return metadata;
 }
 
 auto MakePerspectiveResolvedView(const float width, const float height,
@@ -947,9 +959,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     oxygen::vortex::DepthPrePassCompleteness::kDisabled);
   EXPECT_TRUE(context.current_view.HasValidSceneDepthProduct());
   EXPECT_NE(scene_renderer_->GetSceneTextureBindings().scene_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(scene_renderer_->GetSceneTextureBindings().partial_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    oxygen::kInvalidShaderVisibleIndex);
 }
 
 NOLINT_TEST_F(
@@ -960,11 +972,11 @@ NOLINT_TEST_F(
   EXPECT_EQ(context.current_view.depth_prepass_completeness,
     oxygen::vortex::DepthPrePassCompleteness::kComplete);
   EXPECT_NE(scene_renderer_->GetSceneTextureBindings().scene_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(scene_renderer_->GetSceneTextureBindings().partial_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    oxygen::kInvalidShaderVisibleIndex);
   EXPECT_NE(scene_renderer_->GetSceneTextureBindings().velocity_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    oxygen::kInvalidShaderVisibleIndex);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
@@ -1010,7 +1022,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     = oxygen::vortex::DepthPrepassModule(*renderer_, scene_config);
   auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, scene_config);
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 1> {};
+  auto draw_metadata = MakeBoundDrawMetadata<1>();
   draw_metadata.front().is_indexed = 0U;
   draw_metadata.front().instance_count = 1U;
   draw_metadata.front().vertex_count = 3U;
@@ -1089,19 +1101,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   scene_renderer.PublishBasePassVelocity();
 
   auto bindings = scene_renderer.GetSceneTextureBindings();
-  EXPECT_EQ(bindings.scene_color_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.scene_color_uav,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.scene_color_uav, oxygen::kInvalidShaderVisibleIndex);
   for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
-    EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    EXPECT_EQ(gbuffer_srv, oxygen::kInvalidShaderVisibleIndex);
   }
-  EXPECT_NE(bindings.scene_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_NE(bindings.partial_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_NE(
-    bindings.velocity_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.scene_depth_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_NE(bindings.partial_depth_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_NE(bindings.velocity_srv, oxygen::kInvalidShaderVisibleIndex);
 
   auto stage10_context = RenderContext {};
   stage10_context.scene = oxygen::observer_ptr<Scene> {
@@ -1127,24 +1134,20 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context));
 
   bindings = scene_renderer.GetSceneTextureBindings();
-  EXPECT_NE(bindings.scene_color_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_NE(bindings.scene_color_uav,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.scene_color_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_NE(bindings.scene_color_uav, oxygen::kInvalidShaderVisibleIndex);
   for (std::size_t i = 0;
     i < static_cast<std::size_t>(oxygen::vortex::GBufferIndex::kActiveCount);
     ++i) {
-    EXPECT_NE(bindings.gbuffer_srvs.at(i),
-      oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    EXPECT_NE(bindings.gbuffer_srvs.at(i), oxygen::kInvalidShaderVisibleIndex);
   }
   EXPECT_EQ(bindings.gbuffer_srvs.at(static_cast<std::size_t>(
               oxygen::vortex::GBufferIndex::kShadowFactors)),
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    oxygen::kInvalidShaderVisibleIndex);
   EXPECT_EQ(bindings.gbuffer_srvs.at(static_cast<std::size_t>(
               oxygen::vortex::GBufferIndex::kWorldTangent)),
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_NE(
-    bindings.stencil_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_NE(bindings.stencil_srv, oxygen::kInvalidShaderVisibleIndex);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
@@ -1164,19 +1167,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   scene_renderer.PublishBasePassVelocity();
 
   const auto& bindings = scene_renderer.GetSceneTextureBindings();
-  EXPECT_EQ(bindings.scene_color_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.scene_color_uav,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.scene_color_uav, oxygen::kInvalidShaderVisibleIndex);
   for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
-    EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    EXPECT_EQ(gbuffer_srv, oxygen::kInvalidShaderVisibleIndex);
   }
-  EXPECT_NE(bindings.scene_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_NE(bindings.partial_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(
-    bindings.velocity_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.scene_depth_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_NE(bindings.partial_depth_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.velocity_srv, oxygen::kInvalidShaderVisibleIndex);
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,
@@ -1234,19 +1232,15 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   const auto& bindings = scene_renderer_->GetSceneTextureBindings();
   EXPECT_EQ(
     scene_renderer_->GetEffectiveShadingMode(context), ShadingMode::kForward);
-  EXPECT_NE(bindings.scene_color_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_NE(bindings.scene_color_uav,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.scene_color_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_NE(bindings.scene_color_uav, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_TRUE(
     scene_renderer_->GetSceneTextureExtracts().resolved_scene_color.valid);
   for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
-    EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    EXPECT_EQ(gbuffer_srv, oxygen::kInvalidShaderVisibleIndex);
   }
-  EXPECT_NE(bindings.scene_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_NE(bindings.partial_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.scene_depth_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_NE(bindings.partial_depth_srv, oxygen::kInvalidShaderVisibleIndex);
 }
 
 NOLINT_TEST_F(
@@ -1262,7 +1256,7 @@ NOLINT_TEST_F(
   auto base_pass = oxygen::vortex::BasePassModule(*renderer_, scene_config);
   auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, scene_config);
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 1U> {};
+  auto draw_metadata = MakeBoundDrawMetadata<1>();
   draw_metadata.front().is_indexed = 0U;
   draw_metadata.front().vertex_count = 3U;
   draw_metadata.front().instance_count = 1U;
@@ -1343,7 +1337,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest, BasePassWireframeRunsInForwardMode)
   auto base_pass = oxygen::vortex::BasePassModule(*renderer_, scene_config);
   auto scene_textures = oxygen::vortex::SceneTextures(*graphics_, scene_config);
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 1U> {};
+  auto draw_metadata = MakeBoundDrawMetadata<1>();
   draw_metadata.front().is_indexed = 0U;
   draw_metadata.front().vertex_count = 3U;
   draw_metadata.front().instance_count = 1U;
@@ -1487,7 +1481,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   render_items.front().main_view_visible = true;
   render_items.back().main_view_visible = true;
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 2U> {};
+  auto draw_metadata = MakeBoundDrawMetadata<2>();
   for (auto& metadata : draw_metadata) {
     metadata.is_indexed = 0U;
     metadata.vertex_count = 3U;
@@ -2071,14 +2065,11 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
 
   EXPECT_EQ(context.current_view.depth_prepass_completeness,
     oxygen::vortex::DepthPrePassCompleteness::kComplete);
-  EXPECT_NE(bindings.scene_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.scene_color_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.scene_color_uav,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.scene_depth_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.scene_color_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.scene_color_uav, oxygen::kInvalidShaderVisibleIndex);
   for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
-    EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    EXPECT_EQ(gbuffer_srv, oxygen::kInvalidShaderVisibleIndex);
   }
   EXPECT_FALSE(lighting_state.consumed_published_scene_textures);
 }
@@ -2100,12 +2091,10 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     oxygen::vortex::DepthPrePassCompleteness::kDisabled);
   EXPECT_NE(
     published_bindings.shadow_frame_slot, oxygen::kInvalidShaderVisibleIndex);
-  EXPECT_EQ(bindings.scene_color_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.scene_color_uav,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.scene_color_uav, oxygen::kInvalidShaderVisibleIndex);
   for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
-    EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    EXPECT_EQ(gbuffer_srv, oxygen::kInvalidShaderVisibleIndex);
   }
   EXPECT_FALSE(lighting_state.consumed_published_scene_textures);
 }
@@ -2139,8 +2128,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_FALSE(environment_state.published_bindings);
   EXPECT_FALSE(environment_state.stage14_requested);
   EXPECT_FALSE(environment_state.stage15_requested);
-  EXPECT_NE(bindings.scene_color_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.scene_color_srv, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_TRUE(lighting_state.consumed_published_scene_textures);
 }
 
@@ -2167,8 +2155,7 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_FALSE(lighting_state.consumed_directional_shadow_product);
   EXPECT_TRUE(lighting_state.directional_shadow_surface_srvs.empty());
-  EXPECT_NE(bindings.scene_color_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_NE(bindings.scene_color_srv, oxygen::kInvalidShaderVisibleIndex);
   EXPECT_TRUE(lighting_state.consumed_published_scene_textures);
 }
 
@@ -2243,20 +2230,14 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
     oxygen::vortex::CompositionView::ViewFeatureMask::kSceneLighting));
   EXPECT_EQ(context.current_view.depth_prepass_completeness,
     oxygen::vortex::DepthPrePassCompleteness::kDisabled);
-  EXPECT_EQ(bindings.scene_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.partial_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.scene_color_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.scene_color_uav,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.custom_depth_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.custom_stencil_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_depth_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.partial_depth_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.scene_color_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.scene_color_uav, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.custom_depth_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.custom_stencil_srv, oxygen::kInvalidShaderVisibleIndex);
   for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
-    EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    EXPECT_EQ(gbuffer_srv, oxygen::kInvalidShaderVisibleIndex);
   }
   EXPECT_FALSE(extracts.resolved_scene_color.valid);
   EXPECT_FALSE(extracts.resolved_scene_depth.valid);
@@ -2818,7 +2799,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   const auto renderer = MakeRenderer(graphics);
   auto mesh_processor = oxygen::vortex::DepthPrepassMeshProcessor(*renderer);
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 2> {};
+  auto draw_metadata = MakeBoundDrawMetadata<2>();
   draw_metadata.at(0).vertex_count = 3U;
   draw_metadata.at(0).instance_count = 1U;
   draw_metadata.at(0).flags = oxygen::vortex::PassMask {
@@ -2865,7 +2846,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   const auto renderer = MakeRenderer(graphics);
   auto mesh_processor = oxygen::vortex::DepthPrepassMeshProcessor(*renderer);
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 4> {};
+  auto draw_metadata = MakeBoundDrawMetadata<4>();
   for (auto& metadata : draw_metadata) {
     metadata.vertex_count = 3U;
     metadata.instance_count = 1U;
@@ -2931,7 +2912,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   const auto renderer = MakeRenderer(graphics);
   auto mesh_processor = oxygen::vortex::DepthPrepassMeshProcessor(*renderer);
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 2> {};
+  auto draw_metadata = MakeBoundDrawMetadata<2>();
   for (auto& metadata : draw_metadata) {
     metadata.vertex_count = 3U;
     metadata.instance_count = 1U;
@@ -2975,7 +2956,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   const auto renderer = MakeRenderer(graphics);
   auto mesh_processor = oxygen::vortex::DepthPrepassMeshProcessor(*renderer);
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 2> {};
+  auto draw_metadata = MakeBoundDrawMetadata<2>();
   for (auto& metadata : draw_metadata) {
     metadata.vertex_count = 3U;
     metadata.instance_count = 1U;
@@ -3019,7 +3000,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   const auto renderer = MakeRenderer(graphics);
   auto mesh_processor = oxygen::vortex::TranslucencyMeshProcessor(*renderer);
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 4> {};
+  auto draw_metadata = MakeBoundDrawMetadata<4>();
   for (auto& metadata : draw_metadata) {
     metadata.vertex_count = 3U;
     metadata.instance_count = 1U;
@@ -3088,7 +3069,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   const auto renderer = MakeRenderer(graphics);
   auto mesh_processor = oxygen::vortex::TranslucencyMeshProcessor(*renderer);
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 3> {};
+  auto draw_metadata = MakeBoundDrawMetadata<3>();
   for (auto& metadata : draw_metadata) {
     metadata.vertex_count = 3U;
     metadata.instance_count = 1U;
@@ -3140,7 +3121,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   const auto renderer = MakeRenderer(graphics);
   auto mesh_processor = oxygen::vortex::TranslucencyMeshProcessor(*renderer);
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 2> {};
+  auto draw_metadata = MakeBoundDrawMetadata<2>();
   for (auto& metadata : draw_metadata) {
     metadata.vertex_count = 3U;
     metadata.instance_count = 1U;
@@ -3186,7 +3167,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   const auto renderer = MakeRenderer(graphics);
   auto mesh_processor = oxygen::vortex::TranslucencyMeshProcessor(*renderer);
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 2> {};
+  auto draw_metadata = MakeBoundDrawMetadata<2>();
   for (auto& metadata : draw_metadata) {
     metadata.vertex_count = 3U;
     metadata.instance_count = 1U;
@@ -3253,7 +3234,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   const auto renderer = MakeRenderer(graphics);
   auto mesh_processor = oxygen::vortex::TranslucencyMeshProcessor(*renderer);
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 2> {};
+  auto draw_metadata = MakeBoundDrawMetadata<2>();
   for (auto& metadata : draw_metadata) {
     metadata.vertex_count = 3U;
     metadata.instance_count = 1U;
@@ -3304,7 +3285,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
   const auto renderer = MakeRenderer(graphics);
   auto mesh_processor = oxygen::vortex::TranslucencyMeshProcessor(*renderer);
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 4> {};
+  auto draw_metadata = MakeBoundDrawMetadata<4>();
   for (auto& metadata : draw_metadata) {
     metadata.instance_count = 1U;
     metadata.material_handle = 1U;
@@ -3376,7 +3357,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
       .msaa_sample_count = 1U,
     });
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 1> {};
+  auto draw_metadata = MakeBoundDrawMetadata<1>();
   draw_metadata.at(0).vertex_count = 3U;
   draw_metadata.at(0).instance_count = 1U;
   draw_metadata.at(0).material_handle = 1U;
@@ -3488,7 +3469,7 @@ NOLINT_TEST(SceneRendererDeferredCoreMeshProcessorTest,
     = std::vector<oxygen::vortex::sceneprep::RenderItemData>(1U);
   render_items.front().main_view_visible = true;
 
-  auto draw_metadata = std::array<oxygen::vortex::DrawMetadata, 1U> {};
+  auto draw_metadata = MakeBoundDrawMetadata<1>();
   draw_metadata.front().is_indexed = 0U;
   draw_metadata.front().vertex_count = 3U;
   draw_metadata.front().instance_count = 1U;
@@ -3828,12 +3809,10 @@ NOLINT_TEST(SceneRendererDeferredCoreCapabilityTest,
   EXPECT_EQ(context.current_view.depth_prepass_completeness,
     oxygen::vortex::DepthPrePassCompleteness::kDisabled);
   const auto& bindings = scene_renderer->GetSceneTextureBindings();
-  EXPECT_EQ(bindings.scene_color_srv,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
-  EXPECT_EQ(bindings.scene_color_uav,
-    oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+  EXPECT_EQ(bindings.scene_color_srv, oxygen::kInvalidShaderVisibleIndex);
+  EXPECT_EQ(bindings.scene_color_uav, oxygen::kInvalidShaderVisibleIndex);
   for (const auto gbuffer_srv : bindings.gbuffer_srvs) {
-    EXPECT_EQ(gbuffer_srv, oxygen::vortex::SceneTextureBindings::kInvalidIndex);
+    EXPECT_EQ(gbuffer_srv, oxygen::kInvalidShaderVisibleIndex);
   }
 }
 

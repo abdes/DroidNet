@@ -35,6 +35,7 @@
 #include <Oxygen/Vortex/Internal/TextureViews.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Hzb/HzbPyramidBuilder.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/Generated.OcclusionContracts.h>
 
 namespace oxygen::vortex {
 
@@ -45,34 +46,11 @@ namespace {
   //! Mips per dispatch: a 64 x 64 tile of the dispatch's first level.
   constexpr std::uint32_t kLevelsPerDispatch = 7U;
   constexpr std::uint32_t kTileExtent = 64U;
-  constexpr std::size_t kMipUavCapacity = 16U;
-  //! Scalar fields before the per-mip UAV arrays, padding included.
-  constexpr std::size_t kScalarFieldCount = 12U;
   static_assert(HzbPyramidBuilder::kMaxMipCount <= 2U * kLevelsPerDispatch);
-  static_assert(HzbPyramidBuilder::kMaxMipCount <= kMipUavCapacity);
-
-  //! Mirrors HzbBuildPassConstants in ScreenHzbBuild.hlsl.
-  struct alignas(packing::kShaderDataFieldAlignment) HzbBuildPassConstants {
-    ShaderVisibleIndex source_depth_srv { kInvalidShaderVisibleIndex };
-    std::uint32_t source_origin_x { 0U };
-    std::uint32_t source_origin_y { 0U };
-    std::uint32_t source_width { 0U };
-    std::uint32_t source_height { 0U };
-    std::uint32_t root_width { 0U };
-    std::uint32_t root_height { 0U };
-    std::uint32_t mip_count { 0U };
-    std::uint32_t base_level { 0U };
-    std::uint32_t _pad0 { 0U };
-    std::uint32_t _pad1 { 0U };
-    std::uint32_t _pad2 { 0U };
-    std::array<ShaderVisibleIndex, kMipUavCapacity> closest_mip_uavs {};
-    std::array<ShaderVisibleIndex, kMipUavCapacity> furthest_mip_uavs {};
-  };
-
-  static_assert(sizeof(HzbBuildPassConstants)
-    == (kScalarFieldCount + (2U * kMipUavCapacity)) * sizeof(std::uint32_t));
   static_assert(
-    sizeof(HzbBuildPassConstants) % packing::kShaderDataFieldAlignment == 0U);
+    HzbPyramidBuilder::kMaxMipCount <= occlusion::internal::kHzbBuildMaxMips);
+
+  using occlusion::internal::HzbBuildPassConstants;
 
   auto BuildPipelineDesc(const std::string& debug_name)
     -> graphics::ComputePipelineDesc
@@ -108,7 +86,8 @@ namespace {
   //! Fills `uavs` with one UAV per mip of `texture`; false on failure.
   auto ResolveMipUavs(Graphics& gfx, const graphics::Texture& texture,
     const std::uint32_t mip_count,
-    std::array<ShaderVisibleIndex, kMipUavCapacity>& uavs) -> bool
+    std::array<ShaderVisibleIndex, occlusion::internal::kHzbBuildMaxMips>& uavs)
+    -> bool
   {
     for (std::uint32_t mip = 0U; mip < mip_count; ++mip) {
       uavs.at(mip) = internal::EnsureTextureView(

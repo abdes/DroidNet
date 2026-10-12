@@ -10,60 +10,7 @@
 // Pure contract of the directional receiver fit and receiver mask: the inputs
 // record of their compute passes and the mask lookup used by caster culling.
 
-#include "Core/Bindless/Generated.BindlessAbi.hlsl"
-
-// Mirrors oxygen::vortex::shadows::ShadowReceiverFitInputs.
-struct ShadowReceiverFitInputs
-{
-    // The camera's projection (jitter included) times view, inverted.
-    float4x4 inverse_view_projection;
-    float4x4 view_matrix;
-    // The view rect in scene-depth pixels: origin x, origin y, width, height.
-    float4 viewport;
-    uint scene_depth_srv;
-    // The view's fitted cascade records, seeded from the CPU's loose records.
-    uint cascade_records_uav;
-    uint loose_cascade_records_srv;
-    uint cascade_count;
-    uint bounds_uav;
-    uint mask_uav;
-    uint draw_cull_records_srv;
-    uint draw_metadata_srv;
-    uint worlds_srv;
-    uint draw_count;
-    // The camera near plane: nearer receivers belong to the first cascade.
-    float near_plane;
-    uint _pad0;
-};
-
-// Receivers of one cascade in its loose clip space, as ordered floats.
-struct ShadowReceiverBounds
-{
-    uint min_x;
-    uint min_y;
-    uint max_x;
-    uint max_y;
-    uint receiver_count;
-    uint _pad0;
-    uint _pad1;
-    uint _pad2;
-};
-
-// Each cascade owns one block of the mask buffer: the marked tiles, the
-// dilated tiles, then one coarse tile per 8 x 8 dilated tiles.
-static const uint SHADOW_RECEIVER_MASK_RESOLUTION = 64u;
-static const uint SHADOW_RECEIVER_MASK_COARSE_REDUCTION = 8u;
-static const uint SHADOW_RECEIVER_MASK_COARSE_RESOLUTION
-    = SHADOW_RECEIVER_MASK_RESOLUTION / SHADOW_RECEIVER_MASK_COARSE_REDUCTION;
-static const uint SHADOW_RECEIVER_MASK_TILES
-    = SHADOW_RECEIVER_MASK_RESOLUTION * SHADOW_RECEIVER_MASK_RESOLUTION;
-static const uint SHADOW_RECEIVER_MASK_MARKED_OFFSET = 0u;
-static const uint SHADOW_RECEIVER_MASK_DILATED_OFFSET = SHADOW_RECEIVER_MASK_TILES;
-static const uint SHADOW_RECEIVER_MASK_COARSE_OFFSET
-    = 2u * SHADOW_RECEIVER_MASK_TILES;
-static const uint SHADOW_RECEIVER_MASK_BLOCK = 2u * SHADOW_RECEIVER_MASK_TILES
-    + SHADOW_RECEIVER_MASK_COARSE_RESOLUTION
-        * SHADOW_RECEIVER_MASK_COARSE_RESOLUTION;
+#include "Vortex/Contracts/Shadows/Generated.ShadowPassContracts.hlsli"
 
 // The shadow-map UV of a cascade clip position: x right, y down.
 static inline float2 ShadowReceiverMaskUv(float2 clip_xy)

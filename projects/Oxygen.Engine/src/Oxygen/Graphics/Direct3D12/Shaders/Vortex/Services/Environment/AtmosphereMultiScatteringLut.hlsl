@@ -11,39 +11,13 @@
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/Geometry.hlsli"
 #include "Vortex/Shared/Math.hlsli"
+#include "Vortex/Services/Environment/Generated.AtmosphereContracts.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {
     uint g_DrawIndex;
     uint g_PassConstantsIndex;
 }
-
-struct AtmosphereMultiScatteringLutPassConstants
-{
-    uint output_texture_uav;
-    uint output_width;
-    uint output_height;
-    uint integration_sample_count;
-    uint transmittance_lut_srv;
-    uint transmittance_width;
-    uint transmittance_height;
-    uint active_light_count;
-    float planet_radius_km;
-    float atmosphere_height_km;
-    float rayleigh_scale_height_km;
-    float mie_scale_height_km;
-    float multi_scattering_factor;
-    float mie_anisotropy;
-    float _pad1;
-    float _pad2;
-    float4 ground_albedo_rgb;
-    float4 rayleigh_scattering_per_km_rgb;
-    float4 mie_scattering_per_km_rgb;
-    float4 mie_absorption_per_km_rgb;
-    float4 ozone_absorption_per_km_rgb;
-    float4 ozone_density_layer0;
-    float4 ozone_density_layer1;
-};
 
 static GpuSkyAtmosphereParams BuildAtmosphereParameters(
     AtmosphereMultiScatteringLutPassConstants pass_constants)

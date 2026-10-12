@@ -21,6 +21,7 @@
 
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/Draw/DrawVisibility.hlsli"
+#include "Vortex/Stages/Occlusion/Generated.OcclusionContracts.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {
@@ -32,47 +33,13 @@ static const uint LIST_COMPACTION_GROUP_SIZE = 256u;
 // D3D12_DRAW_ARGUMENTS; StartInstanceLocation carries the draw index.
 static const uint INDIRECT_DRAW_COMMAND_UINTS = 4u;
 
-struct ListCompactionPassConstants
-{
-    uint candidates_srv;
-    uint segments_srv;
-    uint visibility_srv;
-    uint predicate_mask;
-    uint candidate_count;
-    uint group_count;
-    uint scan_uav;
-    uint arguments_uav;
-    uint counts_uav;
-    uint group_prefix_base;
-    uint _pad0;
-    uint _pad1;
-};
-
-// Mirrors oxygen::vortex::occlusion::internal::GpuIndirectCandidate.
-struct IndirectCandidate
-{
-    uint draw_index;
-    uint vertex_count;
-    uint instance_count;
-    uint segment;
-};
-
-// Mirrors oxygen::vortex::occlusion::internal::GpuIndirectSegment.
-struct IndirectSegment
-{
-    uint first_candidate;
-    uint candidate_count;
-    uint _pad0;
-    uint _pad1;
-};
-
 groupshared uint gs_scan[2][LIST_COMPACTION_GROUP_SIZE];
 
 ListCompactionPassConstants LoadPassConstants()
 {
-    StructuredBuffer<ListCompactionPassConstants> constants
-        = ResourceDescriptorHeap[g_PassConstantsIndex];
-    return constants[0];
+    ListCompactionPassConstants constants;
+    TryLoadListCompactionPassConstants(g_PassConstantsIndex, constants);
+    return constants;
 }
 
 // Inclusive Hillis-Steele scan of one value per thread across the group.

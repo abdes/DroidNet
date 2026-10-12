@@ -69,15 +69,18 @@ static float4 SceneSampledProduct(RWByteAddressBuffer status, uint product,
     uint4 shape, bool candidate, float stored_p, float inverse_stored_p)
 {
     const uint index = product == 5u ? 0u : product == 6u ? 1u : 2u;
-    const uint gradient_offset = 160u + index * 32u;
-    const uint flags = status.Load(gradient_offset + 12u);
-    const uint count = status.Load(gradient_offset + 28u);
+    const uint gradient_offset = EXPOSURE_STATUS_FILTER_GRADIENTS_OFFSET
+        + index * EXPOSURE_STATUS_FILTER_GRADIENTS_STRIDE;
+    const uint flags = status.Load(gradient_offset + HDR_FILTER_GRADIENT_FLAGS_OFFSET);
+    const uint count = status.Load(gradient_offset + HDR_FILTER_GRADIENT_CHECKED_TEXELS_OFFSET);
     if ((flags & 3u) != 1u || count == 0u
         || count != shape.x * shape.y * shape.z)
         return float4(0.0, HdrBoundInfinity(), 0.0, HdrBoundInfinity());
-    const float4 store = asfloat(status.Load4((candidate ? 304u : 80u) + index * 16u));
+    const float4 store = asfloat(status.Load4((candidate ? EXPOSURE_STATUS_CANDIDATE_ERRORS_OFFSET
+                                                   : EXPOSURE_STATUS_PRODUCER_ERRORS_OFFSET)
+        + index * EXPOSURE_STATUS_PRODUCER_ERRORS_STRIDE));
     const float3 rgb_gradient = asfloat(status.Load3(gradient_offset));
-    const float3 t_gradient = asfloat(status.Load3(gradient_offset + 16u));
+    const float3 t_gradient = asfloat(status.Load3(gradient_offset + HDR_FILTER_GRADIENT_TRANSMITTANCE_OFFSET));
     const float3 stored_gradient = float3(HdrUpperProduct(rgb_gradient.x, stored_p),
         HdrUpperProduct(rgb_gradient.y, stored_p), HdrUpperProduct(rgb_gradient.z, stored_p));
     float2 rgb = HdrHardwareFilterBound(float2(store.x, HdrUpperProduct(store.y, stored_p)),
@@ -108,8 +111,8 @@ static float4 SceneComposeCertificate(SceneCompositionConstants pass,
     RWByteAddressBuffer status, bool candidate, float p, float inverse_p,
     float maximum, float frame_inverse_p, out bool valid)
 {
-    const uint4 opaque = status.Load4(128u);
-    const uint4 consumers = status.Load4(352u);
+    const uint4 opaque = status.Load4(EXPOSURE_STATUS_COMPOSITION_INPUT_OFFSET);
+    const uint4 consumers = status.Load4(EXPOSURE_STATUS_CONSUMER_INPUTS_OFFSET);
     const uint usage = consumers.z;
     valid = opaque.y == 1u && opaque.z != 0u && opaque.z == pass.opaque_texels
         && (usage & (4u | 8u | 128u)) == 0u
@@ -119,7 +122,7 @@ static float4 SceneComposeCertificate(SceneCompositionConstants pass,
     const float height_maximum = asfloat(consumers.y);
     const float translucent_maximum = asfloat(consumers.x);
     const float sky_gain = asfloat(consumers.w);
-    const float3 product_maximum = asfloat(status.Load3(368u));
+    const float3 product_maximum = asfloat(status.Load3(EXPOSURE_STATUS_PRODUCT_REFERENCE_RGB_MAX_OFFSET));
     float2 rgb = 0.0.xx;
     float2 coverage = 0.0.xx;
     float4 ap = 0.0.xxxx;
@@ -191,8 +194,8 @@ static void ComposeSceneErrorBounds(uint constants_index)
     ByteAddressBuffer report = ResourceDescriptorHeap[pass.report_srv];
     StructuredBuffer<FrameExposureData> frames = ResourceDescriptorHeap[pass.frame_srv];
     const FrameExposureData frame = frames[0];
-    const float candidate_p = asfloat(report.Load(0u));
-    const float maximum = asfloat(report.Load(4u));
+    const float candidate_p = asfloat(report.Load(HDR_SUITABILITY_CANDIDATE_PRE_EXPOSURE_OFFSET));
+    const float maximum = asfloat(report.Load(HDR_SUITABILITY_MAXIMUM_SCENE_RGB_OFFSET));
     bool current_valid, candidate_valid;
     const float4 current = SceneComposeCertificate(pass, status, false,
         frame.pre_exposure, frame.one_over_pre_exposure, maximum, frame.one_over_pre_exposure, current_valid);
@@ -201,9 +204,9 @@ static void ComposeSceneErrorBounds(uint constants_index)
     const bool scale_valid = isfinite(candidate_p) && candidate_p > 0.0
         && isfinite(frame.pre_exposure) && frame.pre_exposure > 0.0
         && isfinite(frame.one_over_pre_exposure) && frame.one_over_pre_exposure > 0.0;
-    status.Store4(256u, asuint(current));
-    status.Store4(272u, asuint(candidate));
-    status.Store4(288u, uint4(asuint(candidate_p), pass.products,
+    status.Store4(EXPOSURE_STATUS_SCENE_ERROR_CURRENT_RGB_RELATIVE_OFFSET, asuint(current));
+    status.Store4(EXPOSURE_STATUS_SCENE_ERROR_CANDIDATE_RGB_RELATIVE_OFFSET, asuint(candidate));
+    status.Store4(EXPOSURE_STATUS_SCENE_ERROR_CANDIDATE_PRE_EXPOSURE_OFFSET, uint4(asuint(candidate_p), pass.products,
         scale_valid ? (current_valid ? 1u : 0u) | (candidate_valid ? 2u : 0u) : 0u, 0u));
 }
 

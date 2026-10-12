@@ -226,36 +226,14 @@ float4 LoadSceneColor(uint2 coord, SceneTextureBindingData bindings) {
 
 ### 4.2 SceneTextureBindings.hlsli
 
-Struct declaration mirroring the C++ `SceneTextureBindings`.
-
-```hlsl
-// SceneTextureBindings.hlsli
-
-#ifndef VORTEX_SCENE_TEXTURE_BINDINGS_HLSLI
-#define VORTEX_SCENE_TEXTURE_BINDINGS_HLSLI
-
-#include "Definitions/SceneDefinitions.hlsli"
-
-struct SceneTextureBindingData {
-  uint scene_color_srv;
-  uint scene_depth_srv;
-  uint partial_depth_srv;
-  uint velocity_srv;
-  uint stencil_srv;
-  uint custom_depth_srv;
-  uint custom_stencil_srv;
-  uint gbuffer_srvs[GBUFFER_BINDING_COUNT];
-  uint scene_color_uav;
-  uint velocity_uav;
-  uint valid_flags;
-};
-
-bool IsSceneTextureValid(SceneTextureBindingData bindings, uint flag) {
-  return (bindings.valid_flags & flag) != 0;
-}
-
-#endif // VORTEX_SCENE_TEXTURE_BINDINGS_HLSLI
-```
+The scene-texture record is a generated contract
+([§4.10](#410-generated-shared-contracts)): C++ `SceneTextureBindings`, HLSL
+`SceneTextureBindingData`. It carries the scene color, depth, partial depth,
+velocity, stencil and custom depth/stencil SRVs, one SRV per logical GBuffer
+(`GBUFFER_BINDING_COUNT`, indexed by `GBufferIndex`), the scene color and
+velocity UAVs and the `SceneTextureSetupMode` valid flags. Slots a view does
+not produce stay invalid. `SceneTextureBindings.hlsli` adds
+`IsSceneTextureValid`.
 
 ### 4.3 GBufferLayout.hlsli
 
@@ -369,64 +347,26 @@ GBufferData ReadGBuffer(float2 uv, SceneTextureBindingData bindings) {
 
 ### 4.5 ViewFrameBindings.hlsli
 
-Accessor for the per-view binding stack. Routes to SceneTextureBindings and
-typed domain products.
-
-```hlsl
-// ViewFrameBindings.hlsli
-// Per-view binding accessors routed through ViewConstants.
-
-#ifndef VORTEX_VIEW_FRAME_BINDINGS_HLSLI
-#define VORTEX_VIEW_FRAME_BINDINGS_HLSLI
-
-#include "SceneTextureBindings.hlsli"
-
-// ViewConstants is the root CBV entry point.
-// It carries indices to ViewFrameBindings and also the current/previous
-// view-projection state required by stage-9 opaque velocity production.
-// The actual struct layout is defined by the C++ ViewConstants type.
-
-// Minimum view-routing payload required by the renderer contract.
-// The real ViewFrameBindings structure may contain additional fields, but this
-// scene-texture slot is the stable seam Phase 3 depends on.
-struct ViewFrameBindingsData {
-  uint scene_texture_frame_slot;
-};
-
-// Access the current view's SceneTextureBindings through the published
-// ViewFrameBindings slot carried in ViewConstants.
-SceneTextureBindingData LoadSceneTextureBindingsForCurrentView(
-    uint currentViewFrameBindingsSlot) {
-  StructuredBuffer<ViewFrameBindingsData> viewBindingsBuffer =
-      ResourceDescriptorHeap[currentViewFrameBindingsSlot];
-  ViewFrameBindingsData viewBindings = viewBindingsBuffer[0];
-
-  StructuredBuffer<SceneTextureBindingData> bindingsBuffer =
-      ResourceDescriptorHeap[viewBindings.scene_texture_frame_slot];
-  return bindingsBuffer[0];
-}
-
-#endif // VORTEX_VIEW_FRAME_BINDINGS_HLSLI
-```
+`ViewFrameBindings` is a view's routing record, reached through the
+`bindless_view_frame_bindings_slot` of the view constants. It routes to the
+draw, lighting, environment, exposure, scene-texture, screen HZB, shadow,
+virtual shadow, debug, history and ray-tracing records, the exposure status UAV
+and the expected lighting publication generation. It is a generated contract
+([§4.10](#410-generated-shared-contracts)). `ViewFrameBindings.hlsli` adds
+`LoadViewFrameBindings`, which returns the all-invalid record when the slot is
+outside the global SRV domain, and `LoadSceneTextureBindings`, which follows
+the scene-texture slot.
 
 ### 4.6 DrawFrameBindings Contract
 
 Opaque velocity parity requires explicit current/previous publication slots.
-
-```hlsl
-// DrawFrameBindings.hlsli
-
-struct DrawFrameBindings {
-  uint draw_metadata_slot;
-  uint current_worlds_slot;
-  uint previous_worlds_slot;
-  uint current_normals_slot;
-  uint current_deformation_slot;
-  uint previous_deformation_slot;
-  uint material_shading_constants_slot;
-  uint instance_data_slot;
-};
-```
+`DrawFrameBindings` is a generated contract
+([§4.10](#410-generated-shared-contracts)) routing a view's draw metadata
+(materials domain), current and previous worlds, normal matrices, material
+shading and procedural-grid constants (materials domain), instance data,
+current and previous material world-position offsets and motion-vector status,
+velocity draw metadata, and the per-draw cull records (materials domain). Its
+C++ fields use the strong slot types of `Types/BindlessSlots.h`.
 
 Contract rules:
 
@@ -508,9 +448,9 @@ and are camera-only: `DrawHelpers.hlsli`, `MaskedAlphaTestView.hlsli`,
 `FrameExposureHelpers.hlsli`, `EnvironmentHelpers.hlsli`,
 `EnvironmentViewHelpers.hlsli` and `LightingHelpers.hlsli`, among others. Their
 pure counterparts take the slot or record instead: `LoadDrawFrameBindings`,
-`MaskedAlphaTest.hlsli`, `FrameExposure.hlsli`, `SkyDiffuseIrradiance.hlsli`,
-`LightRecords.hlsli`, and `ComputeMeshClipPosition`, which takes the view and
-projection matrices.
+`MaskedAlphaTest.hlsli`, `TryLoadFrameExposureData`,
+`SkyDiffuseIrradiance.hlsli`, `LightRecords.hlsli`, and
+`ComputeMeshClipPosition`, which takes the view and projection matrices.
 
 The catalog, not the shader, decides which entry points are camera entries:
 `.view_binding=kCamera` on an `EntryPoint`. ShaderBake defines
@@ -566,8 +506,58 @@ and materials are in the materials domain, so a global-SRV check is wrong for
 them. Typed accessors per contract perform the check.
 
 **Layouts.** Shared C++/HLSL structs, their offset assertions and sampler slots
-are generated from the bindless schema; hand-written mirrors and literal byte
-offsets are not allowed.
+are generated ([§4.10](#410-generated-shared-contracts)); hand-written mirrors
+and literal byte offsets are not allowed.
+
+### 4.10 Generated shared contracts
+
+`src/Oxygen/Vortex/Meta/ShaderContracts.yaml` is the single source of every
+struct that crosses the CPU/GPU boundary: the view constants and routing
+records, view history, draw records and cull records, scene textures,
+exposure state and status, the shadow records, and the pass constants of the
+shadow, contact-shadow, occlusion, HZB, atmosphere and fog passes.
+BindlessCodeGen (`python -m bindless_codegen.contracts`) turns each schema
+file into a `Generated.*.h` header under `src/Oxygen/Vortex` and a
+`Generated.*.hlsli` header under the shader root. The Vortex build regenerates
+them when the schema, the bindless ABI or the generator changes, before the
+module and the shader bake; the outputs are versioned.
+
+The schema names each struct's storage, which fixes its HLSL packing:
+`structured` (StructuredBuffer element), `constant` (cbuffer or
+`ConstantBuffer<T>`, registers of 16 bytes) or `bytes` (ByteAddressBuffer
+record). Padding is always explicit: a member that would need implicit padding
+on either side, a member straddling a constant register, or fields that do not
+add up to the declared size fail generation. The C++ side asserts every
+offset, the size and the alignment, so a C++ type whose layout differs fails
+the build.
+
+For each struct the generator emits:
+
+- the C++ struct, with default member initializers; bindless slots default to
+  invalid, strong slot and index types come from the schema;
+- the HLSL struct, or the `cbuffer` of the view constants at b1;
+- `MakeInvalid<Struct>()` for structs carrying slots;
+- a `TryLoad<Struct>` loader when the schema declares one: it checks the slot
+  against the domain the schema names (`BX_IN_<DOMAIN>`), and for arrays the
+  element index against the buffer size, and returns the invalid record on
+  failure;
+- for byte records, `<PREFIX>_<FIELD>_OFFSET` constants (nested records
+  flattened into absolute offsets, arrays with a `_STRIDE`) and
+  `Load<Struct>`/`Store<Struct>` functions. Exposure, HDR suitability and the
+  HDR consumers address the exposure state and status buffers only through
+  these names.
+
+Shared constants (shadow projection and coverage kinds, cube face count, the
+receiver-mask layout, the HZB mip capacity) are generated the same way.
+Static sampler slots belong to the bindless ABI: `Bindless.yaml` lists them
+under `abi.static_samplers`, the graphics backend creates them in slot order
+and checks each index, and shaders use `K_SAMPLER_LINEAR_WRAP`,
+`K_SAMPLER_SHADOW_COMPARISON`, `K_SAMPLER_POINT_CLAMP` and
+`K_SAMPLER_LINEAR_CLAMP`.
+
+Hand-written headers keep what is not layout: enums and flag helpers, loaders
+with extra validation (for example the shadow publication identity check) and
+pure helpers.
 
 ## 5. Shared — Renderer-Wide Utility Libraries
 
