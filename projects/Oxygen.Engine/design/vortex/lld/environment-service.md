@@ -247,9 +247,12 @@ invariants remain non-negotiable:
 8. Active LUT builders keep the UE5.7 deterministic sample-offset behavior;
    do not add per-frame jitter to sky-view, camera-aerial, transmittance,
    multi-scattering, or distant-sky-light LUT builders.
-9. Local fog and fog-volume composition must never inject emissive or
-   inscattering contributions onto far-depth sky pixels. Sky/atmosphere owns
-   the far-background path.
+9. Fog composes over far-depth sky pixels as UE5.7 does: its height-fog pass
+   covers every pixel, and the local-fog splat traces the view ray past every
+   volume. In Vortex the sky pass owns that far-background path: it composes
+   the whole integrated volumetric-fog column in front of analytic height fog,
+   which starts where the volume ends along the ray. The local-fog compose
+   pass traces sky pixels past every volume.
 
 These are design constraints, not optional implementation notes. Future sky,
 fog, lighting, and local-media changes must preserve them.
@@ -297,7 +300,7 @@ The local-fog path must match the UE5.7 local-fog volume model for:
 - albedo, emissive, directional-light, and sky-light scattering
 - atmosphere-aware directional-light color/transmittance
 - Stage-15 dedicated local-fog composition/splat path
-- no contribution on far-depth sky pixels
+- composition over far-depth sky pixels, traced past every volume
 - injection into volumetric fog when volumetric fog is enabled
 
 If height fog or volumetric fog is missing, local fog remains incomplete; the
@@ -328,7 +331,8 @@ validation.
 Current Vortex status: a first integrated-light-scattering runtime path exists
 for authored/requested volumetric fog. It allocates a 3D product, dispatches a
 Stage-14 compute pass, publishes SRV/static binding validity, and lets the
-Stage-15 fog pass consume the product. Stage 14 runs in two dispatches as in
+Stage-15 fog and sky passes consume the product; the sky pass applies the
+whole integrated column to far-depth pixels. Stage 14 runs in two dispatches as in
 UE5.7: light scattering per froxel (each slice's own in-scattered luminance
 and transmittance over its segment of the view ray, blended with the
 reprojected history), then a final integration that walks each froxel column
