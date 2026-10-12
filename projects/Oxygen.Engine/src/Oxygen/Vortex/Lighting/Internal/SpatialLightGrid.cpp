@@ -16,6 +16,7 @@
 
 #include <glm/gtc/matrix_access.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
@@ -43,6 +44,7 @@
 #include <Oxygen/Vortex/Lighting/Internal/SpatialLightGrid.h>
 #include <Oxygen/Vortex/Lighting/Types/ClusterLightRange.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridMetadata.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridPassConstants.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridResources.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -91,6 +93,9 @@ struct SpatialLightGrid::Impl {
     frame::SequenceNumber feedback_sequence { 0U };
     bool have_demand { false };
     std::optional<CompletedLightGridBuild> completed;
+    //! Inputs of the latest recorded build, reported with a GPU failure.
+    LightGridMetadata recorded_metadata {};
+    bool failure_reported { false };
   };
   observer_ptr<Renderer> renderer;
   frame::SequenceNumber sequence { 0U };
@@ -129,7 +134,38 @@ struct SpatialLightGrid::Impl {
     }
   }
 
-  void ReadDemand(ViewResources& view)
+  //! Reports a GPU-rejected build once, when the view enters the failed state.
+  static void ReportCompletion(const ViewId view_id,
+    const CompletedLightGridBuild& completed, ViewResources& view)
+  {
+    const auto& status = completed.status;
+    if (status.state != kLightGridBuildFailed) {
+      if (status.state == kLightGridBuildValid && view.failure_reported) {
+        LOG_F(INFO, "Light grid recovered for view {}", view_id.get());
+        view.failure_reported = false;
+      }
+      return;
+    }
+    if (view.failure_reported) {
+      return;
+    }
+    view.failure_reported = true;
+    const auto& grid = view.recorded_metadata;
+    LOG_F(ERROR,
+      "Light grid build failed on the GPU for view {}: reason_mask={} "
+      "frame={} grid={}x{}x{} extent={}x{} near_m={} far_m={} "
+      "z_params=({}, {}, {}) projection={} written_indices={} "
+      "fallback_cells={}",
+      view_id.get(), status.reason, completed.sequence.get(), grid.grid_size.x,
+      grid.grid_size.y, grid.grid_size.z, grid.content_extent_px.x,
+      grid.content_extent_px.y, grid.near_depth_m, grid.far_depth_m,
+      grid.grid_z_params.x, grid.grid_z_params.y, grid.grid_z_params.z,
+      grid.projection_kind == kLightGridPerspective ? "perspective"
+                                                    : "orthographic",
+      status.written_index_count, status.fallback_cell_count);
+  }
+
+  void ReadDemand(const ViewId view_id, ViewResources& view)
   {
     for (auto& [frame_slot, resources] : view.frames) {
       if (!resources.feedback) {
@@ -144,10 +180,12 @@ struct SpatialLightGrid::Impl {
         const auto& status = **packet;
         if (!view.completed
           || resources.feedback_sequence > view.completed->sequence) {
-          view.completed = CompletedLightGridBuild {
+          const auto completed = CompletedLightGridBuild {
             .sequence = resources.feedback_sequence,
             .status = status,
           };
+          view.completed = completed;
+          ReportCompletion(view_id, completed, view);
         }
         if (status.state == kLightGridBuildValid
           && (!view.have_demand
@@ -267,7 +305,7 @@ void SpatialLightGrid::OnFrameStart(
         impl_->Retire(it->second);
         it = impl_->views.erase(it);
       } else {
-        impl_->ReadDemand(it->second);
+        impl_->ReadDemand(it->first, it->second);
         ++it;
       }
     }
@@ -350,7 +388,7 @@ auto SpatialLightGrid::InspectCompleted(ViewId view)
   if (found == impl_->views.end()) {
     return std::nullopt;
   }
-  impl_->ReadDemand(found->second);
+  impl_->ReadDemand(view, found->second);
   return found->second.completed;
 }
 
@@ -375,6 +413,7 @@ auto SpatialLightGrid::Record(
   const BuiltLightGridView& view, ShaderVisibleIndex header) -> bool
 {
   auto& state = impl_->views.at(view.view_id);
+  state.recorded_metadata = view.metadata;
   auto& resources = state.frames.at(impl_->slot);
   auto gfx = impl_->renderer->GetGraphics();
   auto recording = gfx->AcquireCommandRecorder(

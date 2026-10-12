@@ -80,6 +80,8 @@
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
+#include <Oxygen/Vortex/SceneRenderer/Generated.SceneTextureBindings.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowReceiverView.h>
 #include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
 #include <Oxygen/Vortex/Types/ResidentContentRevision.h>
@@ -2497,12 +2499,11 @@ auto SceneRenderer::RenderCurrentView(
       "Vortex.Environment.PublishBindings",
       published_view_frame_bindings_.environment_frame_slot);
   }
-  if ((shadows_ != nullptr && wants_shadow_products)
-    || (environment_ != nullptr && wants_environment)
-    || (lighting_ != nullptr && wants_scene_lighting)) {
-    if (!renderer_.RefreshCurrentViewFrameBindings(ctx, *this)) {
-      return false;
-    }
+  if (((shadows_ != nullptr && wants_shadow_products)
+        || (environment_ != nullptr && wants_environment)
+        || (lighting_ != nullptr && wants_scene_lighting))
+    && !renderer_.RefreshCurrentViewFrameBindings(ctx, *this)) {
+    return false;
   }
 
   // Stage 9: Base pass
@@ -2922,6 +2923,8 @@ auto SceneRenderer::RenderCurrentView(
         .require_scene_range = true,
       });
     if (!prepared_exposure) {
+      LogViewRejection(
+        ctx.current_view.view_id, "scene exposure could not be prepared");
       return false;
     }
   }
@@ -3035,6 +3038,8 @@ auto SceneRenderer::RenderCurrentView(
     };
     if (!post_process_->Record(ctx.current_view.view_id, ctx, recorder,
           post_process_inputs, &*prepared_exposure)) {
+      LogViewRejection(
+        ctx.current_view.view_id, "post-processing could not be recorded");
       return false;
     }
     const auto post_process_slot
