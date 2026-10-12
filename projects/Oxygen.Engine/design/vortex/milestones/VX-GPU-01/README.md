@@ -1,11 +1,11 @@
 # VX-GPU-01 — CPU→GPU data contract integrity
 
-Status: `in_progress`
+Status: `validated`
 
 | Field     | Summary                                                                                                                                  |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | Outcome   | GPU work reads only immutable, ordered, receipt-retired data; every unwired renderer feature is finished; ED-M08 resumes after closeout. |
-| Remaining | Open: [VX-GPU-01](../../OPEN_ITEMS.md#p1--current-delivery).                                                                             |
+| Remaining | None in the recorded scope.                                                                                                              |
 | Evidence  | Per-slice evidence in the [slice table](#slices).                                                                                        |
 
 This milestone runs before ED-M08 resumes. It closes the defect class behind
@@ -177,7 +177,7 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 | S9  | Unwired fields and dead code                                           | L2, L3, L4, L5, L6, L8, L11 | S3      | `validated` | —      |
 | S10 | Conventional shadow receiver analysis and receiver-mask caster culling | L1                          | S3, S5  | `validated` | —      |
 | S11 | GPU debug primitives                                                   | L1, VX-DIAG-01              | S3, S6  | `validated` | —      |
-| S12 | Closeout                                                               | all                         | S1–S11  | `planned`   | —      |
+| S12 | Closeout                                                               | all                         | S1–S11  | `validated` | —      |
 
 S1 and S2 come first: they remove the remaining causes of garbage material
 reads. S9 can run in parallel with S4–S8.
@@ -536,6 +536,6 @@ Notes:
 - [x] All findings closed or linked to an issue with an `OPEN_ITEMS` row.
 - [x] Designs current; `CheckDocumentation.py` passes; `STATUS.md`
       regenerated.
-- [ ] **Owner.** RenderScene with BurgerPiz at `-r 30 --vsync on`, with GPU
+- [x] **Owner.** RenderScene with BurgerPiz at `-r 30 --vsync on`, with GPU
       crash dumps enabled: no flicker and no device removal.
-- [ ] **Owner.** Editor check of the ED-M08 delivered slices; ED-M08 resumes.
+- [x] **Owner.** Editor check of the ED-M08 delivered slices; ED-M08 resumes.
