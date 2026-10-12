@@ -11,14 +11,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
-#include <expected>
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <shared_mutex>
 #include <sstream>
+#include <stdexcept>
 #include <string>
+#include <system_error>
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
@@ -80,11 +81,13 @@
 #include <Oxygen/Vortex/Internal/RenderContextPool.h>
 #include <Oxygen/Vortex/Internal/RigidTransformHistoryCache.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/SceneCameraViewResolver.h>
+#include <Oxygen/Vortex/SceneRenderer/Generated.SceneTextureBindings.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderBuilder.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
@@ -1665,17 +1668,23 @@ namespace {
 
 auto Renderer::PublishCurrentViewHistoryFrameBindings(
   RenderContext& render_context, RendererPublicationState& publication_state)
-  -> std::expected<ShaderVisibleIndex, std::error_code>
+  -> Result<ShaderVisibleIndex>
 {
   if (render_context.current_view.resolved_view == nullptr) {
-    return kInvalidShaderVisibleIndex;
+    return Ok(kInvalidShaderVisibleIndex);
   }
 
-  return publication_state.view_history_frame_bindings_publisher->Publish(
-    render_context.current_view.view_id,
-    BuildViewHistoryFrameBindings(render_context.current_view.view_state_handle,
-      *render_context.current_view.resolved_view,
-      observer_ptr<const scene::Scene> { render_context.scene.get() }));
+  const auto published
+    = publication_state.view_history_frame_bindings_publisher->Publish(
+      render_context.current_view.view_id,
+      BuildViewHistoryFrameBindings(
+        render_context.current_view.view_state_handle,
+        *render_context.current_view.resolved_view,
+        observer_ptr<const scene::Scene> { render_context.scene.get() }));
+  if (!published) {
+    return Err(published.error());
+  }
+  return Ok(*published);
 }
 
 auto Renderer::RejectCurrentViewPublication(RenderContext& render_context,

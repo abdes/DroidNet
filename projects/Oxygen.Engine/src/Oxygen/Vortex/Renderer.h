@@ -6,7 +6,6 @@
 
 #pragma once
 
-#include <expected>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -979,7 +978,7 @@ private:
     Graphics& gfx, frame::SequenceNumber sequence, frame::Slot slot) -> void;
   [[nodiscard]] auto PublishCurrentViewHistoryFrameBindings(
     RenderContext& render_context, RendererPublicationState& publication_state)
-    -> std::expected<ShaderVisibleIndex, std::error_code>;
+    -> Result<ShaderVisibleIndex>;
   //! Log the record that failed and clear the view's b1 record and bindings
   //! slot, so no later pass records against a partial publication.
   auto RejectCurrentViewPublication(RenderContext& render_context,

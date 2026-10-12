@@ -8,14 +8,13 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <memory>
 #include <span>
 #include <string>
-#include <system_error>
 #include <type_traits>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -65,8 +64,7 @@ public:
 
   //! Write `value` as a new record.
   template <typename T>
-  auto Write(const T& value)
-    -> std::expected<ConstantBufferRecord, std::error_code>
+  auto Write(const T& value) -> Result<ConstantBufferRecord>
   {
     static_assert(std::is_trivially_copyable_v<T>,
       "TransientConstantBuffer::Write requires a trivially copyable record");
@@ -75,7 +73,7 @@ public:
 
   //! Write `bytes` as a new record, zero-padded to whole 256-byte blocks.
   OXGN_VRTX_API auto WriteBytes(std::span<const std::byte> bytes)
-    -> std::expected<ConstantBufferRecord, std::error_code>;
+    -> Result<ConstantBufferRecord>;
 
 private:
   observer_ptr<StagingProvider> staging_;

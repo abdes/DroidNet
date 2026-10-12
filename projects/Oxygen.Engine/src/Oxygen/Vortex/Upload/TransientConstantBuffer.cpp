@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <expected>
 #include <span>
 #include <string>
 #include <system_error>
@@ -15,6 +14,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
@@ -34,10 +34,10 @@ TransientConstantBuffer::TransientConstantBuffer(StagingProvider& staging,
 }
 
 auto TransientConstantBuffer::WriteBytes(const std::span<const std::byte> bytes)
-  -> std::expected<ConstantBufferRecord, std::error_code>
+  -> Result<ConstantBufferRecord>
 {
   if (bytes.empty()) {
-    return std::unexpected(make_error_code(UploadError::kInvalidRequest));
+    return Err(make_error_code(UploadError::kInvalidRequest));
   }
 
   // Whole 256-byte blocks: a shader cbuffer declared larger than its CPU
@@ -52,7 +52,7 @@ auto TransientConstantBuffer::WriteBytes(const std::span<const std::byte> bytes)
       LOG_F(ERROR, "{}: constant record allocation failed: {}", debug_label_,
         ec.message());
     }
-    return std::unexpected(ec);
+    return Err(ec);
   }
 
   const auto record
@@ -63,10 +63,10 @@ auto TransientConstantBuffer::WriteBytes(const std::span<const std::byte> bytes)
     inline_transfers_->NotifyInlineWrite(
       SizeBytes { record_bytes }, debug_label_);
   }
-  return ConstantBufferRecord {
+  return Ok(ConstantBufferRecord {
     .buffer = allocation->SharedBuffer(),
     .offset_bytes = allocation->Offset().get(),
-  };
+  });
 }
 
 } // namespace oxygen::vortex::upload
