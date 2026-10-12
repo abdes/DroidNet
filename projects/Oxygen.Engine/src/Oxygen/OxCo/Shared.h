@@ -318,7 +318,7 @@ auto Shared<Awaitable>::State::Cancel(AwaiterBase* ptr) noexcept
       "cancelling shared awaitable {} (holding {}); "
       "forwarding cancellation",
       fmt::ptr(this), fmt::ptr(&awaiter_));
-    DCHECK_EQ_F(&parents_.Front(), ptr);
+    DCHECK_EQ_F(parents_.TryFront(), ptr);
     // Prevent new parents from joining, and forward the cancellation
     // to the shared task
     result_.template emplace<Cancelling>();
@@ -348,8 +348,8 @@ auto Shared<Awaitable>::State::Cancel(AwaiterBase* ptr) noexcept
   // choose a new first one to avoid backtracking into something dangling.
   // (If we have no parents_, then the shared task has completed, so it
   // doesn't matter what it declares as its caller.)
-  if (!parents_.Empty()) {
-    ProxyFrame::LinkTo(parents_.Front().parent_);
+  if (const auto* first = parents_.TryFront()) {
+    ProxyFrame::LinkTo(first->parent_);
   }
 
   // Match the type of 'return syncCancelled;' above:

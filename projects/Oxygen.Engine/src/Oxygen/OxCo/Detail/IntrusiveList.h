@@ -6,11 +6,11 @@
 
 #pragma once
 
-#include <Oxygen/Base/Macros.h>
-
 #include <iterator>
 #include <stdexcept>
 #include <utility>
+
+#include <Oxygen/Base/Macros.h>
 
 namespace oxygen::co::detail {
 
@@ -33,7 +33,7 @@ public:
 
 protected:
   // Method to unlink the item from the list
-  void Unlink()
+  void Unlink() noexcept
   {
     if (prev_ && prev_->next_) {
       prev_->next_ = next_;
@@ -114,7 +114,7 @@ public:
     return const_iterator(this);
   }
 
-  [[nodiscard]] auto Empty() const { return this->next_ == this; }
+  [[nodiscard]] auto Empty() const noexcept { return this->next_ == this; }
 
   [[nodiscard]] auto ContainsOneItem() const
   {
@@ -153,6 +153,13 @@ public:
       return;
     }
     this->next_->Unlink();
+  }
+
+  //! Returns the front item, or `nullptr` when the list is empty. Unlike
+  //! `Front()`, it never throws, so wake loops in `noexcept` code can use it.
+  [[nodiscard]] auto TryFront() noexcept -> T*
+  {
+    return Empty() ? nullptr : static_cast<T*>(this->next_);
   }
 
   // Front and back methods

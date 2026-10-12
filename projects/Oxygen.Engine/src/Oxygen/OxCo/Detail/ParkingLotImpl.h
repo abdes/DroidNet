@@ -44,7 +44,7 @@ protected:
       object_.parked_.PushBack(*this);
     }
 
-    void UnPark()
+    void UnPark() noexcept
     {
       this->Unlink();
       std::exchange(handle_, std::noop_coroutine()).resume();
@@ -70,19 +70,19 @@ protected:
   }
 
   //! Wake the oldest waiter, removing it from the list of waiters.
-  void UnParkOne()
+  void UnParkOne() noexcept
   {
-    if (!parked_.Empty()) {
-      parked_.Front().UnPark();
+    if (auto* parked = parked_.TryFront()) {
+      parked->UnPark();
     }
   }
 
   //! Wake all waiters that were waiting when the call to `UnParkAll()` began.
-  void UnParkAll()
+  void UnParkAll() noexcept
   {
     auto parked = std::move(parked_);
-    while (!parked.Empty()) {
-      parked.Front().UnPark();
+    while (auto* waiter = parked.TryFront()) {
+      waiter->UnPark();
     }
   }
 

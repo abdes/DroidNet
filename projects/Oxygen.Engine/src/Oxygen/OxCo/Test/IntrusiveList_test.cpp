@@ -5,11 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <ranges>
+#include <stdexcept>
+#include <utility>
 
 #include <Oxygen/OxCo/Detail/IntrusiveList.h>
 #include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::co::detail;
+using oxygen::co::detail::IntrusiveList;
+using oxygen::co::detail::IntrusiveListItem;
 
 class TestItem final : public IntrusiveListItem<TestItem> {
 public:
@@ -50,18 +53,37 @@ NOLINT_TEST(IntrusiveListTest, EmptyList)
 {
   IntrusiveList<TestItem> list;
   EXPECT_TRUE(list.Empty());
-  auto front = [&list] {
+  auto front = [&list] -> void {
     const auto& f = list.Front();
     (void)f;
   };
   // NOLINTNEXTLINE
   EXPECT_THROW(front(), std::out_of_range);
-  auto back = [&list] {
+  auto back = [&list] -> void {
     const auto& b = list.Back();
     (void)b;
   };
   // NOLINTNEXTLINE
   EXPECT_THROW(back(), std::out_of_range);
+}
+
+//! TryFront() reports an empty list with nullptr instead of throwing, and
+//! otherwise returns the oldest item.
+NOLINT_TEST(IntrusiveListTest, TryFront)
+{
+  // Arrange
+  IntrusiveList<TestItem> list;
+  TestItem item1(1);
+  TestItem item2(2);
+  static_assert(noexcept(list.TryFront()));
+
+  // Act & Assert
+  EXPECT_EQ(list.TryFront(), nullptr);
+  list.PushBack(item1);
+  list.PushBack(item2);
+  EXPECT_EQ(list.TryFront(), &item1);
+  list.PopFront();
+  EXPECT_EQ(list.TryFront(), &item2);
 }
 
 NOLINT_TEST(IntrusiveListTest, PushFront)

@@ -7,6 +7,7 @@
 #include <array>
 #include <chrono>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "Utils/OxCoTestFixture.h"
@@ -195,6 +196,10 @@ NOLINT_TEST_F(BoundedChannelTest, Close)
     EXPECT_FALSE(sent);
   });
 }
+
+// Closing wakes waiters and must be usable from destructors and cleanup guards.
+static_assert(noexcept(std::declval<Channel<int>&>().Close()));
+static_assert(noexcept(std::declval<Channel<int>::Writer&>().Close()));
 
 class UnboundedChannelTest : public OxCoTestFixture {
 protected:

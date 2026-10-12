@@ -204,7 +204,7 @@ namespace detail::channel {
       GetChannel().GetReader().UnParkOne();
       return true;
     }
-    void Close() { GetChannel().Close(); }
+    void Close() noexcept { GetChannel().Close(); }
 
     [[nodiscard]] auto Space() const noexcept { return GetChannel().Space(); }
     [[nodiscard]] auto Full() const noexcept { return GetChannel().Full(); }
@@ -330,7 +330,7 @@ public:
   //! Closes the channel. No more data can be written to the channel. All
   //! queued writes are aborted. Any suspended reads will still be able to
   //! read whatever data remains in the channel.
-  void Close()
+  void Close() noexcept
   {
     closed_ = true;
     GetReader().UnParkAll();
