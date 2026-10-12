@@ -472,10 +472,13 @@ static inline float3 EvaluateLocalFogVolumeInScattering(
 
 // Traces the camera-relative ray from `translated_ray_origin` to
 // `translated_world_position`: the origin is the camera for perspective views
-// and the pixel's point on the camera plane for orthographic views.
+// and the pixel's point on the camera plane for orthographic views. The trace
+// starts no nearer than `exclude_distance_meters` along the ray, the range
+// volumetric fog already covers when local fog is injected into it.
 static inline float4 GetLocalFogVolumeInstanceContribution(
     LocalFogVolumeInstanceData encoded_instance,
     float global_start_distance_meters,
+    float exclude_distance_meters,
     SamplerState linear_sampler,
     float3 camera_position_world,
     float3 translated_ray_origin,
@@ -503,6 +506,11 @@ static inline float4 GetLocalFogVolumeInstanceContribution(
     ray_segment = max(ray_segment, float2(global_start_distance_local, global_start_distance_local));
     ray_segment.x = max(ray_segment.x, 0.0f);
     ray_segment.y = min(ray_segment.y, ray_length_local);
+    if (ray_segment.y > ray_segment.x && exclude_distance_meters > 0.0f)
+    {
+        const float exclude_local = exclude_distance_meters * instance.uniform_scale_inv;
+        ray_segment = max(ray_segment, float2(exclude_local, exclude_local));
+    }
     if (ray_segment.y <= ray_segment.x)
     {
         return float4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -527,7 +535,8 @@ static inline float4 GetLocalFogVolumeContribution(
     SamplerState linear_sampler,
     float3 camera_position_world,
     float3 translated_ray_origin,
-    float3 translated_world_position)
+    float3 translated_world_position,
+    float exclude_distance_meters)
 {
     const uint tile_count
         = min(tile_data_texture[uint3(tile_coord, 0)], pass.max_instances_per_tile);
@@ -548,7 +557,7 @@ static inline float4 GetLocalFogVolumeContribution(
         }
         const float4 contribution = GetLocalFogVolumeInstanceContribution(
             instances[instance_index], pass.global_start_distance_meters,
-            linear_sampler, camera_position_world, translated_ray_origin,
+            exclude_distance_meters, linear_sampler, camera_position_world, translated_ray_origin,
             translated_world_position);
         accumulated_luminance = accumulated_luminance * contribution.a + contribution.rgb;
         accumulated_transmittance *= contribution.a;

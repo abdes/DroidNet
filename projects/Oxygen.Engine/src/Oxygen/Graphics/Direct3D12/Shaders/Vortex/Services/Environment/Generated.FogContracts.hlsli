@@ -64,9 +64,10 @@ struct VolumetricFogLocalFogControl1
 struct VolumetricFogLocalFogControl2
 {
     float max_density_into_volumetric_fog;
-    float _pad0;
-    float _pad1;
-    float _pad2;
+    // Pixel size of a local-fog tile; froxels look tiles up by pixel.
+    uint tile_pixel_size;
+    float view_width;
+    float view_height;
 };
 
 struct VolumetricFogHeightFogMediaControl0

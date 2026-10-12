@@ -16,6 +16,16 @@
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 #include "Vortex/Services/Environment/HeightFog.hlsli"
+#include "Vortex/Services/Environment/LocalFogVolumePixel.hlsli"
+
+// g_PassConstantsIndex names the local-fog compose constants when local fog
+// is injected into volumetric fog; this pass then traces local fog beyond the
+// volume, as UE's height fog pass does.
+cbuffer RootConstants : register(b2, space0)
+{
+    uint g_DrawIndex;
+    uint g_PassConstantsIndex;
+}
 
 static inline bool IsReverseZProjection()
 {
@@ -32,67 +42,6 @@ static inline float EvaluateFarBackgroundMask(float scene_depth)
     const float far_depth = ResolveFarDepthReference();
     const float epsilon = 1.0e-3f;
     return saturate(1.0f - abs(scene_depth - far_depth) / epsilon);
-}
-
-static inline bool VolumetricFogFlagEnabled(uint flags, uint bit)
-{
-    return (flags & bit) != 0u;
-}
-
-// The froxel grid slices view-space depth along the camera axis, so the
-// lookup must use the receiver's view depth, not its radial distance: off-axis
-// the radial distance lands behind the surface, in cells that can be opaque
-// (exponential height fog grows without bound below its height offset).
-static bool IsIntegratedVolumetricFogUsable(GpuVolumetricFogParams volumetric_fog)
-{
-    return VolumetricFogFlagEnabled(volumetric_fog.flags, GPU_VOLUMETRIC_FOG_FLAG_ENABLED)
-        && VolumetricFogFlagEnabled(
-            volumetric_fog.flags,
-            GPU_VOLUMETRIC_FOG_FLAG_INTEGRATED_SCATTERING_VALID)
-        && volumetric_fog.integrated_light_scattering_srv != K_INVALID_BINDLESS_INDEX
-        && BX_IN_TEXTURES(volumetric_fog.integrated_light_scattering_srv);
-}
-
-static float4 SampleIntegratedVolumetricFog(
-    GpuVolumetricFogParams volumetric_fog,
-    float2 uv,
-    float view_depth_m)
-{
-    if (!IsIntegratedVolumetricFogUsable(volumetric_fog)) {
-        return float4(0.0f, 0.0f, 0.0f, 1.0f);
-    }
-
-    const float depth_span =
-        max(volumetric_fog.distance_m - volumetric_fog.start_distance_m, 1.0f);
-    const float linear_depth_fraction =
-        saturate((view_depth_m - volumetric_fog.start_distance_m) / depth_span);
-    float depth_fraction = sqrt(linear_depth_fraction);
-    if (abs(volumetric_fog.grid_z_params.x) > 1.0e-8f
-        && abs(volumetric_fog.grid_z_params.z) > 1.0e-4f
-        && volumetric_fog.grid_depth > 0u) {
-        const float z_argument = max(
-            view_depth_m * volumetric_fog.grid_z_params.x
-            + volumetric_fog.grid_z_params.y,
-            1.0e-8f);
-        const float z_slice =
-            log2(z_argument) * volumetric_fog.grid_z_params.z;
-        depth_fraction = saturate(
-            z_slice / max(float(volumetric_fog.grid_depth), 1.0f));
-    }
-    Texture3D<float4> integrated_light_scattering =
-        ResourceDescriptorHeap[volumetric_fog.integrated_light_scattering_srv];
-    SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
-    return integrated_light_scattering.SampleLevel(
-        linear_sampler,
-        float3(uv, depth_fraction),
-        0.0f);
-}
-
-static float4 ComposeFogResults(float4 height_fog, float4 volumetric_fog)
-{
-    return float4(
-        volumetric_fog.rgb + height_fog.rgb * volumetric_fog.a,
-        saturate(height_fog.a * volumetric_fog.a));
 }
 
 [shader("vertex")]
@@ -134,6 +83,7 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     if (!TrySampleSceneDepth(input.uv, bindings, raw_depth)) {
         discard;
     }
+    // The sky pass fogs far-depth pixels, volumetric fog included.
     if (EvaluateFarBackgroundMask(raw_depth) > 0.999f) {
         return 0.0f.xxxx;
     }
@@ -166,13 +116,25 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
             camera_position,
             camera_to_receiver);
     }
-    RecordHdrConsumerInput(height_fog.rgb, HDR_INPUT_HEIGHT_FOG);
-    height_fog.rgb *= GetPreExposure();
+    // Local fog lies in front of the height fog and behind the volume.
+    float4 analytic_fog = height_fog;
+    if (g_PassConstantsIndex != K_INVALID_BINDLESS_INDEX && volumetric_usable) {
+        StructuredBuffer<LocalFogComposePassConstants> local_fog_constants =
+            ResourceDescriptorHeap[g_PassConstantsIndex];
+        const float4 local_fog = EvaluateLocalFogVolumesAtPixel(
+            local_fog_constants[0], input.uv, raw_depth, false,
+            env_data.volumetric_fog.distance_m);
+        analytic_fog = float4(local_fog.rgb + height_fog.rgb * local_fog.a,
+            local_fog.a * height_fog.a);
+    }
+    // The certificate bounds the volume's attenuation of this analytic fog.
+    RecordHdrConsumerInput(analytic_fog.rgb, HDR_INPUT_HEIGHT_FOG);
+    analytic_fog.rgb *= GetPreExposure();
     const float4 volumetric_fog = SampleIntegratedVolumetricFog(
         env_data.volumetric_fog,
         input.uv,
         view_depth_m);
-    const float4 fog_result = ComposeFogResults(height_fog, volumetric_fog);
+    const float4 fog_result = ComposeFogResults(analytic_fog, volumetric_fog);
     const bool holdout = !reflection_capture && FogFlagEnabled(fog.flags, GPU_FOG_FLAG_HOLDOUT);
     return float4(holdout ? 0.0f.xxx : fog_result.rgb, 1.0f - fog_result.a);
 }

@@ -196,7 +196,8 @@ SkyPass::SkyPass(Renderer& renderer)
 SkyPass::~SkyPass() = default;
 
 auto SkyPass::Record(RenderContext& ctx, graphics::CommandRecorder& recorder,
-  const SceneTextures& scene_textures) const -> RecordState
+  const SceneTextures& scene_textures,
+  const ShaderVisibleIndex local_fog_constants) const -> RecordState
 {
   const auto wants_environment = ctx.current_view.feature_mask.Has(
     CompositionView::ViewFeatureMask::kEnvironment);
@@ -257,7 +258,7 @@ auto SkyPass::Record(RenderContext& ctx, graphics::CommandRecorder& recorder,
     0U);
   recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-    kInvalidShaderVisibleIndex.get(), 1U);
+    local_fog_constants.get(), 1U);
   recorder.Draw(3U, 1U, 0U, 0U);
   recorder.RequireResourceState(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);

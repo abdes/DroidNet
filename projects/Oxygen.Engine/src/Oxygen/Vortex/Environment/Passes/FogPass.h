@@ -8,6 +8,7 @@
 
 #include <cstdint>
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/api_export.h>
 
 namespace oxygen::graphics {
@@ -40,11 +41,21 @@ namespace environment {
     FogPass(FogPass&&) = delete;
     auto operator=(FogPass&&) -> FogPass& = delete;
 
+    //! Whether Record() draws for this view, before graphics availability.
+    [[nodiscard]] OXGN_VRTX_API auto WillExecute(const RenderContext& ctx) const
+      -> bool;
+
+    //! `local_fog_constants` names the local-fog compose constants when local
+    //! fog is injected into volumetric fog: the pass then traces local fog
+    //! beyond the volume. Invalid otherwise.
     [[nodiscard]] OXGN_VRTX_API auto Record(RenderContext& ctx,
-      graphics::CommandRecorder& recorder,
-      const SceneTextures& scene_textures) const -> RecordState;
+      graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
+      ShaderVisibleIndex local_fog_constants = kInvalidShaderVisibleIndex) const
+      -> RecordState;
 
   private:
+    [[nodiscard]] auto IsRequested(const RenderContext& ctx) const -> bool;
+
     Renderer& renderer_;
   };
 

@@ -232,29 +232,29 @@ auto LocalFogVolumeComposePass::EnsurePassConstantsBuffer()
     "Environment.LocalFogCompose.PassConstants") };
 }
 
-auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
-  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
-  const internal::LocalFogVolumeState::ViewProducts& products) -> RecordState
+auto LocalFogVolumeComposePass::IsRequested(const RenderContext& ctx,
+  const internal::LocalFogVolumeState::ViewProducts& products) const -> bool
 {
-  auto state = RecordState {
-    .requested = renderer_.GetLocalFogEnabled()
-      && ctx.current_view.with_local_fog && products.buffer_ready
-      && products.tile_data_ready
-      && products.occupied_tile_buffer_slot.IsValid()
-      && products.instance_count > 0U
-      && products.occupied_tile_draw_args_buffer != nullptr,
-    .executed = false,
-  };
-  if (!state.requested
+  return renderer_.GetLocalFogEnabled() && ctx.current_view.with_local_fog
+    && products.buffer_ready && products.tile_data_ready
+    && products.occupied_tile_buffer_slot.IsValid()
+    && products.instance_count > 0U
+    && products.occupied_tile_draw_args_buffer != nullptr;
+}
+
+auto LocalFogVolumeComposePass::PublishConstants(RenderContext& ctx,
+  const SceneTextures& scene_textures,
+  const internal::LocalFogVolumeState::ViewProducts& products)
+  -> ShaderVisibleIndex
+{
+  if (!IsRequested(ctx, products)
     || !renderer_.HasCapability(
       RendererCapabilityFamily::kEnvironmentLighting)) {
-    return state;
+    return kInvalidShaderVisibleIndex;
   }
-
-  auto gfx = renderer_.GetGraphics();
   const auto constants_buffer = EnsurePassConstantsBuffer();
-  if (gfx == nullptr || constants_buffer == nullptr) {
-    return state;
+  if (constants_buffer == nullptr) {
+    return kInvalidShaderVisibleIndex;
   }
 
   const auto tile_pixel_size = renderer_.GetLocalFogTilePixelSize();
@@ -264,7 +264,6 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
   const auto global_start_distance_meters
     = renderer_.GetLocalFogGlobalStartDistanceMeters();
   auto start_depth_z = 0.0F;
-  auto reverse_z = true;
   if (const auto* resolved_view = ctx.current_view.resolved_view.get();
     resolved_view != nullptr) {
     const auto viewport = resolved_view->Viewport();
@@ -277,10 +276,9 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
     }
     start_depth_z = ComputeLocalFogStartDepthZ(
       *resolved_view, global_start_distance_meters);
-    reverse_z = resolved_view->ReverseZ();
   }
 
-  auto constants = PassConstants {
+  const auto constants = PassConstants {
     .instance_buffer_slot = products.instance_buffer_slot.get(),
     .tile_data_texture_slot = products.tile_data_texture_slot.get(),
     .occupied_tile_buffer_slot = products.occupied_tile_buffer_slot.get(),
@@ -294,15 +292,39 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
     .global_start_distance_meters = global_start_distance_meters,
     .start_depth_z = start_depth_z,
   };
-  if (!vortex::internal::HasViewConstants(ctx, "Vortex.Stage15.LocalFog")) {
-    state.executed = false;
-    return state;
-  }
   auto constants_alloc = constants_buffer->Allocate(1U);
   if (!constants_alloc.has_value()
     || !constants_alloc->TryWriteObject(constants)) {
+    return kInvalidShaderVisibleIndex;
+  }
+  return constants_alloc->srv;
+}
+
+auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
+  const internal::LocalFogVolumeState::ViewProducts& products) -> RecordState
+{
+  auto state = RecordState {
+    .requested = IsRequested(ctx, products),
+    .executed = false,
+  };
+  if (!state.requested
+    || !renderer_.HasCapability(
+      RendererCapabilityFamily::kEnvironmentLighting)) {
     return state;
   }
+
+  auto gfx = renderer_.GetGraphics();
+  if (gfx == nullptr
+    || !vortex::internal::HasViewConstants(ctx, "Vortex.Stage15.LocalFog")) {
+    return state;
+  }
+  const auto constants_srv = PublishConstants(ctx, scene_textures, products);
+  if (!constants_srv.IsValid()) {
+    return state;
+  }
+  const auto* resolved_view = ctx.current_view.resolved_view.get();
+  const auto reverse_z = resolved_view == nullptr || resolved_view->ReverseZ();
 
   auto framebuffer = gfx->CreateFramebuffer(BuildFramebuffer(scene_textures));
 
@@ -343,7 +365,7 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
     0U);
   recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-    constants_alloc->srv.get(), 1U);
+    constants_srv.get(), 1U);
   recorder.ExecuteIndirect(*products.occupied_tile_draw_args_buffer,
     graphics::CommandRecorder::IndirectCommandDesc {
       .kind = graphics::CommandRecorder::IndirectCommandKind::kDraw,

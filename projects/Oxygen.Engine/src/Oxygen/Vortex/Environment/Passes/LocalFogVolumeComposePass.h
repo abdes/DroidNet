@@ -10,6 +10,7 @@
 #include <optional>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Passes/Generated.FogContracts.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
@@ -51,6 +52,14 @@ namespace environment {
     auto operator=(LocalFogVolumeComposePass&&)
       -> LocalFogVolumeComposePass& = delete;
 
+    //! Publishes this view's compose constants for a pass that evaluates
+    //! local fog itself, as the fog and sky passes do when local fog is
+    //! injected into volumetric fog. Invalid when local fog is not requested.
+    [[nodiscard]] OXGN_VRTX_API auto PublishConstants(RenderContext& ctx,
+      const SceneTextures& scene_textures,
+      const internal::LocalFogVolumeState::ViewProducts& products)
+      -> ShaderVisibleIndex;
+
     [[nodiscard]] OXGN_VRTX_API auto Record(RenderContext& ctx,
       graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
       const internal::LocalFogVolumeState::ViewProducts& products)
@@ -58,6 +67,10 @@ namespace environment {
 
   private:
     using PassConstants = LocalFogComposePassConstants;
+
+    [[nodiscard]] auto IsRequested(const RenderContext& ctx,
+      const internal::LocalFogVolumeState::ViewProducts& products) const
+      -> bool;
 
     //! The pass constants buffer, created on first use; null without
     //! Graphics.

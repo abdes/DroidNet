@@ -279,11 +279,16 @@ static bool IsSkyHeightFogEnabled(GpuFogParams fog, EnvironmentViewData view, bo
             || FogFlagEnabled(fog.flags, GPU_FOG_FLAG_VISIBLE_IN_REFLECTION_CAPTURES));
 }
 
+// `exclude_distance_m` is the ray length already covered by volumetric fog;
+// the analytic fog starts beyond it, as UE's CalculateHeightFog does.
 static float4 EvaluateSkyHeightFog(EnvironmentStaticData environment,
-    EnvironmentViewData view, float3 origin, float3 direction, bool capture)
+    EnvironmentViewData view, float3 origin, float3 direction, bool capture,
+    float exclude_distance_m = 0.0f)
 {
     if (!IsSkyHeightFogEnabled(environment.fog, view, capture)) return float4(0, 0, 0, 1);
-    float4 fog = EvaluateExponentialHeightFog(environment.fog, environment, view,
+    GpuFogParams fog_params = environment.fog;
+    fog_params.start_distance_m = max(fog_params.start_distance_m, exclude_distance_m);
+    float4 fog = EvaluateExponentialHeightFog(fog_params, environment, view,
         origin, direction, HeightFogDistantRayDistance(direction));
     if (!capture && (view.flags & (1u << 1u)) == 0u
         && FogFlagEnabled(environment.fog.flags, GPU_FOG_FLAG_HOLDOUT))

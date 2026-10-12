@@ -130,9 +130,10 @@ static_assert(
 
 struct alignas(16) VolumetricFogLocalFogControl2 {
   float max_density_into_volumetric_fog { 0.0F };
-  float _pad0 { 0.0F };
-  float _pad1 { 0.0F };
-  float _pad2 { 0.0F };
+  //! Pixel size of a local-fog tile; froxels look tiles up by pixel.
+  std::uint32_t tile_pixel_size { 0U };
+  float view_width { 0.0F };
+  float view_height { 0.0F };
 };
 
 static_assert(std::is_standard_layout_v<VolumetricFogLocalFogControl2>);
@@ -142,9 +143,9 @@ static_assert(alignof(VolumetricFogLocalFogControl2) == 16U);
 static_assert(
   offsetof(VolumetricFogLocalFogControl2, max_density_into_volumetric_fog)
   == 0U);
-static_assert(offsetof(VolumetricFogLocalFogControl2, _pad0) == 4U);
-static_assert(offsetof(VolumetricFogLocalFogControl2, _pad1) == 8U);
-static_assert(offsetof(VolumetricFogLocalFogControl2, _pad2) == 12U);
+static_assert(offsetof(VolumetricFogLocalFogControl2, tile_pixel_size) == 4U);
+static_assert(offsetof(VolumetricFogLocalFogControl2, view_width) == 8U);
+static_assert(offsetof(VolumetricFogLocalFogControl2, view_height) == 12U);
 
 struct alignas(16) VolumetricFogHeightFogMediaControl0 {
   float primary_density { 0.0F };

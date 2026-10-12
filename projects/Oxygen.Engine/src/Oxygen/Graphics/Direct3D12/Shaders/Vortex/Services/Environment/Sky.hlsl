@@ -14,6 +14,16 @@
 #include "Vortex/Contracts/Scene/SceneTextures.hlsli"
 #include "Vortex/Services/Environment/SkyRadiance.hlsli"
 #include "Vortex/Services/Environment/HeightFog.hlsli"
+#include "Vortex/Services/Environment/LocalFogVolumePixel.hlsli"
+
+// g_PassConstantsIndex names the local-fog compose constants when local fog
+// is injected into volumetric fog; the sky then traces local fog beyond the
+// volume, as UE's height fog pass does for far-depth pixels.
+cbuffer RootConstants : register(b2, space0)
+{
+    uint g_DrawIndex;
+    uint g_PassConstantsIndex;
+}
 #include "Vortex/Services/Environment/ParityTransmittance.hlsli"
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/FullscreenTriangle.hlsli"
@@ -134,10 +144,46 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     {
         discard;
     }
-    const float4 height_fog = EvaluateSkyHeightFog(env_data, environment_view,
-        camera_position, view_direction, false);
-    if (IsSkyHeightFogEnabled(env_data.fog, environment_view, false))
-        RecordHdrConsumerInput(height_fog.rgb, HDR_INPUT_HEIGHT_FOG, HDR_CONSUMER_SKY_HEIGHT_FOG);
+    // As UE's height fog pass does for far-depth pixels, the sky composes the
+    // whole integrated volumetric fog column in front of the analytic fog,
+    // which starts where the volume ends along this ray.
+    const bool reflection_capture_view = IsReflectionCaptureView(environment_view);
+    const GpuFogParams fog = env_data.fog;
+    const bool volumetric_applied = FogFlagEnabled(fog.flags, GPU_FOG_FLAG_ENABLED)
+        && FogFlagEnabled(fog.flags, GPU_FOG_FLAG_RENDER_IN_MAIN_PASS)
+        && (!reflection_capture_view
+            || FogFlagEnabled(fog.flags, GPU_FOG_FLAG_VISIBLE_IN_REFLECTION_CAPTURES))
+        && IsIntegratedVolumetricFogUsable(env_data.volumetric_fog);
+    const float volumetric_exclude_distance_m = volumetric_applied
+        ? env_data.volumetric_fog.distance_m * RayLengthPerViewDepth(view_matrix, view_direction)
+        : 0.0f;
+    const float4 sky_height_fog = EvaluateSkyHeightFog(env_data, environment_view,
+        camera_position, view_direction, false, volumetric_exclude_distance_m);
+    const bool height_fog_enabled = IsSkyHeightFogEnabled(fog, environment_view, false);
+    if (height_fog_enabled)
+        RecordHdrConsumerInput(sky_height_fog.rgb, HDR_INPUT_HEIGHT_FOG, HDR_CONSUMER_SKY_HEIGHT_FOG);
+    // Local fog lies in front of the height fog and behind the volume; below,
+    // `height_fog` is their composition, the analytic fog over the sky.
+    float4 height_fog = sky_height_fog;
+    const bool local_fog_applied = volumetric_applied
+        && g_PassConstantsIndex != K_INVALID_BINDLESS_INDEX;
+    if (local_fog_applied) {
+        StructuredBuffer<LocalFogComposePassConstants> local_fog_constants =
+            ResourceDescriptorHeap[g_PassConstantsIndex];
+        const float4 local_fog = EvaluateLocalFogVolumesAtPixel(
+            local_fog_constants[0], input.uv, ResolveFarDepthReference(), true,
+            env_data.volumetric_fog.distance_m);
+        if (!reflection_capture_view && FogFlagEnabled(fog.flags, GPU_FOG_FLAG_HOLDOUT))
+            height_fog = float4(0.0f.xxx, local_fog.a * sky_height_fog.a);
+        else
+            height_fog = float4(local_fog.rgb + sky_height_fog.rgb * local_fog.a,
+                local_fog.a * sky_height_fog.a);
+    }
+    float4 volumetric_fog = volumetric_applied
+        ? SampleIntegratedVolumetricFogAtDepthFraction(env_data.volumetric_fog, input.uv, 1.0f)
+        : float4(0.0f, 0.0f, 0.0f, 1.0f);
+    if (!reflection_capture_view && FogFlagEnabled(fog.flags, GPU_FOG_FLAG_HOLDOUT))
+        volumetric_fog.rgb = 0.0f.xxx;
     const float view_pre_exposure = GetPreExposure();
     if (env_data.sky_sphere.enabled != 0u)
     {
@@ -173,7 +219,9 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         // The store-range check above records a non-finite texel; the view
         // shows it black rather than letting Inf or NaN reach exposure.
         if (!all(isfinite(sky_color))) sky_color = 0.0.xxx;
-        sky_color = (max(sky_color, 0.0.xxx) * height_fog.a + height_fog.rgb) * view_pre_exposure;
+        sky_color = max(sky_color, 0.0.xxx) * height_fog.a + height_fog.rgb;
+        if (volumetric_applied) RecordHdrSkyVolumetricBackground(sky_color);
+        sky_color = sky_color * view_pre_exposure * volumetric_fog.a + volumetric_fog.rgb;
         CheckHdrStoreRange(float4(sky_color, 1.0), 7u,
             GetExposureStatusUav(), 0u, view_pre_exposure);
         return float4(sky_color, 1.0);
@@ -183,13 +231,15 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         || !BX_IN_TEXTURES(env_data.atmosphere.sky_view_lut_slot)
         || !IsAtmosphereRenderedInMain(environment_view))
     {
-        if (!IsSkyHeightFogEnabled(env_data.fog, environment_view, false)) discard;
+        if (!height_fog_enabled && !volumetric_applied) discard;
         // Existing coverage composition places the display-only background
         // behind this fog without admitting that background to sky lighting.
-        const float3 fog_color = height_fog.rgb * view_pre_exposure;
-        CheckHdrStoreRange(float4(fog_color, 1.0), 7u,
+        if (volumetric_applied) RecordHdrSkyVolumetricBackground(height_fog.rgb);
+        const float4 composed = ComposeFogResults(
+            float4(height_fog.rgb * view_pre_exposure, height_fog.a), volumetric_fog);
+        CheckHdrStoreRange(float4(composed.rgb, 1.0), 7u,
             GetExposureStatusUav(), 0u, view_pre_exposure);
-        return float4(fog_color, 1.0 - height_fog.a);
+        return float4(composed.rgb, 1.0 - composed.a);
     }
 
     const float view_height = environment_view.sky_planet_translated_world_center_km_and_view_height_km.w;
@@ -197,7 +247,6 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     RecordHdrConsumerUsage(HDR_CONSUMER_SKY,
         environment_view.sky_luminance_factor_height_fog_contribution.xyz);
     const float4 sky_sample = SampleSkyViewRadiance(env_data, environment_view, view_direction);
-    const bool reflection_capture_view = IsReflectionCaptureView(environment_view);
     const bool atmosphere_holdout = !reflection_capture_view
         && environment_view.trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass.z > 0.5f;
     float3 sky_color = atmosphere_holdout ? 0.0f.xxx : max(sky_sample.rgb, 0.0.xxx);
@@ -246,8 +295,10 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     }
 
     sky_color = sky_color * height_fog.a + height_fog.rgb * view_pre_exposure;
+    if (volumetric_applied) RecordHdrSkyVolumetricBackground(sky_color / view_pre_exposure);
+    sky_color = sky_color * volumetric_fog.a + volumetric_fog.rgb;
     const float coverage = atmosphere_holdout
-        ? saturate(1.0f - saturate(sky_sample.a) * height_fog.a) : 1.0f;
+        ? saturate(1.0f - saturate(sky_sample.a) * height_fog.a * volumetric_fog.a) : 1.0f;
     CheckHdrStoreRange(float4(sky_color, coverage), 7u,
         GetExposureStatusUav(),
         0u, view_pre_exposure);

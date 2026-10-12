@@ -898,8 +898,14 @@ NOLINT_TEST_F(
       EXPECT_EQ(storage.completed.flags & 16U, 0U);
       const auto qualification = Read<HdrSuitabilityData>(
         *probe->frame->suitability_buffer, ResourceStates::kShaderResource);
-      EXPECT_EQ(qualification.failure_flags, 0U);
-      EXPECT_EQ(storage.completed.fp16_eligible_streak, 1U);
+      // The non-finite step leaves nothing behind: the fog product itself
+      // qualifies. This fixture has no geometry, so the fog is seen only over
+      // the sky, which composes the whole volume; the certified error of
+      // hardware-filtering it from FP16 storage (HdrFilterArithmetic) keeps
+      // the scene image from narrowing, independently of the history.
+      EXPECT_EQ(qualification.failure_flags & 16U, 0U);
+      EXPECT_EQ(qualification.first_failure_product, 11U);
+      EXPECT_EQ(storage.completed.fp16_eligible_streak, 0U);
     }
     renderer_->OnFrameEnd(observer_ptr {
       &frame,

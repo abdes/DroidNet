@@ -6,10 +6,13 @@
 
 #include <array>
 #include <bit>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
+#include <span>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/PostProcess.h>
@@ -704,6 +707,121 @@ NOLINT_TEST_F(ExposureGpuTest, ComposedCoverageRequiresValidOpaqueDepth)
   }
   if (capture) {
     EXPECT_TRUE(capture->EndCapture());
+  }
+}
+
+//! Volumetric fog composed over the sky: the certified scene error must
+//! contain the worst case of an FP16 volume in front of the sky radiance X,
+//! |dV.rgb| + X |dT| (plus the sky's own error, attenuated by T <= 1). Sky
+//! pixels that do not sample the volume keep the sky-only bound.
+NOLINT_TEST_F(ExposureGpuTest, SkyVolumetricFogBoundContainsTransmittanceError)
+{
+  // The tone probe's scene-certificate mode; every probe mode is distinct.
+  constexpr std::uint32_t kSceneCertificateProbe = 2097152U;
+  constexpr std::uint32_t kSkyUsage = 16U;
+  constexpr std::uint32_t kSkyVolumetricUsage = 512U;
+  constexpr std::uint32_t kInvalidSkyInput = 128U;
+  constexpr auto kSkyError = 1.0e-3F;
+  constexpr auto kFogRgbError = 2.0e-3F;
+  constexpr auto kFogTransmittanceError = 5.0e-4F;
+  constexpr auto kBackground = 40.0F;
+  struct Case {
+    const char* name;
+    std::uint32_t usage;
+    float background;
+    bool valid;
+    bool covers_volume;
+  };
+  const std::array cases {
+    Case { .name = "sky only",
+      .usage = kSkyUsage,
+      .background = 0.0F,
+      .valid = true,
+      .covers_volume = false },
+    Case { .name = "sky behind the volume",
+      .usage = kSkyUsage | kSkyVolumetricUsage,
+      .background = kBackground,
+      .valid = true,
+      .covers_volume = true },
+    Case { .name = "fog-only background behind the volume",
+      .usage = kSkyVolumetricUsage,
+      .background = kBackground,
+      .valid = true,
+      .covers_volume = true },
+    Case { .name = "invalid background",
+      .usage = kSkyUsage | kSkyVolumetricUsage | kInvalidSkyInput,
+      .background = 0.0F,
+      .valid = false,
+      .covers_volume = false },
+    Case { .name = "infinite background",
+      .usage = kSkyUsage | kSkyVolumetricUsage,
+      .background = std::numeric_limits<float>::infinity(),
+      .valid = false,
+      .covers_volume = false },
+  };
+  constexpr auto kSkyIndex = 0U;
+  constexpr auto kFogIndex = 2U;
+  constexpr auto kOpaqueTexels = 4U;
+  for (const auto& test : cases) {
+    SCOPED_TRACE(test.name);
+    auto status = ExposureStatusStorage {};
+    status.composition_input = {
+      .maximum_pre_exposed_rgb = 1.0F,
+      .flags = 1U,
+      .checked_pixels = kOpaqueTexels,
+    };
+    for (const auto index : { kSkyIndex, kFogIndex }) {
+      status.filter_gradients.at(index).flags = 1U;
+      status.filter_gradients.at(index).checked_texels = 1U;
+    }
+    status.producer_errors.at(kSkyIndex).rgb_absolute = kSkyError;
+    status.producer_errors.at(kFogIndex).rgb_absolute = kFogRgbError;
+    status.producer_errors.at(kFogIndex).transmittance_absolute
+      = kFogTransmittanceError;
+    status.consumer_inputs.flags = test.usage;
+    status.consumer_inputs.sky_rgb_gain_max = 1.0F;
+    status.product_reference_rgb_max = { 2.0F, 0.0F, 1.0F };
+    status.sky_volumetric_background_rgb_max = test.background;
+
+    std::array<std::array<std::uint32_t, 4>, 31> input {};
+    static_assert(sizeof(status) == 24U * sizeof(input.front()));
+    std::memcpy(input.data(), &status, sizeof(status));
+    constexpr std::array<std::uint32_t, 4> kUnitShape { 1U, 1U, 1U, 0U };
+    input.at(26) = kUnitShape;
+    input.at(28) = kUnitShape;
+    input.at(29) = {
+      std::bit_cast<std::uint32_t>(0.0F),
+      0U,
+      (1U << 4U) | (1U << 9U),
+      kOpaqueTexels,
+    };
+    input.at(30) = {
+      std::bit_cast<std::uint32_t>(1.0F),
+      std::bit_cast<std::uint32_t>(1.0F),
+      std::bit_cast<std::uint32_t>(100.0F),
+      std::bit_cast<std::uint32_t>(1.0F),
+    };
+    const auto records = RunToneProbe(
+      std::as_bytes(std::span { input }), 13U, kSceneCertificateProbe, false);
+    ASSERT_EQ(records.size(), 13U);
+    const auto& result = records.at(12);
+    EXPECT_EQ(result.at(4) == 1.0F, test.valid);
+    if (!test.valid) {
+      EXPECT_TRUE(std::isinf(result.at(1)));
+      continue;
+    }
+    const auto rgb_absolute = result.at(1);
+    const auto coverage_absolute = result.at(3);
+    EXPECT_GE(rgb_absolute, kSkyError);
+    const auto volume_error
+      = kFogRgbError + (kBackground * kFogTransmittanceError);
+    if (test.covers_volume) {
+      EXPECT_GE(rgb_absolute,
+        volume_error + ((test.usage & kSkyUsage) != 0U ? kSkyError : 0.0F));
+      EXPECT_GE(coverage_absolute, kFogTransmittanceError);
+    } else {
+      EXPECT_LT(rgb_absolute, volume_error);
+    }
   }
 }
 

@@ -263,6 +263,7 @@ static VolumetricLocalFogMedia EvaluateLocalFogVolumesForFroxel(
         || pass.local_fog1.tile_resolution_x == 0u
         || pass.local_fog1.tile_resolution_y == 0u
         || pass.local_fog1.max_instances_per_tile == 0u
+        || pass.local_fog2.tile_pixel_size == 0u
         || back_distance <= pass.local_fog1.global_start_distance_m)
     {
         return accumulated;
@@ -279,10 +280,15 @@ static VolumetricLocalFogMedia EvaluateLocalFogVolumesForFroxel(
         return accumulated;
     }
 
+    // Tiles are culled over view pixels, and the tile grid overhangs a view
+    // that is not a whole number of tiles: find the tile from the froxel's
+    // pixel position, as UE's VolumetricFog.usf does, not its UV.
     const uint2 tile_resolution = uint2(
         pass.local_fog1.tile_resolution_x, pass.local_fog1.tile_resolution_y);
+    const float2 view_pixel = saturate(screen_uv)
+        * float2(pass.local_fog2.view_width, pass.local_fog2.view_height);
     const uint2 tile_coord = min(
-        (uint2)floor(saturate(screen_uv) * float2(tile_resolution)),
+        (uint2)floor(view_pixel / float(pass.local_fog2.tile_pixel_size)),
         tile_resolution - 1u);
 
     StructuredBuffer<LocalFogVolumeInstanceData> instances

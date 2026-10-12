@@ -4,15 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <numbers>
 #include <optional>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -25,10 +28,15 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/Command.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
@@ -42,6 +50,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/Fog.h>
+#include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
@@ -50,8 +59,10 @@
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereView.h>
+#include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereComposePass.h>
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
+#include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 #include <Oxygen/Vortex/Environment/Passes/SkyPass.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -88,7 +99,7 @@ namespace {
       renderer_ = std::make_unique<Renderer>(GetGraphicsShared(), config,
         kPhase1DefaultRuntimeCapabilityFamilies
           | RendererCapabilityFamily::kEnvironmentLighting);
-      scene_ = std::make_unique<scene::Scene>("Atmosphere composition", 1U);
+      scene_ = std::make_shared<scene::Scene>("Atmosphere composition", 4U);
       scene_->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
       scene_->GetEnvironment()
         ->AddSystem<scene::environment::SkyAtmosphere>()
@@ -121,6 +132,8 @@ namespace {
       fog_.reset();
       sky_.reset();
       ap_.reset();
+      tile_args_.reset();
+      tiles_.reset();
       textures_.reset();
       scene_.reset();
       ExposureGpuTest::TearDown();
@@ -182,9 +195,14 @@ namespace {
       return { .texture = volume, .srv = RegisterTextureView(*volume) };
     }
 
+    //! Binds a fixed pre-exposure, or a resolved exposure frame and its
+    //! status buffer when `frame_exposure_slot` is valid.
     auto BindEnvironment(const EnvironmentStaticData& environment,
       const EnvironmentViewData& environment_view, ViewConstants::GpuData view,
-      float pre_exposure = 1.0F) -> void
+      float pre_exposure = 1.0F,
+      ShaderVisibleIndex frame_exposure_slot = kInvalidShaderVisibleIndex,
+      ShaderVisibleIndex exposure_status_uav = kInvalidShaderVisibleIndex)
+      -> void
     {
       auto scene_textures = SceneTextureBindings {};
       scene_textures.scene_depth_srv = depth_slot_;
@@ -198,10 +216,13 @@ namespace {
         = PublishFixtureData(scene_textures);
       view_bindings.environment_frame_slot
         = PublishFixtureData(environment_bindings);
-      view_bindings.frame_exposure_slot = PublishFixtureData(FrameExposureData {
-        .pre_exposure = pre_exposure,
-        .one_over_pre_exposure = 1.0F / pre_exposure,
-      });
+      view_bindings.frame_exposure_slot = frame_exposure_slot.IsValid()
+        ? frame_exposure_slot
+        : PublishFixtureData(FrameExposureData {
+            .pre_exposure = pre_exposure,
+            .one_over_pre_exposure = 1.0F / pre_exposure,
+          });
+      view_bindings.exposure_status_uav = exposure_status_uav;
       view.bindless_view_frame_bindings_slot = BindlessViewFrameBindingsSlot {
         PublishFixtureData(view_bindings),
       };
@@ -234,28 +255,112 @@ namespace {
       return ReadFloatTexture(textures_->GetSceneColor());
     }
 
-    auto DrawSky() -> std::vector<Pixel>
+    auto DrawSky(const ShaderVisibleIndex local_fog_constants
+      = kInvalidShaderVisibleIndex) -> std::vector<Pixel>
     {
       const auto state = SubmitCommands("Sky holdout regression",
         [&](graphics::CommandRecorder& recorder) -> auto {
-          return sky_->Record(ctx_, recorder, *textures_);
+          return sky_->Record(ctx_, recorder, *textures_, local_fog_constants);
         });
       EXPECT_TRUE(state.executed);
       return ReadFloatTexture(textures_->GetSceneColor());
     }
 
-    auto DrawFog() -> std::vector<Pixel>
+    auto DrawFog(const ShaderVisibleIndex local_fog_constants
+      = kInvalidShaderVisibleIndex) -> std::vector<Pixel>
     {
       const auto state = SubmitCommands("Fog holdout regression",
         [&](graphics::CommandRecorder& recorder) -> auto {
-          return fog_->Record(ctx_, recorder, *textures_);
+          return fog_->Record(ctx_, recorder, *textures_, local_fog_constants);
         });
       EXPECT_TRUE(state.executed);
       return ReadFloatTexture(textures_->GetSceneColor());
     }
 
-  private:
-    std::unique_ptr<scene::Scene> scene_;
+    auto DrawLocalFog(environment::LocalFogVolumeComposePass& compose,
+      const environment::internal::LocalFogVolumeState::ViewProducts& products)
+      -> std::vector<Pixel>
+    {
+      const auto state = SubmitCommands("Local fog compose reference",
+        [&](graphics::CommandRecorder& recorder) -> auto {
+          return compose.Record(ctx_, recorder, *textures_, products);
+        });
+      EXPECT_TRUE(state.executed);
+      return ReadFloatTexture(textures_->GetSceneColor());
+    }
+
+    //! One 1x1 tile listing local-fog instance zero, with the occupied-tile
+    //! list and indirect draw arguments the compose pass draws it with.
+    auto AddSingleTile(
+      environment::internal::LocalFogVolumeState::ViewProducts& products)
+      -> void
+    {
+      tiles_ = CreateRegisteredTexture({
+        .width = 1U,
+        .height = 1U,
+        .array_size = 2U,
+        .format = Format::kR32UInt,
+        .texture_type = TextureType::kTexture2DArray,
+        .is_shader_resource = true,
+        .initial_state = ResourceStates::kCommon,
+      });
+      // Slice zero holds the count; slice one, instance index zero. Each
+      // slice is its own subresource, at a placement-aligned offset.
+      constexpr auto kPlacement = std::size_t { 512U };
+      auto upload = CreateUploadBuffer(SizeBytes { 2U * kPlacement });
+      std::array<std::uint32_t, (2U * kPlacement) / sizeof(std::uint32_t)>
+        values {};
+      values.at(0) = 1U;
+      upload->Update(values.data(), sizeof(values), 0U);
+      {
+        auto recorder = AcquireRecorder("Local fog tile fixture upload");
+        EnsureTracked(*recorder, upload, ResourceStates::kGenericRead);
+        EnsureTracked(*recorder, tiles_, ResourceStates::kCommon);
+        recorder->RequireResourceState(*tiles_, ResourceStates::kCopyDest);
+        recorder->FlushBarriers();
+        for (std::uint32_t slice = 0U; slice < 2U; ++slice) {
+          recorder->CopyBufferToTexture(*upload,
+            {
+              .buffer_offset = slice * kPlacement,
+              .buffer_row_pitch = 256U,
+              .buffer_slice_pitch = 256U,
+              // The slice selects the subresource; the set spans one.
+              .dst_slice = { .width = 1U,
+                .height = 1U,
+                .depth = 1U,
+                .array_slice = slice },
+              .dst_subresources
+              = { .base_array_slice = slice, .num_array_slices = 1U },
+            },
+            *tiles_);
+        }
+        recorder->RequireResourceStateFinal(
+          *tiles_, ResourceStates::kShaderResource);
+      }
+      tile_args_ = CreateUploadBuffer(SizeBytes { 16U });
+      const std::array<std::uint32_t, 4> draw_args { 6U, 1U, 0U, 0U };
+      tile_args_->Update(draw_args.data(), sizeof(draw_args), 0U);
+      {
+        // An upload-heap buffer stays in the generic read state, which
+        // covers its use as indirect arguments.
+        auto recorder = AcquireRecorder("Local fog tile arguments");
+        EnsureTracked(*recorder, tile_args_, ResourceStates::kGenericRead);
+      }
+      products.tile_data_ready = true;
+      products.tile_data_texture_slot = RegisterTextureView(*tiles_);
+      products.occupied_tile_buffer_slot
+        = PublishFixtureData(std::uint32_t { 0U });
+      products.tile_resolution_x = 1U;
+      products.tile_resolution_y = 1U;
+      products.max_instances_per_tile = 1U;
+      products.occupied_tile_draw_args_buffer
+        = observer_ptr<const graphics::Buffer> { tile_args_.get() };
+    }
+
+    std::shared_ptr<scene::Scene> scene_;
+    std::shared_ptr<graphics::Texture> tiles_;
+    std::shared_ptr<graphics::Buffer> tile_args_;
+
     std::unique_ptr<SceneTextures> textures_;
     std::unique_ptr<environment::AtmosphereComposePass> ap_;
     std::unique_ptr<environment::SkyPass> sky_;
@@ -702,6 +807,331 @@ NOLINT_TEST_F(
       EXPECT_NEAR(held.at(channel), regenerated.at(channel), kPixelTolerance);
     }
   }
+}
+
+namespace {
+  //! Perspective view from the origin along +Y with +Z up, 90 degrees square.
+  auto MakeForwardView(const bool reverse_depth) -> ViewConstants::GpuData
+  {
+    constexpr auto kNear = 0.1F;
+    constexpr auto kFar = 1000.0F;
+    auto view = ViewConstants::GpuData {};
+    view.view_matrix = glm::lookAtRH(glm::vec3 { 0.0F },
+      glm::vec3 { 0.0F, 1.0F, 0.0F }, glm::vec3 { 0.0F, 0.0F, 1.0F });
+    view.projection_matrix
+      = glm::perspectiveRH_ZO(std::numbers::pi_v<float> / 2.0F, 1.0F,
+        reverse_depth ? kFar : kNear, reverse_depth ? kNear : kFar);
+    view.inverse_view_projection_matrix
+      = glm::inverse(view.projection_matrix * view.view_matrix);
+    view.reverse_z = reverse_depth ? 1U : 0U;
+    return view;
+  }
+
+  //! Device depth of the plane at `distance` along the view axis.
+  auto PlaneDepth(const ViewConstants::GpuData& view, const float distance)
+    -> float
+  {
+    const auto clip
+      = view.projection_matrix * glm::vec4 { 0.0F, 0.0F, -distance, 1.0F };
+    return clip.z / clip.w;
+  }
+
+  auto Scaled(const Pixel& value, const float scale) -> Pixel
+  {
+    return { value.at(0) * scale, value.at(1) * scale, value.at(2) * scale,
+      value.at(3) };
+  }
+} // namespace
+
+//! As UE's height fog pass does for far-depth pixels, the sky composes the
+//! whole integrated volumetric-fog column in front of the analytic height fog,
+//! which starts where the volume ends along each ray (its view-depth distance
+//! over the cosine to the view axis).
+NOLINT_TEST_F(
+  AtmosphereCompositionGpuTest, SkyComposesVolumetricFogInFrontOfHeightFog)
+{
+  constexpr Pixel kVolume { 0.125F, 0.25F, 0.375F, 0.5F };
+  constexpr Pixel kBackground { 0.5F, 0.25F, 0.75F, 0.25F };
+  constexpr auto kVolumeDistance = 50.0F;
+  constexpr auto kTolerance = 1.0e-5F;
+  // Corner pixel centers sit at NDC (+-2/3, +-2/3) of a 90-degree frustum.
+  const auto corner_ray_per_depth = std::sqrt(1.0F + (2.0F * 4.0F / 9.0F));
+  auto environment = EnvironmentStaticData {};
+  environment.fog.flags = kGpuFogFlagEnabled | kGpuFogFlagHeightFogEnabled
+    | kGpuFogFlagRenderInMainPass;
+  environment.fog.primary_density = 0.02F;
+  environment.fog.primary_height_falloff = 0.2F;
+  environment.fog.end_distance_m = 200.0F;
+  environment.fog.fog_inscattering_luminance_rgb = { 0.2F, 0.4F, 0.6F };
+  auto environment_view = EnvironmentViewData {};
+  environment_view.flags |= kEnvironmentViewFlagHeightFog;
+  const auto view = MakeForwardView(false);
+  for (const float pre_exposure : { 1.0F, 4.0F }) {
+    SCOPED_TRACE(::testing::Message() << "P=" << pre_exposure);
+    // Only the last slice, the whole column, may reach the sky.
+    const auto volume = MakeVolume(std::array<Pixel, 4> {
+      Pixel { 9.0F, 9.0F, 9.0F, 0.0F },
+      Pixel { 9.0F, 9.0F, 9.0F, 0.0F },
+      Pixel { 9.0F, 9.0F, 9.0F, 0.0F },
+      Scaled(kVolume, pre_exposure),
+    });
+    const auto background = Scaled(kBackground, pre_exposure);
+    const auto draw = [&](const EnvironmentStaticData& data) -> auto {
+      BindEnvironment(data, environment_view, view, pre_exposure);
+      Clear(background, 1.0F);
+      return DrawSky();
+    };
+    const auto analytic_from = [&](const float start) -> auto {
+      auto data = environment;
+      data.fog.start_distance_m = start;
+      return draw(data);
+    };
+    const auto full = analytic_from(0.0F);
+    const auto center_reference = analytic_from(kVolumeDistance);
+    const auto corner_reference
+      = analytic_from(kVolumeDistance * corner_ray_per_depth);
+    auto with_volume = environment;
+    with_volume.volumetric_fog.flags = kGpuVolumetricFogFlagEnabled
+      | kGpuVolumetricFogFlagIntegratedScatteringValid;
+    with_volume.volumetric_fog.integrated_light_scattering_srv
+      = volume.srv.get();
+    with_volume.volumetric_fog.distance_m = kVolumeDistance;
+    const auto actual = draw(with_volume);
+    ASSERT_EQ(actual.size(), kExtent * kExtent);
+    // The excluded range carries fog, so the exclusion is observable.
+    EXPECT_GT(std::abs(full.at(kCenterPixel).at(0)
+                - center_reference.at(kCenterPixel).at(0)),
+      0.01F * pre_exposure);
+    for (const auto& [pixel, reference] : {
+           std::pair { kCenterPixel, center_reference },
+           std::pair { 0U, corner_reference },
+         }) {
+      SCOPED_TRACE(::testing::Message() << "pixel=" << pixel);
+      const auto& got = actual.at(pixel);
+      const auto& analytic = reference.at(pixel);
+      for (std::size_t channel = 0; channel < 3U; ++channel) {
+        const auto expected = (kVolume.at(channel) * pre_exposure)
+          + (analytic.at(channel) * kVolume.at(3));
+        EXPECT_NEAR(got.at(channel), expected, kTolerance * pre_exposure);
+      }
+      // Coverage blends as 1-T over the background alpha: recover the
+      // analytic transmittance and attenuate it by the volume's.
+      const auto analytic_t
+        = (1.0F - analytic.at(3)) / (1.0F - kBackground.at(3));
+      const auto expected_t = analytic_t * kVolume.at(3);
+      EXPECT_NEAR(got.at(3), 1.0F - (expected_t * (1.0F - kBackground.at(3))),
+        kTolerance);
+    }
+  }
+}
+
+//! With local fog injected into volumetric fog, the fog and sky passes trace
+//! it beyond the volume and compose it behind the volume and in front of the
+//! height fog, as UE's height fog pass does. The compose pass, given a global
+//! start distance equal to the volume's, traces the same on-axis segment and
+//! is the reference.
+NOLINT_TEST_F(
+  AtmosphereCompositionGpuTest, InjectedLocalFogComposesBehindVolumetricFog)
+{
+  constexpr Pixel kVolume { 0.125F, 0.25F, 0.375F, 0.5F };
+  constexpr Pixel kBackground { 0.5F, 0.25F, 0.75F, 1.0F };
+  constexpr auto kVolumeDistance = 25.0F;
+  constexpr auto kSurfaceDistance = 50.0F;
+  constexpr auto kPreExposure = 2.0F;
+  constexpr auto kTolerance = 2.0e-5F;
+  constexpr auto kFarDepth = 0.0F;
+  console::Console console;
+  renderer_->RegisterConsoleBindings(observer_ptr { &console });
+  // The renderer reads its cvars through the console until unregistered.
+  const auto unregister_console = ScopeGuard(
+    [this]() noexcept -> void { renderer_->RegisterConsoleBindings({}); });
+  const auto set_start = [&](const char* meters) -> void {
+    EXPECT_EQ(
+      console
+        .Execute(
+          std::string { "vtx.local_fog.global_start_distance_m " } + meters)
+        .status,
+      console::ExecutionStatus::kOk);
+  };
+
+  // A sphere from 20 m to 40 m along the view axis, straddling the volume's
+  // 25 m distance.
+  auto node = scene_->CreateNode("Local fog behind the volume");
+  auto impl = node.GetImpl();
+  ASSERT_TRUE(impl.has_value());
+  auto& fog = impl->get().AddComponent<scene::environment::LocalFogVolume>();
+  fog.SetEnabled(true);
+  fog.SetFogAlbedo({ 0.0F, 0.0F, 0.0F });
+  fog.SetFogEmissive({ 1.0F, 0.5F, 0.25F });
+  fog.SetRadialFogExtinction(1.0F);
+  fog.SetHeightFogExtinction(1.0F);
+  fog.SetHeightFogFalloff(100.0F);
+  fog.SetHeightFogOffset(0.0F);
+  ASSERT_TRUE(node.GetTransform().SetLocalPosition({ 0.0F, 30.0F, 0.0F }));
+  ASSERT_TRUE(node.GetTransform().SetLocalScale(glm::vec3 { 2.0F }));
+  scene_->Update();
+
+  const auto view = MakeForwardView(true);
+  auto resolved_params = ResolvedView::Params {};
+  resolved_params.view_config.viewport = {
+    .width = static_cast<float>(kExtent),
+    .height = static_cast<float>(kExtent),
+  };
+  resolved_params.view_config.scissor = {
+    .right = static_cast<std::int32_t>(kExtent),
+    .bottom = static_cast<std::int32_t>(kExtent),
+  };
+  resolved_params.view_matrix = view.view_matrix;
+  resolved_params.proj_matrix = view.projection_matrix;
+  const auto resolved = ResolvedView { resolved_params };
+  ctx_.current_view.resolved_view = observer_ptr { &resolved };
+  ctx_.current_view.with_local_fog = true;
+
+  auto state = environment::internal::LocalFogVolumeState(*renderer_);
+  auto compose = environment::LocalFogVolumeComposePass(*renderer_);
+  state.OnFrameStart(frame::SequenceNumber { 1U }, frame::Slot { 0U });
+  compose.OnFrameStart(frame::SequenceNumber { 1U }, frame::Slot { 0U });
+  auto products = state.Prepare(ctx_);
+  ASSERT_TRUE(products.buffer_ready);
+  ASSERT_EQ(products.instance_count, 1U);
+  AddSingleTile(products);
+
+  const auto background = Scaled(kBackground, kPreExposure);
+  auto environment = EnvironmentStaticData {};
+  environment.fog.flags = kGpuFogFlagEnabled | kGpuFogFlagRenderInMainPass;
+  const auto environment_view = EnvironmentViewData {};
+
+  // Reference: local fog alone from the volume's distance, over black and
+  // over the background, gives its luminance and transmittance.
+  set_start("25");
+  BindEnvironment(environment, environment_view, view, kPreExposure);
+  Clear(Pixel {}, kFarDepth);
+  const auto luminance = DrawLocalFog(compose, products).at(kCenterPixel);
+  Clear(background, kFarDepth);
+  const auto over_background = DrawLocalFog(compose, products).at(kCenterPixel);
+  const auto local_t
+    = (over_background.at(0) - luminance.at(0)) / background.at(0);
+  ASSERT_GT(luminance.at(0), 0.0F);
+  ASSERT_LT(local_t, 1.0F);
+  // Tracing from the camera covers more of the sphere: the exclusion matters.
+  set_start("0");
+  Clear(Pixel {}, kFarDepth);
+  const auto whole = DrawLocalFog(compose, products).at(kCenterPixel);
+  EXPECT_GT(
+    whole.at(0) - luminance.at(0), 100.0F * kTolerance * luminance.at(0));
+
+  const auto volume = MakeVolume(std::array<Pixel, 2> {
+    Scaled(kVolume, kPreExposure),
+    Scaled(kVolume, kPreExposure),
+  });
+  environment.volumetric_fog.flags = kGpuVolumetricFogFlagEnabled
+    | kGpuVolumetricFogFlagIntegratedScatteringValid;
+  environment.volumetric_fog.integrated_light_scattering_srv = volume.srv.get();
+  environment.volumetric_fog.distance_m = kVolumeDistance;
+  BindEnvironment(environment, environment_view, view, kPreExposure);
+  const auto constants = compose.PublishConstants(ctx_, *textures_, products);
+  ASSERT_TRUE(constants.IsValid());
+  for (const bool sky : { false, true }) {
+    SCOPED_TRACE(::testing::Message() << "sky=" << sky);
+    Clear(background, sky ? kFarDepth : PlaneDepth(view, kSurfaceDistance));
+    const auto pixels = sky ? DrawSky(constants) : DrawFog(constants);
+    ASSERT_EQ(pixels.size(), kExtent * kExtent);
+    const auto& got = pixels.at(kCenterPixel);
+    for (std::size_t channel = 0; channel < 3U; ++channel) {
+      const auto expected = (kVolume.at(channel) * kPreExposure)
+        + ((luminance.at(channel) + (background.at(channel) * local_t))
+          * kVolume.at(3));
+      EXPECT_NEAR(got.at(channel), expected, kTolerance * expected);
+    }
+  }
+  ctx_.current_view.resolved_view.reset();
+}
+
+//! The sky records the scene-referred radiance behind the volumetric fog it
+//! composes, which bounds the error of the volume's transmittance in the scene
+//! certificate, and marks a non-finite background invalid.
+NOLINT_TEST_F(
+  AtmosphereCompositionGpuTest, SkyRecordsTheRadianceBehindVolumetricFog)
+{
+  pass_ = std::make_unique<postprocess::ExposurePass>(*renderer_);
+  auto settings = scene::ExposureSettings {};
+  settings.mode = engine::ExposureMode::kManual;
+  settings.manual_ev = -2.0F; // P = 4: the recorded maximum is scene referred.
+  const auto config = SharedConfig(settings);
+  const auto volume = MakeVolume(std::array<Pixel, 1> {
+    Pixel { 0.5F, 0.5F, 0.5F, 0.5F },
+  });
+  auto environment_view = EnvironmentViewData {};
+  environment_view.flags |= kEnvironmentViewFlagHeightFog;
+  const auto view = MakeForwardView(false);
+  struct Recorded {
+    std::vector<Pixel> pixels;
+    std::uint32_t flags { 0U };
+    float background_max { 0.0F };
+  };
+  const auto render
+    = [&](const float fog_scale, const bool with_volume) -> Recorded {
+    ctx_.frame_sequence = frame::SequenceNumber { ++sequence_ };
+    auto frame_inputs = postprocess::ExposurePass::FrameInputs {};
+    frame_inputs.use_fp32 = false;
+    const auto frame = SubmitCommands("Vortex Exposure Frame",
+      [&](graphics::CommandRecorder& recorder) -> auto {
+        return pass_->ResolveFrame(ctx_, recorder, config, frame_inputs);
+      });
+    EXPECT_NE(frame, nullptr);
+    ctx_.current_view.frame_exposure = frame;
+    auto environment = EnvironmentStaticData {};
+    environment.fog.flags = kGpuFogFlagEnabled | kGpuFogFlagHeightFogEnabled
+      | kGpuFogFlagRenderInMainPass;
+    environment.fog.primary_density = 0.02F;
+    environment.fog.primary_height_falloff = 0.2F;
+    environment.fog.end_distance_m = 200.0F;
+    environment.fog.fog_inscattering_luminance_rgb
+      = { 0.2F * fog_scale, 0.4F * fog_scale, 0.6F * fog_scale };
+    if (with_volume) {
+      // A zero distance keeps the analytic fog identical to the reference.
+      environment.volumetric_fog.flags = kGpuVolumetricFogFlagEnabled
+        | kGpuVolumetricFogFlagIntegratedScatteringValid;
+      environment.volumetric_fog.integrated_light_scattering_srv
+        = volume.srv.get();
+    }
+    BindEnvironment(environment, environment_view, view, 1.0F, frame->srv_index,
+      frame->current_state->status_uav_index);
+    Clear(Pixel {}, 1.0F);
+    const auto pixels = DrawSky();
+    const auto status = Read<ExposureStatusStorage>(
+      *frame->current_state->status_buffer, ResourceStates::kUnorderedAccess);
+    ctx_.current_view.frame_exposure.reset();
+    return {
+      .pixels = pixels,
+      .flags = status.consumer_inputs.flags,
+      .background_max = status.sky_volumetric_background_rgb_max,
+    };
+  };
+  constexpr std::uint32_t kSkyHeightFog = 256U;
+  constexpr std::uint32_t kSkyVolumetricFog = 512U;
+  constexpr std::uint32_t kInvalidSkyInput = 128U;
+  const auto reference = render(1.0F, false);
+  EXPECT_EQ(reference.flags & kSkyVolumetricFog, 0U);
+  EXPECT_EQ(reference.background_max, 0.0F);
+  // Over black, the reference sky is the pre-exposed analytic fog.
+  constexpr auto kPreExposure = 4.0F;
+  auto background_max = 0.0F;
+  for (const auto& pixel : reference.pixels) {
+    for (std::size_t channel = 0; channel < 3U; ++channel) {
+      background_max
+        = std::max(background_max, pixel.at(channel) / kPreExposure);
+    }
+  }
+  ASSERT_GT(background_max, 0.0F);
+  const auto actual = render(1.0F, true);
+  EXPECT_EQ(actual.flags & (kSkyHeightFog | kSkyVolumetricFog),
+    kSkyHeightFog | kSkyVolumetricFog);
+  EXPECT_EQ(actual.flags & kInvalidSkyInput, 0U);
+  EXPECT_NEAR(actual.background_max, background_max, background_max * 1.0e-6F);
+  const auto invalid = render(std::numeric_limits<float>::infinity(), true);
+  EXPECT_NE(invalid.flags & kInvalidSkyInput, 0U);
+  pass_.reset();
 }
 
 } // namespace oxygen::vortex::testing::exposure

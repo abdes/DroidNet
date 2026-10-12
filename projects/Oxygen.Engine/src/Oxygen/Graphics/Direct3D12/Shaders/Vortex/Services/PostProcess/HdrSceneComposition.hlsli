@@ -148,15 +148,21 @@ static float4 SceneComposeCertificate(SceneCompositionConstants pass,
         // bounding the additive opacity and the destination attenuation.
         coverage = float2(0.0, HdrUpperSum(ap.z, ap.w));
     }
-    if ((usage & 2u) != 0u && (pass.products & (1u << 9u)) != 0u) {
+    const bool fog_product = (pass.products & (1u << 9u)) != 0u;
+    const bool depth_fog = fog_product && (usage & 2u) != 0u;
+    const bool sky_fog = fog_product && (usage & 512u) != 0u;
+    if (depth_fog || sky_fog) {
         fog = SceneSampledProduct(status, 10u, pass.fog_shape, candidate, p, inverse_p);
         fog.xy = SceneBoundAtMaximum(fog.xy, product_maximum.z);
         fog.zw = SceneTransmittanceArithmetic(fog.zw);
         valid = valid && SceneBoundValid(fog.xy) && SceneBoundValid(fog.zw)
-            && HdrFiniteNonnegative(height_maximum) && HdrFiniteNonnegative(product_maximum.z);
-        // Depth-fog consumers exclude sky pixels; sky-only analytic fog uses
-        // its separate usage bit and never samples the volume. Height
-        // scattering and the opaque/AP background share volume attenuation.
+            && HdrFiniteNonnegative(product_maximum.z);
+    }
+    if (depth_fog) {
+        valid = valid && HdrFiniteNonnegative(height_maximum);
+        // Depth-fog consumers exclude sky pixels, which the sky branch
+        // fogs. Height scattering and the opaque/AP background share volume
+        // attenuation.
         const float background_maximum = HdrUpperSum(opaque_maximum,
             HdrUpperProduct(product_maximum.y, pass.ap_gain));
         const float attenuated_maximum = HdrUpperSum(background_maximum, height_maximum);
@@ -164,11 +170,24 @@ static float4 SceneComposeCertificate(SceneCompositionConstants pass,
         coverage.y = HdrUpperSum(coverage.y, HdrUpperSum(fog.z, fog.w));
     }
     // The visible sky is a disjoint branch. Its shared analytic fog attenuates
-    // sky-product error by T <= 1 and adds common FP32 scattering. A later nonnegative local-fog
+    // sky-product error by T <= 1 and adds common FP32 scattering. The
+    // integrated volumetric fog lies in front: it adds its scattering error
+    // and attenuates the sky radiance behind it, whose recorded maximum
+    // bounds the transmittance error. A later nonnegative local-fog
     // contribution cannot amplify the absolute error already in the image.
-    if ((usage & 16u) != 0u) {
-        rgb = SceneBoundUnion(rgb, SceneBoundGain(sky.xy, sky_gain));
-        coverage = float2(0.0, max(coverage.y, HdrUpperSum(sky.z, sky.w)));
+    if ((usage & 16u) != 0u || sky_fog) {
+        float2 sky_rgb = (usage & 16u) != 0u ? SceneBoundGain(sky.xy, sky_gain) : 0.0.xx;
+        float sky_coverage = (usage & 16u) != 0u ? HdrUpperSum(sky.z, sky.w) : 0.0;
+        if (sky_fog) {
+            const float background_maximum = asfloat(
+                status.Load(EXPOSURE_STATUS_SKY_VOLUMETRIC_BACKGROUND_RGB_MAX_OFFSET));
+            valid = valid && HdrFiniteNonnegative(background_maximum);
+            sky_rgb = SceneBoundSum(fog.xy,
+                SceneBoundAttenuate(sky_rgb, fog.zw, background_maximum));
+            sky_coverage = HdrUpperSum(sky_coverage, HdrUpperSum(fog.z, fog.w));
+        }
+        rgb = SceneBoundUnion(rgb, sky_rgb);
+        coverage = float2(0.0, max(coverage.y, sky_coverage));
     }
     if ((usage & 1u) != 0u) {
         valid = valid && HdrFiniteNonnegative(translucent_maximum);

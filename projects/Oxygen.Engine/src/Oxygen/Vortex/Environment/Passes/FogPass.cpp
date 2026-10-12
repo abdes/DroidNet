@@ -170,11 +170,23 @@ FogPass::FogPass(Renderer& renderer)
 
 FogPass::~FogPass() = default;
 
-auto FogPass::Record(RenderContext& ctx, graphics::CommandRecorder& recorder,
-  const SceneTextures& scene_textures) const -> RecordState
+auto FogPass::IsRequested(const RenderContext& ctx) const -> bool
 {
-  const auto requested = ctx.current_view.view_id != kInvalidViewId
+  return ctx.current_view.view_id != kInvalidViewId
     && ctx.current_view.with_height_fog && IsFogEnabled(ctx);
+}
+
+auto FogPass::WillExecute(const RenderContext& ctx) const -> bool
+{
+  return IsRequested(ctx)
+    && renderer_.HasCapability(RendererCapabilityFamily::kEnvironmentLighting);
+}
+
+auto FogPass::Record(RenderContext& ctx, graphics::CommandRecorder& recorder,
+  const SceneTextures& scene_textures,
+  const ShaderVisibleIndex local_fog_constants) const -> RecordState
+{
+  const auto requested = IsRequested(ctx);
   auto state = RecordState {
     .requested = requested,
     .executed = requested
@@ -230,7 +242,7 @@ auto FogPass::Record(RenderContext& ctx, graphics::CommandRecorder& recorder,
     0U);
   recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-    kInvalidShaderVisibleIndex.get(), 1U);
+    local_fog_constants.get(), 1U);
   recorder.Draw(3U, 1U, 0U, 0U);
   recorder.RequireResourceState(
     scene_textures.GetSceneColor(), graphics::ResourceStates::kRenderTarget);

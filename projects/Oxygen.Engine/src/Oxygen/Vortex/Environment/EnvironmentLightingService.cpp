@@ -1241,13 +1241,26 @@ auto EnvironmentLightingService::RenderSkyAndFog(RenderContext& ctx,
   const auto& local_fog_products
     = PrepareLocalFogForStage14(ctx, recorder, scene_textures);
   const auto local_fog_culling_state = pending_local_fog_culling_state_;
-  const auto sky_state = sky_->Render(ctx, recorder, scene_textures);
+  // Local fog injected into volumetric fog lies behind the volume, so the fog
+  // and sky passes trace it beyond the volume and compose it there, as UE's
+  // height fog pass does. Without that pass, as in UE, the compose pass
+  // renders local fog on its own.
+  const auto local_fog_in_volumetric_fog
+    = pending_volumetric_fog_state_.local_fog_injection_executed
+    && fog_->WillRender(ctx);
+  const auto local_fog_constants = local_fog_in_volumetric_fog
+    ? local_fog_compose_->PublishConstants(
+        ctx, scene_textures, local_fog_products)
+    : kInvalidShaderVisibleIndex;
+  const auto sky_state
+    = sky_->Render(ctx, recorder, scene_textures, local_fog_constants);
   const auto atmosphere_state
     = atmosphere_->Render(ctx, recorder, scene_textures);
-  const auto fog_state = fog_->Render(ctx, recorder, scene_textures);
+  const auto fog_state
+    = fog_->Render(ctx, recorder, scene_textures, local_fog_constants);
   auto local_fog_compose_state
     = environment::LocalFogVolumeComposePass::RecordState {};
-  if (!pending_volumetric_fog_state_.local_fog_injection_executed) {
+  if (!local_fog_in_volumetric_fog) {
     local_fog_compose_state = local_fog_compose_->Record(
       ctx, recorder, scene_textures, local_fog_products);
   }

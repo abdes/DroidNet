@@ -76,6 +76,35 @@ void CS(uint3 thread : SV_DispatchThreadID)
     if (thread.x >= pass.count) {
         return;
     }
+    if (pass.reserved == 2097152u) {
+        // One synthetic exposure status image (24 uint4), the scene
+        // composition constants (6 uint4) and the settings (P, 1/P, scene
+        // maximum, frame 1/P). The status is copied to the head of the
+        // output, which the certificate reads as its status buffer; the
+        // certificate and its validity follow at byte 384.
+        if (thread.x != 0u) {
+            return;
+        }
+        for (uint word = 0u; word < 24u; ++word) {
+            output.Store4(word * 16u, input[word]);
+        }
+        SceneCompositionConstants composition = (SceneCompositionConstants)0;
+        composition.flags = input[25].w;
+        composition.sky_shape = input[26];
+        composition.ap_shape = input[27];
+        composition.fog_shape = input[28];
+        composition.ap_gain = asfloat(input[29].x);
+        composition.arithmetic_steps = input[29].y;
+        composition.products = input[29].z;
+        composition.opaque_texels = input[29].w;
+        const float4 settings = asfloat(input[30]);
+        bool valid;
+        const float4 bound = SceneComposeCertificate(composition, output, false,
+            settings.x, settings.y, settings.z, settings.w, valid);
+        output.Store4(384u, asuint(bound));
+        output.Store4(400u, asuint(float4(valid ? 1.0 : 0.0, 0.0, 0.0, 0.0)));
+        return;
+    }
     if (pass.reserved == 1048576u) {
         // Foreground grading: (rgb, exposure), (saturation, contrast,
         // vignette intensity, gamma), (content uv, tone mapper, unused).

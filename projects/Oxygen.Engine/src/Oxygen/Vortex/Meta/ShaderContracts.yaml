@@ -362,7 +362,9 @@ files:
             type: uint
             doc: |-
               Translucency/height=1/2; invalid inputs=4/8; sky/opaque
-              AP/translucent AP consumers=16/32/64; invalid sky gain=128.
+              AP/translucent AP consumers=16/32/64; invalid sky gain or sky
+              background=128; sky analytic height fog=256; sky volumetric
+              fog=512.
           - { name: sky_rgb_gain_max, type: float }
 
       - name: ExposureStatusStorage
@@ -399,7 +401,12 @@ files:
             type: float3
             cpp: "std::array<float, 3>"
             doc: Scene-referred reference RGB maxima for sky, AP and fog, respectively.
-          - { name: product_range_reserved, type: uint }
+          - name: sky_volumetric_background_rgb_max
+            type: float
+            doc: |-
+              Scene-referred maximum of the sky radiance behind volumetric fog
+              (sky, sun disks and analytic height fog), which the integrated
+              fog transmittance attenuates.
 
   # --- Draw -------------------------------------------------------------------
   - id: draw
@@ -1719,9 +1726,11 @@ files:
         align: 16
         fields:
           - { name: max_density_into_volumetric_fog, type: float }
-          - { name: _pad0, type: float }
-          - { name: _pad1, type: float }
-          - { name: _pad2, type: float }
+          - name: tile_pixel_size
+            type: uint
+            doc: Pixel size of a local-fog tile; froxels look tiles up by pixel.
+          - { name: view_width, type: float }
+          - { name: view_height, type: float }
       - name: VolumetricFogHeightFogMediaControl0
         layout: structured
         size: 16

@@ -3493,6 +3493,18 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   EXPECT_FLOAT_EQ(static_data->volumetric_fog.grid_z_params.at(2), 32.0F);
   EXPECT_FLOAT_EQ(static_data->volumetric_fog.distance_m, 96000.0F);
   EXPECT_FLOAT_EQ(static_data->volumetric_fog.start_distance_m, 50.0F);
+  {
+    // UE's grid starts 9.5 cm past its near plane (NearOffset = .095 * 100,
+    // in centimetres), here the start distance, and ends at the distance.
+    const auto& z = static_data->volumetric_fog.grid_z_params;
+    const auto slice_depth = [&z](const double slice) -> double {
+      return (std::exp2(slice / static_cast<double>(z.at(2)))
+               - static_cast<double>(z.at(1)))
+        / static_cast<double>(z.at(0));
+    };
+    EXPECT_NEAR(slice_depth(0.0), 50.095, 50.095 * 1.0e-4);
+    EXPECT_NEAR(slice_depth(64.0), 96000.0, 96000.0 * 1.0e-4);
+  }
   EXPECT_TRUE(
     service.GetLastPublicationState().volumetric_fog_authored_enabled);
   EXPECT_TRUE(

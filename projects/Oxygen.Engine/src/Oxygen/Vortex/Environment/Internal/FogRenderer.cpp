@@ -18,11 +18,16 @@ FogRenderer::FogRenderer(Renderer& renderer)
 
 FogRenderer::~FogRenderer() = default;
 
-auto FogRenderer::Render(RenderContext& ctx,
-  graphics::CommandRecorder& recorder,
-  const SceneTextures& scene_textures) const -> RenderState
+auto FogRenderer::WillRender(const RenderContext& ctx) const -> bool
 {
-  return pass_->Record(ctx, recorder, scene_textures);
+  return pass_->WillExecute(ctx);
+}
+
+auto FogRenderer::Render(RenderContext& ctx,
+  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
+  const ShaderVisibleIndex local_fog_constants) const -> RenderState
+{
+  return pass_->Record(ctx, recorder, scene_textures, local_fog_constants);
 }
 
 } // namespace oxygen::vortex::environment

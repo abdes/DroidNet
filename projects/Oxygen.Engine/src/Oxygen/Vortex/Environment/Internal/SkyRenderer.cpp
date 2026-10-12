@@ -19,10 +19,10 @@ SkyRenderer::SkyRenderer(Renderer& renderer)
 SkyRenderer::~SkyRenderer() = default;
 
 auto SkyRenderer::Render(RenderContext& ctx,
-  graphics::CommandRecorder& recorder,
-  const SceneTextures& scene_textures) const -> RenderState
+  graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
+  const ShaderVisibleIndex local_fog_constants) const -> RenderState
 {
-  return pass_->Record(ctx, recorder, scene_textures);
+  return pass_->Record(ctx, recorder, scene_textures, local_fog_constants);
 }
 
 } // namespace oxygen::vortex::environment

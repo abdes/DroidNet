@@ -411,7 +411,13 @@ NOLINT_TEST_F(ExposureGpuTest, LocalFogInjectionMatchesMixedMediumIntegral)
         .max_instances_per_tile = 1,
         .global_start_distance_m = 0,
       };
-      params.local_fog2.max_density_into_volumetric_fog = 100;
+      // One tile covering a one-pixel view.
+      params.local_fog2 = {
+        .max_density_into_volumetric_fog = 100,
+        .tile_pixel_size = 1,
+        .view_width = 1,
+        .view_height = 1,
+      };
       params.light0_direction_enabled.at(2) = 1;
       params.light0_direction_enabled.at(3) = 1;
       std::ranges::fill(std::span { params.light0_illuminance_rgb }.first<3>(),

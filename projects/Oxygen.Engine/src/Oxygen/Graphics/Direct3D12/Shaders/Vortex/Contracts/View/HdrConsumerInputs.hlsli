@@ -17,6 +17,7 @@ static const uint HDR_CONSUMER_SKY = 16u;
 static const uint HDR_CONSUMER_OPAQUE_AP = 32u;
 static const uint HDR_CONSUMER_TRANSLUCENT_AP = 64u;
 static const uint HDR_CONSUMER_SKY_HEIGHT_FOG = 256u;
+static const uint HDR_CONSUMER_SKY_VOLUMETRIC_FOG = 512u;
 
 static void RecordHdrSceneSource(float3 scene_rgb, uint product)
 {
@@ -41,6 +42,28 @@ static void RecordHdrConsumerUsage(uint usage, float3 sky_gain = 1.0.xxx)
         status.InterlockedOr(EXPOSURE_STATUS_CONSUMER_INPUTS_FLAGS_OFFSET, flags, unused);
         if ((usage & HDR_CONSUMER_SKY) != 0u)
             status.InterlockedMax(EXPOSURE_STATUS_CONSUMER_INPUTS_SKY_RGB_GAIN_MAX_OFFSET, gain, unused);
+    }
+}
+
+// Records that sky pixels composed the integrated volumetric fog over
+// `background_rgb`, the scene-referred sky radiance its transmittance
+// attenuates. A non-finite or negative background invalidates the scene
+// certificate.
+static void RecordHdrSkyVolumetricBackground(float3 background_rgb)
+{
+    if (IsFp32OnlyExposure()) return;
+    const ViewFrameBindings bindings = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
+    if (bindings.exposure_status_uav == K_INVALID_BINDLESS_INDEX) return;
+    const bool valid = HdrFiniteNonnegative(background_rgb.x)
+        && HdrFiniteNonnegative(background_rgb.y) && HdrFiniteNonnegative(background_rgb.z);
+    const uint flags = WaveActiveBitOr(HDR_CONSUMER_SKY_VOLUMETRIC_FOG | (valid ? 0u : 128u));
+    const uint3 magnitude = asuint(background_rgb) & 0x7fffffffu.xxx;
+    const uint peak = WaveActiveMax(valid ? max(magnitude.x, max(magnitude.y, magnitude.z)) : 0u);
+    if (WaveIsFirstLane()) {
+        RWByteAddressBuffer status = ResourceDescriptorHeap[bindings.exposure_status_uav];
+        uint unused;
+        status.InterlockedOr(EXPOSURE_STATUS_CONSUMER_INPUTS_FLAGS_OFFSET, flags, unused);
+        status.InterlockedMax(EXPOSURE_STATUS_SKY_VOLUMETRIC_BACKGROUND_RGB_MAX_OFFSET, peak, unused);
     }
 }
 

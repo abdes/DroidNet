@@ -72,7 +72,11 @@ namespace {
   constexpr std::uint32_t kDepthResolution = 64U;
   constexpr float kDefaultVolumetricDistanceMeters = 100000.0F;
   constexpr float kUeVolumetricFogDepthDistributionScale = 32.0F;
-  constexpr float kUeFroxelNearOffsetMeters = 9.5F;
+  // UE's CalculateGridZParams (RenderUtils.h) spaces the first slice
+  // `NearOffset = .095 * 100` past the near plane. That is in UE units,
+  // centimetres: 9.5 cm, not 9.5 m. Vortex works in metres; a 9.5 m offset
+  // removes every froxel nearer than ~10 m.
+  constexpr float kUeFroxelNearOffsetMeters = 0.095F;
   constexpr float kUeVolumetricFogHistoryWeight = 0.9F;
   constexpr std::uint32_t kUeVolumetricFogMaxHistoryMissSamples = 16U;
   constexpr std::uint32_t kHaltonBaseX = 2U;
@@ -570,6 +574,11 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
       = renderer_.GetLocalFogGlobalStartDistanceMeters();
     constants.local_fog2.max_density_into_volumetric_fog
       = renderer_.GetLocalFogMaxDensityIntoVolumetricFog();
+    // Tiles are culled over view pixels, so a froxel finds its tile from its
+    // pixel position, as UE does; the tile grid may overhang the view.
+    constants.local_fog2.tile_pixel_size = renderer_.GetLocalFogTilePixelSize();
+    constants.local_fog2.view_width = resolved_view.Viewport().width;
+    constants.local_fog2.view_height = resolved_view.Viewport().height;
   }
   const auto light0 = internal::PackAtmosphereLight(
     stable_state.view_products.atmosphere_lights.at(0));

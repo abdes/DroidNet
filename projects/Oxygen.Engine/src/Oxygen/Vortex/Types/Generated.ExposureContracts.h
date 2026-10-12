@@ -262,7 +262,9 @@ struct alignas(16) HdrConsumerInputData {
   float translucent_rgb_max { 0.0F };
   float height_fog_rgb_max { 0.0F };
   //! Translucency/height=1/2; invalid inputs=4/8; sky/opaque
-  //! AP/translucent AP consumers=16/32/64; invalid sky gain=128.
+  //! AP/translucent AP consumers=16/32/64; invalid sky gain or sky
+  //! background=128; sky analytic height fog=256; sky volumetric
+  //! fog=512.
   std::uint32_t flags { 0U };
   float sky_rgb_gain_max { 0.0F };
 };
@@ -292,7 +294,10 @@ struct alignas(16) ExposureStatusStorage {
   HdrConsumerInputData consumer_inputs {};
   //! Scene-referred reference RGB maxima for sky, AP and fog, respectively.
   std::array<float, 3> product_reference_rgb_max {};
-  std::uint32_t product_range_reserved { 0U };
+  //! Scene-referred maximum of the sky radiance behind volumetric fog
+  //! (sky, sun disks and analytic height fog), which the integrated
+  //! fog transmittance attenuates.
+  float sky_volumetric_background_rgb_max { 0.0F };
 };
 
 static_assert(std::is_standard_layout_v<ExposureStatusStorage>);
@@ -309,6 +314,7 @@ static_assert(offsetof(ExposureStatusStorage, candidate_errors) == 304U);
 static_assert(offsetof(ExposureStatusStorage, consumer_inputs) == 352U);
 static_assert(
   offsetof(ExposureStatusStorage, product_reference_rgb_max) == 368U);
-static_assert(offsetof(ExposureStatusStorage, product_range_reserved) == 380U);
+static_assert(
+  offsetof(ExposureStatusStorage, sky_volumetric_background_rgb_max) == 380U);
 
 } // namespace oxygen::vortex

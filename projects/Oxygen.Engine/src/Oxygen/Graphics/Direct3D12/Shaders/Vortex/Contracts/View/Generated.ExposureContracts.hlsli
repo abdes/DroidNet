@@ -589,7 +589,9 @@ struct HdrConsumerInputData
     float translucent_rgb_max;
     float height_fog_rgb_max;
     // Translucency/height=1/2; invalid inputs=4/8; sky/opaque
-    // AP/translucent AP consumers=16/32/64; invalid sky gain=128.
+    // AP/translucent AP consumers=16/32/64; invalid sky gain or sky
+    // background=128; sky analytic height fog=256; sky volumetric
+    // fog=512.
     uint flags;
     float sky_rgb_gain_max;
 };
@@ -646,7 +648,10 @@ struct ExposureStatusStorage
     HdrConsumerInputData consumer_inputs;
     // Scene-referred reference RGB maxima for sky, AP and fog, respectively.
     float3 product_reference_rgb_max;
-    uint product_range_reserved;
+    // Scene-referred maximum of the sky radiance behind volumetric fog
+    // (sky, sun disks and analytic height fog), which the integrated
+    // fog transmittance attenuates.
+    float sky_volumetric_background_rgb_max;
 };
 
 // Byte offsets of ExposureStatusStorage in a byte-address buffer.
@@ -700,7 +705,7 @@ static const uint EXPOSURE_STATUS_CONSUMER_INPUTS_HEIGHT_FOG_RGB_MAX_OFFSET = 35
 static const uint EXPOSURE_STATUS_CONSUMER_INPUTS_FLAGS_OFFSET = 360u;
 static const uint EXPOSURE_STATUS_CONSUMER_INPUTS_SKY_RGB_GAIN_MAX_OFFSET = 364u;
 static const uint EXPOSURE_STATUS_PRODUCT_REFERENCE_RGB_MAX_OFFSET = 368u;
-static const uint EXPOSURE_STATUS_PRODUCT_RANGE_RESERVED_OFFSET = 380u;
+static const uint EXPOSURE_STATUS_SKY_VOLUMETRIC_BACKGROUND_RGB_MAX_OFFSET = 380u;
 
 static ExposureStatusStorage LoadExposureStatusStorage(ByteAddressBuffer buffer, uint base)
 {
@@ -720,7 +725,7 @@ static ExposureStatusStorage LoadExposureStatusStorage(ByteAddressBuffer buffer,
     value.candidate_errors[2] = LoadHdrErrorBoundsData(buffer, base + EXPOSURE_STATUS_CANDIDATE_ERRORS_OFFSET + 2u * EXPOSURE_STATUS_CANDIDATE_ERRORS_STRIDE);
     value.consumer_inputs = LoadHdrConsumerInputData(buffer, base + EXPOSURE_STATUS_CONSUMER_INPUTS_OFFSET);
     value.product_reference_rgb_max = asfloat(buffer.Load3(base + EXPOSURE_STATUS_PRODUCT_REFERENCE_RGB_MAX_OFFSET));
-    value.product_range_reserved = buffer.Load(base + EXPOSURE_STATUS_PRODUCT_RANGE_RESERVED_OFFSET);
+    value.sky_volumetric_background_rgb_max = asfloat(buffer.Load(base + EXPOSURE_STATUS_SKY_VOLUMETRIC_BACKGROUND_RGB_MAX_OFFSET));
     return value;
 }
 
@@ -742,7 +747,7 @@ static ExposureStatusStorage LoadExposureStatusStorage(RWByteAddressBuffer buffe
     value.candidate_errors[2] = LoadHdrErrorBoundsData(buffer, base + EXPOSURE_STATUS_CANDIDATE_ERRORS_OFFSET + 2u * EXPOSURE_STATUS_CANDIDATE_ERRORS_STRIDE);
     value.consumer_inputs = LoadHdrConsumerInputData(buffer, base + EXPOSURE_STATUS_CONSUMER_INPUTS_OFFSET);
     value.product_reference_rgb_max = asfloat(buffer.Load3(base + EXPOSURE_STATUS_PRODUCT_REFERENCE_RGB_MAX_OFFSET));
-    value.product_range_reserved = buffer.Load(base + EXPOSURE_STATUS_PRODUCT_RANGE_RESERVED_OFFSET);
+    value.sky_volumetric_background_rgb_max = asfloat(buffer.Load(base + EXPOSURE_STATUS_SKY_VOLUMETRIC_BACKGROUND_RGB_MAX_OFFSET));
     return value;
 }
 
@@ -763,7 +768,7 @@ static void StoreExposureStatusStorage(RWByteAddressBuffer buffer, uint base, Ex
     StoreHdrErrorBoundsData(buffer, base + EXPOSURE_STATUS_CANDIDATE_ERRORS_OFFSET + 2u * EXPOSURE_STATUS_CANDIDATE_ERRORS_STRIDE, value.candidate_errors[2]);
     StoreHdrConsumerInputData(buffer, base + EXPOSURE_STATUS_CONSUMER_INPUTS_OFFSET, value.consumer_inputs);
     buffer.Store3(base + EXPOSURE_STATUS_PRODUCT_REFERENCE_RGB_MAX_OFFSET, asuint(value.product_reference_rgb_max));
-    buffer.Store(base + EXPOSURE_STATUS_PRODUCT_RANGE_RESERVED_OFFSET, value.product_range_reserved);
+    buffer.Store(base + EXPOSURE_STATUS_SKY_VOLUMETRIC_BACKGROUND_RGB_MAX_OFFSET, asuint(value.sky_volumetric_background_rgb_max));
 }
 
 #endif // OXYGEN_GENERATED_VORTEX_CONTRACTS_VIEW_GENERATED_EXPOSURECONTRACTS_HLSLI

@@ -36,8 +36,9 @@ namespace environment {
     auto operator=(SkyRenderer&&) -> SkyRenderer& = delete;
 
     [[nodiscard]] OXGN_VRTX_API auto Render(RenderContext& ctx,
-      graphics::CommandRecorder& recorder,
-      const SceneTextures& scene_textures) const -> RenderState;
+      graphics::CommandRecorder& recorder, const SceneTextures& scene_textures,
+      ShaderVisibleIndex local_fog_constants = kInvalidShaderVisibleIndex) const
+      -> RenderState;
 
   private:
     std::unique_ptr<SkyPass> pass_;
