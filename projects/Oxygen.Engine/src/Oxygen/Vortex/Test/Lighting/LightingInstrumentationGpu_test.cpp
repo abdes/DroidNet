@@ -88,7 +88,8 @@ namespace {
     auto& diagnostics = renderer_->GetDiagnosticsService();
     diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
     diagnostics.SetGpuTimelineMaxScopesPerFrame(128U);
-    diagnostics.SetGpuTimelineRetainLatestFrame(true);
+    RendererPublicationProbe::GetGpuTimelineProfiler(*renderer_)
+      .SetRetainLatestFrame(true);
     diagnostics.SetGpuTimelineEnabled(true);
     ASSERT_TRUE(diagnostics.IsGpuTimelineEnabled());
 
@@ -180,11 +181,12 @@ namespace {
             return scope.display_name == "Vortex.Stage12.DeferredLighting";
           });
       EXPECT_EQ(deferred != gpu->scopes.end(), !forward);
-      const auto forward_base
+      // Base-pass sub-steps are diagnostic scopes, outside the timeline.
+      const auto base_pass
         = std::ranges::find_if(gpu->scopes, [](const auto& scope) -> bool {
-            return scope.display_name == "Vortex.Stage9.BasePass.Forward";
+            return scope.display_name == "Vortex.Stage9.BasePass";
           });
-      EXPECT_EQ(forward_base != gpu->scopes.end(), forward);
+      EXPECT_NE(base_pass, gpu->scopes.end());
       RecordProperty(forward ? "forward_cpu_records" : "deferred_cpu_records",
         cpu_report.at("records").get<unsigned>());
       RecordProperty(forward ? "forward_gpu_scopes" : "deferred_gpu_scopes",

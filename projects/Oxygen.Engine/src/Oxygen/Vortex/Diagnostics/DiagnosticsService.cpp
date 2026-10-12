@@ -5,18 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <cmath>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -27,7 +26,10 @@
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsCaptureManifest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/Diagnostics/GpuWorkSummary.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkSummarizer.h>
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineAccess.h>
 #include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
@@ -169,50 +171,7 @@ auto DiagnosticsService::AttachGpuTimelineCollector(
     return;
   }
   recorder.SetTelemetryCollector(observer_ptr<graphics::IGpuProfileCollector> {
-    gpu_timeline_enabled_requested_ && IsGpuTimelineFeatureEnabled()
-      ? gpu_timeline_profiler_.get()
-      : nullptr });
-}
-
-auto DiagnosticsService::RegisterIblTimingSink(
-  std::shared_ptr<internal::GpuTimelineSink> sink) -> void
-{
-  std::scoped_lock lock(mutex_);
-  CHECK_NOTNULL_F(gpu_timeline_profiler_);
-  gpu_timeline_profiler_->AddSink(std::move(sink));
-}
-
-auto DiagnosticsService::AcquireIblTiming() -> void
-{
-  std::scoped_lock lock(mutex_);
-  ++ibl_timing_owners_;
-  ApplyGpuTimelineEnabled();
-}
-
-auto DiagnosticsService::ReleaseIblTiming() -> void
-{
-  std::scoped_lock lock(mutex_);
-  CHECK_GT_F(ibl_timing_owners_, 0U);
-  --ibl_timing_owners_;
-  ApplyGpuTimelineEnabled();
-}
-
-auto DiagnosticsService::InvalidateIblTiming() noexcept -> void
-{
-  std::scoped_lock lock(mutex_);
-  if (gpu_timeline_profiler_)
-    gpu_timeline_profiler_->InvalidateCurrentFrame();
-}
-
-auto DiagnosticsService::AttachIblTimelineCollector(
-  graphics::CommandRecorder& recorder) const -> void
-{
-  std::scoped_lock lock(mutex_);
-  const auto queue = recorder.GetTargetQueue();
-  if (queue && queue->GetQueueRole() == graphics::QueueRole::kGraphics)
-    recorder.SetTelemetryCollector(
-      observer_ptr<graphics::IGpuProfileCollector> {
-        gpu_timeline_profiler_.get() });
+    IsViewerTimingEnabled() ? gpu_timeline_profiler_.get() : nullptr });
 }
 
 auto DiagnosticsService::SetGpuTimelineProfiler(
@@ -220,6 +179,12 @@ auto DiagnosticsService::SetGpuTimelineProfiler(
 {
   std::scoped_lock lock(mutex_);
   gpu_timeline_profiler_ = profiler;
+  if (gpu_timeline_profiler_ != nullptr) {
+    if (!gpu_work_summarizer_) {
+      gpu_work_summarizer_ = std::make_shared<internal::GpuWorkSummarizer>();
+    }
+    gpu_timeline_profiler_->AddSink(gpu_work_summarizer_);
+  }
   ApplyGpuTimelineEnabled();
   RefreshLedgerState();
 }
@@ -269,8 +234,7 @@ auto DiagnosticsService::SetGpuTimelineEnabled(const bool enabled) -> void
 auto DiagnosticsService::IsGpuTimelineEnabled() const -> bool
 {
   std::scoped_lock lock(mutex_);
-  return gpu_timeline_enabled_requested_ && gpu_timeline_profiler_ != nullptr
-    && IsGpuTimelineFeatureEnabled();
+  return IsUserTimingEnabled();
 }
 
 auto DiagnosticsService::SetGpuTimelineMaxScopesPerFrame(
@@ -282,13 +246,41 @@ auto DiagnosticsService::SetGpuTimelineMaxScopesPerFrame(
   }
 }
 
-auto DiagnosticsService::SetGpuTimelineRetainLatestFrame(
-  const bool retain_latest_frame) -> void
+auto DiagnosticsService::AcquireGpuTimeline() -> GpuTimelineLease
 {
   std::scoped_lock lock(mutex_);
-  if (gpu_timeline_profiler_ != nullptr) {
-    gpu_timeline_profiler_->SetRetainLatestFrame(retain_latest_frame);
+  if (!HasAllCapabilities(renderer_capabilities_,
+        RendererCapabilityFamily::kDiagnosticsAndProfiling)) {
+    return {};
   }
+  return AcquireLease(true);
+}
+
+auto DiagnosticsService::GetLatestGpuWorkSummary() const
+  -> std::shared_ptr<const GpuWorkSummary>
+{
+  std::scoped_lock lock(mutex_);
+  return viewer_timing_active_ && gpu_work_summarizer_
+    ? gpu_work_summarizer_->Latest()
+    : nullptr;
+}
+
+auto DiagnosticsService::AcquireLease(const bool viewer) -> GpuTimelineLease
+{
+  ++(viewer ? viewer_leases_ : production_leases_);
+  ApplyGpuTimelineEnabled();
+  RefreshLedgerState();
+  return GpuTimelineLease { observer_ptr { this }, viewer };
+}
+
+auto DiagnosticsService::ReleaseLease(const bool viewer) noexcept -> void
+{
+  std::scoped_lock lock(mutex_);
+  auto& count = viewer ? viewer_leases_ : production_leases_;
+  CHECK_GT_F(count, 0U);
+  --count;
+  ApplyGpuTimelineEnabled();
+  RefreshLedgerState();
 }
 
 auto DiagnosticsService::RequestGpuTimelineExport(
@@ -395,36 +387,6 @@ auto DiagnosticsService::GetLatestSnapshot() const -> DiagnosticsFrameSnapshot
   return frame_ledger_.GetLatestSnapshot();
 }
 
-auto DiagnosticsService::GetLatestIblGpuTiming() const
-  -> std::optional<IblGpuTiming>
-{
-  std::scoped_lock lock(mutex_);
-  // Internal budget feedback can omit capture LUTs when user timing is off.
-  if (!gpu_timeline_enabled_requested_ || !IsGpuTimelineFeatureEnabled()
-    || !gpu_timeline_profiler_)
-    return std::nullopt;
-  const auto frame = gpu_timeline_profiler_->GetLastPublishedFrame();
-  if (!frame || !frame->profiling_enabled || frame->overflowed
-    || frame->frame_sequence < complete_ibl_timing_from_)
-    return std::nullopt;
-  std::vector<std::pair<double, double>> intervals;
-  for (const auto& scope : frame->scopes) {
-    if (!scope.valid || !std::isfinite(scope.start_ms)
-      || !std::isfinite(scope.end_ms) || scope.end_ms < scope.start_ms)
-      return std::nullopt;
-    if (scope.display_name.starts_with("Vortex.Environment.IBL."))
-      intervals.emplace_back(scope.start_ms, scope.end_ms);
-  }
-  std::ranges::sort(intervals);
-  auto result = IblGpuTiming { .frame_sequence = frame->frame_sequence };
-  double end = -std::numeric_limits<double>::infinity();
-  for (const auto& [left, right] : intervals) {
-    result.producer_ms += std::max(0.0, right - std::max(left, end));
-    end = std::max(end, right);
-  }
-  return result;
-}
-
 auto DiagnosticsService::ComputeEffectiveFeatures() const noexcept
   -> DiagnosticsFeatureSet
 {
@@ -445,6 +407,18 @@ auto DiagnosticsService::IsGpuTimelineFeatureEnabled() const noexcept -> bool
   return HasAllFeatures(enabled_features_, DiagnosticsFeature::kGpuTimeline);
 }
 
+auto DiagnosticsService::IsUserTimingEnabled() const noexcept -> bool
+{
+  return gpu_timeline_profiler_ != nullptr && gpu_timeline_enabled_requested_
+    && IsGpuTimelineFeatureEnabled();
+}
+
+auto DiagnosticsService::IsViewerTimingEnabled() const noexcept -> bool
+{
+  return gpu_timeline_profiler_ != nullptr
+    && (IsUserTimingEnabled() || viewer_leases_ != 0U);
+}
+
 auto DiagnosticsService::HasAvailableGpuTimelineFrame() const -> bool
 {
   return gpu_timeline_profiler_ != nullptr
@@ -453,23 +427,26 @@ auto DiagnosticsService::HasAvailableGpuTimelineFrame() const -> bool
 
 auto DiagnosticsService::ApplyGpuTimelineEnabled() -> void
 {
-  const bool user_timing = gpu_timeline_profiler_ != nullptr
-    && gpu_timeline_enabled_requested_ && IsGpuTimelineFeatureEnabled();
-  if (user_timing && !complete_user_timing_active_)
-    complete_ibl_timing_from_ = current_frame_ + 1U;
-  complete_user_timing_active_ = user_timing;
+  const auto viewer_timing = IsViewerTimingEnabled();
+  if (gpu_work_summarizer_ && viewer_timing != viewer_timing_active_) {
+    // Frames already in flight were recorded without view collection.
+    if (viewer_timing) {
+      gpu_work_summarizer_->Activate(current_frame_ + 1U);
+    } else {
+      gpu_work_summarizer_->Deactivate();
+    }
+  }
+  viewer_timing_active_ = viewer_timing;
   if (gpu_timeline_profiler_ != nullptr) {
-    gpu_timeline_profiler_->SetEnabled(ibl_timing_owners_ != 0U || user_timing);
+    gpu_timeline_profiler_->SetEnabled(
+      production_leases_ != 0U || viewer_timing);
   }
 }
 
 auto DiagnosticsService::RefreshLedgerState() -> void
 {
   frame_ledger_.UpdateState(shader_debug_mode_, requested_features_,
-    enabled_features_,
-    gpu_timeline_enabled_requested_ && gpu_timeline_profiler_ != nullptr
-      && IsGpuTimelineFeatureEnabled(),
-    HasAvailableGpuTimelineFrame());
+    enabled_features_, IsUserTimingEnabled(), HasAvailableGpuTimelineFrame());
 }
 
 auto DiagnosticsService::ReportGpuTimelineIssue(
@@ -487,5 +464,69 @@ auto DiagnosticsService::ReportGpuTimelineIssue(
   issue.view_name = "frame:" + std::to_string(diagnostic.frame_sequence);
   frame_ledger_.ReportIssue(std::move(issue));
 }
+
+GpuTimelineLease::~GpuTimelineLease() { Release(); }
+
+GpuTimelineLease::GpuTimelineLease(GpuTimelineLease&& other) noexcept
+  : service_(std::exchange(other.service_, nullptr))
+  , viewer_(other.viewer_)
+{
+}
+
+auto GpuTimelineLease::operator=(GpuTimelineLease&& other) noexcept
+  -> GpuTimelineLease&
+{
+  if (this != &other) {
+    Release();
+    service_ = std::exchange(other.service_, nullptr);
+    viewer_ = other.viewer_;
+  }
+  return *this;
+}
+
+auto GpuTimelineLease::Release() noexcept -> void
+{
+  if (const auto service = std::exchange(service_, nullptr)) {
+    service->ReleaseLease(viewer_);
+  }
+}
+
+namespace internal {
+
+  auto GpuTimelineAccess::AcquireLease() const -> GpuTimelineLease
+  {
+    std::scoped_lock lock(service_->mutex_);
+    return service_->AcquireLease(false);
+  }
+
+  auto GpuTimelineAccess::AddSink(std::shared_ptr<GpuTimelineSink> sink) const
+    -> void
+  {
+    std::scoped_lock lock(service_->mutex_);
+    CHECK_NOTNULL_F(service_->gpu_timeline_profiler_);
+    service_->gpu_timeline_profiler_->AddSink(std::move(sink));
+  }
+
+  auto GpuTimelineAccess::AttachCollector(
+    graphics::CommandRecorder& recorder) const -> void
+  {
+    std::scoped_lock lock(service_->mutex_);
+    const auto queue = recorder.GetTargetQueue();
+    if (queue && queue->GetQueueRole() == graphics::QueueRole::kGraphics) {
+      recorder.SetTelemetryCollector(
+        observer_ptr<graphics::IGpuProfileCollector> {
+          service_->gpu_timeline_profiler_.get() });
+    }
+  }
+
+  auto GpuTimelineAccess::InvalidateCurrentFrame() const noexcept -> void
+  {
+    std::scoped_lock lock(service_->mutex_);
+    if (service_->gpu_timeline_profiler_) {
+      service_->gpu_timeline_profiler_->InvalidateCurrentFrame();
+    }
+  }
+
+} // namespace internal
 
 } // namespace oxygen::vortex

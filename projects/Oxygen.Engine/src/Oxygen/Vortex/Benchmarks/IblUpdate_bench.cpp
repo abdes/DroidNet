@@ -269,7 +269,6 @@ namespace {
       diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
       diagnostics.SetGpuTimelineMaxScopesPerFrame(
         scheduled ? kScheduledScopeCapacity : kImmediateScopeCapacity);
-      diagnostics.SetGpuTimelineRetainLatestFrame(false);
       diagnostics.SetGpuTimelineEnabled(true);
       const auto verbosity = loguru::g_global_verbosity;
       loguru::g_global_verbosity = loguru::Verbosity_WARNING;

@@ -55,12 +55,12 @@ auto RenderingSettingsService::SetGpuTimelineEnabled(const bool enabled) -> void
   diagnostics.SetGpuTimelineEnabled(enabled);
 }
 
-auto RenderingSettingsService::GetLatestIblGpuTiming() const
-  -> std::optional<vortex::IblGpuTiming>
+auto RenderingSettingsService::GetLatestGpuWorkSummary() const
+  -> std::shared_ptr<const vortex::GpuWorkSummary>
 {
   return vortex_renderer_
-    ? vortex_renderer_->GetDiagnosticsService().GetLatestIblGpuTiming()
-    : std::nullopt;
+    ? vortex_renderer_->GetDiagnosticsService().GetLatestGpuWorkSummary()
+    : nullptr;
 }
 
 namespace {

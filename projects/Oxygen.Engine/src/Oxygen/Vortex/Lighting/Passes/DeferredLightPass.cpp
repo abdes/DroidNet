@@ -47,6 +47,7 @@
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
@@ -778,7 +779,7 @@ auto DeferredLightPass::Record(RenderContext& ctx,
   // Owning labels are initialized once, even when GPU tracing is disabled.
   // The string-view constructor allocates before checking capture policy.
   static const auto kStageProfile = profiling::GpuProfileScopeDesc {
-    .label = "Vortex.Stage12.DeferredLighting",
+    .label = std::string(gpu_work::kDeferredLightingLabel),
     .granularity = profiling::ProfileGranularity::kTelemetry,
     .category = profiling::ProfileCategory::kPass,
   };

@@ -35,6 +35,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewConstantsGuard.h>
@@ -252,8 +253,8 @@ auto GroundGridPass::Record(RenderContext& ctx,
     state.executed = false;
     return state;
   }
-  graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage20.GroundGrid",
-    profiling::ProfileGranularity::kDiagnostic,
+  graphics::GpuEventScope pass_scope(recorder, gpu_work::kGroundGridLabel,
+    profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   auto& target_color
     = *target->GetDescriptor().color_attachments.front().texture;

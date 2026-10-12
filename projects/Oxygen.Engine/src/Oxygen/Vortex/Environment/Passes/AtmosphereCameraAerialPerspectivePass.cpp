@@ -39,6 +39,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereGpuPacking.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
@@ -382,7 +383,7 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
     = (depth + (kThreadGroupSizeZ - 1U)) / kThreadGroupSizeZ;
   {
     graphics::GpuEventScope pass_scope(recorder,
-      "Vortex.Environment.AtmosphereCameraAerialPerspective",
+      gpu_work::kAtmosphereCameraAerialPerspectiveLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     recorder.Dispatch(dispatch_x, dispatch_y, dispatch_z);

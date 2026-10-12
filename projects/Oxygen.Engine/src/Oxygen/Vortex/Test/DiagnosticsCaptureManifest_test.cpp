@@ -55,7 +55,6 @@ auto MakeSnapshot() -> DiagnosticsFrameSnapshot
     .inputs = { "Vortex.SceneColor", "Vortex.GBuffer" },
     .outputs = { "Vortex.SceneColor" },
     .missing_inputs = {},
-    .gpu_duration_ms = 0.25F,
   });
   snapshot.products.push_back(DiagnosticsProductRecord {
     .name = "Vortex.SceneColor",

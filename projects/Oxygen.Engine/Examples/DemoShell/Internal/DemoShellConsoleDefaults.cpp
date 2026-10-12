@@ -17,8 +17,6 @@ namespace oxygen::examples::internal {
 namespace {
 
   constexpr std::string_view kCVarRendererGpuTimestamps = "rndr.gpu_timestamps";
-  constexpr std::string_view kCVarRendererGpuTimestampViewer
-    = "rndr.gpu_timestamps.viewer";
 
   auto TryAddBoolDefault(console::Console& console,
     console::ConsoleStartupPlan& startup_plan, const std::string_view cvar_name,
@@ -38,8 +36,6 @@ auto ApplyDemoShellConsoleDefaults(console::Console& console) -> void
 {
   auto startup_plan = console::ConsoleStartupPlan {};
   TryAddBoolDefault(console, startup_plan, kCVarRendererGpuTimestamps, true);
-  TryAddBoolDefault(
-    console, startup_plan, kCVarRendererGpuTimestampViewer, true);
   console.ApplyStartupPlan(startup_plan);
 }
 

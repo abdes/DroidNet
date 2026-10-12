@@ -23,10 +23,12 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuValidation.h>
 #include <Oxygen/Vortex/Environment/Types/IblProductMetadata.h>
 #include <Oxygen/Vortex/Internal/GpuFeedback.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineAccess.h>
 #include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 
 namespace oxygen::vortex::environment::internal {
@@ -142,13 +144,13 @@ try {
   }
   const ScopeGuard timing([&] noexcept -> void {
     if (!accepted) {
-      diagnostics.InvalidateIblTiming();
+      vortex::internal::GpuTimelineAccess { diagnostics }
+        .InvalidateCurrentFrame();
     }
   });
   diagnostics.AttachGpuTimelineCollector(*recording);
   {
-    const graphics::GpuEventScope scope(*recording,
-      "Vortex.Diagnostics.IBL.Metadata",
+    const graphics::GpuEventScope scope(*recording, gpu_work::kIblMetadataLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kGeneral);
     if (!products.Attach(*recording, graphics_->GetResourceRegistry())
@@ -174,7 +176,7 @@ try {
   free->request = request;
   last_submitted_ = request;
 } catch (const std::exception&) {
-  diagnostics.InvalidateIblTiming();
+  vortex::internal::GpuTimelineAccess { diagnostics }.InvalidateCurrentFrame();
 }
 
 auto IblGpuValidation::Inspect(const IblGpuProducts& products,

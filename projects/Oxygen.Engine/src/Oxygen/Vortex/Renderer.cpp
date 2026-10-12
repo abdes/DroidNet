@@ -68,6 +68,7 @@
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
 #include <Oxygen/Vortex/Internal/CompositingPass.h>
 #include <Oxygen/Vortex/Internal/DeformationHistoryCache.h>
@@ -2172,7 +2173,8 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
     };
 
     for (const auto& task : payload.tasks) {
-      graphics::GpuEventScope task_scope(recorder, "Vortex.CompositingTask",
+      graphics::GpuEventScope task_scope(recorder,
+        gpu_work::kCompositingTaskLabel,
         profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kPass,
         profiling::Vars(
@@ -2283,7 +2285,8 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
       if (!overlay.record) {
         continue;
       }
-      graphics::GpuEventScope overlay_scope(recorder, "Vortex.SurfaceOverlay",
+      graphics::GpuEventScope overlay_scope(recorder,
+        gpu_work::kSurfaceOverlayLabel,
         profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kPass,
         profiling::Vars(profiling::Var("label", overlay.debug_name)));

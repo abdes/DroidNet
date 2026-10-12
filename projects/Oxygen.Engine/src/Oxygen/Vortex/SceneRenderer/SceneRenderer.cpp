@@ -93,6 +93,7 @@
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Diagnostics/Passes/GpuDebugPrimitivePass.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightTranslation.h>
@@ -1725,6 +1726,13 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
       }
       auto& recorder = *recording;
       renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(recorder);
+      // Groups the view's GPU work in the GPU work summary.
+      auto gpu_view_scope = std::optional<graphics::GpuEventScope> {};
+      gpu_view_scope.emplace(recorder, gpu_work::kViewLabel,
+        profiling::ProfileGranularity::kTelemetry,
+        profiling::ProfileCategory::kPass,
+        profiling::Vars(profiling::Var("view", entry.view_id.get()),
+          profiling::Var("name", entry.debug_name)));
       recorder.OnSubmission(
         [this](const graphics::SubmissionOutcome outcome) -> void {
           if (outcome != graphics::SubmissionOutcome::kSubmitted) {
@@ -1757,7 +1765,8 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
         }
 
         graphics::GpuEventScope consume_scope(recorder,
-          "Vortex.AuxView.Consume", profiling::ProfileGranularity::kTelemetry,
+          gpu_work::kAuxViewConsumeLabel,
+          profiling::ProfileGranularity::kTelemetry,
           profiling::ProfileCategory::kPass,
           profiling::Vars(profiling::Var("aux_id", input.input.id.get()),
             profiling::Var("producer_view", input.producer_view_id.get()),
@@ -1793,6 +1802,7 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
         continue;
       }
       renderer_.DispatchViewExtensionsOnPostRenderViewGpu(ctx, recorder);
+      gpu_view_scope.reset();
       result.failure = ViewRenderFailure::kSubmission;
       if (!recording.Submit()) {
         LogViewRejection(entry.view_id, "submission failed");
@@ -1950,6 +1960,15 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
     }
     auto& recorder = *recording;
     renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(recorder);
+    auto gpu_view_scope = std::optional<graphics::GpuEventScope> {};
+    gpu_view_scope.emplace(recorder, gpu_work::kViewLabel,
+      profiling::ProfileGranularity::kTelemetry,
+      profiling::ProfileCategory::kPass,
+      profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get()),
+        profiling::Var("name",
+          ctx.current_view.composition_view != nullptr
+            ? ctx.current_view.composition_view->name
+            : std::string_view {})));
     recorder.OnSubmission(
       [this](const graphics::SubmissionOutcome outcome) -> void {
         if (outcome != graphics::SubmissionOutcome::kSubmitted) {
@@ -1967,6 +1986,7 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
       ResetPerViewSceneProducts();
       return false;
     }
+    gpu_view_scope.reset();
     result.failure = ViewRenderFailure::kSubmission;
     if (!recording.Submit()) {
       LogViewRejection(ctx.current_view.view_id, "submission failed");
@@ -1996,7 +2016,7 @@ auto SceneRenderer::RenderDepthPrepass(RenderContext& ctx,
 {
   const auto prepass = depth_prepass_ != nullptr && wants_depth_prepass
     && ctx.current_view.depth_prepass_mode != DepthPrePassMode::kDisabled;
-  graphics::GpuEventScope stage_scope(recorder, "Vortex.Stage3.DepthPrepass",
+  graphics::GpuEventScope stage_scope(recorder, gpu_work::kDepthPrepassLabel,
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   ctx.current_view.draw_visibility = {};
@@ -2151,7 +2171,6 @@ auto SceneRenderer::RenderCurrentView(
       .missing_inputs = ctx.current_view.prepared_frame == nullptr
         ? std::initializer_list<std::string> { "PreparedSceneFrame" }
         : std::initializer_list<std::string> {},
-      .gpu_duration_ms = {},
     });
   if (diagnostics_only_variant) {
     RecordDiagnosticsPass(renderer_,
@@ -2162,7 +2181,6 @@ auto SceneRenderer::RenderCurrentView(
         .inputs = {},
         .outputs = { "Vortex.DiagnosticsLedger" },
         .missing_inputs = {},
-        .gpu_duration_ms = {},
       });
     RecordDiagnosticsProduct(renderer_,
       DiagnosticsProductRecord {
@@ -2231,7 +2249,6 @@ auto SceneRenderer::RenderCurrentView(
         .inputs = { "FrameLightSelection" },
         .outputs = { "Vortex.LightingFrameBindings" },
         .missing_inputs = {},
-        .gpu_duration_ms = {},
       });
     RecordDiagnosticsViewProduct(renderer_, "Vortex.LightingFrameBindings",
       "Vortex.Stage6.ForwardLightData",
@@ -2250,7 +2267,6 @@ auto SceneRenderer::RenderCurrentView(
         .inputs = { "Vortex.PreparedSceneFrame" },
         .outputs = { "Vortex.OcclusionFrameResults" },
         .missing_inputs = {},
-        .gpu_duration_ms = {},
       });
     RecordDiagnosticsProduct(renderer_,
       DiagnosticsProductRecord {
@@ -2275,7 +2291,6 @@ auto SceneRenderer::RenderCurrentView(
             "Vortex.PartialDepth", }
         : std::initializer_list<std::string> {},
       .missing_inputs = {},
-      .gpu_duration_ms = {},
     });
   if (ctx.current_view.depth_prepass_completeness
     == DepthPrePassCompleteness::kComplete) {
@@ -2362,7 +2377,6 @@ auto SceneRenderer::RenderCurrentView(
           && !ctx.current_view.scene_depth_product_valid
         ? std::initializer_list<std::string> { "Vortex.SceneDepth" }
         : std::initializer_list<std::string> {},
-      .gpu_duration_ms = {},
     });
   RecordDiagnosticsViewProduct(renderer_, "Vortex.ScreenHzb",
     "Vortex.Stage5.ScreenHzbBuild",
@@ -2456,7 +2470,6 @@ auto SceneRenderer::RenderCurrentView(
         .inputs = { "FrameShadowInputs" },
         .outputs = { "Vortex.ShadowFrameBindings" },
         .missing_inputs = {},
-        .gpu_duration_ms = {},
       });
     RecordDiagnosticsViewProduct(renderer_, "Vortex.ShadowFrameBindings",
       "Vortex.Stage8.ShadowDepth",
@@ -2563,7 +2576,6 @@ auto SceneRenderer::RenderCurrentView(
         : std::initializer_list<std::string> { "Vortex.PreparedSceneFrame" },
       .outputs = std::move(base_pass_outputs),
       .missing_inputs = {},
-      .gpu_duration_ms = {},
     });
   if (base_pass_wrote_scene_color) {
     RecordDiagnosticsProduct(renderer_,
@@ -2627,7 +2639,6 @@ auto SceneRenderer::RenderCurrentView(
         ? std::initializer_list<std::string> { "Vortex.SceneColor" }
         : std::initializer_list<std::string> {},
       .missing_inputs = {},
-      .gpu_duration_ms = {},
     });
 
   // Stage 13: deferred surface indirect lighting. Forward surfaces already
@@ -2652,7 +2663,6 @@ auto SceneRenderer::RenderCurrentView(
       .inputs = { "Vortex.GBuffer", "Vortex.EnvironmentFrameBindings" },
       .outputs = { "Vortex.SceneColor" },
       .missing_inputs = {},
-      .gpu_duration_ms = {},
     });
 
   // Stage 14: reserved - EnvironmentLightingService volumetrics
@@ -2766,7 +2776,6 @@ auto SceneRenderer::RenderCurrentView(
           "Vortex.ShadowFrameBindings", },
         .outputs = { "Vortex.Environment.IntegratedLightScattering" },
         .missing_inputs = {},
-        .gpu_duration_ms = {},
       });
     RecordDiagnosticsProduct(renderer_,
       DiagnosticsProductRecord {
@@ -2788,7 +2797,6 @@ auto SceneRenderer::RenderCurrentView(
           "Vortex.Environment.IntegratedLightScattering", },
         .outputs = { "Vortex.SceneColor" },
         .missing_inputs = {},
-        .gpu_duration_ms = {},
       });
   }
 
@@ -2815,7 +2823,6 @@ auto SceneRenderer::RenderCurrentView(
         : std::initializer_list<std::string> {},
       .missing_inputs = TranslucencyMissingInputs(
         translucency_result, translucency_ != nullptr),
-      .gpu_duration_ms = {},
     });
   RecordDiagnosticsProduct(renderer_,
     DiagnosticsProductRecord {
@@ -2847,7 +2854,6 @@ auto SceneRenderer::RenderCurrentView(
           "Vortex.PreparedSceneFrame", },
         .outputs = { "Vortex.SceneColor" },
         .missing_inputs = {},
-        .gpu_duration_ms = {},
       });
   };
 
@@ -2972,7 +2978,6 @@ auto SceneRenderer::RenderCurrentView(
       = wants_resolve && !scene_texture_extracts_.resolved_scene_color.valid
         ? std::initializer_list<std::string> { "Vortex.SceneColor" }
         : std::initializer_list<std::string> {},
-      .gpu_duration_ms = {},
     });
   if (scene_texture_extracts_.resolved_scene_color.valid
     && scene_texture_extracts_.resolved_scene_color.texture != nullptr) {
@@ -3054,7 +3059,6 @@ auto SceneRenderer::RenderCurrentView(
           "Vortex.SceneDepth", },
         .outputs = { "Vortex.PostProcessFrameBindings" },
         .missing_inputs = {},
-        .gpu_duration_ms = {},
       });
     RecordDiagnosticsViewProduct(renderer_, "Vortex.PostProcessFrameBindings",
       "Vortex.Stage22.PostProcess", post_process_slot);
@@ -3082,7 +3086,6 @@ auto SceneRenderer::RenderCurrentView(
         .inputs = { "Vortex.SceneColor" },
         .outputs = { "Vortex.SceneColor" },
         .missing_inputs = {},
-        .gpu_duration_ms = {},
       });
   }
 
@@ -3116,7 +3119,6 @@ auto SceneRenderer::RenderCurrentView(
           .inputs = { "Vortex.PreparedSceneFrame", "Vortex.SceneDepth" },
           .outputs = { "Vortex.ViewOutput" },
           .missing_inputs = {},
-          .gpu_duration_ms = {},
         });
     }
   }
@@ -3147,7 +3149,6 @@ auto SceneRenderer::RenderCurrentView(
           .inputs = { "Vortex.SceneDepth" },
           .outputs = { "Vortex.ViewOutput" },
           .missing_inputs = {},
-          .gpu_duration_ms = {},
         });
     }
   }
@@ -3166,7 +3167,6 @@ auto SceneRenderer::RenderCurrentView(
             .inputs = { "Vortex.GpuDebugLines" },
             .outputs = { "Vortex.ViewOutput" },
             .missing_inputs = {},
-            .gpu_duration_ms = {},
           });
       }
     }
@@ -3774,10 +3774,11 @@ auto SceneRenderer::RenderDebugVisualization(RenderContext& ctx,
   }
 
   graphics::GpuEventScope debug_scope(recorder,
-    fmt::format(
-      "Vortex.DebugVisualization.{}", GetDeferredDebugVisualizationName(mode)),
-    profiling::ProfileGranularity::kDiagnostic,
-    profiling::ProfileCategory::kPass);
+    gpu_work::kDebugVisualizationLabel,
+    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileCategory::kPass,
+    profiling::Vars(
+      profiling::Var("mode", GetDeferredDebugVisualizationName(mode))));
 
   RequireKnownPersistentState(recorder, scene_textures.GetSceneColor());
   if (requires_scene_depth) {

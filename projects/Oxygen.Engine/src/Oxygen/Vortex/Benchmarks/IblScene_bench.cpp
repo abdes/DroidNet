@@ -178,7 +178,6 @@ namespace {
       diagnostics.SetHdrPrecisionControl(HdrPrecisionControl::kProduction);
       diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
       diagnostics.SetGpuTimelineMaxScopesPerFrame(2048U);
-      diagnostics.SetGpuTimelineRetainLatestFrame(false);
       diagnostics.SetGpuTimelineEnabled(true);
       auto cpu = std::ofstream(directory / "frames.csv");
       cpu << "frame_seq,cpu_frame_ms,revision,source_age,completion_frames,"

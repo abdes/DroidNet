@@ -28,6 +28,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/Passes/RenderPass.h>
@@ -219,8 +220,8 @@ auto ViewOverlayPass::Record(RenderContext& ctx,
     return 0U;
   }
 
-  graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage20.ViewOverlay",
-    profiling::ProfileGranularity::kDiagnostic,
+  graphics::GpuEventScope pass_scope(recorder, gpu_work::kViewOverlayLabel,
+    profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   const auto root_constants
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);

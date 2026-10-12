@@ -7,7 +7,7 @@
 #pragma once
 
 #include <atomic>
-#include <optional>
+#include <memory>
 
 #include "DemoShell/Runtime/RendererUiTypes.h"
 #include "DemoShell/Services/DomainService.h"
@@ -17,6 +17,7 @@
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/Diagnostics/GpuWorkSummary.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 
 namespace oxygen::vortex {
@@ -56,8 +57,8 @@ public:
   [[nodiscard]] virtual auto GetFrameDiagnosticsEnabled() const -> bool;
   virtual auto SetFrameDiagnosticsEnabled(bool enabled) -> void;
   virtual auto SetGpuTimelineEnabled(bool enabled) -> void;
-  [[nodiscard]] virtual auto GetLatestIblGpuTiming() const
-    -> std::optional<vortex::IblGpuTiming>;
+  [[nodiscard]] virtual auto GetLatestGpuWorkSummary() const
+    -> std::shared_ptr<const vortex::GpuWorkSummary>;
 
   //! Returns the persisted render mode.
   [[nodiscard]] virtual auto GetRenderMode() const -> vortex::RenderMode;

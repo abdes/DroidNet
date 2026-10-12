@@ -56,11 +56,13 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/IblWorkBudget.h>
 #include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
 #include <Oxygen/Vortex/Environment/Types/IblProductMetadata.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineAccess.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
@@ -506,7 +508,7 @@ auto IblGpuDispatch::CanShareBatchWith(
 struct IblGpuProcessor::Impl {
   observer_ptr<Graphics> graphics;
   std::shared_ptr<ProductPool> pool;
-  observer_ptr<DiagnosticsService> diagnostics { nullptr };
+  std::optional<vortex::internal::GpuTimelineAccess> timeline;
   std::shared_ptr<IblWorkBudget> budget;
   frame::SequenceNumber timing_frame;
 };
@@ -534,7 +536,7 @@ IblGpuProcessor::IblGpuProcessor(
   Renderer& renderer, const std::uint32_t capacity)
   : IblGpuProcessor(*renderer.GetGraphics(), capacity)
 {
-  impl_->diagnostics = observer_ptr { &renderer.GetDiagnosticsService() };
+  impl_->timeline.emplace(renderer.GetDiagnosticsService());
 }
 
 auto IblGpuProcessor::Close() noexcept -> void
@@ -874,8 +876,8 @@ try {
       if (impl_->budget) {
         impl_->budget->Reject(impl_->timing_frame);
       }
-      if (impl_->diagnostics) {
-        impl_->diagnostics->InvalidateIblTiming();
+      if (impl_->timeline) {
+        impl_->timeline->InvalidateCurrentFrame();
       }
     }
   });
@@ -886,14 +888,13 @@ try {
     return std::unexpected(IblProcessError::kRecordingFailed);
   }
   auto& recorder = *recording;
-  if (impl_->diagnostics) {
-    impl_->diagnostics->AttachIblTimelineCollector(recorder);
+  if (impl_->timeline) {
+    impl_->timeline->AttachCollector(recorder);
   }
   AttachVersion(recorder, job->version);
   {
     const graphics::GpuEventScope total_scope(recorder,
-      "Vortex.Environment.IBL.Process",
-      profiling::ProfileGranularity::kTelemetry,
+      gpu_work::kIblProcessLabel, profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute);
     recorder.RecordDependency(job->products->brdf->producer);
     if (job->previous_submission.IsValid()) {

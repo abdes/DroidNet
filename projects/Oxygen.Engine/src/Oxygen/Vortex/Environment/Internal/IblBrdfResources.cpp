@@ -10,6 +10,7 @@
 #include <expected>
 #include <memory>
 #include <new>
+#include <optional>
 #include <span>
 #include <utility>
 
@@ -30,8 +31,10 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/Internal/IblBrdfLookup.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineAccess.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Upload/ImmutableTextureUpload.h>
 #include <Oxygen/Vortex/Upload/Types.h>
@@ -53,7 +56,7 @@ IblBrdfResources::IblBrdfResources(Graphics& graphics)
 IblBrdfResources::IblBrdfResources(Renderer& renderer)
   : graphics_(*renderer.GetGraphics())
   , uploads_(&renderer.GetUploadCoordinator())
-  , diagnostics_(&renderer.GetDiagnosticsService())
+  , timeline_(std::in_place, renderer.GetDiagnosticsService())
 {
 }
 
@@ -124,16 +127,16 @@ auto IblBrdfResources::Prepare()
     }
     bool accepted = false;
     const ScopeGuard timing([&] noexcept -> void {
-      if (!accepted && diagnostics_) {
-        diagnostics_->InvalidateIblTiming();
+      if (!accepted && timeline_) {
+        timeline_->InvalidateCurrentFrame();
       }
     });
-    if (diagnostics_) {
-      diagnostics_->AttachIblTimelineCollector(*recording);
+    if (timeline_) {
+      timeline_->AttachCollector(*recording);
     }
     {
       const graphics::GpuEventScope upload_scope(*recording,
-        "Vortex.Environment.IBL.BrdfUpload",
+        gpu_work::kIblBrdfUploadLabel,
         profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kUpload);
       if (!prepared->Record(*recording)) {

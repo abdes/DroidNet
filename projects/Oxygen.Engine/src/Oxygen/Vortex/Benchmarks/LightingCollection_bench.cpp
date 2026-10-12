@@ -243,7 +243,6 @@ namespace {
     auto& diagnostics = renderer_->GetDiagnosticsService();
     diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
     diagnostics.SetGpuTimelineMaxScopesPerFrame(kGpuScopeCapacity);
-    diagnostics.SetGpuTimelineRetainLatestFrame(false);
     diagnostics.SetGpuTimelineEnabled(true);
     ASSERT_TRUE(diagnostics.IsGpuTimelineEnabled());
     const auto directory = std::filesystem::path { OXYGEN_EXPOSURE_WORKSPACE }

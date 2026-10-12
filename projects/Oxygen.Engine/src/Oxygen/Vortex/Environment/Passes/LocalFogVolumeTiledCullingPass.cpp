@@ -38,6 +38,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
@@ -560,7 +561,7 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
     constants_alloc->srv.get(), 1U);
 
   graphics::GpuEventScope pass_scope(recorder,
-    "Vortex.Stage14.LocalFogTiledCulling",
+    gpu_work::kLocalFogTiledCullingLabel,
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   const auto dispatch_x = std::max(

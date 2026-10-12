@@ -25,6 +25,7 @@
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/ViewConstantsGuard.h>
@@ -211,7 +212,7 @@ auto FogPass::Record(RenderContext& ctx, graphics::CommandRecorder& recorder,
     state.executed = false;
     return state;
   }
-  graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage15.Fog",
+  graphics::GpuEventScope pass_scope(recorder, gpu_work::kFogLabel,
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   TrackTextureFromKnownOrInitial(recorder, scene_textures.GetSceneColor());

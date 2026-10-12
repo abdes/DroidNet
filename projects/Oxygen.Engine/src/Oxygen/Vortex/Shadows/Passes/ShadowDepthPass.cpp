@@ -55,6 +55,7 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/TextureViews.h>
@@ -518,7 +519,7 @@ auto ShadowDepthPass::RecordSlices(const PreparedViewShadowInput& view_input,
   }
 
   {
-    graphics::GpuEventScope stage_scope(*recorder, "Vortex.Stage8.ShadowDepths",
+    graphics::GpuEventScope stage_scope(*recorder, gpu_work::kShadowDepthsLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     if (!local_map) {

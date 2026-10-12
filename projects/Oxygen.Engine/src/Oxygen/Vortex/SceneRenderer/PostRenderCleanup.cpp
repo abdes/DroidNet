@@ -10,6 +10,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 
@@ -101,7 +102,7 @@ void SceneRenderer::PostRenderCleanup(
     return;
   }
 
-  graphics::GpuEventScope scope(recorder, "Vortex.PostRenderCleanup",
+  graphics::GpuEventScope scope(recorder, gpu_work::kPostRenderCleanupLabel,
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
 

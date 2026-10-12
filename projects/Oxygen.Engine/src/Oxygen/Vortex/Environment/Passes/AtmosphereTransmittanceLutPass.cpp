@@ -25,6 +25,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereTransmittanceLutPass.h>
@@ -269,8 +270,8 @@ auto AtmosphereTransmittanceLutPass::Record(RenderContext& ctx,
     = (constants.output_height + (kThreadGroupSizeY - 1U)) / kThreadGroupSizeY;
   {
     graphics::GpuEventScope pass_scope(*recorder,
-      capture ? "Vortex.Environment.IBL.AtmosphereTransmittanceLut"
-              : "Vortex.Environment.AtmosphereTransmittanceLut",
+      capture ? gpu_work::kIblAtmosphereTransmittanceLutLabel
+              : gpu_work::kAtmosphereTransmittanceLutLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     recorder->FlushBarriers();

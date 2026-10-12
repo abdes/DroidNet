@@ -43,7 +43,6 @@ NOLINT_TEST(DiagnosticsFrameLedgerTest, BeginFrameResetsPreviousRecords)
     .inputs = {},
     .outputs = {},
     .missing_inputs = {},
-    .gpu_duration_ms = {},
   });
   ledger.RecordProduct(DiagnosticsProductRecord {
     .name = "P",

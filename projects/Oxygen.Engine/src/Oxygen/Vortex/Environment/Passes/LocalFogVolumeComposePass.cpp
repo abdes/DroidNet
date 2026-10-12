@@ -29,6 +29,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
@@ -333,7 +334,7 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
   TrackBufferFromKnownOrInitial(
     recorder, *products.occupied_tile_draw_args_buffer);
 
-  graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage15.LocalFog",
+  graphics::GpuEventScope pass_scope(recorder, gpu_work::kLocalFogLabel,
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   recorder.RequireResourceState(

@@ -36,6 +36,7 @@
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereSkyViewLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereTransmittanceLutPass.h>
 #include <Oxygen/Vortex/Environment/Passes/DistantSkyLightLutPass.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineAccess.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
@@ -110,7 +111,8 @@ try {
   bool accepted = false;
   const ScopeGuard timing([&] noexcept -> void {
     if (!accepted) {
-      p.renderer.GetDiagnosticsService().InvalidateIblTiming();
+      vortex::internal::GpuTimelineAccess { p.renderer.GetDiagnosticsService() }
+        .InvalidateCurrentFrame();
     }
   });
   if (p.sequence != ctx.frame_sequence || p.slot != ctx.frame_slot) {

@@ -38,6 +38,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/GpuFeedback.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightGridBuilder.h>
@@ -426,7 +427,7 @@ auto SpatialLightGrid::Record(
     *recording);
   auto pending_feedback = vortex::internal::GpuFeedbackReservation {};
   {
-    graphics::GpuEventScope scope(*recording, "Vortex.Stage6.SpatialLightGrid",
+    graphics::GpuEventScope scope(*recording, gpu_work::kSpatialLightGridLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     const auto buffers = std::array {

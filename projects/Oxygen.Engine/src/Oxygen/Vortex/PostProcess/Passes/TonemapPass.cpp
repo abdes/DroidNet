@@ -28,6 +28,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
@@ -252,7 +253,7 @@ auto TonemapPass::Record(RenderContext& ctx,
   recorder.FlushBarriers();
   recorder.BindFrameBuffer(*inputs.post_target);
   SetViewportAndScissor(recorder, ctx, *inputs.post_target);
-  graphics::GpuEventScope pass_scope(recorder, "Vortex.PostProcess.Tonemap",
+  graphics::GpuEventScope pass_scope(recorder, gpu_work::kTonemapLabel,
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   recorder.SetPipelineState(BuildTonemapPipelineDesc(*inputs.post_target));

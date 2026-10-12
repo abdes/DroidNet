@@ -40,6 +40,7 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
@@ -335,9 +336,8 @@ auto SelectionOutlinePass::Record(RenderContext& ctx,
     return 0U;
   }
 
-  graphics::GpuEventScope pass_scope(recorder,
-    "Vortex.Stage20.SelectionOutline",
-    profiling::ProfileGranularity::kDiagnostic,
+  graphics::GpuEventScope pass_scope(recorder, gpu_work::kSelectionOutlineLabel,
+    profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   const auto root_constants
     = static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants);

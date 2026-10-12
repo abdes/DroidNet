@@ -26,10 +26,10 @@ auto DiagnosticsVm::GetSkyLightRuntimeState() const
                       : vortex::SkyLightRuntimeState {};
 }
 
-auto DiagnosticsVm::GetLatestIblGpuTiming() const
-  -> std::optional<vortex::IblGpuTiming>
+auto DiagnosticsVm::GetLatestGpuWorkSummary() const
+  -> std::shared_ptr<const vortex::GpuWorkSummary>
 {
-  return service_->GetLatestIblGpuTiming();
+  return service_->GetLatestGpuWorkSummary();
 }
 
 auto DiagnosticsVm::GetGpuTimelineEnabled() const -> bool

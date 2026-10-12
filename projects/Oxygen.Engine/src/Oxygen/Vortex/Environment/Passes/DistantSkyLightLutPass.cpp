@@ -28,6 +28,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Passes/DistantSkyLightLutPass.h>
@@ -317,8 +318,8 @@ auto DistantSkyLightLutPass::Record(RenderContext& ctx,
 
   {
     graphics::GpuEventScope pass_scope(*recorder,
-      capture ? "Vortex.Environment.IBL.DistantSkyLightLut"
-              : "Vortex.Environment.DistantSkyLightLut",
+      capture ? gpu_work::kIblDistantSkyLightLutLabel
+              : gpu_work::kDistantSkyLightLutLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     recorder->FlushBarriers();

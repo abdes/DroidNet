@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -52,6 +53,7 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/GpuWorkSummary.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/IblBrdfLookup.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
@@ -650,47 +652,83 @@ namespace {
     }));
   }
 
-  NOLINT_TEST_F(IblDiagnosticsGpuTest, ReportsOnlyCompleteRequestedGpuTimings)
+  //! IBL producer time reaches the GPU work summary as frame work, only while
+  //! a viewer keeps collection on, and every scope of the frame is known to
+  //! the stage table.
+  NOLINT_TEST_F(IblDiagnosticsGpuTest, GpuWorkSummaryReportsIblAsFrameWork)
   {
     auto& fog = SetCapturedUniformFog();
     auto& diagnostics = renderer_->GetDiagnosticsService();
-    EXPECT_FALSE(diagnostics.GetLatestIblGpuTiming());
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
+    // Budget-only collection publishes no summary.
     for (unsigned edit = 0U; edit < 3U; ++edit) {
       fog.SetFogInscatteringLuminance(glm::vec3(float(edit + 10U)));
       scene->NotifyEnvironmentAuthoringChange();
       ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
     }
-    diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
-    diagnostics.SetGpuTimelineEnabled(true);
-    // Earlier budget-only samples did not collect the complete producer path.
-    EXPECT_FALSE(diagnostics.GetLatestIblGpuTiming());
+    EXPECT_EQ(diagnostics.GetLatestGpuWorkSummary(), nullptr);
+
+    auto lease = diagnostics.AcquireGpuTimeline();
+    ASSERT_TRUE(lease.IsActive());
     diagnostics.SetGpuTimelineMaxScopesPerFrame(1024U);
-    for (unsigned edit = 0U; edit < 8U; ++edit) {
-      fog.SetFogInscatteringLuminance(glm::vec3(float(edit + 1U)));
+    const auto find_ibl
+      = [](const GpuWorkSummary& summary) -> const GpuWorkItem* {
+      for (const auto& group : summary.frame_work) {
+        if (group.bucket != GpuWorkBucket::kBackground) {
+          continue;
+        }
+        for (const auto& item : group.items) {
+          if (item.id == "background.ibl") {
+            return &item;
+          }
+        }
+      }
+      return nullptr;
+    };
+    // A window closes after 500 ms of steady-clock time; keep the producer
+    // busy with authoring edits until one has.
+    auto summary = std::shared_ptr<const GpuWorkSummary> {};
+    const auto deadline
+      = std::chrono::steady_clock::now() + std::chrono::seconds { 10 };
+    for (unsigned edit = 0U; std::chrono::steady_clock::now() < deadline;
+      ++edit) {
+      fog.SetFogInscatteringLuminance(glm::vec3(float(edit % 8U + 1U)));
       scene->NotifyEnvironmentAuthoringChange();
       ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
+      summary = diagnostics.GetLatestGpuWorkSummary();
+      if (summary && find_ibl(*summary) != nullptr) {
+        break;
+      }
     }
-    const auto timing = diagnostics.GetLatestIblGpuTiming();
-    ASSERT_TRUE(timing);
-    EXPECT_GT(timing->producer_ms, 0.0);
-    const auto measured_frame
-      = RendererPublicationProbe::GetGpuTimelineProfiler(*renderer_)
-          .GetLastPublishedFrame();
-    ASSERT_TRUE(measured_frame);
-    EXPECT_EQ(timing->frame_sequence, measured_frame->frame_sequence);
-    const auto process
-      = std::ranges::find_if(measured_frame->scopes, [](const auto& scope) {
-          return scope.display_name == "Vortex.Environment.IBL.Process";
-        });
-    ASSERT_NE(process, measured_frame->scopes.end());
-    // Fog-only authoring has one Process interval and no atmosphere LUT work.
-    EXPECT_NEAR(timing->producer_ms, process->duration_ms, 0.00001);
-    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 5U));
-    ASSERT_TRUE(diagnostics.GetLatestIblGpuTiming());
-    EXPECT_EQ(diagnostics.GetLatestIblGpuTiming()->producer_ms, 0.0);
-    diagnostics.SetGpuTimelineEnabled(false);
-    EXPECT_FALSE(diagnostics.GetLatestIblGpuTiming());
+    ASSERT_NE(summary, nullptr);
+    EXPECT_GT(summary->valid_frames, 0U);
+    const auto* ibl = find_ibl(*summary);
+    ASSERT_NE(ibl, nullptr);
+    EXPECT_GT(ibl->time.avg_ms, 0.0F);
+    EXPECT_GE(ibl->time.max_ms, ibl->time.avg_ms);
+    // Every telemetry scope of this lit, IBL-processing frame has a stage
+    // table entry: kOther holds only command list work outside stages.
+    const auto expect_known = [](const GpuWorkGroup& group) -> void {
+      if (group.bucket != GpuWorkBucket::kOther) {
+        return;
+      }
+      for (const auto& item : group.items) {
+        EXPECT_TRUE(item.id.starts_with("list:") || item.id == "other")
+          << item.id;
+      }
+    };
+    for (const auto& work_view : summary->views) {
+      for (const auto& group : work_view.groups) {
+        EXPECT_NE(group.bucket, GpuWorkBucket::kBackground) << work_view.name;
+        expect_known(group);
+      }
+    }
+    for (const auto& group : summary->frame_work) {
+      expect_known(group);
+    }
+
+    lease.Release();
+    EXPECT_EQ(diagnostics.GetLatestGpuWorkSummary(), nullptr);
   }
 
   NOLINT_TEST_F(

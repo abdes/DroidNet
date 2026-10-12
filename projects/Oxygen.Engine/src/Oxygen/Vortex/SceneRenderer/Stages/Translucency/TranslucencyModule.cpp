@@ -26,6 +26,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
@@ -309,7 +310,7 @@ auto TranslucencyModule::Execute(RenderContext& ctx,
     return result;
   }
 
-  graphics::GpuEventScope stage_scope(recorder, "Vortex.Stage18.Translucency",
+  graphics::GpuEventScope stage_scope(recorder, gpu_work::kTranslucencyLabel,
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
 

@@ -225,7 +225,7 @@ void DepthPrepassModule::ExecutePhase1(RenderContext& ctx,
 
   graphics::GpuEventScope stage_scope(recorder,
     "Vortex.Stage3.DepthPrepass.Phase1",
-    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileGranularity::kDiagnostic,
     profiling::ProfileCategory::kPass);
   const auto reverse_z = ctx.current_view.resolved_view == nullptr
     || ctx.current_view.resolved_view->ReverseZ();
@@ -248,7 +248,7 @@ void DepthPrepassModule::ExecutePhase2(RenderContext& ctx,
 
   graphics::GpuEventScope stage_scope(recorder,
     "Vortex.Stage3.DepthPrepass.Phase2",
-    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileGranularity::kDiagnostic,
     profiling::ProfileCategory::kPass);
   if (ctx.current_view.draw_visibility.phase2) {
     BeginDepthPrepassResourceTracking(

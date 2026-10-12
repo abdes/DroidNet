@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <expected>
 #include <memory>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -23,6 +24,7 @@
 #include <Oxygen/Graphics/Common/Submission.h>
 #include <Oxygen/Nexus/IndexReuse.h>
 #include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineAccess.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -39,7 +41,6 @@ class ResourceRegistry;
 
 namespace oxygen::vortex {
 class Renderer;
-class DiagnosticsService;
 namespace upload {
   class UploadCoordinator;
 }
@@ -80,7 +81,7 @@ private:
   Graphics& graphics_;
   std::unique_ptr<upload::UploadCoordinator> owned_uploads_;
   observer_ptr<upload::UploadCoordinator> uploads_;
-  observer_ptr<DiagnosticsService> diagnostics_ { nullptr };
+  std::optional<vortex::internal::GpuTimelineAccess> timeline_;
   std::shared_ptr<const IblBrdfProduct> product_;
 };
 

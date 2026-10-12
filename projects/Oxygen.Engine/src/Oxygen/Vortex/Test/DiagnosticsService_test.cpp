@@ -7,6 +7,7 @@
 // assertions; setup loops stay within their sized containers.
 
 #include <memory>
+#include <utility>
 
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Types/Frame.h>
@@ -16,10 +17,12 @@
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineAccess.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 
 namespace {
 
@@ -40,7 +43,9 @@ using oxygen::vortex::DiagnosticsSeverity;
 using oxygen::vortex::Renderer;
 using oxygen::vortex::RendererCapabilityFamily;
 using oxygen::vortex::ShaderDebugMode;
+using oxygen::vortex::internal::GpuTimelineAccess;
 using oxygen::vortex::testing::FakeGraphics;
+using oxygen::vortex::testing::RendererPublicationProbe;
 
 constexpr auto kDiagnosticsCapability
   = RendererCapabilityFamily::kDiagnosticsAndProfiling;
@@ -147,7 +152,6 @@ NOLINT_TEST(DiagnosticsServiceTest, FrameLedgerRecordsFactsWhenEnabled)
     .inputs = {},
     .outputs = { "Vortex.DirectionalShadowSurface" },
     .missing_inputs = {},
-    .gpu_duration_ms = {},
   });
   service.RecordProduct(DiagnosticsProductRecord {
     .name = "Vortex.DirectionalShadowSurface",
@@ -199,7 +203,6 @@ NOLINT_TEST(DiagnosticsServiceTest, DisabledLedgerDoesNotAccumulateRecords)
     .inputs = {},
     .outputs = {},
     .missing_inputs = {},
-    .gpu_duration_ms = {},
   });
   service.RecordProduct(DiagnosticsProductRecord {
     .name = "Skipped",
@@ -269,13 +272,72 @@ NOLINT_TEST(DiagnosticsServiceTest, RendererOwnedGpuTimelineCanBeEnabled)
 
   service.SetEnabledFeatures(
     DiagnosticsFeature::kFrameLedger | DiagnosticsFeature::kGpuTimeline);
-  service.SetGpuTimelineRetainLatestFrame(true);
   service.SetGpuTimelineMaxScopesPerFrame(1U);
   service.SetGpuTimelineEnabled(true);
 
   EXPECT_TRUE(service.IsGpuTimelineEnabled());
   EXPECT_TRUE(HasAllFeatures(
     service.GetEnabledFeatures(), DiagnosticsFeature::kGpuTimeline));
+}
+
+//! Collection runs while any viewer lease or the user setting is on, and
+//! stops when the last goes; leases never change the user setting.
+NOLINT_TEST(DiagnosticsServiceTest, GpuTimelineLeasesKeepCollectionOn)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  const auto renderer = MakeRenderer(graphics, kDiagnosticsCapability);
+  auto& service = renderer->GetDiagnosticsService();
+  const auto& profiler
+    = RendererPublicationProbe::GetGpuTimelineProfiler(*renderer);
+  EXPECT_FALSE(profiler.IsEnabled());
+  EXPECT_EQ(service.GetLatestGpuWorkSummary(), nullptr);
+
+  auto first = service.AcquireGpuTimeline();
+  auto second = service.AcquireGpuTimeline();
+  EXPECT_TRUE(first.IsActive());
+  EXPECT_TRUE(profiler.IsEnabled());
+  EXPECT_FALSE(service.IsGpuTimelineEnabled());
+  first.Release();
+  EXPECT_TRUE(profiler.IsEnabled());
+  auto moved = std::move(second);
+  EXPECT_FALSE(second.IsActive()); // NOLINT(*-use-after-move)
+  moved.Release();
+  EXPECT_FALSE(profiler.IsEnabled());
+
+  service.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
+  service.SetGpuTimelineEnabled(true);
+  EXPECT_TRUE(profiler.IsEnabled());
+  {
+    const auto lease = service.AcquireGpuTimeline();
+  }
+  EXPECT_TRUE(profiler.IsEnabled());
+  service.SetGpuTimelineEnabled(false);
+  EXPECT_FALSE(profiler.IsEnabled());
+  EXPECT_EQ(service.GetLatestGpuWorkSummary(), nullptr);
+}
+
+//! Viewer leases are inert without kDiagnosticsAndProfiling; the production
+//! lease used by IBL budgeting still collects.
+NOLINT_TEST(DiagnosticsServiceTest, ViewerLeaseNeedsDiagnosticsCapability)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  const auto renderer = MakeRenderer(graphics, RendererCapabilityFamily::kNone);
+  auto& service = renderer->GetDiagnosticsService();
+  const auto& profiler
+    = RendererPublicationProbe::GetGpuTimelineProfiler(*renderer);
+
+  auto viewer = service.AcquireGpuTimeline();
+  EXPECT_FALSE(viewer.IsActive());
+  EXPECT_FALSE(profiler.IsEnabled());
+
+  auto production = GpuTimelineAccess { service }.AcquireLease();
+  EXPECT_TRUE(production.IsActive());
+  EXPECT_TRUE(profiler.IsEnabled());
+  EXPECT_EQ(service.GetLatestGpuWorkSummary(), nullptr);
+  production.Release();
+  EXPECT_FALSE(profiler.IsEnabled());
 }
 
 } // namespace

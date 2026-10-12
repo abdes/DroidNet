@@ -91,13 +91,7 @@ namespace {
     out << ",\n";
     Indent(out, 4) << "\"missing_inputs\": ";
     WriteStringArray(out, pass.missing_inputs);
-    if (pass.gpu_duration_ms.has_value()) {
-      out << ",\n";
-      Indent(out, 4) << "\"gpu_duration_ms\": " << *pass.gpu_duration_ms
-                     << "\n";
-    } else {
-      out << "\n";
-    }
+    out << "\n";
     Indent(out, 3) << "}";
   }
 

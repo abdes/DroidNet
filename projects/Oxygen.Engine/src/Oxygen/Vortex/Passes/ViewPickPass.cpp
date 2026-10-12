@@ -39,6 +39,7 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Passes/RenderPass.h>
 #include <Oxygen/Vortex/Passes/ViewPickPass.h>
@@ -176,8 +177,8 @@ auto ViewPickPass::Record(RenderContext& ctx,
 
   auto sources = std::vector<PreparedSceneFrame::DrawSource> {};
   {
-    graphics::GpuEventScope pass_scope(recorder, "Vortex.ViewPick",
-      profiling::ProfileGranularity::kDiagnostic,
+    graphics::GpuEventScope pass_scope(recorder, gpu_work::kViewPickLabel,
+      profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     recorder.BeginTrackingResourceState(
       *ids, graphics::ResourceStates::kRenderTarget, false);

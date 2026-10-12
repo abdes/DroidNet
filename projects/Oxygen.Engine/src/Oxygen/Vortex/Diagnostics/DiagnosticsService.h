@@ -18,6 +18,7 @@
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsCaptureManifest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsFrameLedger.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/Diagnostics/GpuWorkSummary.h>
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/api_export.h>
@@ -29,17 +30,49 @@ class CommandRecorder;
 namespace oxygen::vortex {
 
 namespace internal {
+  class GpuTimelineAccess;
   class GpuTimelineProfiler;
-  class GpuTimelineSink;
+  class GpuWorkSummarizer;
   struct GpuTimelineDiagnostic;
 } // namespace internal
-namespace environment::internal {
-  class IblProcessor;
-  class IblGpuProcessor;
-  class IblGpuValidation;
-  class IblBrdfResources;
-  class CapturedSkySource;
-}
+
+class DiagnosticsService;
+
+//! Keeps GPU timeline collection on while held.
+/*!
+ Move-only. Releasing the last lease turns collection off unless the user
+ setting (`SetGpuTimelineEnabled`) is on. A default-constructed lease, or a
+ viewer lease from a renderer without `kDiagnosticsAndProfiling`, is inert.
+ The service must outlive its leases.
+*/
+class GpuTimelineLease {
+public:
+  GpuTimelineLease() = default;
+  OXGN_VRTX_API ~GpuTimelineLease();
+
+  OXYGEN_MAKE_NON_COPYABLE(GpuTimelineLease)
+  OXGN_VRTX_API GpuTimelineLease(GpuTimelineLease&& other) noexcept;
+  OXGN_VRTX_API auto operator=(GpuTimelineLease&& other) noexcept
+    -> GpuTimelineLease&;
+
+  OXGN_VRTX_API auto Release() noexcept -> void;
+  //! Whether this lease keeps collection on.
+  [[nodiscard]] auto IsActive() const noexcept -> bool
+  {
+    return service_ != nullptr;
+  }
+
+private:
+  friend class DiagnosticsService;
+  GpuTimelineLease(observer_ptr<DiagnosticsService> service, bool viewer)
+    : service_(service)
+    , viewer_(viewer)
+  {
+  }
+
+  observer_ptr<DiagnosticsService> service_ { nullptr };
+  bool viewer_ { false };
+};
 
 struct DiagnosticsConfig {
   DiagnosticsFeatureSet default_features { DiagnosticsFeature::kNone };
@@ -116,8 +149,15 @@ public:
   [[nodiscard]] OXGN_VRTX_API auto IsGpuTimelineEnabled() const -> bool;
   OXGN_VRTX_API auto SetGpuTimelineMaxScopesPerFrame(std::uint32_t max_scopes)
     -> void;
-  OXGN_VRTX_API auto SetGpuTimelineRetainLatestFrame(bool retain_latest_frame)
-    -> void;
+  //! Keeps collection on for a viewer of the GPU work summary. Viewers hold
+  //! one while they show it; several may watch at once. Inert without
+  //! `kDiagnosticsAndProfiling`.
+  [[nodiscard]] OXGN_VRTX_API auto AcquireGpuTimeline() -> GpuTimelineLease;
+  //! The latest windowed summary; null while no viewer lease or user setting
+  //! keeps collection on, and before the first window completes. The
+  //! snapshot never changes while held.
+  [[nodiscard]] OXGN_VRTX_API auto GetLatestGpuWorkSummary() const
+    -> std::shared_ptr<const GpuWorkSummary>;
   OXGN_VRTX_API auto RequestGpuTimelineExport(const std::filesystem::path& path)
     -> void;
   //! Record an exact frame-sequence window starting at the current frame.
@@ -142,24 +182,14 @@ public:
 
   [[nodiscard]] OXGN_VRTX_API auto GetLatestSnapshot() const
     -> DiagnosticsFrameSnapshot;
-  [[nodiscard]] OXGN_VRTX_API auto GetLatestIblGpuTiming() const
-    -> std::optional<IblGpuTiming>;
 
 private:
   friend class Renderer;
-  friend class environment::internal::IblProcessor;
-  friend class environment::internal::IblGpuProcessor;
-  friend class environment::internal::IblGpuValidation;
-  friend class environment::internal::IblBrdfResources;
-  friend class environment::internal::CapturedSkySource;
+  friend class GpuTimelineLease;
+  friend class internal::GpuTimelineAccess;
 
-  auto RegisterIblTimingSink(std::shared_ptr<internal::GpuTimelineSink> sink)
-    -> void;
-  auto AcquireIblTiming() -> void;
-  auto ReleaseIblTiming() -> void;
-  auto InvalidateIblTiming() noexcept -> void;
-  auto AttachIblTimelineCollector(graphics::CommandRecorder& recorder) const
-    -> void;
+  auto AcquireLease(bool viewer) -> GpuTimelineLease;
+  auto ReleaseLease(bool viewer) noexcept -> void;
 
   OXGN_VRTX_API auto SetGpuTimelineProfiler(
     observer_ptr<internal::GpuTimelineProfiler> profiler) -> void;
@@ -169,6 +199,8 @@ private:
     -> DiagnosticsFeatureSet;
   [[nodiscard]] auto IsFrameLedgerEnabled() const noexcept -> bool;
   [[nodiscard]] auto IsGpuTimelineFeatureEnabled() const noexcept -> bool;
+  [[nodiscard]] auto IsUserTimingEnabled() const noexcept -> bool;
+  [[nodiscard]] auto IsViewerTimingEnabled() const noexcept -> bool;
   [[nodiscard]] auto HasAvailableGpuTimelineFrame() const -> bool;
   auto ApplyGpuTimelineEnabled() -> void;
   auto RefreshLedgerState() -> void;
@@ -186,10 +218,11 @@ private:
   GpuDebugPrimitiveSource gpu_debug_sources_ { GpuDebugPrimitiveSource::kNone };
   std::uint32_t gpu_debug_line_capacity_ { kDefaultGpuDebugLineCapacity };
   bool gpu_timeline_enabled_requested_ { false };
-  bool complete_user_timing_active_ { false };
+  bool viewer_timing_active_ { false };
   std::uint64_t current_frame_ {};
-  std::uint64_t complete_ibl_timing_from_ {};
-  std::uint32_t ibl_timing_owners_ {};
+  std::uint32_t viewer_leases_ {};
+  std::uint32_t production_leases_ {};
+  std::shared_ptr<internal::GpuWorkSummarizer> gpu_work_summarizer_;
   HdrPrecisionControl hdr_precision_control_ {
     HdrPrecisionControl::kProduction,
   };

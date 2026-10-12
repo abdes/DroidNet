@@ -26,6 +26,7 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereComposePass.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/ViewConstantsGuard.h>
@@ -200,7 +201,7 @@ auto AtmosphereComposePass::Record(RenderContext& ctx,
     state.executed = false;
     return state;
   }
-  graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage15.Atmosphere",
+  graphics::GpuEventScope pass_scope(recorder, gpu_work::kAtmosphereLabel,
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   TrackTextureFromKnownOrInitial(recorder, scene_textures.GetSceneColor());

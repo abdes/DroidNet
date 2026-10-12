@@ -37,6 +37,7 @@
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Diagnostics/Passes/GpuDebugPrimitivePass.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
@@ -302,8 +303,9 @@ auto GpuDebugPrimitivePass::Prepare(
     return kInvalidShaderVisibleIndex;
   }
 
-  graphics::GpuEventScope scope(recorder, std::string { kDebugName } + ".Clear",
-    profiling::ProfileGranularity::kDiagnostic,
+  graphics::GpuEventScope scope(recorder,
+    gpu_work::kGpuDebugPrimitivesClearLabel,
+    profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   auto& counters = *view.counters.GetBuffer();
   auto& lines = *view.lines.GetBuffer();
@@ -362,8 +364,9 @@ auto GpuDebugPrimitivePass::Record(RenderContext& ctx,
     return false;
   }
 
-  graphics::GpuEventScope scope(recorder, std::string { kDebugName } + ".Draw",
-    profiling::ProfileGranularity::kDiagnostic,
+  graphics::GpuEventScope scope(recorder,
+    gpu_work::kGpuDebugPrimitivesDrawLabel,
+    profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   auto& counters = *view.counters.GetBuffer();
   auto& lines = *view.lines.GetBuffer();

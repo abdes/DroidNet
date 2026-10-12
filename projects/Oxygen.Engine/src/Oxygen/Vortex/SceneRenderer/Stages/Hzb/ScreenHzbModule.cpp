@@ -29,6 +29,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/TextureViews.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -445,8 +446,8 @@ auto ScreenHzbModule::BuildOcclusionPyramid(RenderContext& ctx,
   }
   auto& occlusion = impl_->EnsureOcclusionResources(view_id, source);
 
-  graphics::GpuEventScope pass_scope(recorder, "Vortex.Occlusion.PyramidBuild",
-    profiling::ProfileGranularity::kDiagnostic,
+  graphics::GpuEventScope pass_scope(recorder, gpu_work::kOcclusionHzbLabel,
+    profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   if (!impl_->builder.Build(
         HzbPyramidBuilder::BuildFrame {
@@ -553,8 +554,8 @@ void ScreenHzbModule::Execute(RenderContext& ctx,
   };
 
   {
-    graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage5.ScreenHzbBuild",
-      profiling::ProfileGranularity::kDiagnostic,
+    graphics::GpuEventScope pass_scope(recorder, gpu_work::kScreenHzbLabel,
+      profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     if (!impl_->builder.Build(
           HzbPyramidBuilder::BuildFrame {

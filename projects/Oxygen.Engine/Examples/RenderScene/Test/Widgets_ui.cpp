@@ -311,13 +311,14 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       renderer->GetDiagnosticsService().GetEnabledFeatures(),
       vortex::DiagnosticsFeature::kFrameLedger));
     ctx->ItemCheck("**/GPU Timeline");
-    for (unsigned wait = 0U;
-      wait < 120U && !renderer->GetDiagnosticsService().GetLatestIblGpuTiming();
+    // The GPU work summary publishes every 500 ms window.
+    for (unsigned wait = 0U; wait < 240U
+      && !renderer->GetDiagnosticsService().GetLatestGpuWorkSummary();
       ++wait) {
       ctx->Yield();
     }
     IM_CHECK(
-      renderer->GetDiagnosticsService().GetLatestIblGpuTiming().has_value());
+      renderer->GetDiagnosticsService().GetLatestGpuWorkSummary() != nullptr);
     SelectPanel(
       ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
     ctx->Yield(3);

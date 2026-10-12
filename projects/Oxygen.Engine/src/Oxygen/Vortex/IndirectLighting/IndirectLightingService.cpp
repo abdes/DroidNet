@@ -17,6 +17,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/IndirectLighting/IndirectLightingService.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
@@ -118,8 +119,7 @@ auto IndirectLightingService::Record(RenderContext& ctx,
         .SetDebugName("Vortex.Stage13.IndirectLighting")
         .Build();
   const graphics::GpuEventScope scope(recorder,
-    "Vortex.Stage13.IndirectLighting",
-    profiling::ProfileGranularity::kTelemetry,
+    gpu_work::kIndirectLightingLabel, profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   recorder.FlushBarriers();
   recorder.BindFrameBuffer(*framebuffer_);

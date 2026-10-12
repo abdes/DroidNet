@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <charconv>
 #include <condition_variable>
 #include <cstdint>
 #include <cstring>
@@ -19,6 +20,7 @@
 #include <mutex>
 #include <optional>
 #include <ostream>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -39,6 +41,7 @@
 #include <Oxygen/Graphics/Common/TimestampQueryProvider.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 
 namespace {
@@ -54,17 +57,10 @@ struct TimelineCollectorScopeState {
 static_assert(sizeof(TimelineCollectorScopeState)
   <= sizeof(oxygen::graphics::GpuProfileCollectorState::storage));
 
+// The GPU work stage table looks scopes up by this hash.
 auto HashName(std::string_view value) -> uint64_t
 {
-  constexpr uint64_t kFnvOffsetBasis = 1469598103934665603ULL;
-  constexpr uint64_t kFnvPrime = 1099511628211ULL;
-
-  uint64_t hash = kFnvOffsetBasis;
-  for (const char c : value) {
-    hash ^= static_cast<uint8_t>(c);
-    hash *= kFnvPrime;
-  }
-  return hash;
+  return oxygen::vortex::gpu_work::HashScopeLabel(value);
 }
 
 auto EscapeJson(std::string_view input) -> std::string
@@ -360,11 +356,23 @@ GpuTimelineProfiler::GpuTimelineProfiler(
   }
 }
 
-GpuTimelineProfiler::~GpuTimelineProfiler() = default;
+GpuTimelineProfiler::~GpuTimelineProfiler()
+{
+  if (graphics_ != nullptr && enabled_) {
+    graphics_->SetCommandListTimingCollector(nullptr);
+  }
+}
 
 auto GpuTimelineProfiler::SetEnabled(const bool enabled) -> void
 {
   enabled_ = enabled;
+  // Timing every graphics list separates idle time from work no pass scope
+  // covers.
+  if (graphics_ != nullptr) {
+    graphics_->SetCommandListTimingCollector(enabled
+        ? observer_ptr<graphics::IGpuProfileCollector> { this }
+        : nullptr);
+  }
 }
 
 auto GpuTimelineProfiler::InvalidateCurrentFrame() noexcept -> void
@@ -395,6 +403,7 @@ auto GpuTimelineProfiler::SetRetainLatestFrame(const bool retain_latest_frame)
 auto GpuTimelineProfiler::OnFrameStart(
   const frame::SequenceNumber frame_sequence) -> void
 {
+  frame_thread_ = std::this_thread::get_id();
   if (frame_capture_.resolve_submitted) {
     pending_frames_.push_back(std::move(frame_capture_));
     frame_capture_ = {};
@@ -418,9 +427,11 @@ auto GpuTimelineProfiler::OnFrameStart(
   ResetForFrame(frame_sequence);
   if (frame_scope_state_ && frame_capture_.profiling_enabled) {
     *frame_scope_state_ = {};
+    own_recording_ = true;
     auto recorder = graphics_->AcquireCommandRecorder(
       graphics_->QueueKeyFor(graphics::QueueRole::kGraphics),
       "GpuTimestamp.FrameBegin");
+    own_recording_ = false;
     if (!recorder) {
       AddDiagnostic("gpu.timestamp.frame_begin_failed",
         "failed to acquire the graphics-frame timestamp recorder");
@@ -428,7 +439,7 @@ auto GpuTimelineProfiler::OnFrameStart(
       return;
     }
     const auto desc = profiling::GpuProfileScopeDesc {
-      .label = "Vortex.Frame",
+      .label = std::string(gpu_work::kFrameLabel),
       .granularity = profiling::ProfileGranularity::kTelemetry,
       .category = profiling::ProfileCategory::kPass,
     };
@@ -459,8 +470,10 @@ auto GpuTimelineProfiler::OnFrameRecordTailResolve() -> void
 
   const auto queue_key = graphics_->QueueKeyFor(graphics::QueueRole::kGraphics);
   {
+    own_recording_ = true;
     auto recorder
       = graphics_->AcquireCommandRecorder(queue_key, "GpuTimestamp.Resolve");
+    own_recording_ = false;
     if (!recorder) {
       AddDiagnostic("gpu.timestamp.resolve_failed",
         "failed to acquire resolve command recorder");
@@ -498,6 +511,13 @@ auto GpuTimelineProfiler::BeginScope(graphics::CommandRecorder& recorder,
     state.flags = 0U;
     return;
   }
+  // Command lists may be acquired on any thread; only the frame thread's are
+  // timed, and never the profiler's own timestamp lists.
+  if (info.base_label == graphics::kCommandListScopeLabel
+    && (own_recording_ || std::this_thread::get_id() != frame_thread_)) {
+    state.flags = 0U;
+    return;
+  }
 
   auto provider = ResolveTimestampProvider();
   if (provider == nullptr) {
@@ -525,16 +545,63 @@ auto GpuTimelineProfiler::BeginScope(graphics::CommandRecorder& recorder,
   const auto end_slot
     = frame_capture_.query_offset + frame_capture_.used_query_slots++;
   const auto* display_name = InternName(info.base_label);
-  const auto parent_scope_id
-    = scope_stack_.empty() ? kInvalidScopeId : scope_stack_.back();
+  // Scopes on other recorders run at other times on the GPU; only the frame
+  // span brackets them all.
+  static const auto kFrameHash = HashName(gpu_work::kFrameLabel);
+  static const auto kViewHash = HashName(gpu_work::kViewLabel);
+  auto parent_scope_id = kInvalidScopeId;
+  auto frame_scope_id = kInvalidScopeId;
+  auto view_scope_id = kInvalidScopeId;
+  for (const auto open : std::views::reverse(scope_stack_)) {
+    const auto& record = frame_capture_.scopes.at(open);
+    if (parent_scope_id == kInvalidScopeId && record.recorder == &recorder) {
+      parent_scope_id = open;
+    }
+    if (view_scope_id == kInvalidScopeId
+      && record.scope_name_hash == kViewHash) {
+      view_scope_id = open;
+    }
+    if (record.scope_name_hash == kFrameHash) {
+      frame_scope_id = open;
+    }
+  }
+  if (parent_scope_id == kInvalidScopeId) {
+    parent_scope_id = frame_scope_id;
+  }
+  if (HashName(info.base_label) == kFrameHash) {
+    parent_scope_id = kInvalidScopeId;
+  }
+  const auto depth = parent_scope_id == kInvalidScopeId
+    ? uint16_t { 0U }
+    : static_cast<uint16_t>(
+        frame_capture_.scopes.at(parent_scope_id).depth + 1U);
 
+  auto instance_id = uint64_t { 0U };
+  auto instance_name = std::string {};
+  for (const auto& variable : info.desc.variables) {
+    if (variable.key == nullptr) {
+      continue;
+    }
+    const auto key = std::string_view { variable.key.get() };
+    if (key == "view") {
+      const auto& value = variable.value;
+      std::ignore = std::from_chars(
+        value.data(), value.data() + value.size(), instance_id);
+    } else if (key == "name") {
+      instance_name = variable.value;
+    }
+  }
   frame_capture_.scopes.push_back(GpuScopeRecord {
     .scope_name_hash = HashName(info.base_label),
     .display_name = display_name,
+    .instance_id = instance_id,
+    .instance_name = std::move(instance_name),
+    .recorder = &recorder,
     .parent_scope_id = parent_scope_id,
+    .view_scope_id = view_scope_id,
     .begin_query_slot = begin_slot,
     .end_query_slot = end_slot,
-    .depth = static_cast<uint16_t>(scope_stack_.size()),
+    .depth = depth,
     .stream_id = 0U,
     .flags = 0U,
   });
@@ -809,9 +876,12 @@ auto GpuTimelineProfiler::BuildTimelineFrame(const GpuFrameCapture& capture,
     GpuTimelineScope scope {};
     scope.scope_id = scope_id;
     scope.parent_scope_id = record.parent_scope_id;
+    scope.view_scope_id = record.view_scope_id;
     scope.name_hash = record.scope_name_hash;
     scope.display_name
       = record.display_name != nullptr ? record.display_name : "";
+    scope.instance_id = record.instance_id;
+    scope.instance_name = record.instance_name;
     scope.begin_query_slot = record.begin_query_slot;
     scope.end_query_slot = record.end_query_slot;
     scope.depth = record.depth;

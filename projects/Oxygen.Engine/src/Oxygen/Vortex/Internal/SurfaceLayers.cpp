@@ -28,6 +28,7 @@
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/SurfaceLayers.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SurfaceLayerSource.h>
@@ -200,8 +201,8 @@ auto SurfaceLayers::RecordLayer(Renderer& renderer, const Layer& layer) -> bool
   recorder->BindFrameBuffer(*layer.framebuffer);
   recorder->ClearFramebuffer(*layer.framebuffer);
   {
-    graphics::GpuEventScope scope(*recorder, "Vortex.SurfaceLayer",
-      profiling::ProfileGranularity::kDiagnostic,
+    graphics::GpuEventScope scope(*recorder, gpu_work::kSurfaceLayerLabel,
+      profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     layer.source->Record(*recorder);
   }

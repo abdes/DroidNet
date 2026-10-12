@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <memory>
 #include <mutex>
 
 #include "DemoShell/Runtime/RendererUiTypes.h"
@@ -13,6 +14,7 @@
 #include "DemoShell/Services/RenderingSettingsService.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Vortex/Diagnostics/GpuWorkSummary.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 
 namespace oxygen::examples::ui {
@@ -39,8 +41,8 @@ public:
     observer_ptr<EnvironmentSettingsService> environment = nullptr);
   [[nodiscard]] auto GetSkyLightRuntimeState() const
     -> vortex::SkyLightRuntimeState;
-  [[nodiscard]] auto GetLatestIblGpuTiming() const
-    -> std::optional<vortex::IblGpuTiming>;
+  [[nodiscard]] auto GetLatestGpuWorkSummary() const
+    -> std::shared_ptr<const vortex::GpuWorkSummary>;
   [[nodiscard]] auto GetGpuTimelineEnabled() const -> bool;
   [[nodiscard]] auto GetFrameDiagnosticsEnabled() const -> bool;
   auto SetFrameDiagnosticsEnabled(bool enabled) -> void;

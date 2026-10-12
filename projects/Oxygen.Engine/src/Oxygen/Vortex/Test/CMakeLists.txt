@@ -58,6 +58,8 @@ m_gtest_program(
     "DiagnosticsService_test.cpp"
 )
 
+m_gtest_program(GpuWorkSummary SOURCES "GpuWorkSummarizer_test.cpp")
+
 m_gtest_program(
   DiagnosticsFrameLedger
   SOURCES

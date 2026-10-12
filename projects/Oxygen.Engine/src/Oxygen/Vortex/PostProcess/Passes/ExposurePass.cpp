@@ -51,6 +51,7 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
@@ -722,7 +723,7 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
   frame_bindings_.at(ctx.frame_slot.get()).push_back(frame);
   {
     graphics::GpuEventScope phase_scope(recorder,
-      "Vortex.PostProcess.Exposure.FrameResolve",
+      gpu_work::kExposureFrameResolveLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
@@ -844,7 +845,7 @@ auto ExposurePass::RestoreFrameFallback(RenderContext& ctx,
   }
   {
     graphics::GpuEventScope phase_scope(recorder,
-      "Vortex.PostProcess.Exposure.FrameFallback",
+      gpu_work::kExposureFrameFallbackLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
@@ -945,7 +946,7 @@ auto ExposurePass::RecordSceneRangeCommands(RenderContext& ctx,
 {
   const auto& desc = source.GetDescriptor();
   graphics::GpuEventScope phase_scope(recorder,
-    "Vortex.PostProcess.Exposure.SceneRange",
+    gpu_work::kExposureSceneRangeLabel,
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kCompute,
     profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
@@ -1042,7 +1043,7 @@ auto ExposurePass::PropagateOpaqueApError(RenderContext& ctx,
   EnsurePipelines();
   {
     graphics::GpuEventScope phase_scope(recorder,
-      "Vortex.PostProcess.Exposure.OpaqueApError",
+      gpu_work::kExposureOpaqueApErrorLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
@@ -1150,7 +1151,7 @@ auto ExposurePass::GatherFilterGradients(RenderContext& ctx,
   EnsurePipelines();
   {
     graphics::GpuEventScope phase_scope(recorder,
-      "Vortex.PostProcess.Exposure.FilterGradients",
+      gpu_work::kExposureFilterGradientsLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
@@ -1283,7 +1284,7 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
   CHECK_LE_F(texels, std::numeric_limits<std::uint32_t>::max());
   {
     graphics::GpuEventScope phase_scope(recorder,
-      "Vortex.PostProcess.Exposure.QualifyProducts",
+      gpu_work::kExposureQualifyProductsLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
@@ -1320,10 +1321,10 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
       = [&](const unsigned pipeline, const HdrProduct* product,
           const std::uint32_t additional_flags = 0U) -> void {
       constexpr std::array<std::string_view, 4> names {
-        "Vortex.PostProcess.Exposure.ClearSuitability",
-        "Vortex.PostProcess.Exposure.GatherSuitabilityMaximum",
-        "Vortex.PostProcess.Exposure.SelectSuitabilityCandidate",
-        "Vortex.PostProcess.Exposure.CheckSuitabilityProduct",
+        gpu_work::kExposureClearSuitabilityLabel,
+        gpu_work::kExposureGatherSuitabilityMaximumLabel,
+        gpu_work::kExposureSelectSuitabilityCandidateLabel,
+        gpu_work::kExposureCheckSuitabilityProductLabel,
       };
       graphics::GpuEventScope product_scope(recorder, names.at(pipeline),
         profiling::ProfileGranularity::kTelemetry,
@@ -1607,7 +1608,7 @@ auto ExposurePass::FinalizeFp16Suitability(RenderContext& ctx,
   EnsurePipelines();
   {
     graphics::GpuEventScope phase_scope(recorder,
-      "Vortex.PostProcess.Exposure.FinalizeSuitability",
+      gpu_work::kExposureFinalizeSuitabilityLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
@@ -1734,7 +1735,7 @@ auto ExposurePass::ConvertCheckedSceneColor(RenderContext& ctx,
   }
   {
     graphics::GpuEventScope phase_scope(recorder,
-      "Vortex.PostProcess.Exposure.ConvertSceneColor",
+      gpu_work::kExposureConvertSceneColorLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
@@ -2126,7 +2127,7 @@ auto ExposurePass::RecordState(RenderContext& ctx,
   }
   {
     graphics::GpuEventScope phase_scope(recorder,
-      "Vortex.PostProcess.Exposure.MeterAndAdapt",
+      gpu_work::kExposureMeterAndAdaptLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kCompute,
       profiling::Vars(profiling::Var("view", ctx.current_view.view_id.get())));
@@ -2160,7 +2161,7 @@ auto ExposurePass::RecordState(RenderContext& ctx,
     }
     if (automatic) {
       graphics::GpuEventScope histogram_scope(recorder,
-        "Vortex.PostProcess.Exposure.Histogram",
+        gpu_work::kExposureHistogramLabel,
         profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kCompute,
         profiling::Vars(
@@ -2216,7 +2217,7 @@ auto ExposurePass::RecordState(RenderContext& ctx,
     recorder.FlushBarriers();
     {
       graphics::GpuEventScope solve_scope(recorder,
-        "Vortex.PostProcess.Exposure.Solve",
+        gpu_work::kExposureSolveLabel,
         profiling::ProfileGranularity::kTelemetry,
         profiling::ProfileCategory::kPass);
       recorder.SetPipelineState(RequiredPipeline(average_pipeline_));

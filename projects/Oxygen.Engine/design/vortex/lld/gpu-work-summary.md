@@ -1,6 +1,6 @@
 # GPU work summary LLD
 
-**Status:** draft for owner review
+**Status:** implemented 2026-10-13
 
 Vortex turns its built-in GPU timeline into a small, human-readable summary of
 where the renderer spends GPU time: per view, grouped into a fixed set of work
@@ -10,7 +10,7 @@ see timeline internals.
 
 - [§1](#1-purpose-and-non-goals) purpose and non-goals
 - [§2](#2-boundaries-and-consumers) module boundaries and consumers
-- [§3](#3-current-state) what exists and what is wrong with it
+- [§3](#3-implementation) where each part lives
 - [§4](#4-public-contract) public types, catalog and service API
 - [§5](#5-attribution) how scopes become buckets, items and views
 - [§6](#6-windowing-and-publication) averaging window and snapshot publication
@@ -86,19 +86,19 @@ The editor reaches the summary two ways:
 The editor-side work is tracked as a GitHub issue opened when implementation
 reaches it; it is outside the scope of this LLD.
 
-## 3. Current state
+## 3. Implementation
 
-| Fact                                                                                                                                                                      | Evidence                                                                                          |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| The profiler records nested graphics-queue scopes and publishes `GpuTimelineFrame` to sinks; types live in `vortex::internal` and expose query slots, hashes, parent ids. | `src/Oxygen/Vortex/Internal/GpuTimelineProfiler.h`                                                |
-| Nothing visualizes it. The legacy `GpuTimelinePanel` and its presentation smoother were deleted with the legacy renderer and were never ported to Vortex.                 | commit `58bf8b4a9`                                                                                |
-| `rndr.gpu_timestamps.viewer` is registered but read by nothing.                                                                                                           | `Examples/DemoShell/Internal/DemoShellConsoleDefaults.cpp`                                        |
-| Every `GpuEventScope` defaults to `kTelemetry`; about five sites use `kDiagnostic`. The timeline therefore records constant uploads and sub-steps next to whole passes.   | `src/Oxygen/Vortex/**/*.cpp`                                                                      |
-| Scope labels are inconsistent (`Vortex.Stage3.DepthPrepass` beside `Vortex.DepthPrepass.Opaque`), so grouping by name prefix is not reliable.                             | same                                                                                              |
-| No scope identifies a view. Only exposure scopes carry a `view` variable, and the profiler drops variables.                                                               | `PostProcess/Passes/ExposurePass.cpp`; `GpuTimelineProfiler::BeginScope` stores `base_label` only |
-| `DiagnosticsService` carries an IBL-specific path: five IBL friends, `AcquireIblTiming`, `RegisterIblTimingSink`, `GetLatestIblGpuTiming`.                                | `src/Oxygen/Vortex/Diagnostics/DiagnosticsService.h`                                              |
-| `DiagnosticsPassRecord::gpu_duration_ms` exists but every writer sets it empty.                                                                                           | `SceneRenderer/SceneRenderer.cpp`                                                                 |
-| The only UI consumer of GPU timing is one IBL line in the DemoShell Diagnostics panel.                                                                                    | `Examples/DemoShell/UI/DiagnosticsPanel.cpp`                                                      |
+| Part                                        | Source                                                              |
+| ------------------------------------------- | ------------------------------------------------------------------- |
+| Public types and bucket catalog             | `src/Oxygen/Vortex/Diagnostics/GpuWorkSummary.h`                    |
+| Stage table and label constants             | `src/Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h`        |
+| Summarizer (timeline sink, window, publish) | `src/Oxygen/Vortex/Diagnostics/Internal/GpuWorkSummarizer.h`        |
+| Viewer leases and `GetLatestGpuWorkSummary` | `src/Oxygen/Vortex/Diagnostics/DiagnosticsService.h`                |
+| IBL timing access (production lease, sinks) | `src/Oxygen/Vortex/Internal/GpuTimelineAccess.h`                    |
+| `Vortex.View` scope per view                | `SceneRenderer::RenderViewFamily`, `SceneRenderer::OnRender`        |
+| Chart widget                                | `src/Oxygen/ImGui/Widgets/GpuWorkChart.h`                           |
+| Host overlay and `host.ui.gpu_work`         | `src/Oxygen/Host/GpuWorkOverlay.h`                                  |
+| DemoShell Diagnostics panel IBL line        | `Examples/DemoShell/UI/DiagnosticsPanel.cpp`, from `background.ibl` |
 
 ## 4. Public contract
 
@@ -122,7 +122,7 @@ enum class GpuWorkBucket : std::uint8_t {
   kOverlays,       // grid, selection, view overlays, debug views
   kComposition,    // surface composition and surface layers
   kBackground,     // frame work outside views: IBL, LUT bakes
-  kOther,          // telemetry scopes the stage table does not know
+  kOther,          // unknown scopes, list work no stage covers
 };
 
 struct GpuWorkStat {
@@ -131,7 +131,7 @@ struct GpuWorkStat {
 };
 
 struct GpuWorkItem {
-  std::string id;          // stable, e.g. "lighting.point"
+  std::string id;          // stable, e.g. "lighting.deferred"
   std::string name;        // display text, e.g. "Point lights"
   GpuWorkStat time;
 };
@@ -145,7 +145,7 @@ struct GpuWorkGroup {
 struct GpuWorkView {
   std::uint64_t view_id { 0U };
   std::string name;
-  GpuWorkStat time;
+  GpuWorkStat time;                 // sum of the groups
   std::vector<GpuWorkGroup> groups; // catalog order; empty buckets omitted
 };
 
@@ -159,18 +159,21 @@ struct GpuWorkSummary {
   std::uint32_t valid_frames { 0U };
   std::uint32_t invalid_frames { 0U };      // overflow, incomplete, failed
   GpuWorkStat frame_gpu;                    // whole-frame GPU span
-  GpuWorkStat unscoped;                     // span not covered by any group
+  GpuWorkStat idle;                         // span with no command list
   std::vector<GpuWorkView> views;
   std::vector<GpuWorkGroup> frame_work;     // work outside any view
+  GpuWorkStat frame_work_time;              // their per-frame total
   std::vector<float> frame_gpu_history_ms;  // newest last, for sparklines
 };
 
 } // namespace oxygen::vortex
 ```
 
-All values are milliseconds. `unscoped` is `frame_gpu` minus the sum of view
-and frame-work group times, clamped at zero: GPU idle gaps plus unscoped
-commands. It is shown, not hidden, so missing scopes are visible.
+All values are milliseconds. `idle` is the part of `frame_gpu` when no graphics
+command list runs: the GPU waits for the CPU or for presentation. Work inside a
+command list that no stage scope covers is not idle: it is a `kOther` item
+named after the list ([§5.2](#52-rules)), so missing scopes are visible by
+name.
 
 ### 4.2 Bucket catalog
 
@@ -234,33 +237,36 @@ the `kBackground` group's `ibl` item. Export and recording are unchanged.
 One Vortex-internal table, `Diagnostics/Internal/GpuWorkStageTable.h`, lists
 every scope that may carry summary time:
 
-| Field          | Example                       |
-| -------------- | ----------------------------- |
-| `label`        | `"Vortex.Stage12.PointLight"` |
-| `bucket`       | `GpuWorkBucket::kLighting`    |
-| `item_id`      | `"lighting.point"`            |
-| `display_name` | `"Point lights"`              |
+| Field          | Example                             |
+| -------------- | ----------------------------------- |
+| `label`        | `"Vortex.Stage12.DeferredLighting"` |
+| `bucket`       | `GpuWorkBucket::kLighting`          |
+| `item_id`      | `"lighting.deferred"`               |
+| `display_name` | `"Deferred lights"`                 |
 
 The table also defines the label constants. Scope sites use those constants
 instead of string literals, so a label is spelled once and a renamed pass
 cannot silently fall out of its bucket. The summarizer looks entries up by the
 scope's name hash, which the profiler already computes.
 
-Representative mapping, from the stage labels in use:
+The mapping, by bucket:
 
-| Bucket       | Stage scopes                                                               |
-| ------------ | -------------------------------------------------------------------------- |
-| Visibility   | `Stage2.InitViews`, `Stage3.Occlusion`, `Stage5.ScreenHzbBuild`            |
-| Depth        | `Stage3.DepthPrepass`                                                      |
-| Shadows      | `Stage8.ShadowDepths`, `Stage8.ShadowReceiverFit`, `Stage8.ContactShadow*` |
-| Base pass    | `Stage9.BasePass`, `Stage9.VelocityMerge`                                  |
-| Lighting     | `Stage6.*` light data, `Stage12.*Light`, `Stage13.IndirectLighting`        |
-| Environment  | `Stage14.*` fog, `Stage15.*` sky, atmosphere and fog                       |
-| Translucency | `Stage18.Translucency`                                                     |
-| Post-process | `Stage21.ResolveSceneColor`, `Stage22.PostProcess`                         |
-| Overlays     | `Stage20.*`, `Stage12.DebugVisualization`                                  |
-| Composition  | `Vortex.CompositingTask`, `Vortex.SurfaceOverlay`, surface layers          |
-| Background   | `Vortex.Environment.IBL` and its phases                                    |
+| Bucket       | Stage scopes                                                                         |
+| ------------ | ------------------------------------------------------------------------------------ |
+| Visibility   | `Stage3.Occlusion.Phase1/2`, `Occlusion.PyramidBuild`, `Stage5.ScreenHzbBuild`       |
+| Depth        | `Stage3.DepthPrepass`                                                                |
+| Shadows      | `Stage8.ShadowDepths`, `Stage8.ShadowReceiverFit`, `Stage8.ContactShadowCasterDepth` |
+| Base pass    | `Stage9.BasePass`                                                                    |
+| Lighting     | `Stage6.SpatialLightGrid`, `Stage12.DeferredLighting`, `Stage13.IndirectLighting`    |
+| Environment  | `Stage14.*` fog, `Stage15.*` sky, atmosphere and fog, `Environment.Atmosphere*Lut`   |
+| Translucency | `Stage18.Translucency`                                                               |
+| Post-process | `ResolveSceneColor`, `PostProcess.Exposure.*`, `PostProcess.Tonemap`, cleanup        |
+| Overlays     | `Stage20.*`, `Stage12.DebugVisualization`, `ViewPick`, GPU debug primitives          |
+| Composition  | `Vortex.CompositingTask`, `Vortex.SurfaceOverlay`, `Vortex.SurfaceLayer`, aux views  |
+| Background   | `Vortex.Environment.IBL.*`, the IBL capture LUTs, `Diagnostics.IBL.Metadata`         |
+
+Occlusion culling records inside `Stage3.DepthPrepass`, so its time is part of
+the depth prepass item; `Visibility` shows the HZB builds.
 
 The table is complete when [§10](#10-exit-gates) passes, not when every label in
 the source appears in it: only telemetry scopes need entries
@@ -270,19 +276,33 @@ the source appears in it: only telemetry scopes need entries
 
 For each valid frame:
 
-1. **View.** A scope belongs to the view of its nearest `Vortex.View` ancestor
-   ([§8.1](#81-profiler)). Scopes without one are frame work.
-2. **Item.** A scope's item is its nearest ancestor-or-self that has a table
-   entry. Nested table entries roll up into the outermost one, so a stage's
-   sub-pass entry never double-counts with its parent.
-3. **Time.** An item's time is the sum of the durations of its outermost
-   entry scopes in that view. A group's time is the sum of its items. A view's
-   time is the sum of its groups.
-4. **Unknown scopes.** A telemetry scope with no table ancestor becomes an
-   item of `kOther` named by its label, so a missing table entry shows up in
-   the panel instead of vanishing into `unscoped`.
-5. **Items shown.** Each group keeps its `kMaxItemsPerGroup` largest items by
-   window average; the remainder are folded into one `"other"` item.
+1. **Counted scopes.** A scope's parent is the innermost scope open on the
+   same command recorder, else the frame span: only those contain it on the
+   GPU. Only a scope directly under the frame span or a `Vortex.View` span
+   counts. Nested scopes add nothing, so a stage's sub-pass never
+   double-counts with its parent.
+2. **View.** A counted scope belongs to the `Vortex.View` scope open, on any
+   recorder, when it began ([§8.1](#81-profiler)): passes a view records on
+   their own command lists are its work. Other counted scopes are frame work.
+   `kBackground` items are frame work wherever they were recorded: IBL work
+   records on its own command list while a view records.
+3. **Item.** A counted scope's item is its table entry. An item's time is the
+   sum of its counted scopes in that view. A group's time is the sum of its
+   items. A view's time is the sum of its groups.
+4. **Unknown scopes.** A counted scope with no table entry becomes an item of
+   `kOther` named by its label, so a missing table entry shows up in the panel
+   instead of vanishing into `idle`.
+5. **Command lists.** `Graphics` times every graphics-queue command list as a
+   `Graphics.CommandList` scope named by the list
+   (`Graphics::SetCommandListTimingCollector`, set by the profiler while it
+   collects). A list span is transparent to rule 1. Its time that no counted
+   scope covers becomes the `kOther` item `list:<name>`, in the view the list
+   holds or was recorded for, else in frame work. `idle` is the frame span
+   minus every list and every counted scope outside a list.
+6. **Items shown.** A group with more than `kMaxItemsPerGroup` items keeps its
+   largest by window average and folds the rest into one `"other"` item, so
+   it shows at most `kMaxItemsPerGroup`. The folded maximum is the largest
+   per-frame sum of the folded items.
 
 Views are keyed by `view_id`. A view appears while it has samples in the window
 and disappears with the first window that has none.
@@ -326,6 +346,7 @@ The built-in timeline records `kTelemetry` scopes only
 | `Vortex.View` per-view root                               | `kTelemetry`  |
 | Stage-table entries                                       | `kTelemetry`  |
 | IBL phase scopes while the IBL budget is active           | `kTelemetry`  |
+| Exposure sub-scopes, which exposure benchmarks record     | `kTelemetry`  |
 | Everything else: sub-steps, constant uploads, list builds | `kDiagnostic` |
 
 `kDiagnostic` scopes still reach Tracy and native GPU markers; they leave the
@@ -334,13 +355,15 @@ built-in timeline and its export. This keeps the query budget far below the
 [profiling guide](../../profiling/profiling-developer-guide.md) already asks.
 
 `IblWorkBudget` keeps consuming raw frames through its own sink and keeps its
-own phase labels; its scopes nest under `Vortex.Environment.IBL`, which maps to
-`kBackground`.
+own phase labels; its scopes nest under `Vortex.Environment.IBL.Process`, which
+maps to `kBackground`.
 
 ## 8. Profiler and DiagnosticsService changes
 
 ### 8.1 Profiler
 
+- `GpuTimelineScope` parents follow the scope's recorder ([§5.2](#52-rules))
+  and gain `view_scope_id`, the `Vortex.View` scope open when it began.
 - `GpuTimelineScope` gains `instance_id` and `instance_name`, copied from the
   scope's `view` and `name` variables when present. This is the per-view
   convention the profiling guide already documents; other variables are still
@@ -357,9 +380,9 @@ own phase labels; its scopes nest under `Vortex.Environment.IBL`, which maps to
   `GetLatestIblGpuTiming`, `IblGpuTiming` and the public
   `SetGpuTimelineRetainLatestFrame`; tests that need a raw frame reach the
   profiler through the existing `RendererPublicationProbe` fixture.
-- Move IBL timing plumbing out of the public service. The renderer owns the
-  profiler and hands IBL an internal `GpuTimelineAccess` at construction that
-  provides what the friends use today: attach the collector to a recorder,
+- Move IBL timing plumbing out of the public service. An internal
+  `GpuTimelineAccess`, built over the service and its only timeline friend,
+  provides what the friends used: attach the collector to a recorder,
   register a sink, invalidate the current frame and hold a
   `GpuTimelineLease` while IBL budgeting needs collection. This replaces
   `AcquireIblTiming`/`ReleaseIblTiming` and their owner count with the same

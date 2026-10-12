@@ -7,7 +7,6 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -112,7 +111,6 @@ struct DiagnosticsPassRecord {
   std::vector<std::string> inputs;
   std::vector<std::string> outputs;
   std::vector<std::string> missing_inputs;
-  std::optional<float> gpu_duration_ms;
 };
 
 struct DiagnosticsProductRecord {
@@ -136,12 +134,6 @@ struct DiagnosticsFrameSnapshot {
   std::vector<DiagnosticsPassRecord> passes;
   std::vector<DiagnosticsProductRecord> products;
   std::vector<DiagnosticsIssue> issues;
-};
-
-//! Renderer-wide IBL producer interval union from a completed timing frame.
-struct IblGpuTiming {
-  std::uint64_t frame_sequence { 0U };
-  double producer_ms { 0.0 };
 };
 
 [[nodiscard]] constexpr auto HasAnyFeature(const DiagnosticsFeatureSet features,

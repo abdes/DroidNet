@@ -21,12 +21,14 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/CapturedSkySource.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuValidation.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/IblWorkBudget.h>
 #include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineAccess.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Resources/CubeIlluminance.h>
@@ -130,7 +132,8 @@ struct IblProcessor::Cache {
   std::uint64_t active_scene_lifetime {};
   bool publication_invalidated { false };
   std::shared_ptr<IblWorkBudget> budget { std::make_shared<IblWorkBudget>() };
-  bool timing_required { false };
+  //! Held while IBL work is pending, so the budget gets GPU timing.
+  GpuTimelineLease timing_lease;
   bool recorded_work { false };
   std::optional<frame::SequenceNumber> diagnostics_frame;
 };
@@ -139,20 +142,15 @@ IblProcessor::IblProcessor(Renderer& renderer)
   : renderer_(renderer)
   , cache_(std::make_unique<Cache>())
 {
-  renderer_.GetDiagnosticsService().RegisterIblTimingSink(cache_->budget);
+  vortex::internal::GpuTimelineAccess { renderer_.GetDiagnosticsService() }
+    .AddSink(cache_->budget);
 }
-IblProcessor::~IblProcessor()
-{
-  cache_->budget->Close();
-  if (cache_->timing_required)
-    renderer_.GetDiagnosticsService().ReleaseIblTiming();
-}
+IblProcessor::~IblProcessor() { cache_->budget->Close(); }
 
 auto IblProcessor::OnFrameStart(const frame::SequenceNumber sequence) -> bool
 {
-  if (cache_->timing_required && !cache_->recorded_work) {
-    renderer_.GetDiagnosticsService().ReleaseIblTiming();
-    cache_->timing_required = false;
+  if (!cache_->recorded_work) {
+    cache_->timing_lease.Release();
   }
   cache_->recorded_work = false;
   RetireExpiredScenes();
@@ -588,9 +586,11 @@ try {
   const bool requested = changed || scene_cache.candidate != nullptr;
   if (requested) {
     cache.recorded_work = true;
-    if (!cache.timing_required) {
-      renderer_.GetDiagnosticsService().AcquireIblTiming();
-      cache.timing_required = true;
+    if (!cache.timing_lease.IsActive()) {
+      cache.timing_lease
+        = vortex::internal::GpuTimelineAccess { renderer_
+                                                  .GetDiagnosticsService() }
+            .AcquireLease();
     }
   }
   bool snapshot_started = false;

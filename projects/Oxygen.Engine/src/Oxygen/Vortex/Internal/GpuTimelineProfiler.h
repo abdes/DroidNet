@@ -14,6 +14,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -43,12 +44,22 @@ struct GpuTimelineDiagnostic {
   uint32_t max_query_slots { 0 };
 };
 
+//! A timed scope. Its parent is the innermost scope open on the same command
+//! recorder, else the frame span: only those contain it on the GPU.
 struct GpuTimelineScope {
   uint32_t scope_id { 0 };
   uint32_t parent_scope_id { 0 };
+  //! The innermost `Vortex.View` scope open, on any recorder, when this scope
+  //! began; `0xFFFFFFFF` when none. Work a view records on its own command
+  //! lists belongs to it without being nested in it.
+  uint32_t view_scope_id { 0xFFFFFFFFU };
   std::vector<uint32_t> child_scope_ids;
   uint64_t name_hash { 0 };
   std::string display_name;
+  //! The scope's `view` variable; zero when absent or not a number.
+  uint64_t instance_id { 0 };
+  //! The scope's `name` variable.
+  std::string instance_name;
   uint32_t begin_query_slot { 0 };
   uint32_t end_query_slot { 0 };
   float start_ms { 0.0F };
@@ -88,6 +99,7 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(GpuTimelineProfiler)
 
   OXGN_VRTX_API auto SetEnabled(bool enabled) -> void;
+  [[nodiscard]] auto IsEnabled() const noexcept -> bool { return enabled_; }
   //! Failed recording/submission: skip query resolve and retire the range at
   //! the normal frame-tail fence. This path performs no allocation.
   OXGN_VRTX_API auto InvalidateCurrentFrame() noexcept -> void;
@@ -117,7 +129,12 @@ private:
   struct GpuScopeRecord {
     uint64_t scope_name_hash { 0 };
     const char* display_name { nullptr };
+    uint64_t instance_id { 0 };
+    std::string instance_name;
+    //! Identifies the recorder while the scope is open; never dereferenced.
+    const graphics::CommandRecorder* recorder { nullptr };
     uint32_t parent_scope_id { 0 };
+    uint32_t view_scope_id { 0 };
     uint32_t begin_query_slot { 0 };
     uint32_t end_query_slot { 0 };
     uint16_t depth { 0 };
@@ -157,6 +174,9 @@ private:
 
   observer_ptr<Graphics> graphics_ { nullptr };
   bool enabled_ { false };
+  //! Set while the profiler acquires its own timestamp lists.
+  bool own_recording_ { false };
+  std::thread::id frame_thread_ {};
   bool retain_latest_frame_ { false };
   uint32_t max_scopes_per_frame_ { 4096U };
   uint32_t query_stride_ { 0U };

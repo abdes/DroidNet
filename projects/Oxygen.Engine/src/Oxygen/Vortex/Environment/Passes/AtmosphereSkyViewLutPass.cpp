@@ -40,6 +40,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereGpuPacking.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
@@ -437,8 +438,8 @@ auto AtmosphereSkyViewLutPass::RecordToTarget(RenderContext& ctx,
     = (height + (kThreadGroupSizeY - 1U)) / kThreadGroupSizeY;
   {
     graphics::GpuEventScope pass_scope(recorder,
-      capture ? "Vortex.Environment.IBL.AtmosphereSkyViewLut"
-              : "Vortex.Environment.AtmosphereSkyViewLut",
+      capture ? gpu_work::kIblAtmosphereSkyViewLutLabel
+              : gpu_work::kAtmosphereSkyViewLutLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     recorder.FlushBarriers();

@@ -38,6 +38,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/Internal/GpuFeedback.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
@@ -1446,7 +1447,7 @@ auto PostProcessService::TryEnqueueExposureStatus(PendingExposureStatus& job)
   renderer_.GetDiagnosticsService().AttachGpuTimelineCollector(*recorder);
   const auto recording = recorder->GetCommandListForInspection();
   const auto copied = [&] -> Result<void, graphics::ReadbackError> {
-    GpuEventScope scope(*recorder, "Vortex.PostProcess.Exposure.StatusReadback",
+    GpuEventScope scope(*recorder, gpu_work::kExposureStatusReadbackLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kSynchronization);
     if (!recorder->AdoptKnownResourceState(*job.state->status_buffer)) {

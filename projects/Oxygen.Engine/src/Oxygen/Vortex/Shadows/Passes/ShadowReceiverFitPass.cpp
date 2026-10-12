@@ -33,6 +33,7 @@
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/StructuredGpuBuffer.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
@@ -269,7 +270,7 @@ auto ShadowReceiverFitPass::Record(graphics::CommandRecorder& recorder,
     return std::nullopt;
   }
 
-  graphics::GpuEventScope scope(recorder, kDebugName,
+  graphics::GpuEventScope scope(recorder, gpu_work::kShadowReceiverFitLabel,
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   const auto buffers = std::array {

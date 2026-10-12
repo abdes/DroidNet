@@ -38,6 +38,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
@@ -1073,7 +1074,7 @@ auto BasePassModule::Execute(RenderContext& ctx,
           prepared_frame, draw_command);
       });
 
-  graphics::GpuEventScope stage_scope(recorder, "Vortex.Stage9.BasePass",
+  graphics::GpuEventScope stage_scope(recorder, gpu_work::kBasePassLabel,
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
   const auto draw_list = BuildDrawList(ctx, recorder,
@@ -1110,7 +1111,7 @@ auto BasePassModule::Execute(RenderContext& ctx,
 
     graphics::GpuEventScope wire_scope(recorder,
       "Vortex.Stage9.BasePass.Wireframe",
-      profiling::ProfileGranularity::kTelemetry,
+      profiling::ProfileGranularity::kDiagnostic,
       profiling::ProfileCategory::kPass);
     recorder.ClearFramebuffer(
       *wireframe_framebuffer_, std::nullopt, reverse_z ? 0.0F : 1.0F, 0U);
@@ -1217,7 +1218,7 @@ auto BasePassModule::Execute(RenderContext& ctx,
 
     graphics::GpuEventScope forward_scope(recorder,
       "Vortex.Stage9.BasePass.Forward",
-      profiling::ProfileGranularity::kTelemetry,
+      profiling::ProfileGranularity::kDiagnostic,
       profiling::ProfileCategory::kPass);
     if (!config_.early_z_pass_done) {
       recorder.ClearFramebuffer(
@@ -1270,7 +1271,7 @@ auto BasePassModule::Execute(RenderContext& ctx,
   {
     graphics::GpuEventScope main_pass_scope(recorder,
       "Vortex.Stage9.BasePass.MainPass",
-      profiling::ProfileGranularity::kTelemetry,
+      profiling::ProfileGranularity::kDiagnostic,
       profiling::ProfileCategory::kPass);
     if (!config_.early_z_pass_done) {
       recorder.ClearFramebuffer(
@@ -1336,7 +1337,7 @@ auto BasePassModule::Execute(RenderContext& ctx,
     {
       graphics::GpuEventScope velocity_aux_scope(recorder,
         "Vortex.Stage9.BasePass.VelocityAux",
-        profiling::ProfileGranularity::kTelemetry,
+        profiling::ProfileGranularity::kDiagnostic,
         profiling::ProfileCategory::kPass);
       recorder.ClearFramebuffer(*velocity_aux_color_clear_framebuffer_,
         std::vector<std::optional<graphics::Color>> {
@@ -1380,7 +1381,7 @@ auto BasePassModule::Execute(RenderContext& ctx,
     {
       graphics::GpuEventScope velocity_merge_scope(recorder,
         "Vortex.Stage9.BasePass.VelocityMerge",
-        profiling::ProfileGranularity::kTelemetry,
+        profiling::ProfileGranularity::kDiagnostic,
         profiling::ProfileCategory::kPass);
       recorder.SetPipelineState(BuildVelocityMergePipelineDesc());
       recorder.SetComputeRootConstantBufferView(
@@ -1434,8 +1435,7 @@ auto BasePassModule::ExecuteWireframeOverlay(RenderContext& ctx,
   }
 
   graphics::GpuEventScope overlay_scope(recorder,
-    "Vortex.Stage20.WireframeOverlay",
-    profiling::ProfileGranularity::kTelemetry,
+    gpu_work::kWireframeOverlayLabel, profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
 
   constexpr auto depth_read_only = true;

@@ -15,6 +15,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
+#include <Oxygen/Vortex/Diagnostics/GpuWorkSummary.h>
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 
 namespace oxygen::examples::ui {
@@ -200,11 +201,23 @@ void DiagnosticsPanel::DrawSkyLightDiagnostics()
     && state.last_failed_gpu_revision != state.validated_revision)
     ImGui::Text(
       "Last GPU failure: generation %u", state.last_failed_gpu_revision);
-  if (const auto gpu = vm_->GetLatestIblGpuTiming())
-    ImGui::Text("IBL GPU (all scenes): %.3f ms [frame %llu]", gpu->producer_ms,
-      static_cast<unsigned long long>(gpu->frame_sequence));
-  else if (timing)
-    ImGui::TextDisabled("Waiting for complete GPU timing");
+  if (const auto summary = vm_->GetLatestGpuWorkSummary()) {
+    // IBL work is the background group's `background.ibl` item; no item
+    // means no IBL work in the window.
+    auto ibl = vortex::GpuWorkStat {};
+    for (const auto& group : summary->frame_work) {
+      for (const auto& item : group.items) {
+        if (item.id == "background.ibl") {
+          ibl = item.time;
+        }
+      }
+    }
+    ImGui::Text("IBL GPU (all scenes): %.3f ms avg, %.3f ms max [frame %llu]",
+      ibl.avg_ms, ibl.max_ms,
+      static_cast<unsigned long long>(summary->last_frame.get()));
+  } else if (timing) {
+    ImGui::TextDisabled("Waiting for GPU timing");
+  }
 }
 
 auto DiagnosticsPanel::GetName() const noexcept -> std::string_view

@@ -127,7 +127,7 @@ auto RenderPass::PrepareResources(
   detail::RenderScope context_scope(context_, context);
 
   graphics::GpuEventScope pass_scope(recorder, GetName(),
-    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileGranularity::kDiagnostic,
     profiling::ProfileCategory::kPass);
   graphics::GpuEventScope phase_scope(recorder,
     "Vortex.RenderPass.PrepareResources",
@@ -157,7 +157,7 @@ auto RenderPass::Execute(
   detail::RenderScope context_scope(context_, context);
 
   graphics::GpuEventScope pass_scope(recorder, GetName(),
-    profiling::ProfileGranularity::kTelemetry,
+    profiling::ProfileGranularity::kDiagnostic,
     profiling::ProfileCategory::kPass);
   graphics::GpuEventScope phase_scope(recorder, "Vortex.RenderPass.Execute",
     profiling::ProfileGranularity::kDiagnostic,

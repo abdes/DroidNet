@@ -37,6 +37,7 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Internal/MeshDepthPipeline.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>
@@ -186,7 +187,7 @@ auto ContactShadowCasterDepthPass::Record(const PreparedViewShadowInput& input,
   mesh_processor_->BuildDrawCommands(*input.prepared_scene, &view, true, true);
   {
     graphics::GpuEventScope scope(*recorder,
-      "Vortex.Stage8.ContactShadowCasterDepth",
+      gpu_work::kContactShadowCasterDepthLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     if (!recorder->AdoptKnownResourceState(*texture)) {

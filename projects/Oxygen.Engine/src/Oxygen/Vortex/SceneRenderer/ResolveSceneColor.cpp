@@ -16,6 +16,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
@@ -155,7 +156,7 @@ void SceneRenderer::ResolveSceneColor(RenderContext& ctx,
   scene_texture_extracts_.resolved_scene_depth.valid = scene_depth_ready
     && scene_texture_extracts_.resolved_scene_depth.texture != nullptr;
 
-  graphics::GpuEventScope scope(recorder, "Vortex.ResolveSceneColor",
+  graphics::GpuEventScope scope(recorder, gpu_work::kResolveSceneColorLabel,
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
 

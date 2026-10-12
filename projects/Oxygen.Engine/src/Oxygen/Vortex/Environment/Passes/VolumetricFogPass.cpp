@@ -44,6 +44,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereGpuPacking.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
@@ -658,7 +659,7 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   const auto dispatch_z
     = (depth + (kThreadGroupSizeZ - 1U)) / kThreadGroupSizeZ;
   {
-    graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage14.VolumetricFog",
+    graphics::GpuEventScope pass_scope(recorder, gpu_work::kVolumetricFogLabel,
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
     recorder.SetPipelineState(BuildPipelineDesc(

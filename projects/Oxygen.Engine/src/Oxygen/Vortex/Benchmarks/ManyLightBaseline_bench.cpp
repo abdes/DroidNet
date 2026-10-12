@@ -265,7 +265,6 @@ auto ManyLightBaseline::SetupCase() -> void
   diagnostics.SetEnabledFeatures(DiagnosticsFeature::kGpuTimeline);
   diagnostics.SetGpuTimelineMaxScopesPerFrame(
     (options_.light_count * 2U) + kFixedScopesPerFrame);
-  diagnostics.SetGpuTimelineRetainLatestFrame(false);
   diagnostics.SetGpuTimelineEnabled(measure_);
 }
 auto ManyLightBaseline::Milliseconds(const Clock::duration duration) -> double
