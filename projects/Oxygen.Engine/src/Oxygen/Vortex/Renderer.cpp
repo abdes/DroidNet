@@ -1167,6 +1167,15 @@ Renderer::Renderer(std::weak_ptr<Graphics> graphics, RendererConfig config,
     frame::kFramesInFlight, kRendererStagingAlignment,
     upload::kDefaultRingBufferStagingSlack, "Vortex.UploadStaging");
 
+  auto graphics_policy = upload::DefaultUploadPolicy();
+  graphics_policy.upload_queue_key
+    = gfx->QueueKeyFor(graphics::QueueRole::kGraphics);
+  graphics_uploader_ = std::make_unique<upload::UploadCoordinator>(
+    observer_ptr { gfx.get() }, graphics_policy);
+  graphics_staging_provider_ = graphics_uploader_->CreateRingBufferStaging(
+    frame::kFramesInFlight, kRendererStagingAlignment,
+    upload::kDefaultRingBufferStagingSlack, "Vortex.GraphicsUploadStaging");
+
   inline_transfers_ = std::make_unique<upload::InlineTransfersCoordinator>(
     observer_ptr { gfx.get() });
   inline_staging_provider_ = std::make_shared<upload::RingBufferStaging>(
@@ -1505,6 +1514,9 @@ auto Renderer::OnShutdown() noexcept -> void
   if (uploader_) {
     [[maybe_unused]] const auto result = uploader_->Shutdown();
   }
+  if (graphics_uploader_) {
+    [[maybe_unused]] const auto result = graphics_uploader_->Shutdown();
+  }
   view_const_manager_.reset();
   render_context_pool_.reset();
   gpu_timeline_profiler_.reset();
@@ -1514,6 +1526,8 @@ auto Renderer::OnShutdown() noexcept -> void
   inline_transfers_.reset();
   lighting_staging_provider_.reset();
   inline_staging_provider_.reset();
+  graphics_staging_provider_.reset();
+  graphics_uploader_.reset();
   upload_staging_provider_.reset();
   uploader_.reset();
   render_graphs_.clear();
@@ -1944,6 +1958,10 @@ auto Renderer::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void
   const auto tag = internal::RendererTagFactory::Get();
   if (uploader_) {
     uploader_->OnFrameStart(
+      tag, context->GetFrameSequenceNumber(), frame_slot_);
+  }
+  if (graphics_uploader_) {
+    graphics_uploader_->OnFrameStart(
       tag, context->GetFrameSequenceNumber(), frame_slot_);
   }
   if (inline_transfers_) {
@@ -3496,6 +3514,20 @@ auto Renderer::GetUploadCoordinator() -> upload::UploadCoordinator&
   return *uploader_;
 }
 
+auto Renderer::GetGraphicsUploadCoordinator() -> upload::UploadCoordinator&
+{
+  CHECK_NOTNULL_F(graphics_uploader_.get(),
+    "Renderer graphics upload coordinator is unavailable");
+  return *graphics_uploader_;
+}
+
+auto Renderer::GetGraphicsStagingProvider() -> upload::StagingProvider&
+{
+  CHECK_NOTNULL_F(graphics_staging_provider_.get(),
+    "Renderer graphics staging provider is unavailable");
+  return *graphics_staging_provider_;
+}
+
 auto Renderer::AcquireIblCapture(const ViewId view)
   -> Result<environment::IblCaptureLease, environment::IblCaptureError>
 {
@@ -3862,6 +3894,9 @@ auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
   // slot twice erases tickets submitted by frame-start resource binders.
   if (uploader_ && !frame_already_started) {
     uploader_->OnFrameStart(tag, session.frame_sequence, frame_slot_);
+  }
+  if (graphics_uploader_ && !frame_already_started) {
+    graphics_uploader_->OnFrameStart(tag, session.frame_sequence, frame_slot_);
   }
   // Re-entering the same frame repeats its sequence, so transient buffers on
   // the inline providers keep every view published earlier in the frame.

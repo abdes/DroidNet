@@ -813,6 +813,11 @@ public:
   OXGN_VRTX_NDAPI auto GetInlineTransfersCoordinator()
     -> upload::InlineTransfersCoordinator&;
   OXGN_VRTX_NDAPI auto GetUploadCoordinator() -> upload::UploadCoordinator&;
+  //! Uploads on the graphics queue, ordered before every later pass of the
+  //! frame by queue order. For data shaders read without waiting on a ticket.
+  OXGN_VRTX_NDAPI auto GetGraphicsUploadCoordinator()
+    -> upload::UploadCoordinator&;
+  OXGN_VRTX_NDAPI auto GetGraphicsStagingProvider() -> upload::StagingProvider&;
   [[nodiscard]] OXGN_VRTX_NDAPI auto GetAssetLoader() const noexcept
     -> observer_ptr<content::IAssetLoader>;
 
@@ -1024,6 +1029,8 @@ private:
   std::unique_ptr<internal::ViewConstantsManager> view_const_manager_;
   std::unique_ptr<upload::UploadCoordinator> uploader_;
   std::shared_ptr<upload::StagingProvider> upload_staging_provider_;
+  std::unique_ptr<upload::UploadCoordinator> graphics_uploader_;
+  std::shared_ptr<upload::StagingProvider> graphics_staging_provider_;
   std::unique_ptr<upload::InlineTransfersCoordinator> inline_transfers_;
   std::shared_ptr<upload::StagingProvider> inline_staging_provider_;
   std::shared_ptr<upload::StagingProvider> lighting_staging_provider_;

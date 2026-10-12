@@ -581,7 +581,8 @@ InitViewsModule::InitViewsModule(
       observer_ptr { &inline_transfers });
     auto material_binder
       = std::make_unique<resources::MaterialBinder>(observer_ptr { gfx.get() },
-        observer_ptr { &uploader }, observer_ptr { &staging_provider },
+        observer_ptr { &renderer_.GetGraphicsUploadCoordinator() },
+        observer_ptr { &renderer_.GetGraphicsStagingProvider() },
         observer_ptr { texture_binder_.get() }, asset_loader);
     auto draw_metadata_emitter
       = std::make_unique<resources::DrawMetadataEmitter>(

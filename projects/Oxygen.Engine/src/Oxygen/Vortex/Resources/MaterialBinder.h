@@ -67,18 +67,21 @@ class IResourceBinder;
  index+generation identity for a material content key.
  - **Eviction-aware lifecycle**: material asset evictions invalidate handles and
    schedule Nexus slot release/reclaim.
- - **Dirty tracking**: material constants are tracked as dirty per-frame and
-   only dirty elements are uploaded during `EnsureFrameResources()`.
+ - **Dirty tracking**: changed elements stay pending until
+   `EnsureFrameResources()` submits them. Uploads run on the graphics queue,
+   so they complete before any pass the frame records afterwards.
  - **Bindless SRV**: `GetMaterialShadingSrvIndex()` returns the SRV index for
 
  the core material shading buffer once frame resources are ensured.
 
  ### Lifecycle (concise)
 
- 1. `OnFrameStart(tag, slot)` advances frame state, resets dirty tracking, and
-    processes queued material eviction events.
+ 1. `OnFrameStart(tag, slot)` advances frame state and processes queued
+    material eviction events.
  2. `GetOrAllocate()` / `Update()` mutate CPU-side constants and mark dirty.
- 3. `EnsureFrameResources()` schedules uploads for dirty elements.
+ 3. `EnsureFrameResources()` submits pending elements; each view's
+    preparation calls it, so a material a later view adds is uploaded before
+    that view's passes.
  4. `GetMaterialShadingSrvIndex()` returns the bindless SRV for rendering.
 
  @note Texture bindings are resolved via opaque `content::ResourceKey`s held by

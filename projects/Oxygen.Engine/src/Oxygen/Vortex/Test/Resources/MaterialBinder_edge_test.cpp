@@ -143,6 +143,53 @@ NOLINT_TEST_F(MaterialBinderEdgeTest, ResizingAtlasReuploadsAllMaterials)
   EXPECT_EQ(min_dst_offset, 0U);
 }
 
+//! A material a later view adds in the same frame is uploaded before that
+//! view's passes, and a call with nothing pending uploads nothing.
+NOLINT_TEST_F(MaterialBinderEdgeTest, LaterViewMaterialIsUploadedInSameFrame)
+{
+  auto* fake_gfx = &Gfx();
+  ASSERT_NE(fake_gfx, nullptr);
+  Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 0U });
+  MatBinder().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
+    oxygen::frame::Slot { 0U });
+  const auto allocate = [&](const float red) -> void {
+    oxygen::vortex::sceneprep::MaterialRef ref;
+    ref.resolved_asset = MakeSolidMaterial(red);
+    ref.source_asset_key = ref.resolved_asset->GetAssetKey();
+    ref.resolved_asset_key = ref.resolved_asset->GetAssetKey();
+    ASSERT_TRUE(MatBinder().IsHandleValid(MatBinder().GetOrAllocate(ref)));
+  };
+
+  // First view prepares one material and uploads it.
+  allocate(0.1F);
+  MatBinder().EnsureFrameResources();
+  ASSERT_TRUE(fake_gfx->buffer_log_.copy_called);
+  const auto max_end = [&] -> std::size_t {
+    std::size_t end = 0U;
+    for (const auto& e : fake_gfx->buffer_log_.copies) {
+      end = (std::max)(end, e.dst_offset + e.size);
+    }
+    return end;
+  };
+  const auto first_view_end = max_end();
+
+  // Second view adds another material in the same frame.
+  allocate(0.2F);
+  fake_gfx->buffer_log_.copies.clear();
+  fake_gfx->buffer_log_.copy_called = false;
+  MatBinder().EnsureFrameResources();
+  ASSERT_TRUE(fake_gfx->buffer_log_.copy_called);
+  EXPECT_GT(max_end(), first_view_end)
+    << "the second material was not uploaded";
+
+  // A third view with no changes uploads nothing.
+  fake_gfx->buffer_log_.copies.clear();
+  fake_gfx->buffer_log_.copy_called = false;
+  MatBinder().EnsureFrameResources();
+  EXPECT_FALSE(fake_gfx->buffer_log_.copy_called);
+}
+
 //! Materials that opt out of texture sampling must not call the texture binder.
 NOLINT_TEST_F(MaterialBinderEdgeTest, NoTexturesSkipsTextureBinder)
 {

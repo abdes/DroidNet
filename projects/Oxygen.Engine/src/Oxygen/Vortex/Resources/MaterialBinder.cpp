@@ -35,11 +35,11 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialDomain.h>
-#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Nexus/FrameDrivenIndexReuse.h>
+#include <Oxygen/Nexus/IndexReuse.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Resources/IResourceBinder.h>
 #include <Oxygen/Vortex/Resources/MaterialBinder.h>
@@ -104,9 +104,10 @@ namespace {
 
   if (material.HasProceduralGrid()) {
     const auto grid_spacing = material.GetGridSpacing();
-    if (!std::isfinite(grid_spacing[0]) || !std::isfinite(grid_spacing[1])
-      || std::abs(grid_spacing[0]) <= oxygen::math::Epsilon
-      || std::abs(grid_spacing[1]) <= oxygen::math::Epsilon) {
+    if (!std::isfinite(std::get<0>(grid_spacing))
+      || !std::isfinite(std::get<1>(grid_spacing))
+      || std::abs(std::get<0>(grid_spacing)) <= oxygen::math::Epsilon
+      || std::abs(std::get<1>(grid_spacing)) <= oxygen::math::Epsilon) {
       error_msg = "Material grid_spacing must be finite and non-zero";
       return false;
     }
@@ -127,10 +128,10 @@ auto QuantizeMaterialScalar(const float value) noexcept -> std::uint32_t
 template <typename VectorT>
 auto HashFloatVector(std::size_t& seed, const VectorT& value) -> void
 {
-  oxygen::HashCombine(seed, value[0]);
-  oxygen::HashCombine(seed, value[1]);
-  oxygen::HashCombine(seed, value[2]);
-  oxygen::HashCombine(seed, value[3]);
+  oxygen::HashCombine(seed, std::get<0>(value));
+  oxygen::HashCombine(seed, std::get<1>(value));
+  oxygen::HashCombine(seed, std::get<2>(value));
+  oxygen::HashCombine(seed, std::get<3>(value));
 }
 
 template <typename VectorT>
@@ -209,32 +210,26 @@ struct ProceduralGridIdentity {
   [[nodiscard]] static auto From(const oxygen::data::MaterialAsset& material)
     -> ProceduralGridIdentity
   {
-    const auto spacing = material.GetGridSpacing();
-    const auto minor = material.GetGridMinorColor();
-    const auto major = material.GetGridMajorColor();
-    const auto axis_x = material.GetGridAxisColorX();
-    const auto axis_y = material.GetGridAxisColorY();
-    const auto origin = material.GetGridOriginColor();
     return ProceduralGridIdentity {
-      .spacing = { spacing[0], spacing[1] },
+      .spacing = material.GetGridSpacing(),
       .major_every = material.GetGridMajorEvery(),
       .line_thickness = material.GetGridLineThickness(),
       .major_thickness = material.GetGridMajorThickness(),
       .axis_thickness = material.GetGridAxisThickness(),
       .fade_start = material.GetGridFadeStart(),
       .fade_end = material.GetGridFadeEnd(),
-      .minor_color = { minor[0], minor[1], minor[2], minor[3] },
-      .major_color = { major[0], major[1], major[2], major[3] },
-      .axis_x_color = { axis_x[0], axis_x[1], axis_x[2], axis_x[3] },
-      .axis_y_color = { axis_y[0], axis_y[1], axis_y[2], axis_y[3] },
-      .origin_color = { origin[0], origin[1], origin[2], origin[3] },
+      .minor_color = material.GetGridMinorColor(),
+      .major_color = material.GetGridMajorColor(),
+      .axis_x_color = material.GetGridAxisColorX(),
+      .axis_y_color = material.GetGridAxisColorY(),
+      .origin_color = material.GetGridOriginColor(),
     };
   }
 
   auto HashInto(std::size_t& seed) const noexcept -> void
   {
-    oxygen::HashCombine(seed, spacing[0]);
-    oxygen::HashCombine(seed, spacing[1]);
+    oxygen::HashCombine(seed, std::get<0>(spacing));
+    oxygen::HashCombine(seed, std::get<1>(spacing));
     oxygen::HashCombine(seed, major_every);
     oxygen::HashCombine(seed, line_thickness);
     oxygen::HashCombine(seed, major_thickness);
@@ -267,9 +262,9 @@ auto MakeMaterialKey(
   // Emission is radiance: the dimensionless scalar quantization below would
   // collapse small positive half values to black before exposure can use them.
   const auto emissive = asset.GetEmissiveFactor();
-  oxygen::HashCombine(seed, emissive[0]);
-  oxygen::HashCombine(seed, emissive[1]);
-  oxygen::HashCombine(seed, emissive[2]);
+  oxygen::HashCombine(seed, std::get<0>(emissive));
+  oxygen::HashCombine(seed, std::get<1>(emissive));
+  oxygen::HashCombine(seed, std::get<2>(emissive));
   oxygen::HashCombine(seed, QuantizeMaterialScalar(asset.GetMetalness()));
   oxygen::HashCombine(seed, QuantizeMaterialScalar(asset.GetRoughness()));
   oxygen::HashCombine(seed, QuantizeMaterialScalar(asset.GetNormalScale()));
@@ -384,10 +379,10 @@ auto SerializeMaterialShadingConstants(
   // No explicit opacity_texture_index is kept in the constant buffer.
 
   const auto uv_scale = material.resolved_asset->GetUvScale();
-  constants.uv_scale = { uv_scale[0], uv_scale[1] };
+  constants.uv_scale = { std::get<0>(uv_scale), std::get<1>(uv_scale) };
 
   const auto uv_offset = material.resolved_asset->GetUvOffset();
-  constants.uv_offset = { uv_offset[0], uv_offset[1] };
+  constants.uv_offset = { std::get<0>(uv_offset), std::get<1>(uv_offset) };
 
   constants.uv_rotation_radians
     = material.resolved_asset->GetUvRotationRadians();
@@ -395,8 +390,8 @@ auto SerializeMaterialShadingConstants(
 
   // Emissive: factor and texture for self-illumination / glow.
   const auto emissive_factor = material.resolved_asset->GetEmissiveFactor();
-  constants.emissive_factor
-    = { emissive_factor[0], emissive_factor[1], emissive_factor[2] };
+  constants.emissive_factor = { std::get<0>(emissive_factor),
+    std::get<1>(emissive_factor), std::get<2>(emissive_factor) };
   constants.emissive_texture_index
     = ResolveTextureIndex(material.resolved_asset->GetEmissiveTextureKey());
 
@@ -414,7 +409,8 @@ auto SerializeProceduralGridMaterialConstants(
   }
 
   const auto grid_spacing = material.resolved_asset->GetGridSpacing();
-  constants.grid_spacing = { grid_spacing[0], grid_spacing[1] };
+  constants.grid_spacing
+    = { std::get<0>(grid_spacing), std::get<1>(grid_spacing) };
   constants.grid_major_every = material.resolved_asset->GetGridMajorEvery();
   constants.grid_line_thickness
     = material.resolved_asset->GetGridLineThickness();
@@ -426,24 +422,29 @@ auto SerializeProceduralGridMaterialConstants(
   constants.grid_fade_end = material.resolved_asset->GetGridFadeEnd();
 
   const auto grid_minor_color = material.resolved_asset->GetGridMinorColor();
-  constants.grid_minor_color = { grid_minor_color[0], grid_minor_color[1],
-    grid_minor_color[2], grid_minor_color[3] };
+  constants.grid_minor_color
+    = { std::get<0>(grid_minor_color), std::get<1>(grid_minor_color),
+        std::get<2>(grid_minor_color), std::get<3>(grid_minor_color) };
 
   const auto grid_major_color = material.resolved_asset->GetGridMajorColor();
-  constants.grid_major_color = { grid_major_color[0], grid_major_color[1],
-    grid_major_color[2], grid_major_color[3] };
+  constants.grid_major_color
+    = { std::get<0>(grid_major_color), std::get<1>(grid_major_color),
+        std::get<2>(grid_major_color), std::get<3>(grid_major_color) };
 
   const auto grid_axis_color_x = material.resolved_asset->GetGridAxisColorX();
-  constants.grid_axis_color_x = { grid_axis_color_x[0], grid_axis_color_x[1],
-    grid_axis_color_x[2], grid_axis_color_x[3] };
+  constants.grid_axis_color_x
+    = { std::get<0>(grid_axis_color_x), std::get<1>(grid_axis_color_x),
+        std::get<2>(grid_axis_color_x), std::get<3>(grid_axis_color_x) };
 
   const auto grid_axis_color_y = material.resolved_asset->GetGridAxisColorY();
-  constants.grid_axis_color_y = { grid_axis_color_y[0], grid_axis_color_y[1],
-    grid_axis_color_y[2], grid_axis_color_y[3] };
+  constants.grid_axis_color_y
+    = { std::get<0>(grid_axis_color_y), std::get<1>(grid_axis_color_y),
+        std::get<2>(grid_axis_color_y), std::get<3>(grid_axis_color_y) };
 
   const auto grid_origin_color = material.resolved_asset->GetGridOriginColor();
-  constants.grid_origin_color = { grid_origin_color[0], grid_origin_color[1],
-    grid_origin_color[2], grid_origin_color[3] };
+  constants.grid_origin_color
+    = { std::get<0>(grid_origin_color), std::get<1>(grid_origin_color),
+        std::get<2>(grid_origin_color), std::get<3>(grid_origin_color) };
 
   return constants;
 }
@@ -532,9 +533,9 @@ private:
     procedural_grid_material_constants_;
   std::vector<std::uint64_t> material_keys_;
   std::vector<std::uint32_t> material_handle_generations_;
-  std::vector<std::uint32_t> dirty_epoch_;
+  //! Nonzero while the element waits for an upload submission.
+  std::vector<std::uint8_t> dirty_pending_;
   std::vector<std::uint32_t> dirty_indices_;
-  std::uint32_t current_epoch_ { 1U }; // 0 reserved for 'never'
   std::uint32_t next_handle_index_ { 0U };
   std::shared_ptr<std::vector<bindless::HeapIndex>> free_indices_;
 
@@ -569,7 +570,6 @@ private:
   ReuseStrategy slot_reuse_;
 
   // Frame resource tracking
-  bool uploaded_this_frame_ { false };
 };
 
 MaterialBinder::MaterialBinder(observer_ptr<Graphics> gfx,
@@ -769,16 +769,9 @@ auto MaterialBinder::Impl::OnFrameStart(
   slot_reuse_.OnBeginFrame(slot);
   ++frames_started_count_;
 
-  ++current_epoch_;
-  if (current_epoch_ == 0U) {
-    LOG_F(WARNING,
-      "MaterialBinder::OnFrameStart - epoch overflow, resetting dirty state");
-    current_epoch_ = 1U;
-    std::ranges::fill(dirty_epoch_, 0U);
-  }
-
+  // Dirty elements stay pending until a submission takes them, so a failed
+  // upload retries next frame instead of leaving stale GPU constants.
   current_frame_slot_ = slot;
-  dirty_indices_.clear();
 
   if (materials_atlas_) {
     materials_atlas_->OnFrameStart(slot);
@@ -787,8 +780,6 @@ auto MaterialBinder::Impl::OnFrameStart(
     procedural_grid_materials_atlas_->OnFrameStart(slot);
   }
   ProcessEvictions();
-
-  uploaded_this_frame_ = false;
 }
 
 auto MaterialBinder::Impl::ToVersionedIndex_(
@@ -814,8 +805,8 @@ auto MaterialBinder::Impl::TryGetCurrentIndex_(
   if (u_index >= material_handle_generations_.size()) {
     return std::nullopt;
   }
-  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-  if (material_handle_generations_[u_index] != handle.GenerationValue().get()) {
+  if (material_handle_generations_.at(u_index)
+    != handle.GenerationValue().get()) {
     return std::nullopt;
   }
   return u_index;
@@ -833,8 +824,7 @@ auto MaterialBinder::Impl::FindIndexByHandle(
   if (u_index >= materials_.size()) {
     return std::nullopt;
   }
-  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-  if (!materials_[u_index]) {
+  if (!materials_.at(u_index)) {
     return std::nullopt;
   }
   return u_index;
@@ -868,16 +858,15 @@ auto MaterialBinder::Impl::GetDirtyIndices() const noexcept
 
 auto MaterialBinder::Impl::MarkDirty(const std::uint32_t index) -> void
 {
-  if (index >= dirty_epoch_.size()) {
-    dirty_epoch_.resize(static_cast<std::size_t>(index) + 1U, 0U);
+  if (index >= dirty_pending_.size()) {
+    dirty_pending_.resize(static_cast<std::size_t>(index) + 1U, 0U);
   }
   // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
-  if (dirty_epoch_[index] == current_epoch_) {
+  if (dirty_pending_.at(index) != 0U) {
     return;
   }
-  dirty_epoch_[index] = current_epoch_;
+  dirty_pending_.at(index) = 1U;
   dirty_indices_.push_back(index);
-  uploaded_this_frame_ = false;
   // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
 }
 
@@ -946,8 +935,7 @@ auto MaterialBinder::Impl::UpdateKeyMappingForIndex(
     material_handle_generations_.resize(
       static_cast<std::size_t>(index) + 1U, 0U);
   }
-  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-  const auto handle_generation = material_handle_generations_[index];
+  const auto handle_generation = material_handle_generations_.at(index);
   const auto handle = vortex::sceneprep::MaterialHandle {
     vortex::sceneprep::MaterialHandle::Index { index },
     vortex::sceneprep::MaterialHandle::Generation { handle_generation },
@@ -1008,13 +996,11 @@ auto MaterialBinder::Impl::GetOrAllocate(
 
       ++cache_hits_;
 
-      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-      const auto* old_ptr = materials_[idx].get();
+      const auto* old_ptr = materials_.at(idx).get();
       if ((old_ptr != nullptr) && old_ptr != material.resolved_asset.get()) {
         material_ptr_to_index_.erase(old_ptr);
       }
-      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-      materials_[idx] = material.resolved_asset;
+      materials_.at(idx) = material.resolved_asset;
       material_ptr_to_index_[material.resolved_asset.get()] = idx;
 
       const auto& cached_asset = *material.resolved_asset;
@@ -1040,9 +1026,9 @@ auto MaterialBinder::Impl::GetOrAllocate(
           || needs_refresh(cached_asset.GetClearcoatNormalTextureKey())
           || needs_refresh(cached_asset.GetTransmissionTextureKey())
           || needs_refresh(cached_asset.GetThicknessTextureKey())) {
-          material_shading_constants_[idx]
+          material_shading_constants_.at(idx)
             = SerializeMaterialShadingConstants(material, *texture_binder_);
-          procedural_grid_material_constants_[idx]
+          procedural_grid_material_constants_.at(idx)
             = SerializeProceduralGridMaterialConstants(material);
           MarkDirty(idx);
         }
@@ -1064,9 +1050,9 @@ auto MaterialBinder::Impl::GetOrAllocate(
     free_indices_->pop_back();
   }
   bool activated = false;
-  const auto restore_index = ScopeGuard([&]() noexcept {
+  const auto restore_index = ScopeGuard([&] noexcept -> void {
     if (!activated) {
-      free_indices_->push_back(bindless::HeapIndex { index });
+      free_indices_->emplace_back(index);
     }
   });
   const auto constants
@@ -1104,7 +1090,8 @@ auto MaterialBinder::Impl::GetOrAllocate(
     return vortex::sceneprep::kInvalidMaterialHandle;
   }
 
-  const auto versioned_handle = [&] {
+  const auto versioned_handle
+    = [&] -> nexus::VersionedIndex<bindless::HeapIndex> {
     try {
       return slot_reuse_.ActivateSlot(bindless::HeapIndex { index });
     } catch (...) {
@@ -1121,14 +1108,12 @@ auto MaterialBinder::Impl::GetOrAllocate(
 
   activated = true;
 
-  // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
-  materials_[index] = material.resolved_asset;
-  material_shading_constants_[index] = constants;
-  procedural_grid_material_constants_[index] = procedural_grid_constants;
-  material_refs_[index] = *ref;
-  procedural_grid_material_refs_[index] = *grid_ref;
-  material_handle_generations_[index] = handle.GenerationValue().get();
-  // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
+  materials_.at(index) = material.resolved_asset;
+  material_shading_constants_.at(index) = constants;
+  procedural_grid_material_constants_.at(index) = procedural_grid_constants;
+  material_refs_.at(index) = *ref;
+  procedural_grid_material_refs_.at(index) = *grid_ref;
+  material_handle_generations_.at(index) = handle.GenerationValue().get();
   material_ptr_to_index_[material.resolved_asset.get()] = index;
   ++total_allocations_;
   ++atlas_allocations_;
@@ -1177,15 +1162,15 @@ auto MaterialBinder::Impl::Update(
   const auto new_procedural_grid_constants
     = SerializeProceduralGridMaterialConstants(mat_ref);
 
-  const auto* old_ptr = materials_[index].get();
+  const auto* old_ptr = materials_.at(index).get();
   if (old_ptr != nullptr && old_ptr != material.get()) {
     material_ptr_to_index_.erase(old_ptr);
   }
-  materials_[index] = std::move(material);
-  material_ptr_to_index_[materials_[index].get()] = index;
+  materials_.at(index) = std::move(material);
+  material_ptr_to_index_[materials_.at(index).get()] = index;
 
-  material_shading_constants_[index] = new_constants;
-  procedural_grid_material_constants_[index] = new_procedural_grid_constants;
+  material_shading_constants_.at(index) = new_constants;
+  procedural_grid_material_constants_.at(index) = new_procedural_grid_constants;
   UpdateKeyMappingForIndex(index, new_key);
   MarkDirty(index);
   // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
@@ -1215,8 +1200,7 @@ auto MaterialBinder::Impl::ProcessEvictions() -> void
     bool found_match = false;
     for (std::size_t entry_index = 0U; entry_index < materials_.size();
       ++entry_index) {
-      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-      const auto& material = materials_[entry_index];
+      const auto& material = materials_.at(entry_index);
       if (!material || material->GetAssetKey() != eviction.asset_key) {
         continue;
       }
@@ -1239,24 +1223,19 @@ auto MaterialBinder::Impl::ProcessEvictions() -> void
       material_ptr_to_index_.erase(material.get());
 
       if (entry_index < material_refs_.size()) {
-        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
         materials_atlas_->Release(
-          material_refs_[entry_index], current_frame_slot_);
-        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        material_refs_[entry_index] = AtlasBuffer::ElementRef {};
+          material_refs_.at(entry_index), current_frame_slot_);
+        material_refs_.at(entry_index) = AtlasBuffer::ElementRef {};
       }
       if (entry_index < procedural_grid_material_refs_.size()) {
-        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
         procedural_grid_materials_atlas_->Release(
-          procedural_grid_material_refs_[entry_index], current_frame_slot_);
-        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        procedural_grid_material_refs_[entry_index]
+          procedural_grid_material_refs_.at(entry_index), current_frame_slot_);
+        procedural_grid_material_refs_.at(entry_index)
           = AtlasBuffer::ElementRef {};
       }
 
       if (entry_index < material_handle_generations_.size()) {
-        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        const auto generation = material_handle_generations_[entry_index];
+        const auto generation = material_handle_generations_.at(entry_index);
         if (generation != 0U) {
           const auto handle = vortex::sceneprep::MaterialHandle {
             vortex::sceneprep::MaterialHandle::Index {
@@ -1265,25 +1244,20 @@ auto MaterialBinder::Impl::ProcessEvictions() -> void
           };
           slot_reuse_.Release(ToVersionedIndex_(handle));
         }
-        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        material_handle_generations_[entry_index] = 0U;
+        material_handle_generations_.at(entry_index) = 0U;
       }
 
-      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-      materials_[entry_index].reset();
+      materials_.at(entry_index).reset();
       if (entry_index < material_shading_constants_.size()) {
-        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        material_shading_constants_[entry_index]
+        material_shading_constants_.at(entry_index)
           = vortex::MaterialShadingConstants {};
       }
       if (entry_index < procedural_grid_material_constants_.size()) {
-        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        procedural_grid_material_constants_[entry_index]
+        procedural_grid_material_constants_.at(entry_index)
           = vortex::ProceduralGridMaterialConstants {};
       }
-      if (entry_index < dirty_epoch_.size()) {
-        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-        dirty_epoch_[entry_index] = 0U;
+      if (entry_index < dirty_pending_.size()) {
+        dirty_pending_.at(entry_index) = 0U;
       }
       std::erase(dirty_indices_, static_cast<std::uint32_t>(entry_index));
 
@@ -1336,8 +1310,7 @@ auto MaterialBinder::Impl::OverrideUvTransform(
     return false;
   }
 
-  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
-  auto& constants = material_shading_constants_[index];
+  auto& constants = material_shading_constants_.at(index);
   constants.uv_scale = uv_scale;
   constants.uv_offset = uv_offset;
   MarkDirty(index);
@@ -1346,10 +1319,6 @@ auto MaterialBinder::Impl::OverrideUvTransform(
 
 auto MaterialBinder::Impl::EnsureFrameResources() -> void
 {
-  if (uploaded_this_frame_) {
-    return;
-  }
-
   if (current_frame_slot_ == frame::kInvalidSlot) {
     LOG_F(ERROR,
       "EnsureFrameResources() called before OnFrameStart() - frame lifecycle "
@@ -1365,7 +1334,6 @@ auto MaterialBinder::Impl::EnsureFrameResources() -> void
   }
 
   if (dirty_indices_.empty() || materials_.empty()) {
-    uploaded_this_frame_ = true;
     return;
   }
 
@@ -1400,9 +1368,8 @@ auto MaterialBinder::Impl::EnsureFrameResources() -> void
     req.debug_name = "MaterialShadingConstants";
     req.desc = *desc;
     req.data = vortex::upload::UploadDataView {
-      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
       std::as_bytes(std::span<vortex::MaterialShadingConstants>(
-                      &material_shading_constants_[index], 1))
+                      &material_shading_constants_.at(index), 1))
         .first(material_shading_stride),
     };
     requests.push_back(std::move(req));
@@ -1421,16 +1388,14 @@ auto MaterialBinder::Impl::EnsureFrameResources() -> void
     grid_req.debug_name = "ProceduralGridMaterialConstants";
     grid_req.desc = *grid_desc;
     grid_req.data = vortex::upload::UploadDataView {
-      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
       std::as_bytes(std::span<vortex::ProceduralGridMaterialConstants>(
-                      &procedural_grid_material_constants_[index], 1))
+                      &procedural_grid_material_constants_.at(index), 1))
         .first(procedural_grid_stride),
     };
     requests.push_back(std::move(grid_req));
   }
 
   if (requests.empty()) {
-    uploaded_this_frame_ = true;
     return;
   }
 
@@ -1452,7 +1417,11 @@ auto MaterialBinder::Impl::EnsureFrameResources() -> void
       requests.size(), tickets->size());
   }
 
-  uploaded_this_frame_ = true;
+  // Submitted: a later change in this frame must mark the element again.
+  for (const auto index : dirty_indices_) {
+    dirty_pending_.at(index) = 0U;
+  }
+  dirty_indices_.clear();
 }
 
 auto MaterialBinder::Impl::GetMaterialShadingSrvIndex() const

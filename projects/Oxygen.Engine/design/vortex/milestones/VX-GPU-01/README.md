@@ -165,7 +165,7 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 | ID  | Deliverable                                                            | Findings                    | Depends | State       | Commit |
 | --- | ---------------------------------------------------------------------- | --------------------------- | ------- | ----------- | ------ |
 | S0  | Design updates and open decisions                                      | all                         | —       | `validated` | —      |
-| S1  | Ordered material uploads                                               | N1                          | S0      | `planned`   | —      |
+| S1  | Ordered material uploads                                               | N1                          | S0      | `validated` | —      |
 | S2  | Receipt-retired descriptors; no live descriptor rewrites               | C1, M2, H2, H3, L10         | S0      | `planned`   | —      |
 | S3  | Non-camera passes own their inputs; pure shader helpers                | C2, H4, H5, L9              | S0      | `planned`   | —      |
 | S4  | Versioned view constants; one source per view value                    | H1, M7                      | S3      | `planned`   | —      |
@@ -206,15 +206,17 @@ Update the owning designs, record the [answered decisions](#decisions).
 
 ## S1 — Ordered material uploads
 
-- [ ] `Vortex/Resources/MaterialBinder.cpp`: material and procedural-grid
-      uploads go through the graphics-queue inline transfer path, recorded
-      before the frame's first pass (GD-1); failures are reported and the
-      material is not published.
-- [ ] **Tests.** `Oxygen.Vortex` material binder tests:
-  - a draw recorded in the frame that adds or changes a material reads the
-    new constants (GPU test with `SharedTransferQueueStrategy`);
-  - the material copies are recorded before the frame's first pass;
-  - a failed upload is reported and the material is not published.
+- [x] `Vortex/Renderer.{h,cpp}`: a second `UploadCoordinator` on the graphics
+      queue (`GetGraphicsUploadCoordinator`, `GetGraphicsStagingProvider`).
+- [x] `InitViewsModule.cpp`: MaterialBinder uploads through it, so material
+      and procedural-grid copies are submitted during view preparation, before
+      the view's passes, in graphics-queue order (GD-1).
+- [x] `Vortex/Resources/MaterialBinder.cpp`: a changed element stays pending
+      until a submission takes it; a failed submission retries next frame
+      instead of being dropped at frame start; each view's preparation uploads
+      only what is still pending.
+- [x] **Tests.** `MaterialBinderEdgeTest.LaterViewMaterialIsUploadedInSameFrame`;
+      the 35 MaterialBinder tests and `SceneRendererDeferredCore` pass.
 
 ## S2 — Receipt-retired descriptors
 
