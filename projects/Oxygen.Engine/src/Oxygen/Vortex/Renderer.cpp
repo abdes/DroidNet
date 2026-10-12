@@ -3115,8 +3115,7 @@ auto Renderer::UnregisterViewRenderGraph(ViewId view_id) -> void
 auto Renderer::RegisterRuntimeComposition(const RuntimeCompositionInput& input)
   -> void
 {
-  if (input.composite_target == nullptr || input.target_surface == nullptr
-    || (input.layers.empty() && input.texture_layers.empty())) {
+  if (input.composite_target == nullptr || input.target_surface == nullptr) {
     return;
   }
 
@@ -3165,7 +3164,22 @@ auto Renderer::RegisterRuntimeComposition(const RuntimeCompositionInput& input)
   }
 
   if (submission.tasks.empty()) {
-    return;
+    // Nothing to show (no scene yet, or a session ended): clear the target so
+    // the surface layers (UI) still draw and the window keeps presenting.
+    const auto extent = ResolveFramebufferExtent(*input.composite_target);
+    if (!extent.has_value()) {
+      return;
+    }
+    submission.tasks.push_back(CompositingTask::MakeFill(
+      ViewPort {
+        .top_left_x = 0.0F,
+        .top_left_y = 0.0F,
+        .width = static_cast<float>(extent->x),
+        .height = static_cast<float>(extent->y),
+        .min_depth = 0.0F,
+        .max_depth = 1.0F,
+      },
+      graphics::Color { 0.0F, 0.0F, 0.0F, 1.0F }, "Composite Clear"));
   }
 
   RegisterComposition(std::move(submission), input.target_surface);

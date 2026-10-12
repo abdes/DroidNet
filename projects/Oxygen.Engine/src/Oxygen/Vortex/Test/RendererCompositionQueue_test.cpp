@@ -534,6 +534,54 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   EXPECT_EQ(copy.dst_slice.height, 48U);
 }
 
+//! A window with no view to show (a player between sessions) is still cleared
+//! and presented, so its UI layers keep drawing.
+NOLINT_TEST_F(RendererCompositionQueueTest,
+  RegisterRuntimeCompositionWithoutLayersClearsAndPresents)
+{
+  auto surface_texture = MakeColorTexture("Queue.EmptySurface");
+  auto surface = std::make_shared<FakeSurface>(surface_texture);
+  auto present_target = MakeFramebuffer(surface_texture);
+
+  frame_context_->AddSurface(oxygen::observer_ptr<Surface> {
+    surface.get(),
+  });
+
+  auto harness
+    = oxygen::vortex::harness::single_pass::presets::ForFullscreenGraphicsPass(
+      *renderer_,
+      Renderer::FrameSessionInput {
+        .frame_slot = oxygen::frame::Slot { 0U, },
+        .frame_sequence = oxygen::frame::SequenceNumber { 1U, },
+      },
+      oxygen::observer_ptr<Framebuffer> { present_target.get(), });
+  auto active_frame = harness.Finalize();
+  if (!active_frame.has_value()) {
+    FAIL() << "Expected active_frame to have a value";
+  }
+
+  graphics_->texture_copy_log_.copies.clear();
+  graphics_->draw_log_.draws.clear();
+
+  renderer_->RegisterRuntimeComposition(Renderer::RuntimeCompositionInput {
+    .composite_target = present_target,
+    .target_surface = surface,
+  });
+
+  auto loop = oxygen::co::testing::TestEventLoop {};
+  // co::Run retains this closure until synchronous completion, within the
+  // captured objects lifetimes.
+  oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
+    co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
+      frame_context_.get(),
+    });
+  });
+
+  EXPECT_TRUE(graphics_->texture_copy_log_.copies.empty());
+  EXPECT_EQ(graphics_->draw_log_.draws.size(), 1U);
+  EXPECT_TRUE(frame_context_->IsSurfacePresentable(0));
+}
+
 NOLINT_TEST_F(RendererCompositionQueueTest,
   RegisterRuntimeCompositionBlendsTextureLayerToPresentationTarget)
 {
