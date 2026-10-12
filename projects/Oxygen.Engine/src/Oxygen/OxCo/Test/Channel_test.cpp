@@ -4,27 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/OxCo/Channel.h>
-
 #include <array>
 
-#include <Oxygen/Testing/GTest.h>
+#include "Utils/OxCoTestFixture.h"
 
 #include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
-
-#include "Utils/OxCoTestFixture.h"
+#include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 using oxygen::co::Channel;
 using oxygen::co::Co;
 using oxygen::co::Run;
 using oxygen::co::testing::OxCoTestFixture;
-
-// NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
-// NOLINTBEGIN(*-avoid-capturing-lambda-coroutines)
 
 namespace {
 
@@ -242,6 +237,3 @@ NOLINT_TEST_F(UnboundedChannelTest, Close)
 }
 
 } // namespace
-
-// NOLINTEND(*-avoid-capturing-lambda-coroutines)
-// NOLINTEND(*-avoid-reference-coroutine-parameters)

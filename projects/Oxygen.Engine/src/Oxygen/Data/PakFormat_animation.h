@@ -11,7 +11,7 @@
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
 OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
-// NOLINTBEGIN(*-avoid-c-arrays,*-magic-numbers)
+// NOLINTBEGIN(*-avoid-c-arrays)
 
 //! Oxygen PAK format animation domain schema.
 /*!
@@ -22,5 +22,5 @@ namespace oxygen::data::pak::animation {
 // future expansion of animation-specific packed descriptors.
 } // namespace oxygen::data::pak::animation
 
-// NOLINTEND(*-avoid-c-arrays,*-magic-numbers)
+// NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

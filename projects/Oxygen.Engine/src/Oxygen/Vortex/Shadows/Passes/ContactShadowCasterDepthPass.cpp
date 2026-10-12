@@ -66,15 +66,13 @@ namespace {
     std::uint32_t pad2 { 0U };
   };
 
-  static_assert(sizeof(ContactShadowCasterDepthPassConstants)
-    == 144U); // NOLINT(*-magic-numbers)
+  static_assert(sizeof(ContactShadowCasterDepthPassConstants) == 144U);
   static_assert(
     offsetof(ContactShadowCasterDepthPassConstants, view_matrix) == 0U);
-  static_assert(offsetof(ContactShadowCasterDepthPassConstants,
-                  projection_matrix)
-    == 64U); // NOLINT(*-magic-numbers)
-  static_assert(offsetof(ContactShadowCasterDepthPassConstants, draw_frame_slot)
-    == 128U); // NOLINT(*-magic-numbers)
+  static_assert(
+    offsetof(ContactShadowCasterDepthPassConstants, projection_matrix) == 64U);
+  static_assert(
+    offsetof(ContactShadowCasterDepthPassConstants, draw_frame_slot) == 128U);
   constexpr std::uint32_t kPassConstantsStride
     = sizeof(ContactShadowCasterDepthPassConstants);
 

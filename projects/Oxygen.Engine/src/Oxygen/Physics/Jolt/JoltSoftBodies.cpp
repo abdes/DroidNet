@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Jolt/Jolt.h> // Must always be first (keep separate)
+
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -12,8 +14,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
 
 #include <Jolt/Core/StreamWrapper.h>
 #include <Jolt/Physics/Body/Body.h>
@@ -764,7 +764,6 @@ auto oxygen::physics::jolt::JoltSoftBodies::ApplyMaterialParams(
       return Err(PhysicsError::kBackendInitFailed);
     }
     motion_properties->SetLinearDamping(params.damping);
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     auto* soft_motion
       = static_cast<JPH::SoftBodyMotionProperties*>(motion_properties);
     const auto* settings = soft_motion->GetSettings();

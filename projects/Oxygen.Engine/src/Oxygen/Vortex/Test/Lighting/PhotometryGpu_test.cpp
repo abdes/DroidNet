@@ -21,8 +21,8 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
-#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Core/Lighting/LightPhotometry.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Test/Lighting/LightingGpuAbiFixture.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/Photometry.h>
 
@@ -40,7 +40,6 @@ namespace {
     glm::vec3 intensity_rgb_cd { 0.0F };
     std::uint32_t is_spot { 0U };
   };
-  // NOLINTBEGIN(*-magic-numbers)
   static_assert(sizeof(PhotometryProbeInput) == 64U);
   static_assert(offsetof(PhotometryProbeInput, light_vector) == 0U);
   static_assert(offsetof(PhotometryProbeInput, range_m) == 12U);
@@ -50,7 +49,6 @@ namespace {
   static_assert(offsetof(PhotometryProbeInput, inverse_cosine_width) == 44U);
   static_assert(offsetof(PhotometryProbeInput, intensity_rgb_cd) == 48U);
   static_assert(offsetof(PhotometryProbeInput, is_spot) == 60U);
-  // NOLINTEND(*-magic-numbers)
 
   NOLINT_TEST_F(LightingGpuAbiTest,
     PunctualPhotometryProbeQualifiesFactorsAndReportsBoundaryResiduals)
@@ -179,7 +177,8 @@ namespace {
         EXPECT_GE(measured, 0.0);
         if (lane < 2U) {
           const auto tolerance = (2.0e-5 * wanted) + 2.0e-7;
-          if (lane == 0U) EXPECT_NEAR(measured, wanted, tolerance);
+          if (lane == 0U)
+            EXPECT_NEAR(measured, wanted, tolerance);
           maximum_scaled_error = std::max(
             maximum_scaled_error, std::abs(measured - wanted) / tolerance);
         } else {
@@ -228,8 +227,7 @@ namespace {
       "maximum_reference_deviation_scale", maximum_physical_scaled_error);
   }
 
-  NOLINT_TEST_F(LightingGpuAbiTest,
-    Fp32ConeProfileReportsRotatedBoundaryError)
+  NOLINT_TEST_F(LightingGpuAbiTest, Fp32ConeProfileReportsRotatedBoundaryError)
   {
     const auto axes = std::array {
       glm::vec3 { 0.0F, 0.0F, -1.0F },
@@ -329,17 +327,20 @@ namespace {
     }
     // A zero uploaded intensity is an independent negative control for the
     // complete cone/attenuation path, including its output multiplication.
-    for (auto& input : inputs) input.intensity_rgb_cd = glm::vec3 { 0.0F };
+    for (auto& input : inputs)
+      input.intensity_rgb_cd = glm::vec3 { 0.0F };
     const auto negative = decode();
     for (std::size_t index = 0; index < inputs.size(); ++index) {
-      EXPECT_EQ(std::bit_cast<float>(negative.at(index * kOutputWords + 2U)), 0.0F);
+      EXPECT_EQ(
+        std::bit_cast<float>(negative.at(index * kOutputWords + 2U)), 0.0F);
     }
     RecordProperty("probe_count", inputs.size());
     RecordProperty("lighting_measurement_schema", 2U);
     RecordProperty("lighting_model_revision", 2U);
     RecordProperty("reference_budget_exceedances", physical_failures.size());
     RecordProperty("reference_deviation_details", physical_failures.dump());
-    RecordProperty("maximum_reference_deviation_scale", maximum_budget_fraction);
+    RecordProperty(
+      "maximum_reference_deviation_scale", maximum_budget_fraction);
     RecordProperty("zero_intensity_negative_controls", inputs.size());
   }
 } // namespace

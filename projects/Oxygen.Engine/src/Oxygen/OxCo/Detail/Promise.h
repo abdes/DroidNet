@@ -152,7 +152,7 @@ namespace detail {
            the awaitable `object_` pointer, and as such, its value must be
            distinguishable from a valid.
      */
-    enum class Execution : size_t { // NOLINT(performance-enum-size)
+    enum class Execution : size_t {
       kReady = 0, //!< Used for tasks scheduled for execution (i.e. whose proxy
       //!< handled was `Resume()`ed).
       kRunning = 1, //!< Used for tasks currently being executed (i.e. whose
@@ -171,7 +171,7 @@ namespace detail {
            the awaitable control `functions_` pointer, and as such, its
            value must be distinguishable a valid pointer.
      */
-    enum class Cancellation : size_t { // NOLINT(performance-enum-size)
+    enum class Cancellation : size_t {
       kNone = 0,
       //! Used for `kRunning` or `kReady` tasks that have been requested
       //! to be cancelled. Such a task will get cancelled as soon as
@@ -390,7 +390,6 @@ namespace detail {
     template <void (BasePromise::*TrampolineFn)()> void OnResume()
     {
       resume_fn = +[](CoroutineFrame* frame) {
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
         auto* const promise = static_cast<BasePromise*>(frame);
         (promise->*TrampolineFn)();
       };
@@ -576,7 +575,6 @@ namespace detail {
     }
 
     // ReSharper disable once CppMemberFunctionMayBeStatic
-    // NOLINTNEXTLINE(*-convert-member-functions-to-static)
     auto final_suspend() noexcept { return FinalSuspendProxy(); }
 
     //! An implementation of `await_transform()` that stashes the awaitable
@@ -675,7 +673,6 @@ namespace detail {
   public:
     void return_void()
     {
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
       static_cast<Promise<void>*>(this)->Parent()->StoreSuccess();
     }
   };

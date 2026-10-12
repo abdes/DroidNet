@@ -20,7 +20,7 @@
 
 namespace oxygen::graphics {
 
-enum class ShaderStageFlags : uint32_t { // NOLINT(performance-enum-size)
+enum class ShaderStageFlags : uint32_t {
   kNone = 0, //!< No shader stages set.
 
   //! @{

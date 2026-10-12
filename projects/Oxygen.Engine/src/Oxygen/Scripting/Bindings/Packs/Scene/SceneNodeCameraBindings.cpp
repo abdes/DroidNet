@@ -61,7 +61,7 @@ namespace {
 
   auto PushViewport(lua_State* state, const ViewPort& vp) -> int
   {
-    lua_createtable(state, 0, 6); // NOLINT(*-magic-numbers)
+    lua_createtable(state, 0, 6);
     lua_pushnumber(state, vp.top_left_x);
     lua_setfield(state, -2, "x");
     lua_pushnumber(state, vp.top_left_y);
@@ -209,8 +209,8 @@ namespace {
       float right = 0.0F;
       float bottom = 0.0F;
       float top = 0.0F;
-      float near_plane = 0.1F; // NOLINT(*-magic-numbers)
-      float far_plane = 1000.0F; // NOLINT(*-magic-numbers)
+      float near_plane = 0.1F;
+      float far_plane = 1000.0F;
       const bool has_extents = TryGetNumberField(state, 2, "left", left)
         && TryGetNumberField(state, 2, "right", right)
         && TryGetNumberField(state, 2, "bottom", bottom)
@@ -353,7 +353,7 @@ namespace {
       return 1;
     }
     const auto e = cam->get().GetExtents();
-    lua_createtable(state, 0, 6); // NOLINT(*-magic-numbers)
+    lua_createtable(state, 0, 6);
     lua_pushnumber(state, e.at(0));
     lua_setfield(state, -2, "left");
     lua_pushnumber(state, e.at(1));
@@ -364,7 +364,7 @@ namespace {
     lua_setfield(state, -2, "top");
     lua_pushnumber(state, e.at(4));
     lua_setfield(state, -2, "near_plane");
-    lua_pushnumber(state, e.at(5)); // NOLINT(*-magic-numbers)
+    lua_pushnumber(state, e.at(5));
     lua_setfield(state, -2, "far_plane");
     return 1;
   }
@@ -389,8 +389,8 @@ namespace {
     float right = 0.0F;
     float bottom = 0.0F;
     float top = 0.0F;
-    float near_plane = 0.1F; // NOLINT(*-magic-numbers)
-    float far_plane = 1000.0F; // NOLINT(*-magic-numbers)
+    float near_plane = 0.1F;
+    float far_plane = 1000.0F;
     if (!(TryGetNumberField(state, 2, "left", left)
           && TryGetNumberField(state, 2, "right", right)
           && TryGetNumberField(state, 2, "bottom", bottom)

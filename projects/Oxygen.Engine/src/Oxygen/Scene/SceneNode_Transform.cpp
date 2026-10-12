@@ -479,12 +479,10 @@ auto SceneNode::Transform::LookAt(
 
     // Create rotation matrix using Oxygen's world/object basis:
     // Right = +X, Forward = -Y, Up = +Z.
-    // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
     Mat4 look_matrix(1.0F);
     look_matrix[0] = glm::vec4(right, 0);
     look_matrix[1] = glm::vec4(-forward, 0);
     look_matrix[2] = glm::vec4(up, 0);
-    // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
 
     // Convert to quaternion and set as local rotation
     const auto look_rotation = glm::quat_cast(look_matrix);

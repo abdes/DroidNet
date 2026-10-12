@@ -4,10 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/Object.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::TypeId;
 
@@ -40,7 +39,6 @@ public:
     // and the guarantees of Composition, ensure that if the Composition has a
     // component of a certain type, then that component can be safely cast to
     // that type.
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     base_ptr_ = &static_cast<BaseComponent&>(
       get_component(BaseComponent::ClassTypeId()));
   }

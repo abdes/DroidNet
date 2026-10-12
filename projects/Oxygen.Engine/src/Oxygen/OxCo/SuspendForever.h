@@ -18,12 +18,9 @@ namespace oxygen::co {
 class SuspendForever {
 public:
   // ReSharper disable CppMemberFunctionMayBeStatic
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[nodiscard]] auto await_ready() const noexcept { return false; }
   void await_suspend([[maybe_unused]] detail::Handle h) { }
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[noreturn]] void await_resume() { Unreachable(); }
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   auto await_cancel([[maybe_unused]] detail::Handle h) noexcept
   {
     return std::true_type {};

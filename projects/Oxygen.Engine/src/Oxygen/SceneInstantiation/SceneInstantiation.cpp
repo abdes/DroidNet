@@ -242,12 +242,10 @@ namespace {
     }
 
     //! Creates `asset`'s nodes, under `parent` when it is instanced.
-    // NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
     // The caller awaits at once and owns the referenced arguments.
     auto Build(const data::SceneAsset& asset,
       std::optional<scene::SceneNode> parent, const int depth)
       -> co::Co<std::vector<scene::SceneNode>>
-    // NOLINTEND(*-avoid-reference-coroutine-parameters)
     {
       auto nodes = CreateNodes(asset, parent);
       AttachRenderables(asset, nodes);
@@ -453,11 +451,9 @@ namespace {
       }
     }
 
-    // NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
     // The caller awaits at once and owns the referenced arguments.
     auto InstantiateInstances(const data::SceneAsset& asset,
       std::vector<scene::SceneNode>& nodes, const int depth) -> co::Co<>
-    // NOLINTEND(*-avoid-reference-coroutine-parameters)
     {
       for (const auto& record :
         asset.GetComponents<world::SceneInstanceRecord>()) {
@@ -522,11 +518,9 @@ namespace {
         camera->GetName()));
   }
 
-  // NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
   // The caller awaits at once and owns the referenced arguments.
   auto StartInputContexts(Instantiator& instantiator,
     const data::SceneAsset& asset, engine::InputSystem& input) -> co::Co<>
-  // NOLINTEND(*-avoid-reference-coroutine-parameters)
   {
     for (const auto& record :
       asset.GetComponents<world::StartingInputContextRecord>()) {
@@ -557,11 +551,9 @@ namespace {
 
 } // namespace
 
-// NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
 // The caller awaits at once and owns the referenced arguments.
 auto Instantiate(SceneInstantiationRequest request,
   content::IAssetLoader& loader) -> co::Co<SceneInstance>
-// NOLINTEND(*-avoid-reference-coroutine-parameters)
 {
   auto result = SceneInstance {};
   if (!request.asset || request.target == nullptr) {

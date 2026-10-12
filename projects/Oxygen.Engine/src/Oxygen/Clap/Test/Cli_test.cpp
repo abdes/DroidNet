@@ -27,7 +27,7 @@ namespace oxygen::clap {
 
 namespace {
 
-  // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions,hicpp-special-member-functions)
+  // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
   class BaseCli {
   public:
     [[nodiscard]] [[maybe_unused]] virtual auto CommandLine() -> Cli& = 0;
@@ -86,7 +86,7 @@ namespace {
 
   constexpr int default_num_lines = 10;
 
-  // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions,hicpp-special-member-functions)
+  // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
   class HeadCli : public BaseCli {
   public:
     virtual ~HeadCli() = default;
@@ -172,7 +172,7 @@ namespace {
     std::unique_ptr<Cli> cli_;
   };
 
-  // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions,hicpp-special-member-functions)
+  // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
   class PaintCli : public BaseCli {
   public:
     enum class Color { red = 1, green = 2, blue = 3 };
@@ -225,7 +225,7 @@ namespace {
     std::unique_ptr<Cli> cli_;
   };
 
-  // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions,hicpp-special-member-functions)
+  // NOLINTNEXTLINE(cppcoreguidelines-special-member-functions)
   class UtilsCli : public BaseCli {
   public:
     virtual ~UtilsCli() = default;

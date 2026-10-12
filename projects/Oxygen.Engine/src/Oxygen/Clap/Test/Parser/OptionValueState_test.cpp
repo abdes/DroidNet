@@ -4,10 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "TestHelpers.h"
+
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Clap/Option.h>
-
-#include "TestHelpers.h"
 
 using testing::Eq;
 using testing::IsFalse;
@@ -82,12 +82,12 @@ namespace {
   {
     constexpr int stored_value { 123 };
     OptionValue opt_value(std::make_any<int>(stored_value), "123", false);
-    // NOLINTNEXTLINE(hicpp-avoid-goto, cppcoreguidelines-avoid-goto)
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-goto)
     EXPECT_THROW([[maybe_unused]] auto& value = opt_value.GetAs<std::string>(),
       std::bad_any_cast);
     const OptionValue const_opt_value(
       std::make_any<int>(stored_value), "123", false);
-    // NOLINTNEXTLINE(hicpp-avoid-goto, cppcoreguidelines-avoid-goto)
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-goto)
     EXPECT_THROW([[maybe_unused]] const auto& const_value
       = const_opt_value.GetAs<std::string>(),
       std::bad_any_cast);
@@ -97,11 +97,11 @@ namespace {
   TEST(OptionValuesTest, GetAsThrowsWhenEmpty)
   {
     OptionValue opt_value(std::any {}, "", false);
-    // NOLINTNEXTLINE(hicpp-avoid-goto, cppcoreguidelines-avoid-goto)
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-goto)
     EXPECT_THROW(
       [[maybe_unused]] auto& value = opt_value.GetAs<int>(), std::bad_any_cast);
     const OptionValue const_opt_value(std::any {}, "", false);
-    // NOLINTNEXTLINE(hicpp-avoid-goto, cppcoreguidelines-avoid-goto)
+    // NOLINTNEXTLINE(cppcoreguidelines-avoid-goto)
     EXPECT_THROW(
       [[maybe_unused]] const auto& const_value = const_opt_value.GetAs<int>(),
       std::bad_any_cast);

@@ -209,7 +209,7 @@ auto main(int argc, char** argv) -> int
       asset_loader.RegisterLoader(
         oxygen::content::loaders::LoadPhysicsResource);
 
-      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&AssetLoader::ActivateAsync, &asset_loader);
         asset_loader.Run();

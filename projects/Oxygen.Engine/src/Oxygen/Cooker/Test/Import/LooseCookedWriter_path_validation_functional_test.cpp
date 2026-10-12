@@ -22,8 +22,6 @@
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Testing/GTest.h>
 
-// NOLINTBEGIN(*-magic-numbers)
-
 namespace oxygen::content::testing {
 namespace fixtures = oxygen::content::test;
 
@@ -197,5 +195,3 @@ namespace {
 } // namespace
 
 } // namespace oxygen::content::testing
-
-// NOLINTEND(*-magic-numbers)

@@ -236,7 +236,7 @@ private:
  @snippet StateMachine_test.cpp TransitionTo with data example
 */
 template <typename TargetState> struct TransitionTo {
-  // NOLINTNEXTLINE(google-explicit-constructor, hicpp-explicit-conversions)
+  // NOLINTNEXTLINE(google-explicit-constructor)
   TransitionTo(std::any _data = {})
     : data { std::move(_data) }
   {
@@ -462,7 +462,7 @@ template <typename... Actions> struct OneOf {
   // defaulted copy/move constructors instead of re-entering the variant.
   template <typename T>
     requires(!std::is_base_of_v<OneOf, std::remove_cvref_t<T>>)
-  // NOLINTNEXTLINE(google-explicit-constructor,hicpp-explicit-conversions,bugprone-forwarding-reference-overload)
+  // NOLINTNEXTLINE(google-explicit-constructor,bugprone-forwarding-reference-overload)
   OneOf(T&& arg)
     : option(std::forward<T>(arg))
   {

@@ -60,7 +60,7 @@ struct alignas(packing::kShaderDataFieldAlignment) MaterialShadingConstants {
     kInvalidShaderVisibleIndex
   };
   ShaderVisibleIndex emissive_texture_index { kInvalidShaderVisibleIndex };
-  float alpha_cutoff { 0.5F }; // NOLINT(*-magic-numbers)
+  float alpha_cutoff { 0.5F };
   uint32_t _pad2 { 0U };
 
   // Register 5
@@ -84,7 +84,6 @@ static_assert(
   sizeof(MaterialShadingConstants) % packing::kShaderDataFieldAlignment == 0);
 static_assert(
   sizeof(MaterialShadingConstants) <= packing::kRootConstantsMaxSize);
-static_assert(
-  sizeof(MaterialShadingConstants) == 112); // NOLINT(*-magic-numbers)
+static_assert(sizeof(MaterialShadingConstants) == 112);
 
 } // namespace oxygen::vortex

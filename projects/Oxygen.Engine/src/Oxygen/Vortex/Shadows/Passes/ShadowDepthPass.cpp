@@ -219,16 +219,14 @@ namespace {
     std::uint32_t pad2 { 0U };
   };
 
-  static_assert(sizeof(ShadowPassConstants) == 128U); // NOLINT(*-magic-numbers)
+  static_assert(sizeof(ShadowPassConstants) == 128U);
   static_assert(offsetof(ShadowPassConstants, light_view_projection) == 0U);
-  static_assert(offsetof(ShadowPassConstants, shadow_bias_parameters)
-    == 64U); // NOLINT(*-magic-numbers)
-  static_assert(offsetof(ShadowPassConstants, light_direction_to_source)
-    == 80U); // NOLINT(*-magic-numbers)
-  static_assert(offsetof(ShadowPassConstants, light_position_and_inv_range)
-    == 96U); // NOLINT(*-magic-numbers)
-  static_assert(offsetof(ShadowPassConstants, draw_frame_slot)
-    == 112U); // NOLINT(*-magic-numbers)
+  static_assert(offsetof(ShadowPassConstants, shadow_bias_parameters) == 64U);
+  static_assert(
+    offsetof(ShadowPassConstants, light_direction_to_source) == 80U);
+  static_assert(
+    offsetof(ShadowPassConstants, light_position_and_inv_range) == 96U);
+  static_assert(offsetof(ShadowPassConstants, draw_frame_slot) == 112U);
   constexpr std::uint32_t kShadowPassConstantsStride
     = sizeof(ShadowPassConstants);
 

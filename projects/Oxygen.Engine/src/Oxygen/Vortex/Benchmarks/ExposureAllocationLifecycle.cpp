@@ -91,7 +91,6 @@ auto ExposureAllocationScenario::RenderFrame(
   if (view_count != 0U) {
     auto loop = co::testing::TestEventLoop {};
     // Run completes synchronously before the closure or captures are destroyed.
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     co::Run(loop, [&] -> co::Co<void> {
       co_await fixture_.renderer_->OnPreRender(observer_ptr {
         &fixture_.frame,

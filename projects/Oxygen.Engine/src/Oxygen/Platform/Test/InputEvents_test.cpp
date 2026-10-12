@@ -7,15 +7,14 @@
 #include <chrono>
 #include <memory>
 
-#include <Oxygen/Testing/GTest.h>
+#include "../../OxCo/Test/Utils/OxCoTestFixture.h"
 
 #include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/Platform.h>
-
-#include "../../OxCo/Test/Utils/OxCoTestFixture.h"
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::Platform;
 using oxygen::PlatformConfig;
@@ -41,7 +40,6 @@ NOLINT_TEST_F(InputEventsTest, HeadlessModeExposesWriterAndAllowsInjectedEvents)
   Platform platform(config_);
   auto& input_events = platform.Input();
 
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*el_, [&]() -> co::Co<> {
     auto reader = input_events.ForRead();
     auto& writer = input_events.ForWrite();
@@ -88,7 +86,6 @@ NOLINT_TEST_F(InputEventsTest, PlatformShutdownClosesInputEndpoints)
   Platform platform(config_);
   auto& input_events = platform.Input();
 
-  // NOLINTBEGIN(*-avoid-capturing-lambda-coroutines)
   co::Run(*el_, [&]() -> co::Co<> {
     // Reader will be blocked waiting for events
     auto reader = input_events.ForRead();
@@ -96,7 +93,7 @@ NOLINT_TEST_F(InputEventsTest, PlatformShutdownClosesInputEndpoints)
 
     // Start a coroutine waiting on Receive(); it should be woken with nullptr
     bool reader_unblocked = false;
-    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    OXCO_WITH_NURSERY(n)
     {
       n.Start([&]() -> co::Co<> {
         if (const auto received = co_await reader.Receive();
@@ -119,7 +116,6 @@ NOLINT_TEST_F(InputEventsTest, PlatformShutdownClosesInputEndpoints)
       co_return oxygen::co::kJoin;
     };
   });
-  // NOLINTEND(*-avoid-capturing-lambda-coroutines)
 }
 
 // NOLINTNEXTLINE
@@ -134,7 +130,6 @@ NOLINT_TEST_F(InputEventsTest, BoundedQueueBackpressureBehavior)
   Platform platform(config_);
   auto& input_events = platform.Input();
 
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   ::co::Run(*el_, [&]() -> co::Co<> {
     auto reader = input_events.ForRead();
     auto& writer = input_events.ForWrite();

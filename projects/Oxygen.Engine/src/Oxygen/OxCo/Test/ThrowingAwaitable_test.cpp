@@ -6,14 +6,14 @@
 
 #include <chrono>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
+
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Coroutine.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Testing/GTest.h>
 
 using oxygen::co::AnyOf;
 using oxygen::co::Co;
@@ -25,9 +25,7 @@ namespace {
 
 struct ThrowingAwaitable {
   // ReSharper disable CppMemberFunctionMayBeStatic
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[nodiscard]] auto await_ready() const noexcept -> bool { return false; }
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[noreturn]] void await_suspend(oxygen::co::detail::Handle /*unused*/)
   {
     throw std::runtime_error("test");

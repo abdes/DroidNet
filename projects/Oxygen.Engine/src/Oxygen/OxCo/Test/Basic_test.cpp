@@ -6,12 +6,12 @@
 
 #include <chrono>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include "Utils/OxCoTestFixture.h"
+
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::co;
 using namespace oxygen::co::testing;
@@ -28,9 +28,7 @@ NOLINT_TEST_F(OxCoBasicTest, SmokeTest)
     auto two = [&]() -> Co<int> { co_return 2; };
     auto three = [&]() -> Co<int> { co_return 3; };
 
-    auto six = [&]()
-      -> Co<
-        int> { // NOLINT(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+    auto six = [&]() -> Co<int> {
       const int x = co_await one;
       const int y = co_await two;
       const int z = co_await three;
@@ -160,7 +158,7 @@ NOLINT_TEST_F(OxCoBasicTest, NoOp)
 }
 // ReSharper disable CppMemberFunctionMayBeStatic
 // ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
-// NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard,
+// NOLINTBEGIN(*-use-nodiscard,
 // *-special-member-functions)
 
 struct NonMoveableAwaiter {
@@ -179,7 +177,7 @@ struct NonMoveableAwaitable {
   auto operator co_await() const -> NonMoveableAwaiter { return {}; }
 };
 
-// NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard,
+// NOLINTEND(*-use-nodiscard,
 // *-special-member-functions) ReSharper enable
 // CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines ReSharper enable
 // CppMemberFunctionMayBeStatic

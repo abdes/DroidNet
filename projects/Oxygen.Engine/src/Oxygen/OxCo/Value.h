@@ -42,7 +42,7 @@ public:
 
   [[nodiscard]] auto Get() const noexcept -> const T& { return value_; }
   // ReSharper disable once CppNonExplicitConversionOperator
-  // NOLINTNEXTLINE(*-explicit-constructor, *-explicit-conversions)
+  // NOLINTNEXTLINE(*-explicit-constructor)
   operator const T&() const noexcept { return value_; }
 
   void Set(T value);

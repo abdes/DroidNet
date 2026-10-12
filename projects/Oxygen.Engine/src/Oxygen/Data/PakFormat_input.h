@@ -12,7 +12,7 @@
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
 OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
-// NOLINTBEGIN(*-avoid-c-arrays,*-magic-numbers)
+// NOLINTBEGIN(*-avoid-c-arrays)
 
 //! Oxygen PAK format input domain schema.
 /*!
@@ -25,7 +25,7 @@ namespace oxygen::data::pak::input {
 [[maybe_unused]] constexpr uint8_t kInputMappingContextAssetVersion
   = version::kInputMappingContextAssetVersion;
 
-enum class InputActionAssetFlags : uint32_t { // NOLINT(*-enum-size)
+enum class InputActionAssetFlags : uint32_t {
   kNone = 0,
   kConsumesInput = OXYGEN_FLAG(0),
   //! Bindings' values are summed per component (default: highest magnitude).
@@ -36,13 +36,13 @@ OXGN_DATA_NDAPI auto to_string(InputActionAssetFlags value) -> std::string;
 
 //! Reserved: no context flag is defined and cooked contexts store kNone. A
 //! scene starts its contexts (SceneAssetDesc starting input contexts).
-enum class InputMappingContextFlags : uint32_t { // NOLINT(*-enum-size)
+enum class InputMappingContextFlags : uint32_t {
   kNone = 0,
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(InputMappingContextFlags)
 OXGN_DATA_NDAPI auto to_string(InputMappingContextFlags value) -> std::string;
 
-enum class InputMappingFlags : uint32_t { // NOLINT(*-enum-size)
+enum class InputMappingFlags : uint32_t {
   kNone = 0,
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(InputMappingFlags)
@@ -141,5 +141,5 @@ static_assert(sizeof(InputTriggerAuxRecord) == 32);
 
 } // namespace oxygen::data::pak::input
 
-// NOLINTEND(*-avoid-c-arrays,*-magic-numbers)
+// NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

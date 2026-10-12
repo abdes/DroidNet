@@ -502,7 +502,6 @@ namespace {
     std::optional<GeometryPipeline::FinalizedDescriptor> finalized;
 
     // co::Run blocks until the coroutine completes.
-    // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
     co::Run(loop_, [&] -> co::Co<> {
       MeshBuildPipeline pipeline(pool_,
         MeshBuildPipeline::Config {

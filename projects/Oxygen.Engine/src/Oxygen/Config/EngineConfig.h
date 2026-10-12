@@ -34,9 +34,8 @@ struct TimingConfig {
    Used for physics simulation, networking, and other systems requiring
    deterministic behavior regardless of frame rate.
   */
-  time::CanonicalDuration fixed_delta { // NOLINTNEXTLINE(*-magic-numbers)
-    time::CanonicalDuration::UnderlyingType(16'666'667)
-  };
+  time::CanonicalDuration fixed_delta { time::CanonicalDuration::UnderlyingType(
+    16'666'667) };
 
   //! Maximum accumulated time before clamping to prevent spiral of death
   /*!
@@ -44,7 +43,7 @@ struct TimingConfig {
    to catch up with too many fixed timestep iterations, which would make
    the problem worse. Typically 2-3x the fixed_delta.
   */
-  time::CanonicalDuration max_accumulator { // NOLINTNEXTLINE(*-magic-numbers)
+  time::CanonicalDuration max_accumulator {
     time::CanonicalDuration::UnderlyingType(50'000'000)
   };
 
@@ -54,7 +53,7 @@ struct TimingConfig {
    drops. When this limit is reached, simulation time will run slower
    than real time rather than locking up the engine.
   */
-  uint32_t max_substeps { 4 }; // NOLINT(*-magic-numbers)
+  uint32_t max_substeps { 4 };
 
   //! Safety margin before frame pacing deadline
   /*!
@@ -62,7 +61,6 @@ struct TimingConfig {
    yielding to finish. This compensates for OS sleep jitter/overshoot.
    Tune per platform; typical values 150–300 microseconds.
   */
-  // NOLINTNEXTLINE(*-magic-numbers)
   std::chrono::microseconds pacing_safety_margin { 200 }; // use chrono here
 
   //! Cooperative sleep used when the frame loop is uncapped

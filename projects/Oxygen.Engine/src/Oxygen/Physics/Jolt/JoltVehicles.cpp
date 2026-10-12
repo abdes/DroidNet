@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Jolt/Jolt.h> // Must always be first (keep separate)
+
 #include <algorithm>
 #include <atomic>
 #include <cstdint>
@@ -14,8 +16,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
 
 #include <Jolt/Core/RTTI.h>
 #include <Jolt/Core/StreamWrapper.h>
@@ -30,12 +30,11 @@
 #include <Jolt/Physics/Vehicle/VehicleCollisionTester.h>
 #include <Jolt/Physics/Vehicle/VehicleConstraint.h>
 #include <Jolt/Physics/Vehicle/WheeledVehicleController.h>
-
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Constants.h>
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltVehicles.h>
 
@@ -611,7 +610,6 @@ auto oxygen::physics::jolt::JoltVehicles::SetControlInput(
     return Err(PhysicsError::kBackendInitFailed);
   }
   if (controller_type == vehicle::VehicleControllerType::kWheeled) {
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     auto* const wheeled_controller
       = static_cast<JPH::WheeledVehicleController*>(controller_base);
     if (wheeled_controller == nullptr) {
@@ -620,7 +618,6 @@ auto oxygen::physics::jolt::JoltVehicles::SetControlInput(
     wheeled_controller->SetDriverInput(
       input.forward, input.steering, input.brake, input.hand_brake);
   } else if (controller_type == vehicle::VehicleControllerType::kTracked) {
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     auto* const tracked_controller
       = static_cast<JPH::TrackedVehicleController*>(controller_base);
     if (tracked_controller == nullptr) {

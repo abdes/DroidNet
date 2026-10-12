@@ -4,15 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/OxCo/Detail/MuxBase.h>
-
-#include <Oxygen/Testing/GTest.h>
 #include <gmock/gmock.h>
 
-using oxygen::co::detail::MuxBase;
+#include <Oxygen/OxCo/Detail/MuxBase.h>
+#include <Oxygen/Testing/GTest.h>
 
-// NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
-// NOLINTBEGIN(*-avoid-capturing-lambda-coroutines)
+using oxygen::co::detail::MuxBase;
 
 namespace {
 
@@ -22,11 +19,8 @@ public:
   struct promise_type {
     auto get_return_object() -> TestCoroutine { return TestCoroutine { this }; }
     // ReSharper disable CppMemberFunctionMayBeStatic
-    // NOLINTNEXTLINE(*-convert-member-functions-to-static)
     auto initial_suspend() noexcept -> std::suspend_never { return {}; }
-    // NOLINTNEXTLINE(*-convert-member-functions-to-static)
     auto final_suspend() noexcept -> std::suspend_always { return {}; }
-    // NOLINTNEXTLINE(*-convert-member-functions-to-static)
     [[noreturn]] auto unhandled_exception() -> void { std::terminate(); }
     void return_void() { }
     // ReSharper restore CppMemberFunctionMayBeStatic
@@ -336,8 +330,7 @@ NOLINT_TEST_F(MuxBaseTest, CountSynchronization)
   bool parent_resumed = false;
 
   // Define the parent coroutine
-  const auto parent_coroutine = [](bool& resumed)
-    -> TestCoroutine { // NOLINT(cppcoreguidelines-avoid-capturing-lambda-coroutines)
+  const auto parent_coroutine = [](bool& resumed) -> TestCoroutine {
     co_await std::suspend_always();
     resumed = true;
     co_return;
@@ -431,6 +424,3 @@ NOLINT_TEST_F(MuxBaseTest, AwaitEarlyCancelSkippable)
 }
 
 } // namespace
-
-// NOLINTEND(*-avoid-capturing-lambda-coroutines)
-// NOLINTEND(*-avoid-reference-coroutine-parameters)

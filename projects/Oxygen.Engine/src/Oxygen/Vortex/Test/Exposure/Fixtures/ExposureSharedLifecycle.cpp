@@ -240,7 +240,6 @@ auto ExposureLightingGpuTest::QualifySharedSceneLifecycle(bool forward) -> void
     auto loop = co::testing::TestEventLoop {};
     // co::Run completes synchronously before this closure and its captured
     // fixture state leave scope.
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     co::Run(loop, [&] -> co::Co<void> {
       co_await renderer_->OnPreRender(observer_ptr {
         &frame,

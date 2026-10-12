@@ -256,7 +256,6 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentStaticData {
   GpuPostProcessParams post_process {};
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(sizeof(AtmosphereDensityLayerGpu) == 16);
 static_assert(sizeof(AtmosphereDensityProfileGpu) == 32);
 static_assert(sizeof(GpuFogParams) == 128);
@@ -272,7 +271,5 @@ static_assert(sizeof(GpuSkySphereParams) == 48);
 static_assert(sizeof(GpuVolumetricCloudParams) == 64);
 static_assert(sizeof(GpuPostProcessParams) == 64);
 static_assert(sizeof(EnvironmentStaticData) == 688);
-
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

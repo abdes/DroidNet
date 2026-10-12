@@ -48,7 +48,7 @@ NOLINT_TEST_F(SceneNodeBasicTest, CopyConstructor_PreservesHandle)
   const auto node1 = scene_->CreateNode("TestNode1");
 
   // Act: Copy construct new node
-  const auto node1_copy(node1); // NOLINT(*-unnecessary-copy-in-initialization)
+  const auto node1_copy(node1);
 
   // Assert: Copy should have same handle
   EXPECT_EQ(node1.GetHandle(), node1_copy.GetHandle());

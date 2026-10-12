@@ -16,7 +16,7 @@
 
 namespace oxygen::console {
 
-enum class CommandFlags : uint32_t { // NOLINT(*-enum-size)
+enum class CommandFlags : uint32_t {
   kNone = 0,
   kDevOnly = OXYGEN_FLAG(0),
   kCheat = OXYGEN_FLAG(1),

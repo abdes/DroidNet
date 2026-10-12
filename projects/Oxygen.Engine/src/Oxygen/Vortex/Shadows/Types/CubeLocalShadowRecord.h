@@ -42,7 +42,6 @@ struct alignas(packing::kShaderDataFieldAlignment) CubeLocalShadowRecord {
   std::uint32_t reserved1 { 0U };
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(std::is_standard_layout_v<CubeLocalShadowRecord>);
 static_assert(std::is_trivially_copyable_v<CubeLocalShadowRecord>);
 static_assert(alignof(CubeLocalShadowRecord) == 16U);
@@ -62,6 +61,5 @@ static_assert(offsetof(CubeLocalShadowRecord, shadow_strength) == 428U);
 static_assert(offsetof(CubeLocalShadowRecord, inverse_resolution) == 432U);
 static_assert(offsetof(CubeLocalShadowRecord, pcf_sample_count) == 440U);
 static_assert(offsetof(CubeLocalShadowRecord, reserved1) == 444U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

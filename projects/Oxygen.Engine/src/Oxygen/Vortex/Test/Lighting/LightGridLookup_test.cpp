@@ -39,7 +39,6 @@ namespace {
   };
 
   // Test-input transport mirrors the probe declarations, not the lookup math.
-  // NOLINTBEGIN(*-magic-numbers)
   static_assert(sizeof(GridLookupProbeInput) == 80U);
   static_assert(offsetof(GridLookupProbeInput, screen_position) == 64U);
   static_assert(offsetof(GridLookupProbeInput, view_depth) == 72U);
@@ -47,7 +46,6 @@ namespace {
   static_assert(sizeof(LightIterationProbeInput) == 16U);
   static_assert(offsetof(LightIterationProbeInput, local_count) == 8U);
   static_assert(offsetof(LightIterationProbeInput, reserved) == 12U);
-  // NOLINTEND(*-magic-numbers)
 
   NOLINT_TEST_F(LightingGpuAbiTest, LookupSubtractsOriginAndKeepsSignedDepth)
   {

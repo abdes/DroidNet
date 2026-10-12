@@ -854,7 +854,6 @@ namespace {
     for (unsigned malformed = 0U; malformed < 8U; ++malformed) {
       SCOPED_TRACE(malformed);
       auto record = CheckedAt(directional, 0);
-      // NOLINTBEGIN(*-magic-numbers) - distinct malformed-field cases
       switch (malformed) {
       case 0:
         record.common.affects_world = 2U;
@@ -881,7 +880,6 @@ namespace {
         record.atmosphere_disk_luminance_scale_rgb[1] = -1.0F;
         break;
       }
-      // NOLINTEND(*-magic-numbers)
       auto malformed_bytes = scene_bytes;
       std::memcpy(std::span(malformed_bytes).subspan(table.table.offset).data(),
         &record, sizeof(record));

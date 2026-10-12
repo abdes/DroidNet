@@ -396,9 +396,7 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
       draw_world_boxes_.resize(static_cast<size_t>(index) + 1U);
       velocity_publication_sources_.resize(static_cast<size_t>(index) + 1U);
     }
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     Cpu().at(index) = dm;
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     keys_.at(index) = SortingKey {
       .pass_mask = dm.flags,
       .bucket_order = bucket_order,
@@ -408,7 +406,6 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
       .ib_srv = dm.index_buffer_index,
       .node_handle = item.node_handle,
     };
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     draw_bounding_spheres_.at(index) = item.world_bounding_sphere;
     EmitCullRecord(index, view, dm.flags, item.world_transform);
     if (dm.flags.IsSet(PassMaskBit::kShadowCaster)) {
@@ -423,7 +420,6 @@ auto DrawMetadataEmitter::EmitDrawMetadata(
         .material_generation = item.material_handle.GenerationValue().get(),
       });
     }
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     velocity_publication_sources_.at(index)
       = DrawMetadataEmitter::VelocityPublicationSource {
           .node_handle = item.node_handle,

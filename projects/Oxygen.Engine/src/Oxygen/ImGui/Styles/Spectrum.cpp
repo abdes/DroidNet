@@ -7,12 +7,13 @@
 // This style is inspired/originally by Adobe ImGui Spectrum style.
 // https://github.com/adobe/imgui
 
-#include <imgui.h>
 #include <span>
+
+#include <imgui.h>
 
 #include <Oxygen/ImGui/Styles/Spectrum.h>
 
-// NOLINTBEGIN(*-avoid-c-arrays,*-array-to-pointer-decay,*-magic-numbers)
+// NOLINTBEGIN(*-avoid-c-arrays,*-array-to-pointer-decay)
 
 namespace oxygen::imgui::spectrum {
 
@@ -90,4 +91,4 @@ void StyleColorsSpectrum(ImGuiStyle& style)
 
 } // namespace oxygen::imgui::spectrum
 
-// NOLINTEND(*-avoid-c-arrays,*-array-to-pointer-decay,*-magic-numbers)
+// NOLINTEND(*-avoid-c-arrays,*-array-to-pointer-decay)

@@ -381,11 +381,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     = sky_light_injection_requested && distant_sky_light_lut_srv.IsValid();
 
   // Byte offsets mirror the HLSL VolumetricFogPassConstants layout.
-  // NOLINTBEGIN(*-magic-numbers)
   static_assert(offsetof(PassConstants, reserved0) == 532U);
   static_assert(offsetof(PassConstants, exposure_fp16_store) == 536U);
   static_assert(offsetof(PassConstants, previous_error_bounds_srv) == 540U);
-  // NOLINTEND(*-magic-numbers)
   auto constants = PassConstants {};
   constants.exposure_fp16_store
     = texture->GetDescriptor().format == Format::kRGBA16Float ? 1U : 0U;

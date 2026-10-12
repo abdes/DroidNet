@@ -193,7 +193,6 @@ namespace {
   }
 
   // The caller awaits each resolution inline while it owns `context`.
-  // NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
   auto ResolveBufferSidecarByVirtualPath(GeometryExecutionContext& context,
     std::string_view virtual_path, std::string object_path)
     -> co::Co<std::optional<ResolvedBufferSidecar>>
@@ -520,11 +519,9 @@ namespace {
   };
 
   // The caller awaits the link inline while it owns `context` and `source`.
-  // NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
   auto LinkGeometryDescriptor(
     GeometryExecutionContext& context, const internal::GeometrySource& source)
     -> co::Co<std::optional<LinkedGeometryDescriptor>>
-  // NOLINTEND(*-avoid-reference-coroutine-parameters)
   {
     auto prepared = LinkedGeometryDescriptor {};
     prepared.geometry_name = source.name;
@@ -837,10 +834,8 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   const auto job_start = std::chrono::steady_clock::now();
   auto telemetry = ImportTelemetry {};
   // Awaited inline below, while the job owns `session` and this closure.
-  // NOLINTBEGIN(*-avoid-reference-coroutine-parameters,*-avoid-capturing-lambda-coroutines)
   const auto FinalizeWithTelemetry
     = [&](ImportSession& session) -> co::Co<ImportReport> {
-    // NOLINTEND(*-avoid-reference-coroutine-parameters,*-avoid-capturing-lambda-coroutines)
     const auto finalize_start = std::chrono::steady_clock::now();
     auto report = co_await FinalizeSession(session);
     const auto finalize_end = std::chrono::steady_clock::now();
@@ -975,7 +970,6 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 }
 
 // The job awaits finalization inline while it owns `session`.
-// NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
 auto GeometryDescriptorImportJob::FinalizeSession(ImportSession& session)
   -> co::Co<ImportReport>
 {

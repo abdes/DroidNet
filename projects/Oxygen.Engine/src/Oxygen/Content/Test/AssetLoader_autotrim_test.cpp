@@ -46,8 +46,6 @@ using oxygen::content::testing::AssetLoaderBasicTest;
 using oxygen::data::BufferResource;
 using oxygen::data::MaterialAsset;
 
-// NOLINTBEGIN(*-magic-numbers)
-
 namespace {
 
 class AssetLoaderAutoTrimTest : public AssetLoaderBasicTest { };
@@ -922,5 +920,3 @@ NOLINT_TEST_F(AssetLoaderAutoTrimAsyncTest,
 }
 
 } // namespace
-
-// NOLINTEND(*-magic-numbers)

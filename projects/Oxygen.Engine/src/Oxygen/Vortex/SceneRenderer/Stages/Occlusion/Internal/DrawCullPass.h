@@ -60,8 +60,7 @@ struct alignas(16) OcclusionCullPassConstants {
   float depth_bias { 0.0F };
   std::uint32_t _pad0 { 0U };
 };
-static_assert(
-  sizeof(OcclusionCullPassConstants) == 192U); // NOLINT(*-magic-numbers)
+static_assert(sizeof(OcclusionCullPassConstants) == 192U);
 
 //! How a culling view's depth target stores depth, for the occlusion test.
 /*!

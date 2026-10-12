@@ -118,7 +118,7 @@ NOLINT_TEST_F(
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
-    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&AssetLoader::ActivateAsync, &loader);
       loader.Run();
@@ -184,7 +184,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionFiltersByType)
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
-    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&AssetLoader::ActivateAsync, &loader);
       loader.Run();
@@ -243,7 +243,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionClearMounts)
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
-    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&AssetLoader::ActivateAsync, &loader);
       loader.Run();
@@ -307,7 +307,7 @@ NOLINT_TEST_F(AssetLoaderEvictionAsyncTest, ResourceEvictionStop)
 
     loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
-    OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+    OXCO_WITH_NURSERY(n)
     {
       co_await n.Start(&AssetLoader::ActivateAsync, &loader);
       loader.Run();

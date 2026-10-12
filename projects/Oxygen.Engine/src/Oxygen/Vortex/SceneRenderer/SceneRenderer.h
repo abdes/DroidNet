@@ -87,7 +87,7 @@ namespace testing {
 
 class SceneRenderer {
 public:
-  using StageOrder = std::array<std::uint8_t, 23>; // NOLINT(*-magic-numbers)
+  using StageOrder = std::array<std::uint8_t, 23>;
 
   struct DeferredLightingState {
     bool consumed_published_scene_textures { false };

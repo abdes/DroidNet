@@ -4,10 +4,10 @@
 //  SPDX-License-Identifier: BSD-3-Clause
 // ===----------------------------------------------------------------------===/
 
+#include "TestHelpers.h"
+
 #include <Oxygen/Base/StateMachine.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
-
-#include "TestHelpers.h"
 
 using testing::IsTrue;
 
@@ -94,7 +94,7 @@ namespace {
       const auto context = StateTest::MakeParserContext(base_context, commands);
       context->active_command = predefined_commands().at("with-options");
       auto token = tokenizer.NextToken();
-      // NOLINTNEXTLINE(hicpp-avoid-goto, cppcoreguidelines-avoid-goto)
+      // NOLINTNEXTLINE(cppcoreguidelines-avoid-goto)
       EXPECT_NO_THROW(auto status = EnterState(token, context));
       while (true) {
         token = tokenizer.NextToken();

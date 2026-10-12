@@ -660,7 +660,6 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteRendersIntoOutputTarget)
   oxygen::co::Run(
     // Synchronous execution finishes while the session-owned closure and its
     // captured test locals are alive.
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     loop, [&] -> oxygen::co::Co<void> { co_await session->Execute(); });
 
   EXPECT_FALSE(graphics_->draw_log_.draws.empty());
@@ -701,7 +700,6 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ExecuteAcceptsForwardPipeline)
   oxygen::co::Run(
     // Synchronous execution finishes while the session-owned closure and its
     // captured test locals are alive.
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     loop, [&] -> oxygen::co::Co<void> { co_await session->Execute(); });
 
   EXPECT_FALSE(graphics_->draw_log_.draws.empty());

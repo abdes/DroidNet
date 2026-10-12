@@ -22,7 +22,6 @@ struct alignas(16) DirectionalShadowRecord {
   std::uint32_t reserved { 0U };
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(std::is_standard_layout_v<DirectionalShadowRecord>);
 static_assert(std::is_trivially_copyable_v<DirectionalShadowRecord>);
 static_assert(alignof(DirectionalShadowRecord) == 16U);
@@ -31,6 +30,5 @@ static_assert(offsetof(DirectionalShadowRecord, selection_index) == 0U);
 static_assert(offsetof(DirectionalShadowRecord, first_cascade) == 4U);
 static_assert(offsetof(DirectionalShadowRecord, cascade_count) == 8U);
 static_assert(offsetof(DirectionalShadowRecord, reserved) == 12U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

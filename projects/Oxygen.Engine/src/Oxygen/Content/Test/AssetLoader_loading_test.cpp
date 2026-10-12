@@ -279,7 +279,7 @@ NOLINT_TEST_F(AssetLoaderBasicTest,
       oxygen::co::BroadcastChannel<oxygen::platform::InputEvent> input_channel;
       oxygen::engine::InputSystem input_system(input_channel.ForRead());
 
-      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&AssetLoader::ActivateAsync, &loader);
         loader.Run();
@@ -344,7 +344,7 @@ NOLINT_TEST_F(
       config.thread_pool = observer_ptr<oxygen::co::ThreadPool> { &pool };
       AssetLoader loader(Tag::Get(), config);
 
-      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&AssetLoader::ActivateAsync, &loader);
         loader.Run();
@@ -428,7 +428,7 @@ NOLINT_TEST_F(
       loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
       loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
 
-      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&AssetLoader::ActivateAsync, &loader);
         loader.Run();
@@ -488,7 +488,7 @@ NOLINT_TEST_F(
       loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
       loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
 
-      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&AssetLoader::ActivateAsync, &loader);
         loader.Run();
@@ -558,7 +558,7 @@ NOLINT_TEST_F(AssetLoaderBasicTest, LoadAssetNonExistentReturnsNull)
       loader.RegisterLoader(oxygen::content::loaders::LoadTextureResource);
       loader.RegisterLoader(oxygen::content::loaders::LoadMaterialAsset);
 
-      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&AssetLoader::ActivateAsync, &loader);
         loader.Run();

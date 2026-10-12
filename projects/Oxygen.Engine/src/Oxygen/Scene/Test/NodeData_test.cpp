@@ -4,11 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Scene/Detail/NodeData.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::scene;
 using namespace oxygen::scene::detail;
@@ -193,7 +192,6 @@ NOLINT_TEST_F(NodeDataTest, Clone_PreservesFlags)
 
   // Act: Clone the original NodeData
   const auto cloned = original.Clone();
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   auto* cloned_node_data = static_cast<NodeData*>(cloned.get());
 
   // Assert: Verify clone preserves the original's flags
@@ -206,7 +204,6 @@ NOLINT_TEST_F(NodeDataTest, Clone_CreatesIndependentCopy)
   // Arrange: Create original and clone it
   auto original = NodeData(custom_flags_);
   const auto cloned = original.Clone();
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto* cloned_node_data = static_cast<NodeData*>(cloned.get());
 
   // Act: Modify original after cloning to test independence
@@ -237,7 +234,6 @@ NOLINT_TEST_F(NodeDataTest, ComplexFlagConfiguration_CopyAndCloneWork)
   // Act: Test both copy constructor and cloning with complex flags
   const auto copy = NodeData(node_data);
   const auto cloned = node_data.Clone();
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto* cloned_node_data = static_cast<NodeData*>(cloned.get());
   // Assert: Verify both copy and clone preserve complex flag configuration
   GCHECK_F(ExpectNodeDataState(copy, complex_flags));
@@ -256,7 +252,6 @@ NOLINT_TEST_F(NodeDataTest, AllFlagsDefaultConfiguration_CloneWorks)
 
   // Act: Clone NodeData with default configuration
   const auto cloned = node_data.Clone();
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto* cloned_node_data = static_cast<NodeData*>(cloned.get());
   // Assert: Verify clone preserves default flag state and clean transform
   GCHECK_F(ExpectNodeDataState(*cloned_node_data, all_default));
@@ -272,7 +267,6 @@ NOLINT_TEST_F(
 
   // Act: Clone NodeData with post-construction modifications
   const auto cloned = node_data.Clone();
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto* cloned_node_data = static_cast<NodeData*>(cloned.get());
 
   // Assert: Verify clone preserves the modified flag state

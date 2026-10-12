@@ -297,7 +297,6 @@ end)
   context.SetCurrentPhase(
     core::PhaseId::kGameplay, engine::internal::EngineTagFactory::Get());
   co::testing::TestEventLoop loop;
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   co::Run(loop, [&module, &context] -> co::Co<> {
     co_await module.OnGameplay(observer_ptr { &context });
   });

@@ -225,7 +225,7 @@ namespace {
     desc.base_color[2] = 1.0F;
     desc.base_color[3] = 1.0F;
     desc.metalness = data::Unorm16 { 0.0F };
-    desc.roughness = data::Unorm16 { 0.5F }; // NOLINT(*-magic-numbers)
+    desc.roughness = data::Unorm16 { 0.5F };
     desc.ambient_occlusion = data::Unorm16 { 1.0F };
     const auto key = MakeProceduralMaterialKey(token);
     return std::make_shared<const data::MaterialAsset>(key, desc);

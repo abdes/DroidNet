@@ -641,7 +641,6 @@ void RenderableComponent::OnWorldTransformUpdated(const glm::mat4& world)
 auto RenderableComponent::UpdateDependencies(
   const std::function<Component&(TypeId)>& get_component) noexcept -> void
 {
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   const auto& transform = static_cast<const TransformComponent&>(
     get_component(TransformComponent::ClassTypeId()));
   if (!transform.IsDirty()) {

@@ -6,15 +6,15 @@
 
 #include <chrono>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
+
 #include <Oxygen/Base/Unreachable.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 using namespace oxygen::co::detail;
@@ -25,19 +25,14 @@ namespace {
 
 // ReSharper disable CppMemberFunctionMayBeStatic
 struct Ready {
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[maybe_unused]] auto await_early_cancel() noexcept -> bool { return false; }
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[nodiscard]] auto await_ready() const noexcept { return true; }
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[noreturn]] void await_suspend(Handle) noexcept { oxygen::Unreachable(); }
   void await_resume() noexcept { }
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[maybe_unused]] auto await_cancel(Handle /*unused*/) noexcept -> bool
   {
     return false;
   }
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[nodiscard]] [[maybe_unused]] auto await_must_resume() const noexcept -> bool
   {
     return true;
@@ -45,12 +40,9 @@ struct Ready {
 };
 
 struct ReadyCancellable {
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[nodiscard]] auto await_ready() const noexcept { return true; }
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[noreturn]] void await_suspend(Handle) noexcept { oxygen::Unreachable(); }
   void await_resume() noexcept { }
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[maybe_unused]] auto await_cancel(Handle) noexcept
   {
     return std::true_type {};

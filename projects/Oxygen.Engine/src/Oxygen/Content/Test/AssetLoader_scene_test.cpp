@@ -158,7 +158,7 @@ NOLINT_TEST_F(AssetLoaderSceneTest, LoadAssetLooseCookedSceneLoads)
 
       loader.RegisterLoader(oxygen::content::loaders::LoadSceneAsset);
 
-      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&AssetLoader::ActivateAsync, &loader);
         loader.Run();

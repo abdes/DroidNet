@@ -96,7 +96,6 @@ auto MemoryStream::Read(std::byte* data, const size_t size) noexcept
 }
 
 // ReSharper disable once CppMemberFunctionMayBeStatic
-// NOLINTNEXTLINE(readability-convert-member-functions-to-static)
 auto MemoryStream::Flush() noexcept -> Result<void> { return {}; }
 
 auto MemoryStream::Position() const noexcept -> Result<size_t>

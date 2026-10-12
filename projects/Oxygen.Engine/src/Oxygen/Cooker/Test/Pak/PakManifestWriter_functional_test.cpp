@@ -35,7 +35,6 @@ namespace pak = oxygen::content::pak;
 namespace paktest = oxygen::content::pak::test;
 namespace cooktest = oxygen::cooker::test;
 
-// NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers)
 constexpr auto kContentVersion = uint16_t { 7U };
 constexpr auto kPatchDiffBasisIdentifier
   = std::string_view { "descriptor_plus_transitive_resources_v1" };
@@ -371,5 +370,4 @@ NOLINT_TEST_F(PakManifestTest, FullModeManifestEmissionIsBitExactDeterministic)
   EXPECT_EQ(first_bytes, second_bytes);
 }
 
-// NOLINTEND(cppcoreguidelines-avoid-magic-numbers)
 } // namespace

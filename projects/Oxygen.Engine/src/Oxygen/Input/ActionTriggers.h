@@ -134,7 +134,7 @@ protected:
 
 private:
   Behavior behavior_ { Behavior::kImplicit };
-  float actuation_threshold_ { 0.5F }; // NOLINT(*magic-numbers)
+  float actuation_threshold_ { 0.5F };
   State state_ { State::kIdle };
   State previous_state_ { State::kIdle };
   bool triggered_ { false };
@@ -611,7 +611,7 @@ public:
 
   OXGN_NPUT_API void AddComboStep(std::shared_ptr<Action> action,
     ActionState completion_states = ActionState::kTriggered,
-    float time_to_complete_seconds = 0.5F); // NOLINT(*magic-numbers)
+    float time_to_complete_seconds = 0.5F);
   OXGN_NPUT_API void RemoveComboStep(uint32_t index);
   OXGN_NPUT_API void ClearComboSteps();
   [[nodiscard]] auto GetComboSteps() const { return combo_steps_; }

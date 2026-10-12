@@ -136,14 +136,10 @@ public:
  \endcode
  */
 // NOLINTBEGIN(bugprone-macro-parentheses)
-// NOLINTBEGIN(*-avoid-capturing-lambda-coroutines)
-// NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
 #define OXCO_WITH_NURSERY(arg_name)                                            \
   co_yield ::oxygen::co::Nursery::Factory {}                                   \
     % [&](::oxygen::co::Nursery& arg_name)                                     \
         ->::oxygen::co::Co<::oxygen::co::detail::NurseryBodyRetVal>
-  // NOLINTEND(*-avoid-reference-coroutine-parameters)
-  // NOLINTEND(*-avoid-capturing-lambda-coroutines)
   // NOLINTEND(bugprone-macro-parentheses)
 
   virtual ~Nursery() { DCHECK_F(tasks_.Empty()); }
@@ -964,7 +960,6 @@ namespace detail {
 // No issue here with passing a reference to the nursery pointer that will
 // receive the nursery. This is used for live objects, which pass the address of
 // their nursery field (lifetime is same as object).
-// NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
 inline auto OpenNursery(Nursery*& ptr, TaskStarted<> started /*= {}*/) -> Co<>
 {
   Executor* ex = co_await GetExecutor();

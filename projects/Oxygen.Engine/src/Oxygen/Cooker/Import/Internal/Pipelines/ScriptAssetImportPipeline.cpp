@@ -520,7 +520,6 @@ auto ScriptAssetImportPipeline::Start(co::Nursery& nursery) -> void
 
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
-    // NOLINTNEXTLINE(*-lambda-coroutines)
     nursery.Start(&ScriptAssetImportPipeline::Worker, this);
   }
 }

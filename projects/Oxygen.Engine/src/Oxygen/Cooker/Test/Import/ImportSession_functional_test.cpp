@@ -471,7 +471,6 @@ NOLINT_TEST_F(ImportSessionTest, AddDiagnosticMultipleThreadsThreadSafe)
 
 NOLINT_TEST_F(ImportSessionTest, FinalizeNoErrorsReturnsSuccess)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     const auto request = MakeRequest();
     if (!request.cooked_root.has_value()) {
@@ -501,7 +500,6 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeNoErrorsReturnsSuccess)
 
 NOLINT_TEST_F(ImportSessionTest, FinalizeHasErrorsReturnsFailure)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     const auto request = MakeRequest();
     if (!request.cooked_root.has_value()) {
@@ -530,7 +528,6 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeHasErrorsReturnsFailure)
 
 NOLINT_TEST_F(ImportSessionTest, FinalizeSuccessWritesIndex)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     const auto request = MakeRequest();
     if (!request.cooked_root.has_value()) {
@@ -554,7 +551,6 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeSuccessWritesIndex)
 
 NOLINT_TEST_F(ImportSessionTest, FinalizeHasErrorsWritesIndexWithWarning)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     const auto request = MakeRequest();
     if (!request.cooked_root.has_value()) {
@@ -649,7 +645,6 @@ NOLINT_TEST_F(ImportSessionTest, CohortPublicationPreservesParticipantFailures)
 
 NOLINT_TEST_F(ImportSessionTest, FinalizePendingWritesWaitsForCompletion)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     const auto request = MakeRequest();
     if (!request.cooked_root.has_value()) {
@@ -682,7 +677,6 @@ NOLINT_TEST_F(ImportSessionTest, FinalizePendingWritesWaitsForCompletion)
 
 NOLINT_TEST_F(ImportSessionTest, FinalizeWithDiagnosticsIncludesInReport)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     const auto request = MakeRequest();
     if (!request.cooked_root.has_value()) {
@@ -721,7 +715,6 @@ NOLINT_TEST_F(ImportSessionTest, FinalizeWithEmittersRegistersInIndex)
 {
   using oxygen::data::loose_cooked::FileKind;
 
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     auto request = MakeRequest();
     if (!request.cooked_root.has_value()) {

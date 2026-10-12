@@ -821,7 +821,6 @@ auto SceneNode::CommitLightCandidate(const Component& candidate,
       }
       if (candidate.GetTypeId() == DirectionalLight::ClassTypeId()) {
         // Components carry no RTTI across modules; GetTypeId() checked it.
-        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
         const auto slot = static_cast<const DirectionalLight&>(candidate)
                             .GetAtmosphereLightSlot();
         const bool retains_slot

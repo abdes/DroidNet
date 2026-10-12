@@ -4,22 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/OxCo/Detail/Sequence.h>
-
 #include <chrono>
-
-#include <Oxygen/Testing/GTest.h>
-#include <gmock/gmock.h>
 
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
+#include <gmock/gmock.h>
+
 #include <Oxygen/Base/Unreachable.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Detail/Sequence.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Semaphore.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 using oxygen::co::AllOf;
@@ -36,7 +35,6 @@ using oxygen::co::testing::kNonCancellable;
 using oxygen::co::testing::TestEventLoop;
 
 // NOLINTBEGIN(*-avoid-do-while)
-// NOLINTBEGIN(*-avoid-capturing-lambda-coroutines)
 
 namespace {
 
@@ -300,5 +298,4 @@ NOLINT_TEST_F(SequenceTest, WithEmptySequence)
 
 } // namespace
 
-// NOLINTEND(*-avoid-capturing-lambda-coroutines)
 // NOLINTEND(*-avoid-do-while)

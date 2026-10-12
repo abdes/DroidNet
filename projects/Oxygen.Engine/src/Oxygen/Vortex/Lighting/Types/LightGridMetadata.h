@@ -33,7 +33,6 @@ struct alignas(packing::kShaderDataFieldAlignment) LightGridMetadata {
   std::array<std::uint32_t, 2> reserved {};
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(std::is_standard_layout_v<LightGridMetadata>);
 static_assert(std::is_trivially_copyable_v<LightGridMetadata>);
 static_assert(alignof(LightGridMetadata) == 16U);
@@ -47,6 +46,5 @@ static_assert(offsetof(LightGridMetadata, far_depth_m) == 44U);
 static_assert(offsetof(LightGridMetadata, near_depth_m) == 48U);
 static_assert(offsetof(LightGridMetadata, projection_kind) == 52U);
 static_assert(offsetof(LightGridMetadata, reserved) == 56U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

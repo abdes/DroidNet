@@ -34,7 +34,6 @@ struct alignas(16) LightGridBuildStatus {
   std::array<std::uint32_t, 2> selection_revision {};
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(std::is_standard_layout_v<LightGridBuildStatus>);
 static_assert(std::is_trivially_copyable_v<LightGridBuildStatus>);
 static_assert(alignof(LightGridBuildStatus) == 16U);
@@ -45,6 +44,5 @@ static_assert(offsetof(LightGridBuildStatus, written_index_count) == 8U);
 static_assert(offsetof(LightGridBuildStatus, fallback_cell_count) == 12U);
 static_assert(offsetof(LightGridBuildStatus, required_index_count) == 16U);
 static_assert(offsetof(LightGridBuildStatus, selection_revision) == 24U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

@@ -38,7 +38,6 @@ auto ComputeCrc32Ieee(std::span<const std::byte> bytes, uint32_t state) noexcept
   // in/out, init 0xFFFFFFFF, final XOR 0xFFFFFFFF.
   static constexpr auto kPoly = 0xEDB88320U;
 
-  // NOLINTBEGIN(*-magic-numbers)
   auto table = []() consteval {
     std::array<uint32_t, 256> t {};
     for (uint32_t i = 0; i < 256; ++i) {
@@ -57,7 +56,6 @@ auto ComputeCrc32Ieee(std::span<const std::byte> bytes, uint32_t state) noexcept
     const auto table_index = static_cast<size_t>((crc ^ u_b) & 0xFFU);
     crc = table.at(table_index) ^ (crc >> 8U);
   }
-  // NOLINTEND(*-magic-numbers)
   return crc;
 }
 
@@ -76,7 +74,7 @@ auto ComputePakCrc32(const std::filesystem::path& pak_path,
     = static_cast<size_t>(256) * static_cast<size_t>(1024);
   std::array<std::byte, kChunkSize> buffer {};
 
-  uint32_t crc = 0xFFFFFFFF; // NOLINT(*-magic-numbers)
+  uint32_t crc = 0xFFFFFFFF;
   size_t offset = 0;
 
   while (offset < cfg.file_size) {
@@ -122,7 +120,7 @@ auto ComputePakCrc32(const std::filesystem::path& pak_path,
     offset += to_read;
   }
 
-  return crc ^ 0xFFFFFFFFU; // NOLINT(*-magic-numbers)
+  return crc ^ 0xFFFFFFFFU;
 }
 // Helper to open a FileStream and throw with logging on error
 auto OpenFileStream(const std::filesystem::path& path)

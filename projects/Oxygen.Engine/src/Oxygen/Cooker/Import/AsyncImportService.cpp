@@ -285,7 +285,6 @@ struct AsyncImportService::Impl {
     startup_latch_.count_down();
 
     // Run the coroutine runtime with the AsyncImporter
-    // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) - blocking call
     co::Run(*event_loop_, [this] -> co::Co<> {
       // Use OXCO_WITH_NURSERY to properly activate the LiveObject
       OXCO_WITH_NURSERY(n)
@@ -307,7 +306,6 @@ struct AsyncImportService::Impl {
     // We run coroutines again, after the main nursery is closed, to finalize
     // all resource tables. This guarantees that all import jobs have completed
     // and no further writes will be made to the tables.
-    // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) - blocking call
     co::Run(*event_loop_, [this] -> co::Co<> {
       const auto ok = co_await table_registry_->FinalizeAll();
       if (!ok) {

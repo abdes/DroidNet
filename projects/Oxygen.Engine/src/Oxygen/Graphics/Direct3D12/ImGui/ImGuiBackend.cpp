@@ -4,7 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
+#include <stdexcept>
+
+#include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -15,12 +17,9 @@
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
 #include <Oxygen/Graphics/Direct3D12/ImGui/imgui_impl_dx12.h>
 #include <Oxygen/Graphics/Direct3D12/Texture.h>
-
-#include <imgui.h>
-
-#include <stdexcept>
 
 using oxygen::graphics::d3d12::D3D12ImGuiGraphicsBackend;
 
@@ -49,9 +48,7 @@ auto D3D12ImGuiGraphicsBackend::Init(std::weak_ptr<oxygen::Graphics> gfx_weak)
   graphics_weak_ = gfx_weak;
 
   // Cast to D3D12 graphics to access D3D12-specific functionality
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   const auto gfx = gfx_weak.lock();
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* d3d_gfx = static_cast<Graphics*>(gfx.get());
   auto* device = d3d_gfx->GetCurrentDevice();
 
@@ -62,7 +59,6 @@ auto D3D12ImGuiGraphicsBackend::Init(std::weak_ptr<oxygen::Graphics> gfx_weak)
   }
 
   // Get the underlying D3D12 command queue
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* d3d_queue = static_cast<const CommandQueue*>(graphics_queue.get());
   auto* command_queue = d3d_queue->GetCommandQueue();
 
@@ -264,7 +260,6 @@ auto D3D12ImGuiGraphicsBackend::Render(graphics::CommandRecorder& recorder)
   }
 
   // Cast the command recorder to D3D12 to get the underlying command list
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   const auto* d3d_recorder = static_cast<CommandRecorder*>(&recorder);
   auto* command_list = d3d_recorder->GetD3D12CommandList();
 

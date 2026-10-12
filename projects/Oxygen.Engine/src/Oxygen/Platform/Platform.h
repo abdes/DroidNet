@@ -198,7 +198,6 @@ namespace platform {
       const std::function<Component&(TypeId)>& get_component) noexcept
       -> void override
     {
-      // NOLINTBEGIN(*-pro-type-static-cast-downcast)
       // Must always be present even in headless mode
       async_ = observer_ptr { &static_cast<AsyncOps&>(
         get_component(AsyncOps::ClassTypeId())) };
@@ -211,7 +210,6 @@ namespace platform {
         // If it's not there, we will simply not pull events
         (void)0;
       }
-      // NOLINTEND(*-pro-type-static-cast-downcast)
     }
 
   private:

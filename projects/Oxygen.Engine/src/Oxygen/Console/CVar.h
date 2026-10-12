@@ -32,7 +32,7 @@ enum class CVarValueOrigin : uint8_t {
   kAppForced,
 };
 
-enum class CVarFlags : uint8_t { // NOLINT(*-enum-size)
+enum class CVarFlags : uint8_t {
   kNone = 0,
   kArchive = OXYGEN_FLAG(0),
   kReadOnly = OXYGEN_FLAG(1),

@@ -101,7 +101,6 @@ NOLINT_TEST_F(ExposureGpuTest, CompositionConstantsSurviveLaterSubmission)
   auto loop = co::testing::TestEventLoop {};
   // Run waits for completion, so the closure and captured locals outlive the
   // coroutine.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   co::Run(loop, [&] -> co::Co<void> {
     co_await renderer_->OnCompositing(observer_ptr {
       &frame,
@@ -166,7 +165,6 @@ NOLINT_TEST_F(ExposureGpuTest, CompositionFillPaintsOnlyItsRectangle)
   auto loop = co::testing::TestEventLoop {};
   // Run waits for completion, so the closure and captured locals outlive the
   // coroutine.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   co::Run(loop, [&] -> co::Co<void> {
     co_await renderer_->OnCompositing(observer_ptr { &frame });
   });
@@ -232,7 +230,6 @@ NOLINT_TEST_F(ExposureGpuTest, NativeExposureTimelineRecordsMeteringScopes)
     auto loop = co::testing::TestEventLoop {};
     // Run waits for completion, so the closure and captured locals outlive the
     // coroutine.
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     co::Run(loop, [&] -> co::Co<void> {
       co_await renderer_->OnCompositing(observer_ptr {
         &frame_context,

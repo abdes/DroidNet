@@ -46,7 +46,6 @@ protected:
 //! E; movement on W is unaffected and an idle Jump gets no Canceled edge.
 NOLINT_TEST_F(ConsumptionScenario, InteractDoesNotCancelMovementOnOtherKey)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto interact = MakeAction("Interact", ActionValueType::kBool);
     interact->SetConsumesInput(true);
@@ -73,7 +72,6 @@ NOLINT_TEST_F(ConsumptionScenario, InteractDoesNotCancelMovementOnOtherKey)
 //! The charge on J survives.
 NOLINT_TEST_F(ConsumptionScenario, HudPromptDoesNotResetChargeOnOtherKey)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     using std::chrono::milliseconds;
     auto confirm = MakeAction("ConfirmPickup", ActionValueType::kBool);
@@ -113,7 +111,6 @@ NOLINT_TEST_F(ConsumptionScenario, HudPromptDoesNotResetChargeOnOtherKey)
 //! in the same frame both trigger. A low-priority Space mapping does not.
 NOLINT_TEST_F(ConsumptionScenario, ConsumedKeyBlocksOnlyThatKey)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto jump = MakeAction("Jump", ActionValueType::kBool);
     jump->SetConsumesInput(true);
@@ -139,7 +136,6 @@ NOLINT_TEST_F(ConsumptionScenario, ConsumedKeyBlocksOnlyThatKey)
 //! binding (camera yaw) but not W.
 NOLINT_TEST_F(ConsumptionScenario, MouseXYClaimsBothAxes)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto drag = MakeAction("Drag", ActionValueType::kAxis2D);
     drag->SetConsumesInput(true);
@@ -167,7 +163,6 @@ NOLINT_TEST_F(ConsumptionScenario, MouseXYClaimsBothAxes)
 //! MouseWheelX binding (tilt-wheel strafe) is not.
 NOLINT_TEST_F(ConsumptionScenario, WheelDirectionClaimsItsAxisOnly)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto cycle = MakeAction("NextWeapon", ActionValueType::kBool);
     cycle->SetConsumesInput(true);
@@ -193,7 +188,6 @@ NOLINT_TEST_F(ConsumptionScenario, WheelDirectionClaimsItsAxisOnly)
 //! does not fire, and walking on W continues.
 NOLINT_TEST_F(ConsumptionScenario, AnyKeyClaimsOnlyThePressedKey)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto prompt = MakeAction("PressAnyKey", ActionValueType::kBool);
     prompt->SetConsumesInput(true);

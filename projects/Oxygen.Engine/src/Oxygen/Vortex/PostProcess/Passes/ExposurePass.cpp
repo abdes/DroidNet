@@ -272,7 +272,6 @@ namespace {
   };
 
   // HLSL layout offsets; the bindless schema generates these in time.
-  // NOLINTBEGIN(*-magic-numbers)
   static_assert(sizeof(AutoExposureAverageConstants) == 128U);
   static_assert(
     offsetof(AutoExposureAverageConstants, previous_state_srv) == 64U);
@@ -283,7 +282,6 @@ namespace {
   static_assert(
     offsetof(AutoExposureAverageConstants, borrowed_state_srv) == 100U);
   static_assert(offsetof(AutoExposureAverageConstants, view_lifetime) == 104U);
-  // NOLINTEND(*-magic-numbers)
 
   struct alignas(packing::kShaderDataFieldAlignment) ExposureFrameConstants {
     std::uint32_t output_uav;
@@ -299,13 +297,11 @@ namespace {
     std::uint32_t current_state_srv;
     std::uint32_t status_uav;
   };
-  // NOLINTBEGIN(*-magic-numbers)
   static_assert(sizeof(ExposureFrameConstants) == 48U);
   static_assert(offsetof(ExposureFrameConstants, fixed_scale) == 16U);
   static_assert(offsetof(ExposureFrameConstants, flags) == 32U);
   static_assert(offsetof(ExposureFrameConstants, current_state_srv) == 40U);
   static_assert(offsetof(ExposureFrameConstants, status_uav) == 44U);
-  // NOLINTEND(*-magic-numbers)
 
   // Mirrors SuitabilityConstants in Exposure.hlsl; publish the same raw words.
   struct SuitabilityConstants {

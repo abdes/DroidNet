@@ -31,7 +31,7 @@ public:
   int value_ = 0;
   std::string name_;
 
-  CloneableComponent() = default; // NOLINT(*-unused-member-function)
+  CloneableComponent() = default;
   CloneableComponent(const int v, std::string n)
     : value_(v)
     , name_(std::move(n))
@@ -54,7 +54,7 @@ public:
   double data_ = 0.0;
   std::string tag_;
 
-  CloneablePooledComponent() = default; // NOLINT(*-unused-member-function)
+  CloneablePooledComponent() = default;
   CloneablePooledComponent(const double d, std::string t)
     : data_(d)
     , tag_(std::move(t))

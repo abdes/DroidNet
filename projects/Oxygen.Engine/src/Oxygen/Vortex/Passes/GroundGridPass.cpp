@@ -87,8 +87,7 @@ namespace {
     glm::vec4 origin_color {};
   };
 
-  static_assert(
-    sizeof(GroundGridPassConstants) == 208U); // NOLINT(*-magic-numbers)
+  static_assert(sizeof(GroundGridPassConstants) == 208U);
 
   auto TrackTextureFromKnownOrInitial(graphics::CommandRecorder& recorder,
     const graphics::Texture& texture) -> void

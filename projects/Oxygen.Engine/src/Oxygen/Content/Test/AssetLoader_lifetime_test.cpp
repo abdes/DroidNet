@@ -59,8 +59,6 @@ using oxygen::data::InputMappingContextAsset;
 using oxygen::data::MaterialAsset;
 using oxygen::data::TextureResource;
 
-// NOLINTBEGIN(*-magic-numbers)
-
 using oxygen::base::CheckedAt;
 
 namespace {
@@ -124,7 +122,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceOwnerDropAllowsTrim)
 
       loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
-      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&AssetLoader::ActivateAsync, &loader);
         loader.Run();
@@ -188,7 +186,7 @@ NOLINT_TEST_F(
       std::vector<ResourceKey> loaded_keys;
       loaded_keys.reserve(kResourceCount);
 
-      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&AssetLoader::ActivateAsync, &loader);
         loader.Run();
@@ -253,7 +251,7 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest, ResourceUnloadRefcountedCheckouts)
 
       loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
-      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&AssetLoader::ActivateAsync, &loader);
         loader.Run();
@@ -563,5 +561,3 @@ NOLINT_TEST_F(AssetLoaderLifetimeAsyncTest,
 #endif
 
 } // namespace
-
-// NOLINTEND(*-magic-numbers)

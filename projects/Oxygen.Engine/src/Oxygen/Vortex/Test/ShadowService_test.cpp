@@ -1610,7 +1610,6 @@ NOLINT_TEST_F(
     },
   };
   // The fake graphics creates fake queues.
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* queue = static_cast<oxygen::vortex::testing::FakeCommandQueue*>(
     graphics_->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics).get());
   queue->SetAutoComplete(false);
@@ -1793,7 +1792,6 @@ NOLINT_TEST_F(ShadowServiceBehaviorTest,
   auto allocator = ConventionalShadowTargetAllocator(*renderer_);
   const auto view = oxygen::ViewId { 71 };
   // The fake graphics creates fake queues.
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* queue = static_cast<oxygen::vortex::testing::FakeCommandQueue*>(
     graphics_->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics).get());
   queue->SetAutoComplete(false);
@@ -2180,7 +2178,6 @@ NOLINT_TEST_F(
   EXPECT_EQ(Record(0).surface_srv, Record(1).surface_srv);
   EXPECT_EQ(Record(0).first_array_layer, Record(1).first_array_layer);
   // The fake graphics creates fake queues.
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* queue = static_cast<oxygen::vortex::testing::FakeCommandQueue*>(
     graphics_->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics).get());
   const auto submissions = queue->submitted_batches;
@@ -2328,11 +2325,9 @@ NOLINT_TEST_F(
   auto lease = service->RetainLocalContent(
     inputs.at(0).view_id, selection.local_lights.at(0).source_node);
   // The fake graphics creates fake queues.
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* compute = static_cast<oxygen::vortex::testing::FakeCommandQueue*>(
     graphics_->GetCommandQueue(oxygen::graphics::QueueRole::kCompute).get());
   // The fake graphics creates fake queues.
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto* graphics = static_cast<oxygen::vortex::testing::FakeCommandQueue*>(
     graphics_->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics).get());
   compute->SetAutoComplete(false);

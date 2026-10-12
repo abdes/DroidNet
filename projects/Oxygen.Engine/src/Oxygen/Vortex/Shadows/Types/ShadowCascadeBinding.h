@@ -38,7 +38,6 @@ struct alignas(packing::kShaderDataFieldAlignment) ShadowCascadeBinding {
   glm::uvec2 reserved1 { 0U };
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(std::is_standard_layout_v<ShadowCascadeBinding>);
 static_assert(std::is_trivially_copyable_v<ShadowCascadeBinding>);
 static_assert(alignof(ShadowCascadeBinding) == 16U);
@@ -57,6 +56,5 @@ static_assert(offsetof(ShadowCascadeBinding, transition_width) == 108U);
 static_assert(offsetof(ShadowCascadeBinding, fade_begin) == 112U);
 static_assert(offsetof(ShadowCascadeBinding, fade_end) == 116U);
 static_assert(offsetof(ShadowCascadeBinding, reserved1) == 120U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

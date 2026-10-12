@@ -43,7 +43,6 @@ struct alignas(16) LightingFrameBindings {
   std::uint32_t reserved { 0U };
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(sizeof(LightingFrameBindings) == 96U);
 static_assert(alignof(LightingFrameBindings) == 16U);
 static_assert(std::is_standard_layout_v<LightingFrameBindings>);
@@ -69,6 +68,5 @@ static_assert(offsetof(LightingFrameBindings, publication_state) == 80U);
 static_assert(offsetof(LightingFrameBindings, brdf_energy_srv) == 84U);
 static_assert(offsetof(LightingFrameBindings, brdf_model_revision) == 88U);
 static_assert(offsetof(LightingFrameBindings, reserved) == 92U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

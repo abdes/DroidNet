@@ -23,8 +23,6 @@
 
 namespace {
 
-// NOLINTBEGIN(*-magic-numbers)
-
 using oxygen::AnyCache;
 using oxygen::PolicyBudgetStatus;
 using oxygen::TypeId;
@@ -290,7 +288,5 @@ NOLINT_TEST(AnyCacheBudgetTest, SnapshotStatsTracksBudgetAndOverBudgetState)
   EXPECT_TRUE(stats.over_budget);
   EXPECT_TRUE(cache.IsOverBudget());
 }
-
-// NOLINTEND(*-magic-numbers)
 
 } // namespace

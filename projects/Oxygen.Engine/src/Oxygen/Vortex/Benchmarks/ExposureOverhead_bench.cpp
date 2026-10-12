@@ -200,7 +200,6 @@ NOLINT_TEST_F(ExposureProfilingOverheadTest, DISABLED_ReleaseCollectionOnOff)
     }
     auto loop = co::testing::TestEventLoop {};
     // Run completes synchronously before the closure or captures are destroyed.
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     co::Run(loop, [&]() -> co::Co<void> {
       co_await renderer_->OnPreRender(observer_ptr {
         &frame,

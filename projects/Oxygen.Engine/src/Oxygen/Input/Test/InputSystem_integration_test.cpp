@@ -74,7 +74,6 @@ class InputSystemIntegrationTest : public InputSystemTest { };
 NOLINT_TEST_F(
   InputSystemIntegrationTest, CombatScenario_Integration_HistoryMatches)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange ---------------------------------------------------------------
     auto attack = std::make_shared<Action>("Attack", ActionValueType::kBool);
@@ -340,7 +339,6 @@ NOLINT_TEST_F(
 NOLINT_TEST_F(
   InputSystemIntegrationTest, CrossContext_ConsumerCancelsEarlierContext)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange
     auto shift = std::make_shared<Action>("Shift", ActionValueType::kBool);
@@ -419,7 +417,6 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange: High-priority context with 'High' mapping; low-priority context
     // with two mappings whose order relative to a consumer will be validated.
@@ -536,7 +533,6 @@ NOLINT_TEST_F(InputSystemIntegrationTest, MappingOrderAcrossContexts)
 NOLINT_TEST_F(
   InputSystemIntegrationTest, TDD_JumpHigherCancelsThenJumpTriggersOnNextTap)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     // Arrange (same wiring as CrossContext_ConsumerCancelsEarlierContext)
     auto shift = std::make_shared<Action>("Shift", ActionValueType::kBool);

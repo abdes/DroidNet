@@ -22,7 +22,6 @@
 
 namespace oxygen::vortex {
 
-// NOLINTNEXTLINE(*-enum-size)
 enum class DiagnosticsFeature : std::uint32_t {
   kNone = 0,
   kFrameLedger = OXYGEN_FLAG(0),

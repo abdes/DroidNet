@@ -97,7 +97,7 @@ OXGN_COOK_API auto to_string(UnitNormalizationPolicy value) -> std::string;
  - If no material can be assigned to a SubMesh, the importer MUST fail with a
    diagnostic rather than emitting an invalid mesh.
 */
-enum class ImportContentFlags : uint32_t { // NOLINT(performance-enum-size)
+enum class ImportContentFlags : uint32_t {
   kNone = 0,
 
   //! Emit texture resources.

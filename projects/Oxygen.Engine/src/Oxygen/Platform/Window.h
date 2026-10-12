@@ -33,8 +33,8 @@ namespace window {
   using ExtentT = Extent<uint32_t>;
   using PositionT = Point<uint32_t>;
 
-  enum class Event : uint32_t { // NOLINT(performance-enum-size) - consistent
-                                // with implementation
+  enum class Event : uint32_t {
+    // with implementation
     kUnknown = 0,
     kShown, //!< Window has been shown
     kHidden, //!< Window has been hidden

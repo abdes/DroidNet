@@ -125,7 +125,6 @@ protected:
   auto GetOptimalStackCapacity() const -> std::size_t
   {
     DCHECK_F(!scene_weak_.expired());
-    // NOLINTBEGIN(*-magic-numbers)
     const auto node_count = scene_weak_.lock()->GetNodeCount();
     if (node_count <= 64) {
       return 32;
@@ -137,7 +136,6 @@ protected:
       return 128;
     }
     return 256; // Cap at reasonable size for deep scenes
-    // NOLINTEND(*-magic-numbers)
   }
 
   void CollectChildrenToBuffer(NodeImpl* node, std::size_t parent_depth) const

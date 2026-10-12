@@ -6,12 +6,13 @@
 
 #include <array>
 #include <chrono>
+#include <iostream>
 #include <random>
 #include <utility>
 
+#include "Utils/TestEventLoop.h"
 #include <benchmark/benchmark.h>
 
-#include "Utils/TestEventLoop.h"
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Channel.h>
@@ -22,8 +23,6 @@
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Semaphore.h>
 #include <Oxygen/OxCo/Shared.h>
-
-#include <iostream>
 
 using std::chrono::milliseconds;
 using namespace std::chrono_literals;
@@ -42,8 +41,6 @@ using oxygen::co::Shared;
 using oxygen::co::TaskStarted;
 using oxygen::co::testing::TestEventLoop;
 
-// NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
-// NOLINTBEGIN(*-avoid-capturing-lambda-coroutines)
 // NOLINTBEGIN(*-avoid-do-while)
 
 namespace {
@@ -422,5 +419,3 @@ TEST_CASE("Event Stream - BroadcastChannel benchmark")
 } // namespace
 
 // NOLINTEND(*-avoid-do-while)
-// NOLINTEND(*-avoid-capturing-lambda-coroutines)
-// NOLINTEND(*-avoid-reference-coroutine-parameters)

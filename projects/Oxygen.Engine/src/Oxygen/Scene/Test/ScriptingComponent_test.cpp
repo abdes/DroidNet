@@ -203,7 +203,6 @@ NOLINT_TEST_F(
   ASSERT_NE(clone, nullptr);
   ASSERT_EQ(clone->GetTypeId(), ScriptingComponent::ClassTypeId());
   // C++ RTTI is disabled; the engine's type ID was checked immediately above.
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto& cloned = static_cast<const ScriptingComponent&>(*clone);
   EXPECT_NE(cloned.IncarnationId(), original);
   EXPECT_NE(cloned.IncarnationId(), copied.IncarnationId());

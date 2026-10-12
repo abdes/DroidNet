@@ -35,7 +35,7 @@ struct OcclusionCounters {
 
   auto operator==(const OcclusionCounters&) const -> bool = default;
 };
-static_assert(sizeof(OcclusionCounters) == 32U); // NOLINT(*-magic-numbers)
+static_assert(sizeof(OcclusionCounters) == 32U);
 
 //! The latest counters read back for a culling view.
 struct OcclusionStats {

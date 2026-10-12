@@ -139,7 +139,6 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
     const auto recording = recorder.GetCommandListForInspection();
     const auto* native_recording
       // The recorder comes from the fixture D3D12 backend; RTTI is disabled.
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
       = static_cast<const graphics::d3d12::CommandList*>(recording.get());
     native_recording->GetCommandList()->CopyTextureRegion(
       &destination, 0U, 0U, 0U, &source_location, nullptr);

@@ -30,7 +30,7 @@
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
 OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
-// NOLINTBEGIN(*-avoid-c-arrays,*-magic-numbers)
+// NOLINTBEGIN(*-avoid-c-arrays)
 
 //! Oxygen PAK format core domain schema.
 /*!
@@ -388,5 +388,5 @@ static_assert(sizeof(AssetHeader) == 103);
 
 } // namespace oxygen::data::pak::core
 
-// NOLINTEND(*-avoid-c-arrays,*-magic-numbers)
+// NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

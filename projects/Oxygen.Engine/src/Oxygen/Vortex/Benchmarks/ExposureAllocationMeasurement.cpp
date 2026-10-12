@@ -272,7 +272,6 @@ auto ExposureAllocationScenario::CopyDepth(graphics::CommandRecorder& recorder,
   CHECK_NOTNULL_F(recording.get());
   // The fixture creates only D3D12 command lists; this build has RTTI disabled.
   const auto* native
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     = static_cast<const graphics::d3d12::CommandList*>(recording.get());
   native->GetCommandList()->CopyTextureRegion(
     &destination, 0U, 0U, 0U, &source, nullptr);

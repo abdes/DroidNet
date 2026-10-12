@@ -11,7 +11,6 @@ namespace oxygen::scene {
 inline auto DirectionalLight::UpdateDependencies(
   const std::function<Component&(TypeId)>& get_component) noexcept -> void
 {
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   transform_ = &static_cast<detail::TransformComponent&>(
     get_component(detail::TransformComponent::ClassTypeId()));
 }

@@ -56,7 +56,6 @@ struct alignas(packing::kShaderDataFieldAlignment) EnvironmentFrameBindings {
   std::uint32_t padding { 0U };
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(sizeof(EnvironmentFrameBindings) == 80);
 static_assert(
   alignof(EnvironmentFrameBindings) == packing::kShaderDataFieldAlignment);
@@ -79,6 +78,5 @@ static_assert(
   offsetof(EnvironmentFrameBindings, camera_aerial_perspective_srv) == 44);
 static_assert(offsetof(EnvironmentFrameBindings, probes) == 48);
 static_assert(offsetof(EnvironmentFrameBindings, padding) == 76);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

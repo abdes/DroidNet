@@ -4,20 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/OxCo/Nursery.h>
-
 #include <chrono>
 
-#include <Oxygen/Testing/GTest.h>
-#include <gmock/gmock.h>
-
-#include "Oxygen/Base/ScopeGuard.h"
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
+#include <gmock/gmock.h>
+
+#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Testing/GTest.h>
 
 using std::chrono::milliseconds;
 using namespace std::chrono_literals;
@@ -40,8 +39,6 @@ using oxygen::co::detail::NurseryBodyRetVal;
 using oxygen::co::testing::kNonCancellable;
 using oxygen::co::testing::TestEventLoop;
 
-// NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
-// NOLINTBEGIN(*-avoid-capturing-lambda-coroutines)
 // NOLINTBEGIN(*-avoid-do-while)
 
 namespace {
@@ -686,5 +683,3 @@ NOLINT_TEST_F(NurseryTest, OpenInnerNurseryAndCancel)
 } // namespace
 
 // NOLINTEND(*-avoid-do-while)
-// NOLINTEND(*-avoid-capturing-lambda-coroutines)
-// NOLINTEND(*-avoid-reference-coroutine-parameters)

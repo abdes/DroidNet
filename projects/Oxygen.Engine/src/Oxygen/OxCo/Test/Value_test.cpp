@@ -4,18 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/OxCo/Value.h>
-
 #include <chrono>
-
-#include <Oxygen/Testing/GTest.h>
-#include <gmock/gmock.h>
 
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
+#include <gmock/gmock.h>
+
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Value.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 using oxygen::co::AllOf;
@@ -24,7 +23,6 @@ using oxygen::co::Run;
 using oxygen::co::Value;
 
 // NOLINTBEGIN(*-avoid-do-while)
-// NOLINTBEGIN(*-avoid-capturing-lambda-coroutines)
 
 namespace {
 
@@ -192,5 +190,4 @@ NOLINT_TEST_F(ValueTest, ConversionOperatorReturnsCurrentValue)
 
 } // namespace
 
-// NOLINTEND(*-avoid-capturing-lambda-coroutines)
 // NOLINTEND(*-avoid-do-while)

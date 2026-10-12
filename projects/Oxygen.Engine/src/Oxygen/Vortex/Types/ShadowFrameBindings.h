@@ -44,7 +44,6 @@ struct alignas(packing::kShaderDataFieldAlignment) ShadowFrameBindings {
   glm::uvec2 reserved { 0U };
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(std::is_standard_layout_v<ShadowFrameBindings>);
 static_assert(std::is_trivially_copyable_v<ShadowFrameBindings>);
 static_assert(sizeof(ShadowFrameBindings) == 112U);
@@ -70,6 +69,5 @@ static_assert(offsetof(ShadowFrameBindings, frame_sequence) == 80U);
 static_assert(offsetof(ShadowFrameBindings, view_generation) == 88U);
 static_assert(offsetof(ShadowFrameBindings, contact_texture_extent_px) == 96U);
 static_assert(offsetof(ShadowFrameBindings, reserved) == 104U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

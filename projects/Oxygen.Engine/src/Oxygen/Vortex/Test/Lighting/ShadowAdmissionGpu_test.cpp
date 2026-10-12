@@ -1047,7 +1047,6 @@ namespace {
         auto loop = co::testing::TestEventLoop {};
         // Run completes synchronously before the coroutine closure leaves
         // scope.
-        // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
         co::Run(loop, [&] -> co::Co<void> {
           co_await renderer_->OnPreRender(observer_ptr { &frame });
           co_await renderer_->OnRender(observer_ptr { &frame });

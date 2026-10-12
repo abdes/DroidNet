@@ -143,7 +143,7 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
 
       loader.RegisterLoader(oxygen::content::loaders::LoadBufferResource);
 
-      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&AssetLoader::ActivateAsync, &loader);
         loader.Run();
@@ -214,7 +214,7 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
       std::shared_ptr<BufferResource> loaded;
       std::thread::id callback_thread;
 
-      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&AssetLoader::ActivateAsync, &loader);
         loader.Run();
@@ -303,7 +303,7 @@ NOLINT_TEST_F(AssetLoaderBufferFromBufferAsyncTest,
       std::memcpy(std::span(bytes).subspan(kDataOffset).data(), payload.data(),
         payload.size());
 
-      OXCO_WITH_NURSERY(n) // NOLINT(*-avoid-reference-coroutine-parameters)
+      OXCO_WITH_NURSERY(n)
       {
         co_await n.Start(&AssetLoader::ActivateAsync, &loader);
         loader.Run();

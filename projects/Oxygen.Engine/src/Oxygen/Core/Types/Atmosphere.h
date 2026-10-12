@@ -181,8 +181,8 @@ struct DensityProfile {
 
 static_assert(std::is_standard_layout_v<DensityLayer>);
 static_assert(std::is_standard_layout_v<DensityProfile>);
-static_assert(sizeof(DensityLayer) == 16); // NOLINT(*-magic-numbers)
-static_assert(sizeof(DensityProfile) == 32); // NOLINT(*-magic-numbers)
+static_assert(sizeof(DensityLayer) == 16);
+static_assert(sizeof(DensityProfile) == 32);
 
 //! Default ozone density profile (2-layer tent).
 /*!

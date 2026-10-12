@@ -546,7 +546,6 @@ void DebugLayer::BootstrapRenderDoc() noexcept
   }
 
   // GetProcAddress returns an untyped entry point by contract.
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   const auto get_api = reinterpret_cast<pRENDERDOC_GetAPI>(
     ::GetProcAddress(renderdoc_module, "RENDERDOC_GetAPI"));
   if (get_api == nullptr) {
@@ -560,7 +559,6 @@ void DebugLayer::BootstrapRenderDoc() noexcept
 
   RENDERDOC_API_1_6_0* api = nullptr;
   // RENDERDOC_GetAPI returns the versioned table through a void** by contract.
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   if (get_api(eRENDERDOC_API_Version_1_6_0, reinterpret_cast<void**>(&api)) != 1
     || api == nullptr) {
     LOG_F(WARNING,

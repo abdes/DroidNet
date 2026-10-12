@@ -116,7 +116,6 @@ private:
   //! \return Next power of 2 >= v
   static auto RoundUpPow2(size_t v) -> size_t
   {
-    // NOLINTBEGIN(*-magic-numbers)
     v--;
     v |= v >> 1;
     v |= v >> 2;
@@ -125,7 +124,6 @@ private:
     v |= v >> 16;
     v |= v >> 32;
     return v + 1;
-    // NOLINTEND(*-magic-numbers)
   }
 
   //! Doubles the capacity of the hash table

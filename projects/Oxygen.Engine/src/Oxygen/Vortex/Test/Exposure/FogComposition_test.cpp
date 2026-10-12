@@ -212,7 +212,6 @@ NOLINT_TEST_F(
     auto loop = co::testing::TestEventLoop {};
     // Run waits for completion, so the closure and captured locals outlive the
     // coroutine.
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     co::Run(loop, [&] -> co::Co<void> {
       co_await renderer_->OnPreRender(observer_ptr {
         &frame,

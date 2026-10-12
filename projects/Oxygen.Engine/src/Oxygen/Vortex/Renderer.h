@@ -290,7 +290,6 @@ public:
 
     // Awaited immediately by the caller that owns the recorder, like every
     // render pass Execute.
-    // NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
     auto Execute(graphics::CommandRecorder& recorder) const -> co::Co<void>
     {
       const auto& render_context = context_.GetRenderContext();

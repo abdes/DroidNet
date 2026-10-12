@@ -39,7 +39,6 @@ struct SourceKey : public NamedType<Uuid, struct SourceKeyTag,
 {
   static constexpr std::size_t kSizeBytes = Uuid::kSize;
 
-  // NOLINTNEXTLINE(*-magic-numbers)
   using Base = NamedType<Uuid, struct SourceKeyTag,
     // clang-format off
     oxygen::Comparable,

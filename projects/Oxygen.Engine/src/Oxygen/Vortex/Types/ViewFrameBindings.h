@@ -41,7 +41,6 @@ struct alignas(16) ViewFrameBindings {
   std::array<std::uint32_t, 2> lighting_view_generation {};
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(sizeof(ViewFrameBindings) == 64U);
 static_assert(alignof(ViewFrameBindings) == 16U);
 static_assert(std::is_standard_layout_v<ViewFrameBindings>);
@@ -61,6 +60,5 @@ static_assert(offsetof(ViewFrameBindings, history_frame_slot) == 44U);
 static_assert(offsetof(ViewFrameBindings, ray_tracing_frame_slot) == 48U);
 static_assert(offsetof(ViewFrameBindings, exposure_status_uav) == 52U);
 static_assert(offsetof(ViewFrameBindings, lighting_view_generation) == 56U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

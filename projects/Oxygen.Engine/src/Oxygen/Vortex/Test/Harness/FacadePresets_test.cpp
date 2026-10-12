@@ -177,11 +177,9 @@ NOLINT_TEST_F(FacadePresetsTest, RenderGraphPresetFinalizesWithCallerGraph)
       MakeResolvedViewInput(),
       // The caller synchronously runs or awaits this coroutine before its frame
       // context goes out of scope.
-      // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
       [](ViewId, const oxygen::vortex::RenderContext&,
         // The caller synchronously runs or awaits this coroutine before its
         // frame context goes out of scope.
-        // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
         oxygen::graphics::CommandRecorder&) -> oxygen::co::Co<void> {
         co_return;
       });
@@ -247,11 +245,9 @@ NOLINT_TEST_F(
       // Synchronous execution finishes while the session-owned closure and its
       // captured test locals are alive. The caller synchronously runs or awaits
       // this coroutine before its frame context goes out of scope.
-      // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines,cppcoreguidelines-avoid-reference-coroutine-parameters)
       [&executed](ViewId view_id, const RenderContext& context,
         // The caller synchronously runs or awaits this coroutine before its
         // frame context goes out of scope.
-        // NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
         oxygen::graphics::CommandRecorder&) -> oxygen::co::Co<void> {
         executed = true;
         EXPECT_EQ(view_id, (ViewId { 91U, }));
@@ -274,7 +270,6 @@ NOLINT_TEST_F(
   oxygen::co::Run(loop,
     // Synchronous execution finishes while the session-owned closure and its
     // captured test locals are alive.
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     [&] -> oxygen::co::Co<void> { co_await result->Execute(*recorder); });
 
   EXPECT_TRUE(executed);

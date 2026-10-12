@@ -14,13 +14,11 @@ NOLINT_TEST_F(AppBindingsTest, ExecuteScriptAppBindingsExposeEngineState)
 {
   auto module = MakeModule();
 
-  // NOLINTBEGIN(*-magic-numbers)
   FakeEngine().MutableConfig().application.name = "My Test App";
   FakeEngine().MutableConfig().application.version = 42;
   FakeEngine().MutableConfig().target_fps = 60;
   FakeEngine().MutableConfig().frame_count = 1000;
   FakeEngine().MutableConfig().enable_asset_loader = true;
-  // NOLINTEND(*-magic-numbers)
 
   ASSERT_TRUE(AttachModule(module));
 

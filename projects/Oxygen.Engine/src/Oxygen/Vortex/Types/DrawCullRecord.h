@@ -50,6 +50,6 @@ struct DrawCullRecord {
 
 static_assert(sizeof(DrawCullRecord) == 32);
 static_assert(offsetof(DrawCullRecord, box_extent) == 16);
-static_assert(offsetof(DrawCullRecord, flags) == 28); // NOLINT(*-magic-numbers)
+static_assert(offsetof(DrawCullRecord, flags) == 28);
 
 } // namespace oxygen::vortex

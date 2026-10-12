@@ -258,7 +258,6 @@ protected:
     try {
       // OXYGEN_COMPONENT_REQUIRES guarantees this dependency's exact type;
       // engine RTTI is disabled.
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
       const auto& dm = static_cast<DeviceManager&>(
         get_component(DeviceManager::ClassTypeId()));
       device = dm.Device();
@@ -718,7 +717,6 @@ auto Graphics::CreateSurface(std::weak_ptr<platform::Window> window_weak,
     graphics::d3d12::CommandQueue::ClassTypeId(),
     "Invalid command queue class");
 
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   const auto* queue = static_cast<CommandQueue*>(command_queue.get());
   auto surface = std::make_unique<detail::WindowSurface>(
     window_weak, queue->GetCommandQueue(), this);
@@ -743,7 +741,6 @@ auto Graphics::CreateSurfaceFromNative(void* /*native_handle*/,
     graphics::d3d12::CommandQueue::ClassTypeId(),
     "Invalid command queue class");
 
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   const auto* queue = static_cast<CommandQueue*>(command_queue.get());
   const auto surface = std::make_shared<detail::CompositionSurface>(
     queue->GetCommandQueue(), this);

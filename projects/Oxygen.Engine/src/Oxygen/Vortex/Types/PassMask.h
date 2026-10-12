@@ -44,7 +44,7 @@ namespace oxygen::vortex {
   - kDecal        : Projected decals.
   - kUi           : Overlay / UI.
  */
-enum class PassMaskBit : uint32_t { // NOLINT(*-enum-size)
+enum class PassMaskBit : uint32_t {
   kNone = 0,
   kDoubleSided = OXYGEN_FLAG(1),
   kOpaque = OXYGEN_FLAG(2),

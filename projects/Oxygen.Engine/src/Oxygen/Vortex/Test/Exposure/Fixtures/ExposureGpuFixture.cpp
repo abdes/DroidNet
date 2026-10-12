@@ -119,7 +119,6 @@ auto ExposureGpuTest::MappedTextureBytes(
 auto ExposureGpuTest::FailureBackend() -> ExposureFailureGraphics&
 {
   // CreateBackend constructs this exact type; this build disables RTTI.
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   return static_cast<ExposureFailureGraphics&>(Backend());
 }
 

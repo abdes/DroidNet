@@ -42,7 +42,6 @@ struct alignas(packing::kShaderDataFieldAlignment)
 static_assert(
   sizeof(ProceduralGridMaterialConstants) % packing::kShaderDataFieldAlignment
   == 0);
-static_assert(
-  sizeof(ProceduralGridMaterialConstants) == 112); // NOLINT(*-magic-numbers)
+static_assert(sizeof(ProceduralGridMaterialConstants) == 112);
 
 } // namespace oxygen::vortex

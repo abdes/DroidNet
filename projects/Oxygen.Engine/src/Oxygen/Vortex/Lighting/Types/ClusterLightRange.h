@@ -20,13 +20,11 @@ struct ClusterLightRange {
   std::uint32_t count { 0U };
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(std::is_standard_layout_v<ClusterLightRange>);
 static_assert(std::is_trivially_copyable_v<ClusterLightRange>);
 static_assert(alignof(ClusterLightRange) == 4U);
 static_assert(sizeof(ClusterLightRange) == 8U);
 static_assert(offsetof(ClusterLightRange, offset) == 0U);
 static_assert(offsetof(ClusterLightRange, count) == 4U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

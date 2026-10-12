@@ -64,7 +64,6 @@ namespace {
 
   const auto base_color = material.GetBaseColor();
   for (int i = 0; i < 4; ++i) {
-    // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
     if (!std::isfinite(base_color[i])) {
       error_msg = "Material base_color contains non-finite values";
       return false;
@@ -73,7 +72,6 @@ namespace {
       error_msg = "Material base_color values out of reasonable range [0, 10]";
       return false;
     }
-    // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
   }
 
   const auto metalness = material.GetMetalness();
@@ -138,7 +136,6 @@ template <typename VectorT>
 auto HashQuantizedFloatVector(std::size_t& seed, const VectorT& value) -> void
 {
   for (int i = 0; i < 4; ++i) {
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     oxygen::HashCombine(seed, QuantizeMaterialScalar(value[i]));
   }
 }
@@ -305,7 +302,6 @@ auto SerializeMaterialShadingConstants(
   // Copy base color
   const auto base_color = material.resolved_asset->GetBaseColor();
   constants.base_color
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     = { base_color[0], base_color[1], base_color[2], base_color[3] };
 
   // Copy scalar properties
@@ -896,13 +892,11 @@ auto MaterialBinder::Impl::MarkDirty(const std::uint32_t index) -> void
   if (index >= dirty_pending_.size()) {
     dirty_pending_.resize(static_cast<std::size_t>(index) + 1U, 0U);
   }
-  // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
   if (dirty_pending_.at(index) != 0U) {
     return;
   }
   dirty_pending_.at(index) = 1U;
   dirty_indices_.push_back(index);
-  // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
 }
 
 auto MaterialBinder::Impl::EnsureAtlasCapacityOrLog(
@@ -939,7 +933,6 @@ auto MaterialBinder::Impl::UpdateKeyMappingForIndex(
   if (index >= material_keys_.size()) {
     material_keys_.resize(static_cast<std::size_t>(index) + 1U, 0U);
   }
-  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
   const auto old_key = material_keys_[index];
   if (old_key != 0U) {
     const auto it = material_key_to_handle_.find(old_key);
@@ -948,7 +941,6 @@ auto MaterialBinder::Impl::UpdateKeyMappingForIndex(
     }
   }
 
-  // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
   material_keys_[index] = new_key;
 
   if (index >= material_handle_generations_.size()) {
@@ -1146,7 +1138,6 @@ auto MaterialBinder::Impl::Update(
   }
 
   const auto index = *maybe_index;
-  // NOLINTBEGIN(*-pro-bounds-avoid-unchecked-container-access)
   vortex::sceneprep::MaterialRef mat_ref {
     .source_asset_key = material->GetAssetKey(),
     .resolved_asset_key = material->GetAssetKey(),
@@ -1170,7 +1161,6 @@ auto MaterialBinder::Impl::Update(
   procedural_grid_material_constants_.at(index) = new_procedural_grid_constants;
   UpdateKeyMappingForIndex(index, new_key);
   MarkDirty(index);
-  // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
 }
 
 auto MaterialBinder::Impl::ProcessEvictions() -> void
@@ -1204,7 +1194,6 @@ auto MaterialBinder::Impl::ProcessEvictions() -> void
       found_match = true;
 
       if (entry_index < material_keys_.size()) {
-        // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
         const auto key = material_keys_[entry_index];
         if (key != 0U) {
           const auto it = material_key_to_handle_.find(key);
@@ -1212,7 +1201,6 @@ auto MaterialBinder::Impl::ProcessEvictions() -> void
             && it->second.index == static_cast<std::uint32_t>(entry_index)) {
             material_key_to_handle_.erase(it);
           }
-          // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
           material_keys_[entry_index] = 0U;
         }
       }

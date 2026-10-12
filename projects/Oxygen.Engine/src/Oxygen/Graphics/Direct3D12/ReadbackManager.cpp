@@ -824,10 +824,8 @@ auto D3D12TextureReadback::EnqueueCopy(
     return std::unexpected(validation.error());
   }
 
-  // NOLINTBEGIN(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto& source_texture = static_cast<const d3d12::Texture&>(source);
   auto& d3d12_recorder = static_cast<d3d12::CommandRecorder&>(recorder);
-  // NOLINTEND(cppcoreguidelines-pro-type-static-cast-downcast)
   if (source_texture.IsReadbackSurface()) {
     return std::unexpected(ReadbackError::kUnsupportedResource);
   }

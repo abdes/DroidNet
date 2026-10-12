@@ -33,7 +33,6 @@ struct alignas(packing::kShaderDataFieldAlignment) ForwardLocalLightRecord {
   std::array<std::uint32_t, 3> reserved {};
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(sizeof(ForwardLocalLightRecord) == 80U);
 static_assert(alignof(ForwardLocalLightRecord) == 16U);
 static_assert(std::is_standard_layout_v<ForwardLocalLightRecord>);
@@ -44,14 +43,12 @@ static_assert(offsetof(ForwardLocalLightRecord, intensity_rgb_cd) == 16U);
 static_assert(offsetof(ForwardLocalLightRecord, source_radius_m) == 28U);
 static_assert(offsetof(ForwardLocalLightRecord, emitted_direction_ws) == 32U);
 static_assert(offsetof(ForwardLocalLightRecord, inverse_range_m) == 44U);
-static_assert(
-  offsetof(ForwardLocalLightRecord, outer_cone_cosine) == 48U);
+static_assert(offsetof(ForwardLocalLightRecord, outer_cone_cosine) == 48U);
 static_assert(
   offsetof(ForwardLocalLightRecord, inverse_cone_cosine_width) == 52U);
 static_assert(offsetof(ForwardLocalLightRecord, kind) == 56U);
 static_assert(offsetof(ForwardLocalLightRecord, flags) == 60U);
 static_assert(offsetof(ForwardLocalLightRecord, selection_index) == 64U);
 static_assert(offsetof(ForwardLocalLightRecord, reserved) == 68U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

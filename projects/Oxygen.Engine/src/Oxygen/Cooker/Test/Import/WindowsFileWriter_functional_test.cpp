@@ -480,7 +480,6 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAtAsyncAllowsCooperativeReaders)
     auto callback_error = FileErrorInfo {};
     auto callback_bytes = uint64_t { 0 };
     // Run owns this full expression until the coroutine and callbacks drain.
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     co::Run(*loop_, [&] -> Co<> {
       writer_->WriteAtAsync(path, original.size(), ToBytes(appended),
         WriteOptions { .share_write = share_write },
@@ -521,7 +520,6 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAtAsyncRejectsReadersDenyingWrites)
     auto callback_error = FileErrorInfo {};
     auto callback_bytes = uint64_t { 1 };
     // Run owns this full expression until the coroutine and callbacks drain.
-    // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
     co::Run(*loop_, [&] -> Co<> {
       writer_->WriteAtAsync(path, original.size(), ToBytes("rejected"),
         WriteOptions { .share_write = share_write },
@@ -556,7 +554,6 @@ NOLINT_TEST_F(WindowsFileWriterTest, WriteAtPreservesExclusiveWriteAccess)
   [[maybe_unused]] const auto close_writer = oxygen::Finally(
     [held_writer] -> void { static_cast<void>(CloseHandle(held_writer)); });
   // Run owns this full expression until the coroutine completes.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> Co<> {
     const auto result = co_await writer_->WriteAt(path, 0, ToBytes("rejected"));
     EXPECT_TRUE(result.has_error());

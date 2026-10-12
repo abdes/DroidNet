@@ -25,7 +25,6 @@ struct alignas(16) DeferredLightConstants {
   std::uint32_t light_geometry_vertex_count { 0U };
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(sizeof(DeferredLightConstants) == 80U);
 static_assert(alignof(DeferredLightConstants) == 16U);
 static_assert(std::is_standard_layout_v<DeferredLightConstants>);
@@ -37,6 +36,5 @@ static_assert(
   offsetof(DeferredLightConstants, light_geometry_vertices_srv) == 72U);
 static_assert(
   offsetof(DeferredLightConstants, light_geometry_vertex_count) == 76U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

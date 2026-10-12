@@ -91,7 +91,6 @@ namespace environment {
       std::array<float, 4> ozone_density_layer1 {};
     };
     // Shader ABI size is an exact layout assertion, not a tuning parameter.
-    // NOLINTNEXTLINE(readability-magic-numbers)
     static_assert(sizeof(PassConstants) == 272U);
 
     Renderer& renderer_;

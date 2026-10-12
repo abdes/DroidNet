@@ -29,7 +29,6 @@ struct alignas(packing::kShaderDataFieldAlignment) DirectionalLightForwardData {
   std::array<std::uint32_t, 3> reserved {};
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(sizeof(DirectionalLightForwardData) == 64U);
 static_assert(alignof(DirectionalLightForwardData) == 16U);
 static_assert(std::is_standard_layout_v<DirectionalLightForwardData>);
@@ -47,6 +46,5 @@ static_assert(
   offsetof(DirectionalLightForwardData, atmosphere_mode_flags) == 44U);
 static_assert(offsetof(DirectionalLightForwardData, selection_index) == 48U);
 static_assert(offsetof(DirectionalLightForwardData, reserved) == 52U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

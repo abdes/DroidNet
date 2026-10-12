@@ -241,7 +241,6 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto loop = oxygen::co::testing::TestEventLoop {};
   // co::Run retains this closure until synchronous completion, within the
   // captured objects lifetimes.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
     co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
       frame_context_.get(),
@@ -290,7 +289,6 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto loop = oxygen::co::testing::TestEventLoop {};
   // co::Run retains this closure until synchronous completion, within the
   // captured objects lifetimes.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
     co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
       frame_context_.get(),
@@ -332,7 +330,6 @@ NOLINT_TEST_F(
   auto loop = oxygen::co::testing::TestEventLoop {};
   // co::Run retains this closure until synchronous completion, within the
   // captured objects lifetimes.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
     co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
       frame_context_.get(),
@@ -344,7 +341,6 @@ NOLINT_TEST_F(
 
   // co::Run retains this closure until synchronous completion, within the
   // captured objects lifetimes.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
     co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
       frame_context_.get(),
@@ -416,7 +412,6 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto loop = oxygen::co::testing::TestEventLoop {};
   // co::Run retains this closure until synchronous completion, within the
   // captured objects lifetimes.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
     co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
       frame_context_.get(),
@@ -519,7 +514,6 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto loop = oxygen::co::testing::TestEventLoop {};
   // co::Run retains this closure until synchronous completion, within the
   // captured objects lifetimes.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
     co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
       frame_context_.get(),
@@ -593,7 +587,6 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto loop = oxygen::co::testing::TestEventLoop {};
   // co::Run retains this closure until synchronous completion, within the
   // captured objects lifetimes.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
     co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
       frame_context_.get(),
@@ -650,7 +643,6 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto loop = oxygen::co::testing::TestEventLoop {};
   // co::Run retains this closure until synchronous completion, within the
   // captured objects lifetimes.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
     co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
       frame_context_.get(),
@@ -726,7 +718,6 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   auto loop = oxygen::co::testing::TestEventLoop {};
   // co::Run retains this closure until synchronous completion, within the
   // captured objects lifetimes.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
     co_await renderer_->OnCompositing(oxygen::observer_ptr<FrameContext> {
       frame_context_.get(),

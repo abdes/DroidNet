@@ -39,8 +39,6 @@ using namespace oxygen::co;
 using PakBufferResourceDesc = oxygen::data::pak::core::BufferResourceDesc;
 namespace co = oxygen::co;
 
-// NOLINTBEGIN(*-magic-numbers)
-
 namespace {
 
 using oxygen::cooker::test::ReadBytes;
@@ -921,5 +919,3 @@ NOLINT_TEST_F(BufferEmitterTest, EmitManySmallBuffersAllAlignedCorrectly)
 }
 
 } // namespace
-
-// NOLINTEND(*-magic-numbers)

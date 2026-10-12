@@ -100,11 +100,8 @@ auto TransformUploader::GetOrAllocate(const glm::mat4& transform,
     previous_transforms_.push_back(previous_transform);
     normal_matrices_.push_back(ComputeNormalMatrix(transform));
   } else {
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     transforms_[index] = transform;
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     previous_transforms_[index] = previous_transform;
-    // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
     normal_matrices_[index] = ComputeNormalMatrix(transform);
   }
 

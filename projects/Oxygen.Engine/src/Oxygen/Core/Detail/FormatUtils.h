@@ -49,7 +49,7 @@ OXGN_CORE_NDAPI auto GetFormatInfo(Format format) -> const FormatInfo&;
 OXGN_CORE_NDAPI auto IsHdr(Format format) -> bool;
 
 //! Flags indicating what operations are supported by a format.
-enum class FormatSupport : uint32_t { // NOLINT(*-enum-size)
+enum class FormatSupport : uint32_t {
   kNone = 0,
 
   kBuffer = OXYGEN_FLAG(0), //!< Can be used in a buffer.

@@ -121,7 +121,6 @@ RenderPass::RenderPass(const std::string_view name)
   AddComponent<ObjectMetadata>(name);
 }
 
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
 auto RenderPass::PrepareResources(
   const RenderContext& context, CommandRecorder& recorder) -> co::Co<>
 {
@@ -152,7 +151,6 @@ auto RenderPass::PrepareResources(
   co_return;
 }
 
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
 auto RenderPass::Execute(
   const RenderContext& context, CommandRecorder& recorder) -> co::Co<>
 {

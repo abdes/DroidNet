@@ -53,7 +53,6 @@ auto GetDescriptorAllocator(const DescriptorAllocationHandle& view_handle)
 
   DCHECK_F(view_handle.IsValid(), "Unexpected invalid view handle!");
 
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   const auto* allocator
     = static_cast<DescriptorAllocator*>(view_handle.GetAllocator());
   DCHECK_NOTNULL_F(allocator, "Invalid descriptor allocator for handle: {}",

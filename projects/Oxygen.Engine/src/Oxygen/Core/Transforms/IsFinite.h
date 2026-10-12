@@ -26,7 +26,6 @@ namespace oxygen::transforms {
 {
   for (int c = 0; c < 4; ++c) {
     for (int r = 0; r < 4; ++r) {
-      // NOLINTNEXTLINE(*-pro-bounds-avoid-unchecked-container-access)
       if (!std::isfinite(m[c][r])) {
         return false;
       }

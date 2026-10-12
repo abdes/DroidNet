@@ -33,7 +33,7 @@ namespace oxygen::input {
 */
 class ActionLookup {
 public:
-  // NOLINTBEGIN(*-explicit-constructor, *-explicit-conversions)
+  // NOLINTBEGIN(*-explicit-constructor)
   // Implicit by design: queries accept a name or a key directly.
   ActionLookup(const std::string_view name) noexcept
     : name_(name)
@@ -52,7 +52,7 @@ public:
     , by_key_(true)
   {
   }
-  // NOLINTEND(*-explicit-constructor, *-explicit-conversions)
+  // NOLINTEND(*-explicit-constructor)
 
   //! True if this lookup names an asset key rather than a name.
   [[nodiscard]] auto ByKey() const noexcept { return by_key_; }

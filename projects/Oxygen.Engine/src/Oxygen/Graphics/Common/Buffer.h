@@ -26,7 +26,7 @@ namespace oxygen::graphics {
 class DescriptorAllocationHandle;
 
 //! Specifies the intended usage(s) of a buffer resource.
-enum class BufferUsage : uint32_t { // NOLINT(performance-enum-size)
+enum class BufferUsage : uint32_t {
   kNone = 0,
   kVertex = 1 << 0,
   kIndex = 1 << 1,
@@ -38,7 +38,7 @@ enum class BufferUsage : uint32_t { // NOLINT(performance-enum-size)
 OXYGEN_DEFINE_FLAGS_OPERATORS(BufferUsage)
 
 //! Specifies the memory domain for a buffer resource.
-enum class BufferMemory : uint32_t { // NOLINT(performance-enum-size)
+enum class BufferMemory : uint32_t {
   kDeviceLocal = 0, //!< GPU only
   kUpload = 1, //!< CPU to GPU
   kReadBack = 2, //!< GPU to CPU

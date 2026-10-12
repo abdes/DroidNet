@@ -1631,11 +1631,9 @@ NOLINT_TEST_F(
     const ScopeGuard release_gate(
       [gate] noexcept -> void { static_cast<void>(gate->Signal(1U)); });
     // Oxygen builds without RTTI; the fixture always runs the D3D12 backend.
-    // NOLINTBEGIN(cppcoreguidelines-pro-type-static-cast-downcast)
     const auto queue = observer_ptr {
       static_cast<graphics::d3d12::CommandQueue*>(GetQueue().get()),
     };
-    // NOLINTEND(cppcoreguidelines-pro-type-static-cast-downcast)
     const auto completed_before = queue->GetCompletedValue();
     ASSERT_TRUE(SUCCEEDED(queue->GetCommandQueue()->Wait(gate.Get(), 1U)));
     const auto previous = revision;

@@ -54,7 +54,6 @@ protected:
 //! (game_delta_time is zero) while real frames keep running.
 NOLINT_TEST_F(TimingScenario, HoldToQuitWorksWhilePaused)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto quit = MakeAction("HoldToQuit", ActionValueType::kBool);
     auto menu = MakeContext("pause menu", kOverlayPriority);
@@ -78,7 +77,6 @@ NOLINT_TEST_F(TimingScenario, HoldToQuitWorksWhilePaused)
 //! In the pause menu a 2 s press is not a tap.
 NOLINT_TEST_F(TimingScenario, LongPressWhilePausedIsNotATap)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto select = MakeAction("QuickSelect", ActionValueType::kBool);
     auto menu = MakeContext("pause menu", kOverlayPriority);
@@ -104,7 +102,6 @@ NOLINT_TEST_F(TimingScenario, LongPressWhilePausedIsNotATap)
 //! time, not 2 s.
 NOLINT_TEST_F(TimingScenario, HoldDurationDoesNotStretchInSlowMotion)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto reload = MakeAction("Reload", ActionValueType::kBool);
     auto ctx = MakeContext("gameplay", 0);
@@ -133,7 +130,6 @@ NOLINT_TEST_F(TimingScenario, HoldDurationDoesNotStretchInSlowMotion)
 //! Space gives exactly one impulse in both cases.
 NOLINT_TEST_F(TimingScenario, OnePressGivesExactlyOneFixedStepJump)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto jump = MakeAction("Jump", ActionValueType::kBool);
     auto ctx = MakeContext("gameplay", 0);
@@ -158,7 +154,6 @@ NOLINT_TEST_F(TimingScenario, OnePressGivesExactlyOneFixedStepJump)
 //! jumps for the fixed step, one per substep.
 NOLINT_TEST_F(TimingScenario, TwoPressesInOneFrameGiveTwoFixedStepJumps)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {
     auto jump = MakeAction("Jump", ActionValueType::kBool);
     auto ctx = MakeContext("gameplay", 0);

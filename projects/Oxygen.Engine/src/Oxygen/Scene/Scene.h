@@ -26,7 +26,7 @@ template <typename T> class ResourceTable;
 
 namespace oxygen::scene {
 
-enum class SceneMutationMask : uint32_t { // NOLINT(*-enum-size)
+enum class SceneMutationMask : uint32_t {
   kNone = 0,
   kScriptSlotActivated = 1U << 0U,
   kScriptSlotChanged = 1U << 1U,

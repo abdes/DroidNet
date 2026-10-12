@@ -12,7 +12,7 @@
 // packed structs intentionally embed unaligned strong-typed fields
 OXYGEN_DIAGNOSTIC_PUSH
 OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
-// NOLINTBEGIN(*-avoid-c-arrays,*-magic-numbers)
+// NOLINTBEGIN(*-avoid-c-arrays)
 
 //! Oxygen PAK format physics domain schema.
 /*!
@@ -20,7 +20,7 @@ OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
 */
 namespace oxygen::data::pak::physics {
 
-// NOLINTBEGIN(*-macro-usage,*-enum-size)
+// NOLINTBEGIN(*-macro-usage)
 #define OXPHYS_RESOURCE_FORMAT(name, value) name = (value),
 enum class PhysicsResourceFormat : uint8_t {
 #include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
@@ -99,7 +99,7 @@ enum class PhysicsBindingType : uint32_t {
 #include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
 };
 #undef OXPHYS_BINDING_TYPE
-// NOLINTEND(*-macro-usage,*-enum-size)
+// NOLINTEND(*-macro-usage)
 
 [[maybe_unused]] constexpr uint8_t kPhysicsMaterialAssetVersion
   = version::kPhysicsMaterialAssetVersion;
@@ -611,5 +611,5 @@ static_assert(offsetof(AggregateBindingRecord, authority) == 12);
 
 } // namespace oxygen::data::pak::physics
 
-// NOLINTEND(*-avoid-c-arrays,*-magic-numbers)
+// NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

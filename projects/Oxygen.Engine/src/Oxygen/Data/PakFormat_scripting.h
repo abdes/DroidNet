@@ -14,7 +14,7 @@
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
 OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
-// NOLINTBEGIN(*-avoid-c-arrays,*-magic-numbers)
+// NOLINTBEGIN(*-avoid-c-arrays)
 
 //! Oxygen PAK format scripting domain schema.
 /*!
@@ -24,7 +24,6 @@ namespace oxygen::data::pak::scripting {
 
 inline constexpr uint8_t kScriptAssetVersion = version::kScriptAssetVersion;
 
-// NOLINTNEXTLINE(*-enum-size)
 enum class ScriptParamType : uint32_t {
   kNone = 0,
   kBool = 1,
@@ -52,22 +51,18 @@ enum class ScriptCompression : uint8_t { kNone = 0, kZstd = 1 };
 OXGN_DATA_NDAPI auto to_string(ScriptCompression value) noexcept
   -> std::string_view;
 
-enum class ScriptAssetFlags : uint32_t { // NOLINT(*-enum-size)
+enum class ScriptAssetFlags : uint32_t {
   kNone = 0,
   kAllowExternalSource = OXYGEN_FLAG(0),
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(ScriptAssetFlags)
 OXGN_DATA_NDAPI auto to_string(ScriptAssetFlags value) -> std::string;
 
-enum class ScriptingComponentFlags : uint32_t { // NOLINT(*-enum-size)
-  kNone = 0
-};
+enum class ScriptingComponentFlags : uint32_t { kNone = 0 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(ScriptingComponentFlags)
 OXGN_DATA_NDAPI auto to_string(ScriptingComponentFlags value) -> std::string;
 
-enum class ScriptSlotFlags : uint32_t { // NOLINT(*-enum-size)
-  kNone = 0
-};
+enum class ScriptSlotFlags : uint32_t { kNone = 0 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(ScriptSlotFlags)
 OXGN_DATA_NDAPI auto to_string(ScriptSlotFlags value) -> std::string;
 
@@ -172,5 +167,5 @@ static_assert(sizeof(ScriptAssetDesc) == 251);
 
 } // namespace oxygen::data::pak::scripting
 
-// NOLINTEND(*-avoid-c-arrays,*-magic-numbers)
+// NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

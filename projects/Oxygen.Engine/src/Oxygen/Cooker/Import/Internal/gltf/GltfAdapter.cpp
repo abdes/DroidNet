@@ -533,7 +533,7 @@ namespace {
 
     std::vector<glm::mat4> out(accessor->count);
     for (cgltf_size i = 0; i < accessor->count; ++i) {
-      auto v = std::array<cgltf_float, 16> {}; // NOLINT(*-magic-numbers)
+      auto v = std::array<cgltf_float, 16> {};
       cgltf_accessor_read_float(accessor, i, v.data(), v.size());
       out.at(i) = glm::make_mat4(v.data());
     }
@@ -1058,7 +1058,7 @@ namespace {
         continue;
       }
       input.mesh_index = static_cast<size_t>(node.mesh - data.meshes);
-      auto matrix = std::array<cgltf_float, 16> {}; // NOLINT(*-magic-numbers)
+      auto matrix = std::array<cgltf_float, 16> {};
       cgltf_node_transform_local(&node, matrix.data());
       input.local_transform = glm::make_mat4(matrix.data());
       input.local_transform
@@ -2649,8 +2649,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     const auto base_name
       = input.naming_service->MakeUniqueName(authored, node_context);
 
-    auto local_matrix_data
-      = std::array<cgltf_float, 16> {}; // NOLINT(*-magic-numbers)
+    auto local_matrix_data = std::array<cgltf_float, 16> {};
     cgltf_node_transform_local(node, local_matrix_data.data());
     auto local_matrix = glm::make_mat4(local_matrix_data.data());
 

@@ -118,7 +118,7 @@ struct IndirectDrawCommand {
   std::uint32_t start_instance_location { 0U };
 };
 // The stride of the DRAW command signature: sizeof(D3D12_DRAW_ARGUMENTS).
-static_assert(sizeof(IndirectDrawCommand) == 16U); // NOLINT(*-magic-numbers)
+static_assert(sizeof(IndirectDrawCommand) == 16U);
 
 //! Builds GPU-compacted indirect draw lists from CPU-ordered candidates.
 /*!

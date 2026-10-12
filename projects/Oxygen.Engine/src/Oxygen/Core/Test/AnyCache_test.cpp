@@ -23,8 +23,6 @@ using oxygen::AnyCache;
 
 namespace {
 
-// NOLINTBEGIN(*-magic-numbers)
-
 // -----------------------------------------------------------------------------
 // Basic test cases
 // -----------------------------------------------------------------------------
@@ -391,5 +389,4 @@ NOLINT_TEST_F(AnyCacheBasicTest, ReleaseHonorsImmediateEvictionPolicies)
   EXPECT_EQ(acquired->value->value, 1);
 }
 
-// NOLINTEND(*-magic-numbers)
 } // namespace

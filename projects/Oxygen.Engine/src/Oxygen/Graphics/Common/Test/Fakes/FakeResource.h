@@ -29,7 +29,6 @@ struct TestViewDesc {
   bool force_hash_collision { false };
 
   // Required for hash and equality comparison
-  // NOLINTNEXTLINE(*-unneeded-member-function)
   auto operator==(const TestViewDesc& other) const -> bool
   {
     return id == other.id && view_type == other.view_type

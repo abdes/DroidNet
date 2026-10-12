@@ -54,7 +54,6 @@ auto OrthographicCamera::ResolveExtents(const ViewPort& target) const
 void OrthographicCamera::UpdateDependencies(
   const std::function<Component&(TypeId)>& get_component) noexcept
 {
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   transform_ = &static_cast<detail::TransformComponent&>(
     get_component(detail::TransformComponent::ClassTypeId()));
 }

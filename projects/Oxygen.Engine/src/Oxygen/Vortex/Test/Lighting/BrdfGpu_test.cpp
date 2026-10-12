@@ -18,7 +18,6 @@
 #include <vector>
 
 #include <d3d12.h>
-
 #include <glm/ext/vector_float3.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
@@ -39,32 +38,37 @@ namespace {
     ShaderVisibleIndex energy_srv;
     std::uint32_t reserved;
   };
-  // NOLINTBEGIN(*-magic-numbers)
   static_assert(sizeof(MomentProbeInput) == 16U);
   static_assert(offsetof(MomentProbeInput, roughness) == 0U);
   static_assert(offsetof(MomentProbeInput, view_cosine) == 4U);
   static_assert(offsetof(MomentProbeInput, energy_srv) == 8U);
   static_assert(offsetof(MomentProbeInput, reserved) == 12U);
-  // NOLINTEND(*-magic-numbers)
 
-  NOLINT_TEST_F(LightingGpuAbiTest, EnergyTextureMatchesFilteringAndReportsReferenceError)
+  NOLINT_TEST_F(
+    LightingGpuAbiTest, EnergyTextureMatchesFilteringAndReportsReferenceError)
   {
     const auto texture = PublishBrdfEnergyTexture();
     auto inputs = std::vector<MomentProbeInput> {};
     auto expected = std::vector<reference::GgxMomentEstimate> {};
     for (const auto roughness : { 0.045F, 0.1F, 0.25F, 0.5F, 0.75F, 1.0F }) {
-      for (const auto cosine : { 0.0F, 0.0001F, 0.001F, 0.01F, 0.1F, 0.25F, 0.5F, 0.75F, 1.0F }) {
-        inputs.push_back({ .roughness = roughness, .view_cosine = cosine,
-          .energy_srv = texture, .reserved = 0U });
+      for (const auto cosine :
+        { 0.0F, 0.0001F, 0.001F, 0.01F, 0.1F, 0.25F, 0.5F, 0.75F, 1.0F }) {
+        inputs.push_back({ .roughness = roughness,
+          .view_cosine = cosine,
+          .energy_srv = texture,
+          .reserved = 0U });
         const auto oracle = reference::IntegrateGgxMoments(
-          reference::PerceptualRoughness { roughness }, reference::ViewCosine { cosine });
+          reference::PerceptualRoughness { roughness },
+          reference::ViewCosine { cosine });
         ASSERT_TRUE(oracle.has_value());
         expected.push_back(*oracle);
       }
     }
     const auto output = Decode({ .records = std::as_bytes(std::span(inputs)),
-      .stride = sizeof(MomentProbeInput), .record_kind = 21U,
-      .decoded_words = 4U, .count = static_cast<std::uint32_t>(inputs.size()) });
+      .stride = sizeof(MomentProbeInput),
+      .record_kind = 21U,
+      .decoded_words = 4U,
+      .count = static_cast<std::uint32_t>(inputs.size()) });
     ASSERT_EQ(output.size(), inputs.size() * 4U);
     double maximum_energy_error = 0.0, maximum_bias_error = 0.0;
     for (std::size_t index = 0; index < inputs.size(); ++index) {
@@ -81,24 +85,30 @@ namespace {
       EXPECT_EQ(output.at(index * 4U + 3U), 32U);
       const auto filter = reference::SampleProductionGgxEnergy(
         inputs.at(index).roughness, inputs.at(index).view_cosine);
-      EXPECT_NEAR(energy, filter.moments.directional_albedo, filter.filtering_error_bound);
-      EXPECT_NEAR(bias, filter.moments.schlick_moment, filter.filtering_error_bound);
+      EXPECT_NEAR(energy, filter.moments.directional_albedo,
+        filter.filtering_error_bound);
+      EXPECT_NEAR(
+        bias, filter.moments.schlick_moment, filter.filtering_error_bound);
       maximum_energy_error = std::max(maximum_energy_error,
         std::abs(energy - expected.at(index).directional_albedo));
-      maximum_bias_error = std::max(maximum_bias_error,
-        std::abs(bias - expected.at(index).schlick_moment));
+      maximum_bias_error = std::max(
+        maximum_bias_error, std::abs(bias - expected.at(index).schlick_moment));
     }
-    const auto allocation_bytes = [&](const std::uint64_t width, const std::uint32_t height) {
-      auto description = D3D12_RESOURCE_DESC {};
-      description.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-      description.Width = width;
-      description.Height = height;
-      description.DepthOrArraySize = 1U;
-      description.MipLevels = 1U;
-      description.Format = DXGI_FORMAT_R32G32_FLOAT;
-      description.SampleDesc.Count = 1U;
-      return Backend().GetCurrentDevice()->GetResourceAllocationInfo(0U, 1U, &description).SizeInBytes;
-    };
+    const auto allocation_bytes
+      = [&](const std::uint64_t width, const std::uint32_t height) {
+          auto description = D3D12_RESOURCE_DESC {};
+          description.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+          description.Width = width;
+          description.Height = height;
+          description.DepthOrArraySize = 1U;
+          description.MipLevels = 1U;
+          description.Format = DXGI_FORMAT_R32G32_FLOAT;
+          description.SampleDesc.Count = 1U;
+          return Backend()
+            .GetCurrentDevice()
+            ->GetResourceAllocationInfo(0U, 1U, &description)
+            .SizeInBytes;
+        };
     const auto backing = allocation_bytes(32U, 32U);
     EXPECT_GE(backing, 8192U);
     RecordProperty("energy_payload_bytes", 8192U);
@@ -182,7 +192,8 @@ namespace {
     RecordProperty("probe_count", inputs.size());
     RecordProperty("reference_budget_exceedances", failures.size());
     RecordProperty("reference_deviation_details", failures.dump());
-    RecordProperty("maximum_reference_deviation_scale", maximum_budget_fraction);
+    RecordProperty(
+      "maximum_reference_deviation_scale", maximum_budget_fraction);
   }
 
   struct BrdfProbeInput {
@@ -197,7 +208,6 @@ namespace {
     ShaderVisibleIndex energy_srv { kInvalidShaderVisibleIndex };
     std::uint32_t reserved { 0U };
   };
-  // NOLINTBEGIN(*-magic-numbers)
   static_assert(sizeof(BrdfProbeInput) == 56U);
   static_assert(offsetof(BrdfProbeInput, roughness) == 0U);
   static_assert(offsetof(BrdfProbeInput, light_cosine) == 4U);
@@ -209,7 +219,6 @@ namespace {
   static_assert(offsetof(BrdfProbeInput, specular) == 44U);
   static_assert(offsetof(BrdfProbeInput, energy_srv) == 48U);
   static_assert(offsetof(BrdfProbeInput, reserved) == 52U);
-  // NOLINTEND(*-magic-numbers)
 
   NOLINT_TEST_F(
     LightingGpuAbiTest, ViewDependentCompensationReportsReciprocityDeviation)
@@ -276,12 +285,10 @@ namespace {
     ShaderVisibleIndex energy_srv;
     std::uint32_t reserved;
   };
-  // NOLINTBEGIN(*-magic-numbers)
   static_assert(sizeof(FurnaceProbeInput) == 28U);
   static_assert(offsetof(FurnaceProbeInput, order) == 16U);
   static_assert(offsetof(FurnaceProbeInput, energy_srv) == 20U);
   static_assert(offsetof(FurnaceProbeInput, reserved) == 24U);
-  // NOLINTEND(*-magic-numbers)
 
   NOLINT_TEST_F(
     LightingGpuAbiTest, IntegratedGpuLobesReportEnergyAndIndirectError)
@@ -363,12 +370,15 @@ namespace {
         const auto f0 = std::array { 0.04, 0.45, 1.0 }.at(channel);
         const auto expected_single = (f0 * moment->directional_albedo)
           + ((1.0 - f0) * moment->schlick_moment);
-        const auto sampled = reference::SampleProductionGgxEnergy(test.roughness, test.mu);
-        const auto weight = 1.0 + f0 * (1.0 / sampled.moments.directional_albedo - 1.0);
+        const auto sampled
+          = reference::SampleProductionGgxEnergy(test.roughness, test.mu);
+        const auto weight
+          = 1.0 + f0 * (1.0 / sampled.moments.directional_albedo - 1.0);
         // This checks implementation/integration agreement; LUT approximation
         // and energy differences are separately reported measurements.
         EXPECT_NEAR(sums.at(channel), expected_single * weight,
-          4.0 * maximum_refinement_change + 4.0 * sampled.filtering_error_bound + 1.0e-4);
+          4.0 * maximum_refinement_change + 4.0 * sampled.filtering_error_bound
+            + 1.0e-4);
         const auto specular = sums.at(channel) + sums.at(channel + 3U);
         const auto diffuse = sums.at(channel + 6U);
         const auto read = [&](const std::size_t lane) -> float {
@@ -448,23 +458,31 @@ namespace {
               { .roughness = reference::PerceptualRoughness { roughness },
                 .light = reference::LightCosine { input.light_cosine },
                 .view = reference::ViewCosine { input.view_cosine },
-                .azimuth = reference::RelativeAzimuth { azimuth } }, channels, *view);
+                .azimuth = reference::RelativeAzimuth { azimuth } },
+              channels, *view);
             ASSERT_TRUE(lobes.has_value());
-            const auto filter = reference::SampleProductionGgxEnergy(roughness, input.view_cosine);
+            const auto filter = reference::SampleProductionGgxEnergy(
+              roughness, input.view_cosine);
             const auto sampled = reference::EvaluateRasterGgxBrdf(
               { .roughness = reference::PerceptualRoughness { roughness },
                 .light = reference::LightCosine { input.light_cosine },
                 .view = reference::ViewCosine { input.view_cosine },
-                .azimuth = reference::RelativeAzimuth { azimuth } }, channels, filter.moments);
+                .azimuth = reference::RelativeAzimuth { azimuth } },
+              channels, filter.moments);
             ASSERT_TRUE(sampled.has_value());
             auto sampled_response = std::array<double, 3> {};
-            for (std::size_t channel = 0U; channel < channels.size(); ++channel) {
+            for (std::size_t channel = 0U; channel < channels.size();
+              ++channel) {
               const auto& measured_lobes = sampled->at(channel);
-              sampled_response.at(channel) = (measured_lobes.single_scattering
-                + measured_lobes.multiple_scattering + measured_lobes.diffuse)
-                  * incident.at(channel) * input.light_cosine;
+              sampled_response.at(channel)
+                = (measured_lobes.single_scattering
+                    + measured_lobes.multiple_scattering
+                    + measured_lobes.diffuse)
+                * incident.at(channel) * input.light_cosine;
               const auto& lobe = lobes->at(channel);
-              response.at(channel) = (lobe.single_scattering + lobe.multiple_scattering + lobe.diffuse)
+              response.at(channel)
+                = (lobe.single_scattering + lobe.multiple_scattering
+                    + lobe.diffuse)
                 * incident.at(channel) * input.light_cosine;
               reflectance.at(channel) = channels.at(channel).f0;
             }

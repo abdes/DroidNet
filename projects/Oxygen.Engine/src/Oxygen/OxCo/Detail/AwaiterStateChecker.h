@@ -44,14 +44,12 @@ struct AwaiterStateChecker {
   void AboutToSetExecutor() noexcept { }
 
   // Transform a coroutine handle before passing it to await_suspend().
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[nodiscard]] auto AboutToSuspend(const Handle h) noexcept { return h; }
 
   // Note that await_suspend() threw an exception.
   void SuspendThrew() noexcept { }
 
   // Transform a coroutine handle before passing it to await_cancel().
-  // NOLINTNEXTLINE(*-convert-member-functions-to-static)
   [[nodiscard]] auto AboutToCancel(const Handle h) noexcept { return h; }
 
   // Note that await_cancel() returned the given value. Returns the
@@ -97,8 +95,7 @@ struct AwaiterStateChecker : ProxyFrame {
   AwaiterStateChecker()
   {
     this->resume_fn = +[](CoroutineFrame* frame) {
-      const auto* self = static_cast<AwaiterStateChecker*>(
-        frame); // NOLINT(cppcoreguidelines-pro-type-static-cast-downcast)
+      const auto* self = static_cast<AwaiterStateChecker*>(frame);
       switch (self->state) {
       case State::kRunning:
         self->state = State::kReady;

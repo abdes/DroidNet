@@ -58,7 +58,7 @@ public:
   {
     const auto high = static_cast<uint64_t>(index_.get());
     const auto low = static_cast<uint64_t>(generation_.get());
-    return Packed { (high << 32U) | low }; // NOLINT(*-magic-numbers)
+    return Packed { (high << 32U) | low };
   }
 
   [[nodiscard]] constexpr auto get() const noexcept -> uint32_t
@@ -151,7 +151,7 @@ public:
   {
     const auto high = static_cast<uint64_t>(index_.get());
     const auto low = static_cast<uint64_t>(generation_.get());
-    return Packed { (high << 32U) | low }; // NOLINT(*-magic-numbers)
+    return Packed { (high << 32U) | low };
   }
 
   [[nodiscard]] constexpr auto get() const noexcept -> uint32_t
@@ -254,7 +254,7 @@ public:
   {
     const auto high = static_cast<uint64_t>(index_.get());
     const auto low = static_cast<uint64_t>(generation_.get());
-    return Packed { (high << 32U) | low }; // NOLINT(*-magic-numbers)
+    return Packed { (high << 32U) | low };
   }
 
   [[nodiscard]] constexpr auto get() const noexcept -> uint32_t

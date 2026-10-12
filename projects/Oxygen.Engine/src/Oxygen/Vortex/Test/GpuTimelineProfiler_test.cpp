@@ -457,7 +457,7 @@ TEST(GpuTimelineProfilerTest, DelayedFramesKeepIndependentTimestampStorage)
 {
   auto graphics = MakeGraphics();
   // MakeGraphics installs FakeCommandQueue; this build intentionally has RTTI
-  // disabled. NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  // disabled.
   auto& queue = static_cast<oxygen::vortex::testing::FakeCommandQueue&>(
     *graphics->GetCommandQueue(QueueRole::kGraphics));
   queue.SetAutoComplete(false);
@@ -511,7 +511,7 @@ TEST(GpuTimelineProfilerTest, CaptureBacklogReportsMissingFrameWithoutOverwrite)
 {
   auto graphics = MakeGraphics();
   // MakeGraphics installs FakeCommandQueue; this build intentionally has RTTI
-  // disabled. NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  // disabled.
   auto& queue = static_cast<oxygen::vortex::testing::FakeCommandQueue&>(
     *graphics->GetCommandQueue(QueueRole::kGraphics));
   queue.SetAutoComplete(false);
@@ -562,7 +562,7 @@ TEST(GpuTimelineProfilerTest, CapacityGrowthPreservesPendingCaptures)
 {
   auto graphics = MakeGraphics();
   // MakeGraphics installs FakeCommandQueue; this build intentionally has RTTI
-  // disabled. NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  // disabled.
   auto& queue = static_cast<oxygen::vortex::testing::FakeCommandQueue&>(
     *graphics->GetCommandQueue(QueueRole::kGraphics));
   queue.SetAutoComplete(false);
@@ -762,7 +762,7 @@ TEST(GpuTimelineProfilerTest, RecordingKeepsDelayedFramesAfterBacklogDiagnostic)
 {
   auto graphics = MakeGraphics();
   // MakeGraphics installs FakeCommandQueue; this build intentionally has RTTI
-  // disabled. NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
+  // disabled.
   auto& queue = static_cast<oxygen::vortex::testing::FakeCommandQueue&>(
     *graphics->GetCommandQueue(QueueRole::kGraphics));
   queue.SetAutoComplete(false);

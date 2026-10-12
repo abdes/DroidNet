@@ -79,8 +79,7 @@ namespace {
     std::uint32_t _pad0 { 0U };
     std::uint32_t _pad1 { 0U };
   };
-  static_assert(
-    sizeof(ListCompactionPassConstants) == 48U); // NOLINT(*-magic-numbers)
+  static_assert(sizeof(ListCompactionPassConstants) == 48U);
 
   enum class Kernel : std::uint8_t { kScan, kGroups, kScatter };
 

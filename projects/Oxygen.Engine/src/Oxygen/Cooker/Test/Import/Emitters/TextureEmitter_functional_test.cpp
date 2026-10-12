@@ -211,7 +211,6 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(TextureEmitterTest, EmitSingleTextureAssignsFirstIndex)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
     auto payload = MakeTestPayload();
@@ -226,7 +225,6 @@ NOLINT_TEST_F(TextureEmitterTest, EmitSingleTextureAssignsFirstIndex)
 
 NOLINT_TEST_F(TextureEmitterTest, EmitUniqueTexturesAssignsSequentialIndices)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
 
@@ -260,7 +258,6 @@ NOLINT_TEST_F(TextureEmitterTest, EmitUniqueTexturesAssignsSequentialIndices)
 
 NOLINT_TEST_F(TextureEmitterTest, EmitQueuesWriteReturnsBeforeFinalize)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
     auto payload = MakeTestPayload();
@@ -277,7 +274,6 @@ NOLINT_TEST_F(TextureEmitterTest, EmitQueuesWriteReturnsBeforeFinalize)
 
 NOLINT_TEST_F(TextureEmitterTest, EmitAfterFinalizeThrows)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
 
@@ -293,7 +289,6 @@ NOLINT_TEST_F(TextureEmitterTest, EmitAfterFinalizeThrows)
 
 NOLINT_TEST_F(TextureEmitterTest, FinalizeDrainsPendingWrites)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
 
@@ -311,7 +306,6 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeDrainsPendingWrites)
 
 NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureTableFile)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
     auto payload0 = MakeTestPayload();
@@ -339,7 +333,6 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureTableFile)
 
 NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureDataFileWithAlignment)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
     constexpr size_t kPayloadSize1 = 2048;
@@ -394,7 +387,6 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWritesTextureDataFileWithAlignment)
 
 NOLINT_TEST_F(TextureEmitterTest, FinalizeSerializesTextureMetadataToTable)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
     constexpr uint16_t kNumLayers = 6;
@@ -432,7 +424,6 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeSerializesTextureMetadataToTable)
 
 NOLINT_TEST_F(TextureEmitterTest, FinalizeWithoutUserTexturesWritesFallback)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
 
@@ -476,7 +467,6 @@ NOLINT_TEST_F(TextureEmitterTest, FinalizeWithoutUserTexturesWritesFallback)
 
 NOLINT_TEST_F(TextureEmitterTest, StatsDataFileSizeTracksAccumulatedSize)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
     constexpr uint32_t kWidth = 8;
@@ -532,7 +522,6 @@ NOLINT_TEST_F(TextureEmitterTest, StatsDataFileSizeTracksAccumulatedSize)
 
 NOLINT_TEST_F(TextureEmitterTest, StatsEmittedTexturesCountsFallbackAndUsers)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
 
@@ -577,7 +566,6 @@ NOLINT_TEST_F(TextureEmitterTest, StatsErrorCountStartsAtZero)
 
 NOLINT_TEST_F(TextureEmitterTest, DataFileWritesPayloadBytes)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
     auto payload = MakeTestPayload();
@@ -608,7 +596,6 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesPayloadBytes)
 
 NOLINT_TEST_F(TextureEmitterTest, DataFileWritesMultiplePayloadsInOrder)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
 
@@ -684,7 +671,6 @@ NOLINT_TEST_F(TextureEmitterTest, DataFileWritesMultiplePayloadsInOrder)
 
 NOLINT_TEST_F(TextureEmitterTest, DedupNoHashIdenticalPayloadAcrossSalts)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
     auto payload1 = MakeTestPayload();
@@ -708,7 +694,6 @@ NOLINT_TEST_F(TextureEmitterTest, DedupNoHashIdenticalPayloadAcrossSalts)
 NOLINT_TEST_F(
   TextureEmitterTest, CollisionPolicyWarnKeepFirstExpectedToKeepIndex)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     std::vector<import::ImportDiagnostic> diagnostics;
     auto config = MakeEmitterConfig();
@@ -746,7 +731,6 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(TextureEmitterTest, CollisionPolicyWarnReplaceExpectedToEmitNew)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     std::vector<import::ImportDiagnostic> diagnostics;
     auto config = MakeEmitterConfig();
@@ -780,7 +764,6 @@ NOLINT_TEST_F(TextureEmitterTest, CollisionPolicyWarnReplaceExpectedToEmitNew)
 
 NOLINT_TEST_F(TextureEmitterTest, CollisionPolicyErrorExpectedToThrow)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     auto config = MakeEmitterConfig();
     config.collision_policy = import::DedupCollisionPolicy::kError;
@@ -799,7 +782,6 @@ NOLINT_TEST_F(TextureEmitterTest, CollisionPolicyErrorExpectedToThrow)
 
 NOLINT_TEST_F(TextureEmitterTest, EmitWithHashSaltIgnoredIdenticalContent)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
     auto payload1 = MakeTestPayload(
@@ -836,7 +818,6 @@ NOLINT_TEST_F(TextureEmitterTest, EmitWithHashSaltIgnoredIdenticalContent)
 
 NOLINT_TEST_F(TextureEmitterTest, EmitWithHashSameSaltDifferentContent)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
   co::Run(*loop_, [&] -> co::Co<> {
     TextureEmitter emitter(*writer_, TextureAggregator(), MakeEmitterConfig());
     auto payload1 = MakeTestPayload(

@@ -147,7 +147,6 @@ auto DescriptorAllocator::UpdateShaderVisibleHeapsSet() const -> void
   // ID3D12DescriptorHeap*
   for (const auto& heap_view : Heaps()) {
     for (const auto& segment_ptr : heap_view.segments) {
-      // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
       auto* d3d12_segment
         = static_cast<const DescriptorSegment*>(segment_ptr.get());
       if (d3d12_segment->IsShaderVisible()) {
@@ -226,8 +225,7 @@ auto DescriptorAllocator::GetD3D12Segment(
   }
 
   // Cast to our D3D12-specific segment type
-  return static_cast<const DescriptorSegment*>(
-    *segment_opt); // NOLINT(*-static-cast-downcast)
+  return static_cast<const DescriptorSegment*>(*segment_opt);
 }
 
 auto DescriptorAllocator::GetSharedShaderVisibleSegment(

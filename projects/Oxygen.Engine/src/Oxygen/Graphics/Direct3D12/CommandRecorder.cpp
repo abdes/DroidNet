@@ -535,7 +535,6 @@ auto CommandRecorder::ExecuteIndirect(const graphics::Buffer& argument_buffer,
   auto* d3d12_command_list = command_list.GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto& buf = static_cast<const Buffer&>(argument_buffer);
   auto* resource = buf.GetResource();
   DCHECK_NOTNULL_F(resource);
@@ -550,7 +549,6 @@ auto CommandRecorder::ExecuteIndirect(const graphics::Buffer& argument_buffer,
   UINT64 count_buffer_offset = 0U;
   if (execution_desc.count_buffer != nullptr) {
     const auto& count_buf
-      // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
       = static_cast<const Buffer&>(*execution_desc.count_buffer);
     count_resource = count_buf.GetResource();
     DCHECK_NOTNULL_F(count_resource);
@@ -581,7 +579,6 @@ auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
   auto* d3d12_command_list = command_list.GetCommandList();
 
   // The backend allocator is the D3D12 descriptor allocator.
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto& allocator
     = static_cast<DescriptorAllocator&>(graphics->GetDescriptorAllocator());
   // Ensure descriptor heaps are bound before setting a root signature that may
@@ -617,7 +614,6 @@ auto CommandRecorder::SetPipelineState(ComputePipelineDesc desc) -> void
   auto* d3d12_command_list = command_list.GetCommandList();
 
   // The backend allocator is the D3D12 descriptor allocator.
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   auto& allocator
     = static_cast<DescriptorAllocator&>(graphics->GetDescriptorAllocator());
   // Ensure descriptor heaps are bound before setting a compute root signature
@@ -718,7 +714,6 @@ auto CommandRecorder::ExecuteBarriers(const std::span<const Barrier> barriers)
 
 auto CommandRecorder::GetConcreteCommandList() const -> CommandList&
 {
-  // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
   return static_cast<CommandList&>(GetCommandList());
 }
 
@@ -819,10 +814,8 @@ auto CommandRecorder::CopyBuffer(graphics::Buffer& dst, const size_t dst_offset,
   // - dst must be in D3D12_RESOURCE_STATE_COPY_DEST
   // The caller is responsible for ensuring correct resource states.
 
-  // NOLINTBEGIN(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto& dst_buffer = static_cast<Buffer&>(dst);
   const auto& src_buffer = static_cast<const Buffer&>(src);
-  // NOLINTEND(cppcoreguidelines-pro-type-static-cast-downcast)
 
   auto* dst_resource = dst_buffer.GetResource();
   auto* src_resource = src_buffer.GetResource();
@@ -951,9 +944,7 @@ auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
   auto* d3d12_command_list = command_list.GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
-  // NOLINTBEGIN(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto& src_buf = static_cast<const Buffer&>(src);
-  // NOLINTEND(cppcoreguidelines-pro-type-static-cast-downcast)
 
   auto* src_resource = src_buf.GetResource();
   auto* dst_native = dst.GetNativeResource()->AsPointer<ID3D12Resource>();
@@ -967,7 +958,6 @@ auto CommandRecorder::CopyBufferToTexture(const graphics::Buffer& src,
   const auto& desc = dst.GetDescriptor();
   const auto& format_info = graphics::detail::GetFormatInfo(desc.format);
   const bool depth_stencil = format_info.has_depth || format_info.has_stencil;
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto plane_count = static_cast<const Texture&>(dst).GetPlaneCount();
   // D3D12 subresources are ordered mip, then array slice, then plane.
   const auto array_size = desc.texture_type == TextureType::kTexture3D
@@ -1090,10 +1080,8 @@ auto CommandRecorder::CopyTextureToBuffer(graphics::Buffer& dst,
   auto* d3d12_command_list = command_list.GetCommandList();
   DCHECK_NOTNULL_F(d3d12_command_list);
 
-  // NOLINTBEGIN(cppcoreguidelines-pro-type-static-cast-downcast)
   auto& dst_buf = static_cast<Buffer&>(dst);
   const auto& src_tex = static_cast<const Texture&>(src);
-  // NOLINTEND(cppcoreguidelines-pro-type-static-cast-downcast)
 
   CHECK_F(!src_tex.IsReadbackSurface(),
     "Direct3D12 readback surfaces are buffer-backed and cannot be used as "
@@ -1302,7 +1290,6 @@ auto CommandRecorder::BindIndexBuffer(
   DCHECK_EQ_F(
     command_list.GetQueueRole(), QueueRole::kGraphics, "Invalid queue type");
 
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
   const auto* d3d12_buffer = static_cast<const Buffer*>(&buffer);
   DCHECK_NOTNULL_F(d3d12_buffer, "Buffer must be a D3D12 buffer");
 

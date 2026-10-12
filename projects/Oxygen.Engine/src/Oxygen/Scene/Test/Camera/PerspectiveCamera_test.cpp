@@ -96,7 +96,7 @@ protected:
 };
 
 //! Test default construction and parameter accessors
-TEST_F(D3d12PerspectiveCameraTest, DefaultParameters) // NOLINT(*-magic-numbers)
+TEST_F(D3d12PerspectiveCameraTest, DefaultParameters)
 {
   // Assert
   EXPECT_FLOAT_EQ(camera_->GetFieldOfView(), 1.0F);
@@ -108,7 +108,7 @@ TEST_F(D3d12PerspectiveCameraTest, DefaultParameters) // NOLINT(*-magic-numbers)
 }
 
 //! Test parameter setters and getters
-TEST_F(D3d12PerspectiveCameraTest, SettersAndGetters) // NOLINT(*-magic-numbers)
+TEST_F(D3d12PerspectiveCameraTest, SettersAndGetters)
 {
   // Act
   camera_->SetFieldOfView(0.5F);

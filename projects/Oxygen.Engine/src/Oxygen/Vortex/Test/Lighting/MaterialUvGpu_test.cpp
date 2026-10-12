@@ -29,14 +29,12 @@ namespace {
     float rotation_radians { 0.0F };
     std::uint32_t reserved { 0U };
   };
-  // NOLINTBEGIN(*-magic-numbers)
   static_assert(sizeof(MaterialUvInput) == 32U);
   static_assert(offsetof(MaterialUvInput, uv) == 0U);
   static_assert(offsetof(MaterialUvInput, scale) == 8U);
   static_assert(offsetof(MaterialUvInput, offset) == 16U);
   static_assert(offsetof(MaterialUvInput, rotation_radians) == 24U);
   static_assert(offsetof(MaterialUvInput, reserved) == 28U);
-  // NOLINTEND(*-magic-numbers)
 
   NOLINT_TEST_F(
     LightingGpuAbiTest, MaterialUvTransformMatchesIndependentReference)

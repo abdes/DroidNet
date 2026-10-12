@@ -62,7 +62,6 @@ inline constexpr float kMinDisplayGamma = 0.001F;
 }
 
 //! Metering modes for auto exposure.
-// NOLINTNEXTLINE(performance-enum-size)
 enum class MeteringMode : std::uint32_t {
   kAverage = 0U,
   kCenterWeighted = 1U,
@@ -73,7 +72,7 @@ enum class MeteringMode : std::uint32_t {
 OXGN_CORE_NDAPI auto to_string(MeteringMode mode) -> std::string_view;
 
 //! Standardized exposure modes for rendering.
-enum class ExposureMode : std::uint32_t { // NOLINT(*-enum-size)
+enum class ExposureMode : std::uint32_t {
   kManual = 0,
   kManualCamera = 1,
   kAuto = 2,
@@ -83,7 +82,7 @@ enum class ExposureMode : std::uint32_t { // NOLINT(*-enum-size)
 OXGN_CORE_NDAPI auto to_string(ExposureMode mode) -> std::string_view;
 
 //! Standardized tonemapper selection.
-enum class ToneMapper : std::uint32_t { // NOLINT(*-enum-size)
+enum class ToneMapper : std::uint32_t {
   kNone = 0,
   kAcesFitted = 1,
   kFilmic = 2,

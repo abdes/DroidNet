@@ -65,7 +65,6 @@ namespace {
     ShaderVisibleIndex brdf_energy_srv { kInvalidShaderVisibleIndex };
     std::array<std::uint32_t, 3> reserved {};
   };
-  // NOLINTBEGIN(*-magic-numbers)
   static_assert(sizeof(ReferenceArguments) == 144U);
   static_assert(offsetof(ReferenceArguments, inverse_view_projection) == 0U);
   static_assert(offsetof(ReferenceArguments, camera_position) == 64U);
@@ -83,7 +82,6 @@ namespace {
   static_assert(offsetof(ReferenceArguments, brdf_model_revision) == 124U);
   static_assert(offsetof(ReferenceArguments, brdf_energy_srv) == 128U);
   static_assert(offsetof(ReferenceArguments, reserved) == 132U);
-  // NOLINTEND(*-magic-numbers)
 
   auto ReferenceShader() -> graphics::ShaderRequest
   {

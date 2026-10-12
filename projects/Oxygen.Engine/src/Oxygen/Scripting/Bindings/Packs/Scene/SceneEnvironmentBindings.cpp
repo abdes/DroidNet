@@ -610,7 +610,7 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    lua_createtable(state, 0, 16); // NOLINT(*-magic-numbers)
+    lua_createtable(state, 0, 16);
     lua_pushinteger(
       state, static_cast<lua_Integer>(system->GetTransformMode()));
     lua_setfield(state, -2, "transform_mode");
@@ -748,7 +748,7 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    lua_createtable(state, 0, 7); // NOLINT(*-magic-numbers)
+    lua_createtable(state, 0, 7);
     const char* source_name = system->GetSource()
         == scene::environment::SkyLightSource::kCapturedScene
       ? "captured_scene"
@@ -833,7 +833,7 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    lua_createtable(state, 0, 8); // NOLINT(*-magic-numbers)
+    lua_createtable(state, 0, 8);
     const char* source_name
       = system->GetSource() == scene::environment::SkySphereSource::kCubemap
       ? "cubemap"
@@ -922,7 +922,7 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    lua_createtable(state, 0, 9); // NOLINT(*-magic-numbers)
+    lua_createtable(state, 0, 9);
     lua_pushnumber(state, system->GetBaseAltitudeMeters());
     lua_setfield(state, -2, "base_altitude_meters");
     lua_pushnumber(state, system->GetLayerThicknessMeters());

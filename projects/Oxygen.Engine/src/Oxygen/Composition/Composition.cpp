@@ -9,11 +9,12 @@
 #include <ranges>
 #include <utility> // std::as_const
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Composition/TypeSystem.h>
-#include <fmt/format.h>
 
 using oxygen::Component;
 using oxygen::Composition;
@@ -500,7 +501,6 @@ auto Composition::GetDebugName() const -> std::string_view
     // and the guarantees of Composition, ensure that if the Composition has a
     // component of a certain type, then that component can be safely cast to
     // that type.
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     return static_cast<const ObjectMetadata&>(
       GetComponentImpl(ObjectMetadata::ClassTypeId()))
       .GetName();

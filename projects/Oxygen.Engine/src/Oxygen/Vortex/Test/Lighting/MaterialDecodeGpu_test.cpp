@@ -27,13 +27,11 @@ namespace {
     ShaderVisibleIndex base_color_srv { kInvalidShaderVisibleIndex };
     std::uint32_t pixel_x { 0U };
   };
-  // NOLINTBEGIN(*-magic-numbers)
   static_assert(sizeof(MaterialDecodeInput) == 16U);
   static_assert(offsetof(MaterialDecodeInput, normal_srv) == 0U);
   static_assert(offsetof(MaterialDecodeInput, material_srv) == 4U);
   static_assert(offsetof(MaterialDecodeInput, base_color_srv) == 8U);
   static_assert(offsetof(MaterialDecodeInput, pixel_x) == 12U);
-  // NOLINTEND(*-magic-numbers)
 
   NOLINT_TEST_F(
     LightingGpuAbiTest, NativeGBufferFormatsMatchIndependentMaterialDecoder)

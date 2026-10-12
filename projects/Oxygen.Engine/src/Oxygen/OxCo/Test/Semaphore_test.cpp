@@ -4,18 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/OxCo/Semaphore.h>
-
 #include <chrono>
-
-#include <Oxygen/Testing/GTest.h>
-#include <gmock/gmock.h>
 
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
+#include <gmock/gmock.h>
+
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/Semaphore.h>
+#include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;
 using oxygen::co::Co;
@@ -24,7 +23,6 @@ using oxygen::co::Run;
 using oxygen::co::Semaphore;
 
 // NOLINTBEGIN(*-avoid-do-while)
-// NOLINTBEGIN(*-avoid-capturing-lambda-coroutines)
 
 namespace {
 
@@ -176,5 +174,4 @@ NOLINT_TEST_F(SemaphoreTest, ImmediateCancellation)
 
 } // namespace
 
-// NOLINTEND(*-avoid-capturing-lambda-coroutines)
 // NOLINTEND(*-avoid-do-while)

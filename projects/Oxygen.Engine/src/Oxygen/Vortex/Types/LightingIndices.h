@@ -76,7 +76,6 @@ inline constexpr LightListOffset kCompleteLightListOffset {
 // Fixed wire widths from lighting-gpu-abi.md; C++ types are not
 // interchangeable.
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(sizeof(AtmosphereLightIndex) == 4U);
 static_assert(alignof(AtmosphereLightIndex) == 4U);
 static_assert(std::is_standard_layout_v<AtmosphereLightIndex>);
@@ -101,6 +100,5 @@ static_assert(sizeof(LightListOffset) == 4U);
 static_assert(alignof(LightListOffset) == 4U);
 static_assert(std::is_standard_layout_v<LightListOffset>);
 static_assert(std::is_trivially_copyable_v<LightListOffset>);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

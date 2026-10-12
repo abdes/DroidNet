@@ -39,7 +39,6 @@ struct alignas(packing::kShaderDataFieldAlignment) ProjectedLocalShadowRecord {
   glm::uvec2 reserved1 { 0U };
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(std::is_standard_layout_v<ProjectedLocalShadowRecord>);
 static_assert(std::is_trivially_copyable_v<ProjectedLocalShadowRecord>);
 static_assert(alignof(ProjectedLocalShadowRecord) == 16U);
@@ -58,6 +57,5 @@ static_assert(offsetof(ProjectedLocalShadowRecord, selection_index) == 104U);
 static_assert(offsetof(ProjectedLocalShadowRecord, shadow_strength) == 108U);
 static_assert(offsetof(ProjectedLocalShadowRecord, inverse_resolution) == 112U);
 static_assert(offsetof(ProjectedLocalShadowRecord, reserved1) == 120U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

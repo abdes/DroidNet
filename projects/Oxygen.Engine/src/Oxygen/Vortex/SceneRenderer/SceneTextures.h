@@ -49,7 +49,7 @@ enum class GBufferIndex : std::uint8_t {
 
 class SceneTextureSetupMode {
 public:
-  enum class Flag : std::uint32_t { // NOLINT(*-enum-size)
+  enum class Flag : std::uint32_t {
     kNone = 0,
     kSceneDepth = OXYGEN_FLAG(0),
     kPartialDepth = OXYGEN_FLAG(1),

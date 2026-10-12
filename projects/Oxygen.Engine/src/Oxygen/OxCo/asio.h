@@ -119,7 +119,7 @@ namespace detail {
     //! @{
     //! Implementation of the awaiter interface.
     // ReSharper disable CppMemberFunctionMayBeStatic
-    // NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard)
+    // NOLINTBEGIN(*-use-nodiscard)
 
     auto await_ready() const noexcept { return false; }
 
@@ -166,7 +166,7 @@ namespace detail {
     }
 
     // ReSharper disable CppMemberFunctionMayBeStatic
-    // NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard)
+    // NOLINTEND(*-use-nodiscard)
     //! @}
 
   private:

@@ -109,8 +109,7 @@ public:
 
   //! Schedules `fn(arg)` to be called on the next executor loop, then runs
   //! the executor loop unless already running.
-  template <class T>
-  void RunSoon(void (*fn)(T*) noexcept, T* arg) // NOLINT(*-no-recursion)
+  template <class T> void RunSoon(void (*fn)(T*) noexcept, T* arg)
   {
     Schedule(fn, arg);
     RunSoon();
@@ -164,7 +163,7 @@ public:
    \note This will continue running executor until its run queue empties, and
          only then would return, so I/O checks can be made.
   */
-  void RunSoon() noexcept // NOLINT(*-no-recursion)
+  void RunSoon() noexcept
   {
     if (running_ != nullptr || scheduled_ != nullptr) {
       // Do nothing; our callbacks are already slated to run soon
@@ -271,7 +270,7 @@ namespace detail {
     //! @{
     //! Implementation of the awaiter interface.
     // ReSharper disable CppMemberFunctionMayBeStatic
-    // NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard)
+    // NOLINTBEGIN(*-use-nodiscard)
 
     void await_set_executor(Executor* executor) noexcept
     {
@@ -285,7 +284,7 @@ namespace detail {
     [[nodiscard]] auto await_resume() const -> Executor* { return executor_; }
 
     // ReSharper disable CppMemberFunctionMayBeStatic
-    // NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard)
+    // NOLINTEND(*-use-nodiscard)
     //! @}
   };
 } // namespace detail

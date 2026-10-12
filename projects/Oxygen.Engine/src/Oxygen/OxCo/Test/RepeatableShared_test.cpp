@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/OxCo/RepeatableShared.h>
-
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
+
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/RepeatableShared.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -19,9 +19,6 @@ using oxygen::co::Co;
 using oxygen::co::RepeatableShared;
 using oxygen::co::testing::OxCoTestFixture;
 using oxygen::co::testing::TestEventLoop;
-
-// NOLINTBEGIN(*-avoid-reference-coroutine-parameters)
-// NOLINTBEGIN(*-avoid-capturing-lambda-coroutines)
 
 namespace {
 
@@ -172,6 +169,3 @@ NOLINT_TEST_F(RepeatableSharedConstructionTest, AsyncWithArguments)
 }
 
 } // namespace
-
-// NOLINTEND(*-avoid-capturing-lambda-coroutines)
-// NOLINTEND(*-avoid-reference-coroutine-parameters)

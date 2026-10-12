@@ -545,7 +545,6 @@ auto ScenePipeline::Start(co::Nursery& nursery) -> void
   const auto worker_count = std::max(1U, config_.worker_count);
   for (uint32_t i = 0; i < worker_count; ++i) {
     // The pipeline outlives the nursery that runs its workers.
-    // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines)
     nursery.Start([this] -> co::Co<> { co_await Worker(); });
   }
 }

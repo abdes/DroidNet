@@ -33,7 +33,6 @@ struct alignas(16) LightShadowReference {
   std::uint32_t coverage_state { kShadowCoverageNoRequest };
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(std::is_standard_layout_v<LightShadowReference>);
 static_assert(std::is_trivially_copyable_v<LightShadowReference>);
 static_assert(alignof(LightShadowReference) == 16U);
@@ -42,6 +41,5 @@ static_assert(offsetof(LightShadowReference, projection_kind) == 0U);
 static_assert(offsetof(LightShadowReference, record_index) == 4U);
 static_assert(offsetof(LightShadowReference, selection_index) == 8U);
 static_assert(offsetof(LightShadowReference, coverage_state) == 12U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

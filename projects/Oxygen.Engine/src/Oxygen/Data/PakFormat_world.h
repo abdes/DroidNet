@@ -26,7 +26,7 @@
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
 OXYGEN_DIAGNOSTIC_DISABLE_MSVC(4315)
-// NOLINTBEGIN(*-avoid-c-arrays,*-magic-numbers)
+// NOLINTBEGIN(*-avoid-c-arrays)
 
 //! Oxygen PAK format world domain schema.
 /*!
@@ -66,7 +66,7 @@ using SceneComponentIndexT = uint32_t;
 inline constexpr SceneNodeIndexT kNoStartingCamera = 0xFFFFFFFFU;
 
 //! Scene asset flags.
-enum class SceneAssetFlags : uint32_t { // NOLINT(*-enum-size)
+enum class SceneAssetFlags : uint32_t {
   kNone = 0,
   //! The scene is the output of a model import (glTF, FBX): a read-only
   //! model scene that authored scenes instance, never run on its own.
@@ -404,7 +404,7 @@ inline auto HasValidOrthographicCameraValues(
 //=== Scene: Lights and Environment -----------------------------------------//
 
 //! Environment system type tags used by scene persistence.
-enum class EnvironmentComponentType : uint32_t { // NOLINT(*-enum-size)
+enum class EnvironmentComponentType : uint32_t {
   kSkyAtmosphere = 0,
   kVolumetricClouds = 1,
   kFog = 2,
@@ -989,5 +989,5 @@ static_assert(offsetof(DirectionalLightRecord, intensity_lux) == 93);
 
 } // namespace oxygen::data::pak::world
 
-// NOLINTEND(*-avoid-c-arrays,*-magic-numbers)
+// NOLINTEND(*-avoid-c-arrays)
 OXYGEN_DIAGNOSTIC_POP

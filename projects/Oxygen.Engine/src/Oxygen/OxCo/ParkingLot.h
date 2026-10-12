@@ -23,7 +23,6 @@ public:
   public:
     using Parked::Parked;
     // ReSharper disable CppMemberFunctionMayBeStatic
-    // NOLINTNEXTLINE(*-convert-member-functions-to-static)
     [[nodiscard]] auto await_ready() const noexcept { return false; }
     void await_suspend(const detail::Handle h) { this->DoSuspend(h); }
     void await_resume() { }

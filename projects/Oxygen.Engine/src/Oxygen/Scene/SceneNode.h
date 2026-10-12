@@ -137,7 +137,6 @@ public:
   // NOLINTNEXTLINE(*-derived-method-shadowing-base-method)
   [[nodiscard]] auto GetHandle() const noexcept -> const NodeHandle&
   {
-    // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
     return static_cast<const NodeHandle&>(Resource::GetHandle());
   }
 

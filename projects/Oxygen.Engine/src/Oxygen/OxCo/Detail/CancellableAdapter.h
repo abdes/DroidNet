@@ -50,13 +50,13 @@ public:
   //! @{
   //! Implementation of the awaiter interface.
   // ReSharper disable CppMemberFunctionMayBeStatic
-  // NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard)
+  // NOLINTBEGIN(*-use-nodiscard)
 
   bool await_early_cancel() noexcept { return false; }
   bool await_must_resume() const noexcept { return true; }
 
   // ReSharper disable CppMemberFunctionMayBeStatic
-  // NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard)
+  // NOLINTEND(*-use-nodiscard)
   //! @}
 };
 

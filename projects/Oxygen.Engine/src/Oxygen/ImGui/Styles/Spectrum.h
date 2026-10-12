@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+
 #include <imgui.h>
 
 #include <Oxygen/ImGui/api_export.h>
@@ -55,14 +56,12 @@ constexpr auto Color(unsigned int c) -> unsigned int
   const uint16_t r = (c >> 16) & 0xFF;
   const uint16_t g = (c >> 8) & 0xFF;
   const uint16_t b = (c >> 0) & 0xFF;
-  // NOLINTNEXTLINE(*-magic-numbers)
   return (a << 24) | (r << 0) | (g << 8) | (b << 16);
 }
 // all colors are from http://spectrum.corp.adobe.com/color.html
 
 constexpr auto color_alpha(unsigned int alpha, unsigned int c) -> unsigned int
 {
-  // NOLINTNEXTLINE(*-magic-numbers)
   return ((alpha & 0xFF) << 24) | (c & 0x00FFFFFF);
 }
 

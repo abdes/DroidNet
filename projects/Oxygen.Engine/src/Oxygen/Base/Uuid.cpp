@@ -30,7 +30,7 @@ struct ThreadState final {
 auto MakeThreadRng() -> std::mt19937_64
 {
   auto rd = std::random_device {};
-  auto seed_words = std::array<uint32_t, 8> {}; // NOLINT(*-magic-numbers)
+  auto seed_words = std::array<uint32_t, 8> {};
   std::ranges::generate(seed_words, [&rd]() -> uint32_t { return rd(); });
   auto seed = std::seed_seq(seed_words.begin(), seed_words.end());
   return std::mt19937_64(seed);
@@ -47,7 +47,6 @@ auto CurrentUnixTimestampMs() -> uint64_t
   }
   return static_cast<uint64_t>(count);
 }
-// NOLINTBEGIN(*-magic-numbers)
 constexpr auto ParseHexNibble(const char c) noexcept -> uint8_t
 {
   constexpr auto kInvalidNibble = uint8_t { 0xFFU };
@@ -62,7 +61,6 @@ constexpr auto ParseHexNibble(const char c) noexcept -> uint8_t
   }
   return kInvalidNibble;
 }
-// NOLINTEND(*-magic-numbers)
 
 constexpr auto HasCanonicalHyphens(const std::string_view str) noexcept -> bool
 {
@@ -84,7 +82,6 @@ constexpr auto HasOnlyLowercaseHexDigits(const std::string_view str) noexcept
 
 namespace oxygen {
 
-// NOLINTBEGIN(*-magic-numbers)
 // UUIDv7 bit layout values are intentionally left as RFC literals for clarity.
 
 /*!
@@ -260,6 +257,5 @@ auto to_string(const Uuid& uuid) -> std::string
 
   return text;
 }
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen

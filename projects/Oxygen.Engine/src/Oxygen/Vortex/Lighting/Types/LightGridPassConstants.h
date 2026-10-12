@@ -38,7 +38,6 @@ struct alignas(16) LightGridPassConstants {
   glm::vec4 depth_projection { 0.0F };
 };
 
-// NOLINTBEGIN(*-magic-numbers)
 static_assert(std::is_standard_layout_v<LightGridPassConstants>);
 static_assert(std::is_trivially_copyable_v<LightGridPassConstants>);
 static_assert(alignof(LightGridPassConstants) == 16U);
@@ -58,6 +57,5 @@ static_assert(offsetof(LightGridPassConstants, work_count) == 28U);
 static_assert(offsetof(LightGridPassConstants, work_offset) == 32U);
 static_assert(offsetof(LightGridPassConstants, scan_stride) == 40U);
 static_assert(offsetof(LightGridPassConstants, scan_phase) == 44U);
-// NOLINTEND(*-magic-numbers)
 
 } // namespace oxygen::vortex

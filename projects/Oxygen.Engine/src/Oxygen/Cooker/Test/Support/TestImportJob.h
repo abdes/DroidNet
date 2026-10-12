@@ -29,10 +29,10 @@ public:
   //! Configuration for simulated work.
   struct Config {
     //! Total simulated duration.
-    std::chrono::milliseconds total_delay { 30 }; // NOLINT(*-magic-numbers)
+    std::chrono::milliseconds total_delay { 30 };
 
     //! Delay per step, used to allow cancellation checks.
-    std::chrono::milliseconds step_delay { 5 }; // NOLINT(*-magic-numbers)
+    std::chrono::milliseconds step_delay { 5 };
 
     //! Emit progress updates between steps.
     bool report_progress = true;

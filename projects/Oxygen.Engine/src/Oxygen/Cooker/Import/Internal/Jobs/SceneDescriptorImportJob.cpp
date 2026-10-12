@@ -342,11 +342,9 @@ namespace {
     return resolved;
   }
 
-  // NOLINTBEGIN(*-avoid-reference-coroutine-parameters) - awaited in place
   auto LoadSlotInventories(SceneDescriptorExecutionContext& context,
     const internal::SceneSource& source, IAsyncFileReader& file_reader)
     -> co::Co<bool>
-  // NOLINTEND(*-avoid-reference-coroutine-parameters)
   {
     for (const auto& renderable : source.renderables) {
       if (renderable.materials.empty()) {
@@ -595,11 +593,9 @@ namespace {
   //! Walks the cooked scenes reachable through instances and fails when one
   //! of them instances the scene being cooked. Scenes not yet cooked end
   //! their branch: their own cook checks them.
-  // NOLINTBEGIN(*-avoid-reference-coroutine-parameters) - awaited in place
   auto CheckInstanceCycles(SceneDescriptorExecutionContext& context,
     const data::AssetKey& scene_key, const LinkedSceneDescriptor& prepared,
     IAsyncFileReader& file_reader) -> co::Co<bool>
-  // NOLINTEND(*-avoid-reference-coroutine-parameters)
   {
     struct Pending final {
       data::AssetKey key;
@@ -833,7 +829,6 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   const auto job_start = std::chrono::steady_clock::now();
   auto telemetry = ImportTelemetry {};
-  // NOLINTBEGIN(*-avoid-capturing-lambda-coroutines,*-avoid-reference-coroutine-parameters)
   // The lambda is awaited in place and the session outlives it.
   const auto FinalizeWithTelemetry
     = [&](ImportSession& session) -> co::Co<ImportReport> {
@@ -852,7 +847,6 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     report.telemetry = telemetry;
     co_return report;
   };
-  // NOLINTEND(*-avoid-capturing-lambda-coroutines,*-avoid-reference-coroutine-parameters)
 
   EnsureCookedRoot();
   auto& session = Session();
@@ -892,7 +886,6 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   auto textures = EnvironmentTextureIndices {};
-  // NOLINTBEGIN(*-avoid-capturing-lambda-coroutines,*-avoid-reference-coroutine-parameters)
   // The lambda is awaited in place and its references outlive each call.
   const auto resolve_texture
     = [&](const std::optional<std::string>& path, std::string object_path,
@@ -934,7 +927,6 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       textures.sky_sphere_cubemap)) {
     co_return co_await FinalizeWithTelemetry(session);
   }
-  // NOLINTEND(*-avoid-capturing-lambda-coroutines,*-avoid-reference-coroutine-parameters)
   auto prepared_opt
     = LinkSceneDescriptor(context, std::move(*source), textures);
   if (!prepared_opt.has_value()) {
@@ -1011,7 +1003,6 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
   co_return report;
 }
 
-// NOLINTNEXTLINE(*-avoid-reference-coroutine-parameters)
 auto SceneDescriptorImportJob::FinalizeSession(ImportSession& session)
   -> co::Co<ImportReport>
 {

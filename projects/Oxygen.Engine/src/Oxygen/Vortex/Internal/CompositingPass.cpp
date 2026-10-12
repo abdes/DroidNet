@@ -184,7 +184,6 @@ auto CompositingPass::ValidateConfig() -> void
   has_drawable_region_ = HasPositiveArea(clamped_viewport_);
 }
 
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
 auto CompositingPass::DoPrepareResources(graphics::CommandRecorder& recorder)
   -> co::Co<>
 {
@@ -220,7 +219,6 @@ auto CompositingPass::DoPrepareResources(graphics::CommandRecorder& recorder)
   co_return;
 }
 
-// NOLINTNEXTLINE(cppcoreguidelines-avoid-reference-coroutine-parameters)
 auto CompositingPass::DoExecute(graphics::CommandRecorder& recorder) -> co::Co<>
 {
   if (!has_drawable_region_) {

@@ -14,7 +14,7 @@
 
 namespace oxygen::physics {
 
-// NOLINTBEGIN(*-macro-usage,*-enum-size)
+// NOLINTBEGIN(*-macro-usage)
 #define OXPHYS_SHAPE_TYPE(name, value) name = (value),
 enum class ShapeType : uint8_t {
 #include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc>
@@ -32,7 +32,7 @@ enum class WorldBoundaryMode : uint32_t {
 #include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc>
 };
 #undef OXPHYS_WORLD_BOUNDARY_MODE
-// NOLINTEND(*-macro-usage,*-enum-size)
+// NOLINTEND(*-macro-usage)
 
 struct SphereShape final {
   float radius { 0.5F };

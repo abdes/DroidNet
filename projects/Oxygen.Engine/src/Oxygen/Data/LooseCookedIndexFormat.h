@@ -60,7 +60,7 @@ inline constexpr uint16_t kIndexVersion
   = pak::version::kLooseCookedIndexVersion;
 
 //! Required-section declarations in the current index.
-enum IndexFlags : uint32_t { // NOLINT(*-enum-size)
+enum IndexFlags : uint32_t {
   //! Declares that asset entries contain valid virtual paths.
   kHasVirtualPaths = OXYGEN_FLAG(0),
   //! Declares that the file-records section is present and must be validated.
@@ -127,7 +127,7 @@ struct AssetEntry {
 static_assert(sizeof(AssetEntry) == 81);
 
 //! Kind of a file record.
-enum class FileKind : uint16_t { // NOLINT(*-enum-size)
+enum class FileKind : uint16_t {
   kUnknown = 0,
   kBuffersTable = 1,
   kBuffersData = 2,

@@ -75,7 +75,6 @@ auto RunFrameHooks(Renderer& renderer, FrameContext& frame_context) -> void
   auto loop = oxygen::co::testing::TestEventLoop {};
   // Synchronous execution finishes while the session-owned closure and its
   // captured test locals are alive.
-  // NOLINTNEXTLINE(cppcoreguidelines-avoid-capturing-lambda-coroutines)
   oxygen::co::Run(loop, [&] -> oxygen::co::Co<void> {
     co_await renderer.OnTransformPropagation(frame);
     co_await renderer.OnPreRender(frame);

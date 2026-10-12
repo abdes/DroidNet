@@ -20,7 +20,6 @@ namespace oxygen::content::testing {
 //! An asset loader that has nothing: every query returns an empty result and
 //! every load completes with nothing. Tests derive from it and override only
 //! the queries their code under test makes.
-// NOLINTBEGIN(*-convert-member-functions-to-static, *-identifier-length)
 class StubAssetLoader : public IAssetLoader {
 public:
   using IAssetLoader::StartLoadBuffer;
@@ -395,6 +394,5 @@ public:
   {
   }
 };
-// NOLINTEND(*-convert-member-functions-to-static, *-identifier-length)
 
 } // namespace oxygen::content::testing

@@ -20,7 +20,7 @@ namespace oxygen::graphics {
 
 class Surface;
 
-enum class FrameCaptureFeature : uint32_t { // NOLINT(*-enum-size)
+enum class FrameCaptureFeature : uint32_t {
   kNone = 0,
   kTriggerNextFrame = OXYGEN_FLAG(0),
   kManualCapture = OXYGEN_FLAG(1),

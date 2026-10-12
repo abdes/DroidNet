@@ -20,15 +20,15 @@
 #include <stdexcept>
 #include <vector>
 
-#include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_double3.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <glm/geometric.hpp>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Core/Lighting/LightPhotometry.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
 #include <Oxygen/Vortex/Test/Lighting/LightingGpuAbiFixture.h>
 #include <Oxygen/Vortex/Test/Lighting/Reference/FiniteEmitter.h>
@@ -46,7 +46,6 @@ namespace {
     float f0;
     float rho;
   };
-  // NOLINTBEGIN(*-magic-numbers)
   static_assert(sizeof(FiniteEmitterProbeInput) == 112U);
   static_assert(offsetof(FiniteEmitterProbeInput, view) == 80U);
   static_assert(offsetof(FiniteEmitterProbeInput, roughness) == 92U);
@@ -54,7 +53,6 @@ namespace {
   static_assert(offsetof(FiniteEmitterProbeInput, reserved) == 100U);
   static_assert(offsetof(FiniteEmitterProbeInput, f0) == 104U);
   static_assert(offsetof(FiniteEmitterProbeInput, rho) == 108U);
-  // NOLINTEND(*-magic-numbers)
 
   // The production payload was independently qualified against the CPU/Arb
   // moments. Reading it directly here isolates emitter integration error from
@@ -120,7 +118,8 @@ namespace {
     std::vector<float> values_;
   };
 
-  NOLINT_TEST_F(LightingGpuAbiTest, AnalyticEmitterReportsIndependentGeometryDeviation)
+  NOLINT_TEST_F(
+    LightingGpuAbiTest, AnalyticEmitterReportsIndependentGeometryDeviation)
   {
     const auto tables = PublishBrdfEnergyTexture();
     const auto moments = MomentTable {};
@@ -329,7 +328,8 @@ namespace {
                 brdf, settings);
           ASSERT_TRUE(oracle.has_value())
             << "Emitter reference error: "
-            << (oracle.has_value() ? 0 : static_cast<int>(oracle.error().reason));
+            << (oracle.has_value() ? 0
+                                   : static_cast<int>(oracle.error().reason));
           inputs.push_back(input);
           expected.push_back(oracle->radiance);
         }
@@ -373,11 +373,13 @@ namespace {
           { "reference", lobes.at(lobe) }, { "measured", measured } });
         const auto& light = inputs.at(index).light;
         const auto center_distance = glm::length(light.position_ws);
-        if (light.range_m == 0.0F || center_distance >= light.range_m) EXPECT_EQ(measured, 0.0F);
+        if (light.range_m == 0.0F || center_distance >= light.range_m)
+          EXPECT_EQ(measured, 0.0F);
       }
     }
     RecordProperty("finite_emitter_cases", inputs.size());
-    RecordProperty("maximum_finite_emitter_reference_deviation_scale", maximum_fraction);
+    RecordProperty(
+      "maximum_finite_emitter_reference_deviation_scale", maximum_fraction);
     RecordProperty("lighting_model_revision", 2U);
     RecordProperty("finite_emitter_measurements", measurements.dump());
   }

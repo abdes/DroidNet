@@ -23,8 +23,6 @@
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Testing/GTest.h>
 
-// NOLINTBEGIN(*-magic-numbers)
-
 namespace oxygen::content::testing {
 
 namespace {
@@ -96,5 +94,3 @@ namespace {
 } // namespace
 
 } // namespace oxygen::content::testing
-
-// NOLINTEND(*-magic-numbers)

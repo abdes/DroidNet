@@ -6,10 +6,10 @@
 
 #pragma once
 
+#include <utility>
+
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Coroutine.h>
-
-#include <utility>
 
 namespace oxygen::co::detail {
 
@@ -27,7 +27,7 @@ public:
   //! @{
   //! Implementation of the awaiter interface.
   // ReSharper disable CppMemberFunctionMayBeStatic
-  // NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard)
+  // NOLINTBEGIN(*-use-nodiscard)
 
   auto await_early_cancel() const noexcept { return false; }
   auto await_ready() const noexcept { return true; }
@@ -37,12 +37,12 @@ public:
   auto await_resume() && -> T { return std::forward<T>(value_); }
 
   // ReSharper disable CppMemberFunctionMayBeStatic
-  // NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard)
+  // NOLINTEND(*-use-nodiscard)
   //! @}
 
   // ReSharper disable once CppNonExplicitConversionOperator
   template <std::constructible_from<T> U>
-  // NOLINTNEXTLINE(*-explicit-constructor, *-explicit-conversions)
+  // NOLINTNEXTLINE(*-explicit-constructor)
   operator Co<U>() &&
   {
     return Co<U>(*new StubPromise<U>(std::forward<T>(value_)));
@@ -57,7 +57,7 @@ public:
   //! @{
   //! Implementation of the awaiter interface.
   // ReSharper disable CppMemberFunctionMayBeStatic
-  // NOLINTBEGIN(*-convert-member-functions-to-static, *-use-nodiscard)
+  // NOLINTBEGIN(*-use-nodiscard)
 
   auto await_early_cancel() const noexcept { return false; }
   auto await_ready() const noexcept { return true; }
@@ -67,11 +67,11 @@ public:
   auto await_resume() const noexcept { }
 
   // ReSharper disable CppMemberFunctionMayBeStatic
-  // NOLINTEND(*-convert-member-functions-to-static, *-use-nodiscard)
+  // NOLINTEND(*-use-nodiscard)
   //! @}
 
   // ReSharper disable once CppNonExplicitConversionOperator
-  // NOLINTNEXTLINE(*-explicit-constructor, *-explicit-conversions)
+  // NOLINTNEXTLINE(*-explicit-constructor)
   operator Co<>() const { return Co(StubPromise<void>::Instance()); }
 };
 

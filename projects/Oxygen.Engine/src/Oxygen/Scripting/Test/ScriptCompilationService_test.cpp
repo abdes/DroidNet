@@ -176,14 +176,11 @@ private:
   std::atomic<int>& compile_calls_;
 };
 
-// NOLINTBEGIN(*-magic-numbers)
-
 NOLINT_TEST(ScriptCompilationServiceTest, MissingCompilerReturnsFailure)
 {
   TestEventLoop loop;
   ScriptCompilationService service(observer_ptr<ThreadPool> {});
 
-  // NOLINTNEXTLINE(*capturing-lambda-*)
   oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
@@ -216,7 +213,6 @@ NOLINT_TEST(
   EXPECT_TRUE(service.RegisterCompiler(
     std::make_shared<CountingCompiler>(compile_calls)));
 
-  // NOLINTNEXTLINE(*capturing-lambda-*)
   oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
@@ -260,7 +256,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, CompletionSubscribersArePublishedOnce)
   EXPECT_TRUE(service.RegisterCompiler(
     std::make_shared<CountingCompiler>(compile_calls)));
 
-  // NOLINTNEXTLINE(*capturing-lambda-*)
   oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
@@ -337,7 +332,6 @@ auto CompileAndStop(ScriptCompilationService& service, TestEventLoop& loop,
   const uint64_t key, std::vector<uint8_t> source) -> ScriptCompileResult
 {
   ScriptCompileResult result;
-  // NOLINTNEXTLINE(*capturing-lambda-*)
   oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
@@ -423,7 +417,6 @@ NOLINT_TEST(ScriptCompilationServiceTest,
       }
     });
 
-    // NOLINTNEXTLINE(*capturing-lambda-*)
     oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
@@ -607,7 +600,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, SequentialSameKeyHitsL1Cache)
   EXPECT_TRUE(service.RegisterCompiler(
     std::make_shared<CountingCompiler>(compile_calls)));
 
-  // NOLINTNEXTLINE(*capturing-lambda-*)
   oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
@@ -654,7 +646,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, L1CacheEvictsOldestEntries)
   EXPECT_TRUE(service.RegisterCompiler(
     std::make_shared<SourceSizedCountingCompiler>(compile_calls)));
 
-  // NOLINTNEXTLINE(*capturing-lambda-*)
   oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
@@ -699,7 +690,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, L1CacheKeepsRecentEntries)
   EXPECT_TRUE(service.RegisterCompiler(
     std::make_shared<SourceSizedCountingCompiler>(compile_calls)));
 
-  // NOLINTNEXTLINE(*capturing-lambda-*)
   oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
@@ -746,7 +736,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, PersistentCacheRoundtripAcrossRestart)
     EXPECT_TRUE(service.RegisterCompiler(
       std::make_shared<ImmediateCountingCompiler>(compile_calls)));
 
-    // NOLINTNEXTLINE(*capturing-lambda-*)
     oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
@@ -774,7 +763,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, PersistentCacheRoundtripAcrossRestart)
     TestEventLoop loop;
     ScriptCompilationService service(observer_ptr<ThreadPool> {}, cache_path);
 
-    // NOLINTNEXTLINE(*capturing-lambda-*)
     oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
@@ -816,7 +804,6 @@ NOLINT_TEST(
     EXPECT_TRUE(service.RegisterCompiler(
       std::make_shared<ImmediateCountingCompiler>(compile_calls)));
 
-    // NOLINTNEXTLINE(*capturing-lambda-*)
     oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
@@ -842,7 +829,6 @@ NOLINT_TEST(
     TestEventLoop loop;
     ScriptCompilationService service(observer_ptr<ThreadPool> {}, cache_path);
 
-    // NOLINTNEXTLINE(*capturing-lambda-*)
     oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
@@ -881,7 +867,6 @@ NOLINT_TEST(
     EXPECT_TRUE(service.RegisterCompiler(
       std::make_shared<ImmediateCountingCompiler>(compile_calls)));
 
-    // NOLINTNEXTLINE(*capturing-lambda-*)
     oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
@@ -910,7 +895,6 @@ NOLINT_TEST(
     EXPECT_TRUE(service.RegisterCompiler(
       std::make_shared<ImmediateCountingCompiler>(compile_calls)));
 
-    // NOLINTNEXTLINE(*capturing-lambda-*)
     oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
@@ -946,7 +930,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, UnsubscribePreventsCompletionCallback)
   EXPECT_TRUE(service.RegisterCompiler(
     std::make_shared<CountingCompiler>(compile_calls)));
 
-  // NOLINTNEXTLINE(*capturing-lambda-*)
   oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
@@ -988,7 +971,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, CountersTrackCompileAndL1Hit)
   EXPECT_TRUE(service.RegisterCompiler(
     std::make_shared<ImmediateCountingCompiler>(compile_calls)));
 
-  // NOLINTNEXTLINE(*capturing-lambda-*)
   oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
@@ -1036,7 +1018,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, CountersTrackL2Hit)
     EXPECT_TRUE(service.RegisterCompiler(
       std::make_shared<ImmediateCountingCompiler>(compile_calls)));
 
-    // NOLINTNEXTLINE(*capturing-lambda-*)
     oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
@@ -1058,7 +1039,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, CountersTrackL2Hit)
     TestEventLoop loop;
     ScriptCompilationService service(observer_ptr<ThreadPool> {}, cache_path);
 
-    // NOLINTNEXTLINE(*capturing-lambda-*)
     oxygen::co::Run(loop, [&] -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
@@ -1101,7 +1081,6 @@ NOLINT_TEST(ScriptCompilationServiceTest,
   EXPECT_TRUE(service.RegisterCompiler(
     std::make_shared<CountingCompiler>(compile_calls)));
 
-  // NOLINTNEXTLINE(*capturing-lambda-*)
   oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
@@ -1132,7 +1111,6 @@ NOLINT_TEST(ScriptCompilationServiceTest,
         });
 
       EXPECT_EQ(acquire.placeholder, nullptr);
-      // NOLINTNEXTLINE(*capturing-lambda-*)
       n.Start([&] -> Co<> {
         while (!completion.Triggered()) {
           service.OnFrameStart(
@@ -1166,7 +1144,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, AcquireForSlotPublishesFailure)
   std::atomic<int> ready_calls = 0;
   std::atomic<int> failed_calls = 0;
 
-  // NOLINTNEXTLINE(*capturing-lambda-*)
   oxygen::co::Run(loop, [&] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
@@ -1198,7 +1175,6 @@ NOLINT_TEST(ScriptCompilationServiceTest, AcquireForSlotPublishesFailure)
         });
 
       EXPECT_EQ(acquire.placeholder, nullptr);
-      // NOLINTNEXTLINE(*capturing-lambda-*)
       n.Start([&] -> Co<> {
         while (!completion.Triggered()) {
           service.OnFrameStart(
@@ -1218,7 +1194,5 @@ NOLINT_TEST(ScriptCompilationServiceTest, AcquireForSlotPublishesFailure)
   EXPECT_EQ(ready_calls.load(), 0);
   EXPECT_EQ(failed_calls.load(), 1);
 }
-
-// NOLINTEND(*-magic-numbers)
 
 } // namespace

@@ -47,7 +47,6 @@ protected:
 //! 1000 Hz mouse at 60 fps reports 16 motion events per frame.
 NOLINT_TEST_F(MouseAxisScenario, LookReceivesWholeFrameDelta)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&] -> oxygen::co::Co<> {
     auto rmb = MakeAction("rmb", ActionValueType::kBool);
     auto look = MakeAction("look", ActionValueType::kAxis2D);
@@ -81,7 +80,6 @@ NOLINT_TEST_F(MouseAxisScenario, LookReceivesWholeFrameDelta)
 //! not turn the camera; the look value is zero until the chord holds.
 NOLINT_TEST_F(MouseAxisScenario, LookWithoutChordReportsNoMotion)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&] -> oxygen::co::Co<> {
     auto rmb = MakeAction("rmb", ActionValueType::kBool);
     auto look = MakeAction("look", ActionValueType::kAxis2D);
@@ -120,7 +118,6 @@ NOLINT_TEST_F(MouseAxisScenario, LookWithoutChordReportsNoMotion)
 //! same amount at any frame rate.
 NOLINT_TEST_F(MouseAxisScenario, LookDoesNotDependOnFrameRate)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&] -> oxygen::co::Co<> {
     auto look = MakeAction("look", ActionValueType::kAxis2D);
     auto ctx = MakeContext("camera", 0);
@@ -150,7 +147,6 @@ NOLINT_TEST_F(MouseAxisScenario, LookDoesNotDependOnFrameRate)
 //! MouseWheelXY binding receives single-axis scrolls too.
 NOLINT_TEST_F(MouseAxisScenario, WheelAccumulatesAndReachesXYBindings)
 {
-  // NOLINTNEXTLINE(*-avoid-capturing-lambda-coroutines) oxco-safe
   oxygen::co::Run(Loop(), [&] -> oxygen::co::Co<> {
     auto zoom = MakeAction("zoom", ActionValueType::kAxis1D);
     auto scroll = MakeAction("scroll", ActionValueType::kAxis2D);

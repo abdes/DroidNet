@@ -62,7 +62,6 @@ namespace {
     -> graphics::d3d12::CommandQueue&
   {
     // This fixture creates only D3D12 queues; engine RTTI is disabled.
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-static-cast-downcast)
     return static_cast<graphics::d3d12::CommandQueue&>(queue);
   }
 
