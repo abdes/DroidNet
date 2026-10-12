@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdint>
+#include <exception>
 #include <list>
 #include <memory>
 #include <optional>
@@ -112,6 +113,72 @@ auto InputSystem::ApplyConsoleCVars(
   bool log_events_enabled = log_events_;
   if (console->TryGetCVarValue<bool>(kCVarInputLogEvents, log_events_enabled)) {
     log_events_ = log_events_enabled;
+  }
+}
+
+auto InputSystem::OnSessionBegin(observer_ptr<IAsyncEngine> /*engine*/) noexcept
+  -> bool
+{
+  try {
+    auto baseline = SessionBaseline { .actions = actions_, .contexts = {} };
+    baseline.contexts.reserve(mapping_contexts_.size());
+    for (const auto& entry : mapping_contexts_) {
+      baseline.contexts.emplace_back(entry.mapping_context, entry.is_active);
+    }
+    session_baseline_ = std::move(baseline);
+    return true;
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "Input session could not begin: {}", ex.what());
+  }
+  return false;
+}
+
+auto InputSystem::OnSessionEnd(observer_ptr<IAsyncEngine> /*engine*/) noexcept
+  -> void
+{
+  if (!session_baseline_) {
+    return;
+  }
+  const auto baseline = std::move(*session_baseline_);
+  session_baseline_.reset();
+
+  // Contexts first: removing one ends the contributions of its bindings.
+  const auto was_present = [&baseline](const auto& context) -> bool {
+    return std::ranges::any_of(
+      baseline.contexts, [&context](const auto& recorded) -> bool {
+        return recorded.first == context;
+      });
+  };
+  std::vector<std::shared_ptr<input::InputMappingContext>> added;
+  for (const auto& entry : mapping_contexts_) {
+    if (!was_present(entry.mapping_context)) {
+      added.push_back(entry.mapping_context);
+    }
+  }
+  for (const auto& context : added) {
+    RemoveMappingContext(context);
+  }
+
+  pending_deactivations_.clear();
+  for (auto& entry : mapping_contexts_) {
+    const auto recorded = std::ranges::find_if(
+      baseline.contexts, [&entry](const auto& item) -> bool {
+        return item.first == entry.mapping_context;
+      });
+    const bool was_active
+      = recorded != baseline.contexts.end() && recorded->second;
+    if (entry.is_active && !was_active) {
+      entry.mapping_context->DeactivateAll();
+    }
+    entry.is_active = was_active;
+  }
+
+  std::erase_if(actions_, [&baseline](const auto& action) -> bool {
+    return std::ranges::find(baseline.actions, action)
+      == baseline.actions.end();
+  });
+  for (const auto& action : actions_) {
+    action->pending_fixed_triggers_ = 0U;
   }
 }
 

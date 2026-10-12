@@ -114,6 +114,20 @@ public:
   OXGN_CORE_API auto Advance(CanonicalDuration physical_elapsed) noexcept
     -> void;
 
+  //! Prepare exactly one fixed step, even while paused.
+  /*!
+   Replaces `Advance()` on a frame-step frame: the accumulator becomes one
+   fixed timestep (discarding any remainder), `DeltaTime()` reports that
+   timestep, and the next `ExecuteFixedSteps()` runs one step with a zero
+   interpolation alpha. Time scale does not apply, so a step is independent
+   of wall time and frame rate.
+  */
+  OXGN_CORE_API auto StepFixed() noexcept -> void;
+
+  //! Return to simulation time zero, unpaused, with an empty accumulator.
+  //! The fixed timestep, time scale and accumulator cap are kept.
+  OXGN_CORE_API auto Reset() noexcept -> void;
+
   struct FixedStepResult {
     //! Number of fixed steps executed this frame.
     uint32_t steps_executed { 0 };
@@ -136,6 +150,7 @@ private:
     kDefaultMaxAccumulatorNs) }; // Default to 50ms
   const CanonicalDuration fixed_timestep_;
   bool is_paused_ { false };
+  bool step_pending_ { false };
   double time_scale_ { 1.0 };
   CanonicalDuration last_delta_;
 };

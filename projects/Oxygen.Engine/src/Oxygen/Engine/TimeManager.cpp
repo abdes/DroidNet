@@ -5,7 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 
+#include <Oxygen/Core/Time/PhysicalClock.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Engine/TimeManager.h>
 
 using namespace std::chrono_literals;
@@ -39,7 +44,8 @@ TimeManager::TimeManager(
   last_frame_time_ = physical_clock_->Now();
 }
 
-auto TimeManager::BeginFrame(time::PhysicalTime now) noexcept -> void
+auto TimeManager::BeginFrame(
+  time::PhysicalTime now, const bool step_fixed) noexcept -> void
 {
   const auto phys_dt = CanonicalDuration { duration_cast<nanoseconds>(
     static_cast<steady_clock::time_point>(now)
@@ -48,8 +54,12 @@ auto TimeManager::BeginFrame(time::PhysicalTime now) noexcept -> void
   // Update last frame time immediately
   last_frame_time_ = now;
 
-  // Advance simulation with physical delta
-  simulation_clock_.Advance(phys_dt);
+  // Advance simulation with physical delta, or by exactly one fixed step.
+  if (step_fixed) {
+    simulation_clock_.StepFixed();
+  } else {
+    simulation_clock_.Advance(phys_dt);
+  }
 
   // Execute fixed steps and get alpha (enforce max substeps from config)
   const auto step

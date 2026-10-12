@@ -121,6 +121,41 @@ public:
 
   virtual auto OnUnload() noexcept -> void { }
 
+  //! True when the module keeps running `kGameplay` while the engine is
+  //! paused.
+  /*!
+   A module that ticks when paused sees a zero game delta and the real
+   physical delta, and owns the consequences: pause menus and audio are the
+   intended users. `kFixedSimulation` never runs while paused.
+  */
+  [[nodiscard]] virtual auto TicksWhenPaused() const noexcept -> bool
+  {
+    return false;
+  }
+
+  //! Called when a play session begins, in priority order, before any
+  //! module instantiates session content.
+  /*!
+   @return False aborts the session: modules that already began get
+   `OnSessionEnd` in reverse order.
+  */
+  virtual auto OnSessionBegin(observer_ptr<IAsyncEngine> /*engine*/) noexcept
+    -> bool
+  {
+    return true;
+  }
+
+  //! Called when a play session ends, in reverse priority order. The module
+  //! releases everything it created or changed during the session.
+  /*!
+   The frame's scene is still alive and published. This hook is not allowed
+   to fail. Process exit does not run it; `OnShutdown` covers that.
+  */
+  virtual auto OnSessionEnd(observer_ptr<IAsyncEngine> /*engine*/) noexcept
+    -> void
+  {
+  }
+
   //! Called once when the module is attached so it can register console
   //! commands/CVars using its own namespace (for example `rndr.*`).
   virtual auto RegisterConsoleBindings(

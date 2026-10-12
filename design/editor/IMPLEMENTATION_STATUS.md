@@ -1198,8 +1198,10 @@ readers. Primary/Secondary names remain unchanged.
       every native example; H1 (`Oxygen.Host`: run host, host window, view
       publisher, scene stage, host module, runtime command line) built with
       its scene stage and command-line tests passing; E1 (VortexBasic on the
-      host, without DemoShell) moved ahead of H2 and smoke-run headless and
-      windowed; H2 (pause, step and sessions) next.
+      host, without DemoShell) moved ahead of H2 and validated by the owner
+      (windowed, resize, fullscreen); H2 (engine pause, frame step and play
+      sessions, with scripting and input session cleanup) built and tested;
+      H3 (view-mode catalog, widgets, toolbar) next.
 - [ ] M08.11 asset thumbnails and previews.
 - [ ] M08.12 drag-and-drop scene assembly and closeout walkthrough.
 - [x] M02 supported single-viewport resize/discovery evidence is recorded; the

@@ -116,7 +116,10 @@ public:
   }
 
   // Frame integration
-  OXGN_NGIN_API auto BeginFrame(time::PhysicalTime now) noexcept -> void;
+  //! Integrate this frame's time. On a frame-step frame the simulation runs
+  //! exactly one fixed step instead of advancing by the physical delta.
+  OXGN_NGIN_API auto BeginFrame(
+    time::PhysicalTime now, bool step_fixed = false) noexcept -> void;
   OXGN_NGIN_API auto EndFrame() noexcept -> void;
 
   //! Snapshot of per-frame timing values (updated in BeginFrame).

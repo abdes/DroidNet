@@ -1,8 +1,10 @@
 # Runtime host, play sessions and debug UI
 
 Status: **draft for owner review, 2026-10-11; reviewed 2026-10-12; I1
-validated 2026-10-12; H1 built and unit-tested 2026-10-12; E1 built and
-smoke-run 2026-10-12, ahead of H2 so the host has a running consumer**. Owner
+validated 2026-10-12; H1 built and unit-tested 2026-10-12; E1 validated
+2026-10-12 (ahead of H2, so the host has a running consumer; the owner ran
+VortexBasic windowed, resized and fullscreen); H2 built and tested
+2026-10-12**. Owner
 decisions are recorded in [§10](#10-owner-decisions) with the review's
 position beside each. [§11](#11-open-problems-for-review) gives a definite
 answer to every problem and marks the ones only the owner can close.
@@ -406,7 +408,7 @@ auto Pause() -> void;
 auto Resume() -> void;
 [[nodiscard]] auto IsPaused() const -> bool;
 //! Pauses if running, then simulates `frames` frames and stays paused.
-auto Step(uint32_t frames = 1) -> void;
+auto Step(uint32_t frames) -> void; // ngin.step defaults to 1
 
 // Play sessions.
 //! Requests a session; returns false if one exists or is pending.
@@ -419,12 +421,13 @@ auto EndSession() -> void;
 ```
 
 Every call is a request, safe from any thread like `Stop()`
-(`Engine/AsyncEngine.h:83`), stored in atomics and applied once per frame
-in `PhaseFrameStart` after the latched console variables
-(`AsyncEngine.cpp:717`) and before any module's `OnFrameStart`. A frame is
-therefore entirely paused or entirely running, and `GetSessionState()` and
-`IsPaused()` report applied state, never a pending request. `Resume`
-cancels remaining stepped frames. `EndSession` with no session is a no-op.
+(`Engine/AsyncEngine.h:83`), stored under a mutex and applied once per frame
+at the start of `PhaseFrameStart`: before `TimeManager::BeginFrame`
+integrates the frame's time and before any module's `OnFrameStart`. A frame
+is therefore entirely paused or entirely running, and `GetSessionState()`
+and `IsPaused()` report applied state, never a pending request. `Resume`
+cancels remaining stepped frames. `EndSession` with no session is a no-op;
+`EndSession` before a requested session began withdraws the request.
 
 Console commands registered by `AsyncEngine`: `ngin.pause`,
 `ngin.resume`, `ngin.step [frames]`, `ngin.session.end`, following the
@@ -491,8 +494,10 @@ Pausing is a phase rule in the frame loop, not a per-module convention.
   progress by wall time per step, not by game time. Documented, not fixed.
 - Pausing without a session is allowed; DemoShell examples use it the same
   way. MultiView's exposure proofs call `SimulationClock::SetPaused`
-  directly (`MultiView/MainModule.cpp:206`); they migrate to
-  `engine->Pause()` so the phase rule applies.
+  directly (`MultiView/MainModule.cpp:270`); they migrate to
+  `engine->Pause()` in E3. Until then they keep working: the engine changes
+  the clock's pause flag only when a request asks it to, and reads the
+  frame's pause state back from the clock.
 
 Rejected: letting each module check `IsGamePaused()`. Every module would
 need the same code, and one forgotten check breaks pause.
@@ -533,9 +538,8 @@ module's shutdown at `ScriptingModule.cpp:426-450` is the model for both).
    `kNone`. The host sees this through its own hook (it begins last) or
    through `GetSessionState()` next frame.
 2. Modules record their pre-session state. Input, which runs first
-   (`kModulePriorityHighest`, `InputSystem.h:56`), records the active
-   state of every mapping context and starts tagging additions with the
-   session generation.
+   (`kModulePriorityHighest`, `InputSystem.h:56`), records the actions and
+   mapping contexts present and which contexts are active.
 3. The host's own `OnSessionBegin` starts its content: the player stages a
    scene, launches `Instantiate` as a task in a nursery it owns, and
    publishes when the task completes
@@ -564,9 +568,9 @@ module's shutdown at `ScriptingModule.cpp:426-450` is the model for both).
      `CreateRuntime()` ([P-2](#p-2-recreating-the-lua-state)). No global
      survives into the next session; bytecode stays in the compilation
      service caches, so the next session does not recompile.
-   - **Input**: removes every action and context tagged with the session
-     generation, restores the recorded active state of the rest, clears
-     pending deactivations and latched edges. This covers the starting
+   - **Input**: removes every action and context that was not present at
+     begin, restores the recorded active state of the rest, clears pending
+     deactivations and latched edges. This covers the starting
      contexts, any context a script added, and any change the host made
      during the session: everything added after begin is session-scoped
      by definition. A host that wants a context to outlive sessions adds

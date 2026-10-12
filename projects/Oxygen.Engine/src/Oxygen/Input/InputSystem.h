@@ -10,6 +10,7 @@
 #include <list>
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -75,6 +76,16 @@ public:
     observer_ptr<console::Console> console) noexcept -> void override;
   OXGN_NPUT_API auto ApplyConsoleCVars(
     observer_ptr<const console::Console> console) noexcept -> void override;
+
+  //! Records the actions and contexts present and which contexts are active.
+  OXGN_NPUT_NDAPI auto OnSessionBegin(
+    observer_ptr<IAsyncEngine> engine) noexcept -> bool override;
+  //! Removes every action and context added during the session, restores the
+  //! recorded activation of the rest, and drops pending deactivations and
+  //! latched fixed-step edges. A context meant to outlive sessions is added
+  //! before the session begins.
+  OXGN_NPUT_API auto OnSessionEnd(observer_ptr<IAsyncEngine> engine) noexcept
+    -> void override;
 
   // Frame phase handlers
   OXGN_NPUT_API auto OnFrameStart(observer_ptr<FrameContext> context)
@@ -142,6 +153,14 @@ private:
   // that frame's edge window so the Canceled edges are visible.
   std::vector<std::shared_ptr<input::InputMappingContext>>
     pending_deactivations_;
+
+  // What existed when the play session began; empty without a session.
+  struct SessionBaseline {
+    std::vector<std::shared_ptr<input::Action>> actions;
+    std::vector<std::pair<std::shared_ptr<input::InputMappingContext>, bool>>
+      contexts;
+  };
+  std::optional<SessionBaseline> session_baseline_;
 
   // Frame processing
   co::ReaderContext<platform::InputEvent> input_reader_;

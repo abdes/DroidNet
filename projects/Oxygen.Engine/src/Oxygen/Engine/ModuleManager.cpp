@@ -34,17 +34,35 @@
 #include <algorithm>
 #include <array>
 #include <concepts>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <functional>
+#include <iterator>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <ranges>
+#include <string_view>
 #include <type_traits>
 #include <utility>
+#include <vector>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Engine/ModuleEvent.h>
 #include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Coroutine.h>
 using oxygen::observer_ptr;
 using oxygen::core::ExecutionModel;
 using oxygen::core::kPhaseRegistry;
@@ -63,14 +81,21 @@ struct ReservedPriorityBinding {
 
 constexpr std::array kReservedPriorityBindings {
   ReservedPriorityBinding {
-    oxygen::engine::kImGuiModulePriority, "ImGuiModule" },
+    .priority = oxygen::engine::kImGuiModulePriority,
+    .module_name = "ImGuiModule",
+  },
   ReservedPriorityBinding {
-    oxygen::engine::kScriptingModulePriority, "ScriptingModule" },
+    .priority = oxygen::engine::kScriptingModulePriority,
+    .module_name = "ScriptingModule",
+  },
   ReservedPriorityBinding {
-    oxygen::engine::kRuntimeMotionProducerModulePriority,
-    "RuntimeMotionProducerModule" },
-  ReservedPriorityBinding { oxygen::engine::kSceneObserverSyncModulePriority,
-    "SceneObserverSyncModule" },
+    .priority = oxygen::engine::kRuntimeMotionProducerModulePriority,
+    .module_name = "RuntimeMotionProducerModule",
+  },
+  ReservedPriorityBinding {
+    .priority = oxygen::engine::kSceneObserverSyncModulePriority,
+    .module_name = "SceneObserverSyncModule",
+  },
 };
 
 auto FindReservedOwnerByPriority(const std::uint32_t priority)
@@ -118,8 +143,8 @@ ModuleManager::Subscription::Subscription(Subscription&& other) noexcept
   other.alive_token_.reset();
 }
 
-ModuleManager::Subscription& ModuleManager::Subscription::operator=(
-  Subscription&& other) noexcept
+auto ModuleManager::Subscription::operator=(Subscription&& other) noexcept
+  -> ModuleManager::Subscription&
 {
   if (this != &other) {
     Cancel();
@@ -156,7 +181,7 @@ auto ModuleManager::SubscribeModuleAttached(
   ModuleAttachedCallback cb, const bool replay_existing) -> Subscription
 {
   // Insert the subscriber and obtain id under lock.
-  uint64_t id;
+  uint64_t id { 0 };
   {
     std::scoped_lock lock(subscribers_mutex_);
     id = next_subscriber_id_++;
@@ -189,8 +214,11 @@ auto ModuleManager::SubscribeModuleAttached(
       if (!up) {
         continue;
       }
-      ModuleEvent ev { up->GetTypeId(), std::string { up->GetName() },
-        observer_ptr<EngineModule> { up.get() } };
+      ModuleEvent ev {
+        .type_id = up->GetTypeId(),
+        .name = std::string { up->GetName() },
+        .module = observer_ptr<EngineModule> { up.get() },
+      };
 
       try {
         callback_copy(ev);
@@ -273,7 +301,7 @@ auto ModuleManager::RegisterModule(
     = priority == oxygen::engine::kRendererModulePriority.get();
 
   if (is_renderer_module) {
-    if (std::ranges::any_of(modules_, [](const auto& existing) {
+    if (std::ranges::any_of(modules_, [](const auto& existing) -> auto {
           return existing != nullptr
             && existing->GetPriority().get()
             == oxygen::engine::kRendererModulePriority.get();
@@ -326,9 +354,11 @@ auto ModuleManager::RegisterModule(
   // lightweight ModuleEvent and call subscribers without holding the
   // subscribers_mutex_ to avoid deadlocks or reentrancy issues.
   {
-    ModuleEvent ev { modules_.back()->GetTypeId(),
-      std::string { modules_.back()->GetName() },
-      observer_ptr<EngineModule> { modules_.back().get() } };
+    ModuleEvent ev {
+      .type_id = modules_.back()->GetTypeId(),
+      .name = std::string { modules_.back()->GetName() },
+      .module = observer_ptr<EngineModule> { modules_.back().get() },
+    };
 
     // Snapshot callbacks under lock
     std::vector<ModuleAttachedCallback> cbs;
@@ -358,7 +388,7 @@ auto ModuleManager::RegisterModule(
 auto ModuleManager::UnregisterModule(std::string_view name) noexcept -> void
 {
   auto it = std::ranges::find_if(
-    modules_, [&](const auto& e) { return e->GetName() == name; });
+    modules_, [&](const auto& e) -> auto { return e->GetName() == name; });
   if (it == modules_.end()) {
     return;
   }
@@ -400,7 +430,7 @@ auto ModuleManager::GetModule(std::string_view name) const noexcept
   -> std::optional<std::reference_wrapper<EngineModule>>
 {
   auto it = std::ranges::find_if(
-    modules_, [&](const auto& e) { return e->GetName() == name; });
+    modules_, [&](const auto& e) -> auto { return e->GetName() == name; });
   if (it == modules_.end()) {
     return std::nullopt;
   }
@@ -426,8 +456,8 @@ auto ModuleManager::ApplyConsoleCVars(
     ordered_modules.push_back(module.get());
   }
 
-  std::ranges::stable_sort(
-    ordered_modules, [](const EngineModule* lhs, const EngineModule* rhs) {
+  std::ranges::stable_sort(ordered_modules,
+    [](const EngineModule* lhs, const EngineModule* rhs) -> bool {
       return lhs->GetPriority().get() < rhs->GetPriority().get();
     });
 
@@ -476,17 +506,69 @@ auto ModuleManager::RebuildPhaseCache() noexcept -> void
   for (auto p = PhaseIndex::begin(); p < PhaseIndex::end(); ++p) {
     auto& bucket = phase_cache_[p];
     std::ranges::stable_sort(
-      bucket, [](const EngineModule* a, const EngineModule* b) {
+      bucket, [](const EngineModule* a, const EngineModule* b) -> bool {
         return a->GetPriority().get() < b->GetPriority().get();
       });
+  }
+}
+
+auto ModuleManager::ModulesByPriority() const -> std::vector<EngineModule*>
+{
+  auto ordered = std::vector<EngineModule*> {};
+  ordered.reserve(modules_.size());
+  for (const auto& module : modules_) {
+    ordered.push_back(module.get());
+  }
+  std::ranges::stable_sort(
+    ordered, [](const EngineModule* a, const EngineModule* b) -> bool {
+      return a->GetPriority().get() < b->GetPriority().get();
+    });
+  return ordered;
+}
+
+auto ModuleManager::BeginSession(
+  const observer_ptr<IAsyncEngine> engine) noexcept -> bool
+{
+  try {
+    const auto ordered = ModulesByPriority();
+    for (auto it = ordered.begin(); it != ordered.end(); ++it) {
+      if ((*it)->OnSessionBegin(engine)) {
+        continue;
+      }
+      LOG_F(WARNING, "Module '{}' refused the play session", (*it)->GetName());
+      for (auto began = std::make_reverse_iterator(it); began != ordered.rend();
+        ++began) {
+        (*began)->OnSessionEnd(engine);
+      }
+      return false;
+    }
+    return true;
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "Play session could not begin: {}", ex.what());
+  }
+  return false;
+}
+
+auto ModuleManager::EndSession(const observer_ptr<IAsyncEngine> engine) noexcept
+  -> void
+{
+  try {
+    const auto ordered = ModulesByPriority();
+    for (auto* module : std::views::reverse(ordered)) {
+      module->OnSessionEnd(engine);
+    }
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "Play session end failed: {}", ex.what());
   }
 }
 
 auto ModuleManager::FindModuleByTypeId(TypeId type_id) const noexcept
   -> EngineModule*
 {
-  auto it = std::ranges::find_if(modules_,
-    [type_id](const auto& module) { return module->GetTypeId() == type_id; });
+  auto it
+    = std::ranges::find_if(modules_, [type_id](const auto& module) -> auto {
+        return module->GetTypeId() == type_id;
+      });
   return (it != modules_.end()) ? it->get() : nullptr;
 }
 
@@ -500,39 +582,41 @@ auto ModuleManager::HandleModuleErrors(
 
   // Normalize module errors: find modules by key or type_id and set proper
   // source_key
-  auto normalized_errors = errors | std::views::filter([](const auto& error) {
-    return error.kind == FrameErrorKind::kModuleFailure;
-  }) | std::views::transform([this](auto error) { // Copy error to modify it
-    EngineModule* module;
+  auto normalized_errors = errors
+    | std::views::filter([](const auto& error) -> auto {
+        return error.kind == FrameErrorKind::kModuleFailure;
+      })
+    | std::views::transform(
+      [this](auto error) -> auto { // Copy error to modify it
+        EngineModule* module { nullptr };
 
-    if (error.source_key.has_value()) {
-      // Has key - find module by name
-      auto module_opt = GetModule(error.source_key.value());
-      module = module_opt.has_value()
-        ? const_cast<EngineModule*>(&module_opt.value().get())
-        : nullptr;
-    } else {
-      // No key - try to find by type_id and normalize as bad module
-      module = FindModuleByTypeId(error.source_type_id);
-      if (module) {
-        // Normalize bad module with special key
-        error.source_key = "__bad_module__";
-        error.message = fmt::format("CRITICAL: Module '{}' reported error "
-                                    "without proper attribution: {}",
-          module->GetName(), error.message);
-      }
-    }
+        if (error.source_key.has_value()) {
+          // Has key - find module by name
+          auto module_opt = GetModule(*error.source_key);
+          module = module_opt.has_value() ? &module_opt->get() : nullptr;
+        } else {
+          // No key - try to find by type_id and normalize as bad module
+          module = FindModuleByTypeId(error.source_type_id);
+          if (module) {
+            // Normalize bad module with special key
+            error.source_key = "__bad_module__";
+            error.message = fmt::format("CRITICAL: Module '{}' reported error "
+                                        "without proper attribution: {}",
+              module->GetName(), error.message);
+          }
+        }
 
-    return std::make_pair(error, module);
-  }) | std::views::filter([](const auto& pair) {
-    return pair.second != nullptr; // Only process module errors
-  }) | std::ranges::to<std::vector>();
+        return std::make_pair(error, module);
+      })
+    | std::views::filter([](const auto& pair) -> auto {
+        return pair.second != nullptr; // Only process module errors
+      })
+    | std::ranges::to<std::vector>();
 
   // Handle bad module errors: clear original and report as critical
-  std::ranges::for_each(normalized_errors, [this, ctx](const auto& pair) {
+  std::ranges::for_each(normalized_errors, [ctx](const auto& pair) -> auto {
     const auto& [error, module] = pair;
-    if (error.source_key.has_value()
-      && error.source_key.value() == "__bad_module__") {
+    if (error.source_key.has_value() && *error.source_key == "__bad_module__") {
       // Clear the original badly reported error
       ctx->ClearErrorsFromSource(error.source_type_id);
       // Report normalized critical error
@@ -544,25 +628,25 @@ auto ModuleManager::HandleModuleErrors(
   // Single pipeline: collect non-critical modules to remove (exclude bad
   // modules)
   auto modules_to_remove = normalized_errors
-    | std::views::filter([](const auto& pair) {
+    | std::views::filter([](const auto& pair) -> auto {
         const auto& [error, module] = pair;
+        // Bad modules are reported, never removed.
         return error.source_key.has_value()
-          && error.source_key.value()
-          != "__bad_module__" // Don't remove bad modules
-          && !module->IsCritical();
+          && *error.source_key != "__bad_module__" && !module->IsCritical();
       })
     | std::ranges::to<std::vector>();
 
   // Remove non-critical modules and clear their errors
-  std::ranges::for_each(modules_to_remove, [this, ctx](const auto& pair) {
-    const auto& [error, module] = pair;
-    const auto& module_name = error.source_key.value();
-    const auto module_type_id = error.source_type_id;
-    UnregisterModule(module_name);
+  std::ranges::for_each(
+    modules_to_remove, [this, ctx](const auto& pair) -> auto {
+      const auto& [error, module] = pair;
+      const auto& module_name = *error.source_key;
+      const auto module_type_id = error.source_type_id;
+      UnregisterModule(module_name);
 
-    // Clear only errors from this specific module (by TypeId AND source_key)
-    ctx->ClearErrorsFromSource(module_type_id, error.source_key);
-  });
+      // Clear only errors from this specific module (by TypeId AND source_key)
+      ctx->ClearErrorsFromSource(module_type_id, error.source_key);
+    });
 }
 
 // Lightweight RunHandler: accept a callable that either returns co::Co<> or is
@@ -635,15 +719,16 @@ auto ExecuteSynchronousPhase(const std::vector<EngineModule*>& list,
     switch (phase) { // NOLINT(clang-diagnostic-switch-enum)
     case PhaseId::kFrameStart:
       co_await RunHandlerImpl(
-        [](EngineModule& mm, observer_ptr<FrameContext> c) {
+        [](EngineModule& mm, observer_ptr<FrameContext> c) -> void {
           mm.OnFrameStart(c);
         },
         m, ctx, std::ref(*m), std::ref(ctx));
       break;
     case PhaseId::kSnapshot:
       co_await RunHandlerImpl(
-        [](
-          EngineModule& mm, observer_ptr<FrameContext> c) { mm.OnSnapshot(c); },
+        [](EngineModule& mm, observer_ptr<FrameContext> c) -> void {
+          mm.OnSnapshot(c);
+        },
         m, ctx, std::ref(*m), std::ref(ctx));
       break;
     case PhaseId::kPublishViews:
@@ -654,8 +739,9 @@ auto ExecuteSynchronousPhase(const std::vector<EngineModule*>& list,
       break;
     case PhaseId::kFrameEnd:
       co_await RunHandlerImpl(
-        [](
-          EngineModule& mm, observer_ptr<FrameContext> c) { mm.OnFrameEnd(c); },
+        [](EngineModule& mm, observer_ptr<FrameContext> c) -> void {
+          mm.OnFrameEnd(c);
+        },
         m, ctx, std::ref(*m), std::ref(ctx));
       break;
     default:
@@ -810,8 +896,14 @@ auto ModuleManager::ExecutePhase(
   const PhaseId phase, observer_ptr<FrameContext> ctx) -> co::Co<>
 {
   // Copy the module list for this phase so coroutine lambdas can safely capture
-  // module pointers without referencing a temporary container.
-  const auto list = phase_cache_[phase];
+  // module pointers without referencing a temporary container. While the game
+  // is paused, gameplay runs only for modules that tick when paused.
+  auto list = phase_cache_[phase];
+  if (phase == PhaseId::kGameplay && ctx->IsGamePaused()) {
+    std::erase_if(list, [](const EngineModule* module) -> bool {
+      return !module->TicksWhenPaused();
+    });
+  }
 
   // First, switch on the phase id so the compiler can check for exhaustiveness
   // of handled phases. For each phase, determine the phase descriptor and

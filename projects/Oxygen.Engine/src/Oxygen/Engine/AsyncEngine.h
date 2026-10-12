@@ -6,8 +6,10 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string_view>
 
@@ -62,7 +64,7 @@ class AsyncEngine final : public co::LiveObject,
 public:
   OXGN_NGIN_API AsyncEngine(std::shared_ptr<Platform> platform,
     std::weak_ptr<Graphics> graphics, EngineConfig config = {},
-    console::ConsoleStartupPlan startup_plan = {}) noexcept;
+    const console::ConsoleStartupPlan& startup_plan = {}) noexcept;
 
   OXGN_NGIN_API ~AsyncEngine() override;
 
@@ -81,6 +83,14 @@ public:
   }
 
   OXGN_NGIN_API auto Stop() -> void override;
+
+  OXGN_NGIN_API auto Pause() -> void override;
+  OXGN_NGIN_API auto Resume() -> void override;
+  OXGN_NGIN_NDAPI auto IsPaused() const -> bool override;
+  OXGN_NGIN_API auto Step(std::uint32_t frames) -> void override;
+  OXGN_NGIN_NDAPI auto BeginSession() -> bool override;
+  OXGN_NGIN_API auto EndSession() -> void override;
+  OXGN_NGIN_NDAPI auto GetSessionState() const -> SessionState override;
 
   //! Completion event that becomes triggered after the simulator finishes
   //! running the requested number of frames. Can be awaited or polled.
@@ -262,7 +272,8 @@ private:
   // Poll futures from async jobs (Assets, PSOs, BLAS, LightMaps)
   auto PhaseAsyncPoll(observer_ptr<engine::FrameContext> context) -> void;
 
-  auto PhaseBudgetAdapt(observer_ptr<engine::FrameContext> context) -> void;
+  auto PhaseBudgetAdapt(observer_ptr<engine::FrameContext> context) const
+    -> void;
 
   auto PhaseFrameEnd(observer_ptr<engine::FrameContext> context) -> co::Co<>;
 
@@ -280,6 +291,11 @@ private:
   auto ApplyAllConsoleCVars() -> void;
   auto ApplyConsoleStateAtFrameStart(observer_ptr<engine::FrameContext> context)
     -> void;
+  auto RegisterRunStateConsoleCommands() -> void;
+
+  //! Applies pause, step and session requests; true when this frame is a
+  //! frame step.
+  auto ApplyRunStateRequests() -> bool;
 
   // auto SimulateWork(std::chrono::microseconds cost) const
   //   -> co::Co<>; // yields via thread pool
@@ -342,6 +358,24 @@ private:
 
   // Signals completion when FrameLoop exits.
   co::Event completed_;
+
+  // Pause, step and session requests, written from any thread and taken at
+  // frame start.
+  struct RunStateRequests {
+    std::optional<bool> pause;
+    std::uint32_t step_frames { 0U };
+    bool cancel_steps { false };
+    bool begin_session { false };
+    bool end_session { false };
+  };
+  mutable std::mutex run_state_mutex_;
+  RunStateRequests run_state_requests_;
+
+  // Applied run state. The atomics are read from any thread.
+  std::atomic_bool paused_ { false };
+  std::atomic<SessionState> session_state_ { SessionState::kNone };
+  bool session_active_ { false };
+  std::uint32_t steps_remaining_ { 0U };
 };
 
 } // namespace oxygen

@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -76,6 +77,31 @@ public:
 
   [[nodiscard]] virtual auto IsRunning() const -> bool = 0;
   virtual auto Stop() -> void = 0;
+
+  //! Applied play-session state.
+  enum class SessionState : std::uint8_t {
+    kNone, //!< No session.
+    kRunning, //!< A session runs and the engine is not paused.
+    kPaused, //!< A session runs and the engine is paused.
+  };
+
+  // Pause, frame step and play sessions. Every call is a request, safe from
+  // any thread; the engine applies requests once per frame, at frame start,
+  // before any module's OnFrameStart. Queries report applied state.
+
+  //! Stop simulation from the next frame on; rendering continues.
+  virtual auto Pause() -> void = 0;
+  //! Resume simulation; cancels frame steps still pending.
+  virtual auto Resume() -> void = 0;
+  [[nodiscard]] virtual auto IsPaused() const -> bool = 0;
+  //! Pause if running, simulate `frames` frames, then stay paused.
+  virtual auto Step(std::uint32_t frames) -> void = 0;
+
+  //! Request a play session; false when one runs or is already requested.
+  virtual auto BeginSession() -> bool = 0;
+  //! End the running session at the next frame start; no-op without one.
+  virtual auto EndSession() -> void = 0;
+  [[nodiscard]] virtual auto GetSessionState() const -> SessionState = 0;
 
   using ModuleSubscription = ::oxygen::engine::ModuleManager::Subscription;
   virtual auto SubscribeModuleAttached(

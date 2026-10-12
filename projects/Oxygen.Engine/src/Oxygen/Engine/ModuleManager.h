@@ -92,6 +92,18 @@ public:
   OXGN_NGIN_API auto ExecuteParallelTasks(observer_ptr<FrameContext> ctx,
     const UnifiedSnapshot& snapshot) -> co::Co<>;
 
+  //! Calls `OnSessionBegin` on every module in priority order.
+  /*!
+   When a module refuses, the modules that already began get `OnSessionEnd`
+   in reverse order and the call returns false.
+  */
+  OXGN_NGIN_NDAPI auto BeginSession(observer_ptr<IAsyncEngine> engine) noexcept
+    -> bool;
+
+  //! Calls `OnSessionEnd` on every module in reverse priority order.
+  OXGN_NGIN_API auto EndSession(observer_ptr<IAsyncEngine> engine) noexcept
+    -> void;
+
   OXGN_NGIN_API auto ApplyConsoleCVars(
     observer_ptr<const console::Console> console) noexcept -> void;
 
@@ -139,6 +151,9 @@ private:
   // Precomputed non-owning pointers for each phase to speed up per-frame
   // dispatch and to avoid repeated bitmask checks.
   EnumIndexedArray<core::PhaseId, std::vector<EngineModule*>> phase_cache_ {};
+
+  // Every module, in ascending priority; equal priorities keep attach order.
+  [[nodiscard]] auto ModulesByPriority() const -> std::vector<EngineModule*>;
 
   // Rebuild the phase cache. Called after registration changes.
   auto RebuildPhaseCache() noexcept -> void;

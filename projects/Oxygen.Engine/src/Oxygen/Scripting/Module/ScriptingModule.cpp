@@ -9,6 +9,7 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <limits>
 #include <memory>
@@ -384,6 +385,15 @@ auto ScriptingModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
       (void)source_reload_->OnSourceChanged(observed_scene_.lock(), file);
     });
 
+  if (!CreateRuntime()) {
+    OnShutdown();
+    return false;
+  }
+  return true;
+}
+
+auto ScriptingModule::CreateRuntime() -> bool
+{
   lua_state_ = luaL_newstate();
   if (lua_state_ == nullptr) {
     return false;
@@ -391,37 +401,24 @@ auto ScriptingModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
   bindings::SetActiveEngine(lua_state_, engine_);
 
   if (binding_packs_.empty() && !RegisterDefaultBindingPacks()) {
-    OnShutdown();
     return false;
   }
 
   const auto sandbox_result = InitializeSandbox();
   if (!sandbox_result.ok) {
     DLOG_F(ERROR, "scripting bootstrap failed: {}", sandbox_result.message);
-    OnShutdown();
     return false;
   }
-
   return true;
 }
 
-auto ScriptingModule::OnShutdown() noexcept -> void
+auto ScriptingModule::DestroyRuntime() noexcept -> void
 {
   if (auto observed_scene = observed_scene_.lock(); observed_scene != nullptr) {
     (void)observed_scene->UnregisterObserver(
       observer_ptr<scene::ISceneObserver> { this });
   }
   observed_scene_.reset();
-
-  if (attached_) {
-    DCHECK_NOTNULL_F(engine_);
-    engine_->SetScriptSourceChangedHandler({});
-    source_reload_.reset();
-    (void)engine_->GetScriptCompilationService().UnregisterCompiler(
-      data::pak::scripting::ScriptLanguage::kLuau);
-    attached_ = false;
-    engine_ = nullptr;
-  }
 
   if (lua_state_ != nullptr) {
     bindings::SetActiveFrameContext(lua_state_, {});
@@ -447,7 +444,40 @@ auto ScriptingModule::OnShutdown() noexcept -> void
   slot_runtimes_.clear();
   active_frame_slots_.clear();
   active_slot_indices_.clear();
-  task_queue_.EndSession();
+  active_slots_sorted_ = true;
+  error_frames_.clear();
+  task_queue_.Drain();
+}
+
+auto ScriptingModule::OnSessionEnd(
+  [[maybe_unused]] observer_ptr<IAsyncEngine> engine) noexcept -> void
+{
+  // A session leaves no instance, global or pending task behind; diagnostic
+  // handlers, binding packs and the compilation caches survive.
+  DestroyRuntime();
+  try {
+    if (attached_ && !CreateRuntime()) {
+      LOG_F(ERROR, "scripting runtime could not be recreated after a session");
+    }
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "scripting runtime recreation failed: {}", ex.what());
+  }
+}
+
+auto ScriptingModule::OnShutdown() noexcept -> void
+{
+  // Instances end while the engine is still attached.
+  DestroyRuntime();
+
+  if (attached_) {
+    DCHECK_NOTNULL_F(engine_);
+    engine_->SetScriptSourceChangedHandler({});
+    source_reload_.reset();
+    (void)engine_->GetScriptCompilationService().UnregisterCompiler(
+      data::pak::scripting::ScriptLanguage::kLuau);
+    attached_ = false;
+    engine_ = nullptr;
+  }
   binding_packs_.clear();
 }
 

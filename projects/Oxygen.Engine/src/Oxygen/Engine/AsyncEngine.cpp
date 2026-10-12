@@ -5,24 +5,26 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <thread>
 #include <utility>
 #include <vector>
 
-#include <fmt/format.h>
-
 #include <Oxygen/Base/EnumIndexedArray.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Config/EngineConfig.h>
@@ -57,14 +59,25 @@ struct EngineTagFactory {
 };
 } // namespace oxygen::engine::internal
 
-using namespace std::chrono;
 using namespace std::chrono_literals;
+using std::chrono::duration_cast;
+using std::chrono::microseconds;
+using std::chrono::milliseconds;
+using std::chrono::nanoseconds;
 namespace t = oxygen::time;
 
 namespace oxygen {
 
 using core::PhaseId;
-using namespace oxygen::engine;
+using engine::EngineModule;
+using engine::FrameContext;
+using engine::InputSystem;
+using engine::ModuleAttachedCallback;
+using engine::ModuleManager;
+using engine::ModuleTimingData;
+using engine::TimeManager;
+using engine::UnifiedSnapshot;
+using engine::internal::EngineTagFactory;
 
 // For convenience in timing configuration access
 using TimingConfig = TimingConfig;
@@ -97,36 +110,44 @@ namespace {
     };
   }
 
-  struct PhaseTimer {
+  //! Records how long a phase took when it goes out of scope.
+  class PhaseTimer {
+  public:
     using StageTimings
       = EnumIndexedArray<core::PhaseId, std::chrono::microseconds>;
 
     PhaseTimer(StageTimings& stage_timings, core::PhaseId phase,
       const time::PhysicalClock& clock)
-      : stage_timings_(stage_timings)
+      : stage_timings_(&stage_timings)
       , phase_(phase)
-      , clock_(clock)
+      , clock_(&clock)
       , start_(clock.Now())
     {
     }
 
     ~PhaseTimer()
     {
-      const auto duration
-        = duration_cast<microseconds>(clock_.Since(start_).get());
-      stage_timings_.at(phase_) = duration;
+      (*stage_timings_)[phase_]
+        = duration_cast<microseconds>(clock_->Since(start_).get());
     }
 
-    StageTimings& stage_timings_;
+    OXYGEN_MAKE_NON_COPYABLE(PhaseTimer)
+    OXYGEN_MAKE_NON_MOVABLE(PhaseTimer)
+
+  private:
+    observer_ptr<StageTimings> stage_timings_;
     core::PhaseId phase_;
-    const time::PhysicalClock& clock_;
+    observer_ptr<const time::PhysicalClock> clock_;
     time::PhysicalTime start_;
   };
 } // namespace
 
+// The engine cannot run without its services and console; a failure while
+// building them leaves nothing to recover, so it terminates.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
   std::weak_ptr<Graphics> graphics, EngineConfig config,
-  console::ConsoleStartupPlan startup_plan) noexcept
+  const console::ConsoleStartupPlan& startup_plan) noexcept
   : config_(std::move(config))
   , platform_(std::move(platform))
   , gfx_weak_(std::move(graphics))
@@ -179,7 +200,7 @@ auto AsyncEngine::Run() -> void
   CHECK_NOTNULL_F(
     nursery_, "Nursery must be opened via ActivateAsync before Run");
 
-  nursery_->Start([this]() -> co::Co<> {
+  nursery_->Start([this] -> co::Co<> {
     // Ensure AssetLoader is activated (its own nursery opened) before the
     // frame loop starts so other subsystems can rely on it.
     if (asset_loader_) {
@@ -216,7 +237,7 @@ auto AsyncEngine::Shutdown() -> co::Co<>
   // dangling scene after DemoShell clears ownership.
   {
     frame_context_.SetCurrentPhase(
-      PhaseId::kFrameStart, internal::EngineTagFactory::Get());
+      PhaseId::kFrameStart, EngineTagFactory::Get());
     frame_context_.SetScene(observer_ptr<scene::Scene> {});
   }
 
@@ -282,6 +303,107 @@ auto AsyncEngine::Shutdown() -> co::Co<>
 }
 
 auto AsyncEngine::Stop() -> void { shutdown_requested_ = true; }
+
+auto AsyncEngine::Pause() -> void
+{
+  std::scoped_lock lock(run_state_mutex_);
+  run_state_requests_.pause = true;
+}
+
+auto AsyncEngine::Resume() -> void
+{
+  std::scoped_lock lock(run_state_mutex_);
+  run_state_requests_.pause = false;
+  run_state_requests_.step_frames = 0U;
+  run_state_requests_.cancel_steps = true;
+}
+
+auto AsyncEngine::IsPaused() const -> bool { return paused_.load(); }
+
+auto AsyncEngine::Step(const std::uint32_t frames) -> void
+{
+  std::scoped_lock lock(run_state_mutex_);
+  run_state_requests_.pause = true;
+  run_state_requests_.step_frames += frames;
+}
+
+auto AsyncEngine::BeginSession() -> bool
+{
+  std::scoped_lock lock(run_state_mutex_);
+  if (session_state_.load() != SessionState::kNone
+    || run_state_requests_.begin_session) {
+    return false;
+  }
+  run_state_requests_.begin_session = true;
+  return true;
+}
+
+auto AsyncEngine::EndSession() -> void
+{
+  std::scoped_lock lock(run_state_mutex_);
+  // Ending before a requested session began withdraws the request.
+  run_state_requests_.begin_session = false;
+  run_state_requests_.end_session = true;
+}
+
+auto AsyncEngine::GetSessionState() const -> SessionState
+{
+  return session_state_.load();
+}
+
+auto AsyncEngine::ApplyRunStateRequests() -> bool
+{
+  RunStateRequests requests {};
+  {
+    std::scoped_lock lock(run_state_mutex_);
+    requests = std::exchange(run_state_requests_, {});
+  }
+  if (time_manager_ == nullptr) {
+    return false;
+  }
+  auto& clock = time_manager_->GetSimulationClock();
+  const auto self = observer_ptr<IAsyncEngine> { this };
+
+  // Session transitions come first, so a frame never mixes session states.
+  if (requests.end_session && session_active_) {
+    module_manager_->EndSession(self);
+    session_active_ = false;
+    steps_remaining_ = 0U;
+    clock.Reset();
+    LOG_F(INFO, "Play session ended (frame {})", frame_number_);
+  }
+  if (requests.begin_session && !session_active_) {
+    clock.Reset();
+    steps_remaining_ = 0U;
+    session_active_ = module_manager_->BeginSession(self);
+    LOG_F(INFO, "Play session {} (frame {})",
+      session_active_ ? "began" : "refused", frame_number_);
+  }
+
+  // The clock's pause flag changes only on a request, so code that pauses the
+  // clock directly keeps working.
+  if (requests.cancel_steps) {
+    steps_remaining_ = 0U;
+  }
+  if (requests.pause.has_value()) {
+    clock.SetPaused(*requests.pause);
+  }
+  steps_remaining_ += requests.step_frames;
+
+  const bool paused = clock.IsPaused();
+  const bool step_frame = paused && steps_remaining_ > 0U;
+  if (step_frame) {
+    --steps_remaining_;
+  }
+  paused_.store(paused);
+  if (!session_active_) {
+    session_state_.store(SessionState::kNone);
+  } else {
+    session_state_.store(
+      paused ? SessionState::kPaused : SessionState::kRunning);
+  }
+  return step_frame;
+}
 
 // Register a module (takes ownership). Modules are sorted by priority.
 auto AsyncEngine::RegisterModule(std::unique_ptr<EngineModule> module) noexcept
@@ -365,9 +487,7 @@ auto AsyncEngine::GetModuleByType(const TypeId type_id) const noexcept
 
 auto AsyncEngine::SetTargetFps(uint32_t fps) noexcept -> void
 {
-  if (fps > EngineConfig::kMaxTargetFps) {
-    fps = EngineConfig::kMaxTargetFps;
-  }
+  fps = (std::min)(fps, EngineConfig::kMaxTargetFps);
 
   const auto fps_text = std::to_string(fps);
   const auto result = console_.SetCVarFromText({
@@ -414,10 +534,8 @@ auto AsyncEngine::NextFrame() -> bool
   frame_slot_ = frame::Slot { static_cast<frame::Slot::UnderlyingType>(
     (frame_number_.get() - 1ULL) % frame::kFramesInFlight.get()) };
 
-  if (config_.frame_count > 0 && frame_number_.get() > config_.frame_count) {
-    return false; // Completed requested number of frames
-  }
-  return true;
+  // False once the requested number of frames has run.
+  return config_.frame_count == 0 || frame_number_.get() <= config_.frame_count;
 }
 
 auto AsyncEngine::FrameLoop() -> co::Co<>
@@ -594,7 +712,8 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
 
     // Yield control to thread pool before pacing so any residual
     // work doesn't skew the next frame start timestamp.
-    co_await platform_->Threads().Run([](co::ThreadPool::CancelToken) { });
+    co_await platform_->Threads().Run(
+      [](co::ThreadPool::CancelToken) -> void { });
 
     // Measure pacing separately
     const auto pacing_start = GetPhysicalClock().Now();
@@ -604,7 +723,7 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
     // platform/OS servicing are not starved by a hot loop.
     if (config_.target_fps > 0) {
       const auto period_ns = nanoseconds(
-        1'000'000'000ull / static_cast<uint64_t>(config_.target_fps));
+        1'000'000'000ULL / static_cast<uint64_t>(config_.target_fps));
 
       // Establish or advance the next deadline monotonically from the frame
       // start time to target exact start-to-start periods.
@@ -663,7 +782,7 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
       auto final_timing = context->GetFrameTiming();
       final_timing.stage_timings = working_stage_timings;
       final_timing.pacing_duration = pacing_duration;
-      context->SetFrameTiming(final_timing, internal::EngineTagFactory::Get());
+      context->SetFrameTiming(final_timing, EngineTagFactory::Get());
     }
   }
   co_return;
@@ -672,8 +791,7 @@ auto AsyncEngine::FrameLoop() -> co::Co<>
 auto AsyncEngine::PhaseFrameStart(observer_ptr<FrameContext> context)
   -> co::Co<>
 {
-  context->SetCurrentPhase(
-    PhaseId::kFrameStart, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kFrameStart, EngineTagFactory::Get());
   frame_start_ts_ = GetPhysicalClock().Now();
   if (asset_loader_) {
     asset_loader_->ProcessPendingReleases();
@@ -683,19 +801,20 @@ auto AsyncEngine::PhaseFrameStart(observer_ptr<FrameContext> context)
 
   // NOTE: Views are now persistent with stable IDs across frames
   // Modules register views once (RegisterView) and update them (UpdateView)
-  context->ClearPresentableFlags(internal::EngineTagFactory::Get());
-  context->SetFrameSequenceNumber(
-    frame_number_, internal::EngineTagFactory::Get());
-  context->SetFrameSlot(frame_slot_, internal::EngineTagFactory::Get());
-  context->SetFrameStartTime(
-    frame_start_ts_.get(), internal::EngineTagFactory::Get());
-  context->SetThreadPool(
-    &platform_->Threads(), internal::EngineTagFactory::Get());
-  context->SetGraphicsBackend(gfx_weak_, internal::EngineTagFactory::Get());
+  context->ClearPresentableFlags(EngineTagFactory::Get());
+  context->SetFrameSequenceNumber(frame_number_, EngineTagFactory::Get());
+  context->SetFrameSlot(frame_slot_, EngineTagFactory::Get());
+  context->SetFrameStartTime(frame_start_ts_.get(), EngineTagFactory::Get());
+  context->SetThreadPool(&platform_->Threads(), EngineTagFactory::Get());
+  context->SetGraphicsBackend(gfx_weak_, EngineTagFactory::Get());
+
+  // Pause, step and session requests apply before time integration, so a
+  // frame is entirely paused or entirely running.
+  const bool step_frame = ApplyRunStateRequests();
 
   // Update timing data for this frame via TimeManager
   if (time_manager_ != nullptr) {
-    time_manager_->BeginFrame(frame_start_ts_);
+    time_manager_->BeginFrame(frame_start_ts_, step_frame);
     // Populate ModuleTimingData for modules
     const auto& td = time_manager_->GetFrameTimingData();
     ModuleTimingData module_timing {};
@@ -706,8 +825,10 @@ auto AsyncEngine::PhaseFrameStart(observer_ptr<FrameContext> context)
     module_timing.interpolation_alpha
       = static_cast<float>(td.interpolation_alpha);
     module_timing.current_fps = static_cast<float>(td.current_fps);
-    context->SetModuleTimingData(
-      module_timing, internal::EngineTagFactory::Get());
+    const auto& clock = time_manager_->GetSimulationClock();
+    module_timing.is_paused = clock.IsPaused() && !step_frame;
+    module_timing.time_scale = static_cast<float>(clock.GetTimeScale());
+    context->SetModuleTimingData(module_timing, EngineTagFactory::Get());
   }
 
   // Apply runtime console-driven settings at a deterministic frame boundary.
@@ -770,8 +891,7 @@ auto AsyncEngine::RegisterEngineConsoleBindings() -> void
     .max_value = {},
   }, CVarRegistrationOptions {
     .initial = console::StampedCVarValue {
-      .value = int64_t { static_cast<int64_t>(
-        config_.scripting.hot_reload_poll_interval.count()) },
+      .value = int64_t { config_.scripting.hot_reload_poll_interval.count() },
       .origin = CVarValueOrigin::kAppDefault,
     },
   });
@@ -785,7 +905,7 @@ auto AsyncEngine::RegisterEngineConsoleBindings() -> void
     .max_value = static_cast<double>(EngineConfig::kMaxTargetFps),
   }, CVarRegistrationOptions {
     .initial = console::StampedCVarValue {
-      .value = int64_t { static_cast<int64_t>(config_.target_fps) },
+      .value = static_cast<int64_t>(config_.target_fps),
       .origin = CVarValueOrigin::kAppDefault,
     },
   });
@@ -830,6 +950,68 @@ auto AsyncEngine::RegisterEngineConsoleBindings() -> void
     .flags = CommandFlags::kNone,
     .handler = [this](const std::vector<std::string>&, const CommandContext&)
       -> ExecutionResult { return console_.LoadHistory(path_finder_); },
+  });
+
+  RegisterRunStateConsoleCommands();
+}
+
+auto AsyncEngine::RegisterRunStateConsoleCommands() -> void
+{
+  (void)console_.RegisterCommand(CommandDefinition {
+    .name = "ngin.pause",
+    .help = "Pause simulation from the next frame; rendering continues",
+    .flags = CommandFlags::kNone,
+    .handler = [this](const std::vector<std::string>&,
+                 const CommandContext&) -> ExecutionResult {
+      Pause();
+      return { .status = ExecutionStatus::kOk };
+    },
+  });
+
+  (void)console_.RegisterCommand(CommandDefinition {
+    .name = "ngin.resume",
+    .help = "Resume simulation and cancel pending frame steps",
+    .flags = CommandFlags::kNone,
+    .handler = [this](const std::vector<std::string>&,
+                 const CommandContext&) -> ExecutionResult {
+      Resume();
+      return { .status = ExecutionStatus::kOk };
+    },
+  });
+
+  (void)console_.RegisterCommand(CommandDefinition {
+    .name = "ngin.step",
+    .help = "Pause, then simulate [frames] frames (default 1)",
+    .flags = CommandFlags::kNone,
+    .handler = [this](const std::vector<std::string>& args,
+                 const CommandContext&) -> ExecutionResult {
+      std::uint32_t frames = 1U;
+      if (!args.empty()) {
+        const auto& text = args.front();
+        const auto* const end = std::to_address(text.end());
+        const auto parsed
+          = std::from_chars(std::to_address(text.begin()), end, frames);
+        if (parsed.ec != std::errc {} || parsed.ptr != end || frames == 0U) {
+          return {
+            .status = ExecutionStatus::kInvalidArguments,
+            .error = "ngin.step expects a positive frame count",
+          };
+        }
+      }
+      Step(frames);
+      return { .status = ExecutionStatus::kOk };
+    },
+  });
+
+  (void)console_.RegisterCommand(CommandDefinition {
+    .name = "ngin.session.end",
+    .help = "End the running play session at the next frame start",
+    .flags = CommandFlags::kNone,
+    .handler = [this](const std::vector<std::string>&,
+                 const CommandContext&) -> ExecutionResult {
+      EndSession();
+      return { .status = ExecutionStatus::kOk };
+    },
   });
 }
 
@@ -955,12 +1137,12 @@ auto AsyncEngine::ApplyConsoleStateAtFrameStart(
 
 auto AsyncEngine::PhaseInput(observer_ptr<FrameContext> context) -> co::Co<>
 {
-  context->SetCurrentPhase(PhaseId::kInput, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kInput, EngineTagFactory::Get());
 
   LOG_F(2, "[F{}][A] PhaseInput", frame_number_);
 
   // Engine core sets the current phase
-  context->SetCurrentPhase(PhaseId::kInput, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kInput, EngineTagFactory::Get());
 
   // Execute module input processing first
   co_await module_manager_->ExecutePhase(PhaseId::kInput, context);
@@ -977,14 +1159,13 @@ auto AsyncEngine::PhaseInput(observer_ptr<FrameContext> context) -> co::Co<>
     // Publish type-erased input snapshot directly as blob
     context->SetInputSnapshot(
       std::static_pointer_cast<const void>(std::move(snap)),
-      internal::EngineTagFactory::Get());
+      EngineTagFactory::Get());
   }
 }
 
 auto AsyncEngine::PhaseFixedSim(observer_ptr<FrameContext> context) -> co::Co<>
 {
-  context->SetCurrentPhase(
-    PhaseId::kFixedSimulation, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kFixedSimulation, EngineTagFactory::Get());
 
   LOG_F(2, "[F{}][A] PhaseFixedSim", frame_number_);
   // NOTE: This phase uses coroutines for cooperative parallelism within the
@@ -1003,11 +1184,10 @@ auto AsyncEngine::PhaseFixedSim(observer_ptr<FrameContext> context) -> co::Co<>
       ModuleTimingData module_timing = context->GetModuleTimingData();
       module_timing.fixed_delta_time = sim.GetFixedTimestep();
       module_timing.fixed_steps_this_frame = s + 1;
-      context->SetModuleTimingData(
-        module_timing, internal::EngineTagFactory::Get());
+      context->SetModuleTimingData(module_timing, EngineTagFactory::Get());
 
       context->SetCurrentPhase(
-        PhaseId::kFixedSimulation, internal::EngineTagFactory::Get());
+        PhaseId::kFixedSimulation, EngineTagFactory::Get());
       co_await module_manager_->ExecutePhase(
         PhaseId::kFixedSimulation, context);
     }
@@ -1016,8 +1196,7 @@ auto AsyncEngine::PhaseFixedSim(observer_ptr<FrameContext> context) -> co::Co<>
     module_timing.fixed_steps_this_frame = steps;
     module_timing.interpolation_alpha
       = static_cast<float>(timing.interpolation_alpha);
-    context->SetModuleTimingData(
-      module_timing, internal::EngineTagFactory::Get());
+    context->SetModuleTimingData(module_timing, EngineTagFactory::Get());
 
     LOG_F(2, "[F{}][A] PhaseFixedSim completed {} substeps, alpha={:.3f}",
       frame_number_, steps, module_timing.interpolation_alpha);
@@ -1029,14 +1208,12 @@ auto AsyncEngine::PhaseFixedSim(observer_ptr<FrameContext> context) -> co::Co<>
 
 auto AsyncEngine::PhaseGameplay(observer_ptr<FrameContext> context) -> co::Co<>
 {
-  context->SetCurrentPhase(
-    PhaseId::kGameplay, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kGameplay, EngineTagFactory::Get());
 
   LOG_F(2, "[F{}][A] PhaseGameplay", frame_number_);
 
   // Engine core sets the current phase
-  context->SetCurrentPhase(
-    PhaseId::kGameplay, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kGameplay, EngineTagFactory::Get());
 
   // Execute module gameplay logic first
   co_await module_manager_->ExecutePhase(PhaseId::kGameplay, context);
@@ -1046,13 +1223,13 @@ auto AsyncEngine::PhaseNetworkReconciliation(observer_ptr<FrameContext> context)
   -> co::Co<>
 {
   context->SetCurrentPhase(
-    PhaseId::kNetworkReconciliation, internal::EngineTagFactory::Get());
+    PhaseId::kNetworkReconciliation, EngineTagFactory::Get());
 
   LOG_F(2, "[F{}][A] PhaseNetworkReconciliation", frame_number_);
 
   // Engine core sets the current phase
   context->SetCurrentPhase(
-    PhaseId::kNetworkReconciliation, internal::EngineTagFactory::Get());
+    PhaseId::kNetworkReconciliation, EngineTagFactory::Get());
 
   // TODO: Implement network packet application & authoritative reconciliation
   // Apply received network packets to authoritative game state
@@ -1064,7 +1241,7 @@ auto AsyncEngine::PhaseRandomSeedManagement(observer_ptr<FrameContext> context)
   -> void
 {
   context->SetCurrentPhase(
-    PhaseId::kRandomSeedManagement, internal::EngineTagFactory::Get());
+    PhaseId::kRandomSeedManagement, EngineTagFactory::Get());
 
   LOG_F(2, "[F{}][A] PhaseRandomSeedManagement", frame_number_);
   // CRITICAL: This phase must execute BEFORE any systems that consume
@@ -1098,15 +1275,13 @@ auto AsyncEngine::PhaseRandomSeedManagement(observer_ptr<FrameContext> context)
 auto AsyncEngine::PhaseSceneMutation(observer_ptr<FrameContext> context)
   -> co::Co<>
 {
-  context->SetCurrentPhase(
-    PhaseId::kSceneMutation, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kSceneMutation, EngineTagFactory::Get());
 
   LOG_F(2, "[F{}][A] PhaseSceneMutation (B2: structural integrity barrier)",
     frame_number_);
 
   // Engine core sets the current phase
-  context->SetCurrentPhase(
-    PhaseId::kSceneMutation, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kSceneMutation, EngineTagFactory::Get());
 
   // Execute module scene mutations first
   co_await module_manager_->ExecutePhase(PhaseId::kSceneMutation, context);
@@ -1116,13 +1291,13 @@ auto AsyncEngine::PhaseTransforms(observer_ptr<FrameContext> context)
   -> co::Co<>
 {
   context->SetCurrentPhase(
-    PhaseId::kTransformPropagation, internal::EngineTagFactory::Get());
+    PhaseId::kTransformPropagation, EngineTagFactory::Get());
 
   LOG_F(2, "[F{}][A] PhaseTransforms", frame_number_);
 
   // Engine core sets the current phase
   context->SetCurrentPhase(
-    PhaseId::kTransformPropagation, internal::EngineTagFactory::Get());
+    PhaseId::kTransformPropagation, EngineTagFactory::Get());
 
   // Execute module transform propagation first
   co_await module_manager_->ExecutePhase(
@@ -1132,8 +1307,7 @@ auto AsyncEngine::PhaseTransforms(observer_ptr<FrameContext> context)
 auto AsyncEngine::PhasePublishViews(observer_ptr<FrameContext> context)
   -> co::Co<>
 {
-  context->SetCurrentPhase(
-    PhaseId::kPublishViews, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kPublishViews, EngineTagFactory::Get());
 
   LOG_F(2, "[F{}][A] PhasePublishViews", frame_number_);
 
@@ -1143,16 +1317,14 @@ auto AsyncEngine::PhasePublishViews(observer_ptr<FrameContext> context)
 auto AsyncEngine::PhaseSnapshot(observer_ptr<FrameContext> context)
   -> co::Co<const UnifiedSnapshot&>
 {
-  context->SetCurrentPhase(
-    PhaseId::kSnapshot, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kSnapshot, EngineTagFactory::Get());
 
   LOG_F(2, "[F{}][A] PhaseSnapshot (build immutable snapshot)", frame_number_);
   // Execute module snapshot handlers synchronously (main thread)
   co_await module_manager_->ExecutePhase(PhaseId::kSnapshot, context);
 
   // Engine consolidates contributions and publishes snapshots last
-  const auto& snapshot
-    = context->PublishSnapshots(internal::EngineTagFactory::Get());
+  const auto& snapshot = context->PublishSnapshots(EngineTagFactory::Get());
   LOG_F(2, "[F{}][A] Published snapshots v{}", frame_number_,
     snapshot.frameSnapshot.validation.snapshot_version);
 
@@ -1162,7 +1334,7 @@ auto AsyncEngine::PhaseSnapshot(observer_ptr<FrameContext> context)
 // void AsyncEngine::SetRenderGraphBuilder(observer_ptr<FrameContext> context)
 // {
 //   render_graph_builder_ = std::make_unique<RenderGraphBuilder>();
-//   auto tag = internal::EngineTagFactory::Get();
+//   auto tag = EngineTagFactory::Get();
 
 //   // Initialize the builder with the current frame context
 //   render_graph_builder_->BeginGraph(context);
@@ -1174,7 +1346,7 @@ auto AsyncEngine::PhaseSnapshot(observer_ptr<FrameContext> context)
 
 // void AsyncEngine::ClearRenderGraphBuilder(observer_ptr<FrameContext> context)
 // {
-//   auto tag = internal::EngineTagFactory::Get();
+//   auto tag = EngineTagFactory::Get();
 //   context->SetRenderGraphBuilder(
 //     observer_ptr<RenderGraphBuilder> {}, tag);
 //   render_graph_builder_.reset();
@@ -1182,8 +1354,7 @@ auto AsyncEngine::PhaseSnapshot(observer_ptr<FrameContext> context)
 
 auto AsyncEngine::PhaseGuiUpdate(observer_ptr<FrameContext> context) -> co::Co<>
 {
-  context->SetCurrentPhase(
-    PhaseId::kGuiUpdate, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kGuiUpdate, EngineTagFactory::Get());
 
   LOG_F(2,
     "[F{}][A] PhaseGuiUpdate - UI systems and rendering artifact generation",
@@ -1197,8 +1368,7 @@ auto AsyncEngine::PhaseGuiUpdate(observer_ptr<FrameContext> context) -> co::Co<>
 // command recording).
 auto AsyncEngine::PhasePreRender(observer_ptr<FrameContext> context) -> co::Co<>
 {
-  context->SetCurrentPhase(
-    PhaseId::kPreRender, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kPreRender, EngineTagFactory::Get());
 
   LOG_F(2, "[F{}][A] PhasePreRender - prepare rendering data", frame_number_);
 
@@ -1208,7 +1378,7 @@ auto AsyncEngine::PhasePreRender(observer_ptr<FrameContext> context) -> co::Co<>
 // Render phase: modules record commands and perform per-view rendering.
 auto AsyncEngine::PhaseRender(observer_ptr<FrameContext> context) -> co::Co<>
 {
-  context->SetCurrentPhase(PhaseId::kRender, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kRender, EngineTagFactory::Get());
 
   LOG_F(2, "[F{}][A] PhaseRender - {} surfaces (record+submit phase)",
     frame_number_, context->GetSurfaces().size());
@@ -1222,8 +1392,7 @@ auto AsyncEngine::PhaseRender(observer_ptr<FrameContext> context) -> co::Co<>
 auto AsyncEngine::PhaseCompositing(observer_ptr<FrameContext> context)
   -> co::Co<>
 {
-  context->SetCurrentPhase(
-    PhaseId::kCompositing, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kCompositing, EngineTagFactory::Get());
 
   LOG_F(2, "[F{}][A] PhaseCompositing", frame_number_);
 
@@ -1233,8 +1402,7 @@ auto AsyncEngine::PhaseCompositing(observer_ptr<FrameContext> context)
 
 auto AsyncEngine::PhasePresent(observer_ptr<FrameContext> context) -> void
 {
-  context->SetCurrentPhase(
-    PhaseId::kPresent, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kPresent, EngineTagFactory::Get());
 
   // If modules marked surfaces as presentable during rendering, use those
   // flags to determine which surfaces to present. This allows modules to
@@ -1261,14 +1429,14 @@ auto AsyncEngine::PhasePresent(observer_ptr<FrameContext> context) -> void
 auto AsyncEngine::PhaseAsyncPoll(observer_ptr<FrameContext> context) -> void
 {
   // Engine core sets the current phase for async work
-  context->SetCurrentPhase(
-    PhaseId::kAsyncPoll, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kAsyncPoll, EngineTagFactory::Get());
 
   // Execute module async work (fire and forget style for now)
   auto async_work = module_manager_->ExecutePhase(PhaseId::kAsyncPoll, context);
 }
 
-auto AsyncEngine::PhaseBudgetAdapt(observer_ptr<FrameContext> context) -> void
+auto AsyncEngine::PhaseBudgetAdapt(observer_ptr<FrameContext> context) const
+  -> void
 {
   // Set default budget stats based on target FPS
   FrameContext::BudgetStats budget;
@@ -1283,12 +1451,14 @@ auto AsyncEngine::PhaseBudgetAdapt(observer_ptr<FrameContext> context) -> void
   }
 
   // DEBUG: Force non-zero values
-  if (budget.cpu_budget.count() == 0)
+  if (budget.cpu_budget.count() == 0) {
     budget.cpu_budget = milliseconds(16);
-  if (budget.gpu_budget.count() == 0)
+  }
+  if (budget.gpu_budget.count() == 0) {
     budget.gpu_budget = milliseconds(16);
+  }
 
-  context->SetBudgetStats(budget, internal::EngineTagFactory::Get());
+  context->SetBudgetStats(budget, EngineTagFactory::Get());
 
   // TODO: Implement adaptive budget management
   // Monitor CPU frame time, GPU idle %, and queue depths
@@ -1300,8 +1470,7 @@ auto AsyncEngine::PhaseBudgetAdapt(observer_ptr<FrameContext> context) -> void
 
 auto AsyncEngine::PhaseFrameEnd(observer_ptr<FrameContext> context) -> co::Co<>
 {
-  context->SetCurrentPhase(
-    PhaseId::kFrameEnd, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kFrameEnd, EngineTagFactory::Get());
 
   // Execute module frame end work first
   co_await module_manager_->ExecutePhase(PhaseId::kFrameEnd, context);
@@ -1331,7 +1500,7 @@ auto AsyncEngine::PhaseFrameEnd(observer_ptr<FrameContext> context) -> co::Co<>
     timing.frame_duration = microseconds(1);
   }
 
-  context->SetFrameTiming(timing, internal::EngineTagFactory::Get());
+  context->SetFrameTiming(timing, EngineTagFactory::Get());
 
   LOG_F(1, "Frame {} end | total={}us", frame_number_, total.count());
   // Let the platform finalize frame-level deferred operations (e.g. native
@@ -1349,10 +1518,9 @@ auto AsyncEngine::PhaseFrameEnd(observer_ptr<FrameContext> context) -> co::Co<>
 }
 
 auto AsyncEngine::ParallelTasks(observer_ptr<FrameContext> context,
-  const UnifiedSnapshot& snapshot) -> co::Co<>
+  const UnifiedSnapshot& /*snapshot*/) -> co::Co<>
 {
-  context->SetCurrentPhase(
-    PhaseId::kParallelTasks, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kParallelTasks, EngineTagFactory::Get());
 
   // parallel_results_.clear();
   // parallel_results_.reserve(parallel_specs_.size());
@@ -1361,7 +1529,7 @@ auto AsyncEngine::ParallelTasks(observer_ptr<FrameContext> context,
   //   frame_index_, parallel_specs_.size());
 
   // // Engine core sets the current phase for parallel work
-  // auto tag = internal::EngineTagFactory::Get();
+  // auto tag = EngineTagFactory::Get();
   // context->SetCurrentPhase(PhaseId::kParallelWork, tag);
 
   // // Create vector of coroutines following the test pattern
@@ -1423,8 +1591,7 @@ auto AsyncEngine::ParallelTasks(observer_ptr<FrameContext> context,
 auto AsyncEngine::PhasePostParallel(observer_ptr<FrameContext> context)
   -> co::Co<>
 {
-  context->SetCurrentPhase(
-    PhaseId::kPostParallel, internal::EngineTagFactory::Get());
+  context->SetCurrentPhase(PhaseId::kPostParallel, EngineTagFactory::Get());
 
   LOG_F(2, "[F{}][A] PhasePostParallel (integrate Category B outputs)",
     frame_number_);
@@ -1446,7 +1613,7 @@ auto AsyncEngine::InitializeDetachedServices() -> void
       .path_finder = path_finder_,
     };
     asset_loader_ = std::make_unique<content::AssetLoader>(
-      internal::EngineTagFactory::Get(), asset_loader_cfg);
+      EngineTagFactory::Get(), asset_loader_cfg);
     LOG_F(INFO, "AssetLoader initialized");
 
     if (config_.scripting.enable_hot_reload) {

@@ -96,7 +96,8 @@ public:
     DrainPendingTasks();
   }
 
-  auto EndSession() -> void { DrainPendingTasks(); }
+  //! Runs nothing; drops every pending task.
+  auto Drain() -> void { DrainPendingTasks(); }
 
   auto Submit(Task task, ScriptingSessionId session_id) -> void
   {
@@ -237,6 +238,10 @@ public:
   OXGN_SCRP_NDAPI auto OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
     -> bool override;
   OXGN_SCRP_API auto OnShutdown() noexcept -> void override;
+  //! Ends every instance and replaces the Lua state, so no script global or
+  //! pending task outlives the session.
+  OXGN_SCRP_API auto OnSessionEnd(observer_ptr<IAsyncEngine> engine) noexcept
+    -> void override;
   OXGN_SCRP_API auto RegisterConsoleBindings(
     observer_ptr<console::Console> console) noexcept -> void override;
   OXGN_SCRP_API auto ApplyConsoleCVars(
@@ -353,6 +358,12 @@ private:
   };
 
   auto InitializeSandbox() -> ScriptExecutionResult;
+  //! Creates the Lua state, registers the binding packs and builds the
+  //! sandbox; false on failure.
+  auto CreateRuntime() -> bool;
+  //! Ends every instance, then closes the Lua state and forgets all
+  //! per-state data and the observed scene.
+  auto DestroyRuntime() noexcept -> void;
   auto InvokePhaseHook(std::string_view hook_name,
     observer_ptr<engine::FrameContext> context) -> ScriptExecutionResult;
   auto RunInstances(

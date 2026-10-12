@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <optional>
 #include <system_error>
@@ -99,6 +100,21 @@ public:
 
   auto Stop() -> void override { running_ = false; }
 
+  auto Pause() -> void override { paused_ = true; }
+  auto Resume() -> void override { paused_ = false; }
+  auto IsPaused() const -> bool override { return paused_; }
+  auto Step(std::uint32_t /*frames*/) -> void override { paused_ = true; }
+  auto BeginSession() -> bool override
+  {
+    if (session_ != SessionState::kNone) {
+      return false;
+    }
+    session_ = SessionState::kRunning;
+    return true;
+  }
+  auto EndSession() -> void override { session_ = SessionState::kNone; }
+  auto GetSessionState() const -> SessionState override { return session_; }
+
   auto SubscribeModuleAttached(::oxygen::engine::ModuleAttachedCallback /*cb*/,
     bool /*replay_existing*/) -> ModuleSubscription override
   {
@@ -148,6 +164,8 @@ public:
   }
 
 private:
+  bool paused_ { false };
+  SessionState session_ { SessionState::kNone };
   [[nodiscard]] static auto MakeDefaultEngineConfig() -> EngineConfig
   {
     EngineConfig config {};

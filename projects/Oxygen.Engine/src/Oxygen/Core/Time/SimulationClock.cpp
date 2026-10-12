@@ -6,8 +6,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include <Oxygen/Core/Time/SimulationClock.h>
+#include <Oxygen/Core/Time/Types.h>
 
 namespace oxygen::time {
 
@@ -86,11 +88,30 @@ auto SimulationClock::Advance(CanonicalDuration physical_elapsed) noexcept
   last_delta_ = sd;
 }
 
+auto SimulationClock::StepFixed() noexcept -> void
+{
+  accumulated_time_ = fixed_timestep_;
+  last_delta_ = fixed_timestep_;
+  step_pending_ = true;
+}
+
+auto SimulationClock::Reset() noexcept -> void
+{
+  current_time_ = SimulationTime {};
+  accumulated_time_ = CanonicalDuration {};
+  last_delta_ = CanonicalDuration {};
+  is_paused_ = false;
+  step_pending_ = false;
+}
+
 auto SimulationClock::ExecuteFixedSteps(uint32_t max_steps) noexcept
   -> FixedStepResult
 {
   FixedStepResult result;
-  if (is_paused_) {
+  if (step_pending_) {
+    step_pending_ = false;
+    max_steps = (std::min)(max_steps, 1U);
+  } else if (is_paused_) {
     result.interpolation_alpha = 0.0;
     result.remaining_time = accumulated_time_;
     return result;

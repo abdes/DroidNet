@@ -28,6 +28,7 @@
 #include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 #include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Scripting/Test/ScriptingModule_test_fixture.h>
@@ -96,6 +97,8 @@ namespace {
   constexpr uint64_t kShutdownHash = 5;
   constexpr uint64_t kFailedStartHash = 6;
   constexpr uint64_t kPlainTableHash = 7;
+  constexpr uint64_t kSessionEndHash = 8;
+  constexpr uint64_t kSessionDiagnosticHash = 9;
 
   //! A script that probes its lifecycle and listener ownership.
   constexpr std::string_view kLifecycleScript = R"lua(
@@ -449,6 +452,76 @@ NOLINT_TEST_F(ScriptInstanceTest, ChunkMustReturnScriptTable)
   EXPECT_NE(
     frame.GetErrors().front().message.find("oxygen.script"), std::string::npos);
   ExpectLua(module, "assert(_G.__ran == nil)");
+}
+
+//! Ending a play session ends every started instance while its node is
+//! still reachable.
+NOLINT_TEST_F(ScriptInstanceTest, SessionEndEndsInstancesWithNodeReachable)
+{
+  auto module = MakeModule();
+  AttachWithProbe(module);
+  auto scene = MakeSceneWithExecutableSlot("session-end",
+    CompileSlotExecutable(R"lua(
+local script = oxygen.script {}
+function script.on_start(self) oxygen.events.test_probe("start") end
+function script.on_destroy(self)
+  oxygen.events.test_probe(self.node:is_alive() and "destroy" or "dead")
+end
+return script
+)lua",
+      kSessionEndHash));
+  ASSERT_NE(scene, nullptr);
+  engine::FrameContext frame;
+  frame.SetScene(observer_ptr { scene.get() });
+  RunSlotHooks(module, frame);
+
+  module.OnSessionEnd(observer_ptr<IAsyncEngine> { &FakeEngine() });
+
+  EXPECT_FALSE(frame.HasErrors());
+  EXPECT_THAT(Log(), ::testing::ElementsAre("start", "destroy"));
+}
+
+//! A script global set in one session is gone in the next.
+NOLINT_TEST_F(ScriptInstanceTest, SessionEndClearsScriptGlobals)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+  ExpectLua(module, "_G.__session_value = 42");
+
+  module.OnSessionEnd(observer_ptr<IAsyncEngine> { &FakeEngine() });
+
+  ExpectLua(module, "assert(_G.__session_value == nil)");
+}
+
+//! Diagnostic handlers and binding packs survive the end of a session.
+NOLINT_TEST_F(ScriptInstanceTest, DiagnosticHandlersSurviveSessionEnd)
+{
+  auto module = MakeModule();
+  AttachWithProbe(module);
+  int diagnostics = 0;
+  const auto handler = module.AddDiagnosticHandler(
+    [&diagnostics](
+      const ScriptDiagnostic& /*diagnostic*/) -> void { ++diagnostics; });
+  module.OnSessionEnd(observer_ptr<IAsyncEngine> { &FakeEngine() });
+  auto scene = MakeSceneWithExecutableSlot("session-diagnostic",
+    CompileSlotExecutable(R"lua(
+local script = oxygen.script {}
+function script.on_start(self)
+  oxygen.events.test_probe("start")
+  error("second session failure")
+end
+return script
+)lua",
+      kSessionDiagnosticHash));
+  ASSERT_NE(scene, nullptr);
+  engine::FrameContext frame;
+  frame.SetScene(observer_ptr { scene.get() });
+
+  RunSlotHooks(module, frame);
+
+  EXPECT_EQ(diagnostics, 1);
+  EXPECT_THAT(Log(), ::testing::ElementsAre("start"));
+  EXPECT_TRUE(module.RemoveDiagnosticHandler(handler));
 }
 
 } // namespace oxygen::scripting::test

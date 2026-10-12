@@ -54,3 +54,16 @@ m_gtest_program(
     "ModuleManager_subscribe_test.cpp"
     "AsyncEngine_api_test.cpp"
 )
+
+# Runs a headless engine through real frames to check pause, frame step and
+# play sessions.
+m_gtest_program(RunState SOURCES "RunState_test.cpp")
+target_link_libraries(
+  Oxygen.Engine.RunState.Tests
+  PRIVATE
+    oxygen::input
+    oxygen::loader
+    oxygen::platform
+    oxygen::scene
+)
+add_dependencies(Oxygen.Engine.RunState.Tests oxygen-graphics-headless)

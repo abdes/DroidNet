@@ -66,6 +66,7 @@ m_gtest_program(
     "Scenarios/MouseAxes_scenario_test.cpp"
     "Scenarios/ScenarioTest.cpp"
     "Scenarios/ScenarioTest.h"
+    "Scenarios/Session_scenario_test.cpp"
     "Scenarios/Timing_scenario_test.cpp"
     "InputSystemTest.cpp"
     "InputSystemTest.h"

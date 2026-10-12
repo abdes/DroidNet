@@ -4,11 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <chrono>
 
 #include <Oxygen/Core/Time/SimulationClock.h>
+#include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::time;
+using oxygen::time::CanonicalDuration;
+using oxygen::time::SimulationClock;
 using namespace std::chrono_literals;
 
 namespace {
@@ -25,7 +28,7 @@ NOLINT_TEST_F(SimulationClockTest, FixedStepExecution)
   auto res = clk.ExecuteFixedSteps(10);
 
   // Assert
-  EXPECT_EQ(res.steps_executed, 3u);
+  EXPECT_EQ(res.steps_executed, 3U);
   EXPECT_GE(res.interpolation_alpha, 0.0);
   EXPECT_LE(res.interpolation_alpha, 1.0);
 }
@@ -42,7 +45,7 @@ NOLINT_TEST_F(SimulationClockTest, PausePreventsAdvancement)
   auto res = clk.ExecuteFixedSteps(10);
 
   // Assert
-  EXPECT_EQ(res.steps_executed, 0u);
+  EXPECT_EQ(res.steps_executed, 0U);
   EXPECT_EQ(res.remaining_time.get().count(), 0);
 }
 
@@ -58,7 +61,7 @@ NOLINT_TEST_F(SimulationClockTest, TimeScaleApplied)
   auto res = clk.ExecuteFixedSteps(10);
 
   // Assert
-  EXPECT_EQ(res.steps_executed, 2u);
+  EXPECT_EQ(res.steps_executed, 2U);
 }
 
 //! ExecuteFixedSteps should respect max_steps and return remaining_time
@@ -73,7 +76,7 @@ NOLINT_TEST_F(SimulationClockTest, MaxStepsRespected)
   auto res = clk.ExecuteFixedSteps(3); // limit to 3 steps
 
   // Assert: only 3 executed and remaining_time should equal 2 steps
-  EXPECT_EQ(res.steps_executed, 3u);
+  EXPECT_EQ(res.steps_executed, 3U);
   EXPECT_EQ(res.remaining_time, CanonicalDuration { 20ms });
   // Interpolation alpha should be in [0,1]
   EXPECT_GE(res.interpolation_alpha, 0.0);
@@ -92,7 +95,71 @@ NOLINT_TEST_F(SimulationClockTest, NegativeTimeScaleIgnored)
   auto res = clk.ExecuteFixedSteps(10);
 
   // Assert: negative scale ignored -> default scale 1.0 so 3 steps executed
-  EXPECT_EQ(res.steps_executed, 3u);
+  EXPECT_EQ(res.steps_executed, 3U);
+}
+
+//! A frame step runs exactly one fixed step while paused, with the fixed
+//! timestep as the delta, and leaves the clock paused.
+NOLINT_TEST_F(SimulationClockTest, StepFixedRunsOneStepWhilePaused)
+{
+  // Arrange
+  SimulationClock clk { CanonicalDuration { 10ms } };
+  clk.SetPaused(true);
+
+  // Act
+  clk.StepFixed();
+  const auto stepped = clk.ExecuteFixedSteps(10);
+  clk.Advance(CanonicalDuration { 100ms });
+  const auto after = clk.ExecuteFixedSteps(10);
+
+  // Assert
+  EXPECT_EQ(stepped.steps_executed, 1U);
+  EXPECT_EQ(stepped.interpolation_alpha, 0.0);
+  EXPECT_EQ(clk.Now().get().time_since_epoch(), 10ms);
+  EXPECT_TRUE(clk.IsPaused());
+  EXPECT_EQ(after.steps_executed, 0U);
+  EXPECT_EQ(clk.DeltaTime().get().count(), 0);
+}
+
+//! A frame step ignores the time scale and discards any accumulated
+//! remainder, so it does not depend on wall time.
+NOLINT_TEST_F(SimulationClockTest, StepFixedIgnoresScaleAndRemainder)
+{
+  // Arrange
+  SimulationClock clk { CanonicalDuration { 10ms } };
+  clk.SetTimeScale(4.0);
+  clk.Advance(CanonicalDuration { 7ms });
+
+  // Act
+  clk.StepFixed();
+  const auto delta = clk.DeltaTime();
+  const auto stepped = clk.ExecuteFixedSteps(10);
+
+  // Assert
+  EXPECT_EQ(delta.get(), std::chrono::nanoseconds { 10ms });
+  EXPECT_EQ(stepped.steps_executed, 1U);
+  EXPECT_EQ(stepped.remaining_time.get().count(), 0);
+}
+
+//! Reset returns to time zero, unpaused, and keeps the time scale.
+NOLINT_TEST_F(SimulationClockTest, ResetReturnsToTimeZero)
+{
+  // Arrange
+  SimulationClock clk { CanonicalDuration { 10ms } };
+  clk.SetTimeScale(2.0);
+  clk.Advance(CanonicalDuration { 25ms });
+  (void)clk.ExecuteFixedSteps(10);
+  clk.SetPaused(true);
+
+  // Act
+  clk.Reset();
+
+  // Assert
+  EXPECT_EQ(clk.Now().get().time_since_epoch().count(), 0);
+  EXPECT_FALSE(clk.IsPaused());
+  EXPECT_EQ(clk.DeltaTime().get().count(), 0);
+  EXPECT_EQ(clk.GetTimeScale(), 2.0);
+  EXPECT_EQ(clk.ExecuteFixedSteps(10).steps_executed, 0U);
 }
 
 } // namespace
