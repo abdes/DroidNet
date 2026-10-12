@@ -339,7 +339,7 @@ NOLINT_TEST_F(ExposureGpuTest, FogShadowsFollowAtmosphereSourceIdentity)
     }
     const auto pixels = ReadFloatTexture(*output);
     ASSERT_EQ(pixels.size(), 1U);
-    const double transmission = std::exp(-(std::numbers::sqrt2 - 1.0));
+    const double transmission = std::exp(-1.0);
     // Isotropic single scattering of 100000 lux over the cell: luminance in
     // cd/m^2, stored with unit pre-exposure.
     const double lit
@@ -463,7 +463,7 @@ NOLINT_TEST_F(ExposureGpuTest, VolumetricPhaseScattersTowardEachAtmosphereLight)
     }
     return ReadFloatTexture(*output);
   };
-  const double transmission = std::exp(-(std::numbers::sqrt2 - 1.0));
+  const double transmission = std::exp(-1.0);
   for (const bool secondary : { false, true }) {
     for (const float anisotropy : { -0.8F, 0.0F, 0.8F }) {
       SCOPED_TRACE(::testing::Message()

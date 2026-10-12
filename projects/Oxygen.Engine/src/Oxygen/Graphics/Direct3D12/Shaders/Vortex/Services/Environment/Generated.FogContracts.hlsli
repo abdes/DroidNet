@@ -101,7 +101,7 @@ struct VolumetricFogSkyLightControl1
 
 struct VolumetricFogTemporalHistoryControl0
 {
-    uint previous_integrated_light_scattering_srv;
+    uint previous_light_scattering_srv;
     uint enabled;
     float history_weight;
     uint history_miss_supersample_count;
@@ -133,7 +133,7 @@ struct VolumetricFogPassConstants
     float4 light1_direction_enabled;
     float4 light1_illuminance_rgb;
     uint previous_frame_exposure_srv;
-    uint reserved0;
+    uint light_scattering_srv;
     uint exposure_fp16_store;
     uint previous_error_bounds_srv;
 };

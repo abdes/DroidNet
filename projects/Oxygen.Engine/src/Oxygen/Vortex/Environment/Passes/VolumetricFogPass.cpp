@@ -65,6 +65,7 @@ namespace {
   constexpr std::uint32_t kThreadGroupSizeX = 4U;
   constexpr std::uint32_t kThreadGroupSizeY = 4U;
   constexpr std::uint32_t kThreadGroupSizeZ = 4U;
+  constexpr std::uint32_t kIntegrationGroupSizeXY = 8U;
   constexpr std::uint32_t kTileSizePixels = 8U;
   // UE default r.VolumetricFog.GridSizeZ: 64 slices keep shafts and the
   // ground boundary resolved over kilometre fog distances.
@@ -106,18 +107,19 @@ namespace {
       0.0F };
   }
 
-  auto BuildPipelineDesc() -> graphics::ComputePipelineDesc
+  auto BuildPipelineDesc(const char* entry_point, const char* debug_name)
+    -> graphics::ComputePipelineDesc
   {
     auto root_bindings = vortex::internal::BuildVortexRootBindings();
     return graphics::ComputePipelineDesc::Builder {}
       .SetComputeShader(graphics::ShaderRequest {
         .stage = ShaderType::kCompute,
         .source_path = "Vortex/Services/Environment/VolumetricFog.hlsl",
-        .entry_point = "VortexVolumetricFogCS",
+        .entry_point = entry_point,
       })
       .SetRootBindings(std::span<const graphics::RootBindingItem>(
         root_bindings.data(), root_bindings.size()))
-      .SetDebugName("Vortex.Environment.VolumetricFog")
+      .SetDebugName(debug_name)
       .Build();
   }
 
@@ -216,12 +218,18 @@ VolumetricFogPass::~VolumetricFogPass()
   if (output_pool_) {
     output_pool_->Clear();
   }
+  if (scattering_pool_) {
+    scattering_pool_->Clear();
+  }
 }
 
 auto VolumetricFogPass::RemoveViewState(const ViewId view_id) -> void
 {
   if (output_pool_) {
     output_pool_->RemoveView(view_id);
+  }
+  if (scattering_pool_) {
+    scattering_pool_->RemoveView(view_id);
   }
   ClearHistory(view_id);
 }
@@ -248,6 +256,9 @@ auto VolumetricFogPass::OnFrameStart(
   live_textures_.clear();
   if (output_pool_) {
     output_pool_->OnFrameStart(sequence);
+  }
+  if (scattering_pool_) {
+    scattering_pool_->OnFrameStart(sequence);
   }
   pass_constants_buffer_.OnFrameStart(sequence, slot);
 }
@@ -291,6 +302,11 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
       = std::make_unique<::oxygen::vortex::internal::RetainedTexturePool>(gfx);
     output_pool_->OnFrameStart(ctx.frame_sequence);
   }
+  if (!scattering_pool_) {
+    scattering_pool_
+      = std::make_unique<::oxygen::vortex::internal::RetainedTexturePool>(gfx);
+    scattering_pool_->OnFrameStart(ctx.frame_sequence);
+  }
   const auto recyclable = ctx.current_view.view_id != kInvalidViewId
     && ctx.current_view.view_state_handle
       != CompositionView::kInvalidViewStateHandle;
@@ -322,7 +338,15 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   };
   auto texture
     = output_pool_->Acquire(ctx.current_view.view_id, texture_desc, recyclable);
-  if (texture == nullptr) {
+  // Light scattering is kept in FP32 so its reprojection as history carries
+  // no storage error; only the integrated product may narrow to FP16.
+  auto scattering_desc = texture_desc;
+  scattering_desc.format = Format::kRGBA32Float;
+  scattering_desc.debug_name
+    = "Vortex.Environment.VolumetricFogLightScattering";
+  auto scattering_texture = scattering_pool_->Acquire(
+    ctx.current_view.view_id, scattering_desc, recyclable);
+  if (texture == nullptr || scattering_texture == nullptr) {
     RemoveViewState(ctx.current_view.view_id);
     return state;
   }
@@ -331,7 +355,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   auto retire_unpublished = ScopeGuard([&] noexcept -> void {
     if (!texture_committed) {
       output_pool_->RemoveView(ctx.current_view.view_id);
+      scattering_pool_->RemoveView(ctx.current_view.view_id);
       texture.reset();
+      scattering_texture.reset();
     }
   });
 
@@ -360,6 +386,27 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     MakeTextureViewDesc(graphics::ResourceViewType::kTexture_UAV,
       texture->GetDescriptor().format));
 
+  auto scattering_srv_handle
+    = allocator.AllocateBindless(bindless::generated::kTexturesDomain,
+      graphics::ResourceViewType::kTexture_SRV);
+  auto scattering_uav_handle
+    = allocator.AllocateBindless(bindless::generated::kTexturesDomain,
+      graphics::ResourceViewType::kTexture_UAV);
+  if (!scattering_srv_handle.IsValid() || !scattering_uav_handle.IsValid()) {
+    throw std::runtime_error(
+      "VolumetricFogPass: failed to allocate light-scattering descriptors");
+  }
+  const auto scattering_srv
+    = allocator.GetShaderVisibleIndex(scattering_srv_handle);
+  const auto scattering_uav
+    = allocator.GetShaderVisibleIndex(scattering_uav_handle);
+  registry.RegisterView(*scattering_texture, std::move(scattering_srv_handle),
+    MakeTextureViewDesc(
+      graphics::ResourceViewType::kTexture_SRV, Format::kRGBA32Float));
+  registry.RegisterView(*scattering_texture, std::move(scattering_uav_handle),
+    MakeTextureViewDesc(
+      graphics::ResourceViewType::kTexture_UAV, Format::kRGBA32Float));
+
   const auto& height_fog = stable_state.view_products.height_fog;
   const auto& sky_light = stable_state.view_products.sky_light;
   const auto start_distance = std::max(volumetric.start_distance, 0.0F);
@@ -381,13 +428,13 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     = sky_light_injection_requested && distant_sky_light_lut_srv.IsValid();
 
   // Byte offsets mirror the HLSL VolumetricFogPassConstants layout.
-  static_assert(offsetof(PassConstants, reserved0) == 532U);
+  static_assert(offsetof(PassConstants, light_scattering_srv) == 532U);
   static_assert(offsetof(PassConstants, exposure_fp16_store) == 536U);
   static_assert(offsetof(PassConstants, previous_error_bounds_srv) == 540U);
   auto constants = PassConstants {};
   constants.exposure_fp16_store
     = texture->GetDescriptor().format == Format::kRGBA16Float ? 1U : 0U;
-  constants.output_header.output_texture_uav = integrated_uav.get();
+  constants.output_header.output_texture_uav = scattering_uav.get();
   constants.output_header.output_width = width;
   constants.output_header.output_height = height;
   constants.output_header.output_depth = depth;
@@ -448,12 +495,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
       exposure_readers_.at(ctx.frame_slot.get())
         .push_back(history_entry.frame_exposure);
     }
-    constants.temporal_history0.previous_integrated_light_scattering_srv
+    constants.temporal_history0.previous_light_scattering_srv
       = history_entry.srv.get();
-    constants.temporal_history0.enabled = 1U
-      | (history_entry.texture->GetDescriptor().format == Format::kRGBA16Float
-          ? 2U
-          : 0U);
+    constants.temporal_history0.enabled = 1U;
     constants.temporal_history0.history_weight = kUeVolumetricFogHistoryWeight;
   }
   constants.temporal_history0.history_miss_supersample_count
@@ -536,9 +580,17 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   constants.light1_direction_enabled = light1.direction_enabled;
   constants.light1_illuminance_rgb = light1.illuminance_rgb;
 
+  // The integration pass reads the light scattering and writes the product.
+  auto integration_constants = constants;
+  integration_constants.output_header.output_texture_uav = integrated_uav.get();
+  integration_constants.light_scattering_srv = scattering_srv.get();
+
   auto constants_alloc = pass_constants_buffer_.Allocate(1U);
+  auto integration_constants_alloc = pass_constants_buffer_.Allocate(1U);
   if (!constants_alloc.has_value()
-    || !constants_alloc->TryWriteObject(constants)) {
+    || !constants_alloc->TryWriteObject(constants)
+    || !integration_constants_alloc.has_value()
+    || !integration_constants_alloc->TryWriteObject(integration_constants)) {
     return state;
   }
 
@@ -554,8 +606,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
       status, graphics::ResourceStates::kUnorderedAccess);
   }
   TrackTextureFromKnownOrInitial(recorder, *texture);
+  TrackTextureFromKnownOrInitial(recorder, *scattering_texture);
   recorder.RequireResourceState(
-    *texture, graphics::ResourceStates::kUnorderedAccess);
+    *scattering_texture, graphics::ResourceStates::kUnorderedAccess);
   if (history_matches && history_entry.frame_exposure) {
     const auto& previous_p = *history_entry.frame_exposure->buffer;
     if (!recorder.IsResourceTracked(previous_p)
@@ -577,16 +630,17 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   }
   recorder.FlushBarriers();
 
-  recorder.SetPipelineState(BuildPipelineDesc());
-  recorder.SetComputeRootConstantBufferView(
-    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-    ctx.view_constants.GpuAddress());
-  recorder.SetComputeRoot32BitConstant(
-    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
-    0U);
-  recorder.SetComputeRoot32BitConstant(
-    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
-    constants_alloc->srv.get(), 1U);
+  const auto bind_pass = [&](const ShaderVisibleIndex constants_srv) -> void {
+    recorder.SetComputeRootConstantBufferView(
+      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
+      ctx.view_constants.GpuAddress());
+    recorder.SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
+      0U);
+    recorder.SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants),
+      constants_srv.get(), 1U);
+  };
 
   const auto dispatch_x
     = (width + (kThreadGroupSizeX - 1U)) / kThreadGroupSizeX;
@@ -598,7 +652,24 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
     graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage14.VolumetricFog",
       profiling::ProfileGranularity::kTelemetry,
       profiling::ProfileCategory::kPass);
+    recorder.SetPipelineState(BuildPipelineDesc(
+      "VortexVolumetricFogCS", "Vortex.Environment.VolumetricFog"));
+    bind_pass(constants_alloc->srv);
     recorder.Dispatch(dispatch_x, dispatch_y, dispatch_z);
+
+    // Each column accumulates every slice of the light scattering.
+    recorder.RequireResourceState(
+      *scattering_texture, graphics::ResourceStates::kShaderResource);
+    recorder.RequireResourceState(
+      *texture, graphics::ResourceStates::kUnorderedAccess);
+    recorder.FlushBarriers();
+    recorder.SetPipelineState(
+      BuildPipelineDesc("VortexVolumetricFogIntegrateCS",
+        "Vortex.Environment.VolumetricFogIntegration"));
+    bind_pass(integration_constants_alloc->srv);
+    recorder.Dispatch(
+      (width + (kIntegrationGroupSizeXY - 1U)) / kIntegrationGroupSizeXY,
+      (height + (kIntegrationGroupSizeXY - 1U)) / kIntegrationGroupSizeXY, 1U);
     recorder.RequireResourceState(
       *texture, graphics::ResourceStates::kShaderResource);
   }
@@ -637,9 +708,9 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
   state.grid_z_params = { grid_z_params.x, grid_z_params.y, grid_z_params.z };
   if (temporal_reprojection_enabled) {
     const auto next_history = HistoryEntry {
-      .texture = texture,
+      .texture = scattering_texture,
       .frame_exposure = ctx.current_view.frame_exposure,
-      .srv = integrated_srv,
+      .srv = scattering_srv,
       .width = width,
       .height = height,
       .depth = depth,
@@ -663,8 +734,10 @@ auto VolumetricFogPass::Record(RenderContext& ctx,
         }
         found->second = next_history;
       });
+    live_textures_.push_back(texture);
   } else {
     live_textures_.push_back(texture);
+    live_textures_.push_back(scattering_texture);
   }
   texture_committed = true;
   if (ctx.current_view.frame_exposure) {

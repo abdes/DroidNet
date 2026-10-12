@@ -428,7 +428,8 @@ NOLINT_TEST_F(ExposureGpuTest, LocalFogInjectionMatchesMixedMediumIntegral)
         * -std::expm1(-static_cast<double>(test.height));
       const double local_density = -std::log1p(-local_opacity);
       const double total_density = test.global_density + local_density;
-      const double length = std::numbers::sqrt2 - 1;
+      // The froxel's own slice of the view ray spans depths 1 to 2.
+      const double length = 1.0;
       const double opacity = -std::expm1(-total_density * length);
       const double light = test.scattering
         ? static_cast<double>(test.illuminance) / (4 * std::acos(-1.0))

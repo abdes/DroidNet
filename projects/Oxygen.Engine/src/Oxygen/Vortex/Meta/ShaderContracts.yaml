@@ -1771,7 +1771,7 @@ files:
         align: 16
         fields:
           - {
-              name: previous_integrated_light_scattering_srv,
+              name: previous_light_scattering_srv,
               type: uint,
               default: "kInvalidShaderVisibleIndex.get()",
             }
@@ -1842,7 +1842,11 @@ files:
               type: uint,
               default: "kInvalidShaderVisibleIndex.get()",
             }
-          - { name: reserved0, type: uint }
+          - {
+              name: light_scattering_srv,
+              type: uint,
+              default: "kInvalidShaderVisibleIndex.get()",
+            }
           - { name: exposure_fp16_store, type: uint }
           - {
               name: previous_error_bounds_srv,

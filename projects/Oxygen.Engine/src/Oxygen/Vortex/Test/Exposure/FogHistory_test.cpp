@@ -214,7 +214,7 @@ NOLINT_TEST_F(
     params.grid_z.grid_z_params.at(1) = 0.0F;
     params.grid_z.grid_z_params.at(2) = 1.0F;
     params.temporal_history0 = {
-      .previous_integrated_light_scattering_srv = volume.srv.get(),
+      .previous_light_scattering_srv = volume.srv.get(),
       .enabled = 1U,
       .history_weight = 1.0F,
       .history_miss_supersample_count = 1U,
@@ -468,12 +468,9 @@ NOLINT_TEST_F(ExposureGpuTest, FogStableCellsPreserveHistoryAndHomogeneousMedia)
               = { 2 * emission_scale, 3 * emission_scale, 4 * emission_scale },
               .static_lighting_scattering_intensity = 1.0F,
             };
-            unsigned history_flags = 0U;
-            if (reuse_history) {
-              history_flags = format == Format::kRGBA16Float ? 3U : 1U;
-            }
+            const unsigned history_flags = reuse_history ? 1U : 0U;
             params.temporal_history0 = {
-              .previous_integrated_light_scattering_srv = volume.srv.get(),
+              .previous_light_scattering_srv = volume.srv.get(),
               .enabled = history_flags,
               .history_weight = 1.0F,
               .history_miss_supersample_count = 1U,
@@ -512,20 +509,20 @@ NOLINT_TEST_F(ExposureGpuTest, FogStableCellsPreserveHistoryAndHomogeneousMedia)
             ASSERT_EQ(actual.size(), samples.size());
             const auto emissive = params.media1.emissive_rgb;
             for (unsigned i = 0; i < samples.size(); ++i) {
-              // Independent fixed-depth Beer-Lambert oracle, including near
-              // fade.
+              // Independent oracle: the slice's own Beer-Lambert opacity over
+              // its ray segment [2^s, 2^(s+1)], faded by the distance of its
+              // centre past the grid start.
               const auto slice = i / 16;
-              const double length
+              const double step = std::exp2(static_cast<double>(slice));
+              const double centre
                 = std::exp2(static_cast<double>(slice) + .5) - 1;
               const double fade = fade_distance > 0
-                ? std::min(length / static_cast<double>(fade_distance), 1.0)
+                ? std::min(centre / static_cast<double>(fade_distance), 1.0)
                 : 1.0;
-              const double t
-                = std::exp(-static_cast<double>(density) * fade * length);
               const double opacity
-                = -std::expm1(-static_cast<double>(density) * fade * length);
+                = -std::expm1(-static_cast<double>(density) * step) * fade;
               for (unsigned c = 0; c < 4; ++c) {
-                double expected = t;
+                double expected = 1.0 - opacity;
                 if (reuse_history) {
                   expected = static_cast<double>(samples.at(i).at(c));
                 } else if (c != 3) {
@@ -549,8 +546,11 @@ NOLINT_TEST_F(ExposureGpuTest, FogStableCellsPreserveHistoryAndHomogeneousMedia)
   WaitForQueueIdle();
 }
 
-NOLINT_TEST_F(ExposureGpuTest,
-  FogErrorBoundsContainRepeatedHalfHistoryAndSurviveFloatRecovery)
+//! The integrated product may narrow to FP16 and its error bounds contain the
+//! narrowing; the light-scattering history is FP32, so returning to FP32
+//! storage carries no error from the half-precision frames.
+NOLINT_TEST_F(
+  ExposureGpuTest, FogErrorBoundsContainHalfStoreAndHistoryCarriesNoError)
 {
   pass_.reset();
   renderer_->OnShutdown();
@@ -612,9 +612,13 @@ NOLINT_TEST_F(ExposureGpuTest,
   });
   auto target
     = Backend().CreateFramebuffer(FramebufferDesc {}.AddColorAttachment(color));
+  // Two producers see the same scene and frame: the observed one stores the
+  // product in FP16 or FP32 as the step requires, the reference one always
+  // in FP32. Each keeps its own FP32 light-scattering history.
   struct Probe final : IViewExtension {
     observer_ptr<Renderer> renderer;
     EnvironmentLightingService producer;
+    EnvironmentLightingService reference_producer;
     bool use_half {
       true,
     };
@@ -626,6 +630,7 @@ NOLINT_TEST_F(ExposureGpuTest,
     explicit Probe(Renderer& value)
       : renderer(&value)
       , producer(value)
+      , reference_producer(value)
     {
     }
     auto OnViewSetup(const ViewSetupContext& hook) -> void override
@@ -652,20 +657,24 @@ NOLINT_TEST_F(ExposureGpuTest,
       history_used = producer.GetLastViewProductGenerationState()
                        .volumetric_fog_temporal_history_reprojection_executed;
       discontinuity = ctx.current_view.history_discontinuity;
+
+      ctx.current_view.hdr_color_format = Format::kRGBA32Float;
+      reference_producer.OnFrameStart(ctx.frame_sequence, ctx.frame_slot);
+      std::ignore
+        = reference_producer.PublishEnvironmentBindings(ctx, hook.recorder);
+      const auto* reference_resources
+        = reference_producer.InspectViewRadianceResources(
+          ctx.current_view.view_id);
+      CHECK_NOTNULL_F(reference_resources);
+      reference = reference_resources->volumetric_fog;
       ctx.current_view.hdr_color_format = old_format;
     }
     auto OnPostRenderViewGpu(const ViewRenderGpuContext& hook) -> void override
     {
-      auto* owner = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
-        *renderer);
       hook.recorder.OnSubmission(
-        [this, owner, view_id = hook.render_context.current_view.view_id,
-          exposure = hook.render_context.current_view.frame_exposure](
+        [this, exposure = hook.render_context.current_view.frame_exposure](
           const graphics::SubmissionOutcome outcome) -> void {
           if (outcome == graphics::SubmissionOutcome::kSubmitted) {
-            reference = vortex::testing::RendererPublicationProbe::FogHistory(
-              *owner, view_id)
-                          .first;
             frame = exposure;
           }
         });
@@ -728,7 +737,6 @@ NOLINT_TEST_F(ExposureGpuTest,
     scene.get(),
   });
   double opacity = 1.0;
-  double previous_observed = 1.0;
   double maximum_error = 0.0;
   double last_half_error = 0.0;
   HdrErrorBoundsData last_half_bounds;
@@ -751,9 +759,10 @@ NOLINT_TEST_F(ExposureGpuTest,
   }
   for (unsigned step = 1U; step <= 74U; ++step) {
     SCOPED_TRACE(step);
-    const double desired = 1.0 + (1.0 / 2048.0) + (1.0 / 4194304.0);
-    const auto weight = static_cast<double>(.9F);
-    double fresh = (desired - (weight * previous_observed)) / (1.0 - weight);
+    // Values near 1 that FP16 cannot represent, varying so history and the
+    // fresh sample differ.
+    double fresh
+      = 1.0 + (static_cast<double>(step % 7U) / 4096.0) + (1.0 / 4194304.0);
     if (step == 1U) {
       fresh = 1.0;
     } else if (step == 73U) {
@@ -826,6 +835,8 @@ NOLINT_TEST_F(ExposureGpuTest,
       *probe->frame->current_state->status_buffer, ResourceStates::kCopySource);
     const auto& bounds = storage.producer_errors.at(2);
     if (step == 73U) {
+      // A non-finite input is a producer failure and leaves the product
+      // without a finite error bound.
       EXPECT_TRUE(std::isinf(bounds.rgb_absolute));
       EXPECT_NE(storage.completed.flags & 16U, 0U);
       renderer_->OnFrameEnd(observer_ptr {
@@ -841,6 +852,11 @@ NOLINT_TEST_F(ExposureGpuTest,
     }
     EXPECT_TRUE(std::isfinite(bounds.rgb_relative));
     EXPECT_TRUE(std::isfinite(bounds.rgb_absolute));
+    // Absolute RGB bounds are recorded in scene units; the texels are
+    // pre-exposed.
+    const auto pre_exposure = static_cast<double>(Read<FrameExposureData>(
+      *probe->frame->buffer, ResourceStates::kShaderResource)
+        .pre_exposure);
     for (std::size_t i = 0U; i < observed.size(); ++i) {
       for (unsigned c = 0U; c < 4U; ++c) {
         const double error
@@ -850,43 +866,28 @@ NOLINT_TEST_F(ExposureGpuTest,
               * reference.at(i).at(c))
             + bounds.transmittance_absolute
           : (static_cast<double>(bounds.rgb_relative) * reference.at(i).at(c))
-            + bounds.rgb_absolute;
+            + (static_cast<double>(bounds.rgb_absolute) * pre_exposure);
         EXPECT_LE(error, allowance) << "voxel=" << i << " channel=" << c;
       }
     }
     const double error
       = std::abs(observed.back().at(0) - reference.back().at(0));
-    maximum_error = std::max(maximum_error, error);
+    if (reference.back().at(0) > 0.0) {
+      maximum_error = std::max(maximum_error, error / reference.back().at(0));
+    }
     if (step == 1U) {
       opacity = reference.back().at(0);
     }
-    previous_observed = observed.back().at(0);
     if (step == 64U) {
       last_half_error = error;
       last_half_bounds = bounds;
-      EXPECT_NE(storage.completed.flags & 2U, 0U);
       EXPECT_EQ(storage.completed.flags & 16U, 0U);
     }
-    if (step == 65U) {
-      RecordProperty("recovery_history_used", probe->history_used);
-      RecordProperty("recovery_discontinuity", probe->discontinuity);
-      RecordProperty("recovery_observed", observed.back().at(0));
-      RecordProperty("recovery_reference", reference.back().at(0));
-      RecordProperty("recovery_previous_error", last_half_error);
+    if (step >= 65U && step <= 72U) {
+      // The reused history is FP32, so the FP32 product is exact at once.
       EXPECT_TRUE(probe->history_used);
       EXPECT_FALSE(probe->discontinuity);
-      EXPECT_GT(error,
-        0.0); // FP32 storage does not erase reused history error.
-      EXPECT_GT(bounds.rgb_absolute + bounds.rgb_relative, 0.0F);
-      const auto qualification = Read<HdrSuitabilityData>(
-        *probe->frame->suitability_buffer, ResourceStates::kShaderResource);
-      EXPECT_NE(qualification.failure_flags & 4U, 0U);
-      EXPECT_EQ(qualification.first_failure_product, 10U);
-      EXPECT_EQ(storage.completed.fp16_eligible_streak, 0U);
-    }
-    if (step == 72U) {
-      EXPECT_LT(error, last_half_error);
-      EXPECT_LT(bounds.rgb_absolute, last_half_bounds.rgb_absolute);
+      EXPECT_EQ(error, 0.0);
     }
     if (step == 74U) {
       EXPECT_EQ(error, 0.0);
@@ -910,13 +911,151 @@ NOLINT_TEST_F(ExposureGpuTest,
       slot);
     WaitForQueueIdle();
   }
-  EXPECT_GT(maximum_error, .001);
+  // Half-precision frames show only the narrowing to FP16: at most half an
+  // ulp, relative 2^-11.
+  EXPECT_GT(maximum_error, 0.0);
+  EXPECT_LE(maximum_error, 1.0 / 2048.0);
   RecordProperty("maximum_observed_error", std::to_string(maximum_error));
   RecordProperty("last_half_error", std::to_string(last_half_error));
   RecordProperty(
     "last_half_relative_bound", std::to_string(last_half_bounds.rgb_relative));
   RecordProperty(
     "last_half_absolute_bound", std::to_string(last_half_bounds.rgb_absolute));
+}
+
+//! The integration pass accumulates each froxel column front to back: at
+//! every slice, the light scattered by all slices up to it, attenuated by the
+//! slices in front, and their combined transmittance. A medium confined to
+//! the front slice must still reach every texel behind it.
+NOLINT_TEST_F(ExposureGpuTest, FogIntegrationAccumulatesSlicesFrontToBack)
+{
+  namespace root = oxygen::bindless::generated::d3d12;
+  constexpr unsigned kWidth = 2U;
+  constexpr unsigned kDepth = 4U;
+  const auto pipeline
+    = ComputePipelineDesc::Builder {}
+        .SetComputeShader(ShaderRequest {
+          .stage = ShaderType::kCompute,
+          .source_path = "Vortex/Services/Environment/VolumetricFog.hlsl",
+          .entry_point = "VortexVolumetricFogIntegrateCS",
+        })
+        .SetRootBindings(ExposureProbeRootBindings())
+        .SetDebugName("Fog integration fixture")
+        .Build();
+  auto output = CreateRegisteredTexture({
+    .width = kWidth,
+    .height = 1U,
+    .depth = kDepth,
+    .format = Format::kRGBA32Float,
+    .texture_type = TextureType::kTexture3D,
+    .is_shader_resource = true,
+    .is_uav = true,
+    .initial_state = ResourceStates::kCommon,
+  });
+  auto& allocator = renderer_->GetGraphics()->GetDescriptorAllocator();
+  auto handle = allocator.AllocateRaw(
+    ResourceViewType::kTexture_UAV, DescriptorVisibility::kShaderVisible);
+  const auto output_slot = allocator.GetShaderVisibleIndex(handle);
+  Backend().GetResourceRegistry().RegisterView(*output, std::move(handle),
+    TextureViewDescription {
+      .view_type = ResourceViewType::kTexture_UAV,
+      .format = Format::kRGBA32Float,
+      .dimension = TextureType::kTexture3D,
+    });
+
+  // Column 0: a varied medium. Column 1: a medium only in the front slice,
+  // clear air behind it (the case a per-cell evaluation loses).
+  const std::array<std::array<Pixel, kDepth>, kWidth> columns {
+    {
+      {
+        {
+          { 1.0F, 2.0F, 3.0F, .5F },
+          { 2.0F, 1.0F, .5F, .25F },
+          { 0.0F, 0.0F, 0.0F, 1.0F },
+          { 4.0F, 8.0F, 2.0F, .5F },
+        },
+      },
+      {
+        {
+          { 3.0F, 1.5F, .75F, .2F },
+          { 0.0F, 0.0F, 0.0F, 1.0F },
+          { 0.0F, 0.0F, 0.0F, 1.0F },
+          { 0.0F, 0.0F, 0.0F, 1.0F },
+        },
+      },
+    },
+  };
+  std::array<Pixel, static_cast<std::size_t>(kWidth) * kDepth> slices {};
+  for (unsigned z = 0U; z < kDepth; ++z) {
+    for (unsigned x = 0U; x < kWidth; ++x) {
+      slices.at((z * kWidth) + x) = columns.at(x).at(z);
+    }
+  }
+  const auto scattering
+    = MakeSignal(kWidth, 1U, slices, kDepth, Format::kRGBA32Float, true);
+
+  auto frame_bindings = ViewFrameBindings {};
+  frame_bindings.frame_exposure_slot = PublishUnitFrameExposure();
+  auto view = ViewConstants::GpuData {};
+  view.bindless_view_frame_bindings_slot = BindlessViewFrameBindingsSlot {
+    PublishFixtureData(frame_bindings),
+  };
+  auto view_buffer = CreateUploadBuffer(
+    SizeBytes {
+      256U,
+    },
+    BufferUsage::kConstant);
+  view_buffer->Update(&view, sizeof(view), 0U);
+
+  auto params = vortex::testing::RendererPublicationProbe::FogPassConstants {};
+  params.output_header = {
+    .output_texture_uav = output_slot.get(),
+    .output_width = kWidth,
+    .output_height = 1U,
+    .output_depth = kDepth,
+  };
+  params.light_scattering_srv = scattering.srv.get();
+  const auto pass_slot = PublishFixtureData(params);
+  {
+    auto recorder = AcquireRecorder("Fog integration dispatch");
+    recorder->BeginTrackingResourceState(
+      *output, ResourceStates::kCommon, false);
+    recorder->RequireResourceState(*output, ResourceStates::kUnorderedAccess);
+    recorder->FlushBarriers();
+    recorder->SetPipelineState(pipeline);
+    recorder->SetComputeRootConstantBufferView(
+      static_cast<std::uint32_t>(root::RootParam::kViewConstants),
+      view_buffer->GetGPUVirtualAddress());
+    recorder->SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(root::RootParam::kRootConstants), 0U, 0U);
+    recorder->SetComputeRoot32BitConstant(
+      static_cast<std::uint32_t>(root::RootParam::kRootConstants),
+      pass_slot.get(), 1U);
+    recorder->Dispatch(1U, 1U, 1U);
+  }
+
+  const auto actual = ReadFloatTexture(*output);
+  ASSERT_EQ(actual.size(), slices.size());
+  for (unsigned x = 0U; x < kWidth; ++x) {
+    std::array<double, 3> luminance {};
+    double transmittance = 1.0;
+    for (unsigned z = 0U; z < kDepth; ++z) {
+      const auto& slice = columns.at(x).at(z);
+      for (unsigned c = 0U; c < 3U; ++c) {
+        luminance.at(c) += transmittance * static_cast<double>(slice.at(c));
+      }
+      transmittance *= static_cast<double>(slice.at(3));
+      const auto& texel = actual.at((z * kWidth) + x);
+      for (unsigned c = 0U; c < 3U; ++c) {
+        EXPECT_NEAR(texel.at(c), luminance.at(c), 1e-6 * luminance.at(c))
+          << "x=" << x << " z=" << z << " channel=" << c;
+      }
+      EXPECT_NEAR(texel.at(3), transmittance, 1e-7) << "x=" << x << " z=" << z;
+    }
+  }
+  // The clear slices behind the front medium keep its light.
+  EXPECT_FLOAT_EQ(actual.at(((kDepth - 1U) * kWidth) + 1U).at(0), 3.0F);
+  WaitForQueueIdle();
 }
 
 } // namespace oxygen::vortex::testing::exposure

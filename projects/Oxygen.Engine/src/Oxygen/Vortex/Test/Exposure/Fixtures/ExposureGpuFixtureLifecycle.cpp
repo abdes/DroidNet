@@ -30,6 +30,7 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
@@ -54,7 +55,6 @@
 
 namespace oxygen::vortex::testing::exposure {
 
-using graphics::Framebuffer;
 using graphics::FramebufferDesc;
 using graphics::ResourceStates;
 using graphics::Texture;
@@ -134,10 +134,10 @@ auto ExposureGpuTest::CheckOffscreenSharing(const bool inside_frame) -> void
     .delta_time_seconds = 0.0F, });
   facade.SetSceneSource({ .scene = observer_ptr {
                             scene.get(),
-                          } });
+                          }, });
   facade.SetOutputTarget({ .framebuffer = observer_ptr {
                              framebuffer.get(),
-                           } });
+                           }, });
   facade.SetViewIntent(input);
   for (const auto& issue : facade.Validate().issues) {
     ADD_FAILURE() << issue.code << ": " << issue.message;
@@ -375,7 +375,7 @@ auto ExposureGpuTest::CheckSceneExposureRetry(
       .delta_time_seconds = 0.0F, });
     facade.SetSceneSource({ .scene = observer_ptr {
                               scene.get(),
-                            } });
+                            }, });
     facade.SetViewIntent(sibling ? successful_input : input);
     facade.SetOutputTarget(
       { .framebuffer = observer_ptr {
@@ -616,11 +616,11 @@ auto ExposureGpuTest::CheckFogViewRetirement(
         .delta_time_seconds = 0.0F, });
       facade.SetSceneSource({ .scene = observer_ptr {
                                 scene.get(),
-                              } });
+                              }, });
       facade.SetViewIntent(input);
       facade.SetOutputTarget({ .framebuffer = observer_ptr {
                                  target.get(),
-                               } });
+                               }, });
       auto session = facade.Finalize();
       ASSERT_TRUE(session.has_value());
       ASSERT_TRUE(session->ExecuteInsideFrame(frame));
@@ -631,6 +631,13 @@ auto ExposureGpuTest::CheckFogViewRetirement(
     EXPECT_EQ(
       vortex::testing::RendererPublicationProbe::FogHistoryCount(*owner),
       persistent && temporal ? 1U : 0U);
+    // The pass also keeps its FP32 light scattering alive; the retirement
+    // under test is the integrated product's.
+    std::erase_if(
+      capture->textures, [](const std::shared_ptr<Texture>& candidate) -> bool {
+        return candidate->GetDescriptor().debug_name
+          != "Vortex.Environment.IntegratedLightScattering";
+      });
     ASSERT_EQ(capture->textures.size(), 1U);
     auto texture = capture->textures.front();
     // This observer owns the underlying allocation, not the retained wrapper.

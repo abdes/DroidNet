@@ -222,7 +222,7 @@ static_assert(offsetof(VolumetricFogSkyLightControl1, tint_rgb) == 0U);
 static_assert(offsetof(VolumetricFogSkyLightControl1, intensity_mul) == 12U);
 
 struct alignas(16) VolumetricFogTemporalHistoryControl0 {
-  std::uint32_t previous_integrated_light_scattering_srv {
+  std::uint32_t previous_light_scattering_srv {
     kInvalidShaderVisibleIndex.get()
   };
   std::uint32_t enabled { 0U };
@@ -235,8 +235,8 @@ static_assert(
   std::is_trivially_copyable_v<VolumetricFogTemporalHistoryControl0>);
 static_assert(sizeof(VolumetricFogTemporalHistoryControl0) == 16U);
 static_assert(alignof(VolumetricFogTemporalHistoryControl0) == 16U);
-static_assert(offsetof(VolumetricFogTemporalHistoryControl0,
-                previous_integrated_light_scattering_srv)
+static_assert(
+  offsetof(VolumetricFogTemporalHistoryControl0, previous_light_scattering_srv)
   == 0U);
 static_assert(offsetof(VolumetricFogTemporalHistoryControl0, enabled) == 4U);
 static_assert(
@@ -279,7 +279,7 @@ struct alignas(16) VolumetricFogPassConstants {
   std::uint32_t previous_frame_exposure_srv {
     kInvalidShaderVisibleIndex.get()
   };
-  std::uint32_t reserved0 { 0U };
+  std::uint32_t light_scattering_srv { kInvalidShaderVisibleIndex.get() };
   std::uint32_t exposure_fp16_store { 0U };
   std::uint32_t previous_error_bounds_srv { kInvalidShaderVisibleIndex.get() };
 };
@@ -312,7 +312,8 @@ static_assert(
   offsetof(VolumetricFogPassConstants, light1_illuminance_rgb) == 512U);
 static_assert(
   offsetof(VolumetricFogPassConstants, previous_frame_exposure_srv) == 528U);
-static_assert(offsetof(VolumetricFogPassConstants, reserved0) == 532U);
+static_assert(
+  offsetof(VolumetricFogPassConstants, light_scattering_srv) == 532U);
 static_assert(
   offsetof(VolumetricFogPassConstants, exposure_fp16_store) == 536U);
 static_assert(

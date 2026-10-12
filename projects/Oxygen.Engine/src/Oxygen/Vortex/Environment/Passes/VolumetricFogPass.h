@@ -115,8 +115,12 @@ namespace environment {
 
     Renderer& renderer_;
     upload::TransientStructuredBuffer pass_constants_buffer_;
+    //! The integrated product consumers sample.
     std::unique_ptr<::oxygen::vortex::internal::RetainedTexturePool>
       output_pool_;
+    //! Per-froxel light scattering (FP32), also the temporal history.
+    std::unique_ptr<::oxygen::vortex::internal::RetainedTexturePool>
+      scattering_pool_;
     std::vector<std::shared_ptr<graphics::Texture>> live_textures_;
 
     struct HistoryEntry {

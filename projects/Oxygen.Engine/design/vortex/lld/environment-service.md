@@ -328,8 +328,15 @@ validation.
 Current Vortex status: a first integrated-light-scattering runtime path exists
 for authored/requested volumetric fog. It allocates a 3D product, dispatches a
 Stage-14 compute pass, publishes SRV/static binding validity, and lets the
-Stage-15 fog pass consume the product. The Stage-14 compute path also has a
-first UE5.7-shaped logarithmic froxel-depth distribution and primary
+Stage-15 fog pass consume the product. Stage 14 runs in two dispatches as in
+UE5.7: light scattering per froxel (each slice's own in-scattered luminance
+and transmittance over its segment of the view ray, blended with the
+reprojected history), then a final integration that walks each froxel column
+front to back into the integrated product. The light-scattering texture and
+its history are FP32, so reprojection carries no storage error; only the
+integrated product may narrow to FP16, and its store bounds are certified
+there against the exact FP32 accumulation. The Stage-14 compute path also has
+a first UE5.7-shaped logarithmic froxel-depth distribution and primary
 directional CSM shadow sampling path. This is a partial implementation path,
 not full UE5.7 volumetric-fog parity: full media/local/sky-light injection,
 local-fog injection, temporal history, volumetric shadow artifact proof, and

@@ -159,10 +159,10 @@ static bool TrySampleTemporalHistory(
 {
     history_value = float4(0.0f, 0.0f, 0.0f, 1.0f);
     if (pass.temporal_history0.enabled == 0u
-        || pass.temporal_history0.previous_integrated_light_scattering_srv
+        || pass.temporal_history0.previous_light_scattering_srv
             == K_INVALID_BINDLESS_INDEX
         || !BX_IN_TEXTURES(
-            pass.temporal_history0.previous_integrated_light_scattering_srv))
+            pass.temporal_history0.previous_light_scattering_srv))
     {
         return false;
     }
@@ -205,7 +205,7 @@ static bool TrySampleTemporalHistory(
 
     Texture3D<float4> history_texture =
         ResourceDescriptorHeap[
-            pass.temporal_history0.previous_integrated_light_scattering_srv];
+            pass.temporal_history0.previous_light_scattering_srv];
     const SamplerState linear_sampler = SamplerDescriptorHeap[K_SAMPLER_LINEAR_CLAMP];
     const float previous_w =
         previous_z_slice / max(float(pass.output_header.output_depth), 1.0f);
@@ -315,6 +315,10 @@ static VolumetricLocalFogMedia EvaluateLocalFogVolumesForFroxel(
     return accumulated;
 }
 
+// Light scattering of one froxel: the luminance the slice scatters toward the
+// camera (pre-exposed) and the slice's own transmittance. The media are
+// evaluated at the cell and taken as constant across the slice's segment of
+// the view ray; accumulation along the ray is the integration pass's job.
 static float4 EvaluateVolumetricFogSample(
     VolumetricFogPassConstants pass,
     uint3 dispatch_id,
@@ -323,12 +327,10 @@ static float4 EvaluateVolumetricFogSample(
     const float z_base = float(dispatch_id.z);
     const float front_distance = ComputeCellViewDepth(pass, z_base);
     const float back_distance = ComputeCellViewDepth(pass, z_base + 1.0f);
-    // Each stored texel represents the fixed cell center used by fog sampling.
-    // Jitter varies media/lighting evaluation, never the integrated path length.
     const float slice_distance = ComputeCellViewDepth(pass, z_base + 0.5f);
-    const float ray_length = max(slice_distance - pass.grid.start_distance_m, 0.0f);
+    const float fade_distance = max(slice_distance - pass.grid.start_distance_m, 0.0f);
     const float near_fade = pass.grid.near_fade_in_distance_m > 1.0e-3f
-        ? saturate(ray_length / pass.grid.near_fade_in_distance_m)
+        ? saturate(fade_distance / pass.grid.near_fade_in_distance_m)
         : 1.0f;
 
     const float2 screen_uv =
@@ -336,6 +338,10 @@ static float4 EvaluateVolumetricFogSample(
         / max(float2(pass.output_header.output_width, pass.output_header.output_height),
             float2(1.0f, 1.0f));
     const float3 sample_world_position = ComputeCellWorldPosition(pass, dispatch_id, cell_offset);
+    // The view ray's length across this slice at the sample's screen position.
+    const float slice_ray_length = length(
+        ComputeCellWorldPosition(pass, dispatch_id, float3(cell_offset.xy, 1.0f))
+        - ComputeCellWorldPosition(pass, dispatch_id, float3(cell_offset.xy, 0.0f)));
     const float3 translated_world_position = sample_world_position - camera_position;
     const float3 camera_delta = camera_position - sample_world_position;
     const float camera_delta_length_sq = dot(camera_delta, camera_delta);
@@ -353,10 +359,8 @@ static float4 EvaluateVolumetricFogSample(
     const float height_fog_density =
         EvaluateHeightFogMediaDensity(pass, sample_world_position.z);
     const float height_extinction =
-        height_fog_density * max(pass.grid.global_extinction_scale, 0.0f) * near_fade;
+        height_fog_density * max(pass.grid.global_extinction_scale, 0.0f);
     const float extinction = height_extinction + max(local_fog_media.extinction, 0.0f);
-    const float transmittance = exp(-extinction * ray_length);
-    const float opacity = saturate(OneMinusExpNegative(extinction * ray_length));
 
     float3 directional_lighting = 0.0f.xxx;
     for (uint atmosphere_slot = 0u; atmosphere_slot < 2u; ++atmosphere_slot) {
@@ -379,8 +383,8 @@ static float4 EvaluateVolumetricFogSample(
     }
 
     const float3 sky_lighting = EvaluateSkyLightContribution(pass);
-    // Luminance in cd/m^2 per unit phase-weighted scattering; the store below
-    // applies pre-exposure like every other scene-colour producer.
+    // Luminance in cd/m^2 per unit phase-weighted scattering; the result is
+    // pre-exposed like every other scene-colour producer.
     const float3 bounded_lighting =
         directional_lighting * pass.media1.static_lighting_scattering_intensity
         + sky_lighting;
@@ -395,12 +399,21 @@ static float4 EvaluateVolumetricFogSample(
         ? height_source * (height_extinction / extinction)
             + (local_fog_media.scattering * bounded_lighting + local_fog_media.emissive) / extinction
         : 0.0f.xxx;
-    const float3 integrated_luminance = source_function * opacity;
-    CheckHdrStoreRange(float4(integrated_luminance, transmittance), 10u,
-        GetExposureStatusUav(), 0u, 1.0);
-    return float4(max(integrated_luminance, 0.0f.xxx) * GetPreExposure(), saturate(transmittance));
+    // Energy-conserving integration across the slice ("Physically Based and
+    // Unified Volumetric Rendering in Frostbite"). Near the camera the slice
+    // fades in as in UE: the fade scales its scattering and its extinction.
+    // 1 - exp(-x) without cancellation, so thin media keep their scattering.
+    const float slice_opacity =
+        saturate(OneMinusExpNegative(extinction * slice_ray_length)) * near_fade;
+    const float3 slice_luminance = source_function * slice_opacity;
+    return float4(max(slice_luminance, 0.0f.xxx) * GetPreExposure(),
+        saturate(1.0f - slice_opacity));
 }
 
+// Light scattering per froxel, blended with the reprojected previous frame.
+// The light-scattering texture and its history are FP32, so reprojection
+// carries no storage error; the integrated product is certified when the
+// integration pass stores it.
 [shader("compute")]
 [numthreads(4, 4, 4)]
 void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
@@ -428,84 +441,21 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
         pass.temporal_history1.frame_jitter_offsets[0].xyz);
     // History is stored on the fixed grid, independently of this frame's sample.
     const float3 history_world_position = ComputeCellWorldPosition(pass, dispatch_id, 0.5f.xxx);
-    float4 reference_low = output_value;
-    float4 reference_high = output_value;
     float4 history_value = output_value;
-    const bool fp32_only = IsFp32OnlyExposure();
     bool certified_history = true;
     if (pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX) {
+        // A producer-origin failure (bit 16) in the previous frame makes its
+        // light scattering unusable as history.
         ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
-        // Candidate FP16 rejection (bit 2) does not invalidate the produced
-        // history. Retain its quantified error when recovering to FP32; only
-        // a producer-origin failure (bit 16) makes this history unusable.
         certified_history = (previous_status.Load(EXPOSURE_STATUS_COMPLETED_FLAGS_OFFSET) & 16u) == 0u;
-    }
-    if (certified_history && !fp32_only && GetExposureStatusUav() != K_INVALID_BINDLESS_INDEX) {
-        certified_history = pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX;
-        if (certified_history) {
-            ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
-            const float4 previous_bounds = asfloat(previous_status.Load4(HdrProducerBoundOffset(10u)));
-            certified_history = all(isfinite(previous_bounds)) && all(previous_bounds >= 0.0)
-                && previous_bounds.x < 1.0 && previous_bounds.z < 1.0;
-        }
     }
     if (certified_history && TrySampleTemporalHistory(pass, history_world_position, history_value))
     {
         float inverse_previous_p = 1.0f;
-        float previous_p = 1.0f;
         if (pass.previous_frame_exposure_srv != K_INVALID_BINDLESS_INDEX) {
             StructuredBuffer<FrameExposureData> previous_frame = ResourceDescriptorHeap[pass.previous_frame_exposure_srv];
             inverse_previous_p = previous_frame[0].one_over_pre_exposure;
-            previous_p = previous_frame[0].pre_exposure;
         }
-        if (!fp32_only) {
-            float4 history_low = history_value;
-            float4 history_high = history_value;
-            if (pass.previous_error_bounds_srv != K_INVALID_BINDLESS_INDEX) {
-                ByteAddressBuffer previous_status = ResourceDescriptorHeap[pass.previous_error_bounds_srv];
-                const float4 bounds = asfloat(previous_status.Load4(HdrProducerBoundOffset(10u)));
-                const uint3 extent = uint3(pass.output_header.output_width,
-                    pass.output_header.output_height, pass.output_header.output_depth);
-                const uint gradient_flags = previous_status.Load(
-                    HdrFilterGradientOffset(10u) + HDR_FILTER_GRADIENT_FLAGS_OFFSET);
-                const bool gradients_valid = (gradient_flags & 3u) == 1u
-                    && previous_status.Load(HdrFilterGradientOffset(10u)
-                           + HDR_FILTER_GRADIENT_CHECKED_TEXELS_OFFSET) == extent.x * extent.y * extent.z;
-                const bool half_history = (pass.temporal_history0.enabled & 2u) != 0u;
-                const float3 rgb_gradient = asfloat(previous_status.Load3(
-                    HdrFilterGradientOffset(10u) + HDR_FILTER_GRADIENT_RGB_OFFSET));
-                const float3 t_gradient = asfloat(previous_status.Load3(
-                    HdrFilterGradientOffset(10u) + HDR_FILTER_GRADIENT_TRANSMITTANCE_OFFSET));
-                [unroll] for (uint c = 0u; c < 3u; ++c) {
-                    if (!half_history && all((asuint(bounds.xy) & 0x7fffffffu) == 0u.xx)) {
-                        history_low[c] = history_high[c] = history_value[c] * (GetPreExposure() * inverse_previous_p);
-                    } else {
-                        const float3 stored_gradient = float3(HdrUpperProduct(rgb_gradient.x, previous_p),
-                            HdrUpperProduct(rgb_gradient.y, previous_p), HdrUpperProduct(rgb_gradient.z, previous_p));
-                        const float2 interval = gradients_valid
-                            ? HdrHardwareFilterInterval(max(history_value[c], 0.0),
-                                float2(bounds.x, HdrUpperProduct(bounds.y, previous_p)), stored_gradient, extent, half_history)
-                            : float2(0.0, HdrBoundInfinity());
-                        const float transfer = GetPreExposure() * inverse_previous_p;
-                        history_low[c] = HdrBoundDown(interval.x * transfer);
-                        history_high[c] = HdrUpperProduct(interval.y, transfer);
-                    }
-                }
-                const float2 transmission = gradients_valid || (!half_history && all(bounds.zw == 0.0.xx))
-                    ? HdrHardwareFilterInterval(saturate(history_value.a), bounds.zw, t_gradient, extent, half_history)
-                    : float2(0.0, 1.0);
-                history_low.a = saturate(transmission.x);
-                history_high.a = saturate(transmission.y);
-            } else {
-                history_low.rgb *= GetPreExposure() * inverse_previous_p;
-                history_high.rgb *= GetPreExposure() * inverse_previous_p;
-            }
-            const float weight = saturate(pass.temporal_history0.history_weight);
-            reference_low = lerp(output_value, max(history_low, 0.0.xxxx), weight);
-            reference_high = lerp(output_value, max(history_high, 0.0.xxxx), weight);
-            reference_low.a = saturate(reference_low.a);
-            reference_high.a = saturate(reference_high.a);
-            }
         history_value.rgb *= GetPreExposure() * inverse_previous_p;
         output_value = lerp(
             output_value,
@@ -531,15 +481,63 @@ void VortexVolumetricFogCS(uint3 dispatch_id : SV_DispatchThreadID)
             output_value = accumulated / float(sample_count);
             output_value.a = saturate(output_value.a);
         }
-        reference_low = reference_high = output_value;
     }
 
-    if (!fp32_only) {
-        RecordHdrStoreBounds(output_value, reference_low, reference_high, GetOneOverPreExposure(),
-            10u, GetExposureStatusUav(), pass.exposure_fp16_store);
+    CheckHdrStoreRange(output_value, 10u, GetExposureStatusUav(), 0u, GetPreExposure());
+    output_texture[dispatch_id] = output_value;
+}
+
+// Accumulates the light scattering front to back along each froxel column
+// into the integrated product: at every slice, the luminance scattered toward
+// the camera by all the slices up to it and the transmittance through them.
+// Fog consumers sample this product at a surface's depth.
+[shader("compute")]
+[numthreads(8, 8, 1)]
+void VortexVolumetricFogIntegrateCS(uint3 dispatch_id : SV_DispatchThreadID)
+{
+    if (g_PassConstantsIndex == K_INVALID_BINDLESS_INDEX) {
+        return;
     }
-    CheckHdrStoreRange(output_value, 10u, GetExposureStatusUav(), pass.exposure_fp16_store,
-        GetPreExposure());
-    output_texture[dispatch_id] = pass.exposure_fp16_store != 0u
-        ? HdrRoundToHalf(output_value) : output_value;
+
+    StructuredBuffer<VolumetricFogPassConstants> pass_buffer =
+        ResourceDescriptorHeap[g_PassConstantsIndex];
+    const VolumetricFogPassConstants pass = pass_buffer[0];
+    if (pass.output_header.output_texture_uav == K_INVALID_BINDLESS_INDEX
+        || pass.light_scattering_srv == K_INVALID_BINDLESS_INDEX
+        || !BX_IN_TEXTURES(pass.light_scattering_srv)
+        || dispatch_id.x >= pass.output_header.output_width
+        || dispatch_id.y >= pass.output_header.output_height) {
+        return;
+    }
+
+    Texture3D<float4> light_scattering = ResourceDescriptorHeap[pass.light_scattering_srv];
+    RWTexture3D<float4> output_texture =
+        ResourceDescriptorHeap[pass.output_header.output_texture_uav];
+
+    const bool fp32_only = IsFp32OnlyExposure();
+    float3 accumulated_luminance = 0.0f.xxx;
+    float accumulated_transmittance = 1.0f;
+    [loop]
+    for (uint z = 0u; z < pass.output_header.output_depth; ++z)
+    {
+        const uint3 cell = uint3(dispatch_id.xy, z);
+        // Slices are already nonnegative and in [0, 1] when valid. No clamp
+        // here: a non-finite slice must reach the range check and the bounds
+        // below instead of turning into plausible black fog.
+        const float4 slice = light_scattering[cell];
+        accumulated_luminance += accumulated_transmittance * slice.rgb;
+        accumulated_transmittance *= slice.a;
+
+        const float4 integrated = float4(accumulated_luminance, accumulated_transmittance);
+        // The inputs are exact FP32, so the FP32 result is its own reference:
+        // the only store error is the narrowing to the product's format.
+        if (!fp32_only) {
+            RecordHdrStoreBounds(integrated, integrated, integrated, GetOneOverPreExposure(),
+                10u, GetExposureStatusUav(), pass.exposure_fp16_store);
+        }
+        CheckHdrStoreRange(integrated, 10u, GetExposureStatusUav(), pass.exposure_fp16_store,
+            GetPreExposure());
+        output_texture[cell] = pass.exposure_fp16_store != 0u
+            ? HdrRoundToHalf(integrated) : integrated;
+    }
 }
