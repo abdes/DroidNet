@@ -13,6 +13,9 @@ public partial class WorkspaceViewModel
     [LoggerMessage(Level = LogLevel.Error, Message = "Cooked-content refresh failed during {Stage} for project {ProjectRoot}. Preview state: {PreviewState}.")]
     private partial void LogCookedRootRefreshFailed(Exception exception, string stage, string projectRoot, string previewState);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "A cooked library changed before project {ProjectRoot} could mount it; republishing from the current libraries.")]
+    private partial void LogCookedLibraryChanged(Exception exception, string projectRoot);
+
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to suspend the preview after cooked-content refresh failed for project {ProjectRoot}.")]
     private partial void LogCookedContentSuspensionFailed(Exception exception, string projectRoot);
 

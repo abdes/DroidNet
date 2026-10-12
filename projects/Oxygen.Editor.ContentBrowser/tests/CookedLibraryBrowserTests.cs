@@ -7,6 +7,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
+using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.ContentBrowser.AssetIdentity;
 using Oxygen.Editor.ContentBrowser.Infrastructure.Assets;
@@ -77,12 +78,44 @@ public sealed partial class CookedLibraryBrowserTests
         _ = second.IsCookedSourceOverridden.Should().BeFalse();
     }
 
+    /// <summary>A library re-cooked since the last publication is named, republished and browsed instead of failing the catalog.</summary>
+    /// <returns>The asynchronous stale-library recovery regression.</returns>
+    [TestMethod]
+    public async Task RecookedLibraryIsRepublishedWhenTheBrowserRefreshes()
+    {
+        var token = this.TestContext.CancellationToken;
+        using var fixture = new Fixture();
+        await fixture.PublishSelectionAsync(token).ConfigureAwait(false);
+        fixture.RecookFirst();
+        var current = await CookedIndexSnapshot.ReadAsync(fixture.First, token).ConfigureAwait(false);
+        using (var stale = await fixture.Publication.AcquireReadAsync(fixture.Projects.ActiveProject!, token).ConfigureAwait(false))
+        {
+            var recorded = stale.Roots.Single(static root => string.Equals(root.Name, "First", StringComparison.Ordinal));
+            Func<Task> open = () => stale.CreateCatalogAsync(recorded, token);
+            var changed = (await open.Should().ThrowAsync<CookedLibraryChangedException>().ConfigureAwait(false)).Which;
+            _ = changed.Message.Should().Contain("'First'").And.Contain(fixture.First)
+                .And.Contain(recorded.SourceKey.ToString("D")).And.Contain(recorded.IndexSha256)
+                .And.Contain(current.Index.SourceGuid.ToString("D")).And.Contain(current.Fingerprint);
+        }
+
+        await using var catalog = fixture.CreateCatalog();
+        await catalog.RefreshAsync(token).ConfigureAwait(false);
+        using var snapshot = await catalog.ReadSnapshotAsync(new(AssetQueryScope.All), token).ConfigureAwait(false);
+        _ = snapshot.PublicationError.Should().BeNull();
+        var republished = snapshot.Publication!.Roots.Single(static root => string.Equals(root.Name, "First", StringComparison.Ordinal));
+        _ = republished.SourceKey.Should().Be(current.Index.SourceGuid);
+        _ = republished.IndexSha256.Should().Be(current.Fingerprint);
+        var library = CookedLibraryProjection.ForFolders(fixture.Reduce(snapshot.Records), fixture.Projects.ActiveProject!, ["/First"]).Single();
+        _ = library.CookedMetadata!.RootFolderPath.Should().Be(fixture.First);
+    }
+
     private sealed partial class Fixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-LibraryBrowser-");
         private readonly NativeStorageProvider storage = new(new RealFileSystem());
         private readonly NativeAtomicFileStore files = new(new RealFileSystem());
         private readonly Guid sourceKey = Guid.CreateVersion7();
+        private readonly ContentCookCoordinator coordinator;
 
         public Fixture()
         {
@@ -104,6 +137,14 @@ public sealed partial class CookedLibraryBrowserTests
                 LocalFolderMounts = [new("First", this.First), new("Second", this.Second)],
                 Scenes = [],
             });
+            var project = this.Projects.ActiveProject!;
+            File.WriteAllText(Path.Combine(this.directory.FullName, "Project.oxy"), ProjectInfo.ToJson(new ProjectInfo(project.ProjectId, project.Name, project.Category, project.ProjectRoot)
+            {
+                AuthoringMounts = [.. project.AuthoringMounts],
+                LocalFolderMounts = [.. project.LocalFolderMounts],
+            }));
+            this.coordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
+            this.Publication = new(this.coordinator, this.Projects, this.files, new ProjectManagerService(this.storage, atomicFiles: this.files));
         }
 
         public string ProjectOutput { get; }
@@ -114,14 +155,19 @@ public sealed partial class CookedLibraryBrowserTests
 
         public ProjectContextService Projects { get; } = new();
 
+        public CookPublicationService Publication { get; }
+
         public ProjectAssetCatalog CreateCatalog()
         {
             var builtins = new Mock<IBuiltinCatalogDiscovery>();
             var snapshot = new BuiltinCatalogSnapshot(Catalog: null, IsLastKnown: false, Notice: null);
             _ = builtins.SetupGet(value => value.Snapshot).Returns(snapshot);
             _ = builtins.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(snapshot);
-            return new(this.Projects, this.storage, builtins.Object, new CookPublicationService(Mock.Of<IContentCookCoordinator>(), this.Projects, this.files, new ProjectManagerService(this.storage, atomicFiles: this.files)));
+            return new(this.Projects, this.storage, builtins.Object, this.Publication);
         }
+
+        /// <summary>Replaces the first library the way an external cook does: a new source identity and payload.</summary>
+        public void RecookFirst() => _ = this.WriteRoot("Libraries/First", 4);
 
         public IReadOnlyList<ContentBrowserAssetItem> Reduce(IReadOnlyList<AssetRecord> records)
             => new AssetIdentityReducer().Reduce(records, this.Projects.ActiveProject!, new(this.Projects.ActiveProject!.ProjectId, this.directory.FullName, Path.Combine(this.directory.FullName, ".cooked")), AssetBrowserFilter.Default);
@@ -143,7 +189,11 @@ public sealed partial class CookedLibraryBrowserTests
             _ = await this.files.WriteAsync(CookPublicationPaths.Head(project.ProjectRoot), JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), previous.Version, token).ConfigureAwait(false);
         }
 
-        public void Dispose() => this.directory.Delete(recursive: true);
+        public void Dispose()
+        {
+            this.coordinator.Dispose();
+            this.directory.Delete(recursive: true);
+        }
 
         private string WriteRoot(string relative, byte value, Guid? sourceKey = null)
         {

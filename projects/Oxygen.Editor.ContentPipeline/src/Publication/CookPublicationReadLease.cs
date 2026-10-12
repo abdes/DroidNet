@@ -56,6 +56,7 @@ public sealed class CookPublicationReadLease : IDisposable
     /// <param name="root">A root from this publication.</param>
     /// <param name="cancellationToken">Cancels reading the index; payloads are not hashed.</param>
     /// <returns>A catalog whose records remain tied to this publication.</returns>
+    /// <exception cref="CookedLibraryChangedException">The root's index was replaced after this publication was captured.</exception>
     public async Task<Oxygen.Managed.Assets.Catalog.LooseCooked.LooseCookedIndexAssetCatalog> CreateCatalogAsync(
         CookPublicationRoot root, CancellationToken cancellationToken)
     {
@@ -69,7 +70,7 @@ public sealed class CookPublicationReadLease : IDisposable
         var index = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
         if (index.Index.SourceGuid != root.SourceKey || !string.Equals(index.Fingerprint, root.IndexSha256, StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidDataException("The cooked index changed after publication. Refresh its library before using it.");
+            throw new CookedLibraryChangedException(root, path, index.Index.SourceGuid, index.Fingerprint);
         }
 
         return new(index.Index, path);

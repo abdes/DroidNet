@@ -8,6 +8,8 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text.Json;
 using DroidNet.Storage;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
@@ -24,6 +26,7 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
     private readonly IStorageProvider storage;
     private readonly IBuiltinCatalogDiscovery builtins;
     private readonly CookPublicationService publication;
+    private readonly ILogger logger;
     private Guid? initializedPublicationId;
     private CookPublicationReadLease? installedPublication;
     private string? publicationError;
@@ -47,12 +50,16 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
     /// <param name="projectContextService">The active project context.</param>
     /// <param name="storage">The storage provider for indexed folders.</param>
     /// <param name="builtins">The engine-owned discovery catalog.</param>
-    public ProjectAssetCatalog(IProjectContextService projectContextService, IStorageProvider storage, IBuiltinCatalogDiscovery builtins, CookPublicationService publication)
+    /// <param name="publication">The publication owner, which also republishes after a library changes.</param>
+    /// <param name="logger">Records changed libraries and their republication.</param>
+    public ProjectAssetCatalog(IProjectContextService projectContextService, IStorageProvider storage, IBuiltinCatalogDiscovery builtins, CookPublicationService publication,
+        ILogger<ProjectAssetCatalog>? logger = null)
     {
         this.projectContextService = projectContextService;
         this.storage = storage;
         this.builtins = builtins;
         this.publication = publication;
+        this.logger = (ILogger?)logger ?? NullLogger.Instance;
         this.lifetimeToken = this.lifetime.Token;
     }
 
@@ -79,7 +86,7 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
 
             project = active;
             this.initializedProject = active;
-            completion = this.StartInitialization(project, supplied: null);
+            completion = this.StartInitialization(project, supplied: null, republishStale: true);
             this.initializingWithSelection = false;
             this.initializingPublicationError = null;
             this.refreshSequence++;
@@ -156,7 +163,7 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
                 }
                 else
                 {
-                    completion = this.StartInitialization(project, supplied: null, failure.Message);
+                    completion = this.StartInitialization(project, supplied: null, republishStale: true, failure.Message);
                     fallback = completion.Task;
                     this.initializedProject = project;
                     this.initializingWithSelection = false;
@@ -213,7 +220,9 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
             else
             {
                 retained = selected.Retain();
-                completion = this.StartInitialization(project, retained);
+                // Explicit selections come from publication owners that may hold the project writer, so only
+                // observations made by the catalog itself republish when a library changed underneath them.
+                completion = this.StartInitialization(project, retained, republishStale: observation is not null);
                 initialization = completion.Task;
                 this.initializedProject = project;
                 this.initializingWithSelection = true;
@@ -227,6 +236,12 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
         {
             if (!ReferenceEquals(this.initialization, initialization) || !ReferenceEquals(project, this.projectContextService.ActiveProject))
             {
+                // An observation only asks for the current publication; a newer installed one satisfies it.
+                if (observation is not null && ReferenceEquals(project, this.projectContextService.ActiveProject))
+                {
+                    return;
+                }
+
                 throw new OperationCanceledException("A newer publication superseded catalog initialization.");
             }
         }
@@ -317,11 +332,11 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
     }
 
     // Called under stateLock so shutdown observes the run before it can finish or publish.
-    private TaskCompletionSource StartInitialization(ProjectContext project, CookPublicationReadLease? supplied, string? publicationError = null)
+    private TaskCompletionSource StartInitialization(ProjectContext project, CookPublicationReadLease? supplied, bool republishStale, string? publicationError = null)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         this.initialization = completion.Task;
-        var run = Task.Run(() => this.InitializeCoreAsync(project, completion, supplied, publicationError));
+        var run = Task.Run(() => this.InitializeCoreAsync(project, completion, supplied, republishStale, publicationError));
         this.initializationRuns.Add(run);
         _ = run.ContinueWith(task =>
         {
@@ -333,6 +348,36 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
         }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
         return completion;
     }
+
+    private static void DisposeFrom(List<Registration> candidates, int start)
+    {
+        for (var index = candidates.Count - 1; index >= start; index--)
+        {
+            candidates[index].Dispose();
+            candidates.RemoveAt(index);
+        }
+    }
+
+    private static void Follow(TaskCompletionSource completion, Task successor)
+        => _ = successor.ContinueWith(
+            task =>
+            {
+                if (task.IsCompletedSuccessfully)
+                {
+                    _ = completion.TrySetResult();
+                }
+                else if (task.IsCanceled)
+                {
+                    _ = completion.TrySetCanceled();
+                }
+                else
+                {
+                    _ = completion.TrySetException(task.Exception!.InnerExceptions);
+                }
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.ExecuteSynchronously,
+            TaskScheduler.Default);
 
     private static bool IsPublicationUnavailable(Exception failure)
         => failure is IOException or InvalidDataException or UnauthorizedAccessException or JsonException;
@@ -347,7 +392,7 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "Prepared registrations transfer to the project catalog or are disposed in the initialization finally block.")]
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Every initialization failure must complete the shared promise so callers can observe it and retry; observer failures after publication do not roll back an installed catalog.")]
-    private async Task InitializeCoreAsync(ProjectContext project, TaskCompletionSource completion, CookPublicationReadLease? supplied, string? publicationError = null)
+    private async Task InitializeCoreAsync(ProjectContext project, TaskCompletionSource completion, CookPublicationReadLease? supplied, bool republishStale, string? publicationError = null)
     {
         var candidates = new List<Registration>();
         var selected = supplied;
@@ -376,7 +421,21 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
                 }
             }
 
-            await this.PrepareMountsAsync(project, selected, candidates).ConfigureAwait(false);
+            var authored = candidates.Count;
+            try
+            {
+                await this.PrepareMountsAsync(project, selected, candidates).ConfigureAwait(false);
+            }
+            catch (CookedLibraryChangedException changed) when (republishStale)
+            {
+                this.LogCookedRootChanged(changed, selected?.PublicationId, project.ProjectRoot);
+                DisposeFrom(candidates, authored);
+                selected?.Dispose();
+                selected = null;
+                (selected, publicationError) = await this.RepublishAsync(project, completion).ConfigureAwait(false);
+                await this.PrepareMountsAsync(project, selected, candidates).ConfigureAwait(false);
+            }
+
             this.InstallCatalogs(candidates, completion, project, selected, publicationError);
         }
         catch (OperationCanceledException) when (this.lifetimeToken.IsCancellationRequested)
@@ -392,12 +451,24 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
                 return;
             }
 
+            Task? successor = null;
             lock (this.stateLock)
             {
                 if (ReferenceEquals(this.initialization, completion.Task))
                 {
                     this.initialization = null;
                 }
+                else if (ReferenceEquals(this.initializedProject, project))
+                {
+                    successor = this.initialization;
+                }
+            }
+
+            // A newer selection for the same project replaced this run; its callers observe that catalog instead.
+            if (exception is OperationCanceledException && successor is not null)
+            {
+                Follow(completion, successor);
+                return;
             }
 
             _ = completion.TrySetException(exception);
@@ -412,6 +483,35 @@ public sealed partial class ProjectAssetCatalog : IProjectAssetCatalog, IDisposa
 
             selected?.Dispose();
         }
+    }
+
+    /// <summary>Publishes the project again from its current libraries through the startup publication path.</summary>
+    /// <returns>The new selection, or the failure that keeps cooked content unavailable while authored assets stay browsable.</returns>
+    private async Task<(CookPublicationReadLease? Selected, string? Error)> RepublishAsync(ProjectContext project, TaskCompletionSource completion)
+    {
+        CookPublicationReadLease republished;
+        try
+        {
+            republished = await this.publication.AcquireForMountAsync(project, this.lifetimeToken).ConfigureAwait(false);
+        }
+        catch (Exception failure) when (IsPublicationUnavailable(failure))
+        {
+            this.LogRepublishFailed(failure, project.ProjectRoot);
+            return (null, failure.Message);
+        }
+
+        lock (this.stateLock)
+        {
+            // Publication owners installing this same selection join the running scan instead of replacing it.
+            if (ReferenceEquals(this.initialization, completion.Task))
+            {
+                this.initializingWithSelection = true;
+                this.initializingPublicationId = republished.PublicationId;
+            }
+        }
+
+        this.LogRepublished(republished.PublicationId, project.ProjectRoot);
+        return (republished, null);
     }
 
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "PrepareCatalogAsync owns each child catalog through Registration and disposes it on preparation failure.")]

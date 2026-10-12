@@ -427,11 +427,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         {
             var mountService = this.container.Resolve<Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService>();
             var publication = this.container.Resolve<Oxygen.Editor.ContentPipeline.Publication.CookPublicationService>();
-            using var reader = await publication.AcquireForMountAsync(project, CancellationToken.None).ConfigureAwait(true);
+            var (reader, mounts) = await this.AdmitCookedContentAsync(publication, mountService, project).ConfigureAwait(true);
+            using var retained = reader;
             var bindings = reader.Roots.Zip(
                 reader.RootPaths,
                 static (root, path) => new RuntimeCookedRoot(path, root.Owner == Oxygen.Editor.ContentPipeline.Publication.CookPublicationRootOwner.Project ? root.Name : null)).ToArray();
-            var mounts = await mountService.PrepareAsync(project, reader, CancellationToken.None).ConfigureAwait(true);
             stage = "native mount and preview resume";
             await this.engineService.RefreshProjectCookedRootsAsync(bindings, mounts).ConfigureAwait(true);
             mounted = true;
@@ -464,6 +464,35 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             {
                 await this.SuspendUnavailablePreviewAsync(project).ConfigureAwait(true);
             }
+        }
+    }
+
+    /// <summary>Publishes from the current libraries and admits that selection, republishing once when a library is re-cooked in between.</summary>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The admitted reader transfers to the caller; every rejected reader is disposed here.")]
+    private async Task<(Oxygen.Editor.ContentPipeline.Publication.CookPublicationReadLease Reader, Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountSet Mounts)> AdmitCookedContentAsync(
+        Oxygen.Editor.ContentPipeline.Publication.CookPublicationService publication,
+        Oxygen.Editor.ContentPipeline.Mounting.CookedContentMountService mountService,
+        ProjectContext project)
+    {
+        var reader = await publication.AcquireForMountAsync(project, CancellationToken.None).ConfigureAwait(true);
+        try
+        {
+            try
+            {
+                return (reader, await mountService.PrepareAsync(project, reader, CancellationToken.None).ConfigureAwait(true));
+            }
+            catch (Oxygen.Editor.ContentPipeline.Publication.CookedLibraryChangedException changed)
+            {
+                this.LogCookedLibraryChanged(changed, project.ProjectRoot);
+                reader.Dispose();
+                reader = await publication.AcquireForMountAsync(project, CancellationToken.None).ConfigureAwait(true);
+                return (reader, await mountService.PrepareAsync(project, reader, CancellationToken.None).ConfigureAwait(true));
+            }
+        }
+        catch
+        {
+            reader.Dispose();
+            throw;
         }
     }
 

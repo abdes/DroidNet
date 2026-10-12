@@ -46,7 +46,7 @@ public sealed class CookedContentMountService
                 var inventory = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
                 if (inventory.Index.SourceGuid != binding.SourceKey || !string.Equals(inventory.Fingerprint, binding.IndexSha256, StringComparison.OrdinalIgnoreCase))
                 {
-                    throw new InvalidDataException($"Cooked library '{binding.Name}' changed after this publication was captured.");
+                    throw new CookedLibraryChangedException(binding, path, inventory.Index.SourceGuid, inventory.Fingerprint);
                 }
 
                 inventory.ValidateMetadata(files.GetFiles());

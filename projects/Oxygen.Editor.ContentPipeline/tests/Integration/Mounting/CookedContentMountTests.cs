@@ -78,6 +78,24 @@ public sealed class CookedContentMountTests
         File.WriteAllBytes(path, [9]);
     }
 
+    /// <summary>A library re-cooked after capture is rejected with the root and both index identities.</summary>
+    /// <returns>The asynchronous stale-library diagnosis regression.</returns>
+    [TestMethod]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2025:Do not pass IDisposable instances into unawaited tasks", Justification = "the test awaits the preparation before the reader is disposed")]
+    public async Task RecookedLibraryFailsAdmissionNamingTheChangedRoot()
+    {
+        using var fixture = new MountFixture();
+        using var reader = await fixture.CaptureAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var recorded = reader.Roots.Single(static root => string.Equals(root.Name, "First", StringComparison.Ordinal));
+        fixture.RecookFirst();
+        Func<Task> prepare = () => fixture.Service.PrepareAsync(fixture.Project, reader, this.TestContext.CancellationToken);
+        var changed = (await prepare.Should().ThrowAsync<CookedLibraryChangedException>().ConfigureAwait(false)).Which;
+        _ = changed.Root.Should().Be(recorded);
+        _ = changed.RootPath.Should().Be(fixture.First);
+        _ = changed.ActualIndexSha256.Should().NotBe(recorded.IndexSha256);
+        _ = changed.Message.Should().Contain("'First'").And.Contain(recorded.IndexSha256).And.Contain(changed.ActualIndexSha256!);
+    }
+
     /// <summary>Cancellation waits for preparation to end and releases every acquired file reader.</summary>
     /// <returns>The asynchronous cancellation regression.</returns>
     [TestMethod]
@@ -152,6 +170,8 @@ public sealed class CookedContentMountTests
             _ = await this.files.WriteAsync(CookPublicationPaths.Head(project.ProjectRoot), JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), FileVersion.Missing, token).ConfigureAwait(false);
             return await CookPublicationReadLease.OpenUnderGateAsync(project, this.files, gate, token).ConfigureAwait(false);
         }
+
+        public void RecookFirst() => _ = this.WriteRoot("First", 4);
 
         public void Dispose() => this.directory.Delete(recursive: true);
 
