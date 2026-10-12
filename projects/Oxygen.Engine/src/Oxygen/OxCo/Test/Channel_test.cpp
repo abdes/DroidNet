@@ -5,10 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <chrono>
+#include <optional>
+#include <vector>
 
 #include "Utils/OxCoTestFixture.h"
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Channel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -20,6 +25,8 @@ using oxygen::co::Channel;
 using oxygen::co::Co;
 using oxygen::co::Run;
 using oxygen::co::testing::OxCoTestFixture;
+using testing::Field;
+using testing::Optional;
 
 namespace {
 
@@ -30,7 +37,7 @@ protected:
 
 NOLINT_TEST_F(BoundedChannelTest, Smoke)
 {
-  ::Run(*el_, [this]() -> Co<> {
+  ::Run(*el_, [this] -> Co<> {
     std::vector<std::optional<int>> results;
 
     co_await channel_.Send(1);
@@ -53,14 +60,14 @@ NOLINT_TEST_F(BoundedChannelTest, Smoke)
 
 NOLINT_TEST_F(BoundedChannelTest, Blocking)
 {
-  ::Run(*el_, [this]() -> Co<> {
+  ::Run(*el_, [this] -> Co<> {
     OXCO_WITH_NURSERY(n)
     {
       bool ran_last = false;
-      n.Start([&]() -> Co<> { co_await channel_.Send(1); });
-      n.Start([&]() -> Co<> { co_await channel_.Send(2); });
-      n.Start([&]() -> Co<> { co_await channel_.Send(3); });
-      n.Start([&]() -> Co<> {
+      n.Start([&] -> Co<> { co_await channel_.Send(1); });
+      n.Start([&] -> Co<> { co_await channel_.Send(2); });
+      n.Start([&] -> Co<> { co_await channel_.Send(3); });
+      n.Start([&] -> Co<> {
         co_await channel_.Send(4);
         ran_last = true;
       });
@@ -93,17 +100,17 @@ NOLINT_TEST_F(BoundedChannelTest, Blocking)
 
 NOLINT_TEST_F(BoundedChannelTest, Alternating)
 {
-  ::Run(*el_, [this]() -> Co<> {
+  ::Run(*el_, [this] -> Co<> {
     std::vector<int> results;
 
     co_await oxygen::co::AllOf(
-      [&]() -> Co<> {
+      [&] -> Co<> {
         for (int i = 0; i < 10; i++) {
           co_await channel_.Send(i);
         }
         channel_.Close();
       },
-      [&]() -> Co<> {
+      [&] -> Co<> {
         while (std::optional<int> v = co_await channel_.Receive()) {
           if (*v % 2 == 0) {
             continue;
@@ -146,7 +153,7 @@ NOLINT_TEST_F(BoundedChannelTest, TrySendReceive)
 
 NOLINT_TEST_F(BoundedChannelTest, Close)
 {
-  ::Run(*el_, [this]() -> Co<> {
+  ::Run(*el_, [this] -> Co<> {
     std::vector<std::optional<int>> results;
 
     OXCO_WITH_NURSERY(n)
@@ -196,7 +203,7 @@ protected:
 
 NOLINT_TEST_F(UnboundedChannelTest, Many)
 {
-  ::Run(*el_, [this]() -> Co<> {
+  ::Run(*el_, [this] -> Co<> {
     for (int i = 0; i < 10'000; i++) {
       co_await channel_.Send(i);
     }
@@ -216,7 +223,7 @@ NOLINT_TEST_F(UnboundedChannelTest, Many)
 
 NOLINT_TEST_F(UnboundedChannelTest, Close)
 {
-  ::Run(*el_, [this]() -> Co<> {
+  ::Run(*el_, [this] -> Co<> {
     std::vector<std::optional<int>> results;
 
     bool sent = co_await channel_.Send(1);
@@ -234,6 +241,45 @@ NOLINT_TEST_F(UnboundedChannelTest, Close)
     sent = co_await channel_.Send(2);
     EXPECT_FALSE(sent);
   });
+}
+
+//! Move-only type whose move constructor may throw.
+struct ThrowingMoveOnly {
+  explicit ThrowingMoveOnly(const int v)
+    : value(v)
+  {
+  }
+  ~ThrowingMoveOnly() = default;
+  OXYGEN_MAKE_NON_COPYABLE(ThrowingMoveOnly)
+  // NOLINTNEXTLINE(bugprone-unsafe-to-allow-exceptions) - the point of the type
+  ThrowingMoveOnly(ThrowingMoveOnly&& other) noexcept(false)
+    : value(other.value)
+  {
+  }
+  auto operator=(ThrowingMoveOnly&&) -> ThrowingMoveOnly& = delete;
+
+  int value;
+};
+
+//! An unbounded channel grows its buffer for move-only values whose move
+//! constructor may throw, and delivers them in order.
+NOLINT_TEST(UnboundedChannelThrowingMoveOnlyTest, TrySendReceive)
+{
+  // Arrange
+  constexpr int kCount = 20;
+  Channel<ThrowingMoveOnly> channel;
+
+  // Act
+  for (int i = 0; i < kCount; ++i) {
+    EXPECT_TRUE(channel.TrySend(ThrowingMoveOnly(i)));
+  }
+
+  // Assert
+  for (int i = 0; i < kCount; ++i) {
+    EXPECT_THAT(
+      channel.TryReceive(), Optional(Field(&ThrowingMoveOnly::value, i)));
+  }
+  EXPECT_TRUE(channel.Empty());
 }
 
 } // namespace

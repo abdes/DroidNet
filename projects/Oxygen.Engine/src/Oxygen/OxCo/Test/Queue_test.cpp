@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/OxCo/Detail/Queue.h>
+#include <utility>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/OxCo/Detail/Queue.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::co::detail::Queue;
@@ -191,6 +193,48 @@ NOLINT_TEST(QueueTest, PopFrontCallsDestructor)
     q.EmplaceBack();
   }
   EXPECT_EQ(3, Item::destruction_count);
+}
+
+//! Move-only type whose move constructor may throw.
+struct ThrowingMoveOnly {
+  explicit ThrowingMoveOnly(const int v)
+    : value(v)
+  {
+  }
+  ~ThrowingMoveOnly() = default;
+  OXYGEN_MAKE_NON_COPYABLE(ThrowingMoveOnly)
+  // NOLINTNEXTLINE(bugprone-unsafe-to-allow-exceptions) - the point of the type
+  ThrowingMoveOnly(ThrowingMoveOnly&& other) noexcept(false)
+    : value(other.value)
+  {
+  }
+  auto operator=(ThrowingMoveOnly&&) -> ThrowingMoveOnly& = delete;
+
+  int value;
+};
+
+//! Growing moves elements whose move constructor may throw when they cannot
+//! be copied, across both the contiguous and the wrapped buffer layouts.
+NOLINT_TEST(QueueTest, GrowWithThrowingMoveOnlyElements)
+{
+  // Arrange
+  constexpr int kCount = 20;
+  Queue<ThrowingMoveOnly> q(2);
+  q.EmplaceBack(-1);
+  q.PopFront();
+
+  // Act
+  for (int i = 0; i < kCount; ++i) {
+    q.EmplaceBack(i);
+  }
+
+  // Assert
+  ASSERT_EQ(q.Size(), kCount);
+  for (int i = 0; i < kCount; ++i) {
+    EXPECT_EQ(q.Front().value, i);
+    q.PopFront();
+  }
+  EXPECT_TRUE(q.Empty());
 }
 
 } // namespace

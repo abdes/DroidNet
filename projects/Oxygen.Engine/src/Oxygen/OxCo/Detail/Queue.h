@@ -6,12 +6,12 @@
 
 #pragma once
 
-#include <Oxygen/Base/Macros.h>
-
 #include <memory>
 #include <span>
 #include <type_traits>
 #include <utility>
+
+#include <Oxygen/Base/Macros.h>
 
 namespace oxygen::co::detail {
 
@@ -153,8 +153,11 @@ private:
   void Grow()
   {
     Queue q(std::max<size_t>(8, capacity_ * 2));
+    // Same choice as std::move_if_noexcept: copy only when that preserves the
+    // strong guarantee; a throwing move-only type has none to preserve.
     auto move_range = [&](std::span<T> range) {
-      if constexpr (std::is_nothrow_move_constructible_v<T>) {
+      if constexpr (std::is_nothrow_move_constructible_v<T>
+        || !std::is_copy_constructible_v<T>) {
         q.tail_ = std::uninitialized_move(range.begin(), range.end(), q.tail_);
       } else {
         q.tail_ = std::uninitialized_copy(range.begin(), range.end(), q.tail_);
