@@ -75,10 +75,10 @@ STAGE15_SKY_SCOPE_NAME = "Vortex.Stage15.Sky"
 STAGE15_ATMOSPHERE_SCOPE_NAME = "Vortex.Stage15.Atmosphere"
 STAGE15_FOG_SCOPE_NAME = "Vortex.Stage15.Fog"
 STAGE22_TONEMAP_SCOPE_NAME = "Vortex.PostProcess.Tonemap"
-IMGUI_OVERLAY_SCOPE_NAME = "Vortex.ImGuiOverlay"
+IMGUI_OVERLAY_SCOPE_NAME = "Vortex.SurfaceLayer"
 COMPOSITING_SCOPE_PREFIX = "Vortex.CompositingTask[label=Composite Copy View "
 IMGUI_OVERLAY_BLEND_SCOPE_PREFIXES = (
-    "Vortex.CompositingTask[label=Composite Blend Texture Vortex.ImGuiOverlay",
+    "Vortex.CompositingTask[label=Surface Layer",
     "Vortex.CompositingTask[label=Composite Blend Texture Async.DemoShellOverlay",
 )
 

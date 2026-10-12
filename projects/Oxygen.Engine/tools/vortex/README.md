@@ -318,7 +318,7 @@ surface:
 - `AnalyzeRenderDocAsyncCapture.py`
   - structural analyzer for the Async runtime capture
   - verifies stage scopes (3, 8, 12 directional/spot, 15 sky/atmosphere/fog,
-    22 tonemap), ImGui overlay, compositing, and stage ordering
+    22 tonemap), the ImGui surface layer, compositing, and stage ordering
 
 - `AnalyzeRenderDocAsyncProducts.py`
   - product analyzer for the Async runtime capture
