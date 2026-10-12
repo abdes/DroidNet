@@ -24,8 +24,6 @@ asap_push_module("${META_MODULE_NAME}")
 # ------------------------------------------------------------------------------
 
 find_package(glm CONFIG REQUIRED)
-find_package(asio CONFIG REQUIRED)
-find_package(SDL3 CONFIG REQUIRED)
 
 # ------------------------------------------------------------------------------
 # Sources
@@ -58,19 +56,19 @@ target_include_directories(
     ${OXYGEN_EXAMPLES_SOURCE_DIR}
 )
 
+# The runtime host provides startup, the window, view publishing and the
+# scene hand-off; VortexBasic does not use DemoShell. The Direct3D12 backend is
+# linked so its module is built and copied next to the executable.
 target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>
     glm::glm
     oxygen::base
-    oxygen::composition
     oxygen::oxco
     oxygen::clap
-    oxygen::examples-demoshell
+    oxygen::host
     oxygen::platform
-    oxygen::input
-    oxygen::loader
     oxygen::graphics-common
     oxygen::graphics-direct3d12
     oxygen::vortex

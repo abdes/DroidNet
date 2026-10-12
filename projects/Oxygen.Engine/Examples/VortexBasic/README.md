@@ -1,5 +1,11 @@
 # VortexBasic
 
+Procedural Vortex validation scenes on the engine's runtime host
+(`Oxygen.Host`), without DemoShell. `RunHost` starts and stops the engine,
+`MainModule` is a `host::HostModule` that stages its scene and describes one
+main view, and the host's view publisher renders that view and composites it
+onto the window.
+
 ## Fixed exposure fixture
 
 `--validation-scene exposure-fixed` uses an unlit-by-environment deferred
@@ -7,8 +13,8 @@ emissive receiver with exact scene input 4096, key 12.5, compensation zero,
 None tone curve, gamma one and bloom disabled. It fills the camera for interior
 pixel probes. `--validation-exposure-ev` selects Manual EV100 (default 14).
 This is a focused native engine fixture; LightBench owns interactive experiments.
-The fixture owns a persistent view-state handle, using the public runtime view
-publication API without DemoShell settings reapplication.
+The fixture owns a persistent view-state handle on its main view, which the
+host publishes without DemoShell settings reapplication.
 
 From the engine root, build `oxygen-examples-vortexbasic` and
 `oxygen-graphics-direct3d12`, then run:

@@ -1,7 +1,8 @@
 # Runtime host, play sessions and debug UI
 
 Status: **draft for owner review, 2026-10-11; reviewed 2026-10-12; I1
-validated 2026-10-12; H1 built and unit-tested 2026-10-12**. Owner
+validated 2026-10-12; H1 built and unit-tested 2026-10-12; E1 built and
+smoke-run 2026-10-12, ahead of H2 so the host has a running consumer**. Owner
 decisions are recorded in [§10](#10-owner-decisions) with the review's
 position beside each. [§11](#11-open-problems-for-review) gives a definite
 answer to every problem and marks the ones only the owner can close.

@@ -1197,8 +1197,9 @@ readers. Primary/Secondary names remain unchanged.
       host I1 (ImGui out of Vortex) validated 2026-10-12 in the editor and
       every native example; H1 (`Oxygen.Host`: run host, host window, view
       publisher, scene stage, host module, runtime command line) built with
-      its scene stage and command-line tests passing; H2 (pause, step and
-      sessions) next.
+      its scene stage and command-line tests passing; E1 (VortexBasic on the
+      host, without DemoShell) moved ahead of H2 and smoke-run headless and
+      windowed; H2 (pause, step and sessions) next.
 - [ ] M08.11 asset thumbnails and previews.
 - [ ] M08.12 drag-and-drop scene assembly and closeout walkthrough.
 - [x] M02 supported single-viewport resize/discovery evidence is recorded; the

@@ -8,19 +8,17 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
-#include <cstring>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <random>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
-#include "DemoShell/Runtime/AppWindow.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
-#include "DemoShell/Services/DefaultSceneLighting.h"
 #include "VortexBasic/MainModule.h"
 #include "VortexBasic/NormalMapValidationTexture.h"
 #include <glm/ext/matrix_float4x4.hpp>
@@ -41,10 +39,7 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
-#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
-#include <Oxygen/Core/Types/ResolvedView.h>
-#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/AssetType.h>
@@ -57,10 +52,9 @@
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/ModuleEvent.h>
-#include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/HostModule.h>
+#include <Oxygen/Host/HostWindow.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -78,10 +72,8 @@
 #include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
-#include <Oxygen/Vortex/SceneCameraViewResolver.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
-#include <Oxygen/Vortex/Types/CompositingTask.h>
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
 
 using oxygen::ViewPort;
@@ -107,6 +99,8 @@ constexpr glm::vec4 kOcclusionProbeColor { 1.0F, 0.12F, 0.08F, 1.0F };
 constexpr glm::vec4 kTranslucentSphereColor { 0.00F, 0.95F, 1.0F, 0.18F };
 constexpr glm::vec4 kTranslucentCylinderColor { 1.0F, 0.10F, 0.82F, 0.16F };
 constexpr glm::vec3 kSceneFocusPoint { 0.0F, 0.0F, 1.0F };
+//! Matches the bias DemoShell gives the suns it creates.
+constexpr float kSunShadowBias = 0.03F;
 constexpr glm::vec3 kSunPosition { -10.0F, 10.0F, 16.0F };
 constexpr float kPointLightOrbitRadius = 2.0F;
 constexpr float kPointLightOrbitPeriodSeconds = 4.0F;
@@ -130,41 +124,26 @@ auto RandomUnitAxis(std::mt19937& rng) -> glm::vec3
   }
 }
 
-auto NormalizeOrFallback(const glm::vec3& direction, const glm::vec3& fallback)
-  -> glm::vec3
+//! Rotation that turns the forward axis toward `target`.
+auto LookRotation(const glm::vec3& position, const glm::vec3& target)
+  -> glm::quat
 {
+  const auto& from_dir = oxygen::space::move::Forward;
+  const auto direction = target - position;
   const auto length_sq = glm::dot(direction, direction);
-  if (length_sq <= oxygen::math::Epsilon) {
-    return fallback;
-  }
-  return direction / std::sqrt(length_sq);
-}
-
-auto RotationFromDirToDir(const glm::vec3& from_dir,
-  const glm::vec3& fallback_dir, const glm::vec3& up_axis,
-  const glm::vec3& direction) -> glm::quat
-{
-  const auto to_dir = NormalizeOrFallback(direction, fallback_dir);
+  const auto to_dir = length_sq <= oxygen::math::Epsilon
+    ? from_dir
+    : direction / std::sqrt(length_sq);
   const auto cos_theta = std::clamp(glm::dot(from_dir, to_dir), -1.0F, 1.0F);
 
   if (cos_theta >= 0.9999F) {
     return { 1.0F, 0.0F, 0.0F, 0.0F };
   }
-
   if (cos_theta <= -0.9999F) {
-    return glm::angleAxis(oxygen::math::Pi, up_axis);
+    return glm::angleAxis(oxygen::math::Pi, oxygen::space::move::Up);
   }
-
   const auto axis = glm::normalize(glm::cross(from_dir, to_dir));
-  const auto angle = std::acos(cos_theta);
-  return glm::angleAxis(angle, axis);
-}
-
-auto LookRotation(const glm::vec3& position, const glm::vec3& target)
-  -> glm::quat
-{
-  return RotationFromDirToDir(oxygen::space::move::Forward,
-    oxygen::space::move::Forward, oxygen::space::move::Up, target - position);
+  return glm::angleAxis(std::acos(cos_theta), axis);
 }
 
 auto SetShadowParticipation(oxygen::scene::SceneNode& node,
@@ -179,8 +158,8 @@ auto SetShadowParticipation(oxygen::scene::SceneNode& node,
   }
 }
 
-auto CameraLookRotation(const glm::vec3& position, const glm::vec3& target,
-  const glm::vec3& up_direction = oxygen::space::move::Up) -> glm::quat
+auto CameraLookRotation(const glm::vec3& position, const glm::vec3& target)
+  -> glm::quat
 {
   const auto forward_raw = target - position;
   const float forward_len2 = glm::dot(forward_raw, forward_raw);
@@ -189,7 +168,7 @@ auto CameraLookRotation(const glm::vec3& position, const glm::vec3& target,
   }
 
   const auto forward = glm::normalize(forward_raw);
-  glm::vec3 up_dir = up_direction;
+  glm::vec3 up_dir = oxygen::space::move::Up;
   const float dot_abs = std::abs(glm::dot(forward, glm::normalize(up_dir)));
   if (dot_abs > 0.999F) {
     up_dir = (std::abs(forward.z) > 0.9F) ? oxygen::space::move::Back
@@ -210,13 +189,22 @@ auto CameraLookRotation(const glm::vec3& position, const glm::vec3& target,
   return glm::quat_cast(look_matrix);
 }
 
-auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
-  const float roughness = 0.9F, const float metalness = 0.0F,
-  const oxygen::data::MaterialDomain domain
-  = oxygen::data::MaterialDomain::kOpaque,
-  const glm::vec3 emissive = glm::vec3 { 0.0F },
-  const uint32_t extra_flags = 0U, const bool double_sided = true,
-  const oxygen::content::ResourceKey normal_map = {})
+//! A solid-colour material without textures, unless it has a normal map.
+struct MaterialSpec {
+  //! The material's name; empty uses the geometry's name.
+  std::string_view name;
+  glm::vec4 rgba { 1.0F };
+  float roughness { 0.9F };
+  float metalness { 0.0F };
+  oxygen::data::MaterialDomain domain { oxygen::data::MaterialDomain::kOpaque };
+  glm::vec3 emissive { 0.0F };
+  uint32_t extra_flags { 0U };
+  bool double_sided { true };
+  oxygen::content::ResourceKey normal_map {};
+};
+
+auto MakeSolidColorMaterial(
+  const std::string_view name, const MaterialSpec& spec)
   -> std::shared_ptr<const oxygen::data::MaterialAsset>
 {
   // NOLINTBEGIN(*-magic-numbers)
@@ -225,61 +213,54 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
 
   pak::render::MaterialAssetDesc desc {};
   desc.header.asset_type = static_cast<uint8_t>(d::AssetType::kMaterial);
-  constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
-  const std::size_t n = (std::min)(maxn, std::strlen(name));
-  std::memcpy(desc.header.name, name, n);
-  desc.header.name[n] = '\0';
+  constexpr std::size_t kMaxName = sizeof(desc.header.name) - 1;
+  const auto stored = name.substr(0, (std::min)(kMaxName, name.size()));
+  std::ranges::copy(stored, std::data(desc.header.name));
+  desc.header.name[stored.size()] = '\0';
   desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
   desc.header.streaming_priority = 255;
-  desc.material_domain = static_cast<uint8_t>(domain);
-  desc.flags = pak::render::kMaterialFlag_NoTextureSampling | extra_flags;
-  if (double_sided) {
+  desc.material_domain = static_cast<uint8_t>(spec.domain);
+  desc.flags = pak::render::kMaterialFlag_NoTextureSampling | spec.extra_flags;
+  if (spec.double_sided) {
     desc.flags |= pak::render::kMaterialFlag_DoubleSided;
   }
-  if (normal_map != oxygen::content::ResourceKey {}) {
+  if (spec.normal_map != oxygen::content::ResourceKey {}) {
     desc.flags &= ~pak::render::kMaterialFlag_NoTextureSampling;
   }
   desc.shader_stages = 0;
-  desc.base_color[0] = rgba.r;
-  desc.base_color[1] = rgba.g;
-  desc.base_color[2] = rgba.b;
-  desc.base_color[3] = rgba.a;
+  desc.base_color[0] = spec.rgba.r;
+  desc.base_color[1] = spec.rgba.g;
+  desc.base_color[2] = spec.rgba.b;
+  desc.base_color[3] = spec.rgba.a;
   desc.normal_scale = 1.0F;
-  desc.metalness = d::Unorm16 { metalness };
-  desc.roughness = d::Unorm16 { roughness };
+  desc.metalness = d::Unorm16 { spec.metalness };
+  desc.roughness = d::Unorm16 { spec.roughness };
   desc.ambient_occlusion = d::Unorm16 { 1.0F };
-  desc.emissive_factor[0] = emissive.r;
-  desc.emissive_factor[1] = emissive.g;
-  desc.emissive_factor[2] = emissive.b;
+  desc.emissive_factor[0] = spec.emissive.r;
+  desc.emissive_factor[1] = spec.emissive.g;
+  desc.emissive_factor[2] = spec.emissive.b;
   const auto key = d::AssetKey::FromVirtualPath(
     "/Engine/Examples/VortexBasic/Materials/" + std::string(name) + ".omat");
   return std::make_shared<const d::MaterialAsset>(key, desc,
     std::vector<d::ShaderReference> {},
-    std::vector<oxygen::content::ResourceKey> { {}, normal_map });
+    std::vector<oxygen::content::ResourceKey> { {}, spec.normal_map });
   // NOLINTEND(*-magic-numbers)
 }
 
-auto BuildPrimitiveGeometry(const char* geometry_name,
-  const char* material_name, std::vector<Vertex> vertices,
-  std::vector<uint32_t> indices, const glm::vec4& rgba,
-  const float roughness = 0.9F, const float metalness = 0.0F,
-  const oxygen::data::MaterialDomain domain
-  = oxygen::data::MaterialDomain::kOpaque,
-  const glm::vec3 emissive = glm::vec3 { 0.0F },
-  const uint32_t extra_material_flags = 0U, const bool double_sided = true,
-  const oxygen::content::ResourceKey normal_map = {})
+//! A single-mesh geometry named `name` with one material.
+auto BuildPrimitiveGeometry(const std::string_view name,
+  std::vector<Vertex> vertices, std::vector<uint32_t> indices,
+  const MaterialSpec& material_spec)
   -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   namespace d = oxygen::data;
   namespace pak = d::pak;
 
-  const auto material
-    = MakeSolidColorMaterial(material_name, rgba, roughness, metalness, domain,
-      emissive, extra_material_flags, double_sided, normal_map);
-
+  const auto material = MakeSolidColorMaterial(
+    material_spec.name.empty() ? name : material_spec.name, material_spec);
   const auto vertex_count = static_cast<uint32_t>(vertices.size());
   const auto index_count = static_cast<uint32_t>(indices.size());
-  auto mesh = d::MeshBuilder(oxygen::data::LodIndex {}, geometry_name)
+  auto mesh = d::MeshBuilder(oxygen::data::LodIndex {}, name)
                 .WithVertices(std::move(vertices))
                 .WithIndices(std::move(indices))
                 .BeginSubMesh("full", material)
@@ -304,51 +285,36 @@ auto BuildPrimitiveGeometry(const char* geometry_name,
   geo_desc.bounding_box_max[2] = bb_max.z;
 
   return std::make_shared<d::GeometryAsset>(
-    d::AssetKey::FromVirtualPath("/Engine/Examples/VortexBasic/Geometry/"
-      + std::string(geometry_name) + ".ogeo"),
+    d::AssetKey::FromVirtualPath(
+      "/Engine/Examples/VortexBasic/Geometry/" + std::string(name) + ".ogeo"),
     geo_desc, std::vector<std::shared_ptr<d::Mesh>> { std::move(mesh) });
 }
 
-auto BuildCubeGeometry(const char* geometry_name, const char* material_name,
-  const glm::vec4& rgba, const float roughness = 0.9F,
-  const float metalness = 0.0F,
-  const oxygen::data::MaterialDomain domain
-  = oxygen::data::MaterialDomain::kOpaque,
-  const glm::vec3 emissive = glm::vec3 { 0.0F },
-  const uint32_t extra_material_flags = 0U)
-  -> std::shared_ptr<oxygen::data::GeometryAsset>
+auto BuildCubeGeometry(const std::string_view name,
+  const MaterialSpec& material) -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   auto cube_data = oxygen::data::MakeCubeMeshAsset();
   CHECK_F(cube_data.has_value());
-  return BuildPrimitiveGeometry(geometry_name, material_name,
-    std::move(cube_data->first), std::move(cube_data->second), rgba, roughness,
-    metalness, domain, emissive, extra_material_flags);
+  return BuildPrimitiveGeometry(
+    name, std::move(cube_data->first), std::move(cube_data->second), material);
 }
 
-auto BuildSphereGeometry(const char* geometry_name, const char* material_name,
-  const glm::vec4& rgba, const float roughness,
-  const oxygen::data::MaterialDomain domain, const glm::vec3 emissive,
-  const uint32_t extra_material_flags = 0U)
-  -> std::shared_ptr<oxygen::data::GeometryAsset>
+auto BuildSphereGeometry(const std::string_view name,
+  const MaterialSpec& material) -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   auto sphere_data = oxygen::data::MakeSphereMeshAsset(32U, 48U);
   CHECK_F(sphere_data.has_value());
-  return BuildPrimitiveGeometry(geometry_name, material_name,
-    std::move(sphere_data->first), std::move(sphere_data->second), rgba,
-    roughness, 0.0F, domain, emissive, extra_material_flags);
+  return BuildPrimitiveGeometry(name, std::move(sphere_data->first),
+    std::move(sphere_data->second), material);
 }
 
-auto BuildCylinderGeometry(const char* geometry_name, const char* material_name,
-  const glm::vec4& rgba, const float roughness,
-  const oxygen::data::MaterialDomain domain, const glm::vec3 emissive,
-  const uint32_t extra_material_flags = 0U)
-  -> std::shared_ptr<oxygen::data::GeometryAsset>
+auto BuildCylinderGeometry(const std::string_view name,
+  const MaterialSpec& material) -> std::shared_ptr<oxygen::data::GeometryAsset>
 {
   auto cylinder_data = oxygen::data::MakeCylinderMeshAsset(32U, 1.0F, 0.5F);
   CHECK_F(cylinder_data.has_value());
-  return BuildPrimitiveGeometry(geometry_name, material_name,
-    std::move(cylinder_data->first), std::move(cylinder_data->second), rgba,
-    roughness, 0.0F, domain, emissive, extra_material_flags);
+  return BuildPrimitiveGeometry(name, std::move(cylinder_data->first),
+    std::move(cylinder_data->second), material);
 }
 
 } // namespace
@@ -359,20 +325,14 @@ namespace oxygen::examples::vortex_basic {
 // Construction / destruction
 // ---------------------------------------------------------------------------
 
-MainModule::MainModule(const DemoAppContext& app,
+MainModule::MainModule(const host::HostContext& host,
   const vortex::ShaderDebugMode shader_debug_mode,
-  const ValidationOptions validation) noexcept
-  : app_(app)
+  const ValidationOptions validation, const SceneOptions scene_options)
+  : HostModule(host)
   , validation_(validation)
+  , scene_options_(scene_options)
   , shader_debug_mode_(shader_debug_mode)
 {
-  DCHECK_NOTNULL_F(app_.platform);
-  DCHECK_F(!app_.gfx_weak.expired());
-
-  if (!app_.headless) {
-    auto& wnd = AddComponent<AppWindow>(app_);
-    app_window_ = observer_ptr(&wnd);
-  }
 }
 
 MainModule::~MainModule()
@@ -385,249 +345,107 @@ MainModule::~MainModule()
 // Lifecycle
 // ---------------------------------------------------------------------------
 
-auto MainModule::OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool
+auto MainModule::BuildWindowProperties() const -> platform::window::Properties
+{
+  constexpr uint32_t kWidth = 1920U;
+  constexpr uint32_t kHeight = 1440U;
+  constexpr uint32_t kChartWidth = 1600U;
+  constexpr uint32_t kChartHeight = 1000U;
+  auto props = HostModule::BuildWindowProperties();
+  if (!validation_.sidedness_scene) {
+    props.title = "Vortex Basic Example";
+    props.extent = { .width = kWidth, .height = kHeight };
+  } else {
+    props.title = validation_.shading_mode == vortex::ShadingMode::kDeferred
+      ? "Oxygen Sidedness Validation - Deferred"
+      : "Oxygen Sidedness Validation - Forward";
+    props.extent = { .width = kChartWidth, .height = kChartHeight };
+  }
+  return props;
+}
+
+auto MainModule::OnHostAttached(observer_ptr<IAsyncEngine> engine) -> bool
 {
   DCHECK_NOTNULL_F(engine);
-
-  if (!app_.headless) {
-    DCHECK_NOTNULL_F(app_window_);
-
-    platform::window::Properties props(validation_.sidedness_scene
-        ? (validation_.shading_mode == vortex::ShadingMode::kDeferred
-              ? "Oxygen Sidedness Validation - Deferred"
-              : "Oxygen Sidedness Validation - Forward")
-        : "Vortex Basic Example");
-    constexpr uint32_t kWidth = 1920U;
-    constexpr uint32_t kHeight = 1440U;
-    props.extent = {
-      .width = validation_.sidedness_scene ? 1600U : kWidth,
-      .height = validation_.sidedness_scene ? 1000U : kHeight,
-    };
-    props.flags = {
-      .hidden = false,
-      .always_on_top = false,
-      .full_screen = app_.fullscreen,
-      .maximized = false,
-      .minimized = false,
-      .resizable = true,
-      .borderless = false,
-    };
-    if (!app_window_->CreateAppWindow(props)) {
-      LOG_F(ERROR, "VortexBasic: could not create application window");
-      return false;
-    }
-  }
-
-  main_view_id_ = ViewId { s_next_view_id_++ };
+  main_view_id_ = Publisher().GetOrCreateViewId("MainView");
   if (validation_.IsExposureFixture()) {
     exposure_view_state_
       = vortex::CompositionView::ViewStateHandle { s_next_exposure_state_++ };
   }
 
-  // Subscribe to Vortex Renderer attachment so we can hold an observer.
   renderer_subscription_ = engine->SubscribeModuleAttached(
     [this](const engine::ModuleEvent& event) -> void {
       if (event.type_id != vortex::Renderer::ClassTypeId()) {
         return;
       }
-      vortex_renderer_
-        = observer_ptr { static_cast<vortex::Renderer*>(event.module.get()) };
-      vortex_renderer_->SetGroundGridConfig(vortex::GroundGridConfig {
+      auto& renderer = static_cast<vortex::Renderer&>(*event.module);
+      renderer.SetGroundGridConfig(vortex::GroundGridConfig {
         .enabled = false,
       });
+      renderer.SetShaderDebugMode(shader_debug_mode_);
     },
     true);
-
   return true;
 }
 
 auto MainModule::OnShutdown() noexcept -> void
 {
   renderer_subscription_.Cancel();
-  ReleasePublishedRuntimeView();
-  ClearSceneFb();
+  if (const auto renderer = ResolveRenderer()) {
+    renderer->SetShaderDebugMode(vortex::ShaderDebugMode::kDisabled);
+  }
   camera_node_ = {};
   cube_node_ = {};
   translucent_sphere_node_ = {};
   translucent_cylinder_node_ = {};
   scene_.reset();
-  vortex_renderer_.reset(nullptr);
   validation_normal_map_.reset();
-}
-
-auto MainModule::ReleasePublishedRuntimeView(
-  const observer_ptr<engine::FrameContext> context) -> void
-{
-  auto renderer = ResolveVortexRenderer();
-  if (!renderer) {
-    return;
-  }
-
-  renderer->SetShaderDebugMode(vortex::ShaderDebugMode::kDisabled);
-  if (main_view_id_ == kInvalidViewId) {
-    return;
-  }
-
-  if (context != nullptr) {
-    renderer->RemovePublishedRuntimeView(*context, main_view_id_);
-    return;
-  }
-
-  renderer->RemovePublishedRuntimeView(main_view_id_);
-}
-
-auto MainModule::ResolveVortexRenderer() -> observer_ptr<vortex::Renderer>
-{
-  if (app_.engine) {
-    if (auto renderer = app_.engine->GetModule<vortex::Renderer>()) {
-      vortex_renderer_ = observer_ptr { &renderer->get() };
-      vortex_renderer_->SetGroundGridConfig(vortex::GroundGridConfig {
-        .enabled = false,
-      });
-      return vortex_renderer_;
-    }
-  }
-  vortex_renderer_.reset(nullptr);
-  return nullptr;
-}
-
-auto MainModule::BuildResolvedView(const uint32_t width, const uint32_t height)
-  -> std::optional<ResolvedView>
-{
-  if (!camera_node_.IsAlive() || !camera_node_.HasCamera()) {
-    return std::nullopt;
-  }
-
-  const auto viewport = ViewPort {
-    .top_left_x = 0.0F,
-    .top_left_y = 0.0F,
-    .width = static_cast<float>(width),
-    .height = static_cast<float>(height),
-    .min_depth = 0.0F,
-    .max_depth = 1.0F,
-  };
-  auto camera_node = camera_node_;
-  auto resolver = vortex::SceneCameraViewResolver {
-    [camera_node](
-      const ViewId& /*unused*/) -> scene::SceneNode { return camera_node; },
-    viewport,
-  };
-  return resolver(main_view_id_);
+  HostModule::OnShutdown();
 }
 
 // ---------------------------------------------------------------------------
 // Frame phases
 // ---------------------------------------------------------------------------
 
-auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
-  -> void
-{
-  DCHECK_NOTNULL_F(context);
-
-  if (scene_
-    && (app_.headless
-      || (app_window_ != nullptr && app_window_->GetWindow() != nullptr
-        && !app_window_->IsShuttingDown()))) {
-    context->SetScene(observer_ptr { scene_.get() });
-  }
-
-  if (app_.headless || !app_window_) {
-    return;
-  }
-
-  // Handle window destruction.
-  if (!app_window_->GetWindow()) {
-    if (last_surface_) {
-      const auto surfaces = context->GetSurfaces();
-      for (size_t i = 0; i < surfaces.size(); ++i) {
-        if (surfaces.at(i) == last_surface_) {
-          context->RemoveSurfaceAt(i);
-          break;
-        }
-      }
-      last_surface_ = nullptr;
-    }
-    ReleasePublishedRuntimeView(context);
-    return;
-  }
-
-  // Handle resize.
-  if (app_window_->ShouldResize()) {
-    ClearSceneFb();
-    app_window_->ApplyPendingResize();
-  }
-
-  // Register the surface with the frame context.
-  auto surface = app_window_->GetSurface().lock();
-  if (surface) {
-    auto surfaces = context->GetSurfaces();
-    const bool already_registered = std::ranges::any_of(surfaces,
-      [&](const auto& s) -> auto { return s.get() == surface.get(); });
-    if (!already_registered) {
-      context->AddSurface(observer_ptr { surface.get() });
-    }
-    last_surface_ = observer_ptr { surface.get() };
-  } else {
-    last_surface_ = nullptr;
-  }
-}
-
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  if (!app_.headless && (!app_window_ || !app_window_->GetWindow())) {
-    co_return;
-  }
-
-  if (validation_.normal_map) {
-    if (!validation_normal_map_) {
-      validation_normal_map_ = std::make_unique<NormalMapValidationTexture>(
-        app_.engine->GetAssetLoader());
+  if (HasRenderableWindow()) {
+    bool ready = true;
+    if (validation_.normal_map) {
+      if (!validation_normal_map_) {
+        validation_normal_map_ = std::make_unique<NormalMapValidationTexture>(
+          Host().engine->GetAssetLoader());
+      }
+      ready = validation_normal_map_->EnsureReady();
     }
-    if (!validation_normal_map_->EnsureReady()) {
-      co_return;
+    if (ready) {
+      EnsureScene();
+      EnsureLighting();
+      const auto extent = ResolveViewExtent();
+      EnsureCamera(extent.x, extent.y);
+      UpdateValidationScene(context);
+      if (scene_) {
+        scene_->Update(false);
+      }
     }
   }
-  EnsureScene();
-  EnsureLighting();
-  const auto extent = ResolveViewExtent();
-  EnsureCamera(extent.x, extent.y);
-  UpdateValidationScene(context);
-  if (scene_) {
-    scene_->Update(false);
-  }
-  co_return;
+  co_await HostModule::OnSceneMutation(context);
 }
 
-auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
+auto MainModule::BuildViews(
+  engine::FrameContext& /*context*/, host::HostViews& views) -> void
 {
-  auto renderer = ResolveVortexRenderer();
-  if (!renderer) {
-    co_return;
-  }
-  if (!app_.headless && (!app_window_ || !app_window_->GetWindow())) {
-    co_return;
-  }
   if (!camera_node_.IsAlive()) {
-    co_return;
+    return;
   }
-
   const auto extent = ResolveViewExtent();
   if (extent.x == 0 || extent.y == 0) {
-    co_return;
+    return;
   }
 
-  EnsureSceneFb(extent.x, extent.y);
-  if (!scene_fb_) {
-    co_return;
-  }
-
-  renderer->SetShaderDebugMode(shader_debug_mode_);
-
-  // Build the ViewContext for the Vortex Renderer.
-  engine::ViewContext view_ctx {};
-  view_ctx.view.viewport = ViewPort {
+  View view {};
+  view.viewport = ViewPort {
     .top_left_x = 0.0F,
     .top_left_y = 0.0F,
     .width = static_cast<float>(extent.x),
@@ -635,77 +453,30 @@ auto MainModule::OnPublishViews(observer_ptr<engine::FrameContext> context)
     .min_depth = 0.0F,
     .max_depth = 1.0F,
   };
-  view_ctx.metadata.name = "MainView";
-  view_ctx.metadata.purpose = "primary";
-  view_ctx.metadata.is_scene_view = true;
-  view_ctx.metadata.with_atmosphere = app_.with_atmosphere;
-  view_ctx.metadata.with_height_fog = app_.with_height_fog;
-  view_ctx.metadata.with_local_fog = app_.with_local_fog;
-  view_ctx.render_target = observer_ptr { scene_fb_.get() };
-  view_ctx.composite_source = observer_ptr { scene_fb_.get() };
-
-  renderer->UpsertPublishedRuntimeView(*context, main_view_id_,
-    std::move(view_ctx), validation_.shading_mode, std::nullopt,
-    exposure_view_state_);
-  const auto published_view_id
-    = renderer->ResolvePublishedRuntimeViewId(main_view_id_);
-  if (published_view_id != kInvalidViewId) {
-    if (const auto resolved_view = BuildResolvedView(extent.x, extent.y);
-      resolved_view.has_value()) {
-      renderer->RegisterResolvedView(
-        published_view_id, std::move(*resolved_view));
-    }
-  }
-  co_return;
-}
-
-auto MainModule::OnCompositing(observer_ptr<engine::FrameContext> /*context*/)
-  -> co::Co<>
-{
-  auto renderer = ResolveVortexRenderer();
-  if (app_.headless || !renderer || !app_window_ || !app_window_->GetWindow()) {
-    co_return;
-  }
-
-  auto target_fb = app_window_->GetCurrentFrameBuffer().lock();
-  if (!target_fb) {
-    co_return;
-  }
-
-  auto surface = app_window_->GetSurface().lock();
-  if (!surface) {
-    co_return;
-  }
-
-  const auto extent = app_window_->GetWindow()->Size();
-  const ViewPort viewport {
-    .top_left_x = 0.0F,
-    .top_left_y = 0.0F,
-    .width = static_cast<float>(extent.width),
-    .height = static_cast<float>(extent.height),
-    .min_depth = 0.0F,
-    .max_depth = 1.0F,
-  };
-
-  // Resolve the published view id (intent → stable published id).
-  const auto published_id
-    = renderer->ResolvePublishedRuntimeViewId(main_view_id_);
-  if (published_id == kInvalidViewId) {
-    co_return;
-  }
-
-  vortex::CompositionSubmission submission {};
-  submission.composite_target = target_fb;
-  submission.tasks.push_back(
-    vortex::CompositingTask::MakeCopy(published_id, viewport));
-
-  renderer->RegisterComposition(std::move(submission), std::move(surface));
-  co_return;
+  auto main_view
+    = vortex::CompositionView::ForScene(main_view_id_, view, camera_node_);
+  main_view.name = "MainView";
+  main_view.view_state_handle = exposure_view_state_;
+  main_view.with_atmosphere = scene_options_.with_atmosphere;
+  main_view.with_height_fog = scene_options_.with_height_fog;
+  main_view.with_local_fog = scene_options_.with_local_fog;
+  main_view.shading_mode = validation_.shading_mode;
+  views.views.push_back(std::move(main_view));
+  views.main = main_view_id_;
 }
 
 // ---------------------------------------------------------------------------
 // Scene setup
 // ---------------------------------------------------------------------------
+
+auto MainModule::CreateScene(const char* name, const std::size_t capacity)
+  -> void
+{
+  // Staging collects the build's mutations; the host publishes the scene at
+  // the next frame start.
+  scene_ = std::make_shared<scene::Scene>(name, capacity);
+  Stage().Stage(scene_);
+}
 
 auto MainModule::EnsureScene() -> void
 {
@@ -725,7 +496,7 @@ auto MainModule::EnsureScene() -> void
   }
 
   constexpr size_t kCapacity = 32;
-  scene_ = std::make_shared<scene::Scene>("VortexBasicScene", kCapacity);
+  CreateScene("VortexBasicScene", kCapacity);
   scene_->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
 
   if (const auto environment = scene_->GetEnvironment();
@@ -762,9 +533,9 @@ auto MainModule::EnsureScene() -> void
     atmosphere->SetSunDiskEnabled(true);
     atmosphere->SetAerialPerspectiveDistanceScale(1.0F);
     atmosphere->SetAerialPerspectiveStartDepthMeters(
-      (std::max)(app_.vortex_aerial_start_depth_m, 0.0F));
+      (std::max)(scene_options_.aerial_start_depth_m, 0.0F));
     atmosphere->SetAerialScatteringStrength(
-      (std::max)(app_.vortex_aerial_scattering_strength, 0.0F));
+      (std::max)(scene_options_.aerial_scattering_strength, 0.0F));
     atmosphere->SetHeightFogContribution(1.0F);
     atmosphere->SetTraceSampleCountScale(1.0F);
     atmosphere->SetTransmittanceMinLightElevationDeg(-90.0F);
@@ -782,7 +553,7 @@ auto MainModule::EnsureScene() -> void
     sky_light->SetSpecularIntensity(1.0F);
     sky_light->SetLowerHemisphereColor({ 0.02F, 0.02F, 0.03F });
     sky_light->SetVolumetricScatteringIntensity(
-      app_.vortex_sky_light_volumetric_scattering_intensity);
+      scene_options_.sky_light_volumetric_scattering_intensity);
     sky_light->SetAffectReflections(true);
 
     auto* post_process
@@ -803,9 +574,10 @@ auto MainModule::EnsureScene() -> void
     if (fog == nullptr) {
       fog = &environment->AddSystem<scene::environment::Fog>();
     }
-    fog->SetEnabled(app_.with_height_fog || app_.with_volumetric_fog);
-    fog->SetEnableHeightFog(app_.with_height_fog);
-    fog->SetEnableVolumetricFog(app_.with_volumetric_fog);
+    fog->SetEnabled(
+      scene_options_.with_height_fog || scene_options_.with_volumetric_fog);
+    fog->SetEnableHeightFog(scene_options_.with_height_fog);
+    fog->SetEnableVolumetricFog(scene_options_.with_volumetric_fog);
     fog->SetRenderInMainPass(true);
     fog->SetVisibleInReflectionCaptures(true);
     fog->SetVisibleInRealTimeSkyCaptures(true);
@@ -822,7 +594,7 @@ auto MainModule::EnsureScene() -> void
     fog->SetVolumetricFogScatteringDistribution(0.20F);
     fog->SetVolumetricFogAlbedo({ 0.62F, 0.70F, 0.82F });
     const auto volumetric_emissive_scale
-      = std::max(app_.vortex_volumetric_fog_emissive_scale, 0.0F);
+      = std::max(scene_options_.volumetric_fog_emissive_scale, 0.0F);
     fog->SetVolumetricFogEmissive({ 0.20F * volumetric_emissive_scale,
       0.26F * volumetric_emissive_scale, 0.32F * volumetric_emissive_scale });
     fog->SetVolumetricFogExtinctionScale(1.50F);
@@ -832,21 +604,27 @@ auto MainModule::EnsureScene() -> void
     fog->SetVolumetricFogStaticLightingScatteringIntensity(1.0F);
   }
 
-  auto cube_geo = BuildCubeGeometry(
-    "ValidationCube", "ValidationCube", kCubeColor, 0.28F, 0.85F);
-  auto occlusion_probe_geo = BuildCubeGeometry("OcclusionProbeCube",
-    "OcclusionProbeCube", kOcclusionProbeColor, 0.5F, 0.0F);
+  auto cube_geo = BuildCubeGeometry("ValidationCube",
+    { .rgba = kCubeColor, .roughness = 0.28F, .metalness = 0.85F });
+  auto occlusion_probe_geo = BuildCubeGeometry(
+    "OcclusionProbeCube", { .rgba = kOcclusionProbeColor, .roughness = 0.5F });
   auto translucent_sphere_geo = BuildSphereGeometry("TranslucentCyanSphere",
-    "TranslucentCyanSphere", kTranslucentSphereColor, 0.12F,
-    oxygen::data::MaterialDomain::kAlphaBlended, glm::vec3 { 0.0F },
-    oxygen::data::pak::render::kMaterialFlag_Unlit);
+    {
+      .rgba = kTranslucentSphereColor,
+      .roughness = 0.12F,
+      .domain = oxygen::data::MaterialDomain::kAlphaBlended,
+      .extra_flags = oxygen::data::pak::render::kMaterialFlag_Unlit,
+    });
   auto translucent_cylinder_geo
     = BuildCylinderGeometry("TranslucentMagentaCylinder",
-      "TranslucentMagentaCylinder", kTranslucentCylinderColor, 0.22F,
-      oxygen::data::MaterialDomain::kAlphaBlended, glm::vec3 { 0.0F },
-      oxygen::data::pak::render::kMaterialFlag_Unlit);
+      {
+        .rgba = kTranslucentCylinderColor,
+        .roughness = 0.22F,
+        .domain = oxygen::data::MaterialDomain::kAlphaBlended,
+        .extra_flags = oxygen::data::pak::render::kMaterialFlag_Unlit,
+      });
   auto floor_geo = BuildCubeGeometry(
-    "ValidationFloor", "ValidationFloor", kFloorColor, 0.90F);
+    "ValidationFloor", { .rgba = kFloorColor, .roughness = 0.90F });
 
   cube_node_ = scene_->CreateNode("Cube");
   cube_node_.GetRenderable().SetGeometry(std::move(cube_geo));
@@ -856,7 +634,7 @@ auto MainModule::EnsureScene() -> void
   cube_rotation_axis_ = RandomUnitAxis(cube_rotation_rng_);
   cube_node_.GetTransform().SetLocalRotation(cube_rotation_);
 
-  if (app_.with_occlusion) {
+  if (scene_options_.with_occlusion) {
     occlusion_probe_node_ = scene_->CreateNode("OcclusionProbe");
     occlusion_probe_node_.GetRenderable().SetGeometry(
       std::move(occlusion_probe_geo));
@@ -866,7 +644,7 @@ auto MainModule::EnsureScene() -> void
       kOcclusionProbeCenter);
   }
 
-  if (app_.with_translucency) {
+  if (scene_options_.with_translucency) {
     translucent_sphere_node_ = scene_->CreateNode("TranslucentCyanSphere");
     translucent_sphere_node_.GetRenderable().SetGeometry(
       std::move(translucent_sphere_geo));
@@ -895,7 +673,7 @@ auto MainModule::EnsureScene() -> void
   floor_node_.GetTransform().SetLocalScale(kFloorScale);
   floor_node_.GetTransform().SetLocalPosition(kFloorCenter);
 
-  if (app_.with_local_fog) {
+  if (scene_options_.with_local_fog) {
     local_fog_volume_node_ = scene_->CreateNode("LocalFogVolume");
     if (const auto impl = local_fog_volume_node_.GetImpl(); impl.has_value()) {
       impl->get().AddComponent<scene::environment::LocalFogVolume>();
@@ -909,7 +687,7 @@ auto MainModule::EnsureScene() -> void
       local_fog.SetFogPhaseG(0.15F);
       local_fog.SetFogAlbedo({ 0.10F, 0.92F, 0.86F });
       const auto local_fog_emissive_scale
-        = std::max(app_.vortex_local_fog_emissive_scale, 0.0F);
+        = std::max(scene_options_.local_fog_emissive_scale, 0.0F);
       local_fog.SetFogEmissive({ 7.5F * local_fog_emissive_scale,
         0.4F * local_fog_emissive_scale, 5.5F * local_fog_emissive_scale });
       local_fog.SetSortPriority(2);
@@ -926,7 +704,7 @@ auto MainModule::BuildSidednessScene() -> void
   namespace d = oxygen::data;
   namespace pak = d::pak;
 
-  scene_ = std::make_shared<scene::Scene>("SidednessValidation", 128);
+  CreateScene("SidednessValidation", 128);
   scene_->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
   auto& post = scene_->GetEnvironment()
                  ->AddSystem<scene::environment::PostProcessVolume>();
@@ -997,7 +775,7 @@ auto MainModule::BuildSidednessScene() -> void
     glm::vec4 { 0.015F, 0.5F, 0.9F, 0.55F },
   };
   auto panel_geometry = BuildCubeGeometry(
-    "SidednessPanel", "SidednessPanel", { 0.20F, 0.22F, 0.25F, 1.0F });
+    "SidednessPanel", { .rgba = { 0.20F, 0.22F, 0.25F, 1.0F } });
   const auto normal_map = validation_normal_map_ ? validation_normal_map_->Key()
                                                  : content::ResourceKey {};
 
@@ -1005,12 +783,19 @@ auto MainModule::BuildSidednessScene() -> void
     const auto flags = row == 1 ? pak::render::kMaterialFlag_AlphaTest : 0U;
     const auto single_name = std::string(rows.at(row)) + "Single";
     const auto double_name = std::string(rows.at(row)) + "Double";
-    auto single_geometry = BuildPrimitiveGeometry(single_name.c_str(),
-      single_name.c_str(), vertices, { 0U, 1U, 2U }, colors.at(row), 0.75F,
-      0.0F, domains.at(row), glm::vec3 { 0.0F }, flags, false, normal_map);
-    auto double_geometry = BuildPrimitiveGeometry(double_name.c_str(),
-      double_name.c_str(), vertices, { 0U, 1U, 2U }, colors.at(row), 0.75F,
-      0.0F, domains.at(row), glm::vec3 { 0.0F }, flags, true, normal_map);
+    auto material = MaterialSpec {
+      .rgba = colors.at(row),
+      .roughness = 0.75F,
+      .domain = domains.at(row),
+      .extra_flags = flags,
+      .double_sided = false,
+      .normal_map = normal_map,
+    };
+    auto single_geometry
+      = BuildPrimitiveGeometry(single_name, vertices, { 0U, 1U, 2U }, material);
+    material.double_sided = true;
+    auto double_geometry
+      = BuildPrimitiveGeometry(double_name, vertices, { 0U, 1U, 2U }, material);
 
     for (size_t column = 0; column < columns.size(); ++column) {
       const auto name = std::string(rows.at(row)) + "_" + columns.at(column);
@@ -1053,14 +838,16 @@ auto MainModule::BuildSidednessScene() -> void
   auto cube_data = d::MakeCubeMeshAsset();
   auto sphere_data = d::MakeSphereMeshAsset(24U, 32U);
   CHECK_F(cube_data.has_value() && sphere_data.has_value());
-  auto cube = BuildPrimitiveGeometry("SidednessCube", "SidednessControls",
-    std::move(cube_data->first), std::move(cube_data->second),
-    { 0.8F, 0.42F, 0.025F, 1.0F }, 0.55F, 0.0F, d::MaterialDomain::kOpaque,
-    glm::vec3 { 0.0F }, 0U, false);
-  auto sphere = BuildPrimitiveGeometry("SidednessSphere", "SidednessControls",
-    std::move(sphere_data->first), std::move(sphere_data->second),
-    { 0.8F, 0.42F, 0.025F, 1.0F }, 0.55F, 0.0F, d::MaterialDomain::kOpaque,
-    glm::vec3 { 0.0F }, 0U, false);
+  const auto controls = MaterialSpec {
+    .name = "SidednessControls",
+    .rgba = { 0.8F, 0.42F, 0.025F, 1.0F },
+    .roughness = 0.55F,
+    .double_sided = false,
+  };
+  auto cube = BuildPrimitiveGeometry("SidednessCube",
+    std::move(cube_data->first), std::move(cube_data->second), controls);
+  auto sphere = BuildPrimitiveGeometry("SidednessSphere",
+    std::move(sphere_data->first), std::move(sphere_data->second), controls);
   for (size_t index = 0; index < 4; ++index) {
     const auto mirrored = index % 2 != 0;
     auto node = make_child(validation_root_,
@@ -1080,7 +867,7 @@ auto MainModule::BuildSidednessScene() -> void
   auto light = std::make_unique<scene::DirectionalLight>();
   light->Common().affects_world = true;
   light->Common().casts_shadows = true;
-  light->Common().shadow.bias = kDefaultDemoSunShadowBias;
+  light->Common().shadow.bias = kSunShadowBias;
   light->Common().color_rgb = { 1.0F, 1.0F, 1.0F };
   light->SetIntensityLux(100000.0F);
   light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
@@ -1102,7 +889,7 @@ auto MainModule::BuildSidednessScene() -> void
 
 auto MainModule::BuildExposureScene() -> void
 {
-  scene_ = std::make_shared<scene::Scene>("FixedExposureFixture", 8U);
+  CreateScene("FixedExposureFixture", 8U);
   scene_->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
   auto& post = scene_->GetEnvironment()
                  ->AddSystem<scene::environment::PostProcessVolume>();
@@ -1129,7 +916,8 @@ auto MainModule::BuildExposureScene() -> void
     } else {
       settings.key = 25.0F;
       settings.compensation_ev = 1.0e20F;
-      settings.compensation_curve = { { 0.0F, -1.0e20F } };
+      settings.compensation_curve
+        = { { .metered_ev = 0.0F, .compensation_ev = -1.0e20F } };
       // Lock the arithmetic fixture so asset-readiness startup frames cannot
       // turn this cancellation check into a temporal-settling experiment.
       settings.min_ev = settings.max_ev = 0.0F;
@@ -1142,8 +930,11 @@ auto MainModule::BuildExposureScene() -> void
   const float input = automatic ? 0.25F : 4096.0F;
   auto receiver = scene_->CreateNode("ExposureReceiver");
   receiver.GetRenderable().SetGeometry(BuildCubeGeometry("ExposureReceiver",
-    "ExposureReceiver", glm::vec4 { 0.0F, 0.0F, 0.0F, 1.0F }, 1.0F, 0.0F,
-    data::MaterialDomain::kOpaque, glm::vec3 { input }));
+    {
+      .rgba = { 0.0F, 0.0F, 0.0F, 1.0F },
+      .roughness = 1.0F,
+      .emissive = glm::vec3 { input },
+    }));
   receiver.GetTransform().SetLocalScale({ 100.0F, 1.0F, 100.0F });
   SetShadowParticipation(receiver, false, false);
   LOG_F(INFO, "Exposure fixture: input={} EV={} auto={} gamma=1 None", input,
@@ -1162,7 +953,7 @@ auto MainModule::EnsureLighting() -> void
     auto light = std::make_unique<scene::DirectionalLight>();
     light->Common().affects_world = true;
     light->Common().casts_shadows = true;
-    light->Common().shadow.bias = kDefaultDemoSunShadowBias;
+    light->Common().shadow.bias = kSunShadowBias;
     light->Common().color_rgb = { 1.0F, 0.97F, 0.92F };
     light->SetAngularSizeRadians(glm::radians(0.53F));
     light->SetIntensityLux(100000.0F);
@@ -1294,8 +1085,8 @@ auto MainModule::UpdateValidationScene(
 
 auto MainModule::ResolveViewExtent() const noexcept -> glm::uvec2
 {
-  if (!app_.headless && app_window_ && app_window_->GetWindow()) {
-    const auto extent = app_window_->GetWindow()->Size();
+  if (const auto window = Window(); window && window->GetWindow()) {
+    const auto extent = window->GetWindow()->Size();
     return { extent.width, extent.height };
   }
 
@@ -1350,54 +1141,6 @@ auto MainModule::EnsureCamera(uint32_t width, uint32_t height) -> void
     });
   }
   // NOLINTEND(*-magic-numbers)
-}
-
-// ---------------------------------------------------------------------------
-// Intermediate framebuffer management
-// ---------------------------------------------------------------------------
-
-auto MainModule::EnsureSceneFb(uint32_t width, uint32_t height) -> void
-{
-  if (scene_fb_ && scene_fb_width_ == width && scene_fb_height_ == height) {
-    return;
-  }
-
-  ClearSceneFb();
-
-  auto gfx = app_.gfx_weak.lock();
-  if (!gfx) {
-    return;
-  }
-
-  graphics::TextureDesc color_desc {};
-  color_desc.width = width;
-  color_desc.height = height;
-  color_desc.format = Format::kRGBA8UNorm;
-  color_desc.texture_type = TextureType::kTexture2D;
-  color_desc.is_render_target = true;
-  color_desc.is_shader_resource = true;
-  color_desc.initial_state = graphics::ResourceStates::kCommon;
-  color_desc.use_clear_value = true;
-  color_desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
-  color_desc.debug_name = "VortexBasic.SceneColor";
-
-  auto color_tex = gfx->CreateTexture(color_desc);
-  CHECK_F(static_cast<bool>(color_tex), "Failed to create scene color texture");
-
-  graphics::FramebufferDesc fb_desc {};
-  fb_desc.AddColorAttachment({ .texture = std::move(color_tex) });
-  scene_fb_ = gfx->CreateFramebuffer(fb_desc);
-  CHECK_F(static_cast<bool>(scene_fb_), "Failed to create scene framebuffer");
-
-  scene_fb_width_ = width;
-  scene_fb_height_ = height;
-}
-
-auto MainModule::ClearSceneFb() -> void
-{
-  scene_fb_.reset();
-  scene_fb_width_ = 0;
-  scene_fb_height_ = 0;
 }
 
 } // namespace oxygen::examples::vortex_basic

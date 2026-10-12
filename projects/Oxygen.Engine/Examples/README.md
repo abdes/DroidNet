@@ -27,8 +27,10 @@ For a controlled, uncapped Full HD run:
 Oxygen.Examples.MultiView.exe --resolution 1920x1080 --fullscreen true --fps 0 --vsync false
 ```
 
-The shared option builder and parser live in `Common/DemoCli.h`; `AppWindow`
-applies the typed request through the platform window API.
+The shared option builder and parser live in `Common/DemoCli.h`, and in
+`Oxygen.Host`'s `RuntimeCli` for examples on the runtime host (VortexBasic).
+`AppWindow`, or the host's `HostWindow`, applies the typed request through the
+platform window API.
 
 ---
 

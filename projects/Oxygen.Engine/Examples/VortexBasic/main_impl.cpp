@@ -4,229 +4,195 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <atomic>
-#include <cstdint>
+#include <chrono>
+#include <cstdlib>
+#include <exception>
 #include <filesystem>
+#include <memory>
 #include <source_location>
 #include <span>
+#include <stdexcept>
 #include <string>
-#include <thread>
+#include <string_view>
+#include <utility>
 
-#include "Common/DemoCli.h"
-#include "Common/FrameCaptureCliOptions.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
 #include "VortexBasic/MainModule.h"
-#include <asio/signal_set.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
-#include <Oxygen/Clap/CommandLineContext.h>
+#include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
-#include <Oxygen/Console/StartupPlan.h>
-#include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Config/EngineConfig.h>
+#include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/CVar.h>
 #include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Graphics/Common/BackendModule.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Input/InputSystem.h>
-#include <Oxygen/Loader/GraphicsBackendLoader.h>
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/EventLoop.h>
-#include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/RunHost.h>
+#include <Oxygen/Host/RuntimeCli.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 
-using namespace oxygen;
-using namespace oxygen::engine;
-using namespace oxygen::graphics;
+namespace host = oxygen::host;
+namespace vortex = oxygen::vortex;
+
+using oxygen::AsyncEngine;
+using oxygen::PathFinderConfig;
+using oxygen::RendererConfig;
+using oxygen::RendererImplementation;
+using oxygen::clap::CmdLineArgumentsError;
+using oxygen::clap::Command;
+using oxygen::clap::CommandBuilder;
+using oxygen::clap::Option;
+using oxygen::clap::Options;
+using oxygen::console::CVarValue;
+using oxygen::examples::vortex_basic::MainModule;
+using oxygen::examples::vortex_basic::SceneOptions;
+using oxygen::examples::vortex_basic::ValidationOptions;
+using oxygen::graphics::QueueRole;
 using namespace std::chrono_literals;
 
 namespace {
 
-auto ParseVortexShaderDebugMode(std::string_view text)
-  -> oxygen::vortex::ShaderDebugMode
+auto ParseVortexShaderDebugMode(const std::string_view text)
+  -> vortex::ShaderDebugMode
 {
-  using oxygen::vortex::ShaderDebugMode;
-
-  if (text.empty() || text == "disabled") {
-    return ShaderDebugMode::kDisabled;
+  if (text.empty() || text == "disabled" || text == "normal") {
+    return vortex::ShaderDebugMode::kDisabled;
   }
-  if (text == "normal") {
-    return ShaderDebugMode::kDisabled;
-  }
-
-  if (const auto* info = oxygen::vortex::FindShaderDebugModeInfo(text);
+  if (const auto* info = vortex::FindShaderDebugModeInfo(text);
     info != nullptr && info->supported) {
     return info->mode;
   }
-
   throw std::runtime_error(
     "Unsupported Vortex shader debug mode: " + std::string(text));
 }
 
-auto EventLoopRun(const oxygen::examples::DemoAppContext& app) -> void
+//! Applies the validation scene and shading path names to `validation`.
+auto ResolveValidation(const std::string& scene_name,
+  const std::string& shading_path, ValidationOptions& validation,
+  SceneOptions& scene) -> void
 {
-  while (app.running.load(std::memory_order_relaxed)) {
-
-    app.platform->Async().PollOne();
-    if (!app.headless) {
-      app.platform->Events().PollOne();
-    }
-
-    if (!app.running.load(std::memory_order_relaxed)) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
+  using ExposureFixture = ValidationOptions::ExposureFixture;
+  if (scene_name != "default" && scene_name != "sidedness"
+    && scene_name != "exposure-fixed" && scene_name != "exposure-locked"
+    && scene_name != "exposure-curve-cancellation") {
+    throw std::runtime_error("Unknown validation scene: " + scene_name);
+  }
+  if (shading_path != "deferred" && shading_path != "forward") {
+    throw std::runtime_error("Unknown shading path: " + shading_path);
+  }
+  validation.sidedness_scene = scene_name == "sidedness";
+  if (scene_name == "exposure-fixed") {
+    validation.exposure_fixture = ExposureFixture::kFixed;
+  } else if (scene_name == "exposure-locked") {
+    validation.exposure_fixture = ExposureFixture::kLockedAuto;
+  } else if (scene_name == "exposure-curve-cancellation") {
+    validation.exposure_fixture = ExposureFixture::kCurveCancellation;
+  }
+  constexpr float kLockedEvLimit = 160.0F;
+  constexpr float kEvLimit = 32.0F;
+  const float ev_limit
+    = validation.exposure_fixture == ExposureFixture::kLockedAuto
+    ? kLockedEvLimit
+    : kEvLimit;
+  if (validation.fixed_exposure_ev < -ev_limit
+    || validation.fixed_exposure_ev > ev_limit) {
+    throw std::runtime_error(
+      "--validation-exposure-ev is outside the fixture range");
+  }
+  if (validation.IsExposureFixture() && shading_path != "deferred") {
+    throw std::runtime_error(
+      "exposure fixtures use the deferred emissive input");
+  }
+  if (validation.normal_map && !validation.sidedness_scene) {
+    throw std::runtime_error(
+      "--validation-normal-map requires --validation-scene sidedness");
+  }
+  validation.shading_mode = shading_path == "forward"
+    ? vortex::ShadingMode::kForward
+    : vortex::ShadingMode::kDeferred;
+  if (validation.sidedness_scene || validation.IsExposureFixture()) {
+    scene.with_atmosphere = false;
+    scene.with_height_fog = false;
+    scene.with_local_fog = false;
+    scene.with_volumetric_fog = false;
   }
 }
-} // namespace
 
-template <> struct co::EventLoopTraits<oxygen::examples::DemoAppContext> {
-  static auto Run(oxygen::examples::DemoAppContext& app) -> void
-  {
-    EventLoopRun(app);
-  }
-  static auto Stop(oxygen::examples::DemoAppContext& app) -> void
-  {
-    app.running.store(false, std::memory_order_relaxed);
-  }
-  static auto IsRunning(const oxygen::examples::DemoAppContext& app) -> bool
-  {
-    return app.running.load(std::memory_order_relaxed);
-  }
-  static auto EventLoopId(oxygen::examples::DemoAppContext& app) -> EventLoopID
-  {
-    return EventLoopID(&app);
-  }
-};
-
-namespace {
-
-auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
-  const oxygen::vortex::ShaderDebugMode shader_debug_mode,
-  const oxygen::examples::vortex_basic::ValidationOptions& validation) -> void
+auto SeedSceneCVars(const SceneOptions& scene, host::HostConfig& config) -> void
 {
-  LOG_F(INFO, "Registering engine modules...");
+  auto& cvars = config.startup_cvars;
+  cvars.Set("vtx.volumetric_fog.directional_shadows",
+    CVarValue { scene.volumetric_directional_shadows });
+  cvars.Set("vtx.volumetric_fog.temporal_reprojection",
+    CVarValue { scene.volumetric_temporal_reprojection });
+  if (scene.with_occlusion) {
+    cvars.Set("vtx.occlusion.enable", CVarValue { true });
+  }
+  if (scene.with_local_fog) {
+    cvars.Set("vtx.local_fog.enable", CVarValue { true });
+    cvars.Set("vtx.local_fog.render_into_volumetric_fog",
+      CVarValue { scene.local_fog_into_volumetric });
+    cvars.Set("vtx.local_fog.max_density_into_volumetric_fog",
+      CVarValue {
+        static_cast<double>(scene.local_fog_volumetric_max_density) });
+  }
+}
 
-  auto register_module = [&](std::unique_ptr<engine::EngineModule> module) {
-    const bool registered = app.engine->RegisterModule(std::move(module));
-    if (!registered) {
-      LOG_F(ERROR, "Failed to register module");
-      throw std::runtime_error("Module registration failed");
-    }
+auto RegisterModules(AsyncEngine& engine, host::HostContext& context,
+  const vortex::ShaderDebugMode shader_debug_mode,
+  const ValidationOptions& validation, const SceneOptions& scene) -> void
+{
+  // The main module runs before the renderer in every phase.
+  host::RegisterRequiredModule(engine,
+    std::make_unique<MainModule>(
+      context, shader_debug_mode, validation, scene));
+  host::RegisterRequiredModule(
+    engine, std::make_unique<oxygen::scenesync::RuntimeMotionProducerModule>());
+
+  constexpr auto kCapabilities
+    = vortex::RendererCapabilityFamily::kScenePreparation
+    | vortex::RendererCapabilityFamily::kGpuUploadAndAssetBinding
+    | vortex::RendererCapabilityFamily::kLightingData
+    | vortex::RendererCapabilityFamily::kDeferredShading
+    | vortex::RendererCapabilityFamily::kEnvironmentLighting
+    | vortex::RendererCapabilityFamily::kFinalOutputComposition
+    | vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling;
+  const auto capabilities = validation.sidedness_scene
+    ? kCapabilities | vortex::RendererCapabilityFamily::kShadowing
+    : kCapabilities;
+  const RendererConfig renderer_config {
+    .upload_queue_key
+    = context.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
   };
-
-  {
-    auto input_sys = std::make_unique<oxygen::engine::InputSystem>(
-      app.platform->Input().ForRead());
-    app.input_system = observer_ptr { input_sys.get() };
-    register_module(std::move(input_sys));
-
-    oxygen::RendererConfig renderer_config {
-      .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
-    };
-
-    // Register MainModule before the renderer so it runs first in each phase.
-    register_module(
-      std::make_unique<oxygen::examples::vortex_basic::MainModule>(
-        app, shader_debug_mode, validation));
-    register_module(
-      std::make_unique<oxygen::scenesync::RuntimeMotionProducerModule>());
-
-    switch (app.engine->GetEngineConfig().renderer.implementation) {
-      using enum oxygen::RendererImplementation;
-    case kVortex: {
-      constexpr auto kVortexValidationCapabilities
-        = oxygen::vortex::RendererCapabilityFamily::kScenePreparation
-        | oxygen::vortex::RendererCapabilityFamily::kGpuUploadAndAssetBinding
-        | oxygen::vortex::RendererCapabilityFamily::kLightingData
-        | oxygen::vortex::RendererCapabilityFamily::kDeferredShading
-        | oxygen::vortex::RendererCapabilityFamily::kEnvironmentLighting
-        | oxygen::vortex::RendererCapabilityFamily::kFinalOutputComposition
-        | oxygen::vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling;
-      const auto capabilities = validation.sidedness_scene
-        ? kVortexValidationCapabilities
-          | oxygen::vortex::RendererCapabilityFamily::kShadowing
-        : kVortexValidationCapabilities;
-      register_module(std::make_unique<oxygen::vortex::Renderer>(
-        app.gfx_weak, renderer_config, capabilities));
-      break;
-    }
-
-    case kLegacy:
-      throw std::runtime_error(
-        "VortexBasic requires EngineConfig.renderer.implementation = "
-        "RendererImplementation::kVortex");
-    }
-  }
+  host::RegisterRequiredModule(engine,
+    std::make_unique<vortex::Renderer>(
+      context.gfx_weak, renderer_config, capabilities));
 }
 
-auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
-  const oxygen::vortex::ShaderDebugMode shader_debug_mode,
-  const oxygen::examples::vortex_basic::ValidationOptions& validation)
-  -> co::Co<int>
-{
-  OXCO_WITH_NURSERY(n)
-  {
-    app.running.store(true, std::memory_order_relaxed);
-
-    co_await n.Start(&Platform::ActivateAsync, std::ref(*app.platform));
-    app.platform->Run();
-
-    DCHECK_F(!app.gfx_weak.expired());
-    auto gfx = app.gfx_weak.lock();
-    co_await n.Start(&Graphics::ActivateAsync, std::ref(*gfx));
-    gfx->Run();
-
-    co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*app.engine));
-    app.engine->Run();
-
-    RegisterEngineModules(app, shader_debug_mode, validation);
-
-    n.Start([&app, &n]() -> co::Co<> {
-      co_await app.platform->Windows().LastWindowClosed();
-      LOG_F(INFO, "VortexBasic: last window closed -> shutting down engine");
-      app.engine->Stop();
-      co_return;
-    });
-
-    co_await app.engine->Completed();
-
-    co_return co::kCancel;
-  };
-
-  co_return EXIT_SUCCESS;
-}
 } // namespace
 
 extern "C" auto MainImpl(std::span<const char*> args) -> int
 {
-  using namespace oxygen::clap; // NOLINT
-
-  uint32_t frames = 0U;
-  uint32_t target_fps = 100U;
-  bool headless = false;
-  bool enable_vsync = true;
+  host::RuntimeCliState runtime { .target_fps = 100U };
   std::string shader_debug_mode_name;
   std::string validation_scene_name;
   std::string shading_path_name;
-  oxygen::examples::vortex_basic::ValidationOptions validation {};
-  std::string resolution;
-  oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
-  oxygen::examples::cli::FrameCaptureCliState capture_cli {};
-  oxygen::examples::DemoAppContext app {};
+  ValidationOptions validation {};
+  SceneOptions scene {};
 
   try {
-    auto vortex_options = std::make_shared<clap::Options>("Vortex options");
-    vortex_options->Add(clap::Option::WithKey("validation-scene")
+    auto vortex_options = std::make_shared<Options>("Vortex options");
+    vortex_options->Add(Option::WithKey("validation-scene")
         .About("Procedural scene: default, sidedness, exposure-fixed, "
                "exposure-locked, or exposure-curve-cancellation")
         .Long("validation-scene")
@@ -234,39 +200,38 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .DefaultValue(std::string("default"))
         .StoreTo(&validation_scene_name)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("validation-exposure-ev")
+    vortex_options->Add(Option::WithKey("validation-exposure-ev")
         .About("Manual EV100 for the constant-4096 exposure-fixed fixture")
         .Long("validation-exposure-ev")
         .WithValue<float>()
         .DefaultValue(14.0F)
         .StoreTo(&validation.fixed_exposure_ev)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("validation-exposure-key")
+    vortex_options->Add(Option::WithKey("validation-exposure-key")
         .Long("validation-exposure-key")
         .WithValue<float>()
         .DefaultValue(12.5F)
         .StoreTo(&validation.exposure_key)
         .Build());
-    vortex_options->Add(
-      clap::Option::WithKey("validation-exposure-compensation")
+    vortex_options->Add(Option::WithKey("validation-exposure-compensation")
         .Long("validation-exposure-compensation")
         .WithValue<float>()
         .DefaultValue(0.0F)
         .StoreTo(&validation.exposure_compensation)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("validation-exposure-enabled")
+    vortex_options->Add(Option::WithKey("validation-exposure-enabled")
         .Long("validation-exposure-enabled")
         .WithValue<bool>()
         .DefaultValue(true)
         .StoreTo(&validation.exposure_enabled)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("validation-camera-exposure")
+    vortex_options->Add(Option::WithKey("validation-camera-exposure")
         .Long("validation-camera-exposure")
         .WithValue<bool>()
         .DefaultValue(false)
         .StoreTo(&validation.camera_exposure)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("validation-invalid-exposure")
+    vortex_options->Add(Option::WithKey("validation-invalid-exposure")
         .About(
           "Inject an invalid key at frame 8; retain the last valid exposure")
         .Long("validation-invalid-exposure")
@@ -274,14 +239,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .DefaultValue(false)
         .StoreTo(&validation.inject_invalid_exposure)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("shading-path")
+    vortex_options->Add(Option::WithKey("shading-path")
         .About("Native Vortex shading path: deferred or forward")
         .Long("shading-path")
         .WithValue<std::string>()
         .DefaultValue(std::string("deferred"))
         .StoreTo(&shading_path_name)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("validation-motion")
+    vortex_options->Add(Option::WithKey("validation-motion")
         .About(
           "Translate the sidedness chart at a deterministic rate per frame")
         .Long("validation-motion")
@@ -289,14 +254,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .DefaultValue(false)
         .StoreTo(&validation.animate)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("validation-normal-map")
+    vortex_options->Add(Option::WithKey("validation-normal-map")
         .About("Apply a tangent +Y normal-map fixture to the sidedness chart")
         .Long("validation-normal-map")
         .WithValue<bool>()
         .DefaultValue(false)
         .StoreTo(&validation.normal_map)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("shader-debug-mode")
+    vortex_options->Add(Option::WithKey("shader-debug-mode")
         .About("Deferred debug visualization mode: disabled, base-color, "
                "world-normals, roughness, metalness, scene-depth-raw, "
                "scene-depth-linear, or directional-shadow-mask")
@@ -306,252 +271,148 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("mode")
         .StoreTo(&shader_debug_mode_name)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("with-atmosphere")
+    vortex_options->Add(Option::WithKey("with-atmosphere")
         .About("Enable the atmosphere/aerial-perspective view layer")
         .Long("with-atmosphere")
         .WithValue<bool>()
         .DefaultValue(true)
         .UserFriendlyName("enabled")
-        .StoreTo(&app.with_atmosphere)
+        .StoreTo(&scene.with_atmosphere)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("with-height-fog")
+    vortex_options->Add(Option::WithKey("with-height-fog")
         .About("Enable the height-fog view layer")
         .Long("with-height-fog")
         .WithValue<bool>()
         .DefaultValue(true)
         .UserFriendlyName("enabled")
-        .StoreTo(&app.with_height_fog)
+        .StoreTo(&scene.with_height_fog)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("with-local-fog")
+    vortex_options->Add(Option::WithKey("with-local-fog")
         .About("Enable local fog volume authoring and rendering")
         .Long("with-local-fog")
         .WithValue<bool>()
         .DefaultValue(false)
         .UserFriendlyName("enabled")
-        .StoreTo(&app.with_local_fog)
+        .StoreTo(&scene.with_local_fog)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("with-volumetric-fog")
+    vortex_options->Add(Option::WithKey("with-volumetric-fog")
         .About("Enable volumetric fog authoring and integrated scattering")
         .Long("with-volumetric-fog")
         .WithValue<bool>()
         .DefaultValue(false)
         .UserFriendlyName("enabled")
-        .StoreTo(&app.with_volumetric_fog)
+        .StoreTo(&scene.with_volumetric_fog)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("with-occlusion")
+    vortex_options->Add(Option::WithKey("with-occlusion")
         .About("Enable Screen HZB occlusion proof geometry and runtime culling")
         .Long("with-occlusion")
         .WithValue<bool>()
         .DefaultValue(false)
         .UserFriendlyName("enabled")
-        .StoreTo(&app.with_occlusion)
+        .StoreTo(&scene.with_occlusion)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("with-translucency")
+    vortex_options->Add(Option::WithKey("with-translucency")
         .About("Enable translucent validation meshes for Stage 18 proof")
         .Long("with-translucency")
         .WithValue<bool>()
         .DefaultValue(false)
         .UserFriendlyName("enabled")
-        .StoreTo(&app.with_translucency)
+        .StoreTo(&scene.with_translucency)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("volumetric-local-fog")
+    vortex_options->Add(Option::WithKey("volumetric-local-fog")
         .About("Inject local fog into volumetric fog when both are enabled")
         .Long("volumetric-local-fog")
         .WithValue<bool>()
         .DefaultValue(true)
         .UserFriendlyName("enabled")
-        .StoreTo(&app.vortex_local_fog_into_volumetric)
+        .StoreTo(&scene.local_fog_into_volumetric)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("volumetric-directional-shadows")
+    vortex_options->Add(Option::WithKey("volumetric-directional-shadows")
         .About("Apply directional shadow-map visibility inside volumetric fog")
         .Long("volumetric-directional-shadows")
         .WithValue<bool>()
         .DefaultValue(true)
         .UserFriendlyName("enabled")
-        .StoreTo(&app.vortex_volumetric_directional_shadows)
+        .StoreTo(&scene.volumetric_directional_shadows)
         .Build());
-    vortex_options->Add(
-      clap::Option::WithKey("volumetric-temporal-reprojection")
+    vortex_options->Add(Option::WithKey("volumetric-temporal-reprojection")
         .About("Enable temporal reprojection in volumetric fog")
         .Long("volumetric-temporal-reprojection")
         .WithValue<bool>()
         .DefaultValue(true)
         .UserFriendlyName("enabled")
-        .StoreTo(&app.vortex_volumetric_temporal_reprojection)
+        .StoreTo(&scene.volumetric_temporal_reprojection)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("sky-light-volumetric-scattering")
+    vortex_options->Add(Option::WithKey("sky-light-volumetric-scattering")
         .About("SkyLight volumetric scattering intensity")
         .Long("sky-light-volumetric-scattering")
         .WithValue<float>()
         .DefaultValue(1.0F)
         .UserFriendlyName("intensity")
-        .StoreTo(&app.vortex_sky_light_volumetric_scattering_intensity)
+        .StoreTo(&scene.sky_light_volumetric_scattering_intensity)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("aerial-scattering-strength")
+    vortex_options->Add(Option::WithKey("aerial-scattering-strength")
         .About("Aerial perspective apply-time scattering strength")
         .Long("aerial-scattering-strength")
         .WithValue<float>()
         .DefaultValue(1.0F)
         .UserFriendlyName("strength")
-        .StoreTo(&app.vortex_aerial_scattering_strength)
+        .StoreTo(&scene.aerial_scattering_strength)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("aerial-start-depth")
+    vortex_options->Add(Option::WithKey("aerial-start-depth")
         .About("Aerial perspective start depth in meters")
         .Long("aerial-start-depth")
         .WithValue<float>()
         .DefaultValue(100.0F)
         .UserFriendlyName("meters")
-        .StoreTo(&app.vortex_aerial_start_depth_m)
+        .StoreTo(&scene.aerial_start_depth_m)
         .Build());
-    vortex_options->Add(
-      clap::Option::WithKey("local-fog-volumetric-max-density")
+    vortex_options->Add(Option::WithKey("local-fog-volumetric-max-density")
         .About("Clamp used when injecting local fog into volumetric fog")
         .Long("local-fog-volumetric-max-density")
         .WithValue<float>()
         .DefaultValue(0.01F)
         .UserFriendlyName("density")
-        .StoreTo(&app.vortex_local_fog_volumetric_max_density)
+        .StoreTo(&scene.local_fog_volumetric_max_density)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("local-fog-emissive-scale")
+    vortex_options->Add(Option::WithKey("local-fog-emissive-scale")
         .About("Scale the VortexBasic local-fog emissive proof volume")
         .Long("local-fog-emissive-scale")
         .WithValue<float>()
         .DefaultValue(1.0F)
         .UserFriendlyName("scale")
-        .StoreTo(&app.vortex_local_fog_emissive_scale)
+        .StoreTo(&scene.local_fog_emissive_scale)
         .Build());
-    vortex_options->Add(clap::Option::WithKey("volumetric-fog-emissive-scale")
+    vortex_options->Add(Option::WithKey("volumetric-fog-emissive-scale")
         .About("Scale the base volumetric-fog emissive term")
         .Long("volumetric-fog-emissive-scale")
         .WithValue<float>()
         .DefaultValue(1.0F)
         .UserFriendlyName("scale")
-        .StoreTo(&app.vortex_volumetric_fog_emissive_scale)
+        .StoreTo(&scene.volumetric_fog_emissive_scale)
         .Build());
 
     const Command::Ptr default_command
       = CommandBuilder(Command::DEFAULT)
-          .WithOptions(oxygen::examples::cli::MakeRuntimeOptions({
-            .frames = &frames,
-            .target_fps = &target_fps,
-            .headless = &headless,
-            .fullscreen = &app.fullscreen,
-            .vsync = &enable_vsync,
-            .resolution = &resolution,
-          }))
+          .WithOptions(host::MakeRuntimeOptions(runtime))
           .WithOptions(vortex_options)
-          .WithOptions(oxygen::examples::cli::MakeGraphicsToolingOptions(
-            graphics_tooling_cli))
-          .WithOptions(oxygen::examples::cli::MakeCaptureOptions(capture_cli))
-          .WithOptions(
-            oxygen::examples::cli::MakeAdvancedCaptureOptions(capture_cli),
-            true);
-
-    auto cli = oxygen::examples::cli::BuildCli("vortex-basic",
+          .WithOptions(host::MakeGraphicsToolingOptions(runtime))
+          .WithOptions(host::MakeCaptureOptions(runtime))
+          .WithOptions(host::MakeAdvancedCaptureOptions(runtime), true);
+    const auto cli = host::BuildCli("vortex-basic",
       "Minimal Vortex deferred renderer exercise", default_command);
-
-    const int argc = static_cast<int>(args.size());
-    const char** argv = args.data();
-    auto context = cli->Parse(argc, argv);
-    if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
+    const auto context = cli->Parse(static_cast<int>(args.size()), args.data());
+    if (host::HandleMetaCommand(context, default_command)) {
       return EXIT_SUCCESS;
     }
-    app.window_resolution = oxygen::examples::cli::ResolveWindowResolution(
-      context, resolution, headless);
 
-    oxygen::examples::cli::ValidateGraphicsToolingOptions(graphics_tooling_cli);
-    if (validation_scene_name != "default"
-      && validation_scene_name != "sidedness"
-      && validation_scene_name != "exposure-fixed"
-      && validation_scene_name != "exposure-locked"
-      && validation_scene_name != "exposure-curve-cancellation") {
-      throw std::runtime_error(
-        "Unknown validation scene: " + validation_scene_name);
-    }
-    if (shading_path_name != "deferred" && shading_path_name != "forward") {
-      throw std::runtime_error("Unknown shading path: " + shading_path_name);
-    }
-    validation.sidedness_scene = validation_scene_name == "sidedness";
-    using ExposureFixture
-      = oxygen::examples::vortex_basic::ValidationOptions::ExposureFixture;
-    if (validation_scene_name == "exposure-fixed") {
-      validation.exposure_fixture = ExposureFixture::kFixed;
-    } else if (validation_scene_name == "exposure-locked") {
-      validation.exposure_fixture = ExposureFixture::kLockedAuto;
-    } else if (validation_scene_name == "exposure-curve-cancellation") {
-      validation.exposure_fixture = ExposureFixture::kCurveCancellation;
-    }
-    const float ev_limit
-      = validation.exposure_fixture == ExposureFixture::kLockedAuto ? 160.0F
-                                                                    : 32.0F;
-    if (!(validation.fixed_exposure_ev >= -ev_limit
-          && validation.fixed_exposure_ev <= ev_limit)) {
-      throw std::runtime_error(
-        "--validation-exposure-ev is outside the fixture range");
-    }
-    if (validation.IsExposureFixture() && shading_path_name != "deferred") {
-      throw std::runtime_error(
-        "exposure fixtures use the deferred emissive input");
-    }
-    if (validation.normal_map && !validation.sidedness_scene) {
-      throw std::runtime_error(
-        "--validation-normal-map requires --validation-scene sidedness");
-    }
-    validation.shading_mode = shading_path_name == "forward"
-      ? oxygen::vortex::ShadingMode::kForward
-      : oxygen::vortex::ShadingMode::kDeferred;
-    if (validation.sidedness_scene || validation.IsExposureFixture()) {
-      app.with_atmosphere = false;
-      app.with_height_fog = false;
-      app.with_local_fog = false;
-      app.with_volumetric_fog = false;
-    }
-    LOG_F(INFO, "Validation scene={}, shading path={}, motion={}",
-      validation_scene_name, shading_path_name, validation.animate);
-    LOG_F(INFO, "Parsed frames option = {}", frames);
-    LOG_F(INFO, "Parsed fps option = {}", target_fps);
-    LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
-    LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
-    LOG_F(INFO, "Parsed with-atmosphere option = {}", app.with_atmosphere);
-    LOG_F(INFO, "Parsed with-height-fog option = {}", app.with_height_fog);
-    LOG_F(INFO, "Parsed with-local-fog option = {}", app.with_local_fog);
-    LOG_F(
-      INFO, "Parsed with-volumetric-fog option = {}", app.with_volumetric_fog);
-    LOG_F(INFO, "Parsed with-occlusion option = {}", app.with_occlusion);
-    LOG_F(INFO, "Parsed with-translucency option = {}", app.with_translucency);
-    LOG_F(INFO, "Parsed volumetric-local-fog option = {}",
-      app.vortex_local_fog_into_volumetric);
-    LOG_F(INFO, "Parsed volumetric-directional-shadows option = {}",
-      app.vortex_volumetric_directional_shadows);
-    LOG_F(INFO, "Parsed volumetric-temporal-reprojection option = {}",
-      app.vortex_volumetric_temporal_reprojection);
-    LOG_F(INFO, "Parsed sky-light-volumetric-scattering option = {}",
-      app.vortex_sky_light_volumetric_scattering_intensity);
-    LOG_F(INFO, "Parsed aerial-scattering-strength option = {}",
-      app.vortex_aerial_scattering_strength);
-    LOG_F(INFO, "Parsed aerial-start-depth option = {}",
-      app.vortex_aerial_start_depth_m);
-    LOG_F(INFO, "Parsed local-fog-volumetric-max-density option = {}",
-      app.vortex_local_fog_volumetric_max_density);
-    LOG_F(INFO, "Parsed local-fog-emissive-scale option = {}",
-      app.vortex_local_fog_emissive_scale);
-    LOG_F(INFO, "Parsed volumetric-fog-emissive-scale option = {}",
-      app.vortex_volumetric_fog_emissive_scale);
+    ResolveValidation(
+      validation_scene_name, shading_path_name, validation, scene);
     const auto shader_debug_mode
       = ParseVortexShaderDebugMode(shader_debug_mode_name);
-    LOG_F(INFO, "Parsed Vortex shader debug mode = {}",
-      oxygen::vortex::to_string(shader_debug_mode));
-    oxygen::examples::cli::LogGraphicsToolingOptions(graphics_tooling_cli);
-    oxygen::examples::cli::LogCaptureOptions(capture_cli);
-    LOG_F(INFO, "Starting vortex-basic for {} frames (target {} fps)", frames,
-      target_fps);
-
-    app.headless = headless;
-
-    app.platform = std::make_shared<Platform>(PlatformConfig {
-      .headless = headless,
-      .thread_pool_size = (std::min)(4u, std::thread::hardware_concurrency()),
-    });
+    LOG_F(INFO, "Validation scene={}, shading path={}, motion={}, debug={}",
+      validation_scene_name, shading_path_name, validation.animate,
+      vortex::to_string(shader_debug_mode));
 
     const auto workspace_root
       = std::filesystem::path(std::source_location::current().file_name())
@@ -559,109 +420,36 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
           .parent_path()
           .parent_path();
 
-    const auto path_finder_config
+    host::HostConfig config {};
+    config.engine.renderer.implementation = RendererImplementation::kVortex;
+    config.engine.application
+      = { .name = "Vortex Basic Example", .version = 1U };
+    config.engine.enable_asset_loader = true;
+    config.engine.path_finder_config
       = PathFinderConfig::Create()
           .WithWorkspaceRoot(workspace_root)
           .WithScriptSourceRoots({ workspace_root / "Examples" / "Content" })
           .Build();
-    const auto frame_capture_config
-      = oxygen::examples::cli::BuildFrameCaptureConfig(capture_cli, headless);
-    const GraphicsConfig gfx_config {
-      .enable_debug_layer = graphics_tooling_cli.enable_debug_layer,
-      .enable_validation = false,
-      .enable_aftermath = graphics_tooling_cli.enable_aftermath,
-      .preferred_card_name = std::nullopt,
-      .headless = headless,
-      .enable_vsync = enable_vsync,
-      .frame_capture = frame_capture_config,
-      .extra = {},
-    };
-    const auto& loader = GraphicsBackendLoader::GetInstance();
-    app.gfx_weak = loader.LoadBackend(
-      headless ? BackendType::kHeadless : BackendType::kDirect3D12, gfx_config,
-      path_finder_config);
-    CHECK_F(!app.gfx_weak.expired());
-    app.gfx_weak.lock()->CreateCommandQueues(app.queue_strategy);
+    config.engine.timing.pacing_safety_margin = 250us;
+    host::ApplyRuntimeCli(context, runtime, config);
+    SeedSceneCVars(scene, config);
 
-    app.engine = std::make_shared<AsyncEngine>(
-      app.platform,
-      app.gfx_weak,
-      EngineConfig {
-        .renderer = {
-          .implementation = RendererImplementation::kVortex,
-        },
-        .application = { .name = "Vortex Basic Example", .version = 1u, },
-        .target_fps = target_fps,
-        .frame_count = frames,
-        .enable_asset_loader = true,
-        .path_finder_config = path_finder_config,
-        .timing = {
-          .pacing_safety_margin = 250us,
-        }
-      }
-    );
-
-    if (context.ovm.HasOption("vsync")) {
-      (void)app.engine->GetConsole().SetCVarFromText({
-        .name = "gfx.vsync",
-        .text = enable_vsync ? "true" : "false",
+    const auto exit_code = host::RunHost(std::move(config),
+      [&](AsyncEngine& engine, host::HostContext& host_context) -> void {
+        RegisterModules(
+          engine, host_context, shader_debug_mode, validation, scene);
       });
-      if (const auto gfx = app.gfx_weak.lock()) {
-        gfx->SetVSyncEnabled(enable_vsync);
-      }
-    }
-    auto startup_cvars = oxygen::console::ConsoleStartupPlan {};
-    startup_cvars.Set("vtx.volumetric_fog.directional_shadows",
-      oxygen::console::CVarValue { app.vortex_volumetric_directional_shadows });
-    startup_cvars.Set("vtx.volumetric_fog.temporal_reprojection",
-      oxygen::console::CVarValue {
-        app.vortex_volumetric_temporal_reprojection });
-    if (app.with_occlusion) {
-      startup_cvars.Set(
-        "vtx.occlusion.enable", oxygen::console::CVarValue { true });
-    }
-    if (app.with_local_fog) {
-      startup_cvars.Set(
-        "vtx.local_fog.enable", oxygen::console::CVarValue { true });
-      startup_cvars.Set("vtx.local_fog.render_into_volumetric_fog",
-        oxygen::console::CVarValue { app.vortex_local_fog_into_volumetric });
-      startup_cvars.Set("vtx.local_fog.max_density_into_volumetric_fog",
-        oxygen::console::CVarValue {
-          app.vortex_local_fog_volumetric_max_density });
-    }
-    app.engine->GetConsole().ApplyStartupPlan(startup_cvars);
-
-    const auto rc
-      = co::Run(app, AsyncMain(app, frames, shader_debug_mode, validation));
-
-    app.platform->Stop();
-    app.engine.reset();
-    if (!app.gfx_weak.expired()) {
-      auto gfx = app.gfx_weak.lock();
-      gfx->Stop();
-      gfx.reset();
-    }
-    loader.UnloadBackend();
-    app.platform.reset();
-
-    LOG_F(INFO, "exit code: {}", rc);
     loguru::flush();
     loguru::shutdown();
-    return rc;
-  } catch (const oxygen::examples::cli::FrameCaptureCliError& e) {
-    LOG_F(ERROR, "CLI parse error: {}", e.what());
-    loguru::flush();
-    loguru::shutdown();
-    return EXIT_FAILURE;
+    return exit_code;
+  } catch (const host::RuntimeCliError& e) {
+    LOG_F(ERROR, "CLI error: {}", e.what());
   } catch (const CmdLineArgumentsError& e) {
     LOG_F(ERROR, "CLI parse error: {}", e.what());
-    loguru::flush();
-    loguru::shutdown();
-    return EXIT_FAILURE;
   } catch (const std::exception& e) {
     LOG_F(ERROR, "Unhandled exception: {}", e.what());
-    loguru::flush();
-    loguru::shutdown();
-    return EXIT_FAILURE;
   }
+  loguru::flush();
+  loguru::shutdown();
+  return EXIT_FAILURE;
 }

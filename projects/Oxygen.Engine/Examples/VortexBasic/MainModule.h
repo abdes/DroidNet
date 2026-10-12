@@ -7,8 +7,9 @@
 #pragma once
 
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
-#include <optional>
 #include <random>
 #include <string_view>
 
@@ -18,37 +19,22 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Composition/Composition.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/EngineModule.h>
-#include <Oxygen/Core/PhaseRegistry.h>
-#include <Oxygen/Core/Types/ResolvedView.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Host/HostModule.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Platform/Types.h>
+#include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
 
-namespace oxygen {
-class Graphics;
-namespace engine {
-  class FrameContext;
-}
-namespace graphics {
-  class Framebuffer;
-  class Surface;
-}
-namespace vortex {
-  class Renderer;
-}
-} // namespace oxygen
-
-namespace oxygen::examples {
-class DemoAppContext;
-class AppWindow;
-} // namespace oxygen::examples
+namespace oxygen::engine {
+class FrameContext;
+} // namespace oxygen::engine
 
 namespace oxygen::examples::vortex_basic {
 
@@ -78,27 +64,39 @@ struct ValidationOptions {
   }
 };
 
+//! Environment features and tuning of the default validation scene.
+struct SceneOptions {
+  bool with_atmosphere { true };
+  bool with_height_fog { true };
+  bool with_local_fog { false };
+  bool with_volumetric_fog { false };
+  bool with_occlusion { false };
+  bool with_translucency { false };
+  bool local_fog_into_volumetric { true };
+  bool volumetric_directional_shadows { true };
+  bool volumetric_temporal_reprojection { true };
+  float local_fog_volumetric_max_density { 0.01F };
+  float local_fog_emissive_scale { 1.0F };
+  float volumetric_fog_emissive_scale { 1.0F };
+  float sky_light_volumetric_scattering_intensity { 1.0F };
+  float aerial_scattering_strength { 1.0F };
+  float aerial_start_depth_m { 100.0F };
+};
+
 //! Procedural native validation scenes for the Vortex renderer.
 /*!
- Creates procedural geometry and a perspective camera, and registers a
- * scene
- view with the Vortex renderer each frame. Supports forward/deferred
- * shading
- and RenderDoc frame capture via the standard CLI flags.
-
- This
- * focused example owns an AppWindow directly and talks to vortex::Renderer
-
- * without the general DemoShell panels or cooked-content scene loader.
+ Builds procedural geometry and a perspective camera, stages the scene for
+ the host and renders it through one main view. The host owns the window,
+ the view's framebuffers and the composition onto the window.
 */
-class MainModule final : public engine::EngineModule, public Composition {
+class MainModule final : public host::HostModule {
   OXYGEN_TYPED(MainModule)
 
 public:
-  explicit MainModule(const DemoAppContext& app,
+  explicit MainModule(const host::HostContext& host,
     vortex::ShaderDebugMode shader_debug_mode
     = vortex::ShaderDebugMode::kDisabled,
-    ValidationOptions validation = {}) noexcept;
+    ValidationOptions validation = {}, SceneOptions scene_options = {});
   ~MainModule() override;
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule)
@@ -119,9 +117,7 @@ public:
   [[nodiscard]] auto GetSupportedPhases() const noexcept
     -> engine::ModulePhaseMask override
   {
-    using enum core::PhaseId;
-    return engine::MakeModuleMask<kFrameStart, kSceneMutation, kPublishViews,
-      kCompositing, kFrameEnd>();
+    return kHostPhases;
   }
 
   [[nodiscard]] auto IsCritical() const noexcept -> bool override
@@ -129,24 +125,19 @@ public:
     return true;
   }
 
-  auto OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool override;
   auto OnShutdown() noexcept -> void override;
-
-  auto OnFrameStart(observer_ptr<engine::FrameContext> context)
-    -> void override;
   auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
-  auto OnPublishViews(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
-  auto OnCompositing(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
+
+protected:
+  auto OnHostAttached(observer_ptr<IAsyncEngine> engine) -> bool override;
+  [[nodiscard]] auto BuildWindowProperties() const
+    -> platform::window::Properties override;
+  auto BuildViews(engine::FrameContext& context, host::HostViews& views)
+    -> void override;
 
 private:
-  auto ReleasePublishedRuntimeView(
-    observer_ptr<engine::FrameContext> context = nullptr) -> void;
-  auto ResolveVortexRenderer() -> observer_ptr<vortex::Renderer>;
-  [[nodiscard]] auto BuildResolvedView(uint32_t width, uint32_t height)
-    -> std::optional<ResolvedView>;
+  auto CreateScene(const char* name, std::size_t capacity) -> void;
   auto EnsureScene() -> void;
   auto BuildSidednessScene() -> void;
   auto BuildExposureScene() -> void;
@@ -155,16 +146,11 @@ private:
   auto UpdateValidationScene(observer_ptr<engine::FrameContext> context)
     -> void;
   [[nodiscard]] auto ResolveViewExtent() const noexcept -> glm::uvec2;
-  auto EnsureSceneFb(uint32_t width, uint32_t height) -> void;
-  auto ClearSceneFb() -> void;
 
-  const DemoAppContext& app_;
   ValidationOptions validation_ {};
+  SceneOptions scene_options_ {};
   std::unique_ptr<NormalMapValidationTexture> validation_normal_map_;
   scene::SceneNode validation_root_ {};
-  observer_ptr<AppWindow> app_window_ { nullptr };
-  observer_ptr<graphics::Surface> last_surface_ { nullptr };
-  observer_ptr<vortex::Renderer> vortex_renderer_ { nullptr };
   IAsyncEngine::ModuleSubscription renderer_subscription_ {};
 
   std::shared_ptr<scene::Scene> scene_;
@@ -180,16 +166,11 @@ private:
   scene::SceneNode local_fog_volume_node_ {};
 
   ViewId main_view_id_ { kInvalidViewId };
-  static inline std::atomic<uint64_t> s_next_view_id_ { 2000 };
   vortex::CompositionView::ViewStateHandle exposure_view_state_ {
     vortex::CompositionView::kInvalidViewStateHandle
   };
   static inline std::atomic<uint64_t> s_next_exposure_state_ { 1U };
 
-  // Intermediate scene framebuffer (color-only, matching window size).
-  std::shared_ptr<graphics::Framebuffer> scene_fb_;
-  uint32_t scene_fb_width_ { 0 };
-  uint32_t scene_fb_height_ { 0 };
   float animation_time_seconds_ { 0.0F };
   Quat cube_rotation_ { 1.0F, 0.0F, 0.0F, 0.0F };
   glm::vec3 cube_rotation_axis_ { 0.0F, 0.0F, 1.0F };
