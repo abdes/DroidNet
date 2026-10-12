@@ -65,11 +65,13 @@ namespace {
     NodeAttachment(const observer_ptr<content::IAssetLoader> loader,
       const observer_ptr<const IScriptSourceResolver> resolver,
       const observer_ptr<IScriptCompilationService> compiler,
+      const observer_ptr<const LateScriptDiagnosticHandler> on_late_diagnostic,
       const data::SceneAsset& asset, std::span<const scene::SceneNode> nodes,
       const uint32_t node_index)
       : loader_(loader)
       , resolver_(resolver)
       , compiler_(compiler)
+      , on_late_diagnostic_(on_late_diagnostic)
       , asset_(&asset)
       , nodes_(nodes)
       , node_index_(node_index)
@@ -236,14 +238,15 @@ namespace {
         Fail(outcome, &slot, "no script compilation service is available");
         return;
       }
-      Compile(slot, script->GetAssetKey(), std::move(source));
+      Compile(
+        slot, outcome.slot_index, script->GetAssetKey(), std::move(source));
       outcome.state = State::kCompiling;
     }
 
     //! The service calls back on completion; the callbacks share one copy of
     //! the slot and touch the node only while it lives.
-    auto Compile(const Slot& slot, const data::AssetKey& script_key,
-      ScriptSourceBlob source) const -> void
+    auto Compile(const Slot& slot, const uint32_t slot_index,
+      const data::AssetKey& script_key, ScriptSourceBlob source) const -> void
     {
       const auto compile_key
         = ComputeScriptCompileKey(script_key, source, kCompileMode);
@@ -266,11 +269,24 @@ namespace {
             }
           },
           .on_failed
-          = [node = node_, slot = shared_slot](
+          = [node = node_, slot = shared_slot, slot_index,
+              on_late_diagnostic = *on_late_diagnostic_](
               const std::vector<ScriptDiagnostic>& diagnostics) mutable
             -> void {
             if (!node.IsAlive()) {
               return;
+            }
+            if (on_late_diagnostic) {
+              for (auto diagnostic : diagnostics) {
+                if (!diagnostic.slot.has_value()) {
+                  diagnostic.slot = SlotContext {
+                    .node = std::string(node.GetName()),
+                    .slot_index = slot_index,
+                    .hook = "compile",
+                  };
+                }
+                on_late_diagnostic(diagnostic);
+              }
             }
             auto summary = std::string {};
             for (const auto& diagnostic : diagnostics) {
@@ -302,6 +318,7 @@ namespace {
     observer_ptr<content::IAssetLoader> loader_;
     observer_ptr<const IScriptSourceResolver> resolver_;
     observer_ptr<IScriptCompilationService> compiler_;
+    observer_ptr<const LateScriptDiagnosticHandler> on_late_diagnostic_;
     observer_ptr<const data::SceneAsset> asset_;
     std::span<const scene::SceneNode> nodes_;
     uint32_t node_index_;
@@ -311,10 +328,12 @@ namespace {
 
 SceneScriptAttachment::SceneScriptAttachment(content::IAssetLoader& loader,
   const IScriptSourceResolver& resolver,
-  const observer_ptr<IScriptCompilationService> compiler) noexcept
+  const observer_ptr<IScriptCompilationService> compiler,
+  LateScriptDiagnosticHandler on_late_diagnostic)
   : loader_(&loader)
   , resolver_(&resolver)
   , compiler_(compiler)
+  , on_late_diagnostic_(std::move(on_late_diagnostic))
 {
 }
 
@@ -339,8 +358,8 @@ auto SceneScriptAttachment::Attach(const data::SceneAsset& asset,
       LOG_F(ERROR, "cannot attach scripting to node {}", node_index);
       continue;
     }
-    auto attachment
-      = NodeAttachment(loader_, resolver_, compiler_, asset, nodes, node_index);
+    auto attachment = NodeAttachment(loader_, resolver_, compiler_,
+      observer_ptr { &on_late_diagnostic_ }, asset, nodes, node_index);
     for (const auto& slot : loader_->GetHydratedScriptSlots(asset, component)) {
       attachment.AttachSlot(slot, result);
     }

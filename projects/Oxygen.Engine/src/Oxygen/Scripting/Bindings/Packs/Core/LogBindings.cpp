@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -12,6 +14,7 @@
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
@@ -112,7 +115,8 @@ namespace {
       DLOG_F(2, "[lua.{}] {}", level_name, message);
       break;
     case LuaLogLevel::kInfo:
-      DLOG_F(2, "[lua.{}] {}", level_name, message);
+      // Script output, so it reaches release builds and log listeners.
+      LOG_F(INFO, "[lua.{}] {}", level_name, message);
       break;
     case LuaLogLevel::kWarn:
       LOG_F(WARNING, "[lua.{}] {}", level_name, message);

@@ -1031,6 +1031,9 @@ auto AsyncEngine::RegisterServiceConsoleBindings() -> void
 
 auto AsyncEngine::LoadPersistedConsoleCVars() -> void
 {
+  if (!config_.persist_console_state) {
+    return;
+  }
   const auto result
     = console_.LoadArchiveCVars(path_finder_, MakeConfigFileContext());
   if (result.status == ExecutionStatus::kOk) {
@@ -1042,6 +1045,9 @@ auto AsyncEngine::LoadPersistedConsoleCVars() -> void
 
 auto AsyncEngine::SavePersistedConsoleCVars() -> void
 {
+  if (!config_.persist_console_state) {
+    return;
+  }
   const auto result
     = console_.SaveArchiveCVars(path_finder_, ArchiveSaveMode::kAutomatic);
   if (result.status == ExecutionStatus::kOk) {
@@ -1053,6 +1059,9 @@ auto AsyncEngine::SavePersistedConsoleCVars() -> void
 
 auto AsyncEngine::LoadPersistedConsoleHistory() -> void
 {
+  if (!config_.persist_console_state) {
+    return;
+  }
   const auto result = console_.LoadHistory(path_finder_);
   if (result.status == ExecutionStatus::kOk) {
     LOG_F(INFO, "{}", result.output);
@@ -1063,6 +1072,9 @@ auto AsyncEngine::LoadPersistedConsoleHistory() -> void
 
 auto AsyncEngine::SavePersistedConsoleHistory() const -> void
 {
+  if (!config_.persist_console_state) {
+    return;
+  }
   const auto result = console_.SaveHistory(path_finder_);
   if (result.status == ExecutionStatus::kOk) {
     LOG_F(INFO, "{}", result.output);

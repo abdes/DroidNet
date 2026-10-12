@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <list>
 #include <memory>
@@ -121,6 +122,16 @@ public:
   [[nodiscard]] OXGN_NPUT_API auto GetMappingContextByKey(
     const data::AssetKey& key) const
     -> std::shared_ptr<input::InputMappingContext>;
+  //! Actions and mapping contexts added, active or not.
+  [[nodiscard]] auto GetActionCount() const noexcept -> std::size_t
+  {
+    return actions_.size();
+  }
+  [[nodiscard]] auto GetMappingContextCount() const noexcept -> std::size_t
+  {
+    return mapping_contexts_.size();
+  }
+
   OXGN_NPUT_API void ActivateMappingContext(
     const std::shared_ptr<input::InputMappingContext>& context);
   OXGN_NPUT_API void DeactivateMappingContext(

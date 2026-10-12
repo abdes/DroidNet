@@ -23,6 +23,9 @@ namespace oxygen {
 class AsyncEngine;
 class Graphics;
 class Platform;
+namespace co {
+  class Nursery;
+} // namespace co
 namespace engine {
   class InputSystem;
 } // namespace engine
@@ -69,6 +72,11 @@ struct HostContext {
 
   //! Registered by `RunHost` before any application module.
   observer_ptr<engine::InputSystem> input_system;
+
+  //! Runs background tasks on the engine thread until the engine completes;
+  //! tasks still running then are cancelled. Set before any application
+  //! module is registered.
+  observer_ptr<co::Nursery> nursery;
 
   //! Cleared to stop the host event loop.
   std::atomic_bool running { false };

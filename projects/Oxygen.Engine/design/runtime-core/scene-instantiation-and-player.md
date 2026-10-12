@@ -1,6 +1,7 @@
 # Scene instantiation and the player host
 
-Status: **design; approved by owner decision SD-2 on 2026-10-11**. Needed by the editor's
+Status: **design; approved by owner decision SD-2 on 2026-10-11; the player
+built 2026-10-13 (`src/Oxygen/Player`)**. Needed by the editor's
 Play command ([script authoring](../../../../design/editor/lld/script-authoring.md#8-play))
 and by [scene script hosting](../scripting/scene-script-hosting.md#5-scene-script-attachment).
 
@@ -119,15 +120,42 @@ behaviour are specified in [runtime host and debug UI](runtime-host.md).
 `Oxygen.Player.exe --launch <file>`; the file validates against
 `oxygen.player-launch.schema.json`:
 
-| Field                 | Meaning                                                                  |
-| --------------------- | ------------------------------------------------------------------------ |
-| `mounts`              | Ordered cooked roots or PAK files, highest precedence last.              |
-| `scene`               | Scene virtual path.                                                      |
-| `script_source_roots` | Roots for external script sources; enables source reload when non-empty. |
-| `window`              | Title, client size, VSync and frame cap (off or frames per second).      |
-| `diagnostics_pipe`    | Optional named pipe for the event stream below.                          |
+| Field                 | Meaning                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------- |
+| `version`             | `1`.                                                                                                    |
+| `mounts`              | Ordered cooked roots or PAK files (a `.pak` file), highest precedence last.                             |
+| `scene`               | Scene virtual path, e.g. `/.cooked/Scenes/Level.oscene`.                                                |
+| `script_source_roots` | Roots for external script sources; enables source reload when non-empty.                                |
+| `window`              | Title, client size, VSync and frame cap (`0` is off, else frames per second); all optional.             |
+| `diagnostics_pipe`    | Optional name of the launcher's named pipe (without the `\\.\pipe\` prefix) for the event stream below. |
 
-No setting persists between launches; the launch file is the whole input.
+Relative paths are relative to the launch file's folder. A launch file that
+breaks the schema, or names a mount or source root that does not exist,
+ends the process with an error naming the file, the value and the rule.
+
+No setting persists between launches; the launch file is the whole input:
+the player neither loads nor saves archived console variables or console
+history (`EngineConfig::persist_console_state`).
+
+### Command line
+
+`Oxygen.Player.exe -l <launch file> [options]`. The options are for runs
+outside the editor and override the launch file:
+
+| Option                    | Effect                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------- |
+| `-l`, `--launch <file>`   | The launch file; required.                                                                        |
+| `-w`, `--resolution WxH`  | Client size.                                                                                      |
+| `-F`, `--fullscreen`      | Full screen.                                                                                      |
+| `-s`, `--vsync <bool>`    | VSync.                                                                                            |
+| `-r`, `--fps <n>`         | Frame cap; `0` is off.                                                                            |
+| `-f`, `--frames <n>`      | Stop after `n` frames.                                                                            |
+| `-c`, `--cvar name=value` | Set a console variable at startup, parsed for its type; repeatable. An unknown name is a warning. |
+| `--verify-hashes`         | Verify cooked content hashes when mounting.                                                       |
+| graphics tooling, capture | `--debug-layer`, `--aftermath` and the frame capture options of `RuntimeCli`.                     |
+
+`-v <level>` sets the log verbosity. `Examples/Content/play_scene` writes a
+launch file for a cooked example scene and runs the player with it.
 
 ### Behavior
 
@@ -145,16 +173,19 @@ No setting persists between launches; the launch file is the whole input.
 
 ### Event stream
 
-One JSON object per line, validated by `oxygen.player-events.schema.json`:
+The launcher creates the pipe and the player connects to it at start. One
+JSON object per line, validated by `oxygen.player-events.schema.json`:
 
 | Event        | Payload                                                                                                                                                                  |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `lifecycle`  | `starting`, `session_started`, `scene_loaded`, `scene_failed` (with issues), `paused`, `resumed`, `session_ended`, `stopped`. `stopped` means the process is ending.     |
-| `log`        | Severity, channel and text, including `oxygen.log` output                                                                                                                |
+| `log`        | Severity (`fatal` to `info`), channel and text: `oxygen.log` output on channel `script`, engine lines on the logging source file's name                                  |
 | `diagnostic` | A [script diagnostic](../scripting/script-diagnostics.md#2-model)                                                                                                        |
 | `gpu_work`   | A [GPU work summary](../vortex/lld/gpu-work-summary.md#41-types), sent while the `stats` request has it on and only when its `revision` changes (at most twice a second) |
 
-The launcher sends one request object per line on the same pipe:
+The launcher sends one request object per line on the same pipe, validated
+by `oxygen.player-requests.schema.json`; an invalid request is logged and
+ignored:
 
 | Request       | Effect                                                                                                                                                                                                  |
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -167,8 +198,15 @@ The launcher sends one request object per line on the same pipe:
 | `stats`       | `gpu_work: true` holds a GPU timeline lease and starts `gpu_work` events; `false` releases it. Off at launch; survives sessions.                                                                        |
 
 A `scene_failed` is followed by `session_ended`, so the launcher can send
-`play` again. The reader runs on its own thread and hands requests to the
-engine thread; nothing on the pipe thread touches the engine.
+`play` again; a `play` whose remount fails reports both too. The reader runs
+on its own thread and hands requests to the engine thread; nothing on the
+pipe thread touches the engine. When the launcher closes the pipe, the
+player stops.
+
+Script diagnostics come from the scripting module's handlers (hook errors,
+source reload) and from instantiation: attach problems are sent after
+`scene_loaded`, and a script whose compilation fails later is reported when
+it fails (`SceneScriptAttachment`'s late diagnostic handler).
 
 The `gpu_work` payload mirrors `GpuWorkSummary` field for field, with buckets
 written as their catalog ids (`"base_pass"`), never enum values, and

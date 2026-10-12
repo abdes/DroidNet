@@ -66,6 +66,24 @@ to `.cooked/main`; external script source roots are declared in the manifests.
 Keep those relative relationships when copying inputs. Native schemas validate
 recipes; distinct authored assets need distinct names and virtual paths.
 
+## Play a cooked scene
+
+`play_scene` runs a cooked scene in `Oxygen.Player`, the way a shipped game
+would: through the scene's own camera, with its scripts and input contexts.
+
+```powershell
+./play_scene.ps1 -List
+./play_scene.ps1 camera-switch
+./play_scene.ps1 NewSponza_Main_glTF_003 -NoBuild -- -w 1600x900 -r 60
+```
+
+The scene is its cooked name or its folder under `scenes/`. The script writes
+a launch file to `%TEMP%/oxygen-player` that mounts `.cooked/main` and, for an
+imported scene, its import root, with this folder as the script source root,
+so editing a scene's script reloads it while it plays. Arguments after `--`
+go to the player unchanged; `-- --help` lists them. Tool selection is the same
+as for `cook_scenes`, with `-PlayerPath` for an explicit player.
+
 ## Import and reimport models
 
 For existing registered models, replay their saved recipes and identities:
@@ -175,11 +193,11 @@ locked-generation cleanup waits for its readers.
 
 ## Contributor notes
 
-The public entry points are `cook_scenes`, `import_models` and `pak_content`,
-each with CMD and PowerShell forms. Shared implementation and checkout staging
-helpers live under `internal/`; CMake stages public workflows and authoring
-inputs into the SDK. `pak_content` packages cooked roots through the native
-Cooker APIs. The SDK showcase uses a separate generated directory in
+The public entry points are `cook_scenes`, `import_models`, `pak_content` and
+`play_scene`, each with CMD and PowerShell forms. Shared implementation and
+checkout staging helpers live under `internal/`; CMake stages public workflows
+and authoring inputs into the SDK. `pak_content` packages cooked roots through
+the native Cooker APIs. The SDK showcase uses a separate generated directory in
 the build tree. When its inputs or tools change, CMake discards that directory's
 cooked output and PAKs before recooking; authored files and the installed SDK
 remain untouched until the build and install succeed.

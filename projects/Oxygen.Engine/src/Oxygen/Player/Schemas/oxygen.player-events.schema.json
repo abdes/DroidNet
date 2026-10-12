@@ -1,0 +1,217 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "oxygen.player-events.schema.json",
+  "title": "Oxygen player event",
+  "description": "One event line Oxygen.Player writes to its diagnostics pipe.",
+  "type": "object",
+  "required": ["event"],
+  "properties": {
+    "event": {
+      "enum": ["lifecycle", "log", "diagnostic", "gpu_work"]
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "event": { "const": "lifecycle" } } },
+      "then": {
+        "additionalProperties": false,
+        "required": ["state"],
+        "properties": {
+          "event": true,
+          "state": {
+            "description": "stopped means the process is ending.",
+            "enum": [
+              "starting",
+              "session_started",
+              "scene_loaded",
+              "scene_failed",
+              "paused",
+              "resumed",
+              "session_ended",
+              "stopped"
+            ]
+          },
+          "scene": {
+            "description": "The session's scene virtual path.",
+            "type": "string"
+          },
+          "message": {
+            "description": "Why the scene failed.",
+            "type": "string"
+          },
+          "issues": {
+            "description": "Records of the scene that could not be applied.",
+            "type": "array",
+            "items": { "$ref": "#/definitions/issue" }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "log" } } },
+      "then": {
+        "additionalProperties": false,
+        "required": ["severity", "channel", "text"],
+        "properties": {
+          "event": true,
+          "severity": {
+            "enum": ["fatal", "error", "warning", "info"]
+          },
+          "channel": {
+            "description": "script for oxygen.log output, else the engine source file that logged.",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "diagnostic" } } },
+      "then": {
+        "additionalProperties": false,
+        "required": ["diagnostic"],
+        "properties": {
+          "event": true,
+          "diagnostic": {
+            "description": "A script diagnostic, as oxygen.script-diagnostic.schema.json.",
+            "type": "object"
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "event": { "const": "gpu_work" } } },
+      "then": {
+        "additionalProperties": false,
+        "required": ["summary"],
+        "properties": {
+          "event": true,
+          "summary": { "$ref": "#/definitions/gpu_work_summary" }
+        }
+      }
+    }
+  ],
+  "definitions": {
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scene", "message"],
+      "properties": {
+        "scene": {
+          "description": "Asset key of the scene the record belongs to.",
+          "type": "string"
+        },
+        "node_index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "stat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["avg_ms", "max_ms"],
+      "properties": {
+        "avg_ms": { "type": "number", "minimum": 0 },
+        "max_ms": { "type": "number", "minimum": 0 }
+      }
+    },
+    "group": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bucket", "time", "items"],
+      "properties": {
+        "bucket": {
+          "enum": [
+            "visibility",
+            "depth_prepass",
+            "shadows",
+            "base_pass",
+            "lighting",
+            "environment",
+            "translucency",
+            "post_process",
+            "overlays",
+            "composition",
+            "background",
+            "other"
+          ]
+        },
+        "time": { "$ref": "#/definitions/stat" },
+        "items": {
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "name", "time"],
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "time": { "$ref": "#/definitions/stat" }
+            }
+          }
+        }
+      }
+    },
+    "gpu_work_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "revision",
+        "last_frame",
+        "window_ms",
+        "valid_frames",
+        "invalid_frames",
+        "frame_gpu",
+        "idle",
+        "views",
+        "frame_work",
+        "frame_work_time",
+        "frame_gpu_history_ms"
+      ],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "revision": { "type": "integer", "minimum": 0 },
+        "last_frame": { "type": "integer", "minimum": 0 },
+        "window_ms": { "type": "number", "minimum": 0 },
+        "valid_frames": { "type": "integer", "minimum": 0 },
+        "invalid_frames": { "type": "integer", "minimum": 0 },
+        "frame_gpu": { "$ref": "#/definitions/stat" },
+        "idle": { "$ref": "#/definitions/stat" },
+        "views": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["view_id", "name", "time", "groups"],
+            "properties": {
+              "view_id": { "type": "integer", "minimum": 0 },
+              "name": { "type": "string" },
+              "time": { "$ref": "#/definitions/stat" },
+              "groups": {
+                "type": "array",
+                "items": { "$ref": "#/definitions/group" }
+              }
+            }
+          }
+        },
+        "frame_work": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/group" }
+        },
+        "frame_work_time": { "$ref": "#/definitions/stat" },
+        "frame_gpu_history_ms": {
+          "type": "array",
+          "items": { "type": "number", "minimum": 0 }
+        }
+      }
+    }
+  }
+}

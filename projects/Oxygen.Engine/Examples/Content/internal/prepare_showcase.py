@@ -60,6 +60,7 @@ def prepare(source, output, scenes):
     for name in ("images/showcase/Sky.hdr", "README.md", "ASSET_CREDITS.md",
                  "showcase-assets.json", "cook_scenes.ps1", "cook_scenes.cmd",
                  "pak_content.ps1", "pak_content.cmd", "import_models.ps1", "import_models.cmd",
+                 "play_scene.ps1", "play_scene.cmd",
                  "import-sources.schema.json", "import-sources.example.json"):
         copy_input(source / name)
     write_changed(output.parent / "inputs.txt", ("\n".join(p.as_posix() for p in sorted(visited)) + "\n").encode())

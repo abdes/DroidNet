@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <span>
 #include <vector>
 
@@ -55,6 +56,11 @@ struct SceneScriptAttachmentResult {
   std::vector<SceneScriptSlotOutcome> slots;
 };
 
+//! Receives the diagnostics of a slot whose compilation fails after
+//! `Attach()` returned. Called on the thread that completes compilations.
+using LateScriptDiagnosticHandler
+  = std::function<void(const ScriptDiagnostic&)>;
+
 //! Attaches the scripts a scene asset records to the nodes created for it.
 /*!
  For each scripting component record, in record order, every slot is added
@@ -70,9 +76,12 @@ struct SceneScriptAttachmentResult {
 */
 class SceneScriptAttachment final {
 public:
+  //! `on_late_diagnostic` may be empty; it outlives the attachment in the
+  //! pending compilations.
   OXGN_SCRP_API SceneScriptAttachment(content::IAssetLoader& loader,
     const IScriptSourceResolver& resolver,
-    observer_ptr<IScriptCompilationService> compiler) noexcept;
+    observer_ptr<IScriptCompilationService> compiler,
+    LateScriptDiagnosticHandler on_late_diagnostic = {});
   OXGN_SCRP_API ~SceneScriptAttachment() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(SceneScriptAttachment)
@@ -88,6 +97,7 @@ private:
   observer_ptr<content::IAssetLoader> loader_;
   observer_ptr<const IScriptSourceResolver> resolver_;
   observer_ptr<IScriptCompilationService> compiler_;
+  LateScriptDiagnosticHandler on_late_diagnostic_;
 };
 
 } // namespace oxygen::scripting

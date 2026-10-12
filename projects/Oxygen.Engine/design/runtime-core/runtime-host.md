@@ -5,7 +5,7 @@ validated 2026-10-12; H1 built and unit-tested 2026-10-12; E1 validated
 2026-10-12 (ahead of H2, so the host has a running consumer; the owner ran
 VortexBasic windowed, resized and fullscreen); H2 built and tested
 2026-10-12; H3 built: catalog, main-view variables, widgets and toolbar
-2026-10-12, GPU work overlay 2026-10-13**. Owner
+2026-10-12, GPU work overlay 2026-10-13; P1 built 2026-10-13**. Owner
 decisions are recorded in [§10](#10-owner-decisions) with the review's
 position beside each. [§11](#11-open-problems-for-review) gives a definite
 answer to every problem and marks the ones only the owner can close.
@@ -231,8 +231,11 @@ headless, because the toolbar and console need it, and `backend` becomes
 
 `HostContext` is the generic part of `DemoAppContext`: platform, graphics
 (weak), engine, queue strategy, input system, `running`, `headless` and the
-window options. The event loop traits move with it unchanged. `RunHost`
-performs, in order:
+window options, plus the nursery `RunHost` runs in: a host module starts
+background tasks there (the player's scene load and remount) and cancels
+them itself; tasks still running when the engine completes are cancelled.
+The event loop traits move with it unchanged. `RunHost` performs, in
+order:
 
 1. create the Platform and load the backend;
 2. create command queues, then the `AsyncEngine` with the startup plan;
@@ -249,9 +252,9 @@ performs, in order:
 `GraphicsBackendLoader::GetInstanceRelaxed()`, as the editor runner does; the
 strict singleton accepts its first call only from the executable.
 
-`Examples/main.cpp` (logging setup, type registry, `MainImpl`) moves to
-`Oxygen.Host` as the shared entry point in P1, when the player becomes its
-first consumer.
+The shared entry point (logging setup, type registry, the call to the
+application's `MainImpl`) is the static library `oxygen::host-main`
+(`Host/Main.cpp`); the player and every example link it.
 
 Threading: everything in `Oxygen.Host` runs on the engine thread. A host
 that receives requests from another thread (the player's pipe reader) puts
@@ -822,7 +825,7 @@ session, and with the toolbar hidden.
 | Launch file read and schema validation (embedded schema, `oxygen_embed_json_schemas`)                                                                                                                                                                                                                                                                                                 | ~150 lines    |
 | Event stream: named-pipe client, line writer, request reader on its own thread feeding a queue the module drains in `OnFrameStart`; log capture through `loguru::add_callback`; script diagnostics through `ScriptingModule::AddDiagnosticHandler` (`ScriptingModule.h:288`) and `ToJson`. Requests and lifecycle values: [scene doc](scene-instantiation-and-player.md#event-stream) | ~300 lines    |
 | `PlayerModule : HostModule`: mounts in launch order; registers `ngin.session.begin`; on session begin loads the scene by `AssetKey::FromVirtualPath`, instantiates through `SceneStage` and `oxygen::instantiation::Instantiate` in its own nursery; one main view through `Scene::ActiveCamera()`; toolbar; failure and "Stopped" messages                                           | ~500 lines    |
-| `main`: `--launch <file>` plus the graphics-tooling and capture options of `RuntimeCli`, then `RunHost`                                                                                                                                                                                                                                                                               | ~80 lines     |
+| `main`: the command line in the [scene doc](scene-instantiation-and-player.md#command-line), then `RunHost`                                                                                                                                                                                                                                                                           | ~80 lines     |
 
 The player begins a session as soon as the engine runs. Modules: input,
 scene observer sync, scripting, the player module and the Vortex renderer

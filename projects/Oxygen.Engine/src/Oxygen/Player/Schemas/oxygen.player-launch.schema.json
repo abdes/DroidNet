@@ -1,0 +1,71 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "oxygen.player-launch.schema.json",
+  "title": "Oxygen player launch file",
+  "description": "Everything Oxygen.Player needs to run one cooked scene. Relative paths are relative to the folder of the launch file.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "mounts", "scene"],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "mounts": {
+      "description": "Cooked content, highest precedence last: a file ending in .pak is a PAK file, anything else a loose cooked root.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "scene": {
+      "description": "Virtual path of the scene to play, e.g. /.cooked/Scenes/Level.oscene.",
+      "type": "string",
+      "pattern": "^/.+"
+    },
+    "script_source_roots": {
+      "description": "Roots of external script sources. Non-empty enables reloading a script when its source changes.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "width": {
+          "description": "Client width in pixels.",
+          "type": "integer",
+          "minimum": 64,
+          "maximum": 16384
+        },
+        "height": {
+          "description": "Client height in pixels.",
+          "type": "integer",
+          "minimum": 64,
+          "maximum": 16384
+        },
+        "vsync": {
+          "type": "boolean"
+        },
+        "frame_cap": {
+          "description": "Frame rate limit in frames per second; 0 is off.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 240
+        }
+      }
+    },
+    "diagnostics_pipe": {
+      "description": "Name of a named pipe the launcher listens on (without the \\\\.\\pipe\\ prefix). The player connects to it and streams events.",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._-]{1,200}$"
+    }
+  }
+}

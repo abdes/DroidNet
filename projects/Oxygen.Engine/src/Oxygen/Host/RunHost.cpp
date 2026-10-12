@@ -78,6 +78,7 @@ namespace {
     OXCO_WITH_NURSERY(n)
     {
       host.running.store(true, std::memory_order_relaxed);
+      host.nursery = observer_ptr { &n };
 
       co_await n.Start(&Platform::ActivateAsync, std::ref(*host.platform));
       host.platform->Run();
@@ -103,6 +104,7 @@ namespace {
       });
 
       co_await host.engine->Completed();
+      host.nursery = nullptr;
       co_return co::kCancel;
     };
     co_return EXIT_SUCCESS;
