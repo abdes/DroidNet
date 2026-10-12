@@ -61,7 +61,8 @@ public:
 
   ~UploadCoordinator() = default;
 
-  //! Pack a newly created managed 2D texture without recording or submitting.
+  //! Pack a newly created managed 2D texture, 2D array or cube without
+  //! recording or submitting.
   //! Staging uses the destination's allocation budget and debug label.
   //! Select full subresources; boxed updates are not supported here.
   OXGN_VRTX_NDAPI auto PrepareImmutableTexture2D(

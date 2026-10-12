@@ -65,7 +65,9 @@ namespace oxygen::vortex::resources {
  - the shared placeholder of its shape (2D, cube or 2D array) once evicted.
 
  Placeholder and error bindings exist once per shape, so a shader always
- reads a view of the dimension it declares. They live as long as the binder.
+ reads a view of the dimension it declares. They live as long as the binder
+ and are initialized on the graphics queue when it is constructed, so every
+ later pass that samples them runs after their copy.
 
  ### Entry identity
 

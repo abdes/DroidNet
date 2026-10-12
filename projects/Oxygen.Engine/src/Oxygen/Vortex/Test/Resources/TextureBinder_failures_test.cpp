@@ -59,13 +59,7 @@ protected:
   }
 };
 
-class TextureBinderUploadFailureTest : public TextureBinderTest {
-protected:
-  auto ConfigureGraphics(FakeGraphics& gfx) -> void override
-  {
-    gfx.SetFailMap(true);
-  }
-};
+class TextureBinderUploadFailureTest : public TextureBinderTest { };
 
 //! Every failed entry publishes the one shared error binding.
 /*! Verified through fake-backend SRV view telemetry and the publicly
@@ -214,6 +208,7 @@ NOLINT_TEST_F(
   Uploader().OnFrameStart(oxygen::vortex::internal::RendererTagFactory::Get(),
     oxygen::frame::Slot { 1 });
   const auto loading = TexBinder().GetOrAllocate(key);
+  Gfx().SetFailMap(true);
 
   // Act: the staging map is configured to fail.
   BeginVisibleFrame();

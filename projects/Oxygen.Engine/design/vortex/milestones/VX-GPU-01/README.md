@@ -167,7 +167,7 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 | --- | ---------------------------------------------------------------------- | --------------------------- | ------- | ----------- | ------ |
 | S0  | Design updates and open decisions                                      | all                         | —       | `validated` | —      |
 | S1  | Ordered material uploads                                               | N1                          | S0      | `validated` | —      |
-| S2  | Receipt-retired descriptors; no live descriptor rewrites               | C1, M2, N2, H2, H3, L10     | S0      | `planned`   | —      |
+| S2  | Receipt-retired descriptors; no live descriptor rewrites               | C1, M2, N2, H2, H3, L10     | S0      | `validated` | —      |
 | S3  | Non-camera passes own their inputs; pure shader helpers                | C2, H4, H5, L9              | S0      | `planned`   | —      |
 | S4  | Versioned view constants; one source per view value                    | H1, M7                      | S3      | `planned`   | —      |
 | S5  | One pass-input convention; shared mesh position with WPO               | H7, M6, M7                  | S3, S4  | `planned`   | —      |
@@ -249,9 +249,11 @@ Update the owning designs, record the [answered decisions](#decisions).
       exposes `GetResidentContentRevision()`; MaterialBinder re-resolves a
       material when it changes and uploads it only if an index changed. A
       failed view registration keeps the completion queued for retry.
-- [ ] **Fallback ordering (N2).** Upload the shared placeholder and error
-      textures on the graphics queue (GD-1), so no pass samples them before
-      their copy lands.
+- [x] **Fallback ordering (N2).** The shared placeholder and error textures
+      are managed registrations initialized through
+      `PrepareImmutableTexture2D` (now also for cubes) and recorded on the
+      graphics queue at construction, so no pass samples them before their
+      copy lands (GD-1).
 - [x] **Tests.** Retired buffer keeps views until slot reuse; atlas growth
       copies, new SRV, no growth within capacity; geometry eviction and update
       follow retirement; texture versions get new descriptors and never

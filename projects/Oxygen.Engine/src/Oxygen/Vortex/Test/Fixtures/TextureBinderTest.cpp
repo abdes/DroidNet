@@ -87,6 +87,7 @@ auto TextureBinderTest::DestroyBinder() -> void { texture_binder_.reset(); }
 auto TextureBinderTest::CompleteRetiredFrames() const -> void
 {
   gfx_->GetDeferredReclaimer().ProcessAllDeferredReleases();
+  gfx_->PollCompletedUses();
 }
 
 } // namespace oxygen::vortex::testing

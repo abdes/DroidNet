@@ -47,17 +47,22 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/TextureResource.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/ManagedResource.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Nexus/IndexReuse.h>
 #include <Oxygen/Vortex/Resources/CubeIlluminance.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
+#include <Oxygen/Vortex/Upload/ImmutableTextureUpload.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
@@ -657,6 +662,8 @@ private:
   struct FallbackBinding {
     std::shared_ptr<graphics::Texture> texture;
     ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
+    //! Owns the managed registration and its staging until retirement.
+    std::shared_ptr<vortex::upload::ImmutableTextureUpload> owner;
   };
 
   struct TextureEntry {
@@ -716,8 +723,12 @@ private:
     -> const FallbackBinding&;
   [[nodiscard]] auto FallbackIndex(
     FallbackKind kind, const TextureEntry& entry) const -> ShaderVisibleIndex;
-  auto CreateFallback(FallbackKind kind, FallbackShape shape)
+  //! Registers a fallback and packs its upload; RecordFallbackUploads()
+  //! records it on the graphics queue.
+  auto PrepareFallback(FallbackKind kind, FallbackShape shape)
     -> FallbackBinding;
+  auto RecordFallbackUploads() -> void;
+  auto RetireFallback(FallbackBinding& binding) -> void;
   //! Registers a shader-visible view of `texture` in a new descriptor.
   //! Throws on failure, leaving nothing registered.
   auto RegisterVersion(graphics::Texture& texture) -> ShaderVisibleIndex;
@@ -752,9 +763,6 @@ private:
     std::vector<vortex::upload::UploadSubresource>&& dst_subresources,
     vortex::upload::UploadTextureSourceView&& src_view,
     std::size_t trailing_bytes) -> void;
-
-  auto SubmitUniformLayers(const std::shared_ptr<graphics::Texture>& texture,
-    std::span<const std::byte> layer_bytes) -> void;
 
   observer_ptr<Graphics> gfx_;
   observer_ptr<vortex::upload::UploadCoordinator> uploader_;
@@ -1101,9 +1109,10 @@ TextureBinder::Impl::Impl(const observer_ptr<Graphics> gfx,
 
   for (const auto shape : kFallbackShapes) {
     const auto slot = static_cast<std::size_t>(shape);
-    placeholders_.at(slot) = CreateFallback(FallbackKind::kPlaceholder, shape);
-    errors_.at(slot) = CreateFallback(FallbackKind::kError, shape);
+    placeholders_.at(slot) = PrepareFallback(FallbackKind::kPlaceholder, shape);
+    errors_.at(slot) = PrepareFallback(FallbackKind::kError, shape);
   }
+  RecordFallbackUploads();
 
   callback_gate_ = std::make_shared<CallbackGate>();
   eviction_subscription_ = texture_loader_->SubscribeResourceEvictions(
@@ -1143,10 +1152,10 @@ TextureBinder::Impl::~Impl()
     gfx_->RetireResource(entry.pending_texture);
   }
   for (auto& binding : placeholders_) {
-    gfx_->RetireResource(binding.texture);
+    RetireFallback(binding);
   }
   for (auto& binding : errors_) {
-    gfx_->RetireResource(binding.texture);
+    RetireFallback(binding);
   }
 
   LOG_SCOPE_F(INFO, "TextureBinder Statistics");
@@ -1196,25 +1205,100 @@ auto TextureBinder::Impl::FallbackIndex(const FallbackKind kind,
   return Fallback(kind, ShapeOf(entry.texture_type)).srv;
 }
 
-auto TextureBinder::Impl::CreateFallback(
+auto TextureBinder::Impl::PrepareFallback(
   const FallbackKind kind, const FallbackShape shape) -> FallbackBinding
 {
   constexpr std::uint32_t kErrorTileSizePx = 8U;
   constexpr std::uint32_t kWhitePixel = 0xFFFFFFFFU;
 
   const auto desc = MakeFallbackDesc(kind, shape);
-  auto texture = gfx_->CreateTexture(desc);
-  CHECK_NOTNULL_F(texture, "Failed to create {}", desc.debug_name);
+  auto view = MakeTextureSrvViewDesc(desc.format, {},
+    ArrayRange { .base_array_slice = 0U, .num_array_slices = desc.array_size });
+  view.dimension = desc.texture_type;
+  const auto views = std::array {
+    graphics::TextureViewRequest {
+      .description = view,
+      .domain = oxygen::bindless::generated::kTexturesDomain,
+    },
+  };
+  auto managed = gfx_->GetResourceRegistry().RegisterManagedTexture(
+    gfx_->CreateTexture(desc), views);
+  if (!managed) {
+    throw std::runtime_error("Failed to register " + desc.debug_name);
+  }
 
   const auto pixels = kind == FallbackKind::kError
     ? GenerateErrorTextureData(
         Extent(desc.width, desc.height), kErrorTileSizePx)
     : std::vector<std::uint32_t> { kWhitePixel };
-  SubmitUniformLayers(texture, std::as_bytes(std::span { pixels }));
+  const auto row_pitch
+    = static_cast<std::uint32_t>(desc.width * sizeof(std::uint32_t));
+  vortex::upload::UploadTextureSourceView source;
+  std::vector<vortex::upload::UploadSubresource> subresources;
+  for (std::uint32_t layer = 0U; layer < desc.array_size; ++layer) {
+    subresources.push_back({ .mip = 0U, .array_slice = layer });
+    source.subresources.push_back({
+      .bytes = std::as_bytes(std::span { pixels }),
+      .row_pitch = row_pitch,
+      .slice_pitch = row_pitch * desc.height,
+    });
+  }
+  auto prepared = uploader_->PrepareImmutableTexture2D(
+    std::move(*managed), source, subresources);
+  if (!prepared) {
+    throw std::runtime_error("Failed to prepare the upload of "
+      + desc.debug_name + ": "
+      + vortex::upload::make_error_code(prepared.error()).message());
+  }
 
-  gfx_->GetResourceRegistry().Register(texture);
-  const auto srv = RegisterVersion(*texture);
-  return FallbackBinding { .texture = std::move(texture), .srv = srv };
+  auto owner = std::make_shared<vortex::upload::ImmutableTextureUpload>(
+    std::move(*prepared));
+  const auto& destination = owner->Destination();
+  const auto srv = destination.views.front().shader_visible_index;
+  content_revisions_.insert_or_assign(srv, ++next_content_revision_);
+  return FallbackBinding {
+    .texture = destination.resource,
+    .srv = srv,
+    .owner = std::move(owner),
+  };
+}
+
+auto TextureBinder::Impl::RecordFallbackUploads() -> void
+{
+  // Recorded on the graphics queue, so every later pass that samples a
+  // fallback runs after its copy.
+  auto recording = gfx_->AcquireCommandRecorder(
+    gfx_->QueueKeyFor(graphics::QueueRole::kGraphics),
+    "TextureBinder.Fallbacks", graphics::SubmissionPolicy::kExplicit);
+  if (!recording) {
+    throw std::runtime_error("Failed to record the texture fallbacks");
+  }
+  for (auto* bindings : { &placeholders_, &errors_ }) {
+    for (const auto& binding : *bindings) {
+      if (!binding.owner->Record(*recording)) {
+        throw std::runtime_error("Failed to record the texture fallbacks");
+      }
+    }
+  }
+  const auto submission = recording.SubmitWithReceipt();
+  if (submission.outcome != graphics::SubmissionOutcome::kSubmitted) {
+    throw std::runtime_error("Failed to submit the texture fallbacks");
+  }
+}
+
+auto TextureBinder::Impl::RetireFallback(FallbackBinding& binding) -> void
+{
+  if (!binding.owner) {
+    return;
+  }
+  // The registration retires once its owner and GPU uses are gone; keep the
+  // owner until the frames that may sample the fallback complete.
+  auto& reclaimer = gfx_->GetDeferredReclaimer();
+  auto action = reclaimer.PrepareDeferredAction(
+    [owner = binding.owner] mutable -> void { owner.reset(); });
+  reclaimer.CommitDeferredAction(std::move(action));
+  binding.owner.reset();
+  binding.texture.reset();
 }
 
 auto TextureBinder::Impl::RegisterVersion(graphics::Texture& texture)
@@ -1972,63 +2056,6 @@ auto TextureBinder::Impl::HandleLoadFailure(
     gfx_->RetireResource(entry.texture);
     Publish(entry, FallbackIndex(FallbackKind::kError, entry));
     LOG_F(INFO, "Published the error texture for resource {}", resource_key);
-  }
-}
-
-auto TextureBinder::Impl::SubmitUniformLayers(
-  const std::shared_ptr<graphics::Texture>& texture,
-  const std::span<const std::byte> layer_bytes) -> void
-{
-  if (!uploader_ || !staging_provider_) {
-    return;
-  }
-
-  const auto& desc = texture->GetDescriptor();
-  const auto& format_info = graphics::detail::GetFormatInfo(desc.format);
-  const auto bytes_per_row = desc.width * format_info.bytes_per_block;
-  CHECK_EQ_F(layer_bytes.size(),
-    static_cast<std::size_t>(bytes_per_row) * desc.height,
-    "Fallback texture data does not match {}", desc.debug_name);
-
-  vortex::upload::UploadRequest req {
-    .kind = vortex::upload::UploadKind::kTexture2D,
-    .debug_name = desc.debug_name,
-    .desc = vortex::upload::UploadTextureDesc {
-      .dst = texture,
-      .width = desc.width,
-      .height = desc.height,
-      .depth = desc.depth,
-      .format = desc.format,
-    },
-    .subresources = {},
-    .data = {},
-  };
-  vortex::upload::UploadTextureSourceView src_view;
-  for (std::uint32_t layer = 0U; layer < desc.array_size; ++layer) {
-    req.subresources.push_back(vortex::upload::UploadSubresource {
-      .mip = 0U,
-      .array_slice = layer,
-      .x = 0U,
-      .y = 0U,
-      .z = 0U,
-      .width = 0U,
-      .height = 0U,
-      .depth = 1U,
-    });
-    src_view.subresources.push_back({
-      .bytes = layer_bytes,
-      .row_pitch = bytes_per_row,
-      .slice_pitch = bytes_per_row * desc.height,
-    });
-  }
-  req.data = std::move(src_view);
-
-  const auto result = uploader_->Submit(req, *staging_provider_);
-  if (!result) {
-    const auto error_code
-      = oxygen::vortex::upload::make_error_code(result.error());
-    LOG_F(ERROR, "Texture upload failed ({}): {}", desc.debug_name,
-      error_code.message());
   }
 }
 

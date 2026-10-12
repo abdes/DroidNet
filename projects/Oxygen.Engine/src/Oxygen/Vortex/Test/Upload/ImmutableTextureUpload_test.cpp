@@ -57,6 +57,7 @@ namespace {
           .format = Format::kR8UNorm,
           .texture_type = TextureType::kTexture2D,
           .is_shader_resource = true,
+          .clear_value = {},
           .initial_state = graphics::ResourceStates::kCommon,
         }));
       CHECK_F(result.has_value());
@@ -185,6 +186,40 @@ NOLINT_TEST_F(ImmutableTextureUploadTest, RejectsBoxedUpdatesBeforeRecording)
     EXPECT_EQ(prepared.error(), UploadError::kInvalidRequest);
   }
   EXPECT_FALSE(Gfx().texture_log_.copy_called);
+}
+
+//! A cube uploads as six full faces, like a six-layer 2D array.
+NOLINT_TEST_F(ImmutableTextureUploadTest, PreparesEveryCubeFace)
+{
+  constexpr std::uint32_t kFaceCount = 6U;
+  constexpr auto kTexel = std::array { std::byte { 7 } };
+  auto cube
+    = Gfx().GetResourceRegistry().RegisterManagedTexture(Gfx().CreateTexture({
+      .width = 1U,
+      .height = 1U,
+      .array_size = kFaceCount,
+      .format = Format::kR8UNorm,
+      .texture_type = TextureType::kTextureCube,
+      .is_shader_resource = true,
+      .clear_value = {},
+      .initial_state = graphics::ResourceStates::kCommon,
+    }));
+  ASSERT_TRUE(cube.has_value());
+  auto source = UploadTextureSourceView {};
+  auto faces = std::vector<UploadSubresource> {};
+  for (std::uint32_t face = 0U; face < kFaceCount; ++face) {
+    faces.push_back({ .array_slice = face });
+    source.subresources.push_back({
+      .bytes = kTexel,
+      .row_pitch = 1U,
+      .slice_pitch = 1U,
+    });
+  }
+
+  const auto prepared
+    = Uploader().PrepareImmutableTexture2D(std::move(*cube), source, faces);
+
+  EXPECT_TRUE(prepared);
 }
 
 NOLINT_TEST_F(ImmutableTextureUploadTest, StagingAllocationFailureIsRetryable)

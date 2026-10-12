@@ -75,7 +75,8 @@ auto UploadCoordinator::PrepareImmutableTexture2D(
   }
   const auto& description = destination.resource->GetDescriptor();
   if ((description.texture_type != TextureType::kTexture2D
-        && description.texture_type != TextureType::kTexture2DArray)
+        && description.texture_type != TextureType::kTexture2DArray
+        && description.texture_type != TextureType::kTextureCube)
     || description.sample_count != 1U || !description.is_shader_resource
     || description.initial_state != graphics::ResourceStates::kCommon) {
     return Err(UploadError::kInvalidRequest);
