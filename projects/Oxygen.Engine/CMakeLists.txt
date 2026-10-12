@@ -259,6 +259,8 @@ if(OXYGEN_BUILD_FULL_ENGINE)
   include(Dxc)
 endif()
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/ClangdDatabases.cmake")
+
 add_subdirectory("src")
 
 if(OXYGEN_BUILD_FULL_ENGINE)
