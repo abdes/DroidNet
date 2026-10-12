@@ -79,6 +79,7 @@ m_gtest_program(
   ShaderDebugModeRegistry
   SOURCES
     "ShaderDebugModeRegistry_test.cpp"
+    "ViewModeCatalog_test.cpp"
 )
 
 m_gtest_program(RenderContext SOURCES "RenderContext_test.cpp")
