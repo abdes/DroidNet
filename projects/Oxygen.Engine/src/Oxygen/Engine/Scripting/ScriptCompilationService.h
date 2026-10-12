@@ -68,7 +68,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ScriptCompilationService)
   OXYGEN_MAKE_NON_MOVABLE(ScriptCompilationService)
 
-  OXGN_NGIN_NDAPI auto ActivateAsync(co::TaskStarted<> started = {})
+  OXGN_NGIN_NDAPI auto ActivateAsync(co::TaskStarted<> started)
     -> co::Co<> override;
   OXGN_NGIN_API auto Run() -> void override;
   OXGN_NGIN_API auto Stop() -> void override;
@@ -91,7 +91,7 @@ public:
   OXGN_NGIN_NDAPI auto AcquireForSlot(Request request,
     SlotAcquireCallbacks callbacks) -> SlotAcquireHandle override;
 
-  OXGN_NGIN_API auto OnFrameStart(engine::EngineTag) -> void override;
+  OXGN_NGIN_API auto OnFrameStart(engine::EngineTag /*tag*/) -> void override;
 
   OXGN_NGIN_API auto SetCacheBudget(size_t budget_bytes) -> void override;
   OXGN_NGIN_API auto SetDeferredPersistence(bool enabled) -> void override;
@@ -102,7 +102,7 @@ public:
   OXGN_NGIN_API auto ApplyConsoleCVars(const console::Console& console) -> void;
 
 private:
-  static constexpr size_t kL1ByteBudget = 8 * 1024 * 1024;
+  static constexpr size_t kL1ByteBudget = size_t { 8 } * 1024 * 1024;
 
   struct PersistentIndexEntry final {
     uint64_t data_offset { 0 };

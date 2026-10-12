@@ -91,7 +91,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(LiveObject);
   OXYGEN_DEFAULT_MOVABLE(LiveObject);
 
-  [[nodiscard]] virtual auto ActivateAsync(co::TaskStarted<> started = {})
+  [[nodiscard]] virtual auto ActivateAsync(co::TaskStarted<> started)
     -> co::Co<> = 0;
 
   virtual void Run() { }

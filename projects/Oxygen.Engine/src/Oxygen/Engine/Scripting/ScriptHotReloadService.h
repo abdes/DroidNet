@@ -59,7 +59,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(ScriptHotReloadService)
   OXYGEN_DEFAULT_MOVABLE(ScriptHotReloadService)
 
-  OXGN_NGIN_NDAPI auto ActivateAsync(co::TaskStarted<> started = {})
+  OXGN_NGIN_NDAPI auto ActivateAsync(co::TaskStarted<> started)
     -> co::Co<> override;
 
   OXGN_NGIN_API void Run() override;

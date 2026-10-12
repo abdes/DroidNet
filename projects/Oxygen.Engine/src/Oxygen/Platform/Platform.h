@@ -53,8 +53,11 @@ namespace platform {
   class AsyncOps final : public Component, public co::LiveObject {
     OXYGEN_COMPONENT(AsyncOps)
   public:
-    AsyncOps(const PlatformConfig& config);
+    explicit AsyncOps(const PlatformConfig& config);
     ~AsyncOps() override;
+
+    OXYGEN_MAKE_NON_COPYABLE(AsyncOps)
+    OXYGEN_MAKE_NON_MOVABLE(AsyncOps)
 
     //! A utility function, returning an awaitable suspending the caller for a
     //! specified duration. Suitable for use with `AnyOf()` etc.
@@ -63,7 +66,7 @@ namespace platform {
       return co::SleepFor(io_, delay);
     }
 
-    auto HasThreads() const { return threads_ != nullptr; }
+    [[nodiscard]] auto HasThreads() const { return threads_ != nullptr; }
     auto Threads() -> co::ThreadPool&
     {
       CHECK_NOTNULL_F(threads_, "Platform not configured with a thread pool");
@@ -74,7 +77,7 @@ namespace platform {
 
     auto Stop() -> void override;
 
-    [[nodiscard]] auto ActivateAsync(co::TaskStarted<> started = {})
+    [[nodiscard]] auto ActivateAsync(co::TaskStarted<> started)
       -> co::Co<> override;
 
     [[nodiscard]] auto IsRunning() const -> bool override
@@ -305,7 +308,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(Platform)
   OXYGEN_MAKE_NON_MOVABLE(Platform)
 
-  OXGN_PLAT_NDAPI auto ActivateAsync(co::TaskStarted<> started = {})
+  OXGN_PLAT_NDAPI auto ActivateAsync(co::TaskStarted<> started)
     -> co::Co<> override;
   OXGN_PLAT_API auto Run() -> void override;
   OXGN_PLAT_NDAPI auto IsRunning() const -> bool override;

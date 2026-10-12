@@ -6,6 +6,10 @@
 
 #pragma once
 
+// The header is consumed by the C++20 editor interop; dropping the empty
+// lambda parameter list before specifiers needs C++23.
+// NOLINTBEGIN(readability-redundant-lambda-parameter-list)
+
 #include <atomic>
 #include <concepts>
 #include <functional>
@@ -98,7 +102,7 @@ struct AssetLoaderConfig final {
      @note Async load APIs require a thread pool. If unset, async loads fail
        fast rather than falling back to synchronous work.
   */
-  observer_ptr<co::ThreadPool> thread_pool {};
+  observer_ptr<co::ThreadPool> thread_pool;
 
   //! Enforce that offline loads must not perform GPU work.
   /*!
@@ -142,28 +146,28 @@ public:
   enum class TypedLoadMetric : uint8_t {
     kFirst = 0,
     kRequests = kFirst,
-    kCacheHits,
-    kCacheMisses,
-    kTasksDeduped,
-    kTasksSpawned,
-    kErrDecode,
-    kErrTypeMismatch,
-    kErrRetryFailed,
-    kErrCanceled,
-    kCount,
+    kCacheHits = 1,
+    kCacheMisses = 2,
+    kTasksDeduped = 3,
+    kTasksSpawned = 4,
+    kErrDecode = 5,
+    kErrTypeMismatch = 6,
+    kErrRetryFailed = 7,
+    kErrCanceled = 8,
+    kCount = 9,
   };
   enum class LoadTelemetryEvent : uint8_t {
     kFirst = 0,
     kRequest = kFirst,
-    kCacheHit,
-    kCacheMiss,
-    kTasksDeduped,
-    kTasksSpawned,
-    kDecodeFailure,
-    kTypeMismatch,
-    kStoreRetryFailure,
-    kCancellation,
-    kCount,
+    kCacheHit = 1,
+    kCacheMiss = 2,
+    kTasksDeduped = 3,
+    kTasksSpawned = 4,
+    kDecodeFailure = 5,
+    kTypeMismatch = 6,
+    kStoreRetryFailure = 7,
+    kCancellation = 8,
+    kCount = 9,
   };
   using TypedLoadTelemetry
     = oxygen::EnumIndexedArray<TypedLoadMetric, uint64_t>;
@@ -238,7 +242,7 @@ public:
   };
 
   //! LiveObject contract
-  OXGN_CNTT_NDAPI auto ActivateAsync(co::TaskStarted<> started = {})
+  OXGN_CNTT_NDAPI auto ActivateAsync(co::TaskStarted<> started)
     -> co::Co<> override;
 
   OXGN_CNTT_API void Run() override;
@@ -376,14 +380,16 @@ public:
   void StartLoadAsset(const data::AssetKey& key, LoadRequest request,
     std::function<void(std::shared_ptr<T>)> on_complete)
   {
-    StartAssetLoad<T>(key, std::nullopt, request, std::move(on_complete));
+    StartAssetLoad<T>(
+      key, std::nullopt, std::move(request), std::move(on_complete));
   }
 
   template <IsTyped T>
   void StartLoadAsset(const data::AssetKey& key, data::SourceKey source_key,
     LoadRequest request, std::function<void(std::shared_ptr<T>)> on_complete)
   {
-    StartAssetLoad<T>(key, source_key, request, std::move(on_complete));
+    StartAssetLoad<T>(
+      key, source_key, std::move(request), std::move(on_complete));
   }
 
   //! Acquire a cached asset. Each returned pointer owns one request usage.
@@ -413,7 +419,7 @@ public:
     AssertOwningThread();
     const auto identity = ResolveAssetIdentityForKey(key);
     return observer_ptr<const T> {
-      identity ? content_cache_.Peek<T>(identity->cache_key).get() : nullptr
+      identity ? content_cache_.Peek<T>(identity->cache_key).get() : nullptr,
     };
   }
 
@@ -702,7 +708,7 @@ public:
   }
 
   template <PakResource T>
-  void StartLoadResource(ResourceKey key, LoadRequest request,
+  void StartLoadResource(ResourceKey key, const LoadRequest& request,
     std::function<void(std::shared_ptr<T>)> on_complete)
   {
     AssertOwningThread();
@@ -756,7 +762,8 @@ public:
   }
 
   template <PakResource T>
-  void StartLoadResource(CookedResourceData<T> cooked, LoadRequest request,
+  void StartLoadResource(CookedResourceData<T> cooked,
+    const LoadRequest& request,
     std::function<void(std::shared_ptr<T>)> on_complete)
   {
     AssertOwningThread();
@@ -1093,7 +1100,9 @@ public:
           && (context.source_key.IsNil()
             || result->GetSourceOrigin()
               != data::SourceOrigin {
-                context.source_key, context.source_instance })) {
+                .key = context.source_key,
+                .instance = context.source_instance,
+              })) {
           throw std::logic_error(
             "Asset decoder did not preserve its cooked source identity");
         }
@@ -1130,7 +1139,7 @@ private:
   auto CompleteMountRetirement(internal::MountReplacementState& state) noexcept
     -> void;
   struct DecodedAssetAsyncResult final {
-    data::SourceInstanceId source_id {};
+    data::SourceInstanceId source_id;
     std::shared_ptr<void> asset;
     std::shared_ptr<internal::DependencyCollector> dependency_collector;
     data::AssetReferences references;
@@ -1289,9 +1298,9 @@ private:
     const ContentLoadScope& scope) const
     -> std::optional<data::SourceInstanceId>;
   struct AssetLoadRequest final {
-    data::SourceInstanceId source_id {};
+    data::SourceInstanceId source_id;
     uint64_t cache_key = 0;
-    std::shared_ptr<const internal::IContentSource> source {};
+    std::shared_ptr<const internal::IContentSource> source;
   };
   template <typename T>
   auto LoadAssetPublicationAsync(const data::AssetKey& key,
@@ -1346,7 +1355,7 @@ private:
     const ContentLoadScope& scope) -> std::optional<AssetLoadRequest>;
   struct ResolvedAssetIdentity final {
     uint64_t cache_key = 0;
-    data::SourceInstanceId source_id {};
+    data::SourceInstanceId source_id;
   };
   OXGN_CNTT_API auto ResolveAssetIdentityForKey(const data::AssetKey& key,
     std::optional<data::SourceInstanceId> preferred_source_id
@@ -1385,7 +1394,8 @@ private:
   std::unordered_map<TypeId, LoadFnErased> resource_loaders_;
 
   auto RetireCacheEntry(
-    const AnyCache<uint64_t, RefCountedEviction<uint64_t>>::RetiredEntry& entry,
+    const AnyCache<uint64_t, RefCountedEviction<uint64_t>>::RetiredEntry&
+      retired,
     EvictionReason reason) -> void;
   void UnloadObject(
     uint64_t cache_key, const oxygen::TypeId& type_id, EvictionReason reason);
@@ -1523,7 +1533,8 @@ public:
 
   // Enumerate direct dependents (debug only) by scanning forward map.
   template <typename Fn>
-  auto ForEachDependent(const data::AssetKey& dependency, Fn&& fn) const -> void
+  auto ForEachDependent(const data::AssetKey& dependency, const Fn& fn) const
+    -> void
   {
     const auto identity = ResolveAssetIdentityForKey(dependency);
     if (!identity) {
@@ -1638,3 +1649,5 @@ extern template OXGN_CNTT_API auto
     ResourceKey, LoadRequest) -> co::Co<std::shared_ptr<data::PhysicsResource>>;
 
 } // namespace oxygen::content
+
+// NOLINTEND(readability-redundant-lambda-parameter-list)

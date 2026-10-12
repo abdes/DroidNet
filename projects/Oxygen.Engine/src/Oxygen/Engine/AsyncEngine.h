@@ -69,7 +69,7 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(AsyncEngine)
   OXYGEN_MAKE_NON_MOVABLE(AsyncEngine)
 
-  OXGN_NGIN_NDAPI auto ActivateAsync(co::TaskStarted<> started = {})
+  OXGN_NGIN_NDAPI auto ActivateAsync(co::TaskStarted<> started)
     -> co::Co<> override;
 
   //! Starts internal coroutine frame loop (returns immediately).

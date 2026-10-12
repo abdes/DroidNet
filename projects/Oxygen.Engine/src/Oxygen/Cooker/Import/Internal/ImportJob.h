@@ -70,7 +70,7 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(ImportJob)
 
   //! Open the job nursery.
-  OXGN_COOK_NDAPI auto ActivateAsync(co::TaskStarted<> started = {})
+  OXGN_COOK_NDAPI auto ActivateAsync(co::TaskStarted<> started)
     -> co::Co<> override;
 
   //! Start job execution.
