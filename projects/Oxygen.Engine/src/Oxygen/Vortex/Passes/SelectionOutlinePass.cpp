@@ -7,12 +7,14 @@
 #include <algorithm>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
-#include <glm/vec4.hpp>
+#include <glm/ext/vector_float4.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
@@ -21,6 +23,7 @@
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
@@ -28,11 +31,15 @@
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Profiling/GpuEventScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
@@ -42,6 +49,7 @@
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Types/AcceptedDrawView.h>
+#include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/Types/ViewOutline.h>
 
 namespace oxygen::vortex {
@@ -63,15 +71,22 @@ namespace {
   };
   static_assert(sizeof(SelectionOutlineMaskConstants) == 16U);
 
+  //! Outline width in pixels and the alpha of outline segments hidden behind
+  //! scene geometry.
+  constexpr float kDefaultOutlineRadius = 2.0F;
+  constexpr float kDefaultOccludedAlpha = 0.35F;
+
   struct alignas(16) SelectionOutlineCompositeConstants {
     glm::vec4 color { 0.0F };
     glm::vec4 active_color { 0.0F };
     std::uint32_t mask_srv { kInvalidShaderVisibleIndex.get() };
-    float radius { 2.0F };
-    float occluded_alpha { 0.35F };
+    float radius { kDefaultOutlineRadius };
+    float occluded_alpha { kDefaultOccludedAlpha };
     std::uint32_t pad0 { 0U };
   };
-  static_assert(sizeof(SelectionOutlineCompositeConstants) == 48U);
+  // Three 16-byte rows: two colors, then the scalars.
+  static_assert(
+    sizeof(SelectionOutlineCompositeConstants) == 3U * sizeof(glm::vec4));
 
   auto TrackTexture(graphics::CommandRecorder& recorder,
     const graphics::Texture& texture) -> void
@@ -266,7 +281,8 @@ auto SelectionOutlinePass::Record(RenderContext& ctx,
     if (!draw->flags.IsSet(PassMaskBit::kMainViewVisible)) {
       continue;
     }
-    if (const auto it = levels.find(sources[draw_index].node);
+    if (const auto it
+      = levels.find(sources.subspan(draw_index, 1).front().node);
       it != levels.end()) {
       draws.push_back({ .draw_index = draw_index, .level = it->second });
     }
@@ -294,7 +310,8 @@ auto SelectionOutlinePass::Record(RenderContext& ctx,
   BeginConstantsFrame(ctx);
   const auto test_occlusion
     = inputs.scene_depth != nullptr && inputs.scene_depth_srv.IsValid();
-  const auto publish_mask_constants = [&](const float level) {
+  const auto publish_mask_constants
+    = [&](const float level) -> ShaderVisibleIndex {
     auto constants = MaskConstants {};
     constants.scene_depth_srv = inputs.scene_depth_srv.get();
     constants.level = level;
@@ -339,7 +356,8 @@ auto SelectionOutlinePass::Record(RenderContext& ctx,
   recorder.BindFrameBuffer(*mask->framebuffer);
   recorder.ClearFramebuffer(*mask->framebuffer,
     std::vector<std::optional<graphics::Color>> {
-      graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F } });
+      graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F },
+    });
   SetViewportAndScissor(recorder, ctx, width, height);
   auto current_alpha_test = std::optional<bool> {};
   for (const auto& draw : draws) {
@@ -351,7 +369,7 @@ auto SelectionOutlinePass::Record(RenderContext& ctx,
         view_constants, ctx.view_constants->GetGPUVirtualAddress());
       current_alpha_test = raster.alpha_test;
     }
-    const auto& dm = metadata[draw.draw_index];
+    const auto& dm = metadata.subspan(draw.draw_index, 1).front();
     recorder.SetGraphicsRoot32BitConstant(root_constants,
       (draw.level == kActiveLevel ? active_constants : outlined_constants)
         .get(),
@@ -462,16 +480,7 @@ auto SelectionOutlinePass::RetireMask(ViewMask& mask) -> void
     if (mask.framebuffer) {
       gfx->RegisterDeferredRelease(std::move(mask.framebuffer));
     }
-    if (mask.texture) {
-      auto* registry = &gfx->GetResourceRegistry();
-      gfx->GetDeferredReclaimer().RegisterDeferredAction(
-        [registry, texture = std::move(mask.texture)] mutable -> void {
-          if (registry->Contains(*texture)) {
-            registry->UnRegisterResource(*texture);
-          }
-          texture.reset();
-        });
-    }
+    gfx->RetireResource(mask.texture);
   }
   mask = {};
 }

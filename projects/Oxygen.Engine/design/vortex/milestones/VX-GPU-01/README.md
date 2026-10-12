@@ -220,23 +220,29 @@ Update the owning designs, record the [answered decisions](#decisions).
 
 ## S2 — Receipt-retired descriptors
 
-- [ ] **Registry.** One `Retire` operation releases views and resource by
-      receipt; `Replace` and `UpdateView` on a live shader-visible descriptor
-      are rejected outside shutdown.
-- [ ] **Growth.** `Vortex/Upload/UploadHelpers.cpp` and `AtlasBuffer`: growth
-      creates a new buffer and descriptor, GPU-copies the old content on the
-      graphics queue (GD-2) and publishes the new index; the in-place `Replace` path is deleted.
-- [ ] **Callers.** `SceneTextures.cpp`, `GeometryUploader.cpp` (eviction and
-      growth), `AtlasBuffer.cpp`, `TextureBinder.cpp` (upload completion,
-      eviction, error texture; cube and array placeholders for #25),
-      `LocalFogVolumeTiledCullingPass.cpp` (retire immediately; delete both
-      retired vectors).
-- [ ] **Debug aid.** FIFO descriptor reuse in Debug builds.
-- [ ] **Tests.** Graphics registry tests (retired descriptor not reused before
-      its receipt; live rewrite rejected); atlas growth keeps old elements
-      readable by in-flight frames; TextureBinder eviction of a cube leaves a
-      cube view and repoints only after retirement; scene-texture resize does
-      not recycle a slot in flight.
+- [x] **Retirement.** `Graphics::RetireResource` (strong exception
+      guarantee) replaces the duplicated unregister-then-defer helpers
+      (StructuredGpuBuffer, environment, light grid, HZB, base pass, selection
+      outline, shadow targets, scene textures, atlas, geometry).
+- [x] **Growth.** `CreateBufferAndSrv` replaces `EnsureBufferAndSrv`; the
+      in-place `Replace` path is gone. `AtlasBuffer` growth GPU-copies on the
+      graphics queue and publishes a new SRV (GD-2); element refs survive
+      growth. Growth now happens only when a request does not fit (it used to
+      resize, and rewrite the live descriptor, on most allocations).
+- [x] **Geometry.** Each content version gets a new buffer and SRV; the old
+      one retires by receipt.
+- [x] **Local fog.** Grown buffers retire at once (L10).
+- [x] **Debug aid.** Debug builds use fresh bindless slots before recycling,
+      oldest first.
+- [x] **Accessors.** `Graphics::GetDescriptorAllocator()`/`GetResourceRegistry()`
+      are real overloads in every backend, mock and fake (no `const_cast`).
+- [ ] **TextureBinder (S2c).** New descriptor per texture version (GD-7):
+      upload completion, eviction, error texture; cube and array placeholders
+      (#25); MaterialBinder re-serializes on index change.
+- [ ] **Tests.** Done: retired buffer keeps views until slot reuse; atlas
+      growth copies, new SRV, no growth within capacity; geometry eviction and
+      update follow retirement. Open: TextureBinder versions and cube
+      placeholder.
 
 ## S3 — Non-camera passes own their inputs
 

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <string>
@@ -15,8 +16,12 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
-#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Vortex/Upload/AtlasBuffer.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadHelpers.h>
@@ -52,13 +57,7 @@ AtlasBuffer::~AtlasBuffer()
     return;
   }
 
-  auto buffer = std::move(primary_buffer_);
-  auto& registry = gfx_->GetResourceRegistry();
-  if (registry.Contains(*buffer)) {
-    registry.UnRegisterResource(*buffer);
-  }
-
-  gfx_->GetDeferredReclaimer().RegisterDeferredRelease(std::move(buffer));
+  gfx_->RetireResource(primary_buffer_);
 }
 
 /*!
@@ -94,25 +93,27 @@ AtlasBuffer::~AtlasBuffer()
  @note Safe to call redundantly; inexpensive when capacity is adequate.
  @see AtlasBuffer::Allocate
 */
-auto AtlasBuffer::EnsureCapacity(const std::uint32_t min_elements,
-  const float slack) -> std::expected<EnsureBufferResult, std::error_code>
+auto AtlasBuffer::EnsureCapacity(const CapacityRequest& request)
+  -> std::expected<EnsureBufferResult, std::error_code>
 {
+  const auto min_elements = request.min_elements;
+  const auto slack = request.growth_slack;
   stats_.ensure_calls++;
 
   const std::uint64_t min_bytes
     = static_cast<std::uint64_t>(min_elements) * stride_;
   const std::uint64_t current_bytes
     = primary_buffer_ ? primary_buffer_->GetSize() : 0ULL;
-  const std::uint64_t target_bytes = primary_buffer_
-    ? (std::max)(current_bytes,
-        static_cast<std::uint64_t>(min_bytes * (1.0F + slack)))
-    : min_bytes;
-
-  // Fast path: if a primary buffer exists and the target size is not
-  // larger than current, nothing to do.
-  if (primary_buffer_ && target_bytes <= current_bytes) {
+  if (primary_buffer_ && min_bytes <= current_bytes) {
     return EnsureBufferResult::kUnchanged;
   }
+  // Grow with slack so a run of single allocations does not resize each time.
+  const std::uint64_t target_bytes = primary_buffer_
+    ? (std::max)(min_bytes,
+        static_cast<std::uint64_t>(
+          static_cast<double>(min_bytes) * (1.0 + static_cast<double>(slack)))
+          / stride_ * stride_)
+    : min_bytes;
 
   // Every allocated element can be returned to any frame bucket. Reserve before
   // publishing capacity so release (including failed caller activation) and
@@ -123,32 +124,65 @@ auto AtlasBuffer::EnsureCapacity(const std::uint32_t min_elements,
     retired.reserve(return_capacity);
   }
 
-  auto result = internal::EnsureBufferAndSrv(*gfx_, primary_buffer_,
-    primary_srv_, target_bytes, stride_, debug_label_, domain_);
-  if (!result) {
-    return std::unexpected(result.error());
+  auto created = internal::CreateBufferAndSrv(*gfx_,
+    internal::StructuredBufferSpec {
+      .size_bytes = target_bytes,
+      .stride = stride_,
+      .debug_label = debug_label_,
+      .domain = domain_,
+    });
+  if (!created) {
+    return std::unexpected(created.error());
   }
-
-  // Update capacity on create/resize
-  if (*result == EnsureBufferResult::kCreated
-    || *result == EnsureBufferResult::kResized) {
-    const auto prev_next = next_index_;
-    capacity_elements_
-      = static_cast<std::uint32_t>(primary_buffer_->GetSize() / stride_);
-    if (*result == EnsureBufferResult::kCreated) {
-      // Fresh buffer: start from 0
-      next_index_ = 0;
-    } else {
-      // Preserve allocation tail across resizes;
-      // clamp to new capacity just in case.
-      next_index_ = (std::min)(prev_next, capacity_elements_);
+  const auto result = primary_buffer_ ? EnsureBufferResult::kResized
+                                      : EnsureBufferResult::kCreated;
+  if (primary_buffer_) {
+    // In-flight frames keep reading the old buffer through its old SRV; the
+    // new SRV is published only once the GPU copy carries the live elements.
+    if (!CopyLiveElements(*primary_buffer_, *created->buffer)) {
+      gfx_->RetireResource(created->buffer);
+      return std::unexpected(std::make_error_code(std::errc::io_error));
     }
-    // (Phase 1) We do not migrate live data here; caller re-uploads.
-    stats_.capacity_elements = capacity_elements_;
-    stats_.next_index = next_index_;
+    gfx_->RetireResource(primary_buffer_);
   }
+  primary_buffer_ = std::move(created->buffer);
+  primary_srv_ = created->srv;
 
+  const auto prev_next = next_index_;
+  capacity_elements_
+    = static_cast<std::uint32_t>(primary_buffer_->GetSize() / stride_);
+  next_index_ = result == EnsureBufferResult::kCreated
+    ? 0U
+    : (std::min)(prev_next, capacity_elements_);
+  stats_.capacity_elements = capacity_elements_;
+  stats_.next_index = next_index_;
   return result;
+}
+
+auto AtlasBuffer::CopyLiveElements(
+  const graphics::Buffer& source, graphics::Buffer& destination) -> bool
+{
+  auto recorder = gfx_->AcquireCommandRecorder(
+    gfx_->QueueKeyFor(graphics::QueueRole::kGraphics), "AtlasBuffer.Grow");
+  if (!recorder) {
+    LOG_F(
+      ERROR, "AtlasBuffer '{}': cannot record the growth copy", debug_label_);
+    return false;
+  }
+  if (!recorder->AdoptKnownResourceState(source)) {
+    recorder->BeginTrackingResourceState(
+      source, graphics::ResourceStates::kCommon, false);
+  }
+  recorder->BeginTrackingResourceState(
+    destination, graphics::ResourceStates::kCommon, false);
+  recorder->RequireResourceState(source, graphics::ResourceStates::kCopySource);
+  recorder->RequireResourceState(
+    destination, graphics::ResourceStates::kCopyDest);
+  recorder->FlushBarriers();
+  recorder->CopyBuffer(destination, 0U, source, 0U, source.GetSize());
+  recorder->RequireResourceStateFinal(
+    destination, graphics::ResourceStates::kShaderResource);
+  return recorder.Submit();
 }
 
 /*!
@@ -199,7 +233,7 @@ auto AtlasBuffer::Allocate(const std::uint32_t count)
   stats_.allocations++;
   stats_.next_index = next_index_;
   stats_.free_list_size = static_cast<std::uint32_t>(free_list_.size());
-  return ElementRef { ElementRefTag {}, primary_srv_, idx };
+  return ElementRef { ElementRefTag {}, idx };
 }
 
 /*!
@@ -216,14 +250,12 @@ auto AtlasBuffer::Allocate(const std::uint32_t count)
  - Time Complexity: O(1) push into retire list.
  - Memory: No allocation; return capacity is reserved before allocation.
 
- @note Releasing an ElementRef whose SRV does not match the primary is ignored
-   (Phase 1 invariant enforcement).
+ @note Releasing a default-constructed ElementRef is ignored.
  @see AtlasBuffer::OnFrameStart
 */
 auto AtlasBuffer::Release(const ElementRef ref, const frame::Slot slot) -> void
 {
-  if (ref.srv_ != primary_srv_) {
-    // Phase 1 invariant: only primary chunk exists
+  if (!ref.valid_) {
     return;
   }
   retire_lists_.at(slot.get()).push_back(ref.element_);
@@ -272,7 +304,7 @@ auto AtlasBuffer::MakeUploadDesc(
   -> std::expected<oxygen::vortex::upload::UploadBufferDesc, std::error_code>
 {
   // Phase 1 invariant: only primary chunk exists
-  if (ref.srv_ != primary_srv_ || !primary_buffer_) {
+  if (!ref.valid_ || !primary_buffer_) {
     return std::unexpected(std::make_error_code(std::errc::invalid_argument));
   }
   if (ref.element_ >= capacity_elements_) {
@@ -291,15 +323,14 @@ auto AtlasBuffer::MakeUploadDesc(
  Builds an UploadBufferDesc for a raw element index.
 
  @param element_index Element slot index (0-based) inside primary buffer.
- @param size_bytes Byte size of payload to upload for this element.
- @return UploadBufferDesc on success; unexpected with
-   std::errc::invalid_argument if buffer not yet created;
+ @return UploadBufferDesc for one element (stride bytes) on success;
+   unexpected with std::errc::invalid_argument if buffer not yet created;
    std::errc::result_out_of_range if index >= current capacity.
 
  @see AtlasBuffer::MakeUploadDesc
 */
 auto AtlasBuffer::MakeUploadDescForIndex(
-  const std::uint32_t element_index, const std::uint64_t size_bytes) const
+  const std::uint32_t element_index) const
   -> std::expected<oxygen::vortex::upload::UploadBufferDesc, std::error_code>
 {
   if (!primary_buffer_) {
@@ -312,7 +343,7 @@ auto AtlasBuffer::MakeUploadDescForIndex(
 
   oxygen::vortex::upload::UploadBufferDesc desc;
   desc.dst = primary_buffer_;
-  desc.size_bytes = size_bytes;
+  desc.size_bytes = stride_;
   desc.dst_offset = static_cast<std::uint64_t>(element_index) * stride_;
   return desc;
 }

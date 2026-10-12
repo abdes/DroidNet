@@ -73,6 +73,7 @@ public:
   ~DescriptorAllocatorComponent() override = default;
 
   [[nodiscard]] auto GetAllocator() const -> const auto& { return *allocator_; }
+  [[nodiscard]] auto GetAllocator() -> auto& { return *allocator_; }
   [[nodiscard]] auto ShareAllocator() const -> const auto&
   {
     return allocator_;
@@ -106,6 +107,11 @@ Graphics::Graphics(const SerializedBackendConfig& /*config*/,
 Graphics::~Graphics() { Close(); }
 
 auto Graphics::GetDescriptorAllocator() const -> const DescriptorAllocator&
+{
+  return GetComponent<DescriptorAllocatorComponent>().GetAllocator();
+}
+
+auto Graphics::GetDescriptorAllocator() -> DescriptorAllocator&
 {
   return GetComponent<DescriptorAllocatorComponent>().GetAllocator();
 }

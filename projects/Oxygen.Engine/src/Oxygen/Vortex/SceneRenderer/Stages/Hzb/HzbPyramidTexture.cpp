@@ -66,14 +66,7 @@ auto HzbPyramidTexture::Retire() -> void
     texture_.reset();
     return;
   }
-  auto* registry = &gfx->GetResourceRegistry();
-  gfx->GetDeferredReclaimer().RegisterDeferredAction(
-    [registry, texture = std::move(texture_)] mutable -> void {
-      if (registry->Contains(*texture)) {
-        registry->UnRegisterResource(*texture);
-      }
-      texture.reset();
-    });
+  gfx->RetireResource(texture_);
 }
 
 } // namespace oxygen::vortex

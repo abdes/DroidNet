@@ -237,6 +237,7 @@ public:
   ~DescriptorAllocatorComponent() override = default;
 
   [[nodiscard]] auto GetAllocator() const -> const auto& { return *allocator_; }
+  [[nodiscard]] auto GetAllocator() -> auto& { return *allocator_; }
   [[nodiscard]] auto ShareAllocator() const -> const auto&
   {
     return allocator_;
@@ -431,6 +432,11 @@ auto Graphics::GetFactory() const -> dx::IFactory*
 
 auto Graphics::GetDescriptorAllocator() const
   -> const graphics::DescriptorAllocator&
+{
+  return GetComponent<DescriptorAllocatorComponent>().GetAllocator();
+}
+
+auto Graphics::GetDescriptorAllocator() -> graphics::DescriptorAllocator&
 {
   return GetComponent<DescriptorAllocatorComponent>().GetAllocator();
 }
@@ -671,7 +677,9 @@ auto Graphics::CreateIndirectCommandSignatures() -> void
   const auto create
     = [this](const Kind kind, const D3D12_INDIRECT_ARGUMENT_TYPE type,
         const UINT byte_stride) -> void {
-    const auto argument = D3D12_INDIRECT_ARGUMENT_DESC { .Type = type };
+    // Draw and dispatch arguments carry no extra parameters in the union.
+    auto argument = D3D12_INDIRECT_ARGUMENT_DESC {};
+    argument.Type = type;
     const auto desc = D3D12_COMMAND_SIGNATURE_DESC {
       .ByteStride = byte_stride,
       .NumArgumentDescs = 1U,

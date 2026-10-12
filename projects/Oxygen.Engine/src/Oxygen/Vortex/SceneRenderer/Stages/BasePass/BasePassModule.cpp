@@ -28,7 +28,6 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
-#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
@@ -145,16 +144,7 @@ namespace {
   auto ResetStageTexture(
     Graphics& gfx, std::shared_ptr<graphics::Texture>& texture) -> void
   {
-    if (!texture) {
-      return;
-    }
-
-    auto* registry = &gfx.GetResourceRegistry();
-    gfx.GetDeferredReclaimer().RegisterDeferredAction(
-      [registry, texture = std::move(texture)] mutable -> void {
-        registry->UnRegisterResource(*texture);
-        texture.reset();
-      });
+    gfx.RetireResource(texture);
   }
 
   auto NeedsStageTextureRebuild(

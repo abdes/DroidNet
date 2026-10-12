@@ -29,7 +29,6 @@
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
-#include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
 #include <Oxygen/Vortex/Renderer.h>
 
 namespace oxygen::vortex::environment::internal {
@@ -43,7 +42,11 @@ namespace {
   auto CombineHashU64(std::uint64_t seed, const std::uint64_t value)
     -> std::uint64_t
   {
-    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
+    // Boost-style combine with the 64-bit golden-ratio constant.
+    constexpr std::uint64_t kGoldenRatio = 0x9e3779b97f4a7c15ULL;
+    constexpr std::uint64_t kLeftShift = 6U;
+    constexpr std::uint64_t kRightShift = 2U;
+    seed ^= value + kGoldenRatio + (seed << kLeftShift) + (seed >> kRightShift);
     return seed;
   }
 
@@ -125,7 +128,10 @@ auto AtmosphereLutCache::EnsureResources() -> bool
       params.multi_scattering_width, params.multi_scattering_height)
     && EnsureStructuredBuffer(distant_sky_light_buffer_,
       distant_sky_light_slots_, "Vortex.Environment.DistantSkyLightLut",
-      sizeof(float) * 4U, sizeof(float) * 4U);
+      StructuredBufferShape {
+        .size_bytes = sizeof(float) * 4U,
+        .stride = sizeof(float) * 4U,
+      });
   if (!ready) {
     return false;
   }
@@ -164,9 +170,9 @@ auto AtmosphereLutCache::ResetResources() -> void
 {
   auto gfx = renderer_.GetGraphics();
   if (gfx != nullptr) {
-    RetireEnvironmentResource(*gfx, transmittance_texture_);
-    RetireEnvironmentResource(*gfx, multi_scattering_texture_);
-    RetireEnvironmentResource(*gfx, distant_sky_light_buffer_);
+    gfx->RetireResource(transmittance_texture_);
+    gfx->RetireResource(multi_scattering_texture_);
+    gfx->RetireResource(distant_sky_light_buffer_);
   }
 
   transmittance_texture_.reset();
@@ -216,7 +222,7 @@ auto AtmosphereLutCache::EnsureTexture(
 
   auto& registry = gfx->GetResourceRegistry();
   if (wants_recreate) {
-    RetireEnvironmentResource(*gfx, texture);
+    gfx->RetireResource(texture);
     texture = gfx->CreateTexture({
       .width = width,
       .height = height,
@@ -293,8 +299,7 @@ auto AtmosphereLutCache::EnsureTexture(
 
 auto AtmosphereLutCache::EnsureStructuredBuffer(
   std::shared_ptr<graphics::Buffer>& buffer, BufferSlots& slots,
-  const std::string_view debug_name, const std::uint64_t size_bytes,
-  const std::uint32_t stride) -> bool
+  const std::string_view debug_name, const StructuredBufferShape& shape) -> bool
 {
   auto gfx = renderer_.GetGraphics();
   if (gfx == nullptr) {
@@ -302,12 +307,12 @@ auto AtmosphereLutCache::EnsureStructuredBuffer(
   }
 
   const auto wants_recreate
-    = buffer == nullptr || buffer->GetSize() != size_bytes;
+    = buffer == nullptr || buffer->GetSize() != shape.size_bytes;
   auto& registry = gfx->GetResourceRegistry();
   if (wants_recreate) {
-    RetireEnvironmentResource(*gfx, buffer);
+    gfx->RetireResource(buffer);
     buffer = gfx->CreateBuffer({
-      .size_bytes = size_bytes,
+      .size_bytes = shape.size_bytes,
       .usage = graphics::BufferUsage::kStorage,
       .memory = graphics::BufferMemory::kDeviceLocal,
       .debug_name = std::string(debug_name),
@@ -337,7 +342,7 @@ auto AtmosphereLutCache::EnsureStructuredBuffer(
         .visibility = graphics::DescriptorVisibility::kShaderVisible,
         .format = Format::kUnknown,
         .range = {},
-        .stride = stride,
+        .stride = shape.stride,
       });
   }
 
@@ -356,7 +361,7 @@ auto AtmosphereLutCache::EnsureStructuredBuffer(
         .visibility = graphics::DescriptorVisibility::kShaderVisible,
         .format = Format::kUnknown,
         .range = {},
-        .stride = stride,
+        .stride = shape.stride,
       });
   }
 
@@ -378,15 +383,22 @@ auto AtmosphereLutCache::BuildInternalParameters(
   params.camera_aerial_depth_resolution
     = renderer_.GetAerialPerspectiveLutDepthResolution();
   params.camera_aerial_depth_km = renderer_.GetAerialPerspectiveLutDepthKm();
+  // Base trace sample counts at a sample-count scale of 1, and their limits.
+  constexpr float kTransmittanceSamples = 10.0F;
+  constexpr float kMultiScatteringSamples = 15.0F;
+  constexpr float kSkyViewMinSamples = 4.0F;
+  constexpr float kSkyViewMaxSamples = 32.0F;
+  constexpr float kMaxLutSamples = 64.0F;
+  constexpr float kMaxSkyViewSamples = 128.0F;
+  const float scale = atmosphere.trace_sample_count_scale;
   params.transmittance_sample_count
-    = std::clamp(10.0F * atmosphere.trace_sample_count_scale, 1.0F, 64.0F);
+    = std::clamp(kTransmittanceSamples * scale, 1.0F, kMaxLutSamples);
   params.multi_scattering_sample_count
-    = std::clamp(15.0F * atmosphere.trace_sample_count_scale, 1.0F, 64.0F);
+    = std::clamp(kMultiScatteringSamples * scale, 1.0F, kMaxLutSamples);
   params.sky_view_sample_count_min
-    = std::clamp(4.0F * atmosphere.trace_sample_count_scale, 1.0F, 64.0F);
-  params.sky_view_sample_count_max
-    = std::clamp(32.0F * atmosphere.trace_sample_count_scale,
-      params.sky_view_sample_count_min + 1.0F, 128.0F);
+    = std::clamp(kSkyViewMinSamples * scale, 1.0F, kMaxLutSamples);
+  params.sky_view_sample_count_max = std::clamp(kSkyViewMaxSamples * scale,
+    params.sky_view_sample_count_min + 1.0F, kMaxSkyViewSamples);
   const float camera_aerial_sample_count_max
     = renderer_.GetAerialPerspectiveLutSampleCountMaxPerSlice();
   params.camera_aerial_sample_count_per_slice = std::max(1.0F,

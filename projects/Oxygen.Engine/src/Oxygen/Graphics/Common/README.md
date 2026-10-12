@@ -387,8 +387,9 @@ shaders read descriptors at execution time. Therefore:
 - `ResourceRegistry::UnRegisterResource` and `UnRegisterView` release
   descriptors immediately. Use them only for resources never published to
   shaders, during construction rollback and at shutdown.
-- Debug builds recycle bindless slots first-in first-out, so an early release
-  surfaces as a stale read rather than a silent alias.
+- Debug builds hand out fresh bindless slots before recycling released ones,
+  oldest first, so an early release surfaces as a stale read rather than a
+  silent alias.
 
 ## View indexing and removal
 

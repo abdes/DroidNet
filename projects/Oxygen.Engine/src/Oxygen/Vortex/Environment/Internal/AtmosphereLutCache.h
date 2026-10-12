@@ -27,25 +27,47 @@ struct StableAtmosphereState;
 
 class AtmosphereLutCache {
 public:
+  //! Default LUT resolutions, distances and trace sample counts.
+  struct Defaults {
+    static constexpr std::uint32_t kTransmittanceWidth = 256U;
+    static constexpr std::uint32_t kSkyViewWidth = 192U;
+    static constexpr std::uint32_t kSkyViewHeight = 104U;
+    static constexpr float kSkyViewSampleCountMax = 32.0F;
+    static constexpr float kSkyViewDistanceToSampleCountMaxM = 150000.0F;
+    static constexpr float kCameraAerialDepthKm = 96.0F;
+    static constexpr float kCameraAerialDepthSliceLengthKm = 3.0F;
+    static constexpr float kTransmittanceSampleCount = 10.0F;
+    static constexpr float kMultiScatteringSampleCount = 15.0F;
+    static constexpr float kDistantSkyLightSampleAltitudeKm = 6.0F;
+  };
+
   struct InternalParameters {
-    std::uint32_t transmittance_width { 256U };
+    std::uint32_t transmittance_width { Defaults::kTransmittanceWidth };
     std::uint32_t transmittance_height { 64U };
     std::uint32_t multi_scattering_width { 32U };
     std::uint32_t multi_scattering_height { 32U };
-    std::uint32_t sky_view_width { 192U };
-    std::uint32_t sky_view_height { 104U };
+    std::uint32_t sky_view_width { Defaults::kSkyViewWidth };
+    std::uint32_t sky_view_height { Defaults::kSkyViewHeight };
     float sky_view_sample_count_min { 4.0F };
-    float sky_view_sample_count_max { 32.0F };
-    float sky_view_distance_to_sample_count_max_m { 150000.0F };
+    float sky_view_sample_count_max { Defaults::kSkyViewSampleCountMax };
+    float sky_view_distance_to_sample_count_max_m {
+      Defaults::kSkyViewDistanceToSampleCountMaxM
+    };
     std::uint32_t camera_aerial_width { 64U };
     std::uint32_t camera_aerial_height { 64U };
     std::uint32_t camera_aerial_depth_resolution { 32U };
-    float camera_aerial_depth_km { 96.0F };
-    float camera_aerial_depth_slice_length_km { 3.0F };
+    float camera_aerial_depth_km { Defaults::kCameraAerialDepthKm };
+    float camera_aerial_depth_slice_length_km {
+      Defaults::kCameraAerialDepthSliceLengthKm
+    };
     float camera_aerial_sample_count_per_slice { 2.0F };
-    float transmittance_sample_count { 10.0F };
-    float multi_scattering_sample_count { 15.0F };
-    float distant_sky_light_sample_altitude_km { 6.0F };
+    float transmittance_sample_count { Defaults::kTransmittanceSampleCount };
+    float multi_scattering_sample_count {
+      Defaults::kMultiScatteringSampleCount
+    };
+    float distant_sky_light_sample_altitude_km {
+      Defaults::kDistantSkyLightSampleAltitudeKm
+    };
     glm::vec3 sky_luminance_factor_rgb { 1.0F, 1.0F, 1.0F };
     glm::vec3 sky_and_aerial_perspective_luminance_factor_rgb {
       1.0F,
@@ -162,9 +184,13 @@ private:
   auto EnsureTexture(std::shared_ptr<graphics::Texture>& texture,
     TextureSlots& slots, std::string_view debug_name, std::uint32_t width,
     std::uint32_t height) -> bool;
+  struct StructuredBufferShape {
+    std::uint64_t size_bytes { 0U };
+    std::uint32_t stride { 0U };
+  };
   auto EnsureStructuredBuffer(std::shared_ptr<graphics::Buffer>& buffer,
-    BufferSlots& slots, std::string_view debug_name, std::uint64_t size_bytes,
-    std::uint32_t stride) -> bool;
+    BufferSlots& slots, std::string_view debug_name,
+    const StructuredBufferShape& shape) -> bool;
   [[nodiscard]] auto BuildInternalParameters(
     const StableAtmosphereState& stable_state) -> InternalParameters;
   [[nodiscard]] static auto HashInternalParameters(

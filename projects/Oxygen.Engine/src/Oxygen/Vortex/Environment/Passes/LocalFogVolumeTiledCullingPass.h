@@ -7,6 +7,7 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <type_traits>
@@ -90,9 +91,11 @@ namespace environment {
       std::array<float, 2> _pad2 { 0.0F, 0.0F };
     };
     static_assert(std::is_standard_layout_v<PassConstants>);
-    static_assert(sizeof(PassConstants) == 144U);
+    //! Nine 16-byte rows, mirrored by the HLSL pass constants.
+    static constexpr std::size_t kPassConstantsBytes = 144U;
+    static_assert(sizeof(PassConstants) == kPassConstantsBytes);
 
-    auto EnsurePassConstantsBuffer() -> bool;
+    auto EnsurePassConstantsBuffer() -> upload::TransientStructuredBuffer*;
     auto EnsureTileDataTexture(std::uint32_t tile_resolution_x,
       std::uint32_t tile_resolution_y, std::uint32_t slice_count) -> bool;
     auto EnsureOccupiedTileDrawBuffers(std::uint32_t tile_count) -> bool;
@@ -112,8 +115,6 @@ namespace environment {
     std::uint32_t tile_data_resolution_y_ { 0U };
     std::uint32_t tile_data_slice_count_ { 0U };
     std::uint32_t occupied_tile_capacity_ { 0U };
-    std::vector<std::shared_ptr<graphics::Texture>> retired_textures_;
-    std::vector<std::shared_ptr<graphics::Buffer>> retired_buffers_;
   };
 
 } // namespace environment

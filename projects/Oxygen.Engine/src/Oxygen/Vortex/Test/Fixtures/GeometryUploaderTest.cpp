@@ -135,6 +135,11 @@ auto GeometryUploaderTest::BeginFrame(frame::Slot slot) -> void
     vortex::internal::RendererTagFactory::Get(), slot);
 }
 
+auto GeometryUploaderTest::RetireCompletedFrames() -> void
+{
+  gfx_->GetDeferredReclaimer().ProcessAllDeferredReleases();
+}
+
 auto GeometryUploaderTest::DefaultMaterial() const
   -> std::shared_ptr<const data::MaterialAsset>
 {

@@ -992,7 +992,10 @@ public:
   {
     return *descriptor_allocator_;
   }
-  using Graphics::GetDescriptorAllocator;
+  auto GetDescriptorAllocator() -> graphics::DescriptorAllocator& override
+  {
+    return *descriptor_allocator_;
+  }
   [[nodiscard]] auto GetTimestampQueryProvider() const
     -> observer_ptr<TimestampQueryProvider> override
   {
@@ -1311,8 +1314,10 @@ public:
       observer_ptr<const bool> constant_view_failure_;
       std::vector<std::byte> storage_;
     };
-    auto buffer = std::make_shared<FakeBuffer>("Staging", desc.size_bytes,
-      desc.usage, desc.memory, fail_map_, &buffer_view_log_,
+    auto buffer = std::make_shared<FakeBuffer>(desc.debug_name.empty()
+        ? std::string_view { "Staging" }
+        : desc.debug_name,
+      desc.size_bytes, desc.usage, desc.memory, fail_map_, &buffer_view_log_,
       make_observer(&fail_constant_buffer_views_));
     latest_created_buffer_ = buffer;
     return buffer;

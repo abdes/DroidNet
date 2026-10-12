@@ -8,6 +8,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <memory>
 #include <span>
@@ -39,7 +40,6 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
-#include <Oxygen/Vortex/Environment/Internal/ResourceRetirement.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -89,9 +89,9 @@ namespace {
           table.view_type = RangeTypeToViewType(
             static_cast<bindless_d3d12::RangeType>(range.range_type));
           table.base_index = range.base_register;
-          table.count = range.num_descriptors
-              == (std::numeric_limits<std::uint32_t>::max)()
-            ? (std::numeric_limits<std::uint32_t>::max)()
+          table.count
+            = range.num_descriptors == std::numeric_limits<std::uint32_t>::max()
+            ? std::numeric_limits<std::uint32_t>::max()
             : range.num_descriptors;
         }
         binding.data = table;
@@ -230,41 +230,37 @@ LocalFogVolumeTiledCullingPass::~LocalFogVolumeTiledCullingPass()
     return;
   }
 
-  internal::RetireEnvironmentResource(*gfx, tile_data_texture_);
-  internal::RetireEnvironmentResource(*gfx, occupied_tile_buffer_);
-  internal::RetireEnvironmentResource(*gfx, indirect_args_buffer_);
-  internal::RetireEnvironmentResource(*gfx, indirect_count_clear_buffer_);
-  for (auto& retired : retired_textures_) {
-    internal::RetireEnvironmentResource(*gfx, retired);
-  }
-  for (auto& retired : retired_buffers_) {
-    internal::RetireEnvironmentResource(*gfx, retired);
-  }
+  gfx->RetireResource(tile_data_texture_);
+  gfx->RetireResource(occupied_tile_buffer_);
+  gfx->RetireResource(indirect_args_buffer_);
+  gfx->RetireResource(indirect_count_clear_buffer_);
 }
 
 auto LocalFogVolumeTiledCullingPass::OnFrameStart(
   const frame::SequenceNumber sequence, const frame::Slot slot) -> void
 {
-  if (EnsurePassConstantsBuffer()) {
-    pass_constants_buffer_->OnFrameStart(sequence, slot);
+  if (auto* pass_constants = EnsurePassConstantsBuffer();
+    pass_constants != nullptr) {
+    pass_constants->OnFrameStart(sequence, slot);
   }
 }
 
-auto LocalFogVolumeTiledCullingPass::EnsurePassConstantsBuffer() -> bool
+auto LocalFogVolumeTiledCullingPass::EnsurePassConstantsBuffer()
+  -> upload::TransientStructuredBuffer*
 {
   if (pass_constants_buffer_.has_value()) {
-    return true;
+    return &*pass_constants_buffer_;
   }
   auto gfx = renderer_.GetGraphics();
   if (gfx == nullptr) {
-    return false;
+    return nullptr;
   }
   pass_constants_buffer_.emplace(observer_ptr { gfx.get() },
     renderer_.GetStagingProvider(),
     static_cast<std::uint32_t>(sizeof(PassConstants)),
     observer_ptr { &renderer_.GetInlineTransfersCoordinator() },
     "Environment.LocalFogTiledCulling.PassConstants");
-  return true;
+  return &*pass_constants_buffer_;
 }
 
 auto LocalFogVolumeTiledCullingPass::EnsureTileDataTexture(
@@ -342,7 +338,7 @@ auto LocalFogVolumeTiledCullingPass::EnsureTileDataTexture(
   const auto new_uav_index = allocator.GetShaderVisibleIndex(uav_handle);
   registry.RegisterView(*new_texture, std::move(uav_handle), uav_desc);
 
-  internal::RetireEnvironmentResource(*gfx, tile_data_texture_);
+  gfx->RetireResource(tile_data_texture_);
 
   tile_data_texture_ = std::move(new_texture);
   tile_data_texture_srv_ = new_srv_index;
@@ -443,12 +439,8 @@ auto LocalFogVolumeTiledCullingPass::EnsureOccupiedTileDrawBuffers(
     MakeStructuredViewDesc(graphics::ResourceViewType::kStructuredBuffer_UAV,
       new_indirect_args->GetSize(), sizeof(std::uint32_t)));
 
-  if (occupied_tile_buffer_ != nullptr) {
-    retired_buffers_.push_back(std::move(occupied_tile_buffer_));
-  }
-  if (indirect_args_buffer_ != nullptr) {
-    retired_buffers_.push_back(std::move(indirect_args_buffer_));
-  }
+  gfx->RetireResource(occupied_tile_buffer_);
+  gfx->RetireResource(indirect_args_buffer_);
 
   occupied_tile_buffer_ = std::move(new_occupied_tiles);
   indirect_args_buffer_ = std::move(new_indirect_args);
@@ -472,10 +464,10 @@ auto LocalFogVolumeTiledCullingPass::EnsureOccupiedTileDrawBuffers(
     if (mapped == nullptr) {
       return false;
     }
-    mapped[0] = 6U;
-    mapped[1] = 0U;
-    mapped[2] = 0U;
-    mapped[3] = 0U;
+    // Draw arguments for the tile quad: six vertices, zero instances until
+    // culling counts the occupied tiles.
+    constexpr std::array<std::uint32_t, 4> kClearedDrawArgs { 6U, 0U, 0U, 0U };
+    std::memcpy(mapped, kClearedDrawArgs.data(), sizeof(kClearedDrawArgs));
   }
 
   return true;
@@ -506,7 +498,9 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
   }
 
   auto gfx = renderer_.GetGraphics();
-  if (gfx == nullptr || !EnsurePassConstantsBuffer()) {
+  auto* const pass_constants
+    = gfx != nullptr ? EnsurePassConstantsBuffer() : nullptr;
+  if (pass_constants == nullptr) {
     return state;
   }
 
@@ -523,11 +517,11 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
   if (const auto* resolved_view = ctx.current_view.resolved_view.get();
     resolved_view != nullptr) {
     const auto frustum = resolved_view->GetFrustum();
-    left_plane = MakeShaderPlane(frustum.planes[0]);
-    right_plane = MakeShaderPlane(frustum.planes[1], true);
-    top_plane = MakeShaderPlane(frustum.planes[3], true);
-    bottom_plane = MakeShaderPlane(frustum.planes[2]);
-    near_plane = MakeShaderPlane(frustum.planes[4]);
+    left_plane = MakeShaderPlane(std::get<0>(frustum.planes));
+    right_plane = MakeShaderPlane(std::get<1>(frustum.planes), true);
+    top_plane = MakeShaderPlane(std::get<3>(frustum.planes), true);
+    bottom_plane = MakeShaderPlane(std::get<2>(frustum.planes));
+    near_plane = MakeShaderPlane(std::get<4>(frustum.planes));
 
     const auto viewport = resolved_view->Viewport();
     if (viewport.IsValid()) {
@@ -581,7 +575,7 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
       tile_covered_resolution_y / view_height,
     },
   };
-  auto constants_alloc = pass_constants_buffer_->Allocate(1U);
+  auto constants_alloc = pass_constants->Allocate(1U);
   if (!constants_alloc.has_value()
     || !constants_alloc->TryWriteObject(constants)) {
     return state;

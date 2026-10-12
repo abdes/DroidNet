@@ -161,7 +161,7 @@ public:
     frame::SequenceNumber frame_number, frame::Slot frame_slot) -> void;
 
   OXGN_GFX_API auto PresentSurfaces(
-    const std::vector<observer_ptr<graphics::Surface>>& surfaces) -> void;
+    const std::vector<observer_ptr<graphics::Surface>>& surfaces) const -> void;
 
   //! Apply runtime VSync mode for the active backend.
   /*!
@@ -234,8 +234,7 @@ public:
   // Bindless global accessors (device-owned)
   virtual auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator& = 0;
-  OXGN_GFX_NDAPI auto GetDescriptorAllocator()
-    -> graphics::DescriptorAllocator&;
+  virtual auto GetDescriptorAllocator() -> graphics::DescriptorAllocator& = 0;
 
   OXGN_GFX_NDAPI auto GetResourceRegistry() const
     -> const graphics::ResourceRegistry&;
@@ -272,6 +271,24 @@ public:
 
   OXGN_GFX_API auto ForgetKnownResourceState(
     const graphics::NativeResource& resource) -> void;
+
+  //! Release a resource that shaders may have read through its bindless
+  //! views.
+  /*!
+   One deferred action in the current frame slot forgets the resource's
+   tracked state, unregisters its views (returning their descriptors to the
+   allocator) and drops the resource, after every queue has completed the
+   frames that could read it. Use this instead of unregistering immediately:
+   an immediately freed descriptor can be reused while in-flight work reads it.
+
+   On success `resource` is reset. If preparing the action fails, the
+   exception propagates and `resource` still owns the resource, so the caller
+   can retry.
+  */
+  OXGN_GFX_API auto RetireResource(std::shared_ptr<graphics::Texture>& resource)
+    -> void;
+  OXGN_GFX_API auto RetireResource(std::shared_ptr<graphics::Buffer>& resource)
+    -> void;
 
   template <typename T> auto ForgetKnownResourceState(const T& resource) -> void
   {

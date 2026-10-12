@@ -186,11 +186,13 @@ NOLINT_TEST_F(GeometryUploaderEvictionTest, EvictionThenReloadPublishes)
 
 class GeometryUploaderReclaimTest : public GeometryUploaderTest {
 protected:
-  auto GeometryLimits() const
+  [[nodiscard]] auto GeometryLimits() const
     -> oxygen::vortex::resources::GeometryUploader::MaintenanceLimits override
   {
-    return { .max_pending_upload_visits_per_frame = 128U,
-      .max_reclaimed_lods_per_frame = 1U };
+    return {
+      .max_pending_upload_visits_per_frame = 128U,
+      .max_reclaimed_lods_per_frame = 1U,
+    };
   }
 };
 
@@ -203,10 +205,13 @@ NOLINT_TEST_F(
   const auto mesh = MakeValidTriangleMesh("Resident", false);
   constexpr std::uint32_t kLodCount = 6U;
   std::vector<oxygen::vortex::sceneprep::GeometryHandle> old_handles;
+  old_handles.reserve(kLodCount);
   for (std::uint32_t lod = 0; lod < kLodCount; ++lod) {
-    old_handles.push_back(geometry.GetOrAllocate({ .asset_key = key,
+    old_handles.push_back(geometry.GetOrAllocate({
+      .asset_key = key,
       .lod_index = oxygen::data::LodIndex { lod },
-      .mesh = mesh }));
+      .mesh = mesh,
+    }));
   }
   geometry.EnsureFrameResources();
   auto& registry = GfxPtr()->GetResourceRegistry();
@@ -216,16 +221,22 @@ NOLINT_TEST_F(
   for (const auto handle : old_handles) {
     EXPECT_FALSE(geometry.IsHandleValid(handle));
   }
+  // In-flight frames may still read the reclaimed views.
+  EXPECT_EQ(registry.GetRegisteredResourceCount(), before);
+  RetireCompletedFrames();
   EXPECT_EQ(registry.GetRegisteredResourceCount(), before - 1U);
   EXPECT_EQ(geometry.GetPendingUploadCount(), 0U);
 
-  const auto replacement = geometry.GetOrAllocate({ .asset_key = key,
+  const auto replacement = geometry.GetOrAllocate({
+    .asset_key = key,
     .lod_index = oxygen::data::LodIndex {},
-    .mesh = MakeValidTriangleMesh("Reloaded", false) });
+    .mesh = MakeValidTriangleMesh("Reloaded", false),
+  });
   geometry.EnsureFrameResources();
   EXPECT_EQ(registry.GetRegisteredResourceCount(), before);
   for (std::uint32_t frame = 0U; frame < kLodCount - 1U; ++frame) {
     BeginFrame(Slot { frame % 2U });
+    RetireCompletedFrames();
     EXPECT_EQ(registry.GetRegisteredResourceCount(), before - frame - 1U);
     EXPECT_TRUE(geometry.IsHandleValid(replacement));
   }
@@ -260,9 +271,11 @@ NOLINT_TEST_F(GeometryUploaderReclaimTest,
   BeginFrame(Slot { 0 });
   auto& geometry = GeoUploader();
   const auto key = MakeGeometryAssetKey("failed retirement admission");
-  const auto handle = geometry.GetOrAllocate({ .asset_key = key,
+  const auto handle = geometry.GetOrAllocate({
+    .asset_key = key,
     .lod_index = oxygen::data::LodIndex {},
-    .mesh = MakeValidTriangleMesh("Resident", false) });
+    .mesh = MakeValidTriangleMesh("Resident", false),
+  });
   geometry.EnsureFrameResources();
   const auto before
     = GfxPtr()->GetResourceRegistry().GetRegisteredResourceCount();
@@ -281,6 +294,7 @@ NOLINT_TEST_F(GeometryUploaderReclaimTest,
   EXPECT_EQ(
     GfxPtr()->GetResourceRegistry().GetRegisteredResourceCount(), before);
   geometry.OnFrameStart(RendererTagFactory::Get(), Slot { 0 });
+  RetireCompletedFrames();
   EXPECT_EQ(
     GfxPtr()->GetResourceRegistry().GetRegisteredResourceCount(), before - 1U);
 }

@@ -144,16 +144,7 @@ auto ConventionalShadowTargetAllocator::Retire(SurfaceAllocation& allocation)
     allocation = {};
     return;
   }
-  gfx->GetDeferredReclaimer().RegisterDeferredAction(
-    [owner = gfx.get(),
-      surface = std::move(allocation.surface)] mutable -> void {
-      owner->ForgetKnownResourceState(*surface);
-      auto& registry = owner->GetResourceRegistry();
-      if (registry.Contains(*surface)) {
-        registry.UnRegisterResource(*surface);
-      }
-      surface.reset();
-    });
+  gfx->RetireResource(allocation.surface);
   allocation = {};
 }
 

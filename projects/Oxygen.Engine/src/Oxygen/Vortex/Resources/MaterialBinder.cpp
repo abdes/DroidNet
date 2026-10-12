@@ -512,7 +512,6 @@ private:
   };
 
   auto MarkDirty(std::uint32_t index) -> void;
-  auto MarkAllDirty() -> void;
   [[nodiscard]] auto FindIndexByHandle(
     vortex::sceneprep::MaterialHandle handle) const
     -> std::optional<std::uint32_t>;
@@ -870,44 +869,29 @@ auto MaterialBinder::Impl::MarkDirty(const std::uint32_t index) -> void
   // NOLINTEND(*-pro-bounds-avoid-unchecked-container-access)
 }
 
-auto MaterialBinder::Impl::MarkAllDirty() -> void
-{
-  const auto count
-    = static_cast<std::uint32_t>(material_shading_constants_.size());
-  for (std::uint32_t i = 0U; i < count; ++i) {
-    MarkDirty(i);
-  }
-}
-
 auto MaterialBinder::Impl::EnsureAtlasCapacityOrLog(
   const std::uint32_t desired_count) -> bool
 {
   DCHECK_NOTNULL_F(materials_atlas_.get(), "Atlas not initialized");
-  const auto result = materials_atlas_->EnsureCapacity(desired_count, 0.5F);
+  const auto result = materials_atlas_->EnsureCapacity(
+    { .min_elements = desired_count, .growth_slack = 0.5F });
   if (!result) {
     LOG_F(ERROR, "Failed to ensure material atlas capacity: {}",
       result.error().message());
     return false;
   }
 
-  // AtlasBuffer does not migrate live data on resize (by design). If it was
-  // created/resized, previously uploaded material constants are no longer
-  // guaranteed to be present in GPU memory, so force a full re-upload.
-  if (*result != vortex::upload::EnsureBufferResult::kUnchanged) {
-    MarkAllDirty();
-  }
+  // Growth copies the live elements into the new buffer on the graphics
+  // queue, so uploaded constants survive it.
 
   DCHECK_NOTNULL_F(
     procedural_grid_materials_atlas_.get(), "Grid atlas not initialized");
-  const auto grid_result
-    = procedural_grid_materials_atlas_->EnsureCapacity(desired_count, 0.5F);
+  const auto grid_result = procedural_grid_materials_atlas_->EnsureCapacity(
+    { .min_elements = desired_count, .growth_slack = 0.5F });
   if (!grid_result) {
     LOG_F(ERROR, "Failed to ensure procedural-grid material atlas capacity: {}",
       grid_result.error().message());
     return false;
-  }
-  if (*grid_result != vortex::upload::EnsureBufferResult::kUnchanged) {
-    MarkAllDirty();
   }
 
   return true;
@@ -1352,12 +1336,9 @@ auto MaterialBinder::Impl::EnsureFrameResources() -> void
       continue;
     }
 
-    // IMPORTANT: AtlasBuffer may recreate its SRV during growth. ElementRef
-    // stores the SRV index that was current at allocation time, which can
-    // become stale across resizes. Use index-based descriptors to avoid SRV
-    // mismatches when reuploading.
-    auto desc = materials_atlas_->MakeUploadDescForIndex(
-      index, material_shading_stride);
+    // Growth publishes a new SRV, so upload by element index, not by the
+    // SRV current when the element was allocated.
+    auto desc = materials_atlas_->MakeUploadDescForIndex(index);
     if (!desc.has_value()) {
       LOG_F(ERROR, "Failed to create upload descriptor for material {}", index);
       continue;
@@ -1374,8 +1355,8 @@ auto MaterialBinder::Impl::EnsureFrameResources() -> void
     };
     requests.push_back(std::move(req));
 
-    auto grid_desc = procedural_grid_materials_atlas_->MakeUploadDescForIndex(
-      index, procedural_grid_stride);
+    auto grid_desc
+      = procedural_grid_materials_atlas_->MakeUploadDescForIndex(index);
     if (!grid_desc.has_value()) {
       LOG_F(ERROR,
         "Failed to create upload descriptor for procedural-grid material {}",
@@ -1431,7 +1412,8 @@ auto MaterialBinder::Impl::GetMaterialShadingSrvIndex() const
   if (materials_atlas_->GetBinding().srv == kInvalidShaderVisibleIndex) {
     const auto desired = std::max<std::uint32_t>(
       1U, static_cast<std::uint32_t>(materials_.size()));
-    const auto result = materials_atlas_->EnsureCapacity(desired, 0.5F);
+    const auto result = materials_atlas_->EnsureCapacity(
+      { .min_elements = desired, .growth_slack = 0.5F });
     if (!result) {
       LOG_F(ERROR, "Failed to ensure material atlas capacity for SRV: {}",
         result.error().message());
@@ -1450,8 +1432,8 @@ auto MaterialBinder::Impl::GetProceduralGridMaterialsSrvIndex() const
     == kInvalidShaderVisibleIndex) {
     const auto desired = std::max<std::uint32_t>(
       1U, static_cast<std::uint32_t>(materials_.size()));
-    const auto result
-      = procedural_grid_materials_atlas_->EnsureCapacity(desired, 0.5F);
+    const auto result = procedural_grid_materials_atlas_->EnsureCapacity(
+      { .min_elements = desired, .growth_slack = 0.5F });
     if (!result) {
       LOG_F(ERROR,
         "Failed to ensure procedural-grid material atlas capacity for SRV: {}",

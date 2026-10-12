@@ -58,17 +58,7 @@ namespace {
   auto RetireTexture(Graphics& gfx, std::shared_ptr<graphics::Texture>& texture)
     -> void
   {
-    if (!texture) {
-      return;
-    }
-    auto* registry = &gfx.GetResourceRegistry();
-    gfx.GetDeferredReclaimer().RegisterDeferredAction(
-      [registry, texture = std::move(texture)] mutable -> void {
-        if (registry->Contains(*texture)) {
-          registry->UnRegisterResource(*texture);
-        }
-        texture.reset();
-      });
+    gfx.RetireResource(texture);
   }
 
   //! Creates a registered pyramid texture and its whole-chain SRV.

@@ -25,20 +25,6 @@ namespace oxygen::vortex::internal {
 
 namespace {
 
-  auto RetireBuffer(Graphics& gfx, std::shared_ptr<graphics::Buffer> buffer)
-    -> void
-  {
-    gfx.GetDeferredReclaimer().RegisterDeferredAction(
-      [owner = &gfx, retired = std::move(buffer)] mutable -> void {
-        owner->ForgetKnownResourceState(*retired);
-        auto& registry = owner->GetResourceRegistry();
-        if (registry.Contains(*retired)) {
-          registry.UnRegisterResource(*retired);
-        }
-        retired.reset();
-      });
-  }
-
   //! Registers one shader-visible view of `buffer`; invalid on failure.
   auto RegisterView(Graphics& gfx, const graphics::Buffer& buffer,
     const graphics::ResourceViewType view_type, const std::uint32_t stride)
@@ -108,7 +94,7 @@ auto StructuredGpuBuffer::Ensure(const std::shared_ptr<Graphics>& gfx,
     *gfx, *buffer, graphics::ResourceViewType::kStructuredBuffer_UAV, stride_);
   if (!srv.IsValid() || !uav.IsValid()) {
     LOG_F(ERROR, "{}: view registration failed", debug_name_);
-    RetireBuffer(*gfx, std::move(buffer));
+    gfx->RetireResource(buffer);
     return false;
   }
 
@@ -122,7 +108,7 @@ auto StructuredGpuBuffer::Ensure(const std::shared_ptr<Graphics>& gfx,
 auto StructuredGpuBuffer::Retire() -> void
 {
   if (auto gfx = gfx_.lock(); gfx != nullptr && buffer_ != nullptr) {
-    RetireBuffer(*gfx, std::move(buffer_));
+    gfx->RetireResource(buffer_);
   }
   buffer_.reset();
   srv_ = kInvalidShaderVisibleIndex;

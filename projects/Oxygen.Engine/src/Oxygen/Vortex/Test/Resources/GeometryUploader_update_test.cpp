@@ -4,11 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/EvictionEvents.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/ScenePrep/GeometryRef.h>
@@ -78,6 +80,7 @@ NOLINT_TEST_F(
   BeginFrame(Slot { 0 });
   auto geometry = oxygen::vortex::sceneprep::GeometryRef {
     .asset_key = MakeGeometryAssetKey("content_revision"),
+    .lod_index = oxygen::data::LodIndex {},
     .mesh = MakeValidTriangleMesh("Original", true),
   };
   const auto handle = uploader.GetOrAllocate(geometry);
@@ -94,16 +97,18 @@ NOLINT_TEST_F(
     const auto vertices = geometry.mesh->Vertices();
     auto moved
       = std::vector<oxygen::data::Vertex>(vertices.begin(), vertices.end());
-    moved[0].position.x += 0.25F;
+    moved.front().position.x += 0.25F;
     geometry.mesh
       = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, "Reloaded")
           .WithVertices(moved)
           .WithIndices(std::vector<std::uint32_t> { 0U, 1U, 2U })
           .BeginSubMesh("default", oxygen::data::MaterialAsset::CreateDefault())
-          .WithMeshView({ .first_index = 0U,
+          .WithMeshView({
+            .first_index = 0U,
             .index_count = 3U,
             .first_vertex = 0U,
-            .vertex_count = 3U })
+            .vertex_count = 3U,
+          })
           .EndSubMesh()
           .Build();
     if (explicit_update) {
@@ -115,8 +120,11 @@ NOLINT_TEST_F(
     BeginFrame(Slot { explicit_update ? 0U : 1U });
     const auto after = uploader.GetShaderVisibleIndices(handle);
     EXPECT_EQ(uploader.GetOrAllocate(geometry), handle);
-    EXPECT_EQ(after.vertex_srv_index, original.vertex_srv_index);
-    EXPECT_EQ(after.index_srv_index, original.index_srv_index);
+    // New content gets new descriptors; earlier frames keep reading the old.
+    EXPECT_NE(after.vertex_srv_index, original.vertex_srv_index);
+    EXPECT_NE(after.index_srv_index, original.index_srv_index);
+    EXPECT_TRUE(after.vertex_srv_index.IsValid());
+    EXPECT_TRUE(after.index_srv_index.IsValid());
     EXPECT_GT(after.content_revision, before.content_revision);
     EXPECT_EQ(uploader.GetShaderVisibleIndices(handle).content_revision,
       after.content_revision);
@@ -206,6 +214,7 @@ NOLINT_TEST_F(
   const auto handle
     = uploader.GetOrAllocate(oxygen::vortex::sceneprep::GeometryRef {
       .asset_key = MakeGeometryAssetKey("resident_revision"),
+      .lod_index = oxygen::data::LodIndex {},
       .mesh = MakeValidTriangleMesh("Resident", true),
     });
   // Requesting the indices schedules the upload, as drawing would.

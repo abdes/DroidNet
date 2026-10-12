@@ -404,12 +404,7 @@ void SceneTextures::UnregisterTexture(RegisteredTexture& texture) noexcept
     return;
   }
 
-  auto& registry = gfx_.GetResourceRegistry();
-  gfx_.ForgetKnownResourceState(*resource);
-  if (registry.Contains(*resource)) {
-    registry.UnRegisterResource(*resource);
-  }
-  gfx_.RegisterDeferredRelease(std::move(resource));
+  gfx_.RetireResource(resource);
 }
 
 auto SceneTextures::CreateTexture(std::string_view debug_name,
@@ -439,9 +434,7 @@ auto SceneTextures::CreateTexture(std::string_view debug_name,
       ? graphics::ResourceStates::kDepthWrite
       : graphics::ResourceStates::kRenderTarget;
     desc.use_clear_value = true;
-    desc.clear_value = (format_info.has_depth || format_info.has_stencil)
-      ? graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F }
-      : graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
+    desc.clear_value = graphics::Color { 0.0F, 0.0F, 0.0F, 0.0F };
   } else if (shader_resource) {
     desc.initial_state = graphics::ResourceStates::kShaderResource;
   }

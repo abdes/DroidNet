@@ -16,6 +16,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <unordered_map>
 #include <utility>
@@ -32,6 +33,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -46,7 +48,7 @@
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
 #include <Oxygen/Vortex/Upload/Types.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
-#include <Oxygen/Vortex/Upload/UploadHelpers.h> // For EnsureBufferAndSrv
+#include <Oxygen/Vortex/Upload/UploadHelpers.h>
 #include <Oxygen/Vortex/Upload/UploadTicket.h>
 #ifdef OXYGEN_WITH_TRACY
 #  include <Oxygen/Profiling/CpuProfileScope.h>
@@ -265,6 +267,9 @@ private:
     vortex::sceneprep::GeometryHandle handle, UploadBufferKind kind,
     const vortex::upload::UploadRequest& request) -> void;
   auto ReleaseEntryBuffers(GeometryEntry& entry) -> void;
+  auto ReplaceContentBuffer(std::shared_ptr<graphics::Buffer>& buffer,
+    ShaderVisibleIndex& srv_index, std::uint64_t size_bytes,
+    std::uint32_t stride, std::string_view debug_label) -> bool;
 
   observer_ptr<Graphics> gfx_;
   observer_ptr<vortex::upload::UploadCoordinator> uploader_;
@@ -609,7 +614,7 @@ auto GeometryUploader::Impl::GetOrAllocate(
 
   const auto asset = assets_.try_emplace(geometry.asset_key).first;
   auto& lods = asset->second;
-  const ScopeGuard rollback_asset([&]() noexcept {
+  const ScopeGuard rollback_asset([&] noexcept -> void {
     if (lods.empty()) {
       assets_.erase(asset);
     }
@@ -619,7 +624,7 @@ auto GeometryUploader::Impl::GetOrAllocate(
         .emplace(geometry.lod_index, vortex::sceneprep::kInvalidGeometryHandle)
         .first;
   bool admitted = false;
-  const ScopeGuard rollback_identity([&]() noexcept {
+  const ScopeGuard rollback_identity([&] noexcept -> void {
     if (!admitted) {
       lods.erase(inserted_lod);
     }
@@ -635,7 +640,7 @@ auto GeometryUploader::Impl::GetOrAllocate(
     handle_index = free_indices_->back();
     free_indices_->pop_back();
   }
-  const auto versioned_handle = [&] {
+  const auto versioned_handle = [&] -> VersionedIndex {
     try {
       if (geometry_entries_.size() <= handle_index.get()) {
         geometry_entries_.resize(
@@ -650,7 +655,8 @@ auto GeometryUploader::Impl::GetOrAllocate(
   const auto handle = vortex::sceneprep::GeometryHandle {
     vortex::sceneprep::GeometryHandle::Index { versioned_handle.index.get() },
     vortex::sceneprep::GeometryHandle::Generation {
-      versioned_handle.generation.get() },
+      versioned_handle.generation.get(),
+    },
   };
   DLOG_F(3, "new handle : {}", handle);
   const auto u_handle = handle.get();
@@ -893,24 +899,10 @@ auto GeometryUploader::Impl::ReleaseEntryBuffers(GeometryEntry& entry) -> void
     return;
   }
 
-  auto& registry = gfx_->GetResourceRegistry();
-  auto& reclaimer = gfx_->GetDeferredReclaimer();
-
-  if (entry.vertex_buffer) {
-    auto release = reclaimer.PrepareDeferredAction(
-      [buffer = entry.vertex_buffer]() mutable { buffer.reset(); });
-    registry.UnRegisterResource<graphics::Buffer>(*entry.vertex_buffer);
-    reclaimer.CommitDeferredAction(std::move(release));
-    entry.vertex_buffer.reset();
-  }
-
-  if (entry.index_buffer) {
-    auto release = reclaimer.PrepareDeferredAction(
-      [buffer = entry.index_buffer]() mutable { buffer.reset(); });
-    registry.UnRegisterResource<graphics::Buffer>(*entry.index_buffer);
-    reclaimer.CommitDeferredAction(std::move(release));
-    entry.index_buffer.reset();
-  }
+  // Frames in flight may still read the published views; retirement frees
+  // the descriptors together with the buffers once those frames complete.
+  gfx_->RetireResource(entry.vertex_buffer);
+  gfx_->RetireResource(entry.index_buffer);
 }
 
 auto GeometryUploader::Impl::UploadBuffers() -> void
@@ -951,7 +943,7 @@ auto GeometryUploader::Impl::UploadBuffers() -> void
       && entry.index_srv_index == kInvalidShaderVisibleIndex
       && !entry.pending_index_ticket.has_value()) {
       const ScopeGuard release_source(
-        [&entry]() noexcept { entry.pending_widened_indices.reset(); });
+        [&entry] noexcept -> void { entry.pending_widened_indices.reset(); });
       if (auto req = UploadIndexBuffer(entry)) {
         SubmitBufferUpload(entry, handle, UploadBufferKind::kIndex, *req);
       } else {
@@ -977,12 +969,14 @@ auto GeometryUploader::Impl::SubmitBufferUpload(GeometryEntry& entry,
   const vortex::upload::UploadRequest& request) -> void
 {
   const auto work = pending_completions_.emplace(pending_completions_.end(),
-    PendingCompletion { .handle = handle,
+    PendingCompletion {
+      .handle = handle,
       .content_revision = entry.content_revision,
       .kind = kind,
-      .ticket_id = vortex::upload::TicketId { 0 } });
+      .ticket_id = vortex::upload::TicketId { 0 },
+    });
   bool submitted = false;
-  const ScopeGuard rollback([&]() noexcept {
+  const ScopeGuard rollback([&] noexcept -> void {
     if (!submitted) {
       pending_completions_.erase(work);
     }
@@ -1000,6 +994,32 @@ auto GeometryUploader::Impl::SubmitBufferUpload(GeometryEntry& entry,
   submitted = true;
 }
 
+//! Gives the entry a new buffer and SRV for its new content.
+/*!
+ Content is never written into a buffer that earlier frames may read: the
+ previous buffer (whose SRV is no longer published) retires by receipt, and the
+ new SRV is published when the upload completes.
+*/
+auto GeometryUploader::Impl::ReplaceContentBuffer(
+  std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& srv_index,
+  const std::uint64_t size_bytes, const std::uint32_t stride,
+  const std::string_view debug_label) -> bool
+{
+  auto created = vortex::upload::internal::CreateBufferAndSrv(*gfx_,
+    vortex::upload::internal::StructuredBufferSpec {
+      .size_bytes = size_bytes,
+      .stride = stride,
+      .debug_label = debug_label,
+    });
+  if (!created) {
+    return false; // the helper logs the failure
+  }
+  gfx_->RetireResource(buffer);
+  buffer = std::move(created->buffer);
+  srv_index = created->srv;
+  return true;
+}
+
 auto GeometryUploader::Impl::UploadVertexBuffer(GeometryEntry& dirty_entry)
   -> std::expected<vortex::upload::UploadRequest, bool>
 {
@@ -1012,15 +1032,12 @@ auto GeometryUploader::Impl::UploadVertexBuffer(GeometryEntry& dirty_entry)
   DCHECK_F(!vertices.empty()); // should not have passed through validation
   const auto buffer_size
     = static_cast<std::uint64_t>(vertices.size()) * sizeof(data::Vertex);
-  constexpr auto stride = sizeof(data::Vertex);
-  DCHECK_EQ_F(buffer_size % stride, 0);
+  constexpr auto stride = static_cast<std::uint32_t>(sizeof(data::Vertex));
+  DCHECK_EQ_F(buffer_size % stride, 0U);
 
   DLOG_F(2, "vertex buffer upload: {} bytes", buffer_size);
-  using oxygen::vortex::upload::internal::EnsureBufferAndSrv;
-  if (!EnsureBufferAndSrv(
-        *gfx_, vertex_buffer, srv_index, buffer_size, stride, "VertexBuffer")
-        .has_value()) {
-    // logging is done in the helper
+  if (!ReplaceContentBuffer(
+        vertex_buffer, srv_index, buffer_size, stride, "VertexBuffer")) {
     return std::unexpected { false };
   }
   DCHECK_NOTNULL_F(vertex_buffer);
@@ -1071,13 +1088,11 @@ auto GeometryUploader::Impl::UploadIndexBuffer(GeometryEntry& dirty_entry)
   }
 
   const uint64_t buffer_size = index_bytes.size();
-  DCHECK_EQ_F(buffer_size % kGpuIndexStride, 0);
+  DCHECK_EQ_F(buffer_size % kGpuIndexStride, 0U);
 
   DLOG_F(2, "index buffer upload: {} bytes", buffer_size);
-  using oxygen::vortex::upload::internal::EnsureBufferAndSrv;
-  if (!EnsureBufferAndSrv(*gfx_, index_buffer, srv_index, buffer_size,
-        kGpuIndexStride, "IndexBuffer")
-        .has_value()) {
+  if (!ReplaceContentBuffer(
+        index_buffer, srv_index, buffer_size, kGpuIndexStride, "IndexBuffer")) {
     return std::unexpected { false };
   }
   DCHECK_NOTNULL_F(index_buffer);
@@ -1197,8 +1212,10 @@ auto GeometryUploader::GetPendingUploadCount() const -> std::size_t
 
 auto GeometryUploader::Impl::GetPendingUploadCount() const -> std::size_t
 {
-  return static_cast<std::size_t>(std::ranges::count_if(pending_completions_,
-    [this](const auto& work) { return FindPendingTicket(work) != nullptr; }));
+  return static_cast<std::size_t>(std::ranges::count_if(
+    pending_completions_, [this](const auto& work) -> auto {
+      return FindPendingTicket(work) != nullptr;
+    }));
 }
 
 auto GeometryUploader::GetPendingUploadTickets() const

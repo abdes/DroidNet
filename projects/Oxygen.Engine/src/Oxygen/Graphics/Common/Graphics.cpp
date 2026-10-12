@@ -5,23 +5,32 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <exception>
 #include <memory>
-#include <mutex>
-#include <ranges>
+#include <optional>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <type_traits>
-#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/ComponentMacros.h>
+#include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/BackendLifetime.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h>
@@ -30,13 +39,19 @@
 #include <Oxygen/Graphics/Common/Internal/DeferredReclaimerComponent.h>
 #include <Oxygen/Graphics/Common/Internal/FramebufferImpl.h>
 #include <Oxygen/Graphics/Common/Internal/QueueManager.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/ReadbackErrors.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 
 using oxygen::Graphics;
 using oxygen::graphics::internal::Commander;
@@ -172,12 +187,16 @@ auto BuildCaptureStatusOutput(
   return output;
 }
 
+struct CaptureCommandMessages {
+  std::string_view failure;
+  std::string_view success;
+};
+
 template <typename TAction>
 auto ExecuteCaptureCommand(
   const oxygen::observer_ptr<oxygen::graphics::FrameCaptureController>
     frame_capture,
-  const std::string_view failure_message,
-  const std::string_view success_message, TAction&& action)
+  const CaptureCommandMessages& messages, TAction&& action)
   -> oxygen::console::ExecutionResult
 {
   if (frame_capture == nullptr) {
@@ -186,13 +205,13 @@ auto ExecuteCaptureCommand(
 
   try {
     if (!std::forward<TAction>(action)()) {
-      return CaptureCommandError(failure_message);
+      return CaptureCommandError(messages.failure);
     }
   } catch (const std::runtime_error& ex) {
     return CaptureCommandError(ex.what());
   }
 
-  return CaptureCommandOk(success_message);
+  return CaptureCommandOk(messages.success);
 }
 
 class ResourceRegistryComponent : public oxygen::Component {
@@ -205,6 +224,7 @@ public:
   }
 
   [[nodiscard]] auto GetRegistry() const -> const auto& { return *registry_; }
+  [[nodiscard]] auto GetRegistry() -> auto& { return *registry_; }
 
   OXYGEN_MAKE_NON_COPYABLE(ResourceRegistryComponent)
   OXYGEN_DEFAULT_MOVABLE(ResourceRegistryComponent)
@@ -212,7 +232,7 @@ public:
   ~ResourceRegistryComponent() override = default;
 
 private:
-  std::unique_ptr<oxygen::graphics::ResourceRegistry> registry_ {};
+  std::unique_ptr<oxygen::graphics::ResourceRegistry> registry_;
 };
 
 } // namespace
@@ -223,7 +243,7 @@ Graphics::Graphics(const std::string_view name)
   AddComponent<ObjectMetadata>(name);
   AddComponent<ResourceRegistryComponent>(name);
   GetResourceRegistry().SetResourceUnregisteredCallback(
-    [this](const graphics::NativeResource& resource) {
+    [this](const graphics::NativeResource& resource) -> void {
       this->ForgetKnownResourceState(resource);
     });
   AddComponent<QueueManager>();
@@ -335,7 +355,7 @@ auto Graphics::RetainBackendOwner() -> std::shared_ptr<Graphics>
 auto Graphics::PollCompletedUses() -> void
 {
   GetComponent<QueueManager>().ForEachQueue(
-    [](graphics::CommandQueue& queue) { queue.PollCompletedUses(); });
+    [](graphics::CommandQueue& queue) -> void { queue.PollCompletedUses(); });
   GetResourceRegistry().PollManagedRetirements();
 }
 
@@ -349,17 +369,17 @@ auto Graphics::RecoverSubmissionFault() -> bool
     auto& queues = GetComponent<QueueManager>();
     FlushCommandQueues();
     bool trustworthy = true;
-    queues.ForEachQueue([&](graphics::CommandQueue& queue) {
+    queues.ForEachQueue([&](graphics::CommandQueue& queue) -> void {
       trustworthy = queue.ReconcileQuarantinedStates() && trustworthy;
     });
-    queues.ForEachQueue([&](const graphics::CommandQueue& queue) {
-      queues.ForEachQueue([&](const graphics::CommandQueue& other) {
+    queues.ForEachQueue([&](const graphics::CommandQueue& queue) -> void {
+      queues.ForEachQueue([&](const graphics::CommandQueue& other) -> void {
         trustworthy = !queue.HasStateConflictWith(other) && trustworthy;
       });
     });
     if (trustworthy
       && backend_lifetime_->State() == graphics::BackendLifecycle::kActive) {
-      queues.ForEachQueue([&](graphics::CommandQueue& queue) {
+      queues.ForEachQueue([&](graphics::CommandQueue& queue) -> void {
         trustworthy
           = queue.RecoverQuarantinedWork(GetResourceRegistry()) && trustworthy;
       });
@@ -371,7 +391,10 @@ auto Graphics::RecoverSubmissionFault() -> bool
       PollCompletedUses();
       return true;
     }
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "Backend recovery failed: {}", ex.what());
   } catch (...) {
+    LOG_F(ERROR, "Backend recovery failed with an unknown exception");
   }
   Close();
   return false;
@@ -384,22 +407,27 @@ auto Graphics::Close() noexcept -> void
   }
   try {
     Stop();
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "Graphics stop failed during close: {}", ex.what());
   } catch (...) {
+    LOG_F(ERROR, "Graphics stop failed during close with an unknown exception");
   }
   try {
     FlushCommandQueues();
     bool drained = true;
-    GetComponent<QueueManager>().ForEachQueue([&](
-                                                graphics::CommandQueue& queue) {
-      drained = queue.RecoverQuarantinedWork(GetResourceRegistry()) && drained;
-    });
+    GetComponent<QueueManager>().ForEachQueue(
+      [&](graphics::CommandQueue& queue) -> void {
+        drained
+          = queue.RecoverQuarantinedWork(GetResourceRegistry()) && drained;
+      });
     if (!drained) {
       throw std::runtime_error("Submission publication is still active");
     }
   } catch (...) {
     GetComponent<QueueManager>().ForEachQueue(
-      [](
-        graphics::CommandQueue& queue) { queue.StopAfterSubmissionFailure(); });
+      [](graphics::CommandQueue& queue) -> void {
+        queue.StopAfterSubmissionFailure();
+      });
   }
   GetResourceRegistry().Close();
   GetComponent<DeferredReclaimerComponent>().ProcessAllDeferredReleases();
@@ -419,7 +447,7 @@ auto Graphics::BeginFrame(const frame::SequenceNumber frame_number,
     auto& qm = GetComponent<QueueManager>();
     qm.WaitForFrameSlot(frame_slot);
     qm.ForEachQueue(
-      [](const graphics::CommandQueue& q) { q.BeginProfilingFrame(); });
+      [](const graphics::CommandQueue& q) -> void { q.BeginProfilingFrame(); });
   }
 
   PollCompletedUses();
@@ -452,7 +480,7 @@ auto Graphics::EndFrame(const frame::SequenceNumber frame_number,
 }
 
 auto Graphics::PresentSurfaces(
-  const std::vector<observer_ptr<graphics::Surface>>& surfaces) -> void
+  const std::vector<observer_ptr<graphics::Surface>>& surfaces) const -> void
 {
   DLOG_SCOPE_FUNCTION(1);
 
@@ -558,8 +586,11 @@ auto Graphics::RegisterConsoleBindings(
 
       const auto frame_capture = GetFrameCaptureController();
       return ExecuteCaptureCommand(frame_capture,
-        "failed to arm next-frame capture", "next-frame capture armed",
-        [frame_capture] { return frame_capture->TriggerNextFrame(); });
+        {
+          .failure = "failed to arm next-frame capture",
+          .success = "next-frame capture armed",
+        },
+        [frame_capture] -> bool { return frame_capture->TriggerNextFrame(); });
     },
   });
 
@@ -580,8 +611,11 @@ auto Graphics::RegisterConsoleBindings(
 
       const auto frame_capture = GetFrameCaptureController();
       return ExecuteCaptureCommand(frame_capture,
-        "failed to begin frame capture", "frame capture started",
-        [frame_capture] { return frame_capture->StartCapture(); });
+        {
+          .failure = "failed to begin frame capture",
+          .success = "frame capture started",
+        },
+        [frame_capture] -> bool { return frame_capture->StartCapture(); });
     },
   });
 
@@ -601,9 +635,12 @@ auto Graphics::RegisterConsoleBindings(
       }
 
       const auto frame_capture = GetFrameCaptureController();
-      return ExecuteCaptureCommand(frame_capture, "failed to end frame capture",
-        "frame capture ended",
-        [frame_capture] { return frame_capture->EndCapture(); });
+      return ExecuteCaptureCommand(frame_capture,
+        {
+          .failure = "failed to end frame capture",
+          .success = "frame capture ended",
+        },
+        [frame_capture] -> bool { return frame_capture->EndCapture(); });
     },
   });
 
@@ -624,8 +661,11 @@ auto Graphics::RegisterConsoleBindings(
 
       const auto frame_capture = GetFrameCaptureController();
       return ExecuteCaptureCommand(frame_capture,
-        "failed to discard frame capture", "frame capture discarded",
-        [frame_capture] { return frame_capture->DiscardCapture(); });
+        {
+          .failure = "failed to discard frame capture",
+          .success = "frame capture discarded",
+        },
+        [frame_capture] -> bool { return frame_capture->DiscardCapture(); });
     },
   });
 
@@ -645,9 +685,12 @@ auto Graphics::RegisterConsoleBindings(
       }
 
       const auto frame_capture = GetFrameCaptureController();
-      return ExecuteCaptureCommand(frame_capture, "failed to launch replay UI",
-        "replay UI launch requested",
-        [frame_capture] { return frame_capture->LaunchReplayUI(); });
+      return ExecuteCaptureCommand(frame_capture,
+        {
+          .failure = "failed to launch replay UI",
+          .success = "replay UI launch requested",
+        },
+        [frame_capture] -> bool { return frame_capture->LaunchReplayUI(); });
     },
   });
 }
@@ -689,7 +732,7 @@ auto Graphics::CreateCommandQueues(
 
 auto Graphics::QueueKeyFor(graphics::QueueRole role) const -> graphics::QueueKey
 {
-  auto& qm = GetComponent<QueueManager>();
+  const auto& qm = GetComponent<QueueManager>();
   return qm.QueueKeyFor(role);
 }
 
@@ -697,7 +740,7 @@ auto Graphics::FlushCommandQueues() -> void
 {
   // Forward to the QueueManager which enumerates unique queues safely.
   auto& qm = GetComponent<QueueManager>();
-  qm.ForEachQueue([](const graphics::CommandQueue& q) { q.Flush(); });
+  qm.ForEachQueue([](const graphics::CommandQueue& q) -> void { q.Flush(); });
 }
 
 auto Graphics::TryGetKnownResourceState(
@@ -710,7 +753,7 @@ auto Graphics::TryGetKnownResourceState(
   std::optional<graphics::ResourceStates> agreed_state;
   bool inconsistent = false;
   GetComponent<QueueManager>().ForEachQueue(
-    [&](const graphics::CommandQueue& queue) {
+    [&](const graphics::CommandQueue& queue) -> void {
       const auto state = queue.TryGetKnownResourceState(resource);
       if (!state.has_value()) {
         return;
@@ -732,14 +775,14 @@ auto Graphics::TryGetKnownResourceState(
 auto Graphics::GetCommandQueue(const graphics::QueueKey& key) const
   -> observer_ptr<graphics::CommandQueue>
 {
-  auto& qm = GetComponent<QueueManager>();
+  const auto& qm = GetComponent<QueueManager>();
   return qm.GetQueueByName(key);
 }
 
 auto Graphics::GetCommandQueue(const graphics::QueueRole role) const
   -> observer_ptr<graphics::CommandQueue>
 {
-  auto& qm = GetComponent<QueueManager>();
+  const auto& qm = GetComponent<QueueManager>();
   return qm.GetQueueByRole(role);
 }
 
@@ -777,12 +820,6 @@ auto Graphics::AcquireCommandList(
   return command_list_pool.AcquireCommandList(queue_role, command_list_name);
 }
 
-auto Graphics::GetDescriptorAllocator() -> graphics::DescriptorAllocator&
-{
-  return const_cast<graphics::DescriptorAllocator&>(
-    std::as_const(*this).GetDescriptorAllocator());
-}
-
 auto Graphics::GetResourceRegistry() const -> const graphics::ResourceRegistry&
 {
   return GetComponent<ResourceRegistryComponent>().GetRegistry();
@@ -790,8 +827,7 @@ auto Graphics::GetResourceRegistry() const -> const graphics::ResourceRegistry&
 
 auto Graphics::GetResourceRegistry() -> graphics::ResourceRegistry&
 {
-  return const_cast<graphics::ResourceRegistry&>(
-    std::as_const(*this).GetResourceRegistry());
+  return GetComponent<ResourceRegistryComponent>().GetRegistry();
 }
 auto Graphics::GetDeferredReclaimer() -> graphics::detail::DeferredReclaimer&
 {
@@ -832,6 +868,43 @@ auto Graphics::ForgetKnownResourceState(
 
   auto& qm = GetComponent<QueueManager>();
   qm.ForgetKnownResourceState(resource);
+}
+
+namespace {
+template <typename Resource>
+auto RetireRegisteredResource(
+  Graphics& graphics, std::shared_ptr<Resource>& resource) -> void
+{
+  if (!resource) {
+    return;
+  }
+  auto& reclaimer = graphics.GetDeferredReclaimer();
+  // Prepare with a copy so a failed allocation leaves the caller owning the
+  // resource; committing cannot fail.
+  auto action = reclaimer.PrepareDeferredAction(
+    [owner = &graphics, retired = resource] mutable -> void {
+      owner->ForgetKnownResourceState(*retired);
+      auto& registry = owner->GetResourceRegistry();
+      if (registry.Contains(*retired)) {
+        registry.UnRegisterResource(*retired);
+      }
+      retired.reset();
+    });
+  reclaimer.CommitDeferredAction(std::move(action));
+  resource.reset();
+}
+} // namespace
+
+auto Graphics::RetireResource(std::shared_ptr<graphics::Texture>& resource)
+  -> void
+{
+  RetireRegisteredResource(*this, resource);
+}
+
+auto Graphics::RetireResource(std::shared_ptr<graphics::Buffer>& resource)
+  -> void
+{
+  RetireRegisteredResource(*this, resource);
 }
 
 auto Graphics::GetTimestampQueryProvider() const

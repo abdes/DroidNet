@@ -6,8 +6,11 @@
 
 #pragma once
 
+#include <cstdint>
 #include <expected>
 #include <memory>
+#include <string_view>
+#include <system_error>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/Upload/Types.h>
@@ -22,10 +25,28 @@ namespace graphics {
 
 namespace oxygen::vortex::upload::internal {
 
-OXGN_VRTX_API auto EnsureBufferAndSrv(Graphics& gfx,
-  std::shared_ptr<graphics::Buffer>& buffer, ShaderVisibleIndex& bindless_index,
-  std::uint64_t size_bytes, std::uint32_t stride, std::string_view debug_label,
-  bindless::DomainToken domain = bindless::generated::kGlobalSrvDomain)
-  -> std::expected<EnsureBufferResult, std::error_code>;
+//! A new structured buffer with its shader-visible SRV.
+struct BufferWithSrv {
+  std::shared_ptr<graphics::Buffer> buffer;
+  ShaderVisibleIndex srv { kInvalidShaderVisibleIndex };
+};
+
+//! What CreateBufferAndSrv creates.
+struct StructuredBufferSpec {
+  std::uint64_t size_bytes { 0U };
+  std::uint32_t stride { 0U };
+  std::string_view debug_label;
+  bindless::DomainToken domain { bindless::generated::kGlobalSrvDomain };
+};
+
+//! Creates a device-local structured buffer and a new bindless SRV for it.
+/*!
+ Every call returns a new buffer and a new descriptor. Published descriptors
+ are never repointed: a caller replacing an older buffer publishes the new
+ SRV index and retires the old buffer with `Graphics::RetireResource`.
+*/
+OXGN_VRTX_API auto CreateBufferAndSrv(
+  Graphics& gfx, const StructuredBufferSpec& spec)
+  -> std::expected<BufferWithSrv, std::error_code>;
 
 } // namespace oxygen::vortex::upload::internal

@@ -70,6 +70,8 @@ public:
 
   OXGN_D3D12_NDAPI auto GetDescriptorAllocator() const
     -> const graphics::DescriptorAllocator& override;
+  OXGN_D3D12_NDAPI auto GetDescriptorAllocator()
+    -> graphics::DescriptorAllocator& override;
 
   OXGN_D3D12_NDAPI auto GetTimestampQueryProvider() const
     -> observer_ptr<graphics::TimestampQueryProvider> override;

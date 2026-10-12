@@ -112,16 +112,7 @@ struct SpatialLightGrid::Impl {
   {
     auto gfx = renderer->GetGraphics();
     if (resource.buffer && gfx) {
-      gfx->GetDeferredReclaimer().RegisterDeferredAction(
-        [owner = gfx.get(),
-          buffer = std::move(resource.buffer)] mutable -> void {
-          owner->ForgetKnownResourceState(*buffer);
-          auto& registry = owner->GetResourceRegistry();
-          if (registry.Contains(*buffer)) {
-            registry.UnRegisterResource(*buffer);
-          }
-          buffer.reset();
-        });
+      gfx->RetireResource(resource.buffer);
     }
     resource = {};
   }

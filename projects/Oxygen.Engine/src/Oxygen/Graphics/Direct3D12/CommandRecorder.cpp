@@ -580,10 +580,10 @@ auto CommandRecorder::SetPipelineState(GraphicsPipelineDesc desc) -> void
   const auto& command_list = GetConcreteCommandList();
   auto* d3d12_command_list = command_list.GetCommandList();
 
-  // The D3D12 backend only overrides the const accessor; use the base one.
+  // The backend allocator is the D3D12 descriptor allocator.
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
-  auto& allocator = static_cast<DescriptorAllocator&>(
-    graphics->oxygen::Graphics::GetDescriptorAllocator());
+  auto& allocator
+    = static_cast<DescriptorAllocator&>(graphics->GetDescriptorAllocator());
   // Ensure descriptor heaps are bound before setting a root signature that may
   // expect directly-indexed shader-visible heaps (D3D12 requirement). Bind
   // heaps first, set the root signature, then bind root descriptor tables.
@@ -616,10 +616,10 @@ auto CommandRecorder::SetPipelineState(ComputePipelineDesc desc) -> void
   const auto& command_list = GetConcreteCommandList();
   auto* d3d12_command_list = command_list.GetCommandList();
 
-  // The D3D12 backend only overrides the const accessor; use the base one.
+  // The backend allocator is the D3D12 descriptor allocator.
   // NOLINTNEXTLINE(*-pro-type-static-cast-downcast)
-  auto& allocator = static_cast<DescriptorAllocator&>(
-    graphics->oxygen::Graphics::GetDescriptorAllocator());
+  auto& allocator
+    = static_cast<DescriptorAllocator&>(graphics->GetDescriptorAllocator());
   // Ensure descriptor heaps are bound before setting a compute root signature
   // which may depend on directly-indexed sampler/SRV heaps. Bind heaps, set
   // root signature, then bind root descriptor tables.

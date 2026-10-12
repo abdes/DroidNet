@@ -364,7 +364,6 @@ set(
   "Environment/Internal/IblProcessor.cpp"
   "IndirectLighting/IndirectLightingService.cpp"
   "Environment/Internal/LocalFogVolumeState.cpp"
-  "Environment/Internal/ResourceRetirement.h"
   "Environment/Internal/StaticSkyLightProcessor.cpp"
   "Environment/Internal/IblBrdfLookup.cpp"
   "Environment/Internal/IblBrdfResources.cpp"

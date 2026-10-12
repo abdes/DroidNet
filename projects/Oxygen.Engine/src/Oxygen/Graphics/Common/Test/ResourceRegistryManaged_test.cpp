@@ -121,6 +121,10 @@ public:
   {
     return *allocator_;
   }
+  auto GetDescriptorAllocator() -> DescriptorAllocator& override
+  {
+    return *allocator_;
+  }
 
 private:
   std::shared_ptr<ManagedTestAllocator> allocator_;
@@ -148,6 +152,7 @@ public:
     .texture_type = oxygen::TextureType::kTextureCube,
     .is_shader_resource = true,
     .is_uav = true,
+    .clear_value = {},
   };
 
 private:

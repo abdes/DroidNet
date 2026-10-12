@@ -29,6 +29,8 @@ public:
 
   OXGN_HDLS_NDAPI auto GetDescriptorAllocator() const
     -> const DescriptorAllocator& override;
+  OXGN_HDLS_NDAPI auto GetDescriptorAllocator()
+    -> DescriptorAllocator& override;
 
   OXGN_HDLS_NDAPI auto GetReadbackManager() const
     -> observer_ptr<graphics::ReadbackManager> override;

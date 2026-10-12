@@ -49,6 +49,8 @@ protected:
   [[nodiscard]] auto Loader() const -> FakeAssetLoader&;
 
   auto BeginFrame(frame::Slot slot) -> void;
+  //! Runs deferred retirements, as if the GPU completed every frame in flight.
+  auto RetireCompletedFrames() -> void;
   [[nodiscard]] virtual auto GeometryLimits() const
     -> resources::GeometryUploader::MaintenanceLimits
   {

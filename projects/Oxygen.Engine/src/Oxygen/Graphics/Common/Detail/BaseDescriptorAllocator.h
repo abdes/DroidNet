@@ -101,9 +101,9 @@ public:
   auto AllocateRaw(const ResourceViewType view_type,
     const DescriptorVisibility visibility) -> RawDescriptorHandle override
   {
-    std::lock_guard lock(mutex_);
+    std::scoped_lock lock(mutex_);
 
-    auto& strategy = GetAllocationStrategy();
+    const auto& strategy = GetAllocationStrategy();
     const auto& key = keys_.at(HeapIndex(view_type, visibility));
     auto& segments = heaps_[key];
 
@@ -142,7 +142,7 @@ public:
     DCHECK_F(!segments.empty(), "we should have at least one segment");
 
     // If we couldn't allocate from existing segments, try to create a new one
-    if (auto& desc = strategy.GetHeapDescription(key);
+    if (const auto& desc = strategy.GetHeapDescription(key);
       desc.allow_growth && segments.size() < (1 + desc.max_growth_iterations)) {
       const auto& last = segments.back();
       const auto base_index
@@ -165,8 +165,9 @@ public:
   auto AllocateBindless(const bindless::DomainToken domain,
     const ResourceViewType view_type) -> BindlessHandle override
   {
-    return AbortOnFailed(
-      __func__, [&]() { return AllocateBindlessOrThrow(domain, view_type); });
+    return AbortOnFailed(__func__, [&] -> BindlessHandle {
+      return AllocateBindlessOrThrow(domain, view_type);
+    });
   }
 
   //! Releases a previously allocated descriptor.
@@ -186,8 +187,8 @@ public:
         "cannot release a handle that does not belong to this allocator");
     }
     if (handle.IsBindless()) {
-      return AbortOnFailed(__func__, [&]() {
-        std::lock_guard lock(mutex_);
+      AbortOnFailed(__func__, [&] -> void {
+        std::scoped_lock lock(mutex_);
         auto it = bindless_domains_.find(handle.GetDomain().get());
         if (it == bindless_domains_.end()) {
           throw std::runtime_error(
@@ -203,9 +204,10 @@ public:
         state.free_list.push_back(local_slot);
         handle.Invalidate();
       });
+      return;
     }
 
-    std::lock_guard lock(mutex_);
+    std::scoped_lock lock(mutex_);
     const auto view_type = handle.GetViewType();
     const auto visibility = handle.GetVisibility();
     const auto index = handle.GetBindlessHandle();
@@ -238,8 +240,8 @@ public:
     const DescriptorVisibility visibility) const noexcept
     -> bindless::Count override
   {
-    return AbortOnFailed(__func__, [&]() {
-      std::lock_guard lock(mutex_);
+    return AbortOnFailed(__func__, [&] -> bindless::Count {
+      std::scoped_lock lock(mutex_);
       bindless::Count::UnderlyingType total = 0;
       const auto& key = keys_.at(HeapIndex(view_type, visibility));
       if (const auto it = heaps_.find(key); it != heaps_.end()) {
@@ -276,23 +278,23 @@ public:
     }
 
     if (handle.IsBindless()) {
-      return AbortOnFailed(__func__, [&]() {
-        std::lock_guard lock(mutex_);
+      return AbortOnFailed(__func__, [&] -> bool {
+        std::scoped_lock lock(mutex_);
         const auto it = bindless_domains_.find(handle.GetDomain().get());
         return it != bindless_domains_.end()
           && handle.GetLocalSlot() < it->second.next_slot;
       });
     }
 
-    return AbortOnFailed(__func__, [&]() {
-      std::lock_guard lock(mutex_);
+    return AbortOnFailed(__func__, [&] -> bool {
+      std::scoped_lock lock(mutex_);
       const auto view_type = handle.GetViewType();
       const auto visibility = handle.GetVisibility();
       const auto u_index = handle.GetBindlessHandle().get();
       const auto& key = keys_.at(HeapIndex(view_type, visibility));
       const auto& segments = heaps_.at(key);
 
-      return std::ranges::any_of(segments, [&](const auto& segment) {
+      return std::ranges::any_of(segments, [&](const auto& segment) -> auto {
         const auto u_base = segment->GetBaseIndex().get();
         const auto u_capacity = segment->GetCapacity().get();
         return u_index >= u_base && u_index < (u_base + u_capacity);
@@ -311,24 +313,13 @@ public:
     const ResourceViewType view_type,
     const DescriptorVisibility visibility) const -> bindless::Count override
   {
-    return AbortOnFailed(__func__, [&]() {
-      std::lock_guard lock(mutex_);
+    return AbortOnFailed(__func__, [&] -> bindless::Count {
+      std::scoped_lock lock(mutex_);
       const auto& key = keys_.at(HeapIndex(view_type, visibility));
       // If no segments were created yet for this heap key, return zero.
-      if (const auto it = heaps_.find(key); it == heaps_.end()) {
+      const auto it = heaps_.find(key);
+      if (it == heaps_.end()) {
         bindless::Count total { 0 };
-        if (visibility == DescriptorVisibility::kShaderVisible) {
-          for (const auto& [_, domain_state] : bindless_domains_) {
-            total += domain_state.GetAllocatedCountFor(view_type);
-          }
-        }
-        return total;
-      } else {
-        const auto& segments = it->second;
-        bindless::Count total { 0 };
-        for (const auto& segment : segments) {
-          total += segment->GetAllocatedCount();
-        }
         if (visibility == DescriptorVisibility::kShaderVisible) {
           for (const auto& [_, domain_state] : bindless_domains_) {
             total += domain_state.GetAllocatedCountFor(view_type);
@@ -336,6 +327,17 @@ public:
         }
         return total;
       }
+      const auto& segments = it->second;
+      bindless::Count total { 0 };
+      for (const auto& segment : segments) {
+        total += segment->GetAllocatedCount();
+      }
+      if (visibility == DescriptorVisibility::kShaderVisible) {
+        for (const auto& [_, domain_state] : bindless_domains_) {
+          total += domain_state.GetAllocatedCountFor(view_type);
+        }
+      }
+      return total;
     });
   }
 
@@ -343,7 +345,7 @@ public:
     const bindless::DomainToken domain) const
     -> bindless::ShaderVisibleIndex override
   {
-    return AbortOnFailed(__func__, [&]() {
+    return AbortOnFailed(__func__, [&] -> bindless::ShaderVisibleIndex {
       const auto* const desc = bindless::generated::TryGetDomainDesc(domain);
       if (desc == nullptr) {
         throw std::runtime_error("Unknown bindless domain token");
@@ -356,8 +358,8 @@ public:
     const DescriptorVisibility visibility, const bindless::Count count)
     -> std::optional<bindless::HeapIndex> override
   {
-    return AbortOnFailed(__func__, [&]() -> std::optional<bindless::HeapIndex> {
-      std::lock_guard lock(mutex_);
+    return AbortOnFailed(__func__, [&] -> std::optional<bindless::HeapIndex> {
+      std::scoped_lock lock(mutex_);
       // Some (type, visibility) pairs may be unsupported by the strategy.
       // If the precomputed key is empty, treat it as unsupported.
       const auto& key = keys_.at(HeapIndex(view_type, visibility));
@@ -462,7 +464,7 @@ protected:
     const DescriptorAllocationHandle& handle) const
     -> std::optional<const DescriptorSegment*>
   {
-    std::lock_guard lock(mutex_);
+    std::scoped_lock lock(mutex_);
     return GetSegmentForHandleNoLock(handle);
   }
 
@@ -492,15 +494,16 @@ protected:
   //! Returns a vector of HeapView for all heaps that have at least one segment.
   auto Heaps() const -> std::vector<HeapView>
   {
-    std::lock_guard lock(mutex_);
+    std::scoped_lock lock(mutex_);
 
     const auto& strategy = GetAllocationStrategy();
     std::vector<HeapView> result;
     for (const auto& [key, segments] : heaps_) {
       if (!segments.empty()) {
-        result.push_back(
-          HeapView { .description = &strategy.GetHeapDescription(key),
-            .segments = std::span(segments) });
+        result.push_back(HeapView {
+          .description = &strategy.GetHeapDescription(key),
+          .segments = std::span(segments),
+        });
       }
     }
     return result;
@@ -510,7 +513,7 @@ private:
   auto AllocateBindlessOrThrow(const bindless::DomainToken domain,
     const ResourceViewType view_type) -> BindlessHandle
   {
-    std::lock_guard lock(mutex_);
+    std::scoped_lock lock(mutex_);
     const auto* desc = bindless::generated::TryGetDomainDesc(domain);
     if (!desc) {
       throw std::runtime_error("Unknown bindless domain token");
@@ -521,8 +524,21 @@ private:
       state.capacity = bindless::Capacity { desc->capacity };
       state.initialized = true;
     }
-    const bool recycled = !state.free_list.empty();
-    const auto slot = recycled ? state.free_list.back() : state.next_slot;
+    // Debug builds hand out fresh slots before recycling, oldest release
+    // first, so a descriptor freed while in-flight work still reads it shows
+    // up as a stale read instead of silently aliasing a new resource.
+    constexpr bool kDelayReuse =
+#ifdef NDEBUG
+      false;
+#else
+      true;
+#endif
+    const bool recycled = !state.free_list.empty()
+      && (!kDelayReuse || state.next_slot >= state.capacity.get());
+    auto slot = state.next_slot;
+    if (recycled) {
+      slot = kDelayReuse ? state.free_list.front() : state.free_list.back();
+    }
     if (!recycled) {
       if (slot >= state.capacity.get()) {
         throw std::runtime_error(
@@ -531,13 +547,18 @@ private:
       if (state.free_list.capacity() <= slot) {
         state.free_list.reserve(
           (std::min)(static_cast<std::size_t>(state.capacity.get()),
-            (std::max)({ std::size_t { 64 }, state.free_list.capacity() * 2U,
-              static_cast<std::size_t>(slot) + 1U })));
+            (std::max)({
+              std::size_t { 64 },
+              state.free_list.capacity() * 2U,
+              static_cast<std::size_t>(slot) + 1U,
+            })));
       }
     }
     // Allocate metadata before consuming either a recycled or a fresh slot.
     state.active_view_types.emplace(slot, view_type);
-    if (recycled) {
+    if (recycled && kDelayReuse) {
+      state.free_list.erase(state.free_list.begin());
+    } else if (recycled) {
       state.free_list.pop_back();
     } else {
       ++state.next_slot;
@@ -615,9 +636,7 @@ private:
         continue;
       }
       const auto end = domain.shader_index_base + domain.capacity;
-      if (end > max_end) {
-        max_end = end;
-      }
+      max_end = std::max(end, max_end);
     }
     return max_end;
   }
@@ -655,7 +674,7 @@ private:
         try {
           const size_t idx = HeapIndex(view_type, visibility);
           const auto key = heap_strategy_->GetHeapKey(view_type, visibility);
-          keys_[idx] = key;
+          keys_.at(idx) = key;
         } catch ([[maybe_unused]] const std::exception& ex) {
           DLOG_F(2, "combination ({}, {}) not supported by strategy: {}",
             nostd::to_string(view_type), nostd::to_string(visibility),
@@ -700,28 +719,30 @@ private:
     DCHECK_F(IsValid(vis), "Invalid DescriptorVisibility: {}",
       static_cast<std::underlying_type_t<DescriptorVisibility>>(vis));
 
-    return static_cast<size_t>(vis) * kNumResourceViewTypes
+    return (static_cast<size_t>(vis) * kNumResourceViewTypes)
       + static_cast<size_t>(type);
   }
 
   std::array<std::string, kNumResourceViewTypes * kNumVisibilities> keys_;
   using Segments = std::vector<std::unique_ptr<DescriptorSegment>>;
-  std::unordered_map<std::string, Segments> heaps_ {};
+  std::unordered_map<std::string, Segments> heaps_;
 
   struct BindlessDomainState {
     bindless::DomainToken domain { bindless::generated::kInvalidDomainToken };
     bindless::Capacity capacity { 0U };
     uint32_t next_slot { 0U };
-    std::vector<uint32_t> free_list {};
-    std::unordered_map<uint32_t, ResourceViewType> active_view_types {};
+    std::vector<uint32_t> free_list;
+    std::unordered_map<uint32_t, ResourceViewType> active_view_types;
     bool initialized { false };
 
     [[nodiscard]] auto GetAllocatedCountFor(
       const ResourceViewType view_type) const -> bindless::Count
     {
-      return bindless::Count { static_cast<uint32_t>(
-        std::count_if(active_view_types.begin(), active_view_types.end(),
-          [&](const auto& entry) { return entry.second == view_type; })) };
+      return bindless::Count {
+        static_cast<uint32_t>(std::count_if(active_view_types.begin(),
+          active_view_types.end(),
+          [&](const auto& entry) -> auto { return entry.second == view_type; }))
+      };
     }
 
     [[nodiscard]] auto GetRemainingCountFor(
@@ -732,7 +753,7 @@ private:
       };
     }
   };
-  std::unordered_map<uint16_t, BindlessDomainState> bindless_domains_ {};
+  std::unordered_map<uint16_t, BindlessDomainState> bindless_domains_;
 
   //! Thread synchronization mutex.
   mutable std::mutex mutex_;

@@ -65,14 +65,14 @@ struct ElementRefTag;
 
  ### Architecture Notes
 
- - Growth uses an external helper (EnsureBufferAndSrv) which re-creates the
-   Buffer + SRV as needed. Live data migration is intentionally NOT performed in
-   Phase 1; callers are responsible for re-uploading.
+ - Growth creates a new buffer and a new SRV, copies the live elements on the
+   graphics queue, then publishes the new SRV and retires the old buffer by
+   receipt. Element indices survive growth; the SRV index does not, so readers
+   take it from GetBinding() each frame.
  - Free list recycling is order-agnostic; tests must not assume LIFO.
  - Multi-count allocation (count > 1) returns std::errc::invalid_argument.
 
- @warning Phase 1 design intentionally omits overflow chunk support and does not
-          migrate or compact existing data during resize.
+ @warning Growth never compacts: element indices are stable for their lifetime.
  @see AtlasBuffer::EnsureCapacity, AtlasBuffer::Allocate,
       AtlasBuffer::MakeUploadDesc, AtlasBuffer::OnFrameStart
 */
@@ -109,18 +109,19 @@ public:
     ElementRef(ElementRef&&) = default;
     auto operator=(const ElementRef&) -> ElementRef& = default;
     auto operator=(ElementRef&&) -> ElementRef& = default;
+    ~ElementRef() = default;
 
   private:
     friend class AtlasBuffer; // allow AtlasBuffer to build valid refs
     // Private tagged constructor; tag is defined only in .cpp
-    ElementRef(const ElementRefTag&, ShaderVisibleIndex s, std::uint32_t e)
-      : srv_(s)
-      , element_(e)
+    ElementRef(const ElementRefTag& /*tag*/, std::uint32_t element)
+      : element_(element)
+      , valid_(true)
     {
     }
 
-    ShaderVisibleIndex srv_ { kInvalidShaderVisibleIndex }; // chunk SRV
-    std::uint32_t element_ { 0 }; // element index within the chunk
+    std::uint32_t element_ { 0 }; // element index within the buffer
+    bool valid_ { false };
   };
 
   //! Construct an AtlasBuffer.
@@ -133,8 +134,15 @@ public:
 
   OXGN_VRTX_API ~AtlasBuffer();
 
+  //! Capacity a caller needs, and how much extra to add when growing.
+  struct CapacityRequest {
+    std::uint32_t min_elements { 0U };
+    //! Fraction of `min_elements` added on growth (0.5 = 50% headroom).
+    float growth_slack { 0.0F };
+  };
+
   //! Ensure minimum element capacity (create/resize if needed).
-  OXGN_VRTX_API auto EnsureCapacity(std::uint32_t min_elements, float slack)
+  OXGN_VRTX_API auto EnsureCapacity(const CapacityRequest& request)
     -> std::expected<EnsureBufferResult, std::error_code>;
 
   //! Allocate a single element slot.
@@ -163,8 +171,7 @@ public:
     -> std::expected<oxygen::vortex::upload::UploadBufferDesc, std::error_code>;
 
   //! Build upload descriptor from raw element index.
-  OXGN_VRTX_API auto MakeUploadDescForIndex(
-    std::uint32_t element_index, std::uint64_t size_bytes) const
+  OXGN_VRTX_API auto MakeUploadDescForIndex(std::uint32_t element_index) const
     -> std::expected<oxygen::vortex::upload::UploadBufferDesc, std::error_code>;
 
   //! Lightweight binding description for Phase 1 (single chunk).
@@ -182,7 +189,7 @@ public:
   */
   OXGN_VRTX_NDAPI auto GetBinding() const noexcept -> Binding
   {
-    return Binding { primary_srv_, stride_ };
+    return Binding { .srv = primary_srv_, .stride = stride_ };
   }
 
   //! Read-only helpers for ElementRef inspection.
@@ -196,15 +203,21 @@ public:
   {
     return ref.element_;
   }
+  //! The SRV currently publishing `ref`'s element; growth changes it.
   OXGN_VRTX_NDAPI auto GetSrvIndex(const ElementRef& ref) const noexcept
     -> ShaderVisibleIndex
   {
-    return ref.srv_;
+    return ref.valid_ ? primary_srv_ : kInvalidShaderVisibleIndex;
   }
 
   OXGN_VRTX_NDAPI auto GetStats() const noexcept -> Stats { return stats_; }
 
 private:
+  //! Records and submits a graphics-queue copy of `source` into
+  //! `destination`; false if it cannot be submitted.
+  auto CopyLiveElements(
+    const graphics::Buffer& source, graphics::Buffer& destination) -> bool;
+
   observer_ptr<Graphics> gfx_;
   std::string debug_label_;
   std::uint32_t stride_ { 0 };

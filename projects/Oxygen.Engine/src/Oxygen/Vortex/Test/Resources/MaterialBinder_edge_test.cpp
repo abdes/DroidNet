@@ -9,7 +9,6 @@
 #include <bit>
 #include <cstddef>
 #include <cstdint>
-#include <limits>
 #include <memory>
 
 #include <Oxygen/Core/Bindless/Types.h>
@@ -57,8 +56,9 @@ using oxygen::vortex::testing::MaterialBinderTest;
 
 class MaterialBinderEdgeTest : public MaterialBinderTest { };
 
-//! Atlas resizes must force a full re-upload of existing material constants.
-NOLINT_TEST_F(MaterialBinderEdgeTest, ResizingAtlasReuploadsAllMaterials)
+//! Atlas growth carries existing material constants into the new buffer with
+//! a GPU copy instead of re-uploading them.
+NOLINT_TEST_F(MaterialBinderEdgeTest, GrowingAtlasCopiesExistingMaterials)
 {
   auto* fake_gfx = &Gfx();
   ASSERT_NE(fake_gfx, nullptr);
@@ -114,6 +114,8 @@ NOLINT_TEST_F(MaterialBinderEdgeTest, ResizingAtlasReuploadsAllMaterials)
 
   // Arrange: allocate enough new materials to force at least one atlas resize.
   OnFrameStart(2U);
+  fake_gfx->buffer_log_.copies.clear();
+  fake_gfx->buffer_log_.copy_called = false;
 
   constexpr std::uint32_t kAdditionalCount = 200U;
   for (std::uint32_t i = 0U; i < kAdditionalCount; ++i) {
@@ -126,21 +128,19 @@ NOLINT_TEST_F(MaterialBinderEdgeTest, ResizingAtlasReuploadsAllMaterials)
     ASSERT_TRUE(MatBinder().IsHandleValid(h));
   }
 
-  fake_gfx->buffer_log_.copies.clear();
-  fake_gfx->buffer_log_.copy_called = false;
-
   // Act: ensure resources after growth.
   MatBinder().EnsureFrameResources();
 
-  // Assert: uploads must include existing materials (slot 0 => dst_offset 0).
+  // Assert: the old atlas contents are copied into the grown atlas.
   ASSERT_TRUE(fake_gfx->buffer_log_.copy_called);
-  ASSERT_FALSE(fake_gfx->buffer_log_.copies.empty());
-
-  std::size_t min_dst_offset = std::numeric_limits<std::size_t>::max();
-  for (const auto& e : fake_gfx->buffer_log_.copies) {
-    min_dst_offset = (std::min)(min_dst_offset, e.dst_offset);
-  }
-  EXPECT_EQ(min_dst_offset, 0U);
+  const auto grown_from_old_atlas = std::ranges::any_of(
+    fake_gfx->buffer_log_.copies, [](const auto& e) -> bool {
+      return e.src != nullptr && e.dst != nullptr && e.dst_offset == 0U
+        && e.src_offset == 0U
+        && e.src->GetName() == "MaterialShadingConstantsAtlas"
+        && e.size == e.src->GetSize();
+    });
+  EXPECT_TRUE(grown_from_old_atlas);
 }
 
 //! A material a later view adds in the same frame is uploaded before that
