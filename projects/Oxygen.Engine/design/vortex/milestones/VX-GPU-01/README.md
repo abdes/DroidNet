@@ -172,7 +172,7 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 | S4  | Versioned view constants; one source per view value                    | H1, M7                      | S3      | `validated` | —      |
 | S5  | One pass-input convention; shared mesh position with WPO               | H7, M6, M7                  | S3, S4  | `validated` | —      |
 | S6  | Fail loudly                                                            | M1, M5, H6, H8              | S4      | `validated` | —      |
-| S7  | Frame and view lifecycle                                               | M3, M4                      | S4      | `planned`   | —      |
+| S7  | Frame and view lifecycle                                               | M3, M4                      | S4      | `validated` | —      |
 | S8  | Generated shared contracts                                             | M8, H8                      | S5, S6  | `planned`   | —      |
 | S9  | Unwired fields and dead code                                           | L2, L3, L4, L5, L6, L8, L11 | S3      | `planned`   | —      |
 | S10 | Conventional shadow receiver analysis and receiver-mask caster culling | L1                          | S3, S5  | `planned`   | —      |
@@ -390,14 +390,25 @@ Notes:
 
 ## S7 — Frame and view lifecycle
 
-- [ ] `Renderer.cpp`: offscreen and standalone sessions validate sequence and
-      slot against the renderer's frame.
-- [ ] `SceneRenderer.cpp`: split `BeginFrame` into once-per-frame and per-view
+- [x] `Renderer.cpp`: offscreen and standalone sessions validate sequence and
+      slot against the renderer's frame (`CheckFrameSession`).
+- [x] `SceneRenderer.cpp`: split `BeginFrame` into once-per-frame and per-view
       parts; no second call inside a frame; `GetPublishedViewFrameBindings`
       checks the view id; the single-view path resets per-view products.
-- [ ] **Tests.** An offscreen render inside a host frame leaves the host
+- [x] **Tests.** An offscreen render inside a host frame leaves the host
       view's state intact; a mismatched session is rejected; the single-view
-      path without post-process never inherits another view's draw slot.
+      path without post-process never inherits another view's records.
+
+Notes:
+
+- `BeginFrame` runs once per (sequence, slot). `BeginViewFamily` resets what a
+  render call selects and publishes (lights, light grid, lighting state,
+  per-view products) at the start of each family; a scoped single view resets
+  only its own products.
+- In-frame offscreen renders no longer re-run the scene renderer's frame start
+  after rendering; the host family starts clean on its own.
+- The single-view path always publishes its pre-scene record, and the
+  post-scene refresh rejects a view whose pre-scene record is another view's.
 
 ## S8 — Generated shared contracts
 

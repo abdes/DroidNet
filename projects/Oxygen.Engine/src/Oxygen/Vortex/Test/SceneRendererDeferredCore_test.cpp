@@ -1120,6 +1120,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
         &first_resolved_view_,
       };
   stage10_context.view_constants = { .buffer = view_constants_buffer_ };
+  // Stage 10 republishes on the view's pre-scene record.
+  scene_renderer.PublishViewFrameBindings(stage10_context.current_view.view_id,
+    ViewFrameBindings {}, oxygen::kInvalidShaderVisibleIndex);
   ASSERT_TRUE(
     scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context));
 
@@ -1773,6 +1776,27 @@ NOLINT_TEST_F(
     graphics_->graphics_pipeline_log_.binds, [](const auto& bind) -> bool {
       return bind.desc.GetName() == "Vortex.DeferredLight.Directional";
     }));
+}
+
+NOLINT_TEST_F(SceneRendererDeferredCoreTest,
+  SingleViewRendersNeverInheritAnotherViewsRecords)
+{
+  std::ignore = AddDirectionalLight("Sun");
+  std::ignore = RenderForView(first_view_id_, first_resolved_view_);
+  const auto first
+    = scene_renderer_->GetPublishedViewFrameBindings(first_view_id_);
+  ASSERT_HAS_VALUE(first);
+  ASSERT_TRUE(first->frame_exposure_slot.IsValid());
+
+  std::ignore = RenderForView(second_view_id_, second_resolved_view_);
+  const auto second
+    = scene_renderer_->GetPublishedViewFrameBindings(second_view_id_);
+  ASSERT_HAS_VALUE(second);
+  // The second view publishes its own pre-scene record; nothing carries over.
+  EXPECT_TRUE(second->frame_exposure_slot.IsValid());
+  EXPECT_NE(second->frame_exposure_slot, first->frame_exposure_slot);
+  EXPECT_FALSE(
+    scene_renderer_->GetPublishedViewFrameBindings(first_view_id_).has_value());
 }
 
 NOLINT_TEST_F(SceneRendererDeferredCoreTest,

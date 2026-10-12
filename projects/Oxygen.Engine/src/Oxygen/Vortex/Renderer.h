@@ -765,6 +765,11 @@ public:
     const scene::Scene& scene) const -> SkyLightRuntimeState;
 
   OXGN_VRTX_API auto IsViewReady(ViewId view_id) const -> bool;
+  //! Why `session` cannot run against the renderer's current frame, if it
+  //! cannot: a session may not precede the current frame, and one inside it
+  //! must use its slot.
+  [[nodiscard]] OXGN_VRTX_API auto CheckFrameSession(
+    const FrameSessionInput& session) const -> std::optional<ValidationIssue>;
   OXGN_VRTX_API auto SetImGuiWindowId(platform::WindowIdType window_id) -> void;
   [[nodiscard]] OXGN_VRTX_API auto GetImGuiContext() noexcept -> ImGuiContext*;
   [[nodiscard]] OXGN_VRTX_NDAPI auto IsImGuiFrameActive() const noexcept
@@ -1002,7 +1007,10 @@ private:
     -> DetachedPublishedRuntimeViewState;
   auto ReleasePooledRenderContext(frame::Slot slot) noexcept -> void;
   auto WireContext(RenderContext& context) -> void;
-  auto BeginStandaloneFrameExecution(const FrameSessionInput& session) -> void;
+  //! False, after logging why, when the session does not fit the current
+  //! frame.
+  [[nodiscard]] auto BeginStandaloneFrameExecution(
+    const FrameSessionInput& session) -> bool;
   auto InitializeStandaloneCurrentView(RenderContext& render_context,
     std::optional<ResolvedView>& current_resolved_view,
     std::optional<PreparedSceneFrame>& current_prepared_frame, ViewId view_id,

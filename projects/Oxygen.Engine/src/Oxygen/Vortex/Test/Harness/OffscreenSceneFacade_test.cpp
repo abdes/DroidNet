@@ -153,11 +153,12 @@ protected:
     return view;
   }
 
-  [[nodiscard]] auto MakeFrameSession() const -> Renderer::FrameSessionInput
+  [[nodiscard]] auto MakeFrameSession(const std::uint64_t sequence = 17U) const
+    -> Renderer::FrameSessionInput
   {
     return Renderer::FrameSessionInput {
       .frame_slot = oxygen::frame::Slot { 1U, },
-      .frame_sequence = oxygen::frame::SequenceNumber { 17U, },
+      .frame_sequence = oxygen::frame::SequenceNumber { sequence, },
       .delta_time_seconds = 1.0F / 60.0F,
       .scene = oxygen::observer_ptr<Scene> { scene_.get(), },
     };
@@ -243,6 +244,8 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest,
   auto capture = std::make_shared<Capture>();
   renderer_->RegisterViewExtension(capture);
   const auto name = std::string(160, 'N');
+  // Each pass runs a standalone frame, then a later host frame.
+  std::uint64_t sequence = 17U;
   for (const bool override_enabled : {
          true,
          false,
@@ -251,7 +254,7 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest,
       = [&] -> oxygen::Result<Renderer::ValidatedOffscreenSceneSession,
               Renderer::ValidationReport> {
       auto facade = renderer_->ForOffscreenScene();
-      facade.SetFrameSession(MakeFrameSession());
+      facade.SetFrameSession(MakeFrameSession(sequence));
       facade.SetSceneSource({ .scene = oxygen::observer_ptr {
                                 scene_.get(),
                               } });
@@ -282,7 +285,7 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest,
     });
     frame.SetFrameSequenceNumber(
       oxygen::frame::SequenceNumber {
-        18U,
+        sequence + 1U,
       },
       oxygen::engine::internal::EngineTagFactory::Get());
     frame.SetFrameSlot(
@@ -297,6 +300,7 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest,
     renderer_->OnFrameEnd(oxygen::observer_ptr {
       &frame,
     });
+    sequence += 2U;
   }
   ASSERT_EQ(capture->names.size(), 4U);
   ASSERT_EQ(capture->exposures.size(), 4U);
@@ -399,6 +403,47 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, ValidateRejectsInvalidViewId)
   EXPECT_TRUE(std::ranges::any_of(report.issues, [](const auto& issue) -> auto {
     return issue.code == "view_intent.invalid_id";
   }));
+}
+
+NOLINT_TEST_F(
+  OffscreenSceneFacadeTest, ValidateRejectsSessionsThatDoNotFitTheFrame)
+{
+  auto frame = oxygen::engine::FrameContext {};
+  frame.SetScene(oxygen::observer_ptr { scene_.get() });
+  frame.SetFrameSequenceNumber(oxygen::frame::SequenceNumber { 20U },
+    oxygen::engine::internal::EngineTagFactory::Get());
+  frame.SetFrameSlot(oxygen::frame::Slot { 2U },
+    oxygen::engine::internal::EngineTagFactory::Get());
+  renderer_->OnFrameStart(oxygen::observer_ptr { &frame });
+  const auto issue_code
+    = [&](const Renderer::FrameSessionInput& session) -> std::string {
+    auto facade = renderer_->ForOffscreenScene();
+    facade.SetFrameSession(session);
+    facade.SetSceneSource(Renderer::SceneSourceInput {
+      .scene = oxygen::observer_ptr<Scene> { scene_.get() },
+    });
+    facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera(
+      "SessionFit", ViewId { 42U }, MakeView(), camera_));
+    facade.SetOutputTarget(MakeOutputTarget());
+    const auto report = facade.Validate();
+    const auto found
+      = std::ranges::find_if(report.issues, [](const auto& issue) -> bool {
+          return issue.code.starts_with("frame_session.");
+        });
+    return found != report.issues.end() ? found->code : std::string {};
+  };
+
+  // An earlier frame, or the current frame on another slot, is rejected.
+  EXPECT_EQ(issue_code(MakeFrameSession(19U)), "frame_session.stale_sequence");
+  auto other_slot = MakeFrameSession(20U);
+  other_slot.frame_slot = oxygen::frame::Slot { 1U };
+  EXPECT_EQ(issue_code(other_slot), "frame_session.slot_mismatch");
+  // The current frame on its own slot, and later frames, fit.
+  auto same_slot = MakeFrameSession(20U);
+  same_slot.frame_slot = oxygen::frame::Slot { 2U };
+  EXPECT_EQ(issue_code(same_slot), "");
+  EXPECT_EQ(issue_code(MakeFrameSession(21U)), "");
+  renderer_->OnFrameEnd(oxygen::observer_ptr { &frame });
 }
 
 NOLINT_TEST_F(OffscreenSceneFacadeTest, ValidateRejectsFramebufferWithoutColor)

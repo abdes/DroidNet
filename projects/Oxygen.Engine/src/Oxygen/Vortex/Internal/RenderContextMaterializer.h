@@ -67,6 +67,9 @@ public:
         AddIssue(report, "frame_session.out_of_bounds_slot",
           "Single-pass materialization requires a frame slot inside the "
           "frames-in-flight range");
+      } else if (auto issue
+        = renderer_->CheckFrameSession(*staging.frame_session)) {
+        report.issues.push_back(std::move(*issue));
       }
       if (!std::isfinite(staging.frame_session->delta_time_seconds)
         || staging.frame_session->delta_time_seconds < 0.0F) {

@@ -1364,6 +1364,13 @@ void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
     && *frame_extent != scene_textures_.GetExtent()) {
     ResizeSceneTextureFamily(*frame_extent);
   }
+  // Once per frame: an offscreen render inside a host frame shares the host's
+  // frame and must not reset the services' frame state.
+  if (begun_frame_sequence_ == sequence && begun_frame_slot_ == slot) {
+    return;
+  }
+  begun_frame_sequence_ = sequence;
+  begun_frame_slot_ = slot;
 
   // Pick readbacks recorded in earlier frames land at frame boundaries.
   if (view_pick_pass_) {
@@ -1376,9 +1383,6 @@ void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
     return sequence.get()
       > entry.second.frame_sequence.get() + frame::kFramesInFlight.get();
   });
-  setup_mode_.Reset();
-  scene_texture_bindings_.Invalidate();
-  ResetExtractArtifacts();
   scene_color_pool_->OnFrameStart(sequence);
   for (auto* artifact : {
          &resolved_scene_color_artifact_,
@@ -1389,13 +1393,7 @@ void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
       artifact->pool->OnFrameStart(sequence);
     }
   }
-  InvalidatePublishedViewFrameBindings();
-  deferred_lighting_state_ = {};
-  environment_lighting_state_ = {};
-  frame_light_selection_ = {};
-  frame_lighting_views_.clear();
-  frame_shadow_views_.clear();
-  lighting_grid_built_sequence_.reset();
+  BeginViewFamily();
   if (lighting_ != nullptr) {
     lighting_->OnFrameStart(sequence, slot);
   }
@@ -1414,6 +1412,17 @@ void SceneRenderer::BeginFrame(const frame::SequenceNumber sequence,
   if (init_views_ != nullptr) {
     init_views_->OnFrameStart(sequence, slot);
   }
+}
+
+void SceneRenderer::BeginViewFamily()
+{
+  ResetPerViewSceneProducts();
+  deferred_lighting_state_ = {};
+  environment_lighting_state_ = {};
+  frame_light_selection_ = {};
+  frame_lighting_views_.clear();
+  frame_shadow_views_.clear();
+  lighting_grid_built_sequence_.reset();
 }
 
 void SceneRenderer::OnFrameStart(const engine::FrameContext& frame)
@@ -1584,6 +1593,9 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
     std::shared_ptr<graphics::Texture> texture;
   };
 
+  // Each family selects its own lights and builds its own grid; an earlier
+  // family in this frame (an offscreen render) leaves nothing behind.
+  BeginViewFamily();
   try {
     PrimePreparedViews(ctx);
   } catch (const std::exception& error) {
@@ -1884,6 +1896,13 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
     return std::ranges::any_of(
       ctx.frame_views, [](const auto& view) -> auto { return view.rendered; });
   }
+  // A single view starts from nothing another view published: a standalone
+  // render is its own family, a scoped view keeps only the family's lights.
+  if (ctx.per_view_scope_active_) {
+    ResetPerViewSceneProducts();
+  } else {
+    BeginViewFamily();
+  }
   auto& result = view_render_status_[ctx.current_view.view_id];
   result = {
     .view_id = ctx.current_view.view_id,
@@ -1909,7 +1928,7 @@ auto SceneRenderer::OnRender(RenderContext& ctx) -> bool
           ResetPerViewSceneProducts();
         }
       });
-    if (post_process_ && !ctx.current_view.frame_exposure
+    if (!ctx.current_view.frame_exposure
       && !renderer_.PublishCurrentViewPreSceneFrameBindings(
         ctx, recorder, *this)) {
       LogViewRejection(ctx.current_view.view_id,
@@ -3283,6 +3302,15 @@ auto SceneRenderer::GetAuthoredStageOrder() -> const StageOrder&
 auto SceneRenderer::GetPublishedViewFrameBindings() const
   -> const ViewFrameBindings&
 {
+  return published_view_frame_bindings_;
+}
+
+auto SceneRenderer::GetPublishedViewFrameBindings(const ViewId view_id) const
+  -> std::optional<ViewFrameBindings>
+{
+  if (view_id == kInvalidViewId || view_id != published_view_id_) {
+    return std::nullopt;
+  }
   return published_view_frame_bindings_;
 }
 

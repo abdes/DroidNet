@@ -1118,6 +1118,14 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_NE(bindings.partial_depth_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.velocity_srv, SceneTextureBindings::kInvalidIndex);
 
+  // Stage 10 republishes on the view's pre-scene record.
+
+  scene_renderer.PublishViewFrameBindings(
+
+    stage10_context.current_view.view_id, ViewFrameBindings {},
+
+    oxygen::kInvalidShaderVisibleIndex);
+
   ASSERT_TRUE(
     scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context));
   bindings = scene_renderer.GetSceneTextureBindings();
@@ -1173,6 +1181,14 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_NE(bindings.velocity_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(bindings.gbuffer_srvs.at(0), SceneTextureBindings::kInvalidIndex);
+
+  // Stage 10 republishes on the view's pre-scene record.
+
+  scene_renderer.PublishViewFrameBindings(
+
+    stage10_context.current_view.view_id, ViewFrameBindings {},
+
+    oxygen::kInvalidShaderVisibleIndex);
 
   ASSERT_TRUE(
     scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context));
@@ -1232,6 +1248,14 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_EQ(bindings.gbuffer_srvs.at(5), SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(
     scene_renderer.GetPublishedViewFrameBindings().scene_texture_frame_slot,
+    oxygen::kInvalidShaderVisibleIndex);
+
+  // Stage 10 republishes on the view's pre-scene record.
+
+  scene_renderer.PublishViewFrameBindings(
+
+    stage10_context.current_view.view_id, ViewFrameBindings {},
+
     oxygen::kInvalidShaderVisibleIndex);
 
   ASSERT_TRUE(

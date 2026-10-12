@@ -197,6 +197,10 @@ public:
   OXGN_VRTX_NDAPI auto GetDefaultShadingMode() const -> ShadingMode;
   OXGN_VRTX_NDAPI auto GetEffectiveShadingMode(const RenderContext& ctx) const
     -> ShadingMode;
+  //! The bindings published for `view_id`, or none when the last published
+  //! view is another one.
+  OXGN_VRTX_NDAPI auto GetPublishedViewFrameBindings(ViewId view_id) const
+    -> std::optional<ViewFrameBindings>;
   OXGN_VRTX_NDAPI auto GetPublishedViewFrameBindings() const
     -> const ViewFrameBindings&;
   OXGN_VRTX_NDAPI auto GetPublishedScreenHzbBindings() const
@@ -259,6 +263,9 @@ private:
   OXGN_VRTX_API void ResetExtractArtifacts();
   OXGN_VRTX_API void ResizeSceneTextureFamily(glm::uvec2 new_extent);
   OXGN_VRTX_API void ResetPerViewSceneProducts();
+  //! Reset what one render call's view family selects and publishes: lights,
+  //! the light grid, lighting state and every per-view product.
+  void BeginViewFamily();
   OXGN_VRTX_API auto ActiveSceneTextures() -> SceneTextures&;
   OXGN_VRTX_NDAPI auto ActiveSceneTextures() const -> const SceneTextures&;
   OXGN_VRTX_NDAPI auto BuildSceneTextureLeaseKey(const RenderContext& ctx) const
@@ -322,6 +329,9 @@ private:
   std::vector<PreparedViewShadowInput> frame_shadow_views_;
   std::vector<PreparedViewShadowInput> frame_shadow_preparation_views_;
   std::optional<frame::SequenceNumber> lighting_grid_built_sequence_;
+  //! The frame BeginFrame last started; a second call in it is a no-op.
+  frame::SequenceNumber begun_frame_sequence_ { frame::kInvalidSequenceNumber };
+  frame::Slot begun_frame_slot_ { frame::kInvalidSlot };
   std::unique_ptr<InitViewsModule> init_views_;
   std::unique_ptr<DepthPrepassModule> depth_prepass_;
   std::unique_ptr<ScreenHzbModule> screen_hzb_;

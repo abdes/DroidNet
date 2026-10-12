@@ -106,6 +106,7 @@
 #include <Oxygen/Vortex/Types/ViewOverlay.h>
 #include <Oxygen/Vortex/Types/ViewPick.h>
 #include <Oxygen/Vortex/Types/ViewRenderStatus.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/InlineTransfersCoordinator.h>
 #include <Oxygen/Vortex/Upload/RingBufferStaging.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
@@ -1746,7 +1747,15 @@ auto Renderer::RefreshCurrentViewFrameBindings(
   auto& publication_state = EnsurePublicationState(*gfx);
   const auto view_id = render_context.current_view.view_id;
 
-  auto view_bindings = scene_renderer.GetPublishedViewFrameBindings();
+  // Refresh builds on this view's pre-scene record, never another view's.
+  const auto published = scene_renderer.GetPublishedViewFrameBindings(view_id);
+  if (!published) {
+    RejectCurrentViewPublication(render_context,
+      "pre-scene view frame bindings",
+      make_error_code(upload::UploadError::kInvalidRequest));
+    return false;
+  }
+  auto view_bindings = *published;
   const auto history
     = PublishCurrentViewHistoryFrameBindings(render_context, publication_state);
   if (!history) {
@@ -3884,12 +3893,51 @@ auto Renderer::WireContext(RenderContext& context) -> void
   context.wireframe_color = GetWireframeColor();
 }
 
+auto Renderer::CheckFrameSession(const FrameSessionInput& session) const
+  -> std::optional<ValidationIssue>
+{
+  if (session.frame_slot == frame::kInvalidSlot
+    || !(session.frame_slot < frame::kMaxSlot)) {
+    return ValidationIssue {
+      .code = "frame_session.invalid_slot",
+      .message = "The frame session needs a slot inside the frames-in-flight "
+                 "range",
+    };
+  }
+  if (frame_slot_ == frame::kInvalidSlot) {
+    return std::nullopt;
+  }
+  if (session.frame_sequence.get() < frame_seq_num_) {
+    return ValidationIssue {
+      .code = "frame_session.stale_sequence",
+      .message
+      = fmt::format("Frame session {} precedes the renderer's frame {}",
+        session.frame_sequence.get(), frame_seq_num_),
+    };
+  }
+  if (session.frame_sequence.get() == frame_seq_num_
+    && session.frame_slot != frame_slot_) {
+    return ValidationIssue {
+      .code = "frame_session.slot_mismatch",
+      .message = fmt::format(
+        "Frame session {} uses slot {}, but the renderer's frame uses slot {}",
+        session.frame_sequence.get(), session.frame_slot.get(),
+        frame_slot_.get()),
+    };
+  }
+  return std::nullopt;
+}
+
 auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
-  -> void
+  -> bool
 {
   CHECK_F(std::isfinite(session.delta_time_seconds)
       && session.delta_time_seconds >= 0.0F,
     "Delta time must be finite and nonnegative");
+  if (const auto issue = CheckFrameSession(session)) {
+    LOG_F(ERROR, "Standalone execution rejected: {}", issue->message);
+    return false;
+  }
   const bool frame_already_started = frame_slot_ == session.frame_slot
     && frame_seq_num_ == session.frame_sequence.get();
   frame_slot_ = session.frame_slot;
@@ -3912,6 +3960,7 @@ auto Renderer::BeginStandaloneFrameExecution(const FrameSessionInput& session)
   if (inline_transfers_) {
     inline_transfers_->OnFrameStart(tag, session.frame_sequence, frame_slot_);
   }
+  return true;
 }
 
 auto Renderer::InitializeStandaloneCurrentView(RenderContext& render_context,
@@ -4107,7 +4156,11 @@ Renderer::ValidatedSinglePassHarnessContext::ValidatedSinglePassHarnessContext(
   : renderer_(observer_ptr { &renderer })
   , active_(true)
 {
-  renderer.BeginStandaloneFrameExecution(session);
+  if (!renderer.BeginStandaloneFrameExecution(session)) {
+    active_ = false;
+    throw std::invalid_argument(
+      "single-pass harness frame session does not fit the renderer's frame");
+  }
   try {
     renderer.EnsureSceneRenderer();
     renderer.WireContext(*render_context_);
@@ -4528,7 +4581,9 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteNow() -> bool
 
   auto frame_session = frame_session_;
   frame_session.scene = scene_source_.scene;
-  renderer_->BeginStandaloneFrameExecution(frame_session);
+  if (!renderer_->BeginStandaloneFrameExecution(frame_session)) {
+    return false;
+  }
   const auto frame_guard
     = ScopeGuard([renderer = renderer_.get()] noexcept -> void {
         renderer->EndOffscreenFrame();
@@ -4640,9 +4695,21 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
   };
   auto resolved_view = resolver(view_intent.id);
 
+  if (const auto issue = renderer_->CheckFrameSession(FrameSessionInput {
+        .frame_slot = frame_context.GetFrameSlot(),
+        .frame_sequence = frame_context.GetFrameSequenceNumber(),
+      })) {
+    LOG_F(
+      ERROR, "Offscreen render inside the frame rejected: {}", issue->message);
+    return false;
+  }
   auto& scene_renderer = renderer_->EnsureSceneRenderer(&view_intent);
+  // Starts the scene renderer's frame only if the host has not; the host
+  // view family resets its own products when it renders.
   scene_renderer.OnStandaloneFrameStart(frame_context.GetFrameSequenceNumber(),
     frame_context.GetFrameSlot(), std::nullopt);
+  renderer_->scene_renderer_started_frame_
+    = frame_context.GetFrameSequenceNumber();
 
   auto render_context = RenderContext {};
   renderer_->WireContext(render_context);
@@ -4688,10 +4755,6 @@ auto Renderer::ValidatedOffscreenSceneSession::ExecuteInsideFrame(
   }
   FinalizeOffscreenOutputProduct(*renderer_, *output_target_.framebuffer);
   executed_sequence_ = frame_context.GetFrameSequenceNumber();
-
-  scene_renderer.OnFrameStart(frame_context);
-  renderer_->scene_renderer_started_frame_
-    = frame_context.GetFrameSequenceNumber();
   return true;
 }
 
@@ -4766,11 +4829,8 @@ auto Renderer::OffscreenSceneFacade::Validate() const -> ValidationReport
       .code = "frame_session.missing",
       .message = "Offscreen scene requires a frame session",
     });
-  } else if (frame_session_->frame_slot == frame::kInvalidSlot) {
-    report.issues.push_back(ValidationIssue {
-      .code = "frame_session.invalid_slot",
-      .message = "Offscreen scene requires a valid frame slot",
-    });
+  } else if (auto issue = renderer_->CheckFrameSession(*frame_session_)) {
+    report.issues.push_back(std::move(*issue));
   } else if (!std::isfinite(frame_session_->delta_time_seconds)
     || frame_session_->delta_time_seconds < 0.0F) {
     report.issues.push_back(ValidationIssue {

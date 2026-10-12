@@ -110,9 +110,12 @@ Resumed coroutine work is not represented as constant-time polling.
 
 ## Consumer maintenance
 
-`SceneRenderer::BeginFrame` advances InitViews resource maintenance even when
-there are no scene views. InitViews guards the frame sequence/slot so standalone
-restoration and view preparation cannot spend the same budget twice. Environment
+`SceneRenderer::BeginFrame` runs once per frame sequence and slot, so an
+offscreen render inside a host frame shares the host's frame start; each render
+call resets only its own view family. It advances InitViews resource
+maintenance even when there are no scene views. InitViews guards the frame
+sequence/slot so standalone restoration and view preparation cannot spend the
+same budget twice. Environment
 and post-process retirement run first, releasing their frame leases.
 
 Texture `OnFrameStart` accepts evictions, retires bounded resource/completion
