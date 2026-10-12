@@ -89,6 +89,7 @@
 #include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
+#include <Oxygen/Vortex/Diagnostics/Passes/GpuDebugPrimitivePass.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightTranslation.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
@@ -1353,6 +1354,8 @@ SceneRenderer::SceneRenderer(Renderer& renderer, Graphics& gfx,
     view_overlay_pass_ = std::make_unique<ViewOverlayPass>(renderer_);
     view_pick_pass_ = std::make_unique<ViewPickPass>(renderer_);
   }
+  gpu_debug_primitive_pass_
+    = std::make_unique<GpuDebugPrimitivePass>(renderer_);
 }
 
 SceneRenderer::~SceneRenderer() { ResetExtractArtifacts(); }
@@ -1506,6 +1509,25 @@ auto SceneRenderer::DescribeExposureProductLayout(const RenderContext& ctx)
     append(kFogExposureProduct, required.volumetric_fog, 1.0F);
   }
   return layout;
+}
+
+auto SceneRenderer::PrepareGpuDebugPrimitives(
+  RenderContext& ctx, graphics::CommandRecorder& recorder) -> ShaderVisibleIndex
+{
+  ctx.current_view.gpu_debug_bindings_slot = kInvalidShaderVisibleIndex;
+  if (gpu_debug_primitive_pass_ == nullptr) {
+    return kInvalidShaderVisibleIndex;
+  }
+  return gpu_debug_primitive_pass_->Prepare(ctx, recorder);
+}
+
+auto SceneRenderer::GetGpuDebugPrimitiveStats(const ViewId view_id) const
+  -> std::optional<GpuDebugPrimitiveStats>
+{
+  if (gpu_debug_primitive_pass_ == nullptr) {
+    return std::nullopt;
+  }
+  return gpu_debug_primitive_pass_->GetStats(view_id);
 }
 
 auto SceneRenderer::PrepareExposureDomain(
@@ -3087,6 +3109,26 @@ auto SceneRenderer::RenderCurrentView(
         });
     }
   }
+  // GPU debug lines go over every editor aid, before any pick reads the
+  // output.
+  if (gpu_debug_primitive_pass_ != nullptr) {
+    if (const auto target = ResolveViewOutputTarget(ctx); target != nullptr) {
+      const auto drawn
+        = gpu_debug_primitive_pass_->Record(ctx, recorder, *target);
+      if (drawn) {
+        RecordDiagnosticsPass(renderer_,
+          DiagnosticsPassRecord {
+            .name = "Vortex.Stage20.GpuDebugPrimitives",
+            .kind = DiagnosticsPassKind::kGraphics,
+            .executed = true,
+            .inputs = { "Vortex.GpuDebugLines" },
+            .outputs = { "Vortex.ViewOutput" },
+            .missing_inputs = {},
+            .gpu_duration_ms = {},
+          });
+      }
+    }
+  }
   if (view_pick_pass_ != nullptr) {
     if (auto pick
       = renderer_.TakePublishedRuntimeViewPick(ctx.current_view.view_id)) {
@@ -3127,6 +3169,9 @@ void SceneRenderer::RemoveViewState(const ViewId view_id,
   reported_lighting_failures_.erase(view_id);
   if (selection_outline_pass_) {
     selection_outline_pass_->RemoveView(view_id);
+  }
+  if (gpu_debug_primitive_pass_) {
+    gpu_debug_primitive_pass_->RemoveView(view_id);
   }
   InvalidatePublishedViewFrameBindings();
   exposure_product_layouts_.erase(view_state_handle);

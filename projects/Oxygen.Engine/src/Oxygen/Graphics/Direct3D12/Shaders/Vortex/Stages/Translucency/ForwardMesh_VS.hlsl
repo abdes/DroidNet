@@ -22,6 +22,7 @@
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
 
 #include "Core/Bindless/BindlessHelpers.hlsl"
+#include "Vortex/Services/Diagnostics/GpuDebugView.hlsli"
 #include "Vortex/Stages/Translucency/ForwardPbr.hlsli"
 
 // Mesh shaders take their draw index from SV_StartInstanceLocation (see
@@ -56,6 +57,7 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID,
     // primitives (every vertex collapses to one point).
     DrawMetadata meta;
     if (!BX_LoadDrawMetadata(draw_bindings.draw_metadata_slot, draw_index, meta)) {
+        ReportGpuDebugInvalidBindless(draw_bindings.draw_metadata_slot);
         return output;
     }
     const Vertex vertex = BX_LoadVertex(
@@ -70,6 +72,7 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID,
             draw_bindings.current_worlds_slot, transform_index, world_matrix)
         || !BX_TryLoadMatrix(draw_bindings.normal_matrices_slot,
             transform_index, normal_transform)) {
+        ReportGpuDebugInvalidBindless(draw_bindings.current_worlds_slot);
         return output;
     }
     const float4 world_pos = ComputeMeshWorldPosition(world_matrix,

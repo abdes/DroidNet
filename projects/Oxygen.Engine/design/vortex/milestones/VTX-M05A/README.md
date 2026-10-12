@@ -2,11 +2,11 @@
 
 Status: `validated`
 
-| Field     | Summary                                                                     |
-| --------- | --------------------------------------------------------------------------- |
-| Outcome   | Diagnostics service, shader-debug registry, timeline and capture manifest.  |
-| Remaining | Extensions: [VX-DIAG-01](../../OPEN_ITEMS.md#p3--unscheduled-capabilities). |
-| Evidence  | [Validation record](validation.md)                                          |
+| Field     | Summary                                                                    |
+| --------- | -------------------------------------------------------------------------- |
+| Outcome   | Diagnostics service, shader-debug registry, timeline and capture manifest. |
+| Remaining | None in the recorded scope.                                                |
+| Evidence  | [Validation record](validation.md)                                         |
 
 [Roadmap](../../PLAN.md) · [Design index](../../lld/README.md)
 

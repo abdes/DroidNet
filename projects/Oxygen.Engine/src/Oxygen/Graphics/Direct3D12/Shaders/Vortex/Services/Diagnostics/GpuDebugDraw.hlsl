@@ -4,71 +4,47 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Vortex/Contracts/View/ViewConstants.hlsli"
-#include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
-#include "Vortex/Contracts/Diagnostics/GpuDebugBindings.hlsli"
+// Draws a view's stored GPU debug lines, one instance per line, with the
+// counters as indirect draw arguments.
 
-// Root constants b2 (shared root param index with engine)
-//   g_DrawIndex          : per-draw payload
-//   g_PassConstantsIndex : heap index of a CBV holding pass constants
-cbuffer RootConstants : register(b2, space0) {
+#include "Vortex/Contracts/View/ViewConstants.hlsli"
+#include "Vortex/Services/Diagnostics/GpuDebug.hlsli"
+
+// g_PassConstantsIndex is the view's GpuDebugBindings record.
+cbuffer RootConstants : register(b2, space0)
+{
     uint g_DrawIndex;
     uint g_PassConstantsIndex;
 }
 
-struct GpuDebugDrawPassConstants
-{
-    float2 mouse_down_position;
-    uint mouse_down_valid;
-    uint pad0;
-};
-
-struct GpuDebugLine
-{
-    float4 worldPos0;
-    float4 worldPos1;
-    float4 colorAlpha0;
-    float4 colorAlpha1;
-};
-
 struct VertexOutput
 {
-    float4 position    : SV_POSITION;
-    float4 colorAlpha  : TEXCOORD0;
+    float4 position : SV_POSITION;
+    float4 color : TEXCOORD0;
 };
 
 [shader("vertex")]
-VertexOutput VS(
-    uint vertexID: SV_VertexID,
-    uint instanceID : SV_InstanceID
-)
+VertexOutput VortexGpuDebugDrawVS(
+    uint vertex_id : SV_VertexID, uint instance_id : SV_InstanceID)
 {
-    VertexOutput output;
-
-    const ViewFrameBindings view_bindings =
-        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
-    const GpuDebugBindings debug_bindings =
-        LoadGpuDebugBindings(view_bindings.debug_frame_slot);
-
-    StructuredBuffer<GpuDebugLine> gpuDebugLineBuffer =
-        ResourceDescriptorHeap[debug_bindings.line_buffer_srv_slot];
-    GpuDebugLine debugLine = gpuDebugLineBuffer[instanceID];
-
-    StructuredBuffer<GpuDebugDrawPassConstants> pass_buffer = ResourceDescriptorHeap[g_PassConstantsIndex];
-    GpuDebugDrawPassConstants pass = pass_buffer[g_DrawIndex];
-
-    float4 vertexPosition = vertexID == 0 ? debugLine.worldPos0   : debugLine.worldPos1;
-    float4 vertexColor    = vertexID == 0 ? debugLine.colorAlpha0 : debugLine.colorAlpha1;
-
-    output.position  = mul(projection_matrix, mul(view_matrix, vertexPosition));
-    output.colorAlpha= vertexColor;
-    output.colorAlpha.a += (float)pass.mouse_down_valid * 0.0f;
-
+    VertexOutput output = (VertexOutput)0;
+    const GpuDebugBindings debug = LoadGpuDebugBindings(g_PassConstantsIndex);
+    if (debug.line_buffer_srv_slot == K_INVALID_BINDLESS_INDEX
+        || instance_id >= debug.line_capacity) {
+        return output;
+    }
+    StructuredBuffer<GpuDebugLine> lines
+        = ResourceDescriptorHeap[debug.line_buffer_srv_slot];
+    const GpuDebugLine debug_line = lines[instance_id];
+    const float4 world_position
+        = vertex_id == 0u ? debug_line.world_pos0 : debug_line.world_pos1;
+    output.position = mul(projection_matrix, mul(view_matrix, world_position));
+    output.color = vertex_id == 0u ? debug_line.color0 : debug_line.color1;
     return output;
 }
 
 [shader("pixel")]
-float4 PS(VertexOutput input) : SV_TARGET
+float4 VortexGpuDebugDrawPS(VertexOutput input) : SV_TARGET
 {
-    return input.colorAlpha;
+    return input.color;
 }

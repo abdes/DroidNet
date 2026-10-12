@@ -370,7 +370,7 @@ void DiagnosticsPanel::DrawDebugModes()
 
   if (vm_->SupportsGpuDebugPassControl()) {
     auto gpu_debug_enabled = vm_->GetGpuDebugPassEnabled();
-    if (ImGui::Checkbox("Show GPU Debug Pass", &gpu_debug_enabled)) {
+    if (ImGui::Checkbox("Show Draw Bounds (GPU Debug)", &gpu_debug_enabled)) {
       vm_->SetGpuDebugPassEnabled(gpu_debug_enabled);
     }
   }

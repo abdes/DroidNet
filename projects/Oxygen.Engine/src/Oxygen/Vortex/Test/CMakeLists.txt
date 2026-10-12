@@ -512,6 +512,7 @@ if(WIN32)
       "Exposure/Fp32Only_test.cpp"
       "Exposure/ProceduralGridMaterial_test.cpp"
       "Exposure/SceneDepthDebugMode_test.cpp"
+      "Exposure/GpuDebugPrimitives_test.cpp"
       "Exposure/Fp32Reference_test.cpp"
       "Exposure/FrameDomain_test.cpp"
       "Exposure/IblSurface_test.cpp"

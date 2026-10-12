@@ -23,6 +23,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
 #include <Oxygen/Vortex/Lighting/Types/FrameLightingInputs.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
@@ -75,6 +76,7 @@ struct ExposureSourceLoss;
 class GroundGridPass;
 class SelectionOutlinePass;
 class ViewOverlayPass;
+class GpuDebugPrimitivePass;
 class ViewPickPass;
 class EnvironmentLightingService;
 class IndirectLightingService;
@@ -158,6 +160,13 @@ public:
   OXGN_VRTX_API void PrimePreparedViews(RenderContext& ctx);
   OXGN_VRTX_API auto PrepareExposureDomain(
     RenderContext& ctx, graphics::CommandRecorder& recorder) -> bool;
+  //! Publishes the current view's GPU debug record and resets its counters;
+  //! invalid while GPU debug primitives are disabled.
+  OXGN_VRTX_API auto PrepareGpuDebugPrimitives(RenderContext& ctx,
+    graphics::CommandRecorder& recorder) -> ShaderVisibleIndex;
+  //! The latest GPU debug counters read back for `view_id`.
+  OXGN_VRTX_NDAPI auto GetGpuDebugPrimitiveStats(ViewId view_id) const
+    -> std::optional<GpuDebugPrimitiveStats>;
   OXGN_VRTX_API void PrimePreparedView(RenderContext& ctx);
   OXGN_VRTX_API void RenderViewFamily(RenderContext& ctx);
   OXGN_VRTX_API auto OnRender(RenderContext& ctx) -> bool;
@@ -348,6 +357,7 @@ private:
   std::unique_ptr<GroundGridPass> ground_grid_pass_;
   std::unique_ptr<SelectionOutlinePass> selection_outline_pass_;
   std::unique_ptr<ViewOverlayPass> view_overlay_pass_;
+  std::unique_ptr<GpuDebugPrimitivePass> gpu_debug_primitive_pass_;
   std::unique_ptr<ViewPickPass> view_pick_pass_;
   std::unique_ptr<PostProcessService> post_process_;
 };

@@ -19,6 +19,7 @@
 #include "Vortex/Contracts/Draw/DrawCullRecord.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Contracts/Draw/DrawVisibility.hlsli"
+#include "Vortex/Services/Diagnostics/GpuDebug.hlsli"
 
 cbuffer RootConstants : register(b2, space0)
 {
@@ -84,7 +85,8 @@ struct OcclusionCullPassConstants
     uint draw_count;
     uint flags;
     float depth_bias;
-    uint _pad0;
+    // The view's GpuDebugBindings record when draw bounds are requested.
+    uint debug_bindings_srv;
 };
 
 struct ClipBox
@@ -100,19 +102,41 @@ OcclusionCullPassConstants LoadPassConstants()
     return constants[0];
 }
 
+// The draw's world matrix; identity for world-space boxes.
+float4x4 DrawWorld(
+    OcclusionCullPassConstants c, DrawCullRecord record, uint draw_index)
+{
+    if ((record.flags & DRAW_CULL_WORLD_SPACE_BOX) != 0u
+        || c.worlds_srv == K_INVALID_BINDLESS_INDEX)
+    {
+        return float4x4(1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+            0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f);
+    }
+    StructuredBuffer<DrawMetadata> metadata
+        = ResourceDescriptorHeap[c.draw_metadata_srv];
+    StructuredBuffer<float4x4> worlds = ResourceDescriptorHeap[c.worlds_srv];
+    return worlds[metadata[draw_index].transform_index];
+}
+
+// Draws the box of a draw in the frustum as GPU debug lines: green when
+// phase 1 draws it, yellow when it waits for phase 2.
+void EmitDrawBounds(OcclusionCullPassConstants c, DrawCullRecord record,
+    uint draw_index, bool phase1)
+{
+    const GpuDebugBindings debug = LoadGpuDebugBindings(c.debug_bindings_srv);
+    const float4x4 world = DrawWorld(c, record, draw_index);
+    AddGpuDebugBox(debug, mul(world, float4(record.box_center, 1.0f)).xyz,
+        mul(world, float4(record.box_extent.x, 0.0f, 0.0f, 0.0f)).xyz,
+        mul(world, float4(0.0f, record.box_extent.y, 0.0f, 0.0f)).xyz,
+        mul(world, float4(0.0f, 0.0f, record.box_extent.z, 0.0f)).xyz,
+        phase1 ? float3(0.0f, 1.0f, 0.0f) : float3(1.0f, 1.0f, 0.0f));
+}
+
 ClipBox MakeClipBox(
     OcclusionCullPassConstants c, DrawCullRecord record, uint draw_index)
 {
-    float4x4 to_clip = c.view_projection;
-    if ((record.flags & DRAW_CULL_WORLD_SPACE_BOX) == 0u
-        && c.worlds_srv != K_INVALID_BINDLESS_INDEX)
-    {
-        StructuredBuffer<DrawMetadata> metadata
-            = ResourceDescriptorHeap[c.draw_metadata_srv];
-        StructuredBuffer<float4x4> worlds = ResourceDescriptorHeap[c.worlds_srv];
-        to_clip = mul(
-            c.view_projection, worlds[metadata[draw_index].transform_index]);
-    }
+    const float4x4 to_clip
+        = mul(c.view_projection, DrawWorld(c, record, draw_index));
 
     ClipBox box;
     box.center = mul(to_clip, float4(record.box_center, 1.0f));
@@ -360,6 +384,11 @@ void VortexOcclusionPhase1CS(uint3 dispatch_id : SV_DispatchThreadID)
         RWStructuredBuffer<uint> visibility
             = ResourceDescriptorHeap[c.visibility_uav];
         visibility[draw_index] = bits;
+
+        if (in_frustum && c.debug_bindings_srv != K_INVALID_BINDLESS_INDEX)
+        {
+            EmitDrawBounds(c, record, draw_index, phase1);
+        }
     }
 
     CountStat(c, OCCLUSION_STAT_DRAWS, active);

@@ -1821,6 +1821,8 @@ auto Renderer::PublishCurrentViewPreSceneFrameBindings(
   if (!scene_renderer.PrepareExposureDomain(render_context, recorder)) {
     return false;
   }
+  view_bindings.debug_frame_slot
+    = scene_renderer.PrepareGpuDebugPrimitives(render_context, recorder);
   if (render_context.current_view.frame_exposure) {
     view_bindings.frame_exposure_slot
       = render_context.current_view.frame_exposure->srv_index;

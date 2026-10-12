@@ -191,7 +191,7 @@ auto RenderingSettingsService::GetGpuDebugPassEnabled() const -> bool
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  return settings->GetBool(kGpuDebugPassEnabledKey).value_or(true);
+  return settings->GetBool(kGpuDebugPassEnabledKey).value_or(false);
 }
 
 auto RenderingSettingsService::SetDebugMode(engine::ShaderDebugMode mode)
@@ -209,6 +209,7 @@ auto RenderingSettingsService::SetGpuDebugPassEnabled(bool enabled) -> void
   DCHECK_NOTNULL_F(settings);
   settings->SetBool(kGpuDebugPassEnabledKey, enabled);
   epoch_++;
+  ApplyVortexSettings();
 }
 
 auto RenderingSettingsService::GetAtmosphereBlueNoiseEnabled() const -> bool
@@ -261,7 +262,7 @@ auto RenderingSettingsService::SupportsWireframeColorControl() const -> bool
 
 auto RenderingSettingsService::SupportsGpuDebugPassControl() const -> bool
 {
-  return false;
+  return IsVortexRuntimeBound();
 }
 
 auto RenderingSettingsService::SupportsAtmosphereBlueNoiseControl() const
@@ -301,6 +302,20 @@ auto RenderingSettingsService::ApplyVortexSettings() -> void
     ToVortexDebugMode(GetEffectiveDebugMode()));
   vortex_renderer_->SetRenderMode(GetRenderMode());
   vortex_renderer_->SetWireframeColor(GetWireframeColor());
+
+  // The GPU debug pass shows the draw bounds producer's lines.
+  auto& diagnostics = vortex_renderer_->GetDiagnosticsService();
+  const auto requested = diagnostics.GetRequestedFeatures();
+  const auto gpu_debug = GetGpuDebugPassEnabled();
+  const auto features = gpu_debug
+    ? requested | vortex::DiagnosticsFeature::kGpuDebugPrimitives
+    : requested & ~vortex::DiagnosticsFeature::kGpuDebugPrimitives;
+  if (features != requested) {
+    diagnostics.SetEnabledFeatures(features);
+  }
+  diagnostics.SetGpuDebugPrimitiveSources(gpu_debug
+      ? vortex::GpuDebugPrimitiveSource::kDrawBounds
+      : vortex::GpuDebugPrimitiveSource::kNone);
 }
 
 } // namespace oxygen::examples

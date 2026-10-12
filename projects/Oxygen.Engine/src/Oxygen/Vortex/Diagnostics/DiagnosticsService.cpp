@@ -224,6 +224,40 @@ auto DiagnosticsService::SetGpuTimelineProfiler(
   RefreshLedgerState();
 }
 
+auto DiagnosticsService::IsGpuDebugPrimitivesEnabled() const -> bool
+{
+  std::scoped_lock lock(mutex_);
+  return HasAllFeatures(
+    enabled_features_, DiagnosticsFeature::kGpuDebugPrimitives);
+}
+
+auto DiagnosticsService::SetGpuDebugPrimitiveSources(
+  const GpuDebugPrimitiveSource sources) -> void
+{
+  std::scoped_lock lock(mutex_);
+  gpu_debug_sources_ = sources;
+}
+
+auto DiagnosticsService::GetGpuDebugPrimitiveSources() const
+  -> GpuDebugPrimitiveSource
+{
+  std::scoped_lock lock(mutex_);
+  return gpu_debug_sources_;
+}
+
+auto DiagnosticsService::SetGpuDebugLineCapacity(const std::uint32_t lines)
+  -> void
+{
+  std::scoped_lock lock(mutex_);
+  gpu_debug_line_capacity_ = (std::max)(lines, 1U);
+}
+
+auto DiagnosticsService::GetGpuDebugLineCapacity() const -> std::uint32_t
+{
+  std::scoped_lock lock(mutex_);
+  return gpu_debug_line_capacity_;
+}
+
 auto DiagnosticsService::SetGpuTimelineEnabled(const bool enabled) -> void
 {
   std::scoped_lock lock(mutex_);

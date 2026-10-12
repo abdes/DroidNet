@@ -5,7 +5,7 @@ Status: `in_progress`
 | Field     | Summary                                                                                                                                  |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | Outcome   | GPU work reads only immutable, ordered, receipt-retired data; every unwired renderer feature is finished; ED-M08 resumes after closeout. |
-| Remaining | Open: [VX-GPU-01](../../OPEN_ITEMS.md#p1--current-delivery), [VX-DIAG-01](../../OPEN_ITEMS.md#p1--current-delivery).                     |
+| Remaining | Open: [VX-GPU-01](../../OPEN_ITEMS.md#p1--current-delivery).                                                                             |
 | Evidence  | Per-slice evidence in the [slice table](#slices).                                                                                        |
 
 This milestone runs before ED-M08 resumes. It closes the defect class behind
@@ -176,7 +176,7 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 | S8  | Generated shared contracts                                             | M8, H8                      | S5, S6  | `planned`   | —      |
 | S9  | Unwired fields and dead code                                           | L2, L3, L4, L5, L6, L8, L11 | S3      | `validated` | —      |
 | S10 | Conventional shadow receiver analysis and receiver-mask caster culling | L1                          | S3, S5  | `planned`   | —      |
-| S11 | GPU debug primitives                                                   | L1, VX-DIAG-01              | S3, S6  | `planned`   | —      |
+| S11 | GPU debug primitives                                                   | L1, VX-DIAG-01              | S3, S6  | `validated` | —      |
 | S12 | Closeout                                                               | all                         | S1–S11  | `planned`   | —      |
 
 S1 and S2 come first: they remove the remaining causes of garbage material
@@ -385,8 +385,8 @@ Notes:
   draw-metadata load checks that domain.
 - Fixtures that render camera passes now publish a unit frame exposure; the
   shaders no longer supply one.
-- Recording invalid accesses in the diagnostics buffer, and reporting an
-  invalid material slot through it, move to S11, which builds that buffer.
+- Invalid accesses and invalid material slots are recorded in the GPU debug
+  buffer by S11.
 
 ## S7 — Frame and view lifecycle
 
@@ -467,19 +467,36 @@ Design: S0 shadows update (GD-6: GPU-driven, no readback).
 
 ## S11 — GPU debug primitives
 
-Design: S0 diagnostics update.
+Design: [diagnostics service §12](../../lld/diagnostics-service.md#12-gpu-debug-primitives).
 
-- [ ] Catalog `GpuDebugClear.hlsl` and `GpuDebugDraw.hlsl`; port them to the
-      input model.
-- [ ] `GpuDebugPrimitivePass`, bounded buffers, `DebugFrameBindings`
-      publication, `DiagnosticsFeature::kGpuDebugPrimitives` gate,
-      `FramePlanBuilder` wiring and the DemoShell toggle
-      (`RenderingSettingsService::SetGpuDebugPassEnabled` applies it).
-- [ ] Debug builds record invalid bindless accesses in the debug buffer
-      (from S6); an invalid material slot is reported there.
-- [ ] **Tests.** Primitives emitted by a test shader appear in the image;
-      overflow is bounded and reported; disabled path allocates nothing; an
-      invalid material slot is reported, not drawn.
+- [x] Catalog `GpuDebugClear.hlsl` and `GpuDebugDraw.hlsl`; port them to the
+      input model: the debug record travels in root constants, and the
+      helpers split into pure `GpuDebug.hlsli` and camera-only
+      `GpuDebugView.hlsli`.
+- [x] `GpuDebugPrimitivePass`: per-view bounded line and counter buffers,
+      `DebugFrameBindings` publication into `debug_frame_slot`, the
+      `DiagnosticsFeature::kGpuDebugPrimitives` gate, an indirect line draw
+      in stage 20 and counter readback with overflow and invalid-access
+      issues. The DemoShell toggle requests the feature and the draw-bounds
+      producer (`GpuDebugPrimitiveSource::kDrawBounds`, emitted by occlusion
+      phase 1).
+- [x] Invalid bindless loads in mesh vertex shaders and missing materials in
+      base-pass and forward pixels are counted in the debug buffer; such
+      pixels are discarded.
+- [x] **Tests.** Draw bounds appear in the image; overflow is bounded and
+      reported; the disabled path allocates nothing; an invalid material
+      slot is reported, not drawn.
+
+Notes:
+
+- The gate lives in `DiagnosticsService` alone; the unused frame planner
+  that carried a second GPU-debug flag is removed.
+- Invalid accesses are counted whenever the feature is on, in every build
+  configuration; successful loads cost nothing.
+- The image test uses the draw-bounds producer: nothing can run a test shader
+  inside a view's recording.
+- Lines draw always on top; a depth-tested mode is not needed by any producer
+  yet.
 
 ## S12 — Closeout
 

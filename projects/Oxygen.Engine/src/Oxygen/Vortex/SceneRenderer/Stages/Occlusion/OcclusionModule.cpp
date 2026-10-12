@@ -30,6 +30,8 @@
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/ReadbackTypes.h>
 #include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Internal/StructuredGpuBuffer.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
@@ -257,6 +259,12 @@ void OcclusionModule::BuildPhase1(RenderContext& ctx,
       && !stateless && draw_count != 0U,
     .depth_bias = config_.depth_bias,
   };
+  const auto debug_sources
+    = impl_->renderer->GetDiagnosticsService().GetGpuDebugPrimitiveSources();
+  if ((debug_sources & GpuDebugPrimitiveSource::kDrawBounds)
+    != GpuDebugPrimitiveSource::kNone) {
+    view.inputs.debug_bindings_srv = ctx.current_view.gpu_debug_bindings_slot;
+  }
 
   const auto key = MakeHistoryKey(resolved_view->StableProjectionMatrix(),
     clamped.viewport, clamped.scissors);

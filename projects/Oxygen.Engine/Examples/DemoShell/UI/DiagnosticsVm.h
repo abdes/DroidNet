@@ -103,7 +103,7 @@ private:
     vortex::RendererCapabilityFamily::kNone
   };
   graphics::Color wire_color_ { 1.0F, 1.0F, 1.0F, 1.0F };
-  bool gpu_debug_pass_enabled_ { true };
+  bool gpu_debug_pass_enabled_ { false };
   bool atmosphere_blue_noise_enabled_ { true };
 };
 

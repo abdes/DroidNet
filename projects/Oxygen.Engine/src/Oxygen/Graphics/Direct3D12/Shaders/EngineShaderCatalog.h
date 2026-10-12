@@ -555,6 +555,17 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
       EntryPoint { .type=kVertex, .name="VortexViewOverlayLineVS", .view_binding=kCamera }, },
   },
   ShaderFileSpec {
+    .path="Vortex/Services/Diagnostics/GpuDebugClear.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kCompute, .name="VortexGpuDebugClearCS" }, },
+  },
+  ShaderFileSpec {
+    .path="Vortex/Services/Diagnostics/GpuDebugDraw.hlsl",
+    .entries=std::array {
+      EntryPoint { .type=kVertex, .name="VortexGpuDebugDrawVS", .view_binding=kCamera },
+      EntryPoint { .type=kPixel, .name="VortexGpuDebugDrawPS", .view_binding=kCamera }, },
+  },
+  ShaderFileSpec {
     .path="Vortex/Services/Editor/ViewPick.hlsl",
     .entries=std::array {
       EntryPoint { .type=kPixel, .name="VortexViewPickPS", .view_binding=kCamera }, },
@@ -629,12 +640,13 @@ inline constexpr auto kEngineShaders = GenerateCatalog(
 // - VortexSelectionOutline: 4 (mask PS x ALPHA_TEST, composite VS + PS)
 // - VortexViewPick: 2 (PS x ALPHA_TEST)
 // - VortexViewOverlay: 3 (PS, triangle VS, line VS)
+// - VortexGpuDebug: 3 (clear CS, line draw VS + PS)
 // - VortexPostProcessBloomDownsample: 1 entry
 // - VortexPostProcessBloomUpsample: 1 entry
 // - VortexPostProcessExposure: 3 entries
 // - LightCulling: 1
 // - ImGui: 2 entries
 // - Compositing: 2 entries
-// Total: 118
+// Total: 121
 
 } // namespace oxygen::graphics::d3d12

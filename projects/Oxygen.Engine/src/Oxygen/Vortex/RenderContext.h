@@ -209,6 +209,9 @@ struct RenderContext {
     //! that do not bind b1 carry it in their inputs record to reach the same
     //! view values.
     ShaderVisibleIndex view_frame_bindings_slot { kInvalidShaderVisibleIndex };
+    //! The view's `DebugFrameBindings` record while GPU debug primitives are
+    //! enabled. Passes that do not bind b1 carry it to their producers.
+    ShaderVisibleIndex gpu_debug_bindings_slot { kInvalidShaderVisibleIndex };
     //! This view's per-draw visibility from occlusion culling, for list
     //! builds.
     DrawVisibilityProducts draw_visibility {};

@@ -58,7 +58,7 @@ struct alignas(16) OcclusionCullPassConstants {
   std::uint32_t draw_count { 0U };
   std::uint32_t flags { 0U };
   float depth_bias { 0.0F };
-  std::uint32_t _pad0 { 0U };
+  ShaderVisibleIndex debug_bindings_srv { kInvalidShaderVisibleIndex };
 };
 static_assert(sizeof(OcclusionCullPassConstants) == 192U);
 
@@ -115,6 +115,9 @@ struct DrawCullInputs {
   //! Relative view-depth margin a box must lie behind its occluders.
   float depth_bias { 0.0F };
   DrawCullHistory history {};
+  //! The view's GPU debug record; phase 1 then draws the box of every draw in
+  //! the frustum. Invalid draws nothing.
+  ShaderVisibleIndex debug_bindings_srv { kInvalidShaderVisibleIndex };
 };
 
 //! The furthest pyramid of phase 1 depth, in `kShaderResource`.

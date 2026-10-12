@@ -38,12 +38,16 @@ static inline BasePassMaterial LoadClippedBasePassMaterial(
         draw_bindings.draw_metadata_slot,
         draw_bindings.material_shading_constants_slot, draw_index,
         material.draw_material);
-#if defined(ALPHA_TEST)
-    if (material.has_material) {
-        const SamplerState linear_sampler = SamplerDescriptorHeap[0];
-        material.alpha_test = EvaluateMaskedAlphaTestForMaterial(
-            uv0, material.draw_material.constants, linear_sampler);
+    // A draw without its material is reported and never drawn.
+    if (!material.has_material) {
+        ReportGpuDebugInvalidMaterial(
+            draw_bindings.material_shading_constants_slot);
+        discard;
     }
+#if defined(ALPHA_TEST)
+    const SamplerState linear_sampler = SamplerDescriptorHeap[0];
+    material.alpha_test = EvaluateMaskedAlphaTestForMaterial(
+        uv0, material.draw_material.constants, linear_sampler);
     ApplyMaskedAlphaClip(material.alpha_test);
 #endif
     return material;

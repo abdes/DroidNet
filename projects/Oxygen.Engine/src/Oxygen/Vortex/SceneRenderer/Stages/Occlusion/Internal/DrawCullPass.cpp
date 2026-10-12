@@ -132,6 +132,7 @@ namespace {
       .draw_count = draw_count,
       .flags = flags,
       .depth_bias = inputs.depth_bias,
+      .debug_bindings_srv = inputs.debug_bindings_srv,
     };
   }
 

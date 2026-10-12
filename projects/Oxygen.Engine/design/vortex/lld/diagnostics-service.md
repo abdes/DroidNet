@@ -89,8 +89,8 @@ Default policy:
 - ImGui panels are off until the panel feature is enabled and an ImGui runtime is
   active.
 - capture manifest export is on-demand only; it does not continuously write.
-- GPU debug primitives are off by default and unavailable until their runtime
-  slice is implemented and proven.
+- GPU debug primitives are off by default; while off, no view owns debug
+  buffers or publishes a debug record.
 
 When the effective diagnostics feature mask is zero and shader debug mode is
 `kDisabled`:
@@ -160,15 +160,15 @@ Oxygen divergences:
 
 ### 4.1 Valuable Existing Surfaces
 
-| Surface                      | Current location                                                                    | Assessment                                                                                                                                                                                    | Required action                                                                                                                 |
-| ---------------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| GPU timeline profiler        | `src/Oxygen/Vortex/Internal/GpuTimelineProfiler.{h,cpp}`                            | Correct and valuable. It implements `graphics::IGpuProfileCollector`, records nested scopes, detects overflow/incomplete scopes, supports sinks, latest-frame retention, and JSON/CSV export. | Preserve. Expose through DiagnosticsService. Add frame-ledger correlation and service tests.                                    |
-| ImGui runtime                | `src/Oxygen/Vortex/Internal/ImGuiRuntime.{h,cpp}`                                   | Correct substrate. It initializes backend state, manages frame lifecycle, renders overlay texture, and returns composition data.                                                              | Preserve. Add service-owned panel registry on top.                                                                              |
-| Shader debug mode enum       | `src/Oxygen/Vortex/ShaderDebugMode.h`                                               | Valuable ABI used by Vortex, SceneRenderer, shaders, and DemoShell. Helper functions are real but metadata is incomplete.                                                                     | Preserve enum values. Add authoritative catalog and tests.                                                                      |
-| Deferred debug visualization | `SceneRenderer::RenderDebugVisualization`                                           | Real debug output for material/depth/shadow-mask views. Current mode filtering/name helpers are local to SceneRenderer.                                                                       | Preserve execution in SceneRenderer. Move mode metadata and product requirement truth to the catalog.                           |
-| GPU debug ABI and shaders    | `Types/DebugFrameBindings.h`; `Shaders/Vortex/Services/Diagnostics/*`               | Useful assets, not a complete runtime feature.                                                                                                                                                | Mark as asset-only until CPU resources, pass scheduling, EngineShaderCatalog registration, ShaderBake, and runtime proof exist. |
-| DemoShell controls           | `Examples/DemoShell/Services/RenderingSettingsService.*`; `Examples/DemoShell/UI/*` | Useful operator controls, but mappings are duplicated.                                                                                                                                        | Convert to debug-mode registry consumers after the registry lands.                                                              |
-| External proof tools         | `tools/vortex/*`; `tools/shadows/renderdoc_ui_analysis.py`                          | Essential for capture analysis, debug-layer audits, and validation.                                                                                                                           | Keep external. Define runtime export contracts they can consume.                                                                |
+| Surface                      | Current location                                                                      | Assessment                                                                                                                                                                                    | Required action                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| GPU timeline profiler        | `src/Oxygen/Vortex/Internal/GpuTimelineProfiler.{h,cpp}`                              | Correct and valuable. It implements `graphics::IGpuProfileCollector`, records nested scopes, detects overflow/incomplete scopes, supports sinks, latest-frame retention, and JSON/CSV export. | Preserve. Expose through DiagnosticsService. Add frame-ledger correlation and service tests.          |
+| ImGui runtime                | `src/Oxygen/Vortex/Internal/ImGuiRuntime.{h,cpp}`                                     | Correct substrate. It initializes backend state, manages frame lifecycle, renders overlay texture, and returns composition data.                                                              | Preserve. Add service-owned panel registry on top.                                                    |
+| Shader debug mode enum       | `src/Oxygen/Vortex/ShaderDebugMode.h`                                                 | Valuable ABI used by Vortex, SceneRenderer, shaders, and DemoShell. Helper functions are real but metadata is incomplete.                                                                     | Preserve enum values. Add authoritative catalog and tests.                                            |
+| Deferred debug visualization | `SceneRenderer::RenderDebugVisualization`                                             | Real debug output for material/depth/shadow-mask views. Current mode filtering/name helpers are local to SceneRenderer.                                                                       | Preserve execution in SceneRenderer. Move mode metadata and product requirement truth to the catalog. |
+| GPU debug primitives         | `Diagnostics/Passes/GpuDebugPrimitivePass.*`; `Shaders/Vortex/Services/Diagnostics/*` | Bounded per-view lines and invalid-access counters, drawn over the view output.                                                                                                               | See [§12](#12-gpu-debug-primitives).                                                                  |
+| DemoShell controls           | `Examples/DemoShell/Services/RenderingSettingsService.*`; `Examples/DemoShell/UI/*`   | Useful operator controls, but mappings are duplicated.                                                                                                                                        | Convert to debug-mode registry consumers after the registry lands.                                    |
+| External proof tools         | `tools/vortex/*`; `tools/shadows/renderdoc_ui_analysis.py`                            | Essential for capture analysis, debug-layer audits, and validation.                                                                                                                           | Keep external. Define runtime export contracts they can consume.                                      |
 
 ### 4.2 Problems This Design Fixes
 
@@ -178,7 +178,6 @@ Oxygen divergences:
   debug mode, GPU timeline state, and warnings together.
 - There is no stable runtime schema that external tools can parse before falling
   back to RenderDoc-specific heuristics.
-- GPU debug primitive shaders exist without runtime product truth.
 - Diagnostics terminology is inconsistent. A debug mode name, shader define,
   UI label, capture label, and analyzer key can drift.
 
@@ -203,7 +202,7 @@ src/Oxygen/Vortex/
       GpuTimelineDiagnosticsAdapter.h/.cpp
       ImGuiDiagnosticsPanelRegistry.h/.cpp
     Passes/
-      GpuDebugPrimitivePass.h/.cpp      # VX-GPU-01 S11
+      GpuDebugPrimitivePass.h/.cpp
 ```
 
 Shader assets remain under:
@@ -675,22 +674,60 @@ understand from a ledger, a timeline, or a capture manifest alone.
 They are not core M05A unless a required M05A proof cannot be understood without
 shader-emitted visual geometry.
 
-If a later slice enables them, the scope is deliberately small:
+### 12.1 Gate and producers
 
-- fixed-capacity per-frame primitive buffer with overflow count
-- explicit runtime feature gate plus explicit producer/debug-mode opt-in
-- shader include with a small set of helpers such as debug line/cross/box emit
-- clear and draw integration in a named overlay pass
-- optional depth-tested versus always-on-top display mode
-- EngineShaderCatalog and ShaderBake/catalog validation for any shader changes
-- disabled-path proof that producers compile out or no-op cleanly
-- enabled-path runtime or RenderDoc proof that primitives appear and overflow is
-  bounded
+- `DiagnosticsFeature::kGpuDebugPrimitives` is the only switch. While it is
+  off, `GpuDebugPrimitivePass::Prepare` releases the view's buffers and
+  publishes nothing; `ViewFrameBindings::debug_frame_slot` stays invalid and
+  every shader helper is a no-op.
+- `DiagnosticsService::SetGpuDebugPrimitiveSources` opts producers in.
+  `GpuDebugPrimitiveSource::kDrawBounds` makes occlusion phase 1 draw the box
+  of every draw in a camera view's frustum: green when phase 1 draws it,
+  yellow when it waits for phase 2.
+- DemoShell's "Show Draw Bounds (GPU Debug)" toggle requests the feature and
+  the draw-bounds producer.
 
-[VX-GPU-01 S11](../milestones/VX-GPU-01/README.md#s11--gpu-debug-primitives)
-delivers this scope under [VX-DIAG-01](../OPEN_ITEMS.md): the existing
-`GpuDebug*` shaders, `DebugFrameBindings`, `DiagnosticsFeature::kGpuDebugPrimitives`
-and the DemoShell toggle become one working path.
+### 12.2 Buffers and record
+
+Each enabled view owns two device-local structured buffers:
+
+- a line buffer of `GpuDebugLine` (two world-space points and colors), sized
+  by `DiagnosticsService::SetGpuDebugLineCapacity` (65536 lines by default);
+- a counter buffer of eight words, `GpuDebugCounters`: the line draw's
+  `D3D12_DRAW_ARGUMENTS`, then lines requested, invalid bindless loads,
+  draws without their material, and the slot of the latest invalid access.
+
+`Prepare` runs while the pre-scene view record is built. It publishes a
+`DebugFrameBindings` record (line SRV and UAV, counter UAV, capacity) into
+`debug_frame_slot`, and dispatches `VortexGpuDebugClearCS` before any
+producer runs. Passes that do not bind the camera view constants carry the
+record in their inputs (`RenderContext::current_view.gpu_debug_bindings_slot`,
+for example the occlusion cull constants).
+
+### 12.3 Shader helpers
+
+- `GpuDebug.hlsli` is pure: `AddGpuDebugLine`, `AddGpuDebugCross` and
+  `AddGpuDebugBox` take the bindings. A line takes a slot from the requested
+  counter; slots below the capacity are stored and counted as drawn, so the
+  draw count ends at `min(requested, capacity)` and overflow is never drawn.
+- `GpuDebugView.hlsli` is camera-only. It reaches the bindings through the
+  bound view and reports invalid accesses:
+  - mesh vertex shaders report draw-metadata and transform loads that fail
+    their domain and bounds checks;
+  - base-pass and forward pixels whose material cannot be loaded report the
+    materials slot and discard: a draw without its material is never drawn.
+
+Reports cost nothing on successful loads and work in every build
+configuration while the feature is on.
+
+### 12.4 Draw, readback and issues
+
+Stage 20 draws the stored lines last among the editor aids, always on top
+and unblended, with `VortexGpuDebugDrawVS/PS` and one indirect draw from the
+counter buffer. The counters are then read back. A later frame collects them
+as `GpuDebugPrimitiveStats` (`SceneRenderer::GetGpuDebugPrimitiveStats`) and
+reports at most one issue of each kind per view and collection:
+`gpu-debug.overflow` (warning) and `gpu-debug.invalid-access` (error).
 
 ## 13. Contract Failures And Minimal Runtime Issues
 
@@ -718,6 +755,8 @@ Initial issue vocabulary should be minimal and tied to implemented behavior:
 | `diag.manifest-write-failed` | A requested capture manifest export failed.                                  |
 | `timeline.query-overflow`    | GPU timestamp capacity was exceeded.                                         |
 | `timeline.incomplete-scope`  | A GPU timing scope could not produce a complete duration.                    |
+| `gpu-debug.overflow`         | A view emitted more GPU debug lines than its capacity.                       |
+| `gpu-debug.invalid-access`   | A view's shaders failed a bindless load or a material load.                  |
 | `debug-mode.unsupported`     | A requested debug mode is not supported by current renderer/capabilities.    |
 | `debug-mode.missing-product` | A recoverable debug mode request lacks an input product.                     |
 | `product.stale`              | A published product exists but is not valid for the current frame.           |

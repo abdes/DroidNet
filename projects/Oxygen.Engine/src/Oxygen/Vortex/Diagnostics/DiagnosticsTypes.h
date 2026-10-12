@@ -36,6 +36,31 @@ OXYGEN_DEFINE_FLAGS_OPERATORS(DiagnosticsFeature)
 
 using DiagnosticsFeatureSet = DiagnosticsFeature;
 
+//! Producers that emit GPU debug primitives while `kGpuDebugPrimitives` is
+//! enabled.
+// NOLINTNEXTLINE(*-enum-size)
+enum class GpuDebugPrimitiveSource : std::uint32_t {
+  kNone = 0,
+  //! The box of every draw in a camera view's frustum: green when drawn in
+  //! the first occlusion phase, yellow when left to the second.
+  kDrawBounds = OXYGEN_FLAG(0),
+};
+
+OXYGEN_DEFINE_FLAGS_OPERATORS(GpuDebugPrimitiveSource)
+
+//! What a view's GPU debug buffers recorded in one frame.
+struct GpuDebugPrimitiveStats {
+  frame::SequenceNumber frame_sequence { 0U };
+  std::uint32_t line_capacity { 0U };
+  //! Lines producers emitted; those past the capacity were not drawn.
+  std::uint32_t requested_lines { 0U };
+  std::uint32_t drawn_lines { 0U };
+  std::uint32_t invalid_bindless_accesses { 0U };
+  std::uint32_t invalid_materials { 0U };
+  //! The slot of the latest invalid access of either kind.
+  std::uint32_t last_invalid_slot { 0U };
+};
+
 enum class DiagnosticsSeverity : std::uint8_t {
   kInfo,
   kWarning,
@@ -50,6 +75,8 @@ enum class DiagnosticsIssueCode : std::uint8_t {
   kUnsupportedDebugMode,
   kMissingDebugModeProduct,
   kStaleProduct,
+  kGpuDebugOverflow,
+  kGpuDebugInvalidAccess,
 };
 
 enum class DiagnosticsPassKind : std::uint8_t {
@@ -172,6 +199,10 @@ struct IblGpuTiming {
     return "debug-mode.missing-product";
   case DiagnosticsIssueCode::kStaleProduct:
     return "product.stale";
+  case DiagnosticsIssueCode::kGpuDebugOverflow:
+    return "gpu-debug.overflow";
+  case DiagnosticsIssueCode::kGpuDebugInvalidAccess:
+    return "gpu-debug.invalid-access";
   }
   return "__Unknown__";
 }

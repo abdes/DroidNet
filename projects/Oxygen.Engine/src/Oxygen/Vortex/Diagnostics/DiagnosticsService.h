@@ -57,6 +57,8 @@ enum class HdrPrecisionControl : std::uint8_t {
 
 class DiagnosticsService {
 public:
+  static constexpr std::uint32_t kDefaultGpuDebugLineCapacity { 65536U };
+
   OXGN_VRTX_API explicit DiagnosticsService(CapabilitySet renderer_capabilities,
     DiagnosticsConfig config = DiagnosticsConfig::Default());
   OXGN_VRTX_API ~DiagnosticsService();
@@ -96,6 +98,19 @@ public:
     -> HdrPrecisionControl;
   [[nodiscard]] OXGN_VRTX_API auto GetHdrPrecisionControlRevision() const
     -> std::uint64_t;
+
+  //! Whether views publish GPU debug buffers this frame: the
+  //! `kGpuDebugPrimitives` feature is enabled.
+  [[nodiscard]] OXGN_VRTX_API auto IsGpuDebugPrimitivesEnabled() const -> bool;
+  //! Producers that emit primitives while GPU debug primitives are enabled.
+  OXGN_VRTX_API auto SetGpuDebugPrimitiveSources(
+    GpuDebugPrimitiveSource sources) -> void;
+  [[nodiscard]] OXGN_VRTX_API auto GetGpuDebugPrimitiveSources() const
+    -> GpuDebugPrimitiveSource;
+  //! Lines each view stores per frame; at least one.
+  OXGN_VRTX_API auto SetGpuDebugLineCapacity(std::uint32_t lines) -> void;
+  [[nodiscard]] OXGN_VRTX_API auto GetGpuDebugLineCapacity() const
+    -> std::uint32_t;
 
   OXGN_VRTX_API auto SetGpuTimelineEnabled(bool enabled) -> void;
   [[nodiscard]] OXGN_VRTX_API auto IsGpuTimelineEnabled() const -> bool;
@@ -168,6 +183,8 @@ private:
   observer_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_ {
     nullptr
   };
+  GpuDebugPrimitiveSource gpu_debug_sources_ { GpuDebugPrimitiveSource::kNone };
+  std::uint32_t gpu_debug_line_capacity_ { kDefaultGpuDebugLineCapacity };
   bool gpu_timeline_enabled_requested_ { false };
   bool complete_user_timing_active_ { false };
   std::uint64_t current_frame_ {};

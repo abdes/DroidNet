@@ -14,6 +14,7 @@
 
 #define BX_VERTEX_TYPE Vertex
 #include "Core/Bindless/BindlessHelpers.hlsl"
+#include "Vortex/Services/Diagnostics/GpuDebugView.hlsli"
 
 // Mesh shaders take their draw index from SV_StartInstanceLocation (see
 // Vortex/Contracts/Draw/DrawHelpers.hlsli); they read only the pass constants
@@ -55,6 +56,7 @@ BasePassGBufferVSOutput BasePassGBufferVS(
     DrawMetadata metadata;
     if (!BX_LoadDrawMetadata(
             draw_bindings.draw_metadata_slot, draw_index, metadata)) {
+        ReportGpuDebugInvalidBindless(draw_bindings.draw_metadata_slot);
         return output;
     }
 
@@ -67,12 +69,14 @@ BasePassGBufferVSOutput BasePassGBufferVS(
     if (!BX_TryLoadInstanceWorldMatrix(
             draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot,
             metadata, instance_id, world_matrix)) {
+        ReportGpuDebugInvalidBindless(draw_bindings.current_worlds_slot);
         return output;
     }
     float4x4 previous_world_matrix;
     if (!BX_TryLoadInstanceWorldMatrix(
             draw_bindings.previous_worlds_slot, draw_bindings.instance_data_slot,
             metadata, instance_id, previous_world_matrix)) {
+        ReportGpuDebugInvalidBindless(draw_bindings.previous_worlds_slot);
         return output;
     }
     uint transform_index = 0u;
@@ -82,6 +86,7 @@ BasePassGBufferVSOutput BasePassGBufferVS(
             transform_index)
         || !BX_TryLoadMatrix(draw_bindings.normal_matrices_slot,
             transform_index, normal_transform)) {
+        ReportGpuDebugInvalidBindless(draw_bindings.normal_matrices_slot);
         return output;
     }
     VelocityDrawMetadata velocity_metadata = MakeInvalidVelocityDrawMetadata();

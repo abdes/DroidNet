@@ -13,6 +13,7 @@
 
 #define BX_VERTEX_TYPE Vertex
 #include "Core/Bindless/BindlessHelpers.hlsl"
+#include "Vortex/Services/Diagnostics/GpuDebugView.hlsli"
 
 // Mesh shaders take their draw index from SV_StartInstanceLocation (see
 // Vortex/Contracts/Draw/DrawHelpers.hlsli); they read only the pass constants
@@ -45,6 +46,7 @@ DepthPrepassVSOutput DepthPrepassVS(uint vertex_id : SV_VertexID,
     DrawMetadata metadata;
     if (!BX_LoadDrawMetadata(
             draw_bindings.draw_metadata_slot, draw_index, metadata)) {
+        ReportGpuDebugInvalidBindless(draw_bindings.draw_metadata_slot);
         return output;
     }
 
@@ -58,6 +60,7 @@ DepthPrepassVSOutput DepthPrepassVS(uint vertex_id : SV_VertexID,
     if (!BX_TryLoadInstanceWorldMatrix(
             draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot,
             metadata, instance_id, world_matrix)) {
+        ReportGpuDebugInvalidBindless(draw_bindings.current_worlds_slot);
         return output;
     }
     output.position = ComputeMeshClipPosition(world_matrix, vertex.position,

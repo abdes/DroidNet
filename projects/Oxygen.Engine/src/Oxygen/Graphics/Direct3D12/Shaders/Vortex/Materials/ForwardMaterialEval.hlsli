@@ -10,6 +10,7 @@
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
+#include "Vortex/Services/Diagnostics/GpuDebugView.hlsli"
 #include "Vortex/Shared/MaskedAlphaTest.hlsli"
 #include "Vortex/Shared/PristineGrid.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
@@ -333,6 +334,12 @@ MaterialSurface EvaluateMaterialSurface(
     const bool has_material = TryLoadDrawMaterialFromSlots(
         draw_bindings.draw_metadata_slot,
         draw_bindings.material_shading_constants_slot, draw_index, draw_material);
+    // A draw without its material is reported and never drawn.
+    if (!has_material) {
+        ReportGpuDebugInvalidMaterial(
+            draw_bindings.material_shading_constants_slot);
+        discard;
+    }
     return EvaluateMaterialSurfaceForMaterial(world_pos, world_normal,
         world_tangent, world_bitangent, uv0, has_material, draw_material,
         draw_bindings.procedural_grid_material_constants_slot, is_front_face);
