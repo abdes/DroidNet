@@ -542,6 +542,25 @@ data (identity matrices, depth 1.0, default environment, unit exposure, current
 as history, unclipped masked surfaces). Debug builds record invalid accesses in
 the diagnostics buffer.
 
+- **CPU.** `PerViewStructuredPublisher::Publish` returns `std::expected`.
+  Required view records go through the renderer's publication path, which logs
+  the record that failed, clears the view's b1 record and returns false; the
+  scene renderer then rejects the view. Pass records a recording cannot do
+  without use `RequirePublished`, whose exception fails the view's recording
+  with the reason; optional ones use `SlotOrInvalid`, which logs. Staging
+  budget rejections log once per frame per buffer. A camera pass checks
+  `HasViewConstants` before recording and binds b1 unconditionally.
+- **Shaders.** Required loads are `Try*` functions that return `false` with
+  zeroed outputs: `BX_LoadDrawMetadata`, `BX_TryLoadMatrix`,
+  `BX_TryResolveTransformIndex`, `BX_TryLoadInstanceWorldMatrix`,
+  `TrySampleSceneDepth`, `TryLoadFrameExposure`,
+  `TryLoadViewHistoryFrameBindings`, `TryLoadEnvironmentViewData`. On failure
+  a vertex shader returns its zeroed output, so the draw rasterizes nothing; a
+  pixel shader discards; a compute shader returns. Masked pixels without
+  material data are discarded. The bound-view getters that cannot fail (for
+  example `GetPreExposure`) read zeroed data when the record is missing, which
+  renders black rather than plausible.
+
 **Domains.** Slot checks use the domain the contract declares: draw metadata
 and materials are in the materials domain, so a global-SRV check is wrong for
 them. Typed accessors per contract perform the check.

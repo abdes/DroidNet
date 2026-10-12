@@ -129,7 +129,11 @@ float4 VortexSkyPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
     }
 
     const float3 view_direction = ReconstructViewDirection(input.uv);
-    const EnvironmentViewData environment_view = LoadResolvedEnvironmentViewData();
+    EnvironmentViewData environment_view;
+    if (!TryLoadResolvedEnvironmentViewData(environment_view))
+    {
+        discard;
+    }
     const float4 height_fog = EvaluateSkyHeightFog(env_data, environment_view,
         camera_position, view_direction, false);
     if (IsSkyHeightFogEnabled(env_data.fog, environment_view, false))

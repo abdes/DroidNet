@@ -281,6 +281,7 @@ NOLINT_TEST_F(ExposureGpuTest, FogShadowsFollowAtmosphereSourceIdentity)
     lighting.directional_shadow_map_srv = publish_records(case_references);
     auto bindings = ViewFrameBindings {};
     bindings.lighting_frame_slot = PublishFixtureData(lighting);
+    bindings.frame_exposure_slot = PublishUnitFrameExposure();
     bindings.shadow_frame_slot = PublishFixtureData(shadows);
     auto view = ViewConstants::GpuData {};
     view.view_frame_bindings_bslot
@@ -396,7 +397,11 @@ NOLINT_TEST_F(ExposureGpuTest, VolumetricPhaseScattersTowardEachAtmosphereLight)
         .SetRootBindings(ExposureProbeRootBindings())
         .Build();
   // Identity view matrices place this cell on -Z, looking back toward +Z.
-  const auto view = ViewConstants::GpuData {};
+  auto view_bindings = ViewFrameBindings {};
+  view_bindings.frame_exposure_slot = PublishUnitFrameExposure();
+  auto view = ViewConstants::GpuData {};
+  view.view_frame_bindings_bslot
+    = BindlessViewFrameBindingsSlot { PublishFixtureData(view_bindings) };
   auto view_buffer
     = CreateUploadBuffer(SizeBytes { 256U }, graphics::BufferUsage::kConstant);
   view_buffer->Update(&view, sizeof(view), 0U);

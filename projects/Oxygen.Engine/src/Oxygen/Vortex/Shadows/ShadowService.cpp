@@ -187,7 +187,9 @@ auto ShadowService::PublishShadowBindings(
     return kInvalidShaderVisibleIndex;
   }
   bindings.sampling_flags = kShadowSamplingReversedZPcf;
-  return bindings_publisher_->Publish(view_id, bindings);
+  return internal::SlotOrInvalid(
+    bindings_publisher_->Publish(view_id, bindings), view_id,
+    "shadow frame bindings");
 }
 
 auto ShadowService::PrepareLocalRequests(const FrameShadowInputs& inputs)

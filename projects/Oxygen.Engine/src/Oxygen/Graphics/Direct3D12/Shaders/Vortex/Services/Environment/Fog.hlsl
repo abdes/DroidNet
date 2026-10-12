@@ -114,7 +114,10 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
         return 0.0f.xxxx;
     }
 
-    const EnvironmentViewData environment_view = LoadResolvedEnvironmentViewData();
+    EnvironmentViewData environment_view;
+    if (!TryLoadResolvedEnvironmentViewData(environment_view)) {
+        discard;
+    }
     if (!FogFlagEnabled(fog.flags, GPU_FOG_FLAG_RENDER_IN_MAIN_PASS)) {
         return 0.0f.xxxx;
     }
@@ -127,7 +130,10 @@ float4 VortexFogPassPS(VortexFullscreenTriangleOutput input) : SV_Target0
 
     const SceneTextureBindingData bindings =
         LoadSceneTextureBindings(bindless_view_frame_bindings_slot);
-    const float raw_depth = SampleSceneDepth(input.uv, bindings);
+    float raw_depth;
+    if (!TrySampleSceneDepth(input.uv, bindings, raw_depth)) {
+        discard;
+    }
     if (EvaluateFarBackgroundMask(raw_depth) > 0.999f) {
         return 0.0f.xxxx;
     }

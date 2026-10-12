@@ -30,6 +30,7 @@
 #include <Oxygen/Vortex/Environment/Passes/SkyPass.h>
 #include <Oxygen/Vortex/Environment/SceneBackground.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
+#include <Oxygen/Vortex/Internal/ViewConstantsGuard.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -221,6 +222,10 @@ auto SkyPass::Record(RenderContext& ctx, graphics::CommandRecorder& recorder,
   auto framebuffer
     = gfx->CreateFramebuffer(BuildSkyFramebuffer(scene_textures));
 
+  if (!vortex::internal::HasViewConstants(ctx, "Vortex.Stage15.Sky")) {
+    state.executed = false;
+    return state;
+  }
   graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage15.Sky",
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
@@ -244,11 +249,9 @@ auto SkyPass::Record(RenderContext& ctx, graphics::CommandRecorder& recorder,
   recorder.BindFrameBuffer(*framebuffer);
   SetViewportAndScissor(recorder, ctx, scene_textures);
   recorder.SetPipelineState(BuildSkyPipelineDesc(scene_textures));
-  if (ctx.view_constants.IsValid()) {
-    recorder.SetGraphicsRootConstantBufferView(
-      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-      ctx.view_constants.GpuAddress());
-  }
+  recorder.SetGraphicsRootConstantBufferView(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
+    ctx.view_constants.GpuAddress());
   recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);

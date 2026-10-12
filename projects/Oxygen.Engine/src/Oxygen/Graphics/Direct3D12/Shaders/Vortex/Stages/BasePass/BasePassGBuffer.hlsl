@@ -63,26 +63,36 @@ BasePassGBufferVSOutput BasePassGBufferVS(
     const Vertex vertex
         = BX_LoadVertex(metadata.vertex_buffer_index, actual_vertex_index);
 
-    const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
-        draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot, metadata,
-        instance_id);
-    const float4x4 previous_world_matrix = BX_LoadInstanceWorldMatrix(
-        draw_bindings.previous_worlds_slot, draw_bindings.instance_data_slot, metadata,
-        instance_id);
-    const uint transform_index = BX_ResolveTransformIndex(
-        metadata, draw_bindings.instance_data_slot, instance_id);
+    float4x4 world_matrix;
+    if (!BX_TryLoadInstanceWorldMatrix(
+            draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot,
+            metadata, instance_id, world_matrix)) {
+        return output;
+    }
+    float4x4 previous_world_matrix;
+    if (!BX_TryLoadInstanceWorldMatrix(
+            draw_bindings.previous_worlds_slot, draw_bindings.instance_data_slot,
+            metadata, instance_id, previous_world_matrix)) {
+        return output;
+    }
+    uint transform_index = 0u;
+    float4x4 normal_transform;
+    if (!BX_TryResolveTransformIndex(
+            metadata, draw_bindings.instance_data_slot, instance_id,
+            transform_index)
+        || !BX_TryLoadMatrix(draw_bindings.normal_matrices_slot,
+            transform_index, normal_transform)) {
+        return output;
+    }
     VelocityDrawMetadata velocity_metadata = MakeInvalidVelocityDrawMetadata();
     LoadVelocityDrawMetadata(
         draw_bindings.velocity_draw_metadata_slot, draw_index, velocity_metadata);
-    const ViewHistoryFrameBindings view_history
-        = LoadResolvedViewHistoryFrameBindings();
-
-    float3x3 normal_matrix = (float3x3)world_matrix;
-    if (draw_bindings.normal_matrices_slot != K_INVALID_BINDLESS_INDEX) {
-        StructuredBuffer<float4x4> normal_matrices
-            = ResourceDescriptorHeap[draw_bindings.normal_matrices_slot];
-        normal_matrix = (float3x3)normal_matrices[transform_index];
+    ViewHistoryFrameBindings view_history;
+    if (!TryLoadResolvedViewHistoryFrameBindings(view_history)) {
+        return output;
     }
+
+    const float3x3 normal_matrix = (float3x3)normal_transform;
 
     const float3x3 world_basis = (float3x3)world_matrix;
     const float3 current_material_wpo_offset

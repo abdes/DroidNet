@@ -12,11 +12,16 @@
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
 // Camera-view exposure: the bound view's frame exposure publication.
+// The bound view's exposure. A view without one, which the renderer rejects
+// before recording, reads zero pre-exposure and renders black rather than at a
+// plausible neutral exposure.
 static FrameExposureData GetFrameExposure()
 {
     const ViewFrameBindings bindings
         = LoadViewFrameBindings(bindless_view_frame_bindings_slot);
-    return LoadFrameExposure(bindings.frame_exposure_slot);
+    FrameExposureData exposure;
+    TryLoadFrameExposure(bindings.frame_exposure_slot, exposure);
+    return exposure;
 }
 
 static float GetPreExposure()

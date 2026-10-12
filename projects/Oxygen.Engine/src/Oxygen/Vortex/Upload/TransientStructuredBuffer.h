@@ -209,6 +209,8 @@ private:
   // Sequence number for the current frame; stored so returned allocations
   // include the frame sequence they were created in.
   frame::SequenceNumber current_frame_ { frame::SequenceNumber { 0 } };
+  //! The last frame whose budget rejection was logged; one warning per frame.
+  frame::SequenceNumber budget_warning_frame_ { frame::kInvalidSequenceNumber };
   std::array<SlotData, frame::kFramesInFlight.get()> slots_ {};
   std::shared_ptr<FrameAnchor> frame_anchor_;
 

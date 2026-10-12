@@ -1745,7 +1745,12 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
         throw std::runtime_error(
           "Required auxiliary output has no color texture");
       }
-      renderer_.PublishCurrentViewPostSceneFrameBindings(ctx, *this);
+      if (!renderer_.PublishCurrentViewPostSceneFrameBindings(ctx, *this)) {
+        LogViewRejection(
+          entry.view_id, "post-scene frame bindings were not published");
+        ResetPerViewSceneProducts();
+        continue;
+      }
       renderer_.DispatchViewExtensionsOnPostRenderViewGpu(ctx, recorder);
       result.failure = ViewRenderFailure::kSubmission;
       if (!recording.Submit()) {
@@ -2259,8 +2264,8 @@ auto SceneRenderer::RenderCurrentView(
         ctx.current_view.screen_hzb_has_previous = true;
       }
     }
-    if (screen_hzb_output.available) {
-      PublishScreenHzbProducts(ctx);
+    if (screen_hzb_output.available && !PublishScreenHzbProducts(ctx)) {
+      return false;
     }
   }
   RecordDiagnosticsPass(renderer_,
@@ -2393,6 +2398,11 @@ auto SceneRenderer::RenderCurrentView(
     environment_lighting_state_.published_environment_frame_slot
       = published_view_frame_bindings_.environment_frame_slot;
     environment_lighting_state_.owned_by_environment_service = true;
+    if (!published_view_frame_bindings_.environment_frame_slot.IsValid()) {
+      LogViewRejection(
+        ctx.current_view.view_id, "environment bindings were not published");
+      return false;
+    }
     const auto* environment_bindings
       = environment_->InspectBindings(ctx.current_view.view_id);
     if (environment_bindings != nullptr) {
@@ -2409,7 +2419,9 @@ auto SceneRenderer::RenderCurrentView(
   if ((shadows_ != nullptr && wants_shadow_products)
     || (environment_ != nullptr && wants_environment)
     || (lighting_ != nullptr && wants_scene_lighting)) {
-    renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+    if (!renderer_.RefreshCurrentViewFrameBindings(ctx, *this)) {
+      return false;
+    }
   }
 
   // Stage 9: Base pass
@@ -2436,8 +2448,10 @@ auto SceneRenderer::RenderCurrentView(
       PublishBasePassVelocity();
     }
     if (base_pass_result.published_base_pass_products) {
-      PublishDeferredBasePassSceneTextures(ctx);
-      renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+      if (!PublishDeferredBasePassSceneTextures(ctx)
+        || !renderer_.RefreshCurrentViewFrameBindings(ctx, *this)) {
+        return false;
+      }
     } else if (base_pass_result.wrote_scene_color
       && shading_mode == ShadingMode::kForward && !wireframe_only) {
       // Forward base shading writes these attachments without producing
@@ -2445,7 +2459,9 @@ auto SceneRenderer::RenderCurrentView(
       setup_mode_.SetFlags(SceneTextureSetupMode::Flag::kSceneColor
         | SceneTextureSetupMode::Flag::kSceneDepth);
       RefreshSceneTextureBindings();
-      renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+      if (!renderer_.RefreshCurrentViewFrameBindings(ctx, *this)) {
+        return false;
+      }
     }
   }
   auto base_pass_outputs = std::vector<std::string> {};
@@ -2960,7 +2976,9 @@ auto SceneRenderer::RenderCurrentView(
     RecordDiagnosticsViewProduct(renderer_, "Vortex.PostProcessFrameBindings",
       "Vortex.Stage22.PostProcess",
       published_view_frame_bindings_.post_process_frame_slot);
-    renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+    if (!renderer_.RefreshCurrentViewFrameBindings(ctx, *this)) {
+      return false;
+    }
   }
 
   if (post_process_) {
@@ -3132,15 +3150,18 @@ void SceneRenderer::PublishDepthPrepassProducts()
   RefreshSceneTextureBindings();
 }
 
-void SceneRenderer::PublishScreenHzbProducts(RenderContext& ctx)
+auto SceneRenderer::PublishScreenHzbProducts(RenderContext& ctx) -> bool
 {
   CHECK_F(ctx.current_view.view_id != kInvalidViewId,
     "SceneRenderer: PublishScreenHzbProducts requires a valid current view");
   CHECK_F(ctx.frame_slot != frame::kInvalidSlot,
     "SceneRenderer: PublishScreenHzbProducts requires a valid frame slot");
-  renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+  if (!renderer_.RefreshCurrentViewFrameBindings(ctx, *this)) {
+    return false;
+  }
   ctx.current_view.screen_hzb_frame_slot
     = published_view_frame_bindings_.screen_hzb_frame_slot;
+  return true;
 }
 
 void SceneRenderer::PublishBasePassVelocity()
@@ -3162,7 +3183,8 @@ void SceneRenderer::PublishBasePassVelocity()
     "before the Stage 10 rebuild boundary");
 }
 
-void SceneRenderer::PublishDeferredBasePassSceneTextures(RenderContext& ctx)
+auto SceneRenderer::PublishDeferredBasePassSceneTextures(RenderContext& ctx)
+  -> bool
 {
   auto& scene_textures = ActiveSceneTextures();
   // SceneRenderer is the sole owner of the deferred base-pass scene-texture
@@ -3184,10 +3206,13 @@ void SceneRenderer::PublishDeferredBasePassSceneTextures(RenderContext& ctx)
     | SceneTextureSetupMode::Flag::kSceneDepth
     | SceneTextureSetupMode::Flag::kStencil);
   RefreshSceneTextureBindings();
-  renderer_.RefreshCurrentViewFrameBindings(ctx, *this);
+  if (!renderer_.RefreshCurrentViewFrameBindings(ctx, *this)) {
+    return false;
+  }
   CHECK_F(HasPublishedGBufferBindings(scene_texture_bindings_),
     "SceneRenderer: Stage 10 must publish GBuffer bindings before deferred "
     "lighting or GBuffer debug inspection");
+  return true;
 }
 
 void SceneRenderer::PublishCustomDepthProducts()

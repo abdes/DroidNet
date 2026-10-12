@@ -171,8 +171,14 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
   if (!result) {
     auto ec = make_error_code(result.error());
     if (result.error() != UploadError::kBudgetExceeded) {
-      LOG_F(ERROR, "Allocation from staging buffer failed: {} (code {})",
-        ec.message(), ec.value());
+      LOG_F(
+        ERROR, "{}: staging allocation failed: {}", debug_label_, ec.message());
+    } else if (budget_warning_frame_ != current_frame_) {
+      budget_warning_frame_ = current_frame_;
+      LOG_F(WARNING,
+        "{}: staging budget exhausted in frame {}; {} bytes and later "
+        "requests this frame are rejected",
+        debug_label_, current_frame_.get(), size_bytes);
     }
     return std::unexpected(ec);
   }

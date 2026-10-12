@@ -1120,7 +1120,8 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
         &first_resolved_view_,
       };
   stage10_context.view_constants = { .buffer = view_constants_buffer_ };
-  scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context);
+  ASSERT_TRUE(
+    scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context));
 
   bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_NE(bindings.scene_color_srv,
@@ -1785,9 +1786,9 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   graphics_->buffer_view_log_.events.clear();
   std::ignore = RenderForView(first_view_id_, first_resolved_view_);
   const std::byte* first_constants = nullptr;
+  // Local-light records are one structured array per recording.
   for (const auto& event : graphics_->buffer_view_log_.events) {
-    if (event.stride != 0U
-      || event.size != oxygen::packing::kConstantBufferAlignment) {
+    if (event.stride != sizeof(DeferredLightConstants)) {
       continue;
     }
     auto value = DeferredLightConstants {};
@@ -1806,18 +1807,20 @@ NOLINT_TEST_F(SceneRendererDeferredCoreTest,
   EXPECT_EQ(glm::column(retained.light_world_matrix, 3).x, kFirstPosition);
 }
 
-NOLINT_TEST_F(SceneRendererDeferredCoreTest,
-  DeferredConstantViewFailureRejectsAndRecoversPublication)
+NOLINT_TEST_F(
+  SceneRendererDeferredCoreTest, UnmappableStagingRejectsTheViewAndRecovers)
 {
   std::ignore = AddDirectionalLight("Sun");
-  graphics_->SetFailConstantBufferViews(true);
+  // Staging that cannot be mapped publishes no records; the view is rejected
+  // instead of drawing with missing bindings.
+  graphics_->SetFailMap(true);
   graphics_->draw_log_.draws.clear();
   std::ignore = RenderForView(first_view_id_, first_resolved_view_);
   EXPECT_EQ(scene_renderer_->GetPublishedViewFrameBindingsSlot(),
     oxygen::kInvalidShaderVisibleIndex);
   EXPECT_TRUE(graphics_->draw_log_.draws.empty());
 
-  graphics_->SetFailConstantBufferViews(false);
+  graphics_->SetFailMap(false);
   std::ignore = RenderForView(second_view_id_, second_resolved_view_);
   EXPECT_TRUE(scene_renderer_->GetPublishedViewFrameBindingsSlot().IsValid());
   EXPECT_TRUE(scene_renderer_->GetLastDeferredLightingState()

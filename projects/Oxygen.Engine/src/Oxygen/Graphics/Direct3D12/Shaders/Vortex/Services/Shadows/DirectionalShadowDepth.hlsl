@@ -88,9 +88,12 @@ ShadowDepthVSOutput VortexShadowDepthVS(uint vertex_id : SV_VertexID,
         BX_LoadVertex(metadata.vertex_buffer_index, actual_vertex_index);
     output.uv = vertex.texcoord;
 
-    const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
-        draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot,
-        metadata, instance_id);
+    float4x4 world_matrix;
+    if (!BX_TryLoadInstanceWorldMatrix(
+            draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot,
+            metadata, instance_id, world_matrix)) {
+        return output;
+    }
     const float4 world_position = ComputeMeshWorldPosition(world_matrix,
         vertex.position, ResolveDrawWorldOffset(draw_bindings, draw_index));
     output.position = mul(pass_constants.light_view_projection, world_position);
@@ -99,14 +102,15 @@ ShadowDepthVSOutput VortexShadowDepthVS(uint vertex_id : SV_VertexID,
     if (pass_constants.shadow_bias_parameters.y > 0.0f) {
         // Reuse the inverse-transpose publication consumed by the base pass.
         // Multiplying normals by world is incorrect under nonuniform scale.
-        float3x3 normal_matrix = (float3x3)world_matrix;
-        if (draw_bindings.normal_matrices_slot != K_INVALID_BINDLESS_INDEX) {
-            const uint transform_index = BX_ResolveTransformIndex(
-                metadata, draw_bindings.instance_data_slot, instance_id);
-            StructuredBuffer<float4x4> normals =
-                ResourceDescriptorHeap[draw_bindings.normal_matrices_slot];
-            normal_matrix = (float3x3)normals[transform_index];
+        uint transform_index = 0u;
+        float4x4 normal_transform;
+        if (!BX_TryResolveTransformIndex(metadata,
+                draw_bindings.instance_data_slot, instance_id, transform_index)
+            || !BX_TryLoadMatrix(draw_bindings.normal_matrices_slot,
+                transform_index, normal_transform)) {
+            return output;
         }
+        const float3x3 normal_matrix = (float3x3)normal_transform;
         const float3 transformed_normal = mul(normal_matrix, vertex.normal);
         const float3 world_normal = dot(transformed_normal, transformed_normal) > 1.0e-8f
             ? normalize(transformed_normal) : float3(0.0f, 1.0f, 0.0f);

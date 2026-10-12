@@ -944,9 +944,14 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
   last_publication_state_.probe_revision = probe_state_.probes.probe_revision;
   atmosphere_lut_cache_->RefreshForState(stable_state);
   const auto view_data = BuildEnvironmentViewData(ctx);
+  const auto view_id = ctx.current_view.view_id;
   const auto resolved_environment_view_slot = environment_view_slot.IsValid()
     ? environment_view_slot
-    : view_data_publisher_->Publish(ctx.current_view.view_id, view_data);
+    : internal::SlotOrInvalid(view_data_publisher_->Publish(view_id, view_data),
+        view_id, "environment view data");
+  if (!resolved_environment_view_slot.IsValid()) {
+    return kInvalidShaderVisibleIndex;
+  }
 
   const auto transmittance_state = transmittance_lut_pass_->Record(
     ctx, stable_state, *atmosphere_lut_cache_);
@@ -1023,14 +1028,24 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
   const auto resolved_environment_static_slot
     = environment_static_slot.IsValid()
     ? environment_static_slot
-    : static_data_publisher_->Publish(ctx.current_view.view_id, static_data);
-
-  const auto environment_view_products_slot
-    = view_products_publisher_->Publish(ctx.current_view.view_id, products);
+    : internal::SlotOrInvalid(
+        static_data_publisher_->Publish(view_id, static_data), view_id,
+        "environment static data");
+  const auto environment_view_products_slot = internal::SlotOrInvalid(
+    view_products_publisher_->Publish(view_id, products), view_id,
+    "environment view products");
+  if (!resolved_environment_static_slot.IsValid()
+    || !environment_view_products_slot.IsValid()) {
+    return kInvalidShaderVisibleIndex;
+  }
   const auto bindings = BuildBindings(resolved_environment_static_slot,
     resolved_environment_view_slot, environment_view_products_slot, products);
   const auto slot
-    = bindings_publisher_->Publish(ctx.current_view.view_id, bindings);
+    = internal::SlotOrInvalid(bindings_publisher_->Publish(view_id, bindings),
+      view_id, "environment frame bindings");
+  if (!slot.IsValid()) {
+    return kInvalidShaderVisibleIndex;
+  }
   recorder.OnSubmission([this, view_id = ctx.current_view.view_id, slot](
                           const graphics::SubmissionOutcome outcome) -> void {
     const auto found = published_views_.find(view_id);

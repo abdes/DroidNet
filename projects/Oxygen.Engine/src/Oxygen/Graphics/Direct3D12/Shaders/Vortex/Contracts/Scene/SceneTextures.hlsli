@@ -10,16 +10,21 @@
 #include "Vortex/Contracts/Definitions/SceneDefinitions.hlsli"
 #include "Vortex/Contracts/Scene/SceneTextureBindings.hlsli"
 
-static inline float SampleSceneDepth(float2 uv, SceneTextureBindingData bindings)
+// Sample scene depth; false when the view published no scene depth. There is
+// no default depth: 1.0 is the near plane under reverse-Z.
+static inline bool TrySampleSceneDepth(
+    float2 uv, SceneTextureBindingData bindings, out float depth)
 {
+    depth = 0.0f;
     if (bindings.scene_depth_srv == INVALID_BINDLESS_INDEX) {
-        return 1.0f;
+        return false;
     }
 
     Texture2D<float> depth_texture = ResourceDescriptorHeap[bindings.scene_depth_srv];
     SamplerState point_clamp_sampler
         = SamplerDescriptorHeap[VORTEX_SAMPLER_POINT_CLAMP];
-    return depth_texture.SampleLevel(point_clamp_sampler, uv, 0.0f);
+    depth = depth_texture.SampleLevel(point_clamp_sampler, uv, 0.0f);
+    return true;
 }
 
 static inline float4 SampleSceneColor(float2 uv, SceneTextureBindingData bindings)

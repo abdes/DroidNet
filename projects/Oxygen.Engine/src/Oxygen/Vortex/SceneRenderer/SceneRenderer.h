@@ -176,9 +176,13 @@ public:
     std::shared_ptr<const ExposureSourceLoss> loss);
 
   OXGN_VRTX_API void PublishDepthPrepassProducts();
-  OXGN_VRTX_API void PublishScreenHzbProducts(RenderContext& ctx);
+  //! False when the view's frame bindings could not be republished.
+  [[nodiscard]] OXGN_VRTX_API auto PublishScreenHzbProducts(RenderContext& ctx)
+    -> bool;
   OXGN_VRTX_API void PublishBasePassVelocity();
-  OXGN_VRTX_API void PublishDeferredBasePassSceneTextures(RenderContext& ctx);
+  //! False when the view's frame bindings could not be republished.
+  [[nodiscard]] OXGN_VRTX_API auto PublishDeferredBasePassSceneTextures(
+    RenderContext& ctx) -> bool;
   OXGN_VRTX_API void PublishCustomDepthProducts();
   OXGN_VRTX_API void FinalizeSceneTextureExtractions();
 

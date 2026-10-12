@@ -37,6 +37,7 @@
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/PerViewStructuredPublisher.h>
+#include <Oxygen/Vortex/Internal/ViewConstantsGuard.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/Passes/GroundGridPass.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -248,6 +249,10 @@ auto GroundGridPass::Record(RenderContext& ctx,
     return state;
   }
 
+  if (!internal::HasViewConstants(ctx, "Vortex.Stage20.GroundGrid")) {
+    state.executed = false;
+    return state;
+  }
   graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage20.GroundGrid",
     profiling::ProfileGranularity::kDiagnostic,
     profiling::ProfileCategory::kPass);
@@ -264,12 +269,13 @@ auto GroundGridPass::Record(RenderContext& ctx,
   SetViewportAndScissor(recorder, ctx, scene_textures);
   recorder.SetPipelineState(
     BuildGroundGridPipelineDesc(scene_textures, *target));
-  if (ctx.view_constants.IsValid()) {
-    recorder.SetGraphicsRootConstantBufferView(
-      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-      ctx.view_constants.GpuAddress());
-  }
+  recorder.SetGraphicsRootConstantBufferView(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
+    ctx.view_constants.GpuAddress());
   const auto pass_constants_index = UpdatePassConstants(ctx, state.settling);
+  if (!pass_constants_index.IsValid()) {
+    return state;
+  }
   recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
@@ -310,10 +316,9 @@ auto GroundGridPass::UpdatePassConstants(
   constants.inv_view_proj = ComputeInvViewProj(ctx);
   FillConstants(constants);
   settling = ComputeGridOffset(constants, ctx);
-  const auto slot
-    = constants_publisher_->Publish(ctx.current_view.view_id, constants);
-  CHECK_F(slot.IsValid(), "Ground grid constants publication failed");
-  return slot;
+  return internal::SlotOrInvalid(
+    constants_publisher_->Publish(ctx.current_view.view_id, constants),
+    ctx.current_view.view_id, "ground grid pass constants");
 }
 
 auto GroundGridPass::ComputeInvViewProj(const RenderContext& ctx) const

@@ -46,7 +46,10 @@ float4 VortexAtmosphereComposePS(VortexFullscreenTriangleOutput input) : SV_Targ
 {
     const SceneTextureBindingData bindings
         = LoadSceneTextureBindings(bindless_view_frame_bindings_slot);
-    const float raw_depth = SampleSceneDepth(input.uv, bindings);
+    float raw_depth;
+    if (!TrySampleSceneDepth(input.uv, bindings, raw_depth)) {
+        discard;
+    }
     const float far_background = EvaluateFarBackgroundMask(raw_depth);
     // Far-background (sky-dome) pixels are produced by the dedicated sky pass
     // using the full SkyView LUT. The camera aerial-perspective volume only

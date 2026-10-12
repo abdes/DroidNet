@@ -316,6 +316,7 @@ set(
   "Internal/ImGuiRuntime.h"
   "Internal/MeshRasterState.h"
   "Internal/BindlessRootBindings.h"
+  "Internal/ViewConstantsGuard.h"
   "Internal/TextureViews.h"
   "Lighting/Internal/SpatialLightGrid.h"
   "Lighting/Internal/SpatialLightGrid.cpp"

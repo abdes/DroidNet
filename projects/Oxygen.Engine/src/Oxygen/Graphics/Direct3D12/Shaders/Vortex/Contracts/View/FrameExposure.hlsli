@@ -10,22 +10,21 @@
 #include "Core/Bindless/Generated.BindlessAbi.hlsl"
 #include "Vortex/Contracts/View/ExposureStateData.hlsli"
 
-// Loads a frame exposure publication; neutral exposure when the slot is not
-// published. Passes without a camera view use this with their own slot.
-static FrameExposureData LoadFrameExposure(uint frame_exposure_slot)
+// Load a frame exposure publication; false, with a zeroed record, when the
+// slot is missing or outside the global SRV domain. There is no neutral
+// default: the renderer publishes exposure for every view.
+static bool TryLoadFrameExposure(uint frame_exposure_slot, out FrameExposureData exposure)
 {
+    exposure = (FrameExposureData)0;
+    exposure.global_exposure_state_slot = K_INVALID_BINDLESS_INDEX;
     if (frame_exposure_slot == K_INVALID_BINDLESS_INDEX
         || !BX_IN_GLOBAL_SRV(frame_exposure_slot)) {
-        FrameExposureData neutral;
-        neutral.pre_exposure = 1.0f;
-        neutral.one_over_pre_exposure = 1.0f;
-        neutral.global_exposure_state_slot = K_INVALID_BINDLESS_INDEX;
-        neutral.flags = 0u;
-        return neutral;
+        return false;
     }
     StructuredBuffer<FrameExposureData> buffer
         = ResourceDescriptorHeap[frame_exposure_slot];
-    return buffer[0];
+    exposure = buffer[0];
+    return true;
 }
 
 #endif // OXYGEN_VORTEX_FRAME_EXPOSURE_HLSLI

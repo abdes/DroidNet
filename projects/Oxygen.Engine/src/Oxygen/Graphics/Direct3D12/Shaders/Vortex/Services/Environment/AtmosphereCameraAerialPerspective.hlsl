@@ -10,8 +10,6 @@
 #include "Vortex/Services/Environment/AtmosphereUeMirrorCommon.hlsli"
 #include "Vortex/Shared/PositionReconstruction.hlsli"
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
-#include "Vortex/Contracts/Environment/EnvironmentViewData.hlsli"
-#include "Vortex/Contracts/Environment/EnvironmentFrameBindings.hlsli"
 #include "Vortex/Contracts/View/FrameExposureHelpers.hlsli"
 #include "Vortex/Contracts/View/HdrStoreChecks.hlsli"
 #include "Vortex/Contracts/View/HdrErrorBounds.hlsli"
@@ -67,7 +65,7 @@ struct CameraAerialAtmosphereScales0
 {
     float atmosphere_height_km;
     float aerial_perspective_distance_scale;
-    uint reserved0;
+    uint holdout;
     float rayleigh_scale_height_km;
 };
 
@@ -167,19 +165,6 @@ static GpuSkyAtmosphereParams BuildAtmosphereParams(
 
 
 
-static EnvironmentViewData LoadVortexEnvironmentViewData()
-{
-    const ViewFrameBindings view_bindings =
-        LoadViewFrameBindings(bindless_view_frame_bindings_slot);
-    if (view_bindings.environment_frame_slot == K_INVALID_BINDLESS_INDEX)
-    {
-        return LoadEnvironmentViewData(K_INVALID_BINDLESS_INDEX);
-    }
-    const EnvironmentFrameBindings environment_bindings =
-        LoadEnvironmentFrameBindings(view_bindings.environment_frame_slot);
-    return LoadEnvironmentViewData(environment_bindings.environment_view_slot);
-}
-
 static float ResolveFarDepthReference()
 {
     return reverse_z != 0u ? 0.0f : 1.0f;
@@ -267,7 +252,6 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
 
     RWTexture3D<float4> output_texture = ResourceDescriptorHeap[PassOutputTextureUav(pass)];
     const GpuSkyAtmosphereParams atmosphere = BuildAtmosphereParams(pass);
-    const EnvironmentViewData environment_view = LoadVortexEnvironmentViewData();
     if (PassFogShowFlagFactor(pass) <= 0.0f)
     {
         output_texture[dispatch_id] = float4(0.0f, 0.0f, 0.0f, 1.0f);
@@ -404,7 +388,7 @@ void VortexAtmosphereCameraAerialPerspectiveCS(uint3 dispatch_id : SV_DispatchTh
         t_max_max,
         sample_count);
     float3 luminance = scattering.L;
-    if (environment_view.trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass.z > 0.5f)
+    if (pass.atmosphere_scales0.holdout != 0u)
     {
         luminance = 0.0f.xxx;
     }

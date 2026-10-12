@@ -300,6 +300,12 @@ auto AtmosphereCameraAerialPerspectivePass::Record(RenderContext& ctx,
     = engine::atmos::MetersToSkyUnit(atmosphere.atmosphere_height_m);
   constants.atmosphere_scales0.aerial_perspective_distance_scale
     = view_data.aerial_perspective_distance_scale;
+  constants.atmosphere_scales0.holdout
+    = view_data
+        .trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass.z
+      > 0.5F
+    ? 1U
+    : 0U;
   constants.atmosphere_scales0.rayleigh_scale_height_km
     = engine::atmos::MetersToSkyUnit(atmosphere.rayleigh_scale_height_m);
   constants.atmosphere_scales1.mie_scale_height_km

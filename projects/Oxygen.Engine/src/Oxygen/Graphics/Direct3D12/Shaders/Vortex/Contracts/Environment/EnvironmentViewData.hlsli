@@ -41,40 +41,18 @@ struct EnvironmentViewData
 };
 
 
-static EnvironmentViewData LoadEnvironmentViewData(uint slot)
+// Load the environment view data at `slot`; false, with zeroed data (no
+// environment products), when the slot is missing or outside the global SRV
+// domain. There is no default planet: consumers gate on the result or flags.
+static bool TryLoadEnvironmentViewData(uint slot, out EnvironmentViewData data)
 {
-    EnvironmentViewData invalid_data = (EnvironmentViewData)0;
-    invalid_data.flags = 0u;
-    invalid_data.sky_view_lut_slice = 0.0f;
-    invalid_data.planet_to_sun_cos_zenith = 0.0f;
-    invalid_data.aerial_perspective_distance_scale = 1.0f;
-    invalid_data.aerial_scattering_strength = 1.0f;
-    // Keep the invalid-view fallback aligned with the C++ default
-    // EnvironmentViewData contract: world origin sits on the planet surface and
-    // the planet center is below it on -Z.
-    invalid_data.planet_center_ws_pad = float4(0.0f, 0.0f, -6360000.0f, 0.0f);
-    invalid_data.planet_up_ws_camera_altitude_km = float4(0.0f, 0.0f, 1.0f, 0.0f);
-    invalid_data.sky_planet_translated_world_center_km_and_view_height_km
-        = float4(0.0f, 0.0f, -6360.0f, 6360.0f);
-    invalid_data.sky_camera_translated_world_origin_km_pad = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    invalid_data.sky_view_lut_referential_row0 = float4(1.0f, 0.0f, 0.0f, 0.0f);
-    invalid_data.sky_view_lut_referential_row1 = float4(0.0f, 1.0f, 0.0f, 0.0f);
-    invalid_data.sky_view_lut_referential_row2 = float4(0.0f, 0.0f, 1.0f, 0.0f);
-    invalid_data.atmosphere_light0_direction_angular_size = float4(0.0f, 0.0f, 1.0f, 0.0f);
-    invalid_data.atmosphere_light0_disk_luminance_rgb = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    invalid_data.sky_luminance_factor_height_fog_contribution = float4(1.0f, 1.0f, 1.0f, 1.0f);
-    invalid_data.atmosphere_light1_direction_angular_size = float4(0.0f, 0.0f, 1.0f, 0.0f);
-    invalid_data.atmosphere_light1_disk_luminance_rgb = float4(0.0f, 0.0f, 0.0f, 0.0f);
-    invalid_data.sky_aerial_luminance_aerial_start_depth_km = float4(1.0f, 1.0f, 1.0f, 0.1f);
-    invalid_data.trace_sample_scale_transmittance_min_light_elevation_holdout_mainpass = float4(1.0f, -90.0f, 0.0f, 1.0f);
-    invalid_data.camera_aerial_volume_depth_params = float4(32.0f, 1.0f / 32.0f, 3.0f, 1.0f / 3.0f);
-
+    data = (EnvironmentViewData)0;
     if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
-        return invalid_data;
+        return false;
     }
-
     StructuredBuffer<EnvironmentViewData> data_buffer = ResourceDescriptorHeap[slot];
-    return data_buffer[0];
+    data = data_buffer[0];
+    return true;
 }
 
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_ENVIRONMENTVIEWDATA_HLSLI

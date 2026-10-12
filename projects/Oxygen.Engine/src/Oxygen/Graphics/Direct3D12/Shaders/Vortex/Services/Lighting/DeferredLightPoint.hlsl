@@ -47,7 +47,10 @@ float4 DeferredLightPointPS(DeferredLightVolumeVSOutput input) : SV_Target0
     }
 
     const float2 screen_uv = ResolveDeferredLightScreenUv(input.screen_position);
-    const float scene_depth = SampleSceneDepth(screen_uv, bindings);
+    float scene_depth;
+    if (!TrySampleSceneDepth(screen_uv, bindings, scene_depth)) {
+        discard;
+    }
     if (IsDeferredBackgroundDepth(scene_depth)) return 0.0f.xxxx;
     const float3 world_position
         = ReconstructDeferredWorldPosition(screen_uv, scene_depth);

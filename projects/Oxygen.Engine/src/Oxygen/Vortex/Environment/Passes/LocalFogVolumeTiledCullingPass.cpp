@@ -41,6 +41,7 @@
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
+#include <Oxygen/Vortex/Internal/ViewConstantsGuard.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -515,6 +516,11 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
       tile_covered_resolution_y / view_height,
     },
   };
+  if (!vortex::internal::HasViewConstants(
+        ctx, "Vortex.Stage14.LocalFogTiledCulling")) {
+    state.executed = false;
+    return state;
+  }
   auto constants_alloc = pass_constants->Allocate(1U);
   if (!constants_alloc.has_value()
     || !constants_alloc->TryWriteObject(constants)) {
@@ -543,11 +549,9 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
   recorder.FlushBarriers();
 
   recorder.SetPipelineState(BuildPipelineDesc());
-  if (ctx.view_constants.IsValid()) {
-    recorder.SetComputeRootConstantBufferView(
-      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-      ctx.view_constants.GpuAddress());
-  }
+  recorder.SetComputeRootConstantBufferView(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
+    ctx.view_constants.GpuAddress());
   recorder.SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);

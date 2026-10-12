@@ -422,9 +422,9 @@ struct RendererPublicationProbe {
   //! as each staged view-frame publication does.
   static auto WriteCurrentViewConstants(Renderer& renderer,
     RenderContext& render_context,
-    const ShaderVisibleIndex view_frame_bindings_slot) -> void
+    const ShaderVisibleIndex view_frame_bindings_slot) -> bool
   {
-    renderer.WriteCurrentViewConstants(
+    return renderer.WriteCurrentViewConstants(
       render_context, *renderer.GetGraphics(), view_frame_bindings_slot);
   }
 

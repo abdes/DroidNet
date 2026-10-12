@@ -12,17 +12,29 @@
 #include "Vortex/Contracts/Environment/EnvironmentViewData.hlsli"
 #include "Vortex/Contracts/View/ViewFrameBindings.hlsli"
 
-static inline EnvironmentViewData LoadResolvedEnvironmentViewData()
+// The bound view's environment view data; false, with zeroed data, when the
+// view published no environment.
+static inline bool TryLoadResolvedEnvironmentViewData(out EnvironmentViewData data)
 {
+    data = (EnvironmentViewData)0;
     const ViewFrameBindings view_bindings =
         LoadViewFrameBindings(bindless_view_frame_bindings_slot);
     if (view_bindings.environment_frame_slot == K_INVALID_BINDLESS_INDEX) {
-        return LoadEnvironmentViewData(K_INVALID_BINDLESS_INDEX);
+        return false;
     }
-
     const EnvironmentFrameBindings environment_bindings =
         LoadEnvironmentFrameBindings(view_bindings.environment_frame_slot);
-    return LoadEnvironmentViewData(environment_bindings.environment_view_slot);
+    return TryLoadEnvironmentViewData(
+        environment_bindings.environment_view_slot, data);
+}
+
+// The bound view's environment view data, zeroed (no environment products)
+// when the view published none.
+static inline EnvironmentViewData LoadResolvedEnvironmentViewData()
+{
+    EnvironmentViewData data;
+    TryLoadResolvedEnvironmentViewData(data);
+    return data;
 }
 
 static inline float3 GetPlanetCenterWS()

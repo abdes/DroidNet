@@ -32,6 +32,7 @@
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
+#include <Oxygen/Vortex/Internal/ViewConstantsGuard.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -293,6 +294,10 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
     .global_start_distance_meters = global_start_distance_meters,
     .start_depth_z = start_depth_z,
   };
+  if (!vortex::internal::HasViewConstants(ctx, "Vortex.Stage15.LocalFog")) {
+    state.executed = false;
+    return state;
+  }
   auto constants_alloc = constants_buffer->Allocate(1U);
   if (!constants_alloc.has_value()
     || !constants_alloc->TryWriteObject(constants)) {
@@ -330,11 +335,9 @@ auto LocalFogVolumeComposePass::Record(RenderContext& ctx,
   recorder.BindFrameBuffer(*framebuffer);
   SetViewportAndScissor(recorder, ctx, scene_textures);
   recorder.SetPipelineState(BuildPipelineDesc(scene_textures, reverse_z));
-  if (ctx.view_constants.IsValid()) {
-    recorder.SetGraphicsRootConstantBufferView(
-      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-      ctx.view_constants.GpuAddress());
-  }
+  recorder.SetGraphicsRootConstantBufferView(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
+    ctx.view_constants.GpuAddress());
   recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);

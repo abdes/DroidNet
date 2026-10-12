@@ -125,7 +125,8 @@ namespace environment {
     struct alignas(16) AtmosphereScales0 {
       float atmosphere_height_km { 0.0F };
       float aerial_perspective_distance_scale { 0.0F };
-      std::uint32_t reserved0 { 0U };
+      //! Nonzero when the atmosphere is a holdout in the main pass.
+      std::uint32_t holdout { 0U };
       float rayleigh_scale_height_km { 0.0F };
     };
 

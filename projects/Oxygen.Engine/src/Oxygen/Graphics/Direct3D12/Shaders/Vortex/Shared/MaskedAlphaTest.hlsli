@@ -44,7 +44,9 @@ static inline bool TryLoadDrawMaterialFromSlots(uint draw_metadata_slot,
   material = (DrawMaterial)0;
 
   if (draw_metadata_slot == K_INVALID_BINDLESS_INDEX
-    || material_shading_constants_slot == K_INVALID_BINDLESS_INDEX) {
+    || material_shading_constants_slot == K_INVALID_BINDLESS_INDEX
+    || !BX_IN_MATERIALS(draw_metadata_slot)
+    || !BX_IN_MATERIALS(material_shading_constants_slot)) {
     return false;
   }
 
@@ -130,9 +132,13 @@ static inline MaskedAlphaTestResult EvaluateMaskedAlphaTestFromSlots(
   return EvaluateMaskedAlphaTestForMaterial(uv0, material, linear_sampler);
 }
 
+// Masked pixels without material data are discarded, never kept unclipped.
 static inline void ApplyMaskedAlphaClip(MaskedAlphaTestResult result)
 {
-  if (result.has_material_data && result.alpha_test_enabled) {
+  if (!result.has_material_data) {
+    discard;
+  }
+  if (result.alpha_test_enabled) {
     clip(result.alpha - result.cutoff);
   }
 }

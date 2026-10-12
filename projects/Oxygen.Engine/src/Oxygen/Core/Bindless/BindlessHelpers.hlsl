@@ -20,16 +20,17 @@
 //   // the ResourceDescriptorHeap.
 //   uint draw_metadata_buffer_slot   = /* engine-provided SRV slot for DrawMetadata buffer */ 0;
 //   uint transforms_buffer_slot      = /* engine-provided SRV slot for world matrices   */ 0;
-//   uint materials_buffer_slot       = /* engine-provided SRV slot for materials       */ 0;
 //
 //   DrawMetadata meta;
 //   if (!BX_LoadDrawMetadata(draw_metadata_buffer_slot, g_DrawIndex, meta)) {
-//       // Fallback path (e.g., skip draw or use defaults)
+//       // Drop the draw: required data is missing.
 //   }
 //   uint vIdx = BX_ResolveVertexIndex(meta, SV_VertexID);
 //   BX_VERTEX_TYPE v = BX_LoadVertex(meta.vertex_buffer_index, vIdx);
-//   float4x4 world = BX_LoadWorldMatrix(transforms_buffer_slot, meta.transform_index);
-//   BX_MATERIAL_TYPE mat = BX_LoadMaterial(materials_buffer_slot, meta.material_handle);
+//   float4x4 world;
+//   if (!BX_TryLoadMatrix(transforms_buffer_slot, meta.transform_index, world)) {
+//       // Drop the draw.
+//   }
 //
 //   // Sample a texture via SM 6.6 descriptor heap (example)
 //   // Indices provided by the engine are already global within the descriptor table.
@@ -43,7 +44,6 @@
 //   // Before including this file, you can override the following to match your structs:
 //   // #define BX_VERTEX_TYPE    MyVertex
 //   // #define BX_INDEX_TYPE     uint
-//   // #define BX_MATERIAL_TYPE  MyMaterialShadingConstants
 //   // #include "BindlessHelpers.hlsl"
 //
 // Classic typed arrays (non-SM 6.6)
@@ -76,9 +76,6 @@ static inline bool BX_IsValid(uint idx) { return idx != K_INVALID_BINDLESS_INDEX
 #ifndef BX_INDEX_TYPE
 #define BX_INDEX_TYPE uint
 #endif
-#ifndef BX_MATERIAL_TYPE
-#define BX_MATERIAL_TYPE MaterialShadingConstants
-#endif
 
 // ----------------------------------------------------------------------------
 // SM 6.6 descriptor-heap helpers (no declarations needed in RS)
@@ -87,12 +84,31 @@ static inline bool BX_IsValid(uint idx) { return idx != K_INVALID_BINDLESS_INDEX
 // Quick validity check for a heap slot
 static inline bool BX_IsValidSlot(uint slot) { return BX_IsValid(slot); }
 
-// Load DrawMetadata for current draw; returns false if slot is invalid.
+// Whether a global-SRV slot is present and inside the global SRV domain.
+static inline bool BX_IsGlobalSrvSlot(uint slot)
+{
+    return BX_IsValidSlot(slot) && BX_IN_GLOBAL_SRV(slot);
+}
+
+// Whether a slot is present and inside the materials domain, which holds
+// material constants and the per-draw metadata, bounds and cull records.
+static inline bool BX_IsMaterialsSlot(uint slot)
+{
+    return BX_IsValidSlot(slot) && BX_IN_MATERIALS(slot);
+}
+
+// Load the DrawMetadata of `drawIndex`; false when the slot is missing, outside
+// the materials domain, or the index is out of bounds.
 // Requires the DrawMetadata struct to be visible to the shader.
 static inline bool BX_LoadDrawMetadata(uint slot, uint drawIndex, out DrawMetadata meta)
 {
-    if (!BX_IsValidSlot(slot)) { meta = (DrawMetadata)0; return false; }
+    meta = (DrawMetadata)0;
+    if (!BX_IsMaterialsSlot(slot)) { return false; }
     StructuredBuffer<DrawMetadata> buf = ResourceDescriptorHeap[slot];
+    uint count = 0u;
+    uint stride = 0u;
+    buf.GetDimensions(count, stride);
+    if (drawIndex >= count) { return false; }
     meta = buf[drawIndex];
     return true;
 }
@@ -115,49 +131,54 @@ static inline BX_VERTEX_TYPE BX_LoadVertex(uint vertexBufferIndex, uint vertexIn
     return vb[vertexIndex];
 }
 
-// Load a world matrix from a transforms buffer slot (returns identity if invalid)
-static inline float4x4 BX_LoadWorldMatrix(uint transformsSlot, uint transformIndex)
+// Load matrix `index` of a matrix buffer; false when the slot is missing,
+// outside the global SRV domain, or the index is out of bounds. Callers drop
+// the draw: there is no meaningful default transform.
+static inline bool BX_TryLoadMatrix(uint slot, uint index, out float4x4 value)
 {
-    if (BX_IsValidSlot(transformsSlot)) {
-        StructuredBuffer<float4x4> worlds = ResourceDescriptorHeap[transformsSlot];
-        return worlds[transformIndex];
-    }
-    // Identity
-    return float4x4(1,0,0,0,
-                    0,1,0,0,
-                    0,0,1,0,
-                    0,0,0,1);
+    value = (float4x4)0;
+    if (!BX_IsGlobalSrvSlot(slot)) { return false; }
+    StructuredBuffer<float4x4> matrices = ResourceDescriptorHeap[slot];
+    uint count = 0u;
+    uint stride = 0u;
+    matrices.GetDimensions(count, stride);
+    if (index >= count) { return false; }
+    value = matrices[index];
+    return true;
 }
 
-// Resolve per-instance transform index for GPU instancing.
-// For instanced draws (instance_count > 1), fetches from instance data buffer.
-// For single-instance draws, returns meta.transform_index directly.
-static inline uint BX_ResolveTransformIndex(const DrawMetadata meta,
-                                            uint instanceDataSlot,
-                                            uint instanceID)
+// Resolve the transform index of one instance. Instanced draws
+// (instance_count > 1) read it from the instance data buffer and fail without
+// one; single-instance draws use meta.transform_index.
+static inline bool BX_TryResolveTransformIndex(const DrawMetadata meta,
+                                               uint instanceDataSlot,
+                                               uint instanceID,
+                                               out uint transformIndex)
 {
-    if (meta.instance_count > 1 && BX_IsValidSlot(instanceDataSlot)) {
-        StructuredBuffer<uint> instance_data = ResourceDescriptorHeap[instanceDataSlot];
-        return instance_data[meta.instance_metadata_offset + instanceID];
-    }
-    return meta.transform_index;
+    transformIndex = meta.transform_index;
+    if (meta.instance_count <= 1u) { return true; }
+    if (!BX_IsGlobalSrvSlot(instanceDataSlot)) { return false; }
+    StructuredBuffer<uint> instance_data = ResourceDescriptorHeap[instanceDataSlot];
+    uint count = 0u;
+    uint stride = 0u;
+    instance_data.GetDimensions(count, stride);
+    const uint entry = meta.instance_metadata_offset + instanceID;
+    if (entry >= count) { return false; }
+    transformIndex = instance_data[entry];
+    return true;
 }
 
-// Load a world matrix for a specific instance (handles GPU instancing).
-static inline float4x4 BX_LoadInstanceWorldMatrix(uint transformsSlot,
-                                                   uint instanceDataSlot,
-                                                   const DrawMetadata meta,
-                                                   uint instanceID)
+// Load the world matrix of one instance; false when it cannot be resolved.
+static inline bool BX_TryLoadInstanceWorldMatrix(uint transformsSlot,
+                                                 uint instanceDataSlot,
+                                                 const DrawMetadata meta,
+                                                 uint instanceID,
+                                                 out float4x4 world)
 {
-    const uint transformIndex = BX_ResolveTransformIndex(meta, instanceDataSlot, instanceID);
-    return BX_LoadWorldMatrix(transformsSlot, transformIndex);
-}
-
-// Load a material shading record from a materials buffer slot
-static inline BX_MATERIAL_TYPE BX_LoadMaterial(uint materialsSlot, uint materialIndex)
-{
-    StructuredBuffer<BX_MATERIAL_TYPE> mats = ResourceDescriptorHeap[materialsSlot];
-    return mats[materialIndex];
+    world = (float4x4)0;
+    uint transform_index = 0u;
+    return BX_TryResolveTransformIndex(meta, instanceDataSlot, instanceID, transform_index)
+        && BX_TryLoadMatrix(transformsSlot, transform_index, world);
 }
 
 // Shader Model 6.6 bindless accessors (optional)

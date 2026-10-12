@@ -242,15 +242,18 @@ auto HzbPyramidBuilder::Build(const BuildFrame& frame,
     impl_->constants_frame = frame.sequence;
   }
   const auto view_id = frame.view_id;
-  const auto tile_constants = impl_->pass_constants.Publish(view_id, constants);
+  const auto tile_constants
+    = internal::SlotOrInvalid(impl_->pass_constants.Publish(view_id, constants),
+      view_id, impl_->debug_name);
   const auto has_tail = mip_count > kLevelsPerDispatch;
   auto tail_constants = ShaderVisibleIndex { kInvalidShaderVisibleIndex };
   if (has_tail) {
     constants.base_level = kLevelsPerDispatch;
-    tail_constants = impl_->pass_constants.Publish(view_id, constants);
+    tail_constants = internal::SlotOrInvalid(
+      impl_->pass_constants.Publish(view_id, constants), view_id,
+      impl_->debug_name);
   }
   if (!tile_constants.IsValid() || (has_tail && !tail_constants.IsValid())) {
-    LOG_F(ERROR, "{}: failed to publish the pass constants", impl_->debug_name);
     return false;
   }
 

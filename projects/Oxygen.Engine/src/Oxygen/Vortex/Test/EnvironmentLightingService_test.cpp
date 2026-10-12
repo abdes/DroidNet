@@ -546,6 +546,20 @@ protected:
     renderer_ = MakeRenderer(graphics_);
   }
 
+  //! A b1 record for camera passes; they record nothing without one.
+  [[nodiscard]] auto MakeViewConstantsRecord() const
+    -> oxygen::vortex::upload::ConstantBufferRecord
+  {
+    return {
+      .buffer = graphics_->CreateBuffer({
+        .size_bytes = 1024U,
+        .usage = oxygen::graphics::BufferUsage::kConstant,
+        .memory = oxygen::graphics::BufferMemory::kUpload,
+        .debug_name = "EnvironmentLightingServiceBehaviorTest.ViewConstants",
+      }),
+    };
+  }
+
   std::shared_ptr<FakeGraphics> graphics_;
   std::shared_ptr<Renderer> renderer_;
 };
@@ -1185,6 +1199,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   ctx.scene = oxygen::observer_ptr {
     scene.get(),
   };
+
+  ctx.view_constants = MakeViewConstantsRecord();
 
   oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
     [&](oxygen::graphics::CommandRecorder& recorder) -> void {
@@ -2676,6 +2692,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   graphics_->draw_log_.draws.clear();
   graphics_->graphics_pipeline_log_.binds.clear();
 
+  ctx.view_constants = MakeViewConstantsRecord();
+
   oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
     [&](oxygen::graphics::CommandRecorder& recorder) -> void {
       service.RenderSkyAndFog(ctx, recorder, scene_textures);
@@ -2696,6 +2714,48 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     EXPECT_EQ(draw.vertex_offset, 0U);
     EXPECT_EQ(draw.instance_offset, 0U);
   }
+}
+
+NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
+  RenderSkyAndFogRecordsNothingWithoutViewConstants)
+{
+  auto service = EnvironmentLightingService(*renderer_);
+  service.OnFrameStart(
+    oxygen::frame::SequenceNumber { 6U }, oxygen::frame::Slot { 1U });
+  auto scene_textures = SceneTextures(*graphics_,
+    SceneTexturesConfig {
+      .extent = { 64U, 64U },
+      .enable_velocity = false,
+      .enable_custom_depth = false,
+      .gbuffer_count = 4U,
+      .msaa_sample_count = 1U,
+    });
+  auto resolved_view = MakeResolvedView(64.0F, 64.0F);
+  auto composition_view = oxygen::vortex::CompositionView {};
+  composition_view.id = ViewId { 13U };
+  composition_view.with_atmosphere = true;
+  composition_view.with_height_fog = true;
+  auto ctx = MakeRenderContext(ViewId { 13U }, resolved_view, composition_view);
+  auto scene = MakeSceneWithAtmosphereEnvironment();
+  ctx.scene = oxygen::observer_ptr { scene.get() };
+  graphics_->draw_log_.draws.clear();
+  ASSERT_FALSE(ctx.view_constants.IsValid());
+
+  oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
+    [&](oxygen::graphics::CommandRecorder& recorder) -> void {
+      service.RenderSkyAndFog(ctx, recorder, scene_textures);
+    });
+
+  // Without the view's b1 record the camera passes refuse to record rather
+  // than drawing with an unbound root parameter.
+  const auto& stage15 = service.GetLastStage15State();
+  EXPECT_TRUE(stage15.sky_requested);
+  EXPECT_FALSE(stage15.sky_executed);
+  EXPECT_TRUE(stage15.atmosphere_requested);
+  EXPECT_FALSE(stage15.atmosphere_executed);
+  EXPECT_TRUE(stage15.fog_requested);
+  EXPECT_FALSE(stage15.fog_executed);
+  EXPECT_TRUE(graphics_->draw_log_.draws.empty());
 }
 
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
@@ -2735,6 +2795,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   };
 
   graphics_->graphics_pipeline_log_.binds.clear();
+
+  ctx.view_constants = MakeViewConstantsRecord();
 
   oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
     [&](oxygen::graphics::CommandRecorder& recorder) -> void {
@@ -3878,6 +3940,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   graphics_->dispatch_log_.dispatches.clear();
   graphics_->indirect_log_.draws.clear();
 
+  ctx.view_constants = MakeViewConstantsRecord();
+
   oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
     [&](oxygen::graphics::CommandRecorder& recorder) -> void {
       service.RenderSkyAndFog(ctx, recorder, scene_textures);
@@ -3950,6 +4014,7 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
     ctx.scene = oxygen::observer_ptr {
       scene.get(),
     };
+    ctx.view_constants = MakeViewConstantsRecord();
     oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
       [&](oxygen::graphics::CommandRecorder& recorder) -> void {
         service.RenderSkyAndFog(ctx, recorder, textures);
@@ -4016,6 +4081,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 
   graphics_->dispatch_log_.dispatches.clear();
 
+  ctx.view_constants = MakeViewConstantsRecord();
+
   oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
     [&](oxygen::graphics::CommandRecorder& recorder) -> void {
       service.RenderSkyAndFog(ctx, recorder, scene_textures);
@@ -4066,6 +4133,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   };
 
   graphics_->dispatch_log_.dispatches.clear();
+
+  ctx.view_constants = MakeViewConstantsRecord();
 
   oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
     [&](oxygen::graphics::CommandRecorder& recorder) -> void {
@@ -4126,6 +4195,8 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   };
 
   graphics_->dispatch_log_.dispatches.clear();
+
+  ctx.view_constants = MakeViewConstantsRecord();
 
   oxygen::graphics::testing::SubmitCommands(*graphics_, "Vortex test",
     [&](oxygen::graphics::CommandRecorder& recorder) -> void {

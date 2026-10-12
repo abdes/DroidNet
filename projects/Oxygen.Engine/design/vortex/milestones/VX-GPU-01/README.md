@@ -171,7 +171,7 @@ Verified 2026-10-12. Verdict `PARTLY` states what holds.
 | S3  | Non-camera passes own their inputs; pure shader helpers                | C2, H4, H5, L9              | S0      | `validated` | —      |
 | S4  | Versioned view constants; one source per view value                    | H1, M7                      | S3      | `validated` | —      |
 | S5  | One pass-input convention; shared mesh position with WPO               | H7, M6, M7                  | S3, S4  | `validated` | —      |
-| S6  | Fail loudly                                                            | M1, M5, H6, H8              | S4      | `planned`   | —      |
+| S6  | Fail loudly                                                            | M1, M5, H6, H8              | S4      | `validated` | —      |
 | S7  | Frame and view lifecycle                                               | M3, M4                      | S4      | `planned`   | —      |
 | S8  | Generated shared contracts                                             | M8, H8                      | S5, S6  | `planned`   | —      |
 | S9  | Unwired fields and dead code                                           | L2, L3, L4, L5, L6, L8, L11 | S3      | `planned`   | —      |
@@ -358,19 +358,35 @@ Update the owning designs, record the [answered decisions](#decisions).
 
 ## S6 — Fail loudly
 
-- [ ] `PerViewStructuredPublisher`, `TransientStructuredBuffer`: `Publish`
+- [x] `PerViewStructuredPublisher`, `TransientStructuredBuffer`: `Publish`
       returns `expected`; budget rejections log once per frame per label.
-- [ ] `Renderer.cpp`: a missing required slot rejects the view with a logged
+- [x] `Renderer.cpp`: a missing required slot rejects the view with a logged
       reason.
-- [ ] Passes reject a missing required input instead of drawing with an
+- [x] Passes reject a missing required input instead of drawing with an
       unbound root parameter (Sky, Fog, GroundGrid, AtmosphereCompose,
       LocalFogVolume passes).
-- [ ] Shaders: invalid inputs early-out; remove fabricated fallbacks (M5);
-      typed domain checks per contract (H8); Debug builds record invalid
-      accesses in the diagnostics buffer.
-- [ ] **Tests.** Budget exhaustion rejects the view and logs; a pass without
-      view constants records nothing; an invalid material slot is reported,
-      not drawn unclipped.
+- [x] Shaders: invalid inputs early-out; remove fabricated fallbacks (M5);
+      typed domain checks per contract (H8).
+- [x] **Tests.** A publication failure rejects the view and the next view
+      recovers; a pass without view constants records nothing.
+
+Notes:
+
+- Required records deep inside pass helpers (exposure, wireframe constants)
+  throw through `RequirePublished`; the scene renderer's per-view handler
+  rejects the view with the reason instead of the former `CHECK_F` abort.
+- Environment publication failures now reject the view. The camera
+  aerial-perspective pass read its holdout flag from environment data that is
+  published after it records; the flag now travels in its pass constants.
+- The forward mesh vertex shader used its own copies of the draw and
+  transform loads and ignored material WPO; it now uses the shared helpers and
+  `ComputeMeshWorldPosition`.
+- Draw metadata, bounds and cull records live in the materials domain; the
+  draw-metadata load checks that domain.
+- Fixtures that render camera passes now publish a unit frame exposure; the
+  shaders no longer supply one.
+- Recording invalid accesses in the diagnostics buffer, and reporting an
+  invalid material slot through it, move to S11, which builds that buffer.
 
 ## S7 — Frame and view lifecycle
 
@@ -436,8 +452,11 @@ Design: S0 diagnostics update.
       publication, `DiagnosticsFeature::kGpuDebugPrimitives` gate,
       `FramePlanBuilder` wiring and the DemoShell toggle
       (`RenderingSettingsService::SetGpuDebugPassEnabled` applies it).
+- [ ] Debug builds record invalid bindless accesses in the debug buffer
+      (from S6); an invalid material slot is reported there.
 - [ ] **Tests.** Primitives emitted by a test shader appear in the image;
-      overflow is bounded and reported; disabled path allocates nothing.
+      overflow is bounded and reported; disabled path allocates nothing; an
+      invalid material slot is reported, not drawn.
 
 ## S12 — Closeout
 

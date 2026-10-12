@@ -252,6 +252,7 @@ NOLINT_TEST_F(
             });
         auto frame_bindings = ViewFrameBindings {};
         frame_bindings.history_frame_slot = PublishFixtureData(history);
+        frame_bindings.frame_exposure_slot = PublishUnitFrameExposure();
         auto view = ViewConstants::GpuData {};
         view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
           PublishFixtureData(frame_bindings),
@@ -377,6 +378,7 @@ NOLINT_TEST_F(ExposureGpuTest, FogStableCellsPreserveHistoryAndHomogeneousMedia)
     history.previous_projection_matrix, 2, previous_projection_depth);
   auto frame_bindings = ViewFrameBindings {};
   frame_bindings.history_frame_slot = PublishFixtureData(history);
+  frame_bindings.frame_exposure_slot = PublishUnitFrameExposure();
   auto view = ViewConstants::GpuData {};
   view.view_frame_bindings_bslot = BindlessViewFrameBindingsSlot {
     PublishFixtureData(frame_bindings),

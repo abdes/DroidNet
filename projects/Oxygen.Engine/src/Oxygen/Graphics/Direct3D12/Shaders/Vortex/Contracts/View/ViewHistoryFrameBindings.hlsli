@@ -31,22 +31,22 @@ struct ViewHistoryFrameBindings
     uint _pad_to_16_2;
 };
 
-static ViewHistoryFrameBindings LoadViewHistoryFrameBindings(uint slot)
+// Load a view's history record; false, with zeroed history, when the slot is
+// missing or outside the global SRV domain. The renderer publishes history for
+// every view with a resolved camera, so a missing record is an error, never
+// "history equals current".
+static bool TryLoadViewHistoryFrameBindings(
+    uint slot, out ViewHistoryFrameBindings history)
 {
-    ViewHistoryFrameBindings history = (ViewHistoryFrameBindings)0;
-    history.current_stable_projection_matrix = projection_matrix;
-    history.previous_view_matrix = view_matrix;
-    history.previous_projection_matrix = projection_matrix;
-    history.previous_stable_projection_matrix = projection_matrix;
-    history.previous_inverse_view_projection_matrix = inverse_view_projection_matrix;
-
+    history = (ViewHistoryFrameBindings)0;
     if (slot == K_INVALID_BINDLESS_INDEX || !BX_IN_GLOBAL_SRV(slot)) {
-        return history;
+        return false;
     }
 
     StructuredBuffer<ViewHistoryFrameBindings> bindings_buffer =
         ResourceDescriptorHeap[slot];
-    return bindings_buffer[0];
+    history = bindings_buffer[0];
+    return true;
 }
 
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_VIEWHISTORYFRAMEBINDINGS_HLSLI

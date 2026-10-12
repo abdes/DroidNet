@@ -197,11 +197,12 @@ auto ForwardLightPublisher::Publish(const BuiltLightGridFrame& built_frame)
       = bindings.local_count == 0U && bindings.directional_count == 0U
       ? kLightingPublicationEmpty
       : kLightingPublicationRecorded;
-    const auto slot
+    const auto published
       = lighting_bindings_publisher_->Publish(view.view_id, bindings);
-    if (slot == kInvalidShaderVisibleIndex) {
+    if (!published) {
       return std::unexpected(failure);
     }
+    const auto slot = *published;
     if (bindings.local_count != 0U && !spatial_grid_->Record(view, slot)) {
       return std::unexpected(failure);
     }
@@ -265,10 +266,12 @@ auto ForwardLightPublisher::PublishShadowReferences(
   bindings.directional_shadow_map_srv = shadows.directional_shadow_map_srv;
   bindings.local_shadow_map_srv = shadows.local_shadow_map_srv;
   failure.error = LightingPreparationError::kAllocationFailed;
-  const auto slot = lighting_bindings_publisher_->Publish(view_id, bindings);
-  if (!slot.IsValid()) {
+  const auto published
+    = lighting_bindings_publisher_->Publish(view_id, bindings);
+  if (!published) {
     return std::unexpected(failure);
   }
+  const auto slot = *published;
   published_views_.insert_or_assign(view_id,
     PublishedLightingView {
       .slot = slot,

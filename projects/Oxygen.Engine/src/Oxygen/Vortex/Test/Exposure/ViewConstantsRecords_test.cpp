@@ -121,8 +121,8 @@ namespace {
       recorder->SetPipelineState(pipeline);
       recorder->SetComputeRoot32BitConstant(root_constants, 0U, 0U);
 
-      RendererPublicationProbe::WriteCurrentViewConstants(
-        *renderer_, ctx_, stage9_view_slot);
+      ASSERT_TRUE(RendererPublicationProbe::WriteCurrentViewConstants(
+        *renderer_, ctx_, stage9_view_slot));
       ASSERT_TRUE(ctx_.view_constants.IsValid());
       recorder->SetComputeRootConstantBufferView(
         view_constants, ctx_.view_constants.GpuAddress());
@@ -130,8 +130,8 @@ namespace {
         root_constants, stage9_inputs.get(), 1U);
       recorder->Dispatch(1U, 1U, 1U);
 
-      RendererPublicationProbe::WriteCurrentViewConstants(
-        *renderer_, ctx_, stage10_view_slot);
+      ASSERT_TRUE(RendererPublicationProbe::WriteCurrentViewConstants(
+        *renderer_, ctx_, stage10_view_slot));
       ASSERT_TRUE(ctx_.view_constants.IsValid());
       recorder->SetComputeRootConstantBufferView(
         view_constants, ctx_.view_constants.GpuAddress());

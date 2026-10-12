@@ -28,6 +28,7 @@
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereComposePass.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
+#include <Oxygen/Vortex/Internal/ViewConstantsGuard.h>
 #include <Oxygen/Vortex/Internal/ViewportClamp.h>
 #include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/RenderContext.h>
@@ -195,6 +196,10 @@ auto AtmosphereComposePass::Record(RenderContext& ctx,
   auto framebuffer
     = gfx->CreateFramebuffer(BuildAtmosphereFramebuffer(scene_textures));
 
+  if (!vortex::internal::HasViewConstants(ctx, "Vortex.Stage15.Atmosphere")) {
+    state.executed = false;
+    return state;
+  }
   graphics::GpuEventScope pass_scope(recorder, "Vortex.Stage15.Atmosphere",
     profiling::ProfileGranularity::kTelemetry,
     profiling::ProfileCategory::kPass);
@@ -218,11 +223,9 @@ auto AtmosphereComposePass::Record(RenderContext& ctx,
   recorder.BindFrameBuffer(*framebuffer);
   SetViewportAndScissor(recorder, ctx, scene_textures);
   recorder.SetPipelineState(BuildAtmospherePipelineDesc(scene_textures));
-  if (ctx.view_constants.IsValid()) {
-    recorder.SetGraphicsRootConstantBufferView(
-      static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
-      ctx.view_constants.GpuAddress());
-  }
+  recorder.SetGraphicsRootConstantBufferView(
+    static_cast<std::uint32_t>(bindless_d3d12::RootParam::kViewConstants),
+    ctx.view_constants.GpuAddress());
   recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);

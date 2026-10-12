@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <expected>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -13,6 +14,7 @@
 #include <shared_mutex>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -973,19 +975,28 @@ private:
     Graphics& gfx, frame::SequenceNumber sequence, frame::Slot slot) -> void;
   [[nodiscard]] auto PublishCurrentViewHistoryFrameBindings(
     RenderContext& render_context, RendererPublicationState& publication_state)
-    -> ShaderVisibleIndex;
-  OXGN_VRTX_API auto WriteCurrentViewConstants(RenderContext& render_context,
-    Graphics& gfx, ShaderVisibleIndex view_frame_bindings_slot) -> void;
+    -> std::expected<ShaderVisibleIndex, std::error_code>;
+  //! Log the record that failed and clear the view's b1 record and bindings
+  //! slot, so no later pass records against a partial publication.
+  auto RejectCurrentViewPublication(RenderContext& render_context,
+    std::string_view record, std::error_code error) -> void;
+  //! False when the record was not written; the view must be rejected.
+  [[nodiscard]] OXGN_VRTX_API auto WriteCurrentViewConstants(
+    RenderContext& render_context, Graphics& gfx,
+    ShaderVisibleIndex view_frame_bindings_slot) -> bool;
   //! Write the current view constants as a new b1 record; earlier records
   //! stay intact for work already recorded against them.
-  auto PublishViewConstantsRecord(RenderContext& render_context, Graphics& gfx)
-    -> void;
-  auto RefreshCurrentViewFrameBindings(
-    RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
-  auto PublishCurrentViewPreSceneFrameBindings(RenderContext& render_context,
-    graphics::CommandRecorder& recorder, SceneRenderer& scene_renderer) -> bool;
-  auto PublishCurrentViewPostSceneFrameBindings(
-    RenderContext& render_context, SceneRenderer& scene_renderer) -> void;
+  [[nodiscard]] auto PublishViewConstantsRecord(
+    RenderContext& render_context, Graphics& gfx) -> bool;
+  //! The publication functions return false when a required record was not
+  //! published; the caller rejects the view.
+  [[nodiscard]] auto RefreshCurrentViewFrameBindings(
+    RenderContext& render_context, SceneRenderer& scene_renderer) -> bool;
+  [[nodiscard]] auto PublishCurrentViewPreSceneFrameBindings(
+    RenderContext& render_context, graphics::CommandRecorder& recorder,
+    SceneRenderer& scene_renderer) -> bool;
+  [[nodiscard]] auto PublishCurrentViewPostSceneFrameBindings(
+    RenderContext& render_context, SceneRenderer& scene_renderer) -> bool;
   auto ResetPublicationState() -> void;
   auto DetachPublishedRuntimeViewState(ViewId intent_view_id)
     -> DetachedPublishedRuntimeViewState;

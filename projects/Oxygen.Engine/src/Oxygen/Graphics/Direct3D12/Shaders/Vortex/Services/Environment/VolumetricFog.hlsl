@@ -295,9 +295,9 @@ static bool TrySampleTemporalHistory(
 
     const ViewFrameBindings view_bindings =
         LoadViewFrameBindings(bindless_view_frame_bindings_slot);
-    const ViewHistoryFrameBindings view_history =
-        LoadViewHistoryFrameBindings(view_bindings.history_frame_slot);
-    if ((view_history.validity_flags & VIEW_HISTORY_FLAG_PREVIOUS_VIEW_VALID) == 0u)
+    ViewHistoryFrameBindings view_history;
+    if (!TryLoadViewHistoryFrameBindings(view_bindings.history_frame_slot, view_history)
+        || (view_history.validity_flags & VIEW_HISTORY_FLAG_PREVIOUS_VIEW_VALID) == 0u)
     {
         return false;
     }

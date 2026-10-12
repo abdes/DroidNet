@@ -794,11 +794,11 @@ auto ExposurePass::ResolveFrame(RenderContext& ctx,
       .current_state_srv = frame->current_state->srv_index.get(),
       .status_uav = frame->current_state->status_uav_index.get(),
     };
-    const auto slot
-      = frame_constants_publisher_->Publish(ctx.current_view.view_id,
+    const auto slot = ::oxygen::vortex::internal::RequirePublished(
+      frame_constants_publisher_->Publish(ctx.current_view.view_id,
         std::bit_cast<std::array<std::uint32_t, kFrameConstantWordCount>>(
-          constants));
-    CHECK_F(slot.IsValid());
+          constants)),
+      ctx.current_view.view_id, "exposure frame constants");
     recorder.FlushBarriers();
     recorder.SetPipelineState(RequiredPipeline(frame_pipeline_));
     recorder.SetComputeRoot32BitConstant(
@@ -873,11 +873,11 @@ auto ExposurePass::RestoreFrameFallback(RenderContext& ctx,
         && settings.target_luminance == 0.0F
       ? 2U
       : 0U;
-    const auto slot
-      = frame_constants_publisher_->Publish(ctx.current_view.view_id,
+    const auto slot = ::oxygen::vortex::internal::RequirePublished(
+      frame_constants_publisher_->Publish(ctx.current_view.view_id,
         std::bit_cast<std::array<std::uint32_t, kFrameConstantWordCount>>(
-          constants));
-    CHECK_F(slot.IsValid());
+          constants)),
+      ctx.current_view.view_id, "exposure frame constants");
     recorder.FlushBarriers();
     recorder.SetPipelineState(RequiredPipeline(fallback_pipeline_));
     recorder.SetComputeRoot32BitConstant(
@@ -993,10 +993,10 @@ auto ExposurePass::RecordSceneRangeCommands(RenderContext& ctx,
     .bounds_report_index = 0U,
     .composition_products = 0U,
   };
-  const auto slot
-    = suitability_constants_publisher_->Publish(ctx.current_view.view_id,
-      std::bit_cast<std::array<std::uint32_t, 32U>>(constants));
-  CHECK_F(slot.IsValid());
+  const auto slot = ::oxygen::vortex::internal::RequirePublished(
+    suitability_constants_publisher_->Publish(ctx.current_view.view_id,
+      std::bit_cast<std::array<std::uint32_t, 32U>>(constants)),
+    ctx.current_view.view_id, "exposure suitability constants");
   for (unsigned index = capture_opaque_input && !frame.fp32_only ? 0U : 1U;
     index < 2U; ++index) {
     recorder.RequireResourceState(
@@ -1070,10 +1070,10 @@ auto ExposurePass::PropagateOpaqueApError(RenderContext& ctx,
     constants.frame_srv = frame->srv_index.get();
     constants.flags = 64U;
     constants.consumer_rgb_gain = scattering_strength;
-    const auto slot
-      = suitability_constants_publisher_->Publish(ctx.current_view.view_id,
-        std::bit_cast<std::array<std::uint32_t, 32U>>(constants));
-    CHECK_F(slot.IsValid());
+    const auto slot = ::oxygen::vortex::internal::RequirePublished(
+      suitability_constants_publisher_->Publish(ctx.current_view.view_id,
+        std::bit_cast<std::array<std::uint32_t, 32U>>(constants)),
+      ctx.current_view.view_id, "exposure suitability constants");
     recorder.FlushBarriers();
     recorder.SetPipelineState(RequiredPipeline(suitability_pipelines_.at(2)));
     recorder.SetComputeRoot32BitConstant(
@@ -1184,10 +1184,10 @@ auto ExposurePass::GatherFilterGradients(RenderContext& ctx,
     constants.flags = kGatherFilterGradients | (product.transmittance ? 4U : 0U)
       | (desc.texture_type == TextureType::kTexture3D ? 8U : 0U);
     constants.product = product.id;
-    const auto slot
-      = suitability_constants_publisher_->Publish(ctx.current_view.view_id,
-        std::bit_cast<std::array<std::uint32_t, 32U>>(constants));
-    CHECK_F(slot.IsValid());
+    const auto slot = ::oxygen::vortex::internal::RequirePublished(
+      suitability_constants_publisher_->Publish(ctx.current_view.view_id,
+        std::bit_cast<std::array<std::uint32_t, 32U>>(constants)),
+      ctx.current_view.view_id, "exposure suitability constants");
     for (unsigned pipeline = 0U; pipeline < 2U; ++pipeline) {
       recorder.RequireResourceState(
         status, graphics::ResourceStates::kUnorderedAccess);
@@ -1416,10 +1416,10 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
           : 0U,
         .opaque_depth_usable = opaque_depth_usable ? 1U : 0U,
       };
-      const auto slot
-        = suitability_constants_publisher_->Publish(ctx.current_view.view_id,
-          std::bit_cast<std::array<std::uint32_t, 32U>>(constants));
-      CHECK_F(slot.IsValid());
+      const auto slot = ::oxygen::vortex::internal::RequirePublished(
+        suitability_constants_publisher_->Publish(ctx.current_view.view_id,
+          std::bit_cast<std::array<std::uint32_t, 32U>>(constants)),
+        ctx.current_view.view_id, "exposure suitability constants");
       recorder.RequireResourceState(*report_buffer,
         candidate_bounds && !fused_point_check
           ? graphics::ResourceStates::kShaderResource
@@ -1546,10 +1546,10 @@ auto ExposurePass::EvaluateFp16Products(RenderContext& ctx,
           constants.ap_gain = product.consumer_rgb_gain;
         }
       }
-      const auto slot
-        = suitability_constants_publisher_->Publish(ctx.current_view.view_id,
-          std::bit_cast<std::array<std::uint32_t, 32U>>(constants));
-      CHECK_F(slot.IsValid());
+      const auto slot = ::oxygen::vortex::internal::RequirePublished(
+        suitability_constants_publisher_->Publish(ctx.current_view.view_id,
+          std::bit_cast<std::array<std::uint32_t, 32U>>(constants)),
+        ctx.current_view.view_id, "exposure suitability constants");
       recorder.RequireResourceState(
         *report_buffer, graphics::ResourceStates::kShaderResource);
       recorder.RequireResourceState(*frame->current_state->status_buffer,
@@ -1674,9 +1674,9 @@ auto ExposurePass::FinalizeFp16Suitability(RenderContext& ctx,
       0U,
       0U,
     };
-    const auto slot
-      = constants_publisher_->Publish(ctx.current_view.view_id, constants);
-    CHECK_F(slot.IsValid());
+    const auto slot = ::oxygen::vortex::internal::RequirePublished(
+      constants_publisher_->Publish(ctx.current_view.view_id, constants),
+      ctx.current_view.view_id, "exposure constants");
     recorder.FlushBarriers();
     recorder.SetPipelineState(RequiredPipeline(eligibility_pipeline_));
     recorder.SetComputeRoot32BitConstant(
@@ -1762,9 +1762,10 @@ auto ExposurePass::ConvertCheckedSceneColor(RenderContext& ctx,
       0U,
       0U,
     };
-    const auto slot = conversion_constants_publisher_->Publish(
-      ctx.current_view.view_id, constants);
-    CHECK_F(slot.IsValid());
+    const auto slot = ::oxygen::vortex::internal::RequirePublished(
+      conversion_constants_publisher_->Publish(
+        ctx.current_view.view_id, constants),
+      ctx.current_view.view_id, "exposure conversion constants");
     recorder.FlushBarriers();
     recorder.SetPipelineState(RequiredPipeline(convert_pipeline_));
     recorder.SetComputeRoot32BitConstant(
@@ -2117,8 +2118,9 @@ auto ExposurePass::RecordState(RenderContext& ctx,
   targets.initial_log_gain = resolved.initial_log_gain;
   targets.dark_log_gain = resolved.dark_log_gain;
   std::ranges::copy(resolved.auto_log_targets, targets.keys.begin());
-  const auto targets_srv
-    = target_publisher_->Publish(ctx.current_view.view_id, targets);
+  const auto targets_srv = ::oxygen::vortex::internal::SlotOrInvalid(
+    target_publisher_->Publish(ctx.current_view.view_id, targets),
+    ctx.current_view.view_id, "exposure targets");
   if (!targets_srv.IsValid()) {
     return {};
   }
@@ -2472,9 +2474,10 @@ auto ExposurePass::PublishHistogramConstants(RenderContext& ctx,
     ._pad1 = 0U,
   };
 
-  const auto slot = constants_publisher_->Publish(ctx.current_view.view_id,
-    std::bit_cast<std::array<std::uint32_t, 16U>>(constants));
-  CHECK_F(slot.IsValid(), "Exposure constants publication failed");
+  const auto slot = ::oxygen::vortex::internal::RequirePublished(
+    constants_publisher_->Publish(ctx.current_view.view_id,
+      std::bit_cast<std::array<std::uint32_t, 16U>>(constants)),
+    ctx.current_view.view_id, "exposure constants");
   return slot;
 }
 
@@ -2572,11 +2575,11 @@ auto ExposurePass::UpdateAverageConstants(RenderContext& ctx,
     .view_frame_bindings_slot = ctx.current_view.view_frame_bindings_slot.get(),
   };
 
-  const auto slot
-    = average_constants_publisher_->Publish(ctx.current_view.view_id,
+  const auto slot = ::oxygen::vortex::internal::RequirePublished(
+    average_constants_publisher_->Publish(ctx.current_view.view_id,
       std::bit_cast<std::array<std::uint32_t, kAverageConstantWordCount>>(
-        constants));
-  CHECK_F(slot.IsValid(), "Exposure constants publication failed");
+        constants)),
+    ctx.current_view.view_id, "exposure average constants");
 
   recorder.SetComputeRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,

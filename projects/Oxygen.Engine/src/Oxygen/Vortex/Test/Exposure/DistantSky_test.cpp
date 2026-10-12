@@ -40,6 +40,7 @@
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/Types/ViewConstants.h>
+#include <Oxygen/Vortex/Types/ViewFrameBindings.h>
 
 namespace oxygen::vortex::testing::exposure {
 namespace {
@@ -111,7 +112,11 @@ NOLINT_TEST_F(ExposureGpuTest, DistantSkyPreservesSlotsFactorsAndFogAmbient)
   auto view_params = ResolvedView::Params {};
   view_params.view_config.viewport = ViewPort { .width = 8.0F, .height = 8.0F };
   const auto resolved_view = ResolvedView(view_params);
-  const auto view_data = ViewConstants::GpuData {};
+  auto view_bindings = ViewFrameBindings {};
+  view_bindings.frame_exposure_slot = PublishUnitFrameExposure();
+  auto view_data = ViewConstants::GpuData {};
+  view_data.view_frame_bindings_bslot
+    = BindlessViewFrameBindingsSlot { PublishFixtureData(view_bindings) };
   auto view_buffer
     = CreateUploadBuffer(SizeBytes { 256U }, graphics::BufferUsage::kConstant);
   view_buffer->Update(&view_data, sizeof(view_data), 0U);

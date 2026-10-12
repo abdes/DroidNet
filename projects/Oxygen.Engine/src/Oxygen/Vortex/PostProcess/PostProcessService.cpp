@@ -537,7 +537,9 @@ auto PostProcessService::PublishBindings(const ViewId view_id,
     return kInvalidShaderVisibleIndex;
   }
 
-  const auto slot = bindings_publisher_->Publish(view_id, bindings);
+  const auto slot = ::oxygen::vortex::internal::SlotOrInvalid(
+    bindings_publisher_->Publish(view_id, bindings), view_id,
+    "post-process frame bindings");
   published_views_.insert_or_assign(
     view_id, PublishedView { .slot = slot, .bindings = bindings });
   return slot;

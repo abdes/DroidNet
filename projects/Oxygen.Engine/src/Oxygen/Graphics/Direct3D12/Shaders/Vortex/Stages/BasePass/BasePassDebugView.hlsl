@@ -31,14 +31,20 @@ static float3 EvaluateBasePassDebugView(
     {
         return float3(1.0f, 0.0f, 1.0f);
     }
-    const float device_depth = SampleSceneDepth(uv, bindings);
+    float device_depth;
+    if (!TrySampleSceneDepth(uv, bindings, device_depth)) {
+        discard;
+    }
     return saturate(device_depth).xxx;
 #elif defined(DEBUG_SCENE_DEPTH_LINEAR)
     if (!IsSceneTextureValid(bindings, SCENE_TEXTURE_FLAG_SCENE_DEPTH))
     {
         return float3(1.0f, 0.0f, 1.0f);
     }
-    const float device_depth = SampleSceneDepth(uv, bindings);
+    float device_depth;
+    if (!TrySampleSceneDepth(uv, bindings, device_depth)) {
+        discard;
+    }
     const float3 world_position = ReconstructWorldPosition(
         uv, device_depth, inverse_view_projection_matrix);
     const float4 view_position = mul(view_matrix, float4(world_position, 1.0f));
@@ -67,7 +73,13 @@ static float3 EvaluateBasePassDebugView(
         return float3(0.0f, 0.0f, 1.0f);
     }
 
-    const float device_depth = SampleSceneDepth(uv, bindings);
+    float device_depth;
+
+    if (!TrySampleSceneDepth(uv, bindings, device_depth)) {
+
+        discard;
+
+    }
     const float3 world_position = ReconstructWorldPosition(
         uv, device_depth, inverse_view_projection_matrix);
     const GBufferData data = ReadGBuffer(uv, bindings);

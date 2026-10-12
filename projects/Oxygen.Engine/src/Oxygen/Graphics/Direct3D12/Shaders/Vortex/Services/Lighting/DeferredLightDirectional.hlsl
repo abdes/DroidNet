@@ -29,7 +29,10 @@ float4 DeferredLightDirectionalPS(VortexFullscreenTriangleOutput input) : SV_Tar
 {
     const SceneTextureBindingData bindings = LoadBindingsFromCurrentView();
     if (!HasDeferredLightingInputs(bindings)) return 0.0f.xxxx;
-    const float scene_depth = SampleSceneDepth(input.uv, bindings);
+    float scene_depth;
+    if (!TrySampleSceneDepth(input.uv, bindings, scene_depth)) {
+        discard;
+    }
     if (IsDeferredBackgroundDepth(scene_depth)) return 0.0f.xxxx;
     const float3 world_position =
         ReconstructDeferredWorldPosition(input.uv, scene_depth);

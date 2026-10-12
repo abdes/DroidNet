@@ -316,7 +316,8 @@ auto SelectionOutlinePass::Record(RenderContext& ctx,
     constants.scene_depth_srv = inputs.scene_depth_srv.get();
     constants.level = level;
     constants.test_occlusion = test_occlusion ? 1U : 0U;
-    return mask_constants_->Publish(view_id, constants);
+    return internal::SlotOrInvalid(mask_constants_->Publish(view_id, constants),
+      view_id, "selection outline mask constants");
   };
   const auto outlined_constants = publish_mask_constants(kOutlinedLevel);
   const auto active_constants = publish_mask_constants(kActiveLevel);
@@ -327,7 +328,8 @@ auto SelectionOutlinePass::Record(RenderContext& ctx,
   composite.radius = std::clamp(outline.radius, 0.5F, kMaxRadius);
   composite.occluded_alpha = std::clamp(outline.occluded_alpha, 0.0F, 1.0F);
   const auto composite_constants
-    = composite_constants_->Publish(view_id, composite);
+    = internal::SlotOrInvalid(composite_constants_->Publish(view_id, composite),
+      view_id, "selection outline composite constants");
   if (!outlined_constants.IsValid() || !active_constants.IsValid()
     || !composite_constants.IsValid()) {
     return 0U;

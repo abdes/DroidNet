@@ -18,7 +18,10 @@ float4 DeferredIblPS(VortexFullscreenTriangleOutput input) : SV_Target0
 {
     const SceneTextureBindingData textures = LoadSceneTextureBindings(bindless_view_frame_bindings_slot);
     if (!HasDeferredLightingInputs(textures)) return 0.0.xxxx;
-    const float depth = SampleSceneDepth(input.uv, textures);
+    float depth;
+    if (!TrySampleSceneDepth(input.uv, textures, depth)) {
+        discard;
+    }
     if (IsDeferredBackgroundDepth(depth)) return 0.0.xxxx;
     const DeferredLightingSurfaceData surface = LoadDeferredLightingSurface(input.uv,
         ReconstructDeferredWorldPosition(input.uv, depth), camera_position, textures);

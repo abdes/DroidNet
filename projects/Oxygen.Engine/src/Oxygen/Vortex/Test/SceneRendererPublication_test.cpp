@@ -1118,7 +1118,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_NE(bindings.partial_depth_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.velocity_srv, SceneTextureBindings::kInvalidIndex);
 
-  scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context);
+  ASSERT_TRUE(
+    scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context));
   bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_NE(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_NE(bindings.stencil_srv, SceneTextureBindings::kInvalidIndex);
@@ -1173,7 +1174,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
   EXPECT_EQ(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
   EXPECT_EQ(bindings.gbuffer_srvs.at(0), SceneTextureBindings::kInvalidIndex);
 
-  scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context);
+  ASSERT_TRUE(
+    scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context));
 
   bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_NE(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);
@@ -1232,7 +1234,8 @@ NOLINT_TEST_F(SceneRendererPublicationTest,
     scene_renderer.GetPublishedViewFrameBindings().scene_texture_frame_slot,
     oxygen::kInvalidShaderVisibleIndex);
 
-  scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context);
+  ASSERT_TRUE(
+    scene_renderer.PublishDeferredBasePassSceneTextures(stage10_context));
 
   bindings = scene_renderer.GetSceneTextureBindings();
   EXPECT_NE(bindings.scene_color_srv, SceneTextureBindings::kInvalidIndex);

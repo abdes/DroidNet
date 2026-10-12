@@ -165,6 +165,16 @@ protected:
     graphics::ResourceStates final_state) -> void;
   auto Uniform(float value, std::uint32_t width = 1U, std::uint32_t height = 1U)
     -> Signal;
+  //! A unit pre-exposure record, for views that render unexposed values.
+  //! Camera shaders have no exposure default; every view publishes one.
+  auto PublishUnitFrameExposure() -> ShaderVisibleIndex
+  {
+    return PublishFixtureData(FrameExposureData {
+      .pre_exposure = 1.0F,
+      .one_over_pre_exposure = 1.0F,
+    });
+  }
+
   template <typename T>
   auto PublishFixtureData(const T& value) -> ShaderVisibleIndex
   {

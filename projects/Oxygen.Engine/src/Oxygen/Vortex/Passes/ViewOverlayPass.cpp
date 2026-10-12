@@ -194,7 +194,9 @@ auto ViewOverlayPass::Record(RenderContext& ctx,
       = glm::vec2 { view.Viewport().width, view.Viewport().height };
     constants.occluded_alpha = overlay.occluded_alpha;
     auto draw = LayerDraw {};
-    draw.constants = constants_->Publish(view_id, constants);
+    draw.constants
+      = internal::SlotOrInvalid(constants_->Publish(view_id, constants),
+        view_id, "view overlay constants");
     if (constants.triangles_srv != kInvalidShaderVisibleIndex.get()) {
       draw.triangle_vertices
         = static_cast<std::uint32_t>(layer.triangles.size());

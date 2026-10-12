@@ -90,9 +90,12 @@ ContactShadowCasterDepthVSOutput VortexContactShadowCasterDepthVS(
         = BX_LoadVertex(metadata.vertex_buffer_index, actual_vertex_index);
     output.uv = vertex.texcoord;
 
-    const float4x4 world_matrix = BX_LoadInstanceWorldMatrix(
-        draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot,
-        metadata, instance_id);
+    float4x4 world_matrix;
+    if (!BX_TryLoadInstanceWorldMatrix(
+            draw_bindings.current_worlds_slot, draw_bindings.instance_data_slot,
+            metadata, instance_id, world_matrix)) {
+        return output;
+    }
     output.position = ComputeMeshClipPosition(world_matrix, vertex.position,
         ResolveDrawWorldOffset(draw_bindings, draw_index),
         pass_constants.view_matrix, pass_constants.projection_matrix);

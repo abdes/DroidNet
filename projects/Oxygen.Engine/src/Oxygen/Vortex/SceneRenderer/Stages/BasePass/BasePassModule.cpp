@@ -990,8 +990,10 @@ auto BasePassModule::WriteVelocityMergeInputs(Graphics& gfx,
   }
   velocity_merge_inputs_publisher_->OnFrameStart(
     ctx.frame_sequence, ctx.frame_slot);
-  return velocity_merge_inputs_publisher_->Publish(
-    ctx.current_view.view_id, { base_velocity_srv, aux_velocity_srv, 0U, 0U });
+  return internal::SlotOrInvalid(
+    velocity_merge_inputs_publisher_->Publish(ctx.current_view.view_id,
+      { base_velocity_srv, aux_velocity_srv, 0U, 0U }),
+    ctx.current_view.view_id, "velocity merge inputs");
 }
 
 auto BasePassModule::WriteWireframeConstants(Graphics& gfx,
@@ -1014,10 +1016,10 @@ auto BasePassModule::WriteWireframeConstants(Graphics& gfx,
       ctx.wireframe_color.b, ctx.wireframe_color.a, },
     .write_pre_exposed = write_pre_exposed ? 1.0F : 0.0F,
   };
-  const auto slot = wireframe_constants_publisher_->Publish(
-    ctx.current_view.view_id, std::bit_cast<std::array<float, 8>>(constants));
-  CHECK_F(slot.IsValid(), "Wireframe constants publication failed");
-  return slot;
+  return internal::RequirePublished(
+    wireframe_constants_publisher_->Publish(
+      ctx.current_view.view_id, std::bit_cast<std::array<float, 8>>(constants)),
+    ctx.current_view.view_id, "wireframe pass constants");
 }
 
 auto BasePassModule::BuildDrawList(RenderContext& ctx,

@@ -133,7 +133,10 @@ float4 VortexLocalFogVolumeComposePS(LocalFogTileVertexOutput input) : SV_Target
 
     const SceneTextureBindingData bindings
         = LoadSceneTextureBindings(bindless_view_frame_bindings_slot);
-    const float raw_depth = SampleSceneDepth(input.uv, bindings);
+    float raw_depth;
+    if (!TrySampleSceneDepth(input.uv, bindings, raw_depth)) {
+        discard;
+    }
     float3 ray_origin;
     float3 ray_dir;
     LocalFogPixelRay(input.uv, ray_origin, ray_dir);

@@ -39,10 +39,12 @@ static inline DrawFrameBindings LoadResolvedDrawFrameBindings()
     return LoadDrawFrameBindings(view_bindings.draw_frame_slot);
 }
 
-static inline ViewHistoryFrameBindings LoadResolvedViewHistoryFrameBindings()
+static inline bool TryLoadResolvedViewHistoryFrameBindings(
+    out ViewHistoryFrameBindings history)
 {
     const ViewFrameBindings view_bindings = LoadResolvedViewFrameBindings();
-    return LoadViewHistoryFrameBindings(view_bindings.history_frame_slot);
+    return TryLoadViewHistoryFrameBindings(
+        view_bindings.history_frame_slot, history);
 }
 
 #endif // OXYGEN_D3D12_SHADERS_RENDERER_DRAWHELPERS_HLSLI

@@ -1612,9 +1612,68 @@ auto Renderer::BeginPublicationFrame(Graphics& gfx,
   state.prepared_frame_slot = slot;
 }
 
+namespace {
+  //! The draw-frame record of a prepared scene frame.
+  auto BuildDrawFrameBindings(const PreparedSceneFrame& prepared_frame)
+    -> DrawFrameBindings
+  {
+    return DrawFrameBindings {
+      .draw_metadata_slot
+      = BindlessDrawMetadataSlot { prepared_frame.bindless_draw_metadata_slot },
+      .current_worlds_slot
+      = BindlessWorldsSlot { prepared_frame.bindless_worlds_slot },
+      .previous_worlds_slot
+      = BindlessWorldsSlot { prepared_frame.bindless_previous_worlds_slot },
+      .normal_matrices_slot
+      = BindlessNormalsSlot { prepared_frame.bindless_normals_slot },
+      .material_shading_constants_slot = BindlessMaterialShadingConstantsSlot {
+        prepared_frame.bindless_material_shading_slot,
+      },
+      .procedural_grid_material_constants_slot = {},
+      .instance_data_slot
+      = BindlessInstanceDataSlot { prepared_frame.bindless_instance_data_slot },
+      .current_skinned_pose_slot = BindlessSkinnedPosePublicationsSlot {
+        prepared_frame.bindless_current_skinned_pose_slot,
+      },
+      .previous_skinned_pose_slot = BindlessSkinnedPosePublicationsSlot {
+        prepared_frame.bindless_previous_skinned_pose_slot,
+      },
+      .current_morph_slot = BindlessMorphPublicationsSlot {
+        prepared_frame.bindless_current_morph_slot,
+      },
+      .previous_morph_slot = BindlessMorphPublicationsSlot {
+        prepared_frame.bindless_previous_morph_slot,
+      },
+      .current_material_wpo_slot = BindlessMaterialWpoPublicationsSlot {
+        prepared_frame.bindless_current_material_wpo_slot,
+      },
+      .previous_material_wpo_slot = BindlessMaterialWpoPublicationsSlot {
+        prepared_frame.bindless_previous_material_wpo_slot,
+      },
+      .current_motion_vector_status_slot
+      = BindlessMotionVectorStatusPublicationsSlot {
+        prepared_frame.bindless_current_motion_vector_status_slot,
+      },
+      .previous_motion_vector_status_slot
+      = BindlessMotionVectorStatusPublicationsSlot {
+        prepared_frame.bindless_previous_motion_vector_status_slot,
+      },
+      .velocity_draw_metadata_slot = BindlessVelocityDrawMetadataSlot {
+        prepared_frame.bindless_velocity_draw_metadata_slot,
+      },
+      .cull_records_slot = BindlessDrawCullRecordsSlot {
+        prepared_frame.bindless_draw_cull_records_slot,
+      },
+      ._pad0 = 0U,
+      ._pad1 = 0U,
+      ._pad2 = 0U,
+    };
+  }
+} // namespace
+
 auto Renderer::PublishCurrentViewHistoryFrameBindings(
   RenderContext& render_context, RendererPublicationState& publication_state)
-  -> ShaderVisibleIndex
+  -> std::expected<ShaderVisibleIndex, std::error_code>
 {
   if (render_context.current_view.resolved_view == nullptr) {
     return kInvalidShaderVisibleIndex;
@@ -1627,8 +1686,18 @@ auto Renderer::PublishCurrentViewHistoryFrameBindings(
       observer_ptr<const scene::Scene> { render_context.scene.get() }));
 }
 
+auto Renderer::RejectCurrentViewPublication(RenderContext& render_context,
+  const std::string_view record, const std::error_code error) -> void
+{
+  LOG_F(ERROR, "View {}: {} was not published ({}); the view is rejected",
+    render_context.current_view.view_id.get(), record, error.message());
+  render_context.view_constants = {};
+  render_context.current_view.view_frame_bindings_slot
+    = kInvalidShaderVisibleIndex;
+}
+
 auto Renderer::WriteCurrentViewConstants(RenderContext& render_context,
-  Graphics& gfx, const ShaderVisibleIndex view_frame_bindings_slot) -> void
+  Graphics& gfx, const ShaderVisibleIndex view_frame_bindings_slot) -> bool
 {
   if (render_context.current_view.resolved_view != nullptr) {
     UpdateViewConstantsFromView(*render_context.current_view.resolved_view);
@@ -1643,59 +1712,80 @@ auto Renderer::WriteCurrentViewConstants(RenderContext& render_context,
       ViewConstants::kRenderer);
   render_context.current_view.view_frame_bindings_slot
     = view_frame_bindings_slot;
-  PublishViewConstantsRecord(render_context, gfx);
+  return PublishViewConstantsRecord(render_context, gfx);
 }
 
 auto Renderer::PublishViewConstantsRecord(
-  RenderContext& render_context, Graphics& gfx) -> void
+  RenderContext& render_context, Graphics& gfx) -> bool
 {
   auto& publication_state = EnsurePublicationState(gfx);
   const auto snapshot = view_const_cpu_.GetSnapshot();
   auto record = publication_state.view_constants_writer->Write(snapshot);
   if (!record) {
-    LOG_F(ERROR, "View {}: view constants were not published: {}",
-      render_context.current_view.view_id.get(), record.error().message());
-    render_context.view_constants = {};
-    return;
+    RejectCurrentViewPublication(
+      render_context, "view constants", record.error());
+    return false;
   }
   render_context.view_constants = *record;
+  return true;
 }
 
 auto Renderer::RefreshCurrentViewFrameBindings(
-  RenderContext& render_context, SceneRenderer& scene_renderer) -> void
+  RenderContext& render_context, SceneRenderer& scene_renderer) -> bool
 {
   if (render_context.current_view.view_id == kInvalidViewId) {
-    return;
+    return false;
   }
   auto gfx = GetGraphics();
   if (gfx == nullptr) {
-    return;
+    return false;
   }
 
   BeginPublicationFrame(
     *gfx, render_context.frame_sequence, render_context.frame_slot);
   auto& publication_state = EnsurePublicationState(*gfx);
+  const auto view_id = render_context.current_view.view_id;
 
   auto view_bindings = scene_renderer.GetPublishedViewFrameBindings();
-  view_bindings.history_frame_slot
+  const auto history
     = PublishCurrentViewHistoryFrameBindings(render_context, publication_state);
-  const auto scene_texture_frame_slot
+  if (!history) {
+    RejectCurrentViewPublication(
+      render_context, "view history bindings", history.error());
+    return false;
+  }
+  view_bindings.history_frame_slot = *history;
+  const auto scene_textures
     = publication_state.scene_texture_bindings_publisher->Publish(
-      render_context.current_view.view_id,
-      scene_renderer.GetSceneTextureBindings());
-  view_bindings.scene_texture_frame_slot = scene_texture_frame_slot;
-  view_bindings.screen_hzb_frame_slot
+      view_id, scene_renderer.GetSceneTextureBindings());
+  if (!scene_textures) {
+    RejectCurrentViewPublication(
+      render_context, "scene texture bindings", scene_textures.error());
+    return false;
+  }
+  view_bindings.scene_texture_frame_slot = *scene_textures;
+  const auto screen_hzb
     = publication_state.screen_hzb_bindings_publisher->Publish(
-      render_context.current_view.view_id,
-      scene_renderer.GetPublishedScreenHzbBindings());
+      view_id, scene_renderer.GetPublishedScreenHzbBindings());
+  if (!screen_hzb) {
+    RejectCurrentViewPublication(
+      render_context, "screen HZB bindings", screen_hzb.error());
+    return false;
+  }
+  view_bindings.screen_hzb_frame_slot = *screen_hzb;
 
-  const auto view_frame_bindings_slot
+  const auto view_frame_bindings
     = publication_state.view_frame_bindings_publisher->Publish(
-      render_context.current_view.view_id, view_bindings);
-  scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
-    view_bindings, view_frame_bindings_slot);
+      view_id, view_bindings);
+  if (!view_frame_bindings) {
+    RejectCurrentViewPublication(
+      render_context, "view frame bindings", view_frame_bindings.error());
+    return false;
+  }
+  scene_renderer.PublishViewFrameBindings(
+    view_id, view_bindings, *view_frame_bindings);
 
-  WriteCurrentViewConstants(render_context, *gfx, view_frame_bindings_slot);
+  return WriteCurrentViewConstants(render_context, *gfx, *view_frame_bindings);
 }
 
 auto Renderer::PublishCurrentViewPreSceneFrameBindings(
@@ -1713,150 +1803,83 @@ auto Renderer::PublishCurrentViewPreSceneFrameBindings(
   BeginPublicationFrame(
     *gfx, render_context.frame_sequence, render_context.frame_slot);
   auto& publication_state = EnsurePublicationState(*gfx);
+  const auto view_id = render_context.current_view.view_id;
 
   auto view_bindings = ViewFrameBindings {};
   if (const auto prepared_frame = render_context.current_view.prepared_frame;
     prepared_frame != nullptr) {
-    auto draw_bindings = DrawFrameBindings {
-      .draw_metadata_slot
-      = BindlessDrawMetadataSlot { prepared_frame->bindless_draw_metadata_slot },
-      .current_worlds_slot
-      = BindlessWorldsSlot { prepared_frame->bindless_worlds_slot },
-      .previous_worlds_slot
-      = BindlessWorldsSlot { prepared_frame->bindless_previous_worlds_slot },
-      .normal_matrices_slot
-      = BindlessNormalsSlot { prepared_frame->bindless_normals_slot },
-      .material_shading_constants_slot = BindlessMaterialShadingConstantsSlot {
-        prepared_frame->bindless_material_shading_slot,
-      },
-      .procedural_grid_material_constants_slot = {},
-      .instance_data_slot
-      = BindlessInstanceDataSlot { prepared_frame->bindless_instance_data_slot },
-      .current_skinned_pose_slot = BindlessSkinnedPosePublicationsSlot {
-        prepared_frame->bindless_current_skinned_pose_slot,
-      },
-      .previous_skinned_pose_slot = BindlessSkinnedPosePublicationsSlot {
-        prepared_frame->bindless_previous_skinned_pose_slot,
-      },
-      .current_morph_slot = BindlessMorphPublicationsSlot {
-        prepared_frame->bindless_current_morph_slot,
-      },
-      .previous_morph_slot = BindlessMorphPublicationsSlot {
-        prepared_frame->bindless_previous_morph_slot,
-      },
-      .current_material_wpo_slot = BindlessMaterialWpoPublicationsSlot {
-        prepared_frame->bindless_current_material_wpo_slot,
-      },
-      .previous_material_wpo_slot = BindlessMaterialWpoPublicationsSlot {
-        prepared_frame->bindless_previous_material_wpo_slot,
-      },
-      .current_motion_vector_status_slot
-      = BindlessMotionVectorStatusPublicationsSlot {
-        prepared_frame->bindless_current_motion_vector_status_slot,
-      },
-      .previous_motion_vector_status_slot
-      = BindlessMotionVectorStatusPublicationsSlot {
-        prepared_frame->bindless_previous_motion_vector_status_slot,
-      },
-      .velocity_draw_metadata_slot = BindlessVelocityDrawMetadataSlot {
-        prepared_frame->bindless_velocity_draw_metadata_slot,
-      },
-      .cull_records_slot = BindlessDrawCullRecordsSlot {
-        prepared_frame->bindless_draw_cull_records_slot,
-      },
-      ._pad0 = 0U,
-      ._pad1 = 0U,
-      ._pad2 = 0U,
-    };
-    view_bindings.draw_frame_slot
+    const auto draw_frame
       = publication_state.draw_frame_bindings_publisher->Publish(
-        render_context.current_view.view_id, draw_bindings);
+        view_id, BuildDrawFrameBindings(*prepared_frame));
+    if (!draw_frame) {
+      RejectCurrentViewPublication(
+        render_context, "draw frame bindings", draw_frame.error());
+      return false;
+    }
+    view_bindings.draw_frame_slot = *draw_frame;
   }
   if (!scene_renderer.PrepareExposureDomain(render_context, recorder)) {
     return false;
   }
-  view_bindings.frame_exposure_slot = render_context.current_view.frame_exposure
-    ? render_context.current_view.frame_exposure->srv_index
-    : publication_state.frame_exposure_publisher->Publish(
-        render_context.current_view.view_id, FrameExposureData {});
-  view_bindings.exposure_status_uav = render_context.current_view.frame_exposure
-    ? render_context.current_view.frame_exposure->current_state
-        ->status_uav_index
-    : kInvalidShaderVisibleIndex;
-  view_bindings.history_frame_slot
+  if (render_context.current_view.frame_exposure) {
+    view_bindings.frame_exposure_slot
+      = render_context.current_view.frame_exposure->srv_index;
+    view_bindings.exposure_status_uav
+      = render_context.current_view.frame_exposure->current_state
+          ->status_uav_index;
+  } else {
+    const auto frame_exposure
+      = publication_state.frame_exposure_publisher->Publish(
+        view_id, FrameExposureData {});
+    if (!frame_exposure) {
+      RejectCurrentViewPublication(
+        render_context, "frame exposure", frame_exposure.error());
+      return false;
+    }
+    view_bindings.frame_exposure_slot = *frame_exposure;
+    view_bindings.exposure_status_uav = kInvalidShaderVisibleIndex;
+  }
+  const auto history
     = PublishCurrentViewHistoryFrameBindings(render_context, publication_state);
+  if (!history) {
+    RejectCurrentViewPublication(
+      render_context, "view history bindings", history.error());
+    return false;
+  }
+  view_bindings.history_frame_slot = *history;
 
-  const auto view_frame_bindings_slot
+  const auto view_frame_bindings
     = publication_state.view_frame_bindings_publisher->Publish(
-      render_context.current_view.view_id, view_bindings);
-  LOG_F(INFO,
+      view_id, view_bindings);
+  if (!view_frame_bindings) {
+    RejectCurrentViewPublication(
+      render_context, "view frame bindings", view_frame_bindings.error());
+    return false;
+  }
+  LOG_F(2,
     "view_frame_cpu_pre_scene view={} draw_slot={} color_slot={} "
     "history_slot={} frame_slot={}",
-    render_context.current_view.view_id.get(),
-    view_bindings.draw_frame_slot.get(),
+    view_id.get(), view_bindings.draw_frame_slot.get(),
     view_bindings.frame_exposure_slot.get(),
-    view_bindings.history_frame_slot.get(), view_frame_bindings_slot.get());
-  scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
-    view_bindings, view_frame_bindings_slot);
+    view_bindings.history_frame_slot.get(), view_frame_bindings->get());
+  scene_renderer.PublishViewFrameBindings(
+    view_id, view_bindings, *view_frame_bindings);
 
-  WriteCurrentViewConstants(render_context, *gfx, view_frame_bindings_slot);
-  return true;
+  return WriteCurrentViewConstants(render_context, *gfx, *view_frame_bindings);
 }
 
 auto Renderer::PublishCurrentViewPostSceneFrameBindings(
-  RenderContext& render_context, SceneRenderer& scene_renderer) -> void
+  RenderContext& render_context, SceneRenderer& scene_renderer) -> bool
 {
   if (render_context.current_view.view_id == kInvalidViewId) {
     scene_renderer.InvalidatePublishedViewFrameBindings();
     view_const_cpu_.SetBindlessViewFrameBindingsSlot(
       BindlessViewFrameBindingsSlot {}, ViewConstants::kRenderer);
-    return;
+    return false;
   }
-  auto gfx = GetGraphics();
-  if (gfx == nullptr) {
-    return;
-  }
-
-  BeginPublicationFrame(
-    *gfx, render_context.frame_sequence, render_context.frame_slot);
-  auto& publication_state = EnsurePublicationState(*gfx);
-
-  auto view_bindings = scene_renderer.GetPublishedViewFrameBindings();
-  const auto scene_texture_frame_slot
-    = publication_state.scene_texture_bindings_publisher->Publish(
-      render_context.current_view.view_id,
-      scene_renderer.GetSceneTextureBindings());
-  view_bindings.scene_texture_frame_slot = scene_texture_frame_slot;
-  // Keep the exact pre-scene record and descriptor pinned for this frame.
-  // Post-scene texture publication must not recompute numerical exposure.
-  LOG_F(INFO, "frame_exposure_post_scene view={} pinned_slot={}",
-    render_context.current_view.view_id.get(),
-    view_bindings.frame_exposure_slot.get());
-  view_bindings.screen_hzb_frame_slot
-    = publication_state.screen_hzb_bindings_publisher->Publish(
-      render_context.current_view.view_id,
-      scene_renderer.GetPublishedScreenHzbBindings());
-  view_bindings.history_frame_slot
-    = PublishCurrentViewHistoryFrameBindings(render_context, publication_state);
-
-  const auto view_frame_bindings_slot
-    = publication_state.view_frame_bindings_publisher->Publish(
-      render_context.current_view.view_id, view_bindings);
-  LOG_F(INFO,
-    "view_frame_cpu_post_scene view={} lighting_slot={} env_slot={} "
-    "scene_tex_slot={} color_slot={} hzb_slot={} history_slot={} "
-    "frame_slot={}",
-    render_context.current_view.view_id.get(),
-    view_bindings.lighting_frame_slot.get(),
-    view_bindings.environment_frame_slot.get(),
-    view_bindings.scene_texture_frame_slot.get(),
-    view_bindings.frame_exposure_slot.get(),
-    view_bindings.screen_hzb_frame_slot.get(),
-    view_bindings.history_frame_slot.get(), view_frame_bindings_slot.get());
-  scene_renderer.PublishViewFrameBindings(render_context.current_view.view_id,
-    view_bindings, view_frame_bindings_slot);
-
-  WriteCurrentViewConstants(render_context, *gfx, view_frame_bindings_slot);
+  // Post-scene publication only refreshes scene textures, screen HZB and
+  // history; the pre-scene exposure record stays pinned for the frame.
+  return RefreshCurrentViewFrameBindings(render_context, scene_renderer);
 }
 
 auto Renderer::ResetPublicationState() -> void { publication_state_.reset(); }
@@ -3920,7 +3943,9 @@ auto Renderer::InitializeStandaloneCurrentView(RenderContext& render_context,
     .SetFrameSequenceNumber(
       frame::SequenceNumber { frame_seq_num_ }, ViewConstants::kRenderer);
 
-  PublishViewConstantsRecord(render_context, *gfx);
+  // A failed write is logged and leaves no b1 record, so every camera pass
+  // rejects the view.
+  std::ignore = PublishViewConstantsRecord(render_context, *gfx);
 }
 
 auto Renderer::EndOffscreenFrame() noexcept -> void

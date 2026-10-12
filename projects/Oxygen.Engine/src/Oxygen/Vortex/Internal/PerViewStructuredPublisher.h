@@ -6,13 +6,18 @@
 
 #pragma once
 
-#include <cstring>
+#include <expected>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
@@ -22,6 +27,37 @@
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex::internal {
+
+//! The published slot, or an invalid one after logging which `record` failed
+//! for `view_id`. For callers whose own result already reports an invalid slot
+//! as a rejection.
+inline auto SlotOrInvalid(
+  const std::expected<ShaderVisibleIndex, std::error_code>& published,
+  const ViewId view_id, const std::string_view record) -> ShaderVisibleIndex
+{
+  if (published) {
+    return *published;
+  }
+  LOG_F(ERROR, "View {}: {} was not published: {}", view_id.get(), record,
+    published.error().message());
+  return kInvalidShaderVisibleIndex;
+}
+
+//! The published slot of a record the current recording cannot do without.
+/*!
+ Throws when `record` was not published, so the view's recording fails and the
+ scene renderer rejects the view with this reason.
+*/
+inline auto RequirePublished(
+  const std::expected<ShaderVisibleIndex, std::error_code>& published,
+  const ViewId view_id, const std::string_view record) -> ShaderVisibleIndex
+{
+  if (!published) {
+    throw std::runtime_error(fmt::format("{} was not published for view {}: {}",
+      record, view_id.get(), published.error().message()));
+  }
+  return *published;
+}
 
 //! Generic publisher for per-view structured payloads backed by transient SRVs.
 template <typename Payload> class PerViewStructuredPublisher {
@@ -45,28 +81,23 @@ public:
     buffer_.OnFrameStart(sequence, slot);
   }
 
-  auto Publish(ViewId view_id, const Payload& payload) -> ShaderVisibleIndex
+  //! Publish `payload` as a new record for `view_id`.
+  /*!
+   Fails with the allocation error. The buffer logs budget rejections once per
+   frame; callers decide whether the record was required and reject the view.
+  */
+  auto Publish(ViewId view_id, const Payload& payload)
+    -> std::expected<ShaderVisibleIndex, std::error_code>
   {
     auto allocation = buffer_.Allocate(1);
     if (!allocation) {
-      if (allocation.error()
-        != make_error_code(upload::UploadError::kBudgetExceeded)) {
-        LOG_F(ERROR, "{}: failed to allocate payload for view {}: {}",
-          debug_label_, view_id.get(), allocation.error().message());
-      }
-      return kInvalidShaderVisibleIndex;
+      return std::unexpected(allocation.error());
     }
-
-    if (!allocation->srv.IsValid() || allocation->mapped_ptr == nullptr) {
-      LOG_F(ERROR, "{}: invalid allocation for view {}", debug_label_,
+    if (!allocation->srv.IsValid() || !allocation->TryWriteObject(payload)) {
+      LOG_F(ERROR, "{}: payload for view {} was not written", debug_label_,
         view_id.get());
-      return kInvalidShaderVisibleIndex;
-    }
-
-    if (!allocation->TryWriteObject(payload)) {
-      LOG_F(ERROR, "{}: failed to write payload for view {}", debug_label_,
-        view_id.get());
-      return kInvalidShaderVisibleIndex;
+      return std::unexpected(
+        make_error_code(upload::UploadError::kStagingAllocFailed));
     }
     return allocation->srv;
   }

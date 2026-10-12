@@ -257,6 +257,9 @@ auto TonemapPass::Record(RenderContext& ctx,
     profiling::ProfileCategory::kPass);
   recorder.SetPipelineState(BuildTonemapPipelineDesc(*inputs.post_target));
   const auto pass_constants_index = UpdatePassConstants(ctx, inputs);
+  if (!pass_constants_index.IsValid()) {
+    return state;
+  }
   recorder.SetGraphicsRoot32BitConstant(
     static_cast<std::uint32_t>(bindless_d3d12::RootParam::kRootConstants), 0U,
     0U);
@@ -317,10 +320,10 @@ auto TonemapPass::UpdatePassConstants(RenderContext& ctx, const Inputs& inputs)
     .content_uv_rect = inputs.content_uv_rect,
   };
 
-  const auto slot = constants_publisher_->Publish(ctx.current_view.view_id,
-    std::bit_cast<std::array<std::uint32_t, kPassConstantWords>>(constants));
-  CHECK_F(slot.IsValid(), "Tonemap constants publication failed");
-  return slot;
+  return ::oxygen::vortex::internal::SlotOrInvalid(
+    constants_publisher_->Publish(ctx.current_view.view_id,
+      std::bit_cast<std::array<std::uint32_t, kPassConstantWords>>(constants)),
+    ctx.current_view.view_id, "tonemap pass constants");
 }
 
 } // namespace oxygen::vortex::postprocess

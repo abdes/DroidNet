@@ -17,6 +17,7 @@
 #include "Vortex/Contracts/View/ViewConstants.hlsli"
 #include "Vortex/Contracts/Draw/DrawHelpers.hlsli"
 #include "Vortex/Contracts/Draw/DrawMetadata.hlsli"
+#include "Vortex/Contracts/Draw/MeshPosition.hlsli"
 #include "Vortex/Contracts/Draw/MaterialShadingConstants.hlsli"
 #include "Vortex/Contracts/Draw/Vertex.hlsli"
 
@@ -51,68 +52,29 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID,
     output.draw_index = draw_index;
     const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
 
-    // Access per-draw metadata buffer through dynamic slot; skip if unavailable.
-    if (draw_bindings.draw_metadata_slot == K_INVALID_BINDLESS_INDEX) {
-        // Fallback: no geometry; output origin.
-        output.position = float4(0,0,0,1);
-        output.color = float3(1,0,1); // debug magenta
-        output.uv = float2(0,0);
-        output.world_pos = float3(0,0,0);
-        output.world_normal = float3(0,0,1);   // Z is up
-        output.world_tangent = float3(1,0,0);
-        output.world_bitangent = float3(0,1,0);
+    // A draw whose metadata or transforms cannot be loaded produces no
+    // primitives (every vertex collapses to one point).
+    DrawMetadata meta;
+    if (!BX_LoadDrawMetadata(draw_bindings.draw_metadata_slot, draw_index, meta)) {
         return output;
     }
-    StructuredBuffer<DrawMetadata> draw_meta_buffer = ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
-    DrawMetadata meta = draw_meta_buffer[draw_index];
+    const Vertex vertex = BX_LoadVertex(
+        meta.vertex_buffer_index, BX_ResolveVertexIndex(meta, vertexID));
 
-    uint vertex_buffer_index = meta.vertex_buffer_index;
-    uint index_buffer_index = meta.index_buffer_index;
-
-    uint actual_vertex_index;
-    if (meta.is_indexed) {
-        // For indexed rendering, get the index buffer and read the actual vertex index
-        StructuredBuffer<uint> index_buffer = ResourceDescriptorHeap[index_buffer_index];
-        actual_vertex_index = index_buffer[meta.first_index + vertexID] + (uint)meta.base_vertex;
-    } else {
-        // For non-indexed rendering, use the vertex ID directly
-        actual_vertex_index = vertexID + (uint)meta.base_vertex;
-    }
-
-    // Access vertex data using ResourceDescriptorHeap
-    StructuredBuffer<Vertex> vertex_buffer = ResourceDescriptorHeap[vertex_buffer_index];
-    Vertex vertex = vertex_buffer[actual_vertex_index];
-
-    // Resolve per-instance transform index
-    // For instanced draws (instance_count > 1), fetch transform index from instance data buffer.
-    // For single-instance draws, use transform_index directly from DrawMetadata.
-    uint transform_index = meta.transform_index;
-    if (meta.instance_count > 1 && draw_bindings.instance_data_slot != K_INVALID_BINDLESS_INDEX) {
-        StructuredBuffer<uint> instance_data = ResourceDescriptorHeap[draw_bindings.instance_data_slot];
-        transform_index = instance_data[meta.instance_metadata_offset + instanceID];
-    }
-
-    // Fetch per-draw world matrix and apply world, view, and projection transforms
+    uint transform_index = 0u;
     float4x4 world_matrix;
-    if (draw_bindings.current_worlds_slot != 0xFFFFFFFFu) {
-        StructuredBuffer<float4x4> worlds = ResourceDescriptorHeap[draw_bindings.current_worlds_slot];
-        // Use per-instance transform index
-        world_matrix = worlds[transform_index];
-    } else {
-        world_matrix = float4x4(1,0,0,0,
-                                0,1,0,0,
-                                0,0,1,0,
-                                0,0,0,1);
+    float4x4 normal_transform;
+    if (!BX_TryResolveTransformIndex(
+            meta, draw_bindings.instance_data_slot, instanceID, transform_index)
+        || !BX_TryLoadMatrix(
+            draw_bindings.current_worlds_slot, transform_index, world_matrix)
+        || !BX_TryLoadMatrix(draw_bindings.normal_matrices_slot,
+            transform_index, normal_transform)) {
+        return output;
     }
-    float4 world_pos = mul(world_matrix, float4(vertex.position, 1.0));
-    // Compute world-space normal: prefer uploaded normal matrices if available
-    float3x3 normal_mat;
-    if (draw_bindings.normal_matrices_slot != 0xFFFFFFFFu) {
-        StructuredBuffer<float4x4> normals = ResourceDescriptorHeap[draw_bindings.normal_matrices_slot];
-        normal_mat = (float3x3)normals[transform_index];
-    } else {
-        normal_mat = (float3x3)world_matrix;
-    }
+    const float4 world_pos = ComputeMeshWorldPosition(world_matrix,
+        vertex.position, ResolveDrawWorldOffset(draw_bindings, draw_index));
+    const float3x3 normal_mat = (float3x3)normal_transform;
     const float3x3 world_3x3 = (float3x3)world_matrix;
     float3 n_ws = SafeNormalize(mul(normal_mat, vertex.normal));
     // Tangent-space basis (TBN): transform tangent/bitangent as direction
@@ -147,8 +109,7 @@ VSOutput VS(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID,
     if (dot(B, B) < 0.5) {
         B = cross(NN, T);
     }
-    float4 view_pos = mul(view_matrix, world_pos);
-    float4 proj_pos = mul(projection_matrix, view_pos);
+    precise float4 proj_pos = mul(projection_matrix, mul(view_matrix, world_pos));
     output.position = proj_pos;
     output.color = vertex.color.rgb;
     output.uv = vertex.texcoord;
