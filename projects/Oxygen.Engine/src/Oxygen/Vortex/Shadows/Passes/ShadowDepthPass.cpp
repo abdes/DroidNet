@@ -205,9 +205,15 @@ namespace {
     std::uint32_t current_worlds_slot { kInvalidShaderVisibleIndex.get() };
     std::uint32_t instance_data_slot { kInvalidShaderVisibleIndex.get() };
     std::uint32_t normal_matrices_slot { kInvalidShaderVisibleIndex.get() };
+    std::uint32_t material_shading_constants_slot {
+      kInvalidShaderVisibleIndex.get(),
+    };
+    std::uint32_t pad0 { 0U };
+    std::uint32_t pad1 { 0U };
+    std::uint32_t pad2 { 0U };
   };
 
-  static_assert(sizeof(ShadowPassConstants) == 128U); // NOLINT(*-magic-numbers)
+  static_assert(sizeof(ShadowPassConstants) == 144U); // NOLINT(*-magic-numbers)
   static_assert(offsetof(ShadowPassConstants, light_view_projection) == 0U);
   static_assert(offsetof(ShadowPassConstants, shadow_bias_parameters)
     == 64U); // NOLINT(*-magic-numbers)
@@ -223,6 +229,8 @@ namespace {
     == 120U); // NOLINT(*-magic-numbers)
   static_assert(offsetof(ShadowPassConstants, normal_matrices_slot)
     == 124U); // NOLINT(*-magic-numbers)
+  static_assert(offsetof(ShadowPassConstants, material_shading_constants_slot)
+    == 128U); // NOLINT(*-magic-numbers)
   constexpr std::uint32_t kShadowPassConstantsStride
     = sizeof(ShadowPassConstants);
 
@@ -575,6 +583,8 @@ auto ShadowDepthPass::PublishPassConstants(
     .current_worlds_slot = prepared_scene.bindless_worlds_slot.get(),
     .instance_data_slot = prepared_scene.bindless_instance_data_slot.get(),
     .normal_matrices_slot = prepared_scene.bindless_normals_slot.get(),
+    .material_shading_constants_slot
+    = prepared_scene.bindless_material_shading_slot.get(),
   };
   auto allocation = pass_constants_buffer_.Allocate(1U);
   if (!allocation.has_value() || !allocation->IsValid(current_sequence_)

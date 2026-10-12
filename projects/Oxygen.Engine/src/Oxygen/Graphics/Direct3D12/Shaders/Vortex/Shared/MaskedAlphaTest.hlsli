@@ -27,20 +27,19 @@ static inline float ResolveMaskedAlphaCutoff(MaterialShadingConstants material)
                                       : kDefaultMaskedAlphaCutoff;
 }
 
-static inline bool TryLoadMaterialForDraw(
-  uint draw_index, out MaterialShadingConstants material)
+static inline bool TryLoadMaterialFromSlots(uint draw_metadata_slot,
+  uint material_shading_constants_slot, uint draw_index,
+  out MaterialShadingConstants material)
 {
   material = (MaterialShadingConstants)0;
 
-  const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
-  if (draw_bindings.draw_metadata_slot == K_INVALID_BINDLESS_INDEX
-    || draw_bindings.material_shading_constants_slot
-      == K_INVALID_BINDLESS_INDEX) {
+  if (draw_metadata_slot == K_INVALID_BINDLESS_INDEX
+    || material_shading_constants_slot == K_INVALID_BINDLESS_INDEX) {
     return false;
   }
 
   StructuredBuffer<DrawMetadata> draw_meta_buffer
-    = ResourceDescriptorHeap[draw_bindings.draw_metadata_slot];
+    = ResourceDescriptorHeap[draw_metadata_slot];
   uint draw_count = 0u;
   uint draw_stride = 0u;
   draw_meta_buffer.GetDimensions(draw_count, draw_stride);
@@ -51,7 +50,7 @@ static inline bool TryLoadMaterialForDraw(
   const DrawMetadata meta = draw_meta_buffer[draw_index];
 
   StructuredBuffer<MaterialShadingConstants> materials
-    = ResourceDescriptorHeap[draw_bindings.material_shading_constants_slot];
+    = ResourceDescriptorHeap[material_shading_constants_slot];
   uint material_count = 0u;
   uint material_stride = 0u;
   materials.GetDimensions(material_count, material_stride);
@@ -61,6 +60,17 @@ static inline bool TryLoadMaterialForDraw(
 
   material = materials[meta.material_handle];
   return true;
+}
+
+// Resolves the slots through the bound view's frame bindings. Passes that bind
+// another view's constants, such as shadow depth, pass their own slots to
+// EvaluateMaskedAlphaTestFromSlots instead.
+static inline bool TryLoadMaterialForDraw(
+  uint draw_index, out MaterialShadingConstants material)
+{
+  const DrawFrameBindings draw_bindings = LoadResolvedDrawFrameBindings();
+  return TryLoadMaterialFromSlots(draw_bindings.draw_metadata_slot,
+    draw_bindings.material_shading_constants_slot, draw_index, material);
 }
 
 static inline float SampleMaskedMaterialAlpha(
@@ -81,16 +91,10 @@ static inline float SampleMaskedMaterialAlpha(
   return alpha;
 }
 
-static inline MaskedAlphaTestResult EvaluateMaskedAlphaTest(
-  float2 uv0, uint draw_index, SamplerState linear_sampler)
+static inline MaskedAlphaTestResult EvaluateMaskedAlphaTestForMaterial(
+  float2 uv0, MaterialShadingConstants material, SamplerState linear_sampler)
 {
   MaskedAlphaTestResult result = (MaskedAlphaTestResult)0;
-
-  MaterialShadingConstants material;
-  if (!TryLoadMaterialForDraw(draw_index, material)) {
-    return result;
-  }
-
   result.has_material_data = true;
   result.alpha_test_enabled = (material.flags & MATERIAL_FLAG_ALPHA_TEST) != 0u;
   if (!result.alpha_test_enabled) {
@@ -100,6 +104,28 @@ static inline MaskedAlphaTestResult EvaluateMaskedAlphaTest(
   result.alpha = SampleMaskedMaterialAlpha(uv0, material, linear_sampler);
   result.cutoff = ResolveMaskedAlphaCutoff(material);
   return result;
+}
+
+static inline MaskedAlphaTestResult EvaluateMaskedAlphaTest(
+  float2 uv0, uint draw_index, SamplerState linear_sampler)
+{
+  MaterialShadingConstants material;
+  if (!TryLoadMaterialForDraw(draw_index, material)) {
+    return (MaskedAlphaTestResult)0;
+  }
+  return EvaluateMaskedAlphaTestForMaterial(uv0, material, linear_sampler);
+}
+
+static inline MaskedAlphaTestResult EvaluateMaskedAlphaTestFromSlots(
+  float2 uv0, uint draw_metadata_slot, uint material_shading_constants_slot,
+  uint draw_index, SamplerState linear_sampler)
+{
+  MaterialShadingConstants material;
+  if (!TryLoadMaterialFromSlots(draw_metadata_slot,
+        material_shading_constants_slot, draw_index, material)) {
+    return (MaskedAlphaTestResult)0;
+  }
+  return EvaluateMaskedAlphaTestForMaterial(uv0, material, linear_sampler);
 }
 
 static inline void ApplyMaskedAlphaClip(MaskedAlphaTestResult result)

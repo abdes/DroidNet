@@ -29,6 +29,10 @@ struct ShadowPassConstants
     uint current_worlds_slot;
     uint instance_data_slot;
     uint normal_matrices_slot;
+    uint material_shading_constants_slot;
+    uint _pad0;
+    uint _pad1;
+    uint _pad2;
 };
 
 struct ShadowDepthVSOutput
@@ -142,9 +146,15 @@ void VortexShadowDepthMaskedPS(ShadowDepthVSOutput input
 )
 {
 #if defined(ALPHA_TEST)
+    // The bound view constants belong to the camera view; the casters, like
+    // the vertex shader's, come from this pass's constants.
+    const ShadowPassConstants pass_constants =
+        LoadShadowPassConstants(g_PassConstantsIndex);
     const SamplerState linear_sampler = SamplerDescriptorHeap[0];
-    ApplyMaskedAlphaClip(
-        EvaluateMaskedAlphaTest(input.uv, input.draw_index, linear_sampler));
+    ApplyMaskedAlphaClip(EvaluateMaskedAlphaTestFromSlots(input.uv,
+        pass_constants.draw_metadata_slot,
+        pass_constants.material_shading_constants_slot, input.draw_index,
+        linear_sampler));
 #endif
 #if !defined(CUBE_SHADOW)
     out_depth = saturate(input.biased_depth);
