@@ -27,9 +27,10 @@ namespace oxygen::data::testing {
 
 //! Builds a cooked scene descriptor in memory for tests.
 /*!
- Nodes, component tables, script slots and start state are laid out in the
- cooked form a `SceneAsset` reads: descriptor, nodes, string table,
- component table directory, tables, then script slots.
+ Nodes, component tables, script slots, start state and environment records
+ are laid out in the cooked form a `SceneAsset` reads: descriptor, nodes,
+ string table, component table directory, tables, script slots, then the
+ environment block.
 */
 class SceneAssetBuilder {
 public:
@@ -94,6 +95,15 @@ public:
   auto SetStartingCamera(const NodeIndex node) -> SceneAssetBuilder&
   {
     starting_camera_ = node;
+    return *this;
+  }
+
+  //! Adds an environment system record; its header gives type and size.
+  template <typename Record>
+  auto AddEnvironment(const Record& record) -> SceneAssetBuilder&
+  {
+    Append(environment_, std::as_bytes(std::span(&record, 1)));
+    ++environment_count_;
     return *this;
   }
 
@@ -166,6 +176,16 @@ public:
       Append(bytes, table.bytes);
     }
     Append(bytes, std::as_bytes(std::span(slots_)));
+    if (environment_count_ != 0U) {
+      const auto header = pak::world::SceneEnvironmentBlockHeader {
+        .byte_size
+        = static_cast<uint32_t>(sizeof(pak::world::SceneEnvironmentBlockHeader)
+          + environment_.size()),
+        .systems_count = environment_count_,
+      };
+      Append(bytes, std::as_bytes(std::span(&header, 1)));
+      Append(bytes, environment_);
+    }
     return bytes;
   }
 
@@ -199,6 +219,8 @@ private:
   std::vector<pak::scripting::ScriptSlotRecord> slots_;
   pak::world::SceneAssetFlags flags_ { pak::world::SceneAssetFlags::kNone };
   NodeIndex starting_camera_ { pak::world::kNoStartingCamera };
+  std::vector<std::byte> environment_;
+  uint32_t environment_count_ { 0 };
 };
 
 } // namespace oxygen::data::testing
