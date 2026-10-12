@@ -32,127 +32,168 @@
         </ResourceDictionary>
     </UserControl.Resources>
 
-    <editorcontrols:PropertiesExpander
-        Padding="2"
-        HorizontalAlignment="Stretch"
-        VerticalAlignment="Top"
-        HorizontalContentAlignment="Stretch"
-        Description="{x:Bind ViewModel.Description, Mode=OneWay}"
-        Header="{x:Bind ViewModel.Header, Mode=OneWay}"
-        HeaderIcon="{ui:FontIcon Glyph='&#xF158;'}"
-        IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
-        <editorcontrols:PropertiesExpander.Items>
-            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Asset">
-                <Grid HorizontalAlignment="Stretch" ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
+    <Grid>
+        <editorcontrols:PropertiesExpander
+            Padding="2"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Top"
+            HorizontalContentAlignment="Stretch"
+            Description="{x:Bind ViewModel.Description, Mode=OneWay}"
+            Header="{x:Bind ViewModel.Header, Mode=OneWay}"
+            HeaderIcon="{ui:FontIcon Glyph='&#xF158;'}"
+            IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
+            <editorcontrols:PropertiesExpander.Items>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Asset">
+                    <Grid HorizontalAlignment="Stretch" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
 
-                    <controls:Thumbnail
-                        Width="24"
-                        Height="24"
-                        VerticalAlignment="Center"
-                        Content="{x:Bind ViewModel.AssetThumbnailGlyph, Mode=OneWay}"
-                        ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
+                        <controls:Thumbnail
+                            Width="24"
+                            Height="24"
+                            VerticalAlignment="Center"
+                            Content="{x:Bind ViewModel.AssetThumbnailGlyph, Mode=OneWay}"
+                            ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
 
-                    <muxc:SplitButton
-                        x:Name="AssetSplitButton"
-                        Grid.Column="1"
+                        <muxc:SplitButton
+                            x:Name="AssetSplitButton"
+                            Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            Content="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}">
+                            <muxc:SplitButton.Flyout>
+                                <Flyout x:Name="AssetPickerFlyout">
+                                    <fields:AssetPickerContent
+                                        Groups="{x:Bind ViewModel.Groups, Mode=OneWay}"
+                                        HasNotice="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
+                                        ItemClicked="OnPickerItemClicked"
+                                        NoticeText="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
+                                        RetryCommand="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" />
+                                </Flyout>
+                            </muxc:SplitButton.Flyout>
+                        </muxc:SplitButton>
+                    </Grid>
+                </editorcontrols:PropertyCard>
+
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Slot"
+                    Visibility="{x:Bind ViewModel.ShowMaterialSlotSelector, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <ComboBox
+                        x:Name="MaterialSlotSelector"
                         HorizontalAlignment="Stretch"
-                        Content="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}">
-                        <muxc:SplitButton.Flyout>
-                            <Flyout x:Name="AssetPickerFlyout">
-                                <fields:AssetPickerContent
-                                    Groups="{x:Bind ViewModel.Groups, Mode=OneWay}"
-                                    HasNotice="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
-                                    ItemClicked="OnPickerItemClicked"
-                                    NoticeText="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
-                                    RetryCommand="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" />
-                            </Flyout>
-                        </muxc:SplitButton.Flyout>
-                    </muxc:SplitButton>
-                </Grid>
-            </editorcontrols:PropertyCard>
+                        DisplayMemberPath="DisplayName"
+                        ItemsSource="{x:Bind ViewModel.MaterialSlots, Mode=OneWay}"
+                        SelectedItem="{x:Bind ViewModel.SelectedMaterialSlot, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
 
-            <editorcontrols:PropertyCard
-                HorizontalContentAlignment="Stretch"
-                PropertyName="Slot"
-                Visibility="{x:Bind ViewModel.ShowMaterialSlotSelector, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                <ComboBox
-                    x:Name="MaterialSlotSelector"
-                    HorizontalAlignment="Stretch"
-                    DisplayMemberPath="DisplayName"
-                    ItemsSource="{x:Bind ViewModel.MaterialSlots, Mode=OneWay}"
-                    SelectedItem="{x:Bind ViewModel.SelectedMaterialSlot, Mode=TwoWay}" />
-            </editorcontrols:PropertyCard>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Material">
+                    <Grid HorizontalAlignment="Stretch" ColumnSpacing="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
 
-            <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Material">
-                <Grid
-                    HorizontalAlignment="Stretch"
-                    ColumnSpacing="8"
-                    RowSpacing="4">
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
+                        <controls:Thumbnail
+                            Width="24"
+                            Height="24"
+                            VerticalAlignment="Center"
+                            Content="{x:Bind ViewModel.MaterialThumbnailGlyph, Mode=OneWay}"
+                            ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
 
-                    <controls:Thumbnail
-                        Width="24"
-                        Height="24"
-                        VerticalAlignment="Center"
-                        Content="{x:Bind ViewModel.MaterialThumbnailGlyph, Mode=OneWay}"
-                        ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
-
-                    <muxc:SplitButton
-                        x:Name="MaterialSplitButton"
-                        Grid.Column="1"
-                        HorizontalAlignment="Stretch"
-                        Content="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}"
-                        IsEnabled="{x:Bind ViewModel.CanEditMaterialSlot, Mode=OneWay}"
-                        ToolTipService.ToolTip="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}">
-                        <muxc:SplitButton.Flyout>
-                            <Flyout x:Name="MaterialPickerFlyout" Opening="OnMaterialPickerOpening">
-                                <fields:AssetPickerContent
-                                    Groups="{x:Bind ViewModel.MaterialGroups, Mode=OneWay}"
-                                    HasNotice="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
-                                    IsMaterial="True"
-                                    ItemClicked="OnMaterialPickerItemClicked"
-                                    NoticeText="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
-                                    RetryCommand="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" />
-                            </Flyout>
-                        </muxc:SplitButton.Flyout>
-                    </muxc:SplitButton>
-                    <StackPanel
-                        Grid.Row="1"
-                        Grid.ColumnSpan="2"
-                        Spacing="2"
-                        Visibility="{x:Bind ViewModel.HasMaterialSlotNotice, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
-                        <TextBlock
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Style="{ThemeResource CaptionTextBlockStyle}"
-                            Text="{x:Bind ViewModel.MaterialSlotNotice, Mode=OneWay}"
-                            TextWrapping="Wrap" />
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <HyperlinkButton
-                                Padding="0"
-                                Command="{x:Bind ViewModel.RefreshMaterialSlotsCommand}"
-                                Content="Refresh slots" />
-                            <HyperlinkButton
-                                Padding="0"
-                                Command="{x:Bind ViewModel.ClearUnresolvedMaterialSlotsCommand}"
-                                Content="Clear unresolved"
-                                ToolTipService.ToolTip="Remove material assignments that target another geometry or a missing slot."
-                                Visibility="{x:Bind ViewModel.HasUnresolvedMaterialSlots, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Grid>
-            </editorcontrols:PropertyCard>
-        </editorcontrols:PropertiesExpander.Items>
-    </editorcontrols:PropertiesExpander>
+                        <Border
+                            x:Name="MaterialValueBorder"
+                            Grid.Column="1"
+                            Margin="4,0,0,0"
+                            BorderBrush="Transparent"
+                            BorderThickness="1"
+                            CornerRadius="{ThemeResource ControlCornerRadius}">
+                            <muxc:SplitButton
+                                x:Name="MaterialSplitButton"
+                                HorizontalAlignment="Stretch"
+                                Content="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}"
+                                IsEnabled="{x:Bind ViewModel.CanEditMaterialSlot, Mode=OneWay}"
+                                ToolTipService.ToolTip="{x:Bind ViewModel.MaterialToolTip, Mode=OneWay}">
+                                <muxc:SplitButton.Flyout>
+                                    <Flyout x:Name="MaterialPickerFlyout" Opening="OnMaterialPickerOpening">
+                                        <fields:AssetPickerContent
+                                            Groups="{x:Bind ViewModel.MaterialGroups, Mode=OneWay}"
+                                            HasNotice="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
+                                            IsMaterial="True"
+                                            ItemClicked="OnMaterialPickerItemClicked"
+                                            NoticeText="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
+                                            RetryCommand="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" />
+                                    </Flyout>
+                                </muxc:SplitButton.Flyout>
+                            </muxc:SplitButton>
+                        </Border>
+                        <Button
+                            Grid.Column="2"
+                            Padding="6"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Refresh material slots"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Command="{x:Bind ViewModel.RefreshMaterialSlotsCommand}"
+                            ToolTipService.ToolTip="Refresh material slots: read this geometry's slots again from its cooked output, for example after a cook or reimport.">
+                            <FontIcon
+                                FontSize="14"
+                                Glyph="&#xE72C;"
+                                RenderTransformOrigin="0.5,0.5">
+                                <FontIcon.RenderTransform>
+                                    <RotateTransform x:Name="RefreshMaterialSlotsRotation" />
+                                </FontIcon.RenderTransform>
+                            </FontIcon>
+                        </Button>
+                        <Button
+                            Grid.Column="3"
+                            Padding="6"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Clear unresolved material assignments"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Command="{x:Bind ViewModel.ClearUnresolvedMaterialSlotsCommand}"
+                            ToolTipService.ToolTip="Clear unresolved assignments: remove material overrides that target another geometry or a slot this geometry no longer has. Resolved overrides are kept; Undo restores them."
+                            Visibility="{x:Bind ViewModel.HasUnresolvedMaterialSlots, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <FontIcon FontSize="14" Glyph="&#xE894;" />
+                        </Button>
+                    </Grid>
+                </editorcontrols:PropertyCard>
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="MaterialSlotStatus">
+                <VisualState x:Name="MaterialSlotsResolved" />
+                <VisualState x:Name="MaterialSlotsInError">
+                    <VisualState.StateTriggers>
+                        <StateTrigger IsActive="{x:Bind ViewModel.HasMaterialSlotError, Mode=OneWay}" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="MaterialValueBorder.BorderBrush" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="MaterialSlotLoading">
+                <VisualState x:Name="MaterialSlotsIdle" />
+                <VisualState x:Name="MaterialSlotsLoading">
+                    <VisualState.StateTriggers>
+                        <StateTrigger IsActive="{x:Bind ViewModel.IsMaterialSlotLoading, Mode=OneWay}" />
+                    </VisualState.StateTriggers>
+                    <Storyboard>
+                        <DoubleAnimation
+                            RepeatBehavior="Forever"
+                            Storyboard.TargetName="RefreshMaterialSlotsRotation"
+                            Storyboard.TargetProperty="Angle"
+                            From="0"
+                            To="360"
+                            Duration="0:0:1" />
+                    </Storyboard>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+    </Grid>
 </UserControl>

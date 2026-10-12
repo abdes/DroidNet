@@ -41,8 +41,17 @@ public sealed partial class GeometryViewModel
     /// <summary>Gets whether an existing native slot can be targeted.</summary>
     public bool CanEditMaterialSlot => this.SelectedMaterialSlot is not null && !this.IsMaterialSlotLoading;
 
-    /// <summary>Gets whether an inventory/status message needs presentation.</summary>
-    public bool HasMaterialSlotNotice => this.MaterialSlotNotice.Length != 0;
+    /// <summary>Gets whether slot inventory failed to load for the selected geometry.</summary>
+    [ObservableProperty]
+    public partial bool IsMaterialSlotInventoryFailed { get; set; }
+
+    /// <summary>Gets whether the material value should be shown in its error state.</summary>
+    public bool HasMaterialSlotError => this.HasUnresolvedMaterialSlots || this.IsMaterialSlotInventoryFailed;
+
+    /// <summary>Gets the material value tooltip: the assignment, followed by any slot status and its remedy.</summary>
+    public string MaterialToolTip => this.MaterialSlotNotice.Length == 0
+        ? this.MaterialButtonLabel
+        : this.MaterialButtonLabel + System.Environment.NewLine + this.MaterialSlotNotice;
 
     /// <summary>Clears the selection's unresolved material overrides as one undoable edit.</summary>
     /// <returns>Completion after the edit and a fresh slot projection.</returns>
@@ -100,7 +109,6 @@ public sealed partial class GeometryViewModel
                 return;
             }
 
-            this.MaterialSlotNotice = "Loading material slots…";
             var inventory = await this.materialSlots.ReadAsync(project, geometryUri, request.Token).ConfigureAwait(true);
             if (request.IsCancellationRequested || !this.IsCurrentSelection(nodes)
                 || !ReferenceEquals(project, this.projectContexts.ActiveProject)
@@ -111,7 +119,7 @@ public sealed partial class GeometryViewModel
 
             if (inventory is null)
             {
-                this.SetMaterialSlotsUnavailable("Material slots unavailable. Cook or refresh this geometry.");
+                this.SetMaterialSlotsFailed("Material slots unavailable. Cook this geometry, then refresh its slots.");
                 return;
             }
 
@@ -127,8 +135,10 @@ public sealed partial class GeometryViewModel
             var unresolved = nodes.SelectMany(static node => node.Components.OfType<GeometryComponent>().SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>()))
                 .Count(slot => slot.Target.GeometryUri != geometryUri || !slotIds.Contains(slot.Target.SlotId));
             this.HasUnresolvedMaterialSlots = unresolved != 0;
-            this.MaterialSlotNotice = unresolved == 1 ? "One material assignment needs repair."
-                : unresolved > 1 ? $"{unresolved} material assignments need repair."
+            this.IsMaterialSlotInventoryFailed = false;
+            this.MaterialSlotNotice = unresolved == 1
+                ? "One material assignment targets another geometry or a missing slot. Clear unresolved (✕) removes it; Undo restores it."
+                : unresolved > 1 ? $"{unresolved} material assignments target another geometry or a missing slot. Clear unresolved (✕) removes them; Undo restores them."
                 : this.MaterialSlots.Count == 0 ? "This geometry has no material slots." : string.Empty;
             this.UpdateSelectedMaterialSlotDisplay();
         }
@@ -139,14 +149,14 @@ public sealed partial class GeometryViewModel
         {
             if (!this.disposed && ReferenceEquals(this.slotRefresh, request))
             {
-                this.SetMaterialSlotsUnavailable("Material slots unavailable. Refresh after the project is ready.");
+                this.SetMaterialSlotsFailed("Material slots unavailable. Refresh them after the project is ready.");
             }
         }
         catch (Exception error) when (error is IOException or InvalidDataException or FormatException or InvalidOperationException)
         {
             if (!this.disposed && ReferenceEquals(this.slotRefresh, request))
             {
-                this.SetMaterialSlotsUnavailable("Material slots unavailable. " + error.Message);
+                this.SetMaterialSlotsFailed("Material slots unavailable. " + error.Message);
             }
         }
         finally
@@ -161,9 +171,16 @@ public sealed partial class GeometryViewModel
         }
     }
 
+    private void SetMaterialSlotsFailed(string message)
+    {
+        this.SetMaterialSlotsUnavailable(message);
+        this.IsMaterialSlotInventoryFailed = true;
+    }
+
     private void SetMaterialSlotsUnavailable(string message)
     {
         this.HasUnresolvedMaterialSlots = false;
+        this.IsMaterialSlotInventoryFailed = false;
         this.MaterialSlots = [];
         this.SelectedMaterialSlot = null;
         this.MaterialSlotNotice = message;
@@ -209,7 +226,19 @@ public sealed partial class GeometryViewModel
     partial void OnMaterialSlotNoticeChanged(string value)
     {
         _ = value;
-        this.OnPropertyChanged(nameof(this.HasMaterialSlotNotice));
+        this.OnPropertyChanged(nameof(this.MaterialToolTip));
+    }
+
+    partial void OnHasUnresolvedMaterialSlotsChanged(bool value)
+    {
+        _ = value;
+        this.OnPropertyChanged(nameof(this.HasMaterialSlotError));
+    }
+
+    partial void OnIsMaterialSlotInventoryFailedChanged(bool value)
+    {
+        _ = value;
+        this.OnPropertyChanged(nameof(this.HasMaterialSlotError));
     }
 
     partial void OnIsMaterialSlotLoadingChanged(bool value)

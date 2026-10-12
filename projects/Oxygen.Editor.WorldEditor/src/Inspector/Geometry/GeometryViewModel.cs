@@ -532,6 +532,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     {
         _ = value;
         this.OnPropertyChanged(nameof(this.MaterialButtonLabel));
+        this.OnPropertyChanged(nameof(this.MaterialToolTip));
         this.OnPropertyChanged(nameof(this.MaterialThumbnailGlyph));
     }
 
@@ -539,6 +540,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     {
         _ = value;
         this.OnPropertyChanged(nameof(this.MaterialButtonLabel));
+        this.OnPropertyChanged(nameof(this.MaterialToolTip));
     }
 
     partial void OnSelectedMaterialUriStringChanged(string? value)
