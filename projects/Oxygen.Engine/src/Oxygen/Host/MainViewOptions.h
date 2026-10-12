@@ -30,8 +30,12 @@ inline constexpr std::string_view kViewModeCVar = "host.view_mode";
 inline constexpr std::string_view kDefaultViewMode = "lit";
 
 //! A main-view feature that a `host.show.*` variable can remove.
+/*!
+ There is no lighting flag: the view's scene-lighting bit gates the whole
+ scene pass rather than lighting, and the `unlit` view mode already shows
+ the scene without lighting.
+*/
 enum class ShowFlag : std::uint8_t {
-  kLighting,
   kShadows,
   kEnvironment,
   kTranslucency,
@@ -50,7 +54,6 @@ struct ShowFlagInfo {
 
 //! The show flags in menu order.
 inline constexpr auto kShowFlags = std::array {
-  ShowFlagInfo { ShowFlag::kLighting, "host.show.lighting", "Lighting" },
   ShowFlagInfo { ShowFlag::kShadows, "host.show.shadows", "Shadows" },
   ShowFlagInfo {
     ShowFlag::kEnvironment, "host.show.environment", "Environment" },
@@ -75,7 +78,6 @@ struct MainViewOptions {
   std::string view_mode { kDefaultViewMode };
   //! Indexed by `ShowFlag`; true shows the feature.
   std::array<bool, kShowFlags.size()> show {
-    true,
     true,
     true,
     true,

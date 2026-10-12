@@ -52,6 +52,7 @@ set(
   "RuntimeCli.h"
   "SceneStage.h"
   "ViewPublisher.h"
+  "ViewportToolbar.h"
 )
 set(
   OXYGEN_HOST_PRIVATE_SOURCES
@@ -62,6 +63,7 @@ set(
   "RuntimeCli.cpp"
   "SceneStage.cpp"
   "ViewPublisher.cpp"
+  "ViewportToolbar.cpp"
 )
 
 target_sources(

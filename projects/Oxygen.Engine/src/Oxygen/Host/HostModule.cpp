@@ -8,6 +8,8 @@
 #include <exception>
 #include <memory>
 
+#include <imgui.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Console/Console.h>
@@ -19,6 +21,7 @@
 #include <Oxygen/Host/HostModule.h>
 #include <Oxygen/Host/HostWindow.h>
 #include <Oxygen/Host/MainViewOptions.h>
+#include <Oxygen/Host/ViewportToolbar.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
@@ -112,6 +115,7 @@ auto HostModule::RegisterConsoleBindings(
 {
   try {
     MainViewOptions::RegisterConsoleBindings(*console);
+    ViewportToolbar::RegisterConsoleBindings(*console);
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "{}: console registration failed: {}", GetName(), ex.what());
   } catch (...) {
@@ -156,6 +160,24 @@ auto HostModule::OnSceneMutation(
   }
   BuildViews(*context, views_);
   main_view_options_.ApplyToMain(views_.views, views_.main);
+  co_return;
+}
+
+auto HostModule::OnGuiUpdate(const observer_ptr<engine::FrameContext> context)
+  -> co::Co<>
+{
+  const auto imgui_module = ResolveImGuiModule();
+  if (!imgui_module || !imgui_module->IsFrameActive()) {
+    co_return;
+  }
+  auto* imgui_context = imgui_module->GetImGuiContext();
+  if (imgui_context == nullptr) {
+    co_return;
+  }
+  ImGui::SetCurrentContext(imgui_context);
+  toolbar_.Draw(
+    *host_.engine, *context, ResolveRenderer(), console_host_.State());
+  console_host_.Draw(host_.engine->GetConsole(), imgui_context);
   co_return;
 }
 

@@ -19,7 +19,9 @@
 #include <Oxygen/Host/MainViewOptions.h>
 #include <Oxygen/Host/SceneStage.h>
 #include <Oxygen/Host/ViewPublisher.h>
+#include <Oxygen/Host/ViewportToolbar.h>
 #include <Oxygen/Host/api_export.h>
+#include <Oxygen/ImGui/Console/ConsoleHost.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Vortex/CompositionView.h>
@@ -63,13 +65,15 @@ struct HostViews {
    staged scene, then set the frame's scene.
  - `kSceneMutation`: collect this frame's views from `BuildViews`, then apply
    the `host.view_mode` and `host.show.*` console variables to the main view.
+ - `kGuiUpdate`: unless headless, draw the console, the command palette, the
+   viewport toolbar and the stats overlay.
  - `kPublishViews`: publish the scene views.
  - `kCompositing`: composite them onto the window.
 
  A subclass returns `GetSupportedPhases()` with at least `kHostPhases`, and
  calls the base implementation when it overrides `OnFrameStart`,
- `OnSceneMutation`, `OnShutdown`, `RegisterConsoleBindings` or
- `ApplyConsoleCVars`.
+ `OnSceneMutation`, `OnGuiUpdate`, `OnShutdown`, `RegisterConsoleBindings`
+ or `ApplyConsoleCVars`.
 */
 class HostModule : public engine::EngineModule {
   OXYGEN_TYPED(HostModule)
@@ -77,8 +81,8 @@ class HostModule : public engine::EngineModule {
 public:
   static constexpr auto kHostPhases
     = engine::MakeModuleMask<core::PhaseId::kFrameStart,
-      core::PhaseId::kSceneMutation, core::PhaseId::kPublishViews,
-      core::PhaseId::kCompositing>();
+      core::PhaseId::kSceneMutation, core::PhaseId::kGuiUpdate,
+      core::PhaseId::kPublishViews, core::PhaseId::kCompositing>();
 
   //! `host` must outlive the module.
   OXGN_HOST_API explicit HostModule(const HostContext& host);
@@ -99,6 +103,8 @@ public:
   OXGN_HOST_API auto OnFrameStart(observer_ptr<engine::FrameContext> context)
     -> void override;
   OXGN_HOST_API auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
+    -> co::Co<> override;
+  OXGN_HOST_API auto OnGuiUpdate(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
   OXGN_HOST_API auto OnPublishViews(observer_ptr<engine::FrameContext> context)
     -> co::Co<> final;
@@ -180,6 +186,8 @@ private:
   SceneStage stage_;
   HostViews views_;
   MainViewOptions main_view_options_;
+  imgui::consoleui::ConsoleHost console_host_;
+  ViewportToolbar toolbar_;
 };
 
 } // namespace oxygen::host

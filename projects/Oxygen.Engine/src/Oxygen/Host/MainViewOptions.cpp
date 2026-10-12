@@ -109,7 +109,6 @@ auto MainViewOptions::ApplyTo(vortex::CompositionView& view) const -> void
       ClearFeature(view, bit);
     }
   };
-  clear_unless(ShowFlag::kLighting, Mask::kSceneLighting);
   clear_unless(ShowFlag::kShadows, Mask::kShadows);
   clear_unless(ShowFlag::kEnvironment, Mask::kEnvironment);
   clear_unless(ShowFlag::kTranslucency, Mask::kTranslucency);

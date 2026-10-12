@@ -92,6 +92,8 @@ public:
   OXGN_CONS_API auto ClearExecutionRecords() -> void;
   OXGN_CONS_NDAPI auto FindCVar(std::string_view name) const
     -> observer_ptr<const CVarSnapshot>;
+  OXGN_CONS_NDAPI auto FindCommand(std::string_view name) const
+    -> observer_ptr<const CommandDefinition>;
 
   template <typename TValue>
   [[nodiscard]] auto TryGetCVarValue(

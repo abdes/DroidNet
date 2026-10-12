@@ -127,7 +127,6 @@ NOLINT_TEST_F(MainViewOptionsTest, ShowFlagsOnlyRemoveTheirFeature)
     Mask::Bit bit;
   };
   constexpr auto kMaskCases = std::array {
-    Case { .cvar = "host.show.lighting", .bit = Mask::kSceneLighting },
     Case { .cvar = "host.show.shadows", .bit = Mask::kShadows },
     Case { .cvar = "host.show.environment", .bit = Mask::kEnvironment },
     Case { .cvar = "host.show.translucency", .bit = Mask::kTranslucency },
@@ -180,7 +179,7 @@ NOLINT_TEST_F(MainViewOptionsTest, AppliesToTheMainViewOnly)
     ASSERT_EQ(Run(std::string(info.cvar) + " false"), ExecutionStatus::kOk);
   }
   const auto options = Options();
-  EXPECT_FALSE(options.Shows(ShowFlag::kLighting));
+  EXPECT_FALSE(options.Shows(ShowFlag::kShadows));
 
   auto views = std::array {
     MakeView(ViewId { 1 }),

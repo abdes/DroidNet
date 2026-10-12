@@ -4,9 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <span>
+#include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Command.h>
+#include <Oxygen/Console/Completion.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Console/History.h>
+#include <Oxygen/Console/StartupPlan.h>
 
 namespace oxygen::console {
 
@@ -159,6 +170,12 @@ auto Console::FindCVar(const std::string_view name) const
   -> observer_ptr<const CVarSnapshot>
 {
   return registry_.FindCVar(name);
+}
+
+auto Console::FindCommand(const std::string_view name) const
+  -> observer_ptr<const CommandDefinition>
+{
+  return registry_.FindCommand(name);
 }
 
 } // namespace oxygen::console

@@ -4,7 +4,8 @@ Status: **draft for owner review, 2026-10-11; reviewed 2026-10-12; I1
 validated 2026-10-12; H1 built and unit-tested 2026-10-12; E1 validated
 2026-10-12 (ahead of H2, so the host has a running consumer; the owner ran
 VortexBasic windowed, resized and fullscreen); H2 built and tested
-2026-10-12**. Owner
+2026-10-12; H3 in progress: catalog, main-view variables, widgets and
+toolbar built 2026-10-12, GPU work overlay next**. Owner
 decisions are recorded in [§10](#10-owner-decisions) with the review's
 position beside each. [§11](#11-open-problems-for-review) gives a definite
 answer to every problem and marks the ones only the owner can close.
@@ -634,19 +635,29 @@ modes a renderer-owned vocabulary):
 struct ViewModeInfo {
   std::string_view canonical_name; // console value, e.g. "lit"
   std::string_view display_name;   // "Lit"
-  ViewModeGroup group;             // kCommon or a ShaderDebugModeFamily
+  std::string_view description;    // tooltip, may be empty
+  ShaderDebugModeFamily family;    // kNone for the common modes
   std::optional<RenderMode> render_mode;             // none for "lit"
   std::optional<ShaderDebugMode> shader_debug_mode;  // none for "lit"
+  bool supported;
+  std::string_view unsupported_reason;
 };
 OXGN_VRTX_NDAPI auto EnumerateViewModes() noexcept
   -> std::span<const ViewModeInfo>;
+OXGN_VRTX_NDAPI auto FindViewModeInfo(std::string_view) noexcept
+  -> const ViewModeInfo*;
+OXGN_VRTX_NDAPI auto FindViewModeInfo(RenderMode, ShaderDebugMode) noexcept
+  -> const ViewModeInfo*;
 ```
 
-Common group, matching the editor's table: `lit`, `unlit` (base colour),
-`wireframe`, `lit_wireframe`, `direct_lighting`, `indirect_lighting`,
-`world_normals`, `roughness`, `metalness`, `linear_depth`, `shadow_mask`.
-Every other supported `ShaderDebugModeRegistry` entry follows under its
-family; unsupported entries show their reason and cannot be selected.
+Common modes, matching the editor's table: `lit`, `unlit` (base colour),
+`wireframe`, `lit-wireframe`, `direct-lighting`, `indirect-lighting`,
+`world-normals`, `roughness`, `metalness`, `linear-depth`, `shadow-mask`.
+Names use the shader debug registry's hyphenated style. Every other
+`ShaderDebugModeRegistry` entry follows grouped by family; unsupported
+entries are listed with their reason. `host.view_mode` accepts only
+supported names: the console rejects any other value through the
+variable's allowed values (`CVarDefinition::allowed_values`).
 
 Only the main game view gets the full scene render and these controls.
 Other views (picture-in-picture, maps) are configured by the code that
@@ -661,7 +672,6 @@ and `vtx.*` variables the latter.
 | Variable                 | Type, default | Effect on the main view when false (bools) or set (string)                                    |
 | ------------------------ | ------------- | --------------------------------------------------------------------------------------------- |
 | `host.view_mode`         | string, `lit` | Sets `render_settings` from the catalog entry; `lit` resets both to none. Unknown names fail. |
-| `host.show.lighting`     | bool, true    | Clears `kSceneLighting`                                                                       |
 | `host.show.shadows`      | bool, true    | Clears `kShadows`                                                                             |
 | `host.show.environment`  | bool, true    | Clears `kEnvironment`                                                                         |
 | `host.show.translucency` | bool, true    | Clears `kTranslucency`                                                                        |
@@ -671,12 +681,20 @@ and `vtx.*` variables the latter.
 | `host.show.height_fog`   | bool, true    | Forces `with_height_fog` off                                                                  |
 | `host.show.local_fog`    | bool, true    | Forces `with_local_fog` off                                                                   |
 
+There is no `host.show.lighting`: Vortex's `kSceneLighting` bit gates the
+whole scene pass (depth prepass, resolve and scene-texture publication),
+which only reduced profiles turn off, so clearing it leaves the view
+without scene colour. Turning lighting off is the `unlit` view mode.
+
 A `host.show.*` variable only removes a feature the view asked for. The
-main view asks for atmosphere and fog according to the scene environment:
-`HostModule` derives `with_atmosphere`, `with_height_fog` and
-`with_local_fog` from the scene's environment systems, the same check the
-editor makes for local fog (`EditorModule.cpp:120-136`). The host edits the
-view's `feature_mask`, never its `feature_profile`.
+subclass decides what the main view asks for: VortexBasic sets
+`with_atmosphere`, `with_height_fog` and `with_local_fog` from its command
+line, and the player derives them from the scene's environment systems,
+the same check the editor makes for local fog (`EditorModule.cpp:120-136`).
+`HostModule` does not derive them itself, so an application that turns a
+feature off keeps it off. The host edits the view's `feature_mask`, never
+its `feature_profile`. `MainViewOptions` (`Host/MainViewOptions.h`) holds
+the variable names and the application rule.
 
 The show menu also lists the existing renderer switches
 `vtx.occlusion.enable` and `vtx.shadows.contact.enable`
@@ -720,14 +738,19 @@ free of Vortex. Until Host exists, DemoShell registers the same adapter.
 
 Widgets are generic, with no knowledge of Vortex or the console:
 
-| Widget          | Shape                                                                                                                                                                                                                   |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DropdownMenu`  | The UE-style button plus popup: search field, section headers, check items (show flags) or radio items (view modes) with icon and shortcut text, submenus. Takes items with label, icon, shortcut, state and an action. |
-| `ToolbarButton` | Icon button with tooltip and an optional dropdown arrow.                                                                                                                                                                |
-| `PlayControls`  | Play, Pause, Step and Stop as one centred group; enables each from the session state.                                                                                                                                   |
-| `StatsOverlay`  | DemoShell's overlay (`UI/StatsOverlay.cpp`), taking its config directly instead of `UiSettingsVm`.                                                                                                                      |
-| `GpuWorkChart`  | One stacked horizontal bar of a total split into coloured segments with a budget marker, a legend sorted by cost (ms, %, max), expandable rows with up to four sub-items, and a sparkline. Takes its own row type.      |
-| `ConsoleHost`   | The console panel and the command palette with their hotkeys (`` ` ``, Ctrl+Shift+P), extracted from `DemoShellUi.cpp:154-225`. Window placement is held in memory; DemoShell restores and saves it itself as today.    |
+The widgets live in `Oxygen/ImGui/Widgets/` (`Toolbar.h`: `DropdownMenu`,
+`ToolbarButton`, `PlayControls`; `StatsOverlay.h`) and
+`Oxygen/ImGui/Console/ConsoleHost.h`. DemoShell already uses `StatsOverlay`
+and `ConsoleHost`; its own copies are gone.
+
+| Widget          | Shape                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DropdownMenu`  | The UE-style button plus popup: search field, section headers, check items (show flags) or radio items (view modes) with icon and shortcut text, submenus. Takes items with label, icon, shortcut, state and an action.                                                                                                                                                                                                                                           |
+| `ToolbarButton` | Icon button with tooltip and an optional dropdown arrow.                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `PlayControls`  | Play, Pause, Step and Stop as one centred group; enables each from the session state.                                                                                                                                                                                                                                                                                                                                                                             |
+| `StatsOverlay`  | A translucent panel at the top-right, below a given margin: the frame sequence number (always, so a screenshot names its frame), FPS and frame time, engine CPU and pacing time, the time of every engine phase that does work (slowest three highlighted) and CPU time against budget. Values are averaged over about half a second; the columns are sized for every row the enabled sections can show, so the panel keeps its width. Takes its config directly. |
+| `GpuWorkChart`  | One stacked horizontal bar of a total split into coloured segments with a budget marker, a legend sorted by cost (ms, %, max), expandable rows with up to four sub-items, and a sparkline. Takes its own row type.                                                                                                                                                                                                                                                |
+| `ConsoleHost`   | The console panel and the command palette with their hotkeys (`` ` ``, Ctrl+Shift+P), extracted from `DemoShellUi.cpp:154-225`. Window placement is held in memory; DemoShell restores and saves it itself as today.                                                                                                                                                                                                                                              |
 
 ### 5.4 Viewport toolbar
 
@@ -739,18 +762,19 @@ catalog and draws one strip across the top of the window:
   view mode  show    stats          play controls                 console
 ```
 
-| Control   | Action                                                                                                                                        |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| View mode | `DropdownMenu` of `EnumerateViewModes()`; choosing runs `host.view_mode <name>`. Shortcuts as in UE: Alt+4 lit, Alt+3 unlit, Alt+2 wireframe. |
-| Show      | `DropdownMenu` of the `host.show.*` variables; a click toggles one; "Use defaults" resets them.                                               |
-| Stats     | `DropdownMenu` with the frame stats overlay (`host.ui.stats`) and the GPU work overlay (`host.ui.gpu_work`).                                  |
-| Play      | No session: `ngin.session.begin`. Paused: `ngin.resume`.                                                                                      |
-| Pause     | `ngin.pause`                                                                                                                                  |
-| Step      | `ngin.step` (enabled while paused)                                                                                                            |
-| Stop      | `ngin.session.end`                                                                                                                            |
-| Console   | Toggles the console window.                                                                                                                   |
+| Control   | Action                                                                                                                                               |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| View mode | `DropdownMenu` of `EnumerateViewModes()`; choosing runs `host.view_mode <name>`. Shortcuts as in UE: Alt+4 lit, Alt+3 unlit, Alt+2 wireframe.        |
+| Show      | `DropdownMenu` of the `host.show.*` variables; a click toggles one; "Use defaults" resets them.                                                      |
+| Stats     | `DropdownMenu` with the stats overlay sections (`host.ui.stats.fps`, `.engine`, `.phases`, `.budget`) and the GPU work overlay (`host.ui.gpu_work`). |
+| Play      | No session: `ngin.session.begin`. Paused: `ngin.resume`.                                                                                             |
+| Pause     | `ngin.pause`                                                                                                                                         |
+| Step      | `ngin.step` (enabled while paused)                                                                                                                   |
+| Stop      | `ngin.session.end`                                                                                                                                   |
+| Console   | Toggles the console window.                                                                                                                          |
 
-Play controls appear only when the host registers `ngin.session.begin`.
+`HostModule` draws the toolbar, the stats overlay and `ConsoleHost` at
+`kGuiUpdate` unless headless. Play controls appear only when the host registers `ngin.session.begin`.
 F1 hides or shows the toolbar and stats overlay (`host.ui.visible`); it
 starts visible. The console and the command palette keep their own hotkeys
 and F1 never hides them. The toolbar reads session and pause state from
