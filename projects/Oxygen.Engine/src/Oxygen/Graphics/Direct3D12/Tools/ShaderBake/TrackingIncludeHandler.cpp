@@ -4,11 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/TrackingIncludeHandler.h>
+#include <windows.h>
 
+#include <exception>
+#include <filesystem>
 #include <system_error>
 
-#include <windows.h>
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/TrackingIncludeHandler.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 
@@ -120,23 +123,36 @@ auto STDMETHODCALLTYPE TrackingIncludeHandler::LoadSource(
     return E_INVALIDARG;
   }
 
-  const auto resolved
-    = ResolveTrackedInclude(pFilename, workspace_root_, include_dirs_);
-  if (!resolved.has_value()) {
-    return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
-  }
+  // DXC calls this across a COM boundary: an escaping exception terminates
+  // the process. An include that cannot be tracked fails its compilation.
+  try {
+    const auto resolved
+      = ResolveTrackedInclude(pFilename, workspace_root_, include_dirs_);
+    if (!resolved.has_value()) {
+      return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+    }
 
-  UINT32 code_page = CP_UTF8;
-  Microsoft::WRL::ComPtr<IDxcBlobEncoding> include_blob;
-  const auto hr = utils_->LoadFile(
-    resolved->absolute_path.c_str(), &code_page, include_blob.GetAddressOf());
-  if (FAILED(hr)) {
-    return hr;
-  }
+    UINT32 code_page = CP_UTF8;
+    Microsoft::WRL::ComPtr<IDxcBlobEncoding> include_blob;
+    const auto hr = utils_->LoadFile(
+      resolved->absolute_path.c_str(), &code_page, include_blob.GetAddressOf());
+    if (FAILED(hr)) {
+      return hr;
+    }
 
-  recorder_.RecordDependency(resolved->fingerprint);
-  *ppIncludeSource = include_blob.Detach();
-  return S_OK;
+    recorder_.RecordDependency(resolved->fingerprint);
+    *ppIncludeSource = include_blob.Detach();
+    return S_OK;
+  } catch (const std::exception& error) {
+    LOG_F(ERROR, "Cannot track include `{}` under workspace `{}`: {}",
+      std::filesystem::path(pFilename).string(), workspace_root_.string(),
+      error.what());
+    return E_FAIL;
+  } catch (...) {
+    LOG_F(ERROR, "Cannot track include `{}`: unknown error",
+      std::filesystem::path(pFilename).string());
+    return E_FAIL;
+  }
 }
 
 } // namespace oxygen::graphics::d3d12::tools::shader_bake
