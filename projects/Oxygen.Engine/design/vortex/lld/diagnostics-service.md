@@ -53,11 +53,14 @@ The M05A product is a compact set of reusable instruments:
 
 - stable debug-mode registry
 - frame diagnostics ledger
-- GPU timeline facade
+- GPU timeline facade and its human-readable
+  [GPU work summary](gpu-work-summary.md)
 - pass/product/binding observability records
 - minimal recoverable runtime issues
-- minimal ImGui panel registry
 - capture/export manifest for external tools
+
+Vortex has no ImGui dependency. Panels that show diagnostics live in the
+applications that draw them ([§11](#11-imgui-panels)).
 
 Anything larger is optional unless it directly answers a recurring debugging
 question. GPU debug primitives, texture viewers, and richer panels are planned
@@ -74,8 +77,8 @@ shipping accidental GPU work.
 | Compile-time availability | Normal Vortex build plus narrow optional macros                              | Build system                        | Core diagnostics types, catalog, frame ledger, issue recording, and manifest code are compiled with Vortex. Do not add a broad `OXYGEN_WITH_VORTEX_DIAGNOSTICS` macro for M05A. Optional third-party sinks stay behind their existing macros, such as `OXYGEN_WITH_TRACY`. |
 | Build-profile defaults    | `NDEBUG` / non-`NDEBUG` default initializer only                             | `DiagnosticsConfig` defaults        | `NDEBUG` may change the default feature mask and assertion verbosity. It must not remove APIs, enum values, schema fields, or troubleshooting code needed for release captures.                                                                                            |
 | Renderer capability       | `RendererCapabilityFamily::kDiagnosticsAndProfiling`                         | Renderer configuration              | If the capability is absent, diagnostics features are clamped off and requests produce `diag.feature-unavailable` issues where an issue channel exists. The service can still expose a disabled snapshot.                                                                  |
-| Runtime feature mask      | `DiagnosticsConfig`, CVars/CLI, and `DiagnosticsService::SetEnabledFeatures` | DiagnosticsService                  | The effective feature mask controls CPU ledger recording, GPU timeline collection, panels, manifest export, and GPU debug primitives. This is the main on/off switch.                                                                                                      |
-| Per-feature trigger       | Debug mode, export request, panel registration, GPU primitive request        | DiagnosticsService and owning stage | Heavy work runs only when both the feature mask and the specific trigger require it.                                                                                                                                                                                       |
+| Runtime feature mask      | `DiagnosticsConfig`, CVars/CLI, and `DiagnosticsService::SetEnabledFeatures` | DiagnosticsService                  | The effective feature mask controls CPU ledger recording, GPU timeline collection, manifest export, and GPU debug primitives. This is the main on/off switch.                                                                                                              |
+| Per-feature trigger       | Debug mode, export request, GPU timeline lease, GPU primitive request        | DiagnosticsService and owning stage | Heavy work runs only when both the feature mask and the specific trigger require it.                                                                                                                                                                                       |
 | Pass execution            | Service-owned pass config for diagnostics passes only                        | DiagnosticsService                  | Domain pass configs must not grow diagnostics payloads. Diagnostics passes are scheduled only from diagnostics-owned features.                                                                                                                                             |
 
 Default policy:
@@ -85,9 +88,9 @@ Default policy:
   registry available in memory.
 - `NDEBUG` builds default to no continuously recording diagnostics features
   unless `RendererConfig`, startup CVars, CLI, or tools explicitly enable them.
-- GPU timeline is off by default in all build profiles and enabled explicitly.
-- ImGui panels are off until the panel feature is enabled and an ImGui runtime is
-  active.
+- GPU timeline is off by default in all build profiles and enabled explicitly,
+  by the user setting or by a viewer's lease; the GPU work summary exists only
+  while it collects.
 - capture manifest export is on-demand only; it does not continuously write.
 - GPU debug primitives are off by default; while off, no view owns debug
   buffers or publishes a debug record.
@@ -120,15 +123,14 @@ Rationale:
 DiagnosticsService is a control plane and fact collector. Domain systems remain
 the execution owners:
 
-| Domain                   | Owner                           | Diagnostics role                                            |
-| ------------------------ | ------------------------------- | ----------------------------------------------------------- |
-| Scene texture allocation | `SceneTextures` / SceneRenderer | report product names, descriptors, availability             |
-| Lighting                 | `LightingService`               | report selected lights, debug-mode support, output products |
-| Shadows                  | `ShadowService`                 | report shadow maps, cascades, masks, and recoverable issues |
-| Environment/fog          | `EnvironmentLightingService`    | report atmosphere/fog products and state                    |
-| Post-process             | `PostProcessService`            | report inputs, outputs, exposure/tonemap state              |
-| ImGui rendering          | `ImGuiRuntime`                  | draw service-registered panels                              |
-| GPU timing               | `GpuTimelineProfiler`           | collect and export timeline frames                          |
+| Domain                   | Owner                           | Diagnostics role                                             |
+| ------------------------ | ------------------------------- | ------------------------------------------------------------ |
+| Scene texture allocation | `SceneTextures` / SceneRenderer | report product names, descriptors, availability              |
+| Lighting                 | `LightingService`               | report selected lights, debug-mode support, output products  |
+| Shadows                  | `ShadowService`                 | report shadow maps, cascades, masks, and recoverable issues  |
+| Environment/fog          | `EnvironmentLightingService`    | report atmosphere/fog products and state                     |
+| Post-process             | `PostProcessService`            | report inputs, outputs, exposure/tonemap state               |
+| GPU timing               | `GpuTimelineProfiler`           | collect and export timeline frames; publish the work summary |
 
 DiagnosticsService can visualize or expose facts. It must not mutate another
 domain's products to make a debug view pass.
@@ -162,8 +164,8 @@ Oxygen divergences:
 
 | Surface                      | Current location                                                                      | Assessment                                                                                                                                                                                    | Required action                                                                                       |
 | ---------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| GPU timeline profiler        | `src/Oxygen/Vortex/Internal/GpuTimelineProfiler.{h,cpp}`                              | Correct and valuable. It implements `graphics::IGpuProfileCollector`, records nested scopes, detects overflow/incomplete scopes, supports sinks, latest-frame retention, and JSON/CSV export. | Preserve. Expose through DiagnosticsService. Add frame-ledger correlation and service tests.          |
-| ImGui runtime                | `src/Oxygen/Vortex/Internal/ImGuiRuntime.{h,cpp}`                                     | Correct substrate. It initializes backend state, manages frame lifecycle, renders overlay texture, and returns composition data.                                                              | Preserve. Add service-owned panel registry on top.                                                    |
+| GPU timeline profiler        | `src/Oxygen/Vortex/Internal/GpuTimelineProfiler.{h,cpp}`                              | Correct and valuable. It implements `graphics::IGpuProfileCollector`, records nested scopes, detects overflow/incomplete scopes, supports sinks, latest-frame retention, and JSON/CSV export. | Preserve. Expose through DiagnosticsService. Summarize per [GPU work summary](gpu-work-summary.md).   |
+| ImGui runtime                | `src/Oxygen/Vortex/Internal/ImGuiRuntime.{h,cpp}`                                     | Owns UI lifecycle, style and fonts that are not renderer work, and makes Vortex link ImGui.                                                                                                   | Replace with [surface layer sources](multi-view-composition.md#124-surface-layer-sources).            |
 | Shader debug mode enum       | `src/Oxygen/Vortex/ShaderDebugMode.h`                                                 | Valuable ABI used by Vortex, SceneRenderer, shaders, and DemoShell. Helper functions are real but metadata is incomplete.                                                                     | Preserve enum values. Add authoritative catalog and tests.                                            |
 | Deferred debug visualization | `SceneRenderer::RenderDebugVisualization`                                             | Real debug output for material/depth/shadow-mask views. Current mode filtering/name helpers are local to SceneRenderer.                                                                       | Preserve execution in SceneRenderer. Move mode metadata and product requirement truth to the catalog. |
 | GPU debug primitives         | `Diagnostics/Passes/GpuDebugPrimitivePass.*`; `Shaders/Vortex/Services/Diagnostics/*` | Bounded per-view lines and invalid-access counters, drawn over the view output.                                                                                                               | See [§12](#12-gpu-debug-primitives).                                                                  |
@@ -197,10 +199,10 @@ src/Oxygen/Vortex/
     DiagnosticsCaptureManifest.cpp
     ShaderDebugModeRegistry.h
     ShaderDebugModeRegistry.cpp
-    DiagnosticsPanel.h
+    GpuWorkSummary.h/.cpp
     Internal/
-      GpuTimelineDiagnosticsAdapter.h/.cpp
-      ImGuiDiagnosticsPanelRegistry.h/.cpp
+      GpuWorkSummarizer.h/.cpp
+      GpuWorkStageTable.h
     Passes/
       GpuDebugPrimitivePass.h/.cpp
 ```
@@ -215,13 +217,13 @@ src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Diagnostics/
 
 | Concept                      | Purpose                                                                                                                                                                  |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `DiagnosticsService`         | Runtime control plane, settings, latest snapshot, panel registry, export requests.                                                                                       |
+| `DiagnosticsService`         | Runtime control plane, settings, latest snapshot, GPU timeline leases, export requests.                                                                                  |
 | `ShaderDebugModeRegistry`    | Runtime source of truth for `ShaderDebugMode` names, families, pass owner, product requirements, shader define, and UI label. This is not the D3D12 shader bake catalog. |
 | `DiagnosticsFrameLedger`     | Per-frame facts: views, passes, products, bindings, issues, timeline correlation, and capture labels.                                                                    |
 | `DiagnosticsFrameSnapshot`   | Immutable public copy of the latest ledger plus settings and timeline state.                                                                                             |
 | `DiagnosticsIssue`           | Structured warning/error with stable code, severity, frame/view/pass/product context, and operator message.                                                              |
 | `DiagnosticsCaptureManifest` | JSON export describing how to inspect a frame with external tools.                                                                                                       |
-| `DiagnosticsPanel`           | Optional ImGui consumer of snapshots and catalog state.                                                                                                                  |
+| `GpuWorkSummary`             | Immutable, windowed per-view GPU time by work bucket; see [GPU work summary](gpu-work-summary.md).                                                                       |
 
 ## 6. Public API Contract
 
@@ -238,7 +240,7 @@ enum class DiagnosticsFeature : std::uint32_t {
   kFrameLedger = OXYGEN_FLAG(0),
   kGpuTimeline = OXYGEN_FLAG(1),
   kShaderDebugModes = OXYGEN_FLAG(2),
-  kImGuiPanels = OXYGEN_FLAG(3),
+  // OXYGEN_FLAG(3) retired (was kImGuiPanels); not reused.
   kCaptureManifest = OXYGEN_FLAG(4),
   kGpuDebugPrimitives = OXYGEN_FLAG(5),
 };
@@ -307,7 +309,6 @@ struct DiagnosticsPassRecord {
   std::vector<std::string> inputs;
   std::vector<std::string> outputs;
   std::vector<std::string> missing_inputs;
-  std::optional<float> gpu_duration_ms;
 };
 
 struct DiagnosticsProductRecord {
@@ -324,20 +325,12 @@ struct DiagnosticsFrameSnapshot {
   std::uint64_t frame_index { 0 };
   ShaderDebugMode active_shader_debug_mode { ShaderDebugMode::kDisabled };
   DiagnosticsFeatureSet enabled_features { DiagnosticsFeature::kNone };
-  bool imgui_overlay_active { false };
   bool gpu_timeline_enabled { false };
   bool gpu_timeline_frame_available { false };
   bool capture_manifest_available { false };
   std::vector<DiagnosticsPassRecord> passes;
   std::vector<DiagnosticsProductRecord> products;
   std::vector<DiagnosticsIssue> issues;
-};
-
-class DiagnosticsPanel {
- public:
-  virtual ~DiagnosticsPanel() = default;
-  [[nodiscard]] virtual auto Name() const -> std::string_view = 0;
-  virtual void Draw(DiagnosticsFrameSnapshot const& snapshot) = 0;
 };
 
 class DiagnosticsService {
@@ -353,11 +346,10 @@ class DiagnosticsService {
       -> std::optional<ShaderDebugMode>;
 
   void SetGpuTimelineEnabled(bool enabled);
+  [[nodiscard]] auto AcquireGpuTimeline() -> GpuTimelineLease;
   void RequestGpuTimelineExport(std::filesystem::path path);
-  [[nodiscard]] auto GetLatestGpuTimelineFrame() const
-      -> std::optional<internal::GpuTimelineFrame>;
-
-  void RegisterPanel(std::unique_ptr<DiagnosticsPanel> panel);
+  [[nodiscard]] auto GetLatestGpuWorkSummary() const
+      -> std::shared_ptr<const GpuWorkSummary>;
 
   void BeginFrame(frame::SequenceNumber frame);
   void RecordPass(DiagnosticsPassRecord record);
@@ -406,7 +398,8 @@ Every Vortex frame with diagnostics enabled must be able to emit:
 - product records for published scene, lighting, shadow, environment, and
   post-process outputs
 - minimal recoverable issues emitted by services
-- GPU timeline availability and correlated pass durations where names match
+- GPU timeline availability; GPU time per stage is published by the
+  [GPU work summary](gpu-work-summary.md), not by pass records
 - export paths for generated timeline or capture manifests
 
 ### 7.2 Pass Record Requirements
@@ -422,7 +415,7 @@ semantic name is required:
 - `Stage15.Environment.Compose`
 - `Stage22.PostProcess.Tonemap`
 - `Composition.SceneCopy`
-- `Composition.ImGuiOverlay`
+- `Composition.SurfaceLayer`
 
 This naming rule is a design requirement because RenderDoc event matching and
 human troubleshooting both depend on stable names.
@@ -519,7 +512,9 @@ Required M05A behavior:
 - latest-frame access
 - one-shot JSON/CSV export forwarding
 - overflow and incomplete-scope issues converted into `DiagnosticsIssue`
-- pass records correlated with scope names when possible
+- per-view, per-bucket GPU time published as the
+  [GPU work summary](gpu-work-summary.md); the raw `GpuTimelineFrame` stays
+  internal to Vortex and reaches only its sinks and the export
 - diagnostics snapshot/panel visibility for whether Tracy support was compiled,
   whether GPU collection is active when this can be queried, and where the
   developer should look for the dense trace
@@ -536,7 +531,9 @@ Best-practice requirements:
 - timeline scopes should follow the engine profiling contract in
   `design/profiling/unified-profiling-architecture.md` and the profiling
   developer guide, keeping broad pass scopes available to the built-in timeline
-  and detailed nested scopes available to Tracy/capture analysis
+  and detailed nested scopes available to Tracy/capture analysis; the
+  [granularity policy](gpu-work-summary.md#7-scope-granularity-policy) lists
+  which scopes are telemetry
 
 ## 10. Capture Manifest And External Tools
 
@@ -605,8 +602,12 @@ Automation hardening requirements:
 
 ## 11. ImGui Panels
 
-The panel system is a consumer of snapshots. DemoShell's Vortex-facing runtime
-debugging surface is the Diagnostics panel. The old Rendering panel name is not
+Panels consume snapshots and live in the application that draws them, not in
+Vortex: DemoShell registers its panels in its own `PanelRegistry`, and
+`Oxygen.Host` provides the GPU work overlay
+([runtime host §5.5](../../runtime-core/runtime-host.md#55-gpu-work-overlay)).
+Vortex exposes data only. DemoShell's Vortex-facing runtime debugging surface
+is the Diagnostics panel. The old Rendering panel name is not
 kept as a migration alias for Vortex samples; clean UX and clear ownership are
 more valuable than preserving an ambiguous panel label.
 
@@ -640,9 +641,10 @@ Panel structure:
 - Frame Facts: compact pass/product table showing executed/skipped state,
   major inputs/outputs, stale or missing products, and the issue count. This is
   for scanning, not for displaying raw logs.
-- Timeline: built-in GPU timeline enable/export controls, latest top-level
-  scope timings, overflow/incomplete-scope state, and a Tracy status hint for
-  dense trace inspection.
+- Timeline: built-in GPU timeline enable/export controls,
+  overflow/incomplete-scope state, a toggle for the GPU work overlay, and a
+  Tracy status hint for dense trace inspection. GPU times themselves are shown
+  by the overlay, not repeated in this panel.
 - Tools: one-shot capture manifest export, last artifact paths, and proof-tool
   handoff information.
 - Settings: requested runtime diagnostics features, effective enabled features,
@@ -774,7 +776,7 @@ M05A validation must include:
 - unit tests for frame ledger append/snapshot/reset behavior
 - unit tests for issue recording and manifest schema output
 - existing `GpuTimelineProfiler` tests plus service facade tests
-- panel registry tests if panels are wired
+- GPU work summary tests ([exit gates](gpu-work-summary.md#10-exit-gates))
 - `git diff --check`
 
 Runtime or capture proof is required for any runtime-visible behavior changed by

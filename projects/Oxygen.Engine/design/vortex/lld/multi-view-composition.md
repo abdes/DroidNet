@@ -936,6 +936,62 @@ If MSAA editor primitive rasterization is deferred, that deferral is explicit:
 future implementation must use the reserved target policy and must not invent a
 separate overlay renderer.
 
+### 12.4 Surface layer sources
+
+Vortex does not link ImGui. Screen-space UI that owns its frame lifecycle, such
+as the ImGui module in `Oxygen.ImGui`, reaches the surface overlay lane through
+a registered layer source:
+
+```cpp
+class SurfaceLayerSource {
+public:
+  virtual ~SurfaceLayerSource() = default;
+  //! False skips the layer this frame (no UI frame, no draw data).
+  [[nodiscard]] virtual auto IsActive() const noexcept -> bool = 0;
+  //! Records UI draws; the layer framebuffer is bound and cleared.
+  virtual auto Record(graphics::CommandRecorder& recorder) -> void = 0;
+};
+
+[[nodiscard]] OXGN_VRTX_API auto Renderer::RegisterSurfaceLayerSource(
+  CompositionView::SurfaceRouteId surface,
+  observer_ptr<SurfaceLayerSource> source) -> SurfaceLayerToken;
+OXGN_VRTX_API auto Renderer::UnregisterSurfaceLayerSource(
+  SurfaceLayerToken token) -> void;
+```
+
+For each active source whose surface has a composition this frame, Vortex:
+
+1. owns an `RGBA8_UNORM` layer texture sized to the composite target,
+2. records `SurfaceLayerPass`: bind and clear the layer, call `Record`, return
+   the texture to `kCommon`,
+3. appends a blend-texture task above every view layer.
+
+This is the path `ImGuiRuntime::RenderOverlay` and `ImGuiOverlayPass` implement
+today, generalized and without ImGui types. The separate layer is kept instead
+of recording directly into the surface target, because UI draws in 8-bit sRGB
+with its own alpha while the surface may use another format; the blend task is
+the colour-space boundary ([§13.1](#131-layer-types)). Raw `surface_overlays`
+batches remain for producers that draw in the surface's own format.
+
+The registrant owns the source and unregisters it before destroying it. Vortex
+calls sources on the render thread during compositing only.
+
+Removed from Vortex by this contract:
+
+| Removed                                                                   | Replacement                                                           |
+| ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `Internal/ImGuiRuntime.*`, `Passes/ImGuiOverlayPass.*`                    | `SurfaceLayerPass`; ImGui lifecycle moves to `Oxygen.ImGui`           |
+| `Renderer::SetImGuiWindowId`, `GetImGuiContext`, `IsImGuiFrameActive`     | the ImGui module's own API                                            |
+| `RendererConfig::enable_imgui` and the `kDiagnosticsAndProfiling` gate    | the host creates the ImGui module from `GraphicsConfig::enable_imgui` |
+| `oxygen::imgui` private link, `Oxygen.ImGui` styles, `Platform/ImGui` use | none                                                                  |
+| `CompositionView::ForImGui` and the empty ImGui views examples submit     | none; `on_overlay` stays the view-screen compatibility producer       |
+
+The ImGui module, the adapter that registers it as a source and the call-site
+migration are specified in
+[runtime host §5.3](../../runtime-core/runtime-host.md#53-oxygenimgui-widgets).
+The editor drops its `renderer.enable_imgui` mapping
+(`EditorInterface/EngineRunner.cpp`, `Oxygen.Editor.Interop/src/Config.h`).
+
 ## 13. Composition Architecture
 
 ### 13.1 Layer Types

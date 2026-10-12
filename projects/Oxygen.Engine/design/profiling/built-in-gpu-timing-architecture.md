@@ -6,7 +6,7 @@
 
 This document defines the engine-owned GPU timing system that powers:
 
-1. the in-engine GPU timeline viewer,
+1. the [GPU work summary](../vortex/lld/gpu-work-summary.md) shown by the in-engine overlay, the player event stream and the editor,
 2. one-shot timing export,
 3. stable per-frame GPU telemetry.
 
@@ -31,7 +31,7 @@ It is intentionally different from Tracy:
 3. Reuse a fixed per-frame query budget.
 4. Fail predictably on overflow or incomplete scopes.
 5. Keep renderer code free of backend timestamp details.
-6. Ensure viewer and export are driven by the same published frame model.
+6. Ensure the work summary and export are driven by the same published frame model.
 
 ## 3. Non-Goals
 
@@ -67,7 +67,7 @@ graphics::GpuEventScope scope(recorder, "Renderer.View",
     profiling::Var("name", view_name)));
 ```
 
-The built-in GPU timing system consumes the shared scope metadata, but its identity and aggregation key are the base label only.
+The built-in GPU timing system consumes the shared scope metadata, but its identity and aggregation key are the base label only. It additionally keeps the `view` and `name` variables of a scope as its instance id and name, so per-view root scopes can be attributed to their view.
 
 ## 6. Architectural Components
 
@@ -79,7 +79,7 @@ flowchart LR
   B --> C[GpuTimelineProfiler]
   C --> D[Timestamp Backend]
   C --> E[GpuTimelineFrame]
-  E --> F[ImGui Timeline Viewer]
+  E --> F[GpuWorkSummarizer]
   E --> G[JSON/CSV Export]
   E --> H[Automated Tests]
 ```
@@ -133,7 +133,7 @@ The published frame model contains:
 2. used query-slot count,
 3. overflow and diagnostic flags,
 4. hierarchical telemetry scopes,
-5. timing data suitable for viewer and export.
+5. timing data suitable for the work summary and export.
 
 ## 8. Frame Lifecycle
 
@@ -146,7 +146,7 @@ sequenceDiagram
   participant Recorder as CommandRecorder
   participant Profiler as GpuTimelineProfiler
   participant Backend as Timestamp Backend
-  participant Consumers as Viewer / Export / Tests
+  participant Consumers as Summary / Export / Tests
 
   Frame->>Graphics: BeginFrame
   Graphics->>Profiler: begin profiling frame
@@ -259,7 +259,7 @@ Overflow contract:
 3. a diagnostic is emitted,
 4. the next frame starts clean.
 
-This behavior is architectural, not incidental. If you find the viewer showing an overflow diagnostic, raise `rndr.gpu_timestamps.max_scopes`.
+This behavior is architectural, not incidental. If the GPU work summary reports invalid frames from overflow, check that only the scopes the [granularity policy](../vortex/lld/gpu-work-summary.md#7-scope-granularity-policy) lists are telemetry before raising `rndr.gpu_timestamps.max_scopes`.
 
 ## 10. Incomplete Scope Handling
 
@@ -310,19 +310,18 @@ The built-in GPU timing system is controlled through renderer console variables:
 | --------------------------------------- | ------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `rndr.gpu_timestamps`                   | bool   | `false` | Enables or disables built-in GPU timing collection.                                                                                             |
 | `rndr.gpu_timestamps.max_scopes`        | uint   | `4096`  | Maximum telemetry scope slots per frame. Raise if per-frame overflow diagnostics appear.                                                        |
-| `rndr.gpu_timestamps.viewer`            | bool   | `false` | Shows or hides the ImGui GPU timeline viewer panel.                                                                                             |
 | `rndr.gpu_timestamps.export_next_frame` | string | `""`    | Path for a one-shot frame export. File extension determines format: `.csv` produces CSV; any other extension (including `.json`) produces JSON. |
 
-These controls belong to the built-in GPU timing system, not to Tracy.
+These controls belong to the built-in GPU timing system, not to Tracy. Viewers do not need `rndr.gpu_timestamps`: they hold a collection lease while shown (`DiagnosticsService::AcquireGpuTimeline`), and the in-engine overlay is toggled by `host.ui.gpu_work`.
 
 ## 13. Export Contract
 
-Exports are a first-class consumer of the same published timeline frame used by the in-engine viewer.
+Exports are a first-class consumer of the same published timeline frame the GPU work summary is built from.
 
 High-level contract:
 
 1. export consumes the published timeline model, not backend-private state,
-2. export reflects the same hierarchy and validity rules as the viewer,
+2. export keeps the full telemetry hierarchy and validity rules; the summary aggregates the same frames,
 3. export remains limited to telemetry scopes because it is driven by the built-in collector.
 
 Format selection is determined by the file extension supplied to `rndr.gpu_timestamps.export_next_frame`:
@@ -341,14 +340,14 @@ The following rules must remain true:
 3. render code uses `GpuEventScope`, not backend timing primitives,
 4. the collector is bounded per frame,
 5. backend timestamp resources remain backend-owned,
-6. viewer and export consume the same published model.
+6. the work summary and export consume the same published model.
 
 ## 15. Validation Expectations
 
 The architecture is healthy when:
 
-1. telemetry scopes appear in the built-in viewer,
-2. telemetry exports match viewer structure and timing semantics,
+1. every telemetry scope is attributed to a work bucket in the GPU work summary,
+2. telemetry exports match the published frame structure and timing semantics,
 3. diagnostic scopes do not pollute the built-in timeline,
 4. overflow and incomplete-scope behavior remain diagnosable,
 5. renderer code remains free of backend timing API usage.
@@ -364,4 +363,4 @@ It is:
 3. stable,
 4. backend-agnostic at the renderer boundary,
 5. narrower than Tracy by design,
-6. the source of truth for the engine's own GPU timing viewer and structured exports.
+6. the source of truth for the engine's GPU work summary and structured exports.

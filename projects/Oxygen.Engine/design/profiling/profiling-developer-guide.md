@@ -114,7 +114,7 @@ Good examples:
 
 | Question                                                                                      | If yes        | If no               |
 | --------------------------------------------------------------------------------------------- | ------------- | ------------------- |
-| Should this scope appear in the built-in GPU viewer/export?                                   | `kTelemetry`  | continue            |
+| Should this scope appear in the GPU work summary/export?                                      | `kTelemetry`  | continue            |
 | Is this scope dense enough to explode the built-in timeline if repeated many times per frame? | `kDiagnostic` | likely `kTelemetry` |
 | Is this mostly for deep optimization work in Tracy/capture tools?                             | `kDiagnostic` | likely `kTelemetry` |
 
@@ -123,7 +123,7 @@ Good examples:
 | Scenario                                     | Canonical instrumentation                                                                   | Granularity                                                                     | Naming pattern                                                | Notes                                                                                                               |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Render pass boundary                         | `GpuEventScope` around pass execution, usually using `RenderPass::GetName()`                | `kTelemetry`                                                                    | pass name or stable pass label                                | This is the standard engine-visible GPU timing scope.                                                               |
-| Major renderer phase or per-view render      | `GpuEventScope` around the phase or view root                                               | `kTelemetry`                                                                    | stable phase label plus vars such as `view`, `id`, `name`     | Use this when you want the scope in the built-in GPU viewer/export.                                                 |
+| Major renderer phase or per-view render      | `GpuEventScope` around the phase or view root                                               | `kTelemetry`                                                                    | stable phase label plus vars such as `view`, `id`, `name`     | Use this when you want the scope in the GPU work summary/export.                                                    |
 | Hot shader / draw or dispatch hotspot        | `GpuEventScope` around the owning draw/dispatch region                                      | `kDiagnostic`                                                                   | stable hotspot label plus vars for slice/job/material/view    | You cannot instrument inside shader code with this API; bracket the GPU work region that owns the hotspot.          |
 | CPU-bound algorithm                          | `CpuProfileScope` around the algorithm body                                                 | n/a                                                                             | stable algorithm label plus vars for problem size / mode / id | Use for culling, scene prep, sorting, upload planning, and similar CPU-heavy work.                                  |
 | Tracing a CPU-to-GPU flow                    | paired `CpuProfileScope` + `GpuEventScope` with matching base labels or shared variables    | CPU: n/a, GPU: usually `kTelemetry` at the top level                            | shared labels / vars such as `view`, `frame`, `job`, `task`   | This is the canonical way to correlate orchestration on CPU with execution on GPU in Tracy.                         |
@@ -201,17 +201,25 @@ The built-in GPU timing system is the engine's curated telemetry surface.
 | CVar                                    | Type   | Default | Description                                                                                                                                     |
 | --------------------------------------- | ------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `rndr.gpu_timestamps`                   | bool   | `false` | Enables or disables built-in GPU timing collection.                                                                                             |
-| `rndr.gpu_timestamps.max_scopes`        | uint   | `4096`  | Maximum telemetry scope slots per frame. Raise if overflow diagnostics appear in the viewer.                                                    |
-| `rndr.gpu_timestamps.viewer`            | bool   | `false` | Shows or hides the ImGui GPU timeline viewer panel.                                                                                             |
+| `rndr.gpu_timestamps.max_scopes`        | uint   | `4096`  | Maximum telemetry scope slots per frame. Raise if overflow diagnostics appear.                                                                  |
 | `rndr.gpu_timestamps.export_next_frame` | string | `""`    | Path for a one-shot frame export. File extension determines format: `.csv` produces CSV; any other extension (including `.json`) produces JSON. |
 
-### 7.2 What the Built-In Viewer Sees
+Viewers do not need `rndr.gpu_timestamps`: the in-engine GPU work overlay
+(`host.ui.gpu_work`), the player's `stats` request and the editor hold a
+collection lease while they show the summary.
 
-The built-in viewer sees:
+### 7.2 What the GPU Work Summary Sees
+
+The [GPU work summary](../vortex/lld/gpu-work-summary.md) sees:
 
 1. only `kTelemetry` GPU scopes,
-2. stable scope identity based on the base label,
-3. hierarchy and durations from the engine-owned telemetry collector.
+2. stable scope identity based on the base label, plus the `view` and `name`
+   variables of per-view root scopes,
+3. hierarchy and durations from the engine-owned telemetry collector, rolled
+   up into per-view work buckets and averaged over a short window.
+
+A new telemetry scope needs an entry in the Vortex stage table; until it has
+one, it shows up under "Other" by its label.
 
 It does not show:
 
@@ -226,7 +234,7 @@ Set `rndr.gpu_timestamps.export_next_frame` to a file path. The file extension d
 - `.csv` — comma-separated values with a timestamp-frequency header.
 - any other extension — JSON (use `.json` by convention).
 
-The export reflects the same published built-in timeline model as the viewer. It includes per-scope timing, hierarchy, and validity.
+The export reflects the published built-in timeline model the work summary is built from. It includes per-scope timing, hierarchy, and validity.
 
 ### 7.4 Recording a native frame window
 
@@ -266,7 +274,7 @@ Use Tracy when you need:
 
 1. dense nested timing,
 2. CPU/GPU correlation,
-3. optimization detail beyond the built-in GPU viewer.
+3. optimization detail beyond the GPU work summary.
 
 ### 8.3 Ownership Rule
 
@@ -354,14 +362,16 @@ flowchart TD
 
 ## 13. Troubleshooting
 
-### 13.1 Scope Missing from Built-In Viewer
+### 13.1 Scope Missing from the GPU Work Summary
 
 Check:
 
 1. the scope is GPU, not CPU,
 2. the scope uses `kTelemetry`,
-3. `rndr.gpu_timestamps` is enabled,
-4. the built-in viewer is visible (`rndr.gpu_timestamps.viewer`) or an export is requested,
+3. collection is on: `rndr.gpu_timestamps` is enabled, a viewer such as the
+   GPU work overlay (`host.ui.gpu_work`) is open, or an export is requested,
+4. the scope's label, or an ancestor's, is in the Vortex stage table;
+   otherwise it appears under "Other",
 5. the per-frame budget has not been exhausted — if overflow diagnostics appear, raise `rndr.gpu_timestamps.max_scopes`.
 
 ### 13.2 Scope Missing from Tracy

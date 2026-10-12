@@ -147,11 +147,12 @@ No setting persists between launches; the launch file is the whole input.
 
 One JSON object per line, validated by `oxygen.player-events.schema.json`:
 
-| Event        | Payload                                                                                                                                                              |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `lifecycle`  | `starting`, `session_started`, `scene_loaded`, `scene_failed` (with issues), `paused`, `resumed`, `session_ended`, `stopped`. `stopped` means the process is ending. |
-| `log`        | Severity, channel and text, including `oxygen.log` output                                                                                                            |
-| `diagnostic` | A [script diagnostic](../scripting/script-diagnostics.md#2-model)                                                                                                    |
+| Event        | Payload                                                                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `lifecycle`  | `starting`, `session_started`, `scene_loaded`, `scene_failed` (with issues), `paused`, `resumed`, `session_ended`, `stopped`. `stopped` means the process is ending.     |
+| `log`        | Severity, channel and text, including `oxygen.log` output                                                                                                                |
+| `diagnostic` | A [script diagnostic](../scripting/script-diagnostics.md#2-model)                                                                                                        |
+| `gpu_work`   | A [GPU work summary](../vortex/lld/gpu-work-summary.md#41-types), sent while the `stats` request has it on and only when its `revision` changes (at most twice a second) |
 
 The launcher sends one request object per line on the same pipe:
 
@@ -163,10 +164,17 @@ The launcher sends one request object per line on the same pipe:
 | `step`        | Simulates `frames` frames (default 1) and stays paused.                                                                                                                                                 |
 | `end_session` | Ends the session; the process stays up and reports `session_ended`.                                                                                                                                     |
 | `stop`        | Ends the process.                                                                                                                                                                                       |
+| `stats`       | `gpu_work: true` holds a GPU timeline lease and starts `gpu_work` events; `false` releases it. Off at launch; survives sessions.                                                                        |
 
 A `scene_failed` is followed by `session_ended`, so the launcher can send
 `play` again. The reader runs on its own thread and hands requests to the
 engine thread; nothing on the pipe thread touches the engine.
+
+The `gpu_work` payload mirrors `GpuWorkSummary` field for field, with buckets
+written as their catalog ids (`"base_pass"`), never enum values, and
+`schema_version` from `GpuWorkSummary::kSchemaVersion`. The player module
+serializes it on the engine thread when it sees a new `revision`; Vortex does
+not know the event format.
 
 ## 4. Migration
 
@@ -183,3 +191,4 @@ RenderScene behavior is otherwise unchanged.
 | SIP-3 | The player loads a launch file, applies its window settings, renders through the starting camera with the starting input contexts active, follows a script's camera and context switches, and streams lifecycle and log events. |
 | SIP-4 | A failing script in the player streams its diagnostic; a source edit reloads it while running.                                                                                                                                  |
 | SIP-5 | `end_session` ends the session and leaves the process ready for `play`; `stop` ends the process cleanly; a bad launch file fails with a schema diagnostic.                                                                      |
+| SIP-6 | `stats` with `gpu_work: true` produces schema-valid `gpu_work` events, one per summary revision; `false` stops them and releases the timeline lease; no `gpu_work` event is sent before the first `stats` request.              |

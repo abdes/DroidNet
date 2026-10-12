@@ -74,7 +74,7 @@ flowchart LR
   D --> G[Native GPU Label Collector]
   B --> H[Tracy CPU]
   B --> I[PIX CPU Events]
-  E --> J[GPU Timeline Viewer / Export]
+  E --> J[GPU Work Summary / Export]
   F --> K[Tracy Profiler]
   G --> L[PIX / RenderDoc / Nsight]
 ```

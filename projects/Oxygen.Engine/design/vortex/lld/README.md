@@ -19,6 +19,7 @@ use the [milestone roadmap](../PLAN.md). Shared policy and LLD expectations are 
 | Diagnostics                           | [diagnostics-service.md](diagnostics-service.md)                                                        |
 | Editor rendering extension            | [editor-rendering.md](editor-rendering.md)                                                              |
 | Atmosphere and fog                    | [environment-service.md](environment-service.md)                                                        |
+| GPU work summary                      | [gpu-work-summary.md](gpu-work-summary.md)                                                              |
 | Exposure model and integration        | [exposure.md](exposure.md)                                                                              |
 | Hierarchical depth                    | [hzb.md](hzb.md)                                                                                        |
 | Indirect lighting                     | [indirect-lighting-service.md](indirect-lighting-service.md)                                            |

@@ -1,7 +1,13 @@
 # Oxygen ImGui: Architecture, Backends, and Assets
 
-This directory provides ImGui-related UI assets and helpers used by
-Vortex and graphics/platform backends.
+This directory provides the engine's ImGui module, UI assets and generic
+widgets. It links engine, platform, console and graphics-common, never
+Vortex; Vortex has no ImGui dependency.
+
+The ImGui module and the surface layer described below land with step I1 of
+the [runtime host plan](../../../design/runtime-core/runtime-host.md#9-delivery-order-and-exit-gates);
+until then Vortex's `Internal/ImGuiRuntime` and `Passes/ImGuiOverlayPass` do
+this work.
 
 ## Why This Exists
 
@@ -17,28 +23,38 @@ the runtime is unified. This affects how APIs must be designed and called.
 - `Oxygen.Platform`:
   owns SDL3 ImGui platform backend (`ImGuiSdl3Backend`) for input/events and
   display integration.
-- `Oxygen.Vortex`:
-  owns `ImGuiRuntime` and `ImGuiOverlayPass`; orchestrates frame start/end,
-  binds context, applies style/fonts, and triggers overlay rendering.
 - `Oxygen.ImGui`:
-  provides UI assets (fonts/icons/style constants) and reusable UI utilities.
+  owns `ImGuiModule` (context binding, window binding, frame start/end,
+  style/fonts), UI assets and generic widgets.
+- `Oxygen.Vortex`:
+  knows only surface layer sources
+  ([multi-view composition §12.4](../../../design/vortex/lld/multi-view-composition.md#124-surface-layer-sources)):
+  it owns the layer texture, records the source into it and blends it over
+  the composed surface.
+- `Oxygen.Host`:
+  `ImGuiLayer` adapts the module to a Vortex surface layer source; it is the
+  only code that sees both.
 
 ## Lifecycle and Frame Flow
 
-1. App registers `ImGuiModule` with a graphics backend implementation.
-2. `ImGuiModule::OnAttached` initializes graphics backend (`Init`), which
-   creates ImGui context and initializes `imgui_impl_dx12`.
-3. `ImGuiModule::OnAttached` binds context and applies style/fonts/assets.
-4. `ImGuiModule::SetWindowId` creates `ImGuiSdl3Backend` for a valid window.
-5. Each frame:
+1. The host creates `ImGuiModule` with the backend from
+   `Graphics::CreateImGuiGraphicsBackend()` when
+   `GraphicsConfig::enable_imgui` is set, and registers `ImGuiLayer` with the
+   renderer.
+2. `ImGuiModule::OnAttached` initializes the graphics backend (`Init`), which
+   creates the ImGui context and initializes `imgui_impl_dx12`, then binds the
+   context and applies style/fonts/assets.
+3. `ImGuiModule::SetWindowId` creates `ImGuiSdl3Backend` for a valid window.
+4. Each frame:
    - `OnFrameStart`: platform backend `NewFrame`, validate display metrics,
      graphics backend `NewFrame` (calls `ImGui::NewFrame`).
-   - render systems build UI.
-   - `ImGuiPass::Render` delegates to graphics backend `Render`.
+   - `OnGuiUpdate`: applications build UI with `GetImGuiContext()`.
+   - compositing: Vortex calls `ImGuiLayer::Record`, which delegates to the
+     graphics backend `Render`.
    - `OnFrameEnd`: calls `ImGui::EndFrame` if a frame was started.
-6. Shutdown:
-   - platform backend detached.
-   - graphics backend shutdown (with deferred GPU-safe cleanup when available).
+5. Shutdown: the host unregisters `ImGuiLayer`, then the platform backend
+   detaches and the graphics backend shuts down (with deferred GPU-safe
+   cleanup when available).
 
 ## Platform ImGui Backend (SDL3)
 
@@ -59,7 +75,7 @@ the runtime is unified. This affects how APIs must be designed and called.
 
 ## API Design Rules (Cross-DLL Safe)
 
-For new code added outside the Vortex ImGui runtime, prefer context-free APIs.
+For new code added outside `ImGuiModule`, prefer context-free APIs.
 
 1. New helper APIs in `Oxygen.ImGui` should accept explicit ImGui objects.
 
@@ -72,7 +88,7 @@ For new code added outside the Vortex ImGui runtime, prefer context-free APIs.
    - avoid `ImGui::GetIO()`, `ImGui::GetStyle()`, `ImGui::SetCurrentContext()`.
    - avoid `ImGui::CreateContext()/DestroyContext()`.
 
-3. The Vortex ImGui runtime should bind context before context-dependent work.
+3. `ImGuiModule` binds the context before context-dependent work.
 
    - fetch context from graphics backend.
    - call `ImGui::SetCurrentContext(ctx)`.
@@ -141,18 +157,21 @@ Bundled source assets:
 
 ## Integration Pointers
 
-- Runtime entry: `src/Oxygen/Vortex/Internal/ImGuiRuntime.h`
-- Overlay pass: `src/Oxygen/Vortex/Passes/ImGuiOverlayPass.h`
+- Runtime entry: `ImGuiModule`
+- Renderer seam: `vortex::SurfaceLayerSource`, implemented by Host's
+  `ImGuiLayer`
 - Graphics backend interface:
   `src/Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h`
 - D3D12 backend impl:
   `src/Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h`
 
-## Quick Checklist for New Non-Vortex Additions
+## Quick Checklist for New Additions
 
 - Is it reusable style/font/icon data? Make it context-free.
-- Does it need global ImGui context access? Keep call site in the Vortex ImGui
-  runtime.
+- Does it need global ImGui context access? Keep the call site in
+  `ImGuiModule`.
+- Does it need Vortex data? It belongs in `Oxygen.Host`, which maps the data
+  to a widget's own types; widgets here never include Vortex.
 - If adding UI widgets in `Oxygen.ImGui`, document linkage/runtime assumptions.
 - For context-bound widgets, require `ImGuiContext*` in draw entry points and
   bind it in the widget implementation.
