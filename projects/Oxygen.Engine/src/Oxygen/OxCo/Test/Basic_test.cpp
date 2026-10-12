@@ -158,8 +158,7 @@ NOLINT_TEST_F(OxCoBasicTest, NoOp)
 }
 // ReSharper disable CppMemberFunctionMayBeStatic
 // ReSharper disable CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
-// NOLINTBEGIN(*-use-nodiscard,
-// *-special-member-functions)
+// NOLINTBEGIN(*-use-nodiscard,*-special-member-functions)
 
 struct NonMoveableAwaiter {
   NonMoveableAwaiter() = default;
@@ -177,10 +176,9 @@ struct NonMoveableAwaitable {
   auto operator co_await() const -> NonMoveableAwaiter { return {}; }
 };
 
-// NOLINTEND(*-use-nodiscard,
-// *-special-member-functions) ReSharper enable
-// CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines ReSharper enable
-// CppMemberFunctionMayBeStatic
+// NOLINTEND(*-use-nodiscard,*-special-member-functions)
+// ReSharper restore CppClangTidyCppcoreguidelinesAvoidCapturingLambdaCoroutines
+// ReSharper restore CppMemberFunctionMayBeStatic
 
 NOLINT_TEST_F(OxCoBasicTest, NonMoveable)
 {

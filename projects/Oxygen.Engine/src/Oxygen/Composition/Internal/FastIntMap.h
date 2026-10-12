@@ -11,8 +11,7 @@
 
 namespace oxygen::composition::detail {
 
-// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic,
-// cppcoreguidelines-owning-memory)
+// NOLINTBEGIN(*-pro-bounds-pointer-arithmetic,*-owning-memory)
 
 //! High-performance hash map optimized for uint64_t key-value pairs
 //!
@@ -145,7 +144,6 @@ private:
     }
   }
 };
-// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic,
-// cppcoreguidelines-owning-memory)
+// NOLINTEND(*-pro-bounds-pointer-arithmetic,*-owning-memory)
 
 } // namespace oxygen::composition::detail

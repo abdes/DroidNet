@@ -141,15 +141,13 @@ public:
   */
   template <class T> void Schedule(void (*fn)(T*) noexcept, T* arg)
   {
-    // NOLINTNEXTLINE(clang-diagnostic-cast-function-type-strict,
-    // *-pro-type-reinterpret-cast)
+    // NOLINTNEXTLINE(*-function-type-strict,*-reinterpret-cast)
     ready_->EmplaceBack(reinterpret_cast<void (*)(void*) noexcept>(fn), arg);
   }
 
   template <class T> void Schedule(void (*fn)(const T*) noexcept, const T* arg)
   {
-    // NOLINTNEXTLINE(clang-diagnostic-cast-function-type-strict,
-    // *-pro-type-reinterpret-cast, *-pro-type-const-cast)
+    // NOLINTNEXTLINE(*-function-type-strict,*-reinterpret-cast,*-const-cast)
     ready_->EmplaceBack(
       reinterpret_cast<void (*)(void*) noexcept>(fn), const_cast<T*>(arg));
   }
