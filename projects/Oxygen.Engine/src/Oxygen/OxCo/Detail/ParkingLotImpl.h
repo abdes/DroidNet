@@ -8,6 +8,7 @@
 
 #include "IntrusiveList.h"
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Coroutine.h>
 
@@ -15,7 +16,14 @@ namespace oxygen::co::detail {
 
 template <typename Self> class ParkingLotImpl {
 public:
-  virtual ~ParkingLotImpl() = default;
+  //! Destroying a lot that still has parked waiters would suspend their tasks
+  //! forever. Cancelled waiters unlink themselves, so this only fires on a
+  //! real leak: the owner destroyed a primitive that tasks still wait on.
+  virtual ~ParkingLotImpl()
+  {
+    DCHECK_F(parked_.Empty(),
+      "Still some tasks suspended while destroying a parking lot");
+  }
 
 protected:
   class Parked : public IntrusiveListItem<Parked> {
@@ -55,19 +63,14 @@ protected:
     Handle handle_;
   };
 
+  // Parked waiters hold a reference to their lot, so it must not move.
   OXYGEN_MAKE_NON_COPYABLE(ParkingLotImpl)
-  OXYGEN_DEFAULT_MOVABLE(ParkingLotImpl)
+  OXYGEN_MAKE_NON_MOVABLE(ParkingLotImpl)
 
   //! Return a pointer to the awaiter whose task `UnParkOne()` would wake, or
   //! `nullptr` if there are no waiters currently. You can use its `UnPark()`
   //! method to wake it and remove it from the list of waiters.
-  Parked* Peek()
-  {
-    if (!parked_.empty()) {
-      return &parked_.front();
-    }
-    return nullptr;
-  }
+  auto Peek() noexcept -> Parked* { return parked_.TryFront(); }
 
   //! Wake the oldest waiter, removing it from the list of waiters.
   void UnParkOne() noexcept

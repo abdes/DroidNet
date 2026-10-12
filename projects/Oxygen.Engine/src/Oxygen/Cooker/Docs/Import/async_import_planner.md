@@ -187,7 +187,7 @@ contiguous table to enable stable iteration and deterministic ordering.
 // Sketch of planner-owned storage (implementation detail)
 std::vector<PlanItem> items_;                     // indexed by PlanItemId
 std::vector<std::vector<PlanItemId>> dependencies_; // consumer -> producers
-std::vector<ReadinessEvent> events_;              // indexed by PlanItemId
+std::vector<std::unique_ptr<ReadinessEvent>> events_; // indexed by PlanItemId; co::Event cannot move
 std::vector<ReadinessTracker> trackers_;          // indexed by PlanItemId
 std::vector<PlanItemId> required_storage_;
 std::vector<uint8_t> satisfied_storage_;

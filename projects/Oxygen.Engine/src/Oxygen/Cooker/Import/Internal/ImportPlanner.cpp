@@ -5,11 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <functional>
-#include <queue>
-#include <ranges>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <span>
+#include <string>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPlanner.h>
 
 namespace oxygen::content::import {
@@ -204,7 +209,10 @@ auto ImportPlanner::MakePlan() -> std::vector<PlanStep>
     "ImportPlanner cycle detected in dependency graph");
 
   events_.clear();
-  events_.resize(item_count);
+  events_.reserve(item_count);
+  for (size_t index = 0; index < item_count; ++index) {
+    events_.push_back(std::make_unique<ReadinessEvent>());
+  }
   trackers_.clear();
   trackers_.resize(item_count);
   required_storage_.clear();
@@ -219,11 +227,11 @@ auto ImportPlanner::MakePlan() -> std::vector<PlanStep>
     satisfied_storage_.insert(satisfied_storage_.end(), deps.size(), 0U);
 
     auto& tracker = trackers_[index];
-    tracker.required = std::span<const PlanItemId>(
-      required_storage_.data() + offset, deps.size());
+    tracker.required = std::span<const PlanItemId>(required_storage_)
+                         .subspan(offset, deps.size());
     tracker.satisfied
-      = std::span(satisfied_storage_.data() + offset, deps.size());
-    tracker.ready_event = &events_[index];
+      = std::span<uint8_t>(satisfied_storage_).subspan(offset, deps.size());
+    tracker.ready_event = events_[index].get();
 
     if (deps.empty()) {
       tracker.ready_event->ready = true;
@@ -269,7 +277,7 @@ auto ImportPlanner::Tracker(PlanItemId item) -> ReadinessTracker&
 auto ImportPlanner::ReadyEvent(PlanItemId item) -> ReadinessEvent&
 {
   const auto u_item = ItemIndex(item);
-  return events_.at(u_item);
+  return *events_.at(u_item);
 }
 
 auto ImportPlanner::AddItem(PlanItemKind kind, std::string debug_name,

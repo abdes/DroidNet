@@ -8,6 +8,7 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -172,7 +173,9 @@ private:
   bool sealed_ = false;
   std::vector<PlanItem> items_;
   std::vector<std::vector<PlanItemId>> dependencies_;
-  std::vector<ReadinessEvent> events_;
+  // Heap-allocated: trackers and waiters keep addresses of these events, and
+  // co::Event cannot move.
+  std::vector<std::unique_ptr<ReadinessEvent>> events_;
   std::vector<ReadinessTracker> trackers_;
   std::vector<PlanItemId> required_storage_;
   std::vector<uint8_t> satisfied_storage_;
