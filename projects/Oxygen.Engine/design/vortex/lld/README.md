@@ -7,6 +7,7 @@ use the [milestone roadmap](../PLAN.md). Shared policy and LLD expectations are 
 | Topic                                 | Design                                                                                                  |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | Base pass and GBuffer                 | [base-pass.md](base-pass.md)                                                                            |
+| Camera-relative rendering             | [camera-relative-rendering.md](camera-relative-rendering.md)                                            |
 | Renderer upload                       | [upload.md](upload.md)                                                                                  |
 | Renderer GPU feedback                 | [gpu-feedback.md](gpu-feedback.md)                                                                      |
 | Managed resource/view construction    | [Graphics registry contract](../../../src/Oxygen/Graphics/Common/README.md#managed-resources-and-views) |
@@ -41,7 +42,9 @@ use the [milestone roadmap](../PLAN.md). Shared policy and LLD expectations are 
 | Local-light shadows                   | [shadow-local-lights.md](shadow-local-lights.md)                                                        |
 | Shadow service                        | [shadow-service.md](shadow-service.md)                                                                  |
 | Skybox and static SkyLight            | [skybox-static-skylight.md](skybox-static-skylight.md)                                                  |
+| Temporal resolve (TSR)                | [temporal-resolve.md](temporal-resolve.md)                                                              |
 | Translucency                          | [translucency.md](translucency.md)                                                                      |
+| Virtual shadow maps                   | [virtual-shadow-maps.md](virtual-shadow-maps.md)                                                        |
 
 The completed [substrate migration](../milestones/VTX-M01/implementation.md) and
 [legacy retirement](../milestones/VTX-M07/migration.md) belong to their milestone records.

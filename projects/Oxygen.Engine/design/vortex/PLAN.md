@@ -19,6 +19,13 @@ See [STATUS.md](STATUS.md) for progress and [OPEN_ITEMS.md](OPEN_ITEMS.md) for p
 - [VX-IBL-01 captured sky lighting](milestones/VX-IBL-01/README.md): atmosphere/height-fog diffuse and specular IBL, immediate authoring and budgeted runtime updates; [S7](milestones/VX-IBL-01/README.md#s7--reusable-infrastructure) promotes reusable infrastructure.
 - [VX-OCC-04 two-phase GPU occlusion](milestones/VX-OCC-04/README.md): same-frame
   GPU culling for camera and shadow views through indirect lists.
+- [VX-VIEW-03 camera-relative rendering](milestones/VX-VIEW-03/README.md):
+  translated-world rendering for every view; after Editor V0.1.
+- [VX-POST-02 temporal resolve](milestones/VX-POST-02/README.md): TSR-class
+  anti-aliasing and upscaling; after VX-VIEW-03.
+- [VX-SHADOW-01 virtual shadow maps](milestones/VX-SHADOW-01/README.md):
+  GPU-driven VSM as a second ShadowService strategy for all light kinds;
+  after VX-POST-02.
 - [Material sidedness correction](milestones/material-sidedness/README.md).
 - [RenderScene preview sun](milestones/preview-sun/README.md).
 - [Future capabilities](milestones/VTX-FUTURE/README.md).

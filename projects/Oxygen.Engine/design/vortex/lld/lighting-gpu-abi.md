@@ -291,7 +291,8 @@ status; emitting black inside a lighting helper is insufficient.
 ## Shadow association and deferred draws
 
 `LightShadowReference`: stride **16**, alignment **16**:
-`uint projection_kind` at 0 (None=0, Cascaded2D=1, LocalCube=2, LocalProjected2D=3),
+`uint projection_kind` at 0 (None=0, Cascaded2D=1, LocalCube=2, LocalProjected2D=3;
+Virtual=4 is planned by the [VSM design](virtual-shadow-maps.md#47-consumer-records)),
 `uint record_index` at 4 (absent=`0xffffffff`), `uint selection_index` at 8,
 `uint coverage_state` at 12 (NoRequest=0, NoInfluence=1, Complete=2,
 OutsideAuthoredCoverage=3, QualityOmitted=4). QualityOmitted has no depth record

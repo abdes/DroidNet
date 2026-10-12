@@ -214,7 +214,11 @@ A list is a pass's ordered candidate draws plus a visibility predicate:
 - Candidates are cut into segments: maximal runs of consecutive candidates
   with the same `MeshRasterState` (masked, double-sided, reverse winding).
   Each segment needs its own PSO. Runs, not regrouping, keep the CPU order
-  across segments, which back-to-front translucency requires.
+  across segments, which back-to-front translucency requires. A pass that
+  writes a per-draw stencil value (the depth prepass's shadow-receiver bit,
+  [virtual-shadow-maps.md §1.2.1](virtual-shadow-maps.md#121-receiver-demand-contract))
+  adds that value to the segment key and sets the stencil reference per
+  segment.
 - The CPU uploads the candidates and the segment table once per list.
 
 The GPU keeps the candidates that satisfy the list's predicate, in candidate

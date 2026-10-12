@@ -141,7 +141,10 @@ retain the existing fixed 3×3 PCF filter; directional surface shading does not
 derive finite-source specular broadening from this angle. V0.1 labels the control
 Atmosphere Disk Diameter and shows it for assigned atmosphere contributors.
 Future finite-source shading requires a separate renderer contract and reference
-images; the stored angular size alone does not implement those effects.
+images; the stored angular size alone does not implement those effects. With
+virtual shadow maps, the same angular size sets SMRT shadow softness
+([VSM-D12](../../lld/virtual-shadow-maps.md#2-decisions)); the control's label
+changes with that slice.
 
 Source boundary: [DirectionalLight.h](../../../../src/Oxygen/Scene/Light/DirectionalLight.h).
 Existing shadow scope: [conventional shadow parity](../VTX-M05D/README.md).

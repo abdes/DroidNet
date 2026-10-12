@@ -9,4 +9,4 @@ The milestone README owns the final outcome and remaining work.
 
 Some placeholder directories or shader inventory may exist.
 
-**Remaining work:** Geometry virtualization, material composition, broader indirect lighting/GI/reflections, VSM, clouds, heterogeneous volumes, water, hair, distortion, light shafts.
+**Remaining work:** Geometry virtualization, material composition, broader indirect lighting/GI/reflections, clouds, heterogeneous volumes, water, hair, distortion, light shafts.

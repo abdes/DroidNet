@@ -12,6 +12,9 @@
 
 - depth-only rendering for opaque and masked deferred participants
 - `SceneDepth` population
+- the scene-stencil shadow-receiver bit, from each instance's resolved
+  Receive Shadows, when virtual shadow maps are active
+  ([virtual-shadow-maps.md §1.2.1](virtual-shadow-maps.md#121-receiver-demand-contract))
 - `PartialDepth` publication
 - truthful `DepthPrePassCompleteness`
 
@@ -104,6 +107,7 @@ desktop deferred opaque-velocity policy.
 | ------------ | -------------------- | -------------------------------- |
 | SceneDepth   | D32_FLOAT_S8X24_UINT | SceneTextures::GetSceneDepth()   |
 | PartialDepth | copy of SceneDepth   | SceneTextures::GetPartialDepth() |
+| Receiver bit | scene stencil bit    | SceneTextures::GetStencil()      |
 
 ### 3.3 Setup Milestones
 
@@ -133,10 +137,17 @@ DepthPrepassModule::Execute(ctx, scene_textures)
   │  the view's cull marked phase 1 (occlusion.md §3)
   ├─ bind depth-only framebuffer
   ├─ issue the list: one ExecuteIndirect per run of equal raster state, so
-  │  opaque draws precede masked draws with the alpha-test permutation
+  │  opaque draws precede masked draws with the alpha-test permutation;
+  │  with virtual shadow maps the run key also includes resolved Receive
+  │  Shadows, and each run sets the stencil reference that writes the
+  │  shadow-receiver bit
   ├─ copy SceneDepth -> PartialDepth
   └─ publish completeness state
 ```
+
+Stage 3 hosts the depth-only receiver prepasses that virtual shadow maps
+require from other receiver families (water surface, front-layer
+translucency, hair). Each family owns its sub-pass; all run before Stage 8.
 
 Stage 3 must not synthesize an opaque velocity publication seam while the
 active opaque-velocity policy is `kBasePass`.

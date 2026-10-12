@@ -95,8 +95,10 @@ Phase 4C/VTX-M05D still do **not** claim:
 
 - VSM activation
 
-VSM remains future `ShadowService` work and is not part of the conventional
-shadow-map baseline.
+VSM is a second `ShadowService` strategy, planned in
+[VX-SHADOW-01](../milestones/VX-SHADOW-01/README.md) and specified in
+[virtual-shadow-maps.md](virtual-shadow-maps.md). It is not part of the
+conventional shadow-map baseline.
 
 ### 1.2 Stage Position
 
@@ -193,23 +195,15 @@ behaviors:
 ### 2.1 File Placement
 
 ```text
-src/Oxygen/Vortex/
-`-- Services/
-    `-- Shadows/
-        |-- ShadowService.h
-        |-- ShadowService.cpp
-        |-- Internal/
-        |   |-- CascadeShadowSetup.h/.cpp
-        |   `-- ConventionalShadowTargetAllocator.h/.cpp
-        |-- Passes/
-        |   |-- ShadowDepthPass.h/.cpp
-        |   |-- ShadowReceiverFitPass.h/.cpp
-        |   `-- CascadeShadowPass.h/.cpp
-        |-- Types/
-        |   |-- FrameShadowInputs.h
-        |   `-- Generated.ShadowContracts.h   <- ShaderContracts.yaml
-        `-- Vsm/
-            `-- Internal/   <- reserved and empty in Phase 4C
+src/Oxygen/Vortex/Shadows/
+|-- ShadowService.h/.cpp
+|-- Internal/   cascade, spot and point setup; conventional target allocation;
+|               caster dependencies; shadow references; shared local maps
+|-- Passes/     CascadeShadowPass, ShadowDepthPass, ShadowReceiverFitPass,
+|               ContactShadowCasterDepthPass; Generated.ShadowPassContracts.h
+|-- Types/      frame inputs, shadow records, references, content leases;
+|               Generated.ShadowContracts.h  <- ShaderContracts.yaml
+`-- Vsm/        virtual shadow maps; see virtual-shadow-maps.md §11
 ```
 
 ### 2.2 Public API
@@ -247,7 +241,7 @@ class ShadowService : public ISubsystemService {
   [[nodiscard]] auto InspectShadowData(ViewId view_id) const
     -> observer_ptr<const ShadowFrameData>;
 
-  /// VSM support check. Returns false in Phase 4C.
+  /// True when the configured shadow method is virtual (VX-SHADOW-01).
   [[nodiscard]] auto HasVsm() const -> bool;
 
  private:
@@ -607,6 +601,7 @@ Directional, spot and point conventional shadows are implemented. M05D records
 their original qualification; EX07 adds local-map caching, cross-view sharing
 and forward/translucent consumers. Spot/point shadows are no longer pending.
 
-VSM remains a future strategy (VX-SHADOW-01). Layered one-pass point cubemaps
+VSM is planned in [VX-SHADOW-01](../milestones/VX-SHADOW-01/README.md) under
+[virtual-shadow-maps.md](virtual-shadow-maps.md). Layered one-pass point cubemaps
 remain an optimization decision (VX-SHADOW-02). See
 [OPEN_ITEMS.md](../OPEN_ITEMS.md) and the [local-light contract](shadow-local-lights.md).

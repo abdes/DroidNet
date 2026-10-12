@@ -14,13 +14,15 @@ Dependencies: VTX-M08 or explicit reprioritization
 
 ## Delivered scope
 
-Geometry virtualization, material composition, broader indirect lighting/GI/reflections, VSM, clouds, heterogeneous volumes, water, hair, distortion, light shafts.
+Geometry virtualization, material composition, broader indirect lighting/GI/reflections, clouds, heterogeneous volumes, water, hair, distortion, light shafts.
 
 ## Deferred capability owners
 
 - Captured-sky diffuse/specular IBL and specified-cubemap specular lighting are
   implemented in [VX-IBL-01](../VX-IBL-01/README.md) under ED-M08, including Stage 13 activation and
   retirement of the Stage 12 ambient bridge. That milestone owns acceptance.
+- Virtual shadow maps moved to their own plan,
+  [VX-SHADOW-01](../VX-SHADOW-01/README.md).
 - Broader GI/SSR, reflection probes, SkyLight
   occlusion/baking and cubemap blending require separate delivery plans.
 - Reflection/360-view aerial perspective still needs a runtime resource path.
