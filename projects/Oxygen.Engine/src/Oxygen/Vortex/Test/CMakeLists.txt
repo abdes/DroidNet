@@ -265,20 +265,6 @@ m_gtest_program(
     "Internal/RenderContextMaterializer_test.cpp"
 )
 
-m_gtest_program(
-  AuxiliaryDependencyGraph
-  SOURCES
-    "Fakes/Graphics.h"
-    "Internal/AuxiliaryDependencyGraph_test.cpp"
-)
-
-m_gtest_program(
-  CompositionPlanner
-  SOURCES
-    "Fakes/Graphics.h"
-    "Internal/CompositionPlanner_test.cpp"
-)
-
 m_gtest_program(CompositingPass SOURCES "Internal/CompositingPass_test.cpp")
 
 m_gtest_program(

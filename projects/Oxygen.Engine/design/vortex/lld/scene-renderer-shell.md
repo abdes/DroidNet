@@ -535,9 +535,6 @@ SceneRenderer/
 ├── DepthPrePassPolicy.h
 ├── ResolveSceneColor.cpp
 ├── PostRenderCleanup.cpp
-├── Internal/
-│   ├── FramePlanBuilder.h/.cpp
-│   └── ViewRenderPlan.h
 └── Stages/
     ├── InitViews/         (Phase 3)
     ├── DepthPrepass/      (Phase 3)

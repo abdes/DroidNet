@@ -262,7 +262,7 @@ struct CompositionView {
   ViewId exposure_source_view_id { kInvalidViewId };
 
   //! Optional per-view render/debug/depth settings. Frame-level renderer
-  //! settings are defaults only; FrameViewPacket/ViewRenderPlan carries the
+  //! settings are defaults only; the view's execution entry carries the
   //! effective values consumed by scene stages.
   ViewRenderSettings render_settings {};
 

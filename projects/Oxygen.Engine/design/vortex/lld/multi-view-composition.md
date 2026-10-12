@@ -86,9 +86,10 @@ The current Vortex code already has useful anchors:
   `CompositionViewImpl` instances, resolves cameras, publishes runtime
   `ViewContext`s, and validates exposure source order.
 - `CompositionViewImpl` owns per-view HDR/SDR intermediate resources today.
-- `FramePlanBuilder` creates `FrameViewPacket`s and currently resolves render
-  mode, tone map policy, sky flags, and depth-prepass policy from mostly
-  frame-global settings.
+- `Renderer::PopulateRenderContextViewState` builds one
+  `RenderContext::ViewExecutionEntry` per active view: its kind, state handle,
+  feature mask, resolved auxiliary inputs, targets, and per-view render,
+  shading and debug mode overrides.
 - `RenderContext` already has `frame_views`, `active_view_index`, and
   `current_view`.
 - `RenderContext::current_view` is currently an ambient mutable cursor. M06A
@@ -96,12 +97,7 @@ The current Vortex code already has useful anchors:
   production loop.
 - `InitViewsModule` is already designed to iterate `RenderContext::frame_views`
   and publish one `PreparedSceneFrame` per eligible scene view.
-- `CompositionPlanner` already converts sorted frame view packets into
-  composition tasks, and `Renderer` owns composition submission queueing and
-  execution.
-- `CompositionPlanner` currently treats `kZOrderScene` plus opacity 1 as a
-  "primary scene copy" case. M06A must replace this with a structural surface
-  layer predicate.
+- `Renderer` owns composition planning, submission queueing and execution.
 - `design/vortex/ARCHITECTURE.md` sections 5 and 6.2 remain the higher-level
   authority for frame dispatch and per-view versus per-frame stage separation.
 
@@ -154,7 +150,7 @@ A view packet is the renderer-owned, per-frame realization of view intent:
 - `ViewKind`
 - optional producer-owned `ViewStateHandle`
 - resolved camera/projection
-- `ViewRenderPlan`
+- per-view render, shading and debug mode overrides
 - view constants
 - prepared-scene pointer
 - render target/composite source
@@ -227,7 +223,7 @@ struct AuxInputDesc {
 ```
 
 `CompositionView` intent may declare `produced_aux_outputs` and
-`consumed_aux_outputs`; `FrameViewPacket` carries the resolved descriptors plus
+`consumed_aux_outputs`; `ViewExecutionEntry` carries the resolved inputs plus
 producer/consumer dependency edges. `AuxOutputId` is stable for the producer
 handle, not for a transient framebuffer allocation. A missing required producer
 is a validation failure before rendering starts. A missing optional producer
@@ -451,7 +447,7 @@ FrameStart
 PreRender
   - sync active CompositionViews
   - publish/update runtime ViewContexts
-  - build FrameViewPackets
+  - build ViewExecutionEntries
   - split Primary, Auxiliary, and CompositionOnly packets
   - build ViewFamilies / RenderBatches
   - invoke view extensions: OnFamilyAssembled / OnViewSetup
@@ -557,8 +553,8 @@ multi-view representation:
 
 ### 8.3 Shading Mode and Capability Gating
 
-`ShadingMode` is per view. The effective mode lives in `ViewRenderPlan`, not in
-frame-global state:
+`ShadingMode` is per view. The effective mode lives in the view's
+`ViewExecutionEntry`, not in frame-global state:
 
 - deferred views run base pass into GBuffers plus emissive/auxiliary scene color,
   then run deferred lighting
@@ -761,21 +757,19 @@ multi-view execution is active.
 
 ### 11.1 ViewRenderSettings
 
-M06A should introduce or equivalent-store:
+`CompositionView::render_settings` carries the view-local overrides:
 
 ```cpp
 struct ViewRenderSettings {
-  RenderMode render_mode { RenderMode::kSolid };
-  ShaderDebugMode shader_debug_mode { ShaderDebugMode::kDisabled };
-  DepthPrePassMode depth_prepass_mode { DepthPrePassMode::kOpaqueAndMasked };
-  graphics::Color wire_color { 1.0F, 1.0F, 1.0F, 1.0F };
-  float render_resolution_scale { 1.0F };
-  bool gpu_debug_pass_enabled { true };
+  std::optional<RenderMode> render_mode;
+  std::optional<ShaderDebugMode> shader_debug_mode;
+  std::optional<DepthPrePassMode> depth_prepass_mode;
+  std::optional<scene::ExposureSettings> exposure;
 };
 ```
 
-`FramePlanBuilder` may apply frame defaults, but the final `ViewRenderPlan`
-must be per view. The following must be independently testable per view:
+Renderer frame settings are defaults only; the effective values on each
+`ViewExecutionEntry` are per view. The following must be independently testable per view:
 
 - wireframe does not force another view to wireframe
 - base-color/normals/depth debug mode does not leak to another view
@@ -1046,22 +1040,16 @@ main.consumed_aux_outputs = { AuxInputDesc {
 The route can still copy the auxiliary output into an offscreen surface. That is
 ordinary surface routing, not a second auxiliary-product mechanism.
 
-### 14.2 `FramePlanBuilder`
+### 14.2 View execution entries
 
-Change from frame-global effective mode to per-view effective mode:
+`Renderer::PopulateRenderContextViewState` resolves per-view effective state:
 
-- build `ViewRenderPlan` from frame defaults plus view-local settings
-- record render/debug mode in `FrameViewPacket`
-- record `ViewKind`, `ViewStateHandle`, feature mask, route list, and scene
-  texture descriptor key in `FrameViewPacket`
-- keep sky/environment plan per view
-- remove `frame_render_mode_` and `frame_shader_debug_mode_` as stage-readable
-  state in slice 1. Their values may be consumed only by
-  `FramePlanBuilder::DefaultViewRenderPlan(...)` to seed a packet that did not
-  provide overrides.
-- after slice 1, stages must read `ViewRenderPlan` / `PerViewScope` exclusively.
-  A grep/static gate must fail implementation if production stage code reads
-  removed frame-global symbols as the effective mode.
+- render, shading and debug mode overrides from frame defaults plus
+  view-local settings
+- `ViewKind`, `ViewStateHandle`, feature mask, environment flags, targets and
+  resolved auxiliary inputs on each `ViewExecutionEntry`
+- stages read the effective values through `PerViewScope` exclusively, never
+  frame-global render or debug state
 
 ### 14.3 `RenderContext`
 
@@ -1079,7 +1067,7 @@ it is no longer free mutable state. Only `PerViewScope` may set it:
 ```cpp
 class PerViewScope {
 public:
-  PerViewScope(RenderContext& ctx, const FrameViewPacket& packet,
+  PerViewScope(RenderContext& ctx, const ViewExecutionEntry& entry,
     SceneTextureLease& lease);
   ~PerViewScope();
 };
@@ -1089,7 +1077,7 @@ The scope captures the selected packet and asserts in debug that `current_view`,
 `active_view_index`, view constants, view frame bindings, scene-texture
 bindings, and lease identity still match on exit. Stages must not cache
 `ctx.current_view` outside the scope. Future parallel view recording must use a
-per-view context clone or explicit `FrameViewPacket&`; it must not share one
+per-view context clone or explicit `ViewExecutionEntry&`; it must not share one
 mutable cursor across workers.
 
 Nested `PerViewScope` on the same `RenderContext` is a programming error and
@@ -1106,7 +1094,7 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx,
   const ViewRenderBatch& batch);
 
 void SceneRenderer::RenderView(RenderContext& ctx,
-  const FrameViewPacket& packet,
+  const ViewExecutionEntry& entry,
   SceneTextureLease& scene_textures);
 ```
 
@@ -1162,7 +1150,7 @@ layouts must add the schema in the same commit.
 
 ```cpp
 for (CompositionViewImpl* view : ordered_active_views) {
-  auto packet = BuildFrameViewPacket(view);
+  auto packet = BuildViewExecutionEntry(view);
   if (packet.kind == ViewKind::CompositionOnly) {
     composition_only_packets.push_back(packet);
     continue;
@@ -1201,7 +1189,7 @@ for (ViewRenderBatch& batch : ordered_batches) {
   init_views.Execute(ctx, batch.all_scene_views);
   BuildSharedLightingAndShadows(batch);  // union/shared where compatible
 
-  for (FrameViewPacket& packet : batch.all_scene_views) {
+  for (ViewExecutionEntry& packet : batch.all_scene_views) {
     view_extensions.OnViewSetup(packet);
     auto lease = scene_texture_pool.Acquire(packet.SceneTextureKey());
     PerViewScope view_scope(ctx, packet, lease);
@@ -1289,9 +1277,9 @@ analysis report must be key/value shaped and gated with
 
 ### 17.1 Unit Tests
 
-1. Four active scene views produce four `FrameViewPacket`s with independent
+1. Four active scene views produce four `ViewExecutionEntry`s with independent
    render/debug modes.
-2. `FramePlanBuilder` does not leak wireframe/debug mode between views.
+2. View execution entries do not leak wireframe/debug mode between views.
 3. Renderer Core resolves exposure sharing through previous-frame
    `ViewStateHandle` state and does not impose current-frame render order.
 4. A registered inactive source retains its last publication, or its resolved
@@ -1387,7 +1375,7 @@ M06A should land in narrow slices. Do not implement a full editor UI, a new RDG,
 parallel rendering, or a global show-flag clone unless the LLD is updated first.
 
 1. **Per-view plan and state handles:** move effective render/debug mode into
-   `FrameViewPacket`/`ViewRenderPlan`, introduce `ViewKind` and
+   `ViewExecutionEntry`, introduce `ViewKind` and
    `ViewStateHandle`, remove stage-readable frame-global render/debug state,
    and add tests for no leakage/history reuse.
 2. **Renderer Core view-family loop with serialized scene textures:** render

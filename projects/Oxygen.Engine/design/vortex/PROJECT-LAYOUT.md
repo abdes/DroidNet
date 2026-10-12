@@ -42,9 +42,7 @@ src/Oxygen/Vortex/
 │
 ├── Internal/                          ← renderer-private (never in public API)
 │   │  BlueNoiseData.h                    blue-noise texture data
-│   │  CompositionPlanner.h/.cpp          composition planning infrastructure
 │   │  CompositionViewImpl.h/.cpp         composition view realization
-│   │  FrameViewPacket.h/.cpp             per-frame view packets
 │   │  PerViewStructuredPublisher.h       per-view transient structured buffer publisher
 │   │  RenderContextMaterializer.h        facade staging → validated context
 │   │  RenderContextPool.h                frame-slotted RenderContext pool
@@ -62,9 +60,6 @@ src/Oxygen/Vortex/
 │   │  DepthPrePassPolicy.h               depth pre-pass mode enum
 │   │  ResolveSceneColor.cpp              file-separated method (~180 lines)
 │   │  PostRenderCleanup.cpp              file-separated method (~200-300 lines)
-│   ├── Internal/                      ← scene-renderer-private helpers
-│   │     FramePlanBuilder.h/.cpp          frame planning for desktop stages
-│   │     ViewRenderPlan.h                 per-view render plan
 │   └── Stages/                        ← stage modules (bounded frame-stage units)
 │         ├── InitViews/               stage module: visibility, culling (~6.5k UE5 lines)
 │         │     InitViewsModule.h/.cpp
