@@ -21,6 +21,7 @@
 
 #include "VortexBasic/MainModule.h"
 #include "VortexBasic/NormalMapValidationTexture.h"
+#include <fmt/format.h>
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/quaternion_float.hpp>
 #include <glm/ext/quaternion_geometric.hpp>
@@ -29,6 +30,7 @@
 #include <glm/ext/vector_float4.hpp>
 #include <glm/ext/vector_uint2.hpp>
 #include <glm/geometric.hpp>
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/trigonometric.hpp>
 
@@ -85,19 +87,21 @@ namespace {
 constexpr uint32_t kDefaultOffscreenWidth = 1920U;
 constexpr uint32_t kDefaultOffscreenHeight = 1440U;
 constexpr glm::vec3 kFloorCenter { 0.0F, 0.0F, -0.125F };
-constexpr glm::vec3 kFloorScale { 60.0F, 60.0F, 0.25F };
+constexpr glm::vec3 kFloorScale { 400.0F, 400.0F, 0.25F };
 constexpr glm::vec4 kFloorColor { 0.02F, 0.02F, 0.03F, 1.0F };
 constexpr glm::vec3 kCubeCenter { 0.0F, 0.0F, 2.0F };
 constexpr glm::vec3 kOcclusionProbeCenter { 0.0F, -1.45F, 1.55F };
 constexpr glm::vec3 kOcclusionProbeScale { 0.45F, 0.45F, 0.45F };
-constexpr glm::vec3 kTranslucentSphereCenter { 0.0F, 5.20F, 3.15F };
-constexpr glm::vec3 kTranslucentCylinderCenter { 1.65F, 4.80F, 2.20F };
+constexpr float kOcclusionProbeSwing = 1.6F;
+constexpr float kOcclusionProbePeriodSeconds = 6.0F;
+constexpr glm::vec3 kTranslucentSphereCenter { 2.60F, 1.80F, 1.10F };
+constexpr glm::vec3 kTranslucentCylinderCenter { -2.60F, 2.20F, 1.05F };
 constexpr glm::vec3 kTranslucentSphereScale { 0.85F, 0.85F, 0.85F };
 constexpr glm::vec3 kTranslucentCylinderScale { 0.48F, 0.48F, 1.05F };
 constexpr glm::vec4 kCubeColor { 0.82F, 0.80F, 0.74F, 1.0F };
 constexpr glm::vec4 kOcclusionProbeColor { 1.0F, 0.12F, 0.08F, 1.0F };
-constexpr glm::vec4 kTranslucentSphereColor { 0.00F, 0.95F, 1.0F, 0.18F };
-constexpr glm::vec4 kTranslucentCylinderColor { 1.0F, 0.10F, 0.82F, 0.16F };
+constexpr glm::vec4 kTranslucentSphereColor { 0.00F, 0.95F, 1.0F, 0.45F };
+constexpr glm::vec4 kTranslucentCylinderColor { 1.0F, 0.10F, 0.82F, 0.45F };
 constexpr glm::vec3 kSceneFocusPoint { 0.0F, 0.0F, 1.0F };
 //! Matches the bias DemoShell gives the suns it creates.
 constexpr float kSunShadowBias = 0.03F;
@@ -368,10 +372,11 @@ auto MainModule::OnHostAttached(observer_ptr<IAsyncEngine> engine) -> bool
 {
   DCHECK_NOTNULL_F(engine);
   main_view_id_ = Publisher().GetOrCreateViewId("MainView");
-  if (validation_.IsExposureFixture()) {
-    exposure_view_state_
-      = vortex::CompositionView::ViewStateHandle { s_next_exposure_state_++ };
-  }
+  // Temporal view state: without it Vortex skips the atmosphere LUT and
+  // aerial-perspective history and volumetric fog, and exposure has no
+  // history to adapt from.
+  main_view_state_
+    = vortex::CompositionView::ViewStateHandle { s_next_view_state_++ };
 
   renderer_subscription_ = engine->SubscribeModuleAttached(
     [this](const engine::ModuleEvent& event) -> void {
@@ -380,7 +385,7 @@ auto MainModule::OnHostAttached(observer_ptr<IAsyncEngine> engine) -> bool
       }
       auto& renderer = static_cast<vortex::Renderer&>(*event.module);
       renderer.SetGroundGridConfig(vortex::GroundGridConfig {
-        .enabled = false,
+        .enabled = scene_options_.with_grid,
       });
       renderer.SetShaderDebugMode(shader_debug_mode_);
     },
@@ -456,7 +461,7 @@ auto MainModule::BuildViews(
   auto main_view
     = vortex::CompositionView::ForScene(main_view_id_, view, camera_node_);
   main_view.name = "MainView";
-  main_view.view_state_handle = exposure_view_state_;
+  main_view.view_state_handle = main_view_state_;
   main_view.with_atmosphere = scene_options_.with_atmosphere;
   main_view.with_height_fog = scene_options_.with_height_fog;
   main_view.with_local_fog = scene_options_.with_local_fog;
@@ -581,7 +586,7 @@ auto MainModule::EnsureScene() -> void
     fog->SetRenderInMainPass(true);
     fog->SetVisibleInReflectionCaptures(true);
     fog->SetVisibleInRealTimeSkyCaptures(true);
-    fog->SetExtinctionSigmaTPerMeter(0.0012F);
+    fog->SetExtinctionSigmaTPerMeter(0.02F);
     fog->SetHeightFalloffPerMeter(0.12F);
     fog->SetHeightOffsetMeters(0.0F);
     fog->SetStartDistanceMeters(0.0F);
@@ -613,7 +618,6 @@ auto MainModule::EnsureScene() -> void
       .rgba = kTranslucentSphereColor,
       .roughness = 0.12F,
       .domain = oxygen::data::MaterialDomain::kAlphaBlended,
-      .extra_flags = oxygen::data::pak::render::kMaterialFlag_Unlit,
     });
   auto translucent_cylinder_geo
     = BuildCylinderGeometry("TranslucentMagentaCylinder",
@@ -621,7 +625,6 @@ auto MainModule::EnsureScene() -> void
         .rgba = kTranslucentCylinderColor,
         .roughness = 0.22F,
         .domain = oxygen::data::MaterialDomain::kAlphaBlended,
-        .extra_flags = oxygen::data::pak::render::kMaterialFlag_Unlit,
       });
   auto floor_geo = BuildCubeGeometry(
     "ValidationFloor", { .rgba = kFloorColor, .roughness = 0.90F });
@@ -673,6 +676,10 @@ auto MainModule::EnsureScene() -> void
   floor_node_.GetTransform().SetLocalScale(kFloorScale);
   floor_node_.GetTransform().SetLocalPosition(kFloorCenter);
 
+  if (scene_options_.with_contact_shadows) {
+    AddContactShadowPebbles();
+  }
+
   if (scene_options_.with_local_fog) {
     local_fog_volume_node_ = scene_->CreateNode("LocalFogVolume");
     if (const auto impl = local_fog_volume_node_.GetImpl(); impl.has_value()) {
@@ -692,9 +699,56 @@ auto MainModule::EnsureScene() -> void
         0.4F * local_fog_emissive_scale, 5.5F * local_fog_emissive_scale });
       local_fog.SetSortPriority(2);
     }
+    // The volume's base radius is 5 m; scaled to 2.5 m beside the cube so
+    // the camera stays outside it.
     local_fog_volume_node_.GetTransform().SetLocalPosition(
-      { 0.0F, 0.0F, 1.6F });
-    local_fog_volume_node_.GetTransform().SetLocalScale({ 8.0F, 8.0F, 8.0F });
+      { -3.0F, -1.0F, 1.5F });
+    local_fog_volume_node_.GetTransform().SetLocalScale({ 0.5F, 0.5F, 0.5F });
+  }
+}
+
+//! Small blocks and a thin post on the floor in front of the cube. They are
+//! below the shadow maps' resolution, so only contact shadows ground them.
+auto MainModule::AddContactShadowPebbles() -> void
+{
+  struct Pebble {
+    glm::vec3 position;
+    glm::vec3 scale;
+  };
+  // Positions are the base centre on the floor (z = 0).
+  constexpr auto kPebbles = std::array {
+    Pebble {
+      .position = { -1.20F, 3.20F, 0.0F },
+      .scale = { 0.12F, 0.12F, 0.12F },
+    },
+    Pebble {
+      .position = { -0.60F, 3.40F, 0.0F },
+      .scale = { 0.20F, 0.20F, 0.06F },
+    },
+    Pebble {
+      .position = { 0.00F, 3.20F, 0.0F },
+      .scale = { 0.06F, 0.06F, 0.25F },
+    },
+    Pebble {
+      .position = { 0.60F, 3.40F, 0.0F },
+      .scale = { 0.25F, 0.15F, 0.08F },
+    },
+    Pebble {
+      .position = { 1.20F, 3.20F, 0.0F },
+      .scale = { 0.04F, 0.04F, 0.80F },
+    },
+  };
+  constexpr glm::vec4 kPebbleColor { 0.75F, 0.72F, 0.66F, 1.0F };
+  const auto geometry = BuildCubeGeometry(
+    "ContactShadowPebble", { .rgba = kPebbleColor, .roughness = 0.6F });
+  for (std::size_t i = 0; i < kPebbles.size(); ++i) {
+    const auto& pebble = kPebbles.at(i);
+    auto node = scene_->CreateNode(fmt::format("ContactShadowPebble{}", i));
+    node.GetRenderable().SetGeometry(geometry);
+    SetShadowParticipation(node, true, true);
+    node.GetTransform().SetLocalScale(pebble.scale);
+    node.GetTransform().SetLocalPosition(
+      pebble.position + glm::vec3 { 0.0F, 0.0F, pebble.scale.z * 0.5F });
   }
 }
 
@@ -955,6 +1009,8 @@ auto MainModule::EnsureLighting() -> void
     light->Common().casts_shadows = true;
     light->Common().shadow.bias = kSunShadowBias;
     light->Common().color_rgb = { 1.0F, 0.97F, 0.92F };
+    light->Common().shadow.contact_shadows
+      = scene_options_.with_contact_shadows;
     light->SetAngularSizeRadians(glm::radians(0.53F));
     light->SetIntensityLux(100000.0F);
     light->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
@@ -968,6 +1024,8 @@ auto MainModule::EnsureLighting() -> void
     auto light = std::make_unique<scene::PointLight>();
     light->Common().affects_world = true;
     light->Common().color_rgb = { 0.35F, 0.60F, 1.0F };
+    light->Common().shadow.contact_shadows
+      = scene_options_.with_contact_shadows;
     light->SetRange(8.0F);
     light->SetLuminousFluxLm(1800.0F);
     CHECK_F(point_light_node_.AttachLight(std::move(light)),
@@ -978,6 +1036,8 @@ auto MainModule::EnsureLighting() -> void
     auto light = std::make_unique<scene::SpotLight>();
     light->Common().affects_world = true;
     light->Common().color_rgb = { 1.0F, 0.58F, 0.24F };
+    light->Common().shadow.contact_shadows
+      = scene_options_.with_contact_shadows;
     light->SetRange(10.0F);
     light->SetLuminousFluxLm(1400.0F);
     light->SetInnerConeAngleRadians(0.35F);
@@ -1019,15 +1079,15 @@ auto MainModule::UpdateValidationScene(
     }
     return;
   }
+  // Game time: zero while the engine is paused, one fixed step per Step.
   const auto delta_seconds = context != nullptr
     ? std::chrono::duration<float>(context->GetGameDeltaTime().get()).count()
     : 0.0F;
-  animation_time_seconds_
-    += delta_seconds > 0.0F ? delta_seconds : (1.0F / 60.0F);
+  animation_time_seconds_ += delta_seconds;
 
   if (cube_node_.IsAlive()) {
-    const float rotation_step_radians = kCubeRotationAnglePerSecond
-      * (delta_seconds > 0.0F ? delta_seconds : (1.0F / 60.0F));
+    const float rotation_step_radians
+      = kCubeRotationAnglePerSecond * delta_seconds;
     cube_rotation_ = glm::normalize(
       glm::angleAxis(rotation_step_radians, cube_rotation_axis_)
       * cube_rotation_);
@@ -1035,9 +1095,13 @@ auto MainModule::UpdateValidationScene(
     cube_node_.GetTransform().SetLocalRotation(cube_rotation_);
   }
   if (occlusion_probe_node_.IsAlive()) {
+    // Slides from behind the cube into view and back. Occlusion culling is
+    // correct when the probe never pops while any part of it is visible.
+    const float phase = (animation_time_seconds_ / kOcclusionProbePeriodSeconds)
+      * glm::two_pi<float>();
     occlusion_probe_node_.GetTransform().SetLocalScale(kOcclusionProbeScale);
-    occlusion_probe_node_.GetTransform().SetLocalPosition(
-      kOcclusionProbeCenter);
+    occlusion_probe_node_.GetTransform().SetLocalPosition(kOcclusionProbeCenter
+      + glm::vec3 { kOcclusionProbeSwing * std::sin(phase), 0.0F, 0.0F });
   }
   if (translucent_sphere_node_.IsAlive()) {
     translucent_sphere_node_.GetTransform().SetLocalScale(
@@ -1130,7 +1194,7 @@ auto MainModule::EnsureCamera(uint32_t width, uint32_t height) -> void
     cam.SetFieldOfView(glm::radians(55.0F));
     cam.SetAspectRatio(aspect);
     cam.SetNearPlane(0.1F);
-    cam.SetFarPlane(100.0F);
+    cam.SetFarPlane(chart_camera ? 100.0F : 2000.0F);
     cam.SetViewport(ViewPort {
       .top_left_x = 0.0F,
       .top_left_y = 0.0F,

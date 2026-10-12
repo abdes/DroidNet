@@ -222,7 +222,9 @@ runs can also use `--volumetric-temporal-reprojection false` to compare the
 UE-shaped temporal jitter/reprojection/history-miss path against centered
 single-sample volumetric fog. Additive terms can be amplified or isolated with
 `--local-fog-volumetric-max-density`, `--local-fog-emissive-scale`, and
-`--volumetric-fog-emissive-scale`; the normal defaults remain unchanged.
+`--volumetric-fog-emissive-scale`. The local fog clamp defaults to 1 per
+metre so VortexBasic's small volume reads through volumetric fog; pass a
+lower value to reproduce the engine's 0.01 default.
 `Compare-VortexBasicVolumetricTermReports.ps1` compares paired reports and
 requires both the runtime term gates and the expected sampled
 integrated-scattering delta: positive enabled-minus-disabled increase for

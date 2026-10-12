@@ -125,7 +125,22 @@ auto ResolveValidation(const std::string& scene_name,
     scene.with_height_fog = false;
     scene.with_local_fog = false;
     scene.with_volumetric_fog = false;
+    scene.with_grid = false;
+    scene.with_contact_shadows = false;
   }
+}
+
+//! Turns on every optional feature of the default scene.
+auto EnableAllFeatures(SceneOptions& scene) -> void
+{
+  scene.with_atmosphere = true;
+  scene.with_height_fog = true;
+  scene.with_local_fog = true;
+  scene.with_volumetric_fog = true;
+  scene.with_occlusion = true;
+  scene.with_translucency = true;
+  scene.with_grid = true;
+  scene.with_contact_shadows = true;
 }
 
 auto SeedSceneCVars(const SceneOptions& scene, host::HostConfig& config) -> void
@@ -140,6 +155,10 @@ auto SeedSceneCVars(const SceneOptions& scene, host::HostConfig& config) -> void
   }
   if (scene.with_local_fog) {
     cvars.Set("vtx.local_fog.enable", CVarValue { true });
+    // Local fog is composed only beyond the global start distance (20 m by
+    // default, nearer volumes going through volumetric fog). The scene's
+    // volume sits about 10 m from the camera, so start composing at 1 m.
+    cvars.Set("vtx.local_fog.global_start_distance_m", CVarValue { 1.0 });
     cvars.Set("vtx.local_fog.render_into_volumetric_fog",
       CVarValue { scene.local_fog_into_volumetric });
     cvars.Set("vtx.local_fog.max_density_into_volumetric_fog",
@@ -189,6 +208,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   std::string shading_path_name;
   ValidationOptions validation {};
   SceneOptions scene {};
+  bool all_features { false };
 
   try {
     auto vortex_options = std::make_shared<Options>("Vortex options");
@@ -319,6 +339,34 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .UserFriendlyName("enabled")
         .StoreTo(&scene.with_translucency)
         .Build());
+    vortex_options->Add(Option::WithKey("with-grid")
+        .About("Show the renderer's ground grid")
+        .Long("with-grid")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("enabled")
+        .StoreTo(&scene.with_grid)
+        .Build());
+    vortex_options->Add(Option::WithKey("with-contact-shadows")
+        .About("Enable contact shadows on every light and add small floor "
+               "objects that show them")
+        .Long("with-contact-shadows")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .UserFriendlyName("enabled")
+        .StoreTo(&scene.with_contact_shadows)
+        .Build());
+    vortex_options->Add(Option::WithKey("all-features")
+        .About("Enable every optional feature of the default scene: local "
+               "and volumetric fog, occlusion, translucency, grid and "
+               "contact shadows")
+        .Long("all-features")
+        .WithValue<bool>()
+        .DefaultValue(false)
+        .ImplicitValue(true)
+        .UserFriendlyName("enabled")
+        .StoreTo(&all_features)
+        .Build());
     vortex_options->Add(Option::WithKey("volumetric-local-fog")
         .About("Inject local fog into volumetric fog when both are enabled")
         .Long("volumetric-local-fog")
@@ -368,10 +416,11 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .StoreTo(&scene.aerial_start_depth_m)
         .Build());
     vortex_options->Add(Option::WithKey("local-fog-volumetric-max-density")
-        .About("Clamp used when injecting local fog into volumetric fog")
+        .About("Clamp used when injecting local fog into volumetric fog; the "
+               "scene's small volume needs about 1 per metre to read")
         .Long("local-fog-volumetric-max-density")
         .WithValue<float>()
-        .DefaultValue(0.01F)
+        .DefaultValue(1.0F)
         .UserFriendlyName("density")
         .StoreTo(&scene.local_fog_volumetric_max_density)
         .Build());
@@ -406,6 +455,9 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       return EXIT_SUCCESS;
     }
 
+    if (all_features) {
+      EnableAllFeatures(scene);
+    }
     ResolveValidation(
       validation_scene_name, shading_path_name, validation, scene);
     const auto shader_debug_mode

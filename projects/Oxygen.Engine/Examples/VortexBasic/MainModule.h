@@ -72,10 +72,15 @@ struct SceneOptions {
   bool with_volumetric_fog { false };
   bool with_occlusion { false };
   bool with_translucency { false };
+  //! The renderer's ground grid; validation captures keep it off.
+  bool with_grid { false };
+  //! Contact shadows on every light, and small objects on the floor whose
+  //! contact shading the shadow maps are too coarse to resolve.
+  bool with_contact_shadows { false };
   bool local_fog_into_volumetric { true };
   bool volumetric_directional_shadows { true };
   bool volumetric_temporal_reprojection { true };
-  float local_fog_volumetric_max_density { 0.01F };
+  float local_fog_volumetric_max_density { 1.0F };
   float local_fog_emissive_scale { 1.0F };
   float volumetric_fog_emissive_scale { 1.0F };
   float sky_light_volumetric_scattering_intensity { 1.0F };
@@ -140,6 +145,7 @@ private:
   auto CreateScene(const char* name, std::size_t capacity) -> void;
   auto EnsureScene() -> void;
   auto BuildSidednessScene() -> void;
+  auto AddContactShadowPebbles() -> void;
   auto BuildExposureScene() -> void;
   auto EnsureCamera(uint32_t width, uint32_t height) -> void;
   auto EnsureLighting() -> void;
@@ -166,10 +172,10 @@ private:
   scene::SceneNode local_fog_volume_node_ {};
 
   ViewId main_view_id_ { kInvalidViewId };
-  vortex::CompositionView::ViewStateHandle exposure_view_state_ {
+  vortex::CompositionView::ViewStateHandle main_view_state_ {
     vortex::CompositionView::kInvalidViewStateHandle
   };
-  static inline std::atomic<uint64_t> s_next_exposure_state_ { 1U };
+  static inline std::atomic<uint64_t> s_next_view_state_ { 1U };
 
   float animation_time_seconds_ { 0.0F };
   Quat cube_rotation_ { 1.0F, 0.0F, 0.0F, 0.0F };
