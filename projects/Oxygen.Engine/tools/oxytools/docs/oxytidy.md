@@ -117,6 +117,18 @@ can select a small group, for example
 `--checks="-*,bugprone-use-after-move,bugprone-unchecked-optional-access"`.
 Add `--include-tests` when selecting test files or their consumers.
 
+### Static analyzer pass
+
+The Clang static analyzer finds path-sensitive defects (null dereference,
+use-after-free, leaks, uninitialized members) that the default selection does
+not cover. It is much slower, so `.clang-tidy` leaves it out; run it as a
+separate pass over a module:
+
+```powershell
+oxytidy .\src\Oxygen\Vortex --include-tests `
+  --checks="-*,clang-analyzer-core.*,clang-analyzer-cplusplus.*,clang-analyzer-deadcode.DeadStores,clang-analyzer-optin.cplusplus.UninitializedObject"
+```
+
 Without the `-*,` prefix, `--checks` appends to the `.clang-tidy` selection rather
 than replacing it. Compiler errors remain visible, and the compilation database
 and dependency discovery are still required. Changing the check selection changes

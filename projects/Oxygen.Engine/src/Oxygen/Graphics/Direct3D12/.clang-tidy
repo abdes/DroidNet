@@ -1,0 +1,8 @@
+---
+InheritParentConfig: true
+
+# COM and D3D12 interop requires reinterpret_cast (IID_PPV_ARGS, mapped
+# resources, descriptor handles).
+Checks: >
+  -cppcoreguidelines-pro-type-reinterpret-cast
+...

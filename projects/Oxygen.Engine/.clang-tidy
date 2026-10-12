@@ -4,38 +4,56 @@ UseColor: true
 Checks: >
     bugprone-*,
     cppcoreguidelines-*,
-    google-*,
+    google-build-*,
+    google-default-arguments,
+    google-explicit-constructor,
+    google-global-names-in-headers,
+    google-readability-avoid-underscore-in-googletest-name,
+    google-runtime-int,
+    google-runtime-operator,
+    google-upgrade-googletest-case,
+    misc-coroutine-hostile-raii,
+    misc-definitions-in-headers,
     misc-include-cleaner,
+    misc-misplaced-const,
+    misc-redundant-expression,
+    misc-throw-by-value-catch-by-reference,
+    misc-unused-alias-decls,
+    misc-unused-using-decls,
     modernize-*,
     performance-*,
     portability-*,
     readability-*,
+    -clang-diagnostic-format-security,
     -performance-faster-string-find,
     -portability-avoid-pragma-once,
+    -portability-simd-intrinsics,
     -google-readability-todo,
-    -clang-diagnostic-format-security,
     -readability-identifier-length,
     -readability-convert-member-functions-to-static,
     -readability-function-cognitive-complexity,
     -readability-container-size-empty,
+    -cppcoreguidelines-pro-type-union-access,
+    -bugprone-assignment-in-if-condition,
+    -bugprone-narrowing-conversions,
+    -cppcoreguidelines-avoid-c-arrays,
     -cppcoreguidelines-avoid-magic-numbers,
-    -cppcoreguidelines-pro-type-union-access
+    -cppcoreguidelines-explicit-constructor,
+    -cppcoreguidelines-explicit-virtual-functions,
+    -cppcoreguidelines-macro-to-enum,
+    -cppcoreguidelines-noexcept-destructor,
+    -cppcoreguidelines-noexcept-move-operations,
+    -cppcoreguidelines-noexcept-swap,
+    -cppcoreguidelines-use-default-member-init,
+    -cppcoreguidelines-avoid-capturing-lambda-coroutines,
+    -cppcoreguidelines-avoid-reference-coroutine-parameters,
+    -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
+    -cppcoreguidelines-pro-bounds-constant-array-index,
+    -cppcoreguidelines-pro-type-static-cast-downcast,
+    -performance-enum-size,
+    -readability-magic-numbers
 
 CheckOptions:
-  - key: readability-magic-numbers.IgnoredIntegerValues
-    value: '1;2;3;4;8;16;32;64'
-  - key: readability-magic-numbers.IgnoredFloatingPointValues
-    value: '0.25;0.5;1.0;2.0;4.0;100.0'
-  - key: readability-magic-numbers.IgnorePowersOf2IntegerValues
-    value: false
-  - key: readability-magic-numbers.IgnoreAllFloatingPointValues
-    value: false
-  - key: readability-magic-numbers.IgnoreBitFieldsWidths
-    value: true
-  - key: readability-magic-numbers.IgnoreTypeAliases
-    value: true
-  - key: readability-magic-numbers.IgnoreUserDefinedLiterals
-    value: true
   - key: readability-implicit-bool-conversion.AllowPointerConditions
     value: true
   - key: readability-implicit-bool-conversion.AllowIntegerConditions
@@ -56,14 +74,20 @@ CheckOptions:
   # that allocate or log stay noexcept.
   - key: bugprone-exception-escape.IgnoredExceptions
     value: 'bad_alloc,bad_array_new_length,format_error,bad_cast'
-  # EnumIndexedArray's enum-keyed operator[] is bounds-safe by type.
-  - key: cppcoreguidelines-pro-bounds-avoid-unchecked-container-access.ExcludeClasses
-    value: '::std::map;::std::unordered_map;::std::flat_map;::oxygen::EnumIndexedArray'
+  # glm spreads each type across internal headers that are not meant to be
+  # included directly; include-cleaner cannot map its symbols usefully.
+  - key: misc-include-cleaner.IgnoreHeaders
+    value: 'glm/.*'
 
-HeaderFilterRegex: '^<Oxygen/.*>$'
-ExcludeHeaderFilterRegex: '^<Oxygen/.*signal\.hpp>$'
+# Matched against resolved header paths, not include spellings.
+HeaderFilterRegex: '.*[/\]src[/\]Oxygen[/\].*'
+ExcludeHeaderFilterRegex: '.*[/\]Base[/\]Detail[/\]signal\.hpp$'
 
 ExtraArgs:
   - -Wno-inconsistent-dllimport
   - -Wno-format-extra-args
+  # Omitting fields that have default member initializers is intended C++20
+  # designated-initializer usage, which modernize-use-designated-initializers
+  # encourages.
+  - -Wno-missing-designated-field-initializers
 ...
