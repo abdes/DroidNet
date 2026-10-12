@@ -10,6 +10,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -17,6 +18,7 @@
 #include <Oxygen/Host/HostConfig.h>
 #include <Oxygen/Host/HostModule.h>
 #include <Oxygen/Host/HostWindow.h>
+#include <Oxygen/Host/MainViewOptions.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
@@ -105,6 +107,34 @@ auto HostModule::OnShutdown() noexcept -> void
   }
 }
 
+auto HostModule::RegisterConsoleBindings(
+  const observer_ptr<console::Console> console) noexcept -> void
+{
+  try {
+    MainViewOptions::RegisterConsoleBindings(*console);
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "{}: console registration failed: {}", GetName(), ex.what());
+  } catch (...) {
+    LOG_F(ERROR, "{}: console registration failed with an unknown exception",
+      GetName());
+  }
+}
+
+auto HostModule::ApplyConsoleCVars(
+  const observer_ptr<const console::Console> console) noexcept -> void
+{
+  try {
+    main_view_options_ = MainViewOptions::FromConsole(*console);
+  } catch (const std::exception& ex) {
+    LOG_F(
+      ERROR, "{}: reading console variables failed: {}", GetName(), ex.what());
+  } catch (...) {
+    LOG_F(ERROR,
+      "{}: reading console variables failed with an unknown exception",
+      GetName());
+  }
+}
+
 auto HostModule::OnFrameStart(const observer_ptr<engine::FrameContext> context)
   -> void
 {
@@ -125,6 +155,7 @@ auto HostModule::OnSceneMutation(
     co_return;
   }
   BuildViews(*context, views_);
+  main_view_options_.ApplyToMain(views_.views, views_.main);
   co_return;
 }
 

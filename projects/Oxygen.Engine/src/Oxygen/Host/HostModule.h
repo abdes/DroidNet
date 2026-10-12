@@ -16,6 +16,7 @@
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Host/MainViewOptions.h>
 #include <Oxygen/Host/SceneStage.h>
 #include <Oxygen/Host/ViewPublisher.h>
 #include <Oxygen/Host/api_export.h>
@@ -26,6 +27,9 @@
 
 namespace oxygen {
 class IAsyncEngine;
+namespace console {
+  class Console;
+} // namespace console
 namespace engine {
   class FrameContext;
 } // namespace engine
@@ -57,13 +61,15 @@ struct HostViews {
 
  - `kFrameStart`: register the window surface and apply resizes, publish a
    staged scene, then set the frame's scene.
- - `kSceneMutation`: collect this frame's views from `BuildViews`.
+ - `kSceneMutation`: collect this frame's views from `BuildViews`, then apply
+   the `host.view_mode` and `host.show.*` console variables to the main view.
  - `kPublishViews`: publish the scene views.
  - `kCompositing`: composite them onto the window.
 
  A subclass returns `GetSupportedPhases()` with at least `kHostPhases`, and
  calls the base implementation when it overrides `OnFrameStart`,
- `OnSceneMutation` or `OnShutdown`.
+ `OnSceneMutation`, `OnShutdown`, `RegisterConsoleBindings` or
+ `ApplyConsoleCVars`.
 */
 class HostModule : public engine::EngineModule {
   OXYGEN_TYPED(HostModule)
@@ -84,6 +90,11 @@ public:
   OXGN_HOST_NDAPI auto OnAttached(observer_ptr<IAsyncEngine> engine) noexcept
     -> bool final;
   OXGN_HOST_API auto OnShutdown() noexcept -> void override;
+
+  OXGN_HOST_API auto RegisterConsoleBindings(
+    observer_ptr<console::Console> console) noexcept -> void override;
+  OXGN_HOST_API auto ApplyConsoleCVars(
+    observer_ptr<const console::Console> console) noexcept -> void override;
 
   OXGN_HOST_API auto OnFrameStart(observer_ptr<engine::FrameContext> context)
     -> void override;
@@ -142,6 +153,12 @@ protected:
     return observer_ptr { window_.get() };
   }
   [[nodiscard]] auto Stage() noexcept -> SceneStage& { return stage_; }
+  //! The main-view settings applied this frame.
+  [[nodiscard]] auto GetMainViewOptions() const noexcept
+    -> const MainViewOptions&
+  {
+    return main_view_options_;
+  }
   [[nodiscard]] auto Publisher() noexcept -> ViewPublisher&
   {
     return publisher_;
@@ -162,6 +179,7 @@ private:
   ViewPublisher publisher_;
   SceneStage stage_;
   HostViews views_;
+  MainViewOptions main_view_options_;
 };
 
 } // namespace oxygen::host

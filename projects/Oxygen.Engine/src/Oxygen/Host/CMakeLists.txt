@@ -47,6 +47,7 @@ set(
   "HostModule.h"
   "HostWindow.h"
   "ImGuiLayer.h"
+  "MainViewOptions.h"
   "RunHost.h"
   "RuntimeCli.h"
   "SceneStage.h"
@@ -56,6 +57,7 @@ set(
   OXYGEN_HOST_PRIVATE_SOURCES
   "HostModule.cpp"
   "HostWindow.cpp"
+  "MainViewOptions.cpp"
   "RunHost.cpp"
   "RuntimeCli.cpp"
   "SceneStage.cpp"

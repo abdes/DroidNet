@@ -33,6 +33,7 @@ include(GTestHelpers)
 m_gtest_program(
   Host
   SOURCES
+    "MainViewOptions_test.cpp"
     "RuntimeCli_test.cpp"
     "SceneStage_test.cpp"
 )
