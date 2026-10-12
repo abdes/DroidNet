@@ -236,9 +236,26 @@ Update the owning designs, record the [answered decisions](#decisions).
       oldest first.
 - [x] **Accessors.** `Graphics::GetDescriptorAllocator()`/`GetResourceRegistry()`
       are real overloads in every backend, mock and fake (no `const_cast`).
-- [ ] **TextureBinder (S2c).** New descriptor per texture version (GD-7):
-      upload completion, eviction, error texture; cube and array placeholders
-      (#25); MaterialBinder re-serializes on index change.
+- [ ] **TextureBinder (S2c).** New descriptor per texture version (GD-7),
+      built on existing primitives only (owner: no reinvented wheels):
+  - Entry identity moves from descriptor-slot generations to a Nexus
+    `FrameDrivenIndexReuse` entry handle (as MaterialBinder and
+    GeometryUploader use); async upload, completion, retry and eviction
+    callbacks validate that handle.
+  - No per-entry placeholder textures or home descriptors: a loading entry
+    publishes the shared placeholder index; a loaded version registers its
+    own SRV view on its texture; evicted entries publish a shared 2D, cube or
+    array placeholder index (#25); failures publish the error index.
+    Duplicate views of one resource are rejected by the registry, which is
+    why per-entry home descriptors are not used.
+  - Replaced versions retire with `Graphics::RetireResource`; no
+    `UpdateView`. Remove `ReleaseTextureNextFrame` and the per-entry
+    placeholder paths.
+  - Content revisions come from one global counter, so a new descriptor never
+    reuses an older revision value (IblProcessor compares revisions).
+  - MaterialBinder re-serializes a material whose texture indices changed.
+  - Update `Nexus/Docs/design.md`, which lists texture repointing as a
+    stable-index exception.
 - [ ] **Tests.** Done: retired buffer keeps views until slot reuse; atlas
       growth copies, new SRV, no growth within capacity; geometry eviction and
       update follow retirement. Open: TextureBinder versions and cube
