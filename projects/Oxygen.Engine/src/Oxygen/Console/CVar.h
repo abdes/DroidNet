@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <variant>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NamedType.h>
@@ -59,6 +60,9 @@ struct CVarDefinition {
   CVarFlags flags { CVarFlags::kNone };
   std::optional<double> min_value {}; // NOLINT(*-member-init)
   std::optional<double> max_value {}; // NOLINT(*-member-init)
+  //! For a string variable, the only values it accepts; empty accepts any.
+  //! The default value must be one of them.
+  std::vector<std::string> allowed_values {}; // NOLINT(*-member-init)
 };
 
 struct CVarRegistrationOptions {

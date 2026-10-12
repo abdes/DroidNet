@@ -4,10 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
+#include <array>
+#include <cstdint>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <variant>
 
 #include <Oxygen/Base/Finally.h>
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Console/StartupPlan.h>
+#include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Testing/ScopedLogCapture.h>
 
 namespace {
@@ -135,6 +145,45 @@ NOLINT_TEST(ConsoleCVar, RejectsInvalidTypeAndClampsBounds)
   }
 }
 
+NOLINT_TEST(ConsoleCVar, StringWithAllowedValuesRejectsOthers)
+{
+  Console console {};
+  oxygen::console::ConsoleStartupPlan plan;
+  plan.Set("view.mode", std::string_view { "bogus" });
+  console.ApplyStartupPlan(plan);
+
+  ASSERT_TRUE(console
+      .RegisterCVar(CVarDefinition {
+        .name = "view.mode",
+        .help = "View mode",
+        .default_value = std::string("lit"),
+        .flags = CVarFlags::kNone,
+        .min_value = std::nullopt,
+        .max_value = std::nullopt,
+        .allowed_values = { "lit", "unlit" },
+      })
+      .IsValid());
+  const auto current = [&console] -> std::string {
+    return std::get<std::string>(console.FindCVar("view.mode")->current_value);
+  };
+
+  // The startup value is not allowed, so the default stays.
+  EXPECT_EQ(current(), "lit");
+
+  EXPECT_EQ(console.Execute("view.mode unlit").status, ExecutionStatus::kOk);
+  EXPECT_EQ(current(), "unlit");
+
+  const auto rejected = console.Execute("view.mode wireframe");
+  EXPECT_EQ(rejected.status, ExecutionStatus::kInvalidArguments);
+  EXPECT_NE(rejected.error.find("lit, unlit"), std::string::npos);
+  EXPECT_EQ(current(), "unlit");
+
+  const std::array<std::string_view, 1> args { "+view.mode=nope" };
+  EXPECT_EQ(console.ApplyCommandLineOverrides(args).status,
+    ExecutionStatus::kInvalidArguments);
+  EXPECT_EQ(current(), "unlit");
+}
+
 NOLINT_TEST(ConsoleCVar, ReadOnlyCVarsCannotBeModified)
 {
   Console console {};
@@ -174,9 +223,9 @@ NOLINT_TEST(ConsoleCVar, LatchedCVarsUpdateOnApply)
   EXPECT_EQ(std::get<int64_t>(console.FindCVar("r.latched")->current_value), 0);
   EXPECT_EQ(console.FindCVar("r.latched")->current_origin,
     CVarValueOrigin::kAppDefault);
-  ASSERT_TRUE(console.FindCVar("r.latched")->latched_value.has_value());
-  EXPECT_EQ(
-    std::get<int64_t>(*console.FindCVar("r.latched")->latched_value), 1);
+  const auto latched = console.FindCVar("r.latched")->latched_value;
+  ASSERT_TRUE(latched.has_value());
+  EXPECT_EQ(latched, oxygen::console::CVarValue { int64_t { 1 } });
 
   EXPECT_EQ(console.ApplyLatchedCVars(), 1U);
   EXPECT_EQ(std::get<int64_t>(console.FindCVar("r.latched")->current_value), 1);
@@ -187,8 +236,9 @@ NOLINT_TEST(ConsoleCVar, LatchedCVarsUpdateOnApply)
 NOLINT_TEST(ConsoleCVar, LogsAppliedAndIgnoredChangesAtInfo)
 {
   const auto saved_verbosity = loguru::g_global_verbosity;
-  const auto restore_verbosity = oxygen::Finally(
-    [saved_verbosity] { loguru::g_global_verbosity = saved_verbosity; });
+  const auto restore_verbosity = oxygen::Finally([saved_verbosity] -> void {
+    loguru::g_global_verbosity = saved_verbosity;
+  });
   loguru::g_global_verbosity = loguru::Verbosity_INFO;
 
   ScopedLogCapture capture("console_cvar_info_logs", loguru::Verbosity_INFO);

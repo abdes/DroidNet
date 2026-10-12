@@ -7,22 +7,39 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <ranges>
+#include <span>
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <system_error>
+#include <unordered_map>
 #include <utility>
+#include <variant>
+#include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Command.h>
+#include <Oxygen/Console/Completion.h>
+#include <Oxygen/Console/Constants.h>
+#include <Oxygen/Console/History.h>
 #include <Oxygen/Console/Parser.h>
 #include <Oxygen/Console/Registry.h>
+#include <Oxygen/Console/StartupPlan.h>
 
 namespace oxygen::console {
 
@@ -48,8 +65,10 @@ namespace {
 
   auto ToLower(std::string value) -> std::string
   {
-    std::ranges::transform(value, value.begin(),
-      [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::ranges::transform(
+      value, value.begin(), [](const unsigned char c) -> char {
+        return static_cast<char>(std::tolower(c));
+      });
     return value;
   }
 
@@ -65,7 +84,7 @@ namespace {
     }
     const auto lowered_text = ToLower(std::string(match.text));
     const auto lowered_needle = ToLower(std::string(match.needle));
-    return lowered_text.find(lowered_needle) != std::string::npos;
+    return lowered_text.contains(lowered_needle);
   }
 
   auto IsHidden(const CVarDefinition& definition) -> bool
@@ -176,19 +195,59 @@ namespace {
     return false;
   }
 
+  auto IsAllowedValue(const CVarDefinition& definition, const CVarValue& value)
+    -> bool
+  {
+    const auto* text = std::get_if<std::string>(&value);
+    return definition.allowed_values.empty() || text == nullptr
+      || std::ranges::contains(definition.allowed_values, *text);
+  }
+
   auto IsCompatibleValueType(
     const CVarDefinition& definition, const CVarValue& value) -> bool
   {
-    return CVarTypeOf(definition.default_value) == CVarTypeOf(value);
+    return CVarTypeOf(definition.default_value) == CVarTypeOf(value)
+      && IsAllowedValue(definition, value);
+  }
+
+  auto JoinAllowedValues(const CVarDefinition& definition) -> std::string
+  {
+    std::string joined;
+    for (const auto& allowed : definition.allowed_values) {
+      if (!joined.empty()) {
+        joined += ", ";
+      }
+      joined += allowed;
+    }
+    return joined;
   }
 
   auto LogIncompatibleStampedValue(const std::string_view source,
     const CVarDefinition& definition, const CVarValue& value) -> void
   {
+    if (CVarTypeOf(definition.default_value) == CVarTypeOf(value)) {
+      LOG_F(WARNING,
+        "Console {} value for '{}' ignored: '{}' is not one of: {}", source,
+        definition.name, std::get<std::string>(value),
+        JoinAllowedValues(definition));
+      return;
+    }
     LOG_F(WARNING,
       "Console {} value for '{}' ignored: expected type {} but got {}", source,
       definition.name, to_string(CVarTypeOf(definition.default_value)),
       to_string(CVarTypeOf(value)));
+  }
+
+  auto NotAllowedResult(const CVarDefinition& definition,
+    const std::string_view text) -> ExecutionResult
+  {
+    return {
+      .status = ExecutionStatus::kInvalidArguments,
+      .exit_code = kExitCodeInvalidArguments,
+      .output = {},
+      .error = "value '" + std::string(text)
+        + "' is not one of: " + JoinAllowedValues(definition),
+    };
   }
 
   auto HistoryPathFor(const oxygen::PathFinder& path_finder)
@@ -222,6 +281,10 @@ auto Registry::RegisterCVar(CVarDefinition definition,
     .id = next_id_++,
   };
 
+  DCHECK_F(IsAllowedValue(entry.snapshot.definition,
+             entry.snapshot.definition.default_value),
+    "cvar '{}' default is not one of its allowed values",
+    entry.snapshot.definition.name);
   entry.snapshot.current_value = entry.snapshot.definition.default_value;
   ClampValue(entry.snapshot.definition, entry.snapshot.current_value);
   if (options.initial.has_value()
@@ -334,6 +397,9 @@ auto Registry::SetCVarFromText(const SetCVarRequest& request,
         .error = "value parse failed",
       };
     }
+    if (!IsAllowedValue(snapshot.definition, parsed)) {
+      return NotAllowedResult(snapshot.definition, request.text);
+    }
     ClampValue(snapshot.definition, parsed);
 
     return ApplyStampedValue(cvar,
@@ -432,10 +498,14 @@ auto Registry::SaveArchiveCVars(const oxygen::PathFinder& path_finder,
 
     entries.push_back(json {
       { std::string(kArchiveJsonNameKey), name },
-      { std::string(kArchiveJsonTypeKey),
-        std::string(to_string(CVarTypeOf(*persisted_value))) },
-      { std::string(kArchiveJsonValueKey),
-        SerializeCVarValue(*persisted_value) },
+      {
+        std::string(kArchiveJsonTypeKey),
+        std::string(to_string(CVarTypeOf(*persisted_value))),
+      },
+      {
+        std::string(kArchiveJsonValueKey),
+        SerializeCVarValue(*persisted_value),
+      },
     });
   }
 
@@ -866,6 +936,9 @@ auto Registry::ApplyCommandLineOverrides(
         .error = "value parse failed",
       };
     }
+    if (!IsAllowedValue(cvar.snapshot.definition, parsed)) {
+      return NotAllowedResult(cvar.snapshot.definition, assign.value);
+    }
     ClampValue(cvar.snapshot.definition, parsed);
 
     const auto result = ApplyStampedValue(cvar,
@@ -986,15 +1059,15 @@ auto Registry::ExecuteSingle(
 {
   const auto emit
     = [this, line, context](const std::string& subject,
-        const ExecutionResult& result, const bool denied_by_policy) {
-        EmitAudit(AuditEvent {
-          .source = context.source,
-          .line = std::string(line),
-          .subject = subject,
-          .status = result.status,
-          .denied_by_policy = denied_by_policy,
-        });
-      };
+        const ExecutionResult& result, const bool denied_by_policy) -> void {
+    EmitAudit(AuditEvent {
+      .source = context.source,
+      .line = std::string(line),
+      .subject = subject,
+      .status = result.status,
+      .denied_by_policy = denied_by_policy,
+    });
+  };
 
   const auto tokens = Parser::Tokenize(line);
   if (tokens.empty()) {
@@ -1110,7 +1183,7 @@ auto Registry::Complete(const std::string_view prefix) const
     }
   }
 
-  std::sort(out.begin(), out.end(), [this](const auto& lhs, const auto& rhs) {
+  std::ranges::sort(out, [this](const auto& lhs, const auto& rhs) -> bool {
     const auto lhs_usage = completion_usage_.find(lhs.token);
     const auto rhs_usage = completion_usage_.find(rhs.token);
 
@@ -1180,8 +1253,8 @@ auto Registry::ListSymbols(const bool include_hidden) const
     });
   }
 
-  std::sort(out.begin(), out.end(),
-    [](const ConsoleSymbol& lhs, const ConsoleSymbol& rhs) {
+  std::ranges::sort(
+    out, [](const ConsoleSymbol& lhs, const ConsoleSymbol& rhs) -> bool {
       if (lhs.token != rhs.token) {
         return lhs.token < rhs.token;
       }
@@ -1307,7 +1380,7 @@ void Registry::RegisterBuiltinCommands()
 
       std::string pattern = args.front();
       for (size_t i = 1; i < args.size(); ++i) {
-        pattern += " ";
+        pattern += ' ';
         pattern += args[i];
       }
 
@@ -1340,12 +1413,12 @@ void Registry::RegisterBuiltinCommands()
         };
       }
 
-      std::sort(matches.begin(), matches.end());
+      std::ranges::sort(matches);
       std::string output;
       for (size_t i = 0; i < matches.size(); ++i) {
         output += matches[i];
         if (i + 1 < matches.size()) {
-          output += "\n";
+          output += '\n';
         }
       }
 
@@ -1397,12 +1470,12 @@ void Registry::RegisterBuiltinCommands()
         }
       }
 
-      std::sort(lines.begin(), lines.end());
+      std::ranges::sort(lines);
       std::string output;
       for (size_t i = 0; i < lines.size(); ++i) {
         output += lines[i];
         if (i + 1 < lines.size()) {
-          output += "\n";
+          output += '\n';
         }
       }
 
@@ -1432,7 +1505,7 @@ void Registry::RegisterBuiltinCommands()
 
       std::string path = args.front();
       for (size_t i = 1; i < args.size(); ++i) {
-        path += " ";
+        path += ' ';
         path += args[i];
       }
       return ExecuteScriptFile(path, context);
@@ -1562,7 +1635,7 @@ auto Registry::TryParseValue(const CVarValue& hint, const std::string_view text,
 auto Registry::ClampValue(const CVarDefinition& definition, CVarValue& value)
   -> void
 {
-  const auto clamp_double = [&](double& v) {
+  const auto clamp_double = [&](double& v) -> void {
     if (definition.min_value.has_value()) {
       v = std::max(v, *definition.min_value);
     }
@@ -1629,7 +1702,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
     };
   };
 
-  const auto active_origin = [&]() -> CVarValueOrigin {
+  const auto active_origin = [&] -> CVarValueOrigin {
     if (HasFlag(cvar.snapshot.definition.flags, CVarFlags::kLatched)
       && cvar.latched_origin.has_value()) {
       return *cvar.latched_origin;
@@ -1640,7 +1713,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
     }
     return cvar.snapshot.current_origin;
   }();
-  const auto active_value = [&]() -> const CVarValue& {
+  const auto active_value = [&] -> const CVarValue& {
     if (HasFlag(cvar.snapshot.definition.flags, CVarFlags::kLatched)
       && cvar.snapshot.latched_value.has_value()) {
       return *cvar.snapshot.latched_value;
@@ -1665,7 +1738,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
       ? "ignored " + cvar.snapshot.definition.name
         + " due to higher-precedence value"
       : std::string {};
-    return make_result(ExecutionStatus::kOk, 0, std::move(output), {}, false);
+    return make_result(ExecutionStatus::kOk, 0, output, {}, false);
   }
 
   if (HasFlag(cvar.snapshot.definition.flags, CVarFlags::kLatched)) {
@@ -1676,7 +1749,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
         ? "latched " + cvar.snapshot.definition.name + " = "
           + ValueToString(*cvar.snapshot.latched_value)
         : std::string {};
-      return make_result(ExecutionStatus::kOk, 0, std::move(output), {}, false);
+      return make_result(ExecutionStatus::kOk, 0, output, {}, false);
     }
     const auto had_staged_value = cvar.snapshot.latched_value.has_value();
     const auto previous_staged_value = had_staged_value
@@ -1701,7 +1774,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
       ? "latched " + cvar.snapshot.definition.name + " = "
         + ValueToString(*cvar.snapshot.latched_value)
       : std::string {};
-    return make_result(ExecutionStatus::kOk, 0, std::move(output), {}, true);
+    return make_result(ExecutionStatus::kOk, 0, output, {}, true);
   }
 
   if (HasFlag(cvar.snapshot.definition.flags, CVarFlags::kRequiresRestart)) {
@@ -1712,7 +1785,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
         ? "restart required for " + cvar.snapshot.definition.name + " = "
           + ValueToString(*cvar.snapshot.restart_value)
         : std::string {};
-      return make_result(ExecutionStatus::kOk, 0, std::move(output), {}, false);
+      return make_result(ExecutionStatus::kOk, 0, output, {}, false);
     }
     const auto previous_staged_value = cvar.snapshot.restart_value.has_value()
       ? ValueToString(*cvar.snapshot.restart_value)
@@ -1736,7 +1809,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
       ? "restart required for " + cvar.snapshot.definition.name + " = "
         + ValueToString(*cvar.snapshot.restart_value)
       : std::string {};
-    return make_result(ExecutionStatus::kOk, 0, std::move(output), {}, true);
+    return make_result(ExecutionStatus::kOk, 0, output, {}, true);
   }
 
   if (cvar.snapshot.current_value == stamped_value.value
@@ -1745,7 +1818,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
       ? cvar.snapshot.definition.name + " = "
         + ValueToString(cvar.snapshot.current_value)
       : std::string {};
-    return make_result(ExecutionStatus::kOk, 0, std::move(output), {}, false);
+    return make_result(ExecutionStatus::kOk, 0, output, {}, false);
   }
 
   const auto previous_value = cvar.snapshot.current_value;
@@ -1764,7 +1837,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
     ? cvar.snapshot.definition.name + " = "
       + ValueToString(cvar.snapshot.current_value)
     : std::string {};
-  return make_result(ExecutionStatus::kOk, 0, std::move(output), {}, true);
+  return make_result(ExecutionStatus::kOk, 0, output, {}, true);
 }
 
 auto Registry::SourcePolicyFor(const CommandSource source) const
@@ -1791,11 +1864,10 @@ auto Registry::IsCommandAllowed(
     return false;
   }
 
-  if (context.shipping_build) {
-    if (HasFlag(command.flags, CommandFlags::kCheat)
-      || HasFlag(command.flags, CommandFlags::kDevOnly)) {
-      return false;
-    }
+  if (context.shipping_build
+    && (HasFlag(command.flags, CommandFlags::kCheat)
+      || HasFlag(command.flags, CommandFlags::kDevOnly))) {
+    return false;
   }
 
   if (!policy.allow_dev_only
@@ -1827,11 +1899,10 @@ auto Registry::IsCVarMutationAllowed(
     return false;
   }
 
-  if (context.shipping_build) {
-    if (HasFlag(definition.flags, CVarFlags::kCheat)
-      || HasFlag(definition.flags, CVarFlags::kDevOnly)) {
-      return false;
-    }
+  if (context.shipping_build
+    && (HasFlag(definition.flags, CVarFlags::kCheat)
+      || HasFlag(definition.flags, CVarFlags::kDevOnly))) {
+    return false;
   }
 
   if (!policy.allow_dev_only
