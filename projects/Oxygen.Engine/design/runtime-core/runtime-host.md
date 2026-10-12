@@ -1,7 +1,7 @@
 # Runtime host, play sessions and debug UI
 
 Status: **draft for owner review, 2026-10-11; reviewed 2026-10-12; I1
-validated 2026-10-12**. Owner
+validated 2026-10-12; H1 built and unit-tested 2026-10-12**. Owner
 decisions are recorded in [§10](#10-owner-decisions) with the review's
 position beside each. [§11](#11-open-problems-for-review) gives a definite
 answer to every problem and marks the ones only the owner can close.
@@ -187,6 +187,11 @@ Namespace `oxygen::host`; library target `oxygen::host`; folder
 ### 3.1 Startup and shutdown
 
 ```cpp
+struct HostWindowConfig {
+  std::optional<Extent<std::uint32_t>> resolution; // framebuffer pixels
+  bool fullscreen { false };
+};
+
 struct HostConfig {
   EngineConfig engine;        // application, fps, frames, loader,
                               // scripting, path finder, timing, and
@@ -194,6 +199,7 @@ struct HostConfig {
                               // vsync, imgui, frame capture, headless
   PlatformConfig platform;    // headless, thread pool size (capped by
                               // hardware concurrency)
+  HostWindowConfig window;
   graphics::BackendType backend { graphics::BackendType::kDirect3D12 };
   console::ConsoleStartupPlan startup_cvars;
 };
@@ -202,8 +208,13 @@ struct HostConfig {
 using RegisterModules = std::function<void(AsyncEngine&, HostContext&)>;
 
 //! Runs the engine until it stops; returns the process exit code.
-OXGN_HOST_API auto RunHost(HostConfig config, RegisterModules register_modules)
-  -> int;
+OXGN_HOST_NDAPI auto RunHost(HostConfig config,
+  const RegisterModules& register_modules) -> int;
+
+//! Registers a module the application cannot run without; throws when the
+//! engine rejects it.
+OXGN_HOST_API auto RegisterRequiredModule(AsyncEngine& engine,
+  std::unique_ptr<engine::EngineModule> module) -> void;
 ```
 
 `EngineConfig` already carries `GraphicsConfig` and its `headless` flag
@@ -215,8 +226,9 @@ headless, because the toolbar and console need it, and `backend` becomes
 ([§5.3](#53-oxygenimgui-widgets)) before `register_modules`.
 
 `HostContext` is the generic part of `DemoAppContext`: platform, graphics
-(weak), engine, queue strategy, input system, `running`, `headless`. The
-event loop traits move with it unchanged. `RunHost` performs, in order:
+(weak), engine, queue strategy, input system, `running`, `headless` and the
+window options. The event loop traits move with it unchanged. `RunHost`
+performs, in order:
 
 1. create the Platform and load the backend;
 2. create command queues, then the `AsyncEngine` with the startup plan;
@@ -226,10 +238,16 @@ event loop traits move with it unchanged. `RunHost` performs, in order:
    completion;
 4. tear down: engine stop, platform stop, engine reset, graphics stop,
    backend unload, platform reset — the order every example uses today;
-5. convert exceptions to `EXIT_FAILURE` with one log line, as today.
+5. convert exceptions to `EXIT_FAILURE` with one log line, as today, and
+   still tear down whatever was created.
+
+`RunHost` lives in a library, so it reaches the backend loader through
+`GraphicsBackendLoader::GetInstanceRelaxed()`, as the editor runner does; the
+strict singleton accepts its first call only from the executable.
 
 `Examples/main.cpp` (logging setup, type registry, `MainImpl`) moves to
-`Oxygen.Host` as the shared entry point.
+`Oxygen.Host` as the shared entry point in P1, when the player becomes its
+first consumer.
 
 Threading: everything in `Oxygen.Host` runs on the engine thread. A host
 that receives requests from another thread (the player's pipe reader) puts
@@ -242,7 +260,9 @@ host is not changed ([§10](#10-owner-decisions)).
 ### 3.2 `HostWindow`
 
 `AppWindow` with a constructor taking platform, engine, graphics and an
-optional client size instead of `DemoAppContext`. Behaviour is unchanged
+optional framebuffer size instead of `DemoAppContext`. It is no longer a
+composition component: the host module owns it through a `shared_ptr`, which
+its lifecycle coroutine needs. Behaviour is unchanged
 (lifecycle coroutine for close, resize and terminate; per-frame
 framebuffers; deferred release; binding the ImGui module to the window on
 attach and unbinding it on cleanup, with the `ImGuiLayer` registration that
@@ -257,23 +277,31 @@ The publish/composite half of `DemoModuleBase`, owned by the host module:
 
 - `BeginFrame(FrameContext&)`: register the window surface, apply a pending
   resize, drop the surface when the window is gone (`OnFrameStartCommon`).
-- `Publish(FrameContext&, std::span<const CompositionView>)`: per scene view,
-  normalize viewport and scissor, resolve the camera content rectangle,
-  ensure the scene and composite framebuffers, publish; release views no
-  longer present (`OnPublishViews`, `ReleaseInactiveRuntimeViews`). The
-  span is borrowed for the call only.
-- `Compose(FrameContext&)`: z-ordered layers onto the window framebuffer,
-  `RegisterRuntimeComposition` (`OnCompositing`).
+- `Publish(FrameContext&, std::span<const CompositionView>,
+std::optional<ViewId> main)`: per scene view, normalize viewport and
+  scissor, resolve the camera content rectangle, ensure the scene and
+  composite framebuffers, publish; release views no longer present
+  (`OnPublishViews`, `ReleaseInactiveRuntimeViews`). The span is borrowed
+  for the call only.
+- `Compose(extra_layers)`: z-ordered layers onto the window framebuffer,
+  then the caller's texture layers, `RegisterRuntimeComposition`
+  (`OnCompositing`).
 - `GetOrCreateViewId(name)`, per publisher instead of a process static.
 
-The `OnRuntimeMainViewReady` call to DemoShell becomes a callback that
-`DemoModuleBase` installs.
+The `OnRuntimeMainViewReady` call to DemoShell becomes a main-view handler
+that fires for the view marked as main; `HostModule` routes it to a virtual
+that `DemoModuleBase` overrides. The `ClearBackbufferReferences` hook is
+dropped: every example implements it as a no-op.
 
 ### 3.4 `SceneStage`
 
 `SceneControlBlock` and `ActiveScene` together, with one change: `Stage()`
 calls `CollectMutationsStart()` on the new scene and `PublishStaged()` calls
-`CollectMutationsEnd()`, so both ends live in one class. `Clear()` drops the
+`CollectMutationsEnd()`, so both ends live in one class. Scenes already
+collect mutations for their own observers; the start call opens the replay
+window, so an observer that registers once the scene is published still
+receives the mutations made while the scene was built. A scene set directly
+with `SetScene()` replays nothing. `Clear()` drops the
 active and staged scenes (used at session end). Usage stays: stage and
 build during scene mutation; publish at frame start before
 `FrameContext::SetScene`. The atomics and mutex stay: UI code reads the
@@ -295,6 +323,13 @@ struct HostViews {
 virtual auto BuildViews(FrameContext&, HostViews&) -> void = 0;
 ```
 
+At frame start the host module registers the surface, publishes a staged
+scene and sets the frame's scene. Its other hooks have defaults:
+`OnHostAttached` (after the window exists), `BuildWindowProperties`,
+`OnScenePublished`, `OnMainViewReady`, `AppendCompositionLayers` and
+`RetainInactiveView`. Attach failures and exceptions are logged and fail the
+attach.
+
 The host applies the toolbar's main-view variables
 ([§5.2](#52-main-view-console-variables)) to that view only. `DemoModuleBase`
 derives from `HostModule` and keeps DemoShell ownership, the UI-test hooks
@@ -302,9 +337,13 @@ and its default window title.
 
 ### 3.6 `RuntimeCli`
 
-The option groups from `DemoCli.h` and the frame-capture headers, producing
-`HostConfig` fields. The player uses the graphics-tooling and capture
-groups ([§7](#7-oxygenplayer-composition)); examples keep the runtime group.
+The option groups from `DemoCli.h` and the frame-capture headers, bound to
+one `RuntimeCliState`. `MakeRuntimeOptions` takes the subset of runtime
+options an application offers. `ApplyRuntimeCli` validates the values,
+writes them into `HostConfig` and seeds `ngin.target_fps` and `gfx.vsync`
+when those options were passed; every invalid or contradictory value throws
+`RuntimeCliError`. The player uses the graphics-tooling and capture groups
+([§7](#7-oxygenplayer-composition)); examples keep the runtime group.
 
 ## 4. Pause, frame step and play sessions
 
