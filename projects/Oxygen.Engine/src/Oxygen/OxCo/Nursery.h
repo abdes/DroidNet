@@ -6,6 +6,11 @@
 
 #pragma once
 
+// The header is consumed by the C++20 editor interop; dropping the empty
+// lambda parameter list before specifiers needs C++23.
+// NOLINTBEGIN(readability-redundant-lambda-parameter-list)
+
+#include <cstdint>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -13,6 +18,7 @@
 
 #include <fmt/format.h>
 
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Coroutine.h>
@@ -70,6 +76,35 @@ static constexpr detail::JoinTag kJoin { detail::TagCtor {} };
 static constexpr detail::CancelTag kCancel { detail::TagCtor {} };
 
 template <class Ret = void> class TaskStarted;
+
+namespace detail {
+  //! Receives the `TaskStarted<Ret>` notification of a started task.
+  /*!
+   Decouples `TaskStarted` from `Nursery`, so that other awaitables (such as
+   `co::With()`) can start a callable and react to its readiness signal.
+  */
+  template <class Ret> class TaskStartedSink {
+    friend TaskStarted<Ret>;
+
+    //! Called by `TaskStarted<Ret>::operator()` the first time it is invoked.
+    virtual void MarkStarted(ReturnType<Ret> value) = 0;
+
+  protected:
+    TaskStartedSink() = default;
+    ~TaskStartedSink() = default;
+
+  public:
+    OXYGEN_MAKE_NON_COPYABLE(TaskStartedSink)
+    OXYGEN_MAKE_NON_MOVABLE(TaskStartedSink)
+
+  protected:
+    //! Makes a `TaskStarted<Ret>` that notifies this sink.
+    auto MakeTaskStarted() noexcept -> TaskStarted<Ret>
+    {
+      return TaskStarted<Ret>(this);
+    }
+  };
+} // namespace detail
 
 //! A nursery represents a scope for a set of tasks to live in. Execution cannot
 //! continue past the end of the nursery block until all the tasks that were
@@ -135,12 +170,13 @@ public:
     };
  \endcode
  */
-// NOLINTBEGIN(bugprone-macro-parentheses)
+// The block syntax needs a macro; no function can expand to `co_yield`.
+// NOLINTBEGIN(bugprone-macro-parentheses, cppcoreguidelines-macro-usage)
 #define OXCO_WITH_NURSERY(arg_name)                                            \
   co_yield ::oxygen::co::Nursery::Factory {}                                   \
     % [&](::oxygen::co::Nursery& arg_name)                                     \
         ->::oxygen::co::Co<::oxygen::co::detail::NurseryBodyRetVal>
-  // NOLINTEND(bugprone-macro-parentheses)
+  // NOLINTEND(bugprone-macro-parentheses, cppcoreguidelines-macro-usage)
 
   virtual ~Nursery() { DCHECK_F(tasks_.Empty()); }
 
@@ -236,12 +272,6 @@ protected:
 
   void Adopt(detail::BasePromise* promise);
 
-  template <class Ret>
-  static auto MakeTaskStarted(StartAwaiterBase<Ret>* parent) -> TaskStarted<Ret>
-  {
-    return TaskStarted<Ret>(parent);
-  }
-
   using TaskList = detail::IntrusiveList<detail::BasePromise>;
   TaskList tasks_;
   Executor* executor_ = nullptr;
@@ -316,16 +346,16 @@ protected:
  \endcode
 */
 template <class Ret> class TaskStarted {
-  using ResultType = Ret;
-
-  explicit TaskStarted(Nursery::StartAwaiterBase<Ret>* parent)
+  explicit TaskStarted(detail::TaskStartedSink<Ret>* parent)
     : parent_(parent)
   {
   }
 
-  friend Nursery;
+  friend detail::TaskStartedSink<Ret>;
 
 public:
+  using ResultType = Ret;
+
   TaskStarted() = default;
   ~TaskStarted() = default;
 
@@ -352,7 +382,7 @@ public:
   explicit(false) TaskStarted(detail::TaskStartedTag); // not defined
 
 protected:
-  Nursery::StartAwaiterBase<Ret>* parent_ = nullptr;
+  detail::TaskStartedSink<Ret>* parent_ = nullptr;
 };
 
 //! Usable for implementing live objects, if the only things needed
@@ -375,10 +405,11 @@ protected:
 */
 auto OpenNursery(Nursery*& ptr, TaskStarted<> started = {}) -> Co<>;
 
-template <class Ret> class Nursery::StartAwaiterBase : protected TaskParent {
-  friend TaskStarted<Ret>;
+template <class Ret>
+class Nursery::StartAwaiterBase : public detail::TaskStartedSink<Ret>,
+                                  protected TaskParent {
 
-  enum Flags { kCancelling = 1 };
+  enum class Flags : uint8_t { kNone = 0, kCancelling = 1 };
 
 public:
   explicit StartAwaiterBase(Nursery* nursery)
@@ -386,8 +417,10 @@ public:
   {
   }
 
+  // The sink base carries no state, so a moved awaiter gets a fresh one.
   StartAwaiterBase(StartAwaiterBase&& rhs) noexcept
-    : nursery_(std::exchange(rhs.nursery_, nullptr))
+    : detail::TaskStartedSink<Ret>()
+    , nursery_(std::exchange(rhs.nursery_, nullptr))
   {
     DCHECK_F(handle_ == NoOpHandle() && !promise_);
   }
@@ -397,10 +430,24 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(StartAwaiterBase)
 
 protected:
-  bool IsCancelling() const { return executor_.Bits() & kCancelling; }
-  void SetCancelling() { executor_.SetBits(kCancelling); }
+  [[nodiscard]] auto IsCancelling() const -> bool
+  {
+    return executor_.Bits() == Flags::kCancelling;
+  }
+  void SetCancelling() { executor_.SetBits(Flags::kCancelling); }
 
 private:
+  void MarkStarted(detail::ReturnType<Ret> value) override
+  {
+    if constexpr (std::is_same_v<Ret, void>) {
+      static_cast<void>(value);
+      this->result_.StoreSuccess();
+    } else {
+      this->result_.StoreValue(std::forward<Ret>(value));
+    }
+    HandOff();
+  }
+
   void StoreSuccess() override
   {
     CHECK_F(
@@ -486,9 +533,9 @@ public:
   {
     DLOG_F(5, "    ...Nursery::start() {}", fmt::ptr(this));
     detail::PromisePtr<void> promise(std::apply(
-      [this](auto&&... args) {
+      [this](auto&&... args) -> detail::Promise<void>* {
         return this->nursery_->MakePromise(
-          std::move(callable_), std::move(args)..., MakeTaskStarted(this));
+          std::move(callable_), std::move(args)..., this->MakeTaskStarted());
       },
       std::move(args_)));
 
@@ -531,17 +578,17 @@ public:
   {
     if (this->nursery_) {
       std::apply(
-        [this](auto&&... args) {
-          this->nursery_->Start(std::move(callable_), std::move(args)...,
-            MakeTaskStarted(static_cast<StartAwaiterBase<Ret>*>(nullptr)));
+        [this](auto&&... args) -> void {
+          this->nursery_->Start(
+            std::move(callable_), std::move(args)..., TaskStarted<Ret>());
         },
         std::move(args_));
     }
   }
 
 private:
-  // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved) -
-  // perfect forwarding
+  // Perfect forwarding: the arguments are forwarded, never moved.
+  // NOLINTNEXTLINE(cppcoreguidelines-rvalue-reference-param-not-moved)
   StartAwaiter(Nursery* nursery, Callable&& callable, Args&&... args)
     : StartAwaiterBase<Ret>(nursery)
     , callable_(std::forward<Callable>(callable))
@@ -557,9 +604,8 @@ template <class Ret>
 void TaskStarted<Ret>::operator()(detail::ReturnType<Ret> ret)
   requires(!std::is_same_v<Ret, void>)
 {
-  if (auto p = std::exchange(parent_, nullptr)) {
-    p->result_.StoreValue(std::forward<Ret>(ret));
-    p->HandOff();
+  if (auto* p = std::exchange(parent_, nullptr)) {
+    p->MarkStarted(std::forward<Ret>(ret));
   }
 }
 
@@ -567,9 +613,8 @@ template <class Ret>
 void TaskStarted<Ret>::operator()()
   requires(std::is_same_v<Ret, void>)
 {
-  if (auto p = std::exchange(parent_, nullptr)) {
-    p->result_.StoreSuccess();
-    p->HandOff();
+  if (auto* p = std::exchange(parent_, nullptr)) {
+    p->MarkStarted(detail::Void {});
   }
 }
 
@@ -692,8 +737,8 @@ auto Nursery::Start(Callable callable, Args... args) -> co::Awaitable auto
 {
   if constexpr (std::is_same_v<Ret, detail::Unspecified>) {
     using Sig = detail::CallableSignature<Callable>;
-    using TaskStartedArg = typename Sig::template Arg<Sig::Arity - 1>;
-    using ResultType = typename TaskStartedArg::ResultType;
+    using TaskStartedArg = Sig::template Arg<Sig::Arity - 1>;
+    using ResultType = TaskStartedArg::ResultType;
     return StartAwaiter<ResultType, Callable, Args...>(
       this, std::move(callable), std::move(args)...);
   } else {
@@ -714,10 +759,10 @@ inline void Nursery::DoCancel()
   // tasks_ safely; so defer calling cancel() through the executor.
   Executor* executor = executor_;
   executor->Capture(
-    [this] {
+    [this]() -> void {
       for (detail::BasePromise& t : tasks_) {
         executor_->Schedule(
-          +[](detail::BasePromise* p) noexcept { p->Cancel(); }, &t);
+          +[](detail::BasePromise* p) noexcept -> void { p->Cancel(); }, &t);
       }
     },
     task_count_);
@@ -774,14 +819,16 @@ inline auto Nursery::Continuation(detail::BasePromise* promise) noexcept
   // scope guards, essentially interrupting the coroutine which called
   // Nursery::Cancel().
   executor->RunSoon(
-    +[](detail::BasePromise* p) noexcept { p->Destroy(); }, promise);
+    +[](detail::BasePromise* p) noexcept -> void { p->Destroy(); }, promise);
 
   // To be extra safe, defer the Resume() call to the executor as well,
   // so we can be sure we don't resume the parent before destroying the frame
   // of the last child.
   if (ret != NoOpHandle()) {
     executor->RunSoon(
-      +[](void* arg) noexcept { detail::Handle::from_address(arg).resume(); },
+      +[](void* arg) noexcept -> void {
+        detail::Handle::from_address(arg).resume();
+      },
       ret.address());
   }
   return std::noop_coroutine();
@@ -863,7 +910,7 @@ public:
 };
 
 template <class Callable>
-class Nursery::Scope final : public detail::NurseryScopeBase,
+class Nursery::Scope final : public detail::YieldsLikeAwaitTag,
                              public ParentAwaiter<Scope<Callable>>,
                              /*private*/ TaskParent<detail::NurseryBodyRetVal> {
   class Impl final : public Nursery {
@@ -912,7 +959,7 @@ private:
   }
 
   friend ParentAwaiter<Scope>; // so it can access nursery_
-  [[no_unique_address]] Callable callable_;
+  OXYGEN_NO_UNIQUE_ADDRESS Callable callable_;
   Impl nursery_;
 };
 
@@ -966,3 +1013,5 @@ inline auto OpenNursery(Nursery*& ptr, TaskStarted<> started /*= {}*/) -> Co<>
 } // namespace oxygen::co
 
 // NOLINTEND(*-non-private-member-variables-in-classes)
+
+// NOLINTEND(readability-redundant-lambda-parameter-list)

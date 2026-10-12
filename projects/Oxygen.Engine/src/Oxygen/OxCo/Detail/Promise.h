@@ -614,12 +614,13 @@ namespace detail {
     }
   };
 
-  class NurseryScopeBase {
+  //! Tags awaitables whose `co_yield` behaves like `co_await`.
+  class YieldsLikeAwaitTag {
   protected:
-    NurseryScopeBase() = default;
-    ~NurseryScopeBase() = default;
-    OXYGEN_DEFAULT_COPYABLE(NurseryScopeBase)
-    OXYGEN_DEFAULT_MOVABLE(NurseryScopeBase)
+    YieldsLikeAwaitTag() = default;
+    ~YieldsLikeAwaitTag() = default;
+    OXYGEN_DEFAULT_COPYABLE(YieldsLikeAwaitTag)
+    OXYGEN_DEFAULT_MOVABLE(YieldsLikeAwaitTag)
   };
 
   //! The promise type for a coroutine that returns T.
@@ -643,12 +644,12 @@ namespace detail {
       BasePromise::ReParent(parent, caller);
     }
 
-    /// Allows using `co_yield` instead of `co_await` for nursery factories.
-    /// This is purely a syntactic trick to allow the
-    /// `OXCO_WITH_NURSERY(n) { ... }` syntax to work, by making it expand
-    /// to a binary operator which binds more tightly than `co_yield`.
-    /// (`co_await` binds too tightly.)
-    template <std::derived_from<NurseryScopeBase> U> auto yield_value(U&& u)
+    /// Allows using `co_yield` instead of `co_await` for nursery and `With`
+    /// factories. This is purely a syntactic trick to allow the
+    /// `OXCO_WITH_NURSERY(n) { ... }` and `OXCO_WITH(first, ...) { ... }`
+    /// syntax to work, by making them expand to a binary operator which binds
+    /// more tightly than `co_yield`. (`co_await` binds too tightly.)
+    template <std::derived_from<YieldsLikeAwaitTag> U> auto yield_value(U&& u)
     {
       return await_transform(std::forward<U>(u));
     }
