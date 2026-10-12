@@ -38,7 +38,7 @@ public:
  \note `GetBufferSize()` should return the size of the buffer in bytes.
 */
 template <typename T>
-concept ManagedBuffer = std::movable<T> && requires(T t) {
+concept ManagedBlob = std::movable<T> && requires(T t) {
   { t->GetBufferPointer() } -> std::convertible_to<void*>;
   { t->GetBufferSize() } -> std::convertible_to<size_t>;
   { static_cast<bool>(t) } -> std::convertible_to<bool>;
@@ -74,9 +74,9 @@ concept IsContiguousContainer = std::movable<T> && requires(T t) {
   \tparam T The type of the buffer to hold the shader byte code.
 
   The class is specialized for three cases:
-  - Managed Buffer: Types with GetBufferPointer, GetBufferSize, and Release
+  - Managed Blob: Types with GetBufferPointer, GetBufferSize, and Release
     methods. Memory management for the data is handled through the `Release`
-    method, and may or may not be handled automatically by the managed buffer
+    method, and may or may not be handled automatically by the managed blob
     itself.
   - Contiguous Container: Buffers using the standard library contiguous
     containers or equivalent. Automatic memory management for the data is
@@ -87,7 +87,7 @@ concept IsContiguousContainer = std::movable<T> && requires(T t) {
 */
 template <typename T> class ShaderByteCode;
 
-//! Specialization for `ManagedBuffer` types.
+//! Specialization for `ManagedBlob` types.
 /*!
   \tparam T The type of the buffer to hold the shader byte code.
 
@@ -95,7 +95,7 @@ template <typename T> class ShaderByteCode;
   buffer data memory management. The original buffer is __moved__ into the
   ShaderByteCode wrapper.
 */
-template <ManagedBuffer T> class ShaderByteCode<T> : public IShaderByteCode {
+template <ManagedBlob T> class ShaderByteCode<T> : public IShaderByteCode {
 public:
   explicit ShaderByteCode(T&& buffer) noexcept
     : buffer_(std::move(buffer))

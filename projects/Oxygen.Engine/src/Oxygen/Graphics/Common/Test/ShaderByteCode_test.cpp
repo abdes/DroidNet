@@ -4,15 +4,23 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/ShaderByteCode.h>
-
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <tuple>
+#include <utility>
 #include <vector>
 
+#include "gtest/gtest.h"
+
+#include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Testing/GTest.h>
 
-using namespace oxygen::graphics;
+using oxygen::graphics::BasicBufferWithOwnershipTransfer;
+using oxygen::graphics::IsContiguousContainer;
+using oxygen::graphics::ManagedBlob;
+using oxygen::graphics::ShaderByteCode;
 
 // Test classes
 namespace {
@@ -32,7 +40,7 @@ struct BasicBuffer {
   }
 
   BasicBuffer(const BasicBuffer& other) = delete;
-  BasicBuffer& operator=(const BasicBuffer& other) = delete;
+  auto operator=(const BasicBuffer& other) -> BasicBuffer& = delete;
 
   BasicBuffer(BasicBuffer&& other) noexcept
     : size(other.size)
@@ -54,6 +62,8 @@ struct BasicBuffer {
     return *this;
   }
 
+  // A destructor that cannot record its expectation aborts the test run.
+  // NOLINTNEXTLINE(bugprone-exception-escape)
   virtual ~BasicBuffer()
   {
     // Do nothing - expects the Deleter to be called
@@ -65,6 +75,8 @@ struct BasicBuffer {
 };
 
 // Define a deleter function for BasicBuffer
+// The ShaderByteCode deleter contract hands back the raw array it owns.
+// NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
 void BasicBufferDeleter(const uint32_t* data) { delete[] data; }
 
 // MockBuffer class for testing HasBufferMethods concept
@@ -88,8 +100,9 @@ public:
   }
   [[maybe_unused]] void Release() noexcept
   {
-    if (data == nullptr)
+    if (data == nullptr) {
       return;
+    }
 
     delete[] data;
     data = nullptr;
@@ -114,15 +127,17 @@ public:
 
   ~ManagedResourceBuffer() noexcept
   {
-    if (buffer_ == nullptr)
+    if (buffer_ == nullptr) {
       return;
+    }
 
     buffer_->Release();
     delete buffer_;
   }
 
   ManagedResourceBuffer(const ManagedResourceBuffer& other) = delete;
-  ManagedResourceBuffer& operator=(const ManagedResourceBuffer& other) = delete;
+  auto operator=(const ManagedResourceBuffer& other)
+    -> ManagedResourceBuffer& = delete;
 
   ManagedResourceBuffer(ManagedResourceBuffer&& other) noexcept
     : buffer_(other.buffer_)
@@ -141,7 +156,7 @@ public:
     return *this;
   }
 
-  ResourceBuffer* operator->() const noexcept { return buffer_; }
+  auto operator->() const noexcept -> ResourceBuffer* { return buffer_; }
   explicit operator bool() const noexcept { return buffer_ != nullptr; }
 
 private:
@@ -165,19 +180,18 @@ auto GetTestValue() -> std::tuple<BufferType, size_t, const uint32_t*>
 template <BasicBufferWithOwnershipTransfer BufferType>
 auto GetTestValue() -> std::tuple<BufferType, size_t, const uint32_t*>
 {
-  static constexpr uint32_t default_data[4] { 1, 2, 3, 4 };
-  BasicBuffer buffer { sizeof(default_data) / sizeof(uint32_t), default_data };
+  static constexpr auto default_data = std::array<uint32_t, 4> { 1, 2, 3, 4 };
+  BasicBuffer buffer { default_data.size(), default_data.data() };
   return std::make_tuple(std::move(buffer), buffer.size, buffer.data);
 }
 
 // Helper function to initialize buffer for types with GetBufferPointer,
 // GetBufferSize, and Release methods
-template <ManagedBuffer BufferType>
+template <ManagedBlob BufferType>
 auto GetTestValue() -> std::tuple<BufferType, size_t, const uint32_t*>
 {
-  static constexpr uint32_t default_data[4] { 1, 2, 3, 4 };
-  ManagedResourceBuffer buffer(
-    sizeof(default_data) / sizeof(uint32_t), default_data);
+  static constexpr auto default_data = std::array<uint32_t, 4> { 1, 2, 3, 4 };
+  ManagedResourceBuffer buffer(default_data.size(), default_data.data());
   return std::make_tuple(std::move(buffer), buffer->GetBufferSize(),
     static_cast<uint32_t*>(buffer->GetBufferPointer()));
 }
@@ -196,7 +210,8 @@ public:
     auto [buffer, size, data] = GetTestValue<BufferType>();
     if constexpr (std::is_same_v<BufferType, BasicBuffer>) {
       return {
-        ShaderByteCode<BufferType>(std::move(buffer), BasicBufferDeleter), size
+        ShaderByteCode<BufferType>(std::move(buffer), BasicBufferDeleter),
+        size,
       };
     } else {
       return { ShaderByteCode<BufferType>(std::move(buffer)), size };
@@ -232,26 +247,27 @@ NOLINT_TYPED_TEST(ShaderByteCodeTest, AccessorsTest)
 
 NOLINT_TEST(ShaderByteCodeTest, BasicBufferDeleterGetsCalled)
 {
-  uint32_t data[] = { 1, 2, 3, 4 };
-  BasicBuffer buffer { 4, data };
+  auto data = std::array<uint32_t, 4> { 1, 2, 3, 4 };
+  BasicBuffer buffer { data.size(), data.data() };
   bool deleter_called = false;
   {
-    auto deleter
-      = [&deleter_called](const uint32_t* /*data*/) { deleter_called = true; };
+    auto deleter = [&deleter_called](const uint32_t* /*data*/) -> void {
+      deleter_called = true;
+    };
     ShaderByteCode<BasicBuffer> shader_byte_code(std::move(buffer), deleter);
   }
   EXPECT_TRUE(deleter_called);
 }
 
-NOLINT_TEST(ShaderByteCodeTest, ManagedBufferReleaseGetsCalled)
+NOLINT_TEST(ShaderByteCodeTest, ManagedBlobReleaseGetsCalled)
 {
-  uint32_t data[] = { 1, 2, 3, 4 };
+  auto data = std::array<uint32_t, 4> { 1, 2, 3, 4 };
   bool released = false;
 
   {
-    static_assert(ManagedBuffer<ManagedResourceBuffer>);
+    static_assert(ManagedBlob<ManagedResourceBuffer>);
 
-    ManagedResourceBuffer buffer(4, data, &released);
+    ManagedResourceBuffer buffer(data.size(), data.data(), &released);
     ShaderByteCode<ManagedResourceBuffer> shader_byte_code(std::move(buffer));
   }
   EXPECT_TRUE(released);
@@ -336,7 +352,7 @@ NOLINT_TYPED_TEST(ShaderByteCodeUnsupportedTest, RejectsUnsupportedTypes)
 {
   using BufferType = TypeParam;
   EXPECT_FALSE((IsContiguousContainer<BufferType>));
-  EXPECT_FALSE((ManagedBuffer<BufferType>));
+  EXPECT_FALSE((ManagedBlob<BufferType>));
   EXPECT_FALSE((BasicBufferWithOwnershipTransfer<BufferType>));
 }
 
