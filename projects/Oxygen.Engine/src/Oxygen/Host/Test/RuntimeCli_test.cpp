@@ -102,6 +102,8 @@ NOLINT_TEST_F(RuntimeCliTest, NoArgumentsKeepApplicationDefaults)
   EXPECT_EQ(Config().engine.graphics.frame_capture.provider,
     FrameCaptureProvider::kNone);
   EXPECT_FALSE(FindCVar("ngin.target_fps").has_value());
+  // A defaulted option is not passed, so persisted values still apply.
+  EXPECT_FALSE(FindCVar("gfx.vsync").has_value());
 }
 
 //! Runtime options reach the engine, the window and the startup variables.

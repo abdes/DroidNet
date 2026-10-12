@@ -91,6 +91,10 @@ OXGN_HOST_NDAPI auto BuildCli(const std::string& program_name,
 OXGN_HOST_NDAPI auto HandleMetaCommand(const clap::CommandLineContext& context,
   const clap::Command::Ptr& default_command) -> bool;
 
+//! True when `option` was given on the command line, not just defaulted.
+OXGN_HOST_NDAPI auto WasPassed(
+  const clap::CommandLineContext& context, const std::string& option) -> bool;
+
 //! Parses `WIDTHxHEIGHT` with positive dimensions.
 OXGN_HOST_NDAPI auto ParseWindowResolution(std::string_view value)
   -> Extent<std::uint32_t>;

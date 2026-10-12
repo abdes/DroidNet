@@ -25,6 +25,7 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Clap/OptionValue.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Host/HostConfig.h>
 #include <Oxygen/Host/RuntimeCli.h>
@@ -183,6 +184,7 @@ auto MakeRuntimeOptions(RuntimeCliState& state,
     options->Add(clap::Option::WithKey("resolution")
         .About("Framebuffer resolution in pixels; fullscreen requires an "
                "exact display mode")
+        .Short("w")
         .Long("resolution")
         .WithValue<std::string>()
         .UserFriendlyName("WIDTHxHEIGHT")
@@ -322,6 +324,15 @@ auto HandleMetaCommand(const clap::CommandLineContext& context,
   return true;
 }
 
+auto WasPassed(
+  const clap::CommandLineContext& context, const std::string& option) -> bool
+{
+  return std::ranges::any_of(
+    context.ovm.ValuesOf(option), [](const clap::OptionValue& value) -> bool {
+      return !value.IsDefaulted();
+    });
+}
+
 auto ParseWindowResolution(const std::string_view value)
   -> Extent<std::uint32_t>
 {
@@ -376,11 +387,11 @@ auto ApplyRuntimeCli(const clap::CommandLineContext& context,
   }
 
   // Explicit options win over persisted console values.
-  if (context.ovm.HasOption("fps")) {
+  if (WasPassed(context, "fps")) {
     config.startup_cvars.Set(
       "ngin.target_fps", static_cast<std::int64_t>(state.target_fps));
   }
-  if (context.ovm.HasOption("vsync")) {
+  if (WasPassed(context, "vsync")) {
     config.startup_cvars.Set("gfx.vsync", state.vsync);
   }
 
