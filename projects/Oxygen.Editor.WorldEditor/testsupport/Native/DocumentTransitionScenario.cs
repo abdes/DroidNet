@@ -29,7 +29,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
     /// <returns>The asynchronous document-transition regression.</returns>
     public Task RunAsync(uint targetFps, int cycles) => EnqueueAsync(async () =>
     {
-        var fixture = new NativeSceneFixture(automatic: false, scene => SeedShadowTransitionScene(scene, 4), new EngineSettings { Graphics = new() { EnableDebugLayer = true, EnableValidation = true }, Renderer = new() { DirectionalShadowPolicy = DirectionalShadowPolicy.ConventionalOnly, EnableImGui = false }, });
+        var fixture = new NativeSceneFixture(automatic: false, scene => SeedShadowTransitionScene(scene, 4), new EngineSettings { Graphics = new() { EnableDebugLayer = true, EnableValidation = true }, Renderer = new() { DirectionalShadowPolicy = DirectionalShadowPolicy.ConventionalOnly }, });
         await using var lifetime = fixture.ConfigureAwait(true);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(150));

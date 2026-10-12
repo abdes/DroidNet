@@ -36,6 +36,7 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Vortex/CompositionView.h>
@@ -240,9 +241,9 @@ try {
     return;
   }
   if (!ui_tests_) {
-    const auto renderer = ResolveVortexRenderer();
+    const auto imgui_module = ResolveImGuiModule();
     const auto window = app_window_->GetWindow();
-    auto* context = renderer ? renderer->GetImGuiContext() : nullptr;
+    auto* context = imgui_module ? imgui_module->GetImGuiContext() : nullptr;
     if (!context || !window) {
       return;
     }
@@ -269,6 +270,18 @@ auto DemoModuleBase::ResolveVortexRenderer() const noexcept
   }
   if (auto renderer = app_.engine->GetModule<vortex::Renderer>()) {
     return observer_ptr { &renderer->get() };
+  }
+  return nullptr;
+}
+
+auto DemoModuleBase::ResolveImGuiModule() const noexcept
+  -> observer_ptr<imgui::ImGuiModule>
+{
+  if (app_.engine == nullptr) {
+    return nullptr;
+  }
+  if (auto imgui_module = app_.engine->GetModule<imgui::ImGuiModule>()) {
+    return observer_ptr { &imgui_module->get() };
   }
   return nullptr;
 }

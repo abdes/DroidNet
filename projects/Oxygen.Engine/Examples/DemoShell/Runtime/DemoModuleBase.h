@@ -35,6 +35,9 @@ namespace graphics {
   class Framebuffer;
   class Surface;
 }
+namespace imgui {
+  class ImGuiModule;
+}
 namespace vortex {
   class Renderer;
 }
@@ -128,6 +131,10 @@ protected:
   //! Resolve the active Vortex renderer module if available.
   auto ResolveVortexRenderer() const noexcept -> observer_ptr<vortex::Renderer>;
 
+  //! Resolve the ImGui module; null when headless or not registered.
+  [[nodiscard]] auto ResolveImGuiModule() const noexcept
+    -> observer_ptr<imgui::ImGuiModule>;
+
   //! True when this demo still has a live renderable window, or is headless.
   [[nodiscard]] auto HasRenderableWindow() const noexcept -> bool;
 
@@ -142,8 +149,8 @@ protected:
 
 private:
   struct RuntimeSceneTarget {
-    std::shared_ptr<graphics::Framebuffer> scene_framebuffer {};
-    std::shared_ptr<graphics::Framebuffer> composite_framebuffer {};
+    std::shared_ptr<graphics::Framebuffer> scene_framebuffer;
+    std::shared_ptr<graphics::Framebuffer> composite_framebuffer;
     uint32_t width { 0 };
     uint32_t height { 0 };
   };

@@ -8,37 +8,94 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
 
+#include "DemoShell/DemoShell.h"
+#include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "MultiView/MainModule.h"
+#include "MultiView/SceneBootstrapper.h"
+#include <fmt/format.h>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/matrix.hpp>
+#include <glm/trigonometric.hpp>
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Time/SimulationClock.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/ImGui/ImGuiModule.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
+#include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
 
 namespace oxygen::examples::multiview {
 
 namespace {
+  //! Names the interaction proof step shown at `frame`.
+  constexpr auto InteractionPhaseName(const std::uint64_t frame)
+    -> std::string_view
+  {
+    struct Phase {
+      std::uint64_t end_frame;
+      std::string_view name;
+    };
+    constexpr auto kPhases = std::array {
+      Phase { .end_frame = 40U, .name = "Static reference" },
+      Phase { .end_frame = 52U, .name = "Motion and compensation" },
+      Phase { .end_frame = 60U, .name = "PiP manual exposure" },
+      Phase { .end_frame = 72U, .name = "Auto, seed and cut" },
+      Phase { .end_frame = 88U, .name = "Reorder, viewport and scissor" },
+      Phase { .end_frame = 100U, .name = "Window resize" },
+      Phase { .end_frame = 108U, .name = "Hide and reopen" },
+      Phase { .end_frame = 112U, .name = "Fresh PiP lifetime" },
+      Phase { .end_frame = 120U, .name = "Shared exposure" },
+      Phase { .end_frame = 128U, .name = "Source removed" },
+      Phase { .end_frame = 136U, .name = "Source recreated" },
+    };
+    for (const auto& phase : kPhases) {
+      if (frame < phase.end_frame) {
+        return phase.name;
+      }
+    }
+    return "Paused final state";
+  }
+
   constexpr auto IsMixedProof(ExposureProofScenario proof) -> bool
   {
     return proof == ExposureProofScenario::kMixed
@@ -75,12 +132,12 @@ namespace {
       && fb_desc.color_attachments[0].texture) {
       const auto& color_desc
         = fb_desc.color_attachments[0].texture->GetDescriptor();
-      return { color_desc.width, color_desc.height };
+      return { .width = color_desc.width, .height = color_desc.height };
     }
     if (fb_desc.depth_attachment.texture) {
       const auto& depth_desc
         = fb_desc.depth_attachment.texture->GetDescriptor();
-      return { depth_desc.width, depth_desc.height };
+      return { .width = depth_desc.width, .height = depth_desc.height };
     }
     return {};
   }
@@ -129,8 +186,8 @@ namespace {
     const float kPipHeightRatio = resized ? 0.60F : 0.45F;
     constexpr float kPipMargin = 24.0F;
 
-    const float sw = static_cast<float>(extent.width);
-    const float sh = static_cast<float>(extent.height);
+    const auto sw = static_cast<float>(extent.width);
+    const auto sh = static_cast<float>(extent.height);
     const float pip_w = std::floor(sw * kPipWidthRatio);
     const float pip_h = std::floor(sh * kPipHeightRatio);
     const float offset_x = std::max(0.0F, sw - pip_w - kPipMargin);
@@ -183,18 +240,25 @@ auto MainModule::BuildDefaultWindowProperties() const
   constexpr uint32_t kDefaultHeight = 1400;
 
   platform::window::Properties props("Oxygen :: Examples :: MultiView");
-  props.extent = platform::window::ExtentT { .width = kDefaultWidth,
-    .height = kDefaultHeight };
-  props.flags = { .hidden = false,
+  props.extent = platform::window::ExtentT {
+    .width = kDefaultWidth,
+    .height = kDefaultHeight,
+  };
+  props.flags = {
+    .hidden = false,
     .always_on_top = false,
     .full_screen = app_.fullscreen,
     .maximized = false,
     .minimized = false,
     .resizable = true,
-    .borderless = false };
+    .borderless = false,
+  };
   return props;
 }
 
+// Attaching only builds the shell and its bindings; running out of memory there
+// is not recoverable.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 auto MainModule::OnAttachedImpl(
   oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
@@ -283,15 +347,17 @@ auto MainModule::OnAttachedImpl(
     scene_bootstrapper_.ApplyConsumerVisualProof(config_.visual_fog_mode);
   }
   if (IsLayoutExposureProof(config_.exposure_proof)) {
-    if (IsMixedProof(config_.exposure_proof))
+    if (IsMixedProof(config_.exposure_proof)) {
       scene_bootstrapper_.ApplyMixedExposureProof();
-    else
+    } else {
       scene_bootstrapper_.ApplyConsumerVisualProof(VisualFogMode::kVolumetric);
+    }
     auto& environment = *staged_scene->GetEnvironment();
     auto* post
       = environment.TryGetSystem<scene::environment::PostProcessVolume>().get();
-    if (!post)
+    if (!post) {
       post = &environment.AddSystem<scene::environment::PostProcessVolume>();
+    }
     auto exposure = scene::ExposureSettings {};
     exposure.key = 12.5F;
     exposure.metering_mode = IsMixedProof(config_.exposure_proof)
@@ -420,10 +486,12 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       // Frame the sample objects around their shared center.
       const bool daylight
         = config_.exposure_proof == ExposureProofScenario::kConsumerVisual;
-      const glm::vec3 pip_position = daylight ? glm::vec3(-5.0F, -4.0F, 1.5F)
-        : config_.exposure_proof == ExposureProofScenario::kAtmosphere
-        ? glm::vec3(-5.0F, -6.0F, 4.0F)
-        : glm::vec3(-5.0F, 0.4F, 4.0F);
+      auto pip_position = glm::vec3(-5.0F, 0.4F, 4.0F);
+      if (daylight) {
+        pip_position = glm::vec3(-5.0F, -4.0F, 1.5F);
+      } else if (config_.exposure_proof == ExposureProofScenario::kAtmosphere) {
+        pip_position = glm::vec3(-5.0F, -6.0F, 4.0F);
+      }
       pip_camera_node_.GetTransform().SetLocalPosition(pip_position);
 
       const glm::vec3 target(-0.75F, 0.0F, daylight ? 0.5F : 0.0F);
@@ -466,28 +534,33 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
   const float proof_cell_aspect = extent.height > 0
     ? static_cast<float>(extent.width) / static_cast<float>(extent.height)
     : 1.0F;
-  const auto configure_camera =
-    [](scene::SceneNode& node, const glm::vec3& position,
-      const glm::vec3& target, const float fov_degrees,
-      const float aspect_ratio) {
-      if (!node.IsAlive()) {
-        return;
-      }
-      const auto cam_opt = node.GetCameraAs<scene::PerspectiveCamera>();
-      if (!cam_opt) {
-        return;
-      }
+  struct CameraPose {
+    glm::vec3 position;
+    glm::vec3 target;
+    float fov_degrees;
+  };
+  const auto configure_camera
+    = [](scene::SceneNode& node, const CameraPose& pose,
+        const float aspect_ratio) -> void {
+    if (!node.IsAlive()) {
+      return;
+    }
+    const auto cam_opt = node.GetCameraAs<scene::PerspectiveCamera>();
+    if (!cam_opt) {
+      return;
+    }
 
-      auto& cam = cam_opt->get();
-      const glm::mat4 view_mat = glm::lookAt(position, target, space::move::Up);
-      node.GetTransform().SetLocalPosition(position);
-      node.GetTransform().SetLocalRotation(
-        glm::quat_cast(glm::inverse(view_mat)));
-      cam.SetFieldOfView(glm::radians(fov_degrees));
-      cam.SetAspectRatio(aspect_ratio);
-      cam.SetNearPlane(0.05F);
-      cam.SetFarPlane(160.0F);
-    };
+    auto& cam = cam_opt->get();
+    const glm::mat4 view_mat
+      = glm::lookAt(pose.position, pose.target, space::move::Up);
+    node.GetTransform().SetLocalPosition(pose.position);
+    node.GetTransform().SetLocalRotation(
+      glm::quat_cast(glm::inverse(view_mat)));
+    cam.SetFieldOfView(glm::radians(pose.fov_degrees));
+    cam.SetAspectRatio(aspect_ratio);
+    cam.SetNearPlane(0.05F);
+    cam.SetFarPlane(160.0F);
+  };
 
   if (config_.feature_variant_proof_layout) {
     constexpr float kMargin = 16.0F;
@@ -500,33 +573,79 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
       std::floor(
         (static_cast<float>(extent.height) - (2.0F * kMargin) - kGap) / 2.0F));
     const float cell_aspect = cell_w / cell_h;
-    configure_camera(main_camera_node_, glm::vec3(0.0F, 0.0F, 5.0F),
-      glm::vec3(0.0F, 0.0F, -2.0F), 42.0F, cell_aspect);
-    configure_camera(pip_camera_node_, glm::vec3(-4.8F, 1.2F, 4.6F),
-      glm::vec3(-0.4F, -0.1F, -1.4F), 38.0F, cell_aspect);
-    configure_camera(top_camera_node_, glm::vec3(0.0F, 8.0F, 0.2F),
-      glm::vec3(0.0F, 0.0F, -2.0F), 45.0F, cell_aspect);
-    configure_camera(debug_camera_node_, glm::vec3(-5.0F, 2.5F, 5.5F),
-      glm::vec3(0.0F, 0.0F, -2.0F), 42.0F, cell_aspect);
-    configure_camera(shadow_camera_node_, glm::vec3(5.0F, 3.5F, 4.5F),
-      glm::vec3(0.0F, 0.0F, -2.0F), 42.0F, cell_aspect);
-    configure_camera(diagnostics_camera_node_, glm::vec3(1.8F, 2.0F, 4.0F),
-      glm::vec3(-0.5F, 0.0F, -1.6F), 40.0F, cell_aspect);
+    configure_camera(main_camera_node_,
+      CameraPose {
+        .position = glm::vec3(0.0F, 0.0F, 5.0F),
+        .target = glm::vec3(0.0F, 0.0F, -2.0F),
+        .fov_degrees = 42.0F,
+      },
+      cell_aspect);
+    configure_camera(pip_camera_node_,
+      CameraPose {
+        .position = glm::vec3(-4.8F, 1.2F, 4.6F),
+        .target = glm::vec3(-0.4F, -0.1F, -1.4F),
+        .fov_degrees = 38.0F,
+      },
+      cell_aspect);
+    configure_camera(top_camera_node_,
+      CameraPose {
+        .position = glm::vec3(0.0F, 8.0F, 0.2F),
+        .target = glm::vec3(0.0F, 0.0F, -2.0F),
+        .fov_degrees = 45.0F,
+      },
+      cell_aspect);
+    configure_camera(debug_camera_node_,
+      CameraPose {
+        .position = glm::vec3(-5.0F, 2.5F, 5.5F),
+        .target = glm::vec3(0.0F, 0.0F, -2.0F),
+        .fov_degrees = 42.0F,
+      },
+      cell_aspect);
+    configure_camera(shadow_camera_node_,
+      CameraPose {
+        .position = glm::vec3(5.0F, 3.5F, 4.5F),
+        .target = glm::vec3(0.0F, 0.0F, -2.0F),
+        .fov_degrees = 42.0F,
+      },
+      cell_aspect);
+    configure_camera(diagnostics_camera_node_,
+      CameraPose {
+        .position = glm::vec3(1.8F, 2.0F, 4.0F),
+        .target = glm::vec3(-0.5F, 0.0F, -1.6F),
+        .fov_degrees = 40.0F,
+      },
+      cell_aspect);
   } else {
-    configure_camera(top_camera_node_, glm::vec3(0.0F, 8.0F, 0.1F),
-      glm::vec3(0.0F, 0.0F, -2.0F), 45.0F, proof_cell_aspect);
-    configure_camera(debug_camera_node_, glm::vec3(-5.0F, 2.5F, 5.5F),
-      glm::vec3(0.0F, 0.0F, -2.0F), 42.0F, proof_cell_aspect);
-    configure_camera(shadow_camera_node_, glm::vec3(5.0F, 3.5F, 4.5F),
-      glm::vec3(0.0F, 0.0F, -2.0F), 42.0F, proof_cell_aspect);
+    configure_camera(top_camera_node_,
+      CameraPose {
+        .position = glm::vec3(0.0F, 8.0F, 0.1F),
+        .target = glm::vec3(0.0F, 0.0F, -2.0F),
+        .fov_degrees = 45.0F,
+      },
+      proof_cell_aspect);
+    configure_camera(debug_camera_node_,
+      CameraPose {
+        .position = glm::vec3(-5.0F, 2.5F, 5.5F),
+        .target = glm::vec3(0.0F, 0.0F, -2.0F),
+        .fov_degrees = 42.0F,
+      },
+      proof_cell_aspect);
+    configure_camera(shadow_camera_node_,
+      CameraPose {
+        .position = glm::vec3(5.0F, 3.5F, 4.5F),
+        .target = glm::vec3(0.0F, 0.0F, -2.0F),
+        .fov_degrees = 42.0F,
+      },
+      proof_cell_aspect);
   }
 
-  const auto configure_offscreen_camera = [](scene::SceneNode& node,
-                                            const glm::vec3& position,
-                                            const glm::vec3& target,
-                                            const float fov_degrees,
-                                            const uint32_t width,
-                                            const uint32_t height) {
+  struct TargetSize {
+    uint32_t width;
+    uint32_t height;
+  };
+  const auto configure_offscreen_camera
+    = [](scene::SceneNode& node, const CameraPose& pose,
+        const TargetSize size) -> void {
     if (!node.IsAlive()) {
       return;
     }
@@ -536,23 +655,39 @@ auto MainModule::UpdateCameras(const platform::window::ExtentT& extent) -> void
     }
 
     auto& cam = cam_opt->get();
-    const glm::mat4 view_mat = glm::lookAt(position, target, space::move::Up);
-    node.GetTransform().SetLocalPosition(position);
+    const glm::mat4 view_mat
+      = glm::lookAt(pose.position, pose.target, space::move::Up);
+    node.GetTransform().SetLocalPosition(pose.position);
     node.GetTransform().SetLocalRotation(
       glm::quat_cast(glm::inverse(view_mat)));
-    cam.SetFieldOfView(glm::radians(fov_degrees));
-    cam.SetAspectRatio(static_cast<float>(width) / static_cast<float>(height));
+    cam.SetFieldOfView(glm::radians(pose.fov_degrees));
+    cam.SetAspectRatio(
+      static_cast<float>(size.width) / static_cast<float>(size.height));
     cam.SetNearPlane(0.05F);
     cam.SetFarPlane(160.0F);
-    cam.SetViewport(MakeLocalView(width, height).viewport);
+    cam.SetViewport(MakeLocalView(size.width, size.height).viewport);
   };
 
   configure_offscreen_camera(offscreen_preview_camera_node_,
-    glm::vec3(-3.2F, 2.2F, 4.8F), glm::vec3(-0.75F, 0.0F, 0.0F), 45.0F,
-    kOffscreenPreviewWidth, kOffscreenPreviewHeight);
+    CameraPose {
+      .position = glm::vec3(-3.2F, 2.2F, 4.8F),
+      .target = glm::vec3(-0.75F, 0.0F, 0.0F),
+      .fov_degrees = 45.0F,
+    },
+    TargetSize {
+      .width = kOffscreenPreviewWidth,
+      .height = kOffscreenPreviewHeight,
+    });
   configure_offscreen_camera(offscreen_capture_camera_node_,
-    glm::vec3(5.0F, 4.0F, 4.0F), glm::vec3(-0.75F, 0.0F, 0.0F), 45.0F,
-    kOffscreenCaptureWidth, kOffscreenCaptureHeight);
+    CameraPose {
+      .position = glm::vec3(5.0F, 4.0F, 4.0F),
+      .target = glm::vec3(-0.75F, 0.0F, 0.0F),
+      .fov_degrees = 45.0F,
+    },
+    TargetSize {
+      .width = kOffscreenCaptureWidth,
+      .height = kOffscreenCaptureHeight,
+    });
 }
 
 auto MainModule::OnFrameStart(
@@ -593,12 +728,15 @@ auto MainModule::OnFrameStart(
   if (config_.exposure_proof == ExposureProofScenario::kConsumerVisual
     && config_.visual_fog_cycle) {
     const auto frame = context->GetFrameSequenceNumber().get();
-    if (frame == 32U)
+    if (frame == 32U) {
       pending_visual_fog_mode_ = VisualFogMode::kVolumetric;
-    if (frame == 96U)
+    }
+    if (frame == 96U) {
       pending_visual_fog_mode_ = VisualFogMode::kLocal;
-    if (frame == 128U && !config_.visual_fog_hold_local)
+    }
+    if (frame == 128U && !config_.visual_fog_hold_local) {
       pending_visual_fog_mode_ = VisualFogMode::kClear;
+    }
   }
   if (pending_visual_fog_mode_) {
     config_.visual_fog_mode = *pending_visual_fog_mode_;
@@ -648,8 +786,9 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
 
   auto& shell = GetShell();
   CHECK_NOTNULL_F(&shell, "DemoShell required for GUI update");
-  if (config_.exposure_proof != ExposureProofScenario::kConsumerVisual)
+  if (config_.exposure_proof != ExposureProofScenario::kConsumerVisual) {
     shell.Draw(context);
+  }
   DrawFeatureVariantProofOverlay();
   DrawConsumerVisualControls();
   DrawInteractionProofOverlay(context->GetFrameSequenceNumber().get());
@@ -659,19 +798,24 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
 
 auto MainModule::DrawConsumerVisualControls() -> void
 {
-  if (config_.exposure_proof != ExposureProofScenario::kConsumerVisual)
+  if (config_.exposure_proof != ExposureProofScenario::kConsumerVisual) {
     return;
-  const auto renderer = ResolveVortexRenderer();
-  if (!renderer || !renderer->IsImGuiFrameActive())
+  }
+  const auto imgui_module = ResolveImGuiModule();
+  if (!imgui_module || !imgui_module->IsFrameActive()) {
     return;
-  auto* imgui_context = renderer->GetImGuiContext();
-  if (!imgui_context)
+  }
+  auto* imgui_context = imgui_module->GetImGuiContext();
+  if (!imgui_context) {
     return;
+  }
   ImGui::SetCurrentContext(imgui_context);
   ImGui::SetNextWindowPos(ImVec2(20.0F, 20.0F), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowBgAlpha(0.94F);
-  constexpr auto flags = ImGuiWindowFlags_AlwaysAutoResize
-    | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings;
+  constexpr auto flags = static_cast<ImGuiWindowFlags>(
+    static_cast<unsigned>(ImGuiWindowFlags_AlwaysAutoResize)
+    | static_cast<unsigned>(ImGuiWindowFlags_NoCollapse)
+    | static_cast<unsigned>(ImGuiWindowFlags_NoSavedSettings));
   if (ImGui::Begin("EX05-15 visual check", nullptr, flags)) {
     ImGui::TextUnformatted(
       "Original materials | Fixed cameras | Exposure: EV15");
@@ -686,8 +830,9 @@ auto MainModule::DrawConsumerVisualControls() -> void
     ImGui::SameLine();
     changed |= ImGui::RadioButton(
       "Local fog", &mode, static_cast<int>(VisualFogMode::kLocal));
-    if (changed)
+    if (changed) {
       pending_visual_fog_mode_ = static_cast<VisualFogMode>(mode);
+    }
     ImGui::TextUnformatted(
       "Compare material colors, smooth haze and object edges.");
     ImGui::TextUnformatted("PiP shows the same scene from another angle.");
@@ -783,8 +928,9 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
         const vortex::Renderer::OffscreenPipelineInput pipeline,
         const bool force_wireframe) -> void {
     if (!config_.exposure_view_only.empty()
-      && config_.exposure_view_only != name)
+      && config_.exposure_view_only != name) {
       return;
+    }
     if (IsLayoutExposureProof(config_.exposure_proof)
       && context.GetFrameSequenceNumber().get() == 32U) {
       const auto request = renderer->QueueExposureTransition(
@@ -956,8 +1102,8 @@ auto MainModule::AppendRuntimeCompositionLayers(
 
   constexpr float kMargin = 28.0F;
   constexpr float kGap = 18.0F;
-  const float sw = static_cast<float>(extent.width);
-  const float sh = static_cast<float>(extent.height);
+  const auto sw = static_cast<float>(extent.width);
+  const auto sh = static_cast<float>(extent.height);
   const float preview_w = std::min(512.0F, std::floor(sw * 0.30F));
   const float preview_h = std::floor(preview_w * 9.0F / 16.0F);
   const float capture_size = std::min(256.0F, std::floor(sh * 0.22F));
@@ -1014,8 +1160,8 @@ auto MainModule::DrawFeatureVariantProofOverlay() -> void
   constexpr float kPadX = 10.0F;
   constexpr float kPadY = 6.0F;
   constexpr float kHeaderHeight = 30.0F;
-  const float sw = static_cast<float>(extent.width);
-  const float sh = static_cast<float>(extent.height);
+  const auto sw = static_cast<float>(extent.width);
+  const auto sh = static_cast<float>(extent.height);
   const float cell_w = std::max(
     1.0F, std::floor((sw - (2.0F * kMargin) - (2.0F * kGap)) / 3.0F));
   const float cell_h
@@ -1026,14 +1172,30 @@ auto MainModule::DrawFeatureVariantProofOverlay() -> void
     ImU32 color;
   };
   const std::array labels {
-    Label { "M06C Depth-only | BLACK expected", IM_COL32(76, 120, 190, 235) },
-    Label { "M06C Shadow-only | BLACK expected", IM_COL32(90, 80, 62, 235) },
-    Label { "M06C No environment | no sky/fog", IM_COL32(150, 82, 80, 235) },
-    Label { "M06C No shadowing | no shadows", IM_COL32(70, 125, 92, 235) },
     Label {
-      "M06C No volumetrics | no volume fog", IM_COL32(115, 88, 150, 235) },
+      .text = "M06C Depth-only | BLACK expected",
+      .color = IM_COL32(76, 120, 190, 235),
+    },
     Label {
-      "M06C Diagnostics-only | BLACK expected", IM_COL32(95, 95, 95, 235) },
+      .text = "M06C Shadow-only | BLACK expected",
+      .color = IM_COL32(90, 80, 62, 235),
+    },
+    Label {
+      .text = "M06C No environment | no sky/fog",
+      .color = IM_COL32(150, 82, 80, 235),
+    },
+    Label {
+      .text = "M06C No shadowing | no shadows",
+      .color = IM_COL32(70, 125, 92, 235),
+    },
+    Label {
+      .text = "M06C No volumetrics | no volume fog",
+      .color = IM_COL32(115, 88, 150, 235),
+    },
+    Label {
+      .text = "M06C Diagnostics-only | BLACK expected",
+      .color = IM_COL32(95, 95, 95, 235),
+    },
   };
 
   auto* draw_list = ImGui::GetForegroundDrawList();
@@ -1042,8 +1204,10 @@ auto MainModule::DrawFeatureVariantProofOverlay() -> void
   }
 
   for (std::size_t index = 0U; index < labels.size(); ++index) {
-    const float x = kMargin + static_cast<float>(index % 3U) * (cell_w + kGap);
-    const float y = kMargin + static_cast<float>(index / 3U) * (cell_h + kGap);
+    const auto column = index % 3U;
+    const auto row = index / 3U;
+    const float x = kMargin + (static_cast<float>(column) * (cell_w + kGap));
+    const float y = kMargin + (static_cast<float>(row) * (cell_h + kGap));
     const ImVec2 rect_min { x, y };
     const ImVec2 rect_max { x + cell_w, y + kHeaderHeight };
     draw_list->AddRectFilled(rect_min, rect_max, labels[index].color, 0.0F);
@@ -1067,8 +1231,9 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     = (config_.exposure_proof == ExposureProofScenario::kLifetime
         && sequence >= 44U && sequence < 48U)
     || (interactions && sequence >= 100U && sequence < 104U);
-  if (interactions && sequence == 108U)
+  if (interactions && sequence == 108U) {
     pip_view_id_ = GetOrCreateViewId("InteractionsRecreatedPiP");
+  }
   if (config_.exposure_proof == ExposureProofScenario::kLifetime
     && sequence == 52U) {
     pip_view_id_ = GetOrCreateViewId("RecreatedPipView");
@@ -1171,9 +1336,10 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
         ? engine::MeteringMode::kAverage
         : engine::MeteringMode::kSpot;
       // Exercise an exposed lit auxiliary product instead of normals colors.
-      if (config_.aux_proof_layout && view.id == debug_view_id_)
+      if (config_.aux_proof_layout && view.id == debug_view_id_) {
         view.render_settings.shader_debug_mode
           = vortex::ShaderDebugMode::kDisabled;
+      }
     } else {
       view.force_wireframe = false;
     }
@@ -1209,9 +1375,10 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     }
     view.render_settings.exposure = std::move(exposure);
   }
-  if (interactions)
+  if (interactions) {
     ApplyInteractionProof(context, views);
-  std::erase_if(views, [&](const auto& view) {
+  }
+  std::erase_if(views, [&](const auto& view) -> auto {
     return view.camera.has_value()
       && ((retain_inactive_pip_ && view.id == pip_view_id_)
         || (proof == ExposureProofScenario::kMainOnly
@@ -1257,24 +1424,28 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       "Exposure proof view '{}' is not in this layout",
       config_.exposure_view_only);
     std::vector<ViewId> needed;
-    if (selected != views.end())
+    if (selected != views.end()) {
       needed.push_back(selected->id);
+    }
     for (size_t index = 0; index < needed.size(); ++index) {
       const auto consumer
         = std::ranges::find(views, needed[index], &vortex::CompositionView::id);
       CHECK_F(consumer != views.end());
       for (const auto& input : consumer->consumed_aux_outputs) {
         const auto producer
-          = std::ranges::find_if(views, [&](const auto& view) {
-              return std::ranges::any_of(view.produced_aux_outputs,
-                [&](const auto& output) { return output.id == input.id; });
+          = std::ranges::find_if(views, [&](const auto& view) -> auto {
+              return std::ranges::any_of(
+                view.produced_aux_outputs, [&](const auto& output) -> auto {
+                  return output.id == input.id;
+                });
             });
         if (producer != views.end()
-          && std::ranges::find(needed, producer->id) == needed.end())
+          && std::ranges::find(needed, producer->id) == needed.end()) {
           needed.push_back(producer->id);
+        }
       }
     }
-    std::erase_if(views, [&](const auto& view) {
+    std::erase_if(views, [&](const auto& view) -> auto {
       return view.camera.has_value()
         && std::ranges::find(needed, view.id) == needed.end();
     });
@@ -1294,18 +1465,22 @@ auto MainModule::ApplyInteractionProof(engine::FrameContext& context,
   std::vector<vortex::CompositionView>& views) -> void
 {
   const auto frame = context.GetFrameSequenceNumber().get();
-  if (frame == 40U)
+  if (frame == 40U) {
     app_.engine->GetSimulationClock().SetPaused(false);
-  if (frame == 136U)
+  }
+  if (frame == 136U) {
     app_.engine->GetSimulationClock().SetPaused(true);
+  }
   const auto renderer = ResolveVortexRenderer();
   CHECK_NOTNULL_F(renderer.get());
   if (frame >= 40U) {
     const float phase
       = static_cast<float>(std::min(frame, uint64_t { 132 }) - 40U);
-    const auto move_camera = [&](scene::SceneNode& node, float direction) {
-      if (!node.IsAlive())
+    const auto move_camera
+      = [&](scene::SceneNode& node, float direction) -> void {
+      if (!node.IsAlive()) {
         return;
+      }
       const auto base = node.GetTransform().GetLocalPosition();
       CHECK_F(base.has_value());
       const auto position = *base
@@ -1323,8 +1498,10 @@ auto MainModule::ApplyInteractionProof(engine::FrameContext& context,
     move_camera(offscreen_capture_camera_node_, -1);
   }
   for (auto& view : views) {
-    if (!view.camera.has_value())
+    if (!view.camera.has_value()
+      || !view.render_settings.exposure.has_value()) {
       continue;
+    }
     auto exposure = *view.render_settings.exposure;
     if (view.id == pip_view_id_) {
       exposure.compensation_ev = frame >= 44U && frame < 52U ? .5F : 0;
@@ -1335,8 +1512,9 @@ auto MainModule::ApplyInteractionProof(engine::FrameContext& context,
       view.shading_mode = frame >= 56U && frame < 96U
         ? vortex::ShadingMode::kForward
         : vortex::ShadingMode::kDeferred;
-      if (frame >= 112U && frame < 120U)
+      if (frame >= 112U && frame < 120U) {
         view.exposure_source_view_id = main_view_id_;
+      }
       if (frame == 64U) {
         CHECK_F(renderer
             ->QueueExposureTransition(view.view_state_handle,
@@ -1356,8 +1534,9 @@ auto MainModule::ApplyInteractionProof(engine::FrameContext& context,
     }
     view.render_settings.exposure = std::move(exposure);
   }
-  if (frame >= 72U && frame < 80U)
-    std::reverse(views.begin(), views.end());
+  if (frame >= 72U && frame < 80U) {
+    std::ranges::reverse(views);
+  }
   LOG_F(INFO,
     "Vortex.MultiView.Interactions frame={} delta_seconds={:.9g} main={} "
     "pip={} "
@@ -1371,37 +1550,30 @@ auto MainModule::ApplyInteractionProof(engine::FrameContext& context,
 
 auto MainModule::DrawInteractionProofOverlay(std::uint64_t frame) -> void
 {
-  if (!IsMixedProof(config_.exposure_proof))
+  if (!IsMixedProof(config_.exposure_proof)) {
     return;
-  const auto renderer = ResolveVortexRenderer();
-  if (!renderer || !renderer->IsImGuiFrameActive()
-    || !renderer->GetImGuiContext())
+  }
+  const auto imgui_module = ResolveImGuiModule();
+  if (!imgui_module || !imgui_module->IsFrameActive()
+    || !imgui_module->GetImGuiContext()) {
     return;
-  ImGui::SetCurrentContext(renderer->GetImGuiContext());
+  }
+  ImGui::SetCurrentContext(imgui_module->GetImGuiContext());
   ImGui::SetNextWindowPos(ImVec2(128, 20), ImGuiCond_Always);
   ImGui::SetNextWindowBgAlpha(.9F);
-  constexpr auto flags = ImGuiWindowFlags_AlwaysAutoResize
-    | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings
-    | ImGuiWindowFlags_NoInputs;
+  constexpr auto flags = static_cast<ImGuiWindowFlags>(
+    static_cast<unsigned>(ImGuiWindowFlags_AlwaysAutoResize)
+    | static_cast<unsigned>(ImGuiWindowFlags_NoCollapse)
+    | static_cast<unsigned>(ImGuiWindowFlags_NoSavedSettings)
+    | static_cast<unsigned>(ImGuiWindowFlags_NoInputs));
   if (ImGui::Begin("Mixed exposure validation", nullptr, flags)) {
     ImGui::TextUnformatted(
       "Sphere: opaque | Cube: emissive | Cone: masked | Cylinder: translucent");
-    const char* phase = config_.exposure_proof == ExposureProofScenario::kMixed
-      ? "Static reference"
-      : frame < 40U  ? "Static reference"
-      : frame < 52U  ? "Motion and compensation"
-      : frame < 60U  ? "PiP manual exposure"
-      : frame < 72U  ? "Auto, seed and cut"
-      : frame < 88U  ? "Reorder, viewport and scissor"
-      : frame < 100U ? "Window resize"
-      : frame < 108U ? "Hide and reopen"
-      : frame < 112U ? "Fresh PiP lifetime"
-      : frame < 120U ? "Shared exposure"
-      : frame < 128U ? "Source removed"
-      : frame < 136U ? "Source recreated"
-                     : "Paused final state";
-    ImGui::Text(
-      "Frame %llu | %s", static_cast<unsigned long long>(frame), phase);
+    const auto phase = config_.exposure_proof == ExposureProofScenario::kMixed
+      ? std::string_view { "Static reference" }
+      : InteractionPhaseName(frame);
+    const auto line = fmt::format("Frame {} | {}", frame, phase);
+    ImGui::TextUnformatted(line.c_str());
   }
   ImGui::End();
 }
@@ -1420,8 +1592,8 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
       extent.width, extent.height);
     return;
   }
-  const float sw = static_cast<float>(extent.width);
-  const float sh = static_cast<float>(extent.height);
+  const auto sw = static_cast<float>(extent.width);
+  const auto sh = static_cast<float>(extent.height);
 
   if (config_.feature_variant_proof_layout) {
     constexpr float kMargin = 16.0F;
@@ -1431,10 +1603,10 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
     const float cell_h
       = std::max(1.0F, std::floor((sh - (2.0F * kMargin) - kGap) / 2.0F));
     const auto make_view = [cell_w, cell_h](const std::size_t index) -> View {
-      const float x
-        = kMargin + static_cast<float>(index % 3U) * (cell_w + kGap);
-      const float y
-        = kMargin + static_cast<float>(index / 3U) * (cell_h + kGap);
+      const auto column = index % 3U;
+      const auto row = index / 3U;
+      const float x = kMargin + (static_cast<float>(column) * (cell_w + kGap));
+      const float y = kMargin + (static_cast<float>(row) * (cell_h + kGap));
       View view {};
       view.viewport = ViewPort {
         .top_left_x = x,
@@ -1455,14 +1627,14 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
     const auto configure_variant
       = [](vortex::CompositionView& view,
           const vortex::CompositionView::ViewFeatureProfile profile,
-          const graphics::Color clear_color) {
-          const auto spec = vortex::ResolveViewFeatureProfileSpec(profile);
-          view.feature_profile = profile;
-          view.feature_mask = spec.feature_mask;
-          view.with_atmosphere = true;
-          view.with_height_fog = true;
-          view.clear_color = clear_color;
-        };
+          const graphics::Color clear_color) -> void {
+      const auto spec = vortex::ResolveViewFeatureProfileSpec(profile);
+      view.feature_profile = profile;
+      view.feature_mask = spec.feature_mask;
+      view.with_atmosphere = true;
+      view.with_height_fog = true;
+      view.clear_color = clear_color;
+    };
 
     auto depth_only = vortex::CompositionView::ForScene(
       main_view_id_, make_view(0U), main_camera_node_);
@@ -1522,26 +1694,6 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
         view.view.viewport.height, view.view.viewport.top_left_x,
         view.view.viewport.top_left_y);
     }
-
-    View overlay_view {};
-    overlay_view.viewport = ViewPort {
-      .top_left_x = 0.0F,
-      .top_left_y = 0.0F,
-      .width = sw,
-      .height = sh,
-      .min_depth = 0.0F,
-      .max_depth = 1.0F,
-    };
-    overlay_view.scissor = Scissors {
-      .left = 0,
-      .top = 0,
-      .right = static_cast<int32_t>(extent.width),
-      .bottom = static_cast<int32_t>(extent.height),
-    };
-
-    const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
-    views.push_back(vortex::CompositionView::ForImGui(
-      imgui_view_id, overlay_view, [](graphics::CommandRecorder&) { }));
     return;
   }
 
@@ -1621,10 +1773,6 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
     };
     shadow_comp.clear_color = graphics::Color { 0.08F, 0.07F, 0.02F, 1.0F };
     views.push_back(std::move(shadow_comp));
-
-    const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
-    views.push_back(vortex::CompositionView::ForImGui(imgui_view_id,
-      make_view(0.0F, 0.0F, sw, sh), [](graphics::CommandRecorder&) { }));
     return;
   }
 
@@ -1703,10 +1851,6 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
     };
     shadow_comp.clear_color = graphics::Color { 0.08F, 0.07F, 0.02F, 1.0F };
     views.push_back(std::move(shadow_comp));
-
-    const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
-    views.push_back(vortex::CompositionView::ForImGui(imgui_view_id,
-      make_view(0.0F, 0.0F, sw, sh), [](graphics::CommandRecorder&) { }));
     return;
   }
 
@@ -1796,11 +1940,6 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
 
     views.push_back(std::move(pip_comp));
   }
-
-  // 3. ImGui
-  const auto imgui_view_id = this->GetOrCreateViewId("ImGuiView");
-  views.push_back(vortex::CompositionView::ForImGui(
-    imgui_view_id, main_view, [](graphics::CommandRecorder&) { }));
 }
 
 auto MainModule::ClearBackbufferReferences() -> void { }

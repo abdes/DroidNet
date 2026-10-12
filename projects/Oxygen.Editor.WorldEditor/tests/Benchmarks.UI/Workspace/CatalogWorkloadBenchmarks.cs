@@ -36,7 +36,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
     [TestCategory("Performance")]
     public Task ThousandInputBrowserFiltersWithLiveHundredNodeViewport() => EnqueueAsync(async () =>
     {
-        var fixture = new NativeSceneFixture(automatic: false, engineSettings: new EngineSettings { Graphics = new() { EnableDebugLayer = false, EnableValidation = false }, Renderer = new() { DirectionalShadowPolicy = DirectionalShadowPolicy.ConventionalOnly, EnableImGui = false }, Timing = new() { FixedDelta = TimeSpan.FromSeconds(1.0 / 60) }, });
+        var fixture = new NativeSceneFixture(automatic: false, engineSettings: new EngineSettings { Graphics = new() { EnableDebugLayer = false, EnableValidation = false }, Renderer = new() { DirectionalShadowPolicy = DirectionalShadowPolicy.ConventionalOnly }, Timing = new() { FixedDelta = TimeSpan.FromSeconds(1.0 / 60) }, });
         await using var lifetime = fixture.ConfigureAwait(true);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(5));

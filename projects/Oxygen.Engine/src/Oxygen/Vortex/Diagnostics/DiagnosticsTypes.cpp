@@ -36,7 +36,6 @@ auto to_string(const DiagnosticsFeatureSet features) -> std::string
   append_feature(DiagnosticsFeature::kFrameLedger, "FrameLedger");
   append_feature(DiagnosticsFeature::kGpuTimeline, "GpuTimeline");
   append_feature(DiagnosticsFeature::kShaderDebugModes, "ShaderDebugModes");
-  append_feature(DiagnosticsFeature::kImGuiPanels, "ImGuiPanels");
   append_feature(DiagnosticsFeature::kCaptureManifest, "CaptureManifest");
   append_feature(DiagnosticsFeature::kGpuDebugPrimitives, "GpuDebugPrimitives");
 

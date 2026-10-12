@@ -7,48 +7,55 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cstdint>
+#include <cstdlib>
+#include <exception>
 #include <filesystem>
-#include <ranges>
+#include <functional>
+#include <memory>
+#include <optional>
 #include <source_location>
 #include <span>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "Common/DemoCli.h"
+#include "Common/FrameCaptureCli.h"
 #include "Common/FrameCaptureCliOptions.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "MultiView/CompositingMode.h"
 #include "MultiView/MainModule.h"
-#include <SDL3/SDL.h>
-#include <asio/signal_set.hpp>
+#include "MultiView/SceneBootstrapper.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
-#include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Config/PlatformConfig.h>
+#include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/StartupPlan.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
-#include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/EventLoop.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/asio.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -114,11 +121,13 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
     = std::make_unique<engine::InputSystem>(app.platform->Input().ForRead());
   app.input_system = o::observer_ptr { input_sys.get() };
   register_module(std::move(input_sys));
+  if (!app.headless) {
+    register_module(std::make_unique<oxygen::imgui::ImGuiModule>());
+  }
 
   oxygen::RendererConfig renderer_config {
     .upload_queue_key
     = app.queue_strategy.KeyFor(g::QueueRole::kTransfer).get(),
-    .enable_imgui = !app.headless,
   };
   constexpr auto kMultiViewVortexCapabilities
     = oxygen::vortex::RendererCapabilityFamily::kScenePreparation
@@ -135,7 +144,7 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
     app.gfx_weak, renderer_config, kMultiViewVortexCapabilities));
 }
 
-auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
+auto AsyncMain(oxygen::examples::DemoAppContext& app,
   const oxygen::examples::multiview::MainModuleConfig& main_module_config)
   -> co::Co<int>
 {
@@ -156,7 +165,7 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
 
     RegisterEngineModules(app, main_module_config);
 
-    n.Start([&app]() -> co::Co<> {
+    n.Start([&app] -> co::Co<> {
       co_await app.platform->Windows().LastWindowClosed();
       LOG_F(
         INFO, "MultiView example: last window closed -> shutting down engine");
@@ -378,6 +387,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     }
     app.window_resolution = oxygen::examples::cli::ResolveWindowResolution(
       context, resolution, headless);
+    app.headless = headless;
 
     oxygen::examples::cli::ValidateGraphicsToolingOptions(graphics_tooling_cli);
     LOG_F(INFO, "Parsed frames option = {}", frames);
@@ -451,22 +461,25 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     }
     if (!exposure_view_only.empty()
       && main_module_config.exposure_proof != ExposureProof::kLayouts
-      && main_module_config.exposure_proof != ExposureProof::kMixed)
+      && main_module_config.exposure_proof != ExposureProof::kMixed) {
       throw std::invalid_argument(
         "Exposure view selection requires layouts or mixed proof");
+    }
     main_module_config.exposure_view_only = exposure_view_only;
     using VisualFog = oxygen::examples::multiview::VisualFogMode;
     main_module_config.visual_fog_jitter = visual_fog_jitter;
-    if (visual_fog_value == "clear")
+    if (visual_fog_value == "clear") {
       main_module_config.visual_fog_mode = VisualFog::kClear;
-    else if (visual_fog_value == "local")
+    } else if (visual_fog_value == "local") {
       main_module_config.visual_fog_mode = VisualFog::kLocal;
-    else if (visual_fog_value != "volume")
+    } else if (visual_fog_value != "volume") {
       throw std::invalid_argument("Unknown visual fog comparison");
+    }
     if (visual_fog_cycle || visual_fog_hold_local) {
-      if (main_module_config.exposure_proof != ExposureProof::kConsumerVisual)
+      if (main_module_config.exposure_proof != ExposureProof::kConsumerVisual) {
         throw std::invalid_argument(
           "Visual fog cycling requires consumer-visual");
+      }
       main_module_config.visual_fog_cycle = true;
       main_module_config.visual_fog_hold_local = visual_fog_hold_local;
       main_module_config.visual_fog_mode = VisualFog::kClear;
@@ -487,12 +500,15 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         "Exposure proof requires the ordinary main/PiP layout");
     }
     if (main_module_config.exposure_proof == ExposureProof::kInteractions
-      && (proof_layout || aux_proof_layout || feature_variant_proof_layout))
+      && (proof_layout || aux_proof_layout || feature_variant_proof_layout)) {
       throw std::invalid_argument(
         "Interactions require ordinary or offscreen layout");
+    }
     auto mode_lower = compositing_mode_value;
-    std::ranges::transform(mode_lower, mode_lower.begin(),
-      [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::ranges::transform(
+      mode_lower, mode_lower.begin(), [](unsigned char c) -> char {
+        return static_cast<char>(std::tolower(c));
+      });
     if (mode_lower == "copy") {
       main_module_config.compositing_mode
         = oxygen::examples::multiview::CompositingMode::kCopy;
@@ -553,12 +569,12 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .path_finder_config = path_finder_config,
         .timing = {
           .pacing_safety_margin = 250us,
-        }
+        },
       },
       startup_cvars
     );
 
-    const auto rc = co::Run(app, AsyncMain(app, frames, main_module_config));
+    const auto rc = co::Run(app, AsyncMain(app, main_module_config));
 
     app.platform->Stop();
     app.engine.reset();

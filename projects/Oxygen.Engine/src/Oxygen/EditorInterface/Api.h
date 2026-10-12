@@ -44,31 +44,31 @@ OXGN_EI_API auto CreateEngine(const EditorEngineConfig& config)
   -> std::unique_ptr<EngineContext>;
 OXGN_EI_API auto CreateEngine(const EngineConfig& config)
   -> std::unique_ptr<EngineContext>;
-OXGN_EI_API auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void;
+OXGN_EI_API auto RunEngine(const std::shared_ptr<EngineContext>& ctx) -> void;
 //! Run the loop and acknowledge completed platform, graphics, and module
 //! startup. The callback runs on the engine thread after startup module
 //! registration.
-OXGN_EI_API auto RunEngine(
-  std::shared_ptr<EngineContext> ctx, std::function<void()> on_started) -> void;
+OXGN_EI_API auto RunEngine(const std::shared_ptr<EngineContext>& ctx,
+  const std::function<void()>& on_started) -> void;
 //! Request loop shutdown; safe to repeat or race with native loop teardown.
 //! A null context or a context whose engine has exited is a no-op.
-OXGN_EI_API auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void;
+OXGN_EI_API auto StopEngine(const std::shared_ptr<EngineContext>& ctx) -> void;
 
 // Runtime configuration helpers
 // Set the engine target frames per second for the given engine context.
 // Value is handled by AsyncEngine::SetTargetFps which clamps to allowed range.
-OXGN_EI_API auto SetTargetFps(std::shared_ptr<EngineContext> ctx, uint32_t fps)
-  -> void;
+OXGN_EI_API auto SetTargetFps(
+  const std::shared_ptr<EngineContext>& ctx, uint32_t fps) -> void;
 
 // Turn graphics vsync on or off for every presented surface; applied by the
 // engine thread at the next frame start.
 OXGN_EI_API auto SetVSyncEnabled(
-  std::shared_ptr<EngineContext> ctx, bool enabled) -> void;
+  const std::shared_ptr<EngineContext>& ctx, bool enabled) -> void;
 
 // Returns a copy of the current engine configuration for inspection by
 // managed code or tests. If ctx or ctx->engine is null, returns a default
 // EngineConfig value-initialized to defaults.
-OXGN_EI_API auto GetEngineConfig(std::shared_ptr<EngineContext> ctx)
+OXGN_EI_API auto GetEngineConfig(const std::shared_ptr<EngineContext>& ctx)
   -> EngineConfig;
 
 OXGN_EI_API auto CreateScene(const char* name) -> bool;

@@ -31,6 +31,7 @@
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
@@ -171,24 +172,23 @@ try {
   shell->SetActivePanel("LightBench");
 
   main_view_id_ = GetOrCreateViewId("MainView");
-  console_bindings_
-    = std::make_unique<LightBenchConsoleBindings>(engine->GetConsole(),
-      LightBenchConsoleBindings::Actions {
-        .select =
-          [this](LightBenchPreset preset) {
-            pending_settings_ = PresetSettings(preset);
-          },
-        .reset = [this] { pending_settings_ = PresetSettings(active_preset_); },
-        .inspect =
-          [this] {
-            return fmt::format("active={} pending={} modified={}",
-              GetPresetInfo(active_preset_).id,
-              pending_settings_ ? GetPresetInfo(pending_settings_->preset).id
-                                : "none",
-              main_camera_.IsAlive()
-                && !IsPresetSettings(CaptureCurrentSettings()));
-          },
-      });
+  console_bindings_ = std::make_unique<LightBenchConsoleBindings>(
+    engine->GetConsole(),
+    LightBenchConsoleBindings::Actions {
+      .select = [this](LightBenchPreset preset) -> void {
+        pending_settings_ = PresetSettings(preset);
+      },
+      .reset
+      = [this] -> void { pending_settings_ = PresetSettings(active_preset_); },
+      .inspect = [this] -> std::string {
+        return fmt::format("active={} pending={} modified={}",
+          GetPresetInfo(active_preset_).id,
+          pending_settings_ ? GetPresetInfo(pending_settings_->preset).id
+                            : "none",
+          main_camera_.IsAlive()
+            && !IsPresetSettings(CaptureCurrentSettings()));
+      },
+    });
   LOG_F(INFO, "LightBench: MainView ID created: {}", main_view_id_.get());
   LOG_F(INFO, "LightBench: Module initialized");
   return shell;
@@ -241,7 +241,7 @@ auto MainModule::LoadSettings(const std::filesystem::path& path)
 
 auto MainModule::OnShutdown() noexcept -> void
 {
-#if defined(OXYGEN_BUILD_UI_TESTS)
+#ifdef OXYGEN_BUILD_UI_TESTS
   StopUiTests();
 #endif
   console_bindings_.reset();
@@ -370,10 +370,6 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
     = vortex::ShaderDebugMode::kDisabled;
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
-
-  const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
-  views.push_back(vortex::CompositionView::ForImGui(
-    imgui_view_id, view, [](graphics::CommandRecorder&) -> void { }));
 }
 
 auto MainModule::ResetMainViewState(
@@ -416,9 +412,9 @@ auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   }
 
   shell.Draw(context);
-  if (const auto renderer = ResolveVortexRenderer();
-    renderer && renderer->IsImGuiFrameActive() && light_bench_panel_) {
-    ImGui::SetCurrentContext(renderer->GetImGuiContext());
+  if (const auto imgui_module = ResolveImGuiModule();
+    imgui_module && imgui_module->IsFrameActive() && light_bench_panel_) {
+    ImGui::SetCurrentContext(imgui_module->GetImGuiContext());
     light_bench_panel_->DrawPresetOverlay();
   }
   co_return;
@@ -438,7 +434,7 @@ auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
 
 auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
 {
-#if defined(OXYGEN_BUILD_UI_TESTS)
+#ifdef OXYGEN_BUILD_UI_TESTS
   Base::OnFrameEnd(context);
 #else
   static_cast<void>(context);

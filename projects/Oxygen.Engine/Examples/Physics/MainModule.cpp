@@ -13,6 +13,7 @@
 #include <numbers>
 #include <optional>
 #include <source_location>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -103,8 +104,9 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
     = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
   constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
   const std::size_t n = (std::min)(maxn, std::strlen(name));
-  std::memcpy(desc.header.name, name, n);
-  desc.header.name[n] = '\0';
+  const auto header_name = std::span { desc.header.name };
+  std::memcpy(header_name.data(), name, n);
+  header_name[n] = '\0';
   desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
@@ -218,6 +220,9 @@ auto MainModule::BuildDefaultWindowProperties() const
 
 auto MainModule::ClearBackbufferReferences() -> void { }
 
+// Attaching only builds the shell and its bindings; running out of memory there
+// is not recoverable.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 auto MainModule::OnAttachedImpl(
   oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
@@ -809,8 +814,7 @@ auto MainModule::InitializePhysicsScenario() -> bool
     const auto scale
       = node.GetTransform().GetLocalScale().value_or(Vec3 { 1.0F, 1.0F, 1.0F });
     const bool is_floor = node.GetName() == "Floor";
-    const bool is_sphere
-      = node.GetName().find("Bowl") != std::string_view::npos;
+    const bool is_sphere = node.GetName().contains("Bowl");
     const bool is_ramp_surface = node.GetName() == "Ramp";
 
     physics::body::BodyDesc desc {};
@@ -831,7 +835,11 @@ auto MainModule::InitializePhysicsScenario() -> bool
       ? Quat { 1.0F, 0.0F, 0.0F, 0.0F }
       : node.GetTransform().GetLocalRotation().value_or(
           Quat { 1.0F, 0.0F, 0.0F, 0.0F });
-    desc.friction = is_ramp_surface ? 0.14F : (is_sphere ? 0.80F : 0.88F);
+    if (is_ramp_surface) {
+      desc.friction = 0.14F;
+    } else {
+      desc.friction = is_sphere ? 0.80F : 0.88F;
+    }
     desc.restitution = is_sphere ? 0.03F : 0.02F;
 
     if (!AttachRigidBody(node, desc)) {
@@ -1133,10 +1141,6 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
   main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
-
-  const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
-  views.push_back(vortex::CompositionView::ForImGui(
-    imgui_view_id, view, [](graphics::CommandRecorder&) -> void { }));
 }
 
 auto MainModule::UpdatePhysicsDemoPanelConfig(

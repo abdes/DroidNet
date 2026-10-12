@@ -7,27 +7,39 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cstdint>
+#include <cstdlib>
+#include <exception>
 #include <filesystem>
+#include <functional>
+#include <memory>
 #include <optional>
-#include <source_location>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <utility>
 
 #include "Common/DemoCli.h"
+#include "Common/FrameCaptureCli.h"
 #include "Common/FrameCaptureCliOptions.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 #include "RenderScene/MainModule.h"
-#if defined(OXYGEN_BUILD_UI_TESTS)
+
+#include <Oxygen/Config/EngineConfig.h>
+#include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Config/PlatformConfig.h>
+#include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Console/StartupPlan.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#ifdef OXYGEN_BUILD_UI_TESTS
 #  include "DemoShell/Test/UiTestSession.h"
 #endif
 #include "RenderScene/RuntimePaths.h"
-#include <asio/signal_set.hpp>
-#include <glm/vec3.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -37,12 +49,11 @@
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
-#include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Direct3D12/ImGui/ImGuiBackend.h>
+#include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/OxCo/Co.h>
@@ -56,10 +67,22 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 
-using namespace oxygen;
-using namespace oxygen::engine;
-using namespace oxygen::graphics;
+namespace co = oxygen::co;
+namespace engine = oxygen::engine;
+namespace examples = oxygen::examples;
+
+using oxygen::AsyncEngine;
+using oxygen::EngineConfig;
+using oxygen::Graphics;
+using oxygen::GraphicsBackendLoader;
+using oxygen::GraphicsConfig;
+using oxygen::observer_ptr;
+using oxygen::PathFinderConfig;
+using oxygen::Platform;
+using oxygen::PlatformConfig;
 using oxygen::examples::SettingsService;
+using oxygen::graphics::BackendType;
+using oxygen::graphics::QueueRole;
 using namespace std::chrono_literals;
 
 namespace {
@@ -108,7 +131,8 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
 {
   LOG_F(INFO, "Registering engine modules...");
 
-  auto register_module = [&](std::unique_ptr<engine::EngineModule> module) {
+  auto register_module
+    = [&](std::unique_ptr<engine::EngineModule> module) -> void {
     const bool registered = app.engine->RegisterModule(std::move(module));
     if (!registered) {
       LOG_F(ERROR, "Failed to register module");
@@ -121,11 +145,13 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
       app.platform->Input().ForRead());
     app.input_system = observer_ptr { input_sys.get() };
     register_module(std::move(input_sys));
+    if (!app.headless) {
+      register_module(std::make_unique<oxygen::imgui::ImGuiModule>());
+    }
 
     oxygen::RendererConfig renderer_config {
       .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
       .directional_shadow_policy = app.directional_shadow_policy,
-      .enable_imgui = !app.headless,
     };
     constexpr auto kRenderSceneVortexCapabilities
       = oxygen::vortex::RendererCapabilityFamily::kScenePreparation
@@ -152,7 +178,7 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
   }
 }
 
-auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
+auto AsyncMain(oxygen::examples::DemoAppContext& app,
   const bool preview_sun_enabled, const std::optional<int> environment_profile)
   -> co::Co<int>
 {
@@ -173,7 +199,7 @@ auto AsyncMain(oxygen::examples::DemoAppContext& app, uint32_t frames,
 
     RegisterEngineModules(app, preview_sun_enabled, environment_profile);
 
-    n.Start([&app, &n]() -> co::Co<> {
+    n.Start([&app] -> co::Co<> {
       co_await app.platform->Windows().LastWindowClosed();
       LOG_F(INFO,
         "RenderScene example: last window closed -> shutting down engine");
@@ -196,8 +222,10 @@ namespace {
 
 auto NormalizeCliToken(std::string value) -> std::string
 {
-  std::ranges::transform(value, value.begin(),
-    [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  std::ranges::transform(
+    value, value.begin(), [](const unsigned char c) -> char {
+      return static_cast<char>(std::tolower(c));
+    });
   return value;
 }
 
@@ -225,7 +253,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
 
   const auto runtime_paths
     = oxygen::examples::render_scene::ResolveRuntimePaths();
-#if defined(OXYGEN_BUILD_UI_TESTS)
+#ifdef OXYGEN_BUILD_UI_TESTS
   const bool isolated_settings
     = oxygen::examples::testing::UiTestSession::InitializeSettings();
 #else
@@ -434,7 +462,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     // Create the platform
     app.platform = std::make_shared<Platform>(PlatformConfig {
       .headless = app.headless,
-      .thread_pool_size = (std::min)(4u, std::thread::hardware_concurrency()),
+      .thread_pool_size = (std::min)(4U, std::thread::hardware_concurrency()),
     });
 
     auto path_finder_builder
@@ -495,7 +523,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       app.platform,
       app.gfx_weak,
       EngineConfig {
-        .application = { .name = "RenderScene Example", .version = 1u, },
+        .application = { .name = "RenderScene Example", .version = 1U, },
         .target_fps = target_fps,
         .frame_count = frames,
         .enable_asset_loader = true,
@@ -507,13 +535,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .graphics = { .enable_vsync = enable_vsync, },
         .timing = {
           .pacing_safety_margin = 250us,
-        }
+        },
       },
       startup_cvars
     );
 
-    const auto rc = co::Run(
-      app, AsyncMain(app, frames, preview_sun_enabled, environment_profile));
+    const auto rc
+      = co::Run(app, AsyncMain(app, preview_sun_enabled, environment_profile));
 
     app.engine->Stop();
     app.platform->Stop();
@@ -529,7 +557,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     app.platform.reset();
 
     LOG_F(INFO, "exit code: {}", rc);
-#if defined(OXYGEN_BUILD_UI_TESTS)
+#ifdef OXYGEN_BUILD_UI_TESTS
     return oxygen::examples::testing::UiTestSession::ExitCode(rc);
 #else
     return rc;

@@ -151,11 +151,6 @@ internal static class EngineSettingsExtensions
             config.DirectionalShadowPolicy = NativeSessionConversions.ToNative<DirectionalShadowImplementationPolicyManaged>(settings.DirectionalShadowPolicy.Value);
         }
 
-        if (settings.EnableImGui.HasValue)
-        {
-            config.EnableImGui = settings.EnableImGui.Value;
-        }
-
         if (settings.PathFinder.HasAnySetting())
         {
             config.PathFinder ??= new PathFinderConfigManaged();

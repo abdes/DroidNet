@@ -17,6 +17,7 @@
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Types.h>
+#include <Oxygen/Vortex/SurfaceLayerSource.h>
 
 namespace oxygen {
 class Platform;
@@ -40,13 +41,15 @@ namespace graphics {
 namespace oxygen::examples {
 
 class DemoAppContext;
+class ImGuiLayer;
 
 //! Single component combining native window + surface + framebuffers.
 /*!
  AppWindow owns the platform::Window, the graphics::Surface (swapchain) and
  the per-frame Framebuffer objects. It encapsulates the platform-side
  async handlers and the engine-thread-only GPU resource lifecycle (resize,
- framebuffer creation/cleanup, and notifications for ImGui device objects).
+ framebuffer creation/cleanup, and binding the ImGui module and its surface
+ layer to the window).
 
  The component is self-contained and intentionally avoids depending on other
  demo components so demo modules can AddComponent<AppWindow>(app) and treat
@@ -90,6 +93,8 @@ private:
   // Internal lifecycle management.
   auto ManageLifecycle() -> co::Co<>;
   auto Cleanup() -> void;
+  auto RegisterImGuiLayer() -> void;
+  auto UnbindImGui() -> void;
 
   // The platform and the engine are guaranteed to outlive this component.
   // We store them as observer_ptr to avoid unnecessarily extending their
@@ -107,7 +112,7 @@ private:
   std::weak_ptr<platform::Window> window_;
 
   // Platform destructor token.
-  size_t window_lifecycle_token_;
+  size_t window_lifecycle_token_ { 0 };
 
   // Per-instance shutdown event used to cancel async handlers.
   std::shared_ptr<co::Event> shutdown_event_;
@@ -128,6 +133,13 @@ private:
   // subscription is tied to this component instance without exposing the
   // concrete type in the header.
   std::unique_ptr<SubscriptionToken> imgui_subscription_token_;
+
+  // Draws the ImGui module's frame over the window's surface once both the
+  // module and the renderer are attached.
+  std::unique_ptr<ImGuiLayer> imgui_layer_;
+  vortex::SurfaceLayerToken imgui_layer_token_ {
+    vortex::kInvalidSurfaceLayerToken
+  };
 };
 
 } // namespace oxygen::examples

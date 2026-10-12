@@ -68,13 +68,6 @@ struct RendererConfig {
     DirectionalShadowImplementationPolicy::kConventionalOnly
   };
 
-  //! Enable renderer-owned ImGui plumbing when supported by the active
-  //! graphics backend.
-  //!
-  //! The application still owns the actual UI draw code, but the renderer owns
-  //! the backend setup, frame lifecycle, and final composition plumbing.
-  bool enable_imgui { false };
-
   //! Renderer-wide lighting/shadow allocation ceilings, including retained
   //! generations. These are admission limits, not preallocation targets.
   std::uint64_t lighting_allocation_limit_bytes { kDefaultLightingLimitBytes };

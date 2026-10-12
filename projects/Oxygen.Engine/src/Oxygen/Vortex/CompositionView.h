@@ -182,7 +182,8 @@ struct CompositionView {
   //! The standard Game UI layer (main menus, inventory, primary HUD).
   static constexpr ZOrder kZOrderGameUI { 1000 };
 
-  //! The absolute highest layer (e.g., Engine ImGui tools).
+  //! The highest view layer (engine tool views); surface layer sources
+  //! still draw above it.
   static constexpr ZOrder kZOrderTools {
     (std::numeric_limits<ZOrder::UnderlyingType>::max)() - 1
   };
@@ -290,7 +291,7 @@ struct CompositionView {
   //! When unset, the shell falls back to its capability-driven default.
   std::optional<ShadingMode> shading_mode;
 
-  //! Callback for recording view-specific SDR commands (HUD, Gizmos, ImGui).
+  //! Callback for recording view-specific SDR commands (HUD, gizmos).
   //! Executed in the correct hardware phase (Post-Tonemap for HDR views).
   std::function<void(graphics::CommandRecorder&)> on_overlay;
 
@@ -388,24 +389,6 @@ struct CompositionView {
       .view = view,
       .view_kind = ViewKind::kCompositionOnly,
       .z_order = z_order,
-      .camera = {},
-      .clear_color = { 0.0F, 0.0F, 0.0F, 0.0F },
-      .enable_hdr = false,
-      .on_overlay = std::move(on_overlay),
-    };
-  }
-
-  //! Creates a designated ImGui layer at its mandatory highest Z-order.
-  static auto ForImGui(ViewId id, View view,
-    std::function<void(graphics::CommandRecorder&)> on_overlay)
-    -> CompositionView
-  {
-    return CompositionView {
-      .name = "ImGui",
-      .id = id,
-      .view = view,
-      .view_kind = ViewKind::kCompositionOnly,
-      .z_order = kZOrderTools,
       .camera = {},
       .clear_color = { 0.0F, 0.0F, 0.0F, 0.0F },
       .enable_hdr = false,

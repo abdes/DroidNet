@@ -68,6 +68,7 @@ set(
   "Runtime/SceneActivationPolicy.h"
   "Runtime/RendererUiTypes.h"
   "Runtime/DemoModuleBase.h"
+  "Runtime/ImGuiLayer.h"
   "Runtime/PathNormalization.h"
   "Services/CameraSettingsService.h"
   "Services/ContentSettingsService.h"

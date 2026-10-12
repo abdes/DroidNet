@@ -142,10 +142,6 @@ auto MainModule::UpdateComposition(observer_ptr<engine::FrameContext> context,
 
     // 2. Register the 3D Scene View
     views.push_back(CompositionView::ForScene(main_view_id_, view, active_camera));
-
-    // 3. Register the ImGui Overlay (Tools) View - MANDATORY for UI visibility
-    auto imgui_view_id = GetOrCreateViewId("ImGuiView");
-    views.push_back(CompositionView::ForImGui(imgui_view_id, view, [](graphics::CommandRecorder&){}));
 }
 ```
 
@@ -154,7 +150,7 @@ auto MainModule::UpdateComposition(observer_ptr<engine::FrameContext> context,
 ## 🚨 Critical "Make-or-Break" Steps
 
 - **`co_await Base::OnSceneMutation(context)`**: If you forget to call the base implementation in mutation, your `UpdateComposition` will never be called, and nothing will render.
-- **`UpdateComposition` mandates an ImGui Layer**: Without `ForImGui`, the DemoShell panels and engine tools will not be composited, resulting in no UI.
+- **Register the ImGui module**: UI needs `oxygen::imgui::ImGuiModule` registered (unless headless). `AppWindow` binds it to the window and draws it over the composed surface; no ImGui view is published.
 - **Viewport Construction**: Passing an empty `View {}` to `ForScene` results in a black screen. Always construct a viewport from the current window size.
 - **Settings Sync in `OnFrameStart`**: Apply render modes and debug settings _before_ `Base::OnFrameStart`. These settings are used for resource allocation; applying them later (e.g., in `OnPreRender`) causes a visible 1-frame lag.
 - **`context.SetScene(...)`**: The rendering backend retrieves the scene from the `FrameContext`. If you don't call this in `HandleOnFrameStart`, you will get a black screen or an empty world.

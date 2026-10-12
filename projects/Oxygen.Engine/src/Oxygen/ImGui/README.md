@@ -4,11 +4,6 @@ This directory provides the engine's ImGui module, UI assets and generic
 widgets. It links engine, platform, console and graphics-common, never
 Vortex; Vortex has no ImGui dependency.
 
-The ImGui module and the surface layer described below land with step I1 of
-the [runtime host plan](../../../design/runtime-core/runtime-host.md#9-delivery-order-and-exit-gates);
-until then Vortex's `Internal/ImGuiRuntime` and `Passes/ImGuiOverlayPass` do
-this work.
-
 ## Why This Exists
 
 ImGui state is global per ImGui runtime instance (`GImGui`).
@@ -37,14 +32,16 @@ the runtime is unified. This affects how APIs must be designed and called.
 
 ## Lifecycle and Frame Flow
 
-1. The host creates `ImGuiModule` with the backend from
-   `Graphics::CreateImGuiGraphicsBackend()` when
-   `GraphicsConfig::enable_imgui` is set, and registers `ImGuiLayer` with the
-   renderer.
-2. `ImGuiModule::OnAttached` initializes the graphics backend (`Init`), which
+1. The host registers `ImGuiModule` unless it runs headless, and registers
+   `ImGuiLayer` with the renderer for the window's surface. Until
+   `Oxygen.Host` exists, each example registers the module and DemoShell's
+   `AppWindow` registers the layer.
+2. `ImGuiModule::OnAttached` creates the backend through
+   `Graphics::CreateImGuiGraphicsBackend()` and initializes it (`Init`), which
    creates the ImGui context and initializes `imgui_impl_dx12`, then binds the
    context and applies style/fonts/assets.
-3. `ImGuiModule::SetWindowId` creates `ImGuiSdl3Backend` for a valid window.
+3. `ImGuiModule::SetWindowId` creates `ImGuiSdl3Backend` for a valid window;
+   no frame starts while no window is bound.
 4. Each frame:
    - `OnFrameStart`: platform backend `NewFrame`, validate display metrics,
      graphics backend `NewFrame` (calls `ImGui::NewFrame`).
@@ -158,8 +155,8 @@ Bundled source assets:
 ## Integration Pointers
 
 - Runtime entry: `ImGuiModule`
-- Renderer seam: `vortex::SurfaceLayerSource`, implemented by Host's
-  `ImGuiLayer`
+- Renderer seam: `vortex::SurfaceLayerSource`, implemented by `ImGuiLayer`
+  (in DemoShell until `Oxygen.Host` exists)
 - Graphics backend interface:
   `src/Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h`
 - D3D12 backend impl:

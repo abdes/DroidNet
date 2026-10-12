@@ -27,7 +27,7 @@ enum class DiagnosticsFeature : std::uint32_t {
   kFrameLedger = OXYGEN_FLAG(0),
   kGpuTimeline = OXYGEN_FLAG(1),
   kShaderDebugModes = OXYGEN_FLAG(2),
-  kImGuiPanels = OXYGEN_FLAG(3),
+  // OXYGEN_FLAG(3) retired (was kImGuiPanels); not reused.
   kCaptureManifest = OXYGEN_FLAG(4),
   kGpuDebugPrimitives = OXYGEN_FLAG(5),
 };
@@ -130,7 +130,6 @@ struct DiagnosticsFrameSnapshot {
   ShaderDebugMode active_shader_debug_mode { ShaderDebugMode::kDisabled };
   DiagnosticsFeatureSet requested_features { DiagnosticsFeature::kNone };
   DiagnosticsFeatureSet enabled_features { DiagnosticsFeature::kNone };
-  bool imgui_overlay_active { false };
   bool gpu_timeline_enabled { false };
   bool gpu_timeline_frame_available { false };
   bool capture_manifest_available { false };

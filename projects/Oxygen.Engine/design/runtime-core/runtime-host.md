@@ -1,6 +1,7 @@
 # Runtime host, play sessions and debug UI
 
-Status: **draft for owner review, 2026-10-11; reviewed 2026-10-12**. Owner
+Status: **draft for owner review, 2026-10-11; reviewed 2026-10-12; I1
+delivered 2026-10-12, awaiting the owner's visual check**. Owner
 decisions are recorded in [§10](#10-owner-decisions) with the review's
 position beside each. [§11](#11-open-problems-for-review) gives a definite
 answer to every problem and marks the ones only the owner can close.
@@ -171,17 +172,17 @@ DemoShell would be its only consumer.
 Namespace `oxygen::host`; library target `oxygen::host`; folder
 `src/Oxygen/Host`. Every piece is extracted from existing code.
 
-| Piece                   | Source                                                                           |
-| ----------------------- | -------------------------------------------------------------------------------- |
-| `HostConfig`, `RunHost` | example `main_impl.cpp` bootstrap                                                |
-| `HostWindow`            | `AppWindow`                                                                      |
-| `ViewPublisher`         | `DemoModuleBase` publish and composite half                                      |
-| `SceneStage`            | `SceneControlBlock`, `ActiveScene`                                               |
-| `HostModule`            | `DemoModuleBase` without DemoShell                                               |
-| `RuntimeCli`            | `DemoCli.h`, `FrameCaptureCli*.h`                                                |
-| `ViewportToolbar`       | new ([§5.4](#54-viewport-toolbar))                                               |
-| `ImGuiLayer`            | overlay half of `Vortex/Internal/ImGuiRuntime` ([§5.3](#53-oxygenimgui-widgets)) |
-| `GpuWorkOverlay`        | new ([§5.5](#55-gpu-work-overlay))                                               |
+| Piece                   | Source                                                             |
+| ----------------------- | ------------------------------------------------------------------ |
+| `HostConfig`, `RunHost` | example `main_impl.cpp` bootstrap                                  |
+| `HostWindow`            | `AppWindow`                                                        |
+| `ViewPublisher`         | `DemoModuleBase` publish and composite half                        |
+| `SceneStage`            | `SceneControlBlock`, `ActiveScene`                                 |
+| `HostModule`            | `DemoModuleBase` without DemoShell                                 |
+| `RuntimeCli`            | `DemoCli.h`, `FrameCaptureCli*.h`                                  |
+| `ViewportToolbar`       | new ([§5.4](#54-viewport-toolbar))                                 |
+| `ImGuiLayer`            | DemoShell's interim `ImGuiLayer` ([§5.3](#53-oxygenimgui-widgets)) |
+| `GpuWorkOverlay`        | new ([§5.5](#55-gpu-work-overlay))                                 |
 
 ### 3.1 Startup and shutdown
 
@@ -244,8 +245,8 @@ host is not changed ([§10](#10-owner-decisions)).
 optional client size instead of `DemoAppContext`. Behaviour is unchanged
 (lifecycle coroutine for close, resize and terminate; per-frame
 framebuffers; deferred release; binding the ImGui module to the window on
-attach and unbinding it on cleanup, where `AppWindow` calls
-`SetImGuiWindowId` on the renderer today) except one fix: the framebuffers
+attach and unbinding it on cleanup, with the `ImGuiLayer` registration that
+`AppWindow` performs since I1) except one fix: the framebuffers
 are colour-only. Runtime
 composition and the ImGui overlay write colour only; the editor dropped the
 same depth texture from its composite targets (ED-M08 M08.V0 R2).
@@ -656,7 +657,7 @@ disappears. Owner decides.
 ### 5.3 `Oxygen.ImGui` widgets
 
 **ImGui module.** `oxygen::imgui::ImGuiModule`, an engine module at
-`kImGuiModulePriority`, owns what `Vortex/Internal/ImGuiRuntime` owns today
+`kImGuiModulePriority`, owns what the former `Vortex/Internal/ImGuiRuntime` owned
 except rendering: it creates the graphics backend through
 `Graphics::CreateImGuiGraphicsBackend()`, binds the SDL platform backend to a
 window (`SetWindowId`), applies the Spectrum style, fonts and icons, calls

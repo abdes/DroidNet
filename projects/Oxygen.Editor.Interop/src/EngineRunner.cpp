@@ -140,7 +140,6 @@ namespace Oxygen::Interop {
     if (engine_cfg != nullptr) {
       if (engine_cfg->Graphics != nullptr) {
         editor_cfg->Platform->Headless = engine_cfg->Graphics->Headless;
-        editor_cfg->Renderer->EnableImGui = engine_cfg->Graphics->EnableImGui;
       }
       if (engine_cfg->PathFinder != nullptr) {
         editor_cfg->Renderer->PathFinder = engine_cfg->PathFinder;

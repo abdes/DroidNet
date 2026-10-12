@@ -10,21 +10,32 @@
 
 #include "DemoShell/Runtime/AppWindow.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/ImGuiLayer.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/ModuleEvent.h>
 #include <Oxygen/Graphics/Common/DeferredObjectRelease.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Platform/Types.h>
 #include <Oxygen/Platform/Window.h>
+#include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/SurfaceLayerSource.h>
 
 namespace oxygen::examples {
 
@@ -48,7 +59,6 @@ AppWindow::AppWindow(const DemoAppContext& app) noexcept
   , engine_(app.engine.get()) // observe only
   , gfx_weak_(app.gfx_weak)
   , requested_resolution_(app.window_resolution)
-  , window_lifecycle_token_(0)
 {
   // Sanity checks only; heavyweight initialization is explicit and deferred.
   CHECK_NOTNULL_F(platform_);
@@ -59,6 +69,9 @@ AppWindow::AppWindow(const DemoAppContext& app) noexcept
   DLOG_F(INFO, "AppWindow constructed");
 }
 
+// Teardown only unregisters handlers and releases resources; a failure there
+// leaves nothing to recover, so it terminates.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 AppWindow::~AppWindow() noexcept
 {
   DLOG_SCOPE_FUNCTION(INFO);
@@ -117,7 +130,7 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
   // Start the consolidated window lifecycle manager using a weak pointer
   // to avoid circular references that prevent destruction.
   platform_->Async().Nursery().Start(
-    [weak_self = weak_from_this()]() -> co::Co<> {
+    [weak_self = weak_from_this()] -> co::Co<> {
       if (auto self = weak_self.lock()) {
         co_await self->ManageLifecycle();
       }
@@ -132,7 +145,7 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
   const auto win_id = win_ref->Id();
   window_lifecycle_token_ = platform_->RegisterWindowAboutToBeDestroyedHandler(
     [weak_self = weak_from_this(), win_id](
-      platform::WindowIdType closing_window_id) {
+      platform::WindowIdType closing_window_id) -> void {
       if (closing_window_id != win_id) {
         return;
       }
@@ -143,10 +156,13 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
 
   if (CreateSurface() && EnsureFramebuffers()) {
     auto sub = engine_->SubscribeModuleAttached(
-      [this](engine::ModuleEvent const& ev) {
-        if (ev.type_id == vortex::Renderer::ClassTypeId()) {
-          auto& renderer = static_cast<vortex::Renderer&>(*ev.module);
-          renderer.SetImGuiWindowId(GetWindowId());
+      [this](engine::ModuleEvent const& ev) -> void {
+        if (ev.type_id == imgui::ImGuiModule::ClassTypeId()) {
+          static_cast<imgui::ImGuiModule&>(*ev.module)
+            .SetWindowId(GetWindowId());
+          RegisterImGuiLayer();
+        } else if (ev.type_id == vortex::Renderer::ClassTypeId()) {
+          RegisterImGuiLayer();
         }
       },
       /*replay_existing=*/true);
@@ -157,6 +173,37 @@ auto AppWindow::CreateAppWindow(const platform::window::Properties& props)
   }
 
   return false;
+}
+
+auto AppWindow::RegisterImGuiLayer() -> void
+{
+  if (imgui_layer_) {
+    return;
+  }
+  const auto imgui_module = engine_->GetModule<imgui::ImGuiModule>();
+  const auto renderer = engine_->GetModule<vortex::Renderer>();
+  if (!imgui_module || !renderer) {
+    return;
+  }
+  imgui_layer_
+    = std::make_unique<ImGuiLayer>(observer_ptr { &imgui_module->get() });
+  imgui_layer_token_ = renderer->get().RegisterSurfaceLayerSource(
+    vortex::CompositionView::kDefaultSurfaceRoute,
+    observer_ptr<vortex::SurfaceLayerSource> { imgui_layer_.get() });
+}
+
+auto AppWindow::UnbindImGui() -> void
+{
+  if (imgui_layer_token_ != vortex::kInvalidSurfaceLayerToken) {
+    if (const auto renderer = engine_->GetModule<vortex::Renderer>()) {
+      renderer->get().UnregisterSurfaceLayerSource(imgui_layer_token_);
+    }
+    imgui_layer_token_ = vortex::kInvalidSurfaceLayerToken;
+  }
+  imgui_layer_.reset();
+  if (const auto imgui_module = engine_->GetModule<imgui::ImGuiModule>()) {
+    imgui_module->get().SetWindowId(platform::kInvalidWindowId);
+  }
 }
 
 auto AppWindow::GetWindow() const noexcept -> observer_ptr<platform::Window>
@@ -371,12 +418,12 @@ auto AppWindow::ManageLifecycle() -> co::Co<>
     // component shutdown. Use lambda for terminal to ensure we stop listening
     // once signaled.
     auto [close, event, terminal, shutdown]
-      = co_await co::AnyOf([w]() -> co::Co<> { co_await w->CloseRequested(); },
-        [w]() -> co::Co<platform::window::Event> {
+      = co_await co::AnyOf([w] -> co::Co<> { co_await w->CloseRequested(); },
+        [w] -> co::Co<platform::window::Event> {
           const auto [from, to] = co_await w->Events().UntilChanged();
           co_return to;
         },
-        [p = self->platform_, term_signaled]() -> co::Co<> {
+        [p = self->platform_, term_signaled] -> co::Co<> {
           if (term_signaled) {
             co_await co::kSuspendForever;
           }
@@ -430,9 +477,7 @@ auto AppWindow::Cleanup() -> void
   LOG_F(INFO, "Cleanup and release resources (window_id={})", GetWindowId());
 
   // Release resources and clear the state.
-  if (auto renderer = engine_->GetModule<vortex::Renderer>()) {
-    renderer->get().SetImGuiWindowId(platform::kInvalidWindowId);
-  }
+  UnbindImGui();
   ClearFramebuffers();
 
   if (!gfx_weak_.expired()) {

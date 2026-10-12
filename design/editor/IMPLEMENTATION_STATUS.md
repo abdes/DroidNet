@@ -1193,7 +1193,8 @@ readers. Primary/Secondary names remain unchanged.
       into running slots. Instantiation, cooker, scripting and input tests
       pass. In RenderScene the owner loaded every maintained scene, saw the
       camera-switch scene's script switch cameras, and saw two edits of its
-      source reload into the running scene. M08.10m is next.
+      source reload into the running scene. M08.10m is in progress: runtime
+      host I1 (ImGui out of Vortex) delivered 2026-10-12, owner UI check open.
 - [ ] M08.11 asset thumbnails and previews.
 - [ ] M08.12 drag-and-drop scene assembly and closeout walkthrough.
 - [x] M02 supported single-viewport resize/discovery evidence is recorded; the

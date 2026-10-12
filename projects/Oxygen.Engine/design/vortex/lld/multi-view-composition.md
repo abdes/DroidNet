@@ -962,12 +962,12 @@ OXGN_VRTX_API auto Renderer::UnregisterSurfaceLayerSource(
 For each active source whose surface has a composition this frame, Vortex:
 
 1. owns an `RGBA8_UNORM` layer texture sized to the composite target,
-2. records `SurfaceLayerPass`: bind and clear the layer, call `Record`, return
-   the texture to `kCommon`,
+2. records the layer (`Internal/SurfaceLayers`): bind and clear it, call
+   `Record`, return the texture to `kCommon`,
 3. appends a blend-texture task above every view layer.
 
-This is the path `ImGuiRuntime::RenderOverlay` and `ImGuiOverlayPass` implement
-today, generalized and without ImGui types. The separate layer is kept instead
+This generalizes the former ImGui overlay path without ImGui types. The
+separate layer is kept instead
 of recording directly into the surface target, because UI draws in 8-bit sRGB
 with its own alpha while the surface may use another format; the blend task is
 the colour-space boundary ([§13.1](#131-layer-types)). Raw `surface_overlays`
@@ -980,7 +980,7 @@ Removed from Vortex by this contract:
 
 | Removed                                                                   | Replacement                                                           |
 | ------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `Internal/ImGuiRuntime.*`, `Passes/ImGuiOverlayPass.*`                    | `SurfaceLayerPass`; ImGui lifecycle moves to `Oxygen.ImGui`           |
+| `Internal/ImGuiRuntime.*`, `Passes/ImGuiOverlayPass.*`                    | `Internal/SurfaceLayers`; ImGui lifecycle moves to `Oxygen.ImGui`     |
 | `Renderer::SetImGuiWindowId`, `GetImGuiContext`, `IsImGuiFrameActive`     | the ImGui module's own API                                            |
 | `RendererConfig::enable_imgui` and the `kDiagnosticsAndProfiling` gate    | the host creates the ImGui module from `GraphicsConfig::enable_imgui` |
 | `oxygen::imgui` private link, `Oxygen.ImGui` styles, `Platform/ImGui` use | none                                                                  |

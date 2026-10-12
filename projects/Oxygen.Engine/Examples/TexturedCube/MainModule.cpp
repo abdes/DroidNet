@@ -4,28 +4,40 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <filesystem>
 #include <memory>
 #include <source_location>
+#include <utility>
+#include <vector>
 
+#include "DemoShell/DemoShell.h"
 #include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/SkyboxService.h"
 #include "DemoShell/UI/DemoShellUi.h"
 #include "TexturedCube/MainModule.h"
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <imgui.h>
+#include "TexturedCube/SceneSetup.h"
+#include "TexturedCube/TextureLoadingService.h"
+#include "TexturedCube/UI/MaterialsSandboxPanel.h"
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/CompositionView.h>
 
 namespace oxygen::examples::textured_cube {
@@ -36,7 +48,7 @@ namespace {
 
 MainModule::MainModule(const DemoAppContext& app)
   : Base(app)
-  , last_viewport_({ 0, 0 })
+  , last_viewport_({ .width = 0, .height = 0 })
 {
   DCHECK_NOTNULL_F(app_.platform);
   DCHECK_F(!app_.gfx_weak.expired());
@@ -106,8 +118,8 @@ auto MainModule::RequestCustomMaterialLoad(const data::AssetKey& key) -> void
 
   selected_custom_material_.reset();
   custom_material_load_inflight_key_ = key;
-  asset_loader->StartLoadMaterialAsset(
-    key, [this, key](std::shared_ptr<data::MaterialAsset> material) {
+  asset_loader->StartLoadMaterialAsset(key,
+    [this, key](const std::shared_ptr<data::MaterialAsset>& material) -> void {
       if (!texture_vm_ || !texture_vm_->IsUseCustomMaterial()) {
         custom_material_load_inflight_key_.reset();
         return;
@@ -142,13 +154,15 @@ auto MainModule::BuildDefaultWindowProperties() const
 
   platform::window::Properties p("Textured Cube (Demo Shell)");
   p.extent = { .width = kWidth, .height = kHeight };
-  p.flags = { .hidden = false,
+  p.flags = {
+    .hidden = false,
     .always_on_top = false,
     .full_screen = app_.fullscreen,
     .maximized = false,
     .minimized = false,
     .resizable = true,
-    .borderless = false };
+    .borderless = false,
+  };
   return p;
 }
 
@@ -213,22 +227,23 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
       observer_ptr { &shell->GetFileBrowserService() });
     texture_vm_->SetCubeRebuildNeeded();
 
-    texture_vm_->SetOnSkyboxSelected([this](oxygen::content::ResourceKey key) {
-      if (skybox_service_) {
-        skybox_service_->SetSkyboxResourceKey(key);
-        SkyboxService::SkyLightParams params;
-        if (const auto settings = SettingsService::ForDemoApp()) {
-          if (const auto intensity
-            = settings->GetFloat("env.sky_sphere.intensity")) {
-            params.sky_sphere_intensity = *intensity;
+    texture_vm_->SetOnSkyboxSelected(
+      [this](oxygen::content::ResourceKey key) -> void {
+        if (skybox_service_) {
+          skybox_service_->SetSkyboxResourceKey(key);
+          SkyboxService::SkyLightParams params;
+          if (const auto settings = SettingsService::ForDemoApp()) {
+            if (const auto intensity
+              = settings->GetFloat("env.sky_sphere.intensity")) {
+              params.sky_sphere_intensity = *intensity;
+            }
           }
+          params.intensity_mul = 1.0F;
+          params.diffuse_intensity = 1.0F;
+          params.specular_intensity = 1.0F;
+          skybox_service_->ApplyToScene(params);
         }
-        params.intensity_mul = 1.0F;
-        params.diffuse_intensity = 1.0F;
-        params.specular_intensity = 1.0F;
-        skybox_service_->ApplyToScene(params);
-      }
-    });
+      });
 
     texture_panel_ = std::make_shared<ui::MaterialsSandboxPanel>();
     texture_panel_->Initialize(observer_ptr { texture_vm_.get() });
@@ -248,7 +263,7 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
 
 auto MainModule::OnShutdown() noexcept -> void
 {
-#if defined(OXYGEN_BUILD_UI_TESTS)
+#ifdef OXYGEN_BUILD_UI_TESTS
   StopUiTests();
 #endif
   // Clear scene from shell first to ensure controlled destruction
@@ -267,7 +282,7 @@ auto MainModule::OnShutdown() noexcept -> void
   selected_custom_material_key_.reset();
   custom_material_load_inflight_key_.reset();
 
-  last_viewport_ = { 0, 0 };
+  last_viewport_ = { .width = 0, .height = 0 };
 
   // Clear observers
   active_scene_ = {};
@@ -340,7 +355,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       texture_vm_->SetCubeRebuildNeeded();
 
       texture_vm_->SetOnSkyboxSelected(
-        [this](oxygen::content::ResourceKey key) {
+        [this](oxygen::content::ResourceKey key) -> void {
           if (skybox_service_) {
             skybox_service_->SetSkyboxResourceKey(key);
             SkyboxService::SkyLightParams params;
@@ -393,9 +408,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         && asset_loader) {
         forced_error_key_ = asset_loader->MintSyntheticTextureKey();
       }
-
-      const std::pair<glm::vec2, glm::vec2> uv_transform
-        = texture_vm_->GetEffectiveUvTransform();
 
       glm::vec4 surface_base_color { 1.0F };
       if (surface_vm.use_constant_base_color) {
@@ -495,11 +507,6 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
   main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
-
-  // Also render our tools layer
-  const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
-  views.push_back(vortex::CompositionView::ForImGui(
-    imgui_view_id, view, [](graphics::CommandRecorder&) { }));
 }
 
 } // namespace oxygen::examples::textured_cube

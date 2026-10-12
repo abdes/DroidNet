@@ -10,6 +10,7 @@
 #include <cstring>
 #include <memory>
 #include <source_location>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
@@ -71,8 +72,9 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
     = static_cast<uint8_t>(oxygen::data::AssetType::kMaterial);
   constexpr std::size_t maxn = sizeof(desc.header.name) - 1;
   const std::size_t n = (std::min)(maxn, std::strlen(name));
-  std::memcpy(desc.header.name, name, n);
-  desc.header.name[n] = '\0';
+  const auto header_name = std::span { desc.header.name };
+  std::memcpy(header_name.data(), name, n);
+  header_name[n] = '\0';
   desc.header.version = oxygen::data::pak::render::kMaterialAssetVersion;
   desc.header.streaming_priority = 255;
   desc.material_domain = static_cast<uint8_t>(domain);
@@ -145,6 +147,9 @@ auto MainModule::StageInitialScene(DemoShell& shell) -> void
     });
 }
 
+// Attaching only builds the shell and its bindings; running out of memory there
+// is not recoverable.
+// NOLINTNEXTLINE(bugprone-exception-escape)
 auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
 {
@@ -529,10 +534,6 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
   main_comp.with_atmosphere = true;
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
-
-  const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
-  views.push_back(vortex::CompositionView::ForImGui(
-    imgui_view_id, view, [](graphics::CommandRecorder&) -> void { }));
 }
 
 } // namespace oxygen::examples::input_system

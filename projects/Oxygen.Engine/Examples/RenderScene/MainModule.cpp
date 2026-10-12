@@ -48,10 +48,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
 #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Vortex/CompositionView.h>
-
-using oxygen::scene::SceneNodeFlags;
 
 namespace oxygen::examples::render_scene {
 
@@ -1034,11 +1031,6 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
   main_comp.with_local_fog = shell.IsLocalFogPassRequested();
   shell.OnMainViewReady(context, main_comp);
   views.push_back(std::move(main_comp));
-
-  // Also render our tools layer
-  const auto imgui_view_id = GetOrCreateViewId("ImGuiView");
-  views.push_back(vortex::CompositionView::ForImGui(
-    imgui_view_id, view, [](graphics::CommandRecorder&) -> void { }));
 }
 
 auto MainModule::ResetMainViewState(

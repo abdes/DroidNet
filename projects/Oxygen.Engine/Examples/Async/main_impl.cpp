@@ -46,6 +46,7 @@
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/OxCo/Co.h>
@@ -131,11 +132,13 @@ auto RegisterEngineModules(oxygen::examples::DemoAppContext& app) -> void
       app.platform->Input().ForRead());
     app.input_system = observer_ptr { input_sys.get() };
     register_module(std::move(input_sys));
+    if (!app.headless) {
+      register_module(std::make_unique<oxygen::imgui::ImGuiModule>());
+    }
 
     oxygen::RendererConfig renderer_config {
       .path_finder_config = app.engine->GetEngineConfig().path_finder_config,
       .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
-      .enable_imgui = !app.headless,
     };
     register_module(std::make_unique<oxygen::examples::async::MainModule>(app));
     register_module(

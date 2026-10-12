@@ -132,6 +132,7 @@ set(
   "RendererTag.h"
   "RenderMode.h"
   "ShaderDebugMode.h"
+  "SurfaceLayerSource.h"
   "ViewExtension.h"
   "ViewFeatureProfile.h"
   "Diagnostics/DiagnosticsCaptureManifest.h"
@@ -172,7 +173,6 @@ set(
   "Passes/SelectionOutlinePass.h"
   "Passes/ViewPickPass.h"
   "Passes/ViewOverlayPass.h"
-  "Passes/ImGuiOverlayPass.h"
   "Passes/RenderPass.h"
   "Environment/EnvironmentLightingService.h"
   "Environment/SceneBackground.h"
@@ -352,9 +352,9 @@ set(
   "Internal/CompositionViewImpl.h"
   "Internal/DeformationHistoryCache.cpp"
   "Internal/DeformationHistoryCache.h"
-  "Internal/ImGuiRuntime.cpp"
-  "Internal/ImGuiRuntime.h"
   "Internal/MeshRasterState.h"
+  "Internal/SurfaceLayers.cpp"
+  "Internal/SurfaceLayers.h"
   "Internal/BindlessRootBindings.h"
   "Internal/ViewConstantsGuard.h"
   "Internal/TextureViews.h"
@@ -389,7 +389,6 @@ set(
   "Passes/SelectionOutlinePass.cpp"
   "Passes/ViewPickPass.cpp"
   "Passes/ViewOverlayPass.cpp"
-  "Passes/ImGuiOverlayPass.cpp"
   "Passes/RenderPass.cpp"
   "Environment/EnvironmentLightingService.cpp"
   "Environment/Internal/SkyRenderer.cpp"
@@ -544,8 +543,6 @@ target_link_libraries(
     oxygen::nexus
     oxygen::scenesync
   PRIVATE
-    oxygen::imgui
-    oxygen::platform
     oxygen::profiling
 )
 

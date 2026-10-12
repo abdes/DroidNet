@@ -31,7 +31,6 @@
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Platform/Types.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
@@ -39,6 +38,7 @@
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
+#include <Oxygen/Vortex/SurfaceLayerSource.h>
 #include <Oxygen/Vortex/Types/CompositingTask.h>
 #include <Oxygen/Vortex/Types/EnvironmentLightingState.h>
 #include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
@@ -55,8 +55,6 @@
 #include <Oxygen/Vortex/ViewExtension.h>
 #include <Oxygen/Vortex/ViewFeatureProfile.h>
 #include <Oxygen/Vortex/api_export.h>
-
-struct ImGuiContext;
 
 namespace oxygen::graphics {
 class Buffer;
@@ -93,9 +91,9 @@ class CompositingPass;
 struct CompositingPassConfig;
 class DeformationHistoryCache;
 class GpuTimelineProfiler;
-class ImGuiRuntime;
 class PreviousViewHistoryCache;
 class RigidTransformHistoryCache;
+class SurfaceLayers;
 template <typename RendererT> class BasicRenderContextMaterializer;
 } // namespace oxygen::vortex::internal
 
@@ -706,6 +704,15 @@ public:
   OXGN_VRTX_API auto RegisterComposition(CompositionSubmission submission,
     std::shared_ptr<graphics::Surface> target_surface) -> void;
   OXGN_VRTX_API auto RegisterViewExtension(ViewExtensionPtr extension) -> void;
+  //! Draws `source` over everything composited on `surface` from the next
+  //! frame on. The caller owns the source and unregisters it before
+  //! destroying it.
+  OXGN_VRTX_NDAPI auto RegisterSurfaceLayerSource(
+    CompositionView::SurfaceRouteId surface,
+    observer_ptr<SurfaceLayerSource> source) -> SurfaceLayerToken;
+  //! Stops drawing the source; an unknown token is ignored.
+  OXGN_VRTX_API auto UnregisterSurfaceLayerSource(SurfaceLayerToken token)
+    -> void;
 
   OXGN_VRTX_API auto ForSinglePassHarness() -> SinglePassHarnessFacade;
   OXGN_VRTX_API auto ForRenderGraphHarness() -> RenderGraphHarnessFacade;
@@ -768,10 +775,6 @@ public:
   //! must use its slot.
   [[nodiscard]] OXGN_VRTX_API auto CheckFrameSession(
     const FrameSessionInput& session) const -> std::optional<ValidationIssue>;
-  OXGN_VRTX_API auto SetImGuiWindowId(platform::WindowIdType window_id) -> void;
-  [[nodiscard]] OXGN_VRTX_API auto GetImGuiContext() noexcept -> ImGuiContext*;
-  [[nodiscard]] OXGN_VRTX_NDAPI auto IsImGuiFrameActive() const noexcept
-    -> bool;
   OXGN_VRTX_API auto GetGraphics() -> std::shared_ptr<Graphics>;
   [[nodiscard]] OXGN_VRTX_API auto GetLocalFogEnabled() const noexcept -> bool;
   [[nodiscard]] OXGN_VRTX_API auto
@@ -948,7 +951,7 @@ private:
     60
   };
 
-  auto EnsureImGuiRuntime() -> internal::ImGuiRuntime*;
+  auto ComposeSurfaceLayers() -> void;
   OXGN_VRTX_API auto PopulateRenderContextViewState(
     RenderContext& render_context, engine::FrameContext& context,
     bool prefer_composite_source) const -> void;
@@ -1055,7 +1058,7 @@ private:
   std::shared_ptr<internal::CompositingPassConfig> compositing_pass_config_;
   std::unique_ptr<DiagnosticsService> diagnostics_service_;
   std::unique_ptr<internal::GpuTimelineProfiler> gpu_timeline_profiler_;
-  std::unique_ptr<internal::ImGuiRuntime> imgui_runtime_;
+  std::unique_ptr<internal::SurfaceLayers> surface_layers_;
   GroundGridConfig ground_grid_config_ {};
   RenderMode render_mode_ { RenderMode::kSolid };
   graphics::Color wireframe_color_ { 1.0F, 1.0F, 1.0F, 1.0F };

@@ -35,11 +35,6 @@ public sealed class RendererSettings
     public DirectionalShadowPolicy? DirectionalShadowPolicy { get; set; }
 
     /// <summary>
-    ///     Gets or sets a value indicating whether renderer-owned ImGui plumbing is enabled.
-    /// </summary>
-    public bool? EnableImGui { get; set; }
-
-    /// <summary>
     ///     Gets or sets renderer path resolution settings.
     /// </summary>
     public PathFinderSettings PathFinder { get; set; } = new();

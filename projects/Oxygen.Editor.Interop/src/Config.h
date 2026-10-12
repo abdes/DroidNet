@@ -188,14 +188,12 @@ namespace Oxygen::Interop {
     System::UInt64 MaxActiveViews;
     ShadowQualityTierManaged ShadowQualityTier;
     DirectionalShadowImplementationPolicyManaged DirectionalShadowPolicy;
-    bool EnableImGui;
 
     RendererConfigManaged()
       : PathFinder(gcnew PathFinderConfigManaged()),
       UploadQueueKey(gcnew System::String("")), MaxActiveViews(8),
       ShadowQualityTier(ShadowQualityTierManaged::High),
-      DirectionalShadowPolicy(DirectionalShadowImplementationPolicyManaged::ConventionalOnly),
-      EnableImGui(false) {
+      DirectionalShadowPolicy(DirectionalShadowImplementationPolicyManaged::ConventionalOnly) {
     }
 
     static RendererConfigManaged^ FromNative(native::RendererConfig const& n) {
@@ -208,7 +206,6 @@ namespace Oxygen::Interop {
       m->DirectionalShadowPolicy =
         static_cast<DirectionalShadowImplementationPolicyManaged>(
           n.directional_shadow_policy);
-      m->EnableImGui = n.enable_imgui;
       return m;
     }
 
@@ -224,7 +221,6 @@ namespace Oxygen::Interop {
       n.directional_shadow_policy =
         static_cast<native::DirectionalShadowImplementationPolicy>(
           DirectionalShadowPolicy);
-      n.enable_imgui = EnableImGui;
       return n;
     }
   };
@@ -603,8 +599,6 @@ namespace Oxygen::Interop {
       native_default.platform.headless = native_default.engine.graphics.headless;
       native_default.renderer.path_finder_config =
         native_default.engine.path_finder_config;
-      native_default.renderer.enable_imgui =
-        native_default.engine.graphics.enable_imgui;
       return EditorEngineConfigManaged::FromNative(native_default);
     }
   };

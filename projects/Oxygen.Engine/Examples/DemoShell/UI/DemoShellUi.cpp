@@ -6,8 +6,13 @@
 
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <exception>
+#include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <utility>
 
 #include "DemoShell/DemoShell.h"
 #include "DemoShell/PanelRegistry.h"
@@ -45,6 +50,8 @@
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
@@ -52,7 +59,9 @@
 #include <Oxygen/ImGui/Console/CommandPalette.h>
 #include <Oxygen/ImGui/Console/ConsolePanel.h>
 #include <Oxygen/ImGui/Console/ConsoleUiState.h>
+#include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 
 namespace oxygen::examples::ui {
 
@@ -177,28 +186,35 @@ namespace {
     bool visible = false;
     for (const auto entry : frame.GetViews()) {
       const auto& view = entry.get();
-      if (!view.metadata.is_scene_view)
+      if (!view.metadata.is_scene_view) {
         continue;
+      }
       const auto status = renderer.InspectViewRenderStatus(view.id);
-      if (!status || status->state != vortex::ViewRenderState::kFailed)
+      if (!status || status->state != vortex::ViewRenderState::kFailed) {
         continue;
+      }
       if (!opened) {
         const auto* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(
-          { viewport->WorkPos.x + viewport->WorkSize.x * 0.5F,
+          { viewport->WorkPos.x + (viewport->WorkSize.x * 0.5F),
             viewport->WorkPos.y + 12.0F },
           ImGuiCond_Always, { 0.5F, 0.0F });
-        visible = ImGui::Begin("Rendering failed", nullptr,
-          ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize
-            | ImGuiWindowFlags_NoInputs | ImGuiWindowFlags_NoSavedSettings);
+        constexpr auto kFlags = static_cast<ImGuiWindowFlags>(
+          static_cast<unsigned>(ImGuiWindowFlags_NoDecoration)
+          | static_cast<unsigned>(ImGuiWindowFlags_AlwaysAutoResize)
+          | static_cast<unsigned>(ImGuiWindowFlags_NoInputs)
+          | static_cast<unsigned>(ImGuiWindowFlags_NoSavedSettings));
+        visible = ImGui::Begin("Rendering failed", nullptr, kFlags);
         opened = true;
       }
       if (visible) {
-        ImGui::Text("%s: rendering failed", view.metadata.name.c_str());
+        const auto line = view.metadata.name + ": rendering failed";
+        ImGui::TextUnformatted(line.c_str());
       }
     }
-    if (opened)
+    if (opened) {
       ImGui::End();
+    }
   }
 
 } // namespace
@@ -394,7 +410,7 @@ struct DemoShellUi::Impl {
       kConsoleFilterWarningKey,
       kConsoleFilterErrorKey,
     };
-    for (size_t i = 0; i < severities.size(); ++i) {
+    for (std::size_t i = 0; i < severities.size(); ++i) {
       const bool value = settings->GetBool(keys[i]).value_or(true);
       console_ui_state.SetSeverityEnabled(severities[i], value);
       last_saved_severity_filters[i] = value;
@@ -450,7 +466,7 @@ struct DemoShellUi::Impl {
       kConsoleFilterWarningKey,
       kConsoleFilterErrorKey,
     };
-    for (size_t i = 0; i < severities.size(); ++i) {
+    for (std::size_t i = 0; i < severities.size(); ++i) {
       const bool enabled = console_ui_state.IsSeverityEnabled(severities[i]);
       if (enabled != last_saved_severity_filters[i]) {
         settings->SetBool(keys[i], enabled);
@@ -495,9 +511,10 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
   }
 
   auto& renderer = renderer_ref->get();
-  if (impl_->post_process_settings_service)
+  if (impl_->post_process_settings_service) {
     impl_->post_process_settings_service->BindVortexRenderer(
       observer_ptr { &renderer });
+  }
   if (impl_->panel_config.diagnostics && !impl_->diagnostics_panel
     && impl_->rendering_settings_service) {
     impl_->rendering_settings_service->BindVortexRenderer(
@@ -524,11 +541,12 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
       observer_ptr { &renderer });
   }
 
-  if (!renderer.IsImGuiFrameActive()) {
+  const auto imgui_module = impl_->engine->GetModule<imgui::ImGuiModule>();
+  if (!imgui_module || !imgui_module->get().IsFrameActive()) {
     return;
   }
 
-  auto* imgui_context = renderer.GetImGuiContext();
+  auto* imgui_context = imgui_module->get().GetImGuiContext();
   if (imgui_context == nullptr) {
     return;
   }
@@ -556,8 +574,9 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
   // Settings now flow through UiSettingsVm instead of view-owned state.
   impl_->axes_widget.Draw(impl_->ui_settings_vm.GetActiveCamera());
   impl_->stats_overlay.Draw(fc);
-  if (fc)
+  if (fc) {
     DrawViewFailures(*fc, renderer);
+  }
 
   if (impl_->file_browser_service) {
     impl_->file_browser_service->UpdateAndDraw();

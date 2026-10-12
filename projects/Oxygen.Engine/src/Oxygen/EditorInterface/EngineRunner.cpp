@@ -4,15 +4,29 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
+#include <chrono>
+#include <cstdint>
+#include <cstdlib>
 #include <exception>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
+#include <string_view>
 #include <thread>
 #include <utility>
 
-#if defined(_WIN32)
-#  include <Windows.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+
+#ifdef _WIN32
+#  include <Windows.h> // IWYU pragma: keep
+
+#  include <fileapi.h>
+#  include <minwindef.h>
+#  include <processenv.h>
+#  include <winbase.h>
+#  include <winnt.h>
 #else
 #  include <unistd.h>
 #endif
@@ -35,7 +49,8 @@
 namespace {
 
 // Protect the editor API's engine owner while stop/config calls overlap loop
-// exit.
+// exit. A mutex is mutable shared state by design.
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables)
 std::mutex engine_owner_mutex;
 
 //! Event loop tick: drives the engine's asio context (if supplied) and
@@ -81,26 +96,24 @@ namespace {
 
 auto RegisterEngineModules(oxygen::engine::interop::EngineContext& ctx) -> void
 {
-  using namespace oxygen;
-
   // Register engine modules
   LOG_F(INFO, "Registering engine modules...");
 
   // Helper lambda to register modules with error checking
   auto register_module
-    = [&](std::unique_ptr<oxygen::engine::EngineModule> module) {
-        const bool registered = ctx.engine->RegisterModule(std::move(module));
-        if (!registered) {
-          LOG_F(ERROR, "Failed to register module");
-          throw std::runtime_error("Module registration failed");
-        }
-      };
+    = [&](std::unique_ptr<oxygen::engine::EngineModule> module) -> void {
+    const bool registered = ctx.engine->RegisterModule(std::move(module));
+    if (!registered) {
+      LOG_F(ERROR, "Failed to register module");
+      throw std::runtime_error("Module registration failed");
+    }
+  };
 
   // Register built-in engine modules (one-time)
   {
     auto input_sys = std::make_unique<oxygen::engine::InputSystem>(
       ctx.platform->Input().ForRead());
-    ctx.input_system = observer_ptr { input_sys.get() };
+    ctx.input_system = oxygen::observer_ptr { input_sys.get() };
     register_module(std::move(input_sys));
   }
 }
@@ -108,8 +121,6 @@ auto RegisterEngineModules(oxygen::engine::interop::EngineContext& ctx) -> void
 auto AsyncMain(oxygen::engine::interop::EngineContext& ctx,
   const std::function<void()>& on_started) -> oxygen::co::Co<int>
 {
-  using namespace oxygen;
-
   // Structured concurrency scope.
   OXCO_WITH_NURSERY(n)
   {
@@ -117,15 +128,16 @@ auto AsyncMain(oxygen::engine::interop::EngineContext& ctx,
 
     // PLatform started and running is a prerequisite for many of the modules
     // and the other subsystems.
-    co_await n.Start(&Platform::ActivateAsync, std::ref(*ctx.platform));
+    co_await n.Start(&oxygen::Platform::ActivateAsync, std::ref(*ctx.platform));
     ctx.platform->Run();
 
     DCHECK_F(!ctx.gfx_weak.expired());
     auto gfx = ctx.gfx_weak.lock();
-    co_await n.Start(&Graphics::ActivateAsync, std::ref(*gfx));
+    co_await n.Start(&oxygen::Graphics::ActivateAsync, std::ref(*gfx));
     gfx->Run();
 
-    co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*ctx.engine));
+    co_await n.Start(
+      &oxygen::AsyncEngine::ActivateAsync, std::ref(*ctx.engine));
     ctx.engine->Run();
 
     // Everything is started, now register modules
@@ -139,7 +151,7 @@ auto AsyncMain(oxygen::engine::interop::EngineContext& ctx,
 
     co_await ctx.engine->Completed();
 
-    co_return co::kCancel;
+    co_return oxygen::co::kCancel;
   };
 
   co_return EXIT_SUCCESS;
@@ -160,8 +172,8 @@ auto CreateEngine(const EditorEngineConfig& config)
       "exception of unknown type\n";
 
   // Low-level error reporting function that won't allocate memory
-  auto report_error = [](std::string_view message) noexcept {
-#if defined(_WIN32)
+  auto report_error = [](std::string_view message) noexcept -> void {
+#ifdef _WIN32
     HANDLE stderr_handle = GetStdHandle(STD_ERROR_HANDLE);
     DWORD bytes_written { 0UL };
     WriteFile(stderr_handle, message.data(), static_cast<DWORD>(message.size()),
@@ -221,17 +233,16 @@ auto CreateEngine(const EngineConfig& config) -> std::unique_ptr<EngineContext>
   editor_config.engine = config;
   editor_config.platform.headless = config.graphics.headless;
   editor_config.renderer.path_finder_config = config.path_finder_config;
-  editor_config.renderer.enable_imgui = config.graphics.enable_imgui;
   return CreateEngine(editor_config);
 }
 
-auto RunEngine(std::shared_ptr<EngineContext> ctx) -> void
+auto RunEngine(const std::shared_ptr<EngineContext>& ctx) -> void
 {
-  RunEngine(std::move(ctx), {});
+  RunEngine(ctx, {});
 }
 
-auto RunEngine(
-  std::shared_ptr<EngineContext> ctx, std::function<void()> on_started) -> void
+auto RunEngine(const std::shared_ptr<EngineContext>& ctx,
+  const std::function<void()>& on_started) -> void
 {
   const auto rc = co::Run(*ctx, AsyncMain(*ctx, on_started));
 
@@ -268,7 +279,7 @@ auto RunEngine(
   loguru::flush();
 }
 
-auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void
+auto StopEngine(const std::shared_ptr<EngineContext>& ctx) -> void
 {
   const std::scoped_lock lock(engine_owner_mutex);
   if (ctx) {
@@ -279,22 +290,26 @@ auto StopEngine(std::shared_ptr<EngineContext> ctx) -> void
   }
 }
 
-auto SetTargetFps(std::shared_ptr<EngineContext> ctx, uint32_t fps) -> void
+auto SetTargetFps(const std::shared_ptr<EngineContext>& ctx, uint32_t fps)
+  -> void
 {
   const std::scoped_lock lock(engine_owner_mutex);
   if (!ctx || !ctx->engine) {
     return; // nothing to do
   }
 
+  // Keep the interop boundary robust: a rejected value is logged, not thrown.
   try {
     ctx->engine->SetTargetFps(fps);
+  } catch (const std::exception& ex) {
+    LOG_F(WARNING, "SetTargetFps({}) failed: {}", fps, ex.what());
   } catch (...) {
-    // keep interop boundary robust — swallow internal errors
+    LOG_F(WARNING, "SetTargetFps({}) failed with an unknown error", fps);
   }
 }
 
-auto SetVSyncEnabled(std::shared_ptr<EngineContext> ctx, const bool enabled)
-  -> void
+auto SetVSyncEnabled(
+  const std::shared_ptr<EngineContext>& ctx, const bool enabled) -> void
 {
   const std::scoped_lock lock(engine_owner_mutex);
   if (!ctx || !ctx->engine) {
@@ -304,7 +319,7 @@ auto SetVSyncEnabled(std::shared_ptr<EngineContext> ctx, const bool enabled)
   ctx->engine->SetVSyncEnabled(enabled);
 }
 
-auto GetEngineConfig(std::shared_ptr<EngineContext> ctx) -> EngineConfig
+auto GetEngineConfig(const std::shared_ptr<EngineContext>& ctx) -> EngineConfig
 {
   const std::scoped_lock lock(engine_owner_mutex);
   if (!ctx || !ctx->engine) {
