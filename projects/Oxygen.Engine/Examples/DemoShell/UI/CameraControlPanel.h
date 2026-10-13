@@ -10,34 +10,38 @@
 
 #include "DemoShell/UI/DemoPanel.h"
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+
+namespace oxygen::examples {
+class PanelCommands;
+} // namespace oxygen::examples
 
 namespace oxygen::examples::ui {
 
 class CameraVm;
+class UiSettingsVm;
 
 //! Camera control mode
 enum class CameraControlMode { kOrbit, kFly, kDrone };
 
 //! Camera control panel with mode switching and debugging
 /*!
- Displays an ImGui panel for controlling camera behavior. Powered by CameraVm,
- it provides ergonomics for switching between orbit and fly modes, adjusting
- speeds, and viewing live debug information.
-
- ### Usage Examples
-
- ```cpp
- CameraControlPanel panel(vm);
- // Registered with DemoShell; the shell draws DrawContents() when active.
- ```
+ Switches between orbit, fly and drone control, edits their settings and the
+ active camera's projection, and shows the camera pose and the axes. Every
+ control runs a `demo.camera.*` command.
 
  @see CameraVm
  */
 class CameraControlPanel final : public DemoPanel {
 public:
-  explicit CameraControlPanel(observer_ptr<CameraVm> vm);
+  CameraControlPanel(observer_ptr<CameraVm> vm,
+    observer_ptr<UiSettingsVm> ui_settings,
+    observer_ptr<PanelCommands> commands);
   ~CameraControlPanel() override = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(CameraControlPanel)
+  OXYGEN_MAKE_NON_MOVABLE(CameraControlPanel)
 
   //! Draws the panel content without creating a window.
   auto DrawContents() -> void override;
@@ -50,13 +54,14 @@ public:
 
 private:
   void DrawCameraModeTab();
-  void DrawDebugTab();
+  void DrawOrientationTab();
   void DrawCameraPoseInfo();
   void DrawProjectionSettings();
-  void DrawInputDebugInfo();
   void DrawDroneMinimap();
 
   observer_ptr<CameraVm> vm_;
+  observer_ptr<UiSettingsVm> ui_settings_;
+  observer_ptr<PanelCommands> commands_;
 };
 
 } // namespace oxygen::examples::ui

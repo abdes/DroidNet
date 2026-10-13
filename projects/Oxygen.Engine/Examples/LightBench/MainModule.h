@@ -9,9 +9,7 @@
 #include <memory>
 #include <string_view>
 
-#include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
 #include "LightBench/LightBenchPanel.h"
 #include "LightBench/LightBenchSettings.h"
@@ -21,6 +19,8 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/SceneStage.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -48,7 +48,7 @@ class MainModule final : public DemoModuleBase {
 public:
   using Base = oxygen::examples::DemoModuleBase;
 
-  explicit MainModule(const oxygen::examples::DemoAppContext& app,
+  explicit MainModule(const host::HostContext& host,
     LightBenchPreset startup_preset = LightBenchPreset::kNeutralReference);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
@@ -65,10 +65,7 @@ public:
   [[nodiscard]] auto GetSupportedPhases() const noexcept
     -> oxygen::engine::ModulePhaseMask override
   {
-    using namespace core;
-    return engine::MakeModuleMask<PhaseId::kFrameStart, PhaseId::kSceneMutation,
-      PhaseId::kGameplay, PhaseId::kPublishViews, PhaseId::kGuiUpdate,
-      PhaseId::kPreRender, PhaseId::kCompositing, PhaseId::kFrameEnd>();
+    return kDemoPhases;
   }
 
   ~MainModule() override;
@@ -85,29 +82,21 @@ public:
     -> void override;
   auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
-  auto OnGameplay(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
   auto OnGuiUpdate(observer_ptr<oxygen::engine::FrameContext> context)
     -> co::Co<> override;
-  auto OnPreRender(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
-  auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 
 protected:
 #if defined(OXYGEN_BUILD_UI_TESTS)
   auto RegisterUiTests(ImGuiTestEngine* engine) -> void override;
 #endif
-  auto BuildDefaultWindowProperties() const
+  [[nodiscard]] auto BuildWindowProperties() const
     -> platform::window::Properties override;
-
-  auto ClearBackbufferReferences() -> void override;
-
-  auto UpdateComposition(engine::FrameContext& context,
-    std::vector<vortex::CompositionView>& views) -> void override;
+  auto OnScenePublished(engine::FrameContext& context) -> void override;
+  auto BuildViews(engine::FrameContext& context, host::HostViews& views)
+    -> void override;
 
 private:
-  auto StageInitialScene(DemoShell& shell, const LightBenchSettings& settings)
-    -> void;
+  auto StageInitialScene(const LightBenchSettings& settings) -> void;
   auto CaptureCurrentSettings() -> LightBenchSettings;
   auto SaveSettings(const std::filesystem::path& path)
     -> Result<void, std::string>;
@@ -123,13 +112,13 @@ private:
   std::optional<std::array<float, 6>> fitted_camera_extents_;
   std::uint32_t reference_width_ { 0 };
   std::uint32_t reference_height_ { 0 };
-  ActiveScene active_scene_ {};
+  host::ActiveScene active_scene_;
   scene::SceneNode main_view_state_camera_ {};
   scene::SceneNode main_camera_ {};
 
-  LightScene light_scene_ {};
+  LightScene light_scene_;
 
-  std::shared_ptr<LightBenchPanel> light_bench_panel_ {};
+  std::shared_ptr<LightBenchPanel> light_bench_panel_;
   std::unique_ptr<LightBenchConsoleBindings> console_bindings_;
 
   // Hosted view

@@ -7,27 +7,24 @@
 #pragma once
 
 #include <memory>
-#include <optional>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Types/Geometry.h>
 
 namespace oxygen {
 class IAsyncEngine;
 namespace engine {
   class FrameContext;
-  struct ShaderPassConfig;
-}
+} // namespace engine
 } // namespace oxygen
 
 namespace oxygen::examples {
 
+class PanelCommands;
 class PanelRegistry;
 class DemoPanel;
 class UiSettingsService;
 class RenderingSettingsService;
-class LightCullingSettingsService;
 class CameraSettingsService;
 class ContentSettingsService;
 class EnvironmentSettingsService;
@@ -37,25 +34,20 @@ struct DemoShellPanelConfig;
 
 namespace ui {
 
-  class DiagnosticsVm;
-  class LightCullingVm;
   class CameraVm;
   class ContentVm;
   class EnvironmentVm;
   class PostProcessSettingsService;
   class CameraRigController;
-  class GridVm;
 
-  [[nodiscard]] auto MakeRuntimePanelConfig(DemoShellPanelConfig panel_config,
-    bool enable_renderer_bound_panels) -> DemoShellPanelConfig;
-
+  //! The side bar, the side panel, the axes widget and the standard panels.
   class DemoShellUi {
   public:
     DemoShellUi(observer_ptr<IAsyncEngine> engine,
+      observer_ptr<PanelCommands> commands,
       observer_ptr<PanelRegistry> panel_registry,
       observer_ptr<UiSettingsService> ui_settings_service,
       observer_ptr<RenderingSettingsService> rendering_settings_service,
-      observer_ptr<LightCullingSettingsService> light_culling_settings_service,
       observer_ptr<CameraSettingsService> camera_settings_service,
       observer_ptr<ContentSettingsService> content_settings_service,
       observer_ptr<EnvironmentSettingsService> environment_settings_service,
@@ -69,22 +61,16 @@ namespace ui {
     OXYGEN_MAKE_NON_COPYABLE(DemoShellUi)
     OXYGEN_DEFAULT_MOVABLE(DemoShellUi)
 
-    auto Draw(observer_ptr<engine::FrameContext> fc) -> void;
+    //! Draw the side bar and the active panel below `top_inset`.
+    auto Draw(observer_ptr<engine::FrameContext> fc, float top_inset) -> void;
     auto RegisterCustomPanel(std::shared_ptr<DemoPanel> panel) -> bool;
 
-    [[nodiscard]] auto GetDiagnosticsVm() const -> observer_ptr<DiagnosticsVm>;
-    [[nodiscard]] auto GetLightCullingVm() const
-      -> observer_ptr<LightCullingVm>;
-    [[nodiscard]] auto GetCameraVm() const -> observer_ptr<CameraVm>;
     [[nodiscard]] auto GetContentVm() const -> observer_ptr<ContentVm>;
     [[nodiscard]] auto GetEnvironmentVm() const -> observer_ptr<EnvironmentVm>;
-    [[nodiscard]] auto GetLastMouseDownPosition() const
-      -> std::optional<SubPixelPosition>;
 
   private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
-    std::optional<SubPixelPosition> last_mouse_down_position_;
   };
 
 } // namespace ui

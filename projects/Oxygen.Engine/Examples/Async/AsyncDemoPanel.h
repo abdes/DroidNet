@@ -14,25 +14,33 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>
 
+namespace oxygen::examples {
+class PanelCommands;
+} // namespace oxygen::examples
+
 namespace oxygen::examples::async {
 
 class AsyncDemoVm;
 
-//! Panel for controlling Async Demo specific features.
+//! The tour, the lighting previews, the scene animation and the camera
+//! spotlight.
 /*!
- Replaces DroneControlPanel. Provides UI for scene info, spotlight settings,
- and frame profiling data, using AsyncDemoVm for state.
+ Every control runs an `async.*` command. Frame timing is the host's: its
+ stats overlay shows the engine phases and its GPU work overlay the passes.
 */
 class AsyncDemoPanel final : public oxygen::examples::DemoPanel {
 public:
-  explicit AsyncDemoPanel(observer_ptr<AsyncDemoVm> vm);
+  AsyncDemoPanel(
+    observer_ptr<AsyncDemoVm> vm, observer_ptr<PanelCommands> commands);
   ~AsyncDemoPanel() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(AsyncDemoPanel)
   OXYGEN_MAKE_NON_MOVABLE(AsyncDemoPanel)
 
   auto DrawContents() -> void override;
-  auto DrawPresentation(frame::SequenceNumber frame_sequence) -> void;
+  //! The tour overlay, below the UI that covers `top_inset` of the window.
+  auto DrawPresentation(frame::SequenceNumber frame_sequence, float top_inset)
+    -> void;
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
   [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override;
@@ -45,9 +53,11 @@ private:
   auto DrawShowcaseControls() -> void;
   void DrawSceneInfo();
   void DrawSpotlightControls();
-  void DrawProfilingInfo();
+  auto RegisterCommands() -> void;
 
   observer_ptr<AsyncDemoVm> vm_;
+  observer_ptr<PanelCommands> commands_;
+  bool comparison_held_ { false };
 };
 
 } // namespace oxygen::examples::async

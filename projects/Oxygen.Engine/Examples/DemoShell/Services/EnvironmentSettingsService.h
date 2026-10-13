@@ -9,7 +9,6 @@
 #include <array>
 #include <atomic>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -60,14 +59,12 @@ struct EnvironmentRuntimeConfig {
   bool force_environment_override { true };
   bool restore_environment_profile { false };
   SceneActivationPolicy activation_policy {
-    SceneActivationPolicy::kRestorePreferences
+    SceneActivationPolicy::kRestorePreferences,
   };
-  std::optional<int> initial_environment_profile {};
-  std::string startup_skybox_path {};
-  std::optional<bool> initial_preview_sun_enabled {};
+  std::optional<int> initial_environment_profile;
+  std::string startup_skybox_path;
+  std::optional<bool> initial_preview_sun_enabled;
   bool preview_scene_ready { true };
-  std::function<void()> on_atmosphere_params_changed {};
-  std::function<void()> on_exposure_changed {};
 };
 
 //! Settings persistence and runtime apply logic for the environment panel.
@@ -138,9 +135,8 @@ public:
 
   auto OnFrameStart(const engine::FrameContext& context) -> void override;
   auto OnSceneActivated(scene::Scene& scene) -> void override;
-  auto OnMainViewReady(const engine::FrameContext& context,
-    const vortex::CompositionView& view) -> void override;
-  auto OnRuntimeMainViewReady(ViewId view_id) -> void;
+  auto OnMainViewReady(ViewId view_id, const scene::SceneNode& camera,
+    const ViewPort& viewport) -> void override;
 
   // SkyAtmosphere
   [[nodiscard]] virtual auto GetSkyAtmosphereEnabled() const -> bool;
@@ -262,9 +258,6 @@ public:
   virtual auto SetSkyboxHdrExposureEv(float value) -> void;
 
   [[nodiscard]] virtual auto GetSkyboxStatusMessage() const -> std::string_view;
-  [[nodiscard]] virtual auto GetSkyboxLastFaceSize() const -> int;
-  [[nodiscard]] virtual auto GetSkyboxLastResourceKey() const
-    -> content::ResourceKey;
 
   virtual auto LoadSkybox(std::string_view path, int layout_index,
     int output_format_index, int face_size, bool flip_y,
@@ -558,20 +551,20 @@ private:
   };
 
   enum class DirtyDomain : uint32_t {
-    kNone = 0u,
-    kAtmosphereModel = 1u << 0u,
-    kAtmosphereLights = 1u << 1u,
-    kHeightFog = 1u << 2u,
-    kVolumetricFog = 1u << 3u,
-    kLocalFogVolumes = 1u << 4u,
-    kSkyLight = 1u << 5u,
-    kSkybox = 1u << 6u,
-    kSkySphere = 1u << 7u,
-    kSun = 1u << 8u,
-    kPreset = 1u << 9u,
+    kNone = 0U,
+    kAtmosphereModel = 1U << 0U,
+    kAtmosphereLights = 1U << 1U,
+    kHeightFog = 1U << 2U,
+    kVolumetricFog = 1U << 3U,
+    kLocalFogVolumes = 1U << 4U,
+    kSkyLight = 1U << 5U,
+    kSkybox = 1U << 6U,
+    kSkySphere = 1U << 7U,
+    kSun = 1U << 8U,
+    kPreset = 1U << 9U,
     kAtmosphere = kAtmosphereModel,
     kFog = kHeightFog,
-    kAll = 0xFFFFFFFFu,
+    kAll = 0xFFFFFFFFU,
   };
 
   static constexpr auto ToMask(DirtyDomain domain) noexcept -> uint32_t
@@ -644,14 +637,13 @@ private:
   bool settings_persist_dirty_ { false };
   bool pending_changes_ { false };
   bool applied_changes_this_frame_ { false };
-  bool needs_sky_capture_ { false };
   bool needs_sync_ { true };
   bool force_scene_rebind_ { false };
   uint32_t dirty_domains_ { ToMask(DirtyDomain::kAll) };
   uint32_t batched_dirty_domains_ { ToMask(DirtyDomain::kNone) };
   std::uint64_t settings_revision_ { 0 };
   std::uint64_t last_persisted_settings_revision_ { 0 };
-  std::optional<ViewId> main_view_id_ {};
+  std::optional<ViewId> main_view_id_;
 
   // SkyAtmosphere
   bool sky_atmo_enabled_ { false };
@@ -663,7 +655,7 @@ private:
   float mie_scale_height_km_ { 1.2F };
   float mie_anisotropy_ { 0.8F };
   float mie_absorption_scale_ {
-    1.0F
+    1.0F,
   }; // 1.0 = Earth-like absorption (SSA ≈ 0.9)
   float multi_scattering_ { 1.0F };
   glm::vec3 sky_luminance_factor_ { 1.0F, 1.0F, 1.0F };
@@ -704,9 +696,8 @@ private:
   bool skybox_flip_y_ { false };
   bool skybox_tonemap_hdr_to_ldr_ { false };
   float skybox_hdr_exposure_ev_ { 0.0F };
-  std::string skybox_path_ {};
+  std::string skybox_path_;
   std::string skybox_status_message_;
-  int skybox_last_face_size_ { 0 };
   content::ResourceKey skybox_last_resource_key_ { 0U };
   bool skybox_dirty_ { false };
   std::string last_loaded_skybox_path_;
@@ -773,8 +764,8 @@ private:
   bool fog_render_in_main_pass_ { true };
   bool fog_visible_in_reflection_captures_ { true };
   bool fog_visible_in_real_time_sky_captures_ { true };
-  std::vector<LocalFogVolumeUiState> local_fog_volumes_ {};
-  std::vector<scene::NodeHandle> removed_local_fog_nodes_ {};
+  std::vector<LocalFogVolumeUiState> local_fog_volumes_;
+  std::vector<scene::NodeHandle> removed_local_fog_nodes_;
   int selected_local_fog_volume_index_ { -1 };
 
   // Resolved scene sun controls
@@ -786,31 +777,34 @@ private:
   bool sun_use_temperature_ { false };
   float sun_temperature_kelvin_ { 6500.0F };
   float sun_source_angle_deg_ { kDefaultSunSourceAngleDeg };
-  int sun_atmosphere_light_slot_ { static_cast<int>(
-    scene::AtmosphereLightSlot::kPrimary) };
+  int sun_atmosphere_light_slot_ {
+    static_cast<int>(scene::AtmosphereLightSlot::kPrimary),
+  };
   bool sun_use_per_pixel_atmosphere_transmittance_ { false };
   glm::vec3 sun_atmosphere_disk_luminance_scale_ { 1.0F, 1.0F, 1.0F };
   float sun_shadow_bias_ { scene::kDefaultShadowBias };
   float sun_shadow_normal_bias_ { scene::kDefaultShadowNormalBias };
-  int sun_shadow_resolution_hint_ { static_cast<int>(
-    scene::ShadowResolutionHint::kMedium) };
+  int sun_shadow_resolution_hint_ {
+    static_cast<int>(scene::ShadowResolutionHint::kMedium),
+  };
   int sun_shadow_cascade_count_ { static_cast<int>(scene::kMaxShadowCascades) };
-  int sun_shadow_split_mode_ { static_cast<int>(
-    scene::DirectionalCsmSplitMode::kGenerated) };
+  int sun_shadow_split_mode_ {
+    static_cast<int>(scene::DirectionalCsmSplitMode::kGenerated),
+  };
   float sun_shadow_max_distance_ {
-    scene::kDefaultDirectionalMaxShadowDistance
+    scene::kDefaultDirectionalMaxShadowDistance,
   };
   std::array<float, scene::kMaxShadowCascades> sun_shadow_cascade_distances_ {
     scene::kDefaultDirectionalCascadeDistances
   };
   float sun_shadow_distribution_exponent_ {
-    scene::kDefaultDirectionalDistributionExponent
+    scene::kDefaultDirectionalDistributionExponent,
   };
   float sun_shadow_transition_fraction_ {
-    scene::kDefaultDirectionalTransitionFraction
+    scene::kDefaultDirectionalTransitionFraction,
   };
   float sun_shadow_distance_fadeout_fraction_ {
-    scene::kDefaultDirectionalDistanceFadeoutFraction
+    scene::kDefaultDirectionalDistanceFadeoutFraction,
   };
   scene::SceneNode sun_light_node_;
   bool sun_light_available_ { false };

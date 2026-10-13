@@ -2184,16 +2184,8 @@ auto SceneLoaderService::BuildSceneAsync(scene::Scene& scene,
       .input = input_system_,
     },
     loader_);
+  // Instantiation has already logged each issue.
   runtime_nodes_ = std::move(instance.nodes);
-  if (!instance.issues.empty()) {
-    std::string problems;
-    for (const auto& issue : instance.issues) {
-      problems += problems.empty() ? "" : "; ";
-      problems += issue.message;
-    }
-    LOG_F(WARNING, "SceneLoader: The scene loaded with {} problem{}: {}",
-      instance.issues.size(), instance.issues.size() == 1 ? "" : "s", problems);
-  }
   if (const auto active = scene.ActiveCamera(); active.has_value()) {
     active_camera_ = *active;
   }
@@ -2390,7 +2382,7 @@ void SceneLoaderService::EnsureCameraAndViewport(scene::Scene& scene)
 
 void SceneLoaderService::LogSceneHierarchy(const scene::Scene& scene)
 {
-  LOG_F(INFO, "SceneLoader: Runtime scene hierarchy:");
+  LOG_F(1, "SceneLoader: Runtime scene hierarchy:");
   std::unordered_set<scene::NodeHandle> visited_nodes;
   visited_nodes.reserve(runtime_nodes_.size());
   const auto PrintNodeLine
@@ -2399,7 +2391,7 @@ void SceneLoaderService::LogSceneHierarchy(const scene::Scene& scene)
     const bool has_renderable = node.GetRenderable().HasGeometry();
     const bool has_camera = node.HasCamera();
     const bool has_light = node.HasLight();
-    LOG_F(INFO, "{}- {}{}{}{}", indent, node.GetName().c_str(),
+    LOG_F(1, "{}- {}{}{}{}", indent, node.GetName().c_str(),
       has_renderable ? " [R]" : "", has_camera ? " [C]" : "",
       has_light ? " [L]" : "");
   };

@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -16,8 +17,12 @@
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/Styles/Spectrum.h>
+
+// NOLINTBEGIN(cppcoreguidelines-pro-type-vararg, bugprone-signed-bitwise) -
+// ImGui
 
 namespace oxygen::examples::ui {
 
@@ -34,12 +39,11 @@ namespace {
     if (std::string_view(font->GetDebugName()) == name) {
       return true;
     }
-    for (const ImFontConfig* config : font->Sources) {
-      if (config && std::string_view(config->Name) == name) {
-        return true;
-      }
-    }
-    return false;
+    return std::ranges::any_of(
+      font->Sources, [name](const ImFontConfig* config) -> bool {
+        return config != nullptr
+          && std::string_view(std::data(config->Name)) == name;
+      });
   }
 
   auto FindIconFontByName(std::string_view name) -> ImFont*
@@ -67,6 +71,7 @@ namespace {
     ImGui::SetCursorPosX(std::floor(offset + 0.5F));
   }
 
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - color, then alpha
   auto ToSpectrumColor(const unsigned int color, const float alpha) -> ImVec4
   {
     ImVec4 result = ImGui::ColorConvertU32ToFloat4(color);
@@ -85,7 +90,7 @@ PanelSideBar::PanelSideBar(observer_ptr<PanelRegistry> panel_registry,
   DCHECK_NOTNULL_F(ui_settings_vm, "PanelSideBar requires UiSettingsVm");
 }
 
-auto PanelSideBar::Draw() -> void
+auto PanelSideBar::Draw(const float top) -> void
 {
   const auto desired_active = ui_settings_vm_->GetActivePanelName();
   if (desired_active.has_value()) {
@@ -97,14 +102,17 @@ auto PanelSideBar::Draw() -> void
     if (!current_active.empty()) {
       panel_registry_->ClearActivePanel();
     }
-  } else if (desired_active.value() != current_active) {
-    (void)panel_registry_->SetActivePanelByName(*desired_active);
+  } else if (*desired_active != current_active
+    && !panel_registry_->SetActivePanelByName(*desired_active)) {
+    // A saved panel this demo no longer has.
+    LOG_F(INFO, "No '{}' panel; showing none", *desired_active);
+    ui_settings_vm_->SetActivePanelName(std::optional<std::string> {});
   }
 
   const auto& io = ImGui::GetIO();
-  const float height = std::max(0.0F, io.DisplaySize.y);
+  const float height = std::max(0.0F, io.DisplaySize.y - top);
 
-  ImGui::SetNextWindowPos(ImVec2(0.0F, 0.0F), ImGuiCond_Always);
+  ImGui::SetNextWindowPos(ImVec2(0.0F, top), ImGuiCond_Always);
   ImGui::SetNextWindowSize(ImVec2(kSidebarWidth, height), ImGuiCond_Always);
   ImGui::SetNextWindowBgAlpha(0.45F);
 
@@ -121,7 +129,7 @@ auto PanelSideBar::Draw() -> void
   ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(14.0F, 14.0F));
 
   constexpr float kIconButtonPadding = 16.0F;
-  constexpr float kIconButtonBaseSize = kIconSize + kIconButtonPadding * 2.0F;
+  constexpr float kIconButtonBaseSize = kIconSize + (kIconButtonPadding * 2.0F);
 
   // None button
   constexpr std::string_view kSideBarIconFontName = "oxygen-icons";
@@ -151,8 +159,9 @@ auto PanelSideBar::Draw() -> void
         panel_registry_->ClearActivePanel();
         ui_settings_vm_->SetActivePanelName(std::optional<std::string> {});
       } else {
-        (void)panel_registry_->SetActivePanelByName(entry.name);
-        ui_settings_vm_->SetActivePanelName(entry.name);
+        if (panel_registry_->SetActivePanelByName(entry.name)) {
+          ui_settings_vm_->SetActivePanelName(entry.name);
+        }
       }
     }
 
@@ -164,9 +173,9 @@ auto PanelSideBar::Draw() -> void
         = ToSpectrumColor(imgui::spectrum::Static::kBlue500, 1.0F);
       ImDrawList* draw_list = ImGui::GetForegroundDrawList();
       draw_list->PushClipRect(min, max, true);
-      draw_list->AddRectFilled(ImVec2(min.x + 6.0F * dpi_scale,
-                                 max.y - underline_height - 2.0F * dpi_scale),
-        ImVec2(max.x - 6.0F * dpi_scale, max.y - 2.0F * dpi_scale),
+      draw_list->AddRectFilled(ImVec2(min.x + (6.0F * dpi_scale),
+                                 max.y - underline_height - (2.0F * dpi_scale)),
+        ImVec2(max.x - (6.0F * dpi_scale), max.y - (2.0F * dpi_scale)),
         ImGui::ColorConvertFloat4ToU32(underline_color));
       draw_list->PopClipRect();
     }
@@ -202,3 +211,5 @@ auto PanelSideBar::Draw() -> void
 auto PanelSideBar::GetWidth() const noexcept -> float { return kSidebarWidth; }
 
 } // namespace oxygen::examples::ui
+
+// NOLINTEND(cppcoreguidelines-pro-type-vararg, bugprone-signed-bitwise)

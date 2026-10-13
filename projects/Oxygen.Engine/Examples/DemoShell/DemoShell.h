@@ -6,13 +6,14 @@
 
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
 
-#include "DemoShell/ActiveScene.h"
-#include "DemoShell/Runtime/RendererUiTypes.h"
 #include "DemoShell/Runtime/SceneActivationPolicy.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
@@ -21,23 +22,26 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Time/Types.h>
-#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
-#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen {
 class IAsyncEngine;
+namespace control {
+  class CommandDispatcher;
+} // namespace control
 namespace engine {
   class FrameContext;
-  class InputSystem;
-  struct ShaderPassConfig;
-}
+} // namespace engine
+namespace host {
+  class SceneStage;
+} // namespace host
 } // namespace oxygen
 
 namespace oxygen::examples {
-class SkyboxService;
+class PanelCommands;
 class CameraSettingsService;
 class ContentSettingsService;
 } // namespace oxygen::examples
@@ -57,7 +61,6 @@ struct DemoShellPanelConfig {
   bool content_loader { false };
   bool camera_controls { false };
   bool environment { false };
-  bool lighting { false };
   bool diagnostics { false };
   bool post_process { false };
   bool ground_grid { true };
@@ -65,82 +68,51 @@ struct DemoShellPanelConfig {
 
 //! Configuration for the demo shell and its standard panels.
 /*!
- Supplies the dependencies and callbacks needed to initialize the demo shell
- panels and orchestrate runtime updates.
-
-### Key Features
-
-- **Centralized Wiring**: Connects UI panels to engine services and callbacks.
-- **Safe Ownership**: Uses non-owning pointers for engine dependencies.
-- **Flexible Updates**: Refreshes scene-backed runtime state without owning
-renderer internals.
-
-### Usage Patterns
-
- Construct once during module attachment and pass it to
- `DemoShell::Initialize`.
-
-### Architecture Notes
-
- The configuration favors non-owning references to avoid lifetime coupling.
- Panels capture callbacks for scene loading and runtime integration.
+ Supplies the host bindings, the panels to show and the callbacks the
+ panels run. `DemoModuleBase::MakeShellConfig()` fills the host bindings.
 
  @warning Callbacks must remain valid for the lifetime of the shell.
  @see DemoShell, DemoShell::Initialize
 */
 struct DemoShellConfig {
   observer_ptr<IAsyncEngine> engine { nullptr };
+  //! The host's scene stage; the shell follows the scene it publishes.
+  observer_ptr<const host::SceneStage> stage { nullptr };
+  //! Runs the commands posted by panel controls; null runs them at once.
+  observer_ptr<control::CommandDispatcher> commands { nullptr };
   bool enable_camera_rig { true };
-  bool enable_renderer_bound_panels { true };
   bool force_environment_override { true };
   bool restore_environment_profile { false };
   SceneActivationPolicy scene_activation_policy {
     SceneActivationPolicy::kRestorePreferences,
   };
-  std::optional<int> initial_environment_profile {};
-  std::string startup_skybox_path {};
-  std::optional<bool> initial_preview_sun_enabled {};
-  std::function<bool()> preview_scene_ready {};
+  std::optional<int> initial_environment_profile;
+  std::string startup_skybox_path;
+  std::optional<bool> initial_preview_sun_enabled;
+  std::function<bool()> preview_scene_ready;
 
   ContentRootConfig content_roots {};
   DemoShellPanelConfig panel_config {};
 
-  std::function<void(const ui::SceneEntry&)> on_scene_load_requested {};
-  std::function<void()> on_scene_load_cancel_requested {};
-  std::function<void(std::size_t)> on_dump_texture_memory {};
-  std::function<std::optional<data::AssetKey>()> get_last_released_scene_key {};
-  std::function<void()> on_force_trim {};
-  std::function<void()> on_clear_mounts {};
-  std::function<void(const std::filesystem::path&)> on_pak_mounted {};
-  std::function<void(const std::filesystem::path&)> on_loose_index_loaded {};
-  std::function<void(const ui::GenerationPublication&)>
-    on_generation_published {};
+  std::function<void(const ui::SceneEntry&)> on_scene_load_requested;
+  std::function<void()> on_scene_load_cancel_requested;
+  std::function<void()> on_clear_mounts;
+  std::function<void(const std::filesystem::path&)> on_pak_mounted;
+  std::function<void(const std::filesystem::path&)> on_loose_index_loaded;
+  std::function<void(const ui::GenerationPublication&)> on_generation_published;
 };
 
-//! Orchestrates the demo shell UI, panels, and camera helpers.
+//! The demo panels, their services and the camera rig.
 /*!
- Manages panel initialization, registration, and per-frame updates for demo
- applications. The shell owns the common debug panels and provides a
- consistent layout through `DemoShellUi`.
+ The host owns the window, the scene stage, the toolbar and the console; the
+ shell adds the side panels and the settings services behind them. Every
+ panel control runs a command (see `PanelCommands`).
 
-### Key Features
+ `DemoModuleBase` drives the shell: frame start, the scene the stage
+ publishes, the main view once published, the camera rig in `kInput`, and
+ drawing after the host's toolbar.
 
-- **Standard Panels**: Content loading, camera controls, lighting, rendering,
-  settings, and environment debugging.
-- **Camera Integration**: Wires a camera rig to the UI and lifecycle service.
-- **Centralized Draw**: Owns the DemoShell UI layout and draw sequencing.
-
-### Usage Patterns
-
- Create the shell during module attachment and drive it from scene mutation,
- gameplay, and GUI update phases.
-
-### Architecture Notes
-
- The shell does not own engine systems; it receives them through the config
- and forwards them to each panel.
-
- @see DemoShellUi, PanelRegistry, CameraSettingsService
+ @see DemoShellUi, PanelRegistry, PanelCommands
 */
 class DemoShell final {
 public:
@@ -153,22 +125,21 @@ public:
   //! Initialize the shell and register standard panels.
   auto Initialize(const DemoShellConfig& config) -> bool;
 
-  //! Update panel state or camera rig based on the frame phase.
+  //! Tick the camera rig and the content panel by the physical delta.
   auto Update(time::CanonicalDuration delta_time) -> void;
 
-  //! Draw the demo shell UI layout and active panel contents.
-  auto Draw(observer_ptr<engine::FrameContext> fc) -> void;
+  //! Draw the side bar, the active panel and the axes below `top_inset`.
+  auto Draw(observer_ptr<engine::FrameContext> fc, float top_inset) -> void;
 
-  //! Notify services of the frame start lifecycle.
+  //! Follow the stage's scene and flush the services at frame start.
   auto OnFrameStart(const engine::FrameContext& context) -> void;
 
-  //! Notify services once the main view is ready in the frame context.
-  auto OnMainViewReady(const engine::FrameContext& context,
-    const vortex::MainViewContract& view) -> void;
+  //! Bind the services to the scene the stage holds, if it changed.
+  auto SyncActiveScene() -> void;
 
-  //! Notify runtime-backed services once the Vortex main view is ready.
-  auto OnRuntimeMainViewReady(
-    ViewId view_id, scene::SceneNode camera, const ViewPort& viewport) -> void;
+  //! Notify the services once the main view is published.
+  auto OnMainViewReady(ViewId view_id, const scene::SceneNode& camera,
+    const ViewPort& viewport) -> void;
 
   //! Register a demo-specific panel with the shell.
   //!
@@ -177,38 +148,11 @@ public:
   //! `DemoShellUi` for registration.
   auto RegisterPanel(std::shared_ptr<DemoPanel> panel) -> bool;
 
-  //! Set the active scene (ownership transferred to the shell).
-  auto SetScene(std::unique_ptr<scene::Scene> scene) -> ActiveScene;
-
-  //! Stage a scene for publication on frame start.
-  auto StageScene(std::unique_ptr<scene::Scene> scene) -> void;
-
-  //! Return true if a scene is currently staged for publish.
-  [[nodiscard]] auto HasStagedScene() const noexcept -> bool;
-
-  //! Drop any staged scene without publishing it.
-  auto DiscardStagedScene() -> void;
-
-  //! Get the staged scene for mutation-time build/hydration.
-  [[nodiscard]] auto GetStagedScene() const -> observer_ptr<scene::Scene>;
-
-  //! Set the staged scene's main camera (selected during hydration).
-  auto SetStagedMainCamera(scene::SceneNode camera) -> void;
-
-  //! Publish staged scene as active scene.
-  auto PublishStagedScene() -> bool;
-
-  //! Consume the most recently published main camera.
-  auto TakePublishedMainCamera() -> scene::SceneNode;
-
-  //! Returns a value object for accessing the current active scene.
-  [[nodiscard]] auto GetActiveScene() const -> ActiveScene;
+  //! The commands panel controls run; valid after initialization.
+  [[nodiscard]] auto GetPanelCommands() const -> observer_ptr<PanelCommands>;
 
   //! Returns a non-owning pointer to the active scene (may be null).
   [[nodiscard]] auto TryGetScene() const -> observer_ptr<scene::Scene>;
-
-  //! Returns the skybox service used by environment panels (created on demand).
-  [[nodiscard]] auto GetSkyboxService() -> observer_ptr<SkyboxService>;
 
   //! Cancel any in-flight content imports.
   auto CancelContentImport() -> void;
@@ -223,24 +167,11 @@ public:
   [[nodiscard]] auto GetCameraRig() const
     -> observer_ptr<ui::CameraRigController>;
 
-  //! Get the current rendering view mode selection.
-  [[nodiscard]] auto GetRenderingViewMode() const -> vortex::RenderMode;
-
   //! Force an active panel by name (no-op if not registered).
   auto SetActivePanel(std::string_view panel_name) -> void;
 
   //! Returns the name of the currently active panel, if any.
   [[nodiscard]] auto GetActivePanelName() const -> std::optional<std::string>;
-
-  //! Returns the current rendering debug mode.
-  [[nodiscard]] auto GetRenderingDebugMode() const -> engine::ShaderDebugMode;
-
-  //! Returns the current wireframe color.
-  [[nodiscard]] auto GetRenderingWireframeColor() const -> graphics::Color;
-
-  //! Returns the current light culling visualization mode.
-  [[nodiscard]] auto GetLightCullingVisualizationMode() const
-    -> engine::ShaderDebugMode;
 
   //! Returns true when the main Vortex scene view should request height fog.
   [[nodiscard]] auto IsHeightFogPassRequested() const -> bool;
@@ -259,6 +190,7 @@ private:
   auto CompleteInitialization() -> bool;
   auto SyncRuntimeState() -> void;
   auto OnSceneActivated(scene::Scene& scene) -> void;
+  auto OnSceneCleared() -> void;
 
   struct Impl;
   std::unique_ptr<Impl> impl_;

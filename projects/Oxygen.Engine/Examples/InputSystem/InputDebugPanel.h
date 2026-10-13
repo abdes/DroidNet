@@ -6,9 +6,12 @@
 
 #pragma once
 
+#include <array>
+#include <cstddef>
 #include <memory>
 #include <string_view>
 #include <unordered_map>
+#include <vector>
 
 #include "DemoShell/UI/DemoPanel.h"
 
@@ -27,37 +30,39 @@ namespace oxygen::scene {
 class SceneNode;
 } // namespace oxygen::scene
 
+namespace oxygen::examples {
+class PanelCommands;
+} // namespace oxygen::examples
+
 namespace oxygen::examples::ui {
 class CameraRigController;
 } // namespace oxygen::examples::ui
 
 namespace oxygen::examples::input_system {
 
+//! The swimming mode command; the module registers it.
+inline constexpr std::string_view kSwimmingCommand = "input.swimming";
+
 //! Configuration for the InputSystem debug panel.
 struct InputDebugPanelConfig {
-  observer_ptr<engine::InputSystem> input_system { nullptr };
   observer_ptr<oxygen::examples::ui::CameraRigController> camera_rig {
     nullptr
   };
+  //! Runs the swimming mode command.
+  observer_ptr<PanelCommands> commands { nullptr };
 
   std::shared_ptr<oxygen::input::Action> shift_action { nullptr };
   std::shared_ptr<oxygen::input::Action> jump_action { nullptr };
   std::shared_ptr<oxygen::input::Action> jump_higher_action { nullptr };
   std::shared_ptr<oxygen::input::Action> swim_up_action { nullptr };
 
-  std::shared_ptr<oxygen::input::InputMappingContext> ground_movement_ctx {
-    nullptr,
-  };
-  std::shared_ptr<oxygen::input::InputMappingContext> swimming_ctx { nullptr };
-
-  bool* swimming_mode { nullptr };
-  bool* pending_ground_reset { nullptr };
+  observer_ptr<const bool> swimming_mode { nullptr };
 };
 
 //! Demo panel that visualizes InputSystem actions and mapping state.
 /*!
  Shows action state badges, analog values, and sparklines for the InputSystem
- example. It also exposes the ground/swimming toggle used by the demo.
+ example. Its ground/swimming toggle runs `input.swimming`.
 
  ### Key Features
 
@@ -74,14 +79,10 @@ public:
 
   InputDebugPanel(const InputDebugPanel&) = delete;
   auto operator=(const InputDebugPanel&) -> InputDebugPanel& = delete;
-  InputDebugPanel(InputDebugPanel&&) = default;
+  InputDebugPanel(InputDebugPanel&&) noexcept = default;
   auto operator=(InputDebugPanel&&) -> InputDebugPanel& = default;
 
-  //! Initialize the panel configuration.
-  void Initialize(const InputDebugPanelConfig& config);
-
-  //! Update the panel configuration.
-  void UpdateConfig(const InputDebugPanelConfig& config);
+  auto Initialize(const InputDebugPanelConfig& config) -> void;
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
   [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override;
@@ -91,18 +92,23 @@ public:
   auto OnUnloaded() -> void override;
 
 private:
-  struct History {
-    static constexpr int kCapacity = 64;
-    float values[kCapacity] = {};
-    int head = 0;
-    int count = 0;
+  //! The latest values of an action, oldest overwritten first.
+  class History {
+  public:
+    auto Push(float value) noexcept -> void;
+    //! The values held, oldest first.
+    [[nodiscard]] auto InOrder() const -> std::vector<float>;
 
-    void Push(float v) noexcept;
+  private:
+    static constexpr std::size_t kCapacity = 64;
+    std::array<float, kCapacity> values_ {};
+    std::size_t next_ { 0 };
+    std::size_t count_ { 0 };
   };
 
   InputDebugPanelConfig config_ {};
-  std::unordered_map<const char*, History> histories_ {};
-  std::unordered_map<const char*, double> last_trigger_time_ {};
+  std::unordered_map<const char*, History> histories_;
+  std::unordered_map<const char*, double> last_trigger_time_;
   bool show_inactive_ { true };
 };
 

@@ -19,7 +19,7 @@
 #include <vector>
 
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/PanelCommands.h"
 #include "DemoShell/Services/DefaultSceneLighting.h"
 #include "Physics/MainModule.h"
 #include "Physics/PhysicsDemoPanel.h"
@@ -35,7 +35,6 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -45,6 +44,8 @@
 #include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/HostModule.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -194,31 +195,18 @@ void SetShadowParticipation(oxygen::scene::SceneNode& node,
 
 namespace oxygen::examples::physics_demo {
 
-MainModule::MainModule(const DemoAppContext& app)
-  : Base(app)
+MainModule::MainModule(const host::HostContext& host)
+  : Base(host)
 {
-  DCHECK_NOTNULL_F(app_.platform);
-  DCHECK_F(!app_.gfx_weak.expired());
 }
 
-auto MainModule::BuildDefaultWindowProperties() const
-  -> platform::window::Properties
+auto MainModule::BuildWindowProperties() const -> platform::window::Properties
 {
-  platform::window::Properties p("Oxygen Physics");
-  p.extent = { .width = kWindowWidth, .height = kWindowHeight };
-  p.flags = {
-    .hidden = false,
-    .always_on_top = false,
-    .full_screen = app_.fullscreen,
-    .maximized = false,
-    .minimized = false,
-    .resizable = true,
-    .borderless = false,
-  };
-  return p;
+  auto props = Base::BuildWindowProperties();
+  props.title = "Oxygen Physics";
+  props.extent = { .width = kWindowWidth, .height = kWindowHeight };
+  return props;
 }
-
-auto MainModule::ClearBackbufferReferences() -> void { }
 
 // Attaching only builds the shell and its bindings; running out of memory there
 // is not recoverable.
@@ -237,23 +225,20 @@ auto MainModule::OnAttachedImpl(
   const auto demo_root
     = std::filesystem::path(std::source_location::current().file_name())
         .parent_path();
-  DemoShellConfig shell_config {
-    .engine = engine,
-    .enable_camera_rig = true,
-    .force_environment_override = false,
-    .content_roots = {
-      .content_root = demo_root.parent_path() / "Content",
-      .cooked_root = demo_root / ".cooked",
-    },
-    .panel_config = {
-      .content_loader = false,
-      .camera_controls = true,
-      .environment = true,
-      .lighting = false,
-      .diagnostics = true,
-      .post_process = true,
-      .ground_grid = true,
-    },
+  auto shell_config = MakeShellConfig();
+  shell_config.enable_camera_rig = true;
+  shell_config.force_environment_override = false;
+  shell_config.content_roots = {
+    .content_root = demo_root.parent_path() / "Content",
+    .cooked_root = demo_root / ".cooked",
+  };
+  shell_config.panel_config = {
+    .content_loader = false,
+    .camera_controls = true,
+    .environment = true,
+    .diagnostics = true,
+    .post_process = true,
+    .ground_grid = true,
   };
 
   if (!shell->Initialize(shell_config)) {
@@ -261,40 +246,42 @@ auto MainModule::OnAttachedImpl(
     return nullptr;
   }
 
+  RegisterPhysicsCommands(*shell);
   physics_panel_ = std::make_shared<PhysicsDemoPanel>();
-  UpdatePhysicsDemoPanelConfig(shell->GetCameraRig());
+  physics_panel_->Initialize(PhysicsDemoPanelConfig {
+    .camera_rig = shell->GetCameraRig(),
+    .commands = shell->GetPanelCommands(),
+    .launch_action = launch_action_,
+    .reset_action = reset_action_,
+    .nudge_left_action = nudge_left_action_,
+    .nudge_right_action = nudge_right_action_,
+    .launch_impulse = observer_ptr<const float> { &launch_impulse_ },
+    .player_speed = observer_ptr<const float> { &player_speed_ },
+    .player_settled = observer_ptr<const bool> { &player_settled_ },
+    .launches_count = observer_ptr<const uint64_t> { &launches_count_ },
+    .resets_count = observer_ptr<const uint64_t> { &resets_count_ },
+    .contact_events_count
+    = observer_ptr<const uint64_t> { &contact_events_count_ },
+    .flipper_trigger_count
+    = observer_ptr<const uint64_t> { &flipper_trigger_count_ },
+    .settle_progress = observer_ptr<const float> { &settle_display_sec_ },
+    .settle_target = kSettleTimeRequiredSec,
+  });
   if (!shell->RegisterPanel(physics_panel_)) {
     LOG_F(WARNING, "Physics: failed to register panel");
     return nullptr;
   }
+  (void)StageScenarioScene();
 
-  shell->StageScene(std::make_unique<scene::Scene>("Physics-Scene", 512));
-  const auto staged_scene = shell->GetStagedScene();
-  CHECK_NOTNULL_F(staged_scene, "Physics staged scene is null");
-  auto camera_node = staged_scene->CreateNode("MainCamera");
-  auto camera = std::make_unique<scene::PerspectiveCamera>();
-  CHECK_F(camera_node.AttachCamera(std::move(camera)),
-    "Failed to attach PerspectiveCamera to MainCamera");
-  auto tf = camera_node.GetTransform();
-  tf.SetLocalPosition(Vec3 { 0.0F, -26.0F, 13.0F });
-  tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -24.0F, 0.0F, 0.0F })));
-  shell->SetStagedMainCamera(camera_node);
-  sun_light_node_ = EnsureDefaultSceneLighting(*staged_scene,
-    DefaultSceneLightingDesc {
-      .sun_node_name = "SunLight",
-      .sun_position = kSunPosition,
-      .focus_point = kSceneLightingFocusPoint,
-    });
-
-  main_view_id_ = GetOrCreateViewId("MainView");
+  main_view_id_ = Publisher().GetOrCreateViewId("MainView");
   LOG_F(INFO, "Physics: Module initialized");
   return shell;
 }
 
 void MainModule::OnShutdown() noexcept
 {
-  auto& shell = GetShell();
-  shell.SetScene(nullptr);
+  Stage().Clear();
+  Base::OnShutdown();
 
   sun_light_node_ = {};
   physics_panel_.reset();
@@ -303,61 +290,23 @@ void MainModule::OnShutdown() noexcept
   reset_action_.reset();
   nudge_left_action_.reset();
   nudge_right_action_.reset();
-
-  Base::OnShutdown();
 }
 
-auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
-  -> void
+auto MainModule::OnScenePublished(engine::FrameContext& context) -> void
 {
-  DCHECK_NOTNULL_F(context);
-  auto& shell = GetShell();
-
-  if (shell.HasStagedScene()) {
-    CHECK_F(shell.PublishStagedScene(),
-      "expected staged scene before frame-start publish");
-    active_scene_ = shell.GetActiveScene();
-    main_camera_ = shell.TakePublishedMainCamera();
-  }
-
-  shell.OnFrameStart(*context);
-  Base::OnFrameStart(context);
-
-  if (!HasRenderableWindow()) {
-    return;
-  }
-
-  context->SetScene(shell.TryGetScene());
-
-  const auto rig = shell.GetCameraRig();
-  if (rig != last_camera_rig_) {
-    last_camera_rig_ = rig;
-  }
-}
-
-auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
-{
-  DCHECK_NOTNULL_F(app_window_);
-
-  if (!app_window_->GetWindow()) {
-    co_return;
-  }
-
-  co_await Base::OnPreRender(context);
+  Base::OnScenePublished(context);
+  active_scene_ = Stage().GetActiveScene();
+  main_camera_ = Stage().TakePublishedMainCamera();
 }
 
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  DCHECK_NOTNULL_F(app_window_);
-  auto& shell = GetShell();
-
-  if (!app_window_->GetWindow()) {
+  if (!HasRenderableWindow()) {
     co_return;
   }
 
-  if ((!active_scene_.IsValid() && !shell.HasStagedScene())
+  if ((!active_scene_.IsValid() && !Stage().HasStagedScene())
     && (!StageScenarioScene())) {
     ReportError(context, "failed to stage initial scenario");
   }
@@ -384,7 +333,6 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
 {
   namespace c = std::chrono;
   const auto dt = c::duration<float>(context->GetGameDeltaTime().get()).count();
-  auto& shell = GetShell();
 
   if (launch_action_ && launch_action_->WasTriggeredThisFrame()) {
     pending_launch_ = true;
@@ -401,7 +349,6 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
     if (pending_reset_) {
       pending_reset_ = false;
       ResetScenario();
-      shell.Update(context->GetGameDeltaTime());
       co_return;
     }
 
@@ -489,29 +436,6 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
       }
     }
   }
-
-  shell.Update(context->GetGameDeltaTime());
-  co_return;
-}
-
-auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
-{
-  DCHECK_NOTNULL_F(app_window_);
-  auto& shell = GetShell();
-
-  if (app_window_->IsShuttingDown()) {
-    co_return;
-  }
-
-  static bool camera_rig_bound = false;
-  if (!camera_rig_bound && shell.GetCameraRig()) {
-    UpdatePhysicsDemoPanelConfig(shell.GetCameraRig());
-    camera_rig_bound = true;
-  }
-
-  shell.Draw(context);
-
   co_return;
 }
 
@@ -524,7 +448,7 @@ auto MainModule::InitInputBindings() noexcept -> bool
   using oxygen::input::InputMappingContext;
   using platform::InputSlots;
 
-  if (!app_.input_system) {
+  if (!Host().input_system) {
     LOG_F(ERROR, "InputSystem not available; skipping input bindings");
     return false;
   }
@@ -536,10 +460,10 @@ auto MainModule::InitInputBindings() noexcept -> bool
   nudge_right_action_
     = std::make_shared<Action>("nudge right", ActionValueType::kBool);
 
-  app_.input_system->AddAction(launch_action_);
-  app_.input_system->AddAction(reset_action_);
-  app_.input_system->AddAction(nudge_left_action_);
-  app_.input_system->AddAction(nudge_right_action_);
+  Host().input_system->AddAction(launch_action_);
+  Host().input_system->AddAction(reset_action_);
+  Host().input_system->AddAction(nudge_left_action_);
+  Host().input_system->AddAction(nudge_right_action_);
 
   gameplay_input_ctx_
     = std::make_shared<InputMappingContext>("physics gameplay");
@@ -577,18 +501,18 @@ auto MainModule::InitInputBindings() noexcept -> bool
     gameplay_input_ctx_->AddMapping(mapping);
   }
 
-  app_.input_system->AddMappingContext(gameplay_input_ctx_, 0);
-  app_.input_system->ActivateMappingContext(gameplay_input_ctx_);
+  Host().input_system->AddMappingContext(gameplay_input_ctx_, 0);
+  Host().input_system->ActivateMappingContext(gameplay_input_ctx_);
 
   return true;
 }
 
 auto MainModule::ResolvePhysicsModule() -> observer_ptr<physics::PhysicsModule>
 {
-  if (!app_.engine) {
+  if (!Host().engine) {
     return nullptr;
   }
-  if (auto module_ref = app_.engine->GetModule<physics::PhysicsModule>()) {
+  if (auto module_ref = Host().engine->GetModule<physics::PhysicsModule>()) {
     return observer_ptr<physics::PhysicsModule> { &module_ref->get() };
   }
   return nullptr;
@@ -920,11 +844,9 @@ auto MainModule::StageScenarioScene() -> bool
 {
   constexpr size_t kDefaultSceneCapacity = 512;
 
-  auto& shell = GetShell();
-  shell.StageScene(
-    std::make_unique<scene::Scene>("Physics-Scene", kDefaultSceneCapacity));
-  const auto staged_scene = shell.GetStagedScene();
-  CHECK_NOTNULL_F(staged_scene, "Physics staged scene is null");
+  Stage().Stage(
+    std::make_shared<scene::Scene>("Physics-Scene", kDefaultSceneCapacity));
+  const auto staged_scene = Stage().GetStagedScene();
 
   auto camera_node = staged_scene->CreateNode("MainCamera");
   auto camera = std::make_unique<scene::PerspectiveCamera>();
@@ -933,7 +855,7 @@ auto MainModule::StageScenarioScene() -> bool
   auto tf = camera_node.GetTransform();
   tf.SetLocalPosition(Vec3 { 0.0F, -26.0F, 13.0F });
   tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -24.0F, 0.0F, 0.0F })));
-  shell.SetStagedMainCamera(std::move(camera_node));
+  Stage().SetStagedMainCamera(std::move(camera_node));
   sun_light_node_ = EnsureDefaultSceneLighting(*staged_scene,
     DefaultSceneLightingDesc {
       .sun_node_name = "SunLight",
@@ -1115,61 +1037,34 @@ void MainModule::UpdateFlippers(const float dt_seconds)
   }
 }
 
-auto MainModule::UpdateComposition(engine::FrameContext& context,
-  std::vector<vortex::CompositionView>& views) -> void
+auto MainModule::BuildViews(
+  engine::FrameContext& /*context*/, host::HostViews& views) -> void
 {
-  auto& shell = GetShell();
   if (!main_camera_.IsAlive()) {
     return;
   }
-
-  View view {};
-  if (app_window_ && app_window_->GetWindow()) {
-    const auto extent = app_window_->GetWindow()->Size();
-    view.viewport = ViewPort {
-      .top_left_x = 0.0F,
-      .top_left_y = 0.0F,
-      .width = static_cast<float>(extent.width),
-      .height = static_cast<float>(extent.height),
-      .min_depth = 0.0F,
-      .max_depth = 1.0F,
-    };
-  }
-
-  auto main_comp
-    = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
-  main_comp.with_atmosphere = true;
-  shell.OnMainViewReady(context, main_comp);
-  views.push_back(std::move(main_comp));
+  // An unset viewport covers the window.
+  auto main_view
+    = vortex::CompositionView::ForScene(main_view_id_, View {}, main_camera_);
+  main_view.with_atmosphere = true;
+  views.views.push_back(std::move(main_view));
+  views.main = main_view_id_;
 }
 
-auto MainModule::UpdatePhysicsDemoPanelConfig(
-  observer_ptr<ui::CameraRigController> camera_rig) -> void
+auto MainModule::RegisterPhysicsCommands(DemoShell& shell) -> void
 {
-  PhysicsDemoPanelConfig config {};
-  config.camera_rig = camera_rig;
-  config.launch_action = launch_action_;
-  config.reset_action = reset_action_;
-  config.nudge_left_action = nudge_left_action_;
-  config.nudge_right_action = nudge_right_action_;
-
-  config.pending_launch = &pending_launch_;
-  config.pending_reset = &pending_reset_;
-  config.launch_impulse = &launch_impulse_;
-  config.player_speed = &player_speed_;
-  config.player_settled = &player_settled_;
-
-  config.launches_count = &launches_count_;
-  config.resets_count = &resets_count_;
-  config.contact_events_count = &contact_events_count_;
-  config.flipper_trigger_count = &flipper_trigger_count_;
-
-  config.settle_progress = &settle_display_sec_;
-  config.settle_target = kSettleTimeRequiredSec;
-
-  if (physics_panel_) {
-    physics_panel_->Initialize(config);
-  }
+  auto& commands = *shell.GetPanelCommands();
+  commands.AddAction(std::string(kLaunchCommand), "Launch",
+    "Launch the sphere up the ramp",
+    [this] -> void { pending_launch_ = true; });
+  commands.AddAction(std::string(kResetCommand), "Reset Scenario",
+    "Put the sphere and the obstacles back",
+    [this] -> void { pending_reset_ = true; });
+  commands.AddFloat(
+    std::string(kLaunchImpulseCommand), "Launch Impulse",
+    "Impulse of the launch",
+    [this](const float impulse) -> void { launch_impulse_ = impulse; }, 10.0F,
+    120.0F);
 }
 
 } // namespace oxygen::examples::physics_demo

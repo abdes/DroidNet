@@ -5,7 +5,9 @@ validated 2026-10-12; H1 built and unit-tested 2026-10-12; E1 validated
 2026-10-12 (ahead of H2, so the host has a running consumer; the owner ran
 VortexBasic windowed, resized and fullscreen); H2 built and tested
 2026-10-12; H3 built: catalog, main-view variables, widgets and toolbar
-2026-10-12, GPU work overlay 2026-10-13; P1 built and its gate passed 2026-10-13**. Owner
+2026-10-12, GPU work overlay 2026-10-13; P1 built and its gate passed 2026-10-13; R1 built and tested 2026-10-13;
+E2 and E3 built 2026-10-13, awaiting validation in the running
+examples**. Owner
 decisions are recorded in [§10](#10-owner-decisions) with the review's
 position beside each. [§11](#11-open-problems-for-review) gives a definite
 answer to every problem and marks the ones only the owner can close.
@@ -84,9 +86,8 @@ Every `file:line` in [§1](#1-findings) and every file named in
   the main view and its framebuffers survive the session with an exposure
   discontinuity; a failed instantiation ends the session; process exit
   does not run session hooks; the host decides the post-session scene.
-- [§5.2](#52-main-view-console-variables): `lit` clears the view overrides
-  so DemoShell's renderer-global mode still applies; the toolbar shows the
-  effective mode.
+- [§5.2](#52-main-view-console-variables): `lit` clears the view overrides;
+  the toolbar shows the effective mode.
 - [§7](#7-oxygenplayer-composition): gaps a shipped player still has.
 - [§9](#9-delivery-order-and-exit-gates): gates that catch the regressions
   the design is exposed to (late loader callbacks, leaks across sessions,
@@ -105,10 +106,10 @@ Every `file:line` in [§1](#1-findings) and every file named in
   mature engine has the opt-in (UE `bTickEvenWhenPaused`, Godot
   `process_mode`, Unity's unscaled `Update`). The script-slot flag that
   would use it is authoring data and stays deferred.
-- _DemoShell settings unchanged._ Keep the settings, but in E2 route the
-  Diagnostics panel's render mode through `host.view_mode` so one variable
-  owns the main view's mode ([§5.2](#52-main-view-console-variables)).
-  Until then the toolbar shows the effective mode, so it never lies.
+- _DemoShell settings unchanged._ Keep the settings, but remove the
+  Diagnostics panel's render and debug mode so `host.view_mode` alone owns
+  the main view's mode ([§5.2](#52-main-view-console-variables)). Done in
+  E2.
 - _Physics hydration: no._ Confirmed for the player. The session hook
   design still names who creates and destroys a physics world, because
   there is no physics engine module today ([§4.4](#44-session-lifecycle)).
@@ -122,7 +123,7 @@ Every `file:line` in [§1](#1-findings) and every file named in
   ([P-4](#p-4-recooked-content-in-a-warm-player)).
 - Warm player: approved; the editor LLD is updated
   ([P-5](#p-5-editor-flow-with-a-warm-player)).
-- DemoShell's render mode goes through `host.view_mode` in E2
+- DemoShell's render mode goes through `host.view_mode` from E2
   ([§5.2](#52-main-view-console-variables)).
 
 ## 1. Findings
@@ -342,7 +343,11 @@ attach.
 The host applies the toolbar's main-view variables
 ([§5.2](#52-main-view-console-variables)) to that view only. `DemoModuleBase`
 derives from `HostModule` and keeps DemoShell ownership, the UI-test hooks
-and its default window title.
+and its default window title, and saves the console window placement in the
+demo settings file. The `host.*` toolbar variables are archived console
+variables: each application keeps them in its own archive, and a value set on
+the command line wins over the saved one. `RunDemo` builds an example's command line from
+`RuntimeCli` and its own option groups, then calls `RunHost`.
 
 ### 3.6 `RuntimeCli`
 
@@ -502,11 +507,8 @@ Pausing is a phase rule in the frame loop, not a per-module convention.
   fixed step; uncapped it is shorter. Hold and tap windows therefore
   progress by wall time per step, not by game time. Documented, not fixed.
 - Pausing without a session is allowed; DemoShell examples use it the same
-  way. MultiView's exposure proofs call `SimulationClock::SetPaused`
-  directly (`MultiView/MainModule.cpp:270`); they migrate to
-  `engine->Pause()` in E3. Until then they keep working: the engine changes
-  the clock's pause flag only when a request asks it to, and reads the
-  frame's pause state back from the clock.
+  way. MultiView's exposure proofs pause through `engine->Pause()` and
+  `Resume()`.
 
 Rejected: letting each module check `IsGamePaused()`. Every module would
 need the same code, and one forgotten check breaks pause.
@@ -630,8 +632,10 @@ changes the hooks above.
 Toolbar controls are shortcuts to console variables and commands: the
 control shows the current value, so a change typed in the console or set by
 a startup plan appears in the toolbar at once, and everything the toolbar
-does can be typed. This applies to the toolbar only. DemoShell's settings
-service and its persisted settings are not touched.
+does can be typed. DemoShell panels follow the same
+[rule](commands-and-remote-control.md#2-the-rule): each control runs a
+command or sets a console variable; the settings service still persists the
+values.
 
 ### 5.2 Main-view console variables
 
@@ -708,21 +712,14 @@ The show menu also lists the existing renderer switches
 `vtx.occlusion.enable` and `vtx.shadows.contact.enable`
 (`Renderer.cpp:186-188`) under Advanced.
 
-**DemoShell's renderer-global mode.** DemoShell keeps its Diagnostics panel
-and `RenderingSettingsService`, which set the renderer-global render and
-debug modes. A view override wins over the global mode
-(`Renderer.cpp:2864`), so the toolbar wins while `host.view_mode` is
-anything but `lit`; at `lit` the view carries no override and the panel's
-global mode applies. The toolbar must not then say "Lit" while the view is
-wireframe: when its variable is `lit` it labels the control with the
-effective global mode (`Renderer::GetRenderMode()` and the global debug
-mode) and marks it "(global)". No DemoShell setting is removed.
-
-Recommendation (against "DemoShell settings unchanged",
-[§10](#10-owner-decisions)): in E2, make the Diagnostics panel's render
-mode set `host.view_mode` and persist that value through the settings
-service, so the main view's mode has one owner and the "(global)" case
-disappears. Owner decides.
+**One owner for the main view's mode.** DemoShell's Diagnostics panel no
+longer sets the renderer-global render or debug mode; `host.view_mode` is the
+only control, and it is archived with the other `host.*` variables. A
+view override wins over the global mode (`Renderer.cpp:2864`), so at `lit`,
+which carries no override, the renderer-global mode applies. Nothing in the
+examples sets it; if an application does, the toolbar labels the
+control with the effective global mode and marks it "(global)" rather than
+claiming "Lit".
 
 ### 5.3 `Oxygen.ImGui` widgets
 
@@ -860,12 +857,12 @@ mistaken for covered:
 
 ## 8. Migration
 
-| Consumer                                                                                       | Change                                                                                                                                                                                                                                                                                                                               | Removed                                                                                                                                                                                                                           |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| VortexBasic                                                                                    | Uses `RunHost`, `HostModule`, the toolbar; no DemoShell link                                                                                                                                                                                                                                                                         | its own surface and resize code (`VortexBasic/MainModule.cpp:535-570`), its use of `AppWindow` and `DemoAppContext`                                                                                                               |
-| DemoShell                                                                                      | `DemoModuleBase : HostModule`; `SceneStage` replaces `SceneControlBlock`/`ActiveScene`; the toolbar and `ConsoleHost` replace its console wiring; `StatsOverlay` comes from `Oxygen.ImGui`; `ImGuiLayer` and `GpuWorkOverlay` come from Host; the camera rig ticks in `kInput` on the physical delta so it keeps flying while paused | `AppWindow`, `SceneControlBlock`, `ActiveScene`, the generic half of `DemoModuleBase`, `StatsOverlay`, its interim `ImGuiLayer` and `GpuWorkOverlay`, the generic fields of `DemoAppContext`. Panels, services and settings stay. |
-| Other examples (Async, InputSystem, LightBench, MultiView, Physics, RenderScene, TexturedCube) | `main_impl.cpp` calls `RunHost`; scene publishing uses `SceneStage`; each marks its main view; MultiView pauses through `engine->Pause()`                                                                                                                                                                                            | the copied bootstrap and teardown, about 150 lines each                                                                                                                                                                           |
-| Editor interop                                                                                 | none from the host; the ImGui seam (I1) removes its `renderer.enable_imgui` mapping                                                                                                                                                                                                                                                  | `renderer.enable_imgui` in `EngineRunner.cpp` and `Config.h`                                                                                                                                                                      |
+| Consumer                                                                                       | Change                                                                                                                                                                                                                                                                                                                                                                                                            | Removed                                                                                                                                                                                                                           |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| VortexBasic                                                                                    | Uses `RunHost`, `HostModule`, the toolbar; no DemoShell link                                                                                                                                                                                                                                                                                                                                                      | its own surface and resize code (`VortexBasic/MainModule.cpp:535-570`), its use of `AppWindow` and `DemoAppContext`                                                                                                               |
+| DemoShell                                                                                      | `DemoModuleBase : HostModule`; `SceneStage` replaces `SceneControlBlock`/`ActiveScene`; the toolbar and `ConsoleHost` replace its console wiring; `StatsOverlay` comes from `Oxygen.ImGui`; `ImGuiLayer` and `GpuWorkOverlay` come from Host; the camera rig ticks in `kInput` on the physical delta so it keeps flying while paused; panel controls run commands; `RunDemo` replaces each example's startup code | `AppWindow`, `SceneControlBlock`, `ActiveScene`, the generic half of `DemoModuleBase`, `StatsOverlay`, its interim `ImGuiLayer` and `GpuWorkOverlay`, the generic fields of `DemoAppContext`. Panels, services and settings stay. |
+| Other examples (Async, InputSystem, LightBench, MultiView, Physics, RenderScene, TexturedCube) | `main_impl.cpp` calls `RunHost`; scene publishing uses `SceneStage`; each marks its main view; MultiView pauses through `engine->Pause()`                                                                                                                                                                                                                                                                         | the copied bootstrap and teardown, about 150 lines each                                                                                                                                                                           |
+| Editor interop                                                                                 | none from the host; the ImGui seam (I1) removes its `renderer.enable_imgui` mapping                                                                                                                                                                                                                                                                                                                               | `renderer.enable_imgui` in `EngineRunner.cpp` and `Config.h`                                                                                                                                                                      |
 
 ## 9. Delivery order and exit gates
 
@@ -900,7 +897,7 @@ until the owner changes it.
 | Remount on editor `play`                        | Always (2026-10-12).                                                                                                                          | As recommended in [P-4](#p-4-recooked-content-in-a-warm-player).                                                                                                                      |
 | View mode and show flags                        | Main game view only. Other views are set up by their owner; MultiView sets up its own.                                                        | Confirmed; the host owns them as viewport-client state ([§5.2](#52-main-view-console-variables)).                                                                                     |
 | UI tests in the player                          | None.                                                                                                                                         | Confirmed; the widgets are tested where they live.                                                                                                                                    |
-| DemoShell settings                              | Unchanged, except the Diagnostics panel's render mode, which goes through `host.view_mode` in E2 (2026-10-12).                                | Kept. Recommend routing the Diagnostics panel's render mode through `host.view_mode` in E2 ([§5.2](#52-main-view-console-variables)).                                                 |
+| DemoShell settings                              | Unchanged, except the Diagnostics panel's render mode, which goes through `host.view_mode` in E2 (2026-10-12).                                | Done in E2: the panel's render and debug mode are gone and `host.view_mode` is archived ([§5.2](#52-main-view-console-variables)).                                                    |
 
 ## 11. Open problems for review
 

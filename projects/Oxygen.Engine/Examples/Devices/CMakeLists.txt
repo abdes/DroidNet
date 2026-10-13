@@ -43,6 +43,7 @@ target_link_libraries(
   ${META_MODULE_TARGET}
   PRIVATE
     oxygen::host-main
+    oxygen::host
     oxygen::base
     oxygen::clap
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:oxygen::cs-init>

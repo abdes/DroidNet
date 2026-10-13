@@ -5,20 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <memory>
+#include <string_view>
 
+#include "DemoShell/PanelCommands.h"
 #include "Physics/PhysicsDemoPanel.h"
 #include <imgui.h>
 
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
+#include <Oxygen/Input/Action.h>
+
+// NOLINTBEGIN(cppcoreguidelines-pro-type-vararg) - ImGui
 
 namespace oxygen::examples::physics_demo {
 
 void PhysicsDemoPanel::Initialize(const PhysicsDemoPanelConfig& config)
-{
-  config_ = config;
-}
-
-void PhysicsDemoPanel::UpdateConfig(const PhysicsDemoPanelConfig& config)
 {
   config_ = config;
 }
@@ -62,17 +63,22 @@ auto PhysicsDemoPanel::ActionState(
 
 auto PhysicsDemoPanel::DrawContents() -> void
 {
-  if (config_.pending_launch && ImGui::Button("Launch (Up)")) {
-    *config_.pending_launch = true;
+  if (!config_.commands) {
+    return;
+  }
+  if (ImGui::Button("Launch (Up)")) {
+    config_.commands->Run(kLaunchCommand);
   }
   ImGui::SameLine();
-  if (config_.pending_reset && ImGui::Button("Reset (G)")) {
-    *config_.pending_reset = true;
+  if (ImGui::Button("Reset (G)")) {
+    config_.commands->Run(kResetCommand);
   }
 
   if (config_.launch_impulse) {
-    ImGui::SliderFloat(
-      "Launch impulse", config_.launch_impulse, 10.0F, 120.0F, "%.1f");
+    float impulse = *config_.launch_impulse;
+    if (ImGui::SliderFloat("Launch impulse", &impulse, 10.0F, 120.0F, "%.1f")) {
+      config_.commands->RunFloat(kLaunchImpulseCommand, impulse);
+    }
   }
 
   ImGui::Separator();
@@ -121,3 +127,5 @@ auto PhysicsDemoPanel::DrawContents() -> void
 }
 
 } // namespace oxygen::examples::physics_demo
+
+// NOLINTEND(cppcoreguidelines-pro-type-vararg)

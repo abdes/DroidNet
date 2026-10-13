@@ -29,9 +29,6 @@ struct ContentExplorerSettings {
   bool include_glb { true };
   bool include_gltf { true };
   bool auto_load_on_import { true };
-  bool auto_dump_texture_memory { true };
-  int auto_dump_delay_frames { 180 };
-  int dump_top_n { 20 };
 };
 
 //! Persisted active scene selection for content loader restoration.

@@ -6,11 +6,6 @@
 
 #pragma once
 
-#include <chrono>
-#include <string>
-#include <utility>
-#include <vector>
-
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Scene/SceneNode.h>
@@ -31,11 +26,4 @@ struct SphereState {
 };
 
 // Debug overlay tracking structures
-struct FrameActionTracker {
-  std::chrono::steady_clock::time_point frame_start_time;
-  std::chrono::steady_clock::time_point frame_end_time;
-  std::vector<std::pair<std::string, std::chrono::microseconds>> phase_timings;
-  std::vector<std::string> frame_actions;
-};
-
 } // namespace oxygen::examples::async

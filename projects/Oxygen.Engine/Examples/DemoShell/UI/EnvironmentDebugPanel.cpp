@@ -13,14 +13,19 @@
 #include <numbers>
 #include <span>
 #include <string>
+#include <string_view>
 
+#include "DemoShell/PanelCommands.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/EnvironmentDebugPanel.h"
+#include "DemoShell/UI/EnvironmentPanelCommands.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 #include <glm/ext/vector_float3.hpp>
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Scene/Environment/Fog.h>
@@ -130,30 +135,20 @@ namespace {
 
 } // namespace
 
-void EnvironmentDebugPanel::Initialize(const EnvironmentDebugConfig& config)
+EnvironmentDebugPanel::EnvironmentDebugPanel(
+  observer_ptr<EnvironmentVm> vm, observer_ptr<PanelCommands> commands)
+  : environment_vm_(vm)
+  , commands_(commands)
 {
-  config_ = config;
-  environment_vm_ = config_.environment_vm;
   CHECK_NOTNULL_F(
     environment_vm_, "EnvironmentDebugPanel requires an EnvironmentVm");
-  initialized_ = true;
+  CHECK_NOTNULL_F(commands_, "EnvironmentDebugPanel requires PanelCommands");
+  RegisterEnvironmentCommands(*commands_, environment_vm_);
   environment_vm_->SyncFromSceneIfNeeded();
-}
-
-void EnvironmentDebugPanel::UpdateConfig(const EnvironmentDebugConfig& config)
-{
-  config_ = config;
 }
 
 auto EnvironmentDebugPanel::DrawContents() -> void
 {
-  if (!initialized_) {
-    return;
-  }
-
-  if (!environment_vm_) {
-    return;
-  }
   environment_vm_->SyncFromSceneIfNeeded();
   const bool has_scene = environment_vm_->HasScene();
 
@@ -202,7 +197,8 @@ auto EnvironmentDebugPanel::DrawContents() -> void
     for (int i = 0; i < preset_count; ++i) {
       const auto name = environment_vm_->GetPresetName(i);
       if (ImGui::Selectable(std::string(name).c_str(), i == current_index)) {
-        environment_vm_->ApplyPreset(i);
+        commands_->RunText(
+          env_commands::kPreset, EnvironmentVm::GetPresetKey(i));
       }
     }
     ImGui::EndCombo();
@@ -213,7 +209,7 @@ auto EnvironmentDebugPanel::DrawContents() -> void
     bool preview = environment_vm_->GetPreviewSunEnabled();
     ImGui::BeginDisabled(!available);
     if (ImGui::Checkbox("Preview sun", &preview)) {
-      environment_vm_->SetPreviewSunEnabled(preview);
+      commands_->RunBool(env_commands::kPreviewSunEnabled, preview);
     }
     ImGui::EndDisabled();
     const auto help = environment_vm_->GetPreviewSunHelpText();
@@ -305,19 +301,21 @@ void EnvironmentDebugPanel::DrawFog()
   // Height and volumetric fog are independent: toggling one keeps the other.
   bool fog_enabled = environment_vm_->GetFogEnabled();
   if (ImGui::Checkbox("Enable Height Fog", &fog_enabled)) {
-    environment_vm_->SetFogEnabled(fog_enabled);
+    commands_->RunBool(env_commands::kFogEnabled, fog_enabled);
   }
   bool volumetric_fog = environment_vm_->GetFogModel()
     == static_cast<int>(scene::environment::FogModel::kVolumetric);
   if (ImGui::Checkbox("Enable Volumetric Fog", &volumetric_fog)) {
-    environment_vm_->SetFogModel(static_cast<int>(volumetric_fog
-        ? scene::environment::FogModel::kVolumetric
-        : scene::environment::FogModel::kExponentialHeight));
+    commands_->RunText(env_commands::kFogModel,
+      env_commands::ValueAt(env_commands::kFogModels,
+        static_cast<int>(volumetric_fog
+            ? scene::environment::FogModel::kVolumetric
+            : scene::environment::FogModel::kExponentialHeight)));
   }
 
   bool fog_main_pass = environment_vm_->GetFogRenderInMainPass();
   if (ImGui::Checkbox("Render In Main Pass##Fog", &fog_main_pass)) {
-    environment_vm_->SetFogRenderInMainPass(fog_main_pass);
+    commands_->RunBool(env_commands::kFogRenderInMainPass, fog_main_pass);
   }
 
   ImGui::BeginDisabled(!fog_enabled);
@@ -328,13 +326,15 @@ void EnvironmentDebugPanel::DrawFog()
   if (ImGui::SliderFloat("Density / Extinction (1/m)",
         &extinction_sigma_t_per_m, 0.0F, 10.0F, "%.6f",
         ImGuiSliderFlags_Logarithmic)) {
-    environment_vm_->SetFogExtinctionSigmaTPerMeter(extinction_sigma_t_per_m);
+    commands_->RunFloat(
+      env_commands::kFogExtinctionSigmaTPerMeter, extinction_sigma_t_per_m);
   }
 
   float height_falloff_per_m = environment_vm_->GetFogHeightFalloffPerMeter();
   if (ImGui::DragFloat("Height Falloff (1/m)", &height_falloff_per_m, 0.0001F,
         0.0F, 10.0F, "%.4f")) {
-    environment_vm_->SetFogHeightFalloffPerMeter(height_falloff_per_m);
+    commands_->RunFloat(
+      env_commands::kFogHeightFalloffPerMeter, height_falloff_per_m);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
     ImGui::SetTooltip(
@@ -349,96 +349,104 @@ void EnvironmentDebugPanel::DrawFog()
   float height_offset_m = environment_vm_->GetFogHeightOffsetMeters();
   if (ImGui::DragFloat("Height Offset (m)", &height_offset_m, 0.25F, -100000.0F,
         100000.0F, "%.1f")) {
-    environment_vm_->SetFogHeightOffsetMeters(height_offset_m);
+    commands_->RunFloat(env_commands::kFogHeightOffsetMeters, height_offset_m);
   }
 
   ImGui::SeparatorText("Distance and Opacity");
   float start_distance_m = environment_vm_->GetFogStartDistanceMeters();
   if (ImGui::DragFloat("Start Distance (m)", &start_distance_m, 1.0F, 0.0F,
         1000000.0F, "%.1f")) {
-    environment_vm_->SetFogStartDistanceMeters(
-      std::max(start_distance_m, 0.0F));
+    commands_->RunFloat(
+      env_commands::kFogStartDistanceMeters, std::max(start_distance_m, 0.0F));
   }
   float end_distance = environment_vm_->GetFogEndDistanceMeters();
   if (ImGui::DragFloat(
         "End Distance (m)", &end_distance, 1.0F, 0.0F, 1000000.0F, "%.1f")) {
-    environment_vm_->SetFogEndDistanceMeters(end_distance);
+    commands_->RunFloat(env_commands::kFogEndDistanceMeters, end_distance);
   }
   float cutoff_distance = environment_vm_->GetFogCutoffDistanceMeters();
   if (ImGui::DragFloat("Cutoff Distance (m)", &cutoff_distance, 10.0F, 0.0F,
         1000000.0F, "%.1f")) {
-    environment_vm_->SetFogCutoffDistanceMeters(cutoff_distance);
+    commands_->RunFloat(
+      env_commands::kFogCutoffDistanceMeters, cutoff_distance);
   }
   float max_opacity = environment_vm_->GetFogMaxOpacity();
   if (ImGui::SliderFloat("Max Opacity", &max_opacity, 0.0F, 1.0F, "%.3f")) {
-    environment_vm_->SetFogMaxOpacity(max_opacity);
+    commands_->RunFloat(env_commands::kFogMaxOpacity, max_opacity);
   }
 
   ImGui::SeparatorText("Secondary Layer");
   float second_fog_density = environment_vm_->GetSecondFogDensity();
   if (ImGui::DragFloat("Second Density (1/m)", &second_fog_density, 0.001F,
         0.0F, 10.0F, "%.4f")) {
-    environment_vm_->SetSecondFogDensity(second_fog_density);
+    commands_->RunFloat(env_commands::kSecondFogDensity, second_fog_density);
   }
   float second_fog_height_falloff
     = environment_vm_->GetSecondFogHeightFalloff();
   if (ImGui::DragFloat("Second Height Falloff (1/m)",
         &second_fog_height_falloff, 0.0001F, 0.0F, 10.0F, "%.4f")) {
-    environment_vm_->SetSecondFogHeightFalloff(second_fog_height_falloff);
+    commands_->RunFloat(
+      env_commands::kSecondFogHeightFalloff, second_fog_height_falloff);
   }
   float second_fog_height_offset = environment_vm_->GetSecondFogHeightOffset();
   if (ImGui::DragFloat("Second Height Offset (m)", &second_fog_height_offset,
         0.25F, -100000.0F, 100000.0F, "%.1f")) {
-    environment_vm_->SetSecondFogHeightOffset(second_fog_height_offset);
+    commands_->RunFloat(
+      env_commands::kSecondFogHeightOffset, second_fog_height_offset);
   }
 
   ImGui::SeparatorText("Inscattering");
   auto fog_inscattering = environment_vm_->GetFogInscatteringLuminance();
   if (ImGui::DragFloat3("Fog Inscattering Luminance", &fog_inscattering.x, 1.0F,
         0.0F, 100000.0F, "%.3f")) {
-    environment_vm_->SetFogInscatteringLuminance(fog_inscattering);
+    commands_->RunRgb(
+      env_commands::kFogInscatteringLuminance, fog_inscattering);
   }
   auto ambient_scale
     = environment_vm_->GetSkyAtmosphereAmbientContributionColorScale();
   if (ImGui::DragFloat3("Sky Atmosphere Ambient Scale", &ambient_scale.x, 0.01F,
         0.0F, 16.0F, "%.3f")) {
-    environment_vm_->SetSkyAtmosphereAmbientContributionColorScale(
-      ambient_scale);
+    commands_->RunRgb(
+      env_commands::kSkyAtmosphereAmbientContributionColorScale, ambient_scale);
   }
   auto directional_luminance
     = environment_vm_->GetDirectionalInscatteringLuminance();
   if (ImGui::DragFloat3("Directional Inscattering Luminance",
         &directional_luminance.x, 1.0F, 0.0F, 100000.0F, "%.3f")) {
-    environment_vm_->SetDirectionalInscatteringLuminance(directional_luminance);
+    commands_->RunRgb(
+      env_commands::kDirectionalInscatteringLuminance, directional_luminance);
   }
   float directional_exponent
     = environment_vm_->GetDirectionalInscatteringExponent();
   if (ImGui::DragFloat("Directional Exponent", &directional_exponent, 0.1F,
         0.0F, 128.0F, "%.2f")) {
-    environment_vm_->SetDirectionalInscatteringExponent(directional_exponent);
+    commands_->RunFloat(
+      env_commands::kDirectionalInscatteringExponent, directional_exponent);
   }
   float directional_start_distance
     = environment_vm_->GetDirectionalInscatteringStartDistance();
   if (ImGui::DragFloat("Directional Start Distance (m)",
         &directional_start_distance, 1.0F, 0.0F, 1000000.0F, "%.1f")) {
-    environment_vm_->SetDirectionalInscatteringStartDistance(
+    commands_->RunFloat(env_commands::kDirectionalInscatteringStartDistance,
       directional_start_distance);
   }
 
   ImGui::SeparatorText("Visibility");
   bool fog_holdout = environment_vm_->GetFogHoldout();
   if (ImGui::Checkbox("Holdout##Fog", &fog_holdout)) {
-    environment_vm_->SetFogHoldout(fog_holdout);
+    commands_->RunBool(env_commands::kFogHoldout, fog_holdout);
   }
   bool fog_reflection_captures
     = environment_vm_->GetFogVisibleInReflectionCaptures();
   if (ImGui::Checkbox(
         "Visible In Reflection Captures", &fog_reflection_captures)) {
-    environment_vm_->SetFogVisibleInReflectionCaptures(fog_reflection_captures);
+    commands_->RunBool(
+      env_commands::kFogVisibleInReflectionCaptures, fog_reflection_captures);
   }
   bool fog_realtime_sky = environment_vm_->GetFogVisibleInRealTimeSkyCaptures();
   if (ImGui::Checkbox("Include in Sky Lighting", &fog_realtime_sky)) {
-    environment_vm_->SetFogVisibleInRealTimeSkyCaptures(fog_realtime_sky);
+    commands_->RunBool(
+      env_commands::kFogVisibleInRealTimeSkyCaptures, fog_realtime_sky);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
     ImGui::SetTooltip("Includes height fog in the Captured Scene skylight, "
@@ -457,13 +465,13 @@ void EnvironmentDebugPanel::DrawLocalFogVolumes()
   const int count = environment_vm_->GetLocalFogVolumeCount();
   ImGui::Text("Count: %d", count);
   if (ImGui::Button("Add Local Fog Volume")) {
-    environment_vm_->AddLocalFogVolume();
+    commands_->Run(env_commands::kAddLocalFogVolume);
   }
   ImGui::SameLine();
   const bool has_selection = count > 0;
   ImGui::BeginDisabled(!has_selection);
   if (ImGui::Button("Remove Selected")) {
-    environment_vm_->RemoveSelectedLocalFogVolume();
+    commands_->Run(env_commands::kRemoveLocalFogVolume);
   }
   ImGui::EndDisabled();
 
@@ -474,19 +482,21 @@ void EnvironmentDebugPanel::DrawLocalFogVolumes()
   int selected_index = environment_vm_->GetSelectedLocalFogVolumeIndex();
   if (ImGui::SliderInt(
         "Selected", &selected_index, 0, std::max(count - 1, 0))) {
-    environment_vm_->SetSelectedLocalFogVolumeIndex(selected_index);
+    commands_->RunInt(
+      env_commands::kSelectedLocalFogVolumeIndex, selected_index);
   }
 
   bool enabled = environment_vm_->GetSelectedLocalFogVolumeEnabled();
   if (ImGui::Checkbox("Enabled##LocalFog", &enabled)) {
-    environment_vm_->SetSelectedLocalFogVolumeEnabled(enabled);
+    commands_->RunBool(env_commands::kSelectedLocalFogVolumeEnabled, enabled);
   }
 
   float radial_extinction
     = environment_vm_->GetSelectedLocalFogVolumeRadialFogExtinction();
   if (ImGui::DragFloat("Radial Extinction (1/m)##LocalFog", &radial_extinction,
         0.001F, 0.0F, 10.0F, "%.4f")) {
-    environment_vm_->SetSelectedLocalFogVolumeRadialFogExtinction(
+    commands_->RunFloat(
+      env_commands::kSelectedLocalFogVolumeRadialFogExtinction,
       radial_extinction);
   }
 
@@ -494,7 +504,8 @@ void EnvironmentDebugPanel::DrawLocalFogVolumes()
     = environment_vm_->GetSelectedLocalFogVolumeHeightFogExtinction();
   if (ImGui::DragFloat("Height Extinction (1/m)##LocalFog", &height_extinction,
         0.001F, 0.0F, 10.0F, "%.4f")) {
-    environment_vm_->SetSelectedLocalFogVolumeHeightFogExtinction(
+    commands_->RunFloat(
+      env_commands::kSelectedLocalFogVolumeHeightFogExtinction,
       height_extinction);
   }
 
@@ -502,37 +513,43 @@ void EnvironmentDebugPanel::DrawLocalFogVolumes()
     = environment_vm_->GetSelectedLocalFogVolumeHeightFogFalloff();
   if (ImGui::DragFloat("Height Falloff (1/m)##LocalFog", &height_falloff,
         0.001F, 0.0F, 10.0F, "%.4f")) {
-    environment_vm_->SetSelectedLocalFogVolumeHeightFogFalloff(height_falloff);
+    commands_->RunFloat(
+      env_commands::kSelectedLocalFogVolumeHeightFogFalloff, height_falloff);
   }
 
   float height_offset
     = environment_vm_->GetSelectedLocalFogVolumeHeightFogOffset();
   if (ImGui::DragFloat("Height Offset (m)##LocalFog", &height_offset, 0.05F,
         -1000.0F, 1000.0F, "%.2f")) {
-    environment_vm_->SetSelectedLocalFogVolumeHeightFogOffset(height_offset);
+    commands_->RunFloat(
+      env_commands::kSelectedLocalFogVolumeHeightFogOffset, height_offset);
   }
 
   float fog_phase_g = environment_vm_->GetSelectedLocalFogVolumeFogPhaseG();
   if (ImGui::SliderFloat(
         "Phase g##LocalFog", &fog_phase_g, -0.99F, 0.99F, "%.2f")) {
-    environment_vm_->SetSelectedLocalFogVolumeFogPhaseG(fog_phase_g);
+    commands_->RunFloat(
+      env_commands::kSelectedLocalFogVolumeFogPhaseG, fog_phase_g);
   }
 
   auto fog_albedo = environment_vm_->GetSelectedLocalFogVolumeFogAlbedo();
   if (ImGui::ColorEdit3(
         "Albedo##LocalFog", &fog_albedo.x, ImGuiColorEditFlags_Float)) {
-    environment_vm_->SetSelectedLocalFogVolumeFogAlbedo(fog_albedo);
+    commands_->RunRgb(
+      env_commands::kSelectedLocalFogVolumeFogAlbedo, fog_albedo);
   }
 
   auto fog_emissive = environment_vm_->GetSelectedLocalFogVolumeFogEmissive();
   if (ImGui::ColorEdit3(
         "Emissive##LocalFog", &fog_emissive.x, ImGuiColorEditFlags_Float)) {
-    environment_vm_->SetSelectedLocalFogVolumeFogEmissive(fog_emissive);
+    commands_->RunRgb(
+      env_commands::kSelectedLocalFogVolumeFogEmissive, fog_emissive);
   }
 
   int sort_priority = environment_vm_->GetSelectedLocalFogVolumeSortPriority();
   if (ImGui::DragInt("Sort Priority##LocalFog", &sort_priority, 1, -128, 128)) {
-    environment_vm_->SetSelectedLocalFogVolumeSortPriority(sort_priority);
+    commands_->RunInt(
+      env_commands::kSelectedLocalFogVolumeSortPriority, sort_priority);
   }
 }
 
@@ -551,7 +568,7 @@ auto EnvironmentDebugPanel::GetIcon() const noexcept -> std::string_view
   return imgui::icons::kIconEnvironment;
 }
 
-auto EnvironmentDebugPanel::OnRegistered() -> void { (void)initialized_; }
+auto EnvironmentDebugPanel::OnRegistered() -> void { }
 
 auto EnvironmentDebugPanel::OnLoaded() -> void
 {
@@ -616,7 +633,7 @@ void EnvironmentDebugPanel::DrawSunSection()
   }
   bool sun_enabled = environment_vm_->GetSunEnabled();
   if (ImGui::Checkbox("Enabled##Sun", &sun_enabled)) {
-    environment_vm_->SetSunEnabled(sun_enabled);
+    commands_->RunBool(env_commands::kSunEnabled, sun_enabled);
   }
 
   ImGui::Separator();
@@ -625,13 +642,13 @@ void EnvironmentDebugPanel::DrawSunSection()
   float sun_azimuth_deg = environment_vm_->GetSunAzimuthDeg();
   if (ImGui::SliderFloat(
         "Azimuth (deg)", &sun_azimuth_deg, 0.0F, 360.0F, "%.1F")) {
-    environment_vm_->SetSunAzimuthDeg(sun_azimuth_deg);
+    commands_->RunFloat(env_commands::kSunAzimuthDeg, sun_azimuth_deg);
   }
 
   float sun_elevation_deg = environment_vm_->GetSunElevationDeg();
   if (ImGui::DragFloat(
         "Elevation (deg)", &sun_elevation_deg, 0.1F, -90.0F, 90.0F, "%.1F")) {
-    environment_vm_->SetSunElevationDeg(sun_elevation_deg);
+    commands_->RunFloat(env_commands::kSunElevationDeg, sun_elevation_deg);
   }
 
   const auto sun_dir
@@ -644,19 +661,20 @@ void EnvironmentDebugPanel::DrawSunSection()
   float sun_illuminance_lx = environment_vm_->GetSunIlluminanceLx();
   if (ImGui::DragFloat("Illuminance (lux)", &sun_illuminance_lx, 100.0F, 0.0F,
         1000000.0F, "%.1F")) {
-    environment_vm_->SetSunIlluminanceLx(sun_illuminance_lx);
+    commands_->RunFloat(env_commands::kSunIlluminanceLx, sun_illuminance_lx);
   }
 
   bool sun_use_temperature = environment_vm_->GetSunUseTemperature();
   if (ImGui::Checkbox("Use temperature", &sun_use_temperature)) {
-    environment_vm_->SetSunUseTemperature(sun_use_temperature);
+    commands_->RunBool(env_commands::kSunUseTemperature, sun_use_temperature);
   }
 
   if (sun_use_temperature) {
     float sun_temperature_kelvin = environment_vm_->GetSunTemperatureKelvin();
     if (ImGui::DragFloat("Temperature (K)", &sun_temperature_kelvin, 50.0F,
           1000.0F, 40000.0F, "%.0F")) {
-      environment_vm_->SetSunTemperatureKelvin(sun_temperature_kelvin);
+      commands_->RunFloat(
+        env_commands::kSunTemperatureKelvin, sun_temperature_kelvin);
     }
     const auto preview = KelvinToLinearRgb(sun_temperature_kelvin);
     ImGui::ColorButton("Temperature Preview",
@@ -672,7 +690,7 @@ void EnvironmentDebugPanel::DrawSunSection()
   };
   if (ImGui::ColorEdit3("Color", sun_color.data(),
         ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR)) {
-    environment_vm_->SetSunColorRgb(
+    commands_->RunRgb(env_commands::kSunColorRgb,
       { sun_color.at(0), sun_color.at(1), sun_color.at(2) });
   }
   ImGui::EndDisabled();
@@ -681,7 +699,7 @@ void EnvironmentDebugPanel::DrawSunSection()
   float sun_source_angle_deg = environment_vm_->GetSunSourceAngleDeg();
   if (ImGui::DragFloat("Source angle (deg)", &sun_source_angle_deg, 0.01F,
         0.01F, 5.0F, "%.3F")) {
-    environment_vm_->SetSunSourceAngleDeg(sun_source_angle_deg);
+    commands_->RunFloat(env_commands::kSunSourceAngleDeg, sun_source_angle_deg);
   }
 
   ImGui::SeparatorText("Atmosphere Light");
@@ -697,7 +715,9 @@ void EnvironmentDebugPanel::DrawSunSection()
   if (ImGui::Combo("Atmosphere Slot", &atmosphere_light_slot,
         kAtmosphereLightSlotLabels.data(),
         static_cast<int>(kAtmosphereLightSlotLabels.size()))) {
-    environment_vm_->SetSunAtmosphereLightSlot(atmosphere_light_slot);
+    commands_->RunText(env_commands::kSunAtmosphereLightSlot,
+      env_commands::ValueAt(
+        env_commands::kAtmosphereLightSlots, atmosphere_light_slot));
   }
   ImGui::EndDisabled();
   if (preview_owns_role) {
@@ -707,7 +727,7 @@ void EnvironmentDebugPanel::DrawSunSection()
     = environment_vm_->GetSunUsePerPixelAtmosphereTransmittance();
   if (ImGui::Checkbox("Per-Pixel Atmosphere Transmittance",
         &use_per_pixel_atmosphere_transmittance)) {
-    environment_vm_->SetSunUsePerPixelAtmosphereTransmittance(
+    commands_->RunBool(env_commands::kSunUsePerPixelAtmosphereTransmittance,
       use_per_pixel_atmosphere_transmittance);
   }
   auto disk_luminance_scale
@@ -717,7 +737,8 @@ void EnvironmentDebugPanel::DrawSunSection()
     | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_NoOptions;
   if (ImGui::ColorEdit3("Atmosphere Sun Disk Color Scale",
         &disk_luminance_scale.x, kSunDiskColorScaleFlags)) {
-    environment_vm_->SetSunAtmosphereDiskLuminanceScale(disk_luminance_scale);
+    commands_->RunRgb(
+      env_commands::kSunAtmosphereDiskLuminanceScale, disk_luminance_scale);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_Stationary)) {
     ImGui::SetTooltip(
@@ -731,13 +752,14 @@ void EnvironmentDebugPanel::DrawSunSection()
   float sun_shadow_bias = environment_vm_->GetSunShadowBias();
   if (ImGui::DragFloat(
         "Shadow bias", &sun_shadow_bias, 0.0001F, 0.0F, 1.0F, "%.4f")) {
-    environment_vm_->SetSunShadowBias(sun_shadow_bias);
+    commands_->RunFloat(env_commands::kSunShadowBias, sun_shadow_bias);
   }
 
   float sun_shadow_normal_bias = environment_vm_->GetSunShadowNormalBias();
   if (ImGui::DragFloat("Shadow normal bias", &sun_shadow_normal_bias, 0.0001F,
         0.0F, 1.0F, "%.4f")) {
-    environment_vm_->SetSunShadowNormalBias(sun_shadow_normal_bias);
+    commands_->RunFloat(
+      env_commands::kSunShadowNormalBias, sun_shadow_normal_bias);
   }
 
   int sun_shadow_resolution_hint
@@ -746,12 +768,15 @@ void EnvironmentDebugPanel::DrawSunSection()
   if (ImGui::Combo("Resolution hint", &sun_shadow_resolution_hint,
         kShadowResolutionLabels.data(),
         static_cast<int>(kShadowResolutionLabels.size()))) {
-    environment_vm_->SetSunShadowResolutionHint(sun_shadow_resolution_hint);
+    commands_->RunText(env_commands::kSunShadowResolutionHint,
+      env_commands::ValueAt(
+        env_commands::kShadowResolutions, sun_shadow_resolution_hint));
   }
 
   int sun_shadow_cascade_count = environment_vm_->GetSunShadowCascadeCount();
   if (ImGui::SliderInt("Cascade count", &sun_shadow_cascade_count, 1, 4)) {
-    environment_vm_->SetSunShadowCascadeCount(sun_shadow_cascade_count);
+    commands_->RunInt(
+      env_commands::kSunShadowCascadeCount, sun_shadow_cascade_count);
   }
 
   int sun_shadow_split_mode = environment_vm_->GetSunShadowSplitMode();
@@ -759,7 +784,9 @@ void EnvironmentDebugPanel::DrawSunSection()
   if (ImGui::Combo("Split mode", &sun_shadow_split_mode,
         kShadowSplitModeLabels.data(),
         static_cast<int>(kShadowSplitModeLabels.size()))) {
-    environment_vm_->SetSunShadowSplitMode(sun_shadow_split_mode);
+    commands_->RunText(env_commands::kSunShadowSplitMode,
+      env_commands::ValueAt(
+        env_commands::kShadowSplitModes, sun_shadow_split_mode));
   }
 
   const bool generated_splits = sun_shadow_split_mode == 0;
@@ -768,14 +795,15 @@ void EnvironmentDebugPanel::DrawSunSection()
     float sun_shadow_max_distance = environment_vm_->GetSunShadowMaxDistance();
     if (ImGui::DragFloat("Max shadow distance", &sun_shadow_max_distance, 1.0F,
           1.0F, 100000.0F, "%.1f")) {
-      environment_vm_->SetSunShadowMaxDistance(sun_shadow_max_distance);
+      commands_->RunFloat(
+        env_commands::kSunShadowMaxDistance, sun_shadow_max_distance);
     }
 
     float sun_shadow_distribution_exponent
       = environment_vm_->GetSunShadowDistributionExponent();
     if (ImGui::DragFloat("Distribution exponent",
           &sun_shadow_distribution_exponent, 0.05F, 1.0F, 16.0F, "%.2f")) {
-      environment_vm_->SetSunShadowDistributionExponent(
+      commands_->RunFloat(env_commands::kSunShadowDistributionExponent,
         sun_shadow_distribution_exponent);
     }
   } else {
@@ -786,7 +814,7 @@ void EnvironmentDebugPanel::DrawSunSection()
     = environment_vm_->GetSunShadowTransitionFraction();
   if (ImGui::SliderFloat("Transition fraction", &sun_shadow_transition_fraction,
         0.0F, 1.0F, "%.3f")) {
-    environment_vm_->SetSunShadowTransitionFraction(
+    commands_->RunFloat(env_commands::kSunShadowTransitionFraction,
       sun_shadow_transition_fraction);
   }
 
@@ -794,7 +822,7 @@ void EnvironmentDebugPanel::DrawSunSection()
     = environment_vm_->GetSunShadowDistanceFadeoutFraction();
   if (ImGui::SliderFloat("Distance fadeout fraction",
         &sun_shadow_distance_fadeout_fraction, 0.0F, 1.0F, "%.3f")) {
-    environment_vm_->SetSunShadowDistanceFadeoutFraction(
+    commands_->RunFloat(env_commands::kSunShadowDistanceFadeoutFraction,
       sun_shadow_distance_fadeout_fraction);
   }
 
@@ -810,7 +838,8 @@ void EnvironmentDebugPanel::DrawSunSection()
       const float drag_min = minimum_distance + 0.1F;
       if (ImGui::DragFloat(
             label.c_str(), &distance, 0.5F, drag_min, 100000.0F, "%.1f")) {
-        environment_vm_->SetSunShadowCascadeDistance(cascade_index, distance);
+        commands_->Run(env_commands::kSunShadowCascadeDistance,
+          { { "cascade", cascade_index }, { "distance", distance } });
       }
       minimum_distance = std::max(distance, drag_min);
     }
@@ -830,9 +859,9 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
 
   bool enabled = sky_atmo_enabled;
   if (ImGui::Checkbox("Enabled##SkyAtmo", &enabled)) {
-    environment_vm_->SetSkyAtmosphereEnabled(enabled);
+    commands_->RunBool(env_commands::kSkyAtmosphereEnabled, enabled);
     if (enabled) {
-      environment_vm_->SetSkySphereEnabled(false);
+      commands_->RunBool(env_commands::kSkySphereEnabled, false);
     }
   }
 
@@ -850,7 +879,8 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   int transform_mode = environment_vm_->GetSkyAtmosphereTransformMode();
   if (ImGui::Combo("Transform Mode", &transform_mode, transform_modes.data(),
         static_cast<int>(transform_modes.size()))) {
-    environment_vm_->SetSkyAtmosphereTransformMode(transform_mode);
+    commands_->RunText(env_commands::kSkyAtmosphereTransformMode,
+      env_commands::ValueAt(env_commands::kTransformModes, transform_mode));
   }
 
   // Planet parameters
@@ -861,17 +891,18 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   float planet_radius_km = environment_vm_->GetPlanetRadiusKm();
   if (ImGui::DragFloat(
         "Radius (km)", &planet_radius_km, 10.0F, 10.0F, 100000.0F, "%.0F")) {
-    environment_vm_->SetPlanetRadiusKm(planet_radius_km);
+    commands_->RunFloat(env_commands::kPlanetRadiusKm, planet_radius_km);
   }
   float atmosphere_height_km = environment_vm_->GetAtmosphereHeightKm();
   if (ImGui::DragFloat("Atmosphere Height (km)", &atmosphere_height_km, 1.0F,
         1.0F, 1000.0F, "%.1F")) {
-    environment_vm_->SetAtmosphereHeightKm(atmosphere_height_km);
+    commands_->RunFloat(
+      env_commands::kAtmosphereHeightKm, atmosphere_height_km);
   }
   ImGui::SetNextItemWidth(240);
   auto ground_albedo = environment_vm_->GetGroundAlbedo();
   if (ImGui::ColorEdit3("Ground Albedo", &ground_albedo.x)) {
-    environment_vm_->SetGroundAlbedo(ground_albedo);
+    commands_->RunRgb(env_commands::kGroundAlbedo, ground_albedo);
   }
 
   ImGui::Separator();
@@ -883,22 +914,24 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   float rayleigh_scale_height_km = environment_vm_->GetRayleighScaleHeightKm();
   if (ImGui::DragFloat("Rayleigh Scale Height (km)", &rayleigh_scale_height_km,
         0.1F, 0.1F, 50.0F, "%.1F")) {
-    environment_vm_->SetRayleighScaleHeightKm(rayleigh_scale_height_km);
+    commands_->RunFloat(
+      env_commands::kRayleighScaleHeightKm, rayleigh_scale_height_km);
   }
   float mie_scale_height_km = environment_vm_->GetMieScaleHeightKm();
   if (ImGui::DragFloat("Mie Scale Height (km)", &mie_scale_height_km, 0.05F,
         0.05F, 20.0F, "%.2F")) {
-    environment_vm_->SetMieScaleHeightKm(mie_scale_height_km);
+    commands_->RunFloat(env_commands::kMieScaleHeightKm, mie_scale_height_km);
   }
   float mie_anisotropy = environment_vm_->GetMieAnisotropy();
   if (ImGui::SliderFloat(
         "Mie Anisotropy", &mie_anisotropy, 0.0F, 0.99F, "%.2F")) {
-    environment_vm_->SetMieAnisotropy(mie_anisotropy);
+    commands_->RunFloat(env_commands::kMieAnisotropy, mie_anisotropy);
   }
   float mie_absorption_scale = environment_vm_->GetMieAbsorptionScale();
   if (ImGui::SliderFloat(
         "Mie Absorption", &mie_absorption_scale, 0.0F, 5.0F, "%.2F")) {
-    environment_vm_->SetMieAbsorptionScale(mie_absorption_scale);
+    commands_->RunFloat(
+      env_commands::kMieAbsorptionScale, mie_absorption_scale);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
     ImGui::SetTooltip(
@@ -910,20 +943,20 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   float multi_scattering = environment_vm_->GetMultiScattering();
   if (ImGui::SliderFloat(
         "Multi-Scattering", &multi_scattering, 0.0F, 5.0F, "%.2F")) {
-    environment_vm_->SetMultiScattering(multi_scattering);
+    commands_->RunFloat(env_commands::kMultiScattering, multi_scattering);
   }
 
   ImGui::SeparatorText("Art Direction");
   auto sky_luminance = environment_vm_->GetSkyLuminanceFactor();
   if (ImGui::ColorEdit3("Sky Luminance Factor", &sky_luminance.x,
         ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR)) {
-    environment_vm_->SetSkyLuminanceFactor(sky_luminance);
+    commands_->RunRgb(env_commands::kSkyLuminanceFactor, sky_luminance);
   }
   auto sky_aerial_luminance
     = environment_vm_->GetSkyAndAerialPerspectiveLuminanceFactor();
   if (ImGui::ColorEdit3("Sky+Aerial Luminance", &sky_aerial_luminance.x,
         ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR)) {
-    environment_vm_->SetSkyAndAerialPerspectiveLuminanceFactor(
+    commands_->RunRgb(env_commands::kSkyAndAerialPerspectiveLuminanceFactor,
       sky_aerial_luminance);
   }
 
@@ -936,7 +969,7 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   ImGui::TextDisabled("Peak altitude is in km. Slopes are shown in 1/km. "
                       "Offsets are unitless density terms.");
 
-  auto ozone_profile = environment_vm_->GetOzoneDensityProfile();
+  const auto ozone_profile = environment_vm_->GetOzoneDensityProfile();
   const auto& lower = ozone_profile.layers.at(0);
   const auto& upper = ozone_profile.layers.at(1);
 
@@ -985,49 +1018,36 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   }
 
   if (ozone_profile_changed) {
-    ozone_profile.layers.at(0).width_m = peak_alt_km * kKmToMeters;
-    ozone_profile.layers.at(0).exp_term = 0.0F;
-    ozone_profile.layers.at(0).linear_term = lower_slope_inv_km / kKmToMeters;
-    ozone_profile.layers.at(0).constant_term = lower_offset;
-
-    ozone_profile.layers.at(1).width_m = 0.0F;
-    ozone_profile.layers.at(1).exp_term = 0.0F;
-    ozone_profile.layers.at(1).linear_term = upper_slope_inv_km / kKmToMeters;
-    ozone_profile.layers.at(1).constant_term = upper_offset;
-
-    environment_vm_->SetOzoneDensityProfile(ozone_profile);
+    commands_->Run(env_commands::kOzoneDensityProfile,
+      {
+        { "peak_km", peak_alt_km },
+        { "lower_slope", lower_slope_inv_km },
+        { "lower_offset", lower_offset },
+        { "upper_slope", upper_slope_inv_km },
+        { "upper_offset", upper_offset },
+      });
   }
 
-  // Ozone Absorption Color (scaled for usability)
-  // Ozone absorption is typically ~1e-6. We scale by 1e6 so user sees "0.65"
-  // instead of "0.00000065".
+  // Ozone absorption is about 1e-6 per meter; it is shown scaled by 1e6.
   constexpr float kOzoneScale = 1.0e6F;
   glm::vec3 absorption_rgb = environment_vm_->GetOzoneRgb() * kOzoneScale;
   std::array<float, 3> absorption_rgb_arr
     = { absorption_rgb.r, absorption_rgb.g, absorption_rgb.b };
 
-  // Use DragFloat3 or ColorEdit3. ColorEdit3 is good for picking color ratios,
-  // but if we want to visualize "intensity" maybe DragFloat3 is better?
-  // Let's stick to ColorEdit3 but with the scaled validation.
-  // Actually, ColorEdit3 clamps 0-1 for the picker visual, which is fine if we
-  // map 0..1 to 0..1e-6 range? No, if the values are 0.65 (after scaling), they
-  // fit nicely in 0..1 ColorEdit. So scaling by 1e6 makes it user-friendly
-  // color picker compatible!
-
   if (ImGui::DragFloat3("Ozone Absorption (x1e-6 1/m)",
         absorption_rgb_arr.data(), 0.01F, 0.0F, 10.0F, "%.3f")) {
-    environment_vm_->SetOzoneRgb(
+    commands_->RunRgb(env_commands::kOzoneRgb,
       glm::vec3(absorption_rgb_arr.at(0), absorption_rgb_arr.at(1),
         absorption_rgb_arr.at(2))
-      / kOzoneScale);
+        / kOzoneScale);
   }
   ImGui::SameLine();
   if (ImGui::ColorEdit3("##OzoneColorPreview", absorption_rgb_arr.data(),
         ImGuiColorEditFlags_NoInputs | ImGuiColorEditFlags_HDR)) {
-    environment_vm_->SetOzoneRgb(
+    commands_->RunRgb(env_commands::kOzoneRgb,
       glm::vec3(absorption_rgb_arr.at(0), absorption_rgb_arr.at(1),
         absorption_rgb_arr.at(2))
-      / kOzoneScale);
+        / kOzoneScale);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
     ImGui::SetTooltip(
@@ -1039,7 +1059,7 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   ImGui::SeparatorText("Sun Disk");
   bool sun_disk_enabled = environment_vm_->GetSunDiskEnabled();
   if (ImGui::Checkbox("Show Sun Disk", &sun_disk_enabled)) {
-    environment_vm_->SetSunDiskEnabled(sun_disk_enabled);
+    commands_->RunBool(env_commands::kSunDiskEnabled, sun_disk_enabled);
   }
   ImGui::TextDisabled("Radius is controlled in the Sun section.");
 
@@ -1049,7 +1069,8 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
     = environment_vm_->GetAerialPerspectiveEnabled();
   if (ImGui::Checkbox(
         "Enabled##AerialPerspective", &aerial_perspective_enabled)) {
-    environment_vm_->SetAerialPerspectiveEnabled(aerial_perspective_enabled);
+    commands_->RunBool(
+      env_commands::kAerialPerspectiveEnabled, aerial_perspective_enabled);
   }
   ImGui::TextDisabled("Strength zero disables AP without disabling sky");
 
@@ -1057,46 +1078,51 @@ void EnvironmentDebugPanel::DrawSkyAtmosphereSection()
   float aerial_perspective_scale = environment_vm_->GetAerialPerspectiveScale();
   if (ImGui::DragFloat("Distance Scale", &aerial_perspective_scale, 1.0F, 0.0F,
         10000.0F, "%.1F")) {
-    environment_vm_->SetAerialPerspectiveScale(aerial_perspective_scale);
+    commands_->RunFloat(
+      env_commands::kAerialPerspectiveScale, aerial_perspective_scale);
   }
   float aerial_start_depth
     = environment_vm_->GetAerialPerspectiveStartDepthMeters();
   if (ImGui::DragFloat("Start Depth (m)", &aerial_start_depth, 1.0F, 0.0F,
         1000000.0F, "%.1F")) {
-    environment_vm_->SetAerialPerspectiveStartDepthMeters(aerial_start_depth);
+    commands_->RunFloat(
+      env_commands::kAerialPerspectiveStartDepthMeters, aerial_start_depth);
   }
   float aerial_scattering_strength
     = environment_vm_->GetAerialScatteringStrength();
   if (ImGui::DragFloat("Haze Strength", &aerial_scattering_strength, 0.01F,
         0.0F, 100.0F, "%.2F")) {
-    environment_vm_->SetAerialScatteringStrength(aerial_scattering_strength);
+    commands_->RunFloat(
+      env_commands::kAerialScatteringStrength, aerial_scattering_strength);
   }
   float height_fog_contribution = environment_vm_->GetHeightFogContribution();
   if (ImGui::SliderFloat("Height Fog Contribution", &height_fog_contribution,
         0.0F, 1.0F, "%.2F")) {
-    environment_vm_->SetHeightFogContribution(height_fog_contribution);
+    commands_->RunFloat(
+      env_commands::kHeightFogContribution, height_fog_contribution);
   }
   float trace_sample_count_scale = environment_vm_->GetTraceSampleCountScale();
   if (ImGui::SliderFloat(
         "Trace Sample Scale", &trace_sample_count_scale, 0.25F, 8.0F, "%.2F")) {
-    environment_vm_->SetTraceSampleCountScale(trace_sample_count_scale);
+    commands_->RunFloat(
+      env_commands::kTraceSampleCountScale, trace_sample_count_scale);
   }
   float transmittance_min_light_elevation
     = environment_vm_->GetTransmittanceMinLightElevationDeg();
   if (ImGui::SliderFloat("Min Light Elevation (deg)",
         &transmittance_min_light_elevation, -90.0F, 90.0F, "%.1F")) {
-    environment_vm_->SetTransmittanceMinLightElevationDeg(
+    commands_->RunFloat(env_commands::kTransmittanceMinLightElevationDeg,
       transmittance_min_light_elevation);
   }
   bool atmosphere_holdout = environment_vm_->GetAtmosphereHoldout();
   if (ImGui::Checkbox("Holdout##SkyAtmo", &atmosphere_holdout)) {
-    environment_vm_->SetAtmosphereHoldout(atmosphere_holdout);
+    commands_->RunBool(env_commands::kAtmosphereHoldout, atmosphere_holdout);
   }
   bool atmosphere_render_in_main_pass
     = environment_vm_->GetAtmosphereRenderInMainPass();
   if (ImGui::Checkbox(
         "Render In Main Pass##SkyAtmo", &atmosphere_render_in_main_pass)) {
-    environment_vm_->SetAtmosphereRenderInMainPass(
+    commands_->RunBool(env_commands::kAtmosphereRenderInMainPass,
       atmosphere_render_in_main_pass);
   }
   ImGui::EndDisabled();
@@ -1117,10 +1143,10 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
   bool enabled = sky_sphere_enabled;
   if (ImGui::Checkbox("Enabled##SkySphere", &enabled)) {
     if (enabled) {
-      environment_vm_->SetSkyAtmosphereEnabled(false);
-      environment_vm_->SetSkySphereEnabled(true);
+      commands_->RunBool(env_commands::kSkyAtmosphereEnabled, false);
+      commands_->RunBool(env_commands::kSkySphereEnabled, true);
     } else {
-      environment_vm_->SetSkySphereEnabled(false);
+      commands_->RunBool(env_commands::kSkySphereEnabled, false);
     }
   }
 
@@ -1135,16 +1161,14 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
   int sky_sphere_source = environment_vm_->GetSkySphereSource();
   if (ImGui::Combo("Source##SkySphere", &sky_sphere_source, sources.data(),
         static_cast<int>(sources.size()))) {
-    environment_vm_->SetSkySphereSource(sky_sphere_source);
+    commands_->RunText(env_commands::kSkySphereSource,
+      env_commands::ValueAt(
+        env_commands::kSkySphereSources, sky_sphere_source));
   }
 
   if (sky_sphere_source == 0) { // Cubemap
-    const auto key = environment_vm_->GetSkySphereCubemapResourceKey();
-    ImGui::Text(
-      "Cubemap ResourceKey: %llu", static_cast<unsigned long long>(key.get()));
-    if (key.IsPlaceholder()) {
-      ImGui::TextColored(
-        ImVec4(1.0F, 0.7F, 0.0F, 1.0F), "No cubemap bound (placeholder)");
+    if (environment_vm_->GetSkySphereCubemapResourceKey().IsPlaceholder()) {
+      ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F), "No cubemap bound");
     }
 
     ImGui::Spacing();
@@ -1159,12 +1183,11 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
       CopyPathToBuffer(std::filesystem::path(skybox_path),
         std::span(skybox_path_.data(), skybox_path_.size()));
     }
-    const bool path_changed = ImGui::InputText(
-      "Path##Skybox", skybox_path_.data(), skybox_path_.size());
+    ImGui::InputText("Path##Skybox", skybox_path_.data(), skybox_path_.size());
     const bool path_active = ImGui::IsItemActive();
-    if (path_changed) {
-      environment_vm_->SetSkyboxPath(std::string_view(skybox_path_.data()));
-
+    if (ImGui::IsItemDeactivatedAfterEdit()) {
+      commands_->RunText(
+        env_commands::kSkyboxPath, std::string_view(skybox_path_.data()));
     } else if (!path_active) {
       const std::string current_path(skybox_path_.data());
       if (!skybox_path.empty() && skybox_path != current_path) {
@@ -1183,6 +1206,8 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
       = environment_vm_->ConsumeSkyboxBrowseResult()) {
       CopyPathToBuffer(
         *selected_path, std::span(skybox_path_.data(), skybox_path_.size()));
+      commands_->RunText(
+        env_commands::kSkyboxPath, std::string_view(skybox_path_.data()));
     }
 
     const std::array layouts = {
@@ -1195,7 +1220,8 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
     int skybox_layout_idx = environment_vm_->GetSkyboxLayoutIndex();
     if (ImGui::Combo("Layout##Skybox", &skybox_layout_idx, layouts.data(),
           static_cast<int>(layouts.size()))) {
-      environment_vm_->SetSkyboxLayoutIndex(skybox_layout_idx);
+      commands_->RunText(env_commands::kSkyboxLayout,
+        env_commands::ValueAt(env_commands::kSkyboxLayouts, skybox_layout_idx));
     }
 
     const std::array formats = { "RGBA8", "RGBA16F", "RGBA32F", "BC7" };
@@ -1203,16 +1229,18 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
       = environment_vm_->GetSkyboxOutputFormatIndex();
     if (ImGui::Combo("Output##Skybox", &skybox_output_format_idx,
           formats.data(), static_cast<int>(formats.size()))) {
-      environment_vm_->SetSkyboxOutputFormatIndex(skybox_output_format_idx);
+      commands_->RunText(env_commands::kSkyboxFormat,
+        env_commands::ValueAt(
+          env_commands::kSkyboxFormats, skybox_output_format_idx));
     }
 
     int skybox_face_size = environment_vm_->GetSkyboxFaceSize();
     if (ImGui::DragInt("Face Size##Skybox", &skybox_face_size, 16, 16, 4096)) {
-      environment_vm_->SetSkyboxFaceSize(skybox_face_size);
+      commands_->RunInt(env_commands::kSkyboxFaceSize, skybox_face_size);
     }
     bool skybox_flip_y = environment_vm_->GetSkyboxFlipY();
     if (ImGui::Checkbox("Flip Y##Skybox", &skybox_flip_y)) {
-      environment_vm_->SetSkyboxFlipY(skybox_flip_y);
+      commands_->RunBool(env_commands::kSkyboxFlipY, skybox_flip_y);
     }
 
     const bool output_is_ldr
@@ -1222,21 +1250,36 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
         = environment_vm_->GetSkyboxTonemapHdrToLdr();
       if (ImGui::Checkbox(
             "HDR->LDR Tonemap##Skybox", &skybox_tonemap_hdr_to_ldr)) {
-        environment_vm_->SetSkyboxTonemapHdrToLdr(skybox_tonemap_hdr_to_ldr);
+        commands_->RunBool(
+          env_commands::kSkyboxTonemapHdrToLdr, skybox_tonemap_hdr_to_ldr);
       }
       float skybox_hdr_exposure_ev = environment_vm_->GetSkyboxHdrExposureEv();
       if (ImGui::DragFloat("HDR Exposure (EV)##Skybox", &skybox_hdr_exposure_ev,
             0.1F, 0.0F, 16.0F, "%.2F")) {
-        environment_vm_->SetSkyboxHdrExposureEv(
+        commands_->RunFloat(env_commands::kSkyboxHdrExposureEv,
           std::max(skybox_hdr_exposure_ev, 0.0F));
       }
     }
 
     if (ImGui::Button("Load Skybox##Skybox")) {
-      environment_vm_->LoadSkybox(std::string_view(skybox_path_.data()),
-        skybox_layout_idx, skybox_output_format_idx, skybox_face_size,
-        skybox_flip_y, environment_vm_->GetSkyboxTonemapHdrToLdr(),
-        environment_vm_->GetSkyboxHdrExposureEv());
+      commands_->Run(env_commands::kLoadSkybox,
+        {
+          { "path", std::string_view(skybox_path_.data()) },
+          {
+            "layout",
+            env_commands::ValueAt(
+              env_commands::kSkyboxLayouts, skybox_layout_idx),
+          },
+          {
+            "format",
+            env_commands::ValueAt(
+              env_commands::kSkyboxFormats, skybox_output_format_idx),
+          },
+          { "face_size", skybox_face_size },
+          { "flip_y", skybox_flip_y },
+          { "tonemap", environment_vm_->GetSkyboxTonemapHdrToLdr() },
+          { "exposure_ev", environment_vm_->GetSkyboxHdrExposureEv() },
+        });
     }
     ImGui::SameLine();
     const auto status_message = environment_vm_->GetSkyboxStatusMessage();
@@ -1244,23 +1287,11 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
       ImGui::TextUnformatted(std::string(status_message).c_str());
     }
 
-    // Always draw both rows so the controls below keep their position while a
-    // skybox loads or before the first one does.
-    const int last_face_size = environment_vm_->GetSkyboxLastFaceSize();
-    if (last_face_size > 0) {
-      ImGui::Text("Last face size: %d", last_face_size);
-      ImGui::Text("Last ResourceKey: %llu",
-        static_cast<unsigned long long>(
-          environment_vm_->GetSkyboxLastResourceKey().get()));
-    } else {
-      ImGui::TextDisabled("Last face size: -");
-      ImGui::TextDisabled("Last ResourceKey: -");
-    }
-
   } else { // Solid color
     auto sky_sphere_solid_color = environment_vm_->GetSkySphereSolidColor();
     if (ImGui::ColorEdit3("Color##SkySphere", &sky_sphere_solid_color.x)) {
-      environment_vm_->SetSkySphereSolidColor(sky_sphere_solid_color);
+      commands_->RunRgb(
+        env_commands::kSkySphereSolidColor, sky_sphere_solid_color);
     }
   }
 
@@ -1268,7 +1299,7 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
   if (ImGui::DragFloat("Sky Illuminance (lux)", &illuminance, 50.0F, 0.0F,
         200000.0F, illuminance > 0.0F ? "%.0f lux" : "Off (raw image)",
         ImGuiSliderFlags_Logarithmic)) {
-    environment_vm_->SetSkySphereIlluminanceLux(illuminance);
+    commands_->RunFloat(env_commands::kSkySphereIlluminanceLux, illuminance);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
     ImGui::SetTooltip(
@@ -1298,7 +1329,7 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
     : "Sky Color Exposure (EV)";
   if (ImGui::DragFloat(exposure_label, &sky_exposure_ev, 0.05F,
         kMinSkySphereExposureEv, kMaxSkySphereExposureEv, "%+.2f")) {
-    environment_vm_->SetSkyIntensity(
+    commands_->RunFloat(env_commands::kSkyIntensity,
       SkySphereExposureEvToRadianceScale(sky_exposure_ev));
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
@@ -1314,7 +1345,8 @@ void EnvironmentDebugPanel::DrawSkySphereSection()
   float sky_sphere_rotation_deg = environment_vm_->GetSkySphereRotationDeg();
   if (ImGui::SliderFloat(
         "Rotation (deg)", &sky_sphere_rotation_deg, 0.0F, 360.0F, "%.1F")) {
-    environment_vm_->SetSkySphereRotationDeg(sky_sphere_rotation_deg);
+    commands_->RunFloat(
+      env_commands::kSkySphereRotationDeg, sky_sphere_rotation_deg);
   }
 
   ImGui::PopItemWidth();
@@ -1342,7 +1374,7 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
 {
   bool enabled = environment_vm_->GetSkyLightEnabled();
   if (ImGui::Checkbox("Enabled##SkyLight", &enabled)) {
-    environment_vm_->SetSkyLightEnabled(enabled);
+    commands_->RunBool(env_commands::kSkyLightEnabled, enabled);
   }
 
   if (!enabled) {
@@ -1354,7 +1386,7 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
   float intensity = environment_vm_->GetSkyLightIntensityMul();
   if (ImGui::DragFloat("Intensity##SkyLight", &intensity, 0.01F, 0.0F,
         100000.0F, "%.2F", ImGuiSliderFlags_Logarithmic)) {
-    environment_vm_->SetSkyLightIntensityMul(intensity);
+    commands_->RunFloat(env_commands::kSkyLightIntensityMul, intensity);
   }
   if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
     ImGui::SetTooltip(
@@ -1369,17 +1401,15 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
   ImGui::SetNextItemWidth(220.0F);
   if (ImGui::Combo("Source##SkyLight", &source, sources.data(),
         static_cast<int>(sources.size()))) {
-    environment_vm_->SetSkyLightSource(source);
+    commands_->RunText(env_commands::kSkyLightSource,
+      env_commands::ValueAt(env_commands::kSkyLightSources, source));
   }
   if (source == 1) {
-    const auto key = environment_vm_->GetSkyLightCubemapResourceKey();
-    ImGui::Text(
-      "Cubemap ResourceKey: %llu", static_cast<unsigned long long>(key.get()));
     float cubemap_lux = environment_vm_->GetSkyLightIlluminanceLux();
     if (ImGui::DragFloat("Cubemap Illuminance (lux)", &cubemap_lux, 50.0F, 0.0F,
           200000.0F, cubemap_lux > 0.0F ? "%.0f lux" : "Off (raw image)",
           ImGuiSliderFlags_Logarithmic)) {
-      environment_vm_->SetSkyLightIlluminanceLux(cubemap_lux);
+      commands_->RunFloat(env_commands::kSkyLightIlluminanceLux, cubemap_lux);
     }
     if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
       ImGui::SetTooltip(
@@ -1403,39 +1433,41 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
 
   auto sky_light_tint = environment_vm_->GetSkyLightTint();
   if (ImGui::ColorEdit3("Tint##SkyLight", &sky_light_tint.x)) {
-    environment_vm_->SetSkyLightTint(sky_light_tint);
+    commands_->RunRgb(env_commands::kSkyLightTint, sky_light_tint);
   }
 
   float sky_light_diffuse = environment_vm_->GetSkyLightDiffuse();
   if (ImGui::DragFloat(
         "Diffuse Indirect", &sky_light_diffuse, 0.01F, 0.0F, 6.0F, "%.2F")) {
-    environment_vm_->SetSkyLightDiffuse(sky_light_diffuse);
+    commands_->RunFloat(env_commands::kSkyLightDiffuse, sky_light_diffuse);
   }
 
   float specular = environment_vm_->GetSkyLightSpecular();
   if (ImGui::DragFloat(
         "Specular Indirect", &specular, 0.01F, 0.0F, 6.0F, "%.2F")) {
-    environment_vm_->SetSkyLightSpecular(specular);
+    commands_->RunFloat(env_commands::kSkyLightSpecular, specular);
   }
   bool reflections = environment_vm_->GetSkyLightAffectReflections();
   if (ImGui::Checkbox("Affect Reflections", &reflections)) {
-    environment_vm_->SetSkyLightAffectReflections(reflections);
+    commands_->RunBool(env_commands::kSkyLightAffectReflections, reflections);
   }
 
   bool override_hemisphere
     = environment_vm_->GetSkyLightLowerHemisphereOverride();
   if (ImGui::Checkbox("Override Lower Hemisphere", &override_hemisphere)) {
-    environment_vm_->SetSkyLightLowerHemisphereOverride(override_hemisphere);
+    commands_->RunBool(
+      env_commands::kSkyLightLowerHemisphereOverride, override_hemisphere);
   }
   ImGui::BeginDisabled(!override_hemisphere);
   auto lower_hemisphere = environment_vm_->GetSkyLightLowerHemisphereColor();
   if (ImGui::ColorEdit3(
         "Lower Hemisphere", &lower_hemisphere.x, ImGuiColorEditFlags_Float)) {
-    environment_vm_->SetSkyLightLowerHemisphereColor(lower_hemisphere);
+    commands_->RunRgb(
+      env_commands::kSkyLightLowerHemisphereColor, lower_hemisphere);
   }
   float blend = environment_vm_->GetSkyLightLowerHemisphereBlend();
   if (ImGui::SliderFloat("Hemisphere Blend", &blend, 0.0F, 1.0F, "%.2F")) {
-    environment_vm_->SetSkyLightLowerHemisphereBlend(blend);
+    commands_->RunFloat(env_commands::kSkyLightLowerHemisphereBlend, blend);
   }
   ImGui::EndDisabled();
 
@@ -1443,31 +1475,12 @@ void EnvironmentDebugPanel::DrawSkyLightSection()
     = environment_vm_->GetSkyLightVolumetricScatteringIntensity();
   if (ImGui::DragFloat("Volumetric Scattering",
         &volumetric_scattering_intensity, 0.01F, 0.0F, 4.0F, "%.2F")) {
-    environment_vm_->SetSkyLightVolumetricScatteringIntensity(
+    commands_->RunFloat(env_commands::kSkyLightVolumetricScatteringIntensity,
       volumetric_scattering_intensity);
   }
 
   ImGui::TreePop();
   ImGui::PopItemWidth();
-}
-
-auto EnvironmentDebugPanel::HasPendingChanges() const -> bool
-{
-  return environment_vm_ ? environment_vm_->HasPendingChanges() : false;
-}
-
-void EnvironmentDebugPanel::ApplyPendingChanges()
-{
-  if (environment_vm_) {
-    environment_vm_->ApplyPendingChanges();
-  }
-}
-
-void EnvironmentDebugPanel::RequestResync()
-{
-  if (environment_vm_) {
-    environment_vm_->RequestResync();
-  }
 }
 
 // NOLINTEND(*-magic-numbers, bugprone-signed-bitwise)

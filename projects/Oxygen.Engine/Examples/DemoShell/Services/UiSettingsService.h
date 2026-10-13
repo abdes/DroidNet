@@ -14,16 +14,16 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/ImGui/Widgets/StatsOverlay.h>
 
 namespace oxygen::examples {
 
 class SettingsService;
 
-//! Settings persistence for UI visibility and stats overlays.
+//! Settings persistence for the DemoShell layout: axes visibility and the
+//! active panel.
 /*!
- Owns the UI-facing settings for axes visibility and stats overlays, delegating
- persistence to `SettingsService` and exposing an epoch for cache invalidation.
+ Delegates persistence to `SettingsService` and exposes an epoch for cache
+ invalidation. The stats overlay is the host toolbar's (`host.ui.stats.*`).
 
 ### Key Features
 
@@ -47,19 +47,6 @@ public:
   //! Sets axes widget visibility.
   virtual auto SetAxesVisible(bool visible) -> void;
 
-  //! Returns the current stats overlay configuration.
-  [[nodiscard]] virtual auto GetStatsConfig() const
-    -> imgui::StatsOverlayConfig;
-
-  //! Sets FPS stats visibility.
-  virtual auto SetStatsShowFps(bool visible) -> void;
-  //! Sets frame timing detail visibility.
-  virtual auto SetStatsShowFrameTimingDetail(bool visible) -> void;
-  //! Sets engine timing visibility.
-  virtual auto SetStatsShowEngineTiming(bool visible) -> void;
-  //! Sets budget stats visibility.
-  virtual auto SetStatsShowBudgetStats(bool visible) -> void;
-
   //! Returns the persisted active panel name (empty if none).
   [[nodiscard]] virtual auto GetActivePanelName() const
     -> std::optional<std::string>;
@@ -76,13 +63,6 @@ private:
     -> void;
 
   static constexpr std::string_view kAxesVisibleKey = "ui.axes.visible";
-  static constexpr std::string_view kStatsShowFpsKey = "ui.stats.show_fps";
-  static constexpr std::string_view kStatsShowDetailKey
-    = "ui.stats.show_frame_timing_detail";
-  static constexpr std::string_view kStatsShowEngineKey
-    = "ui.stats.show_engine_timing";
-  static constexpr std::string_view kStatsShowBudgetKey
-    = "ui.stats.show_budget_stats";
   static constexpr std::string_view kActivePanelKey = "demo_shell.active_panel";
   static constexpr bool kDefaultAxesVisible = true;
 

@@ -8,37 +8,244 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <memory>
 #include <string>
 #include <string_view>
 
+#include "DemoShell/PanelCommands.h"
 #include "DemoShell/UI/CameraControlPanel.h"
 #include "DemoShell/UI/CameraVm.h"
 #include "DemoShell/UI/OrbitCameraController.h"
+#include "DemoShell/UI/UiSettingsVm.h"
 #include <glm/ext/quaternion_float.hpp>
 #include <glm/ext/vector_float2.hpp>
 #include <glm/ext/vector_float3.hpp>
 #include <glm/geometric.hpp>
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
-#include <Oxygen/Input/Action.h>
-#include <Oxygen/Input/ActionValue.h>
 
 namespace oxygen::examples::ui {
 
 // ImGui takes printf-style text and literal layout metrics.
 // NOLINTBEGIN(cppcoreguidelines-pro-type-vararg, *-magic-numbers)
 
-CameraControlPanel::CameraControlPanel(observer_ptr<CameraVm> vm)
+namespace {
+
+  constexpr std::string_view kMode = "demo.camera.mode";
+  constexpr std::string_view kOrbitMode = "demo.camera.orbit_mode";
+  constexpr std::string_view kFlySpeed = "demo.camera.fly_speed";
+  constexpr std::string_view kDroneRunning = "demo.camera.drone.running";
+  constexpr std::string_view kDroneSpeed = "demo.camera.drone.speed";
+  constexpr std::string_view kDroneSmoothing = "demo.camera.drone.smoothing";
+  constexpr std::string_view kDroneFocusHeight
+    = "demo.camera.drone.focus_height";
+  constexpr std::string_view kDroneFocusOffset
+    = "demo.camera.drone.focus_offset";
+  constexpr std::string_view kDroneBobAmplitude
+    = "demo.camera.drone.bob_amplitude";
+  constexpr std::string_view kDroneBobFrequency
+    = "demo.camera.drone.bob_frequency";
+  constexpr std::string_view kDroneNoise = "demo.camera.drone.noise";
+  constexpr std::string_view kDroneBank = "demo.camera.drone.bank";
+  constexpr std::string_view kDronePoiRadius = "demo.camera.drone.poi_radius";
+  constexpr std::string_view kDronePoiMinSpeed
+    = "demo.camera.drone.poi_min_speed";
+  constexpr std::string_view kDroneShowPath = "demo.camera.drone.show_path";
+  constexpr std::string_view kProjection = "demo.camera.projection";
+  constexpr std::string_view kFov = "demo.camera.fov";
+  constexpr std::string_view kOrthoHeight = "demo.camera.ortho_height";
+  constexpr std::string_view kAspectMode = "demo.camera.aspect_mode";
+  constexpr std::string_view kAspectRatio = "demo.camera.aspect_ratio";
+  constexpr std::string_view kNear = "demo.camera.near";
+  constexpr std::string_view kFar = "demo.camera.far";
+  constexpr std::string_view kReset = "demo.camera.reset";
+  constexpr std::string_view kAxes = "demo.camera.axes";
+
+  constexpr auto kModeNames = std::array { "orbit", "fly", "drone" };
+  constexpr auto kModes = std::array {
+    CameraControlMode::kOrbit,
+    CameraControlMode::kFly,
+    CameraControlMode::kDrone,
+  };
+
+  auto Name(const std::string_view name) -> std::string
+  {
+    return std::string(name);
+  }
+
+  auto RegisterDroneCommands(PanelCommands& commands, observer_ptr<CameraVm> vm)
+    -> void
+  {
+    commands.AddBool(Name(kDroneRunning), "Drone Flight",
+      "Fly or pause the drone along its path",
+      [vm](const bool v) -> void { vm->SetDroneRunning(v); });
+    commands.AddFloat(
+      Name(kDroneSpeed), "Drone Speed", "Drone speed in units per second",
+      [vm](const float v) -> void { vm->SetDroneSpeed(v); }, 0.5F, 30.0F);
+    commands.AddFloat(
+      Name(kDroneSmoothing), "Drone Smoothing", "Drone motion damping",
+      [vm](const float v) -> void { vm->SetDroneDamping(v); }, 1.0F, 20.0F);
+    commands.AddFloat(
+      Name(kDroneFocusHeight), "Drone Focus Height",
+      "Height of the point the drone looks at",
+      [vm](const float v) -> void { vm->SetDroneFocusHeight(v); }, -5.0F,
+      15.0F);
+    commands.Add({
+      .name = Name(kDroneFocusOffset),
+      .label = "Drone Focus Offset",
+      .help = "Horizontal offset of the point the drone looks at",
+      .params = {
+        commands::CommandParam {
+          .name = "x",
+          .type = commands::ParamType::kDouble,
+          .help = "X offset",
+          .required = true,
+        },
+        commands::CommandParam {
+          .name = "z",
+          .type = commands::ParamType::kDouble,
+          .help = "Z offset",
+          .required = true,
+        },
+      },
+      .handler = [vm](const commands::CommandArgs& args,
+                   const commands::CommandContext&) -> commands::CommandResult {
+        vm->SetDroneFocusOffset(glm::vec2 {
+          static_cast<float>(args.GetDouble("x")),
+          static_cast<float>(args.GetDouble("z")),
+        });
+        return commands::CommandResult::Success();
+      },
+    });
+    commands.AddFloat(
+      Name(kDroneBobAmplitude), "Drone Bob Amplitude",
+      "Vertical bobbing amplitude",
+      [vm](const float v) -> void { vm->SetDroneBobAmplitude(v); }, 0.0F, 0.5F);
+    commands.AddFloat(
+      Name(kDroneBobFrequency), "Drone Bob Frequency",
+      "Vertical bobbing frequency in Hz",
+      [vm](const float v) -> void { vm->SetDroneBobFrequency(v); }, 0.1F, 5.0F);
+    commands.AddFloat(
+      Name(kDroneNoise), "Drone Noise", "Path noise amplitude",
+      [vm](const float v) -> void { vm->SetDroneNoiseAmplitude(v); }, 0.0F,
+      0.2F);
+    commands.AddFloat(
+      Name(kDroneBank), "Drone Bank", "Banking into turns",
+      [vm](const float v) -> void { vm->SetDroneBankFactor(v); }, 0.0F, 0.2F);
+    commands.AddFloat(
+      Name(kDronePoiRadius), "Drone POI Radius",
+      "Distance from a point of interest where the drone slows down",
+      [vm](const float v) -> void { vm->SetDronePOISlowdownRadius(v); }, 1.0F,
+      20.0F);
+    commands.AddFloat(
+      Name(kDronePoiMinSpeed), "Drone POI Min Speed",
+      "Speed factor at a point of interest",
+      [vm](const float v) -> void { vm->SetDronePOIMinSpeed(v); }, 0.1F, 1.0F);
+    commands.AddBool(Name(kDroneShowPath), "Drone Flight Path",
+      "Show the drone's flight path and minimap",
+      [vm](const bool v) -> void { vm->SetDroneShowPath(v); });
+  }
+
+  auto RegisterProjectionCommands(
+    PanelCommands& commands, observer_ptr<CameraVm> vm) -> void
+  {
+    commands.AddEnum(Name(kProjection), "Camera Projection",
+      "Projection of the active camera", { "perspective", "orthographic" },
+      [vm](const std::size_t i) -> void { vm->SetOrthographic(i == 1U); });
+    commands.AddFloat(
+      Name(kFov), "Camera Field of View",
+      "Vertical field of view of a perspective camera, in degrees",
+      [vm](const float v) -> void { vm->SetPerspectiveFovDegrees(v); }, 10.0F,
+      160.0F);
+    commands.AddFloat(
+      Name(kOrthoHeight), "Camera Ortho Size",
+      "Visible height of an orthographic camera, in world units",
+      [vm](const float v) -> void { vm->SetOrthoHeight(v); }, 0.0F);
+    commands.AddEnum(Name(kAspectMode), "Camera Aspect",
+      "auto fills the view; fixed keeps the ratio and adds bars",
+      { "auto", "fixed" }, [vm](const std::size_t i) -> void {
+        vm->SetAspectMode(
+          i == 1U ? CameraAspectMode::kFixed : CameraAspectMode::kAuto);
+      });
+    commands.AddFloat(
+      Name(kAspectRatio), "Camera Aspect Ratio",
+      "Width over height of a fixed-aspect camera",
+      [vm](const float v) -> void { vm->SetAspectRatio(v); }, 0.0F);
+    commands.AddFloat(Name(kNear), "Camera Near Plane",
+      "Near clipping distance of the active camera",
+      [vm](const float v) -> void {
+        if (vm->HasPerspectiveCamera()) {
+          vm->SetPerspectiveNearPlane(v);
+        } else {
+          vm->SetOrthoNearPlane(v);
+        }
+      });
+    commands.AddFloat(Name(kFar), "Camera Far Plane",
+      "Far clipping distance of the active camera",
+      [vm](const float v) -> void {
+        if (vm->HasPerspectiveCamera()) {
+          vm->SetPerspectiveFarPlane(v);
+        } else {
+          vm->SetOrthoFarPlane(v);
+        }
+      });
+  }
+
+  auto RegisterCommands(PanelCommands& commands, observer_ptr<CameraVm> vm)
+    -> void
+  {
+    commands.AddEnum(Name(kMode), "Camera Mode", "Camera control mode",
+      { kModeNames.begin(), kModeNames.end() },
+      [vm](const std::size_t i) -> void { vm->SetControlMode(kModes.at(i)); });
+    commands.AddEnum(Name(kOrbitMode), "Orbit Mode",
+      "Trackball rotates freely; turntable keeps the horizon level",
+      { "trackball", "turntable" }, [vm](const std::size_t i) -> void {
+        vm->SetOrbitMode(
+          i == 0U ? OrbitMode::kTrackball : OrbitMode::kTurntable);
+      });
+    commands.AddFloat(
+      Name(kFlySpeed), "Fly Speed", "Fly camera speed in units per second",
+      [vm](const float v) -> void { vm->SetFlyMoveSpeed(v); }, 0.1F, 1000.0F);
+    commands.AddAction(Name(kReset), "Reset Camera",
+      "Reset the camera to its initial position and rotation",
+      [vm] -> void { vm->RequestReset(); });
+    RegisterDroneCommands(commands, vm);
+    RegisterProjectionCommands(commands, vm);
+  }
+
+  auto ModeName(const CameraControlMode mode) -> std::string_view
+  {
+    for (std::size_t i = 0; i < kModes.size(); ++i) {
+      if (kModes.at(i) == mode) {
+        return kModeNames.at(i);
+      }
+    }
+    return kModeNames.front();
+  }
+
+} // namespace
+
+CameraControlPanel::CameraControlPanel(observer_ptr<CameraVm> vm,
+  observer_ptr<UiSettingsVm> ui_settings, observer_ptr<PanelCommands> commands)
   : vm_(vm)
+  , ui_settings_(ui_settings)
+  , commands_(commands)
 {
-  DCHECK_NOTNULL_F(vm, "CameraControlPanel requires CameraVm");
+  DCHECK_NOTNULL_F(vm_, "CameraControlPanel requires CameraVm");
+  DCHECK_NOTNULL_F(ui_settings_, "CameraControlPanel requires UiSettingsVm");
+  DCHECK_NOTNULL_F(commands_, "CameraControlPanel requires PanelCommands");
+  RegisterCommands(*commands_, vm_);
+  commands_->AddBool(std::string(kAxes), "Show Axes",
+    "Show the orientation axes in the corner of the window",
+    [settings = ui_settings_](
+      const bool visible) -> void { settings->SetAxesVisible(visible); });
 }
 
 auto CameraControlPanel::DrawContents() -> void
@@ -49,8 +256,8 @@ auto CameraControlPanel::DrawContents() -> void
       ImGui::EndTabItem();
     }
 
-    if (ImGui::BeginTabItem("Debug")) {
-      DrawDebugTab();
+    if (ImGui::BeginTabItem("Orientation")) {
+      DrawOrientationTab();
       ImGui::EndTabItem();
     }
 
@@ -89,18 +296,18 @@ void CameraControlPanel::DrawCameraModeTab()
   const bool is_fly = current_mode == CameraControlMode::kFly;
 
   if (ImGui::RadioButton("Orbit", is_orbit)) {
-    vm_->SetControlMode(CameraControlMode::kOrbit);
+    commands_->RunText(kMode, ModeName(CameraControlMode::kOrbit));
   }
   ImGui::SameLine();
   if (ImGui::RadioButton("Fly", is_fly)) {
-    vm_->SetControlMode(CameraControlMode::kFly);
+    commands_->RunText(kMode, ModeName(CameraControlMode::kFly));
   }
 
   if (vm_->IsDroneAvailable()) {
     ImGui::SameLine();
     const bool is_drone = current_mode == CameraControlMode::kDrone;
     if (ImGui::RadioButton("Drone", is_drone)) {
-      vm_->SetControlMode(CameraControlMode::kDrone);
+      commands_->RunText(kMode, ModeName(CameraControlMode::kDrone));
     }
   }
 
@@ -114,11 +321,11 @@ void CameraControlPanel::DrawCameraModeTab()
     const bool is_turntable = orbit_mode == OrbitMode::kTurntable;
 
     if (ImGui::RadioButton("Trackball", is_trackball)) {
-      vm_->SetOrbitMode(OrbitMode::kTrackball);
+      commands_->RunText(kOrbitMode, "trackball");
     }
     ImGui::SameLine();
     if (ImGui::RadioButton("Turntable", is_turntable)) {
-      vm_->SetOrbitMode(OrbitMode::kTurntable);
+      commands_->RunText(kOrbitMode, "turntable");
     }
 
     ImGui::Spacing();
@@ -131,7 +338,7 @@ void CameraControlPanel::DrawCameraModeTab()
     // Play/Pause + Progress
     bool running = vm_->GetDroneRunning();
     if (ImGui::Button(running ? "Pause" : "Play")) {
-      vm_->SetDroneRunning(!running);
+      commands_->RunBool(kDroneRunning, !running);
     }
     ImGui::SameLine();
     ImGui::ProgressBar(static_cast<float>(vm_->GetDroneProgress()),
@@ -142,12 +349,12 @@ void CameraControlPanel::DrawCameraModeTab()
     // Flight Settings
     float speed = vm_->GetDroneSpeed();
     if (ImGui::SliderFloat("Speed", &speed, 0.5F, 30.0F, "%.1F u/s")) {
-      vm_->SetDroneSpeed(speed);
+      commands_->RunFloat(kDroneSpeed, speed);
     }
 
     float damping = vm_->GetDroneDamping();
     if (ImGui::SliderFloat("Smoothing", &damping, 1.0F, 20.0F, "%.1F")) {
-      vm_->SetDroneDamping(damping);
+      commands_->RunFloat(kDroneSmoothing, damping);
     }
 
     ImGui::Spacing();
@@ -155,11 +362,12 @@ void CameraControlPanel::DrawCameraModeTab()
     ImGui::Indent();
     float height = vm_->GetDroneFocusHeight();
     if (ImGui::SliderFloat("Height", &height, -5.0F, 15.0F)) {
-      vm_->SetDroneFocusHeight(height);
+      commands_->RunFloat(kDroneFocusHeight, height);
     }
     glm::vec2 offset = vm_->GetDroneFocusOffset();
     if (ImGui::DragFloat2("Offset X/Z", &offset.x, 0.1F)) {
-      vm_->SetDroneFocusOffset(offset);
+      commands_->Run(
+        kDroneFocusOffset, { { "x", offset.x }, { "z", offset.y } });
     }
     ImGui::Unindent();
 
@@ -167,37 +375,37 @@ void CameraControlPanel::DrawCameraModeTab()
     if (ImGui::CollapsingHeader("Cinematics")) {
       float bob_amp = vm_->GetDroneBobAmplitude();
       if (ImGui::SliderFloat("Bob Amp", &bob_amp, 0.0F, 0.5F)) {
-        vm_->SetDroneBobAmplitude(bob_amp);
+        commands_->RunFloat(kDroneBobAmplitude, bob_amp);
       }
       float bob_freq = vm_->GetDroneBobFrequency();
       if (ImGui::SliderFloat("Bob Freq", &bob_freq, 0.1F, 5.0F, "%.1F Hz")) {
-        vm_->SetDroneBobFrequency(bob_freq);
+        commands_->RunFloat(kDroneBobFrequency, bob_freq);
       }
       float noise = vm_->GetDroneNoiseAmplitude();
       if (ImGui::SliderFloat("Noise", &noise, 0.0F, 0.2F)) {
-        vm_->SetDroneNoiseAmplitude(noise);
+        commands_->RunFloat(kDroneNoise, noise);
       }
       float bank = vm_->GetDroneBankFactor();
       if (ImGui::SliderFloat("Bank", &bank, 0.0F, 0.2F)) {
-        vm_->SetDroneBankFactor(bank);
+        commands_->RunFloat(kDroneBank, bank);
       }
     }
 
     if (ImGui::CollapsingHeader("POI Slowdown")) {
       float radius = vm_->GetDronePOISlowdownRadius();
       if (ImGui::SliderFloat("Radius", &radius, 1.0F, 20.0F)) {
-        vm_->SetDronePOISlowdownRadius(radius);
+        commands_->RunFloat(kDronePoiRadius, radius);
       }
       float min_speed = vm_->GetDronePOIMinSpeed();
       if (ImGui::SliderFloat("Min Speed", &min_speed, 0.1F, 1.0F, "%.2Fx")) {
-        vm_->SetDronePOIMinSpeed(min_speed);
+        commands_->RunFloat(kDronePoiMinSpeed, min_speed);
       }
     }
 
     ImGui::Spacing();
     bool show_path = vm_->GetDroneShowPath();
     if (ImGui::Checkbox("Show flight path", &show_path)) {
-      vm_->SetDroneShowPath(show_path);
+      commands_->RunBool(kDroneShowPath, show_path);
     }
 
     if (show_path) {
@@ -212,7 +420,7 @@ void CameraControlPanel::DrawCameraModeTab()
     float speed = vm_->GetFlyMoveSpeed();
     if (ImGui::SliderFloat("Move Speed", &speed, 0.1F, 1000.0F, "%.2F",
           ImGuiSliderFlags_Logarithmic)) {
-      vm_->SetFlyMoveSpeed(speed);
+      commands_->RunFloat(kFlySpeed, speed);
     }
 
     ImGui::Spacing();
@@ -237,7 +445,7 @@ void CameraControlPanel::DrawCameraModeTab()
   ImGui::SeparatorText("Actions");
 
   if (ImGui::Button("Reset Camera Position", ImVec2(-1, 0))) {
-    vm_->RequestReset();
+    commands_->Run(kReset);
   }
 
   if (ImGui::IsItemHovered()) {
@@ -267,18 +475,19 @@ void CameraControlPanel::DrawProjectionSettings()
   int projection = vm_->HasOrthographicCamera() ? 1 : 0;
   if (ImGui::Combo("Type", &projection, kProjectionItems.data(),
         static_cast<int>(kProjectionItems.size()))) {
-    vm_->SetOrthographic(projection == 1);
+    commands_->RunText(
+      kProjection, projection == 1 ? "orthographic" : "perspective");
   }
 
   if (vm_->HasPerspectiveCamera()) {
     float fov_deg = vm_->GetPerspectiveFovDegrees();
     if (ImGui::SliderFloat("FOV", &fov_deg, 10.0F, 160.0F, "%.1F deg")) {
-      vm_->SetPerspectiveFovDegrees(fov_deg);
+      commands_->RunFloat(kFov, fov_deg);
     }
   } else {
     float height = vm_->GetOrthoHeight();
     if (ImGui::InputFloat("Size", &height, 0.1F, 1.0F, "%.3F")) {
-      vm_->SetOrthoHeight(height);
+      commands_->RunFloat(kOrthoHeight, height);
     }
     ImGui::SetItemTooltip("Visible height in world units");
   }
@@ -288,8 +497,7 @@ void CameraControlPanel::DrawProjectionSettings()
   int mode_index = mode == CameraAspectMode::kFixed ? 1 : 0;
   if (ImGui::Combo("Aspect", &mode_index, kAspectItems.data(),
         static_cast<int>(kAspectItems.size()))) {
-    vm_->SetAspectMode(
-      mode_index == 1 ? CameraAspectMode::kFixed : CameraAspectMode::kAuto);
+    commands_->RunText(kAspectMode, mode_index == 1 ? "fixed" : "auto");
   }
   if (mode == CameraAspectMode::kFixed) {
     float ratio = vm_->GetAspectRatio();
@@ -302,13 +510,13 @@ void CameraControlPanel::DrawProjectionSettings()
     if (ImGui::BeginCombo("Ratio", current)) {
       for (const auto& preset : kRatioPresets) {
         if (ImGui::Selectable(preset.label, current == preset.label)) {
-          vm_->SetAspectRatio(preset.ratio);
+          commands_->RunFloat(kAspectRatio, preset.ratio);
         }
       }
       ImGui::EndCombo();
     }
     if (ImGui::InputFloat("Width / Height", &ratio, 0.01F, 0.1F, "%.4F")) {
-      vm_->SetAspectRatio(ratio);
+      commands_->RunFloat(kAspectRatio, ratio);
     }
   }
 
@@ -316,33 +524,25 @@ void CameraControlPanel::DrawProjectionSettings()
     ? vm_->GetPerspectiveNearPlane()
     : vm_->GetOrthoNearPlane();
   if (ImGui::InputFloat("Near", &near_plane, 0.01F, 0.1F, "%.4F")) {
-    if (vm_->HasPerspectiveCamera()) {
-      vm_->SetPerspectiveNearPlane(near_plane);
-    } else {
-      vm_->SetOrthoNearPlane(near_plane);
-    }
+    commands_->RunFloat(kNear, near_plane);
   }
   float far_plane = vm_->HasPerspectiveCamera() ? vm_->GetPerspectiveFarPlane()
                                                 : vm_->GetOrthoFarPlane();
   if (ImGui::InputFloat("Far", &far_plane, 1.0F, 10.0F, "%.2F")) {
-    if (vm_->HasPerspectiveCamera()) {
-      vm_->SetPerspectiveFarPlane(far_plane);
-    } else {
-      vm_->SetOrthoFarPlane(far_plane);
-    }
+    commands_->RunFloat(kFar, far_plane);
   }
 
   ImGui::Unindent();
   ImGui::PopID();
 }
 
-void CameraControlPanel::DrawDebugTab()
+void CameraControlPanel::DrawOrientationTab()
 {
-  DrawCameraPoseInfo();
-  if (vm_->GetControlMode() == CameraControlMode::kFly) {
-    ImGui::Spacing();
-    DrawInputDebugInfo();
+  bool axes = ui_settings_->GetAxesVisible();
+  if (ImGui::Checkbox("Show Axes", &axes)) {
+    commands_->RunBool(kAxes, axes);
   }
+  DrawCameraPoseInfo();
 }
 
 void CameraControlPanel::DrawCameraPoseInfo()
@@ -361,26 +561,6 @@ void CameraControlPanel::DrawCameraPoseInfo()
   const glm::vec3 forward = rotation * space::look::Forward;
   const glm::vec3 up = rotation * space::look::Up;
   const glm::vec3 right = rotation * space::look::Right;
-
-  // World space alignment checks
-  const auto safe_normalize = [](const glm::vec3& v) -> glm::vec3 {
-    const float len_squared = glm::dot(v, v);
-    if (len_squared <= 0.0F) {
-      return glm::vec3(0.0F);
-    }
-    return v / std::sqrt(len_squared);
-  };
-
-  const glm::vec3 forward_normalized = safe_normalize(forward);
-  const glm::vec3 up_normalized = safe_normalize(up);
-
-  constexpr glm::vec3 world_pos_y = space::move::Back;
-  constexpr glm::vec3 world_neg_y = space::move::Forward;
-  constexpr glm::vec3 world_pos_z = space::move::Up;
-
-  const float forward_dot_pos_y = glm::dot(forward_normalized, world_pos_y);
-  const float forward_dot_neg_y = glm::dot(forward_normalized, world_neg_y);
-  const float up_dot_pos_z = glm::dot(up_normalized, world_pos_z);
 
   ImGui::PushID("CameraPoseTable");
   if (ImGui::BeginTable(
@@ -412,133 +592,14 @@ void CameraControlPanel::DrawCameraPoseInfo()
       ImGui::EndDisabled();
     };
 
-    auto row_float = [right_align](const char* label, float value) -> void {
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      ImGui::TextUnformatted(label);
-      ImGui::TableNextColumn();
-      float data = value;
-      ImGui::BeginDisabled();
-      const std::string id = std::string("##") + label;
-      right_align();
-      ImGui::SetNextItemWidth(kValueFieldWidth);
-      ImGui::InputFloat(
-        id.c_str(), &data, 0.0F, 0.0F, "%.3F", ImGuiInputTextFlags_ReadOnly);
-      ImGui::EndDisabled();
-    };
-
     row_vec3("Position", position);
     row_vec3("Forward", forward);
     row_vec3("Up", up);
     row_vec3("Right", right);
-    row_float("forward · +Y", forward_dot_pos_y);
-    row_float("forward · -Y", forward_dot_neg_y);
-    row_float("up · +Z", up_dot_pos_z);
 
     ImGui::EndTable();
   }
   ImGui::PopID();
-}
-
-void CameraControlPanel::DrawInputDebugInfo()
-{
-  ImGui::SeparatorText("Input State");
-
-  const auto& io = ImGui::GetIO();
-  constexpr ImVec4 kActiveColor { 0.2F, 0.8F, 0.2F, 1.0F };
-  constexpr ImVec4 kInactiveColor { 0.6F, 0.6F, 0.6F, 1.0F };
-  ImGui::PushID("InputStateTable");
-  if (ImGui::BeginTable(
-        "##InputStateTable", 2, ImGuiTableFlags_SizingStretchProp)) {
-    ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 260.0F);
-    ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-
-    auto row_bool
-      = [kActiveColor, kInactiveColor](const char* label, bool value) -> void {
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      ImGui::TextUnformatted(label);
-      ImGui::TableNextColumn();
-      const ImVec4 color = value ? kActiveColor : kInactiveColor;
-      ImGui::TextColored(color, "%s", value ? "Active" : "Inactive");
-    };
-
-    row_bool("ImGui WantCaptureKeyboard", io.WantCaptureKeyboard);
-    row_bool("ImGui WantCaptureMouse", io.WantCaptureMouse);
-    ImGui::EndTable();
-  }
-  ImGui::PopID();
-
-  ImGui::Spacing();
-  ImGui::TextUnformatted("Action States:");
-  ImGui::Separator();
-
-  if (ImGui::BeginTable(
-        "##ActionStatesTable", 3, ImGuiTableFlags_SizingStretchProp)) {
-    ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 120.0F);
-    ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 120.0F);
-    ImGui::TableSetupColumn("Flags", ImGuiTableColumnFlags_WidthStretch);
-
-    const auto show_action
-      = [this](const char* label,
-          const std::shared_ptr<input::Action>& action) -> void {
-      const char* state = vm_->GetActionStateString(action);
-      const bool ongoing = action && action->IsOngoing();
-      const bool triggered = action && action->WasTriggeredThisFrame();
-      const bool released = action && action->WasReleasedThisFrame();
-      const bool is_active = std::string_view(state) != "Idle"
-        && std::string_view(state) != "<null>";
-      const ImVec4 color = is_active ? ImVec4(1.0F, 0.75F, 0.2F, 1.0F)
-                                     : ImGui::GetStyleColorVec4(ImGuiCol_Text);
-
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      ImGui::TextUnformatted(label);
-      ImGui::TableNextColumn();
-      ImGui::TextColored(color, "%s", state);
-      ImGui::TableNextColumn();
-      ImGui::TextColored(color, "O:%d  T:%d  R:%d", ongoing ? 1 : 0,
-        triggered ? 1 : 0, released ? 1 : 0);
-    };
-
-    show_action("W (Fwd)", vm_->GetMoveForwardAction());
-    show_action("S (Bwd)", vm_->GetMoveBackwardAction());
-    show_action("A (Left)", vm_->GetMoveLeftAction());
-    show_action("D (Right)", vm_->GetMoveRightAction());
-    show_action("Shift", vm_->GetFlyBoostAction());
-    show_action("Space", vm_->GetFlyPlaneLockAction());
-    show_action("RMB", vm_->GetRmbAction());
-    ImGui::EndTable();
-  }
-
-  // Mouse delta
-  auto orbit_action = vm_->GetOrbitAction();
-  if (orbit_action
-    && orbit_action->GetValueType() == input::ActionValueType::kAxis2D) {
-    const auto& value = orbit_action->GetValue().GetAs<Axis2D>();
-    const glm::vec2 mouse_delta(value.x, value.y);
-
-    ImGui::Spacing();
-    ImGui::PushID("MouseDeltaTable");
-    if (ImGui::BeginTable(
-          "##MouseDeltaTable", 2, ImGuiTableFlags_SizingStretchProp)) {
-      ImGui::TableSetupColumn(
-        "Label", ImGuiTableColumnFlags_WidthFixed, 160.0F);
-      ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
-      ImGui::TableNextRow();
-      ImGui::TableNextColumn();
-      ImGui::TextUnformatted("Mouse Delta");
-      ImGui::TableNextColumn();
-      std::array delta { mouse_delta.x, mouse_delta.y };
-      ImGui::BeginDisabled();
-      ImGui::SetNextItemWidth(220.0F);
-      ImGui::InputFloat2(
-        "##MouseDelta", delta.data(), "%.2F", ImGuiInputTextFlags_ReadOnly);
-      ImGui::EndDisabled();
-      ImGui::EndTable();
-    }
-    ImGui::PopID();
-  }
 }
 
 void CameraControlPanel::DrawDroneMinimap()

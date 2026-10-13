@@ -9,9 +9,7 @@
 #include <memory>
 #include <string_view>
 
-#include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
 #include "InputSystem/InputDebugPanel.h"
 #include <glm/glm.hpp>
@@ -20,6 +18,8 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/SceneStage.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -36,8 +36,9 @@ namespace oxygen::examples::input_system {
 
 //! Main module for the InputSystem demo.
 /*!
-  Demonstrates the Oxygen InputSystem with actions, mappings, and triggers.
-  Migrated to use DemoModuleBase and ForwardPipeline for rendering.
+  Demonstrates the Oxygen InputSystem with actions, mappings, and triggers:
+  Space jumps (Shift+Space jumps higher) on the ground, and rises in the
+  swimming mode that `input.swimming` toggles.
 
   @see DemoShell, DemoModuleBase
 */
@@ -47,7 +48,7 @@ class MainModule final : public DemoModuleBase {
 public:
   using Base = DemoModuleBase;
 
-  explicit MainModule(const DemoAppContext& app);
+  explicit MainModule(const host::HostContext& host);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -64,9 +65,7 @@ public:
   [[nodiscard]] auto GetSupportedPhases() const noexcept
     -> engine::ModulePhaseMask override
   {
-    using enum core::PhaseId;
-    return engine::MakeModuleMask<kFrameStart, kSceneMutation, kGameplay,
-      kPublishViews, kGuiUpdate, kPreRender, kCompositing, kFrameEnd>();
+    return kDemoPhases | engine::MakeModuleMask<core::PhaseId::kGameplay>();
   }
 
   [[nodiscard]] auto IsCritical() const noexcept -> bool override
@@ -79,41 +78,29 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
   OXYGEN_MAKE_NON_MOVABLE(MainModule);
 
-  // EngineModule lifecycle
   auto OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     -> std::unique_ptr<DemoShell> override;
   void OnShutdown() noexcept override;
 
-  // Example-specific setup
-
-protected:
-  // DemoModuleBase hooks
-  auto BuildDefaultWindowProperties() const
-    -> platform::window::Properties override;
-  auto ClearBackbufferReferences() -> void override;
-  auto UpdateComposition(engine::FrameContext& context,
-    std::vector<vortex::CompositionView>& views) -> void override;
-
-  // EngineModule phase handlers
-  auto OnFrameStart(observer_ptr<engine::FrameContext> context)
-    -> void override;
   auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
   auto OnGameplay(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
-  auto OnGuiUpdate(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
-  auto OnPreRender(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
+
+protected:
+  [[nodiscard]] auto BuildWindowProperties() const
+    -> platform::window::Properties override;
+  auto OnScenePublished(engine::FrameContext& context) -> void override;
+  auto BuildViews(engine::FrameContext& context, host::HostViews& views)
+    -> void override;
 
 private:
-  auto StageInitialScene(DemoShell& shell) -> void;
+  auto StageInitialScene() -> void;
   auto InitInputBindings() noexcept -> bool;
-  auto UpdateInputDebugPanelConfig(
-    observer_ptr<ui::CameraRigController> camera_rig) -> void;
+  //! Switches between the ground and the swimming mapping contexts.
+  auto SetSwimmingMode(bool swimming) -> void;
 
-  // Scene and rendering
-  ActiveScene active_scene_;
+  host::ActiveScene active_scene_;
   scene::SceneNode sphere_node_;
   scene::SceneNode main_camera_ {};
   scene::SceneNode sun_light_node_ {};
@@ -147,10 +134,7 @@ private:
   bool pending_ground_reset_ { false };
   // NOLINTEND(*-magic-numbers)
 
-  // DemoShell and panels
   std::shared_ptr<InputDebugPanel> input_debug_panel_;
-
-  observer_ptr<ui::CameraRigController> last_camera_rig_ { nullptr };
 };
 
 } // namespace oxygen::examples::input_system

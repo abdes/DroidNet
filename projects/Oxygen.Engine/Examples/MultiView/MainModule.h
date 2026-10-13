@@ -13,9 +13,7 @@
 #include <string_view>
 #include <vector>
 
-#include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
 #include "MultiView/CompositingMode.h"
 #include "MultiView/SceneBootstrapper.h"
@@ -23,26 +21,14 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/SceneStage.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 
 namespace oxygen {
 class IAsyncEngine;
-class Graphics;
-namespace renderer {
-  struct CompositionView;
-}
 } // namespace oxygen
-
-namespace graphics {
-class CommandRecorder;
-class Framebuffer;
-class Texture;
-} // namespace graphics
-
-namespace examples::ui {
-class CameraRigController;
-}
 
 namespace oxygen::examples::multiview {
 
@@ -104,8 +90,7 @@ class MainModule final : public examples::DemoModuleBase {
 public:
   using Base = examples::DemoModuleBase;
 
-  explicit MainModule(
-    const examples::DemoAppContext& app, MainModuleConfig config) noexcept;
+  MainModule(const host::HostContext& host, MainModuleConfig config) noexcept;
   ~MainModule() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
@@ -126,11 +111,9 @@ public:
   [[nodiscard]] auto GetSupportedPhases() const noexcept
     -> engine::ModulePhaseMask override
   {
-    return engine::MakeModuleMask<core::PhaseId::kFrameStart,
-      core::PhaseId::kSceneMutation, core::PhaseId::kGameplay,
-      core::PhaseId::kPublishViews, core::PhaseId::kGuiUpdate,
-      core::PhaseId::kPreRender, core::PhaseId::kCompositing,
-      core::PhaseId::kFrameEnd>();
+    return kDemoPhases
+      | engine::MakeModuleMask<core::PhaseId::kPreRender,
+        core::PhaseId::kFrameEnd>();
   }
 
   [[nodiscard]] auto IsCritical() const noexcept -> bool override
@@ -138,28 +121,13 @@ public:
     return true; // Critical module
   }
 
-  // EngineModule lifecycle
   auto OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     -> std::unique_ptr<DemoShell> override;
   void OnShutdown() noexcept override;
 
-  // Example-specific setup
-
-protected:
-  // DemoModuleBase hooks
-  auto BuildDefaultWindowProperties() const
-    -> platform::window::Properties override;
-  auto ClearBackbufferReferences() -> void override;
-  auto RetainInactiveView(ViewId view_id) const noexcept -> bool override;
-  auto UpdateComposition(engine::FrameContext& context,
-    std::vector<vortex::CompositionView>& views) -> void override;
-
-  // EngineModule phase handlers
   auto OnFrameStart(observer_ptr<engine::FrameContext> context)
     -> void override;
   auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
-  auto OnGameplay(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
   auto OnGuiUpdate(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
@@ -167,12 +135,23 @@ protected:
     -> co::Co<> override;
   auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 
+protected:
+  [[nodiscard]] auto BuildWindowProperties() const
+    -> platform::window::Properties override;
+  [[nodiscard]] auto RetainInactiveView(ViewId view_id) const noexcept
+    -> bool override;
+  auto OnScenePublished(engine::FrameContext& context) -> void override;
+  auto BuildViews(engine::FrameContext& context, host::HostViews& views)
+    -> void override;
+
 private:
+  //! Stages the scene with every camera the layout uses.
+  auto StageScene() -> void;
   auto BuildComposition(engine::FrameContext& context,
     std::vector<vortex::CompositionView>& views) -> void;
 
   struct OffscreenProofProduct {
-    std::shared_ptr<graphics::Framebuffer> framebuffer {};
+    std::shared_ptr<graphics::Framebuffer> framebuffer;
     uint32_t width { 0U };
     uint32_t height { 0U };
   };
@@ -182,7 +161,7 @@ private:
   auto EnsureOffscreenProofProduct(OffscreenProofProduct& product,
     uint32_t width, uint32_t height, std::string_view debug_name) -> bool;
   auto RenderOffscreenProofProducts(engine::FrameContext& context) -> void;
-  auto AppendRuntimeCompositionLayers(engine::FrameContext& context,
+  auto AppendCompositionLayers(engine::FrameContext& context,
     vortex::Renderer::RuntimeCompositionInput& input) -> void override;
   auto DrawFeatureVariantProofOverlay() -> void;
   auto DrawConsumerVisualControls() -> void;
@@ -190,11 +169,8 @@ private:
     std::vector<vortex::CompositionView>& views) -> void;
   auto DrawInteractionProofOverlay(std::uint64_t frame) -> void;
 
-  const examples::DemoAppContext& app_;
   SceneBootstrapper scene_bootstrapper_;
-
-  // DemoShell integration (all panels disabled for this non-interactive demo)
-  examples::ActiveScene active_scene_;
+  host::ActiveScene active_scene_;
 
   // View identifiers
   ViewId main_view_id_ { kInvalidViewId };
@@ -217,14 +193,16 @@ private:
   OffscreenProofProduct offscreen_preview_;
   OffscreenProofProduct offscreen_capture_;
 
-  observer_ptr<examples::ui::CameraRigController> last_camera_rig_ { nullptr };
+  //! The view the camera controls drive this frame.
+  std::optional<ViewId> main_view_;
   MainModuleConfig config_ {};
   std::optional<VisualFogMode> pending_visual_fog_mode_;
   bool viewport_proof_resized_ { false };
   bool viewport_proof_scissored_ { false };
   bool retain_inactive_pip_ { false };
-  platform::window::ExtentT window_proof_initial_extent_ { 0U, 0U };
-  platform::window::ExtentT last_viewport_ { 0, 0 };
+  platform::window::ExtentT window_proof_initial_extent_ { .width = 0U,
+    .height = 0U };
+  platform::window::ExtentT last_viewport_ { .width = 0, .height = 0 };
 };
 
 } // namespace oxygen::examples::multiview

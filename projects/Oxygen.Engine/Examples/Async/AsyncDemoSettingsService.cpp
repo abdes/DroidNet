@@ -52,21 +52,6 @@ auto AsyncDemoSettingsService::SetSpotlightSectionOpen(bool open) -> void
   ++epoch_;
 }
 
-auto AsyncDemoSettingsService::GetProfilerSectionOpen() const -> bool
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  return settings->GetBool(kProfilerOpenKey).value_or(true);
-}
-
-auto AsyncDemoSettingsService::SetProfilerSectionOpen(bool open) -> void
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  settings->SetBool(kProfilerOpenKey, open);
-  ++epoch_;
-}
-
 auto AsyncDemoSettingsService::GetSpotlightIntensity() const -> float
 {
   const auto settings = SettingsService::ForDemoApp();

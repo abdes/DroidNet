@@ -19,21 +19,29 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 
+namespace oxygen::examples {
+class PanelCommands;
+} // namespace oxygen::examples
+
 namespace oxygen::examples::light_bench {
 
 //! Demo panel for LightBench-specific controls.
+/*!
+ Every control runs a command: the presets run `lightbench.preset` and
+ `lightbench.reset`, the light and geometry controls the `lightbench.*`
+ commands this panel registers. The settings path is a local draft.
+*/
 class LightBenchPanel final : public DemoPanel {
 public:
   struct Actions {
-    std::function<void()> reset;
-    std::function<void(LightBenchPreset)> select;
     std::function<LightBenchPreset()> selected;
     std::function<bool()> is_reference;
     std::function<Result<void, std::string>(const std::filesystem::path&)> save;
     std::function<Result<void, std::string>(const std::filesystem::path&)> load;
   };
   LightBenchPanel(observer_ptr<LightScene> light_scene, Actions actions,
-    const std::filesystem::path& settings_path);
+    const std::filesystem::path& settings_path,
+    observer_ptr<PanelCommands> commands);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -51,8 +59,9 @@ public:
   }
 
   auto DrawContents() -> void override;
-  //! Persistent preset controls, independent of the active sidebar panel.
-  auto DrawPresetOverlay() -> void;
+  //! Persistent preset controls, independent of the active sidebar panel,
+  //! centered below the UI that covers `top_inset` of the window.
+  auto DrawPresetOverlay(float top_inset) -> void;
   auto OnLoaded() -> void override { }
   auto OnUnloaded() -> void override { }
 
@@ -60,12 +69,9 @@ private:
   auto DrawSceneSection() -> void;
   auto DrawPresetControls(float button_width) -> void;
   auto DrawSceneAdvancedSection() -> void;
-  auto DrawSceneObjectControls(std::string_view label,
-    LightScene::SceneObjectState& state, bool allow_rotation) -> void;
-  auto DrawVector3Table(const std::string& id, const char* label, Vec3& value,
-    float speed, float min_value, float max_value) -> void;
-  auto DrawAxisFloatCell(const std::string& id, const Vec3& color, float& value,
-    float speed, float min_value, float max_value) -> void;
+  auto DrawSceneObjectControls(std::string_view object, std::string_view label,
+    const LightScene::SceneObjectState& state, bool allow_rotation) -> void;
+  auto RegisterCommands() -> void;
   auto DrawLightsSection() -> void;
   auto DrawDirectionalLightControls() -> void;
   auto DrawPointLightControls() -> void;
@@ -75,7 +81,8 @@ private:
   std::array<char, 1024> settings_path_ {};
   std::string file_status_;
   observer_ptr<LightScene> light_scene_ { nullptr };
-  std::string icon_ {};
+  observer_ptr<PanelCommands> commands_;
+  std::string icon_;
 };
 
 } // namespace oxygen::examples::light_bench

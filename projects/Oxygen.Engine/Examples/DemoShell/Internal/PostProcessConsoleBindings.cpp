@@ -16,7 +16,6 @@
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -24,12 +23,12 @@
 #include "DemoShell/Services/PostProcessSettingsService.h"
 #include <fmt/format.h>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Commands/Params.h>
 #include <Oxygen/Console/Console.h>
-#include <Oxygen/Console/Constants.h>
 #include <Oxygen/Console/Parser.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/ExposureSettings.h>
@@ -57,6 +56,50 @@ namespace {
       .status = commands::ExecutionStatus::kError,
       .error = std::move(message),
     };
+  }
+
+  template <typename T> using NamedValue = std::pair<std::string_view, T>;
+
+  constexpr auto kExposureModes
+    = std::to_array<NamedValue<engine::ExposureMode>>({
+      { "manual", engine::ExposureMode::kManual },
+      { "camera", engine::ExposureMode::kManualCamera },
+      { "auto", engine::ExposureMode::kAuto },
+    });
+  constexpr auto kMeteringModes
+    = std::to_array<NamedValue<engine::MeteringMode>>({
+      { "average", engine::MeteringMode::kAverage },
+      { "center", engine::MeteringMode::kCenterWeighted },
+      { "spot", engine::MeteringMode::kSpot },
+    });
+  constexpr auto kToneCurves = std::to_array<NamedValue<engine::ToneMapper>>({
+    { "none", engine::ToneMapper::kNone },
+    { "aces", engine::ToneMapper::kAcesFitted },
+    { "filmic", engine::ToneMapper::kFilmic },
+    { "reinhard", engine::ToneMapper::kReinhard },
+  });
+
+  template <typename T, std::size_t N>
+  auto NamesOf(const std::array<NamedValue<T>, N>& table)
+    -> std::vector<std::string>
+  {
+    auto names = std::vector<std::string> {};
+    names.reserve(N);
+    for (const auto& [name, value] : table) {
+      static_cast<void>(value);
+      names.emplace_back(name);
+    }
+    return names;
+  }
+
+  //! The value named `name`; the binder has already checked the name.
+  template <typename T, std::size_t N>
+  auto ValueOf(const std::array<NamedValue<T>, N>& table, std::string_view name)
+    -> T
+  {
+    const auto it = std::ranges::find(table, name, &NamedValue<T>::first);
+    CHECK_F(it != table.end(), "unknown enum value '{}'", name);
+    return it->second;
   }
   template <typename T> auto Number(std::string_view text, T& result) -> bool
   {
@@ -132,18 +175,111 @@ namespace {
     }
     return "unknown";
   }
-  auto Owner(vortex::Renderer& renderer, std::string_view text)
+  auto Owner(vortex::Renderer& renderer, const std::int64_t id)
     -> std::optional<Handle>
   {
-    std::uint64_t id = 0;
-    if (!Number(text, id)) {
+    if (id < 0) {
       return std::nullopt;
     }
-    const auto handle = Handle { id };
+    const auto handle = Handle { static_cast<std::uint64_t>(id) };
     const auto owners = renderer.GetExposureOwners();
     return std::ranges::find(owners, handle) != owners.end()
       ? std::optional { handle }
       : std::nullopt;
+  }
+
+  constexpr const char* kTarget = "target";
+  constexpr const char* kOwner = "owner";
+
+  auto StaleTarget() -> Result
+  {
+    return Invalid("Invalid or stale scene target; use pp.targets.");
+  }
+
+  auto TargetParam() -> commands::CommandParam
+  {
+    return {
+      .name = kTarget,
+      .type = commands::ParamType::kString,
+      .help = "scene:<revision> from pp.targets",
+      .required = true,
+    };
+  }
+
+  auto OwnerParam() -> commands::CommandParam
+  {
+    return {
+      .name = kOwner,
+      .type = commands::ParamType::kInt,
+      .help = "Exposure owner handle from pp.targets",
+      .required = true,
+      .min_value = 0.0,
+    };
+  }
+
+  auto NumberParam(std::string name, std::string help) -> commands::CommandParam
+  {
+    return {
+      .name = std::move(name),
+      .type = commands::ParamType::kDouble,
+      .help = std::move(help),
+      .required = true,
+    };
+  }
+
+  auto BoolParam(std::string name, std::string help) -> commands::CommandParam
+  {
+    return {
+      .name = std::move(name),
+      .type = commands::ParamType::kBool,
+      .help = std::move(help),
+      .required = true,
+    };
+  }
+
+  auto EnumParam(std::string name, std::string help,
+    std::vector<std::string> values) -> commands::CommandParam
+  {
+    return {
+      .name = std::move(name),
+      .type = commands::ParamType::kEnum,
+      .help = std::move(help),
+      .required = true,
+      .allowed_values = std::move(values),
+    };
+  }
+
+  auto Optional(commands::CommandParam param) -> commands::CommandParam
+  {
+    param.required = false;
+    return param;
+  }
+
+  auto FieldHelp(const std::string_view name) -> std::string
+  {
+    constexpr std::array help {
+      std::pair { "manual_ev", "Manual exposure value, EV100" },
+      std::pair { "compensation_ev", "Added exposure in EV" },
+      std::pair { "key", "Display calibration multiplier; reference 12.5" },
+      std::pair { "min_ev", "Lowest metered EV100 of automatic exposure" },
+      std::pair { "max_ev", "Highest metered EV100 of automatic exposure" },
+      std::pair { "speed_up", "Adaptation toward brighter scenes, EV/s" },
+      std::pair { "speed_down", "Adaptation toward darker scenes, EV/s" },
+      std::pair { "low_percentile", "Histogram low percentile, a fraction" },
+      std::pair { "high_percentile", "Histogram high percentile, a fraction" },
+      std::pair {
+        "min_log_luminance", "Histogram lower bound, log2 luminance" },
+      std::pair { "log_luminance_range", "Histogram range, log2 luminance" },
+      std::pair { "target_luminance", "Reference luminance of auto exposure" },
+      std::pair {
+        "spot_meter_radius", "Spot radius in normalized coordinates" },
+      std::pair { "black_influence", "Weight of black samples, a fraction" },
+      std::pair { "transition_distance",
+        "EV from the target where adaptation turns smooth" },
+    };
+    const auto found = std::ranges::find_if(
+      help, [name](const auto& entry) -> bool { return entry.first == name; });
+    return found == help.end() ? std::string(name) : found->second;
   }
 } // namespace
 
@@ -157,109 +293,146 @@ PostProcessConsoleBindings::PostProcessConsoleBindings(
   if (!renderer_) {
     throw std::invalid_argument("A renderer resolver is required");
   }
-  struct Binding {
-    const char* name;
-    const char* help;
-    Result (PostProcessConsoleBindings::*execute)(const Arguments&);
-  };
-  const std::array bindings {
-    Binding {
-      .name = "pp.targets",
-      .help = "List the scene:<revision> authoring target and published "
-              "exposure owner "
-              "handles.",
-      .execute = &PostProcessConsoleBindings::Targets,
-    },
-    Binding {
-      .name = "pp.inspect",
-      .help
-      = "pp.inspect scene:<revision> — authored controls and actual renderer "
-        "acceptance status.",
-      .execute = &PostProcessConsoleBindings::Inspect,
-    },
-    Binding {
-      .name = "pp.exposure",
-      .help
-      = "pp.exposure scene:<revision> field=value [...] — atomic exposure "
-        "edit; "
-        "pp.inspect lists numeric fields. mode=manual|camera|auto; "
-        "metering=average|center|spot; enabled=true|false; mask=scene|off.",
-      .execute = &PostProcessConsoleBindings::Exposure,
-    },
-    Binding {
-      .name = "pp.camera",
-      .help = "pp.camera scene:<revision> aperture_f shutter_rate iso — atomic "
-              "physical-camera exposure edit.",
-      .execute = &PostProcessConsoleBindings::Camera,
-    },
-    Binding {
-      .name = "pp.output",
-      .help
-      = "pp.output scene:<revision> none|aces|filmic|reinhard gamma — atomic "
-        "output settings.",
-      .execute = &PostProcessConsoleBindings::Output,
-    },
-    Binding {
-      .name = "pp.curve",
-      .help
-      = "pp.curve scene:<revision> clear OR metered_ev:compensation_ev [...] — "
-        "replace the complete curve.",
-      .execute = &PostProcessConsoleBindings::Curve,
-    },
-    Binding {
-      .name = "pp.transition",
-      .help
-      = "pp.transition <owner-handle> remeter|preserve OR seed <ev100> — queue "
-        "intent; not immediate GPU completion.",
-      .execute = &PostProcessConsoleBindings::Transition,
-    },
-    Binding {
-      .name = "pp.transition.status",
-      .help
-      = "pp.transition.status <owner-handle> — actual renderer token phase, "
-        "generation and error.",
-      .execute = &PostProcessConsoleBindings::TransitionStatus,
-    },
-  };
-  handles_.reserve(bindings.size());
   bool registered = false;
   const auto rollback = ScopeGuard([&] noexcept -> void {
     if (!registered) {
       Unregister();
     }
   });
-  for (const auto& binding : bindings) {
-    // The pp.* grammars are free-form; each takes its argument text whole and
-    // parses it with its own rules.
-    const auto handle = console_.Commands()->Register({
-      .name = binding.name,
-      .label = binding.name,
-      .help = binding.help,
-      .params = {
-        commands::CommandParam {
-          .name = "arguments",
-          .type = commands::ParamType::kString,
-          .default_value = commands::ParamValue { std::string {} },
-          .rest_of_line = true,
-        },
-      },
-      .handler = [this, execute = binding.execute](
-                   const commands::CommandArgs& args,
-                   const commands::CommandContext&) -> Result {
-        return (this->*execute)(
-          console::Parser::Tokenize(args.GetString("arguments")));
-      },
-    });
-    if (!handle.IsValid()) {
-      throw std::runtime_error(
-        std::string("Cannot register console command: ") + binding.name);
+  const auto handler = [this](Result (PostProcessConsoleBindings::*execute)(
+                         const Args&)) -> commands::CommandHandler {
+    return [this, execute](
+             const Args& args, const commands::CommandContext&) -> Result {
+      return (this->*execute)(args);
+    };
+  };
+
+  Register({
+    .name = "pp.targets",
+    .label = "Post-Process Targets",
+    .help = "List the scene:<revision> authoring target and the published "
+            "exposure owner handles",
+    .handler = [this](const Args&, const commands::CommandContext&) -> Result {
+      return Targets();
+    },
+  });
+  Register({
+    .name = "pp.inspect",
+    .label = "Inspect Post-Process",
+    .help = "Authored exposure and output settings, and whether the renderer "
+            "accepted them",
+    .params = { TargetParam() },
+    .handler = handler(&PostProcessConsoleBindings::Inspect),
+  });
+  {
+    // Every field is optional; the edit changes only the fields given and
+    // applies all of them or none.
+    std::vector<commands::CommandParam> params { TargetParam() };
+    params.push_back(Optional(BoolParam("enabled", "Apply exposure")));
+    params.push_back(Optional(EnumParam("mode",
+      "manual EV100, physical camera or automatic", NamesOf(kExposureModes))));
+    params.push_back(Optional(EnumParam(
+      "metering", "How the image is metered", NamesOf(kMeteringModes))));
+    params.push_back(Optional(EnumParam("mask",
+      "Meter through the scene's metering mask, or not", { "scene", "off" })));
+    for (const auto& [name, member] : fields) {
+      static_cast<void>(member);
+      params.push_back(Optional(NumberParam(name, FieldHelp(name))));
     }
-    handles_.push_back(handle);
+    Register({
+      .name = "pp.exposure",
+      .label = "Exposure",
+      .help = "Edit exposure fields atomically: every field given or none",
+      .params = std::move(params),
+      .handler = handler(&PostProcessConsoleBindings::Exposure),
+    });
   }
+  Register({
+    .name = "pp.camera",
+    .label = "Physical Camera Exposure",
+    .help = "Set the physical camera's aperture, shutter rate and ISO together",
+    .params = {
+      TargetParam(),
+      NumberParam("aperture_f", "Aperture f-number"),
+      NumberParam("shutter_rate", "Shutter rate in 1/s"),
+      NumberParam("iso", "Sensor sensitivity"),
+    },
+    .handler = handler(&PostProcessConsoleBindings::Camera),
+  });
+  Register({
+    .name = "pp.output",
+    .label = "Display Output",
+    .help = "Set the tone curve and the display gamma together",
+    .params = {
+      TargetParam(),
+      EnumParam("tone_curve", "How HDR brightness maps to the display",
+        NamesOf(kToneCurves)),
+      NumberParam("gamma", "Display gamma applied after the tone curve"),
+    },
+    .handler = handler(&PostProcessConsoleBindings::Output),
+  });
+  {
+    auto keys = commands::CommandParam {
+      .name = "keys",
+      .type = commands::ParamType::kString,
+      .help = "clear, or metered_ev:compensation_ev pairs ordered by metered "
+              "EV (at most 64)",
+      .required = true,
+      .rest_of_line = true,
+    };
+    Register({
+      .name = "pp.curve",
+      .label = "Compensation Curve",
+      .help = "Replace the whole exposure compensation curve",
+      .params = { TargetParam(), std::move(keys) },
+      .handler = handler(&PostProcessConsoleBindings::Curve),
+    });
+  }
+  Register({
+    .name = "pp.reset_auto",
+    .label = "Reset Auto Exposure",
+    .help = "Reset the automatic exposure controls; mode, compensation, "
+            "calibration and camera settings are kept",
+    .params = { TargetParam() },
+    .handler = handler(&PostProcessConsoleBindings::ResetAuto),
+  });
+  Register({
+    .name = "pp.transition",
+    .label = "Exposure Transition",
+    .help = "Queue an exposure transition for an owner; its completion is "
+            "reported by pp.transition.status",
+    .params = {
+      OwnerParam(),
+      EnumParam("policy",
+        "remeter, preserve, or seed from the given EV100",
+        { "remeter", "preserve", "seed" }),
+      Optional(NumberParam("ev100", "Seed EV100; required with seed")),
+    },
+    .handler = handler(&PostProcessConsoleBindings::Transition),
+  });
+  Register({
+    .name = "pp.transition.status",
+    .label = "Exposure Transition Status",
+    .help = "Phase, generation and error of an owner's latest transition",
+    .params = { OwnerParam() },
+    .handler = handler(&PostProcessConsoleBindings::TransitionStatus),
+  });
   registered = true;
 }
 
 PostProcessConsoleBindings::~PostProcessConsoleBindings() { Unregister(); }
+
+auto PostProcessConsoleBindings::Register(
+  commands::CommandDefinition definition) -> void
+{
+  const auto name = definition.name;
+  const auto handle = console_.Commands()->Register(std::move(definition));
+  if (!handle.IsValid()) {
+    throw std::runtime_error("Cannot register console command: " + name);
+  }
+  handles_.push_back(handle);
+}
+
 auto PostProcessConsoleBindings::Unregister() -> void
 {
   for (const auto handle : handles_) {
@@ -267,19 +440,18 @@ auto PostProcessConsoleBindings::Unregister() -> void
   }
   handles_.clear();
 }
-auto PostProcessConsoleBindings::HasTarget(const Arguments& args) const -> bool
+
+auto PostProcessConsoleBindings::IsCurrentTarget(
+  const std::string_view target) const -> bool
 {
-  if (args.empty()) {
-    return false;
-  }
   const auto current = settings_.GetAuthoringTarget();
-  const auto text = std::string_view(args.front());
   std::uint64_t revision = 0;
   constexpr std::string_view prefix = "scene:";
-  return current && text.starts_with(prefix)
-    && Number(text.substr(prefix.size()), revision)
+  return current && target.starts_with(prefix)
+    && Number(target.substr(prefix.size()), revision)
     && revision == current->scene_revision;
 }
+
 auto PostProcessConsoleBindings::Accepted() const -> Result
 {
   return {
@@ -288,11 +460,9 @@ auto PostProcessConsoleBindings::Accepted() const -> Result
       settings_.GetSceneRevision(), settings_.GetEpoch()),
   };
 }
-auto PostProcessConsoleBindings::Targets(const Arguments& args) -> Result
+
+auto PostProcessConsoleBindings::Targets() -> Result
 {
-  if (!args.empty()) {
-    return Invalid("pp.targets takes no arguments.");
-  }
   std::string output;
   if (const auto target = settings_.GetAuthoringTarget()) {
     output = fmt::format("scene:{} main_view={} (scene-owned settings; views "
@@ -311,15 +481,17 @@ auto PostProcessConsoleBindings::Targets(const Arguments& args) -> Result
   }
   return { .output = std::move(output) };
 }
-auto PostProcessConsoleBindings::Inspect(const Arguments& args) -> Result
+
+auto PostProcessConsoleBindings::Inspect(const Args& args) -> Result
 {
-  if (args.size() != 1 || !HasTarget(args)) {
-    return Invalid("Invalid/stale scene target. Use pp.targets.");
+  const auto& target = args.GetString(kTarget);
+  if (!IsCurrentTarget(target)) {
+    return StaleTarget();
   }
   const auto settings = settings_.GetExposureSettings();
   settings_.BindVortexRenderer(renderer_());
   auto text = fmt::format(
-    "{} epoch={} enabled={} mode={} metering={} mask={}\n", args.front(),
+    "{} epoch={} enabled={} mode={} metering={} mask={}\n", target,
     settings_.GetEpoch(), settings.enabled, engine::to_string(settings.mode),
     engine::to_string(settings.metering_mode), settings.metering_mask.get());
   for (const auto& [name, member] : fields) {
@@ -357,119 +529,90 @@ auto PostProcessConsoleBindings::Inspect(const Arguments& args) -> Result
   }
   return { .output = std::move(text) };
 }
-auto PostProcessConsoleBindings::Exposure(const Arguments& args) -> Result
+
+auto PostProcessConsoleBindings::Exposure(const Args& args) -> Result
 {
-  if (args.size() < 2 || !HasTarget(args)) {
-    return Invalid(
-      "Expected scene:<revision> field=value [...]; use pp.targets.");
+  if (!IsCurrentTarget(args.GetString(kTarget))) {
+    return StaleTarget();
   }
   auto next = settings_.GetExposureSettings();
-  std::unordered_set<std::string_view> seen;
-  for (std::size_t i = 1; i < args.size(); ++i) {
-    const auto text = std::string_view(args.at(i));
-    const auto separator = text.find('=');
-    if (separator == std::string_view::npos) {
-      return Invalid("Expected field=value.");
-    }
-    const auto field = text.substr(0, separator);
-    const auto value = text.substr(separator + 1);
-    if (!seen.insert(field).second) {
-      return Invalid("Duplicate exposure field: " + std::string(field));
-    }
-    if (field == "enabled") {
-      if (value != "true" && value != "false") {
-        return Invalid("enabled expects true|false.");
-      }
-      next.enabled = value == "true";
-    } else if (field == "mode") {
-      if (value == "auto") {
-        next.mode = engine::ExposureMode::kAuto;
-      } else if (value == "manual") {
-        next.mode = engine::ExposureMode::kManual;
-      } else if (value == "camera") {
-        next.mode = engine::ExposureMode::kManualCamera;
-      } else {
-        return Invalid("mode expects manual|camera|auto.");
-      }
-    } else if (field == "metering") {
-      if (value == "average") {
-        next.metering_mode = engine::MeteringMode::kAverage;
-      } else if (value == "center") {
-        next.metering_mode = engine::MeteringMode::kCenterWeighted;
-      } else if (value == "spot") {
-        next.metering_mode = engine::MeteringMode::kSpot;
-      } else {
-        return Invalid("metering expects average|center|spot.");
-      }
-    } else if (field == "mask") {
-      if (value == "off") {
-        next.metering_mask = {};
-      } else if (value == "scene" && settings_.HasSceneMeteringMask()) {
-        next.metering_mask = settings_.GetSceneMeteringMask();
-      } else {
-        return Invalid("mask expects off or an available scene mask.");
-      }
+  bool changed = false;
+  if (args.Has("enabled")) {
+    next.enabled = args.GetBool("enabled");
+    changed = true;
+  }
+  if (args.Has("mode")) {
+    next.mode = ValueOf(kExposureModes, args.GetString("mode"));
+    changed = true;
+  }
+  if (args.Has("metering")) {
+    next.metering_mode = ValueOf(kMeteringModes, args.GetString("metering"));
+    changed = true;
+  }
+  if (args.Has("mask")) {
+    if (args.GetString("mask") == "off") {
+      next.metering_mask = {};
+    } else if (settings_.HasSceneMeteringMask()) {
+      next.metering_mask = settings_.GetSceneMeteringMask();
     } else {
-      const auto found = std::ranges::find_if(fields,
-        [field](const auto& item) -> auto { return field == item.first; });
-      if (found == fields.end() || !Scalar(value, next.*found->second)) {
-        return Invalid(
-          "Unknown field or invalid finite number: " + std::string(field));
-      }
+      return Invalid("The scene has no metering mask.");
     }
+    changed = true;
+  }
+  for (const auto& [name, member] : fields) {
+    if (args.Has(name)) {
+      next.*member = static_cast<float>(args.GetDouble(name));
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return Invalid("Give at least one exposure field.");
   }
   return settings_.TrySetExposureSettings(next)
     ? Accepted()
     : Invalid(std::string(settings_.GetValidationError()));
 }
-auto PostProcessConsoleBindings::Camera(const Arguments& args) -> Result
+
+auto PostProcessConsoleBindings::Camera(const Args& args) -> Result
 {
-  scene::CameraExposure next;
-  if (args.size() != 4 || !HasTarget(args)
-    || !Scalar(args.at(1), next.aperture_f)
-    || !Scalar(args.at(2), next.shutter_rate)
-    || !Scalar(args.at(3), next.iso)) {
-    return Invalid("Expected scene:<revision> aperture_f shutter_rate iso.");
+  if (!IsCurrentTarget(args.GetString(kTarget))) {
+    return StaleTarget();
   }
+  const scene::CameraExposure next {
+    .aperture_f = static_cast<float>(args.GetDouble("aperture_f")),
+    .shutter_rate = static_cast<float>(args.GetDouble("shutter_rate")),
+    .iso = static_cast<float>(args.GetDouble("iso")),
+  };
   return settings_.TrySetCameraExposure(next)
     ? Accepted()
     : Invalid(std::string(settings_.GetValidationError()));
 }
-auto PostProcessConsoleBindings::Output(const Arguments& args) -> Result
+
+auto PostProcessConsoleBindings::Output(const Args& args) -> Result
 {
-  float gamma = 0;
-  if (args.size() != 3 || !HasTarget(args) || !Scalar(args.at(2), gamma)) {
-    return Invalid(
-      "Expected scene:<revision> none|aces|filmic|reinhard gamma.");
+  if (!IsCurrentTarget(args.GetString(kTarget))) {
+    return StaleTarget();
   }
-  auto mode = engine::ToneMapper::kNone;
-  if (args.at(1) == "none") {
-    mode = engine::ToneMapper::kNone;
-  } else if (args.at(1) == "aces") {
-    mode = engine::ToneMapper::kAcesFitted;
-  } else if (args.at(1) == "filmic") {
-    mode = engine::ToneMapper::kFilmic;
-  } else if (args.at(1) == "reinhard") {
-    mode = engine::ToneMapper::kReinhard;
-  } else {
-    return Invalid("Unknown tone mapper.");
-  }
-  return settings_.TrySetOutputSettings(mode, gamma)
+  const auto mode = ValueOf(kToneCurves, args.GetString("tone_curve"));
+  return settings_.TrySetOutputSettings(
+           mode, static_cast<float>(args.GetDouble("gamma")))
     ? Accepted()
     : Invalid(std::string(settings_.GetValidationError()));
 }
-auto PostProcessConsoleBindings::Curve(const Arguments& args) -> Result
+
+auto PostProcessConsoleBindings::Curve(const Args& args) -> Result
 {
-  if (args.size() < 2 || !HasTarget(args)) {
-    return Invalid("Expected scene:<revision> clear OR ev:compensation [...].");
+  if (!IsCurrentTarget(args.GetString(kTarget))) {
+    return StaleTarget();
   }
+  const auto tokens = console::Parser::Tokenize(args.GetString("keys"));
   std::vector<scene::ExposureCompensationKey> keys;
-  if (args.size() != 2 || args.at(1) != "clear") {
-    if (args.size() - 1 > engine::kMaxExposureCompensationCurveKeys) {
+  if (tokens.size() != 1 || tokens.front() != "clear") {
+    if (tokens.size() > engine::kMaxExposureCompensationCurveKeys) {
       return Invalid("At most 64 curve keys are supported.");
     }
-    for (std::size_t i = 1; i < args.size(); ++i) {
-      const auto text = std::string_view(args.at(i));
+    for (const auto& token : tokens) {
+      const auto text = std::string_view(token);
       const auto separator = text.find(':');
       scene::ExposureCompensationKey key;
       if (separator == std::string_view::npos
@@ -485,33 +628,40 @@ auto PostProcessConsoleBindings::Curve(const Arguments& args) -> Result
     ? Accepted()
     : Invalid(std::string(settings_.GetValidationError()));
 }
-auto PostProcessConsoleBindings::Transition(const Arguments& args) -> Result
+
+auto PostProcessConsoleBindings::ResetAuto(const Args& args) -> Result
 {
-  if (args.size() < 2) {
-    return Invalid("Expected owner-handle remeter|preserve OR seed ev100.");
+  if (!IsCurrentTarget(args.GetString(kTarget))) {
+    return StaleTarget();
   }
+  settings_.ResetAutoExposureDefaults();
+  return Accepted();
+}
+
+auto PostProcessConsoleBindings::Transition(const Args& args) -> Result
+{
   const auto renderer = renderer_();
   if (!renderer) {
     return Error("Renderer unavailable.");
   }
-  const auto owner = Owner(*renderer, args.front());
+  const auto owner = Owner(*renderer, args.GetInt(kOwner));
   if (!owner) {
     return Invalid("Invalid/stale exposure owner. Use pp.targets; borrowers "
                    "are not owners.");
   }
+  const auto& policy_name = args.GetString("policy");
   auto policy = vortex::ExposureTransitionPolicy::kRemeter;
   std::optional<float> seed;
-  if (args.at(1) == "seed" && args.size() == 3) {
-    float ev = 0;
-    if (!Scalar(args.at(2), ev)) {
-      return Invalid("Seed EV100 must be finite.");
+  if (policy_name == "seed") {
+    if (!args.Has("ev100")) {
+      return Invalid("seed needs ev100.");
     }
-    seed = ev;
+    seed = static_cast<float>(args.GetDouble("ev100"));
     policy = vortex::ExposureTransitionPolicy::kSeedFromEv100;
-  } else if (args.at(1) == "preserve" && args.size() == 2) {
+  } else if (args.Has("ev100")) {
+    return Invalid("ev100 goes only with seed.");
+  } else if (policy_name == "preserve") {
     policy = vortex::ExposureTransitionPolicy::kPreserve;
-  } else if (args.at(1) != "remeter" || args.size() != 2) {
-    return Invalid("Expected remeter|preserve OR seed ev100.");
   }
   const auto token = renderer->QueueExposureTransition(*owner, policy, seed);
   if (!token) {
@@ -523,17 +673,14 @@ auto PostProcessConsoleBindings::Transition(const Arguments& args) -> Result
       token->target.get(), token->lifetime, token->generation),
   };
 }
-auto PostProcessConsoleBindings::TransitionStatus(const Arguments& args)
-  -> Result
+
+auto PostProcessConsoleBindings::TransitionStatus(const Args& args) -> Result
 {
-  if (args.size() != 1) {
-    return Invalid("Expected one owner handle.");
-  }
   const auto renderer = renderer_();
   if (!renderer) {
     return Error("Renderer unavailable.");
   }
-  const auto owner = Owner(*renderer, args.front());
+  const auto owner = Owner(*renderer, args.GetInt(kOwner));
   if (!owner) {
     return Invalid("Invalid/stale exposure owner. Use pp.targets.");
   }

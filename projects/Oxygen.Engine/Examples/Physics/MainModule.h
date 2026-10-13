@@ -11,9 +11,7 @@
 #include <string_view>
 #include <vector>
 
-#include "DemoShell/ActiveScene.h"
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
 #include "Physics/PhysicsDemoPanel.h"
 #include <glm/glm.hpp>
@@ -24,6 +22,8 @@
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/SceneStage.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Physics/Handles.h>
@@ -48,7 +48,7 @@ class MainModule final : public DemoModuleBase {
 public:
   using Base = DemoModuleBase;
 
-  explicit MainModule(const DemoAppContext& app);
+  explicit MainModule(const host::HostContext& host);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -65,9 +65,7 @@ public:
   [[nodiscard]] auto GetSupportedPhases() const noexcept
     -> engine::ModulePhaseMask override
   {
-    using enum core::PhaseId;
-    return engine::MakeModuleMask<kFrameStart, kSceneMutation, kGameplay,
-      kPublishViews, kGuiUpdate, kPreRender, kCompositing, kFrameEnd>();
+    return kDemoPhases | engine::MakeModuleMask<core::PhaseId::kGameplay>();
   }
 
   [[nodiscard]] auto IsCritical() const noexcept -> bool override
@@ -84,23 +82,17 @@ public:
     -> std::unique_ptr<DemoShell> override;
   void OnShutdown() noexcept override;
 
-protected:
-  auto BuildDefaultWindowProperties() const
-    -> platform::window::Properties override;
-  auto ClearBackbufferReferences() -> void override;
-  auto UpdateComposition(engine::FrameContext& context,
-    std::vector<vortex::CompositionView>& views) -> void override;
-
-  auto OnFrameStart(observer_ptr<engine::FrameContext> context)
-    -> void override;
   auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
   auto OnGameplay(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
-  auto OnGuiUpdate(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
-  auto OnPreRender(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
+
+protected:
+  [[nodiscard]] auto BuildWindowProperties() const
+    -> platform::window::Properties override;
+  auto OnScenePublished(engine::FrameContext& context) -> void override;
+  auto BuildViews(engine::FrameContext& context, host::HostViews& views)
+    -> void override;
 
 private:
   struct DynamicObstacleState final {
@@ -122,8 +114,7 @@ private:
   };
 
   auto InitInputBindings() noexcept -> bool;
-  auto UpdatePhysicsDemoPanelConfig(
-    observer_ptr<ui::CameraRigController> camera_rig) -> void;
+  auto RegisterPhysicsCommands(DemoShell& shell) -> void;
 
   auto ResolvePhysicsModule() -> observer_ptr<physics::PhysicsModule>;
   auto BuildProceduralScene() -> bool;
@@ -140,7 +131,7 @@ private:
   auto AttachRigidBody(scene::SceneNode& node,
     const physics::body::BodyDesc& desc) -> std::optional<physics::BodyId>;
 
-  ActiveScene active_scene_;
+  host::ActiveScene active_scene_;
   scene::SceneNode main_camera_ {};
   scene::SceneNode sun_light_node_ {};
 
@@ -154,17 +145,16 @@ private:
 
   std::shared_ptr<PhysicsDemoPanel> physics_panel_;
 
-  observer_ptr<ui::CameraRigController> last_camera_rig_ { nullptr };
   std::shared_ptr<data::GeometryAsset> cube_geometry_;
   std::shared_ptr<data::GeometryAsset> floor_geometry_;
   std::shared_ptr<data::GeometryAsset> sphere_geometry_;
   std::shared_ptr<data::GeometryAsset> player_sphere_geometry_;
 
   scene::SceneNode player_node_ {};
-  std::optional<physics::BodyId> player_body_ {};
-  std::vector<scene::SceneNode> static_nodes_ {};
-  std::vector<DynamicObstacleState> dynamic_obstacles_ {};
-  std::vector<FlipperState> flippers_ {};
+  std::optional<physics::BodyId> player_body_;
+  std::vector<scene::SceneNode> static_nodes_;
+  std::vector<DynamicObstacleState> dynamic_obstacles_;
+  std::vector<FlipperState> flippers_;
   Vec3 player_spawn_position_ { 0.0F, -12.6F, 8.3F };
   Quat player_spawn_rotation_ { 1.0F, 0.0F, 0.0F, 0.0F };
   Vec3 bowl_center_ { 0.0F, 11.0F, 0.8F };
@@ -180,7 +170,7 @@ private:
   float settle_timer_sec_ { 0.0F };
   float settle_display_sec_ { 0.0F };
   bool player_settled_ { false };
-  std::optional<Vec3> previous_player_world_position_ {};
+  std::optional<Vec3> previous_player_world_position_;
 
   uint64_t launches_count_ { 0 };
   uint64_t resets_count_ { 0 };

@@ -12,7 +12,6 @@
 #include <string>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/ImGui/Widgets/StatsOverlay.h>
 #include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::examples {
@@ -22,16 +21,11 @@ class UiSettingsService;
 
 namespace oxygen::examples::ui {
 
-//! View model for UI settings panel state.
+//! View model of the DemoShell layout settings: axes visibility and the
+//! active panel.
 /*!
- Caches UI settings retrieved from `UiSettingsService`, invalidating the cache
- based on the service epoch and applying UI changes back to the service.
-
-### Key Features
-
-- **Epoch-driven refresh**: Reacquires state when stale.
-- **Immediate persistence**: Setters forward changes to the service.
-- **Dirty tracking**: Records user edits per frame.
+ Caches the settings of `UiSettingsService`, refreshing when the service
+ epoch changes. The stats overlay belongs to the host toolbar.
 
 @see oxygen::examples::UiSettingsService
 */
@@ -44,9 +38,6 @@ public:
   //! Returns the cached axes visibility.
   [[nodiscard]] auto GetAxesVisible() -> bool;
 
-  //! Returns the cached stats overlay configuration.
-  [[nodiscard]] auto GetStatsConfig() -> imgui::StatsOverlayConfig;
-
   //! Returns the cached active panel name (empty if none).
   [[nodiscard]] auto GetActivePanelName() -> std::optional<std::string>;
 
@@ -56,43 +47,19 @@ public:
   //! Sets axes visibility and forwards changes to the service.
   auto SetAxesVisible(bool visible) -> void;
 
-  //! Sets FPS stats visibility and forwards changes to the service.
-  auto SetStatsShowFps(bool visible) -> void;
-
-  //! Sets frame timing detail visibility and forwards changes to the service.
-  auto SetStatsShowFrameTimingDetail(bool visible) -> void;
-  auto SetStatsShowEngineTiming(bool visible) -> void;
-  auto SetStatsShowBudgetStats(bool visible) -> void;
-
   //! Sets the active panel name and forwards changes to the service.
   auto SetActivePanelName(std::optional<std::string> panel_name) -> void;
-
-  //! Returns whether axes visibility was edited since the last refresh.
-  [[nodiscard]] auto IsAxesDirty() const noexcept -> bool
-  {
-    return axes_dirty_;
-  }
-
-  //! Returns whether stats configuration was edited since the last refresh.
-  [[nodiscard]] auto IsStatsDirty() const noexcept -> bool
-  {
-    return stats_dirty_;
-  }
 
 private:
   auto Refresh() -> void;
   [[nodiscard]] auto IsStale() const -> bool;
 
-  mutable std::mutex mutex_ {};
+  mutable std::mutex mutex_;
   observer_ptr<UiSettingsService> service_;
   observer_ptr<CameraSettingsService> camera_settings_;
   std::uint64_t epoch_ { 0 };
   bool axes_visible_ { true };
-  imgui::StatsOverlayConfig stats_config_ {};
-  std::optional<std::string> active_panel_name_ {};
-  bool axes_dirty_ { false };
-  bool stats_dirty_ { false };
-  bool active_panel_dirty_ { false };
+  std::optional<std::string> active_panel_name_;
 };
 
 } // namespace oxygen::examples::ui

@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/DemoModuleBase.h"
 #include "DemoShell/UI/ContentVm.h"
 #include <glm/vec3.hpp>
@@ -25,6 +24,8 @@
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/SceneStage.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/CompositionView.h>
@@ -47,14 +48,26 @@ class SkyboxService;
 
 namespace oxygen::examples::render_scene {
 
+//! What RenderScene loads or proves at startup, from its command line.
+struct StartupOptions {
+  //! A cooked scene to load: name, virtual path, stem or key.
+  std::string scene_name;
+  //! A cubemap the startup scene's environment uses.
+  std::string skybox_path;
+  bool preview_sun_enabled { false };
+  std::optional<int> environment_profile;
+  //! Disables then re-enables the static sky light at these frames.
+  bool sky_light_lifecycle_proof_enabled { false };
+  std::uint32_t sky_light_lifecycle_disable_frame { 0U };
+  std::uint32_t sky_light_lifecycle_enable_frame { 0U };
+};
+
 class MainModule final : public DemoModuleBase {
   OXYGEN_TYPED(MainModule)
 public:
   using Base = oxygen::examples::DemoModuleBase;
 
-  explicit MainModule(const oxygen::examples::DemoAppContext& app,
-    bool preview_sun_enabled = false,
-    std::optional<int> environment_profile = std::nullopt);
+  MainModule(const host::HostContext& host, StartupOptions options);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override
   {
@@ -71,23 +84,13 @@ public:
   [[nodiscard]] auto GetSupportedPhases() const noexcept
     -> oxygen::engine::ModulePhaseMask override
   {
-    using enum core::PhaseId;
-    return engine::MakeModuleMask<kFrameStart, kInput, kSceneMutation,
-      kGameplay, kPublishViews, kGuiUpdate, kPreRender, kCompositing,
-      kFrameEnd>();
+    return kDemoPhases;
   }
 
   ~MainModule() override;
 
   OXYGEN_MAKE_NON_COPYABLE(MainModule);
   OXYGEN_MAKE_NON_MOVABLE(MainModule);
-
-  auto BuildDefaultWindowProperties() const
-    -> platform::window::Properties override;
-
-  auto ClearBackbufferReferences() -> void override;
-  auto UpdateComposition(engine::FrameContext& context,
-    std::vector<vortex::CompositionView>& views) -> void override;
 
   auto OnAttachedImpl(
     oxygen::observer_ptr<oxygen::IAsyncEngine> engine) noexcept
@@ -96,15 +99,15 @@ public:
 
   auto OnFrameStart(observer_ptr<oxygen::engine::FrameContext> context)
     -> void override;
-  auto OnInput(observer_ptr<engine::FrameContext> context) -> co::Co<> override;
   auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
-  auto OnGameplay(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
-  auto OnGuiUpdate(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
-  auto OnPreRender(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
+
+protected:
+  [[nodiscard]] auto BuildWindowProperties() const
+    -> platform::window::Properties override;
+  auto OnScenePublished(engine::FrameContext& context) -> void override;
+  auto BuildViews(engine::FrameContext& context, host::HostViews& views)
+    -> void override;
 
 private:
 #ifdef OXYGEN_BUILD_UI_TESTS
@@ -128,14 +131,14 @@ private:
   };
 
   // Scene and rendering.
-  ActiveScene active_scene_;
+  host::ActiveScene active_scene_;
   ViewId main_view_id_ { kInvalidViewId };
   scene::SceneNode main_camera_;
   //! Temporal history belongs to this scene/camera session, not main_view_id_.
   vortex::CompositionView::ViewStateHandle main_view_state_handle_ {
     vortex::CompositionView::kInvalidViewStateHandle
   };
-  ActiveScene main_view_state_scene_;
+  host::ActiveScene main_view_state_scene_;
   scene::SceneNode main_view_state_camera_;
 
   std::shared_ptr<oxygen::examples::SceneLoaderService> scene_loader_;
@@ -150,15 +153,10 @@ private:
   std::optional<data::AssetKey> active_scene_load_key_;
   Extent<uint32_t> last_viewport_;
 
-  // Debug/instrumentation.
-  bool logged_gameplay_tick_ { false };
-  bool was_orbiting_last_frame_ { false };
-
   // Deferred lifecycle actions (applied in OnFrameStart)
   enum class PendingSourceAction : uint8_t {
     kNone,
     kClear,
-    kTrimCache,
     kMountPak,
     kMountIndex,
     kMountGeneration,
@@ -166,14 +164,12 @@ private:
   struct PendingSourceRequest final {
     PendingSourceAction action { PendingSourceAction::kNone };
     std::filesystem::path path {};
-    std::optional<std::filesystem::path> previous_root {};
+    std::optional<std::filesystem::path> previous_root;
   };
   std::deque<PendingSourceRequest> pending_source_requests_;
   std::optional<SceneLoadRequest> pending_scene_load_;
+  StartupOptions startup_;
   std::optional<std::string> startup_scene_name_;
-  bool startup_sky_light_lifecycle_proof_enabled_ { false };
-  std::uint32_t startup_sky_light_lifecycle_disable_frame_ { 0U };
-  std::uint32_t startup_sky_light_lifecycle_enable_frame_ { 0U };
   bool startup_sky_light_lifecycle_disable_applied_ { false };
   bool startup_sky_light_lifecycle_enable_applied_ { false };
   bool startup_scene_load_requested_ { false };
@@ -183,9 +179,7 @@ private:
   std::unordered_map<std::filesystem::path, std::filesystem::file_time_type>
     mounted_loose_index_write_times_;
   bool pending_scene_clear_ { false };
-  bool preview_sun_enabled_ { false };
   bool loaded_scene_active_ { false };
-  std::optional<int> environment_profile_;
 };
 
 } // namespace oxygen::examples::render_scene

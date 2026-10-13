@@ -6,10 +6,8 @@
 
 #pragma once
 
-#include <chrono>
 #include <functional>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "Async/AsyncDemoTypes.h"
@@ -35,7 +33,6 @@ class AsyncDemoVm {
 public:
   explicit AsyncDemoVm(observer_ptr<AsyncDemoSettingsService> settings,
     observer_ptr<scene::SceneNode> spotlight_node,
-    const FrameActionTracker* frame_tracker,
     const std::vector<SphereState>* spheres);
 
   auto BindShowcase(observer_ptr<AsyncShowcase> showcase) noexcept -> void
@@ -54,9 +51,6 @@ public:
 
   [[nodiscard]] auto GetSpotlightSectionOpen() -> bool;
   auto SetSpotlightSectionOpen(bool open) -> void;
-
-  [[nodiscard]] auto GetProfilerSectionOpen() -> bool;
-  auto SetProfilerSectionOpen(bool open) -> void;
 
   // --- Scene Info (Read-only) ---
 
@@ -102,12 +96,6 @@ public:
   void SetEnsureSpotlightCallback(EnsureSpotlightCallback cb);
   void EnsureSpotlight();
 
-  // --- Profiler ---
-
-  [[nodiscard]] auto GetPhaseTimings() const
-    -> const std::vector<std::pair<std::string, std::chrono::microseconds>>&;
-  [[nodiscard]] auto GetFrameActions() const -> const std::vector<std::string>&;
-
   // Sync animation time from module
   void SetAnimationTime(double time);
 
@@ -115,7 +103,6 @@ private:
   observer_ptr<AsyncShowcase> showcase_;
   observer_ptr<AsyncDemoSettingsService> settings_;
   observer_ptr<scene::SceneNode> spotlight_node_;
-  const FrameActionTracker* frame_tracker_;
   const std::vector<SphereState>* spheres_;
 
   EnsureSpotlightCallback ensure_spotlight_cb_;

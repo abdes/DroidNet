@@ -159,8 +159,6 @@ public:
   [[nodiscard]] auto GetSkyboxHdrExposureEv() const -> float;
   auto SetSkyboxHdrExposureEv(float value) -> void;
   [[nodiscard]] auto GetSkyboxStatusMessage() const -> std::string_view;
-  [[nodiscard]] auto GetSkyboxLastFaceSize() const -> int;
-  [[nodiscard]] auto GetSkyboxLastResourceKey() const -> content::ResourceKey;
   auto LoadSkybox(std::string_view path, int layout_index,
     int output_format_index, int face_size, bool flip_y,
     bool tonemap_hdr_to_ldr, float hdr_exposure_ev) -> void;
@@ -360,9 +358,9 @@ private:
   observer_ptr<FileBrowserService> file_browser_ { nullptr };
   FileBrowserService::RequestId skybox_browse_request_id_ { 0 };
   scene::Scene* runtime_scene_ { nullptr };
-  scene::Scene* last_runtime_config_scene_ { nullptr };
-  SkyboxService* last_runtime_config_skybox_service_ { nullptr };
-  vortex::Renderer* last_runtime_config_renderer_ { nullptr };
+  const scene::Scene* last_runtime_config_scene_ { nullptr };
+  const SkyboxService* last_runtime_config_skybox_service_ { nullptr };
+  const vortex::Renderer* last_runtime_config_renderer_ { nullptr };
   bool runtime_config_initialized_ { false };
   bool startup_preset_applied_ { false };
   bool applying_preset_ { false };

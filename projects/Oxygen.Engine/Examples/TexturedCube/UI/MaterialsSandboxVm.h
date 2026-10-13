@@ -62,7 +62,7 @@ public:
 
     // Status
     float progress { 0.0F };
-    std::string status_message {};
+    std::string status_message;
     bool last_import_success { false };
   };
 
@@ -75,16 +75,16 @@ public:
     std::uint32_t array_layers { 0U };
     std::uint64_t size_bytes { 0U };
     std::uint64_t content_hash { 0U };
-    std::string name {};
+    std::string name;
     oxygen::Format format { oxygen::Format::kUnknown };
     oxygen::TextureType texture_type { oxygen::TextureType::kTexture2D };
   };
 
   //! One cooked material entry for the browser list.
   struct CookedMaterialEntry {
-    oxygen::data::AssetKey key {};
-    std::string virtual_path {};
-    std::string descriptor_relpath {};
+    oxygen::data::AssetKey key;
+    std::string virtual_path;
+    std::string descriptor_relpath;
     std::uint64_t descriptor_size { 0U };
   };
 
@@ -93,38 +93,6 @@ public:
     TextureIndexMode mode { TextureIndexMode::kFallback };
     std::uint32_t resource_index { 0U };
     oxygen::content::ResourceKey resource_key { 0U };
-  };
-
-  //! UV orientation fix mode.
-  enum class OrientationFixMode : std::uint8_t {
-    kNormalizeTextureOnUpload = 0,
-    kNormalizeUvInTransform = 1,
-    kNone = 2,
-  };
-
-  //! Image origin convention.
-  enum class ImageOrigin : std::uint8_t {
-    kTopLeft = 0,
-    kBottomLeft = 1,
-  };
-
-  //! UV origin convention.
-  enum class UvOrigin : std::uint8_t {
-    kBottomLeft = 0,
-    kTopLeft = 1,
-  };
-
-  //! State for UV transformation UI.
-  struct UvState {
-    glm::vec2 scale { 1.0F, 1.0F };
-    glm::vec2 offset { 0.0F, 0.0F };
-    UvOrigin uv_origin { UvOrigin::kBottomLeft };
-    ImageOrigin image_origin { ImageOrigin::kTopLeft };
-    OrientationFixMode fix_mode {
-      OrientationFixMode::kNormalizeTextureOnUpload
-    };
-    bool extra_flip_u { false };
-    bool extra_flip_v { false };
   };
 
   //! State for the demo surface material.
@@ -145,89 +113,108 @@ public:
 
   // --- Commands ---
 
-  void RequestImport();
+  auto RequestImport() -> void;
 
   // Inline Workflow Actions
-  void StartImportFlow();
-  void CancelImport();
-  void OnFileSelected(const std::filesystem::path& path);
-  void
-  UpdateImportSettingsFromUsage(); // Apply smart defaults based on Usage enum
+  auto StartImportFlow() -> void;
+  auto CancelImport() -> void;
+  auto OnFileSelected(const std::filesystem::path& path) -> void;
+  //! Apply smart defaults based on the usage.
+  auto UpdateImportSettingsFromUsage() -> void;
 
-  void RequestRefresh();
-  void BrowseForSourcePath();
-  void BrowseForCookedRoot();
+  auto RequestRefresh() -> void;
+  auto BrowseForSourcePath() -> void;
+  auto BrowseForCookedRoot() -> void;
 
   //! Triggered when the user selects a texture for a specific slot.
   //! Returns true if the load was initiated.
-  bool SelectTextureForSlot(uint32_t entry_index, bool is_sphere);
+  auto SelectTextureForSlot(uint32_t entry_index, bool is_sphere) -> bool;
 
   //! Triggered when the user selects a skybox texture.
-  bool SelectSkybox(uint32_t entry_index,
-    std::function<void(oxygen::content::ResourceKey)> on_loaded = nullptr);
+  auto SelectSkybox(uint32_t entry_index,
+    std::function<void(oxygen::content::ResourceKey)> on_loaded = nullptr)
+    -> bool;
 
-  void SetOnSkyboxSelected(
-    std::function<void(oxygen::content::ResourceKey)> callback);
+  auto SetOnSkyboxSelected(
+    std::function<void(oxygen::content::ResourceKey)> callback) -> void;
 
   // --- State Access ---
 
   //! Returns a formatted JSON string of the texture settings, if available.
-  [[nodiscard]] std::string GetMetadataJson(uint32_t entry_index) const;
+  [[nodiscard]] auto GetMetadataJson(uint32_t entry_index) const -> std::string;
 
-  ImportState& GetImportState() { return import_state_; }
-  const ImportState& GetImportState() const { return import_state_; }
+  [[nodiscard]] auto GetImportState() -> ImportState& { return import_state_; }
+  [[nodiscard]] auto GetImportState() const -> const ImportState&
+  {
+    return import_state_;
+  }
 
-  const std::vector<CookedTextureEntry>& GetCookedEntries() const
+  [[nodiscard]] auto GetCookedEntries() const
+    -> const std::vector<CookedTextureEntry>&
   {
     return cooked_entries_;
   }
 
-  TextureSlotState& GetSphereTextureState() { return sphere_texture_; }
-  const TextureSlotState& GetSphereTextureState() const
+  [[nodiscard]] auto GetSphereTextureState() -> TextureSlotState&
+  {
+    return sphere_texture_;
+  }
+  [[nodiscard]] auto GetSphereTextureState() const -> const TextureSlotState&
   {
     return sphere_texture_;
   }
 
-  TextureSlotState& GetCubeTextureState() { return cube_texture_; }
-  const TextureSlotState& GetCubeTextureState() const { return cube_texture_; }
+  [[nodiscard]] auto GetCubeTextureState() -> TextureSlotState&
+  {
+    return cube_texture_;
+  }
+  [[nodiscard]] auto GetCubeTextureState() const -> const TextureSlotState&
+  {
+    return cube_texture_;
+  }
 
-  UvState& GetUvState() { return uv_state_; }
-  const UvState& GetUvState() const { return uv_state_; }
+  [[nodiscard]] auto GetSurfaceState() -> SurfaceState&
+  {
+    return surface_state_;
+  }
+  [[nodiscard]] auto GetSurfaceState() const -> const SurfaceState&
+  {
+    return surface_state_;
+  }
 
-  SurfaceState& GetSurfaceState() { return surface_state_; }
-  const SurfaceState& GetSurfaceState() const { return surface_state_; }
-
-  [[nodiscard]] std::pair<glm::vec2, glm::vec2> GetEffectiveUvTransform() const;
-
-  [[nodiscard]] bool IsUseCustomMaterial() const
+  [[nodiscard]] auto IsUseCustomMaterial() const -> bool
   {
     return use_custom_material_;
   }
-  void SetUseCustomMaterial(bool enabled);
+  auto SetUseCustomMaterial(bool enabled) -> void;
 
-  [[nodiscard]] const std::vector<CookedMaterialEntry>&
-  GetCookedMaterialEntries() const
+  [[nodiscard]] auto GetCookedMaterialEntries() const
+    -> const std::vector<CookedMaterialEntry>&
   {
     return cooked_material_entries_;
   }
 
   [[nodiscard]] auto GetSelectedCustomMaterialKey() const
     -> std::optional<oxygen::data::AssetKey>;
-  void ClearSelectedCustomMaterial();
-  bool SelectCustomMaterialByEntryIndex(std::size_t entry_index);
+  auto ClearSelectedCustomMaterial() -> void;
+  auto SelectCustomMaterialByEntryIndex(std::size_t entry_index) -> bool;
 
-  [[nodiscard]] bool IsCubeRebuildNeeded() const { return cube_needs_rebuild_; }
-  void ClearCubeRebuildNeeded() { cube_needs_rebuild_ = false; }
-  void SetCubeRebuildNeeded() { cube_needs_rebuild_ = true; }
+  [[nodiscard]] auto IsCubeRebuildNeeded() const -> bool
+  {
+    return cube_needs_rebuild_;
+  }
+  auto ClearCubeRebuildNeeded() -> void { cube_needs_rebuild_ = false; }
+  auto SetCubeRebuildNeeded() -> void { cube_needs_rebuild_ = true; }
 
   // --- Update loop ---
-  void Update();
+  auto Update() -> void;
 
 private:
-  void UpdateImportStatus();
-  void HandleRefresh();
-  void UpdateCookedEntries();
-  void UpdateCookedMaterialEntries(const std::filesystem::path& cooked_root);
+  auto UpdateImportStatus() -> void;
+  auto HandleRefresh() -> void;
+  auto UpdateCookedEntries() -> void;
+  auto UpdateCookedMaterialEntries(const std::filesystem::path& cooked_root)
+    -> void;
 
   observer_ptr<TextureLoadingService> texture_service_;
   observer_ptr<oxygen::examples::FileBrowserService> file_browser_;
@@ -242,11 +229,10 @@ private:
   TextureSlotState cube_texture_;
 
   SurfaceState surface_state_;
-  UvState uv_state_;
 
   std::vector<CookedTextureEntry> cooked_entries_;
   std::vector<CookedMaterialEntry> cooked_material_entries_;
-  std::optional<oxygen::data::AssetKey> selected_custom_material_key_ {};
+  std::optional<oxygen::data::AssetKey> selected_custom_material_key_;
   bool use_custom_material_ { false };
   bool cube_needs_rebuild_ { false };
   bool refresh_requested_ { false };

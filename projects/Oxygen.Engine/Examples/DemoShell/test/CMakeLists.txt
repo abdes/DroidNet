@@ -15,10 +15,7 @@ m_gtest_program(
 m_gtest_program(SettingsService SOURCES "SettingsService_test.cpp")
 m_gtest_program(ContentVm SOURCES "ContentVm_test.cpp")
 
-m_gtest_program(ConsoleDefaults SOURCES "DemoShellConsoleDefaults_test.cpp")
 m_gtest_program(PostProcessConsole SOURCES "PostProcessConsole_test.cpp")
-
-m_gtest_program(DemoShellPanelConfig SOURCES "DemoShellPanelConfig_test.cpp")
 
 m_gtest_program(DefaultSceneLighting SOURCES "DefaultSceneLighting_test.cpp")
 m_gtest_program(PreviewSunController SOURCES "PreviewSunController_test.cpp")
@@ -52,18 +49,3 @@ m_gtest_program(
 )
 
 m_gtest_program(DiagnosticsPanel SOURCES "DiagnosticsPanel_test.cpp")
-
-m_gtest_program(
-  AsyncVortexMigrationSurface
-  SOURCES
-    "AsyncVortexMigrationSurface_test.cpp"
-)
-
-m_gtest_program(FrameCaptureCli SOURCES "FrameCaptureCli_test.cpp")
-
-m_gtest_program(GraphicsToolingCli SOURCES "GraphicsToolingCli_test.cpp")
-target_link_libraries(
-  "Oxygen.Examples.DemoShell.GraphicsToolingCli.Tests"
-  PRIVATE
-    oxygen::clap
-)

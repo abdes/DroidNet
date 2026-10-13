@@ -41,9 +41,6 @@ public:
   [[nodiscard]] virtual auto GetSpotlightSectionOpen() const -> bool;
   virtual auto SetSpotlightSectionOpen(bool open) -> void;
 
-  [[nodiscard]] virtual auto GetProfilerSectionOpen() const -> bool;
-  virtual auto SetProfilerSectionOpen(bool open) -> void;
-
   // --- Spotlight Settings ---
 
   [[nodiscard]] virtual auto GetSpotlightIntensity() const -> float;
@@ -74,7 +71,6 @@ public:
 private:
   static constexpr const char* kSceneOpenKey = "async_demo.scene_open";
   static constexpr const char* kSpotlightOpenKey = "async_demo.spotlight_open";
-  static constexpr const char* kProfilerOpenKey = "async_demo.profiler_open";
 
   static constexpr const char* kSpotlightIntensityKey
     = "async_demo.spotlight_intensity";

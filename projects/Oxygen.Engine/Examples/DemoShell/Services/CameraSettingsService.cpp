@@ -35,17 +35,16 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Vortex/CompositionView.h>
 
 namespace oxygen::examples {
 
 namespace {
 
-  constexpr float kDefaultFlySpeed = 5.0F;
   constexpr float kDefaultDroneSpeed = 6.0F;
   constexpr float kDefaultDroneDamping = 8.0F;
   constexpr float kDefaultDroneFocusHeight = 0.8F;
@@ -98,23 +97,6 @@ namespace {
     }
     if (value == "fly") {
       return ui::CameraControlMode::kFly;
-    }
-    return std::nullopt;
-  }
-
-  auto OrbitModeToString(const ui::OrbitMode mode) -> std::string_view
-  {
-    return mode == ui::OrbitMode::kTrackball ? "trackball" : "turntable";
-  }
-
-  auto ParseOrbitMode(const std::string_view value)
-    -> std::optional<ui::OrbitMode>
-  {
-    if (value == "trackball") {
-      return ui::OrbitMode::kTrackball;
-    }
-    if (value == "turntable") {
-      return ui::OrbitMode::kTurntable;
     }
     return std::nullopt;
   }
@@ -253,30 +235,7 @@ auto CameraSettingsService::OnSceneActivated(scene::Scene& /*scene*/) -> void
   ++epoch_;
 }
 
-auto CameraSettingsService::OnMainViewReady(
-  const engine::FrameContext& /*context*/, const vortex::CompositionView& view)
-  -> void
-{
-  if (!view.camera.has_value()) {
-    DCHECK_F(false, "Main view must provide a camera");
-    return;
-  }
-
-  auto camera = view.camera.value();
-  if (!camera.IsAlive()) {
-    DCHECK_F(false, "Main view camera must be alive");
-    return;
-  }
-
-  if (!camera.HasCamera()) {
-    DCHECK_F(false, "Main view camera must have a camera component");
-    return;
-  }
-
-  OnRuntimeMainViewReady(camera, view.view.viewport);
-}
-
-auto CameraSettingsService::OnRuntimeMainViewReady(
+auto CameraSettingsService::OnMainViewReady(ViewId /*view_id*/,
   const scene::SceneNode& camera, const ViewPort& viewport) -> void
 {
   const bool camera_changed = !active_camera_.IsAlive()
@@ -314,26 +273,6 @@ auto CameraSettingsService::SetOrbitMode(OrbitMode mode) -> void
   const char* value
     = (mode == OrbitMode::kTrackball) ? "trackball" : "turntable";
   settings->SetString(kOrbitModeKey, value);
-  ++epoch_;
-}
-
-auto CameraSettingsService::GetFlyMoveSpeed() const -> float
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-
-  if (const auto value = settings->GetFloat(kFlyMoveSpeedKey)) {
-    return *value;
-  }
-  return kDefaultFlySpeed;
-}
-
-auto CameraSettingsService::SetFlyMoveSpeed(float speed) -> void
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-
-  settings->SetFloat(kFlyMoveSpeedKey, speed);
   ++epoch_;
 }
 
@@ -922,8 +861,7 @@ auto CameraSettingsService::PersistActiveCameraSettings() -> void
     = !same_camera || current.ortho.IsDirty(last_saved_state_.ortho);
   const bool orbit_dirty = !same_camera
     || !NearlyEqual(last_saved_state_.orbit_target, current.orbit_target)
-    || !NearlyEqual(last_saved_state_.orbit_distance, current.orbit_distance)
-    || last_saved_state_.orbit_mode != current.orbit_mode;
+    || !NearlyEqual(last_saved_state_.orbit_distance, current.orbit_distance);
   const bool fly_dirty = !same_camera
     || !NearlyEqual(last_saved_state_.fly_move_speed, current.fly_move_speed)
     || !NearlyEqual(
@@ -965,9 +903,6 @@ auto CameraSettingsService::PersistActiveCameraSettings() -> void
     settings->SetFloat(prefix + ".orbit.target.y", current.orbit_target.y);
     settings->SetFloat(prefix + ".orbit.target.z", current.orbit_target.z);
     settings->SetFloat(prefix + ".orbit.distance", current.orbit_distance);
-    settings->SetString(prefix + ".orbit.mode",
-      std::string(
-        OrbitModeToString(static_cast<ui::OrbitMode>(current.orbit_mode))));
   }
 
   if (fly_dirty) {
@@ -1007,7 +942,6 @@ auto CameraSettingsService::RestoreActiveCameraSettings() -> bool
 
   const std::string prefix = "camera_rig." + camera_id;
   std::string mode_label = "default";
-  std::string orbit_mode_label = "default";
 
   if (camera_rig_) {
     if (const auto mode_str = settings->GetString(prefix + ".mode")) {
@@ -1177,12 +1111,6 @@ auto CameraSettingsService::RestoreActiveCameraSettings() -> bool
       if (orbit_distance.has_value()) {
         orbit->SetDistance(*orbit_distance);
       }
-      if (const auto mode_str = settings->GetString(prefix + ".orbit.mode")) {
-        if (const auto mode = ParseOrbitMode(*mode_str)) {
-          orbit->SetMode(*mode);
-          orbit_mode_label = *mode_str;
-        }
-      }
       if (is_orbit_mode && orbit_distance.has_value() && orbit_target_loaded) {
         orbit->Update(
           active_camera_, time::CanonicalDuration(std::chrono::nanoseconds(0)));
@@ -1271,7 +1199,6 @@ auto CameraSettingsService::CaptureActiveCameraState() -> PersistedCameraState
     if (const auto orbit = camera_rig_->GetOrbitController(); orbit) {
       current.orbit_target = orbit->GetTarget();
       current.orbit_distance = orbit->GetDistance();
-      current.orbit_mode = static_cast<int>(orbit->GetMode());
     }
     if (const auto fly = camera_rig_->GetFlyController(); fly) {
       current.fly_move_speed = fly->GetMoveSpeed();

@@ -313,7 +313,6 @@ NOLINT_TEST(OrbitCameraController, SettingsRestoreUsesPersistedWorldPivot)
     [&]() noexcept -> void { settings->Load(); });
   constexpr auto prefix = "camera_rig.OrbitWorldRestoreTest";
   settings->SetString(std::string(prefix) + ".mode", "orbit");
-  settings->SetString(std::string(prefix) + ".orbit.mode", "turntable");
   settings->SetFloat(std::string(prefix) + ".orbit.target.x", kWorldPivot.x);
   settings->SetFloat(std::string(prefix) + ".orbit.target.y", kWorldPivot.y);
   settings->SetFloat(std::string(prefix) + ".orbit.target.z", kWorldPivot.z);
@@ -341,7 +340,7 @@ NOLINT_TEST(OrbitCameraController, SettingsRestoreUsesPersistedWorldPivot)
   CameraSettingsService service;
   service.BindCameraRig(observer_ptr { &rig });
   service.OnSceneActivated(*scene);
-  service.OnRuntimeMainViewReady(camera, kViewport);
+  service.OnMainViewReady(ViewId { 1U }, camera, kViewport);
   scene->Update();
   ExpectPosition(CheckedValue(camera.GetTransform().GetWorldPosition()),
     pivot - (world_rotation * space::look::Forward) * kOrbitRadius);

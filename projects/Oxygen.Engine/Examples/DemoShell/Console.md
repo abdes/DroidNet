@@ -1,9 +1,39 @@
-# Post-process console commands
+# DemoShell console commands
 
 Open the console with **`** (grave accent), or use **Ctrl+Shift+P** for the
 command palette. Built-in `help`, `find`, completion and source policies apply.
 These controls are available in ordinary Release builds; no instrumentation
 option is required.
+
+## Panel commands
+
+Every DemoShell panel control runs a command; the console, the command palette
+and a remote client can run the same command. A command posted from a panel
+applies at the next frame start. `find <prefix>` lists a group and
+`help <command>` shows its parameters.
+
+| Prefix           | Panel or example                                                            |
+| ---------------- | --------------------------------------------------------------------------- |
+| `demo.camera.*`  | Camera: mode (`orbit`, `fly`, `drone`), projection, lens, drone path, axes. |
+| `demo.content.*` | Content Loader: import options, library, scene loading, pak mounting.       |
+| `demo.diag.*`    | Diagnostics: frame diagnostics, GPU draw bounds, wireframe color.           |
+| `demo.env.*`     | Environment: profile, sun, sky atmosphere, sky sphere, sky light, fog.      |
+| `demo.grid.*`    | Ground grid.                                                                |
+| `pp.*`           | Post Process: the post-process commands below.                              |
+| `async.*`        | Async: tour playback, lighting preset, animation, spotlight.                |
+| `cube.*`         | TexturedCube: material sandbox, texture import, skybox.                     |
+| `input.swimming` | InputSystem: swimming mode.                                                 |
+| `lightbench.*`   | LightBench: presets, settings file, test object and lights.                 |
+| `multiview.fog`  | MultiView: fog.                                                             |
+| `physics.*`      | Physics: launch, reset, launch impulse.                                     |
+
+Content's cache trim runs the engine's `cntt.trim_cache`. The view mode, show
+flags, stats and GPU work overlay belong to the host's toolbar and its
+`host.*` console variables. They are saved in the example's console
+variable archive, and a value given on the command line wins over the saved
+one.
+
+## Post-process commands
 
 Start with `pp.targets`. It reports:
 
@@ -17,7 +47,11 @@ scene revision and can retire exposure handles. Old targets are rejected rather
 than silently retargeted. Proof recipes may own per-view overrides; `pp.inspect`
 reports that fact. Editing the scene does not overwrite a producer's override.
 
-## Commands
+### Commands
+
+Every command takes typed parameters, so `cmd.list` describes them to remote
+clients. On the console the target comes first and the rest by position or as
+`name=value`; a remote client sends `{"target": "scene:3", "mode": "auto"}`.
 
 | Command                                                         | Effect                                                                                                                               |
 | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
@@ -28,6 +62,7 @@ reports that fact. Editing the scene does not overwrite a producer's override.
 | `pp.output scene:<revision> none\|aces\|filmic\|reinhard gamma` | Apply a validated tone curve/gamma pair. `none` disables the tone curve, not exposure.                                               |
 | `pp.curve scene:<revision> clear`                               | Remove the compensation curve.                                                                                                       |
 | `pp.curve scene:<revision> ev:compensation [...]`               | Replace the entire curve; at most 64 ordered keys, validated by the existing owner.                                                  |
+| `pp.reset_auto scene:<revision>`                                | Reset the automatic exposure controls; mode, compensation, calibration and camera settings are kept.                                 |
 | `pp.transition <owner-handle> remeter`                          | Queue an event-frame remeter.                                                                                                        |
 | `pp.transition <owner-handle> seed <ev100>`                     | Queue an explicit exposure seed.                                                                                                     |
 | `pp.transition <owner-handle> preserve`                         | Queue the existing preserve policy.                                                                                                  |

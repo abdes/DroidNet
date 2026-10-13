@@ -24,6 +24,8 @@ public:
   explicit PostProcessVm(observer_ptr<PostProcessSettingsService> service);
 
   [[nodiscard]] auto GetExposureSettings() -> scene::ExposureSettings;
+  //! The `scene:<revision>` the pp.* commands edit; none without a scene.
+  [[nodiscard]] auto GetAuthoringTarget() -> std::optional<std::string>;
   auto TrySetExposureSettings(const scene::ExposureSettings& settings) -> bool;
   auto SetExposureCompensationCurve(
     std::span<const scene::ExposureCompensationKey> keys) -> bool;
@@ -142,7 +144,7 @@ private:
   float auto_exposure_target_lum_ { 0.18F };
   float auto_exposure_spot_radius_ { 0.2F };
   engine::MeteringMode auto_exposure_metering_mode_ {
-    engine::MeteringMode::kAverage
+    engine::MeteringMode::kAverage,
   };
   bool tonemapping_enabled_ { true };
   engine::ToneMapper tonemapping_mode_ { engine::ToneMapper::kAcesFitted };

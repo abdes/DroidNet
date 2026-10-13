@@ -59,16 +59,12 @@ set_target_properties(
 
 set(
   OXYGEN_DEMOSHELL_HEADERS
-  "ActiveScene.h"
   "DemoShell.h"
+  "PanelCommands.h"
   "PanelRegistry.h"
-  "Runtime/AppWindow.h"
-  "Runtime/DemoAppContext.h"
-  "Runtime/MainViewContract.h"
   "Runtime/SceneActivationPolicy.h"
-  "Runtime/RendererUiTypes.h"
+  "Runtime/DemoMain.h"
   "Runtime/DemoModuleBase.h"
-  "Runtime/ImGuiLayer.h"
   "Runtime/PathNormalization.h"
   "Services/CameraSettingsService.h"
   "Services/ContentSettingsService.h"
@@ -79,7 +75,6 @@ set(
   "Services/EnvironmentSettingsService.h"
   "Services/FileBrowserService.h"
   "Services/GridSettingsService.h"
-  "Services/LightCullingSettingsService.h"
   "Services/PostProcessSettingsService.h"
   "Services/RenderingSettingsService.h"
   "Services/SceneLoaderService.h"
@@ -96,12 +91,11 @@ set(
   "UI/DemoShellUi.h"
   "UI/DroneCameraController.h"
   "UI/EnvironmentDebugPanel.h"
+  "UI/EnvironmentPanelCommands.h"
   "UI/EnvironmentVm.h"
   "UI/FlyCameraController.h"
   "UI/GridPanel.h"
   "UI/GridVm.h"
-  "UI/LightCullingDebugPanel.h"
-  "UI/LightCullingVm.h"
   "UI/OrbitCameraController.h"
   "UI/PanelSideBar.h"
   "UI/PostProcessPanel.h"
@@ -109,24 +103,20 @@ set(
   "UI/DiagnosticsPanel.h"
   "UI/DiagnosticsVm.h"
   "UI/SidePanel.h"
-  "UI/UiSettingsPanel.h"
   "UI/UiSettingsVm.h"
 )
 set(
   OXYGEN_DEMOSHELL_PRIVATE_SOURCES
-  "ActiveScene.cpp"
   "DemoShell.cpp"
+  "PanelCommands.cpp"
   "FileBrowser/imfilebrowser.h"
   "FileBrowser/LICENSE.txt"
   "FileBrowser/VERSION.txt"
-  "Internal/SceneControlBlock.h"
-  "Internal/DemoShellConsoleDefaults.h"
   "Internal/PostProcessConsoleBindings.h"
   "Internal/PostProcessConsoleBindings.cpp"
   "PanelRegistry.cpp"
-  "Runtime/AppWindow.cpp"
+  "Runtime/DemoMain.cpp"
   "Runtime/DemoModuleBase.cpp"
-  "Internal/DemoShellConsoleDefaults.cpp"
   "Services/CameraSettingsService.cpp"
   "Services/ContentSettingsService.cpp"
   "Services/DefaultSceneLighting.cpp"
@@ -135,7 +125,6 @@ set(
   "Services/EnvironmentSettingsService.cpp"
   "Services/FileBrowserService.cpp"
   "Services/GridSettingsService.cpp"
-  "Services/LightCullingSettingsService.cpp"
   "Services/RenderingSettingsService.cpp"
   "Services/PostProcessSettingsService.cpp"
   "Services/SceneLoaderService.cpp"
@@ -151,12 +140,11 @@ set(
   "UI/DemoShellUi.cpp"
   "UI/DroneCameraController.cpp"
   "UI/EnvironmentDebugPanel.cpp"
+  "UI/EnvironmentPanelCommands.cpp"
   "UI/EnvironmentVm.cpp"
   "UI/FlyCameraController.cpp"
   "UI/GridPanel.cpp"
   "UI/GridVm.cpp"
-  "UI/LightCullingDebugPanel.cpp"
-  "UI/LightCullingVm.cpp"
   "UI/OrbitCameraController.cpp"
   "UI/PanelSideBar.cpp"
   "UI/DiagnosticsPanel.cpp"
@@ -164,7 +152,6 @@ set(
   "UI/PostProcessPanel.cpp"
   "UI/PostProcessVm.cpp"
   "UI/SidePanel.cpp"
-  "UI/UiSettingsPanel.cpp"
   "UI/UiSettingsVm.cpp"
 )
 
@@ -207,11 +194,15 @@ target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
     oxygen::base
+    oxygen::clap
+    oxygen::commands
+    oxygen::control
     oxygen::cooker
     oxygen::content
     oxygen::data
     oxygen::engine
     oxygen::graphics-common
+    oxygen::host
     oxygen::imgui
     oxygen::input
     oxygen::platform

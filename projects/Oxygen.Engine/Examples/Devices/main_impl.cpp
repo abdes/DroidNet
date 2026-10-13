@@ -7,19 +7,24 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <exception>
+#include <memory>
 #include <span>
+#include <stdexcept>
 #include <string>
+#include <utility>
 
-#include "Common/DemoCli.h"
+#include <d3dcommon.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
-#include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
+#include <Oxygen/Host/RuntimeCli.h>
 
 using oxygen::graphics::d3d12::DeviceManager;
 using oxygen::graphics::d3d12::DeviceManagerDesc;
@@ -53,7 +58,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
 {
   using namespace oxygen::clap; // NOLINT
 
-  oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
+  oxygen::host::RuntimeCliState graphics_tooling_cli {};
   bool enable_validation = false;
   bool require_display = true;
   bool auto_select_adapter = false;
@@ -96,21 +101,28 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
 
     const Command::Ptr default_command
       = CommandBuilder(Command::DEFAULT)
-          .WithOptions(oxygen::examples::cli::MakeGraphicsToolingOptions(
-            graphics_tooling_cli))
+          .WithOptions(
+            oxygen::host::MakeGraphicsToolingOptions(graphics_tooling_cli))
           .WithOptions(device_options);
-    auto cli = oxygen::examples::cli::BuildCli(
+    auto cli = oxygen::host::BuildCli(
       "devices", "D3D12 device removal demo", default_command);
 
     const int argc = static_cast<int>(args.size());
     const char** argv = args.data();
     auto context = cli->Parse(argc, argv);
-    if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
+    if (oxygen::host::HandleMetaCommand(context, default_command)) {
       return EXIT_SUCCESS;
     }
 
-    oxygen::examples::cli::ValidateGraphicsToolingOptions(graphics_tooling_cli);
-    oxygen::examples::cli::LogGraphicsToolingOptions(graphics_tooling_cli);
+    if (!oxygen::AreGraphicsToolingOptionsMutuallyExclusive(
+          graphics_tooling_cli.enable_debug_layer,
+          graphics_tooling_cli.enable_aftermath)) {
+      throw oxygen::host::RuntimeCliError(
+        "--debug-layer and --aftermath are mutually exclusive");
+    }
+    LOG_F(INFO, "Devices: debug_layer={} aftermath={}",
+      graphics_tooling_cli.enable_debug_layer,
+      graphics_tooling_cli.enable_aftermath);
 
     const oxygen::graphics::d3d12::DeviceManagerDesc props {
       .enable_debug_layer = graphics_tooling_cli.enable_debug_layer,
@@ -123,14 +135,14 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
     DeviceManager device_manager(props);
 
     device_manager.SelectBestAdapter(
-      []() { LOG_F(INFO, "Device removal detected!"); });
+      [] { LOG_F(INFO, "Device removal detected!"); });
 
     auto* device = device_manager.Device();
     device->GetDeviceRemovedReason();
     device->RemoveDevice();
 
     device_manager.SelectBestAdapter(
-      []() { LOG_F(INFO, "Device removal handler called"); });
+      [] { LOG_F(INFO, "Device removal handler called"); });
     return EXIT_SUCCESS;
   } catch (const CmdLineArgumentsError& e) {
     LOG_F(ERROR, "Devices CLI parse failed: {}", e.what());

@@ -20,7 +20,6 @@
 #include <vector>
 
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/PathNormalization.h"
 #include "DemoShell/Services/DefaultSceneLighting.h"
 #include "DemoShell/Services/SceneLoaderService.h"
@@ -41,6 +40,9 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/HostModule.h>
+#include <Oxygen/Host/HostWindow.h>
 #include <Oxygen/Input/InputSystem.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
@@ -140,57 +142,42 @@ namespace {
 
 } // namespace
 
-MainModule::MainModule(const examples::DemoAppContext& app,
-  const bool preview_sun_enabled, const std::optional<int> environment_profile)
-  : Base(app)
+MainModule::MainModule(const host::HostContext& host, StartupOptions options)
+  : Base(host)
   , last_viewport_({ .width = 0, .height = 0 })
-  , preview_sun_enabled_(preview_sun_enabled)
-  , environment_profile_(environment_profile)
+  , startup_(std::move(options))
 {
-  if (!app.startup_scene_name.empty()) {
-    startup_scene_name_ = app.startup_scene_name;
+  if (!startup_.scene_name.empty()) {
+    startup_scene_name_ = startup_.scene_name;
   }
-  if (!app.startup_skybox_path.empty()) {
-    startup_sky_light_lifecycle_proof_enabled_
-      = app.startup_sky_light_lifecycle_proof_enabled;
-    startup_sky_light_lifecycle_disable_frame_
-      = app.startup_sky_light_lifecycle_disable_frame;
-    startup_sky_light_lifecycle_enable_frame_
-      = app.startup_sky_light_lifecycle_enable_frame;
-    if (startup_sky_light_lifecycle_proof_enabled_
-      && startup_sky_light_lifecycle_enable_frame_
-        <= startup_sky_light_lifecycle_disable_frame_) {
-      startup_sky_light_lifecycle_proof_enabled_ = false;
-      LOG_F(WARNING,
-        "RenderScene: disabled static SkyLight lifecycle proof because "
-        "enable_frame ({}) must be greater than disable_frame ({})",
-        startup_sky_light_lifecycle_enable_frame_,
-        startup_sky_light_lifecycle_disable_frame_);
-    }
+  // The lifecycle proof toggles the sky light of the startup skybox.
+  if (startup_.skybox_path.empty()) {
+    startup_.sky_light_lifecycle_proof_enabled = false;
+  }
+  if (startup_.sky_light_lifecycle_proof_enabled
+    && startup_.sky_light_lifecycle_enable_frame
+      <= startup_.sky_light_lifecycle_disable_frame) {
+    startup_.sky_light_lifecycle_proof_enabled = false;
+    LOG_F(WARNING,
+      "RenderScene: disabled static SkyLight lifecycle proof because "
+      "enable_frame ({}) must be greater than disable_frame ({})",
+      startup_.sky_light_lifecycle_enable_frame,
+      startup_.sky_light_lifecycle_disable_frame);
   }
 }
 
 MainModule::~MainModule() = default;
 
-auto MainModule::BuildDefaultWindowProperties() const
-  -> platform::window::Properties
+auto MainModule::BuildWindowProperties() const -> platform::window::Properties
 {
   constexpr uint32_t kDefaultWidth = 2560;
   constexpr uint32_t kDefaultHeight = 1400;
 
-  platform::window::Properties props("Oxygen :: Examples :: RenderScene");
+  auto props = Base::BuildWindowProperties();
+  props.title = "Oxygen :: Examples :: RenderScene";
   props.extent = platform::window::ExtentT {
     .width = kDefaultWidth,
     .height = kDefaultHeight,
-  };
-  props.flags = {
-    .hidden = false,
-    .always_on_top = false,
-    .full_screen = app_.fullscreen,
-    .maximized = false,
-    .minimized = false,
-    .resizable = true,
-    .borderless = false,
   };
   return props;
 }
@@ -204,13 +191,8 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     return nullptr;
   }
 
-  LOG_F(INFO, "RenderScene: OnAttached; input_system={} engine={}",
-    static_cast<const void*>(app_.input_system.get()),
-    static_cast<const void*>(engine.get()));
-
   auto shell = std::make_unique<DemoShell>();
-  DemoShellConfig shell_config;
-  shell_config.engine = observer_ptr { engine.get() };
+  auto shell_config = MakeShellConfig();
   const auto runtime_paths = ResolveRuntimePaths();
   const auto& demo_root = runtime_paths.showcase;
   shell_config.content_roots = {
@@ -219,7 +201,6 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   };
   shell_config.panel_config.content_loader = true;
   shell_config.panel_config.camera_controls = true;
-  shell_config.panel_config.lighting = true;
   shell_config.panel_config.environment = true;
   shell_config.panel_config.diagnostics = true;
   shell_config.panel_config.post_process = true;
@@ -227,9 +208,9 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   shell_config.enable_camera_rig = true;
   shell_config.force_environment_override = false;
   shell_config.restore_environment_profile = true;
-  shell_config.initial_environment_profile = environment_profile_;
-  shell_config.startup_skybox_path = app_.startup_skybox_path;
-  shell_config.initial_preview_sun_enabled = preview_sun_enabled_;
+  shell_config.initial_environment_profile = startup_.environment_profile;
+  shell_config.startup_skybox_path = startup_.skybox_path;
+  shell_config.initial_preview_sun_enabled = startup_.preview_sun_enabled;
   shell_config.preview_scene_ready
     = [this] -> bool { return loaded_scene_active_; };
   shell_config.on_scene_load_requested
@@ -243,21 +224,6 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   };
   shell_config.on_scene_load_cancel_requested
     = [this] -> void { scene_load_cancel_requested_ = true; };
-  shell_config.on_dump_texture_memory
-    = [](const std::size_t /*top_n*/) -> void {
-    LOG_F(INFO,
-      "RenderScene: Vortex runtime path does not expose legacy texture-memory "
-      "dump telemetry");
-  };
-  shell_config.get_last_released_scene_key
-    = [this] -> std::optional<data::AssetKey> {
-    return last_released_scene_key_;
-  };
-  shell_config.on_force_trim = [this] -> void {
-    pending_source_requests_.push_back(PendingSourceRequest {
-      .action = PendingSourceAction::kTrimCache,
-    });
-  };
   shell_config.on_clear_mounts = [this] -> void {
     pending_source_requests_.push_back(PendingSourceRequest {
       .action = PendingSourceAction::kClear,
@@ -312,28 +278,11 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
       *startup_scene_name_, cooked_index.string());
   }
 
-  LOG_F(INFO, "RenderScene: Staging fallback default scene");
-  shell->StageScene(
-    std::make_unique<scene::Scene>("RenderScene", kSceneInitialCapacity));
-  auto staged_scene = shell->GetStagedScene();
-  CHECK_NOTNULL_F(staged_scene.get(),
-    "fallback staged scene must be available after StageScene");
-  main_camera_ = staged_scene->CreateNode("MainCamera");
-  auto camera = std::make_unique<scene::PerspectiveCamera>();
-  const bool attached = main_camera_.AttachCamera(std::move(camera));
-  CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
-  auto tf = main_camera_.GetTransform();
-  tf.SetLocalPosition(kFallbackCameraPosition);
-  tf.SetLocalRotation(
-    glm::quat(glm::radians(Vec3 { kFallbackCameraPitchDegrees, 0.0F, 0.0F })));
-  shell->SetStagedMainCamera(main_camera_);
+  StageFallbackScene();
 
-  // Create Main View ID
-  main_view_id_ = GetOrCreateViewId("MainView");
-
-  if (!app_.headless && app_window_ && app_window_->GetWindow()) {
-    const auto extent = app_window_->GetWindow()->Size();
-    last_viewport_ = extent;
+  main_view_id_ = Publisher().GetOrCreateViewId("MainView");
+  if (Window() && Window()->GetWindow()) {
+    last_viewport_ = Window()->GetWindow()->Size();
   }
 
   LOG_F(INFO, "RenderScene: DemoShell initialized");
@@ -355,68 +304,60 @@ auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   -> void
 {
   DCHECK_NOTNULL_F(context);
-  auto& shell = GetShell();
-  auto& frame_context = *context;
   scene_published_this_frame_ = false;
 
-  // Scene lifetime contract:
-  // - Scene swaps/clears are applied ONLY in OnFrameStart.
-  // - FrameContext stores a non-owning scene pointer for this frame.
-  // - Replacing/clearing the scene in later phases (e.g. OnSceneMutation)
-  //   can dangle that pointer before transform propagation.
-  // Keep all ownership changes here, before frame_context.SetScene(...).
+  // Scene swaps and clears happen at frame start only: the frame context
+  // keeps a non-owning scene pointer for the rest of the frame. The host
+  // publishes a staged scene in the base frame start; retire the main view's
+  // history before, so it cannot carry over to the new scene.
   if (pending_scene_clear_) {
     loaded_scene_active_ = false;
-    LOG_F(INFO,
-      "RenderScene: Applying deferred scene clear at frame-start before "
-      "FrameContext publication");
+    LOG_F(INFO, "RenderScene: Applying deferred scene clear at frame start");
     ResetMainViewState(context);
     active_scene_ = {};
     main_camera_ = {};
     scene_loader_.reset();
     active_scene_load_key_.reset();
-    shell.SetScene(nullptr);
+    Stage().Clear();
     StageFallbackScene();
     pending_scene_clear_ = false;
   }
-
-  if (shell.HasStagedScene()) {
+  if (Stage().HasStagedScene()) {
     ResetMainViewState(context);
-    CHECK_F(shell.PublishStagedScene(),
-      "expected a staged scene before frame-start publish");
-    scene_published_this_frame_ = true;
-    loaded_scene_active_ = current_scene_key_.has_value();
-    active_scene_ = shell.GetActiveScene();
-    main_camera_ = shell.TakePublishedMainCamera();
-    LOG_F(INFO, "RenderScene: Published staged scene at frame-start");
-
-    if (active_scene_load_key_) {
-      if (const auto vm = shell.GetContentVm()) {
-        vm->NotifySceneLoadCompleted(*active_scene_load_key_, true);
-      }
-      shell.ReapplyPostProcessSettingsToScene();
-      active_scene_load_key_.reset();
-    }
   }
 
-  shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
 
   if (!HasRenderableWindow()) {
     ResetMainViewState(context);
     return;
   }
-
-  if (!app_.headless && app_window_ && app_window_->GetWindow()) {
-    last_viewport_ = app_window_->GetWindow()->Size();
+  if (Window() && Window()->GetWindow()) {
+    last_viewport_ = Window()->GetWindow()->Size();
   }
-
-  const auto scene_ptr = shell.TryGetScene();
-  if (scene_ptr != nullptr) {
+  if (const auto scene_ptr = Stage().TryGetScene()) {
     ApplySkyLightLifecycleProofToggle(
-      *scene_ptr, frame_context.GetFrameSequenceNumber().get());
+      *scene_ptr, context->GetFrameSequenceNumber().get());
   }
-  frame_context.SetScene(observer_ptr { scene_ptr.get() });
+}
+
+auto MainModule::OnScenePublished(engine::FrameContext& context) -> void
+{
+  Base::OnScenePublished(context);
+  scene_published_this_frame_ = true;
+  loaded_scene_active_ = current_scene_key_.has_value();
+  active_scene_ = Stage().GetActiveScene();
+  main_camera_ = Stage().TakePublishedMainCamera();
+  LOG_F(INFO, "RenderScene: Published staged scene at frame start");
+
+  if (const auto load_key
+    = std::exchange(active_scene_load_key_, std::nullopt)) {
+    auto& shell = GetShell();
+    if (const auto vm = shell.GetContentVm()) {
+      vm->NotifySceneLoadCompleted(*load_key, true);
+    }
+    shell.ReapplyPostProcessSettingsToScene();
+  }
 }
 
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
@@ -441,8 +382,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         reason = "loose cooked root";
       } else if (action == PendingSourceAction::kClear) {
         reason = "clear mounts";
-      } else if (action == PendingSourceAction::kTrimCache) {
-        reason = "trim cache";
       }
 
       if (action == PendingSourceAction::kClear) {
@@ -453,15 +392,12 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         pending_scene_clear_ = true;
       }
 
-      auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+      auto asset_loader = Host().engine->GetAssetLoader();
       if (asset_loader) {
         if (action == PendingSourceAction::kClear) {
           asset_loader->ClearMounts();
           mounted_pak_write_times_.clear();
           mounted_loose_index_write_times_.clear();
-          refresh_library = true;
-        } else if (action == PendingSourceAction::kTrimCache) {
-          asset_loader->TrimCache();
           refresh_library = true;
         } else if (action == PendingSourceAction::kMountGeneration) {
           const auto normalized = runtime::NormalizePath(path);
@@ -704,7 +640,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     const auto request = *pending_scene_load_;
     pending_scene_load_.reset();
 
-    auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+    auto asset_loader = Host().engine->GetAssetLoader();
     if (asset_loader) {
       try {
         if (request.source_kind == ui::SceneSourceKind::kPak) {
@@ -817,10 +753,10 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           request.source_kind == ui::SceneSourceKind::kPak
             ? request.source_path
             : std::filesystem::path {},
-          observer_ptr { app_.engine.get() }, app_.input_system,
-          observer_ptr { &app_.engine->GetScriptCompilationService() },
+          observer_ptr { Host().engine.get() }, Host().input_system,
+          observer_ptr { &Host().engine->GetScriptCompilationService() },
           PathFinder(std::make_shared<const PathFinderConfig>(
-                       app_.engine->GetEngineConfig().path_finder_config),
+                       Host().engine->GetEngineConfig().path_finder_config),
             std::filesystem::current_path()));
       active_scene_load_key_ = request.key;
       scene_loader_->StartLoad(request.key);
@@ -839,7 +775,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     }
   }
 
-  if (scene_loader_ && !shell.HasStagedScene() && !pending_physics_sidecar_) {
+  if (scene_loader_ && !Stage().HasStagedScene() && !pending_physics_sidecar_) {
     if (scene_loader_->IsReady()) {
       auto loader = scene_loader_;
       auto swap = loader->GetResult();
@@ -855,20 +791,18 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       }
 
       if (swap.asset && loader) {
-        DCHECK_F(!shell.HasStagedScene(),
+        DCHECK_F(!Stage().HasStagedScene(),
           "scene build path expects no pre-existing staged scene");
-        shell.StageScene(
-          std::make_unique<scene::Scene>("RenderScene", kSceneInitialCapacity));
-        auto staged_scene = shell.GetStagedScene();
-        CHECK_NOTNULL_F(staged_scene.get(),
-          "staged scene must be available immediately after StageScene");
+        Stage().Stage(
+          std::make_shared<scene::Scene>("RenderScene", kSceneInitialCapacity));
+        auto staged_scene = Stage().GetStagedScene();
         scene::SceneNode staged_main_camera;
         try {
           staged_main_camera
             = co_await loader->BuildSceneAsync(*staged_scene, swap.asset);
           pending_physics_sidecar_ = swap.physics_asset;
         } catch (const std::exception& ex) {
-          shell.DiscardStagedScene();
+          Stage().DiscardStagedScene();
           pending_physics_sidecar_.reset();
           LOG_F(ERROR,
             "RenderScene: Scene build/hydration failed (scene_key={} "
@@ -884,7 +818,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           }
           co_return;
         } catch (...) {
-          shell.DiscardStagedScene();
+          Stage().DiscardStagedScene();
           pending_physics_sidecar_.reset();
           LOG_F(ERROR,
             "RenderScene: Scene build/hydration failed (scene_key={} "
@@ -901,7 +835,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
           co_return;
         }
 
-        shell.SetStagedMainCamera(std::move(staged_main_camera));
+        Stage().SetStagedMainCamera(std::move(staged_main_camera));
         active_scene_asset_pin_ = swap.asset;
         current_scene_key_ = swap.scene_key;
         LOG_F(INFO,
@@ -937,7 +871,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
 
   if (pending_physics_sidecar_) {
     const bool can_hydrate_now = active_scene_.IsValid()
-      && !shell.HasStagedScene() && !scene_published_this_frame_
+      && !Stage().HasStagedScene() && !scene_published_this_frame_
       && scene_loader_ && !scene_loader_->IsFailed();
     if (can_hydrate_now) {
       try {
@@ -962,7 +896,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     }
   }
 
-  if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
+  if (!active_scene_.IsValid() && !Stage().HasStagedScene()) {
     StageFallbackScene();
   }
 
@@ -982,12 +916,12 @@ auto MainModule::ReleaseCurrentSceneAsset(const char* reason) -> void
   current_scene_key_.reset();
 }
 
-auto MainModule::UpdateComposition(engine::FrameContext& context,
-  std::vector<vortex::CompositionView>& views) -> void
+auto MainModule::BuildViews(
+  engine::FrameContext& context, host::HostViews& views) -> void
 {
   auto& shell = GetShell();
   // Scripts switch cameras through the scene; view through its active camera.
-  if (const auto scene = shell.TryGetScene(); scene != nullptr) {
+  if (const auto scene = Stage().TryGetScene(); scene != nullptr) {
     if (const auto active = scene->ActiveCamera();
       active.has_value() && active->GetHandle() != main_camera_.GetHandle()) {
       main_camera_ = *active;
@@ -1009,28 +943,15 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
     main_view_state_camera_ = main_camera_;
   }
 
-  View view {};
-  if (app_window_ && app_window_->GetWindow()) {
-    const auto extent = app_window_->GetWindow()->Size();
-    view.viewport = ViewPort {
-      .top_left_x = 0.0F,
-      .top_left_y = 0.0F,
-      .width = static_cast<float>(extent.width),
-      .height = static_cast<float>(extent.height),
-      .min_depth = 0.0F,
-      .max_depth = 1.0F,
-    };
-  }
-
-  // Create the main scene view intent
+  // An unset viewport covers the window.
   auto main_comp
-    = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
+    = vortex::CompositionView::ForScene(main_view_id_, View {}, main_camera_);
   main_comp.view_state_handle = main_view_state_handle_;
   main_comp.with_atmosphere = true;
   main_comp.with_height_fog = shell.IsHeightFogPassRequested();
   main_comp.with_local_fog = shell.IsLocalFogPassRequested();
-  shell.OnMainViewReady(context, main_comp);
-  views.push_back(std::move(main_comp));
+  views.views.push_back(std::move(main_comp));
+  views.main = main_view_id_;
 }
 
 auto MainModule::ResetMainViewState(
@@ -1038,7 +959,7 @@ auto MainModule::ResetMainViewState(
 {
   if (main_view_state_handle_
     != vortex::CompositionView::kInvalidViewStateHandle) {
-    if (auto renderer = ResolveVortexRenderer(); renderer != nullptr) {
+    if (auto renderer = ResolveRenderer(); renderer != nullptr) {
       if (context != nullptr) {
         renderer->RemovePublishedRuntimeView(*context, main_view_id_);
       } else {
@@ -1053,29 +974,25 @@ auto MainModule::ResetMainViewState(
 
 auto MainModule::ClearSceneRuntime(const char* /*reason*/) -> void
 {
-  auto& shell = GetShell();
   ResetMainViewState();
   active_scene_ = {};
   main_camera_ = {};
   scene_loader_.reset();
   pending_physics_sidecar_.reset();
   active_scene_load_key_.reset();
-  shell.SetScene(nullptr);
+  Stage().Clear();
 }
 
 auto MainModule::StageFallbackScene() -> void
 {
-  auto& shell = GetShell();
-  if (shell.HasStagedScene()) {
+  if (Stage().HasStagedScene()) {
     return;
   }
 
   LOG_F(INFO, "RenderScene: Staging fallback default scene");
-  shell.StageScene(
-    std::make_unique<scene::Scene>("RenderScene", kSceneInitialCapacity));
-  auto staged_scene = shell.GetStagedScene();
-  CHECK_NOTNULL_F(staged_scene.get(),
-    "fallback staged scene must be available after StageScene");
+  Stage().Stage(
+    std::make_shared<scene::Scene>("RenderScene", kSceneInitialCapacity));
+  auto staged_scene = Stage().GetStagedScene();
   auto camera_node = staged_scene->CreateNode("MainCamera");
   auto camera = std::make_unique<scene::PerspectiveCamera>();
   const bool attached = camera_node.AttachCamera(std::move(camera));
@@ -1084,13 +1001,13 @@ auto MainModule::StageFallbackScene() -> void
   tf.SetLocalPosition(kFallbackCameraPosition);
   tf.SetLocalRotation(
     glm::quat(glm::radians(Vec3 { kFallbackCameraPitchDegrees, 0.0F, 0.0F })));
-  shell.SetStagedMainCamera(std::move(camera_node));
+  Stage().SetStagedMainCamera(std::move(camera_node));
 }
 
 auto MainModule::ApplySkyLightLifecycleProofToggle(
   scene::Scene& scene, const std::uint64_t frame_index) -> void
 {
-  if (!startup_sky_light_lifecycle_proof_enabled_) {
+  if (!startup_.sky_light_lifecycle_proof_enabled) {
     return;
   }
 
@@ -1116,70 +1033,17 @@ auto MainModule::ApplySkyLightLifecycleProofToggle(
   };
 
   if (!startup_sky_light_lifecycle_disable_applied_
-    && frame_index >= startup_sky_light_lifecycle_disable_frame_) {
+    && frame_index >= startup_.sky_light_lifecycle_disable_frame) {
     startup_sky_light_lifecycle_disable_applied_ = true;
     toggle_sky_light(false, "disabled");
   }
 
   if (startup_sky_light_lifecycle_disable_applied_
     && !startup_sky_light_lifecycle_enable_applied_
-    && frame_index >= startup_sky_light_lifecycle_enable_frame_) {
+    && frame_index >= startup_.sky_light_lifecycle_enable_frame) {
     startup_sky_light_lifecycle_enable_applied_ = true;
     toggle_sky_light(true, "re-enabled");
   }
-}
-
-auto MainModule::ClearBackbufferReferences() -> void { }
-
-auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> /*context*/)
-  -> co::Co<>
-{
-  if (!logged_gameplay_tick_) {
-    logged_gameplay_tick_ = true;
-    LOG_F(INFO, "RenderScene: OnGameplay is running");
-  }
-
-  co_return;
-}
-
-auto MainModule::OnInput(observer_ptr<engine::FrameContext> context) -> co::Co<>
-{
-  auto& shell = GetShell();
-
-  // Input edges are finalized during kInput earlier in the frame (mirrors the
-  // InputSystem example). Apply camera controls here so WASD/Shift/Space and
-  // mouse deltas are visible in the same frame without stomping camera
-  // transforms written later by gameplay scripts.
-  shell.Update(context->GetGameDeltaTime());
-
-  co_return;
-}
-
-auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
-{
-  DCHECK_NOTNULL_F(app_window_);
-  if (!app_window_->GetWindow()) {
-    co_return;
-  }
-
-  auto& shell = GetShell();
-  shell.Draw(context);
-
-  co_return;
-}
-
-auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
-{
-  DCHECK_NOTNULL_F(app_window_);
-
-  if (!app_window_->GetWindow()) {
-    DLOG_F(1, "OnPreRender: no valid window - skipping");
-    co_return;
-  }
-
-  co_await Base::OnPreRender(context);
 }
 
 } // namespace oxygen::examples::render_scene

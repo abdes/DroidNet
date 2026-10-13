@@ -12,32 +12,29 @@
 #include "DemoShell/UI/DemoPanel.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+
+namespace oxygen::examples {
+class PanelCommands;
+} // namespace oxygen::examples
 
 namespace oxygen::examples::ui {
 
-//! Configuration for the environment debug panel.
-struct EnvironmentDebugConfig {
-  //! Environment view model.
-  observer_ptr<EnvironmentVm> environment_vm { nullptr };
-};
-
+//! Edits the scene environment: sun, fog, local fog volumes, sky atmosphere,
+//! sky sphere and sky light.
+/*!
+ Every control runs a `demo.env.*` command (see `EnvironmentPanelCommands`).
+ Text fields keep a local draft until they lose focus.
+*/
 class EnvironmentDebugPanel final : public DemoPanel {
 public:
-  EnvironmentDebugPanel() = default;
+  EnvironmentDebugPanel(
+    observer_ptr<EnvironmentVm> vm, observer_ptr<PanelCommands> commands);
   ~EnvironmentDebugPanel() override = default;
 
-  EnvironmentDebugPanel(const EnvironmentDebugPanel&) = delete;
-  auto operator=(const EnvironmentDebugPanel&)
-    -> EnvironmentDebugPanel& = delete;
-  EnvironmentDebugPanel(EnvironmentDebugPanel&&) = default;
-  auto operator=(EnvironmentDebugPanel&&) -> EnvironmentDebugPanel& = default;
-
-  //! Initialize or update the panel configuration.
-  void Initialize(const EnvironmentDebugConfig& config);
-
-  //! Update configuration (e.g., when scene changes).
-  void UpdateConfig(const EnvironmentDebugConfig& config);
+  OXYGEN_MAKE_NON_COPYABLE(EnvironmentDebugPanel)
+  OXYGEN_MAKE_NON_MOVABLE(EnvironmentDebugPanel)
 
   //! Draws the panel content without creating a window.
   auto DrawContents() -> void override;
@@ -48,19 +45,6 @@ public:
   auto OnRegistered() -> void override;
   auto OnLoaded() -> void override;
   auto OnUnloaded() -> void override;
-
-  //! Returns true if there are pending changes to apply.
-  [[nodiscard]] auto HasPendingChanges() const -> bool;
-
-  //! Apply pending changes to the scene. Call during OnSceneMutation.
-  void ApplyPendingChanges();
-
-  //! Request that the panel resync its cached state from the scene.
-  /*!
-   This is useful when an external system (e.g. an async skybox load) modifies
-   the scene environment outside of `ApplyPendingChanges`.
-  */
-  void RequestResync();
 
 private:
   //=== UI Drawing Methods ===-----------------------------------------------//
@@ -73,10 +57,8 @@ private:
   void DrawSunSection();
   void DrawRuntimeStateSection();
 
-  //=== Configuration ===----------------------------------------------------//
-  EnvironmentDebugConfig config_ {};
-  observer_ptr<EnvironmentVm> environment_vm_ { nullptr };
-  bool initialized_ { false };
+  observer_ptr<EnvironmentVm> environment_vm_;
+  observer_ptr<PanelCommands> commands_;
 
   // Skybox load UI (disk -> cooked runtime cubemap)
   std::array<char, 260> skybox_path_ {};

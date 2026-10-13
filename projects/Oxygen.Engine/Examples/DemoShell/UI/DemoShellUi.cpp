@@ -4,27 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
-#include <cmath>
-#include <cstddef>
 #include <exception>
 #include <memory>
-#include <optional>
-#include <string>
 #include <string_view>
 #include <utility>
 
 #include "DemoShell/DemoShell.h"
+#include "DemoShell/PanelCommands.h"
 #include "DemoShell/PanelRegistry.h"
 #include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/ContentSettingsService.h"
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/Services/GridSettingsService.h"
-#include "DemoShell/Services/LightCullingSettingsService.h"
 #include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
-#include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/UiSettingsService.h"
 #include "DemoShell/UI/AxesWidget.h"
 #include "DemoShell/UI/CameraControlPanel.h"
@@ -38,230 +32,63 @@
 #include "DemoShell/UI/EnvironmentVm.h"
 #include "DemoShell/UI/GridPanel.h"
 #include "DemoShell/UI/GridVm.h"
-#include "DemoShell/UI/LightCullingDebugPanel.h"
-#include "DemoShell/UI/LightCullingVm.h"
 #include "DemoShell/UI/PanelSideBar.h"
 #include "DemoShell/UI/PostProcessPanel.h"
 #include "DemoShell/UI/PostProcessVm.h"
 #include "DemoShell/UI/SidePanel.h"
-#include "DemoShell/UI/UiSettingsPanel.h"
 #include "DemoShell/UI/UiSettingsVm.h"
-#include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/Types/Geometry.h>
-#include <Oxygen/Commands/Command.h>
-#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
-#include <Oxygen/ImGui/Console/ConsoleHost.h>
-#include <Oxygen/ImGui/Console/ConsoleUiState.h>
-#include <Oxygen/ImGui/ImGuiModule.h>
-#include <Oxygen/ImGui/Widgets/StatsOverlay.h>
 #include <Oxygen/Vortex/Renderer.h>
-#include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 
 namespace oxygen::examples::ui {
 
-auto MakeRuntimePanelConfig(DemoShellPanelConfig panel_config,
-  const bool enable_renderer_bound_panels) -> DemoShellPanelConfig
-{
-  if (enable_renderer_bound_panels) {
-    return panel_config;
-  }
-
-  panel_config.lighting = false;
-  return panel_config;
-}
-
-namespace {
-
-  constexpr float kGeometryEpsilon = 0.5F;
-  constexpr std::string_view kConsoleXKey = "demo_shell.console.window.x";
-  constexpr std::string_view kConsoleYKey = "demo_shell.console.window.y";
-  constexpr std::string_view kConsoleWidthKey
-    = "demo_shell.console.window.width";
-  constexpr std::string_view kConsoleHeightKey
-    = "demo_shell.console.window.height";
-  constexpr std::string_view kPaletteXKey = "demo_shell.palette.window.x";
-  constexpr std::string_view kPaletteYKey = "demo_shell.palette.window.y";
-  constexpr std::string_view kPaletteWidthKey
-    = "demo_shell.palette.window.width";
-  constexpr std::string_view kPaletteHeightKey
-    = "demo_shell.palette.window.height";
-  constexpr std::string_view kConsoleAutoScrollKey
-    = "demo_shell.console.auto_scroll";
-  constexpr std::string_view kConsoleFilterOkKey
-    = "demo_shell.console.filter.ok";
-  constexpr std::string_view kConsoleFilterWarningKey
-    = "demo_shell.console.filter.warning";
-  constexpr std::string_view kConsoleFilterErrorKey
-    = "demo_shell.console.filter.error";
-
-  struct WindowSettingKeys final {
-    std::string_view x;
-    std::string_view y;
-    std::string_view width;
-    std::string_view height;
-  };
-
-  constexpr WindowSettingKeys kConsoleWindowKeys {
-    .x = kConsoleXKey,
-    .y = kConsoleYKey,
-    .width = kConsoleWidthKey,
-    .height = kConsoleHeightKey,
-  };
-
-  constexpr WindowSettingKeys kPaletteWindowKeys {
-    .x = kPaletteXKey,
-    .y = kPaletteYKey,
-    .width = kPaletteWidthKey,
-    .height = kPaletteHeightKey,
-  };
-
-  auto IsApproximatelyEqual(const float lhs, const float rhs) noexcept -> bool
-  {
-    return std::abs(lhs - rhs) <= kGeometryEpsilon;
-  }
-
-  auto IsPlacementDifferent(const imgui::consoleui::WindowPlacement& lhs,
-    const imgui::consoleui::WindowPlacement& rhs) noexcept -> bool
-  {
-    return !IsApproximatelyEqual(lhs.x, rhs.x)
-      || !IsApproximatelyEqual(lhs.y, rhs.y)
-      || !IsApproximatelyEqual(lhs.width, rhs.width)
-      || !IsApproximatelyEqual(lhs.height, rhs.height);
-  }
-
-  auto TryLoadPlacement(
-    observer_ptr<SettingsService> settings, const WindowSettingKeys& keys)
-    -> std::optional<imgui::consoleui::WindowPlacement>
-  {
-    if (!settings) {
-      return std::nullopt;
-    }
-
-    const auto x = settings->GetFloat(keys.x);
-    const auto y = settings->GetFloat(keys.y);
-    const auto width = settings->GetFloat(keys.width);
-    const auto height = settings->GetFloat(keys.height);
-    if (!x.has_value() || !y.has_value() || !width.has_value()
-      || !height.has_value()) {
-      return std::nullopt;
-    }
-
-    return imgui::consoleui::WindowPlacement {
-      .x = *x,
-      .y = *y,
-      .width = *width,
-      .height = *height,
-    };
-  }
-
-  void DrawViewFailures(
-    const engine::FrameContext& frame, const vortex::Renderer& renderer)
-  {
-    bool opened = false;
-    bool visible = false;
-    for (const auto entry : frame.GetViews()) {
-      const auto& view = entry.get();
-      if (!view.metadata.is_scene_view) {
-        continue;
-      }
-      const auto status = renderer.InspectViewRenderStatus(view.id);
-      if (!status || status->state != vortex::ViewRenderState::kFailed) {
-        continue;
-      }
-      if (!opened) {
-        const auto* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(
-          { viewport->WorkPos.x + (viewport->WorkSize.x * 0.5F),
-            viewport->WorkPos.y + 12.0F },
-          ImGuiCond_Always, { 0.5F, 0.0F });
-        constexpr auto kFlags = static_cast<ImGuiWindowFlags>(
-          static_cast<unsigned>(ImGuiWindowFlags_NoDecoration)
-          | static_cast<unsigned>(ImGuiWindowFlags_AlwaysAutoResize)
-          | static_cast<unsigned>(ImGuiWindowFlags_NoInputs)
-          | static_cast<unsigned>(ImGuiWindowFlags_NoSavedSettings));
-        visible = ImGui::Begin("Rendering failed", nullptr, kFlags);
-        opened = true;
-      }
-      if (visible) {
-        const auto line = view.metadata.name + ": rendering failed";
-        ImGui::TextUnformatted(line.c_str());
-      }
-    }
-    if (opened) {
-      ImGui::End();
-    }
-  }
-
-} // namespace
-
 struct DemoShellUi::Impl {
   observer_ptr<IAsyncEngine> engine;
+  observer_ptr<PanelCommands> commands;
   observer_ptr<PanelRegistry> panel_registry;
   observer_ptr<RenderingSettingsService> rendering_settings_service;
-  observer_ptr<LightCullingSettingsService> light_culling_settings_service;
-  observer_ptr<CameraSettingsService> camera_settings_service;
   observer_ptr<EnvironmentSettingsService> environment_settings_service;
   observer_ptr<PostProcessSettingsService> post_process_settings_service;
   observer_ptr<GridSettingsService> grid_settings_service;
   observer_ptr<FileBrowserService> file_browser_service;
   DemoShellPanelConfig panel_config;
 
-  // UI Settings (always created)
   UiSettingsVm ui_settings_vm;
   observer_ptr<UiSettingsVm> ui_settings_vm_ptr { &ui_settings_vm };
 
-  // Core UI components
-  imgui::consoleui::ConsoleHost console_host;
   PanelSideBar side_bar;
   SidePanel side_panel;
   AxesWidget axes_widget;
-  imgui::StatsOverlay stats_overlay;
-  std::shared_ptr<UiSettingsPanel> settings_panel;
-  std::optional<imgui::consoleui::WindowPlacement> last_saved_console_window;
-  std::optional<imgui::consoleui::WindowPlacement> last_saved_palette_window;
-  bool last_saved_auto_scroll { true };
-  std::array<bool, 3> last_saved_severity_filters { true, true, true };
 
-  // Diagnostics panel (created lazily when the Vortex runtime is available)
+  // Created once the renderer is attached.
   std::unique_ptr<DiagnosticsVm> diagnostics_vm;
   std::shared_ptr<DiagnosticsPanel> diagnostics_panel;
 
-  // Lighting panel (created lazily when pass configs are available)
-  std::unique_ptr<LightCullingVm> light_culling_vm;
-  std::shared_ptr<LightingPanel> lighting_panel;
-
-  // Camera panel
   std::unique_ptr<CameraVm> camera_vm;
   std::shared_ptr<CameraControlPanel> camera_panel;
 
-  // Content panel
   std::shared_ptr<ContentVm> content_vm;
   std::shared_ptr<ContentLoaderPanel> content_panel;
 
-  // Environment panel
   std::unique_ptr<EnvironmentVm> environment_vm;
   std::shared_ptr<EnvironmentDebugPanel> environment_panel;
 
-  // PostProcess panel
   std::unique_ptr<PostProcessVm> post_process_vm;
   std::shared_ptr<PostProcessPanel> post_process_panel;
 
-  // Ground grid panel
   std::unique_ptr<GridVm> grid_vm;
   std::shared_ptr<GridPanel> grid_panel;
 
   Impl(observer_ptr<IAsyncEngine> engine_ptr,
+    observer_ptr<PanelCommands> commands_ptr,
     observer_ptr<PanelRegistry> registry,
     observer_ptr<UiSettingsService> ui_settings_service,
     observer_ptr<RenderingSettingsService> rendering_settings,
-    observer_ptr<LightCullingSettingsService> light_culling_settings,
     observer_ptr<CameraSettingsService> camera_settings,
     observer_ptr<ContentSettingsService> content_settings,
     observer_ptr<EnvironmentSettingsService> environment_settings,
@@ -271,10 +98,9 @@ struct DemoShellUi::Impl {
     observer_ptr<FileBrowserService> file_browser,
     const DemoShellPanelConfig& panel_config_in)
     : engine(engine_ptr)
+    , commands(commands_ptr)
     , panel_registry(registry)
     , rendering_settings_service(rendering_settings)
-    , light_culling_settings_service(light_culling_settings)
-    , camera_settings_service(camera_settings)
     , environment_settings_service(environment_settings)
     , post_process_settings_service(post_process_settings)
     , grid_settings_service(grid_settings)
@@ -285,185 +111,86 @@ struct DemoShellUi::Impl {
     , side_panel(panel_registry)
     , axes_widget(ui_settings_vm_ptr)
   {
+    DCHECK_NOTNULL_F(commands, "expecting valid PanelCommands");
     DCHECK_NOTNULL_F(panel_registry, "expecting valid PanelRegistry");
     DCHECK_NOTNULL_F(ui_settings_service, "expecting valid UiSettingsService");
-    if (engine) {
-      console_host.RegisterCommands(engine->GetCommands());
-    }
 
-    // Create Camera VM and Panel
     if (panel_config.camera_controls && camera_settings && camera_rig) {
       camera_vm = std::make_unique<CameraVm>(camera_settings, camera_rig);
       camera_panel = std::make_shared<CameraControlPanel>(
-        observer_ptr { camera_vm.get() });
-      if (panel_registry->RegisterPanel(camera_panel)) {
-        LOG_F(INFO, "Registered Camera panel");
-      }
+        observer_ptr { camera_vm.get() }, ui_settings_vm_ptr, commands);
+      Register(camera_panel);
     }
 
-    // Create Content VM and Panel
     if (panel_config.content_loader && content_settings && file_browser) {
-      observer_ptr<content::IAssetLoader> asset_loader { nullptr };
-      if (engine) {
-        asset_loader = engine->GetAssetLoader();
-      }
+      const auto asset_loader = engine ? engine->GetAssetLoader()
+                                       : observer_ptr<content::IAssetLoader> {};
       content_vm = std::make_shared<ContentVm>(
         content_settings, file_browser, asset_loader);
       content_panel = std::make_shared<ContentLoaderPanel>(
-        observer_ptr { content_vm.get() });
-      if (panel_registry->RegisterPanel(content_panel)) {
-        LOG_F(INFO, "Registered Content panel");
-      }
+        observer_ptr { content_vm.get() }, commands);
+      Register(content_panel);
     }
 
-    // Create Environment VM and Panel
     if (panel_config.environment && environment_settings) {
       environment_vm = std::make_unique<EnvironmentVm>(
         environment_settings, post_process_settings, file_browser);
-      environment_panel = std::make_shared<EnvironmentDebugPanel>();
-
-      EnvironmentDebugConfig env_config;
-      env_config.environment_vm = observer_ptr { environment_vm.get() };
-      environment_panel->Initialize(env_config);
-      if (panel_registry->RegisterPanel(environment_panel)) {
-        LOG_F(INFO, "Registered Environment panel");
-      }
+      environment_panel = std::make_shared<EnvironmentDebugPanel>(
+        observer_ptr { environment_vm.get() }, commands);
+      Register(environment_panel);
     }
 
-    // Create PostProcess VM and Panel
     if (panel_config.post_process && post_process_settings) {
       post_process_vm = std::make_unique<PostProcessVm>(post_process_settings);
       post_process_panel = std::make_shared<PostProcessPanel>(
-        observer_ptr { post_process_vm.get() });
-      if (panel_registry->RegisterPanel(post_process_panel)) {
-        LOG_F(INFO, "Registered PostProcess panel");
-      }
+        observer_ptr { post_process_vm.get() }, commands);
+      Register(post_process_panel);
     }
 
-    // Create Ground Grid VM and Panel
     if (panel_config.ground_grid && grid_settings) {
       grid_vm = std::make_unique<GridVm>(grid_settings);
-      grid_panel = std::make_shared<GridPanel>(observer_ptr { grid_vm.get() });
-      if (panel_registry->RegisterPanel(grid_panel)) {
-        LOG_F(INFO, "Registered Ground Grid panel");
-      }
-    }
-
-    settings_panel = std::make_shared<UiSettingsPanel>(ui_settings_vm_ptr);
-    const auto result = panel_registry->RegisterPanel(settings_panel);
-    if (!result) {
-      LOG_F(WARNING, "Failed to register Settings panel");
-    }
-
-    LoadConsoleUiSettingsFromStorage();
-  }
-
-  auto LoadConsoleUiSettingsFromStorage() -> void
-  {
-    const auto settings = SettingsService::ForDemoApp();
-    if (!settings) {
-      return;
-    }
-
-    if (const auto console_window
-      = TryLoadPlacement(settings, kConsoleWindowKeys);
-      console_window.has_value()) {
-      console_host.State().SetConsoleWindowPlacement(*console_window);
-      last_saved_console_window = console_window;
-    }
-    if (const auto palette_window
-      = TryLoadPlacement(settings, kPaletteWindowKeys);
-      palette_window.has_value()) {
-      console_host.State().SetPaletteWindowPlacement(*palette_window);
-      last_saved_palette_window = palette_window;
-    }
-
-    last_saved_auto_scroll
-      = settings->GetBool(kConsoleAutoScrollKey).value_or(true);
-    console_host.State().SetAutoScrollEnabled(last_saved_auto_scroll);
-
-    const std::array<imgui::consoleui::LogSeverity, 3> severities {
-      imgui::consoleui::LogSeverity::kSuccess,
-      imgui::consoleui::LogSeverity::kWarning,
-      imgui::consoleui::LogSeverity::kError,
-    };
-    const std::array<std::string_view, 3> keys {
-      kConsoleFilterOkKey,
-      kConsoleFilterWarningKey,
-      kConsoleFilterErrorKey,
-    };
-    for (std::size_t i = 0; i < severities.size(); ++i) {
-      const bool value = settings->GetBool(keys[i]).value_or(true);
-      console_host.State().SetSeverityEnabled(severities[i], value);
-      last_saved_severity_filters[i] = value;
+      grid_panel
+        = std::make_shared<GridPanel>(observer_ptr { grid_vm.get() }, commands);
+      Register(grid_panel);
     }
   }
 
-  auto PersistConsoleUiSettingsToStorage() -> void
+  auto Register(const std::shared_ptr<DemoPanel>& panel) const -> void
   {
-    const auto settings = SettingsService::ForDemoApp();
-    if (!settings) {
+    if (!panel_registry->RegisterPanel(panel)) {
+      LOG_F(WARNING, "Failed to register the {} panel", panel->GetName());
+    }
+  }
+
+  //! Bind the renderer-backed services, and create the diagnostics panel the
+  //! first time the renderer is there.
+  auto BindRenderer(vortex::Renderer& renderer) -> void
+  {
+    const auto bound = observer_ptr { &renderer };
+    if (post_process_settings_service) {
+      post_process_settings_service->BindVortexRenderer(bound);
+    }
+    if (panel_config.ground_grid && grid_settings_service) {
+      grid_settings_service->BindVortexRenderer(bound);
+    }
+    if (!panel_config.diagnostics || diagnostics_panel
+      || !rendering_settings_service) {
       return;
     }
-
-    if (const auto& current = console_host.State().ConsoleWindowPlacement();
-      current.has_value()) {
-      const bool save_geometry = !last_saved_console_window.has_value()
-        || IsPlacementDifferent(*current, *last_saved_console_window);
-      if (save_geometry && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-        settings->SetFloat(kConsoleXKey, current->x);
-        settings->SetFloat(kConsoleYKey, current->y);
-        settings->SetFloat(kConsoleWidthKey, current->width);
-        settings->SetFloat(kConsoleHeightKey, current->height);
-        last_saved_console_window = current;
-      }
-    }
-
-    if (const auto& current = console_host.State().PaletteWindowPlacement();
-      current.has_value()) {
-      const bool save_geometry = !last_saved_palette_window.has_value()
-        || IsPlacementDifferent(*current, *last_saved_palette_window);
-      if (save_geometry && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-        settings->SetFloat(kPaletteXKey, current->x);
-        settings->SetFloat(kPaletteYKey, current->y);
-        settings->SetFloat(kPaletteWidthKey, current->width);
-        settings->SetFloat(kPaletteHeightKey, current->height);
-        last_saved_palette_window = current;
-      }
-    }
-
-    const bool auto_scroll = console_host.State().IsAutoScrollEnabled();
-    if (auto_scroll != last_saved_auto_scroll) {
-      settings->SetBool(kConsoleAutoScrollKey, auto_scroll);
-      last_saved_auto_scroll = auto_scroll;
-    }
-
-    const std::array<imgui::consoleui::LogSeverity, 3> severities {
-      imgui::consoleui::LogSeverity::kSuccess,
-      imgui::consoleui::LogSeverity::kWarning,
-      imgui::consoleui::LogSeverity::kError,
-    };
-    const std::array<std::string_view, 3> keys {
-      kConsoleFilterOkKey,
-      kConsoleFilterWarningKey,
-      kConsoleFilterErrorKey,
-    };
-    for (std::size_t i = 0; i < severities.size(); ++i) {
-      const bool enabled
-        = console_host.State().IsSeverityEnabled(severities[i]);
-      if (enabled != last_saved_severity_filters[i]) {
-        settings->SetBool(keys[i], enabled);
-        last_saved_severity_filters[i] = enabled;
-      }
-    }
+    rendering_settings_service->BindVortexRenderer(bound);
+    diagnostics_vm = std::make_unique<DiagnosticsVm>(
+      rendering_settings_service, environment_settings_service);
+    diagnostics_panel = std::make_shared<DiagnosticsPanel>(
+      observer_ptr { diagnostics_vm.get() }, commands);
+    Register(diagnostics_panel);
   }
 };
 
 DemoShellUi::DemoShellUi(observer_ptr<IAsyncEngine> engine,
+  observer_ptr<PanelCommands> commands,
   observer_ptr<PanelRegistry> panel_registry,
   observer_ptr<UiSettingsService> ui_settings_service,
   observer_ptr<RenderingSettingsService> rendering_settings_service,
-  observer_ptr<LightCullingSettingsService> light_culling_settings_service,
   observer_ptr<CameraSettingsService> camera_settings_service,
   observer_ptr<ContentSettingsService> content_settings_service,
   observer_ptr<EnvironmentSettingsService> environment_settings_service,
@@ -472,96 +199,31 @@ DemoShellUi::DemoShellUi(observer_ptr<IAsyncEngine> engine,
   observer_ptr<CameraRigController> camera_rig,
   observer_ptr<FileBrowserService> file_browser_service,
   const DemoShellPanelConfig& panel_config)
-  : impl_(std::make_unique<Impl>(engine, panel_registry, ui_settings_service,
-      rendering_settings_service, light_culling_settings_service,
-      camera_settings_service, content_settings_service,
-      environment_settings_service, post_process_settings_service,
-      grid_settings_service, camera_rig, file_browser_service, panel_config))
+  : impl_(std::make_unique<Impl>(engine, commands, panel_registry,
+      ui_settings_service, rendering_settings_service, camera_settings_service,
+      content_settings_service, environment_settings_service,
+      post_process_settings_service, grid_settings_service, camera_rig,
+      file_browser_service, panel_config))
 {
 }
 
 DemoShellUi::~DemoShellUi() = default;
 
-auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
+auto DemoShellUi::Draw(
+  observer_ptr<engine::FrameContext> /*fc*/, const float top_inset) -> void
 {
   if (!impl_->engine) {
     return;
   }
-
-  auto renderer_ref = impl_->engine->GetModule<vortex::Renderer>();
-  if (!renderer_ref) {
+  const auto renderer = impl_->engine->GetModule<vortex::Renderer>();
+  if (!renderer) {
     return;
   }
+  impl_->BindRenderer(renderer->get());
 
-  auto& renderer = renderer_ref->get();
-  if (impl_->post_process_settings_service) {
-    impl_->post_process_settings_service->BindVortexRenderer(
-      observer_ptr { &renderer });
-  }
-  if (impl_->panel_config.diagnostics && !impl_->diagnostics_panel
-    && impl_->rendering_settings_service) {
-    impl_->rendering_settings_service->BindVortexRenderer(
-      observer_ptr { &renderer });
-    if (impl_->light_culling_settings_service) {
-      impl_->light_culling_settings_service->BindVortexRenderer(
-        observer_ptr { &renderer });
-    }
-    impl_->diagnostics_vm = std::make_unique<DiagnosticsVm>(
-      impl_->rendering_settings_service, impl_->environment_settings_service);
-    impl_->diagnostics_panel = std::make_shared<DiagnosticsPanel>(
-      observer_ptr { impl_->diagnostics_vm.get() });
-    if (impl_->panel_registry->RegisterPanel(impl_->diagnostics_panel)) {
-      LOG_F(INFO, "Registered Diagnostics panel for the Vortex runtime");
-    } else {
-      LOG_F(
-        WARNING, "Failed to register Diagnostics panel for the Vortex runtime");
-      impl_->diagnostics_panel.reset();
-      impl_->diagnostics_vm.reset();
-    }
-  }
-  if (impl_->panel_config.ground_grid && impl_->grid_settings_service) {
-    impl_->grid_settings_service->BindVortexRenderer(
-      observer_ptr { &renderer });
-  }
-
-  const auto imgui_module = impl_->engine->GetModule<imgui::ImGuiModule>();
-  if (!imgui_module || !imgui_module->get().IsFrameActive()) {
-    return;
-  }
-
-  auto* imgui_context = imgui_module->get().GetImGuiContext();
-  if (imgui_context == nullptr) {
-    return;
-  }
-
-  ImGui::SetCurrentContext(imgui_context);
-
-  const auto& io = ImGui::GetIO();
-  // DemoShell has no command dispatcher: console lines run synchronously.
-  auto& console = impl_->engine->GetConsole();
-  impl_->console_host.Draw(console, imgui_context,
-    [&console](std::string line, const commands::CommandSource source) -> void {
-      static_cast<void>(
-        console.Execute(line, commands::CommandContext { .source = source }));
-    });
-  impl_->PersistConsoleUiSettingsToStorage();
-
-  if (!io.WantCaptureMouse && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-    last_mouse_down_position_ = SubPixelPosition {
-      .x = io.MousePos.x,
-      .y = io.MousePos.y,
-    };
-  }
-
-  impl_->side_bar.Draw();
-  impl_->side_panel.Draw(impl_->side_bar.GetWidth());
-
-  // Settings now flow through UiSettingsVm instead of view-owned state.
+  impl_->side_bar.Draw(top_inset);
+  impl_->side_panel.Draw(impl_->side_bar.GetWidth(), top_inset);
   impl_->axes_widget.Draw(impl_->ui_settings_vm.GetActiveCamera());
-  if (fc) {
-    impl_->stats_overlay.Draw(*fc, impl_->ui_settings_vm.GetStatsConfig());
-    DrawViewFailures(*fc, renderer);
-  }
 
   if (impl_->file_browser_service) {
     impl_->file_browser_service->UpdateAndDraw();
@@ -574,10 +236,6 @@ auto DemoShellUi::RegisterCustomPanel(std::shared_ptr<DemoPanel> panel) -> bool
     LOG_F(WARNING, "Cannot register null panel");
     return false;
   }
-  if (!impl_->panel_registry) {
-    LOG_F(WARNING, "Panel registry not available");
-    return false;
-  }
 
   const auto name = std::string_view(panel->GetName());
   if (name.empty()) {
@@ -586,8 +244,7 @@ auto DemoShellUi::RegisterCustomPanel(std::shared_ptr<DemoPanel> panel) -> bool
   }
 
   try {
-    const auto result = impl_->panel_registry->RegisterPanel(std::move(panel));
-    if (!result) {
+    if (!impl_->panel_registry->RegisterPanel(std::move(panel))) {
       LOG_F(WARNING, "Failed to register panel '{}'", name);
       return false;
     }
@@ -599,21 +256,6 @@ auto DemoShellUi::RegisterCustomPanel(std::shared_ptr<DemoPanel> panel) -> bool
   return true;
 }
 
-auto DemoShellUi::GetDiagnosticsVm() const -> observer_ptr<DiagnosticsVm>
-{
-  return observer_ptr { impl_->diagnostics_vm.get() };
-}
-
-auto DemoShellUi::GetLightCullingVm() const -> observer_ptr<LightCullingVm>
-{
-  return observer_ptr { impl_->light_culling_vm.get() };
-}
-
-auto DemoShellUi::GetCameraVm() const -> observer_ptr<CameraVm>
-{
-  return observer_ptr { impl_->camera_vm.get() };
-}
-
 auto DemoShellUi::GetContentVm() const -> observer_ptr<ContentVm>
 {
   return observer_ptr { impl_->content_vm.get() };
@@ -622,24 +264,6 @@ auto DemoShellUi::GetContentVm() const -> observer_ptr<ContentVm>
 auto DemoShellUi::GetEnvironmentVm() const -> observer_ptr<EnvironmentVm>
 {
   return observer_ptr { impl_->environment_vm.get() };
-}
-
-/*!
- Returns the last mouse-down position captured by the UI.
-
- @return The most recent mouse-down position if captured, otherwise an empty
-   optional.
-
-### Performance Characteristics
-
-- Time Complexity: O(1)
-- Memory: None
-- Optimization: None
-*/
-auto DemoShellUi::GetLastMouseDownPosition() const
-  -> std::optional<SubPixelPosition>
-{
-  return last_mouse_down_position_;
 }
 
 } // namespace oxygen::examples::ui

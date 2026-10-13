@@ -5,7 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdlib>
+#include <memory>
 
+#include "DemoShell/UI/CameraControlPanel.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "DemoShell/UI/DroneCameraController.h"
 #include "DemoShell/UI/FlyCameraController.h"
@@ -13,8 +16,12 @@
 #include <glm/geometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
+#include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputActionMapping.h>
 #include <Oxygen/Input/InputMappingContext.h>
 #include <Oxygen/Input/InputSystem.h>
@@ -241,17 +248,6 @@ auto CameraRigController::SetActiveCamera(observer_ptr<scene::SceneNode> camera)
   SyncFromActiveCamera();
 }
 
-/*!
- Retrieves the active camera handle currently controlled by the rig.
-
- @return Observer pointer to the active camera node, or null if none is set.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
 auto CameraRigController::GetActiveCamera() const noexcept
   -> observer_ptr<scene::SceneNode>
 {
@@ -430,17 +426,6 @@ auto CameraRigController::SyncFromActiveCamera() -> void
   drone_controller_->SyncFromTransform(*active_camera_);
 }
 
-/*!
- Retrieves the orbit controller handle.
-
- @return Observer pointer to the orbit controller, or null when unavailable.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
 auto CameraRigController::GetOrbitController() noexcept
   -> observer_ptr<OrbitCameraController>
 {
@@ -448,17 +433,6 @@ auto CameraRigController::GetOrbitController() noexcept
   return observer_ptr { orbit_controller_.get() };
 }
 
-/*!
- Retrieves the fly controller handle.
-
- @return Observer pointer to the fly controller, or null when unavailable.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
 auto CameraRigController::GetFlyController() noexcept
   -> observer_ptr<FlyCameraController>
 {
@@ -466,208 +440,28 @@ auto CameraRigController::GetFlyController() noexcept
   return observer_ptr { fly_controller_.get() };
 }
 
-/*!
- Retrieves the zoom-in action used for camera control.
-
- @return Shared pointer to the zoom-in action.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
 auto CameraRigController::GetZoomInAction() const noexcept
   -> std::shared_ptr<input::Action>
 {
   return zoom_in_action_;
 }
 
-/*!
- Retrieves the zoom-out action used for camera control.
-
- @return Shared pointer to the zoom-out action.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
 auto CameraRigController::GetZoomOutAction() const noexcept
   -> std::shared_ptr<input::Action>
 {
   return zoom_out_action_;
 }
 
-/*!
- Retrieves the right mouse button action used for camera control.
-
- @return Shared pointer to the right mouse button action.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
 auto CameraRigController::GetRmbAction() const noexcept
   -> std::shared_ptr<input::Action>
 {
   return rmb_action_;
 }
 
-/*!
- Retrieves the orbit/look action used for mouse deltas.
-
- @return Shared pointer to the orbit/look action.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
 auto CameraRigController::GetOrbitAction() const noexcept
   -> std::shared_ptr<input::Action>
 {
   return orbit_action_;
-}
-
-/*!
- Retrieves the forward movement action.
-
- @return Shared pointer to the forward movement action.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
-auto CameraRigController::GetMoveForwardAction() const noexcept
-  -> std::shared_ptr<input::Action>
-{
-  return move_fwd_action_;
-}
-
-/*!
- Retrieves the backward movement action.
-
- @return Shared pointer to the backward movement action.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
-auto CameraRigController::GetMoveBackwardAction() const noexcept
-  -> std::shared_ptr<input::Action>
-{
-  return move_bwd_action_;
-}
-
-/*!
- Retrieves the left movement action.
-
- @return Shared pointer to the left movement action.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
-auto CameraRigController::GetMoveLeftAction() const noexcept
-  -> std::shared_ptr<input::Action>
-{
-  return move_left_action_;
-}
-
-/*!
- Retrieves the right movement action.
-
- @return Shared pointer to the right movement action.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
-auto CameraRigController::GetMoveRightAction() const noexcept
-  -> std::shared_ptr<input::Action>
-{
-  return move_right_action_;
-}
-
-/*!
- Retrieves the up movement action.
-
- @return Shared pointer to the up movement action.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
-auto CameraRigController::GetMoveUpAction() const noexcept
-  -> std::shared_ptr<input::Action>
-{
-  return move_up_action_;
-}
-
-/*!
- Retrieves the down movement action.
-
- @return Shared pointer to the down movement action.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
-auto CameraRigController::GetMoveDownAction() const noexcept
-  -> std::shared_ptr<input::Action>
-{
-  return move_down_action_;
-}
-
-/*!
- Retrieves the plane-lock action for fly mode.
-
- @return Shared pointer to the plane-lock action.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
-auto CameraRigController::GetFlyPlaneLockAction() const noexcept
-  -> std::shared_ptr<input::Action>
-{
-  return fly_plane_lock_action_;
-}
-
-/*!
- Retrieves the boost action for fly mode.
-
- @return Shared pointer to the boost action.
-
- ### Performance Characteristics
-
- - Time Complexity: O(1)
- - Memory: None.
- - Optimization: None.
-*/
-auto CameraRigController::GetFlyBoostAction() const noexcept
-  -> std::shared_ptr<input::Action>
-{
-  return fly_boost_action_;
 }
 
 auto CameraRigController::UpdateActiveCameraInputContext() -> void

@@ -481,6 +481,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
       = PathFinderConfig::Create()
           .WithWorkspaceRoot(workspace_root)
           .WithScriptSourceRoots({ workspace_root / "Examples" / "Content" })
+          .WithCVarsArchivePath("bin/Oxygen/vortex-basic/cvars.json")
           .Build();
     config.engine.timing.pacing_safety_margin = 250us;
     host::ApplyRuntimeCli(context, runtime, config);

@@ -69,9 +69,6 @@ namespace {
   constexpr auto kIncludeGlbKey = "content.explorer.include_glb";
   constexpr auto kIncludeGltfKey = "content.explorer.include_gltf";
   constexpr auto kAutoLoadOnImportKey = "content.explorer.auto_load_on_import";
-  constexpr auto kAutoDumpTexMemKey = "content.explorer.auto_dump_tex_mem";
-  constexpr auto kAutoDumpDelayKey = "content.explorer.auto_dump_delay";
-  constexpr auto kDumpTopNKey = "content.explorer.dump_top_n";
 
   // Import Options Keys (subset of most important)
   constexpr auto kNodePruningKey = "content.import.node_pruning";
@@ -138,15 +135,6 @@ auto ContentSettingsService::GetExplorerSettings() const
   if (auto val = settings->GetBool(kAutoLoadOnImportKey)) {
     s.auto_load_on_import = *val;
   }
-  if (auto val = settings->GetBool(kAutoDumpTexMemKey)) {
-    s.auto_dump_texture_memory = *val;
-  }
-  if (auto val = settings->GetFloat(kAutoDumpDelayKey)) {
-    s.auto_dump_delay_frames = static_cast<int>(*val);
-  }
-  if (auto val = settings->GetFloat(kDumpTopNKey)) {
-    s.dump_top_n = static_cast<int>(*val);
-  }
 
   return s;
 }
@@ -163,10 +151,6 @@ auto ContentSettingsService::SetExplorerSettings(
   settings->SetBool(kIncludeGlbKey, s.include_glb);
   settings->SetBool(kIncludeGltfKey, s.include_gltf);
   settings->SetBool(kAutoLoadOnImportKey, s.auto_load_on_import);
-  settings->SetBool(kAutoDumpTexMemKey, s.auto_dump_texture_memory);
-  settings->SetFloat(
-    kAutoDumpDelayKey, static_cast<float>(s.auto_dump_delay_frames));
-  settings->SetFloat(kDumpTopNKey, static_cast<float>(s.dump_top_n));
   ++epoch_;
 }
 

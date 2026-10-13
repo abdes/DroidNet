@@ -189,7 +189,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       IM_CHECK(app.active_scene_asset_pin_->HasEnvironmentBlock());
       const auto scene = app.GetShell().TryGetScene();
       IM_CHECK(scene && scene->GetEnvironment());
-      IM_CHECK(app.ResolveVortexRenderer());
+      IM_CHECK(app.ResolveRenderer());
       ctx->Yield(30);
     };
   }
@@ -224,7 +224,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
         IM_CHECK_EQ(count, 1);
       }
       const auto scene = app.GetShell().TryGetScene();
-      const auto renderer = app.ResolveVortexRenderer();
+      const auto renderer = app.ResolveRenderer();
       IM_CHECK(scene && renderer);
       for (unsigned wait = 0U;
         wait < 120U && !renderer->InspectSkyLight(*scene).usable; ++wait) {
@@ -255,7 +255,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     ctx->ItemOpen("**/Sky Light (IBL)");
     ctx->ItemCheck("**/Enabled##SkyLight");
     const auto scene = app.GetShell().TryGetScene();
-    const auto renderer = app.ResolveVortexRenderer();
+    const auto renderer = app.ResolveRenderer();
     IM_CHECK(scene && renderer);
     auto sky
       = scene->GetEnvironment()->TryGetSystem<scene::environment::SkyLight>();
@@ -310,7 +310,9 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     IM_CHECK(!vortex::HasAnyFeature(
       renderer->GetDiagnosticsService().GetEnabledFeatures(),
       vortex::DiagnosticsFeature::kFrameLedger));
-    ctx->ItemCheck("**/GPU Timeline");
+    auto& console = app.Host().engine->GetConsole();
+    IM_CHECK(console.Execute("host.ui.gpu_work true").status
+      == commands::ExecutionStatus::kOk);
     // The GPU work summary publishes every 500 ms window.
     for (unsigned wait = 0U; wait < 240U
       && !renderer->GetDiagnosticsService().GetLatestGpuWorkSummary();
@@ -353,7 +355,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     ctx->ItemClick("//$FOCUSED/$$1/Specified Cubemap");
     ctx->Yield(3);
     const auto scene = app.GetShell().TryGetScene();
-    const auto renderer = app.ResolveVortexRenderer();
+    const auto renderer = app.ResolveRenderer();
     IM_CHECK(scene && renderer);
     IM_CHECK(!renderer->InspectSkyLight(*scene).usable);
     IM_CHECK(renderer->InspectSkyLight(*scene).unavailable_reason
@@ -420,7 +422,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
   };
 
   // Runs only when RenderScene starts with --startup-skybox <HDR image>.
-  if (!app_.startup_skybox_path.empty()) {
+  if (!startup_.skybox_path.empty()) {
     test = IM_REGISTER_TEST(engine, "renderscene", "ibl_startup_skybox");
     test->UserData = this;
     test->TestFunc = [](ImGuiTestContext* ctx) -> void {
@@ -432,7 +434,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       }
       IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
       const auto scene = app.GetShell().TryGetScene();
-      const auto renderer = app.ResolveVortexRenderer();
+      const auto renderer = app.ResolveRenderer();
       IM_CHECK(scene && renderer);
       const auto env = scene->GetEnvironment();
       IM_CHECK(env != nullptr);
@@ -492,7 +494,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     }
     IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
     const auto scene = app.GetShell().TryGetScene();
-    const auto renderer = app.ResolveVortexRenderer();
+    const auto renderer = app.ResolveRenderer();
     IM_CHECK(scene && renderer);
     CheckGpuLighting(ctx, *renderer, *scene);
     if (ctx->IsError()) {
@@ -506,7 +508,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     IM_CHECK_EQ(exposure->active_settings->key, 12.5F);
     IM_CHECK_EQ(exposure->active_settings->compensation_ev, 0.0F);
     ctx->Yield(30);
-    const auto graphics = app.app_.gfx_weak.lock();
+    const auto graphics = app.Host().gfx_weak.lock();
     IM_CHECK(graphics);
     if (const auto capture = graphics->GetFrameCaptureController();
       capture && capture->IsAvailable()) {
@@ -540,7 +542,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     test->GuiFunc = [](ImGuiTestContext* ctx) -> void {
       auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
       const auto targets
-        = app.app_.engine->GetConsole().Execute("pp.targets").output;
+        = app.Host().engine->GetConsole().Execute("pp.targets").output;
       if (targets.starts_with("scene:")) {
         constexpr auto prefix = std::string_view("scene:").size();
         ctx->GetVars<AppearanceState>().post_process_scope = "Post Process/"
@@ -556,7 +558,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       }
       IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
       const auto scene = app.GetShell().TryGetScene();
-      const auto renderer = app.ResolveVortexRenderer();
+      const auto renderer = app.ResolveRenderer();
       IM_CHECK(scene && renderer);
       SelectPanel(
         ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
@@ -609,7 +611,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       ctx->SetRef("//DemoPanelSideBar");
       ctx->ItemClick(imgui::icons::kIconHdrTonemap.data());
       ctx->Yield(120);
-      const auto graphics = app.app_.gfx_weak.lock();
+      const auto graphics = app.Host().gfx_weak.lock();
       IM_CHECK(graphics);
       if (const auto capture = graphics->GetFrameCaptureController();
         capture && capture->IsAvailable()) {
@@ -646,7 +648,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       ctx->Yield();
     }
     IM_CHECK(app.current_scene_key_ && !app.active_scene_load_key_);
-    const auto renderer = app.ResolveVortexRenderer();
+    const auto renderer = app.ResolveRenderer();
     IM_CHECK(renderer);
     SelectPanel(
       ctx, app.GetShell(), "Environment", imgui::icons::kIconEnvironment);
@@ -761,7 +763,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     IM_CHECK(std::string(nostd::to_string(*app.current_scene_key_))
       == expected.at("scene_key").get<std::string>());
     const auto scene = app.GetShell().TryGetScene();
-    const auto renderer = app.ResolveVortexRenderer();
+    const auto renderer = app.ResolveRenderer();
     IM_CHECK(scene && renderer);
     CheckPersistedLighting(*scene);
     if (ctx->IsError()) {

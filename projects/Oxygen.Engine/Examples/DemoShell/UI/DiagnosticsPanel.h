@@ -6,27 +6,34 @@
 
 #pragma once
 
-#include "DemoShell/Runtime/RendererUiTypes.h"
+#include <string_view>
+
 #include "DemoShell/UI/DemoPanel.h"
-#include "DemoShell/UI/DiagnosticsVm.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
+
+namespace oxygen::examples {
+class PanelCommands;
+} // namespace oxygen::examples
 
 namespace oxygen::examples::ui {
 
 class DiagnosticsVm;
 
-//! Diagnostics panel with Vortex runtime status and debug controls.
+//! Sky-light validation and the debug drawing the toolbar does not cover.
 /*!
- This panel follows the MVVM pattern, receiving a DiagnosticsVm that owns
- the requested UI state and exposes the renderer effective state.
+ The view mode (lit, wireframe, every shader debug mode) is the host
+ toolbar's `host.view_mode`, and GPU timing is its GPU work overlay. This
+ panel shows the sky-light pipeline state with its GPU validation, and
+ controls frame diagnostics, the draw-bounds debug pass and the color the
+ wireframe view modes draw with. Every control runs a `demo.diag.*`
+ command.
 */
 class DiagnosticsPanel final : public DemoPanel {
 public:
-  //! Create the panel bound to a rendering view model.
-  explicit DiagnosticsPanel(observer_ptr<DiagnosticsVm> vm);
+  DiagnosticsPanel(
+    observer_ptr<DiagnosticsVm> vm, observer_ptr<PanelCommands> commands);
 
-  //! Draws the panel content without creating a window.
   auto DrawContents() -> void override;
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
@@ -36,18 +43,13 @@ public:
   auto OnLoaded() -> void override;
   auto OnUnloaded() -> void override;
 
-  //! Get the current render mode from the view model.
-  [[nodiscard]] auto GetRenderMode() const -> vortex::RenderMode;
-
 private:
-  void DrawRuntimeStatus();
-  void DrawSkyLightDiagnostics();
-  void DrawRendererCapabilities();
-  void DrawViewModeControls();
-  void DrawWireframeColor();
-  void DrawDebugModes();
+  auto DrawFrameDiagnostics() -> void;
+  auto DrawSkyLight() -> void;
+  auto DrawDebugDrawing() -> void;
 
   observer_ptr<DiagnosticsVm> vm_;
+  observer_ptr<PanelCommands> commands_;
 };
 
 } // namespace oxygen::examples::ui

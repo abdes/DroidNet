@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <chrono>
 #include <cstddef>
 #include <string>
 #include <utility>
@@ -24,11 +23,9 @@ namespace oxygen::examples::async {
 
 AsyncDemoVm::AsyncDemoVm(observer_ptr<AsyncDemoSettingsService> settings,
   observer_ptr<scene::SceneNode> spotlight_node,
-  const FrameActionTracker* frame_tracker,
   const std::vector<SphereState>* spheres)
   : settings_(settings)
   , spotlight_node_(spotlight_node)
-  , frame_tracker_(frame_tracker)
   , spheres_(spheres)
 {
 }
@@ -51,16 +48,6 @@ auto AsyncDemoVm::GetSpotlightSectionOpen() -> bool
 auto AsyncDemoVm::SetSpotlightSectionOpen(bool open) -> void
 {
   settings_->SetSpotlightSectionOpen(open);
-}
-
-auto AsyncDemoVm::GetProfilerSectionOpen() -> bool
-{
-  return settings_->GetProfilerSectionOpen();
-}
-
-auto AsyncDemoVm::SetProfilerSectionOpen(bool open) -> void
-{
-  settings_->SetProfilerSectionOpen(open);
 }
 
 auto AsyncDemoVm::GetSphereCount() const -> size_t
@@ -235,20 +222,6 @@ void AsyncDemoVm::EnsureSpotlight()
   if (ensure_spotlight_cb_) {
     ensure_spotlight_cb_();
   }
-}
-
-auto AsyncDemoVm::GetPhaseTimings() const
-  -> const std::vector<std::pair<std::string, std::chrono::microseconds>>&
-{
-  static const std::vector<std::pair<std::string, std::chrono::microseconds>>
-    empty;
-  return frame_tracker_ ? frame_tracker_->phase_timings : empty;
-}
-
-auto AsyncDemoVm::GetFrameActions() const -> const std::vector<std::string>&
-{
-  static const std::vector<std::string> empty;
-  return frame_tracker_ ? frame_tracker_->frame_actions : empty;
 }
 
 void AsyncDemoVm::SetAnimationTime(double time) { anim_time_ = time; }

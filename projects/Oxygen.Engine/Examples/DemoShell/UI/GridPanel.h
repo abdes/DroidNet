@@ -6,17 +6,24 @@
 
 #pragma once
 
+#include <string_view>
+
 #include "DemoShell/UI/DemoPanel.h"
 #include "DemoShell/UI/GridVm.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
 
+namespace oxygen::examples {
+class PanelCommands;
+} // namespace oxygen::examples
+
 namespace oxygen::examples::ui {
 
-//! Panel for configuring the demo ground grid.
+//! Panel for configuring the demo ground grid; every control runs a
+//! `demo.grid.*` command.
 class GridPanel final : public DemoPanel {
 public:
-  explicit GridPanel(observer_ptr<GridVm> vm);
+  GridPanel(observer_ptr<GridVm> vm, observer_ptr<PanelCommands> commands);
 
   auto DrawContents() -> void override;
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
@@ -34,6 +41,7 @@ private:
   void DrawRenderSection();
 
   observer_ptr<GridVm> vm_;
+  observer_ptr<PanelCommands> commands_;
 };
 
 } // namespace oxygen::examples::ui

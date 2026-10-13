@@ -7,16 +7,18 @@
 #include <filesystem>
 #include <memory>
 
-#include "DemoShell/Services/LightCullingSettingsService.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/test/Fakes/Graphics.h>
 
 namespace oxygen::examples::testing {
@@ -71,82 +73,46 @@ namespace {
 
 } // namespace
 
-NOLINT_TEST_F(
-  RenderingSettingsServiceTest, VortexBoundDebugModePersistsDirectLightingOnly)
+NOLINT_TEST_F(RenderingSettingsServiceTest, WireframeColorAppliesToRenderer)
 {
   auto graphics = std::make_shared<FakeGraphics>();
   graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
   auto renderer = MakeRenderer(graphics);
   service_.BindVortexRenderer(observer_ptr { renderer.get() });
 
-  service_.SetDebugMode(engine::ShaderDebugMode::kDirectLightingOnly);
+  service_.SetWireframeColor(
+    oxygen::graphics::Color { 2.5F, 0.5F, 4.0F, 1.0F });
 
-  EXPECT_TRUE(
-    service_.SupportsDebugMode(engine::ShaderDebugMode::kDirectLightingOnly));
-  EXPECT_EQ(
-    service_.GetDebugMode(), engine::ShaderDebugMode::kDirectLightingOnly);
-  EXPECT_EQ(service_.GetEffectiveDebugMode(),
-    engine::ShaderDebugMode::kDirectLightingOnly);
+  EXPECT_FLOAT_EQ(renderer->GetWireframeColor().r, 2.5F);
+  EXPECT_FLOAT_EQ(renderer->GetWireframeColor().g, 0.5F);
+  EXPECT_FLOAT_EQ(renderer->GetWireframeColor().b, 4.0F);
 }
 
-NOLINT_TEST_F(RenderingSettingsServiceTest,
-  VortexBoundUnsupportedDebugModeKeepsRequestedAndDisablesEffectiveMode)
+//! The view mode belongs to the host toolbar: the service never sets the
+//! renderer-wide render or debug mode.
+NOLINT_TEST_F(RenderingSettingsServiceTest, LeavesRendererViewModeAlone)
 {
   auto graphics = std::make_shared<FakeGraphics>();
   graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
   auto renderer = MakeRenderer(graphics);
+  renderer->SetRenderMode(vortex::RenderMode::kWireframe);
+  renderer->SetShaderDebugMode(vortex::ShaderDebugMode::kDirectLightingOnly);
+
   service_.BindVortexRenderer(observer_ptr { renderer.get() });
+  service_.SetGpuDebugPassEnabled(true);
+  service_.OnFrameStart(engine::FrameContext {});
 
-  service_.SetDebugMode(engine::ShaderDebugMode::kDirectionalShadowMask);
-
-  EXPECT_FALSE(service_.SupportsDebugMode(
-    engine::ShaderDebugMode::kDirectionalShadowMask));
-  EXPECT_EQ(
-    service_.GetDebugMode(), engine::ShaderDebugMode::kDirectionalShadowMask);
-  EXPECT_EQ(
-    service_.GetEffectiveDebugMode(), engine::ShaderDebugMode::kDisabled);
-  EXPECT_EQ(renderer->GetShaderDebugMode(), vortex::ShaderDebugMode::kDisabled);
-}
-
-NOLINT_TEST_F(RenderingSettingsServiceTest,
-  LightCullingDisabledDoesNotOverrideRenderingDebugModeOnVortex)
-{
-  auto graphics = std::make_shared<FakeGraphics>();
-  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
-  auto renderer = MakeRenderer(graphics);
-
-  LightCullingSettingsService light_culling_service {};
-  service_.BindVortexRenderer(observer_ptr { renderer.get() });
-  light_culling_service.BindVortexRenderer(observer_ptr { renderer.get() });
-
-  service_.SetDebugMode(engine::ShaderDebugMode::kDirectLightingOnly);
-  light_culling_service.SetVisualizationMode(
-    engine::ShaderDebugMode::kDisabled);
-  light_culling_service.OnMainViewReady(
-    engine::FrameContext {}, vortex::CompositionView {});
-
+  EXPECT_EQ(renderer->GetRenderMode(), vortex::RenderMode::kWireframe);
   EXPECT_EQ(renderer->GetShaderDebugMode(),
     vortex::ShaderDebugMode::kDirectLightingOnly);
 }
 
-NOLINT_TEST_F(RenderingSettingsServiceTest,
-  VortexBoundRenderModeAndWireframeColorApplyToRenderer)
+NOLINT_TEST_F(RenderingSettingsServiceTest, GpuDebugPassPersists)
 {
-  auto graphics = std::make_shared<FakeGraphics>();
-  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
-  auto renderer = MakeRenderer(graphics);
-  service_.BindVortexRenderer(observer_ptr { renderer.get() });
+  service_.SetGpuDebugPassEnabled(true);
 
-  service_.SetRenderMode(vortex::RenderMode::kWireframe);
-  service_.SetWireframeColor(
-    oxygen::graphics::Color { 2.5F, 0.5F, 4.0F, 1.0F });
-
-  EXPECT_TRUE(service_.SupportsRenderModeControls());
-  EXPECT_TRUE(service_.SupportsWireframeColorControl());
-  EXPECT_EQ(renderer->GetRenderMode(), vortex::RenderMode::kWireframe);
-  EXPECT_FLOAT_EQ(renderer->GetWireframeColor().r, 2.5F);
-  EXPECT_FLOAT_EQ(renderer->GetWireframeColor().g, 0.5F);
-  EXPECT_FLOAT_EQ(renderer->GetWireframeColor().b, 4.0F);
+  RenderingSettingsService reloaded {};
+  EXPECT_TRUE(reloaded.GetGpuDebugPassEnabled());
 }
 
 } // namespace oxygen::examples::testing

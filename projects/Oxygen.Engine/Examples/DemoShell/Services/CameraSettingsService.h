@@ -74,12 +74,6 @@ public:
   //! Sets the orbit mode.
   virtual auto SetOrbitMode(OrbitMode mode) -> void;
 
-  //! Returns the persisted fly move speed.
-  [[nodiscard]] virtual auto GetFlyMoveSpeed() const -> float;
-
-  //! Sets the fly move speed.
-  virtual auto SetFlyMoveSpeed(float speed) -> void;
-
   // --- Drone Settings (per-camera rig) ---
 
   //! Returns the persisted drone speed.
@@ -183,10 +177,8 @@ public:
 
   auto OnFrameStart(const engine::FrameContext& context) -> void override;
   auto OnSceneActivated(scene::Scene& scene) -> void override;
-  auto OnMainViewReady(const engine::FrameContext& context,
-    const vortex::CompositionView& view) -> void override;
-  auto OnRuntimeMainViewReady(
-    const scene::SceneNode& camera, const ViewPort& viewport) -> void;
+  auto OnMainViewReady(ViewId view_id, const scene::SceneNode& camera,
+    const ViewPort& viewport) -> void override;
 
 private:
   SceneActivationPolicy activation_policy_ {
@@ -251,7 +243,6 @@ private:
 
     glm::vec3 orbit_target { 0.0F, 0.0F, 0.0F };
     float orbit_distance { 5.0F };
-    int orbit_mode { 0 };
 
     float fly_move_speed { 5.0F };
     float fly_look_sensitivity { 0.0015F };
@@ -274,7 +265,6 @@ private:
   [[nodiscard]] auto CaptureActiveCameraState() -> PersistedCameraState;
 
   static constexpr auto kOrbitModeKey = "camera.orbit_mode";
-  static constexpr auto kFlyMoveSpeedKey = "camera.fly_move_speed";
 
   static constexpr auto kDroneSpeedKey = "drone.speed";
   static constexpr auto kDroneDampingKey = "drone.damping";

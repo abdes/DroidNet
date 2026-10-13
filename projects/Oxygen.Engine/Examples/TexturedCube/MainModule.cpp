@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/FileBrowserService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/SkyboxService.h"
@@ -34,6 +33,8 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/HostModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -46,12 +47,9 @@ namespace {
   constexpr size_t kDefaultSceneCapacity = 128;
 }
 
-MainModule::MainModule(const DemoAppContext& app)
-  : Base(app)
-  , last_viewport_({ .width = 0, .height = 0 })
+MainModule::MainModule(const host::HostContext& host)
+  : Base(host)
 {
-  DCHECK_NOTNULL_F(app_.platform);
-  DCHECK_F(!app_.gfx_weak.expired());
   cooked_root_
     = std::filesystem::path(std::source_location::current().file_name())
         .parent_path()
@@ -88,7 +86,7 @@ auto MainModule::ResolveSelectedCustomMaterial()
     return selected_custom_material_;
   }
 
-  auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+  auto asset_loader = Host().engine->GetAssetLoader();
   if (!asset_loader) {
     return nullptr;
   }
@@ -106,7 +104,7 @@ auto MainModule::ResolveSelectedCustomMaterial()
 
 auto MainModule::RequestCustomMaterialLoad(const data::AssetKey& key) -> void
 {
-  auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+  auto asset_loader = Host().engine->GetAssetLoader();
   if (!asset_loader) {
     return;
   }
@@ -146,27 +144,16 @@ auto MainModule::RequestCustomMaterialLoad(const data::AssetKey& key) -> void
     });
 }
 
-auto MainModule::BuildDefaultWindowProperties() const
-  -> platform::window::Properties
+auto MainModule::BuildWindowProperties() const -> platform::window::Properties
 {
   constexpr auto kWidth = 2560U;
   constexpr auto kHeight = 1400U;
 
-  platform::window::Properties p("Textured Cube (Demo Shell)");
-  p.extent = { .width = kWidth, .height = kHeight };
-  p.flags = {
-    .hidden = false,
-    .always_on_top = false,
-    .full_screen = app_.fullscreen,
-    .maximized = false,
-    .minimized = false,
-    .resizable = true,
-    .borderless = false,
-  };
-  return p;
+  auto props = Base::BuildWindowProperties();
+  props.title = "Textured Cube (Demo Shell)";
+  props.extent = { .width = kWidth, .height = kHeight };
+  return props;
 }
-
-auto MainModule::ClearBackbufferReferences() -> void { }
 
 auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   -> std::unique_ptr<DemoShell>
@@ -176,86 +163,29 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   }
 
   auto shell = std::make_unique<DemoShell>();
-  DemoShellConfig shell_config;
-  shell_config.engine = engine;
+  auto shell_config = MakeShellConfig();
   shell_config.content_roots = {
     .content_root = content_root_,
     .cooked_root = cooked_root_,
   };
 
-  shell_config.panel_config.content_loader
-    = false; // We use custom texture loader
+  // The materials sandbox replaces the content loader.
+  shell_config.panel_config.content_loader = false;
   shell_config.panel_config.camera_controls = true;
-  shell_config.panel_config.lighting = true;
   shell_config.panel_config.environment = true;
   shell_config.panel_config.diagnostics = true;
   shell_config.panel_config.post_process = true;
   shell_config.panel_config.ground_grid = true;
   shell_config.enable_camera_rig = true;
-  shell_config.enable_renderer_bound_panels = false;
   shell_config.force_environment_override = false;
 
   if (!shell->Initialize(shell_config)) {
     LOG_F(ERROR, "TexturedCube: DemoShell initialization failed");
     return nullptr;
   }
+  StageScene(*shell);
 
-  shell->StageScene(std::make_unique<scene::Scene>(
-    "TexturedCube-Scene", kDefaultSceneCapacity));
-  const auto staged_scene = shell->GetStagedScene();
-  CHECK_NOTNULL_F(staged_scene, "TexturedCube staged scene is null");
-
-  main_camera_ = staged_scene->CreateNode("MainCamera");
-  auto camera = std::make_unique<scene::PerspectiveCamera>();
-  const bool attached = main_camera_.AttachCamera(std::move(camera));
-  CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
-  auto tf = main_camera_.GetTransform();
-  tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-  tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
-  shell->SetStagedMainCamera(main_camera_);
-
-  auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-  if (asset_loader) {
-    texture_service_ = std::make_unique<TextureLoadingService>(
-      observer_ptr<oxygen::content::IAssetLoader> { asset_loader.get() });
-    skybox_service_ = std::make_unique<SkyboxService>(
-      observer_ptr<oxygen::content::IAssetLoader> { asset_loader.get() },
-      staged_scene);
-
-    texture_vm_ = std::make_unique<ui::MaterialsSandboxVm>(
-      observer_ptr { texture_service_.get() },
-      observer_ptr { &shell->GetFileBrowserService() });
-    texture_vm_->SetCubeRebuildNeeded();
-
-    texture_vm_->SetOnSkyboxSelected(
-      [this](oxygen::content::ResourceKey key) -> void {
-        if (skybox_service_) {
-          skybox_service_->SetSkyboxResourceKey(key);
-          SkyboxService::SkyLightParams params;
-          if (const auto settings = SettingsService::ForDemoApp()) {
-            if (const auto intensity
-              = settings->GetFloat("env.sky_sphere.intensity")) {
-              params.sky_sphere_intensity = *intensity;
-            }
-          }
-          params.intensity_mul = 1.0F;
-          params.diffuse_intensity = 1.0F;
-          params.specular_intensity = 1.0F;
-          skybox_service_->ApplyToScene(params);
-        }
-      });
-
-    texture_panel_ = std::make_shared<ui::MaterialsSandboxPanel>();
-    texture_panel_->Initialize(observer_ptr { texture_vm_.get() });
-    shell->RegisterPanel(texture_panel_);
-
-    scene_setup_ = std::make_unique<SceneSetup>(
-      staged_scene, *texture_service_, *skybox_service_, cooked_root_);
-    scene_setup_->Initialize();
-  }
-
-  // Create Main View ID
-  main_view_id_ = GetOrCreateViewId("MainView");
+  main_view_id_ = Publisher().GetOrCreateViewId("MainView");
 
   LOG_F(INFO, "TexturedCube: Module initialized");
   return shell;
@@ -266,9 +196,8 @@ auto MainModule::OnShutdown() noexcept -> void
 #ifdef OXYGEN_BUILD_UI_TESTS
   StopUiTests();
 #endif
-  // Clear scene from shell first to ensure controlled destruction
-  auto& shell = GetShell();
-  shell.SetScene(nullptr);
+  // Drop the scene before the services that reference it.
+  Stage().Clear();
 
   // Destroy setup before other services
   scene_setup_.reset();
@@ -281,108 +210,93 @@ auto MainModule::OnShutdown() noexcept -> void
   selected_custom_material_.reset();
   selected_custom_material_key_.reset();
   custom_material_load_inflight_key_.reset();
-
-  last_viewport_ = { .width = 0, .height = 0 };
-
-  // Clear observers
   active_scene_ = {};
   Base::OnShutdown();
 }
 
-auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
-  -> void
+auto MainModule::OnScenePublished(engine::FrameContext& context) -> void
 {
-  DCHECK_NOTNULL_F(context);
-  auto& shell = GetShell();
-  auto& frame_context = *context;
+  Base::OnScenePublished(context);
+  active_scene_ = Stage().GetActiveScene();
+  main_camera_ = Stage().TakePublishedMainCamera();
+}
 
-  if (shell.HasStagedScene()) {
-    CHECK_F(shell.PublishStagedScene(),
-      "expected staged scene before frame-start publish");
-    active_scene_ = shell.GetActiveScene();
-    main_camera_ = shell.TakePublishedMainCamera();
-  }
+auto MainModule::StageScene(DemoShell& shell) -> void
+{
+  Stage().Stage(std::make_shared<scene::Scene>(
+    "TexturedCube-Scene", kDefaultSceneCapacity));
+  const auto staged_scene = Stage().GetStagedScene();
 
-  shell.OnFrameStart(*context);
-  Base::OnFrameStart(context);
+  auto camera_node = staged_scene->CreateNode("MainCamera");
+  const bool attached
+    = camera_node.AttachCamera(std::make_unique<scene::PerspectiveCamera>());
+  CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
+  auto tf = camera_node.GetTransform();
+  tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
+  tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
+  Stage().SetStagedMainCamera(std::move(camera_node));
 
-  if (!HasRenderableWindow()) {
+  auto asset_loader = Host().engine->GetAssetLoader();
+  if (!asset_loader) {
     return;
   }
-
-  if (!app_.headless && app_window_ && app_window_->GetWindow()) {
-    last_viewport_ = app_window_->GetWindow()->Size();
+  const auto loader
+    = observer_ptr<oxygen::content::IAssetLoader> { asset_loader.get() };
+  skybox_service_ = std::make_unique<SkyboxService>(loader, staged_scene);
+  if (!texture_vm_) {
+    CreateMaterialsSandbox(shell, loader);
   }
+  texture_vm_->SetCubeRebuildNeeded();
 
-  frame_context.SetScene(shell.TryGetScene());
+  scene_setup_ = std::make_unique<SceneSetup>(
+    staged_scene, *texture_service_, *skybox_service_, cooked_root_);
+  scene_setup_->Initialize();
+}
+
+auto MainModule::CreateMaterialsSandbox(
+  DemoShell& shell, observer_ptr<content::IAssetLoader> loader) -> void
+{
+  texture_service_ = std::make_unique<TextureLoadingService>(loader);
+  texture_vm_ = std::make_unique<ui::MaterialsSandboxVm>(
+    observer_ptr { texture_service_.get() },
+    observer_ptr { &shell.GetFileBrowserService() });
+  texture_vm_->SetOnSkyboxSelected(
+    [this](oxygen::content::ResourceKey key) -> void {
+      if (!skybox_service_) {
+        return;
+      }
+      skybox_service_->SetSkyboxResourceKey(key);
+      SkyboxService::SkyLightParams params;
+      if (const auto settings = SettingsService::ForDemoApp()) {
+        if (const auto intensity
+          = settings->GetFloat("env.sky_sphere.intensity")) {
+          params.sky_sphere_intensity = *intensity;
+        }
+      }
+      params.intensity_mul = 1.0F;
+      params.diffuse_intensity = 1.0F;
+      params.specular_intensity = 1.0F;
+      skybox_service_->ApplyToScene(params);
+    });
+
+  texture_panel_ = std::make_shared<ui::MaterialsSandboxPanel>(
+    observer_ptr { texture_vm_.get() }, shell.GetPanelCommands());
+  shell.RegisterPanel(texture_panel_);
 }
 
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  DCHECK_NOTNULL_F(app_window_);
-  auto& shell = GetShell();
-  if (!app_window_->GetWindow()) {
+  if (!HasRenderableWindow()) {
     co_return;
   }
 
-  if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
-    shell.StageScene(std::make_unique<scene::Scene>(
-      "TexturedCube-Scene", kDefaultSceneCapacity));
-    const auto staged_scene = shell.GetStagedScene();
-    CHECK_NOTNULL_F(staged_scene, "TexturedCube staged scene is null");
-
-    auto camera_node = staged_scene->CreateNode("MainCamera");
-    auto camera = std::make_unique<scene::PerspectiveCamera>();
-    const bool attached = camera_node.AttachCamera(std::move(camera));
-    CHECK_F(attached, "Failed to attach PerspectiveCamera to MainCamera");
-    auto tf = camera_node.GetTransform();
-    tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
-    tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
-    shell.SetStagedMainCamera(std::move(camera_node));
-
-    auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
-    if (asset_loader) {
-      texture_service_ = std::make_unique<TextureLoadingService>(
-        observer_ptr<oxygen::content::IAssetLoader> { asset_loader.get() });
-      skybox_service_ = std::make_unique<SkyboxService>(
-        observer_ptr<oxygen::content::IAssetLoader> { asset_loader.get() },
-        staged_scene);
-
-      texture_vm_ = std::make_unique<ui::MaterialsSandboxVm>(
-        observer_ptr { texture_service_.get() },
-        observer_ptr { &shell.GetFileBrowserService() });
-      texture_vm_->SetCubeRebuildNeeded();
-
-      texture_vm_->SetOnSkyboxSelected(
-        [this](oxygen::content::ResourceKey key) -> void {
-          if (skybox_service_) {
-            skybox_service_->SetSkyboxResourceKey(key);
-            SkyboxService::SkyLightParams params;
-            if (const auto settings = SettingsService::ForDemoApp()) {
-              if (const auto intensity
-                = settings->GetFloat("env.sky_sphere.intensity")) {
-                params.sky_sphere_intensity = *intensity;
-              }
-            }
-            params.intensity_mul = 1.0F;
-            params.diffuse_intensity = 1.0F;
-            params.specular_intensity = 1.0F;
-            skybox_service_->ApplyToScene(params);
-          }
-        });
-
-      texture_panel_ = std::make_shared<ui::MaterialsSandboxPanel>();
-      texture_panel_->Initialize(observer_ptr { texture_vm_.get() });
-      shell.RegisterPanel(texture_panel_);
-
-      scene_setup_ = std::make_unique<SceneSetup>(
-        staged_scene, *texture_service_, *skybox_service_, cooked_root_);
-      scene_setup_->Initialize();
-    }
+  if (!active_scene_.IsValid() && !Stage().HasStagedScene()) {
+    StageScene(GetShell());
   }
 
   if (!active_scene_.IsValid()) {
+    co_await Base::OnSceneMutation(context);
     co_return;
   }
 
@@ -401,7 +315,7 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       auto& cube_slot = texture_vm_->GetCubeTextureState();
       auto& surface_vm = texture_vm_->GetSurfaceState();
 
-      auto asset_loader = app_.engine ? app_.engine->GetAssetLoader() : nullptr;
+      auto asset_loader = Host().engine->GetAssetLoader();
       if ((sphere_slot.mode == TextureIndexMode::kForcedError
             || cube_slot.mode == TextureIndexMode::kForcedError)
         && (forced_error_key_ == oxygen::content::ResourceKey { 0U })
@@ -439,74 +353,28 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
         = surface_vm.use_constant_base_color || grid_selected;
       const auto custom_material = ResolveSelectedCustomMaterial();
 
-      // Update each object independently so callers can later update only one
       scene_setup_->UpdateSphere(
         sphere_state, surface_params, forced_error_key_, custom_material);
       scene_setup_->UpdateCube(
         cube_state, surface_params, forced_error_key_, custom_material);
-
-      // Vortex currently uses the rebuilt material snapshot directly; the
-      // legacy live UV override path is intentionally removed.
-    } else {
-      // Vortex currently uses the rebuilt material snapshot directly; the
-      // legacy live UV override path is intentionally removed.
     }
   }
 
-  // Delegate to pipeline
   co_await Base::OnSceneMutation(context);
 }
 
-auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
+auto MainModule::BuildViews(
+  engine::FrameContext& /*context*/, host::HostViews& views) -> void
 {
-  auto& shell = GetShell();
-  shell.Update(context->GetGameDeltaTime());
-  co_return;
-}
-
-auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
-{
-  // We only draw ImGui if we still have an app window open
-  DCHECK_NOTNULL_F(app_window_);
-  if (!app_window_->GetWindow()) {
-    co_return;
-  }
-
-  auto& shell = GetShell();
-  shell.Draw(context);
-
-  co_return;
-}
-
-auto MainModule::UpdateComposition(engine::FrameContext& context,
-  std::vector<vortex::CompositionView>& views) -> void
-{
-  auto& shell = GetShell();
   if (!main_camera_.IsAlive()) {
     return;
   }
-
-  View view {};
-  if (app_window_ && app_window_->GetWindow()) {
-    const auto extent = app_window_->GetWindow()->Size();
-    view.viewport = ViewPort {
-      .top_left_x = 0.0F,
-      .top_left_y = 0.0F,
-      .width = static_cast<float>(extent.width),
-      .height = static_cast<float>(extent.height),
-      .min_depth = 0.0F,
-      .max_depth = 1.0F,
-    };
-  }
-
-  // Create the main scene view intent
-  auto main_comp
-    = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
-  main_comp.with_atmosphere = true;
-  shell.OnMainViewReady(context, main_comp);
-  views.push_back(std::move(main_comp));
+  // An unset viewport covers the window.
+  auto main_view
+    = vortex::CompositionView::ForScene(main_view_id_, View {}, main_camera_);
+  main_view.with_atmosphere = true;
+  views.views.push_back(std::move(main_view));
+  views.main = main_view_id_;
 }
 
 } // namespace oxygen::examples::textured_cube

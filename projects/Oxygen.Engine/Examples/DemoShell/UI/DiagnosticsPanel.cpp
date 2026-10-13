@@ -8,178 +8,114 @@
 #include <string>
 #include <string_view>
 
+#include "DemoShell/PanelCommands.h"
 #include "DemoShell/UI/DiagnosticsPanel.h"
 #include "DemoShell/UI/DiagnosticsVm.h"
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
-#include <Oxygen/Vortex/Diagnostics/GpuWorkSummary.h>
-#include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
+#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
+
+// NOLINTBEGIN(cppcoreguidelines-pro-type-vararg, bugprone-signed-bitwise) -
+// ImGui
 
 namespace oxygen::examples::ui {
 
 namespace {
 
-  [[nodiscard]] auto DisplayNameFor(const engine::ShaderDebugMode mode)
-    -> std::string_view
-  {
-    const auto* info = vortex::FindShaderDebugModeInfo(mode);
-    if (info == nullptr) {
-      return "Unknown";
-    }
-    return info->display_name;
-  }
+  constexpr std::string_view kFrameDiagnostics = "demo.diag.frame_diagnostics";
+  constexpr std::string_view kDrawBounds = "demo.diag.draw_bounds";
+  constexpr std::string_view kWireColor = "demo.diag.wire_color";
 
-  [[nodiscard]] auto MissingReason(const vortex::ShaderDebugModeInfo& info,
-    const vortex::CapabilitySet capabilities) -> std::string
-  {
-    if (!info.supported) {
-      return std::string(info.unsupported_reason);
-    }
-
-    const auto missing
-      = vortex::MissingCapabilities(capabilities, info.required_capabilities);
-    if (missing != vortex::RendererCapabilityFamily::kNone) {
-      return "Missing renderer capabilities: " + vortex::to_string(missing);
-    }
-
-    return {};
-  }
-
-  [[nodiscard]] auto FamilyLabel(
-    const vortex::ShaderDebugModeFamily family) noexcept -> const char*
-  {
-    using Family = vortex::ShaderDebugModeFamily;
-    switch (family) {
-    case Family::kLightCulling:
-      return "Light Culling";
-    case Family::kIbl:
-      return "Image-Based Lighting";
-    case Family::kMaterial:
-      return "Material";
-    case Family::kDirectLighting:
-      return "Direct Lighting";
-    case Family::kShadow:
-      return "Shadows";
-    case Family::kSceneDepth:
-      return "Scene Depth";
-    case Family::kMasked:
-      return "Masked Geometry";
-    case Family::kNone:
-    default:
-      return "Other";
-    }
-  }
-
-  constexpr auto kDebugModeFamilies = std::to_array({
-    vortex::ShaderDebugModeFamily::kMaterial,
-    vortex::ShaderDebugModeFamily::kDirectLighting,
-    vortex::ShaderDebugModeFamily::kShadow,
-    vortex::ShaderDebugModeFamily::kSceneDepth,
-    vortex::ShaderDebugModeFamily::kIbl,
-    vortex::ShaderDebugModeFamily::kLightCulling,
-    vortex::ShaderDebugModeFamily::kMasked,
-  });
-
-  struct CapabilityUiRow {
-    vortex::RendererCapabilityFamily family;
-    const char* label;
-    const char* tooltip;
-  };
-
-  constexpr auto kCapabilityUiRows = std::to_array<CapabilityUiRow>({
-    { vortex::RendererCapabilityFamily::kScenePreparation, "Scene preparation",
-      "Scene extraction, view setup, and per-frame scene inputs." },
-    { vortex::RendererCapabilityFamily::kGpuUploadAndAssetBinding,
-      "GPU upload/binding",
-      "GPU upload and asset descriptor binding support." },
-    { vortex::RendererCapabilityFamily::kDeferredShading, "Deferred shading",
-      "G-buffer, depth publication, and deferred debug views." },
-    { vortex::RendererCapabilityFamily::kLightingData, "Lighting data",
-      "Analytic light data, clustered lighting, and lighting buffers." },
-    { vortex::RendererCapabilityFamily::kShadowing, "Shadowing",
-      "Directional shadow map rendering and shadow-mask products." },
-    { vortex::RendererCapabilityFamily::kEnvironmentLighting,
-      "Environment lighting",
-      "Sky, atmosphere, image-based lighting, and fog passes." },
-    { vortex::RendererCapabilityFamily::kFinalOutputComposition,
-      "Final composition", "Final scene composition and presentation output." },
-    { vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling,
-      "Diagnostics/profiling",
-      "Built-in diagnostics service and GPU timeline profiling support." },
-  });
+  constexpr auto kWarningColor = ImVec4(1.0F, 0.7F, 0.0F, 1.0F);
 
 } // namespace
 
-DiagnosticsPanel::DiagnosticsPanel(observer_ptr<DiagnosticsVm> vm)
+DiagnosticsPanel::DiagnosticsPanel(
+  observer_ptr<DiagnosticsVm> vm, observer_ptr<PanelCommands> commands)
   : vm_(vm)
+  , commands_(commands)
 {
-  DCHECK_NOTNULL_F(vm, "DiagnosticsPanel requires DiagnosticsVm");
+  DCHECK_NOTNULL_F(vm_, "DiagnosticsPanel requires DiagnosticsVm");
+  DCHECK_NOTNULL_F(commands_, "DiagnosticsPanel requires PanelCommands");
+  commands_->AddBool(std::string(kFrameDiagnostics), "Frame Diagnostics",
+    "Validate the renderer's GPU products each frame",
+    [vm](
+      const bool enabled) -> void { vm->SetFrameDiagnosticsEnabled(enabled); });
+  commands_->AddBool(std::string(kDrawBounds), "Show Draw Bounds",
+    "Draw every draw's bounds with the GPU debug pass",
+    [vm](const bool enabled) -> void { vm->SetGpuDebugPassEnabled(enabled); });
+  commands_->AddColor(std::string(kWireColor), "Wireframe Color",
+    "Color of the wireframe view modes",
+    [vm](
+      const graphics::Color& color) -> void { vm->SetWireframeColor(color); });
 }
 
 auto DiagnosticsPanel::DrawContents() -> void
 {
-  if (ImGui::CollapsingHeader("Status", ImGuiTreeNodeFlags_DefaultOpen)) {
-    DrawRuntimeStatus();
-  }
+  DrawFrameDiagnostics();
   if (ImGui::CollapsingHeader("Sky Lighting", ImGuiTreeNodeFlags_DefaultOpen)) {
-    DrawSkyLightDiagnostics();
+    DrawSkyLight();
   }
-
-  if (vm_->SupportsRenderModeControls()
-    && ImGui::CollapsingHeader("Render Mode", ImGuiTreeNodeFlags_DefaultOpen)) {
-    DrawViewModeControls();
-    if (vm_->SupportsWireframeColorControl()) {
-      DrawWireframeColor();
-    }
-  }
-
-  if (ImGui::CollapsingHeader("Shader Debug", ImGuiTreeNodeFlags_DefaultOpen)) {
-    DrawDebugModes();
+  if (ImGui::CollapsingHeader(
+        "Debug Drawing", ImGuiTreeNodeFlags_DefaultOpen)) {
+    DrawDebugDrawing();
   }
 }
 
-void DiagnosticsPanel::DrawSkyLightDiagnostics()
+auto DiagnosticsPanel::DrawFrameDiagnostics() -> void
+{
+  ImGui::BeginDisabled(!vm_->SupportsDiagnostics());
+  bool enabled = vm_->GetFrameDiagnosticsEnabled();
+  if (ImGui::Checkbox("Frame Diagnostics", &enabled)) {
+    commands_->RunBool(kFrameDiagnostics, enabled);
+  }
+  ImGui::EndDisabled();
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+    ImGui::SetTooltip("Records the renderer's diagnostics each frame and reads "
+                      "rendered products, such as the sky light, back from "
+                      "the GPU to check them.%s",
+      vm_->SupportsDiagnostics()
+        ? ""
+        : "\nThe renderer has no diagnostics capability.");
+  }
+}
+
+auto DiagnosticsPanel::DrawSkyLight() -> void
 {
   const auto state = vm_->GetSkyLightRuntimeState();
   if (!state.observed) {
     ImGui::TextDisabled("No rendered sky-light state");
     return;
   }
-  ImGui::Text(
-    "Scene frame: %llu", static_cast<unsigned long long>(state.frame_sequence));
   ImGui::Text("Published / building: %u / %u", state.published_revision,
     state.building_revision);
   ImGui::Text("Snapshot age: %llu frames",
     static_cast<unsigned long long>(state.source_age_frames));
   ImGui::Text("Cube: %u x %u", state.face_size, state.face_size);
-  ImGui::Text("CPU decision: %.3f ms", state.cpu_update_ms);
   if (state.gpu_validation != vortex::SkyLightGpuValidation::kInvalid
     && state.unavailable_reason
       == vortex::environment::StaticSkyLightUnavailableReason::
-        kProcessingFailed)
-    ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F),
+        kProcessingFailed) {
+    ImGui::TextColored(kWarningColor,
       state.usable ? "Update failed; previous lighting retained"
                    : "Lighting update failed");
-  bool timing = vm_->GetGpuTimelineEnabled();
-  const bool supported
-    = vortex::HasAllCapabilities(vm_->GetRendererCapabilities(),
-      vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling);
-  ImGui::BeginDisabled(!supported);
-  bool validation = vm_->GetFrameDiagnosticsEnabled();
-  if (ImGui::Checkbox("Frame Diagnostics", &validation))
-    vm_->SetFrameDiagnosticsEnabled(validation);
-  if (ImGui::Checkbox("GPU Timeline", &timing))
-    vm_->SetGpuTimelineEnabled(timing);
-  ImGui::EndDisabled();
+  }
+  // The renderer keeps the last validation of the current products; it is
+  // shown only while the check runs.
+  if (!vm_->GetFrameDiagnosticsEnabled()) {
+    ImGui::TextDisabled("Frame Diagnostics checks these products on the GPU");
+    return;
+  }
   using Validation = vortex::SkyLightGpuValidation;
   switch (state.gpu_validation) {
   case Validation::kNotRequested:
-    ImGui::TextDisabled(state.usable
-        ? "Enable Frame Diagnostics to check GPU products"
-        : "No submitted sky-light products");
+    ImGui::TextDisabled(state.usable ? "GPU validation pending"
+                                     : "No submitted sky-light products");
     break;
   case Validation::kPending:
     ImGui::TextDisabled("GPU validation pending");
@@ -190,7 +126,7 @@ void DiagnosticsPanel::DrawSkyLightDiagnostics()
     ImGui::Text("Average brightness: %.6g", state.average_brightness);
     break;
   case Validation::kInvalid:
-    ImGui::TextColored(ImVec4(1.0F, 0.7F, 0.0F, 1.0F),
+    ImGui::TextColored(kWarningColor,
       "Invalid GPU generation %u; lighting is zero", state.validated_revision);
     break;
   case Validation::kUnavailable:
@@ -198,26 +134,48 @@ void DiagnosticsPanel::DrawSkyLightDiagnostics()
     break;
   }
   if (state.last_failed_gpu_revision != 0U
-    && state.last_failed_gpu_revision != state.validated_revision)
+    && state.last_failed_gpu_revision != state.validated_revision) {
     ImGui::Text(
       "Last GPU failure: generation %u", state.last_failed_gpu_revision);
-  if (const auto summary = vm_->GetLatestGpuWorkSummary()) {
-    // IBL work is the background group's `background.ibl` item; no item
-    // means no IBL work in the window.
-    auto ibl = vortex::GpuWorkStat {};
-    for (const auto& group : summary->frame_work) {
-      for (const auto& item : group.items) {
-        if (item.id == "background.ibl") {
-          ibl = item.time;
-        }
-      }
-    }
-    ImGui::Text("IBL GPU (all scenes): %.3f ms avg, %.3f ms max [frame %llu]",
-      ibl.avg_ms, ibl.max_ms,
-      static_cast<unsigned long long>(summary->last_frame.get()));
-  } else if (timing) {
-    ImGui::TextDisabled("Waiting for GPU timing");
   }
+}
+
+auto DiagnosticsPanel::DrawDebugDrawing() -> void
+{
+  ImGui::BeginDisabled(!vm_->IsVortexRuntimeBound());
+  bool draw_bounds = vm_->GetGpuDebugPassEnabled();
+  if (ImGui::Checkbox("Show Draw Bounds", &draw_bounds)) {
+    commands_->RunBool(kDrawBounds, draw_bounds);
+  }
+  if (draw_bounds) {
+    // The occlusion cull pass draws the boxes in these fixed colors.
+    constexpr auto kPhase1 = ImVec4(0.0F, 1.0F, 0.0F, 1.0F);
+    constexpr auto kPhase2 = ImVec4(1.0F, 1.0F, 0.0F, 1.0F);
+    ImGui::Indent();
+    ImGui::TextColored(kPhase1, "Green");
+    ImGui::SameLine();
+    ImGui::TextUnformatted("drawn in the first pass");
+    ImGui::TextColored(kPhase2, "Yellow");
+    ImGui::SameLine();
+    ImGui::TextUnformatted("held for the occlusion test");
+    ImGui::Unindent();
+  }
+
+  // The color of the wireframe view modes, not of the draw bounds.
+  ImGui::SeparatorText("Wireframe View Modes");
+  const auto color = vm_->GetWireframeColor();
+  std::array wire_color { color.r, color.g, color.b };
+  if (ImGui::ColorEdit3("Line Color", wire_color.data(),
+        ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR)) {
+    commands_->RunColor(kWireColor,
+      graphics::Color {
+        wire_color.at(0), wire_color.at(1), wire_color.at(2), 1.0F });
+  }
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip(
+      "Lines of the toolbar's Wireframe and Lit Wireframe view modes.");
+  }
+  ImGui::EndDisabled();
 }
 
 auto DiagnosticsPanel::GetName() const noexcept -> std::string_view
@@ -227,7 +185,7 @@ auto DiagnosticsPanel::GetName() const noexcept -> std::string_view
 
 auto DiagnosticsPanel::GetPreferredWidth() const noexcept -> float
 {
-  return 380.0F;
+  return 340.0F;
 }
 
 auto DiagnosticsPanel::GetIcon() const noexcept -> std::string_view
@@ -239,161 +197,8 @@ auto DiagnosticsPanel::OnRegistered() -> void { }
 
 auto DiagnosticsPanel::OnLoaded() -> void { }
 
-auto DiagnosticsPanel::OnUnloaded() -> void
-{
-  // Persistence is handled by RenderingSettingsService via the ViewModel.
-}
-
-auto DiagnosticsPanel::GetRenderMode() const -> vortex::RenderMode
-{
-  return vm_->GetRenderMode();
-}
-
-void DiagnosticsPanel::DrawRuntimeStatus()
-{
-  const auto requested = vm_->GetRequestedDebugMode();
-  const auto effective = vm_->GetEffectiveDebugMode();
-
-  ImGui::Text("Renderer: %s", vm_->IsVortexRuntimeBound() ? "Vortex" : "None");
-  ImGui::Text("Selected debug view: %s", DisplayNameFor(requested).data());
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("The debug view selected in this panel.");
-  }
-  ImGui::Text("Active debug view: %s", DisplayNameFor(effective).data());
-  if (ImGui::IsItemHovered()) {
-    ImGui::SetTooltip("The debug view currently applied by the renderer after "
-                      "capability checks.");
-  }
-  DrawRendererCapabilities();
-}
-
-void DiagnosticsPanel::DrawRendererCapabilities()
-{
-  const auto capabilities = vm_->GetRendererCapabilities();
-
-  ImGui::Spacing();
-  ImGui::TextUnformatted("Capabilities");
-  ImGui::Indent();
-  for (const auto& row : kCapabilityUiRows) {
-    bool enabled = vortex::HasAllCapabilities(capabilities, row.family);
-    ImGui::PushID(row.label);
-    ImGui::BeginDisabled();
-    ImGui::Checkbox(row.label, &enabled);
-    ImGui::EndDisabled();
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-      ImGui::SetTooltip("%s", row.tooltip);
-    }
-    ImGui::PopID();
-  }
-  ImGui::Unindent();
-}
-
-void DiagnosticsPanel::DrawViewModeControls()
-{
-  using r = vortex::RenderMode;
-
-  auto mode = vm_->GetRenderMode();
-
-  if (ImGui::RadioButton("Solid", mode == r::kSolid)) {
-    vm_->SetDebugMode(engine::ShaderDebugMode::kDisabled);
-    vm_->SetRenderMode(r::kSolid);
-  }
-  if (ImGui::RadioButton("Wireframe", mode == r::kWireframe)) {
-    vm_->SetDebugMode(engine::ShaderDebugMode::kDisabled);
-    vm_->SetRenderMode(r::kWireframe);
-  }
-  if (ImGui::RadioButton("Overlay Wireframe", mode == r::kOverlayWireframe)) {
-    vm_->SetDebugMode(engine::ShaderDebugMode::kDisabled);
-    vm_->SetRenderMode(r::kOverlayWireframe);
-  }
-}
-
-void DiagnosticsPanel::DrawWireframeColor()
-{
-  const auto color = vm_->GetWireframeColor();
-  float wire_color[3] = { color.r, color.g, color.b };
-  if (ImGui::ColorEdit3("Wire Color", wire_color,
-        ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR)) {
-    LOG_F(INFO, "DiagnosticsPanel: UI wire_color changed ({}, {}, {})",
-      wire_color[0], wire_color[1], wire_color[2]);
-    vm_->SetWireframeColor(
-      graphics::Color { wire_color[0], wire_color[1], wire_color[2], 1.0F });
-  }
-}
-
-void DiagnosticsPanel::DrawDebugModes()
-{
-  using engine::ShaderDebugMode;
-  using RenderMode = vortex::RenderMode;
-
-  const bool disable_debug_modes = vm_->SupportsRenderModeControls()
-    && GetRenderMode() == RenderMode::kWireframe;
-  if (disable_debug_modes) {
-    ImGui::BeginDisabled();
-  }
-
-  const auto requested_mode = vm_->GetRequestedDebugMode();
-  const auto capabilities = vm_->GetRendererCapabilities();
-
-  if (ImGui::RadioButton(
-        "Disabled", requested_mode == ShaderDebugMode::kDisabled)) {
-    vm_->SetDebugMode(ShaderDebugMode::kDisabled);
-  }
-
-  for (const auto family : kDebugModeFamilies) {
-    if (!ImGui::TreeNodeEx(
-          FamilyLabel(family), ImGuiTreeNodeFlags_DefaultOpen)) {
-      continue;
-    }
-
-    for (const auto& info : vortex::EnumerateShaderDebugModes()) {
-      if (info.mode == ShaderDebugMode::kDisabled || info.family != family) {
-        continue;
-      }
-
-      const bool supported = vm_->SupportsDebugMode(info.mode);
-      const auto reason = MissingReason(info, capabilities);
-
-      ImGui::PushID(info.canonical_name.data());
-      if (!supported) {
-        ImGui::BeginDisabled();
-      }
-      if (ImGui::RadioButton(
-            info.display_name.data(), requested_mode == info.mode)) {
-        vm_->SetDebugMode(info.mode);
-      }
-      if (!supported) {
-        ImGui::EndDisabled();
-        if (!reason.empty()
-          && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-          ImGui::SetTooltip("%s", reason.c_str());
-        }
-        ImGui::SameLine();
-        ImGui::TextDisabled("Unavailable");
-      }
-      ImGui::PopID();
-    }
-
-    ImGui::TreePop();
-  }
-
-  if (disable_debug_modes) {
-    ImGui::EndDisabled();
-  }
-
-  if (vm_->SupportsGpuDebugPassControl()) {
-    auto gpu_debug_enabled = vm_->GetGpuDebugPassEnabled();
-    if (ImGui::Checkbox("Show Draw Bounds (GPU Debug)", &gpu_debug_enabled)) {
-      vm_->SetGpuDebugPassEnabled(gpu_debug_enabled);
-    }
-  }
-
-  if (vm_->SupportsAtmosphereBlueNoiseControl()) {
-    auto atmo_blue_noise = vm_->GetAtmosphereBlueNoiseEnabled();
-    if (ImGui::Checkbox("Atmosphere Blue Noise", &atmo_blue_noise)) {
-      vm_->SetAtmosphereBlueNoiseEnabled(atmo_blue_noise);
-    }
-  }
-}
+auto DiagnosticsPanel::OnUnloaded() -> void { }
 
 } // namespace oxygen::examples::ui
+
+// NOLINTEND(cppcoreguidelines-pro-type-vararg, bugprone-signed-bitwise)

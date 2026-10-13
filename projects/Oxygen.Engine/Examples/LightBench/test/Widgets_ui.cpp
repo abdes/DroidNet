@@ -109,7 +109,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     }
     auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
     const auto targets
-      = app.app_.engine->GetConsole().Execute("pp.targets").output;
+      = app.Host().engine->GetConsole().Execute("pp.targets").output;
     IM_CHECK(targets.starts_with("scene:"));
     constexpr auto prefix_length = std::string_view("scene:").size();
     path = std::string("Post Process/")
@@ -169,7 +169,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     auto& fixture = ctx->GetVars<MaskFixture>();
     auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
     if (fixture.initialized) {
-      if (const auto renderer = app.ResolveVortexRenderer()) {
+      if (const auto renderer = app.ResolveRenderer()) {
         fixture.status = renderer->InspectExposureSettings(
           renderer->ResolvePublishedRuntimeViewId(app.main_view_id_));
       }
@@ -180,7 +180,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     // TestFunc runs on Test Engine's cooperative driver thread.
     const auto root = app.UiTestOutputDirectory() / "mask";
     testing::WriteUiTextureFixture(root);
-    const auto loader = app.app_.engine->GetAssetLoader();
+    const auto loader = app.Host().engine->GetAssetLoader();
     IM_CHECK(loader != nullptr);
     loader->AddLooseCookedRoot(root);
     const auto mounts = loader->EnumerateMountedSources();
@@ -319,7 +319,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
   test->GuiFunc = [](ImGuiTestContext* ctx) -> void {
     auto& app = *static_cast<MainModule*>(ctx->Test->UserData);
     auto& state = ctx->GetVars<ConsoleState>();
-    auto& console = app.app_.engine->GetConsole();
+    auto& console = app.Host().engine->GetConsole();
     if (state.initial_target.empty()) {
       const auto targets = console.Execute("pp.targets").output;
       IM_CHECK(targets.starts_with("scene:"));

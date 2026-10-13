@@ -26,7 +26,8 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(PanelSideBar)
   OXYGEN_DEFAULT_MOVABLE(PanelSideBar)
 
-  auto Draw() -> void;
+  //! Draws the bar down the left edge, from `top` to the bottom.
+  auto Draw(float top) -> void;
 
   [[nodiscard]] auto GetWidth() const noexcept -> float;
 

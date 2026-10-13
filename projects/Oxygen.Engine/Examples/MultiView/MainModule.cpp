@@ -17,7 +17,7 @@
 #include <vector>
 
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/PanelCommands.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "MultiView/MainModule.h"
 #include "MultiView/SceneBootstrapper.h"
@@ -47,6 +47,9 @@
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/HostModule.h>
+#include <Oxygen/Host/HostWindow.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
@@ -215,9 +218,8 @@ namespace {
 } // namespace
 
 MainModule::MainModule(
-  const DemoAppContext& app, MainModuleConfig config) noexcept
-  : Base(app)
-  , app_(app)
+  const host::HostContext& host, MainModuleConfig config) noexcept
+  : Base(host)
   , scene_bootstrapper_(config.point_light_enabled
         && config.exposure_proof != ExposureProofScenario::kAtmosphere,
       config.spot_light_enabled
@@ -225,33 +227,24 @@ MainModule::MainModule(
   , config_(std::move(config))
 {
 
-  main_view_id_ = this->GetOrCreateViewId("MainView");
-  pip_view_id_ = this->GetOrCreateViewId("PipView");
-  top_view_id_ = this->GetOrCreateViewId("TopView");
-  debug_view_id_ = this->GetOrCreateViewId("DebugView");
-  shadow_view_id_ = this->GetOrCreateViewId("ShadowView");
-  diagnostics_view_id_ = this->GetOrCreateViewId("DiagnosticsView");
+  main_view_id_ = Publisher().GetOrCreateViewId("MainView");
+  pip_view_id_ = Publisher().GetOrCreateViewId("PipView");
+  top_view_id_ = Publisher().GetOrCreateViewId("TopView");
+  debug_view_id_ = Publisher().GetOrCreateViewId("DebugView");
+  shadow_view_id_ = Publisher().GetOrCreateViewId("ShadowView");
+  diagnostics_view_id_ = Publisher().GetOrCreateViewId("DiagnosticsView");
 }
 
-auto MainModule::BuildDefaultWindowProperties() const
-  -> platform::window::Properties
+auto MainModule::BuildWindowProperties() const -> platform::window::Properties
 {
   constexpr uint32_t kDefaultWidth = 2560;
   constexpr uint32_t kDefaultHeight = 1400;
 
-  platform::window::Properties props("Oxygen :: Examples :: MultiView");
+  auto props = Base::BuildWindowProperties();
+  props.title = "Oxygen :: Examples :: MultiView";
   props.extent = platform::window::ExtentT {
     .width = kDefaultWidth,
     .height = kDefaultHeight,
-  };
-  props.flags = {
-    .hidden = false,
-    .always_on_top = false,
-    .full_screen = app_.fullscreen,
-    .maximized = false,
-    .minimized = false,
-    .resizable = true,
-    .borderless = false,
   };
   return props;
 }
@@ -267,24 +260,21 @@ auto MainModule::OnAttachedImpl(
   const bool exposure_proof
     = config_.exposure_proof != ExposureProofScenario::kNone;
   if (exposure_proof) {
-    app_.engine->GetSimulationClock().SetPaused(true);
+    engine->Pause();
   }
 
   // Initialize DemoShell with camera controls enabled outside proof layouts.
   auto shell = std::make_unique<DemoShell>();
-  DemoShellConfig shell_config;
-  shell_config.engine = engine;
+  auto shell_config = MakeShellConfig();
   shell_config.panel_config = DemoShellPanelConfig {
     .content_loader = false,
     .camera_controls = !config_.feature_variant_proof_layout && !exposure_proof,
     .environment = false,
-    .lighting = false,
     .post_process = !config_.feature_variant_proof_layout && !exposure_proof,
     .ground_grid
     = config_.exposure_proof != ExposureProofScenario::kConsumerVisual,
   };
   shell_config.enable_camera_rig = !exposure_proof;
-  shell_config.enable_renderer_bound_panels = false;
   if (config_.exposure_proof == ExposureProofScenario::kConsumerVisual) {
     auto plan = console::ConsoleStartupPlan {};
     plan
@@ -295,7 +285,7 @@ auto MainModule::OnAttachedImpl(
         console::CVarValueOrigin::kAppForced)
       .Set("vtx.volumetric_fog.jitter", config_.visual_fog_jitter,
         console::CVarValueOrigin::kAppForced);
-    app_.engine->GetConsole().ApplyStartupPlan(plan);
+    engine->GetConsole().ApplyStartupPlan(plan);
   }
   if (config_.exposure_proof == ExposureProofScenario::kAtmosphere
     || config_.exposure_proof == ExposureProofScenario::kAtmosphereLit
@@ -310,35 +300,19 @@ auto MainModule::OnAttachedImpl(
     "MultiView: DemoShell initialization failed");
   LOG_F(INFO, "[MultiView] DemoShell initialized (camera controls enabled)");
 
-  shell->StageScene(
-    std::make_unique<scene::Scene>("MultiViewScene", kDefaultSceneCapacity));
-  const auto staged_scene = shell->GetStagedScene();
-  CHECK_NOTNULL_F(staged_scene, "MultiView staged scene is null");
+  shell->GetPanelCommands()->AddEnum("multiview.fog", "Visual Fog",
+    "Fog of the visual check: clear, volumetric or local",
+    { "clear", "volumetric", "local" }, [this](const std::size_t i) -> void {
+      constexpr auto kModes = std::array {
+        VisualFogMode::kClear,
+        VisualFogMode::kVolumetric,
+        VisualFogMode::kLocal,
+      };
+      pending_visual_fog_mode_ = kModes.at(i);
+    });
 
-  main_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "MainCamera");
-  pip_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "PipCamera");
-  if (config_.proof_layout || config_.aux_proof_layout
-    || config_.feature_variant_proof_layout) {
-    top_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "TopCamera");
-    debug_camera_node_
-      = CreatePerspectiveCameraNode(*staged_scene, "DebugCamera");
-    shadow_camera_node_
-      = CreatePerspectiveCameraNode(*staged_scene, "ShadowCamera");
-  }
-  if (config_.feature_variant_proof_layout) {
-    diagnostics_camera_node_
-      = CreatePerspectiveCameraNode(*staged_scene, "DiagnosticsCamera");
-  }
-  if (config_.offscreen_proof_layout) {
-    offscreen_preview_camera_node_ = CreatePerspectiveCameraNode(
-      *staged_scene, "M06BOffscreenPreviewCamera");
-    offscreen_capture_camera_node_ = CreatePerspectiveCameraNode(
-      *staged_scene, "M06BOffscreenCaptureCamera");
-  }
-
-  shell->SetStagedMainCamera(main_camera_node_);
-  scene_bootstrapper_.BindToScene(staged_scene);
-  (void)scene_bootstrapper_.EnsureSceneWithContent();
+  StageScene();
+  const auto staged_scene = Stage().GetStagedScene();
   if (config_.exposure_proof == ExposureProofScenario::kAtmosphere) {
     scene_bootstrapper_.ApplyAtmosphereProof(0U);
   } else if (config_.exposure_proof == ExposureProofScenario::kAtmosphereLit) {
@@ -368,19 +342,50 @@ auto MainModule::OnAttachedImpl(
   if (config_.directional_array_proof) {
     scene_bootstrapper_.ApplyDirectionalArrayProof();
   }
+  return shell;
+}
+
+auto MainModule::StageScene() -> void
+{
+  Stage().Stage(
+    std::make_shared<scene::Scene>("MultiViewScene", kDefaultSceneCapacity));
+  const auto staged_scene = Stage().GetStagedScene();
+
+  main_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "MainCamera");
+  pip_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "PipCamera");
+  if (config_.proof_layout || config_.aux_proof_layout
+    || config_.feature_variant_proof_layout) {
+    top_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "TopCamera");
+    debug_camera_node_
+      = CreatePerspectiveCameraNode(*staged_scene, "DebugCamera");
+    shadow_camera_node_
+      = CreatePerspectiveCameraNode(*staged_scene, "ShadowCamera");
+  }
+  if (config_.feature_variant_proof_layout) {
+    diagnostics_camera_node_
+      = CreatePerspectiveCameraNode(*staged_scene, "DiagnosticsCamera");
+  }
+  if (config_.offscreen_proof_layout) {
+    offscreen_preview_camera_node_ = CreatePerspectiveCameraNode(
+      *staged_scene, "M06BOffscreenPreviewCamera");
+    offscreen_capture_camera_node_ = CreatePerspectiveCameraNode(
+      *staged_scene, "M06BOffscreenCaptureCamera");
+  }
+
+  Stage().SetStagedMainCamera(main_camera_node_);
+  scene_bootstrapper_.BindToScene(staged_scene);
+  (void)scene_bootstrapper_.EnsureSceneWithContent();
   const auto extent = ResolveRenderExtent();
   if (HasPositiveExtent(extent)) {
     UpdateCameras(extent);
     last_viewport_ = extent;
   }
-
-  return shell;
 }
 
 auto MainModule::OnShutdown() noexcept -> void
 {
   if (config_.offscreen_proof_layout) {
-    if (auto renderer = ResolveVortexRenderer()) {
+    if (auto renderer = ResolveRenderer()) {
       for (const auto view_id :
         { kOffscreenPreviewViewId, kOffscreenCaptureViewId }) {
         if (!renderer->ReleaseOffscreenViewState(view_id,
@@ -396,17 +401,16 @@ auto MainModule::OnShutdown() noexcept -> void
     product->framebuffer.reset();
   }
 
-  auto& shell = GetShell();
-  shell.SetScene(std::unique_ptr<scene::Scene> {});
+  Stage().Clear();
   active_scene_ = {};
-
   scene_bootstrapper_.BindToScene(observer_ptr<scene::Scene> { nullptr });
+  Base::OnShutdown();
 }
 
 auto MainModule::ResolveRenderExtent() const -> platform::window::ExtentT
 {
-  if (app_window_) {
-    if (auto framebuffer = app_window_->GetCurrentFrameBuffer().lock()) {
+  if (Window()) {
+    if (auto framebuffer = Window()->GetCurrentFrameBuffer().lock()) {
       const auto framebuffer_extent = GetFramebufferExtent(*framebuffer);
       if (HasPositiveExtent(framebuffer_extent)) {
         return framebuffer_extent;
@@ -414,8 +418,8 @@ auto MainModule::ResolveRenderExtent() const -> platform::window::ExtentT
     }
   }
 
-  if (app_window_ && app_window_->GetWindow()) {
-    const auto window_extent = app_window_->GetWindow()->Size();
+  if (Window() && Window()->GetWindow()) {
+    const auto window_extent = Window()->GetWindow()->Size();
     if (HasPositiveExtent(window_extent)) {
       return window_extent;
     }
@@ -694,33 +698,10 @@ auto MainModule::OnFrameStart(
   observer_ptr<oxygen::engine::FrameContext> context) -> void
 {
   DCHECK_NOTNULL_F(context);
-  auto& shell = GetShell();
-  CHECK_NOTNULL_F(&shell, "DemoShell must exist in MultiView");
-
-  if (shell.HasStagedScene()) {
-    CHECK_F(shell.PublishStagedScene(),
-      "expected staged scene before frame-start publish");
-    active_scene_ = shell.GetActiveScene();
-    auto published_camera = shell.TakePublishedMainCamera();
-    if (published_camera.IsAlive()) {
-      main_camera_node_ = std::move(published_camera);
-    }
-    scene_bootstrapper_.BindToScene(shell.TryGetScene());
-  }
-
-  shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
-
-  CHECK_NOTNULL_F(app_window_, "AppWindow must exist in MultiView");
-  if (!HasRenderableWindow()) {
+  if (!HasRenderableWindow() || !Stage().TryGetScene()) {
     return;
   }
-
-  const auto scene_ptr = shell.TryGetScene();
-  if (!scene_ptr) {
-    return;
-  }
-  context->SetScene(oxygen::observer_ptr { scene_ptr.get() });
 
   // Ensure content exists
   (void)scene_bootstrapper_.EnsureSceneWithContent();
@@ -748,12 +729,17 @@ auto MainModule::OnFrameStart(
     scene_bootstrapper_.ApplyAtmosphereProof(
       context->GetFrameSequenceNumber().get());
   }
+}
 
-  // Ensure drone is configured once the rig is available
-  const auto rig = shell.GetCameraRig();
-  if (rig != last_camera_rig_) {
-    last_camera_rig_ = rig;
+auto MainModule::OnScenePublished(engine::FrameContext& context) -> void
+{
+  Base::OnScenePublished(context);
+  active_scene_ = Stage().GetActiveScene();
+  auto published_camera = Stage().TakePublishedMainCamera();
+  if (published_camera.IsAlive()) {
+    main_camera_node_ = std::move(published_camera);
   }
+  scene_bootstrapper_.BindToScene(Stage().TryGetScene());
 }
 
 auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
@@ -761,15 +747,15 @@ auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
   Base::OnFrameEnd(context);
   if ((config_.exposure_proof == ExposureProofScenario::kWindowResize
         || config_.exposure_proof == ExposureProofScenario::kInteractions)
-    && app_window_ && app_window_->GetWindow()) {
+    && Window() && Window()->GetWindow()) {
     const auto frame = context->GetFrameSequenceNumber().get();
     const bool interactions
       = config_.exposure_proof == ExposureProofScenario::kInteractions;
     if (frame == (interactions ? 88U : 44U)) {
-      window_proof_initial_extent_ = app_window_->GetWindow()->Size();
-      app_window_->GetWindow()->Resize({ .width = 1280U, .height = 800U });
+      window_proof_initial_extent_ = Window()->GetWindow()->Size();
+      Window()->GetWindow()->Resize({ .width = 1280U, .height = 800U });
     } else if (frame == (interactions ? 96U : 52U)) {
-      app_window_->GetWindow()->Resize(window_proof_initial_extent_);
+      Window()->GetWindow()->Resize(window_proof_initial_extent_);
     }
   }
 }
@@ -777,17 +763,15 @@ auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
 auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   -> oxygen::co::Co<>
 {
-  if (!app_window_ || !app_window_->GetWindow()) {
-    co_return;
-  }
-  if (!active_scene_.IsValid() || !main_camera_node_.IsAlive()) {
-    co_return;
-  }
-
-  auto& shell = GetShell();
-  CHECK_NOTNULL_F(&shell, "DemoShell required for GUI update");
+  // The visual check shows only its own window over the views.
   if (config_.exposure_proof != ExposureProofScenario::kConsumerVisual) {
-    shell.Draw(context);
+    co_await Base::OnGuiUpdate(context);
+  } else {
+    static_cast<void>(co_await DrawHostUi(context));
+  }
+  if (!HasRenderableWindow() || !active_scene_.IsValid()
+    || !main_camera_node_.IsAlive()) {
+    co_return;
   }
   DrawFeatureVariantProofOverlay();
   DrawConsumerVisualControls();
@@ -831,7 +815,9 @@ auto MainModule::DrawConsumerVisualControls() -> void
     changed |= ImGui::RadioButton(
       "Local fog", &mode, static_cast<int>(VisualFogMode::kLocal));
     if (changed) {
-      pending_visual_fog_mode_ = static_cast<VisualFogMode>(mode);
+      constexpr auto kNames = std::array { "clear", "volumetric", "local" };
+      GetShell().GetPanelCommands()->RunText(
+        "multiview.fog", kNames.at(static_cast<std::size_t>(mode)));
     }
     ImGui::TextUnformatted(
       "Compare material colors, smooth haze and object edges.");
@@ -840,19 +826,11 @@ auto MainModule::DrawConsumerVisualControls() -> void
   ImGui::End();
 }
 
-auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
-  -> oxygen::co::Co<>
-{
-  auto& shell = GetShell();
-  shell.Update(context->GetGameDeltaTime());
-  co_return;
-}
-
 auto MainModule::EnsureOffscreenProofProduct(OffscreenProofProduct& product,
   const uint32_t width, const uint32_t height, std::string_view debug_name)
   -> bool
 {
-  auto gfx = app_.gfx_weak.lock();
+  auto gfx = Host().gfx_weak.lock();
   if (!gfx) {
     return false;
   }
@@ -892,7 +870,7 @@ auto MainModule::EnsureOffscreenProofProduct(OffscreenProofProduct& product,
 auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
   -> void
 {
-  auto renderer = ResolveVortexRenderer();
+  auto renderer = ResolveRenderer();
   if (!renderer) {
     return;
   }
@@ -1005,49 +983,11 @@ auto MainModule::RenderOffscreenProofProducts(engine::FrameContext& context)
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> oxygen::co::Co<>
 {
-  auto& shell = GetShell();
-  CHECK_NOTNULL_F(app_window_, "AppWindow required for scene mutation");
-  if (!app_window_->GetWindow()) {
+  if (!HasRenderableWindow()) {
     co_return;
   }
-
-  if (!active_scene_.IsValid() && !shell.HasStagedScene()) {
-    shell.StageScene(
-      std::make_unique<scene::Scene>("MultiViewScene", kDefaultSceneCapacity));
-    const auto staged_scene = shell.GetStagedScene();
-    CHECK_NOTNULL_F(staged_scene, "MultiView staged scene is null");
-
-    main_camera_node_
-      = CreatePerspectiveCameraNode(*staged_scene, "MainCamera");
-    pip_camera_node_ = CreatePerspectiveCameraNode(*staged_scene, "PipCamera");
-    if (config_.proof_layout || config_.aux_proof_layout
-      || config_.feature_variant_proof_layout) {
-      top_camera_node_
-        = CreatePerspectiveCameraNode(*staged_scene, "TopCamera");
-      debug_camera_node_
-        = CreatePerspectiveCameraNode(*staged_scene, "DebugCamera");
-      shadow_camera_node_
-        = CreatePerspectiveCameraNode(*staged_scene, "ShadowCamera");
-    }
-    if (config_.feature_variant_proof_layout) {
-      diagnostics_camera_node_
-        = CreatePerspectiveCameraNode(*staged_scene, "DiagnosticsCamera");
-    }
-    if (config_.offscreen_proof_layout) {
-      offscreen_preview_camera_node_ = CreatePerspectiveCameraNode(
-        *staged_scene, "M06BOffscreenPreviewCamera");
-      offscreen_capture_camera_node_ = CreatePerspectiveCameraNode(
-        *staged_scene, "M06BOffscreenCaptureCamera");
-    }
-
-    shell.SetStagedMainCamera(main_camera_node_);
-    scene_bootstrapper_.BindToScene(staged_scene);
-    (void)scene_bootstrapper_.EnsureSceneWithContent();
-    const auto extent = ResolveRenderExtent();
-    if (HasPositiveExtent(extent)) {
-      UpdateCameras(extent);
-      last_viewport_ = extent;
-    }
+  if (!active_scene_.IsValid() && !Stage().HasStagedScene()) {
+    StageScene();
   }
 
   if (!active_scene_.IsValid()) {
@@ -1074,12 +1014,10 @@ auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
     RenderOffscreenProofProducts(*context);
   }
 
-  co_await Base::OnPreRender(context);
   co_return;
 }
 
-auto MainModule::AppendRuntimeCompositionLayers(
-  engine::FrameContext& /*context*/,
+auto MainModule::AppendCompositionLayers(engine::FrameContext& /*context*/,
   vortex::Renderer::RuntimeCompositionInput& input) -> void
 {
   if (!config_.offscreen_proof_layout || !offscreen_preview_.framebuffer
@@ -1221,9 +1159,11 @@ auto MainModule::DrawFeatureVariantProofOverlay() -> void
   }
 }
 
-auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
-  std::vector<vortex::CompositionView>& views) -> void
+auto MainModule::BuildViews(
+  oxygen::engine::FrameContext& context, host::HostViews& host_views) -> void
 {
+  auto& views = host_views.views;
+  main_view_.reset();
   const auto sequence = context.GetFrameSequenceNumber().get();
   const bool interactions
     = config_.exposure_proof == ExposureProofScenario::kInteractions;
@@ -1232,11 +1172,11 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
         && sequence >= 44U && sequence < 48U)
     || (interactions && sequence >= 100U && sequence < 104U);
   if (interactions && sequence == 108U) {
-    pip_view_id_ = GetOrCreateViewId("InteractionsRecreatedPiP");
+    pip_view_id_ = Publisher().GetOrCreateViewId("InteractionsRecreatedPiP");
   }
   if (config_.exposure_proof == ExposureProofScenario::kLifetime
     && sequence == 52U) {
-    pip_view_id_ = GetOrCreateViewId("RecreatedPipView");
+    pip_view_id_ = Publisher().GetOrCreateViewId("RecreatedPipView");
   }
   viewport_proof_resized_
     = (config_.exposure_proof == ExposureProofScenario::kViewport
@@ -1245,6 +1185,7 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
   viewport_proof_scissored_
     = viewport_proof_resized_ && sequence >= (interactions ? 80U : 48U);
   BuildComposition(context, views);
+  host_views.main = main_view_;
   for (auto& view : views) {
     if (view.camera.has_value()) {
       // The demo owns these logical IDs for the complete view lifetime.
@@ -1262,7 +1203,7 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
       graphics::Color { .2F, .8F, .2F, 1.0F },
       graphics::Color { .2F, .2F, .8F, 1.0F },
     };
-    if (const auto renderer = ResolveVortexRenderer()) {
+    if (const auto renderer = ResolveRenderer()) {
       renderer->SetWireframeColor(
         colors[context.GetFrameSequenceNumber().get() % colors.size()]);
     }
@@ -1279,7 +1220,7 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
     || (interactions && frame >= 120U && frame < 128U);
   if (proof == ExposureProofScenario::kSourceLoss) {
     if (frame == 46U) {
-      app_.engine->GetSimulationClock().SetPaused(false);
+      Host().engine->Resume();
     }
     if (frame >= 43U && frame <= 52U) {
       LOG_F(INFO, "Vortex.MultiView.SourceLoss frame={} delta_seconds={:.9g}",
@@ -1287,7 +1228,7 @@ auto MainModule::UpdateComposition(oxygen::engine::FrameContext& context,
         std::chrono::duration<float>(context.GetGameDeltaTime().get()).count());
     }
   }
-  auto renderer = ResolveVortexRenderer();
+  auto renderer = ResolveRenderer();
   CHECK_NOTNULL_F(renderer.get());
   if (proof == ExposureProofScenario::kConsumerVisual
     && renderer->GetGroundGridConfig().enabled) {
@@ -1466,12 +1407,12 @@ auto MainModule::ApplyInteractionProof(engine::FrameContext& context,
 {
   const auto frame = context.GetFrameSequenceNumber().get();
   if (frame == 40U) {
-    app_.engine->GetSimulationClock().SetPaused(false);
+    Host().engine->Resume();
   }
   if (frame == 136U) {
-    app_.engine->GetSimulationClock().SetPaused(true);
+    Host().engine->Pause();
   }
-  const auto renderer = ResolveVortexRenderer();
+  const auto renderer = ResolveRenderer();
   CHECK_NOTNULL_F(renderer.get());
   if (frame >= 40U) {
     const float phase
@@ -1581,7 +1522,6 @@ auto MainModule::DrawInteractionProofOverlay(std::uint64_t frame) -> void
 auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
   std::vector<vortex::CompositionView>& views) -> void
 {
-  auto& shell = GetShell();
   if (!main_camera_node_.IsAlive()) {
     return;
   }
@@ -1642,7 +1582,7 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
     configure_variant(depth_only,
       vortex::CompositionView::ViewFeatureProfile::kDepthOnly,
       graphics::Color { 0.04F, 0.08F, 0.18F, 1.0F });
-    shell.OnMainViewReady(context, depth_only);
+    main_view_ = depth_only.id;
     views.push_back(std::move(depth_only));
 
     auto shadow_only = vortex::CompositionView::ForScene(
@@ -1732,7 +1672,7 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
         .kind = vortex::CompositionView::AuxOutputKind::kColorTexture,
         .required = true,
       });
-    shell.OnMainViewReady(context, consumer_comp);
+    main_view_ = consumer_comp.id;
     views.push_back(std::move(consumer_comp));
 
     auto producer_comp = vortex::CompositionView::ForScene(debug_view_id_,
@@ -1811,7 +1751,7 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
         .kind = vortex::CompositionView::AuxOutputKind::kColorTexture,
         .debug_name = "M06A.LitPerspective.Color",
       });
-    shell.OnMainViewReady(context, lit_comp);
+    main_view_ = lit_comp.id;
     views.push_back(std::move(lit_comp));
 
     auto top_comp = vortex::CompositionView::ForScene(top_view_id_,
@@ -1881,7 +1821,7 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
       && context.GetFrameSequenceNumber().get() >= 120U
       && context.GetFrameSequenceNumber().get() < 128U);
   if (!pip_only) {
-    shell.OnMainViewReady(context, main_comp);
+    main_view_ = main_comp.id;
   }
   const graphics::Color kMainClearColor { 0.1F, 0.2F, 0.38F, 1.0F };
   main_comp.clear_color = kMainClearColor;
@@ -1935,14 +1875,12 @@ auto MainModule::BuildComposition(oxygen::engine::FrameContext& context,
     pip_comp.opacity = 1.0F;
     pip_comp.force_wireframe = config_.pip_force_wireframe;
     if (pip_only) {
-      shell.OnMainViewReady(context, pip_comp);
+      main_view_ = pip_comp.id;
     }
 
     views.push_back(std::move(pip_comp));
   }
 }
-
-auto MainModule::ClearBackbufferReferences() -> void { }
 
 auto MainModule::RetainInactiveView(const ViewId view_id) const noexcept -> bool
 {

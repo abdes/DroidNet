@@ -7,14 +7,17 @@
 #include <filesystem>
 #include <memory>
 
+#include "DemoShell/PanelCommands.h"
 #include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/DiagnosticsPanel.h"
 #include "DemoShell/UI/DiagnosticsVm.h"
 #include <imgui.h>
 
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -105,22 +108,56 @@ NOLINT_TEST_F(DiagnosticsPanelTest, DrawContentsWithVortexRendererBound)
   RenderingSettingsService settings_service {};
   settings_service.BindVortexRenderer(observer_ptr { renderer.get() });
   ui::DiagnosticsVm vm { observer_ptr { &settings_service } };
-  ui::DiagnosticsPanel panel { observer_ptr { &vm } };
+  commands::CommandRegistry registry;
+  PanelCommands commands { observer_ptr { &registry }, nullptr };
+  ui::DiagnosticsPanel panel { observer_ptr { &vm },
+    observer_ptr { &commands } };
 
   EXPECT_EQ(panel.GetName(), "Diagnostics");
-
-  auto& io = ImGui::GetIO();
-  io.DisplaySize = ImVec2 { 1280.0F, 720.0F };
-  io.DeltaTime = 1.0F / 60.0F;
 
   ImGui::NewFrame();
   panel.DrawContents();
   ImGui::Render();
+}
 
-  EXPECT_EQ(
-    settings_service.GetDebugMode(), engine::ShaderDebugMode::kDisabled);
-  EXPECT_EQ(settings_service.GetEffectiveDebugMode(),
-    engine::ShaderDebugMode::kDisabled);
+//! The panel's controls are commands any caller can run.
+NOLINT_TEST_F(DiagnosticsPanelTest, CommandsChangeTheSettings)
+{
+  auto graphics = std::make_shared<FakeGraphics>();
+  graphics->CreateCommandQueues(oxygen::graphics::SingleQueueStrategy());
+  auto renderer = MakeRenderer(graphics);
+
+  RenderingSettingsService settings_service {};
+  settings_service.BindVortexRenderer(observer_ptr { renderer.get() });
+  ui::DiagnosticsVm vm { observer_ptr { &settings_service } };
+  commands::CommandRegistry registry;
+  PanelCommands commands { observer_ptr { &registry }, nullptr };
+  const ui::DiagnosticsPanel panel { observer_ptr { &vm },
+    observer_ptr { &commands } };
+
+  commands.RunBool("demo.diag.draw_bounds", true);
+  commands.RunColor("demo.diag.wire_color",
+    oxygen::graphics::Color { 0.25F, 0.5F, 0.75F, 1.0F });
+
+  EXPECT_TRUE(settings_service.GetGpuDebugPassEnabled());
+  EXPECT_FLOAT_EQ(renderer->GetWireframeColor().g, 0.5F);
+  ASSERT_NE(registry.Find("demo.diag.frame_diagnostics"), nullptr);
+  EXPECT_FALSE(registry.Find("demo.diag.frame_diagnostics")->label.empty());
+}
+
+//! Commands registered by a panel go away with its `PanelCommands`.
+NOLINT_TEST_F(DiagnosticsPanelTest, CommandsAreUnregisteredWithTheirOwner)
+{
+  RenderingSettingsService settings_service {};
+  ui::DiagnosticsVm vm { observer_ptr { &settings_service } };
+  commands::CommandRegistry registry;
+  {
+    PanelCommands commands { observer_ptr { &registry }, nullptr };
+    const ui::DiagnosticsPanel panel { observer_ptr { &vm },
+      observer_ptr { &commands } };
+    EXPECT_NE(registry.Find("demo.diag.draw_bounds"), nullptr);
+  }
+  EXPECT_EQ(registry.Find("demo.diag.draw_bounds"), nullptr);
 }
 
 } // namespace oxygen::examples::testing

@@ -4,10 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <mutex>
+
 #include "DemoShell/Services/GridSettingsService.h"
 #include "DemoShell/UI/GridVm.h"
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 
 namespace oxygen::examples::ui {
 
@@ -15,18 +19,6 @@ GridVm::GridVm(observer_ptr<GridSettingsService> service)
   : service_(service)
 {
   DCHECK_NOTNULL_F(service, "GridVm requires GridSettingsService");
-}
-
-auto GridVm::GetEnabled() -> bool
-{
-  Refresh();
-  return enabled_;
-}
-
-auto GridVm::SetEnabled(const bool enabled) -> void
-{
-  service_->SetEnabled(enabled);
-  enabled_ = enabled;
 }
 
 auto GridVm::GetGridSpacing() -> float
@@ -217,7 +209,6 @@ auto GridVm::Refresh() -> void
   }
 
   epoch_ = service_->GetEpoch();
-  enabled_ = service_->GetEnabled();
   spacing_ = service_->GetGridSpacing();
   major_every_ = service_->GetMajorEvery();
   line_thickness_ = service_->GetLineThickness();

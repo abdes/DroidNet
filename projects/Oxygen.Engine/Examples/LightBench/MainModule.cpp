@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Runtime/SceneActivationPolicy.h"
 #include "LightBench/LightBenchConsoleBindings.h"
 #include "LightBench/LightBenchPanel.h"
@@ -31,14 +30,15 @@
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/HostModule.h>
+#include <Oxygen/Host/HostWindow.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Vortex/CompositionView.h>
-#include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/Renderer.h>
-#include <Oxygen/Vortex/ShaderDebugMode.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
 
 namespace oxygen::examples::light_bench {
@@ -60,45 +60,30 @@ namespace {
 } // namespace
 
 MainModule::MainModule(
-  const DemoAppContext& app, LightBenchPreset startup_preset)
-  : Base(app)
+  const host::HostContext& host, LightBenchPreset startup_preset)
+  : Base(host)
   , active_preset_(startup_preset)
 {
-  DCHECK_NOTNULL_F(app_.platform);
-  DCHECK_F(!app_.gfx_weak.expired());
 }
 
 MainModule::~MainModule() = default;
 
-auto MainModule::BuildDefaultWindowProperties() const
-  -> platform::window::Properties
+auto MainModule::BuildWindowProperties() const -> platform::window::Properties
 {
-  platform::window::Properties p("Oxygen LightBench");
-  p.extent = { .width = kWindowWidth, .height = kWindowHeight };
-  p.flags = {
-    .hidden = false,
-    .always_on_top = false,
-    .full_screen = app_.fullscreen,
-    .maximized = false,
-    .minimized = false,
-    .resizable = true,
-    .borderless = false,
-  };
-  return p;
+  auto props = Base::BuildWindowProperties();
+  props.title = "Oxygen LightBench";
+  props.extent = { .width = kWindowWidth, .height = kWindowHeight };
+  return props;
 }
 
-auto MainModule::ClearBackbufferReferences() -> void { }
-
-auto MainModule::StageInitialScene(
-  DemoShell& shell, const LightBenchSettings& settings) -> void
+auto MainModule::StageInitialScene(const LightBenchSettings& settings) -> void
 {
-  shell.StageScene(light_scene_.CreateScene());
-  const auto staged_scene = shell.GetStagedScene();
-  CHECK_NOTNULL_F(staged_scene, "LightBench staged scene is null");
+  Stage().Stage(light_scene_.CreateScene());
+  const auto staged_scene = Stage().GetStagedScene();
 
   main_camera_ = LightScene::CreateReferenceCamera(*staged_scene);
   reference_width_ = reference_height_ = 0;
-  shell.SetStagedMainCamera(main_camera_);
+  Stage().SetStagedMainCamera(main_camera_);
 
   light_scene_.SetScene(staged_scene);
   ApplySettings(settings, light_scene_, main_camera_);
@@ -122,10 +107,8 @@ try {
   const auto demo_root
     = std::filesystem::path(std::source_location::current().file_name())
         .parent_path();
-  auto shell_config = DemoShellConfig {};
-  shell_config.engine = engine;
+  auto shell_config = MakeShellConfig();
   shell_config.enable_camera_rig = true;
-  shell_config.enable_renderer_bound_panels = false;
   shell_config.force_environment_override = false;
   shell_config.scene_activation_policy
     = SceneActivationPolicy::kExperimentOwned;
@@ -137,7 +120,6 @@ try {
     .content_loader = false,
     .camera_controls = true,
     .environment = false,
-    .lighting = false,
     .diagnostics = false,
     .post_process = true,
     .ground_grid = false,
@@ -148,30 +130,6 @@ try {
     return nullptr;
   }
 
-  light_bench_panel_ = std::make_shared<LightBenchPanel>(
-    observer_ptr { &light_scene_ },
-    LightBenchPanel::Actions {
-      .reset
-      = [this] -> void { pending_settings_ = PresetSettings(active_preset_); },
-      .select = [this](LightBenchPreset preset) -> void {
-        pending_settings_ = PresetSettings(preset);
-      },
-      .selected = [this] -> LightBenchPreset { return active_preset_; },
-      .is_reference = [this] -> bool {
-        return main_camera_.IsAlive()
-          && IsPresetSettings(CaptureCurrentSettings());
-      },
-      .save = [this](const auto& path) -> auto { return SaveSettings(path); },
-      .load = [this](const auto& path) -> auto { return LoadSettings(path); },
-    },
-    demo_root / "lightbench.saved.json");
-  if (!shell->RegisterPanel(light_bench_panel_)) {
-    LOG_F(WARNING, "LightBench: failed to register LightBench panel");
-  }
-  StageInitialScene(*shell, PresetSettings(active_preset_));
-  shell->SetActivePanel("LightBench");
-
-  main_view_id_ = GetOrCreateViewId("MainView");
   console_bindings_ = std::make_unique<LightBenchConsoleBindings>(
     engine->GetConsole(),
     LightBenchConsoleBindings::Actions {
@@ -189,6 +147,25 @@ try {
             && !IsPresetSettings(CaptureCurrentSettings()));
       },
     });
+  light_bench_panel_
+    = std::make_shared<LightBenchPanel>(observer_ptr { &light_scene_ },
+      LightBenchPanel::Actions {
+        .selected = [this] -> LightBenchPreset { return active_preset_; },
+        .is_reference = [this] -> bool {
+          return main_camera_.IsAlive()
+            && IsPresetSettings(CaptureCurrentSettings());
+        },
+        .save = [this](const auto& path) -> auto { return SaveSettings(path); },
+        .load = [this](const auto& path) -> auto { return LoadSettings(path); },
+      },
+      demo_root / "lightbench.saved.json", shell->GetPanelCommands());
+  if (!shell->RegisterPanel(light_bench_panel_)) {
+    LOG_F(WARNING, "LightBench: failed to register LightBench panel");
+  }
+  StageInitialScene(PresetSettings(active_preset_));
+  shell->SetActivePanel("LightBench");
+
+  main_view_id_ = Publisher().GetOrCreateViewId("MainView");
   LOG_F(INFO, "LightBench: MainView ID created: {}", main_view_id_.get());
   LOG_F(INFO, "LightBench: Module initialized");
   return shell;
@@ -246,57 +223,40 @@ auto MainModule::OnShutdown() noexcept -> void
 #endif
   console_bindings_.reset();
   ResetMainViewState();
-  auto& shell = GetShell();
-  shell.SetScene(nullptr);
+  Stage().Clear();
+  Base::OnShutdown();
   light_scene_.Reset();
   light_bench_panel_.reset();
-  Base::OnShutdown();
 }
 
 auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
   -> void
 {
   DCHECK_NOTNULL_F(context);
-  auto& shell = GetShell();
-
+  // A preset or loaded settings replace the scene; the host publishes it in
+  // the base frame start below.
   if (pending_settings_) {
-    StageInitialScene(shell, *pending_settings_);
+    StageInitialScene(*pending_settings_);
     pending_settings_.reset();
   }
-
-  if (shell.HasStagedScene()) {
-    CHECK_F(shell.PublishStagedScene(),
-      "expected staged scene before frame-start publish");
-    active_scene_ = shell.GetActiveScene();
-    auto published_camera = shell.TakePublishedMainCamera();
-    if (published_camera.IsAlive()) {
-      main_camera_ = std::move(published_camera);
-    }
-    light_scene_.SetScene(shell.TryGetScene());
-  }
-
-  shell.OnFrameStart(*context);
   Base::OnFrameStart(context);
+}
 
-  if (!HasRenderableWindow()) {
-    return;
+auto MainModule::OnScenePublished(engine::FrameContext& context) -> void
+{
+  Base::OnScenePublished(context);
+  active_scene_ = Stage().GetActiveScene();
+  auto published_camera = Stage().TakePublishedMainCamera();
+  if (published_camera.IsAlive()) {
+    main_camera_ = std::move(published_camera);
   }
-
-  if (const auto scene_ptr = shell.TryGetScene()) {
-    context->SetScene(scene_ptr);
-  }
+  light_scene_.SetScene(Stage().TryGetScene());
 }
 
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  DCHECK_NOTNULL_F(app_window_);
-  if (!app_window_->GetWindow()) {
-    DLOG_F(1, "OnSceneMutation: no valid window - skipping");
-    co_return;
-  }
-
-  if (!active_scene_.IsValid()) {
+  if (!HasRenderableWindow() || !active_scene_.IsValid()) {
     co_await Base::OnSceneMutation(context);
     co_return;
   }
@@ -305,10 +265,9 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   co_await Base::OnSceneMutation(context);
 }
 
-auto MainModule::UpdateComposition(engine::FrameContext& context,
-  std::vector<vortex::CompositionView>& views) -> void
+auto MainModule::BuildViews(
+  engine::FrameContext& context, host::HostViews& views) -> void
 {
-  auto& shell = GetShell();
   if (!main_camera_.IsAlive()) {
     ResetMainViewState(observer_ptr { &context });
     return;
@@ -320,7 +279,7 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
     main_view_state_handle_ = AllocateMainViewStateHandle();
     main_view_state_camera_ = main_camera_;
     if (pending_auto_seed_) {
-      if (auto renderer = ResolveVortexRenderer()) {
+      if (auto renderer = ResolveRenderer()) {
         const auto queued
           = renderer->QueueExposureTransition(main_view_state_handle_,
             vortex::ExposureTransitionPolicy::kSeedFromEv100,
@@ -333,8 +292,8 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
   }
 
   View view {};
-  if (app_window_ && app_window_->GetWindow()) {
-    const auto extent = app_window_->GetWindow()->Size();
+  if (Window() && Window()->GetWindow()) {
+    const auto extent = Window()->GetWindow()->Size();
     view.viewport = ViewPort {
       .top_left_x = 0.0F,
       .top_left_y = 0.0F,
@@ -365,11 +324,8 @@ auto MainModule::UpdateComposition(engine::FrameContext& context,
     = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
   main_comp.view_state_handle = main_view_state_handle_;
   main_comp.with_atmosphere = false;
-  main_comp.render_settings.render_mode = vortex::RenderMode::kSolid;
-  main_comp.render_settings.shader_debug_mode
-    = vortex::ShaderDebugMode::kDisabled;
-  shell.OnMainViewReady(context, main_comp);
-  views.push_back(std::move(main_comp));
+  views.views.push_back(std::move(main_comp));
+  views.main = main_view_id_;
 }
 
 auto MainModule::ResetMainViewState(
@@ -377,7 +333,7 @@ auto MainModule::ResetMainViewState(
 {
   if (main_view_state_handle_
     != vortex::CompositionView::kInvalidViewStateHandle) {
-    if (auto renderer = ResolveVortexRenderer()) {
+    if (auto renderer = ResolveRenderer()) {
       if (context) {
         renderer->RemovePublishedRuntimeView(*context, main_view_id_);
       } else {
@@ -389,56 +345,19 @@ auto MainModule::ResetMainViewState(
   main_view_state_camera_ = {};
 }
 
-auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
-{
-  auto& shell = GetShell();
-  shell.Update(context->GetGameDeltaTime());
-  co_return;
-}
-
 auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  DCHECK_NOTNULL_F(app_window_);
+  co_await Base::OnGuiUpdate(context);
   if (!active_scene_.IsValid() || !main_camera_.IsAlive()) {
     co_return;
   }
-
-  auto& shell = GetShell();
-  if (app_window_->IsShuttingDown()) {
-    DLOG_F(1, "OnGuiUpdate: window is closed/closing - skipping");
-    co_return;
-  }
-
-  shell.Draw(context);
   if (const auto imgui_module = ResolveImGuiModule();
     imgui_module && imgui_module->IsFrameActive() && light_bench_panel_) {
     ImGui::SetCurrentContext(imgui_module->GetImGuiContext());
-    light_bench_panel_->DrawPresetOverlay();
+    light_bench_panel_->DrawPresetOverlay(UiTopInset());
   }
   co_return;
-}
-
-auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
-{
-  DCHECK_NOTNULL_F(app_window_);
-  if (!app_window_->GetWindow()) {
-    DLOG_F(1, "OnPreRender: no valid window - skipping");
-    co_return;
-  }
-
-  co_await Base::OnPreRender(context);
-}
-
-auto MainModule::OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void
-{
-#ifdef OXYGEN_BUILD_UI_TESTS
-  Base::OnFrameEnd(context);
-#else
-  static_cast<void>(context);
-#endif
 }
 
 } // namespace oxygen::examples::light_bench

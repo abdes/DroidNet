@@ -55,26 +55,6 @@ namespace {
     return runtime::NormalizePath(path).string();
   }
 
-  auto IsPathUnderRoot(const std::filesystem::path& path,
-    const std::filesystem::path& root) -> bool
-  {
-    if (path.empty() || root.empty()) {
-      return false;
-    }
-
-    const auto normalized_path = runtime::NormalizePath(path);
-    const auto normalized_root = runtime::NormalizePath(root);
-
-    auto path_it = normalized_path.begin();
-    auto root_it = normalized_root.begin();
-    for (; root_it != normalized_root.end(); ++root_it, ++path_it) {
-      if (path_it == normalized_path.end() || *path_it != *root_it) {
-        return false;
-      }
-    }
-    return true;
-  }
-
 } // namespace
 
 auto ContentVm::MakeSceneEntryKey(const SceneEntry& entry) -> SceneEntryKey
@@ -97,7 +77,7 @@ auto ContentVm::RebuildSceneList(
     out.push_back(entry);
   }
 
-  std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) -> auto {
+  std::ranges::sort(out, [](const auto& a, const auto& b) -> auto {
     if (a.name != b.name) {
       return a.name < b.name;
     }
@@ -160,45 +140,7 @@ ContentVm::~ContentVm()
 
 auto ContentVm::Update() -> void
 {
-  // Handle File Browser results
-  if (file_browser_) {
-    if (browse_request_id_ != 0) {
-      const auto result = file_browser_->ConsumeResult(browse_request_id_);
-      if (result) {
-        if (result->kind == FileBrowserService::ResultKind::kSelected) {
-          LOG_F(INFO, "ContentVm: FileBrowser selection '{}' (mode={})",
-            result->path.string(), static_cast<int>(browse_mode_));
-          if (browse_mode_ == BrowseMode::kModelRoot) {
-            auto s = settings_->GetExplorerSettings();
-            s.model_root = result->path;
-            settings_->SetExplorerSettings(s);
-            RefreshSources();
-          } else if (browse_mode_ == BrowseMode::kSourceFile) {
-            StartImport(result->path);
-          } else if (browse_mode_ == BrowseMode::kPakFile) {
-            MountPak(result->path);
-          } else if (browse_mode_ == BrowseMode::kLibraryFile) {
-            if (result->path.filename().string().ends_with(".import.json")) {
-              LoadImportRecord(result->path);
-            } else {
-              LoadIndex(result->path);
-            }
-          } else {
-            LOG_F(
-              WARNING, "ContentVm: FileBrowser selection ignored (mode=None)");
-          }
-        } else if ((result->kind == FileBrowserService::ResultKind::kCanceled)
-          && (browse_mode_ != BrowseMode::kNone)) {
-          LOG_F(INFO, "ContentVm: FileBrowser closed without selection");
-        }
-
-        browse_mode_ = BrowseMode::kNone;
-        browse_request_id_ = 0;
-      }
-    }
-  }
-
-  // Auto-dismiss scene loading message after 10 seconds
+  // Dismiss the scene-load message five seconds after the load finished.
   if (import_state_.scene_load_finish_time) {
     auto now = std::chrono::steady_clock::now();
     if (std::chrono::duration_cast<std::chrono::seconds>(
@@ -218,7 +160,7 @@ auto ContentVm::Update() -> void
   std::optional<content::import::ImportReport> report;
   std::string completion_error;
   {
-    std::lock_guard lock(import_state_.completion_mutex);
+    std::scoped_lock lock(import_state_.completion_mutex);
     report = import_state_.completion_report;
     completion_error = import_state_.completion_error;
     import_state_.completion_report.reset();
@@ -267,7 +209,7 @@ auto ContentVm::Update() -> void
           .path = index_path,
         };
         {
-          std::lock_guard data_lock(data_mutex_);
+          std::scoped_lock data_lock(data_mutex_);
           if (report->retained_record_path
             && std::ranges::find(
                  loaded_import_records_, *report->retained_record_path)
@@ -306,9 +248,8 @@ auto ContentVm::Update() -> void
 
         // Notify engine about the new index so it can be mounted for loading
         {
-          std::lock_guard data_lock(data_mutex_);
-          if (std::find(
-                loaded_indices_.begin(), loaded_indices_.end(), index_path)
+          std::scoped_lock data_lock(data_mutex_);
+          if (std::ranges::find(loaded_indices_, index_path)
             == loaded_indices_.end()) {
             loaded_indices_.push_back(index_path);
           }
@@ -424,7 +365,7 @@ auto ContentVm::BrowseForModelRoot() -> void
     config.initial_directory = s.model_root;
   }
   browse_request_id_ = file_browser_->Open(config);
-  browse_mode_ = BrowseMode::kModelRoot;
+  browse_target_ = BrowseTarget::kModelRoot;
 }
 
 auto ContentVm::BrowseForSourceFile() -> void
@@ -438,7 +379,7 @@ auto ContentVm::BrowseForSourceFile() -> void
     config.initial_directory = s.model_root;
   }
   browse_request_id_ = file_browser_->Open(config);
-  browse_mode_ = BrowseMode::kSourceFile;
+  browse_target_ = BrowseTarget::kSourceFile;
 }
 
 auto ContentVm::IsImportInProgress() const -> bool
@@ -452,13 +393,13 @@ auto ContentVm::GetActiveImportPath() const -> std::string
 
 auto ContentVm::GetActiveImportProgress() const -> float
 {
-  std::lock_guard lock(import_state_.progress_mutex);
+  std::scoped_lock lock(import_state_.progress_mutex);
   return import_state_.progress.header.overall_progress;
 }
 
 auto ContentVm::GetActiveImportMessage() const -> std::string
 {
-  std::lock_guard lock(import_state_.progress_mutex);
+  std::scoped_lock lock(import_state_.progress_mutex);
   return import_state_.progress.header.message;
 }
 
@@ -498,20 +439,20 @@ auto ContentVm::RefreshSources() -> void
       const auto ext = entry.path().extension().string();
       if (s.include_fbx && ext == ".fbx") {
         sources.push_back({
-          base::ToLogicalPath(entry.path()),
-          content::import::ImportFormat::kFbx,
+          .path = base::ToLogicalPath(entry.path()),
+          .format = content::import::ImportFormat::kFbx,
         });
         DLOG_F(INFO, "ContentVm: Found FBX: {}", entry.path().string());
       } else if (s.include_glb && ext == ".glb") {
         sources.push_back({
-          base::ToLogicalPath(entry.path()),
-          content::import::ImportFormat::kGltf,
+          .path = base::ToLogicalPath(entry.path()),
+          .format = content::import::ImportFormat::kGltf,
         });
         DLOG_F(INFO, "ContentVm: Found GLB: {}", entry.path().string());
       } else if (s.include_gltf && ext == ".gltf") {
         sources.push_back({
-          base::ToLogicalPath(entry.path()),
-          content::import::ImportFormat::kGltf,
+          .path = base::ToLogicalPath(entry.path()),
+          .format = content::import::ImportFormat::kGltf,
         });
         DLOG_F(INFO, "ContentVm: Found GLTF: {}", entry.path().string());
       }
@@ -523,7 +464,7 @@ auto ContentVm::RefreshSources() -> void
       INFO, "ContentVm: Discovery complete. Found {} sources.", sources.size());
   }
 
-  std::lock_guard lock(data_mutex_);
+  std::scoped_lock lock(data_mutex_);
   cached_sources_ = std::move(sources);
 }
 
@@ -595,7 +536,7 @@ auto ContentVm::RefreshLibrary() -> void
   }
 
   {
-    std::lock_guard lock(data_mutex_);
+    std::scoped_lock lock(data_mutex_);
     discovered_paks_ = std::move(paks);
     loaded_paks_ = std::move(runtime_loaded_paks);
     loaded_indices_ = std::move(runtime_loaded_indices);
@@ -749,7 +690,7 @@ auto ContentVm::LoadImportRecord(const std::filesystem::path& path) -> void
 auto ContentVm::UnloadAllLibrary() -> void
 {
   {
-    std::lock_guard lock(data_mutex_);
+    std::scoped_lock lock(data_mutex_);
     loaded_paks_.clear();
     loaded_indices_.clear();
     loaded_import_records_.clear();
@@ -896,7 +837,7 @@ auto ContentVm::BrowseForPak() -> void
   }
   auto config = MakePakFileBrowserConfig(file_browser_->GetContentRoots());
   browse_request_id_ = file_browser_->Open(config);
-  browse_mode_ = BrowseMode::kPakFile;
+  browse_target_ = BrowseTarget::kPakFile;
 }
 
 auto ContentVm::BrowseForLibrary() -> void
@@ -906,7 +847,7 @@ auto ContentVm::BrowseForLibrary() -> void
   }
   auto config = MakeLibraryBrowserConfig(file_browser_->GetContentRoots());
   browse_request_id_ = file_browser_->Open(config);
-  browse_mode_ = BrowseMode::kLibraryFile;
+  browse_target_ = BrowseTarget::kLibraryFile;
 }
 
 auto ContentVm::GetAvailableScenes() const -> const std::vector<SceneEntry>&
@@ -924,7 +865,7 @@ auto ContentVm::RequestSceneLoad(const SceneEntry& entry) -> void
     PersistActiveSceneSelection(entry);
     const auto scene_name = entry.name;
     {
-      std::lock_guard lock(import_state_.progress_mutex);
+      std::scoped_lock lock(import_state_.progress_mutex);
       import_state_.is_scene_loading = true;
       import_state_.scene_load_progress = 0.0F;
       import_state_.scene_load_message = "Loading scene: " + scene_name;
@@ -964,12 +905,12 @@ auto ContentVm::PersistMountedSources() -> void
       }
     }
     {
-      std::lock_guard lock(data_mutex_);
+      std::scoped_lock lock(data_mutex_);
       loaded_paks_ = paks;
-      loaded_indices_ = all_indices;
+      loaded_indices_ = std::move(all_indices);
     }
   } else {
-    std::lock_guard lock(data_mutex_);
+    std::scoped_lock lock(data_mutex_);
     paks = loaded_paks_;
     indices = loaded_indices_;
   }
@@ -1059,7 +1000,7 @@ auto ContentVm::TryResolvePendingSceneSelection() -> void
 
   std::optional<SceneEntry> match;
   {
-    std::lock_guard lock(data_mutex_);
+    std::scoped_lock lock(data_mutex_);
     for (const auto& scene : available_scenes_) {
       if (scene.source.kind != desired_kind) {
         continue;
@@ -1098,7 +1039,7 @@ auto ContentVm::GetSceneLoadProgress() const -> float
 }
 auto ContentVm::GetSceneLoadMessage() const -> std::string
 {
-  std::lock_guard lock(import_state_.progress_mutex);
+  std::scoped_lock lock(import_state_.progress_mutex);
   return import_state_.scene_load_message;
 }
 auto ContentVm::ShouldShowSceneLoadProgress() const -> bool
@@ -1120,14 +1061,14 @@ auto ContentVm::CancelSceneLoad() -> void
   std::optional<data::AssetKey> scene_key;
   std::string scene_label;
   {
-    std::lock_guard lock(import_state_.progress_mutex);
+    std::scoped_lock lock(import_state_.progress_mutex);
     scene_key = import_state_.scene_load_key;
     scene_label = import_state_.scene_load_label;
   }
   const auto scene_name
     = scene_label.empty() ? ResolveSceneLabel(scene_key) : scene_label;
   {
-    std::lock_guard lock(import_state_.progress_mutex);
+    std::scoped_lock lock(import_state_.progress_mutex);
     import_state_.is_scene_loading = false;
     import_state_.scene_load_progress = 1.0F;
     import_state_.scene_load_message = "Cancelled scene load: " + scene_name;
@@ -1148,7 +1089,7 @@ auto ContentVm::NotifySceneLoadCompleted(
   std::optional<data::AssetKey> active_key;
   std::string scene_label;
   {
-    std::lock_guard lock(import_state_.progress_mutex);
+    std::scoped_lock lock(import_state_.progress_mutex);
     active_key = import_state_.scene_load_key;
     scene_label = import_state_.scene_load_label;
   }
@@ -1160,7 +1101,7 @@ auto ContentVm::NotifySceneLoadCompleted(
   const auto scene_name
     = scene_label.empty() ? ResolveSceneLabel(key) : scene_label;
   {
-    std::lock_guard lock(import_state_.progress_mutex);
+    std::scoped_lock lock(import_state_.progress_mutex);
     import_state_.is_scene_loading = false;
     import_state_.scene_load_progress = 1.0F;
     import_state_.scene_load_message = success
@@ -1264,34 +1205,56 @@ auto ContentVm::AddDiagnosticMarker(const std::string& label, bool is_start)
   diag.code = is_start ? "marker.start" : "marker.end";
   diag.message = "--- " + label + " ---";
 
-  std::lock_guard lock(import_state_.progress_mutex);
+  std::scoped_lock lock(import_state_.progress_mutex);
   import_state_.diagnostics.push_back(std::move(diag));
 }
 
 auto ContentVm::GetDiagnostics() const
   -> const std::vector<content::import::ImportDiagnostic>&
 {
-  std::lock_guard lock(import_state_.progress_mutex);
+  std::scoped_lock lock(import_state_.progress_mutex);
   return import_state_.diagnostics;
 }
 
 auto ContentVm::ClearDiagnostics() -> void
 {
-  std::lock_guard lock(import_state_.progress_mutex);
+  std::scoped_lock lock(import_state_.progress_mutex);
   import_state_.diagnostics.clear();
 }
 
-auto ContentVm::ForceTrimCaches() -> void
+auto ContentVm::ConsumeBrowseSelection() -> std::optional<BrowseSelection>
 {
-  LOG_F(INFO, "ContentVm: Force trimming asset cache.");
-  if (on_force_trim_) {
-    on_force_trim_();
+  if (!file_browser_ || browse_request_id_ == 0 || !browse_target_) {
+    return std::nullopt;
   }
+  const auto result = file_browser_->ConsumeResult(browse_request_id_);
+  if (!result) {
+    return std::nullopt;
+  }
+  const auto target = *browse_target_;
+  browse_target_.reset();
+  browse_request_id_ = 0;
+  if (result->kind != FileBrowserService::ResultKind::kSelected) {
+    return std::nullopt;
+  }
+  return BrowseSelection { .target = target, .path = result->path };
 }
 
-auto ContentVm::SetOnForceTrim(std::function<void()> callback) -> void
+auto ContentVm::SetModelRoot(const std::filesystem::path& root) -> void
 {
-  on_force_trim_ = std::move(callback);
+  auto explorer = settings_->GetExplorerSettings();
+  explorer.model_root = root;
+  settings_->SetExplorerSettings(explorer);
+  RefreshSources();
+}
+
+auto ContentVm::LoadLibrary(const std::filesystem::path& path) -> void
+{
+  if (path.filename().string().ends_with(".import.json")) {
+    LoadImportRecord(path);
+  } else {
+    LoadIndex(path);
+  }
 }
 
 auto ContentVm::OnImportComplete(content::import::ImportJobId job_id,
@@ -1303,7 +1266,7 @@ auto ContentVm::OnImportComplete(content::import::ImportJobId job_id,
 
   LOG_F(INFO, "ContentVm: OnImportComplete for job {}", job_id.get());
   {
-    std::lock_guard lock(import_state_.completion_mutex);
+    std::scoped_lock lock(import_state_.completion_mutex);
     import_state_.completion_report = report;
   }
   import_state_.completion_ready.store(true);
@@ -1312,7 +1275,7 @@ auto ContentVm::OnImportComplete(content::import::ImportJobId job_id,
 auto ContentVm::OnImportProgress(const content::import::ProgressEvent& progress)
   -> void
 {
-  std::lock_guard lock(import_state_.progress_mutex);
+  std::scoped_lock lock(import_state_.progress_mutex);
   import_state_.progress = progress;
   if (!progress.header.new_diagnostics.empty()) {
     import_state_.diagnostics.insert(import_state_.diagnostics.end(),
@@ -1334,7 +1297,7 @@ auto ContentVm::ResolveSceneLabel(
   }
 
   {
-    std::lock_guard lock(data_mutex_);
+    std::scoped_lock lock(data_mutex_);
     for (const auto& [entry_key, entry] : scenes_map_) {
       if (entry_key.key == *key) {
         return entry.name;

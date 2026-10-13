@@ -6,14 +6,25 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <functional>
+#include <optional>
+#include <system_error>
+#include <utility>
 
 #include "DemoShell/Services/FileBrowserService.h"
+#include "TexturedCube/SceneSetup.h"
+#include "TexturedCube/TextureLoadingService.h"
 #include "TexturedCube/UI/MaterialsSandboxVm.h"
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 
 namespace oxygen::examples::textured_cube::ui {
@@ -34,8 +45,7 @@ MaterialsSandboxVm::MaterialsSandboxVm(
       const auto path_str = roots.cooked_root.string();
       // Ensure null termination and size fit
       if (path_str.size() < import_state_.cooked_root.size()) {
-        std::copy(
-          path_str.begin(), path_str.end(), import_state_.cooked_root.begin());
+        std::ranges::copy(path_str, import_state_.cooked_root.begin());
         import_state_.cooked_root[path_str.size()] = '\0';
       }
     }
@@ -53,8 +63,7 @@ MaterialsSandboxVm::MaterialsSandboxVm(
 
       const auto path_str = source_dir.string();
       if (path_str.size() < import_state_.source_path.size()) {
-        std::copy(
-          path_str.begin(), path_str.end(), import_state_.source_path.begin());
+        std::ranges::copy(path_str, import_state_.source_path.begin());
         import_state_.source_path[path_str.size()] = '\0';
       }
     }
@@ -63,7 +72,7 @@ MaterialsSandboxVm::MaterialsSandboxVm(
 
 MaterialsSandboxVm::~MaterialsSandboxVm() = default;
 
-void MaterialsSandboxVm::StartImportFlow()
+auto MaterialsSandboxVm::StartImportFlow() -> void
 {
   // 1. Reset State
   import_state_.status_message.clear();
@@ -80,22 +89,22 @@ void MaterialsSandboxVm::StartImportFlow()
   BrowseForSourcePath();
 }
 
-void MaterialsSandboxVm::CancelImport()
+auto MaterialsSandboxVm::CancelImport() -> void
 {
   import_state_.workflow_state = ImportState::WorkflowState::Idle;
   import_state_.status_message.clear();
   import_state_.progress = 0.0F;
 }
 
-void MaterialsSandboxVm::OnFileSelected(const std::filesystem::path& path)
+auto MaterialsSandboxVm::OnFileSelected(const std::filesystem::path& path)
+  -> void
 {
   if (browse_mode_ == BrowseMode::kSourcePath) {
     // Called when browser returns a file
     std::string path_str = path.string();
     size_t len
       = std::min(path_str.size(), import_state_.source_path.size() - 1);
-    std::copy(
-      path_str.begin(), path_str.end(), import_state_.source_path.begin());
+    std::copy_n(path_str.begin(), len, import_state_.source_path.begin());
     import_state_.source_path[len] = '\0';
 
     // Auto-configure
@@ -107,23 +116,22 @@ void MaterialsSandboxVm::OnFileSelected(const std::filesystem::path& path)
     std::string path_str = path.string();
     size_t len
       = std::min(path_str.size(), import_state_.cooked_root.size() - 1);
-    std::copy(
-      path_str.begin(), path_str.end(), import_state_.cooked_root.begin());
+    std::copy_n(path_str.begin(), len, import_state_.cooked_root.begin());
     import_state_.cooked_root[len] = '\0';
   }
 }
 
-void MaterialsSandboxVm::UpdateImportSettingsFromUsage()
+auto MaterialsSandboxVm::UpdateImportSettingsFromUsage() -> void
 {
   std::string source_path = import_state_.source_path.data();
   std::filesystem::path path(source_path);
   std::string ext = path.extension().string();
   // ToLower
-  std::transform(ext.begin(), ext.end(), ext.begin(),
-    [](unsigned char c) { return std::tolower(c); });
+  std::ranges::transform(
+    ext, ext.begin(), [](unsigned char c) { return std::tolower(c); });
 
   std::string filename = path.filename().string();
-  std::transform(filename.begin(), filename.end(), filename.begin(),
+  std::ranges::transform(filename, filename.begin(),
     [](unsigned char c) { return std::tolower(c); });
 
   auto effective_usage = import_state_.usage;
@@ -132,55 +140,33 @@ void MaterialsSandboxVm::UpdateImportSettingsFromUsage()
   if (effective_usage == ImportState::Usage::kAuto) {
     if (ext == ".hdr" || ext == ".exr") {
       effective_usage = ImportState::Usage::kHdrEnvironment;
-    } else if (filename.find("_normal") != std::string::npos) {
+    } else if (filename.contains("_normal")) {
       effective_usage = ImportState::Usage::kNormal;
-    } else if (filename.find("_ui") != std::string::npos) {
+    } else if (filename.contains("_ui")) {
       effective_usage = ImportState::Usage::kUi;
     } else {
       effective_usage = ImportState::Usage::kAlbedo;
     }
   }
 
-  // 2. Apply Defaults
-  // Common defaults
   import_state_.generate_mips = true;
   import_state_.max_mip_levels = 0; // All
   import_state_.flip_y = false;
-  import_state_.force_rgba = true; // Usually safer
+  import_state_.force_rgba = true;
 
-  // Usage specific
+  // Output formats index TextureLoadingService's list: RGBA8 sRGB, BC7 sRGB,
+  // RGBA16F, RGBA32F.
   switch (effective_usage) {
   case ImportState::Usage::kHdrEnvironment:
     import_state_.import_kind = 2; // Skybox (Layout)
     import_state_.layout_idx = 5; // Equirectangular
-    // HDR usually F32 or F16. Compressed BC6H is an option but we stick to
-    // float for quality default
-    import_state_.output_format_idx = 2; // RGBA16F (assume index 2)
-    // If compressed? Maybe BC6H if we added it, but for now RGBA16F is safe.
+    import_state_.output_format_idx = 2; // RGBA16F
     break;
 
   case ImportState::Usage::kNormal:
+    // The list has no linear 8-bit or BC5 format; normals need linear data.
     import_state_.import_kind = 0; // Texture 2D
-    // Normal maps need linear (UNORM), not SRGB.
-    // If compressed: BC5 (not in list? We have BC7 SRGB, RGBA8 SRGB...)
-    // The list in panel was: "RGBA8 SRGB", "BC7 SRGB", "RGBA16F", "RGBA32F"
-    // Wait, standard list misses linear formats?
-    // TextureLoadingService::FormatFromIndex:
-    // 0: RGBA8_SRGB, 1: BC7_SRGB, 2: RGBA16F, 3: RGBA32F.
-    // We need UNORM/Linear for Normals.
-    // This implies the current UI/Service is limited.
-    // For now, allow what is there. RGBA8_SRGB is bad for normals.
-    // We might need to stick to RGBA16F (Linear) for normals if we lack UNORM
-    // 8-bit? checking TextureLoadingService.cpp... It seems the service is
-    // hardcoded for that list. We should use RGBA16F for normals to be
-    // safe/linear if no UNORM. Or maybe I should add options. But for now, use
-    // RGBA16F.
-    if (import_state_.compress) {
-      // We don't have BC5 support exposed in this simple list.
-      import_state_.output_format_idx = 2; // RGBA16F (Linear)
-    } else {
-      import_state_.output_format_idx = 2; // RGBA16F (Linear)
-    }
+    import_state_.output_format_idx = 2; // RGBA16F
     break;
 
   case ImportState::Usage::kUi:
@@ -201,7 +187,7 @@ void MaterialsSandboxVm::UpdateImportSettingsFromUsage()
   }
 }
 
-void MaterialsSandboxVm::RequestImport()
+auto MaterialsSandboxVm::RequestImport() -> void
 {
   if (!texture_service_) {
     return;
@@ -232,22 +218,16 @@ void MaterialsSandboxVm::RequestImport()
   }
 }
 
-void MaterialsSandboxVm::RequestRefresh() { refresh_requested_ = true; }
+auto MaterialsSandboxVm::RequestRefresh() -> void { refresh_requested_ = true; }
 
-void MaterialsSandboxVm::BrowseForSourcePath()
+auto MaterialsSandboxVm::BrowseForSourcePath() -> void
 {
   if (file_browser_) {
-    // Use a generic file browser config for now, or imagine a helper
-    // Since we don't have MakeGenericFileBrowserConfig, let's construct one
-    // manually or use MakeModelFileBrowserConfig but that filters for models.
-    // We probably want images.
-    // Let's check FileBrowserService.h... implies we can make config.
-
     FileBrowserConfig config;
     config.title = "Select Source Texture";
     // config.initial_directory = ...
-    config.filters.push_back(
-      { "Image Files", { ".png", ".jpg", ".tga", ".bmp", ".hdr", ".exr" } });
+    config.filters.push_back({ .description = "Image Files",
+      .extensions = { ".png", ".jpg", ".tga", ".bmp", ".hdr", ".exr" } });
 
     if (import_state_.source_path[0] != '\0') {
       config.initial_directory
@@ -259,7 +239,7 @@ void MaterialsSandboxVm::BrowseForSourcePath()
   }
 }
 
-void MaterialsSandboxVm::BrowseForCookedRoot()
+auto MaterialsSandboxVm::BrowseForCookedRoot() -> void
 {
   if (file_browser_) {
     FileBrowserConfig config;
@@ -274,8 +254,8 @@ void MaterialsSandboxVm::BrowseForCookedRoot()
   }
 }
 
-bool MaterialsSandboxVm::SelectTextureForSlot(
-  uint32_t entry_index, bool is_sphere)
+auto MaterialsSandboxVm::SelectTextureForSlot(
+  uint32_t entry_index, bool is_sphere) -> bool
 {
   if (!texture_service_) {
     return false;
@@ -286,7 +266,8 @@ bool MaterialsSandboxVm::SelectTextureForSlot(
   import_state_.progress = 0.0F;
 
   texture_service_->StartLoadCookedTexture(entry_index,
-    [this, entry_index, is_sphere](TextureLoadingService::LoadResult result) {
+    [this, entry_index, is_sphere](
+      const TextureLoadingService::LoadResult& result) {
       import_state_.status_message = result.status_message;
       // import_state_.in_flight = false;
 
@@ -312,14 +293,14 @@ bool MaterialsSandboxVm::SelectTextureForSlot(
   return true;
 }
 
-void MaterialsSandboxVm::SetOnSkyboxSelected(
-  std::function<void(oxygen::content::ResourceKey)> callback)
+auto MaterialsSandboxVm::SetOnSkyboxSelected(
+  std::function<void(oxygen::content::ResourceKey)> callback) -> void
 {
   on_skybox_selected_ = std::move(callback);
 }
 
-bool MaterialsSandboxVm::SelectSkybox(uint32_t entry_index,
-  std::function<void(oxygen::content::ResourceKey)> on_loaded)
+auto MaterialsSandboxVm::SelectSkybox(uint32_t entry_index,
+  std::function<void(oxygen::content::ResourceKey)> on_loaded) -> bool
 {
 
   import_state_.status_message = "Loading skybox...";
@@ -341,8 +322,9 @@ bool MaterialsSandboxVm::SelectSkybox(uint32_t entry_index,
 
   import_state_.progress = 0.0F;
 
-  texture_service_->StartLoadCookedTexture(
-    entry_index, [this, on_loaded](TextureLoadingService::LoadResult result) {
+  texture_service_->StartLoadCookedTexture(entry_index,
+    [this, on_loaded = std::move(on_loaded)](
+      const TextureLoadingService::LoadResult& result) {
       if (result.success) {
         if (on_loaded) {
           on_loaded(result.resource_key);
@@ -360,7 +342,7 @@ bool MaterialsSandboxVm::SelectSkybox(uint32_t entry_index,
   return true;
 }
 
-void MaterialsSandboxVm::SetUseCustomMaterial(const bool enabled)
+auto MaterialsSandboxVm::SetUseCustomMaterial(const bool enabled) -> void
 {
   if (use_custom_material_ == enabled) {
     return;
@@ -375,7 +357,7 @@ auto MaterialsSandboxVm::GetSelectedCustomMaterialKey() const
   return selected_custom_material_key_;
 }
 
-void MaterialsSandboxVm::ClearSelectedCustomMaterial()
+auto MaterialsSandboxVm::ClearSelectedCustomMaterial() -> void
 {
   if (!selected_custom_material_key_.has_value()) {
     return;
@@ -384,8 +366,8 @@ void MaterialsSandboxVm::ClearSelectedCustomMaterial()
   cube_needs_rebuild_ = true;
 }
 
-bool MaterialsSandboxVm::SelectCustomMaterialByEntryIndex(
-  const std::size_t entry_index)
+auto MaterialsSandboxVm::SelectCustomMaterialByEntryIndex(
+  const std::size_t entry_index) -> bool
 {
   if (entry_index >= cooked_material_entries_.size()) {
     return false;
@@ -402,7 +384,7 @@ bool MaterialsSandboxVm::SelectCustomMaterialByEntryIndex(
   return true;
 }
 
-void MaterialsSandboxVm::Update()
+auto MaterialsSandboxVm::Update() -> void
 {
   if (!texture_service_) {
     return;
@@ -477,7 +459,7 @@ void MaterialsSandboxVm::Update()
   }
 }
 
-void MaterialsSandboxVm::UpdateImportStatus()
+auto MaterialsSandboxVm::UpdateImportStatus() -> void
 {
   const auto status = texture_service_->GetImportStatus();
   if (!status.message.empty()) {
@@ -487,7 +469,7 @@ void MaterialsSandboxVm::UpdateImportStatus()
   }
 }
 
-void MaterialsSandboxVm::HandleRefresh()
+auto MaterialsSandboxVm::HandleRefresh() -> void
 {
   const auto root_path
     = std::filesystem::path(import_state_.cooked_root.data());
@@ -508,7 +490,7 @@ void MaterialsSandboxVm::HandleRefresh()
   import_state_.progress = 0.0F;
 }
 
-void MaterialsSandboxVm::UpdateCookedEntries()
+auto MaterialsSandboxVm::UpdateCookedEntries() -> void
 {
   if (!texture_service_) {
     return;
@@ -546,8 +528,8 @@ void MaterialsSandboxVm::UpdateCookedEntries()
     cooked_entries_.size());
 }
 
-void MaterialsSandboxVm::UpdateCookedMaterialEntries(
-  const std::filesystem::path& cooked_root)
+auto MaterialsSandboxVm::UpdateCookedMaterialEntries(
+  const std::filesystem::path& cooked_root) -> void
 {
   cooked_material_entries_.clear();
   bool selection_cleared = false;
@@ -580,7 +562,7 @@ void MaterialsSandboxVm::UpdateCookedMaterialEntries(
       });
     }
 
-    std::sort(cooked_material_entries_.begin(), cooked_material_entries_.end(),
+    std::ranges::sort(cooked_material_entries_,
       [](const CookedMaterialEntry& lhs, const CookedMaterialEntry& rhs) {
         if (lhs.virtual_path == rhs.virtual_path) {
           return lhs.descriptor_relpath < rhs.descriptor_relpath;
@@ -589,8 +571,7 @@ void MaterialsSandboxVm::UpdateCookedMaterialEntries(
       });
 
     if (selected_custom_material_key_.has_value()) {
-      const auto it = std::find_if(cooked_material_entries_.begin(),
-        cooked_material_entries_.end(),
+      const auto it = std::ranges::find_if(cooked_material_entries_,
         [selected = selected_custom_material_key_.value()](
           const CookedMaterialEntry& entry) { return entry.key == selected; });
       if (it == cooked_material_entries_.end()) {
@@ -625,53 +606,6 @@ auto MaterialsSandboxVm::GetMetadataJson(uint32_t entry_index) const
   return entry == cooked_entries_.end()
     ? std::string {}
     : texture_service_->GetTextureMetadataJson(entry->content_hash);
-}
-
-std::pair<glm::vec2, glm::vec2>
-MaterialsSandboxVm::GetEffectiveUvTransform() const
-{
-  glm::vec2 scale = uv_state_.scale;
-  glm::vec2 offset = uv_state_.offset;
-
-  // 1. Flip Scale based on UvOrigin
-  // If the user selects TopLeft UV origin, we flip V so that (0,0) is top-left
-  // in the UV space, but this depends on how the shader consumes it.
-  // Standard OpenGL/Vulkan/D3D conventions usually have (0,0) at TopLeft or
-  // BottomLeft.
-  // Oxygen Engine shaders typically assume (0,0) is TopLeft for Texture
-  // Coordinates (DirectX style) but it might vary. The original DebugUI code
-  // had this logic:
-
-  if (uv_state_.uv_origin == UvOrigin::kBottomLeft) {
-    scale.y *= -1.0F;
-    offset.y += 1.0F; // Shift to keep in [0,1] range roughly
-  }
-
-  // 2. Extra Flips
-  if (uv_state_.extra_flip_u) {
-    scale.x *= -1.0F;
-    offset.x = 1.0F - offset.x; // Pivot around center? Or just simple flip?
-    // Simple flip usually means u' = (1-u) or u' = -u + 1.
-    // With scale/offset: u' = (u * -s) + (o + 1)?
-    // Let's stick to simple scale flip for now, user can adjust offset.
-  }
-  if (uv_state_.extra_flip_v) {
-    scale.y *= -1.0F;
-    // offset adjustment usually needed to bring back to visible range
-  }
-
-  // NOTE: This logic mimics the original DebugUI.cpp implementation logic which
-  // I Should have double checked. Let's assume standard behavior or verifying
-  // against the original code if strictly needed.
-  //
-  // Looking at the original DebugUI.cpp (I assume I saw it or similar logic).
-  // Actually, I didn't see DebugUI.cpp, only DebugUI.h.
-  // But avoiding regressions is key.
-  //
-  // Let's keep it simple: pass raw scale/offset unless we are sure.
-  // The structure matches `DebugUI.h` structs.
-
-  return { scale, offset };
 }
 
 } // namespace oxygen::examples::textured_cube::ui

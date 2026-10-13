@@ -13,7 +13,6 @@
 #include "Async/AsyncShowcase.h"
 #include "Async/MainModule.h"
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/CameraControlPanel.h"
 #include "DemoShell/UI/CameraRigController.h"
@@ -73,8 +72,8 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     camera->get().SetFieldOfView(original_fov);
 
     const auto scene = app.GetShell().TryGetScene();
-    const auto renderer = app.ResolveVortexRenderer();
-    const auto graphics = app.app_.gfx_weak.lock();
+    const auto renderer = app.ResolveRenderer();
+    const auto graphics = app.Host().gfx_weak.lock();
     IM_CHECK(scene && renderer && graphics);
     auto post = scene->GetEnvironment()
                   ->TryGetSystem<scene::environment::PostProcessVolume>();
@@ -240,7 +239,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     }
     IM_CHECK(app.showcase_);
     app.showcase_->Play();
-    const auto graphics = app.app_.gfx_weak.lock();
+    const auto graphics = app.Host().gfx_weak.lock();
     IM_CHECK(graphics);
     const auto capture = graphics->GetFrameCaptureController();
     constexpr std::array kCaptureProgress { 0.15F, 0.5F, 0.85F };

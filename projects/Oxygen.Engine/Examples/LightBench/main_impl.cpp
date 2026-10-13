@@ -5,373 +5,92 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <cstdint>
-#include <cstdlib>
-#include <exception>
-#include <filesystem>
-#include <functional>
 #include <memory>
-#include <optional>
-#include <source_location>
 #include <span>
 #include <stdexcept>
 #include <string>
-#include <thread>
-#include <utility>
-#include <vector>
 
-#include "Common/DemoCli.h"
-#include "Common/FrameCaptureCli.h"
-#include "Common/FrameCaptureCliOptions.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/DemoMain.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "LightBench/LightBenchSettings.h"
 #include "LightBench/MainModule.h"
 
-#include <Oxygen/Config/EngineConfig.h>
-#include <Oxygen/Config/PathFinderConfig.h>
-#include <Oxygen/Config/PlatformConfig.h>
-#include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Console/StartupPlan.h>
-#include <Oxygen/Graphics/Common/Types/QueueRole.h>
-#ifdef OXYGEN_BUILD_UI_TESTS
-#  include "DemoShell/test/UiTestSession.h"
-#endif
-
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Clap/Cli.h>
-#include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Graphics/Common/BackendModule.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/ImGui/ImGuiModule.h>
-#include <Oxygen/Input/InputSystem.h>
-#include <Oxygen/Loader/GraphicsBackendLoader.h>
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/EventLoop.h>
-#include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/RunHost.h>
 #include <Oxygen/SceneSync/SceneObserverSyncModule.h>
 #include <Oxygen/Vortex/Renderer.h>
-#include <Oxygen/Vortex/RendererCapability.h>
 
-namespace co = oxygen::co;
-namespace engine = oxygen::engine;
+#ifdef OXYGEN_BUILD_UI_TESTS
+#  include "DemoShell/test/UiTestSession.h"
+#endif
 
-using oxygen::AsyncEngine;
-using oxygen::EngineConfig;
-using oxygen::Graphics;
-using oxygen::GraphicsBackendLoader;
-using oxygen::GraphicsConfig;
-using oxygen::observer_ptr;
-using oxygen::PathFinderConfig;
-using oxygen::Platform;
-using oxygen::PlatformConfig;
-using oxygen::examples::SettingsService;
-using oxygen::graphics::BackendType;
-using oxygen::graphics::QueueRole;
-using namespace std::chrono_literals;
-
-namespace {
-
-//! Event loop tick: drives the engine's asio context (if supplied) and
-//! applies frame pacing + cooperative sleep when idle to avoid busy spinning.
-auto EventLoopRun(const oxygen::examples::DemoAppContext& app) -> void
-{
-  while (app.running.load(std::memory_order_relaxed)) {
-
-    app.platform->Async().PollOne();
-    if (!app.headless) {
-      // Input Events (only if not headless platform)
-      app.platform->Events().PollOne();
-    }
-
-    if (!app.running.load(std::memory_order_relaxed)) {
-      // Additional gentle backoff before running starts.
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-  }
-}
-} // namespace
-
-template <> struct co::EventLoopTraits<oxygen::examples::DemoAppContext> {
-  static auto Run(oxygen::examples::DemoAppContext& app) -> void
-  {
-    EventLoopRun(app);
-  }
-  static auto Stop(oxygen::examples::DemoAppContext& app) -> void
-  {
-    app.running.store(false, std::memory_order_relaxed);
-  }
-  static auto IsRunning(const oxygen::examples::DemoAppContext& app) -> bool
-  {
-    return app.running.load(std::memory_order_relaxed);
-  }
-  static auto EventLoopId(oxygen::examples::DemoAppContext& app) -> EventLoopID
-  {
-    return EventLoopID(&app);
-  }
-};
-
-namespace {
-
-auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
-  oxygen::examples::light_bench::LightBenchPreset preset) -> void
-{
-  LOG_F(INFO, "Registering engine modules...");
-
-  auto register_module
-    = [&](std::unique_ptr<engine::EngineModule> module) -> void {
-    const bool registered = app.engine->RegisterModule(std::move(module));
-    if (!registered) {
-      LOG_F(ERROR, "Failed to register module");
-      throw std::runtime_error("Module registration failed");
-    }
-  };
-
-  {
-    auto input_sys = std::make_unique<oxygen::engine::InputSystem>(
-      app.platform->Input().ForRead());
-    app.input_system = observer_ptr { input_sys.get() };
-    register_module(std::move(input_sys));
-    if (!app.headless) {
-      register_module(std::make_unique<oxygen::imgui::ImGuiModule>());
-    }
-
-    oxygen::RendererConfig renderer_config {
-      .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
-    };
-    constexpr auto kLightBenchVortexCapabilities
-      = oxygen::vortex::RendererCapabilityFamily::kScenePreparation
-      | oxygen::vortex::RendererCapabilityFamily::kGpuUploadAndAssetBinding
-      | oxygen::vortex::RendererCapabilityFamily::kLightingData
-      | oxygen::vortex::RendererCapabilityFamily::kShadowing
-      | oxygen::vortex::RendererCapabilityFamily::kEnvironmentLighting
-      | oxygen::vortex::RendererCapabilityFamily::kFinalOutputComposition
-      | oxygen::vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling
-      | oxygen::vortex::RendererCapabilityFamily::kDeferredShading;
-
-    register_module(
-      std::make_unique<oxygen::examples::light_bench::MainModule>(app, preset));
-
-    register_module(
-      std::make_unique<oxygen::scenesync::SceneObserverSyncModule>(
-        engine::kSceneObserverSyncModulePriority));
-
-    auto renderer = std::make_unique<oxygen::vortex::Renderer>(
-      app.gfx_weak, renderer_config, kLightBenchVortexCapabilities);
-    renderer->SetGroundGridConfig({ .enabled = false });
-    register_module(std::move(renderer));
-  }
-}
-
-auto AsyncMain(oxygen::examples::DemoAppContext& app,
-  oxygen::examples::light_bench::LightBenchPreset preset) -> co::Co<int>
-{
-  OXCO_WITH_NURSERY(n)
-  {
-    app.running.store(true, std::memory_order_relaxed);
-
-    co_await n.Start(&Platform::ActivateAsync, std::ref(*app.platform));
-    app.platform->Run();
-
-    DCHECK_F(!app.gfx_weak.expired());
-    auto gfx = app.gfx_weak.lock();
-    co_await n.Start(&Graphics::ActivateAsync, std::ref(*gfx));
-    gfx->Run();
-
-    co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*app.engine));
-    app.engine->Run();
-
-    RegisterEngineModules(app, preset);
-
-    n.Start([&app] -> co::Co<> {
-      co_await app.platform->Windows().LastWindowClosed();
-      LOG_F(INFO, "LightBench: last window closed -> shutting down engine");
-
-      app.engine->Stop();
-      co_return;
-    });
-
-    co_await app.engine->Completed();
-
-    co_return co::kCancel;
-  };
-
-  co_return EXIT_SUCCESS;
-}
-} // namespace
+namespace examples = oxygen::examples;
+namespace host = oxygen::host;
+namespace light_bench = oxygen::examples::light_bench;
 
 extern "C" auto MainImpl(std::span<const char*> args) -> int
 {
-  using namespace oxygen::clap; // NOLINT
+  using oxygen::clap::Option;
+  using oxygen::clap::Options;
 
-  // Initialize settings service
-  SettingsService::ForDemoApp();
-
-  uint32_t frames = 0U;
-  uint32_t target_fps = 100U; // desired frame pacing
-  bool headless = false;
-  bool enable_vsync = true;
-  std::string resolution;
-  std::string preset_id = "neutral-reference";
-  oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
-  oxygen::examples::cli::FrameCaptureCliState capture_cli {};
-  oxygen::examples::DemoAppContext app {};
-
-  try {
-    const Command::Ptr default_command
-      = CommandBuilder(Command::DEFAULT)
-          .WithOptions(oxygen::examples::cli::MakeRuntimeOptions({
-            .frames = &frames,
-            .target_fps = &target_fps,
-            .headless = &headless,
-            .fullscreen = &app.fullscreen,
-            .vsync = &enable_vsync,
-            .resolution = &resolution,
-          }))
-          .WithOptions(oxygen::examples::cli::MakeGraphicsToolingOptions(
-            graphics_tooling_cli))
-          .WithOption(Option::WithKey("preset")
-              .About("Initial scenario: neutral-reference, point-falloff, "
-                     "spot-cone, material-lighting, auto-adaptation, indoor, "
-                     "outdoor-daylight")
-              .Long("preset")
-              .WithValue<std::string>()
-              .DefaultValue("neutral-reference")
-              .StoreTo(&preset_id)
-              .Build())
-          .WithOptions(oxygen::examples::cli::MakeCaptureOptions(capture_cli))
-          .WithOptions(
-            oxygen::examples::cli::MakeAdvancedCaptureOptions(capture_cli),
-            true);
-
-    auto cli = oxygen::examples::cli::BuildCli(
-      "light-bench", "PBR lighting validation demo", default_command);
-
-    const int argc = static_cast<int>(args.size());
-    const char** argv = args.data();
-    auto context = cli->Parse(argc, argv);
-    if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
-      return EXIT_SUCCESS;
-    }
-    const auto presets = oxygen::examples::light_bench::GetPresets();
-    const auto selected = std::ranges::find_if(presets,
-      [&](const auto& entry) -> auto { return entry.id == preset_id; });
-    if (selected == presets.end()) {
-      throw std::invalid_argument("Unknown LightBench preset: " + preset_id);
-    }
-    const auto preset = selected->preset;
-    app.window_resolution = oxygen::examples::cli::ResolveWindowResolution(
-      context, resolution, headless);
-    app.headless = headless;
-
-    const bool batch_run = frames != 0U || headless;
-    SettingsService::ForDemoApp()->SetPersistenceEnabled(!batch_run);
-    if (batch_run) {
-      LOG_F(INFO, "LightBench batch run: personal settings writes disabled");
-    }
-
-    oxygen::examples::cli::ValidateGraphicsToolingOptions(graphics_tooling_cli);
-    LOG_F(INFO, "Parsed frames option = {}", frames);
-    LOG_F(INFO, "Parsed fps option = {}", target_fps);
-    LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
-    LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
-    oxygen::examples::cli::LogGraphicsToolingOptions(graphics_tooling_cli);
-    oxygen::examples::cli::LogCaptureOptions(capture_cli);
-    LOG_F(INFO, "Starting LightBench for {} frames (target {} fps)", frames,
-      target_fps);
-
-    app.platform = std::make_shared<Platform>(PlatformConfig {
-      .headless = headless,
-      .thread_pool_size = (std::min)(4U, std::thread::hardware_concurrency()),
-    });
-
-    const auto workspace_root
-      = std::filesystem::path(std::source_location::current().file_name())
-          .parent_path()
-          .parent_path()
-          .parent_path();
-
-    const auto path_finder_config
-      = PathFinderConfig::Create()
-          .WithWorkspaceRoot(workspace_root)
-          .WithScriptSourceRoots({ workspace_root / "Examples" / "Content" })
-          .Build();
-    const auto frame_capture_config
-      = oxygen::examples::cli::BuildFrameCaptureConfig(capture_cli, headless);
-    const GraphicsConfig gfx_config {
-      .enable_debug_layer = graphics_tooling_cli.enable_debug_layer,
-      .enable_validation = false,
-      .enable_aftermath = graphics_tooling_cli.enable_aftermath,
-      .preferred_card_name = std::nullopt,
-      .headless = headless,
-      .enable_vsync = enable_vsync,
-      .frame_capture = frame_capture_config,
-      .extra = {},
-    };
-    const auto& loader = GraphicsBackendLoader::GetInstance();
-    app.gfx_weak = loader.LoadBackend(
-      headless ? BackendType::kHeadless : BackendType::kDirect3D12, gfx_config,
-      path_finder_config);
-    CHECK_F(!app.gfx_weak.expired());
-    app.gfx_weak.lock()->CreateCommandQueues(app.queue_strategy);
-
-    oxygen::console::ConsoleStartupPlan startup_cvars {};
-    oxygen::examples::cli::SeedCommonRuntimeStartupCVars(
-      context, target_fps, enable_vsync, startup_cvars);
-
-    app.engine = std::make_shared<AsyncEngine>(
-      app.platform,
-      app.gfx_weak,
-      EngineConfig {
-        .application = { .name = "LightBench", .version = 1U, },
-        .target_fps = target_fps,
-        .frame_count = frames,
-        .enable_asset_loader = true,
-        .path_finder_config = path_finder_config,
-        .timing = {
-          .pacing_safety_margin = 250us,
-        },
-      },
-      startup_cvars
-    );
-
-    const auto rc = co::Run(app, AsyncMain(app, preset));
-
-    app.engine->Stop();
-    app.platform->Stop();
-    app.engine.reset();
-    if (!app.gfx_weak.expired()) {
-      auto gfx = app.gfx_weak.lock();
-      gfx->Stop();
-      gfx.reset();
-    }
-    loader.UnloadBackend();
-    app.platform.reset();
-
-    LOG_F(INFO, "exit code: {}", rc);
 #ifdef OXYGEN_BUILD_UI_TESTS
-    return oxygen::examples::testing::UiTestSession::ExitCode(rc);
-#else
-    return rc;
+  examples::testing::UiTestSession::InitializeSettings();
 #endif
-  } catch (const oxygen::examples::cli::FrameCaptureCliError& e) {
-    LOG_F(ERROR, "CLI parse error: {}", e.what());
-    return EXIT_FAILURE;
-  } catch (const CmdLineArgumentsError& e) {
-    LOG_F(ERROR, "CLI parse error: {}", e.what());
-    return EXIT_FAILURE;
-  } catch (const std::exception& e) {
-    LOG_F(ERROR, "Unhandled exception: {}", e.what());
-    return EXIT_FAILURE;
-  }
+  examples::SettingsService::ForDemoApp();
+
+  std::string preset_id = "neutral-reference";
+  auto preset = light_bench::LightBenchPreset::kNeutralReference;
+  auto options = std::make_shared<Options>("LightBench");
+  options->Add(Option::WithKey("preset")
+      .About("Initial scenario: neutral-reference, point-falloff, spot-cone, "
+             "material-lighting, auto-adaptation, indoor, outdoor-daylight")
+      .Long("preset")
+      .WithValue<std::string>()
+      .DefaultValue(std::string("neutral-reference"))
+      .StoreTo(&preset_id)
+      .Build());
+
+  return examples::RunDemo(args,
+    {
+      .program = "light-bench",
+      .about = "PBR lighting validation demo",
+      .application = "LightBench",
+      .options = { { options, false } },
+      .configure = [&](const oxygen::clap::CommandLineContext&,
+                     const host::HostConfig& config) -> void {
+        const auto presets = light_bench::GetPresets();
+        const auto selected = std::ranges::find_if(presets,
+          [&](const auto& entry) -> bool { return entry.id == preset_id; });
+        if (selected == presets.end()) {
+          throw std::invalid_argument(
+            "Unknown LightBench preset: " + preset_id);
+        }
+        preset = selected->preset;
+        // A batch run must not rewrite the person's settings.
+        const bool batch_run
+          = config.engine.frame_count != 0U || config.platform.headless;
+        examples::SettingsService::ForDemoApp()->SetPersistenceEnabled(
+          !batch_run);
+        if (batch_run) {
+          LOG_F(
+            INFO, "LightBench batch run: personal settings writes disabled");
+        }
+      },
+      .register_modules
+      = [&](oxygen::AsyncEngine& engine, host::HostContext& context) -> void {
+        host::RegisterRequiredModule(
+          engine, std::make_unique<light_bench::MainModule>(context, preset));
+        host::RegisterRequiredModule(engine,
+          std::make_unique<oxygen::scenesync::SceneObserverSyncModule>(
+            oxygen::engine::kSceneObserverSyncModulePriority));
+        examples::RegisterDemoRenderer(engine, context)
+          ->SetGroundGridConfig({ .enabled = false });
+      },
+    });
 }

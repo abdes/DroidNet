@@ -33,9 +33,7 @@ the runtime is unified. This affects how APIs must be designed and called.
 ## Lifecycle and Frame Flow
 
 1. The host registers `ImGuiModule` unless it runs headless, and registers
-   `ImGuiLayer` with the renderer for the window's surface. Until
-   `Oxygen.Host` exists, each example registers the module and DemoShell's
-   `AppWindow` registers the layer.
+   `ImGuiLayer` with the renderer for the window's surface.
 2. `ImGuiModule::OnAttached` creates the backend through
    `Graphics::CreateImGuiGraphicsBackend()` and initializes it (`Init`), which
    creates the ImGui context and initializes `imgui_impl_dx12`, then binds the
@@ -156,7 +154,7 @@ Bundled source assets:
 
 - Runtime entry: `ImGuiModule`
 - Renderer seam: `vortex::SurfaceLayerSource`, implemented by `ImGuiLayer`
-  (in DemoShell until `Oxygen.Host` exists)
+  in `Oxygen.Host`
 - Graphics backend interface:
   `src/Oxygen/Graphics/Common/ImGui/ImGuiGraphicsBackend.h`
 - D3D12 backend impl:

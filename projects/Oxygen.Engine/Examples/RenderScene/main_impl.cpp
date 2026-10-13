@@ -5,571 +5,291 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <atomic>
 #include <cctype>
-#include <chrono>
 #include <cstdint>
-#include <cstdlib>
-#include <exception>
 #include <filesystem>
-#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
-#include <string_view>
-#include <thread>
 #include <utility>
 
-#include "Common/DemoCli.h"
-#include "Common/FrameCaptureCli.h"
-#include "Common/FrameCaptureCliOptions.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/DemoMain.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 #include "RenderScene/MainModule.h"
-
-#include <Oxygen/Config/EngineConfig.h>
-#include <Oxygen/Config/PathFinderConfig.h>
-#include <Oxygen/Config/PlatformConfig.h>
-#include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Console/StartupPlan.h>
-#include <Oxygen/Graphics/Common/Types/QueueRole.h>
-#ifdef OXYGEN_BUILD_UI_TESTS
-#  include "DemoShell/test/UiTestSession.h"
-#endif
 #include "RenderScene/RuntimePaths.h"
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Clap/Cli.h>
-#include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Graphics/Common/BackendModule.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/ImGui/ImGuiModule.h>
-#include <Oxygen/Input/InputSystem.h>
-#include <Oxygen/Loader/GraphicsBackendLoader.h>
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/EventLoop.h>
-#include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/RunHost.h>
+#include <Oxygen/Host/RuntimeCli.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
-#include <Oxygen/Platform/Platform.h>
 #include <Oxygen/SceneSync/SceneObserverSyncModule.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
-#include <Oxygen/Vortex/Renderer.h>
-#include <Oxygen/Vortex/RendererCapability.h>
 
-namespace co = oxygen::co;
-namespace engine = oxygen::engine;
+#ifdef OXYGEN_BUILD_UI_TESTS
+#  include "DemoShell/test/UiTestSession.h"
+#endif
+
 namespace examples = oxygen::examples;
-
-using oxygen::AsyncEngine;
-using oxygen::EngineConfig;
-using oxygen::Graphics;
-using oxygen::GraphicsBackendLoader;
-using oxygen::GraphicsConfig;
-using oxygen::observer_ptr;
-using oxygen::PathFinderConfig;
-using oxygen::Platform;
-using oxygen::PlatformConfig;
-using oxygen::examples::SettingsService;
-using oxygen::graphics::BackendType;
-using oxygen::graphics::QueueRole;
-using namespace std::chrono_literals;
+namespace host = oxygen::host;
+namespace render_scene = oxygen::examples::render_scene;
 
 namespace {
 
-auto EventLoopRun(const oxygen::examples::DemoAppContext& app) -> void
-{
-  while (app.running.load(std::memory_order_relaxed)) {
-
-    app.platform->Async().PollOne();
-    if (!app.headless) {
-      app.platform->Events().PollOne();
-    }
-
-    if (!app.running.load(std::memory_order_relaxed)) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-  }
-}
-
-} // namespace
-
-template <> struct co::EventLoopTraits<oxygen::examples::DemoAppContext> {
-  static auto Run(oxygen::examples::DemoAppContext& app) -> void
-  {
-    EventLoopRun(app);
-  }
-  static auto Stop(oxygen::examples::DemoAppContext& app) -> void
-  {
-    app.running.store(false, std::memory_order_relaxed);
-  }
-  static auto IsRunning(const oxygen::examples::DemoAppContext& app) -> bool
-  {
-    return app.running.load(std::memory_order_relaxed);
-  }
-  static auto EventLoopId(oxygen::examples::DemoAppContext& app) -> EventLoopID
-  {
-    return EventLoopID(&app);
-  }
-};
-
-namespace {
-
-auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
-  const bool preview_sun_enabled, const std::optional<int> environment_profile)
-  -> void
-{
-  LOG_F(INFO, "Registering engine modules...");
-
-  auto register_module
-    = [&](std::unique_ptr<engine::EngineModule> module) -> void {
-    const bool registered = app.engine->RegisterModule(std::move(module));
-    if (!registered) {
-      LOG_F(ERROR, "Failed to register module");
-      throw std::runtime_error("Module registration failed");
-    }
-  };
-
-  {
-    auto input_sys = std::make_unique<oxygen::engine::InputSystem>(
-      app.platform->Input().ForRead());
-    app.input_system = observer_ptr { input_sys.get() };
-    register_module(std::move(input_sys));
-    if (!app.headless) {
-      register_module(std::make_unique<oxygen::imgui::ImGuiModule>());
-    }
-
-    oxygen::RendererConfig renderer_config {
-      .upload_queue_key = app.queue_strategy.KeyFor(QueueRole::kTransfer).get(),
-      .directional_shadow_policy = app.directional_shadow_policy,
-    };
-    constexpr auto kRenderSceneVortexCapabilities
-      = oxygen::vortex::RendererCapabilityFamily::kScenePreparation
-      | oxygen::vortex::RendererCapabilityFamily::kGpuUploadAndAssetBinding
-      | oxygen::vortex::RendererCapabilityFamily::kLightingData
-      | oxygen::vortex::RendererCapabilityFamily::kShadowing
-      | oxygen::vortex::RendererCapabilityFamily::kEnvironmentLighting
-      | oxygen::vortex::RendererCapabilityFamily::kFinalOutputComposition
-      | oxygen::vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling
-      | oxygen::vortex::RendererCapabilityFamily::kDeferredShading;
-    register_module(std::make_unique<oxygen::physics::PhysicsModule>(
-      oxygen::engine::kPhysicsModulePriority));
-    register_module(
-      std::make_unique<oxygen::scenesync::SceneObserverSyncModule>(
-        engine::kSceneObserverSyncModulePriority));
-    register_module(std::make_unique<oxygen::scripting::ScriptingModule>(
-      engine::kScriptingModulePriority));
-    register_module(
-      std::make_unique<oxygen::examples::render_scene::MainModule>(
-        app, preview_sun_enabled, environment_profile));
-
-    register_module(std::make_unique<oxygen::vortex::Renderer>(
-      app.gfx_weak, renderer_config, kRenderSceneVortexCapabilities));
-  }
-}
-
-auto AsyncMain(oxygen::examples::DemoAppContext& app,
-  const bool preview_sun_enabled, const std::optional<int> environment_profile)
-  -> co::Co<int>
-{
-  OXCO_WITH_NURSERY(n)
-  {
-    app.running.store(true, std::memory_order_relaxed);
-
-    co_await n.Start(&Platform::ActivateAsync, std::ref(*app.platform));
-    app.platform->Run();
-
-    DCHECK_F(!app.gfx_weak.expired());
-    auto gfx = app.gfx_weak.lock();
-    co_await n.Start(&Graphics::ActivateAsync, std::ref(*gfx));
-    gfx->Run();
-
-    co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*app.engine));
-    app.engine->Run();
-
-    RegisterEngineModules(app, preview_sun_enabled, environment_profile);
-
-    n.Start([&app] -> co::Co<> {
-      co_await app.platform->Windows().LastWindowClosed();
-      LOG_F(INFO,
-        "RenderScene example: last window closed -> shutting down engine");
-
-      app.engine->Stop();
-      co_return;
-    });
-
-    co_await app.engine->Completed();
-
-    co_return co::kCancel;
-  };
-
-  co_return EXIT_SUCCESS;
-}
-
-} // namespace
-
-namespace {
-
-auto NormalizeCliToken(std::string value) -> std::string
+auto ParseDirectionalShadowPolicy(std::string value)
+  -> oxygen::DirectionalShadowImplementationPolicy
 {
   std::ranges::transform(
     value, value.begin(), [](const unsigned char c) -> char {
       return static_cast<char>(std::tolower(c));
     });
-  return value;
-}
-
-auto ParseDirectionalShadowPolicy(std::string value)
-  -> oxygen::DirectionalShadowImplementationPolicy
-{
-  value = NormalizeCliToken(std::move(value));
-
   if (value == "conventional" || value == "conventional-only") {
     return oxygen::DirectionalShadowImplementationPolicy::kConventionalOnly;
   }
   if (value == "vsm" || value == "virtual-shadow-map") {
     return oxygen::DirectionalShadowImplementationPolicy::kVirtualShadowMap;
   }
+  throw std::invalid_argument("Invalid value for --directional-shadows. "
+                              "Expected one of: conventional, vsm");
+}
 
-  throw std::runtime_error("Invalid value for --directional-shadows. "
-                           "Expected one of: conventional, vsm");
+//! Developer options; listed by `help-advanced`.
+struct DeveloperOptions {
+  bool verify_hashes { false };
+  bool hot_reload { true };
+  std::string cvars_archive;
+  std::string directional_shadows { "conventional" };
+};
+
+auto MakeEnvironmentOptions(render_scene::StartupOptions& startup,
+  std::string& environment_profile) -> oxygen::clap::Options::Ptr
+{
+  using oxygen::clap::Option;
+  auto options = std::make_shared<oxygen::clap::Options>("Environment");
+  options->Add(Option::WithKey("preview-sun")
+      .About("Opt in to preview sunlight: reuse a directional light or "
+             "create one when no scene sun exists")
+      .Long("preview-sun")
+      .WithValue<bool>()
+      .DefaultValue(startup.preview_sun_enabled)
+      .UserFriendlyName("enabled")
+      .StoreTo(&startup.preview_sun_enabled)
+      .Build());
+  options->Add(Option::WithKey("environment-profile")
+      .About("Startup profile: scene, custom, outdoor-sunny, outdoor-cloudy, "
+             "foggy-daylight, outdoor-dawn, outdoor-dusk")
+      .Long("environment-profile")
+      .WithValue<std::string>()
+      .StoreTo(&environment_profile)
+      .Build());
+  return options;
+}
+
+auto MakeDeveloperOptions(render_scene::StartupOptions& startup,
+  DeveloperOptions& developer) -> oxygen::clap::Options::Ptr
+{
+  using oxygen::clap::Option;
+  auto options = std::make_shared<oxygen::clap::Options>("Developer options");
+  options->Add(Option::WithKey("verify-hashes")
+      .About("Enable content hash verification for mounted sources")
+      .Long("verify-hashes")
+      .WithValue<bool>()
+      .DefaultValue(false)
+      .UserFriendlyName("verify-hashes")
+      .StoreTo(&developer.verify_hashes)
+      .Build());
+  options->Add(Option::WithKey("hot-reload")
+      .About("Enable hot-reloading of script files from disk")
+      .Long("hot-reload")
+      .WithValue<bool>()
+      .DefaultValue(true)
+      .UserFriendlyName("hot-reload")
+      .StoreTo(&developer.hot_reload)
+      .Build());
+  options->Add(Option::WithKey("cvars-archive")
+      .About("Override the persisted CVar archive path for this run")
+      .Long("cvars-archive")
+      .WithValue<std::string>()
+      .UserFriendlyName("path")
+      .StoreTo(&developer.cvars_archive)
+      .Build());
+  options->Add(Option::WithKey("directional-shadows")
+      .About("Directional shadow backend policy")
+      .Long("directional-shadows")
+      .WithValue<std::string>()
+      .DefaultValue(std::string("conventional"))
+      .UserFriendlyName("policy")
+      .StoreTo(&developer.directional_shadows)
+      .Build());
+  options->Add(Option::WithKey("scene")
+      .About(
+        "Load a cooked scene by name, virtual path, stem, or key at startup")
+      .Long("scene")
+      .WithValue<std::string>()
+      .UserFriendlyName("scene")
+      .StoreTo(&startup.scene_name)
+      .Build());
+  options->Add(Option::WithKey("startup-skybox")
+      .About("Load and equip a cubemap skybox on the startup scene")
+      .Long("startup-skybox")
+      .WithValue<std::string>()
+      .UserFriendlyName("path")
+      .StoreTo(&startup.skybox_path)
+      .Build());
+  return options;
+}
+
+auto ReadStartupOptions(const examples::SettingsService& settings)
+  -> render_scene::StartupOptions
+{
+  const auto frame = [&settings](const char* key) -> std::uint32_t {
+    return static_cast<std::uint32_t>(
+      std::max(settings.GetFloat(key).value_or(0.0F), 0.0F));
+  };
+  return render_scene::StartupOptions {
+    .preview_sun_enabled
+    = settings.GetBool("render_scene.preview_sun.enabled").value_or(false),
+    .sky_light_lifecycle_proof_enabled
+    = settings.GetBool("env.sky_light.lifecycle_proof.enabled").value_or(false),
+    .sky_light_lifecycle_disable_frame
+    = frame("env.sky_light.lifecycle_proof.disable_frame"),
+    .sky_light_lifecycle_enable_frame
+    = frame("env.sky_light.lifecycle_proof.enable_frame"),
+  };
 }
 
 } // namespace
 
 extern "C" auto MainImpl(std::span<const char*> args) -> int
 {
-  using namespace oxygen::clap; // NOLINT
-
-  const auto runtime_paths
-    = oxygen::examples::render_scene::ResolveRuntimePaths();
+  const auto runtime_paths = render_scene::ResolveRuntimePaths();
 #ifdef OXYGEN_BUILD_UI_TESTS
   const bool isolated_settings
-    = oxygen::examples::testing::UiTestSession::InitializeSettings();
+    = examples::testing::UiTestSession::InitializeSettings();
 #else
   constexpr bool isolated_settings = false;
 #endif
   if (runtime_paths.installed && !isolated_settings) {
-    SettingsService::InitializeForDemoApp(
+    examples::SettingsService::InitializeForDemoApp(
       runtime_paths.showcase / "demo_settings.json", runtime_paths.root);
   }
-  // Initialize settings service
-  const auto startup_settings = SettingsService::ForDemoApp();
-  bool preview_sun_enabled
-    = startup_settings->GetBool("render_scene.preview_sun.enabled")
-        .value_or(false);
-  std::string environment_profile_key;
-  std::optional<int> environment_profile;
+  const auto settings = examples::SettingsService::ForDemoApp();
 
-  uint32_t frames = 0U;
-  uint32_t target_fps = 100U; // desired frame pacing
-  bool enable_vsync = true;
-  bool verify_hashes = false;
-  bool hot_reload = true;
-  std::string directional_shadows = "conventional";
-  std::string startup_scene_name;
-  std::string startup_skybox_path;
-  std::string cvars_archive_path;
-  std::string resolution;
-  oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
-  oxygen::examples::cli::FrameCaptureCliState capture_cli {};
-  oxygen::examples::DemoAppContext app {};
-  app.headless = false;
+  auto startup = ReadStartupOptions(*settings);
+  std::string environment_profile;
+  auto developer = DeveloperOptions {};
+  auto renderer_config = oxygen::RendererConfig {};
 
-  try {
-    const auto developer_options
-      = std::make_shared<Options>("Developer options");
-    auto environment_options = std::make_shared<Options>("Environment");
-    environment_options->Add(Option::WithKey("preview-sun")
-        .About("Opt in to preview sunlight: reuse a directional light or "
-               "create one when no scene sun exists")
-        .Long("preview-sun")
-        .WithValue<bool>()
-        .DefaultValue(preview_sun_enabled)
-        .UserFriendlyName("enabled")
-        .StoreTo(&preview_sun_enabled)
-        .Build());
-    environment_options->Add(Option::WithKey("environment-profile")
-        .About("Startup profile: scene, custom, outdoor-sunny, outdoor-cloudy, "
-               "foggy-daylight, outdoor-dawn, outdoor-dusk")
-        .Long("environment-profile")
-        .WithValue<std::string>()
-        .StoreTo(&environment_profile_key)
-        .Build());
-    developer_options->Add(Option::WithKey("verify-hashes")
-        .About("Enable content hash verification for mounted sources")
-        .Long("verify-hashes")
-        .WithValue<bool>()
-        .DefaultValue(false)
-        .UserFriendlyName("verify-hashes")
-        .StoreTo(&verify_hashes)
-        .Build());
-    developer_options->Add(Option::WithKey("hot-reload")
-        .About("Enable hot-reloading of script files from disk")
-        .Long("hot-reload")
-        .WithValue<bool>()
-        .DefaultValue(true)
-        .UserFriendlyName("hot-reload")
-        .StoreTo(&hot_reload)
-        .Build());
-    developer_options->Add(Option::WithKey("cvars-archive")
-        .About("Override the persisted CVar archive path for this run")
-        .Long("cvars-archive")
-        .WithValue<std::string>()
-        .UserFriendlyName("path")
-        .StoreTo(&cvars_archive_path)
-        .Build());
-    developer_options->Add(Option::WithKey("directional-shadows")
-        .About("Directional shadow backend policy")
-        .Long("directional-shadows")
-        .WithValue<std::string>()
-        .DefaultValue(std::string("conventional"))
-        .UserFriendlyName("policy")
-        .StoreTo(&directional_shadows)
-        .Build());
-    developer_options->Add(Option::WithKey("scene")
-        .About(
-          "Load a cooked scene by name, virtual path, stem, or key at startup")
-        .Long("scene")
-        .WithValue<std::string>()
-        .UserFriendlyName("scene")
-        .StoreTo(&startup_scene_name)
-        .Build());
-    developer_options->Add(Option::WithKey("startup-skybox")
-        .About("Load and equip a cubemap skybox on the startup scene")
-        .Long("startup-skybox")
-        .WithValue<std::string>()
-        .UserFriendlyName("path")
-        .StoreTo(&startup_skybox_path)
-        .Build());
-
-    const Command::Ptr default_command
-      = CommandBuilder(Command::DEFAULT)
-          .WithOptions(oxygen::examples::cli::MakeRuntimeOptions({
-            .frames = &frames,
-            .target_fps = &target_fps,
-            .fullscreen = &app.fullscreen,
-            .vsync = &enable_vsync,
-            .resolution = &resolution,
-          }))
-          .WithOptions(oxygen::examples::cli::MakeGraphicsToolingOptions(
-            graphics_tooling_cli))
-          .WithOptions(oxygen::examples::cli::MakeCaptureOptions(capture_cli))
-          .WithOptions(environment_options)
-          .WithOptions(
-            oxygen::examples::cli::MakeAdvancedCaptureOptions(capture_cli),
-            true)
-          .WithOptions(developer_options, true);
-
-    auto cli = oxygen::examples::cli::BuildCli("render-scene",
-      "Render a cooked scene from mounted content", default_command);
-
-    const int argc = static_cast<int>(args.size());
-    const char** argv = args.data();
-    auto context = cli->Parse(argc, argv);
-    if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
-      return EXIT_SUCCESS;
-    }
-    if (runtime_paths.installed && startup_scene_name.empty()
-      && startup_settings->GetString("content.active_scene.key")
-        .value_or("")
-        .empty()) {
-      startup_scene_name = "Lantern";
-    }
-    if (runtime_paths.installed && startup_scene_name == "Lantern"
-      && startup_skybox_path.empty() && environment_profile_key.empty()) {
-      startup_skybox_path
-        = (runtime_paths.content / "images/showcase/Sky.hdr").string();
-      preview_sun_enabled = true;
-    }
-    app.window_resolution = oxygen::examples::cli::ResolveWindowResolution(
-      context, resolution, false);
-
-    oxygen::examples::cli::ValidateGraphicsToolingOptions(graphics_tooling_cli);
-    LOG_F(INFO, "Parsed frames option = {}", frames);
-    LOG_F(INFO, "Parsed fps option = {}", target_fps);
-    LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
-    LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
-    oxygen::examples::cli::LogGraphicsToolingOptions(graphics_tooling_cli);
-    LOG_F(INFO, "Parsed verify-hashes option = {}", verify_hashes);
-    oxygen::examples::cli::LogCaptureOptions(capture_cli);
-    LOG_F(INFO, "Parsed directional-shadows option = {}", directional_shadows);
-    LOG_F(INFO, "Resolved preview-sun option = {}", preview_sun_enabled);
-    if (!startup_scene_name.empty()) {
-      LOG_F(INFO, "Parsed scene option = {}", startup_scene_name);
-    }
-    if (!startup_skybox_path.empty()) {
-      LOG_F(INFO, "Parsed startup-skybox option = {}", startup_skybox_path);
-    }
-    if (!environment_profile_key.empty()) {
-      const auto index
-        = examples::ui::EnvironmentVm::FindPresetIndex(environment_profile_key);
-      if (!index) {
-        throw std::invalid_argument("Unknown environment profile '"
-          + environment_profile_key
-          + "'. Use scene, custom, outdoor-sunny, outdoor-cloudy, "
-            "foggy-daylight, outdoor-dawn, or outdoor-dusk.");
-      }
-      environment_profile = *index - 2;
-    }
-    if (!startup_skybox_path.empty()) {
-      if (environment_profile && *environment_profile != -1) {
-        throw std::invalid_argument(
-          "--startup-skybox requires --environment-profile custom.");
-      }
-      environment_profile = -1;
-    }
-    if (!cvars_archive_path.empty()) {
-      LOG_F(INFO, "Parsed cvars-archive option = {}", cvars_archive_path);
-    }
-    LOG_F(INFO, "Starting render-scene demo for {} frames (target {} fps)",
-      frames, target_fps);
-    app.directional_shadow_policy
-      = ParseDirectionalShadowPolicy(directional_shadows);
-    app.startup_scene_name = startup_scene_name;
-    if (const auto settings = SettingsService::ForDemoApp()) {
-      app.startup_sky_light_lifecycle_proof_enabled
-        = settings->GetBool("env.sky_light.lifecycle_proof.enabled")
-            .value_or(false);
-      app.startup_sky_light_lifecycle_disable_frame
-        = static_cast<std::uint32_t>(std::max(
-          settings->GetFloat("env.sky_light.lifecycle_proof.disable_frame")
-            .value_or(0.0F),
-          0.0F));
-      app.startup_sky_light_lifecycle_enable_frame
-        = static_cast<std::uint32_t>(std::max(
-          settings->GetFloat("env.sky_light.lifecycle_proof.enable_frame")
-            .value_or(0.0F),
-          0.0F));
-    }
-    app.startup_skybox_path = startup_skybox_path;
-    if (!app.startup_skybox_path.empty()) {
-      LOG_F(INFO, "Custom startup skybox path='{}'", app.startup_skybox_path);
-    }
-    LOG_F(INFO, "Resolved directional shadow policy = {}",
-      app.directional_shadow_policy);
-
-    // Create the platform
-    app.platform = std::make_shared<Platform>(PlatformConfig {
-      .headless = app.headless,
-      .thread_pool_size = (std::min)(4U, std::thread::hardware_concurrency()),
-    });
-
-    auto path_finder_builder
-      = PathFinderConfig::Create()
-          .WithWorkspaceRoot(runtime_paths.root)
-          .WithScriptSourceRoots({ runtime_paths.content });
-    if (runtime_paths.installed) {
-      path_finder_builder
-        = std::move(path_finder_builder)
-            .WithShaderLibraryPath("share/oxygen/shaders/shaders.bin")
-            .WithCVarsArchivePath(runtime_paths.showcase / "cvars.json")
-            .WithScriptBytecodeCachePath(
-              runtime_paths.showcase / "scripts.bin");
-    }
-    if (!cvars_archive_path.empty()) {
-      path_finder_builder
-        = std::move(path_finder_builder)
-            .WithCVarsArchivePath(std::filesystem::path(cvars_archive_path));
-    }
-    const auto path_finder_config = std::move(path_finder_builder).Build();
-    const auto frame_capture_config
-      = oxygen::examples::cli::BuildFrameCaptureConfig(capture_cli);
-    const GraphicsConfig gfx_config {
-      .enable_debug_layer = graphics_tooling_cli.enable_debug_layer,
-      .enable_validation = false,
-      .enable_aftermath = graphics_tooling_cli.enable_aftermath,
-      .preferred_card_name = std::nullopt,
-      .headless = app.headless,
-      .enable_vsync = enable_vsync,
-      .frame_capture = frame_capture_config,
-      .extra = {},
-    };
-    const auto& loader = GraphicsBackendLoader::GetInstance();
-    app.gfx_weak = loader.LoadBackend(
-      app.headless ? BackendType::kHeadless : BackendType::kDirect3D12,
-      gfx_config, path_finder_config);
-    CHECK_F(
-      !app.gfx_weak.expired()); // Expect a valid graphics backend, or abort
-    app.gfx_weak.lock()->CreateCommandQueues(app.queue_strategy);
-
-    oxygen::console::ConsoleStartupPlan startup_cvars {};
-    oxygen::examples::cli::SeedCommonRuntimeStartupCVars(
-      context, target_fps, enable_vsync, startup_cvars);
-    if (context.ovm.HasOption("hot-reload")) {
-      startup_cvars.Set("ngin.scripting.hot_reload", hot_reload);
-    }
-    if (context.ovm.HasOption("verify-hashes")) {
-      startup_cvars.Set("cntt.verify_content_hashes", verify_hashes);
-    }
-    if (!startup_scene_name.empty()) {
-      startup_cvars.Set("vtx.local_fog.enable", true);
-      startup_cvars.Set("vtx.local_fog.render_into_volumetric_fog", true);
-      startup_cvars.Set("vtx.volumetric_fog.directional_shadows", true);
-      startup_cvars.Set("vtx.volumetric_fog.temporal_reprojection", true);
-    }
-
-    app.engine = std::make_shared<AsyncEngine>(
-      app.platform,
-      app.gfx_weak,
-      EngineConfig {
-        .application = { .name = "RenderScene Example", .version = 1U, },
-        .target_fps = target_fps,
-        .frame_count = frames,
-        .enable_asset_loader = true,
-        .asset_loader = { .verify_content_hashes = verify_hashes, },
-        .scripting = {
-          .enable_hot_reload = hot_reload,
-        },
-        .path_finder_config = path_finder_config,
-        .graphics = { .enable_vsync = enable_vsync, },
-        .timing = {
-          .pacing_safety_margin = 250us,
-        },
+  return examples::RunDemo(args,
+    {
+      .program = "render-scene",
+      .about = "Render a cooked scene from mounted content",
+      .application = "RenderScene Example",
+      .runtime_options = { .headless = false },
+      .options = {
+        { MakeEnvironmentOptions(startup, environment_profile), false },
+        { MakeDeveloperOptions(startup, developer), true },
       },
-      startup_cvars
-    );
+      .configure =
+        [&](const oxygen::clap::CommandLineContext& context,
+          host::HostConfig& config) -> void {
+        // The installed showcase opens Lantern under its sky unless asked
+        // otherwise.
+        if (runtime_paths.installed && startup.scene_name.empty()
+          && settings->GetString("content.active_scene.key")
+               .value_or("")
+               .empty()) {
+          startup.scene_name = "Lantern";
+        }
+        if (runtime_paths.installed && startup.scene_name == "Lantern"
+          && startup.skybox_path.empty() && environment_profile.empty()) {
+          startup.skybox_path
+            = (runtime_paths.content / "images/showcase/Sky.hdr").string();
+          startup.preview_sun_enabled = true;
+        }
+        if (!environment_profile.empty()) {
+          const auto index
+            = examples::ui::EnvironmentVm::FindPresetIndex(environment_profile);
+          if (!index) {
+            throw std::invalid_argument("Unknown environment profile '"
+              + environment_profile
+              + "'. Use scene, custom, outdoor-sunny, outdoor-cloudy, "
+                "foggy-daylight, outdoor-dawn, or outdoor-dusk.");
+          }
+          startup.environment_profile = *index - 2;
+        }
+        if (!startup.skybox_path.empty()) {
+          if (startup.environment_profile
+            && *startup.environment_profile != -1) {
+            throw std::invalid_argument(
+              "--startup-skybox requires --environment-profile custom.");
+          }
+          startup.environment_profile = -1;
+        }
+        renderer_config.directional_shadow_policy
+          = ParseDirectionalShadowPolicy(developer.directional_shadows);
 
-    const auto rc
-      = co::Run(app, AsyncMain(app, preview_sun_enabled, environment_profile));
+        auto paths
+          = oxygen::PathFinderConfig::Create()
+              .WithWorkspaceRoot(runtime_paths.root)
+              .WithScriptSourceRoots({ runtime_paths.content })
+              .WithCVarsArchivePath("bin/Oxygen/render-scene/cvars.json");
+        if (runtime_paths.installed) {
+          paths = std::move(paths)
+                    .WithShaderLibraryPath("share/oxygen/shaders/shaders.bin")
+                    .WithCVarsArchivePath(runtime_paths.showcase / "cvars.json")
+                    .WithScriptBytecodeCachePath(
+                      runtime_paths.showcase / "scripts.bin");
+        }
+        if (!developer.cvars_archive.empty()) {
+          paths = std::move(paths).WithCVarsArchivePath(
+            std::filesystem::path(developer.cvars_archive));
+        }
+        config.engine.path_finder_config = std::move(paths).Build();
+        config.engine.asset_loader.verify_content_hashes
+          = developer.verify_hashes;
+        config.engine.scripting.enable_hot_reload = developer.hot_reload;
 
-    app.engine->Stop();
-    app.platform->Stop();
-    app.engine.reset();
-    if (!app.gfx_weak.expired()) {
-      auto gfx = app.gfx_weak.lock();
-      gfx->Stop();
-      gfx.reset();
-    }
-    // Make sure no one holds a reference to the Graphics instance at this
-    // point.
-    loader.UnloadBackend();
-    app.platform.reset();
-
-    LOG_F(INFO, "exit code: {}", rc);
-#ifdef OXYGEN_BUILD_UI_TESTS
-    return oxygen::examples::testing::UiTestSession::ExitCode(rc);
-#else
-    return rc;
-#endif
-  } catch (const oxygen::examples::cli::FrameCaptureCliError& e) {
-    LOG_F(ERROR, "CLI parse error: {}", e.what());
-    return EXIT_FAILURE;
-  } catch (const CmdLineArgumentsError& e) {
-    LOG_F(ERROR, "CLI parse error: {}", e.what());
-    return EXIT_FAILURE;
-  } catch (const std::exception& e) {
-    LOG_F(ERROR, "Unhandled exception: {}", e.what());
-    return EXIT_FAILURE;
-  }
+        auto& cvars = config.startup_cvars;
+        if (host::WasPassed(context, "hot-reload")) {
+          cvars.Set("ngin.scripting.hot_reload", developer.hot_reload);
+        }
+        if (host::WasPassed(context, "verify-hashes")) {
+          cvars.Set("cntt.verify_content_hashes", developer.verify_hashes);
+        }
+        if (!startup.scene_name.empty()) {
+          cvars.Set("vtx.local_fog.enable", true);
+          cvars.Set("vtx.local_fog.render_into_volumetric_fog", true);
+          cvars.Set("vtx.volumetric_fog.directional_shadows", true);
+          cvars.Set("vtx.volumetric_fog.temporal_reprojection", true);
+          LOG_F(INFO, "RenderScene: startup scene '{}'", startup.scene_name);
+        }
+      },
+      .register_modules
+      = [&](oxygen::AsyncEngine& engine, host::HostContext& context) -> void {
+        host::RegisterRequiredModule(engine,
+          std::make_unique<oxygen::physics::PhysicsModule>(
+            oxygen::engine::kPhysicsModulePriority));
+        host::RegisterRequiredModule(engine,
+          std::make_unique<oxygen::scenesync::SceneObserverSyncModule>(
+            oxygen::engine::kSceneObserverSyncModulePriority));
+        host::RegisterRequiredModule(engine,
+          std::make_unique<oxygen::scripting::ScriptingModule>(
+            oxygen::engine::kScriptingModulePriority));
+        host::RegisterRequiredModule(engine,
+          std::make_unique<render_scene::MainModule>(context, startup));
+        examples::RegisterDemoRenderer(engine, context, renderer_config);
+      },
+    });
 }

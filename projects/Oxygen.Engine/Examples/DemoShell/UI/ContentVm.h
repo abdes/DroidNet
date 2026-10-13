@@ -21,6 +21,7 @@
 #include "DemoShell/Services/FileBrowserService.h"
 
 #include <Oxygen/Base/Hash.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -73,6 +74,9 @@ public:
     observer_ptr<content::IAssetLoader> asset_loader);
   ~ContentVm();
 
+  OXYGEN_MAKE_NON_COPYABLE(ContentVm)
+  OXYGEN_MAKE_NON_MOVABLE(ContentVm)
+
   // --- Discovery (Sources & Mounts) ---
 
   //! Scans for importable source files based on explorer settings.
@@ -94,8 +98,29 @@ public:
 
   // --- Browsing ---
 
+  //! What a file dialog opened by the panel picks.
+  enum class BrowseTarget : uint8_t {
+    kModelRoot,
+    kSourceFile,
+    kPakFile,
+    kLibraryFile,
+  };
+
+  //! A file picked in a dialog the panel opened.
+  struct BrowseSelection {
+    BrowseTarget target { BrowseTarget::kModelRoot };
+    std::filesystem::path path;
+  };
+
   auto BrowseForModelRoot() -> void;
   auto BrowseForSourceFile() -> void;
+
+  //! The file picked in the open dialog, once; the panel runs the matching
+  //! command with it.
+  [[nodiscard]] auto ConsumeBrowseSelection() -> std::optional<BrowseSelection>;
+
+  //! Scan `root` for importable sources.
+  auto SetModelRoot(const std::filesystem::path& root) -> void;
 
   // --- Registry & Ready-to-Load ---
 
@@ -124,6 +149,8 @@ public:
   auto MountPak(const std::filesystem::path& path) -> void;
   auto LoadIndex(const std::filesystem::path& path) -> void;
   auto LoadImportRecord(const std::filesystem::path& path) -> void;
+  //! Mount an import record (`*.import.json`) or a cooked index.
+  auto LoadLibrary(const std::filesystem::path& path) -> void;
   auto UnloadAllLibrary() -> void;
   auto RestorePersistedLibraryState() -> void;
   auto PersistLibraryState() -> void;
@@ -179,9 +206,6 @@ public:
   auto ClearDiagnostics() -> void;
 
   // --- Utils ---
-  auto ForceTrimCaches() -> void;
-  //! Register callback for force-trim requests.
-  auto SetOnForceTrim(std::function<void()> callback) -> void;
 
   //! Access to the file browser service for drawing in UI context.
   [[nodiscard]] auto GetFileBrowser() const -> observer_ptr<FileBrowserService>;
@@ -258,14 +282,7 @@ private:
     SceneSourceKind source_kind, const std::filesystem::path& path) -> void;
   auto TryResolvePendingSceneSelection() -> void;
 
-  enum class BrowseMode : uint8_t {
-    kNone,
-    kModelRoot,
-    kSourceFile,
-    kPakFile,
-    kLibraryFile,
-  };
-  BrowseMode browse_mode_ { BrowseMode::kNone };
+  std::optional<BrowseTarget> browse_target_;
   FileBrowserService::RequestId browse_request_id_ { 0 };
 
   observer_ptr<ContentSettingsService> settings_;
@@ -296,7 +313,6 @@ private:
   std::function<void()> on_clear_mounts_;
   std::function<void(const SceneEntry&)> on_scene_load_requested_;
   std::function<void()> on_scene_load_cancel_requested_;
-  std::function<void()> on_force_trim_;
 };
 
 } // namespace oxygen::examples::ui

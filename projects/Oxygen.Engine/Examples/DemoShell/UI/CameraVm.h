@@ -16,6 +16,7 @@
 #include "DemoShell/UI/OrbitCameraController.h"
 #include <glm/gtc/quaternion.hpp>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 
@@ -42,7 +43,6 @@ class CameraRigController;
 - **Persistent Settings**: Syncs with CameraSettingsService for mode/speed.
 - **Bi-directional Sync**: Pulls live camera poses from the simulation
   and pushes UI-driven changes back.
-- **Input State Exposure**: Provides action states for debug visualization.
 - **Thread-safe**: Protected by a mutex for multi-threaded access.
 */
 class CameraVm {
@@ -54,6 +54,9 @@ public:
     observer_ptr<CameraRigController> camera_rig);
 
   ~CameraVm() = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(CameraVm)
+  OXYGEN_MAKE_NON_MOVABLE(CameraVm)
 
   // --- Perspectives & Modes ---
 
@@ -154,27 +157,6 @@ public:
 
   [[nodiscard]] auto GetDronePathPoints() const -> std::span<const glm::vec3>;
 
-  // --- Input & Debug ---
-
-  [[nodiscard]] auto GetActionStateString(
-    const std::shared_ptr<input::Action>& action) const -> const char*;
-
-  // Expose actions for the panel
-  [[nodiscard]] auto GetMoveForwardAction() const
-    -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetMoveBackwardAction() const
-    -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetMoveLeftAction() const
-    -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetMoveRightAction() const
-    -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetFlyBoostAction() const
-    -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetFlyPlaneLockAction() const
-    -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetRmbAction() const -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetOrbitAction() const -> std::shared_ptr<input::Action>;
-
   // --- Actions ---
 
   auto RequestReset() -> void;
@@ -184,7 +166,7 @@ private:
   auto Refresh() -> void;
   [[nodiscard]] auto IsStale() const -> bool;
 
-  mutable std::mutex mutex_ {};
+  mutable std::mutex mutex_;
   observer_ptr<CameraSettingsService> service_;
   observer_ptr<CameraRigController> camera_rig_;
 
@@ -193,7 +175,6 @@ private:
   // Cached settings state
   CameraControlMode control_mode_ { CameraControlMode::kOrbit };
   OrbitMode orbit_mode_ { OrbitMode::kTurntable };
-  float fly_move_speed_ { 5.0F };
 };
 
 } // namespace oxygen::examples::ui

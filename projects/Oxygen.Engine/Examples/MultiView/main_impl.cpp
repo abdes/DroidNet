@@ -5,197 +5,37 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <atomic>
 #include <cctype>
-#include <chrono>
 #include <cstdint>
-#include <cstdlib>
-#include <exception>
-#include <filesystem>
-#include <functional>
 #include <memory>
-#include <optional>
-#include <source_location>
 #include <span>
 #include <stdexcept>
 #include <string>
-#include <thread>
-#include <utility>
-#include <vector>
 
-#include "Common/DemoCli.h"
-#include "Common/FrameCaptureCli.h"
-#include "Common/FrameCaptureCliOptions.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/Runtime/DemoMain.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "MultiView/CompositingMode.h"
 #include "MultiView/MainModule.h"
 #include "MultiView/SceneBootstrapper.h"
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Clap/Cli.h>
-#include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
-#include <Oxygen/Config/EngineConfig.h>
-#include <Oxygen/Config/PathFinderConfig.h>
-#include <Oxygen/Config/PlatformConfig.h>
-#include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Console/StartupPlan.h>
-#include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
-#include <Oxygen/Graphics/Common/BackendModule.h>
-#include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/Types/QueueRole.h>
-#include <Oxygen/ImGui/ImGuiModule.h>
-#include <Oxygen/Input/InputSystem.h>
-#include <Oxygen/Loader/GraphicsBackendLoader.h>
-#include <Oxygen/OxCo/Co.h>
-#include <Oxygen/OxCo/EventLoop.h>
-#include <Oxygen/OxCo/Nursery.h>
-#include <Oxygen/OxCo/Run.h>
-#include <Oxygen/Platform/Platform.h>
-#include <Oxygen/Vortex/Renderer.h>
-#include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/MainViewOptions.h>
+#include <Oxygen/Host/RunHost.h>
 
-using namespace std::chrono_literals;
-
-namespace engine = oxygen::engine;
-namespace o = oxygen;
-namespace co = oxygen::co;
-namespace g = oxygen::graphics;
-using oxygen::examples::SettingsService;
-
-namespace {
-auto EventLoopRun(const oxygen::examples::DemoAppContext& app) -> void
-{
-  while (app.running.load(std::memory_order_relaxed)) {
-    app.platform->Async().PollOne();
-    if (!app.headless) {
-      app.platform->Events().PollOne();
-    }
-    if (!app.running.load(std::memory_order_relaxed)) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-  }
-}
-} // namespace
-
-template <>
-struct oxygen::co::EventLoopTraits<oxygen::examples::DemoAppContext> {
-  static auto Run(examples::DemoAppContext& app) -> void { EventLoopRun(app); }
-  static auto Stop(examples::DemoAppContext& app) -> void
-  {
-    app.running.store(false, std::memory_order_relaxed);
-  }
-  static auto IsRunning(const examples::DemoAppContext& app) -> bool
-  {
-    return app.running.load(std::memory_order_relaxed);
-  }
-  static auto EventLoopId(examples::DemoAppContext& app) -> EventLoopID
-  {
-    return EventLoopID(&app);
-  }
-};
-
-namespace {
-
-auto RegisterEngineModules(oxygen::examples::DemoAppContext& app,
-  const oxygen::examples::multiview::MainModuleConfig& main_module_config)
-  -> void
-{
-  LOG_F(INFO, "Registering engine modules...");
-
-  auto register_module
-    = [&](std::unique_ptr<engine::EngineModule> module) -> void {
-    const bool registered = app.engine->RegisterModule(std::move(module));
-    if (!registered) {
-      LOG_F(ERROR, "Failed to register module");
-      throw std::runtime_error("Module registration failed");
-    }
-  };
-
-  auto input_sys
-    = std::make_unique<engine::InputSystem>(app.platform->Input().ForRead());
-  app.input_system = o::observer_ptr { input_sys.get() };
-  register_module(std::move(input_sys));
-  if (!app.headless) {
-    register_module(std::make_unique<oxygen::imgui::ImGuiModule>());
-  }
-
-  oxygen::RendererConfig renderer_config {
-    .upload_queue_key
-    = app.queue_strategy.KeyFor(g::QueueRole::kTransfer).get(),
-  };
-  constexpr auto kMultiViewVortexCapabilities
-    = oxygen::vortex::RendererCapabilityFamily::kScenePreparation
-    | oxygen::vortex::RendererCapabilityFamily::kGpuUploadAndAssetBinding
-    | oxygen::vortex::RendererCapabilityFamily::kLightingData
-    | oxygen::vortex::RendererCapabilityFamily::kShadowing
-    | oxygen::vortex::RendererCapabilityFamily::kEnvironmentLighting
-    | oxygen::vortex::RendererCapabilityFamily::kFinalOutputComposition
-    | oxygen::vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling
-    | oxygen::vortex::RendererCapabilityFamily::kDeferredShading;
-  register_module(std::make_unique<oxygen::examples::multiview::MainModule>(
-    app, main_module_config));
-  register_module(std::make_unique<oxygen::vortex::Renderer>(
-    app.gfx_weak, renderer_config, kMultiViewVortexCapabilities));
-}
-
-auto AsyncMain(oxygen::examples::DemoAppContext& app,
-  const oxygen::examples::multiview::MainModuleConfig& main_module_config)
-  -> co::Co<int>
-{
-  OXCO_WITH_NURSERY(n)
-  {
-    app.running.store(true, std::memory_order_relaxed);
-
-    co_await n.Start(&o::Platform::ActivateAsync, std::ref(*app.platform));
-    app.platform->Run();
-
-    DCHECK_F(!app.gfx_weak.expired());
-    auto gfx = app.gfx_weak.lock();
-    co_await n.Start(&o::Graphics::ActivateAsync, std::ref(*gfx));
-    gfx->Run();
-
-    co_await n.Start(&o::AsyncEngine::ActivateAsync, std::ref(*app.engine));
-    app.engine->Run();
-
-    RegisterEngineModules(app, main_module_config);
-
-    n.Start([&app] -> co::Co<> {
-      co_await app.platform->Windows().LastWindowClosed();
-      LOG_F(
-        INFO, "MultiView example: last window closed -> shutting down engine");
-      app.engine->Stop();
-      co_return;
-    });
-
-    co_await app.engine->Completed();
-
-    co_return co::kCancel;
-  };
-
-  co_return EXIT_SUCCESS;
-}
-} // namespace
+namespace examples = oxygen::examples;
+namespace host = oxygen::host;
 
 extern "C" auto MainImpl(std::span<const char*> args) -> int
 {
-  using oxygen::clap::CmdLineArgumentsError;
-  using oxygen::clap::Command;
-  using oxygen::clap::CommandBuilder;
   using oxygen::clap::Option;
+  using oxygen::clap::Options;
 
-  // Initialize settings service
-  SettingsService::ForDemoApp();
+  examples::SettingsService::ForDemoApp();
 
-  uint32_t frames = 0U;
-  uint32_t target_fps = 100U;
-  bool headless = false;
-  bool enable_vsync = true;
   std::string compositing_mode_value = "copy";
   bool pip_wireframe = true;
   uint32_t pip_scissor_inset_px = 0U;
@@ -213,397 +53,284 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   bool visual_fog_cycle = false;
   bool visual_fog_hold_local = false;
   bool visual_fog_jitter = true;
-  std::string resolution;
-  oxygen::examples::cli::GraphicsToolingCliState graphics_tooling_cli {};
-  oxygen::examples::cli::FrameCaptureCliState capture_cli {};
-  oxygen::examples::DemoAppContext app {};
+  auto main_module_config = examples::multiview::MainModuleConfig {};
 
-  try {
-    const Command::Ptr default_command
-      = CommandBuilder(Command::DEFAULT)
-          .WithOptions(oxygen::examples::cli::MakeRuntimeOptions({
-            .frames = &frames,
-            .target_fps = &target_fps,
-            .headless = &headless,
-            .fullscreen = &app.fullscreen,
-            .vsync = &enable_vsync,
-            .resolution = &resolution,
-          }))
-          .WithOptions(oxygen::examples::cli::MakeGraphicsToolingOptions(
-            graphics_tooling_cli))
-          .WithOptions(oxygen::examples::cli::MakeCaptureOptions(capture_cli))
-          .WithOptions(
-            oxygen::examples::cli::MakeAdvancedCaptureOptions(capture_cli),
-            true)
-          .WithOption(Option::WithKey("composite-mode")
-              .About("Compositing mode to use: copy or blend")
-              .Short("c")
-              .Long("composite-mode")
-              .WithValue<std::string>()
-              .DefaultValue("copy")
-              .UserFriendlyName("mode")
-              .StoreTo(&compositing_mode_value)
-              .Build())
-          .WithOption(Option::WithKey("exposure-proof")
-              .About("Exposure proof: none, independent, shared, main-only, "
-                     "pip-only, reordered, source-loss, viewport, lifetime, "
-                     "window-resize, modes, atmosphere, atmosphere-lit, "
-                     "consumer-visual, layouts, mixed, interactions")
-              .Long("exposure-proof")
-              .WithValue<std::string>()
-              .DefaultValue("none")
-              .StoreTo(&exposure_proof_value)
-              .Build())
-          .WithOption(Option::WithKey("exposure-view-only")
-              .About("Layouts proof: render one named view and its required "
-                     "producers")
-              .Long("exposure-view-only")
-              .WithValue<std::string>()
-              .DefaultValue("")
-              .StoreTo(&exposure_view_only)
-              .Build())
-          .WithOption(Option::WithKey("visual-fog")
-              .About(
-                "Initial consumer-visual comparison: clear, volume, or local")
-              .Long("visual-fog")
-              .WithValue<std::string>()
-              .DefaultValue("volume")
-              .StoreTo(&visual_fog_value)
-              .Build())
-          .WithOption(Option::WithKey("visual-fog-cycle")
-              .About("Script the visual controls: clear, volume at 32, local "
-                     "at 96, clear at 128")
-              .Long("visual-fog-cycle")
-              .WithValue<bool>()
-              .DefaultValue(false)
-              .StoreTo(&visual_fog_cycle)
-              .Build())
-          .WithOption(Option::WithKey("visual-fog-hold-local")
-              .About("Run the visual fog cycle and leave Local fog active for "
-                     "temporal diagnosis")
-              .Long("visual-fog-hold-local")
-              .WithValue<bool>()
-              .DefaultValue(false)
-              .StoreTo(&visual_fog_hold_local)
-              .Build())
-          .WithOption(Option::WithKey("visual-fog-jitter")
-              .About(
-                "Volumetric jitter for the bounded consumer-visual comparison")
-              .Long("visual-fog-jitter")
-              .WithValue<bool>()
-              .DefaultValue(true)
-              .StoreTo(&visual_fog_jitter)
-              .Build())
-          .WithOption(Option::WithKey("proof-wireframe-overlay")
-              .About("Exercise per-frame wireframe overlays in the four-view "
-                     "proof layout")
-              .Long("proof-wireframe-overlay")
-              .WithValue<bool>()
-              .DefaultValue(false)
-              .StoreTo(&proof_wireframe_overlay)
-              .Build())
-          .WithOption(Option::WithKey("directional-array-proof")
-              .About("Validate one unassigned and two atmospheric directional "
-                     "lights")
-              .Long("directional-array-proof")
-              .WithValue<bool>()
-              .DefaultValue(false)
-              .StoreTo(&directional_array_proof)
-              .Build())
-          .WithOption(Option::WithKey("point-light")
-              .About(
-                "Enable the point fill light; disable to isolate the spotlight")
-              .Long("point-light")
-              .WithValue<bool>()
-              .DefaultValue(true)
-              .StoreTo(&point_light_enabled)
-              .Build())
-          .WithOption(Option::WithKey("spot-light")
-              .About(
-                "Enable the key spotlight; disable to isolate the point light")
-              .Long("spot-light")
-              .WithValue<bool>()
-              .DefaultValue(true)
-              .StoreTo(&spot_light_enabled)
-              .Build())
-          .WithOption(Option::WithKey("pip-wireframe")
-              .About("Render the PiP scene view in wireframe mode")
-              .Long("pip-wireframe")
-              .WithValue<bool>()
-              .DefaultValue(true)
-              .UserFriendlyName("enabled")
-              .StoreTo(&pip_wireframe)
-              .Build())
-          .WithOption(Option::WithKey("pip-scissor-inset")
-              .About("Inset the PiP scene scissor in pixels before rendering")
-              .Long("pip-scissor-inset")
-              .WithValue<uint32_t>()
-              .DefaultValue(0U)
-              .UserFriendlyName("pixels")
-              .StoreTo(&pip_scissor_inset_px)
-              .Build())
-          .WithOption(Option::WithKey("proof-layout")
-              .About("Use the four-view M06A validation layout")
-              .Long("proof-layout")
-              .WithValue<bool>()
-              .DefaultValue(false)
-              .UserFriendlyName("enabled")
-              .StoreTo(&proof_layout)
-              .Build())
-          .WithOption(Option::WithKey("aux-proof-layout")
-              .About(
-                "Use the M06A auxiliary producer/consumer validation layout")
-              .Long("aux-proof-layout")
-              .WithValue<bool>()
-              .DefaultValue(false)
-              .UserFriendlyName("enabled")
-              .StoreTo(&aux_proof_layout)
-              .Build())
-          .WithOption(Option::WithKey("offscreen-proof-layout")
-              .About("Use the M06B offscreen preview/capture validation layout")
-              .Long("offscreen-proof-layout")
-              .WithValue<bool>()
-              .DefaultValue(false)
-              .UserFriendlyName("enabled")
-              .StoreTo(&offscreen_proof_layout)
-              .Build())
-          .WithOption(Option::WithKey("feature-variant-proof-layout")
-              .About("Use the M06C feature-variant validation layout")
-              .Long("feature-variant-proof-layout")
-              .WithValue<bool>()
-              .DefaultValue(false)
-              .UserFriendlyName("enabled")
-              .StoreTo(&feature_variant_proof_layout)
-              .Build());
+  auto options = std::make_shared<Options>("MultiView");
+  options->Add(Option::WithKey("composite-mode")
+      .About("Compositing mode to use: copy or blend")
+      .Short("c")
+      .Long("composite-mode")
+      .WithValue<std::string>()
+      .DefaultValue("copy")
+      .UserFriendlyName("mode")
+      .StoreTo(&compositing_mode_value)
+      .Build());
+  options->Add(Option::WithKey("exposure-proof")
+      .About("Exposure proof: none, independent, shared, main-only, "
+             "pip-only, reordered, source-loss, viewport, lifetime, "
+             "window-resize, modes, atmosphere, atmosphere-lit, "
+             "consumer-visual, layouts, mixed, interactions")
+      .Long("exposure-proof")
+      .WithValue<std::string>()
+      .DefaultValue("none")
+      .StoreTo(&exposure_proof_value)
+      .Build());
+  options->Add(Option::WithKey("exposure-view-only")
+      .About("Layouts proof: render one named view and its required "
+             "producers")
+      .Long("exposure-view-only")
+      .WithValue<std::string>()
+      .DefaultValue("")
+      .StoreTo(&exposure_view_only)
+      .Build());
+  options->Add(Option::WithKey("visual-fog")
+      .About("Initial consumer-visual comparison: clear, volume, or local")
+      .Long("visual-fog")
+      .WithValue<std::string>()
+      .DefaultValue("volume")
+      .StoreTo(&visual_fog_value)
+      .Build());
+  options->Add(Option::WithKey("visual-fog-cycle")
+      .About("Script the visual controls: clear, volume at 32, local "
+             "at 96, clear at 128")
+      .Long("visual-fog-cycle")
+      .WithValue<bool>()
+      .DefaultValue(false)
+      .StoreTo(&visual_fog_cycle)
+      .Build());
+  options->Add(Option::WithKey("visual-fog-hold-local")
+      .About("Run the visual fog cycle and leave Local fog active for "
+             "temporal diagnosis")
+      .Long("visual-fog-hold-local")
+      .WithValue<bool>()
+      .DefaultValue(false)
+      .StoreTo(&visual_fog_hold_local)
+      .Build());
+  options->Add(Option::WithKey("visual-fog-jitter")
+      .About("Volumetric jitter for the bounded consumer-visual comparison")
+      .Long("visual-fog-jitter")
+      .WithValue<bool>()
+      .DefaultValue(true)
+      .StoreTo(&visual_fog_jitter)
+      .Build());
+  options->Add(Option::WithKey("proof-wireframe-overlay")
+      .About("Exercise per-frame wireframe overlays in the four-view "
+             "proof layout")
+      .Long("proof-wireframe-overlay")
+      .WithValue<bool>()
+      .DefaultValue(false)
+      .StoreTo(&proof_wireframe_overlay)
+      .Build());
+  options->Add(Option::WithKey("directional-array-proof")
+      .About("Validate one unassigned and two atmospheric directional "
+             "lights")
+      .Long("directional-array-proof")
+      .WithValue<bool>()
+      .DefaultValue(false)
+      .StoreTo(&directional_array_proof)
+      .Build());
+  options->Add(Option::WithKey("point-light")
+      .About("Enable the point fill light; disable to isolate the spotlight")
+      .Long("point-light")
+      .WithValue<bool>()
+      .DefaultValue(true)
+      .StoreTo(&point_light_enabled)
+      .Build());
+  options->Add(Option::WithKey("spot-light")
+      .About("Enable the key spotlight; disable to isolate the point light")
+      .Long("spot-light")
+      .WithValue<bool>()
+      .DefaultValue(true)
+      .StoreTo(&spot_light_enabled)
+      .Build());
+  options->Add(Option::WithKey("pip-wireframe")
+      .About("Render the PiP scene view in wireframe mode")
+      .Long("pip-wireframe")
+      .WithValue<bool>()
+      .DefaultValue(true)
+      .UserFriendlyName("enabled")
+      .StoreTo(&pip_wireframe)
+      .Build());
+  options->Add(Option::WithKey("pip-scissor-inset")
+      .About("Inset the PiP scene scissor in pixels before rendering")
+      .Long("pip-scissor-inset")
+      .WithValue<uint32_t>()
+      .DefaultValue(0U)
+      .UserFriendlyName("pixels")
+      .StoreTo(&pip_scissor_inset_px)
+      .Build());
+  options->Add(Option::WithKey("proof-layout")
+      .About("Use the four-view M06A validation layout")
+      .Long("proof-layout")
+      .WithValue<bool>()
+      .DefaultValue(false)
+      .UserFriendlyName("enabled")
+      .StoreTo(&proof_layout)
+      .Build());
+  options->Add(Option::WithKey("aux-proof-layout")
+      .About("Use the M06A auxiliary producer/consumer validation layout")
+      .Long("aux-proof-layout")
+      .WithValue<bool>()
+      .DefaultValue(false)
+      .UserFriendlyName("enabled")
+      .StoreTo(&aux_proof_layout)
+      .Build());
+  options->Add(Option::WithKey("offscreen-proof-layout")
+      .About("Use the M06B offscreen preview/capture validation layout")
+      .Long("offscreen-proof-layout")
+      .WithValue<bool>()
+      .DefaultValue(false)
+      .UserFriendlyName("enabled")
+      .StoreTo(&offscreen_proof_layout)
+      .Build());
+  options->Add(Option::WithKey("feature-variant-proof-layout")
+      .About("Use the M06C feature-variant validation layout")
+      .Long("feature-variant-proof-layout")
+      .WithValue<bool>()
+      .DefaultValue(false)
+      .UserFriendlyName("enabled")
+      .StoreTo(&feature_variant_proof_layout)
+      .Build());
 
-    auto cli = oxygen::examples::cli::BuildCli(
-      "multi-view", "Multi-view rendering demo", default_command);
-
-    const int argc = static_cast<int>(args.size());
-    const char** argv = args.data();
-    auto context = cli->Parse(argc, argv);
-    if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
-      return EXIT_SUCCESS;
-    }
-    app.window_resolution = oxygen::examples::cli::ResolveWindowResolution(
-      context, resolution, headless);
-    app.headless = headless;
-
-    oxygen::examples::cli::ValidateGraphicsToolingOptions(graphics_tooling_cli);
-    LOG_F(INFO, "Parsed frames option = {}", frames);
-    LOG_F(INFO, "Parsed fps option = {}", target_fps);
-    LOG_F(INFO, "Parsed fullscreen option = {}", app.fullscreen);
-    LOG_F(INFO, "Parsed vsync option = {}", enable_vsync);
-    oxygen::examples::cli::LogGraphicsToolingOptions(graphics_tooling_cli);
-    oxygen::examples::cli::LogCaptureOptions(capture_cli);
-    LOG_F(INFO, "Parsed composite mode option = {}", compositing_mode_value);
-    LOG_F(INFO, "Parsed pip wireframe option = {}", pip_wireframe);
-    LOG_F(INFO, "Parsed pip scissor inset option = {}", pip_scissor_inset_px);
-    LOG_F(INFO, "Parsed proof layout option = {}", proof_layout);
-    LOG_F(INFO, "Parsed aux proof layout option = {}", aux_proof_layout);
-    LOG_F(INFO, "Parsed offscreen proof layout option = {}",
-      offscreen_proof_layout);
-    LOG_F(INFO, "Parsed feature variant proof layout option = {}",
-      feature_variant_proof_layout);
-
-    auto main_module_config = oxygen::examples::multiview::MainModuleConfig {
-      .compositing_mode = oxygen::examples::multiview::CompositingMode::kBlend,
-      .pip_force_wireframe = pip_wireframe,
-      .pip_scissor_inset_px = pip_scissor_inset_px,
-      .proof_layout = proof_layout,
-      .aux_proof_layout = aux_proof_layout,
-      .offscreen_proof_layout = offscreen_proof_layout,
-      .feature_variant_proof_layout = feature_variant_proof_layout,
-      .proof_wireframe_overlay = proof_wireframe_overlay,
-      .point_light_enabled = point_light_enabled,
-      .spot_light_enabled = spot_light_enabled,
-      .directional_array_proof = directional_array_proof,
-    };
-    using ExposureProof = oxygen::examples::multiview::ExposureProofScenario;
-    if (proof_wireframe_overlay && !proof_layout && !aux_proof_layout) {
-      throw std::invalid_argument(
-        "Wireframe overlay proof requires a four-view proof layout");
-    }
-    if (exposure_proof_value == "independent") {
-      main_module_config.exposure_proof = ExposureProof::kIndependent;
-    } else if (exposure_proof_value == "shared") {
-      main_module_config.exposure_proof = ExposureProof::kShared;
-    } else if (exposure_proof_value == "main-only") {
-      main_module_config.exposure_proof = ExposureProof::kMainOnly;
-    } else if (exposure_proof_value == "pip-only") {
-      main_module_config.exposure_proof = ExposureProof::kPipOnly;
-    } else if (exposure_proof_value == "reordered") {
-      main_module_config.exposure_proof = ExposureProof::kReordered;
-    } else if (exposure_proof_value == "source-loss") {
-      main_module_config.exposure_proof = ExposureProof::kSourceLoss;
-    } else if (exposure_proof_value == "viewport") {
-      main_module_config.exposure_proof = ExposureProof::kViewport;
-    } else if (exposure_proof_value == "lifetime") {
-      main_module_config.exposure_proof = ExposureProof::kLifetime;
-    } else if (exposure_proof_value == "window-resize") {
-      main_module_config.exposure_proof = ExposureProof::kWindowResize;
-    } else if (exposure_proof_value == "modes") {
-      main_module_config.exposure_proof = ExposureProof::kModes;
-    } else if (exposure_proof_value == "atmosphere") {
-      main_module_config.exposure_proof = ExposureProof::kAtmosphere;
-    } else if (exposure_proof_value == "atmosphere-lit") {
-      main_module_config.exposure_proof = ExposureProof::kAtmosphereLit;
-    } else if (exposure_proof_value == "consumer-visual") {
-      main_module_config.exposure_proof = ExposureProof::kConsumerVisual;
-    } else if (exposure_proof_value == "layouts") {
-      main_module_config.exposure_proof = ExposureProof::kLayouts;
-    } else if (exposure_proof_value == "mixed") {
-      main_module_config.exposure_proof = ExposureProof::kMixed;
-    } else if (exposure_proof_value == "interactions") {
-      main_module_config.exposure_proof = ExposureProof::kInteractions;
-    } else if (exposure_proof_value != "none") {
-      throw std::invalid_argument("Unknown exposure proof scenario");
-    }
-    if (!exposure_view_only.empty()
-      && main_module_config.exposure_proof != ExposureProof::kLayouts
-      && main_module_config.exposure_proof != ExposureProof::kMixed) {
-      throw std::invalid_argument(
-        "Exposure view selection requires layouts or mixed proof");
-    }
-    main_module_config.exposure_view_only = exposure_view_only;
-    using VisualFog = oxygen::examples::multiview::VisualFogMode;
-    main_module_config.visual_fog_jitter = visual_fog_jitter;
-    if (visual_fog_value == "clear") {
-      main_module_config.visual_fog_mode = VisualFog::kClear;
-    } else if (visual_fog_value == "local") {
-      main_module_config.visual_fog_mode = VisualFog::kLocal;
-    } else if (visual_fog_value != "volume") {
-      throw std::invalid_argument("Unknown visual fog comparison");
-    }
-    if (visual_fog_cycle || visual_fog_hold_local) {
-      if (main_module_config.exposure_proof != ExposureProof::kConsumerVisual) {
-        throw std::invalid_argument(
-          "Visual fog cycling requires consumer-visual");
-      }
-      main_module_config.visual_fog_cycle = true;
-      main_module_config.visual_fog_hold_local = visual_fog_hold_local;
-      main_module_config.visual_fog_mode = VisualFog::kClear;
-    }
-    if ((main_module_config.exposure_proof == ExposureProof::kWindowResize
-          || main_module_config.exposure_proof == ExposureProof::kInteractions)
-      && (headless || app.fullscreen)) {
-      throw std::invalid_argument(
-        "This proof requires a windowed presentation surface");
-    }
-    if (main_module_config.exposure_proof != ExposureProof::kNone
-      && main_module_config.exposure_proof != ExposureProof::kLayouts
-      && main_module_config.exposure_proof != ExposureProof::kMixed
-      && main_module_config.exposure_proof != ExposureProof::kInteractions
-      && (proof_layout || aux_proof_layout || offscreen_proof_layout
-        || feature_variant_proof_layout)) {
-      throw std::invalid_argument(
-        "Exposure proof requires the ordinary main/PiP layout");
-    }
-    if (main_module_config.exposure_proof == ExposureProof::kInteractions
-      && (proof_layout || aux_proof_layout || feature_variant_proof_layout)) {
-      throw std::invalid_argument(
-        "Interactions require ordinary or offscreen layout");
-    }
-    auto mode_lower = compositing_mode_value;
-    std::ranges::transform(
-      mode_lower, mode_lower.begin(), [](unsigned char c) -> char {
-        return static_cast<char>(std::tolower(c));
-      });
-    if (mode_lower == "copy") {
-      main_module_config.compositing_mode
-        = oxygen::examples::multiview::CompositingMode::kCopy;
-    } else if (mode_lower == "blend") {
-      main_module_config.compositing_mode
-        = oxygen::examples::multiview::CompositingMode::kBlend;
-    } else if (!mode_lower.empty()) {
-      throw std::runtime_error("Invalid composite mode; use 'copy' or 'blend'");
-    }
-
-    app.platform = std::make_shared<o::Platform>(o::PlatformConfig {
-      .headless = headless,
-      .thread_pool_size = (std::min)(4U, std::thread::hardware_concurrency()),
-    });
-
-    const auto workspace_root
-      = std::filesystem::path(std::source_location::current().file_name())
-          .parent_path()
-          .parent_path()
-          .parent_path();
-
-    const auto path_finder_config
-      = o::PathFinderConfig::Create()
-          .WithWorkspaceRoot(workspace_root)
-          .WithScriptSourceRoots({ workspace_root / "Examples" / "Content" })
-          .Build();
-    const auto frame_capture_config
-      = oxygen::examples::cli::BuildFrameCaptureConfig(capture_cli, headless);
-    const o::GraphicsConfig gfx_config {
-      .enable_debug_layer = graphics_tooling_cli.enable_debug_layer,
-      .enable_validation = false,
-      .enable_aftermath = graphics_tooling_cli.enable_aftermath,
-      .preferred_card_name = std::nullopt,
-      .headless = headless,
-      .enable_vsync = enable_vsync,
-      .frame_capture = frame_capture_config,
-      .extra = {},
-    };
-    const auto& loader = o::GraphicsBackendLoader::GetInstance();
-    app.gfx_weak = loader.LoadBackend(
-      headless ? g::BackendType::kHeadless : g::BackendType::kDirect3D12,
-      gfx_config, path_finder_config);
-    CHECK_F(!app.gfx_weak.expired());
-    app.gfx_weak.lock()->CreateCommandQueues(app.queue_strategy);
-
-    o::console::ConsoleStartupPlan startup_cvars {};
-    oxygen::examples::cli::SeedCommonRuntimeStartupCVars(
-      context, target_fps, enable_vsync, startup_cvars);
-
-    app.engine = std::make_shared<o::AsyncEngine>(
-      app.platform,
-      app.gfx_weak,
-      o::EngineConfig {
-        .application = { .name = "MultiView Example", .version = 1U, },
-        .target_fps = target_fps,
-        .frame_count = frames,
-        .enable_asset_loader = true,
-        .path_finder_config = path_finder_config,
-        .timing = {
-          .pacing_safety_margin = 250us,
-        },
+  return examples::RunDemo(args,
+    {
+      .program = "multi-view",
+      .about = "Multi-view rendering demo",
+      .application = "MultiView Example",
+      .options = { { options, false } },
+      .configure = [&](const oxygen::clap::CommandLineContext&,
+                     host::HostConfig& config) -> void {
+        main_module_config = oxygen::examples::multiview::MainModuleConfig {
+          .compositing_mode
+          = oxygen::examples::multiview::CompositingMode::kBlend,
+          .pip_force_wireframe = pip_wireframe,
+          .pip_scissor_inset_px = pip_scissor_inset_px,
+          .proof_layout = proof_layout,
+          .aux_proof_layout = aux_proof_layout,
+          .offscreen_proof_layout = offscreen_proof_layout,
+          .feature_variant_proof_layout = feature_variant_proof_layout,
+          .proof_wireframe_overlay = proof_wireframe_overlay,
+          .point_light_enabled = point_light_enabled,
+          .spot_light_enabled = spot_light_enabled,
+          .directional_array_proof = directional_array_proof,
+        };
+        using ExposureProof
+          = oxygen::examples::multiview::ExposureProofScenario;
+        if (proof_wireframe_overlay && !proof_layout && !aux_proof_layout) {
+          throw std::invalid_argument(
+            "Wireframe overlay proof requires a four-view proof layout");
+        }
+        if (exposure_proof_value == "independent") {
+          main_module_config.exposure_proof = ExposureProof::kIndependent;
+        } else if (exposure_proof_value == "shared") {
+          main_module_config.exposure_proof = ExposureProof::kShared;
+        } else if (exposure_proof_value == "main-only") {
+          main_module_config.exposure_proof = ExposureProof::kMainOnly;
+        } else if (exposure_proof_value == "pip-only") {
+          main_module_config.exposure_proof = ExposureProof::kPipOnly;
+        } else if (exposure_proof_value == "reordered") {
+          main_module_config.exposure_proof = ExposureProof::kReordered;
+        } else if (exposure_proof_value == "source-loss") {
+          main_module_config.exposure_proof = ExposureProof::kSourceLoss;
+        } else if (exposure_proof_value == "viewport") {
+          main_module_config.exposure_proof = ExposureProof::kViewport;
+        } else if (exposure_proof_value == "lifetime") {
+          main_module_config.exposure_proof = ExposureProof::kLifetime;
+        } else if (exposure_proof_value == "window-resize") {
+          main_module_config.exposure_proof = ExposureProof::kWindowResize;
+        } else if (exposure_proof_value == "modes") {
+          main_module_config.exposure_proof = ExposureProof::kModes;
+        } else if (exposure_proof_value == "atmosphere") {
+          main_module_config.exposure_proof = ExposureProof::kAtmosphere;
+        } else if (exposure_proof_value == "atmosphere-lit") {
+          main_module_config.exposure_proof = ExposureProof::kAtmosphereLit;
+        } else if (exposure_proof_value == "consumer-visual") {
+          main_module_config.exposure_proof = ExposureProof::kConsumerVisual;
+        } else if (exposure_proof_value == "layouts") {
+          main_module_config.exposure_proof = ExposureProof::kLayouts;
+        } else if (exposure_proof_value == "mixed") {
+          main_module_config.exposure_proof = ExposureProof::kMixed;
+        } else if (exposure_proof_value == "interactions") {
+          main_module_config.exposure_proof = ExposureProof::kInteractions;
+        } else if (exposure_proof_value != "none") {
+          throw std::invalid_argument("Unknown exposure proof scenario");
+        }
+        if (!exposure_view_only.empty()
+          && main_module_config.exposure_proof != ExposureProof::kLayouts
+          && main_module_config.exposure_proof != ExposureProof::kMixed) {
+          throw std::invalid_argument(
+            "Exposure view selection requires layouts or mixed proof");
+        }
+        main_module_config.exposure_view_only = exposure_view_only;
+        using VisualFog = oxygen::examples::multiview::VisualFogMode;
+        main_module_config.visual_fog_jitter = visual_fog_jitter;
+        if (visual_fog_value == "clear") {
+          main_module_config.visual_fog_mode = VisualFog::kClear;
+        } else if (visual_fog_value == "local") {
+          main_module_config.visual_fog_mode = VisualFog::kLocal;
+        } else if (visual_fog_value != "volume") {
+          throw std::invalid_argument("Unknown visual fog comparison");
+        }
+        if (visual_fog_cycle || visual_fog_hold_local) {
+          if (main_module_config.exposure_proof
+            != ExposureProof::kConsumerVisual) {
+            throw std::invalid_argument(
+              "Visual fog cycling requires consumer-visual");
+          }
+          main_module_config.visual_fog_cycle = true;
+          main_module_config.visual_fog_hold_local = visual_fog_hold_local;
+          main_module_config.visual_fog_mode = VisualFog::kClear;
+        }
+        if ((main_module_config.exposure_proof == ExposureProof::kWindowResize
+              || main_module_config.exposure_proof
+                == ExposureProof::kInteractions)
+          && (config.platform.headless || config.window.fullscreen)) {
+          throw std::invalid_argument(
+            "This proof requires a windowed presentation surface");
+        }
+        if (main_module_config.exposure_proof != ExposureProof::kNone
+          && main_module_config.exposure_proof != ExposureProof::kLayouts
+          && main_module_config.exposure_proof != ExposureProof::kMixed
+          && main_module_config.exposure_proof != ExposureProof::kInteractions
+          && (proof_layout || aux_proof_layout || offscreen_proof_layout
+            || feature_variant_proof_layout)) {
+          throw std::invalid_argument(
+            "Exposure proof requires the ordinary main/PiP layout");
+        }
+        if (main_module_config.exposure_proof == ExposureProof::kInteractions
+          && (proof_layout || aux_proof_layout
+            || feature_variant_proof_layout)) {
+          throw std::invalid_argument(
+            "Interactions require ordinary or offscreen layout");
+        }
+        auto mode_lower = compositing_mode_value;
+        std::ranges::transform(
+          mode_lower, mode_lower.begin(), [](unsigned char c) -> char {
+            return static_cast<char>(std::tolower(c));
+          });
+        if (mode_lower == "copy") {
+          main_module_config.compositing_mode
+            = oxygen::examples::multiview::CompositingMode::kCopy;
+        } else if (mode_lower == "blend") {
+          main_module_config.compositing_mode
+            = oxygen::examples::multiview::CompositingMode::kBlend;
+        } else if (!mode_lower.empty()) {
+          throw std::runtime_error(
+            "Invalid composite mode; use 'copy' or 'blend'");
+        }
+        if (proof_wireframe_overlay) {
+          // The main view takes the host's view mode; the others take the
+          // overlay from the module.
+          config.startup_cvars.Set(
+            std::string(host::kViewModeCVar), "lit-wireframe");
+        }
       },
-      startup_cvars
-    );
-
-    const auto rc = co::Run(app, AsyncMain(app, main_module_config));
-
-    app.platform->Stop();
-    app.engine.reset();
-    if (!app.gfx_weak.expired()) {
-      auto gfx = app.gfx_weak.lock();
-      gfx->Stop();
-      gfx.reset();
-    }
-    loader.UnloadBackend();
-    app.platform.reset();
-
-    LOG_F(INFO, "exit code: {}", rc);
-    loguru::flush();
-    loguru::shutdown();
-    return rc;
-  } catch (const oxygen::examples::cli::FrameCaptureCliError& e) {
-    LOG_F(ERROR, "CLI parse error: {}", e.what());
-    loguru::flush();
-    loguru::shutdown();
-    return EXIT_FAILURE;
-  } catch (const CmdLineArgumentsError& e) {
-    LOG_F(ERROR, "CLI parse error: {}", e.what());
-    loguru::flush();
-    loguru::shutdown();
-    return EXIT_FAILURE;
-  } catch (const std::exception& e) {
-    LOG_F(ERROR, "Unhandled exception: {}", e.what());
-    loguru::flush();
-    loguru::shutdown();
-    return EXIT_FAILURE;
-  }
+      .register_modules
+      = [&](oxygen::AsyncEngine& engine, host::HostContext& context) -> void {
+        host::RegisterRequiredModule(engine,
+          std::make_unique<examples::multiview::MainModule>(
+            context, main_module_config));
+        examples::RegisterDemoRenderer(engine, context);
+      },
+    });
 }

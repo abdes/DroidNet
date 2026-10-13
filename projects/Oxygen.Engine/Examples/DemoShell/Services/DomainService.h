@@ -9,7 +9,8 @@
 #include <cstdint>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 
 namespace oxygen {
 namespace engine {
@@ -17,6 +18,7 @@ namespace engine {
 }
 namespace scene {
   class Scene;
+  class SceneNode;
 }
 } // namespace oxygen
 
@@ -32,8 +34,9 @@ public:
 
   virtual void OnFrameStart(const engine::FrameContext& context) = 0;
   virtual void OnSceneActivated(scene::Scene& scene) = 0;
-  virtual void OnMainViewReady(const engine::FrameContext& context,
-    const vortex::CompositionView& view) = 0;
+  //! The main view was published with `camera` over `viewport`.
+  virtual void OnMainViewReady(ViewId view_id, const scene::SceneNode& camera,
+    const ViewPort& viewport) = 0;
 
   [[nodiscard]] virtual auto GetEpoch() const noexcept -> std::uint64_t = 0;
 };

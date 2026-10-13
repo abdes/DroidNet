@@ -6,170 +6,138 @@
 
 #pragma once
 
-#include <map>
+#include <array>
+#include <filesystem>
 #include <memory>
+#include <optional>
+#include <string>
 #include <vector>
 
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/AppWindow.h"
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Host/HostModule.h>
+#include <Oxygen/ImGui/Console/ConsoleUiState.h>
 #include <Oxygen/OxCo/Co.h>
-#include <Oxygen/Platform/Window.h>
-#include <Oxygen/Vortex/CompositionView.h>
-#include <Oxygen/Vortex/Renderer.h>
 
 #ifdef OXYGEN_BUILD_UI_TESTS
 struct ImGuiTestEngine;
 #endif
 
 namespace oxygen {
+namespace console {
+  class Console;
+} // namespace console
 namespace engine {
   class FrameContext;
-}
-namespace graphics {
-  class Framebuffer;
-  class Surface;
-}
-namespace imgui {
-  class ImGuiModule;
-}
-namespace vortex {
-  class Renderer;
-}
+} // namespace engine
+namespace scene {
+  class SceneNode;
+} // namespace scene
 } // namespace oxygen
 
 namespace oxygen::examples {
 
-class DemoAppContext;
 #ifdef OXYGEN_BUILD_UI_TESTS
 namespace testing {
   class UiTestSession;
-}
+} // namespace testing
 #endif
 
-//! Base class for demo engine modules.
+//! Base class for the application module of a DemoShell example.
 /*!
-  Implements shared helpers and storage for common demo lifecycle pieces such
-  as the main window, view publication, runtime composition, and demo shell
-  integration on top of the Vortex renderer.
+ The host owns the window, the views, the scene stage, the toolbar and the
+ console. This base adds the DemoShell panels and services on top:
+
+ - the shell sees every scene the stage publishes and the main view once it
+   is published;
+ - the camera rig and the content panel tick in `kInput` on the physical
+   delta, so the camera keeps flying while the engine is paused;
+ - the panels draw below the toolbar;
+ - the console and palette window placement and the GPU work overlay's
+   position persist in the demo settings, as the panels' settings do; the
+   host's view mode, show flags and overlay switches are console variables
+   saved in the application's archive;
+ - a second instance of the demo runs without saving its settings.
+
+ A derived module returns at least `kDemoPhases` from `GetSupportedPhases()`
+ and calls the base implementation of every phase it overrides.
 */
-class DemoModuleBase : public engine::EngineModule, public Composition {
+class DemoModuleBase : public host::HostModule {
   OXYGEN_TYPED(DemoModuleBase)
 public:
-  explicit DemoModuleBase(const DemoAppContext& app);
+#ifdef OXYGEN_BUILD_UI_TESTS
+  static constexpr auto kDemoPhases = kHostPhases
+    | engine::MakeModuleMask<core::PhaseId::kInput, core::PhaseId::kFrameEnd>();
+#else
+  static constexpr auto kDemoPhases
+    = kHostPhases | engine::MakeModuleMask<core::PhaseId::kInput>();
+#endif
+
+  explicit DemoModuleBase(const host::HostContext& host);
   ~DemoModuleBase() override;
 
   OXYGEN_MAKE_NON_COPYABLE(DemoModuleBase)
   OXYGEN_MAKE_NON_MOVABLE(DemoModuleBase)
 
-  auto OnAttached(observer_ptr<IAsyncEngine> engine) noexcept -> bool final;
   auto OnShutdown() noexcept -> void override;
 
   auto OnFrameStart(observer_ptr<engine::FrameContext> context)
     -> void override;
-  auto OnSceneMutation(observer_ptr<engine::FrameContext> context)
+  auto OnInput(observer_ptr<engine::FrameContext> context) -> co::Co<> override;
+  auto OnGuiUpdate(observer_ptr<engine::FrameContext> context)
     -> co::Co<> override;
-  auto OnPreRender(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
-  auto OnCompositing(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> final;
-  auto OnPublishViews(observer_ptr<engine::FrameContext> context)
-    -> co::Co<> override;
-
-protected:
 #ifdef OXYGEN_BUILD_UI_TESTS
-  auto UiTestOutputDirectory() const -> std::filesystem::path;
-  virtual auto RegisterUiTests(ImGuiTestEngine*) -> void;
-  auto StopUiTests() -> void;
   auto OnFrameEnd(observer_ptr<engine::FrameContext> context) -> void override;
 #endif
-  //! Hook: derived demos create and configure the DemoShell instance.
+
+protected:
+  //! Derived demos create and initialize the shell, starting from
+  //! `MakeShellConfig()`.
   virtual auto OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     -> std::unique_ptr<DemoShell> = 0;
 
-  //! Access the owned DemoShell instance (must be initialized).
-  auto GetShell() -> DemoShell&;
+  //! A shell configuration bound to the host: engine, scene stage and
+  //! command dispatcher.
+  [[nodiscard]] auto MakeShellConfig() -> DemoShellConfig;
 
-  //! Hook: allow derived demos to customize window properties.
-  virtual auto BuildDefaultWindowProperties() const
-    -> platform::window::Properties;
+  //! The shell; the module must be attached.
+  [[nodiscard]] auto GetShell() -> DemoShell&;
 
-  //! Hook retained for existing demos; Vortex runtime path does not require
-  //! explicit backbuffer cleanup and most implementations can now no-op.
-  virtual auto ClearBackbufferReferences() -> void = 0;
+  //! Draw the host's UI without the panels and make this binary's ImGui
+  //! context current; true when an ImGui frame is open to draw into.
+  [[nodiscard]] auto DrawHostUi(observer_ptr<engine::FrameContext> context)
+    -> co::Co<bool>;
 
-  //! Hook: derived classes fill this with the views they want to render this
-  //! frame.
-  virtual auto UpdateComposition(engine::FrameContext& /*context*/,
-    std::vector<vortex::CompositionView>& /*views*/) -> void
-  {
-  }
+  auto OnScenePublished(engine::FrameContext& context) -> void override;
+  auto OnMainViewReady(ViewId view_id, const scene::SceneNode& camera,
+    const ViewPort& viewport) -> void override;
 
-  //! Hook: derived demos may add texture-backed composition layers after their
-  //! scene layers have been collected.
-  virtual auto AppendRuntimeCompositionLayers(engine::FrameContext& /*context*/,
-    vortex::Renderer::RuntimeCompositionInput& /*input*/) -> void
-  {
-  }
-
-  // Helpers
-  auto GetOrCreateViewId(std::string_view name) -> ViewId;
-  auto ClearViewIds() -> void;
-
-  //! Retain an omitted view's registration/history with no current outputs.
-  //! The renderer's normal idle-retirement policy still applies.
-  virtual auto RetainInactiveView(ViewId /*view_id*/) const noexcept -> bool
-  {
-    return false;
-  }
-
-  //! Resolve the active Vortex renderer module if available.
-  auto ResolveVortexRenderer() const noexcept -> observer_ptr<vortex::Renderer>;
-
-  //! Resolve the ImGui module; null when headless or not registered.
-  [[nodiscard]] auto ResolveImGuiModule() const noexcept
-    -> observer_ptr<imgui::ImGuiModule>;
-
-  //! True when this demo still has a live renderable window, or is headless.
-  [[nodiscard]] auto HasRenderableWindow() const noexcept -> bool;
-
-  // State
-  const DemoAppContext& app_;
-  observer_ptr<AppWindow> app_window_ { nullptr };
-
-  //! Map of logical view names to persistent ViewIds for resource tracking.
-  std::map<std::string, ViewId> view_registry_;
-  //! The active descriptors for the current frame.
-  std::vector<vortex::CompositionView> active_views_;
+#ifdef OXYGEN_BUILD_UI_TESTS
+  [[nodiscard]] auto UiTestOutputDirectory() const -> std::filesystem::path;
+  virtual auto RegisterUiTests(ImGuiTestEngine* engine) -> void;
+  auto StopUiTests() -> void;
+#endif
 
 private:
-  struct RuntimeSceneTarget {
-    std::shared_ptr<graphics::Framebuffer> scene_framebuffer;
-    std::shared_ptr<graphics::Framebuffer> composite_framebuffer;
-    uint32_t width { 0 };
-    uint32_t height { 0 };
-  };
+  auto OnHostAttached(observer_ptr<IAsyncEngine> engine) -> bool final;
+  auto LoadUiPlacement() -> void;
+  auto PersistUiPlacement() -> void;
 
   std::unique_ptr<DemoShell> shell_;
+  std::optional<imgui::consoleui::WindowPlacement> saved_console_window_;
+  std::optional<imgui::consoleui::WindowPlacement> saved_palette_window_;
+  bool saved_auto_scroll_ { true };
+  std::optional<host::GpuWorkPosition> saved_gpu_work_;
+  std::array<bool, 3> saved_severity_filters_ { true, true, true };
 #ifdef OXYGEN_BUILD_UI_TESTS
   std::unique_ptr<testing::UiTestSession> ui_tests_;
 #endif
-
-  auto OnFrameStartCommon(engine::FrameContext& context) -> void;
-  auto EnsureSceneFramebuffer(ViewId view_id, uint32_t width, uint32_t height)
-    -> RuntimeSceneTarget*;
-  auto ClearSceneFramebuffers() -> void;
-  auto RetireSceneFramebuffers(RuntimeSceneTarget& target) -> void;
-  auto ReleaseInactiveRuntimeViews(observer_ptr<engine::FrameContext> context,
-    const std::vector<ViewId>& retained_intent_ids) -> void;
-
-  observer_ptr<graphics::Surface> last_surface_ { nullptr };
-  std::map<ViewId, RuntimeSceneTarget> scene_targets_;
 };
 
 } // namespace oxygen::examples

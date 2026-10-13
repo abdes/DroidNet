@@ -25,15 +25,15 @@
 #  include <winuser.h>
 #endif
 
-#include "Common/DemoCli.h"
-
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Config/PlatformConfig.h>
+#include <Oxygen/Host/RuntimeCli.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/EventLoop.h>
@@ -49,6 +49,8 @@ using WindowProps = oxygen::platform::window::Properties;
 using WindowEvent = oxygen::platform::window::Event;
 
 namespace {
+// NOLINTNEXTLINE(cppcoreguidelines-avoid-non-const-global-variables) - static
+// loop traits
 bool is_running { false };
 
 //! Simple help text renderer using Windows GDI APIs
@@ -62,9 +64,10 @@ private:
 
 public:
   explicit HelpRenderer(void* native_window_handle)
+    : hwnd_(static_cast<HWND>(native_window_handle))
   {
 #ifdef _WIN32
-    hwnd_ = static_cast<HWND>(native_window_handle);
+
     if (!hwnd_) {
       LOG_F(ERROR, "Invalid native window handle");
       return;
@@ -72,19 +75,26 @@ public:
 #endif
 
     // Initialize help text lines
-    help_lines_ = { "Oxygen Platform Example - Keyboard Controls", "",
+    help_lines_ = {
+      "Oxygen Platform Example - Keyboard Controls",
+      "",
       "Arrow Keys: Move window position by 10px",
       "X: Maximize  |  M: Minimize  |  R: Restore",
       "F: Enter Fullscreen  |  G: Exit Fullscreen",
       "Q: Request Close  |  A: Request Close (rejected)",
       "Z: Force Close  |  Y: Confirm close prompt",
-      "H: Toggle this help overlay", "",
-      "Press any key to test the controls..." };
+      "H: Toggle this help overlay",
+      "",
+      "Press any key to test the controls...",
+    };
 
     LOG_F(INFO, "Help renderer created successfully");
   }
 
   ~HelpRenderer() = default;
+
+  OXYGEN_MAKE_NON_COPYABLE(HelpRenderer)
+  OXYGEN_MAKE_NON_MOVABLE(HelpRenderer)
 
   void ToggleHelp()
   {
@@ -106,19 +116,20 @@ public:
     }
   }
 
-public:
-  bool IsShowingHelp() const { return show_help_; }
+  [[nodiscard]] auto IsShowingHelp() const -> bool { return show_help_; }
 
 private:
   void DrawHelp()
   {
 #ifdef _WIN32
-    if (!hwnd_)
+    if (!hwnd_) {
       return;
+    }
 
     HDC hdc = GetDC(hwnd_);
-    if (!hdc)
+    if (!hdc) {
       return;
+    }
 
     // Get window dimensions
     RECT window_rect;
@@ -163,13 +174,13 @@ private:
       // Use bright colors on black background
       if (i == 0) {
         SetTextColor(hdc, RGB(255, 255, 255)); // White header
-      } else if (line.find(":") != std::string::npos) {
+      } else if (line.contains(':')) {
         SetTextColor(hdc, RGB(255, 255, 0)); // Yellow for key controls
       } else {
         SetTextColor(hdc, RGB(200, 200, 200)); // Light gray for descriptions
       }
 
-      TextOut(hdc, margin, margin + static_cast<int>(i) * line_height,
+      TextOut(hdc, margin, margin + (static_cast<int>(i) * line_height),
         line.c_str(), static_cast<int>(line.length()));
     }
 
@@ -184,12 +195,14 @@ private:
   void ClearHelp()
   {
 #ifdef _WIN32
-    if (!hwnd_)
+    if (!hwnd_) {
       return;
+    }
 
     HDC hdc = GetDC(hwnd_);
-    if (!hdc)
+    if (!hdc) {
       return;
+    }
 
     // Get window dimensions and fill with black
     RECT window_rect;
@@ -245,7 +258,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
     // hooks each frame. Window closure is discovered at frame end and applied
     // at the next frame start, so both hooks must run continuously. Run at
     // ~60Hz.
-    n.Start([platform]() -> oxygen::co::Co<> {
+    n.Start([platform] -> oxygen::co::Co<> {
       const auto frame_period = std::chrono::milliseconds(16); // ~60 FPS
       while (oxygen::co::EventLoopTraits<Platform>::IsRunning(*platform)) {
         // Advance per-frame state and process pending closures from the
@@ -276,13 +289,15 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
 
     WindowProps props("Oxygen Window Playground - Interactive Controls");
     props.extent = { .width = 800, .height = 600 };
-    props.flags = { .hidden = false,
+    props.flags = {
+      .hidden = false,
       .always_on_top = false,
       .full_screen = start_fullscreen,
       .maximized = false,
       .minimized = false,
       .resizable = true,
-      .borderless = false };
+      .borderless = false,
+    };
     const auto window_weak = platform->Windows().MakeWindow(props);
     std::shared_ptr<HelpRenderer> help_renderer;
 
@@ -309,7 +324,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
         help_renderer ? "On-screen + Console" : "Console only");
     }
 
-    n.Start([window_weak, help_renderer]() -> oxygen::co::Co<> {
+    n.Start([window_weak, help_renderer] -> oxygen::co::Co<> {
       bool not_destroyed { true };
       while (not_destroyed && !window_weak.expired()) {
         auto window = window_weak.lock();
@@ -331,7 +346,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
       }
     });
 
-    n.Start([window_weak, platform]() -> oxygen::co::Co<> {
+    n.Start([window_weak, platform] -> oxygen::co::Co<> {
       while (!window_weak.expired()) {
         auto window = window_weak.lock();
         co_await window->CloseRequested();
@@ -339,11 +354,11 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
         // Wait for the user to press 'y'
         // 3 seconds to elapse
         auto [double_close, _] = co_await oxygen::co::AnyOf(
-          [&platform]() -> oxygen::co::Co<bool> {
+          [&platform] -> oxygen::co::Co<bool> {
             while (true) {
-              auto& event = co_await platform->Events().NextEvent();
+              const auto& event = co_await platform->Events().NextEvent();
               auto _ = co_await platform->Events().Lock();
-              auto sdl_event = event.NativeEventAs<SDL_Event>();
+              auto* sdl_event = event.NativeEventAs<SDL_Event>();
               if (sdl_event->type == SDL_EVENT_KEY_DOWN) {
                 if (sdl_event->key.key == SDLK_Y) {
                   co_return true;
@@ -364,16 +379,17 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
     });
 
     // Async keyboard input handler for window manipulation
-    n.Start([window_weak, platform, &n, help_renderer]() -> oxygen::co::Co<> {
+    n.Start([window_weak, platform, &n, help_renderer] -> oxygen::co::Co<> {
       while (!window_weak.expired()) {
-        auto& event = co_await platform->Events().NextEvent();
+        const auto& event = co_await platform->Events().NextEvent();
         auto _ = co_await platform->Events().Lock();
-        auto sdl_event = event.NativeEventAs<SDL_Event>();
+        auto* sdl_event = event.NativeEventAs<SDL_Event>();
 
         if (sdl_event->type == SDL_EVENT_KEY_DOWN) {
           const auto window = window_weak.lock();
-          if (!window)
+          if (!window) {
             continue;
+          }
 
           constexpr int translate_by = 10;
 
@@ -384,7 +400,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
               window->Restore();
             }
             const auto [pos_x, pos_y] = window->Position();
-            window->MoveTo({ pos_x - translate_by, pos_y });
+            window->MoveTo({ .x = pos_x - translate_by, .y = pos_y });
           } break;
 
           case SDLK_RIGHT: {
@@ -392,7 +408,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
               window->Restore();
             }
             const auto [pos_x, pos_y] = window->Position();
-            window->MoveTo({ pos_x + translate_by, pos_y });
+            window->MoveTo({ .x = pos_x + translate_by, .y = pos_y });
           } break;
 
           case SDLK_UP: {
@@ -400,7 +416,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
               window->Restore();
             }
             const auto [pos_x, pos_y] = window->Position();
-            window->MoveTo({ pos_x, pos_y - translate_by });
+            window->MoveTo({ .x = pos_x, .y = pos_y - translate_by });
           } break;
 
           case SDLK_DOWN: {
@@ -408,7 +424,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
               window->Restore();
             }
             const auto [pos_x, pos_y] = window->Position();
-            window->MoveTo({ pos_x, pos_y + translate_by });
+            window->MoveTo({ .x = pos_x, .y = pos_y + translate_by });
           } break;
 
           // Window state controls
@@ -447,7 +463,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
           case SDLK_A: {
             LOG_F(INFO, "RequestClose(force=false) rejected");
             // Start a task that will automatically vote against closing
-            n.Start([window_weak]() -> oxygen::co::Co<> {
+            n.Start([window_weak] -> oxygen::co::Co<> {
               if (auto window = window_weak.lock()) {
                 co_await window->CloseRequested();
                 LOG_F(INFO, "Auto-rejecting close request (A key behavior)");
@@ -462,7 +478,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
               INFO, "RequestClose(force=true) rejected - should still close");
             // Start a task that will vote against closing, but force=true
             // should override it
-            n.Start([window_weak]() -> oxygen::co::Co<> {
+            n.Start([window_weak] -> oxygen::co::Co<> {
               if (auto window = window_weak.lock()) {
                 co_await window->CloseRequested();
                 LOG_F(INFO,
@@ -513,7 +529,7 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
       }
     });
 
-    n.Start([&platform, &n]() -> oxygen::co::Co<> {
+    n.Start([&platform, &n] -> oxygen::co::Co<> {
       co_await platform->Windows().LastWindowClosed();
       LOG_F(INFO, "Last window is closed -> wrapping up");
       platform->Stop();
@@ -557,13 +573,13 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
 
     const Command::Ptr default_command
       = CommandBuilder(Command::DEFAULT).WithOptions(window_options);
-    auto cli = oxygen::examples::cli::BuildCli(
+    auto cli = oxygen::host::BuildCli(
       "platform", "Interactive platform window controls demo", default_command);
 
     const int argc = static_cast<int>(args.size());
     const char** argv = args.data();
     auto context = cli->Parse(argc, argv);
-    if (oxygen::examples::cli::HandleMetaCommand(context, default_command)) {
+    if (oxygen::host::HandleMetaCommand(context, default_command)) {
       return EXIT_SUCCESS;
     }
 

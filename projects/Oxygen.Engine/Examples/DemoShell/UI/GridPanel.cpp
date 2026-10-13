@@ -4,19 +4,119 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <optional>
+#include <string>
+#include <string_view>
+
+#include "DemoShell/PanelCommands.h"
 #include "DemoShell/UI/GridPanel.h"
+#include "DemoShell/UI/GridVm.h"
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 
+// NOLINTBEGIN(bugprone-signed-bitwise) - ImGui
+
 namespace oxygen::examples::ui {
 
-GridPanel::GridPanel(observer_ptr<GridVm> vm)
+namespace {
+
+  constexpr std::string_view kSmoothMotion = "demo.grid.smooth_motion";
+  constexpr std::string_view kSmoothTime = "demo.grid.smooth_time";
+  constexpr std::string_view kSpacing = "demo.grid.spacing";
+  constexpr std::string_view kMajorEvery = "demo.grid.major_every";
+  constexpr std::string_view kLineThickness = "demo.grid.line_thickness";
+  constexpr std::string_view kMajorThickness = "demo.grid.major_thickness";
+  constexpr std::string_view kAxisThickness = "demo.grid.axis_thickness";
+  constexpr std::string_view kFadeStart = "demo.grid.fade_start";
+  constexpr std::string_view kFadePower = "demo.grid.fade_power";
+  constexpr std::string_view kMinorColor = "demo.grid.minor_color";
+  constexpr std::string_view kMajorColor = "demo.grid.major_color";
+  constexpr std::string_view kAxisColorX = "demo.grid.axis_x_color";
+  constexpr std::string_view kAxisColorY = "demo.grid.axis_y_color";
+  constexpr std::string_view kOriginColor = "demo.grid.origin_color";
+  constexpr std::string_view kHorizonBoost = "demo.grid.horizon_boost";
+
+  auto RegisterCommands(PanelCommands& commands, observer_ptr<GridVm> vm)
+    -> void
+  {
+    const auto name
+      = [](const std::string_view n) -> std::string { return std::string(n); };
+    commands.AddBool(name(kSmoothMotion), "Grid Smooth Motion",
+      "Follow the camera smoothly instead of snapping",
+      [vm](const bool v) -> void { vm->SetSmoothMotion(v); });
+    commands.AddFloat(
+      name(kSmoothTime), "Grid Smooth Time",
+      "Seconds the grid takes to follow the camera",
+      [vm](const float v) -> void { vm->SetSmoothTime(v); }, 0.001F, 10.0F);
+    commands.AddFloat(
+      name(kSpacing), "Grid Spacing", "Distance between minor lines, in meters",
+      [vm](const float v) -> void { vm->SetGridSpacing(v); }, 0.01F, 100.0F);
+    commands.AddInt(
+      name(kMajorEvery), "Grid Major Every", "Minor cells between major lines",
+      [vm](const int v) -> void { vm->SetMajorEvery(v); }, 1, 100);
+    commands.AddFloat(
+      name(kLineThickness), "Grid Line Thickness", "Minor line thickness",
+      [vm](const float v) -> void { vm->SetLineThickness(v); }, 0.0F, 0.1F);
+    commands.AddFloat(
+      name(kMajorThickness), "Grid Major Thickness", "Major line thickness",
+      [vm](const float v) -> void { vm->SetMajorThickness(v); }, 0.0F, 0.1F);
+    commands.AddFloat(
+      name(kAxisThickness), "Grid Axis Thickness", "Axis line thickness",
+      [vm](const float v) -> void { vm->SetAxisThickness(v); }, 0.0F, 0.1F);
+    commands.AddFloat(
+      name(kFadeStart), "Grid Fade Start",
+      "Distance where the grid starts to fade, in meters",
+      [vm](const float v) -> void { vm->SetFadeStart(v); }, 0.0F, 10000.0F);
+    commands.AddFloat(
+      name(kFadePower), "Grid Fade Power", "Steepness of the fade",
+      [vm](const float v) -> void { vm->SetFadePower(v); }, 0.0F, 8.0F);
+    commands.AddColor(name(kMinorColor), "Grid Minor Color",
+      "Color of the minor lines",
+      [vm](const graphics::Color& c) -> void { vm->SetMinorColor(c); });
+    commands.AddColor(name(kMajorColor), "Grid Major Color",
+      "Color of the major lines",
+      [vm](const graphics::Color& c) -> void { vm->SetMajorColor(c); });
+    commands.AddColor(name(kAxisColorX), "Grid X Axis Color",
+      "Color of the X axis line",
+      [vm](const graphics::Color& c) -> void { vm->SetAxisColorX(c); });
+    commands.AddColor(name(kAxisColorY), "Grid Y Axis Color",
+      "Color of the Y axis line",
+      [vm](const graphics::Color& c) -> void { vm->SetAxisColorY(c); });
+    commands.AddColor(name(kOriginColor), "Grid Origin Color",
+      "Color of the origin marker",
+      [vm](const graphics::Color& c) -> void { vm->SetOriginColor(c); });
+    commands.AddFloat(
+      name(kHorizonBoost), "Grid Horizon Boost", "Line boost near the horizon",
+      [vm](const float v) -> void { vm->SetHorizonBoost(v); }, 0.0F, 4.0F);
+  }
+
+  //! An HDR color editor; the edited color when the user changed it.
+  auto EditColor(const char* label, const graphics::Color& color)
+    -> std::optional<graphics::Color>
+  {
+    auto rgba = std::array { color.r, color.g, color.b, color.a };
+    if (!ImGui::ColorEdit4(label, rgba.data(),
+          ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float)) {
+      return std::nullopt;
+    }
+    return graphics::Color { rgba[0], rgba[1], rgba[2], rgba[3] };
+  }
+
+} // namespace
+
+GridPanel::GridPanel(
+  observer_ptr<GridVm> vm, observer_ptr<PanelCommands> commands)
   : vm_(vm)
+  , commands_(commands)
 {
-  DCHECK_NOTNULL_F(vm, "GridPanel requires GridVm");
+  DCHECK_NOTNULL_F(vm_, "GridPanel requires GridVm");
+  DCHECK_NOTNULL_F(commands_, "GridPanel requires PanelCommands");
+  RegisterCommands(*commands_, vm_);
 }
 
 auto GridPanel::DrawContents() -> void
@@ -45,50 +145,46 @@ void GridPanel::DrawGridSection()
     return;
   }
 
-  bool enabled = vm_->GetEnabled();
-  if (ImGui::Checkbox("Enabled", &enabled)) {
-    vm_->SetEnabled(enabled);
-  }
-
+  // Showing or hiding the grid is the toolbar's Show > Grid.
   bool smooth_motion = vm_->GetSmoothMotion();
   if (ImGui::Checkbox("Smooth Motion", &smooth_motion)) {
-    vm_->SetSmoothMotion(smooth_motion);
+    commands_->RunBool(kSmoothMotion, smooth_motion);
   }
 
   if (smooth_motion) {
     float smooth_time = vm_->GetSmoothTime();
     if (ImGui::DragFloat(
           "Smooth Time", &smooth_time, 0.05F, 0.001F, 10.0F, "%.3f")) {
-      vm_->SetSmoothTime(smooth_time);
+      commands_->RunFloat(kSmoothTime, smooth_time);
     }
   }
 
   float spacing = vm_->GetGridSpacing();
   if (ImGui::DragFloat("Spacing", &spacing, 0.1F, 0.01F, 100.0F, "%.2f")) {
-    vm_->SetGridSpacing(spacing);
+    commands_->RunFloat(kSpacing, spacing);
   }
 
   int major_every = vm_->GetMajorEvery();
   if (ImGui::DragInt("Major Every", &major_every, 1.0F, 1, 100)) {
-    vm_->SetMajorEvery(major_every);
+    commands_->RunInt(kMajorEvery, major_every);
   }
 
   float line_thickness = vm_->GetLineThickness();
   if (ImGui::DragFloat(
         "Line Thickness", &line_thickness, 0.01F, 0.0F, 0.10F, "%.2f")) {
-    vm_->SetLineThickness(line_thickness);
+    commands_->RunFloat(kLineThickness, line_thickness);
   }
 
   float major_thickness = vm_->GetMajorThickness();
   if (ImGui::DragFloat(
         "Major Thickness", &major_thickness, 0.01F, 0.0F, 0.10F, "%.2f")) {
-    vm_->SetMajorThickness(major_thickness);
+    commands_->RunFloat(kMajorThickness, major_thickness);
   }
 
   float axis_thickness = vm_->GetAxisThickness();
   if (ImGui::DragFloat(
         "Axis Thickness", &axis_thickness, 0.01F, 0.0F, 0.10F, "%.2f")) {
-    vm_->SetAxisThickness(axis_thickness);
+    commands_->RunFloat(kAxisThickness, axis_thickness);
   }
 }
 
@@ -101,12 +197,12 @@ void GridPanel::DrawFadeSection()
   float fade_start = vm_->GetFadeStart();
   if (ImGui::DragFloat(
         "Fade Start", &fade_start, 1.0F, 0.0F, 10000.0F, "%.1f")) {
-    vm_->SetFadeStart(fade_start);
+    commands_->RunFloat(kFadeStart, fade_start);
   }
 
   float fade_power = vm_->GetFadePower();
   if (ImGui::DragFloat("Fade Power", &fade_power, 0.05F, 0.0F, 8.0F, "%.2f")) {
-    vm_->SetFadePower(fade_power);
+    commands_->RunFloat(kFadePower, fade_power);
   }
 }
 
@@ -116,42 +212,20 @@ void GridPanel::DrawColorSection()
     return;
   }
 
-  const ImGuiColorEditFlags color_flags
-    = ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_Float;
-
-  auto minor = vm_->GetMinorColor();
-  float minor_rgba[4] { minor.r, minor.g, minor.b, minor.a };
-  if (ImGui::ColorEdit4("Minor Color", minor_rgba, color_flags)) {
-    vm_->SetMinorColor(graphics::Color {
-      minor_rgba[0], minor_rgba[1], minor_rgba[2], minor_rgba[3] });
+  if (const auto color = EditColor("Minor Color", vm_->GetMinorColor())) {
+    commands_->RunColor(kMinorColor, *color);
   }
-
-  auto major = vm_->GetMajorColor();
-  float major_rgba[4] { major.r, major.g, major.b, major.a };
-  if (ImGui::ColorEdit4("Major Color", major_rgba, color_flags)) {
-    vm_->SetMajorColor(graphics::Color {
-      major_rgba[0], major_rgba[1], major_rgba[2], major_rgba[3] });
+  if (const auto color = EditColor("Major Color", vm_->GetMajorColor())) {
+    commands_->RunColor(kMajorColor, *color);
   }
-
-  auto axis_x = vm_->GetAxisColorX();
-  float axis_x_rgba[4] { axis_x.r, axis_x.g, axis_x.b, axis_x.a };
-  if (ImGui::ColorEdit4("Axis X Color", axis_x_rgba, color_flags)) {
-    vm_->SetAxisColorX(graphics::Color {
-      axis_x_rgba[0], axis_x_rgba[1], axis_x_rgba[2], axis_x_rgba[3] });
+  if (const auto color = EditColor("Axis X Color", vm_->GetAxisColorX())) {
+    commands_->RunColor(kAxisColorX, *color);
   }
-
-  auto axis_y = vm_->GetAxisColorY();
-  float axis_y_rgba[4] { axis_y.r, axis_y.g, axis_y.b, axis_y.a };
-  if (ImGui::ColorEdit4("Axis Y Color", axis_y_rgba, color_flags)) {
-    vm_->SetAxisColorY(graphics::Color {
-      axis_y_rgba[0], axis_y_rgba[1], axis_y_rgba[2], axis_y_rgba[3] });
+  if (const auto color = EditColor("Axis Y Color", vm_->GetAxisColorY())) {
+    commands_->RunColor(kAxisColorY, *color);
   }
-
-  auto origin = vm_->GetOriginColor();
-  float origin_rgba[4] { origin.r, origin.g, origin.b, origin.a };
-  if (ImGui::ColorEdit4("Origin Color", origin_rgba, color_flags)) {
-    vm_->SetOriginColor(graphics::Color {
-      origin_rgba[0], origin_rgba[1], origin_rgba[2], origin_rgba[3] });
+  if (const auto color = EditColor("Origin Color", vm_->GetOriginColor())) {
+    commands_->RunColor(kOriginColor, *color);
   }
 }
 
@@ -164,8 +238,10 @@ void GridPanel::DrawRenderSection()
   float horizon_boost = vm_->GetHorizonBoost();
   if (ImGui::DragFloat(
         "Horizon Boost", &horizon_boost, 0.05F, 0.0F, 4.0F, "%.2f")) {
-    vm_->SetHorizonBoost(horizon_boost);
+    commands_->RunFloat(kHorizonBoost, horizon_boost);
   }
 }
 
 } // namespace oxygen::examples::ui
+
+// NOLINTEND(bugprone-signed-bitwise)

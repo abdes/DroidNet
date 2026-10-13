@@ -101,22 +101,6 @@ public:
     -> std::shared_ptr<input::Action>;
   [[nodiscard]] auto GetOrbitAction() const noexcept
     -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetMoveForwardAction() const noexcept
-    -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetMoveBackwardAction() const noexcept
-    -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetMoveLeftAction() const noexcept
-    -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetMoveRightAction() const noexcept
-    -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetMoveUpAction() const noexcept
-    -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetMoveDownAction() const noexcept
-    -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetFlyPlaneLockAction() const noexcept
-    -> std::shared_ptr<input::Action>;
-  [[nodiscard]] auto GetFlyBoostAction() const noexcept
-    -> std::shared_ptr<input::Action>;
 
 private:
   auto UpdateActiveCameraInputContext() -> void;
@@ -125,27 +109,27 @@ private:
   observer_ptr<engine::InputSystem> input_system_ { nullptr };
   observer_ptr<scene::SceneNode> active_camera_ { nullptr };
 
-  std::shared_ptr<input::Action> zoom_in_action_ {};
-  std::shared_ptr<input::Action> zoom_out_action_ {};
-  std::shared_ptr<input::Action> rmb_action_ {};
-  std::shared_ptr<input::Action> orbit_action_ {};
-  std::shared_ptr<input::Action> move_fwd_action_ {};
-  std::shared_ptr<input::Action> move_bwd_action_ {};
-  std::shared_ptr<input::Action> move_left_action_ {};
-  std::shared_ptr<input::Action> move_right_action_ {};
-  std::shared_ptr<input::Action> move_up_action_ {};
-  std::shared_ptr<input::Action> move_down_action_ {};
-  std::shared_ptr<input::Action> fly_plane_lock_action_ {};
-  std::shared_ptr<input::Action> fly_boost_action_ {};
+  std::shared_ptr<input::Action> zoom_in_action_;
+  std::shared_ptr<input::Action> zoom_out_action_;
+  std::shared_ptr<input::Action> rmb_action_;
+  std::shared_ptr<input::Action> orbit_action_;
+  std::shared_ptr<input::Action> move_fwd_action_;
+  std::shared_ptr<input::Action> move_bwd_action_;
+  std::shared_ptr<input::Action> move_left_action_;
+  std::shared_ptr<input::Action> move_right_action_;
+  std::shared_ptr<input::Action> move_up_action_;
+  std::shared_ptr<input::Action> move_down_action_;
+  std::shared_ptr<input::Action> fly_plane_lock_action_;
+  std::shared_ptr<input::Action> fly_boost_action_;
 
-  std::shared_ptr<input::InputMappingContext> orbit_controls_ctx_ {};
-  std::shared_ptr<input::InputMappingContext> fly_controls_ctx_ {};
-  std::shared_ptr<input::InputMappingContext> fly_modifier_keys_ctx_ {};
+  std::shared_ptr<input::InputMappingContext> orbit_controls_ctx_;
+  std::shared_ptr<input::InputMappingContext> fly_controls_ctx_;
+  std::shared_ptr<input::InputMappingContext> fly_modifier_keys_ctx_;
 
   CameraControlMode current_mode_ { CameraControlMode::kFly };
-  std::unique_ptr<OrbitCameraController> orbit_controller_ {};
-  std::unique_ptr<FlyCameraController> fly_controller_ {};
-  std::unique_ptr<DroneCameraController> drone_controller_ {};
+  std::unique_ptr<OrbitCameraController> orbit_controller_;
+  std::unique_ptr<FlyCameraController> fly_controller_;
+  std::unique_ptr<DroneCameraController> drone_controller_;
 };
 
 } // namespace oxygen::examples::ui

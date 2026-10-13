@@ -1,6 +1,7 @@
 # Oxygen Engine Examples
 
-This directory contains examples demonstrating the use of the Oxygen Engine. Modern demos in Oxygen are built using the **DemoShell** framework and a **Composition-First** rendering pipeline.
+This directory contains examples of the Oxygen Engine. They run on the
+runtime host (`Oxygen.Host`); most add the **DemoShell** panels on top.
 
 ## Shared display and timing options
 
@@ -27,140 +28,78 @@ For a controlled, uncapped Full HD run:
 Oxygen.Examples.MultiView.exe --resolution 1920x1080 --fullscreen true --fps 0 --vsync false
 ```
 
-The shared option builder and parser live in `Common/DemoCli.h`, and in
-`Oxygen.Host`'s `RuntimeCli` for examples on the runtime host (VortexBasic).
-`AppWindow`, or the host's `HostWindow`, applies the typed request through the
-platform window API.
+These options, the graphics tooling switches (`--debug-layer`, `--aftermath`)
+and frame capture come from `Oxygen.Host`'s `RuntimeCli`. `help-advanced`
+lists the hidden groups. The host's `HostWindow` applies the window request
+through the platform window API.
 
----
+## Writing a demo
 
-## 🏗️ Demo Blueprint: The composition-first approach
+Every example runs on `Oxygen.Host`: the host owns the window, the per-view
+framebuffers, view publishing, the console, the viewport toolbar (view mode,
+show flags, stats, GPU work), pause and step. A demo supplies a scene, its
+views and its own panels. VortexBasic shows the host alone; the others add
+DemoShell for the shared panels, camera rig and settings.
 
-To create a robust demo that integrates with the engine's modular tools, follow this blueprint.
+### Startup
 
-### 1. The Foundation: `DemoModuleBase`
-
-Always inherit from `DemoModuleBase`. It provides the necessary plumbing for window management, surface lifecycle, and phase-based dispatching.
-
-```cpp
-class MainModule final : public DemoModuleBase {
-public:
-    explicit MainModule(const DemoAppContext& app) : DemoModuleBase(app) {}
-
-    // Define the phases your module needs
-    auto GetSupportedPhases() const noexcept -> engine::ModulePhaseMask override {
-        using enum core::PhaseId;
-        return engine::MakeModuleMask<kFrameStart, kSceneMutation, kGameplay, kGuiUpdate, kCompositing>();
-    }
-};
-```
-
-### 2. Initialization & Pipeline Setup
-
-In `OnAttached`, create your `ForwardPipeline` and initialize the `DemoShell`. The Shell will automatically hook up standard UI panels for you.
+`main_impl.cpp` calls `RunDemo` (`DemoShell/Runtime/DemoMain.h`). It builds
+the command line with the runtime, tooling and capture groups, applies it to
+the host configuration and runs the host. The example adds its own option
+groups and registers its modules:
 
 ```cpp
-auto MainModule::OnAttached(observer_ptr<AsyncEngine> engine) noexcept -> bool {
-    if (!Base::OnAttached(engine)) return false;
-
-    // 1. Create the pipeline (handles HDR, Tonemapping, Pass Orchestration)
-    pipeline_ = std::make_unique<ForwardPipeline>(observer_ptr{app_.engine.get()});
-
-    // 2. Initialize the DemoShell
-    shell_ = std::make_unique<DemoShell>();
-    DemoShellConfig config {
-        .engine = observer_ptr{app_.engine.get()},
-        .panel_config = {
-            .content_loader = true,
-            .camera_controls = true,
-            .lighting = true,
-            .diagnostics = true,
-            .post_process = true // Enable Post-Processing controls
-        },
-        .get_active_pipeline = [this]() { return observer_ptr{pipeline_.get()}; }
-    };
-    return shell_->Initialize(config);
+extern "C" auto MainImpl(std::span<const char*> args) -> int
+{
+  examples::SettingsService::ForDemoApp();
+  return examples::RunDemo(args,
+    {
+      .program = "physics",
+      .about = "End-to-end physics integration demo",
+      .application = "Physics Demo",
+      .register_modules
+      = [](AsyncEngine& engine, host::HostContext& context) -> void {
+        host::RegisterRequiredModule(
+          engine, std::make_unique<MainModule>(context));
+        examples::RegisterDemoRenderer(engine, context);
+      },
+    });
 }
 ```
 
-### 3. The "Reloadable" Scene Pattern (Critical)
+`SettingsService::ForDemoApp()` must be called from the example itself: it
+places the settings file next to the calling source.
 
-Demos should allow the scene to be unloaded and reloaded (e.g., via the Content Loader). Implement this in `HandleOnFrameStart` to ensure the `FrameContext` always has a valid scene.
+### The module
 
-```cpp
-auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context) -> void {
-    // 1. Sync pipeline settings FIRST to avoid 1-frame lag
-    ApplySettingsFromUI();
+Derive from `DemoModuleBase`, which is a `host::HostModule`. Return
+`kDemoPhases`, plus any phase the demo needs, from `GetSupportedPhases`.
+Create the `DemoShell` in `OnAttachedImpl` from `MakeShellConfig()`, then
+override the host hooks:
 
-    // 2. Standard base processing (surface management)
-    Base::OnFrameStart(context);
-}
+- `BuildWindowProperties`: title and size, starting from the base result.
+- Stage a scene with `Stage().Stage(...)` and its camera with
+  `Stage().SetStagedMainCamera(...)`. The host publishes it at the next frame
+  start and calls `OnScenePublished`; take the scene and camera there with
+  `Stage().GetActiveScene()` and `Stage().TakePublishedMainCamera()`.
+- `BuildViews`: add composition views to `views.views` and name the main one
+  in `views.main`. An unset viewport covers the window.
+- `AppendCompositionLayers`, when the demo draws extra texture layers.
 
-auto MainModule::HandleOnFrameStart(observer_ptr<engine::FrameContext> context) -> void {
-    // 3. Ensure the scene is valid (re-create if unloaded)
-    if (!active_scene_.IsValid()) {
-        auto scene = CreateMyDemoScene();
-        active_scene_ = shell_->SetScene(std::move(scene));
-    }
-    // 4. Inject the active scene into the frame context
-    context.SetScene(shell_->TryGetScene());
-}
-```
+The host gives the camera rig the main view through `OnMainViewReady`, and
+the rig moves in `kInput` on wall-clock time, so the free camera still moves
+while the engine is paused. Do not call the shell's update or draw yourself;
+`DemoModuleBase` does it, below the toolbar.
 
-### 4. Mutation & Panel Sync
+### Panels
 
-The `OnSceneMutation` phase is where you finalize the scene state before the renderer takes a "snapshot". DemoShell now synchronizes camera lifecycle from the view metadata it receives in `UpdateComposition`.
+A panel control never changes state directly: it runs a command registered
+through `DemoShell::GetPanelCommands()` (`AddAction`, `AddBool`, `AddFloat`,
+`AddEnum`, ...) or sets a console variable. The command runs at the next
+frame start, and the same command is available from the console and from a
+remote client. Panel layout and presentation stay local. See
+[Console.md](DemoShell/Console.md) for the commands.
 
-```cpp
-auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context) -> co::Co<> {
-    // 1. Sync panel-driven settings.
-    shell_->OnMainViewReady(*context, main_view);
-
-    // 2. Delegation: Required to register views with the pipeline!
-    co_await Base::OnSceneMutation(context);
-}
-```
-
-### 5. Declaring View Intents
-
-Instead of manually rendering, describe _what_ you want to see by overriding `UpdateComposition`. The pipeline will then manage the HDR/SDR resources and tonemapping automatically.
-
-```cpp
-auto MainModule::UpdateComposition(observer_ptr<engine::FrameContext> context,
-                                 std::vector<CompositionView>& views) -> void {
-    auto& active_camera = shell_->GetCameraLifecycle().GetActiveCamera();
-    if (!active_camera.IsAlive()) return;
-
-    // 1. Build a valid View with viewport from the window size
-    View view {};
-    if (app_window_ && app_window_->GetWindow()) {
-        const auto extent = app_window_->GetWindow()->Size();
-        view.viewport = ViewPort {
-            .width = static_cast<float>(extent.width),
-            .height = static_cast<float>(extent.height),
-            // ... min/max depth ...
-        };
-    }
-
-    // 2. Register the 3D Scene View
-    views.push_back(CompositionView::ForScene(main_view_id_, view, active_camera));
-}
-```
-
----
-
-## 🚨 Critical "Make-or-Break" Steps
-
-- **`co_await Base::OnSceneMutation(context)`**: If you forget to call the base implementation in mutation, your `UpdateComposition` will never be called, and nothing will render.
-- **Register the ImGui module**: UI needs `oxygen::imgui::ImGuiModule` registered (unless headless). `AppWindow` binds it to the window and draws it over the composed surface; no ImGui view is published.
-- **Viewport Construction**: Passing an empty `View {}` to `ForScene` results in a black screen. Always construct a viewport from the current window size.
-- **Settings Sync in `OnFrameStart`**: Apply render modes and debug settings _before_ `Base::OnFrameStart`. These settings are used for resource allocation; applying them later (e.g., in `OnPreRender`) causes a visible 1-frame lag.
-- **`context.SetScene(...)`**: The rendering backend retrieves the scene from the `FrameContext`. If you don't call this in `HandleOnFrameStart`, you will get a black screen or an empty world.
-- **Camera lifecycle sync**: The shell derives viewport information from `UpdateComposition` and applies camera sync automatically.
-- **Controlled Shutdown**: Always call `shell_->SetScene(nullptr)` in `OnShutdown` to ensure scene nodes are destroyed while the graphics systems are still alive.
-
----
-
-## 🎨 Design Philosophy: Focus on the "What", not the "How"
-
-By following this blueprint, your demo code should focus entirely on **Scene Creation** and **Gameplay Logic**. Resource management, tonemapping, and multi-layered compositing are handled by the framework.
+Do not add readouts that the host already shows: frame, phase and GPU timings
+belong to the toolbar's stats and GPU work overlay, and the view mode to its
+view menu.

@@ -6,90 +6,100 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
+#include <cstddef>
+#include <memory>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "DemoShell/PanelCommands.h"
 #include "DemoShell/UI/CameraRigController.h"
 #include "InputSystem/InputDebugPanel.h"
 #include <imgui.h>
 
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Input/Action.h>
+#include <Oxygen/Input/ActionValue.h>
 #include <Oxygen/Input/InputSystem.h>
 
 namespace {
 
-//! Draw a simple keyboard/mouse keycap (rounded rect + centered label).
-auto DrawKeycap(ImDrawList* dl, ImVec2 p, const char* label, ImU32 bg,
-  ImU32 border, ImU32 text, float scale = 1.0F) -> void
+struct KeycapColors {
+  ImU32 background;
+  ImU32 border;
+  ImU32 text;
+};
+
+constexpr auto kKeycapColors = KeycapColors {
+  .background = IM_COL32(40, 40, 46, 255),
+  .border = IM_COL32(80, 80, 90, 255),
+  .text = IM_COL32(230, 230, 240, 255),
+};
+
+auto TextSize(const std::string_view text) -> ImVec2
+{
+  return ImGui::CalcTextSize(
+    std::to_address(text.begin()), std::to_address(text.end()));
+}
+
+//! The size of a keycap: its label with padding around it.
+auto MeasureKeycap(const std::string_view label, const float scale) -> ImVec2
 {
   const float pad = 6.0F * scale;
-  const ImVec2 text_size = ImGui::CalcTextSize(label);
-  const ImVec2 size
-    = ImVec2(text_size.x + pad * 2.0F, text_size.y + pad * 1.5F);
-  const float r = 6.0F * scale;
-
-  const ImVec2 p_max(p.x + size.x, p.y + size.y);
-  dl->AddRectFilled(p, p_max, bg, r);
-  dl->AddRect(p, p_max, border, r, 0, 1.5F * scale);
-
-  const ImVec2 tp = ImVec2(
-    p.x + (size.x - text_size.x) * 0.5F, p.y + (size.y - text_size.y) * 0.5F);
-  dl->AddText(tp, text, label, label + std::strlen(label));
+  const ImVec2 text_size = TextSize(label);
+  return { text_size.x + (pad * 2.0F), text_size.y + (pad * 1.5F) };
 }
 
-//! Compute the rendered size of a keycap for spacing/layout.
-auto MeasureKeycap(const char* label, float scale = 1.0F) -> ImVec2
+//! Draw a keyboard or mouse keycap, a rounded box around a centered label,
+//! and return its size.
+auto DrawKeycap(ImDrawList* draw_list, const ImVec2 position,
+  const std::string_view label, const float scale) -> ImVec2
 {
-  const float pad = 6.0F * scale;
-  const ImVec2 text_size = ImGui::CalcTextSize(label);
-  return ImVec2(text_size.x + pad * 2.0F, text_size.y + pad * 1.5F);
+  const ImVec2 size = MeasureKeycap(label, scale);
+  const ImVec2 text_size = TextSize(label);
+  const float rounding = 6.0F * scale;
+  const ImVec2 max(position.x + size.x, position.y + size.y);
+  draw_list->AddRectFilled(position, max, kKeycapColors.background, rounding);
+  draw_list->AddRect(
+    position, max, kKeycapColors.border, rounding, 0, 1.5F * scale);
+  const ImVec2 text_position(position.x + ((size.x - text_size.x) * 0.5F),
+    position.y + ((size.y - text_size.y) * 0.5F));
+  draw_list->AddText(text_position, kKeycapColors.text,
+    std::to_address(label.begin()), std::to_address(label.end()));
+  return size;
 }
 
-//! Draw a tiny horizontal analog bar for scalar values in [vmin, vmax].
-auto DrawAnalogBar(ImDrawList* dl, ImVec2 p, ImVec2 sz, float v,
-  float vmin = -1.0F, float vmax = 1.0F, ImU32 bg = IM_COL32(30, 30, 34, 255),
-  ImU32 fg = IM_COL32(90, 170, 255, 255)) -> void
+//! Draw a small horizontal bar filled to `value`, clamped to [0, 1].
+auto DrawValueBar(ImDrawList* draw_list, const ImVec2 position,
+  const ImVec2 size, const float value) -> void
 {
-  const ImVec2 p_max(p.x + sz.x, p.y + sz.y);
-  dl->AddRectFilled(p, p_max, bg, 3.0F);
-  const float t = (v - vmin) / (vmax - vmin);
-  const float tt = std::clamp(t, 0.0F, 1.0F);
-  const ImVec2 fill = ImVec2(p.x + sz.x * tt, p.y + sz.y);
-  dl->AddRectFilled(p, ImVec2(fill.x, fill.y), fg, 3.0F);
-  // zero line
-  const float zt = (-vmin) / (vmax - vmin);
-  const float zx = p.x + sz.x * std::clamp(zt, 0.0F, 1.0F);
-  dl->AddLine(ImVec2(zx, p.y), ImVec2(zx, p.y + sz.y),
-    IM_COL32(180, 180, 190, 120), 1.0F);
+  constexpr auto kBackground = IM_COL32(30, 30, 34, 255);
+  constexpr auto kFill = IM_COL32(90, 170, 255, 255);
+  const ImVec2 max(position.x + size.x, position.y + size.y);
+  draw_list->AddRectFilled(position, max, kBackground, 3.0F);
+  const float filled = size.x * std::clamp(value, 0.0F, 1.0F);
+  draw_list->AddRectFilled(
+    position, ImVec2(position.x + filled, max.y), kFill, 3.0F);
 }
 
-//! Plot a tiny sparkline from a circular buffer (values[filled], head==next).
-auto PlotSparkline(const char* id, const float* values, int filled, int head,
-  int capacity, ImVec2 size) -> void
+//! Plot a small line of values in [-1, 1], oldest first.
+auto PlotSparkline(
+  const char* id, const std::vector<float>& values, const ImVec2 size) -> void
 {
-  if (!values || filled <= 0) {
+  if (values.empty()) {
     return;
   }
   ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(0, 0));
   ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(0, 0, 0, 0));
   ImGui::PushStyleColor(ImGuiCol_PlotLines, IM_COL32(140, 200, 255, 220));
-  // rotate to chronological order into a small local buffer
-  static float tmp[128];
-  const int N = (std::min)(filled, 128);
-  const int cap = (std::min)(capacity, 128);
-  // Start at the oldest sample index in the ring buffer
-  const int start = (head - filled + cap) % cap;
-  for (int i = 0; i < N; ++i) {
-    tmp[i] = values[(start + i) % cap];
-  }
-  ImGui::PlotLines(id, tmp, N, 0, nullptr, -1.0F, 1.0F, size);
+  ImGui::PlotLines(id, values.data(), static_cast<int>(values.size()), 0,
+    nullptr, -1.0F, 1.0F, size);
   ImGui::PopStyleColor(2);
   ImGui::PopStyleVar();
 }
 
-//! Compute an action state label and color for a compact badge.
+//! An action's state as a short label and a badge color.
 auto ActionStateBadge(const std::shared_ptr<oxygen::input::Action>& a)
   -> std::pair<const char*, ImU32>
 {
@@ -114,46 +124,34 @@ auto ActionStateBadge(const std::shared_ptr<oxygen::input::Action>& a)
   return { "Idle", IM_COL32(70, 70, 80, 255) };
 }
 
-//! Compute a scalar analog value in [-1, 1] for plotting bars/sparklines.
-//! For bool actions, returns 0 or 1. For Axis2D, returns magnitude.
-auto ActionScalarValue(const std::shared_ptr<oxygen::input::Action>& a) noexcept
-  -> float
+//! An action's value as one number in [-1, 1]: 0 or 1 for a button, the
+//! magnitude for a 2D axis.
+auto ActionScalarValue(const std::shared_ptr<oxygen::input::Action>& a) -> float
 {
   if (!a) {
     return 0.0F;
   }
-
   using oxygen::input::ActionValueType;
-  const auto vt = a->GetValueType();
-  switch (vt) {
+  switch (a->GetValueType()) {
   case ActionValueType::kAxis2D: {
     const auto& axis = a->GetValue().GetAs<oxygen::Axis2D>();
-    const float mag = std::sqrt(axis.x * axis.x + axis.y * axis.y);
-    return (std::min)(mag, 1.0F);
+    return std::min(std::hypot(axis.x, axis.y), 1.0F);
   }
-  case ActionValueType::kAxis1D: {
-    const auto& ax = a->GetValue().GetAs<oxygen::Axis1D>();
-    return std::clamp(ax.x, -1.0F, 1.0F);
+  case ActionValueType::kAxis1D:
+    return std::clamp(a->GetValue().GetAs<oxygen::Axis1D>().x, -1.0F, 1.0F);
+  case ActionValueType::kBool:
+    return a->GetValue().GetAs<bool>() ? 1.0F : 0.0F;
   }
-  case ActionValueType::kBool: {
-    const bool b = a->GetValue().GetAs<bool>();
-    return b ? 1.0F : 0.0F;
-  }
-  default:
-    return 0.0F;
-  }
+  return 0.0F;
 }
 
 } // namespace
 
+// NOLINTBEGIN(cppcoreguidelines-pro-type-vararg) - ImGui
+
 namespace oxygen::examples::input_system {
 
-void InputDebugPanel::Initialize(const InputDebugPanelConfig& config)
-{
-  config_ = config;
-}
-
-void InputDebugPanel::UpdateConfig(const InputDebugPanelConfig& config)
+auto InputDebugPanel::Initialize(const InputDebugPanelConfig& config) -> void
 {
   config_ = config;
 }
@@ -177,13 +175,22 @@ auto InputDebugPanel::OnLoaded() -> void { }
 
 auto InputDebugPanel::OnUnloaded() -> void { }
 
-void InputDebugPanel::History::Push(float v) noexcept
+auto InputDebugPanel::History::Push(const float value) noexcept -> void
 {
-  values[head] = v;
-  head = (head + 1) % kCapacity;
-  if (count < kCapacity) {
-    ++count;
+  values_.at(next_) = value;
+  next_ = (next_ + 1) % kCapacity;
+  count_ = std::min(count_ + 1, kCapacity);
+}
+
+auto InputDebugPanel::History::InOrder() const -> std::vector<float>
+{
+  auto values = std::vector<float> {};
+  values.reserve(count_);
+  const auto oldest = (next_ + kCapacity - count_) % kCapacity;
+  for (std::size_t i = 0; i < count_; ++i) {
+    values.push_back(values_.at((oldest + i) % kCapacity));
   }
+  return values;
 }
 
 auto InputDebugPanel::DrawContents() -> void
@@ -192,45 +199,62 @@ auto InputDebugPanel::DrawContents() -> void
   ImGui::Text("WantCaptureMouse: %s", io.WantCaptureMouse ? "true" : "false");
   ImGui::Separator();
 
-  if (config_.swimming_mode) {
-    bool prev_mode = *config_.swimming_mode;
-    ImGui::Checkbox("Swimming mode", config_.swimming_mode);
-    if (*config_.swimming_mode != prev_mode && config_.input_system) {
-      if (*config_.swimming_mode) {
-        config_.input_system->DeactivateMappingContext(
-          config_.ground_movement_ctx);
-        config_.input_system->ActivateMappingContext(config_.swimming_ctx);
-      } else {
-        config_.input_system->DeactivateMappingContext(config_.swimming_ctx);
-        config_.input_system->ActivateMappingContext(
-          config_.ground_movement_ctx);
-        if (config_.pending_ground_reset) {
-          *config_.pending_ground_reset = true;
-        }
-      }
+  if (config_.swimming_mode && config_.commands) {
+    bool swimming = *config_.swimming_mode;
+    if (ImGui::Checkbox("Swimming mode", &swimming)) {
+      config_.commands->RunBool(kSwimmingCommand, swimming);
     }
   }
 
   struct Row {
     const char* label;
     std::shared_ptr<oxygen::input::Action> act;
+    std::vector<std::string_view> keys;
   };
 
-  // Build rows from demo actions + camera rig actions
+  // The demo's actions, then the camera rig's when there is one.
   std::vector<Row> rows;
-
-  // Demo-specific actions
-  rows.push_back({ "Shift", config_.shift_action });
-  rows.push_back({ "Jump", config_.jump_action });
-  rows.push_back({ "Jump Higher", config_.jump_higher_action });
-  rows.push_back({ "Swim Up", config_.swim_up_action });
-
-  // Camera rig actions (if available)
+  rows.push_back({
+    .label = "Shift",
+    .act = config_.shift_action,
+    .keys = { "Shift" },
+  });
+  rows.push_back({
+    .label = "Jump",
+    .act = config_.jump_action,
+    .keys = { "Space" },
+  });
+  rows.push_back({
+    .label = "Jump Higher",
+    .act = config_.jump_higher_action,
+    .keys = { "Shift", "Space" },
+  });
+  rows.push_back({
+    .label = "Swim Up",
+    .act = config_.swim_up_action,
+    .keys = { "Space" },
+  });
   if (config_.camera_rig) {
-    rows.push_back({ "RMB", config_.camera_rig->GetRmbAction() });
-    rows.push_back({ "Orbit", config_.camera_rig->GetOrbitAction() });
-    rows.push_back({ "Zoom In", config_.camera_rig->GetZoomInAction() });
-    rows.push_back({ "Zoom Out", config_.camera_rig->GetZoomOutAction() });
+    rows.push_back({
+      .label = "RMB",
+      .act = config_.camera_rig->GetRmbAction(),
+      .keys = { "RMB" },
+    });
+    rows.push_back({
+      .label = "Orbit",
+      .act = config_.camera_rig->GetOrbitAction(),
+      .keys = { "RMB", "Drag" },
+    });
+    rows.push_back({
+      .label = "Zoom In",
+      .act = config_.camera_rig->GetZoomInAction(),
+      .keys = { "Wheel+" },
+    });
+    rows.push_back({
+      .label = "Zoom Out",
+      .act = config_.camera_rig->GetZoomOutAction(),
+      .keys = { "Wheel-" },
+    });
   }
 
   ImGui::Checkbox("Show inactive", &show_inactive_);
@@ -275,7 +299,7 @@ auto InputDebugPanel::DrawContents() -> void
         constexpr float kFlashDuration = 1.5F;
         auto it = last_trigger_time_.find(r.label);
         if (it != last_trigger_time_.end()) {
-          const float age = static_cast<float>(now - it->second);
+          const auto age = static_cast<float>(now - it->second);
           if (age >= 0.0F && age < kFlashDuration) {
             float t = 1.0F - (age / kFlashDuration);
             t = t * t;
@@ -301,34 +325,11 @@ auto InputDebugPanel::DrawContents() -> void
         const float gap = 8.0F * scale;
         float used_w = 0.0F;
         float used_h = 0.0F;
-        auto draw_and_advance = [&](const char* cap) {
-          const ImVec2 sz = MeasureKeycap(cap, scale);
-          DrawKeycap(dl, p, cap, IM_COL32(40, 40, 46, 255),
-            IM_COL32(80, 80, 90, 255), IM_COL32(230, 230, 240, 255), scale);
-          p.x += sz.x + gap;
-          used_w += sz.x + gap;
-          used_h = (std::max)(used_h, sz.y);
-        };
-
-        const std::string_view label_view = r.label;
-        if (label_view == "Jump") {
-          draw_and_advance("Space");
-        } else if (label_view == "Jump Higher") {
-          draw_and_advance("Shift");
-          draw_and_advance("Space");
-        } else if (label_view == "Shift") {
-          draw_and_advance("Shift");
-        } else if (label_view == "Swim Up") {
-          draw_and_advance("Space");
-        } else if (label_view == "RMB") {
-          draw_and_advance("RMB");
-        } else if (label_view == "Orbit") {
-          draw_and_advance("RMB");
-          draw_and_advance("Drag");
-        } else if (label_view == "Zoom In") {
-          draw_and_advance("Wheel+");
-        } else if (label_view == "Zoom Out") {
-          draw_and_advance("Wheel-");
+        for (const auto key : r.keys) {
+          const ImVec2 size = DrawKeycap(dl, p, key, scale);
+          p.x += size.x + gap;
+          used_w += size.x + gap;
+          used_h = std::max(used_h, size.y);
         }
         if (used_w > 0.0F && used_h > 0.0F) {
           used_w -= gap;
@@ -350,13 +351,12 @@ auto InputDebugPanel::DrawContents() -> void
       {
         ImDrawList* dl = ImGui::GetWindowDrawList();
         ImVec2 p = ImGui::GetCursorScreenPos();
-        DrawAnalogBar(dl, p, ImVec2(160, 8), v, 0.0F, 1.0F);
+        DrawValueBar(dl, p, ImVec2(160, 8), v);
         ImGui::Dummy(ImVec2(160, 10));
       }
 
       ImGui::TableSetColumnIndex(4);
-      PlotSparkline("##spark", hist.values, hist.count, hist.head,
-        History::kCapacity, ImVec2(160, 28));
+      PlotSparkline("##spark", hist.InOrder(), ImVec2(160, 28));
 
       ImGui::PopID();
     }
@@ -365,3 +365,5 @@ auto InputDebugPanel::DrawContents() -> void
 }
 
 } // namespace oxygen::examples::input_system
+
+// NOLINTEND(cppcoreguidelines-pro-type-vararg)

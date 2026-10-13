@@ -4,19 +4,45 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <exception>
-#include <string>
-#include <string_view>
+#include <atomic>
+#include <cstdint>
 
 #include "DemoShell/Services/RenderingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
-#include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 
 namespace oxygen::examples {
+
+auto RenderingSettingsService::BindVortexRenderer(
+  observer_ptr<vortex::Renderer> renderer) -> void
+{
+  DCHECK_NOTNULL_F(renderer);
+  vortex_renderer_ = renderer;
+  ApplyVortexSettings();
+}
+
+auto RenderingSettingsService::IsVortexRuntimeBound() const -> bool
+{
+  return vortex_renderer_ != nullptr;
+}
+
+auto RenderingSettingsService::SupportsDiagnostics() const -> bool
+{
+  return vortex_renderer_
+    && vortex::HasAllCapabilities(vortex_renderer_->GetCapabilityFamilies(),
+      vortex::RendererCapabilityFamily::kDiagnosticsAndProfiling);
+}
 
 auto RenderingSettingsService::GetFrameDiagnosticsEnabled() const -> bool
 {
@@ -29,117 +55,15 @@ auto RenderingSettingsService::GetFrameDiagnosticsEnabled() const -> bool
 auto RenderingSettingsService::SetFrameDiagnosticsEnabled(const bool enabled)
   -> void
 {
-  if (!vortex_renderer_)
+  if (!vortex_renderer_) {
     return;
+  }
   auto& diagnostics = vortex_renderer_->GetDiagnosticsService();
   const auto features = diagnostics.GetRequestedFeatures();
   diagnostics.SetEnabledFeatures(enabled
       ? features | vortex::DiagnosticsFeature::kFrameLedger
       : features & ~vortex::DiagnosticsFeature::kFrameLedger);
-}
-
-auto RenderingSettingsService::GetGpuTimelineEnabled() const -> bool
-{
-  return vortex_renderer_
-    && vortex_renderer_->GetDiagnosticsService().IsGpuTimelineEnabled();
-}
-
-auto RenderingSettingsService::SetGpuTimelineEnabled(const bool enabled) -> void
-{
-  if (!vortex_renderer_)
-    return;
-  auto& diagnostics = vortex_renderer_->GetDiagnosticsService();
-  if (enabled)
-    diagnostics.SetEnabledFeatures(diagnostics.GetRequestedFeatures()
-      | vortex::DiagnosticsFeature::kGpuTimeline);
-  diagnostics.SetGpuTimelineEnabled(enabled);
-}
-
-auto RenderingSettingsService::GetLatestGpuWorkSummary() const
-  -> std::shared_ptr<const vortex::GpuWorkSummary>
-{
-  return vortex_renderer_
-    ? vortex_renderer_->GetDiagnosticsService().GetLatestGpuWorkSummary()
-    : nullptr;
-}
-
-namespace {
-
-  auto ToVortexDebugMode(const engine::ShaderDebugMode mode)
-    -> vortex::ShaderDebugMode
-  {
-    return static_cast<vortex::ShaderDebugMode>(mode);
-  }
-
-  auto ParseShaderDebugModeOrDisabled(std::string_view value)
-    -> engine::ShaderDebugMode
-  {
-    try {
-      return static_cast<engine::ShaderDebugMode>(
-        std::stoi(std::string(value)));
-    } catch (const std::exception&) {
-      return engine::ShaderDebugMode::kDisabled;
-    }
-  }
-
-  auto SupportsVortexDebugMode(const engine::ShaderDebugMode mode,
-    const vortex::CapabilitySet capabilities) -> bool
-  {
-    const auto* info = vortex::FindShaderDebugModeInfo(ToVortexDebugMode(mode));
-    if (info == nullptr || !info->supported) {
-      return false;
-    }
-    return vortex::HasAllCapabilities(
-      capabilities, info->required_capabilities);
-  }
-
-} // namespace
-
-auto RenderingSettingsService::BindVortexRenderer(
-  observer_ptr<vortex::Renderer> renderer) -> void
-{
-  DCHECK_NOTNULL_F(renderer);
-  vortex_renderer_ = renderer;
-  ApplyVortexSettings();
-}
-
-auto RenderingSettingsService::GetRenderMode() const -> vortex::RenderMode
-{
-  using vortex::RenderMode;
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-
-  auto val = settings->GetString(kViewModeKey).value_or("solid");
-  if (val == "wireframe") {
-    return RenderMode::kWireframe;
-  }
-  if (val == "overlay_wireframe") {
-    return RenderMode::kOverlayWireframe;
-  }
-  return RenderMode::kSolid;
-}
-
-auto RenderingSettingsService::SetRenderMode(vortex::RenderMode mode) -> void
-{
-  using vortex::RenderMode;
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  const char* value = "solid";
-  switch (mode) {
-  case RenderMode::kWireframe:
-    value = "wireframe";
-    break;
-  case RenderMode::kOverlayWireframe:
-    value = "overlay_wireframe";
-    break;
-  case RenderMode::kSolid:
-  default:
-    value = "solid";
-    break;
-  }
-  settings->SetString(kViewModeKey, value);
   epoch_++;
-  ApplyVortexSettings();
 }
 
 auto RenderingSettingsService::GetWireframeColor() const -> graphics::Color
@@ -157,34 +81,11 @@ auto RenderingSettingsService::SetWireframeColor(const graphics::Color& color)
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  LOG_F(INFO, "RenderingSettingsService: SetWireframeColor ({}, {}, {}, {})",
-    color.r, color.g, color.b, color.a);
   settings->SetFloat(kWireColorRKey, color.r);
   settings->SetFloat(kWireColorGKey, color.g);
   settings->SetFloat(kWireColorBKey, color.b);
   epoch_++;
   ApplyVortexSettings();
-}
-
-auto RenderingSettingsService::GetDebugMode() const -> engine::ShaderDebugMode
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  auto val = settings->GetString(kDebugModeKey).value_or("0");
-  return ParseShaderDebugModeOrDisabled(val);
-}
-
-auto RenderingSettingsService::GetEffectiveDebugMode() const
-  -> engine::ShaderDebugMode
-{
-  const auto requested = GetDebugMode();
-  if (requested == engine::ShaderDebugMode::kDisabled) {
-    return requested;
-  }
-  if ((vortex_renderer_ == nullptr) || !SupportsDebugMode(requested)) {
-    return engine::ShaderDebugMode::kDisabled;
-  }
-  return requested;
 }
 
 auto RenderingSettingsService::GetGpuDebugPassEnabled() const -> bool
@@ -194,38 +95,14 @@ auto RenderingSettingsService::GetGpuDebugPassEnabled() const -> bool
   return settings->GetBool(kGpuDebugPassEnabledKey).value_or(false);
 }
 
-auto RenderingSettingsService::SetDebugMode(engine::ShaderDebugMode mode)
+auto RenderingSettingsService::SetGpuDebugPassEnabled(const bool enabled)
   -> void
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  settings->SetString(kDebugModeKey, std::to_string(static_cast<int>(mode)));
-  epoch_++;
-  ApplyVortexSettings();
-}
-auto RenderingSettingsService::SetGpuDebugPassEnabled(bool enabled) -> void
 {
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
   settings->SetBool(kGpuDebugPassEnabledKey, enabled);
   epoch_++;
   ApplyVortexSettings();
-}
-
-auto RenderingSettingsService::GetAtmosphereBlueNoiseEnabled() const -> bool
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  return settings->GetBool(kAtmosphereBlueNoiseEnabledKey).value_or(true);
-}
-
-auto RenderingSettingsService::SetAtmosphereBlueNoiseEnabled(bool enabled)
-  -> void
-{
-  const auto settings = SettingsService::ForDemoApp();
-  DCHECK_NOTNULL_F(settings);
-  settings->SetBool(kAtmosphereBlueNoiseEnabledKey, enabled);
-  epoch_++;
 }
 
 auto RenderingSettingsService::GetEpoch() const noexcept -> std::uint64_t
@@ -243,53 +120,9 @@ auto RenderingSettingsService::OnSceneActivated(scene::Scene& /*scene*/) -> void
 {
 }
 
-auto RenderingSettingsService::OnMainViewReady(
-  const engine::FrameContext& /*context*/,
-  const vortex::CompositionView& /*view*/) -> void
+auto RenderingSettingsService::OnMainViewReady(ViewId /*view_id*/,
+  const scene::SceneNode& /*camera*/, const ViewPort& /*viewport*/) -> void
 {
-  ApplyVortexSettings();
-}
-
-auto RenderingSettingsService::SupportsRenderModeControls() const -> bool
-{
-  return IsVortexRuntimeBound();
-}
-
-auto RenderingSettingsService::SupportsWireframeColorControl() const -> bool
-{
-  return IsVortexRuntimeBound();
-}
-
-auto RenderingSettingsService::SupportsGpuDebugPassControl() const -> bool
-{
-  return IsVortexRuntimeBound();
-}
-
-auto RenderingSettingsService::SupportsAtmosphereBlueNoiseControl() const
-  -> bool
-{
-  return false;
-}
-
-auto RenderingSettingsService::SupportsDebugMode(
-  const engine::ShaderDebugMode mode) const -> bool
-{
-  return (vortex_renderer_ != nullptr)
-    && SupportsVortexDebugMode(mode, vortex_renderer_->GetCapabilityFamilies());
-}
-
-auto RenderingSettingsService::IsVortexRuntimeBound() const -> bool
-{
-  return vortex_renderer_ != nullptr;
-}
-
-auto RenderingSettingsService::GetRendererCapabilities() const
-  -> vortex::CapabilitySet
-{
-  if (vortex_renderer_ == nullptr) {
-    return vortex::RendererCapabilityFamily::kNone;
-  }
-  return vortex_renderer_->GetCapabilityFamilies();
 }
 
 auto RenderingSettingsService::ApplyVortexSettings() -> void
@@ -298,9 +131,6 @@ auto RenderingSettingsService::ApplyVortexSettings() -> void
     return;
   }
 
-  vortex_renderer_->SetShaderDebugMode(
-    ToVortexDebugMode(GetEffectiveDebugMode()));
-  vortex_renderer_->SetRenderMode(GetRenderMode());
   vortex_renderer_->SetWireframeColor(GetWireframeColor());
 
   // The GPU debug pass shows the draw bounds producer's lines.

@@ -53,7 +53,7 @@ namespace {
       ASSERT_TRUE(
         camera.AttachCamera(std::make_unique<scene::PerspectiveCamera>()));
       cameras.SetSceneActivationPolicy(SceneActivationPolicy::kExperimentOwned);
-      cameras.OnRuntimeMainViewReady(camera, ViewPort {});
+      cameras.OnMainViewReady(ViewId { 1U }, camera, ViewPort {});
       settings.SetSceneActivationPolicy(
         SceneActivationPolicy::kExperimentOwned);
       settings.BindCameraSettings(observer_ptr { &cameras });
@@ -103,7 +103,7 @@ namespace {
 NOLINT_TEST_F(
   PostProcessConsoleTest, DiscoversTargetsAndUnregistersOnOwnerDestruction)
 {
-  EXPECT_EQ(console.Complete("pp.").size(), 8U);
+  EXPECT_EQ(console.Complete("pp.").size(), 9U);
   const auto listed = Execute("pp.targets");
   EXPECT_EQ(listed.status, Status::kOk);
   EXPECT_NE(listed.output.find(target), std::string::npos);

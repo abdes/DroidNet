@@ -5,24 +5,36 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
+#include <bit>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <numbers>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "DemoShell/Runtime/SceneActivationPolicy.h"
 #include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/Services/SkyboxService.h"
 #include <glm/geometric.hpp>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Core/Types/View.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/LocalFogVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -31,10 +43,13 @@
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
-#include <Oxygen/Vortex/CompositionView.h>
+#include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 
 namespace oxygen::examples {
 
@@ -46,6 +61,7 @@ namespace {
   constexpr float kKmToMeters = engine::atmos::kSkyUnitToM;
   constexpr float kMaxSkySphereIntensity = 100000.0F;
 
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - named in order
   auto DirectionFromAzimuthElevation(float azimuth_deg, float elevation_deg)
     -> glm::vec3
   {
@@ -53,8 +69,8 @@ namespace {
     const float el_rad = elevation_deg * kDegToRad;
 
     const float cos_el = std::cos(el_rad);
-    return glm::vec3(
-      cos_el * std::cos(az_rad), cos_el * std::sin(az_rad), std::sin(el_rad));
+    return { cos_el * std::cos(az_rad), cos_el * std::sin(az_rad),
+      std::sin(el_rad) };
   }
 
   auto KelvinToLinearRgb(float kelvin) -> glm::vec3
@@ -92,7 +108,7 @@ namespace {
   {
     if (glm::dot(direction_ws, direction_ws)
       <= math::EpsilonDirection * math::EpsilonDirection) {
-      return glm::quat(1.0F, 0.0F, 0.0F, 0.0F);
+      return { 1.0F, 0.0F, 0.0F, 0.0F };
     }
 
     constexpr glm::vec3 from_dir = space::move::Forward;
@@ -381,24 +397,6 @@ namespace {
   constexpr std::string_view kFogEndDistanceKey = "env.fog.end_distance_m";
   constexpr std::string_view kFogCutoffDistanceKey
     = "env.fog.cutoff_distance_m";
-  constexpr std::string_view kVolumetricFogScatteringDistributionKey
-    = "env.fog.volumetric.scattering_distribution";
-  constexpr std::string_view kVolumetricFogAlbedoKey
-    = "env.fog.volumetric.albedo";
-  constexpr std::string_view kVolumetricFogEmissiveKey
-    = "env.fog.volumetric.emissive";
-  constexpr std::string_view kVolumetricFogExtinctionScaleKey
-    = "env.fog.volumetric.extinction_scale";
-  constexpr std::string_view kVolumetricFogDistanceKey
-    = "env.fog.volumetric.distance_m";
-  constexpr std::string_view kVolumetricFogStartDistanceKey
-    = "env.fog.volumetric.start_distance_m";
-  constexpr std::string_view kVolumetricFogNearFadeInDistanceKey
-    = "env.fog.volumetric.near_fade_in_distance_m";
-  constexpr std::string_view kVolumetricFogStaticLightingScatteringKey
-    = "env.fog.volumetric.static_lighting_scattering_intensity";
-  constexpr std::string_view kVolumetricFogOverrideLightColorsKey
-    = "env.fog.volumetric.override_light_colors";
   constexpr std::string_view kFogHoldoutKey = "env.fog.holdout";
   constexpr std::string_view kFogRenderInMainPassKey
     = "env.fog.render_in_main_pass";
@@ -464,8 +462,8 @@ namespace {
   constexpr float kCurrentSettingsSchemaVersion = 6.0F;
   constexpr int kPresetUseScene = -2;
   constexpr int kPresetCustom = -1;
-  constexpr std::uint32_t kFogDirtyMask = (1u << 2u) | (1u << 3u);
-  constexpr std::uint32_t kSunDirtyMask = (1u << 8u) | (1u << 1u);
+  constexpr std::uint32_t kFogDirtyMask = (1U << 2U) | (1U << 3U);
+  constexpr std::uint32_t kSunDirtyMask = (1U << 8U) | (1U << 1U);
 
   auto ClampVec3(const glm::vec3& value, float min_value, float max_value)
     -> glm::vec3
@@ -481,11 +479,7 @@ namespace {
 
   auto FloatBits(const float v) -> std::uint32_t
   {
-    const auto bytes = reinterpret_cast<const std::uint8_t*>(&v);
-    return static_cast<std::uint32_t>(bytes[0])
-      | (static_cast<std::uint32_t>(bytes[1]) << 8U)
-      | (static_cast<std::uint32_t>(bytes[2]) << 16U)
-      | (static_cast<std::uint32_t>(bytes[3]) << 24U);
+    return std::bit_cast<std::uint32_t>(v);
   }
 
 } // namespace
@@ -619,15 +613,8 @@ auto EnvironmentSettingsService::OnSceneActivated(scene::Scene& scene) -> void
   BindSceneSun();
 }
 
-auto EnvironmentSettingsService::OnMainViewReady(
-  const engine::FrameContext& /*context*/, const vortex::CompositionView& view)
-  -> void
-{
-  OnRuntimeMainViewReady(view.id);
-}
-
-auto EnvironmentSettingsService::OnRuntimeMainViewReady(const ViewId view_id)
-  -> void
+auto EnvironmentSettingsService::OnMainViewReady(const ViewId view_id,
+  const scene::SceneNode& /*camera*/, const ViewPort& /*viewport*/) -> void
 {
   main_view_id_ = view_id;
 }
@@ -645,12 +632,11 @@ auto EnvironmentSettingsService::EndUpdate() -> void
 {
   if (update_depth_ > 0) {
     update_depth_--;
-    if (update_depth_ == 0) {
-      if (batched_dirty_domains_ != ToMask(DirtyDomain::kNone)) {
-        const auto merged_domains = batched_dirty_domains_;
-        batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
-        MarkDirty(merged_domains);
-      }
+    if ((update_depth_ == 0)
+      && (batched_dirty_domains_ != ToMask(DirtyDomain::kNone))) {
+      const auto merged_domains = batched_dirty_domains_;
+      batched_dirty_domains_ = ToMask(DirtyDomain::kNone);
+      MarkDirty(merged_domains);
     }
   }
 }
@@ -898,7 +884,7 @@ auto EnvironmentSettingsService::ReconcilePreviewSun() -> void
   }
   preview_reconciling_ = true;
   const ScopeGuard finish_reconcile(
-    [this]() noexcept { preview_reconciling_ = false; });
+    [this] noexcept { preview_reconciling_ = false; });
   preview_sun_.Update(*config_.scene,
     SupportsPreviewSun() && config_.preview_scene_ready
       && preview_sun_enabled_);
@@ -1521,23 +1507,11 @@ auto EnvironmentSettingsService::GetSkyboxStatusMessage() const
   return skybox_status_message_;
 }
 
-auto EnvironmentSettingsService::GetSkyboxLastFaceSize() const -> int
-{
-  return skybox_last_face_size_;
-}
-
-auto EnvironmentSettingsService::GetSkyboxLastResourceKey() const
-  -> content::ResourceKey
-{
-  return skybox_last_resource_key_;
-}
-
 auto EnvironmentSettingsService::LoadSkybox(std::string_view path,
   int layout_index, int output_format_index, int face_size, bool flip_y,
   bool tonemap_hdr_to_ldr, float hdr_exposure_ev) -> void
 {
   skybox_status_message_ = "Loading skybox...";
-  skybox_last_face_size_ = 0;
   skybox_last_resource_key_ = content::ResourceKey { 0U };
 
   if (!config_.skybox_service) {
@@ -1556,7 +1530,8 @@ auto EnvironmentSettingsService::LoadSkybox(std::string_view path,
   options.hdr_exposure_ev = hdr_exposure_ev;
 
   config_.skybox_service->LoadAndEquip(std::string(path), options,
-    { .enable_sky_sphere = sky_sphere_enabled_
+    {
+      .enable_sky_sphere = sky_sphere_enabled_
         && sky_sphere_source_
           == static_cast<int>(scene::environment::SkySphereSource::kCubemap),
       .enable_sky_light = sky_light_enabled_
@@ -1567,10 +1542,10 @@ auto EnvironmentSettingsService::LoadSkybox(std::string_view path,
       .intensity_mul = sky_light_intensity_mul_,
       .diffuse_intensity = sky_light_diffuse_,
       .specular_intensity = sky_light_specular_,
-      .tint_rgb = sky_light_tint_ },
+      .tint_rgb = sky_light_tint_,
+    },
     [this](const SkyboxService::LoadResult& result) {
       skybox_status_message_ = result.status_message;
-      skybox_last_face_size_ = result.face_size;
       skybox_last_resource_key_ = result.resource_key;
       if (result.success) {
         sky_sphere_cubemap_resource_key_ = result.resource_key;
@@ -1734,8 +1709,9 @@ auto EnvironmentSettingsService::GetSkyLightLowerHemisphereOverride() const
 auto EnvironmentSettingsService::SetSkyLightLowerHemisphereOverride(
   const bool enabled) -> void
 {
-  if (sky_light_lower_hemisphere_is_solid_color_ == enabled)
+  if (sky_light_lower_hemisphere_is_solid_color_ == enabled) {
     return;
+  }
   sky_light_lower_hemisphere_is_solid_color_ = enabled;
   MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
@@ -1749,8 +1725,9 @@ auto EnvironmentSettingsService::GetSkyLightLowerHemisphereBlend() const
 auto EnvironmentSettingsService::SetSkyLightLowerHemisphereBlend(
   const float value) -> void
 {
-  if (sky_light_lower_hemisphere_blend_alpha_ == value)
+  if (sky_light_lower_hemisphere_blend_alpha_ == value) {
     return;
+  }
   sky_light_lower_hemisphere_blend_alpha_ = value;
   MarkDirty(ToMask(DirtyDomain::kSkyLight));
 }
@@ -2353,8 +2330,8 @@ auto EnvironmentSettingsService::GetSelectedLocalFogVolumeMutable()
   -> LocalFogVolumeUiState*
 {
   if (selected_local_fog_volume_index_ < 0
-    || selected_local_fog_volume_index_
-      >= static_cast<int>(local_fog_volumes_.size())) {
+    || std::cmp_greater_equal(
+      selected_local_fog_volume_index_, local_fog_volumes_.size())) {
     return nullptr;
   }
   return &local_fog_volumes_[static_cast<size_t>(
@@ -2365,8 +2342,8 @@ auto EnvironmentSettingsService::GetSelectedLocalFogVolume() const
   -> const LocalFogVolumeUiState*
 {
   if (selected_local_fog_volume_index_ < 0
-    || selected_local_fog_volume_index_
-      >= static_cast<int>(local_fog_volumes_.size())) {
+    || std::cmp_greater_equal(
+      selected_local_fog_volume_index_, local_fog_volumes_.size())) {
     return nullptr;
   }
   return &local_fog_volumes_[static_cast<size_t>(
@@ -2872,7 +2849,7 @@ auto EnvironmentSettingsService::GetSunShadowCascadeDistance(
   const int index) const -> float
 {
   if (index < 0
-    || index >= static_cast<int>(sun_shadow_cascade_distances_.size())) {
+    || std::cmp_greater_equal(index, sun_shadow_cascade_distances_.size())) {
     return 0.0F;
   }
   return sun_shadow_cascade_distances_[static_cast<std::size_t>(index)];
@@ -2882,7 +2859,7 @@ auto EnvironmentSettingsService::SetSunShadowCascadeDistance(
   const int index, float value) -> void
 {
   if (index < 0
-    || index >= static_cast<int>(sun_shadow_cascade_distances_.size())) {
+    || std::cmp_greater_equal(index, sun_shadow_cascade_distances_.size())) {
     return;
   }
   const auto idx = static_cast<std::size_t>(index);
@@ -2986,7 +2963,7 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
     {
       preview_reconciling_ = true;
       const ScopeGuard finish_restore(
-        [this]() noexcept { preview_reconciling_ = false; });
+        [this] noexcept { preview_reconciling_ = false; });
       preview_sun_.Update(*config_.scene, false);
       scene_snapshot_.Restore(*config_.scene);
       config_.scene->NotifyEnvironmentAuthoringChange();
@@ -3106,12 +3083,6 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
       atmosphere_state.transmittance_min_light_elevation_deg);
     atmo->SetHoldout(atmosphere_state.holdout);
     atmo->SetRenderInMainPass(atmosphere_state.render_in_main_pass);
-
-    if (config_.on_atmosphere_params_changed) {
-      config_.on_atmosphere_params_changed();
-      LOG_F(1, "atmosphere parameters changed (SunDiskEnabled={})",
-        sun_disk_enabled_);
-    }
   }
 
   auto fog = env->TryGetSystem<scene::environment::Fog>();
@@ -3174,10 +3145,10 @@ auto EnvironmentSettingsService::ApplyPendingChanges() -> void
 
   if (apply_local_fog && config_.scene) {
     for (const auto& removed_handle : removed_local_fog_nodes_) {
-      if (auto* node_impl = config_.scene->TryGetNodeImpl(removed_handle)) {
-        if (node_impl->HasComponent<scene::environment::LocalFogVolume>()) {
-          node_impl->RemoveComponent<scene::environment::LocalFogVolume>();
-        }
+      if (auto* node_impl = config_.scene->TryGetNodeImpl(removed_handle);
+        node_impl
+        && node_impl->HasComponent<scene::environment::LocalFogVolume>()) {
+        node_impl->RemoveComponent<scene::environment::LocalFogVolume>();
       }
     }
     removed_local_fog_nodes_.clear();
@@ -3282,7 +3253,6 @@ auto EnvironmentSettingsService::SyncFromScene() -> void
   if (!config_.scene) {
     return;
   }
-  const auto cache_atmo_before = CaptureAtmosphereCanonicalState();
 
   // Directional lights belong to scene nodes and do not require a scene
   // environment block. Bind before the environment-only early return.
@@ -3831,9 +3801,10 @@ auto EnvironmentSettingsService::LoadSettings(const bool custom_only) -> void
     // Persist only this migration. Saving the environment state here would
     // overwrite stored custom controls while a built-in/scene profile is
     // active.
-    if (loaded_schema_version == 5.0F)
+    if (loaded_schema_version == 5.0F) {
       settings->SetFloat(
         kEnvironmentSettingsSchemaVersionKey, kCurrentSettingsSchemaVersion);
+    }
     settings->Save();
   }
 
@@ -3862,22 +3833,6 @@ auto EnvironmentSettingsService::LoadSettings(const bool custom_only) -> void
     key.resize(prefix.size());
     key += ".z";
     loaded |= load_float(key, out.z);
-    return loaded;
-  };
-  auto load_vec4 = [&](std::string_view prefix, glm::vec4& out) -> bool {
-    bool loaded = false;
-    std::string key(prefix);
-    key += ".x";
-    loaded |= load_float(key, out.x);
-    key.resize(prefix.size());
-    key += ".y";
-    loaded |= load_float(key, out.y);
-    key.resize(prefix.size());
-    key += ".z";
-    loaded |= load_float(key, out.z);
-    key.resize(prefix.size());
-    key += ".w";
-    loaded |= load_float(key, out.w);
     return loaded;
   };
   auto load_int = [&](std::string_view key, int& out) -> bool {
@@ -4202,20 +4157,6 @@ auto EnvironmentSettingsService::SaveSettings() const -> void
     key += ".z";
     save_float(key, value.z);
   };
-  auto save_vec4 = [&](std::string_view prefix, const glm::vec4& value) {
-    std::string key(prefix);
-    key += ".x";
-    save_float(key, value.x);
-    key.resize(prefix.size());
-    key += ".y";
-    save_float(key, value.y);
-    key.resize(prefix.size());
-    key += ".z";
-    save_float(key, value.z);
-    key.resize(prefix.size());
-    key += ".w";
-    save_float(key, value.w);
-  };
   auto save_int = [&](std::string_view key, int value) {
     save_float(key, static_cast<float>(value));
   };
@@ -4498,7 +4439,7 @@ auto EnvironmentSettingsService::FindSunLightCandidate() const
   if (!config_.scene) {
     return std::nullopt;
   }
-  if (const auto preview = preview_sun_.GetSun(); preview.IsAlive()) {
+  if (auto preview = preview_sun_.GetSun(); preview.IsAlive()) {
     return preview;
   }
 

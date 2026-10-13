@@ -4,16 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <cstddef>
 #include <exception>
+#include <filesystem>
 #include <fstream>
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
+#include <source_location>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include "DemoShell/Services/SettingsService.h"
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 
 namespace oxygen::examples {
 
@@ -41,10 +52,56 @@ namespace {
     return state;
   }
 
+  //! Settings no code reads any more. Loading drops them, so a settings file
+  //! does not carry dead values forever.
+  constexpr std::array kRetiredKeys {
+    std::string_view { "async_demo.profiler_open" },
+    std::string_view { "camera.fly_move_speed" },
+    std::string_view { "content.explorer.auto_dump_delay" },
+    std::string_view { "content.explorer.auto_dump_tex_mem" },
+    std::string_view { "content.explorer.dump_top_n" },
+    std::string_view { "diagnostics.shader_debug_mode" },
+    std::string_view { "ground_grid.enabled" },
+    // The host's toolbar variables live in the console archive.
+    std::string_view { "host" },
+    std::string_view { "light_culling.visualization_mode" },
+    std::string_view { "rendering.atmosphere_blue_noise" },
+    std::string_view { "rendering.debug_mode" },
+    std::string_view { "rendering.view_mode" },
+    std::string_view { "ui.stats.show_budget_stats" },
+    std::string_view { "ui.stats.show_engine_timing" },
+    std::string_view { "ui.stats.show_fps" },
+    std::string_view { "ui.stats.show_frame_timing_detail" },
+  };
+
+  //! Erases the dotted `key` and the objects it leaves empty; true when the
+  //! key was there.
+  auto EraseKey(nlohmann::json& node, const std::string_view key) -> bool
+  {
+    if (!node.is_object()) {
+      return false;
+    }
+    const auto dot = key.find('.');
+    const auto head = std::string(key.substr(0, dot));
+    if (dot == std::string_view::npos) {
+      return node.erase(head) > 0U;
+    }
+    const auto child = node.find(head);
+    if (child == node.end() || !EraseKey(*child, key.substr(dot + 1U))) {
+      return false;
+    }
+    if (child->is_object() && child->empty()) {
+      node.erase(child);
+    }
+    return true;
+  }
+
 } // namespace
 
 SettingsService::SettingsService(
-  std::filesystem::path storage_path, std::filesystem::path portable_root)
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - distinct roles
+  std::filesystem::path storage_path,
+  const std::filesystem::path& portable_root)
   : storage_path_(std::move(storage_path))
   , portable_root_(portable_root.empty()
         ? std::filesystem::path {}
@@ -90,14 +147,14 @@ auto SettingsService::ResolveDefault(std::source_location location)
 }
 
 auto SettingsService::InitializeForDemoApp(std::filesystem::path storage_path,
-  std::filesystem::path portable_root) -> void
+  const std::filesystem::path& portable_root) -> void
 {
   auto& state = GetDefaultState();
   if (state.owned) {
     throw std::logic_error("Demo settings were already initialized");
   }
-  state.owned = std::make_unique<SettingsService>(
-    std::move(storage_path), std::move(portable_root));
+  state.owned
+    = std::make_unique<SettingsService>(std::move(storage_path), portable_root);
 }
 
 auto SettingsService::EncodePath(const std::filesystem::path& path) const
@@ -106,8 +163,8 @@ auto SettingsService::EncodePath(const std::filesystem::path& path) const
   if (portable_root_.empty() || path.empty()) {
     return path;
   }
-  const auto absolute = std::filesystem::absolute(path).lexically_normal();
-  const auto relative = absolute.lexically_relative(portable_root_);
+  auto absolute = std::filesystem::absolute(path).lexically_normal();
+  auto relative = absolute.lexically_relative(portable_root_);
   if (!relative.empty() && *relative.begin() != "..") {
     return relative;
   }
@@ -137,8 +194,20 @@ auto SettingsService::Load() -> void
 
   try {
     input >> storage_->data;
-  } catch (const nlohmann::json::exception&) {
+  } catch (const nlohmann::json::exception& error) {
+    // Saving would replace the file, so its loss must not be silent.
+    LOG_F(WARNING,
+      "SettingsService: '{}' is not valid JSON ({}); starting from defaults "
+      "and overwriting it on the next save",
+      storage_path_.string(), error.what());
     storage_->data = nlohmann::json::object();
+  }
+  for (const auto key : kRetiredKeys) {
+    if (EraseKey(storage_->data, key)) {
+      LOG_F(INFO, "SettingsService: removed retired setting '{}' from '{}'",
+        key, storage_path_.string());
+      dirty_ = true;
+    }
   }
   loaded_ = true;
 }
@@ -214,7 +283,7 @@ auto SettingsService::ResolveNode(std::string_view key) -> void*
     if (!current->is_object()) {
       *current = nlohmann::json::object();
     }
-    current = &((*current)[token]);
+    current = &(*current)[token];
   }
   return current;
 }

@@ -13,12 +13,15 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
+#include "DemoShell/PanelCommands.h"
 #include "DemoShell/Runtime/SceneActivationPolicy.h"
 #include "DemoShell/UI/PostProcessPanel.h"
 #include "DemoShell/UI/PostProcessVm.h"
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -31,10 +34,107 @@
 
 namespace oxygen::examples::ui {
 
-PostProcessPanel::PostProcessPanel(observer_ptr<PostProcessVm> vm)
+namespace {
+
+  constexpr auto kModes = std::array {
+    engine::ExposureMode::kManual,
+    engine::ExposureMode::kManualCamera,
+    engine::ExposureMode::kAuto,
+  };
+  constexpr auto kModeNames = std::array { "manual", "camera", "auto" };
+  constexpr auto kMeterings = std::array {
+    engine::MeteringMode::kAverage,
+    engine::MeteringMode::kCenterWeighted,
+    engine::MeteringMode::kSpot,
+  };
+  constexpr auto kMeteringNames = std::array { "average", "center", "spot" };
+  constexpr auto kToneCurveNames
+    = std::array { "none", "aces", "filmic", "reinhard" };
+
+  auto ToneCurveIndex(const engine::ToneMapper mode) -> std::size_t
+  {
+    switch (mode) {
+    case engine::ToneMapper::kAcesFitted:
+      return 1U;
+    case engine::ToneMapper::kFilmic:
+      return 2U;
+    case engine::ToneMapper::kReinhard:
+      return 3U;
+    case engine::ToneMapper::kNone:
+      break;
+    }
+    return 0U;
+  }
+
+  template <typename T, std::size_t N>
+  auto NameOf(const std::array<T, N>& values,
+    const std::array<const char*, N>& names, const T value) -> const char*
+  {
+    for (std::size_t i = 0; i < N; ++i) {
+      if (values.at(i) == value) {
+        return names.at(i);
+      }
+    }
+    return names.front();
+  }
+
+  //! `metered:added` pairs separated by spaces, ordered by metered EV100.
+  auto FormatCurve(const std::vector<scene::ExposureCompensationKey>& keys)
+    -> std::string
+  {
+    std::string text;
+    for (const auto& key : keys) {
+      if (!text.empty()) {
+        text += ' ';
+      }
+      text += std::to_string(key.metered_ev) + ':'
+        + std::to_string(key.compensation_ev);
+    }
+    return text;
+  }
+
+} // namespace
+
+PostProcessPanel::PostProcessPanel(
+  observer_ptr<PostProcessVm> vm, observer_ptr<PanelCommands> commands)
   : vm_(vm)
+  , commands_(commands)
 {
-  DCHECK_NOTNULL_F(vm, "PostProcessPanel requires PostProcessVm");
+  DCHECK_NOTNULL_F(vm_, "PostProcessPanel requires PostProcessVm");
+  DCHECK_NOTNULL_F(commands_, "PostProcessPanel requires PanelCommands");
+}
+
+auto PostProcessPanel::RunOnTarget(
+  const std::string_view command, nlohmann::json arguments) const -> void
+{
+  // Without a scene there is nothing to edit; the controls show defaults.
+  if (const auto target = vm_->GetAuthoringTarget()) {
+    arguments["target"] = *target;
+    commands_->Run(command, arguments);
+  }
+}
+
+auto PostProcessPanel::RunExposure(nlohmann::json fields) const -> void
+{
+  RunOnTarget("pp.exposure", std::move(fields));
+}
+
+auto PostProcessPanel::RunCamera(
+  const float aperture, const float shutter_rate, const float iso) const -> void
+{
+  RunOnTarget("pp.camera",
+    {
+      { "aperture_f", aperture },
+      { "shutter_rate", shutter_rate },
+      { "iso", iso },
+    });
+}
+
+auto PostProcessPanel::RunOutput(
+  const std::string_view tone_curve, const float gamma) const -> void
+{
+  RunOnTarget(
+    "pp.output", { { "tone_curve", tone_curve }, { "gamma", gamma } });
 }
 
 auto PostProcessPanel::GetName() const noexcept -> std::string_view
@@ -292,7 +392,7 @@ void PostProcessPanel::DrawExposureSection()
   ImGui::BeginDisabled(externally_owned);
   bool enabled = vm_->GetExposureEnabled();
   if (ImGui::Checkbox("Enable exposure", &enabled)) {
-    vm_->SetExposureEnabled(enabled);
+    RunExposure({ { "enabled", enabled } });
   }
   ImGui::BeginDisabled(!enabled);
   auto mode = vm_->GetExposureMode();
@@ -304,8 +404,7 @@ void PostProcessPanel::DrawExposureSection()
            engine::ExposureMode::kAuto,
          }) {
       if (ImGui::Selectable(ExposureModeLabel(candidate), mode == candidate)) {
-        vm_->SetExposureMode(candidate);
-        mode = vm_->GetExposureMode();
+        RunExposure({ { "mode", NameOf(kModes, kModeNames, candidate) } });
       }
     }
     ImGui::EndCombo();
@@ -314,7 +413,7 @@ void PostProcessPanel::DrawExposureSection()
     auto ev = vm_->GetManualExposureEv();
     if (FloatControl(
           "EV100", ev, kEvDrag, "Increasing EV100 by one halves exposure.")) {
-      vm_->SetManualExposureEv(ev);
+      RunExposure({ { "manual_ev", ev } });
     }
   } else if (mode == engine::ExposureMode::kManualCamera) {
     const bool has_camera = vm_->HasActiveCamera();
@@ -324,14 +423,14 @@ void PostProcessPanel::DrawExposureSection()
     auto iso = vm_->GetManualCameraIso();
     if (FloatControl("Aperture (f-number)", aperture, kApertureDrag,
           "A smaller f-number increases exposure.")) {
-      vm_->SetManualCameraAperture(aperture);
+      RunCamera(aperture, shutter, iso);
     }
     if (FloatControl("Shutter rate (1/s)", shutter, kShutterDrag,
           "125 means a shutter time of 1/125 second.")) {
-      vm_->SetManualCameraShutterRate(shutter);
+      RunCamera(aperture, shutter, iso);
     }
     if (FloatControl("ISO", iso, kIsoDrag, "Higher ISO increases exposure.")) {
-      vm_->SetManualCameraIso(iso);
+      RunCamera(aperture, shutter, iso);
     }
     ImGui::EndDisabled();
     if (has_camera) {
@@ -343,7 +442,7 @@ void PostProcessPanel::DrawExposureSection()
   auto compensation = vm_->GetExposureCompensation();
   if (FloatControl("Compensation (EV)", compensation, kCompensationDrag,
         "Positive compensation brightens the image. +1 EV doubles exposure.")) {
-    vm_->SetExposureCompensation(compensation);
+    RunExposure({ { "compensation_ev", compensation } });
   }
   if (mode == engine::ExposureMode::kAuto) {
     DrawAutoExposureControls();
@@ -369,8 +468,7 @@ void PostProcessPanel::DrawAutoExposureControls()
           kEvDrag.step, kEvDrag.minimum, kEvDrag.maximum, "Min %.2f",
           "Max %.2f");
       })) {
-    vm_->SetAutoExposureRange(
-      { .minimum = limits.front(), .maximum = limits.back() });
+    RunExposure({ { "min_ev", limits.front() }, { "max_ev", limits.back() } });
   }
   if (minimum == maximum) {
     ImGui::TextDisabled("Locked to a fixed metered EV100");
@@ -380,12 +478,12 @@ void PostProcessPanel::DrawAutoExposureControls()
   if (FloatControl("To bright scenes (EV/s)", speed_up, kAdaptationRateDrag,
         "Speed when moving from dark to bright scenes. Zero holds exposure in "
         "this direction.")) {
-    vm_->SetAutoExposureAdaptationSpeedUp(speed_up);
+    RunExposure({ { "speed_up", speed_up } });
   }
   if (FloatControl("To dark scenes (EV/s)", speed_down, kAdaptationRateDrag,
         "Speed when moving from bright to dark scenes. Zero holds exposure in "
         "this direction.")) {
-    vm_->SetAutoExposureAdaptationSpeedDown(speed_down);
+    RunExposure({ { "speed_down", speed_down } });
   }
   auto metering = vm_->GetAutoExposureMeteringMode();
   ImGui::TextUnformatted("Metering");
@@ -399,7 +497,9 @@ void PostProcessPanel::DrawAutoExposureControls()
          }) {
       const auto label = std::string(engine::to_string(candidate));
       if (ImGui::Selectable(label.c_str(), metering == candidate)) {
-        vm_->SetAutoExposureMeteringMode(candidate);
+        RunExposure({
+          { "metering", NameOf(kMeterings, kMeteringNames, candidate) },
+        });
         metering = candidate;
       }
     }
@@ -410,7 +510,7 @@ void PostProcessPanel::DrawAutoExposureControls()
     if (FloatControl("Spot radius", radius, kSpotRadiusDrag,
           "Radius in normalized image coordinates. Zero selects only exact "
           "center samples.")) {
-      vm_->SetAutoExposureSpotMeterRadius(radius);
+      RunExposure({ { "spot_meter_radius", radius } });
     }
   }
 }
@@ -420,7 +520,7 @@ void PostProcessPanel::DrawAdvancedExposureControls()
   auto key = vm_->GetExposureKey();
   if (FloatControl("Calibration key", key, kCalibrationDrag,
         "Display calibration multiplier. The calibrated reference is 12.5.")) {
-    vm_->SetExposureKey(key);
+    RunExposure({ { "key", key } });
   }
   if (vm_->GetExposureMode() != engine::ExposureMode::kAuto) {
     return;
@@ -435,9 +535,9 @@ void PostProcessPanel::DrawAdvancedExposureControls()
         return ImGui::DragFloatRange2("##value", &draft.front(), &draft.back(),
           0.5F, 0.0F, kPercentScale, "Low %.1f", "High %.1f");
       })) {
-    vm_->SetAutoExposurePercentiles({
-      .minimum = percentiles.front() / kPercentScale,
-      .maximum = percentiles.back() / kPercentScale,
+    RunExposure({
+      { "low_percentile", percentiles.front() / kPercentScale },
+      { "high_percentile", percentiles.back() / kPercentScale },
     });
   }
   auto minimum = requested.min_log_luminance;
@@ -451,33 +551,36 @@ void PostProcessPanel::DrawAdvancedExposureControls()
             &draft.back(), kEvDrag.step, engine::kMinExposureLogLuminance,
             engine::kMaxExposureLogLuminance, "Min %.1f", "Max %.1f");
         })) {
-    vm_->SetAutoExposureHistogramWindow({
-      .minimum = histogram_bounds.front(),
-      .maximum = histogram_bounds.back(),
+    RunExposure({
+      { "min_log_luminance", histogram_bounds.front() },
+      {
+        "log_luminance_range",
+        histogram_bounds.back() - histogram_bounds.front(),
+      },
     });
   }
   auto target = requested.target_luminance;
   if (FloatControl("Target luminance", target, kLuminanceDrag,
         "Reference luminance for automatic exposure. Zero intentionally "
         "produces zero exposure.")) {
-    vm_->SetAutoExposureTargetLuminance(target);
+    RunExposure({ { "target_luminance", target } });
   }
   auto black = requested.black_influence * kPercentScale;
   if (FloatControl("Black-pixel influence (%)", black, kPercentDrag,
         "Weight given to black samples. Zero excludes them; 100 gives them "
         "full weight.")) {
-    vm_->SetAutoExposureBlackInfluence(black / kPercentScale);
+    RunExposure({ { "black_influence", black / kPercentScale } });
   }
   auto distance = requested.transition_distance;
   if (FloatControl("Adaptation transition (EV)", distance, kTransitionDrag,
         "Distance from the target where adaptation changes from a constant "
         "rate to a smooth approach. Must be positive.")) {
-    vm_->SetAutoExposureTransitionDistance(distance);
+    RunExposure({ { "transition_distance", distance } });
   }
   if (vm_->HasSceneMeteringMask()) {
     bool use_mask = vm_->GetUseSceneMeteringMask();
     if (ImGui::Checkbox("Use scene mask", &use_mask)) {
-      vm_->SetUseSceneMeteringMask(use_mask);
+      RunExposure({ { "mask", use_mask ? "scene" : "off" } });
     }
   } else {
     ImGui::TextDisabled("No metering mask assigned by the scene");
@@ -487,7 +590,7 @@ void PostProcessPanel::DrawAdvancedExposureControls()
     ImGui::TreePop();
   }
   if (ImGui::Button("Reset auto controls")) {
-    vm_->ResetAutoExposureDefaults();
+    RunOnTarget("pp.reset_auto", nlohmann::json::object());
     curve_dirty_ = false;
   }
   if (ImGui::IsItemHovered()) {
@@ -574,10 +677,12 @@ void PostProcessPanel::DrawCompensationCurve(
       "Keys must be finite and ordered by EV100, with no duplicates.");
   }
   ImGui::BeginDisabled(!curve_dirty_ || !CurveIsOrdered(curve_draft_));
-  if (ImGui::Button("Apply curve")
-    && vm_->SetExposureCompensationCurve(curve_draft_)) {
+  if (ImGui::Button("Apply curve")) {
+    // The draft resyncs from the applied settings once the command ran; a
+    // rejected curve leaves the settings and reports the validation error.
+    const auto keys = FormatCurve(curve_draft_);
+    RunOnTarget("pp.curve", { { "keys", keys.empty() ? "clear" : keys } });
     curve_dirty_ = false;
-    curve_epoch_ = vm_->GetEpoch();
   }
   ImGui::EndDisabled();
   ImGui::SameLine();
@@ -616,7 +721,7 @@ void PostProcessPanel::DrawExposureStatus(
                        "reload the scene after fixing the texture.",
       status->mask_error.c_str());
     if (ImGui::Button("Disable mask")) {
-      vm_->SetUseSceneMeteringMask(false);
+      RunExposure({ { "mask", "off" } });
     }
   }
   if (status->active_settings) {
@@ -668,19 +773,16 @@ void PostProcessPanel::DrawTonemappingSection()
   ImGui::SetNextItemWidth(-1.0F);
   if (ImGui::BeginCombo("##Tone curve", mode_str)) {
     if (ImGui::Selectable("None", current_mode == ToneMapper::kNone)) {
-      vm_->SetTonemappingEnabled(false);
+      RunOutput("none", vm_->GetGamma());
     }
     if (ImGui::Selectable("ACES", current_mode == ToneMapper::kAcesFitted)) {
-      vm_->SetTonemappingEnabled(true);
-      vm_->SetToneMapper(ToneMapper::kAcesFitted);
+      RunOutput("aces", vm_->GetGamma());
     }
     if (ImGui::Selectable("Filmic", current_mode == ToneMapper::kFilmic)) {
-      vm_->SetTonemappingEnabled(true);
-      vm_->SetToneMapper(ToneMapper::kFilmic);
+      RunOutput("filmic", vm_->GetGamma());
     }
     if (ImGui::Selectable("Reinhard", current_mode == ToneMapper::kReinhard)) {
-      vm_->SetTonemappingEnabled(true);
-      vm_->SetToneMapper(ToneMapper::kReinhard);
+      RunOutput("reinhard", vm_->GetGamma());
     }
     ImGui::EndCombo();
   }
@@ -692,7 +794,7 @@ void PostProcessPanel::DrawTonemappingSection()
   float gamma = vm_->GetGamma();
   if (FloatControl("Display gamma", gamma, kGammaDrag,
         "Display gamma applied after the selected tone curve.")) {
-    vm_->SetGamma(gamma);
+    RunOutput(kToneCurveNames.at(ToneCurveIndex(current_mode)), gamma);
   }
 }
 

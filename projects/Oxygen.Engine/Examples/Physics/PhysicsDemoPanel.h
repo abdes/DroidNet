@@ -15,34 +15,44 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Input/Action.h>
 
+namespace oxygen::examples {
+class PanelCommands;
+} // namespace oxygen::examples
+
 namespace oxygen::examples::ui {
 class CameraRigController;
 } // namespace oxygen::examples::ui
 
 namespace oxygen::examples::physics_demo {
 
+//! The demo's commands; the module registers them.
+inline constexpr std::string_view kLaunchCommand = "physics.launch";
+inline constexpr std::string_view kResetCommand = "physics.reset";
+inline constexpr std::string_view kLaunchImpulseCommand
+  = "physics.launch_impulse";
+
+//! What the panel shows; it changes nothing except through commands.
 struct PhysicsDemoPanelConfig {
   observer_ptr<oxygen::examples::ui::CameraRigController> camera_rig {
     nullptr
   };
+  observer_ptr<PanelCommands> commands { nullptr };
 
   std::shared_ptr<oxygen::input::Action> launch_action { nullptr };
   std::shared_ptr<oxygen::input::Action> reset_action { nullptr };
   std::shared_ptr<oxygen::input::Action> nudge_left_action { nullptr };
   std::shared_ptr<oxygen::input::Action> nudge_right_action { nullptr };
 
-  bool* pending_launch { nullptr };
-  bool* pending_reset { nullptr };
-  float* launch_impulse { nullptr };
-  float* player_speed { nullptr };
-  bool* player_settled { nullptr };
+  observer_ptr<const float> launch_impulse { nullptr };
+  observer_ptr<const float> player_speed { nullptr };
+  observer_ptr<const bool> player_settled { nullptr };
 
-  uint64_t* launches_count { nullptr };
-  uint64_t* resets_count { nullptr };
-  uint64_t* contact_events_count { nullptr };
-  uint64_t* flipper_trigger_count { nullptr };
+  observer_ptr<const uint64_t> launches_count { nullptr };
+  observer_ptr<const uint64_t> resets_count { nullptr };
+  observer_ptr<const uint64_t> contact_events_count { nullptr };
+  observer_ptr<const uint64_t> flipper_trigger_count { nullptr };
 
-  float* settle_progress { nullptr };
+  observer_ptr<const float> settle_progress { nullptr };
   float settle_target { 1.0F };
 };
 
@@ -55,7 +65,6 @@ public:
   OXYGEN_DEFAULT_MOVABLE(PhysicsDemoPanel)
 
   void Initialize(const PhysicsDemoPanelConfig& config);
-  void UpdateConfig(const PhysicsDemoPanelConfig& config);
 
   [[nodiscard]] auto GetName() const noexcept -> std::string_view override;
   [[nodiscard]] auto GetPreferredWidth() const noexcept -> float override;

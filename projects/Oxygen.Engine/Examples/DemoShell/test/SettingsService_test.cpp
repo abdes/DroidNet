@@ -69,6 +69,35 @@ namespace {
     EXPECT_FALSE(std::filesystem::exists(path));
   }
 
+  //! Loading drops settings no code reads and the objects they leave empty.
+  NOLINT_TEST(SettingsServicePersistenceTest, LoadRemovesRetiredSettings)
+  {
+    const auto path = std::filesystem::temp_directory_path()
+      / ("oxygen-settings-" + Uuid::Generate().ToString() + ".json");
+    [[maybe_unused]] const auto cleanup = Finally([&path] {
+      std::error_code ignored;
+      std::filesystem::remove(path, ignored);
+    });
+    {
+      std::ofstream output(path, std::ios::binary);
+      output << R"json({
+        "rendering": { "view_mode": "solid", "debug_mode": 0 },
+        "ui": { "stats": { "show_fps": true }, "axes": { "visible": false } }
+      })json";
+    }
+    {
+      SettingsService settings(path);
+      EXPECT_FALSE(settings.GetString("rendering.view_mode").has_value());
+      EXPECT_FALSE(settings.GetBool("ui.stats.show_fps").has_value());
+      EXPECT_EQ(settings.GetBool("ui.axes.visible"), false);
+      settings.Save();
+    }
+    const auto saved = ReadSettingsBytes(path);
+    EXPECT_EQ(saved.find("rendering"), std::string::npos);
+    EXPECT_EQ(saved.find("stats"), std::string::npos);
+    EXPECT_NE(saved.find("axes"), std::string::npos);
+  }
+
   NOLINT_TEST(ContentImportSettingsTest, FastDefaultsPreserveExplicitUserTuning)
   {
     const auto path = std::filesystem::temp_directory_path()

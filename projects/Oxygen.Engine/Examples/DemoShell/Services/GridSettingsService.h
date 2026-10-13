@@ -39,9 +39,6 @@ public:
   auto BindCameraRig(observer_ptr<ui::CameraRigController> camera_rig) -> void;
   auto BindVortexRenderer(observer_ptr<vortex::Renderer> renderer) -> void;
 
-  [[nodiscard]] auto GetEnabled() const -> bool;
-  auto SetEnabled(bool enabled) -> void;
-
   [[nodiscard]] auto GetGridSpacing() const -> float;
   auto SetGridSpacing(float spacing) -> void;
 
@@ -91,8 +88,8 @@ public:
 
   auto OnFrameStart(const engine::FrameContext& context) -> void override;
   auto OnSceneActivated(scene::Scene& scene) -> void override;
-  auto OnMainViewReady(const engine::FrameContext& context,
-    const vortex::CompositionView& view) -> void override;
+  auto OnMainViewReady(ViewId view_id, const scene::SceneNode& camera,
+    const ViewPort& viewport) -> void override;
 
 private:
   struct GridConfig;

@@ -18,15 +18,9 @@ auto DemoModuleBase::RegisterUiTests(ImGuiTestEngine* engine) -> void
     const auto& app = *static_cast<DemoModuleBase*>(ctx->Test->UserData);
     constexpr int kWarmupFrames = 90;
     ctx->Yield(kWarmupFrames);
-    IM_CHECK(app.ResolveVortexRenderer());
-    IM_CHECK(!app.active_views_.empty());
-    IM_CHECK(!app.scene_targets_.empty());
-    for (const auto& [view, target] : app.scene_targets_) {
-      static_cast<void>(view);
-      IM_CHECK(target.scene_framebuffer && target.composite_framebuffer);
-      IM_CHECK_GT(target.width, 0U);
-      IM_CHECK_GT(target.height, 0U);
-    }
+    IM_CHECK(app.ResolveRenderer());
+    IM_CHECK(app.Window());
+    IM_CHECK(app.HasRenderableWindow());
   };
 }
 

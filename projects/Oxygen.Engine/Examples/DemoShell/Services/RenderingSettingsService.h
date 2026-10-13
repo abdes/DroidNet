@@ -7,18 +7,13 @@
 #pragma once
 
 #include <atomic>
-#include <memory>
+#include <cstdint>
 
-#include "DemoShell/Runtime/RendererUiTypes.h"
 #include "DemoShell/Services/DomainService.h"
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
-#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
-#include <Oxygen/Vortex/Diagnostics/GpuWorkSummary.h>
-#include <Oxygen/Vortex/RendererCapability.h>
 
 namespace oxygen::vortex {
 class Renderer;
@@ -26,26 +21,18 @@ class Renderer;
 
 namespace oxygen::examples {
 
-class SettingsService;
-
-//! Settings persistence for Vortex diagnostics and rendering options.
+//! Renderer diagnostics the Diagnostics panel controls.
 /*!
- Owns UI-facing settings for view mode (solid/wireframe) and debug mode,
- delegating persistence to `SettingsService` and exposing an epoch for cache
- invalidation.
-
-### Key Features
-
-- **Passive state**: Reads and writes via SettingsService without caching.
-- **Epoch tracking**: Increments on each effective change.
-- **Testable**: Virtual getters and setters for overrides in tests.
-
-@see SettingsService
+ The view mode belongs to the host toolbar (`host.view_mode`) and GPU timing
+ to its GPU work overlay; this service keeps what they do not cover: the
+ wireframe color the wireframe view modes draw with, the draw-bounds GPU
+ debug pass and the frame diagnostics that validate GPU products. The color
+ and the debug pass persist through `SettingsService`.
 */
 class RenderingSettingsService : public DomainService {
 public:
   RenderingSettingsService() = default;
-  virtual ~RenderingSettingsService() = default;
+  ~RenderingSettingsService() override = default;
 
   OXYGEN_MAKE_NON_COPYABLE(RenderingSettingsService)
   OXYGEN_MAKE_NON_MOVABLE(RenderingSettingsService)
@@ -53,77 +40,38 @@ public:
   //! Binds the service to the Vortex runtime.
   virtual auto BindVortexRenderer(observer_ptr<vortex::Renderer> renderer)
     -> void;
-  [[nodiscard]] virtual auto GetGpuTimelineEnabled() const -> bool;
+  [[nodiscard]] virtual auto IsVortexRuntimeBound() const -> bool;
+  //! Whether the renderer has the diagnostics capability.
+  [[nodiscard]] virtual auto SupportsDiagnostics() const -> bool;
+
+  //! Whether the renderer validates GPU products each frame.
   [[nodiscard]] virtual auto GetFrameDiagnosticsEnabled() const -> bool;
   virtual auto SetFrameDiagnosticsEnabled(bool enabled) -> void;
-  virtual auto SetGpuTimelineEnabled(bool enabled) -> void;
-  [[nodiscard]] virtual auto GetLatestGpuWorkSummary() const
-    -> std::shared_ptr<const vortex::GpuWorkSummary>;
 
-  //! Returns the persisted render mode.
-  [[nodiscard]] virtual auto GetRenderMode() const -> vortex::RenderMode;
-
-  //! Sets the render mode.
-  virtual auto SetRenderMode(vortex::RenderMode mode) -> void;
-
-  //! Returns the persisted wireframe color.
+  //! The color the wireframe view modes draw with.
   [[nodiscard]] virtual auto GetWireframeColor() const -> graphics::Color;
-
-  //! Sets the wireframe color.
   virtual auto SetWireframeColor(const graphics::Color& color) -> void;
 
-  //! Returns the persisted debug mode.
-  [[nodiscard]] virtual auto GetDebugMode() const -> engine::ShaderDebugMode;
-
-  //! Returns the debug mode that the renderer will actually execute.
-  [[nodiscard]] virtual auto GetEffectiveDebugMode() const
-    -> engine::ShaderDebugMode;
-
-  //! Sets the debug mode.
-  virtual auto SetDebugMode(engine::ShaderDebugMode mode) -> void;
-
-  //! Returns the persisted GPU debug pass flag.
+  //! Whether the GPU debug pass draws the draw bounds.
   [[nodiscard]] virtual auto GetGpuDebugPassEnabled() const -> bool;
-
-  //! Sets whether the GPU debug pass is enabled.
   virtual auto SetGpuDebugPassEnabled(bool enabled) -> void;
-
-  //! Returns whether atmosphere blue-noise jitter is enabled.
-  [[nodiscard]] virtual auto GetAtmosphereBlueNoiseEnabled() const -> bool;
-
-  //! Sets whether atmosphere blue-noise jitter is enabled.
-  virtual auto SetAtmosphereBlueNoiseEnabled(bool enabled) -> void;
-
-  [[nodiscard]] virtual auto SupportsRenderModeControls() const -> bool;
-  [[nodiscard]] virtual auto SupportsWireframeColorControl() const -> bool;
-  [[nodiscard]] virtual auto SupportsGpuDebugPassControl() const -> bool;
-  [[nodiscard]] virtual auto SupportsAtmosphereBlueNoiseControl() const -> bool;
-  [[nodiscard]] virtual auto SupportsDebugMode(
-    engine::ShaderDebugMode mode) const -> bool;
-  [[nodiscard]] virtual auto IsVortexRuntimeBound() const -> bool;
-  [[nodiscard]] virtual auto GetRendererCapabilities() const
-    -> vortex::CapabilitySet;
 
   //! Returns the current settings epoch.
   [[nodiscard]] auto GetEpoch() const noexcept -> std::uint64_t override;
 
   auto OnFrameStart(const engine::FrameContext& context) -> void override;
   auto OnSceneActivated(scene::Scene& scene) -> void override;
-  auto OnMainViewReady(const engine::FrameContext& context,
-    const vortex::CompositionView& view) -> void override;
+  auto OnMainViewReady(ViewId view_id, const scene::SceneNode& camera,
+    const ViewPort& viewport) -> void override;
 
 private:
-  static constexpr auto kViewModeKey = "rendering.view_mode";
   static constexpr auto kWireColorRKey = "rendering.wire_color.r";
   static constexpr auto kWireColorGKey = "rendering.wire_color.g";
   static constexpr auto kWireColorBKey = "rendering.wire_color.b";
-  static constexpr auto kDebugModeKey = "diagnostics.shader_debug_mode";
   static constexpr auto kGpuDebugPassEnabledKey = "rendering.debug_gpu_pass";
-  static constexpr auto kAtmosphereBlueNoiseEnabledKey
-    = "rendering.atmosphere_blue_noise";
 
   observer_ptr<vortex::Renderer> vortex_renderer_ { nullptr };
-  mutable std::atomic_uint64_t epoch_ { 0 };
+  std::atomic_uint64_t epoch_ { 0 };
 
   auto ApplyVortexSettings() -> void;
 };

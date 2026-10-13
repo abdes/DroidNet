@@ -7,19 +7,33 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 #include <vector>
 
 #include "DemoShell/UI/DemoPanel.h"
 #include "DemoShell/UI/PostProcessVm.h"
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
+
+namespace oxygen::examples {
+class PanelCommands;
+} // namespace oxygen::examples
 
 namespace oxygen::examples::ui {
 
 //! Panel for controlling post-process effects (Exposure, Tonemapping).
+/*!
+ Every control posts a `pp.*` command (`pp.exposure`, `pp.camera`,
+ `pp.output`, `pp.curve`, `pp.reset_auto`) to the current `scene:<revision>`
+ target, so a person and a remote client edit through the same validated
+ path. The compensation curve is edited as a local draft and applied as one
+ command.
+*/
 class PostProcessPanel final : public DemoPanel {
 public:
-  explicit PostProcessPanel(observer_ptr<PostProcessVm> vm);
+  PostProcessPanel(
+    observer_ptr<PostProcessVm> vm, observer_ptr<PanelCommands> commands);
 
   // DemoPanel interface
   auto DrawContents() -> void override;
@@ -32,6 +46,13 @@ public:
   auto OnUnloaded() -> void override { }
 
 private:
+  //! Posts a pp.* command to the current authoring target, if any.
+  auto RunOnTarget(std::string_view command, nlohmann::json arguments) const
+    -> void;
+  auto RunExposure(nlohmann::json fields) const -> void;
+  auto RunCamera(float aperture, float shutter_rate, float iso) const -> void;
+  auto RunOutput(std::string_view tone_curve, float gamma) const -> void;
+
   void DrawExposureSection();
   void DrawTonemappingSection();
   void DrawAutoExposureControls();
@@ -46,6 +67,7 @@ private:
   bool curve_dirty_ { false };
 
   observer_ptr<PostProcessVm> vm_;
+  observer_ptr<PanelCommands> commands_;
 };
 
 } // namespace oxygen::examples::ui

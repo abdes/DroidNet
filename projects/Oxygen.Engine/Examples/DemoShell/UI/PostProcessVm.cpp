@@ -72,6 +72,18 @@ auto PostProcessVm::GetExposureSettings() -> scene::ExposureSettings
   std::scoped_lock lock(mutex_);
   return service_->GetExposureSettings();
 }
+auto PostProcessVm::GetAuthoringTarget() -> std::optional<std::string>
+{
+  std::scoped_lock lock(mutex_);
+  if (!service_) {
+    return std::nullopt;
+  }
+  const auto target = service_->GetAuthoringTarget();
+  if (!target) {
+    return std::nullopt;
+  }
+  return "scene:" + std::to_string(target->scene_revision);
+}
 auto PostProcessVm::TrySetExposureSettings(
   const scene::ExposureSettings& settings) -> bool
 {

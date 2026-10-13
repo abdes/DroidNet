@@ -27,7 +27,6 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
-#include <Oxygen/Input/Action.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/SceneNode.h>
@@ -100,26 +99,24 @@ auto CameraVm::SetOrbitMode(OrbitMode mode) -> void
 
 auto CameraVm::GetFlyMoveSpeed() -> float
 {
+  // Each camera keeps its own speed, because scenes differ in scale.
   std::scoped_lock lock(mutex_);
-  if (IsStale()) {
-    Refresh();
+  if (!camera_rig_) {
+    return 0.0F;
   }
-  return fly_move_speed_;
+  const auto fly = camera_rig_->GetFlyController();
+  return fly ? fly->GetMoveSpeed() : 0.0F;
 }
 
 auto CameraVm::SetFlyMoveSpeed(float speed) -> void
 {
   std::scoped_lock lock(mutex_);
-  if (fly_move_speed_ == speed) {
+  if (!camera_rig_) {
     return;
   }
-
-  fly_move_speed_ = speed;
-  service_->SetFlyMoveSpeed(speed);
-  epoch_ = service_->GetEpoch();
-
-  if (camera_rig_ && camera_rig_->GetFlyController()) {
-    camera_rig_->GetFlyController()->SetMoveSpeed(speed);
+  if (const auto fly = camera_rig_->GetFlyController()) {
+    fly->SetMoveSpeed(speed);
+    service_->PersistActiveCameraSettings();
   }
 }
 
@@ -852,68 +849,6 @@ auto CameraVm::GetDronePathPoints() const -> std::span<const glm::vec3>
   return { empty };
 }
 
-auto CameraVm::GetActionStateString(
-  const std::shared_ptr<input::Action>& action) const -> const char*
-{
-  if (!action) {
-    return "<null>";
-  }
-
-  if (action->WasCanceledThisFrame()) {
-    return "Canceled";
-  }
-  if (action->WasCompletedThisFrame()) {
-    return "Completed";
-  }
-  if (action->WasTriggeredThisFrame()) {
-    return "Triggered";
-  }
-  if (action->WasReleasedThisFrame()) {
-    return "Released";
-  }
-  if (action->IsOngoing()) {
-    return "Ongoing";
-  }
-  if (action->WasValueUpdatedThisFrame()) {
-    return "Updated";
-  }
-
-  return "Idle";
-}
-
-auto CameraVm::GetMoveForwardAction() const -> std::shared_ptr<input::Action>
-{
-  return camera_rig_ ? camera_rig_->GetMoveForwardAction() : nullptr;
-}
-auto CameraVm::GetMoveBackwardAction() const -> std::shared_ptr<input::Action>
-{
-  return camera_rig_ ? camera_rig_->GetMoveBackwardAction() : nullptr;
-}
-auto CameraVm::GetMoveLeftAction() const -> std::shared_ptr<input::Action>
-{
-  return camera_rig_ ? camera_rig_->GetMoveLeftAction() : nullptr;
-}
-auto CameraVm::GetMoveRightAction() const -> std::shared_ptr<input::Action>
-{
-  return camera_rig_ ? camera_rig_->GetMoveRightAction() : nullptr;
-}
-auto CameraVm::GetFlyBoostAction() const -> std::shared_ptr<input::Action>
-{
-  return camera_rig_ ? camera_rig_->GetFlyBoostAction() : nullptr;
-}
-auto CameraVm::GetFlyPlaneLockAction() const -> std::shared_ptr<input::Action>
-{
-  return camera_rig_ ? camera_rig_->GetFlyPlaneLockAction() : nullptr;
-}
-auto CameraVm::GetRmbAction() const -> std::shared_ptr<input::Action>
-{
-  return camera_rig_ ? camera_rig_->GetRmbAction() : nullptr;
-}
-auto CameraVm::GetOrbitAction() const -> std::shared_ptr<input::Action>
-{
-  return camera_rig_ ? camera_rig_->GetOrbitAction() : nullptr;
-}
-
 auto CameraVm::RequestReset() -> void
 {
   if (service_) {
@@ -932,7 +867,6 @@ auto CameraVm::Refresh() -> void
 {
   control_mode_ = service_->GetCameraControlMode();
   orbit_mode_ = service_->GetOrbitMode();
-  fly_move_speed_ = service_->GetFlyMoveSpeed();
   epoch_ = service_->GetEpoch();
 
   // Also apply to controller on initial refresh if available
@@ -940,9 +874,6 @@ auto CameraVm::Refresh() -> void
     camera_rig_->SetMode(control_mode_);
     if (auto orbit = camera_rig_->GetOrbitController()) {
       orbit->SetMode(orbit_mode_);
-    }
-    if (auto fly = camera_rig_->GetFlyController()) {
-      fly->SetMoveSpeed(fly_move_speed_);
     }
     if (auto drone = camera_rig_->GetDroneController()) {
       drone->SetSpeed(service_->GetDroneSpeed());

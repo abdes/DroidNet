@@ -21,7 +21,7 @@ namespace oxygen::examples::ui {
 */
 class SidePanel {
 public:
-  SidePanel(observer_ptr<PanelRegistry> panel_registry);
+  explicit SidePanel(observer_ptr<PanelRegistry> panel_registry);
   ~SidePanel() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(SidePanel)
@@ -30,14 +30,15 @@ public:
   //! Draws the side panel window and the active panel content.
   //!
   //! The left offset param is the horizontal size of any left-docked UI such
-  //! as a `PanelSideBar` so the SidePanel positions itself after it.
-  auto Draw(float left_offset) -> void;
+  //! as a `PanelSideBar` so the SidePanel positions itself after it; `top` is
+  //! the height of the UI across the top of the window.
+  auto Draw(float left_offset, float top) -> void;
 
 private:
   observer_ptr<PanelRegistry> panel_registry_;
   float width_ { 420.0F };
   // Track last active panel name to detect selection changes.
-  std::string last_active_panel_name_ {};
+  std::string last_active_panel_name_;
   float last_saved_panel_width_ { 0.0F };
 };
 

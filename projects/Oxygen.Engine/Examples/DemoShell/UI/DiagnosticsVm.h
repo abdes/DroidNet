@@ -6,107 +6,46 @@
 
 #pragma once
 
-#include <memory>
-#include <mutex>
-
-#include "DemoShell/Runtime/RendererUiTypes.h"
-#include "DemoShell/Services/EnvironmentSettingsService.h"
-#include "DemoShell/Services/RenderingSettingsService.h"
-
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Vortex/Diagnostics/GpuWorkSummary.h>
-#include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
+
+namespace oxygen::examples {
+class EnvironmentSettingsService;
+class RenderingSettingsService;
+} // namespace oxygen::examples
 
 namespace oxygen::examples::ui {
 
-//! View model for the Vortex diagnostics panel state.
+//! View model of the Diagnostics panel.
 /*!
- Caches rendering settings retrieved from `RenderingSettingsService`,
- invalidating the cache based on the service epoch and applying UI changes back
- to the service.
-
-### Key Features
-
-- **Epoch-driven refresh**: Reacquires state when stale.
-- **Immediate persistence**: Setters forward changes to the service.
-- **Pass config sync**: Applies debug mode changes to the shader pass config.
-- **Thread-safe**: Protected by a mutex for access from UI and render threads.
-
-@see oxygen::examples::RenderingSettingsService
+ Reads and writes through `RenderingSettingsService`, and reads the sky-light
+ state the environment service observes. The view mode and GPU timing are
+ not here: the host toolbar and its GPU work overlay own them.
 */
 class DiagnosticsVm {
 public:
-  //! Creates a view model backed by the provided settings service.
   explicit DiagnosticsVm(observer_ptr<RenderingSettingsService> service,
     observer_ptr<EnvironmentSettingsService> environment = nullptr);
+
+  [[nodiscard]] auto IsVortexRuntimeBound() const -> bool;
+  [[nodiscard]] auto SupportsDiagnostics() const -> bool;
+
   [[nodiscard]] auto GetSkyLightRuntimeState() const
     -> vortex::SkyLightRuntimeState;
-  [[nodiscard]] auto GetLatestGpuWorkSummary() const
-    -> std::shared_ptr<const vortex::GpuWorkSummary>;
-  [[nodiscard]] auto GetGpuTimelineEnabled() const -> bool;
+
   [[nodiscard]] auto GetFrameDiagnosticsEnabled() const -> bool;
   auto SetFrameDiagnosticsEnabled(bool enabled) -> void;
-  auto SetGpuTimelineEnabled(bool enabled) -> void;
 
-  //! Returns the cached view mode.
-  [[nodiscard]] auto GetRenderMode() -> vortex::RenderMode;
-
-  //! Returns the requested shader debug mode stored by the UI.
-  [[nodiscard]] auto GetRequestedDebugMode() -> engine::ShaderDebugMode;
-
-  //! Returns the shader debug mode accepted by the Vortex renderer.
-  [[nodiscard]] auto GetEffectiveDebugMode() -> engine::ShaderDebugMode;
-
-  //! Returns the renderer capabilities currently visible to the UI.
-  [[nodiscard]] auto GetRendererCapabilities() -> vortex::CapabilitySet;
-
-  //! Returns whether the GPU debug pass is currently enabled.
-  [[nodiscard]] auto GetGpuDebugPassEnabled() -> bool;
-  //! Returns whether atmosphere blue-noise jitter is currently enabled.
-  [[nodiscard]] auto GetAtmosphereBlueNoiseEnabled() -> bool;
-  [[nodiscard]] auto SupportsRenderModeControls() const -> bool;
-  [[nodiscard]] auto SupportsWireframeColorControl() const -> bool;
-  [[nodiscard]] auto SupportsGpuDebugPassControl() const -> bool;
-  [[nodiscard]] auto SupportsAtmosphereBlueNoiseControl() const -> bool;
-  [[nodiscard]] auto SupportsDebugMode(engine::ShaderDebugMode mode) const
-    -> bool;
-  [[nodiscard]] auto IsVortexRuntimeBound() const -> bool;
-
-  //! Sets view mode and forwards changes to the service.
-  auto SetRenderMode(vortex::RenderMode mode) -> void;
-
-  //! Sets the requested debug mode and forwards changes to the service.
-  auto SetDebugMode(engine::ShaderDebugMode mode) -> void;
-
-  //! Toggles the GPU debug pass and persists the change.
+  [[nodiscard]] auto GetGpuDebugPassEnabled() const -> bool;
   auto SetGpuDebugPassEnabled(bool enabled) -> void;
-  //! Toggles atmosphere blue-noise jitter and persists the change.
-  auto SetAtmosphereBlueNoiseEnabled(bool enabled) -> void;
 
-  [[nodiscard]] auto GetWireframeColor() -> graphics::Color;
+  [[nodiscard]] auto GetWireframeColor() const -> graphics::Color;
   auto SetWireframeColor(const graphics::Color& color) -> void;
 
 private:
-  auto Refresh() -> void;
-  [[nodiscard]] auto IsStale() const -> bool;
-
-  mutable std::mutex mutex_ {};
   observer_ptr<RenderingSettingsService> service_;
   observer_ptr<EnvironmentSettingsService> environment_;
-  std::uint64_t epoch_ { 0 };
-  vortex::RenderMode render_mode_ { vortex::RenderMode::kSolid };
-  engine::ShaderDebugMode requested_debug_mode_ {
-    engine::ShaderDebugMode::kDisabled
-  };
-  engine::ShaderDebugMode effective_debug_mode_ {
-    engine::ShaderDebugMode::kDisabled
-  };
-  vortex::CapabilitySet renderer_capabilities_ {
-    vortex::RendererCapabilityFamily::kNone
-  };
-  graphics::Color wire_color_ { 1.0F, 1.0F, 1.0F, 1.0F };
-  bool gpu_debug_pass_enabled_ { false };
-  bool atmosphere_blue_noise_enabled_ { true };
 };
 
 } // namespace oxygen::examples::ui

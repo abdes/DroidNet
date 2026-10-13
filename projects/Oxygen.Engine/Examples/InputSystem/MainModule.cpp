@@ -16,7 +16,7 @@
 #include <vector>
 
 #include "DemoShell/DemoShell.h"
-#include "DemoShell/Runtime/DemoAppContext.h"
+#include "DemoShell/PanelCommands.h"
 #include "DemoShell/Services/DefaultSceneLighting.h"
 #include "InputSystem/InputDebugPanel.h"
 #include "InputSystem/MainModule.h"
@@ -30,7 +30,6 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -39,6 +38,8 @@
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Engine/AsyncEngine.h> // IWYU pragma: keep
+#include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/HostModule.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -98,38 +99,24 @@ auto MakeSolidColorMaterial(const char* name, const glm::vec4& rgba,
 
 namespace oxygen::examples::input_system {
 
-MainModule::MainModule(const DemoAppContext& app)
-  : Base(app)
+MainModule::MainModule(const host::HostContext& host)
+  : Base(host)
 {
-  DCHECK_NOTNULL_F(app_.platform);
-  DCHECK_F(!app_.gfx_weak.expired());
 }
 
-auto MainModule::BuildDefaultWindowProperties() const
-  -> platform::window::Properties
+auto MainModule::BuildWindowProperties() const -> platform::window::Properties
 {
-  platform::window::Properties p("Oxygen Input System");
-  p.extent = { .width = kWindowWidth, .height = kWindowHeight };
-  p.flags = {
-    .hidden = false,
-    .always_on_top = false,
-    .full_screen = app_.fullscreen,
-    .maximized = false,
-    .minimized = false,
-    .resizable = true,
-    .borderless = false,
-  };
-  return p;
+  auto props = Base::BuildWindowProperties();
+  props.title = "Oxygen Input System";
+  props.extent = { .width = kWindowWidth, .height = kWindowHeight };
+  return props;
 }
 
-auto MainModule::ClearBackbufferReferences() -> void { }
-
-auto MainModule::StageInitialScene(DemoShell& shell) -> void
+auto MainModule::StageInitialScene() -> void
 {
-  shell.StageScene(
-    std::make_unique<scene::Scene>("InputSystem-Scene", kDefaultSceneCapacity));
-  const auto staged_scene = shell.GetStagedScene();
-  CHECK_NOTNULL_F(staged_scene, "InputSystem staged scene is null");
+  Stage().Stage(
+    std::make_shared<scene::Scene>("InputSystem-Scene", kDefaultSceneCapacity));
+  const auto staged_scene = Stage().GetStagedScene();
 
   main_camera_ = staged_scene->CreateNode("MainCamera");
   auto camera = std::make_unique<scene::PerspectiveCamera>();
@@ -138,7 +125,7 @@ auto MainModule::StageInitialScene(DemoShell& shell) -> void
   auto tf = main_camera_.GetTransform();
   tf.SetLocalPosition(Vec3 { 0.0F, -6.0F, 3.0F });
   tf.SetLocalRotation(glm::quat(glm::radians(Vec3 { -20.0F, 0.0F, 0.0F })));
-  shell.SetStagedMainCamera(main_camera_);
+  Stage().SetStagedMainCamera(main_camera_);
   sun_light_node_ = EnsureDefaultSceneLighting(*staged_scene,
     DefaultSceneLightingDesc {
       .sun_node_name = "SunLight",
@@ -163,23 +150,19 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
   const auto demo_root
     = std::filesystem::path(std::source_location::current().file_name())
         .parent_path();
-  DemoShellConfig shell_config {
-    .engine = engine,
-    .enable_camera_rig = true,
-    .enable_renderer_bound_panels = false,
-    .force_environment_override = false,
-    .content_roots = {
-      .content_root = demo_root.parent_path() / "Content",
-      .cooked_root = demo_root / ".cooked",
-    },
-    .panel_config = {
-      .content_loader = false,
-      .camera_controls = true,
-      .environment = true,
-      .lighting = false,
-      .post_process = true,
-      .ground_grid = true,
-    },
+  auto shell_config = MakeShellConfig();
+  shell_config.enable_camera_rig = true;
+  shell_config.force_environment_override = false;
+  shell_config.content_roots = {
+    .content_root = demo_root.parent_path() / "Content",
+    .cooked_root = demo_root / ".cooked",
+  };
+  shell_config.panel_config = {
+    .content_loader = false,
+    .camera_controls = true,
+    .environment = true,
+    .post_process = true,
+    .ground_grid = true,
   };
 
   if (!shell->Initialize(shell_config)) {
@@ -187,55 +170,44 @@ auto MainModule::OnAttachedImpl(observer_ptr<IAsyncEngine> engine) noexcept
     return nullptr;
   }
 
+  shell->GetPanelCommands()->AddBool(std::string(kSwimmingCommand),
+    "Swimming Mode", "Space rises instead of jumping",
+    [this](const bool swimming) -> void { SetSwimmingMode(swimming); });
+
   input_debug_panel_ = std::make_shared<InputDebugPanel>();
-  UpdateInputDebugPanelConfig(shell->GetCameraRig());
+  input_debug_panel_->Initialize(InputDebugPanelConfig {
+    .camera_rig = shell->GetCameraRig(),
+    .commands = shell->GetPanelCommands(),
+    .shift_action = shift_action_,
+    .jump_action = jump_action_,
+    .jump_higher_action = jump_higher_action_,
+    .swim_up_action = swim_up_action_,
+    .swimming_mode = observer_ptr<const bool> { &swimming_mode_ },
+  });
   if (!shell->RegisterPanel(input_debug_panel_)) {
     LOG_F(WARNING, "InputSystem: failed to register Input Debug panel");
     return nullptr;
   }
 
-  StageInitialScene(*shell);
+  StageInitialScene();
 
-  main_view_id_ = GetOrCreateViewId("MainView");
+  main_view_id_ = Publisher().GetOrCreateViewId("MainView");
   LOG_F(INFO, "InputSystem: Module initialized");
   return shell;
 }
 
 void MainModule::OnShutdown() noexcept
 {
-  auto& shell = GetShell();
-  shell.SetScene(nullptr);
-  input_debug_panel_.reset();
+  Stage().Clear();
   Base::OnShutdown();
+  input_debug_panel_.reset();
 }
 
-auto MainModule::OnFrameStart(observer_ptr<engine::FrameContext> context)
-  -> void
+auto MainModule::OnScenePublished(engine::FrameContext& context) -> void
 {
-  DCHECK_NOTNULL_F(context);
-  auto& shell = GetShell();
-  auto& frame_context = *context;
-
-  LOG_SCOPE_F(3, "MainModule::OnFrameStart");
-
-  if (shell.HasStagedScene()) {
-    CHECK_F(shell.PublishStagedScene(),
-      "expected staged scene before frame-start publish");
-    active_scene_ = shell.GetActiveScene();
-    main_camera_ = shell.TakePublishedMainCamera();
-  }
-
-  shell.OnFrameStart(*context);
-  Base::OnFrameStart(context);
-  if (!HasRenderableWindow()) {
-    return;
-  }
-  frame_context.SetScene(shell.TryGetScene());
-
-  const auto rig = shell.GetCameraRig();
-  if (rig != last_camera_rig_) {
-    last_camera_rig_ = rig;
-  }
+  Base::OnScenePublished(context);
+  active_scene_ = Stage().GetActiveScene();
+  main_camera_ = Stage().TakePublishedMainCamera();
 }
 
 auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
@@ -292,40 +264,18 @@ auto MainModule::OnGameplay(observer_ptr<engine::FrameContext> context)
     }
     tf.SetLocalPosition(pos);
   }
-
-  auto& shell = GetShell();
-  shell.Update(context->GetGameDeltaTime());
   co_return;
-}
-
-auto MainModule::OnPreRender(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
-{
-  DCHECK_NOTNULL_F(app_window_);
-  if (!app_window_->GetWindow()) {
-    DLOG_F(1, "OnPreRender: no valid window - skipping");
-    co_return;
-  }
-
-  co_await Base::OnPreRender(context);
 }
 
 auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   -> co::Co<>
 {
-  DCHECK_NOTNULL_F(app_window_);
-  auto& shell = GetShell();
-
-  if (!app_window_->GetWindow()) {
-    DLOG_F(1, "OnSceneMutation: no valid window - skipping");
+  if (!HasRenderableWindow() || !active_scene_.IsValid()) {
+    co_await Base::OnSceneMutation(context);
     co_return;
   }
 
-  if (!active_scene_.IsValid()) {
-    co_return;
-  }
-
-  const auto scene_ptr = shell.TryGetScene();
+  const auto scene_ptr = Stage().TryGetScene();
   if (!scene_ptr) {
     co_return;
   }
@@ -381,27 +331,6 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
   co_await Base::OnSceneMutation(context);
 }
 
-auto MainModule::OnGuiUpdate(observer_ptr<engine::FrameContext> context)
-  -> co::Co<>
-{
-  DCHECK_NOTNULL_F(app_window_);
-  auto& shell = GetShell();
-
-  if (app_window_->IsShuttingDown()) {
-    DLOG_F(1, "OnGuiUpdate: window is closed/closing - skipping");
-    co_return;
-  }
-
-  static bool camera_rig_bound = false;
-  if (!camera_rig_bound && shell.GetCameraRig()) {
-    UpdateInputDebugPanelConfig(shell.GetCameraRig());
-    camera_rig_bound = true;
-  }
-
-  shell.Draw(context);
-  co_return;
-}
-
 auto MainModule::InitInputBindings() noexcept -> bool
 {
   using oxygen::input::Action;
@@ -412,13 +341,13 @@ auto MainModule::InitInputBindings() noexcept -> bool
   using oxygen::input::InputMappingContext;
   using platform::InputSlots;
 
-  if (!app_.input_system) {
+  if (!Host().input_system) {
     LOG_F(ERROR, "InputSystem not available; skipping input bindings");
     return false;
   }
 
   shift_action_ = std::make_shared<Action>("shift", ActionValueType::kBool);
-  app_.input_system->AddAction(shift_action_);
+  Host().input_system->AddAction(shift_action_);
   modifier_keys_ctx_ = std::make_shared<InputMappingContext>("modifier keys");
   {
     const auto trigger = std::make_shared<oxygen::input::ActionTriggerDown>();
@@ -428,18 +357,18 @@ auto MainModule::InitInputBindings() noexcept -> bool
     left_shift_mapping->AddTrigger(trigger);
     modifier_keys_ctx_->AddMapping(left_shift_mapping);
   }
-  app_.input_system->AddMappingContext(modifier_keys_ctx_, 1000);
+  Host().input_system->AddMappingContext(modifier_keys_ctx_, 1000);
 
   jump_action_ = std::make_shared<Action>("jump", ActionValueType::kBool);
-  app_.input_system->AddAction(jump_action_);
+  Host().input_system->AddAction(jump_action_);
 
   jump_higher_action_
     = std::make_shared<Action>("jump higher", ActionValueType::kBool);
   jump_higher_action_->SetConsumesInput(true);
-  app_.input_system->AddAction(jump_higher_action_);
+  Host().input_system->AddAction(jump_higher_action_);
 
   swim_up_action_ = std::make_shared<Action>("swim up", ActionValueType::kBool);
-  app_.input_system->AddAction(swim_up_action_);
+  Host().input_system->AddAction(swim_up_action_);
 
   ground_movement_ctx_
     = std::make_shared<InputMappingContext>("ground movement");
@@ -468,7 +397,7 @@ auto MainModule::InitInputBindings() noexcept -> bool
       mapping->AddTrigger(trigger);
       ground_movement_ctx_->AddMapping(mapping);
     }
-    app_.input_system->AddMappingContext(ground_movement_ctx_, 0);
+    Host().input_system->AddMappingContext(ground_movement_ctx_, 0);
   }
 
   swimming_ctx_ = std::make_shared<InputMappingContext>("swimming");
@@ -480,60 +409,43 @@ auto MainModule::InitInputBindings() noexcept -> bool
       swim_up_action_, InputSlots::Space);
     mapping->AddTrigger(trig_down);
     swimming_ctx_->AddMapping(mapping);
-    app_.input_system->AddMappingContext(swimming_ctx_, 0);
+    Host().input_system->AddMappingContext(swimming_ctx_, 0);
   }
 
-  app_.input_system->ActivateMappingContext(modifier_keys_ctx_);
-  app_.input_system->ActivateMappingContext(ground_movement_ctx_);
+  Host().input_system->ActivateMappingContext(modifier_keys_ctx_);
+  Host().input_system->ActivateMappingContext(ground_movement_ctx_);
   return true;
 }
 
-auto MainModule::UpdateInputDebugPanelConfig(
-  observer_ptr<ui::CameraRigController> camera_rig) -> void
+auto MainModule::SetSwimmingMode(const bool swimming) -> void
 {
-  InputDebugPanelConfig config;
-  config.input_system = observer_ptr { app_.input_system.get() };
-  config.camera_rig = camera_rig;
-  config.shift_action = shift_action_;
-  config.jump_action = jump_action_;
-  config.jump_higher_action = jump_higher_action_;
-  config.swim_up_action = swim_up_action_;
-  config.ground_movement_ctx = ground_movement_ctx_;
-  config.swimming_ctx = swimming_ctx_;
-  config.swimming_mode = &swimming_mode_;
-  config.pending_ground_reset = &pending_ground_reset_;
-
-  if (input_debug_panel_) {
-    input_debug_panel_->Initialize(config);
+  if (swimming == swimming_mode_) {
+    return;
+  }
+  swimming_mode_ = swimming;
+  const auto input = Host().input_system;
+  if (swimming) {
+    input->DeactivateMappingContext(ground_movement_ctx_);
+    input->ActivateMappingContext(swimming_ctx_);
+  } else {
+    input->DeactivateMappingContext(swimming_ctx_);
+    input->ActivateMappingContext(ground_movement_ctx_);
+    pending_ground_reset_ = true;
   }
 }
 
-auto MainModule::UpdateComposition(engine::FrameContext& context,
-  std::vector<vortex::CompositionView>& views) -> void
+auto MainModule::BuildViews(
+  engine::FrameContext& /*context*/, host::HostViews& views) -> void
 {
-  auto& shell = GetShell();
   if (!main_camera_.IsAlive()) {
     return;
   }
-
-  View view {};
-  if (app_window_ && app_window_->GetWindow()) {
-    const auto extent = app_window_->GetWindow()->Size();
-    view.viewport = ViewPort {
-      .top_left_x = 0.0F,
-      .top_left_y = 0.0F,
-      .width = static_cast<float>(extent.width),
-      .height = static_cast<float>(extent.height),
-      .min_depth = 0.0F,
-      .max_depth = 1.0F,
-    };
-  }
-
-  auto main_comp
-    = vortex::CompositionView::ForScene(main_view_id_, view, main_camera_);
-  main_comp.with_atmosphere = true;
-  shell.OnMainViewReady(context, main_comp);
-  views.push_back(std::move(main_comp));
+  // An unset viewport covers the window.
+  auto main_view
+    = vortex::CompositionView::ForScene(main_view_id_, View {}, main_camera_);
+  main_view.with_atmosphere = true;
+  views.views.push_back(std::move(main_view));
+  views.main = main_view_id_;
 }
 
 } // namespace oxygen::examples::input_system

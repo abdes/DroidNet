@@ -25,7 +25,7 @@ namespace oxygen::examples {
 class SettingsService {
 public:
   explicit SettingsService(std::filesystem::path storage_path,
-    std::filesystem::path portable_root = {});
+    const std::filesystem::path& portable_root = {});
 
   OXYGEN_MAKE_NON_COPYABLE(SettingsService);
   OXYGEN_MAKE_NON_MOVABLE(SettingsService);
@@ -38,7 +38,7 @@ public:
 
   //! Selects the installed showcase's settings file before its first use.
   static auto InitializeForDemoApp(std::filesystem::path storage_path,
-    std::filesystem::path portable_root = {}) -> void;
+    const std::filesystem::path& portable_root = {}) -> void;
 
   //! Encode SDK-local paths relative to its root; retain external absolute
   //! paths.

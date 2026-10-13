@@ -8,6 +8,7 @@
 
 #include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
@@ -38,19 +39,22 @@ public:
   OXYGEN_MAKE_NON_MOVABLE(PostProcessConsoleBindings)
 
 private:
-  using Arguments = std::vector<std::string>;
+  using Args = commands::CommandArgs;
   using Result = commands::CommandResult;
+  auto Register(commands::CommandDefinition definition) -> void;
   auto Unregister() -> void;
-  [[nodiscard]] auto HasTarget(const Arguments& args) const -> bool;
+  //! True when `target` names the current authoring target, `scene:<rev>`.
+  [[nodiscard]] auto IsCurrentTarget(std::string_view target) const -> bool;
   [[nodiscard]] auto Accepted() const -> Result;
-  auto Targets(const Arguments& args) -> Result;
-  auto Inspect(const Arguments& args) -> Result;
-  auto Exposure(const Arguments& args) -> Result;
-  auto Camera(const Arguments& args) -> Result;
-  auto Output(const Arguments& args) -> Result;
-  auto Curve(const Arguments& args) -> Result;
-  auto Transition(const Arguments& args) -> Result;
-  auto TransitionStatus(const Arguments& args) -> Result;
+  auto Targets() -> Result;
+  auto Inspect(const Args& args) -> Result;
+  auto Exposure(const Args& args) -> Result;
+  auto Camera(const Args& args) -> Result;
+  auto Output(const Args& args) -> Result;
+  auto Curve(const Args& args) -> Result;
+  auto ResetAuto(const Args& args) -> Result;
+  auto Transition(const Args& args) -> Result;
+  auto TransitionStatus(const Args& args) -> Result;
 
   console::Console& console_;
   ui::PostProcessSettingsService& settings_;

@@ -6,13 +6,19 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <string>
+#include <string_view>
 
+#include "DemoShell/PanelRegistry.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/SidePanel.h"
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+
+// NOLINTBEGIN(bugprone-signed-bitwise) - ImGui
 
 namespace oxygen::examples::ui {
 
@@ -45,7 +51,7 @@ SidePanel::SidePanel(observer_ptr<PanelRegistry> panel_registry)
   DCHECK_NOTNULL_F(panel_registry, "expecting valid PanelRegistry");
 }
 
-auto SidePanel::Draw(float left_offset) -> void
+auto SidePanel::Draw(const float left_offset, const float top) -> void
 {
   const auto active_panel = panel_registry_->GetActivePanel();
   if (!active_panel) {
@@ -73,11 +79,11 @@ auto SidePanel::Draw(float left_offset) -> void
     last_saved_panel_width_ = width_;
   }
 
-  const float height = std::max(0.0F, io.DisplaySize.y);
+  const float height = std::max(0.0F, io.DisplaySize.y - top);
   const float max_width
     = std::max(kMinPanelWidth, io.DisplaySize.x * kMaxPanelWidthRatio);
 
-  ImGui::SetNextWindowPos(ImVec2(left_offset, 0.0F), ImGuiCond_Always);
+  ImGui::SetNextWindowPos(ImVec2(left_offset, top), ImGuiCond_Always);
   ImGui::SetNextWindowSize(ImVec2(width_, height), ImGuiCond_Always);
   ImGui::SetNextWindowSizeConstraints(
     ImVec2(kMinPanelWidth, height), ImVec2(max_width, height));
@@ -109,3 +115,5 @@ auto SidePanel::Draw(float left_offset) -> void
 }
 
 } // namespace oxygen::examples::ui
+
+// NOLINTEND(bugprone-signed-bitwise)

@@ -260,7 +260,7 @@ NOLINT_TEST(PostProcessAuthoringTest,
   ASSERT_TRUE(node.GetTransform().SetLocalPosition({ 1.0F, 2.0F, 3.0F }));
   CameraSettingsService service;
   service.SetSceneActivationPolicy(SceneActivationPolicy::kExperimentOwned);
-  service.OnRuntimeMainViewReady(node, ViewPort {});
+  service.OnMainViewReady(ViewId { 1U }, node, ViewPort {});
   service.PersistActiveCameraSettings();
   EXPECT_EQ(node.GetTransform().GetLocalPosition(), Vec3(1.0F, 2.0F, 3.0F));
   const auto component = node.GetCameraAs<scene::PerspectiveCamera>();
@@ -272,7 +272,7 @@ NOLINT_TEST(PostProcessAuthoringTest,
     2.0F);
   service.SetSceneActivationPolicy(SceneActivationPolicy::kRestorePreferences);
   service.OnSceneActivated(*world);
-  service.OnRuntimeMainViewReady(node, ViewPort {});
+  service.OnMainViewReady(ViewId { 1U }, node, ViewPort {});
   EXPECT_FLOAT_EQ(node.GetTransform().GetLocalPosition()->x, 90.0F);
   EXPECT_FLOAT_EQ(component->get().Exposure().aperture_f, 2.0F);
 }

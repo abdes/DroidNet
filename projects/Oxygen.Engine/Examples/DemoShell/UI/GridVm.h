@@ -24,9 +24,6 @@ class GridVm {
 public:
   explicit GridVm(observer_ptr<GridSettingsService> service);
 
-  [[nodiscard]] auto GetEnabled() -> bool;
-  auto SetEnabled(bool enabled) -> void;
-
   [[nodiscard]] auto GetGridSpacing() -> float;
   auto SetGridSpacing(float spacing) -> void;
 
@@ -80,7 +77,6 @@ private:
   observer_ptr<GridSettingsService> service_;
   std::uint64_t epoch_ { std::numeric_limits<std::uint64_t>::max() };
 
-  bool enabled_ { true };
   bool smooth_motion_ { true };
   float smooth_time_ { 1.0F };
   float spacing_ { 1.0F };

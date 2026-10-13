@@ -6,15 +6,27 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <filesystem>
+#include <optional>
+#include <string>
 #include <string_view>
+#include <utility>
 
+#include "DemoShell/Services/EnvironmentSettingsService.h"
 #include "DemoShell/Services/FileBrowserService.h"
+#include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/UI/EnvironmentVm.h"
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 
 namespace oxygen::examples::ui {
 
@@ -386,10 +398,9 @@ auto EnvironmentVm::SetRuntimeConfig(const EnvironmentRuntimeConfig& config)
   service_->SetRuntimeConfig(config);
 
   if (runtime_changed) {
-    last_runtime_config_scene_ = const_cast<scene::Scene*>(scene_ptr);
-    last_runtime_config_skybox_service_
-      = const_cast<SkyboxService*>(skybox_service_ptr);
-    last_runtime_config_renderer_ = const_cast<vortex::Renderer*>(renderer_ptr);
+    last_runtime_config_scene_ = scene_ptr;
+    last_runtime_config_skybox_service_ = skybox_service_ptr;
+    last_runtime_config_renderer_ = renderer_ptr;
     runtime_config_initialized_ = true;
   }
   MaybeApplyStartupPreset(config);
@@ -1115,16 +1126,6 @@ auto EnvironmentVm::GetSkyboxStatusMessage() const -> std::string_view
   return service_->GetSkyboxStatusMessage();
 }
 
-auto EnvironmentVm::GetSkyboxLastFaceSize() const -> int
-{
-  return service_->GetSkyboxLastFaceSize();
-}
-
-auto EnvironmentVm::GetSkyboxLastResourceKey() const -> content::ResourceKey
-{
-  return service_->GetSkyboxLastResourceKey();
-}
-
 auto EnvironmentVm::LoadSkybox(std::string_view path, int layout_index,
   int output_format_index, int face_size, bool flip_y, bool tonemap_hdr_to_ldr,
   float hdr_exposure_ev) -> void
@@ -1252,32 +1253,44 @@ auto EnvironmentVm::GetSkyLightFeedback() const -> SkyLightFeedback
 {
   using Status = vortex::environment::StaticSkyLightProductStatus;
   using Reason = vortex::environment::StaticSkyLightUnavailableReason;
-  if (!GetSkyLightEnabled())
+  if (!GetSkyLightEnabled()) {
     return { .label = "Off" };
-  if (!HasScene())
+  }
+  if (!HasScene()) {
     return { .label = "No scene" };
+  }
   const auto state = service_->GetSkyLightRuntimeState();
   if (GetSkyLightSource() == 1
-    && GetSkyLightCubemapResourceKey().IsPlaceholder())
+    && GetSkyLightCubemapResourceKey().IsPlaceholder()) {
     return { .label = "No cubemap selected", .warning = true };
-  if (!state.observed)
+  }
+  if (!state.observed) {
     return { .label = "Waiting for scene rendering" };
-  if (state.source != static_cast<std::uint32_t>(GetSkyLightSource())
+  }
+  if (std::cmp_not_equal(state.source, GetSkyLightSource())
     || (state.source == 1U
-      && state.source_cubemap != GetSkyLightCubemapResourceKey()))
+      && state.source_cubemap != GetSkyLightCubemapResourceKey())) {
     return { .label = "Updating source" };
-  if (state.unavailable_reason == Reason::kGpuProductsPending)
+  }
+  if (state.unavailable_reason == Reason::kGpuProductsPending) {
     return { .label = "Loading cubemap" };
-  if (state.gpu_validation == vortex::SkyLightGpuValidation::kInvalid)
-    return { .label = "Invalid sky lighting",
+  }
+  if (state.gpu_validation == vortex::SkyLightGpuValidation::kInvalid) {
+    return {
+      .label = "Invalid sky lighting",
       .detail
       = "GPU validation failed. This generation contributes no lighting.",
-      .warning = true };
-  if (state.unavailable_reason == Reason::kProcessingFailed && state.usable)
-    return { .label = "Update failed",
+      .warning = true,
+    };
+  }
+  if (state.unavailable_reason == Reason::kProcessingFailed && state.usable) {
+    return {
+      .label = "Update failed",
       .detail = "Previous lighting remains active.",
       .active = true,
-      .warning = true };
+      .warning = true,
+    };
+  }
   if (!state.usable) {
     switch (state.unavailable_reason) {
     case Reason::kMissingCubemap:
@@ -1294,16 +1307,23 @@ auto EnvironmentVm::GetSkyLightFeedback() const -> SkyLightFeedback
       return { .label = "Waiting for lighting" };
     }
   }
-  if (state.empty_capture)
-    return { .label = "No captured sky or fog",
+  if (state.empty_capture) {
+    return {
+      .label = "No captured sky or fog",
       .detail
-      = "Atmosphere is off and no height fog contributes to sky lighting." };
-  if (!state.enabled)
+      = "Atmosphere is off and no height fog contributes to sky lighting.",
+    };
+  }
+  if (!state.enabled) {
     return { .label = "Waiting for lighting" };
-  if (state.status == Status::kRegeneratingCurrentKey)
-    return { .label = "Updating",
+  }
+  if (state.status == Status::kRegeneratingCurrentKey) {
+    return {
+      .label = "Updating",
       .detail = "Current lighting remains active.",
-      .active = true };
+      .active = true,
+    };
+  }
   return { .label = "Active", .active = true };
 }
 

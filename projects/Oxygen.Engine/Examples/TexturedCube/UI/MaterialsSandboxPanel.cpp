@@ -6,66 +6,314 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
+#include "DemoShell/PanelCommands.h"
+#include "TexturedCube/SceneSetup.h"
 #include "TexturedCube/UI/MaterialsSandboxPanel.h"
 #include "TexturedCube/UI/MaterialsSandboxVm.h"
 #include <fmt/format.h>
+#include <glm/vec3.hpp>
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/Styles/IconsFontAwesome.h>
 
-namespace {
-
-template <typename EnumT, std::size_t N>
-auto DrawEnumCombo(
-  const char* label, EnumT& value, const std::array<EnumT, N>& items) -> bool
-{
-  std::string preview_s(nostd::to_string(value));
-  bool changed = false;
-  if (ImGui::BeginCombo(label, preview_s.c_str())) {
-    for (const auto candidate : items) {
-      const bool is_selected = (candidate == value);
-      std::string item_s(nostd::to_string(candidate));
-      if (ImGui::Selectable(item_s.c_str(), is_selected)) {
-        value = candidate;
-        changed = true;
-      }
-      if (is_selected)
-        ImGui::SetItemDefaultFocus();
-    }
-    ImGui::EndCombo();
-  }
-  return changed;
-}
-
-auto InputTextString(const char* label, std::array<char, 512>& value) -> bool
-{
-  return ImGui::InputText(label, value.data(), value.size());
-}
-
-} // namespace
+// NOLINTBEGIN(cppcoreguidelines-pro-type-vararg, bugprone-signed-bitwise) -
+// ImGui
 
 namespace oxygen::examples::textured_cube::ui {
 
-auto to_string(MaterialsSandboxVm::UvOrigin origin) -> std::string
-{
-  switch (origin) {
-  case MaterialsSandboxVm::UvOrigin::kBottomLeft:
-    return "Bottom Left";
-  case MaterialsSandboxVm::UvOrigin::kTopLeft:
-    return "Top Left";
-  default:
-    return "Unknown";
-  }
-}
+namespace {
 
-void MaterialsSandboxPanel::Initialize(observer_ptr<MaterialsSandboxVm> vm)
+  using ImportState = MaterialsSandboxVm::ImportState;
+  using WorkflowState = ImportState::WorkflowState;
+
+  constexpr std::string_view kMode = "cube.material_mode";
+  constexpr std::string_view kBaseColor = "cube.base_color";
+  constexpr std::string_view kMetalness = "cube.metalness";
+  constexpr std::string_view kRoughness = "cube.roughness";
+  constexpr std::string_view kRefresh = "cube.refresh";
+  constexpr std::string_view kImport = "cube.import";
+  constexpr std::string_view kTexture = "cube.texture";
+  constexpr std::string_view kSkybox = "cube.skybox";
+  constexpr std::string_view kMaterial = "cube.material";
+  constexpr std::string_view kClearMaterial = "cube.clear_material";
+
+  //! What the sphere and the cube are shaded with.
+  enum class MaterialMode : std::uint8_t {
+    kFallback,
+    kForcedError,
+    kSolidColor,
+    kCustomTexture,
+    kGrid,
+    kCustomMaterial,
+  };
+
+  struct ModeInfo {
+    MaterialMode mode;
+    const char* name;
+    const char* label;
+  };
+  constexpr auto kModes = std::array {
+    ModeInfo { .mode = MaterialMode::kFallback,
+      .name = "fallback",
+      .label = "Fallback" },
+    ModeInfo { .mode = MaterialMode::kForcedError,
+      .name = "forced_error",
+      .label = "Forced Error" },
+    ModeInfo { .mode = MaterialMode::kSolidColor,
+      .name = "solid_color",
+      .label = "Solid Color" },
+    ModeInfo {
+      .mode = MaterialMode::kCustomTexture,
+      .name = "custom_texture",
+      .label = "Custom Texture",
+    },
+    ModeInfo {
+      .mode = MaterialMode::kGrid, .name = "grid", .label = "Grid Material" },
+    ModeInfo {
+      .mode = MaterialMode::kCustomMaterial,
+      .name = "custom_material",
+      .label = "Custom Material",
+    },
+  };
+
+  constexpr auto kUsageNames
+    = std::array { "auto", "albedo", "normal", "hdr", "ui" };
+  constexpr auto kUsageLabels = std::array {
+    "Auto-Detect",
+    "Albedo / Diffuse",
+    "Normal Map",
+    "HDR Environment",
+    "UI Element",
+  };
+  constexpr auto kQualityLabels = std::array { "Fast", "Balanced", "High" };
+  constexpr auto kFormatLabels
+    = std::array { "RGBA8 SRGB", "BC7 SRGB", "RGBA16F", "RGBA32F" };
+
+  auto Name(const std::string_view name) -> std::string
+  {
+    return std::string(name);
+  }
+
+  auto Param(std::string name, const commands::ParamType type, std::string help)
+    -> commands::CommandParam
+  {
+    return commands::CommandParam {
+      .name = std::move(name),
+      .type = type,
+      .help = std::move(help),
+      .required = true,
+    };
+  }
+
+  auto ApplyMode(MaterialsSandboxVm& vm, const MaterialMode mode) -> void
+  {
+    vm.SetUseCustomMaterial(mode == MaterialMode::kCustomMaterial);
+    if (mode != MaterialMode::kCustomMaterial) {
+      auto slot_mode = TextureIndexMode::kFallback;
+      switch (mode) {
+      case MaterialMode::kForcedError:
+        slot_mode = TextureIndexMode::kForcedError;
+        break;
+      case MaterialMode::kCustomTexture:
+        slot_mode = TextureIndexMode::kCustom;
+        break;
+      case MaterialMode::kGrid:
+        slot_mode = TextureIndexMode::kProceduralGrid;
+        break;
+      default:
+        break;
+      }
+      vm.GetSphereTextureState().mode = slot_mode;
+      vm.GetCubeTextureState().mode = slot_mode;
+      // Solid color keeps the texture indices; fallback sampling ignores
+      // them.
+      vm.GetSurfaceState().use_constant_base_color
+        = mode == MaterialMode::kSolidColor;
+    }
+    vm.SetCubeRebuildNeeded();
+  }
+
+  auto CurrentMode(const MaterialsSandboxVm& vm) -> MaterialMode
+  {
+    if (vm.IsUseCustomMaterial()) {
+      return MaterialMode::kCustomMaterial;
+    }
+    if (vm.GetSurfaceState().use_constant_base_color) {
+      return MaterialMode::kSolidColor;
+    }
+    const auto sphere = vm.GetSphereTextureState().mode;
+    if (sphere != vm.GetCubeTextureState().mode) {
+      // Mixed slots edit per slot, as custom textures do.
+      return MaterialMode::kCustomTexture;
+    }
+    switch (sphere) {
+    case TextureIndexMode::kForcedError:
+      return MaterialMode::kForcedError;
+    case TextureIndexMode::kCustom:
+      return MaterialMode::kCustomTexture;
+    case TextureIndexMode::kProceduralGrid:
+      return MaterialMode::kGrid;
+    case TextureIndexMode::kFallback:
+    default:
+      return MaterialMode::kFallback;
+    }
+  }
+
+  auto RegisterImportCommand(PanelCommands& commands, MaterialsSandboxVm& vm)
+    -> void
+  {
+    auto usage = Param("usage", commands::ParamType::kEnum, "Texture usage");
+    usage.allowed_values = { kUsageNames.begin(), kUsageNames.end() };
+    commands.Add({
+      .name = Name(kImport),
+      .label = "Import Texture",
+      .help = "Import an image into the cooked root",
+      .params = {
+        Param("path", commands::ParamType::kPath, "Source image"),
+        std::move(usage),
+        Param("compress", commands::ParamType::kBool, "Compress to BC7"),
+        Param("quality", commands::ParamType::kInt,
+          "BC7 quality: 1 fast, 2 balanced, 3 high"),
+        Param("hash", commands::ParamType::kBool, "Deduplicate by hash"),
+        Param("flip_green", commands::ParamType::kBool,
+          "Flip a normal map's green channel"),
+        Param("exposure_ev", commands::ParamType::kDouble,
+          "Exposure of an HDR source"),
+        Param("mips", commands::ParamType::kBool, "Generate mips"),
+        Param("format", commands::ParamType::kInt,
+          "Output format index: RGBA8 sRGB, BC7 sRGB, RGBA16F, RGBA32F"),
+      },
+      .handler = [&vm](const commands::CommandArgs& args,
+                   const commands::CommandContext&) -> commands::CommandResult {
+        auto& state = vm.GetImportState();
+        const auto& path = args.GetString("path");
+        const auto length = std::min(path.size(), state.source_path.size() - 1);
+        std::copy_n(path.begin(), length, state.source_path.begin());
+        state.source_path.at(length) = '\0';
+        const auto& usage_name = args.GetString("usage");
+        for (std::size_t i = 0; i < kUsageNames.size(); ++i) {
+          if (usage_name == kUsageNames.at(i)) {
+            state.usage = static_cast<ImportState::Usage>(i);
+          }
+        }
+        state.compress = args.GetBool("compress");
+        // Usage and compression pick the defaults the other values override.
+        vm.UpdateImportSettingsFromUsage();
+        state.bc7_quality_idx = static_cast<int>(args.GetInt("quality"));
+        state.compute_hash = args.GetBool("hash");
+        state.flip_normal_green = args.GetBool("flip_green");
+        state.exposure_ev = static_cast<float>(args.GetDouble("exposure_ev"));
+        state.generate_mips = args.GetBool("mips");
+        state.output_format_idx = static_cast<int>(args.GetInt("format"));
+        vm.RequestImport();
+        return commands::CommandResult::Success();
+      },
+    });
+  }
+
+  auto RegisterCommands(PanelCommands& commands, MaterialsSandboxVm& vm) -> void
+  {
+    std::vector<std::string> modes;
+    modes.reserve(kModes.size());
+    for (const auto& info : kModes) {
+      modes.emplace_back(info.name);
+    }
+    commands.AddEnum(Name(kMode), "Material Mode",
+      "What the sphere and the cube are shaded with", std::move(modes),
+      [&vm](const std::size_t i) -> void { ApplyMode(vm, kModes.at(i).mode); });
+    commands.AddRgb(Name(kBaseColor), "Base Color",
+      "Base color of the solid color mode",
+      [&vm](const glm::vec3& color) -> void {
+        vm.GetSurfaceState().constant_base_color_rgb = color;
+        vm.SetCubeRebuildNeeded();
+      });
+    commands.AddFloat(
+      Name(kMetalness), "Metalness", "Surface metalness",
+      [&vm](const float v) -> void {
+        vm.GetSurfaceState().metalness = v;
+        vm.SetCubeRebuildNeeded();
+      },
+      0.0F, 1.0F);
+    commands.AddFloat(
+      Name(kRoughness), "Roughness", "Surface roughness",
+      [&vm](const float v) -> void {
+        vm.GetSurfaceState().roughness = v;
+        vm.SetCubeRebuildNeeded();
+      },
+      0.0F, 1.0F);
+    commands.AddAction(Name(kRefresh), "Refresh Cooked Content",
+      "Rescan the cooked textures and materials",
+      [&vm] -> void { vm.RequestRefresh(); });
+    commands.Add({
+      .name = Name(kTexture),
+      .label = "Assign Texture",
+      .help = "Assign a cooked texture to the sphere or the cube",
+      .params = {
+        Param("index", commands::ParamType::kInt, "Cooked texture index"),
+        commands::CommandParam {
+          .name = "object",
+          .type = commands::ParamType::kEnum,
+          .help = "Object that takes the texture",
+          .required = true,
+          .allowed_values = { "sphere", "cube" },
+        },
+      },
+      .handler = [&vm](const commands::CommandArgs& args,
+                   const commands::CommandContext&) -> commands::CommandResult {
+        const auto index = static_cast<std::uint32_t>(args.GetInt("index"));
+        if (!vm.SelectTextureForSlot(
+              index, args.GetString("object") == "sphere")) {
+          return commands::CommandResult::Failure(
+            commands::ExecutionStatus::kError, "The texture did not load");
+        }
+        return commands::CommandResult::Success();
+      },
+    });
+    commands.AddInt(
+      Name(kSkybox), "Assign Skybox", "Use a cooked cubemap as the skybox",
+      [&vm](const int index) -> void {
+        static_cast<void>(vm.SelectSkybox(static_cast<std::uint32_t>(index)));
+      },
+      0);
+    commands.AddInt(
+      Name(kMaterial), "Assign Material",
+      "Shade both objects with a cooked material",
+      [&vm](const int index) -> void {
+        static_cast<void>(
+          vm.SelectCustomMaterialByEntryIndex(static_cast<std::size_t>(index)));
+      },
+      0);
+    commands.AddAction(Name(kClearMaterial), "Clear Material",
+      "Clear the selected cooked material",
+      [&vm] -> void { vm.ClearSelectedCustomMaterial(); });
+    RegisterImportCommand(commands, vm);
+  }
+
+} // namespace
+
+MaterialsSandboxPanel::MaterialsSandboxPanel(
+  observer_ptr<MaterialsSandboxVm> vm, observer_ptr<PanelCommands> commands)
+  : vm_(vm)
+  , commands_(commands)
 {
-  vm_ = vm;
+  DCHECK_NOTNULL_F(vm_, "MaterialsSandboxPanel requires MaterialsSandboxVm");
+  DCHECK_NOTNULL_F(commands_, "MaterialsSandboxPanel requires PanelCommands");
+  RegisterCommands(*commands_, *vm_);
 }
 
 auto MaterialsSandboxPanel::GetName() const noexcept -> std::string_view
@@ -83,36 +331,17 @@ auto MaterialsSandboxPanel::GetPreferredWidth() const noexcept -> float
   return 480.0F;
 }
 
-auto MaterialsSandboxPanel::OnLoaded() -> void
-{
-  if (vm_) {
-    // Refresh cooked list just in case
-    vm_->RequestRefresh();
-  }
-}
+auto MaterialsSandboxPanel::OnLoaded() -> void { commands_->Run(kRefresh); }
 
 auto MaterialsSandboxPanel::OnUnloaded() -> void { }
 
 auto MaterialsSandboxPanel::DrawContents() -> void
 {
-  if (!vm_) {
-    ImGui::TextDisabled("No VM attached");
-    return;
-  }
-
-  // Update VM loop
   vm_->Update();
 
   ImGui::PushID("Materials Sandbox");
-
-  // Determine interaction state
-  const auto state = vm_->GetImportState().workflow_state;
-  // const bool is_configuring = ... (Moved to DrawBrowserSection logic)
   const bool is_idle
-    = (state == MaterialsSandboxVm::ImportState::WorkflowState::Idle);
-
-  // Inline Import Section
-  // Moved to DrawBrowserSection
+    = vm_->GetImportState().workflow_state == WorkflowState::Idle;
 
   if (ImGui::CollapsingHeader(
         "Custom Materials", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -130,18 +359,10 @@ auto MaterialsSandboxPanel::DrawContents() -> void
     }
   }
 
-  // Show/Collapse Texture Browser depending on modes. Solid Color collapses
-  // and disables the browser; Custom auto-expands and enables it.
-  const auto& sphere_slot = vm_->GetSphereTextureState();
-  const auto& cube_slot = vm_->GetCubeTextureState();
-  const bool any_custom = (sphere_slot.mode
-      == oxygen::examples::textured_cube::TextureIndexMode::kCustom
-    || cube_slot.mode
-      == oxygen::examples::textured_cube::TextureIndexMode::kCustom);
-
-  // Only draw the Texture Browser when a slot is in Custom mode. Do not
-  // render a disabled/collapsed header in other modes (prevents interactivity
-  // and clutter).
+  // The texture browser serves the custom texture mode only.
+  const bool any_custom
+    = vm_->GetSphereTextureState().mode == TextureIndexMode::kCustom
+    || vm_->GetCubeTextureState().mode == TextureIndexMode::kCustom;
   if (any_custom && !use_custom_material) {
     ImGui::SetNextItemOpen(true, ImGuiCond_Always);
     if (ImGui::CollapsingHeader(
@@ -155,6 +376,7 @@ auto MaterialsSandboxPanel::DrawContents() -> void
 
 auto MaterialsSandboxPanel::DrawImportSection() -> void
 {
+  // The import settings are a draft; Import runs them as one command.
   auto& state = vm_->GetImportState();
 
   ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.15F, 0.15F, 0.15F, 1.0F));
@@ -165,80 +387,53 @@ auto MaterialsSandboxPanel::DrawImportSection() -> void
   ImGui::Text("Importing: %s", state.source_path.data());
   ImGui::Spacing();
 
-  // 1. Configuration (Disable if importing)
-  const bool is_importing = (state.workflow_state
-    == MaterialsSandboxVm::ImportState::WorkflowState::Importing);
-
+  const bool is_importing = state.workflow_state == WorkflowState::Importing;
   ImGui::BeginDisabled(is_importing);
-  {
-    // Usage Presets
-    const char* kUsages[] = { "Auto-Detect", "Albedo / Diffuse", "Normal Map",
-      "HDR Environment", "UI Element" };
-    int usage_idx = static_cast<int>(state.usage);
-    if (ImGui::Combo(
-          "Usage Preset", &usage_idx, kUsages, IM_ARRAYSIZE(kUsages))) {
-      state.usage
-        = static_cast<MaterialsSandboxVm::ImportState::Usage>(usage_idx);
-      vm_->UpdateImportSettingsFromUsage();
-    }
-
-    // Contextual Toggles
-    if (state.usage == MaterialsSandboxVm::ImportState::Usage::kNormal) {
-      ImGui::Indent();
-      ImGui::Checkbox("Flip Green Channel (Y)", &state.flip_normal_green);
-      ImGui::Unindent();
-    }
-    if (state.usage
-      == MaterialsSandboxVm::ImportState::Usage::kHdrEnvironment) {
-      ImGui::Indent();
-      ImGui::SliderFloat("Exposure (EV)", &state.exposure_ev, -5.0F, 5.0F);
-      ImGui::Unindent();
-    }
-
-    // Tuning
-    if (ImGui::Checkbox("Compress", &state.compress)) {
-      vm_->UpdateImportSettingsFromUsage();
-    }
-    if (state.compress) {
-      ImGui::SameLine();
-      const char* kQuality[] = { "Fast", "Balanced", "High" };
-      int q_ui = state.bc7_quality_idx - 1;
-      if (q_ui < 0)
-        q_ui = 1;
-
-      ImGui::SetNextItemWidth(100);
-      if (ImGui::Combo("##Quality", &q_ui, kQuality, IM_ARRAYSIZE(kQuality))) {
-        state.bc7_quality_idx = q_ui + 1;
-      }
-    }
-
+  int usage_idx = static_cast<int>(state.usage);
+  if (ImGui::Combo("Usage Preset", &usage_idx, kUsageLabels.data(),
+        static_cast<int>(kUsageLabels.size()))) {
+    state.usage = static_cast<ImportState::Usage>(usage_idx);
+    vm_->UpdateImportSettingsFromUsage();
+  }
+  if (state.usage == ImportState::Usage::kNormal) {
+    ImGui::Indent();
+    ImGui::Checkbox("Flip Green Channel (Y)", &state.flip_normal_green);
+    ImGui::Unindent();
+  }
+  if (state.usage == ImportState::Usage::kHdrEnvironment) {
+    ImGui::Indent();
+    ImGui::SliderFloat("Exposure (EV)", &state.exposure_ev, -5.0F, 5.0F);
+    ImGui::Unindent();
+  }
+  if (ImGui::Checkbox("Compress", &state.compress)) {
+    vm_->UpdateImportSettingsFromUsage();
+  }
+  if (state.compress) {
     ImGui::SameLine();
-    ImGui::Checkbox("Deduplicate (Hash)", &state.compute_hash);
-
-    // Fold for advanced
-    if (ImGui::TreeNode("Advanced Settings")) {
-      // ... (Keep existing advanced logic if needed, simplified for inline)
-      ImGui::Checkbox("Generate Mips", &state.generate_mips);
-      const char* kFormats[]
-        = { "RGBA8 SRGB", "BC7 SRGB", "RGBA16F", "RGBA32F" };
-      ImGui::Combo(
-        "Format", &state.output_format_idx, kFormats, IM_ARRAYSIZE(kFormats));
-      ImGui::TreePop();
+    int quality = std::clamp(state.bc7_quality_idx - 1, 0, 2);
+    ImGui::SetNextItemWidth(100);
+    if (ImGui::Combo("##Quality", &quality, kQualityLabels.data(),
+          static_cast<int>(kQualityLabels.size()))) {
+      state.bc7_quality_idx = quality + 1;
     }
+  }
+  ImGui::SameLine();
+  ImGui::Checkbox("Deduplicate (Hash)", &state.compute_hash);
+  if (ImGui::TreeNode("Advanced Settings")) {
+    ImGui::Checkbox("Generate Mips", &state.generate_mips);
+    ImGui::Combo("Format", &state.output_format_idx, kFormatLabels.data(),
+      static_cast<int>(kFormatLabels.size()));
+    ImGui::TreePop();
   }
   ImGui::EndDisabled();
 
   ImGui::Spacing();
   ImGui::SeparatorText("Import Status");
   ImGui::Spacing();
-
-  // 2. Status / Progress (Bottom area)
-  if (state.workflow_state
-    == MaterialsSandboxVm::ImportState::WorkflowState::Importing) {
+  if (is_importing) {
     ImGui::Text("Importing...");
     ImGui::ProgressBar(state.progress, ImVec2(-1, 0));
-  } else if (state.workflow_state
-    == MaterialsSandboxVm::ImportState::WorkflowState::Finished) {
+  } else if (state.workflow_state == WorkflowState::Finished) {
     if (state.last_import_success) {
       ImGui::TextColored(
         ImVec4(0.2F, 1.0F, 0.2F, 1.0F), "%s", state.status_message.c_str());
@@ -248,27 +443,26 @@ auto MaterialsSandboxPanel::DrawImportSection() -> void
     }
   }
 
-  // 3. Actions (Bottom Right)
-  // Spacer to push buttons right? Or just fill width.
-
-  // if Finished (Error), user can Retry (Import) or Cancel.
-  // if Finished (Success), actually we should have closed?
-  //   If we auto-close on success, we won't see this state easily unless we
-  //   delay. Let's auto-close on success in VM Update().
-
+  // Cancel closes the draft; a running import completes in the background.
   if (ImGui::Button("Cancel", ImVec2(100, 0))) {
     vm_->CancelImport();
   }
-
   ImGui::SameLine();
-
   ImGui::BeginDisabled(is_importing);
-  if (ImGui::Button(state.workflow_state
-            == MaterialsSandboxVm::ImportState::WorkflowState::Finished
-          ? "Retry Import"
-          : "Import",
-        ImVec2(-1, 0))) {
-    vm_->RequestImport();
+  const bool finished = state.workflow_state == WorkflowState::Finished;
+  if (ImGui::Button(finished ? "Retry Import" : "Import", ImVec2(-1, 0))) {
+    commands_->Run(kImport,
+      {
+        { "path", std::string_view(state.source_path.data()) },
+        { "usage", kUsageNames.at(static_cast<std::size_t>(state.usage)) },
+        { "compress", state.compress },
+        { "quality", state.bc7_quality_idx },
+        { "hash", state.compute_hash },
+        { "flip_green", state.flip_normal_green },
+        { "exposure_ev", state.exposure_ev },
+        { "mips", state.generate_mips },
+        { "format", state.output_format_idx },
+      });
   }
   ImGui::EndDisabled();
 
@@ -278,252 +472,99 @@ auto MaterialsSandboxPanel::DrawImportSection() -> void
 
 auto MaterialsSandboxPanel::DrawMaterialsSection() -> void
 {
-  auto& surface = vm_->GetSurfaceState();
-  auto& uv = vm_->GetUvState();
-
-  // Texture mode controls (global - applies to both sphere and cube)
-  // 0 = Fallback, 1 = Forced Error, 2 = Solid Color, 3 = Custom Texture,
-  // 4 = Grid Material, 5 = Custom Material
-  int current_mode = 0;
-  const auto& sphere_slot = vm_->GetSphereTextureState();
-  const auto& cube_slot = vm_->GetCubeTextureState();
-
-  if (vm_->IsUseCustomMaterial()) {
-    current_mode = 5;
-  } else if (surface.use_constant_base_color) {
-    // Solid color mode takes visual priority for texture-driven shading.
-    current_mode = 2;
-  } else if (sphere_slot.mode == cube_slot.mode) {
-    switch (sphere_slot.mode) {
-    case oxygen::examples::textured_cube::TextureIndexMode::kForcedError:
-      current_mode = 1;
-      break;
-    case oxygen::examples::textured_cube::TextureIndexMode::kCustom:
-      current_mode = 3;
-      break;
-    case oxygen::examples::textured_cube::TextureIndexMode::kProceduralGrid:
-      current_mode = 4;
-      break;
-    case oxygen::examples::textured_cube::TextureIndexMode::kFallback:
-    default:
-      current_mode = 0;
-      break;
+  const auto current = CurrentMode(*vm_);
+  for (const auto& info : kModes) {
+    if (ImGui::RadioButton(info.label, current == info.mode)
+      && current != info.mode) {
+      commands_->RunText(kMode, info.name);
     }
-  } else {
-    // Mixed modes or other case: default to Custom to allow per-slot edits
-    current_mode = 3;
   }
-
-  auto apply_mode = [this](int mode) {
-    switch (mode) {
-    case 0: // Fallback
-      vm_->SetUseCustomMaterial(false);
-      vm_->GetSphereTextureState().mode
-        = oxygen::examples::textured_cube::TextureIndexMode::kFallback;
-      vm_->GetCubeTextureState().mode
-        = oxygen::examples::textured_cube::TextureIndexMode::kFallback;
-      vm_->GetSurfaceState().use_constant_base_color = false;
-      break;
-    case 1: // Forced Error
-      vm_->SetUseCustomMaterial(false);
-      vm_->GetSphereTextureState().mode
-        = oxygen::examples::textured_cube::TextureIndexMode::kForcedError;
-      vm_->GetCubeTextureState().mode
-        = oxygen::examples::textured_cube::TextureIndexMode::kForcedError;
-      vm_->GetSurfaceState().use_constant_base_color = false;
-      break;
-    case 2: // Solid Color
-      vm_->SetUseCustomMaterial(false);
-      vm_->GetSurfaceState().use_constant_base_color = true;
-      // Keep resource indices but ensure textures are ignored by using
-      // fallback mode for sampling
-      vm_->GetSphereTextureState().mode
-        = oxygen::examples::textured_cube::TextureIndexMode::kFallback;
-      vm_->GetCubeTextureState().mode
-        = oxygen::examples::textured_cube::TextureIndexMode::kFallback;
-      break;
-    case 3: // Custom
-      vm_->SetUseCustomMaterial(false);
-      vm_->GetSphereTextureState().mode
-        = oxygen::examples::textured_cube::TextureIndexMode::kCustom;
-      vm_->GetCubeTextureState().mode
-        = oxygen::examples::textured_cube::TextureIndexMode::kCustom;
-      vm_->GetSurfaceState().use_constant_base_color = false;
-      break;
-    case 4: // Grid Material
-      vm_->SetUseCustomMaterial(false);
-      vm_->GetSphereTextureState().mode
-        = oxygen::examples::textured_cube::TextureIndexMode::kProceduralGrid;
-      vm_->GetCubeTextureState().mode
-        = oxygen::examples::textured_cube::TextureIndexMode::kProceduralGrid;
-      vm_->GetSurfaceState().use_constant_base_color = false;
-      break;
-    case 5: // Custom Material
-      vm_->SetUseCustomMaterial(true);
-      break;
-    default:
-      break;
-    }
-    vm_->SetCubeRebuildNeeded();
-  };
-
-  // Vertical radio buttons (one per line)
-  if (ImGui::RadioButton("Fallback", &current_mode, 0)) {
-    apply_mode(0);
-  }
-  if (ImGui::RadioButton("Forced Error", &current_mode, 1)) {
-    apply_mode(1);
-  }
-  if (ImGui::RadioButton("Solid Color", &current_mode, 2)) {
-    apply_mode(2);
-  }
-  if (ImGui::RadioButton("Custom Texture", &current_mode, 3)) {
-    apply_mode(3);
-  }
-  if (ImGui::RadioButton("Grid Material", &current_mode, 4)) {
-    apply_mode(4);
-  }
-  if (ImGui::RadioButton("Custom Material", &current_mode, 5)) {
-    apply_mode(5);
-  }
-
-  if (current_mode == 5) {
+  if (current == MaterialMode::kCustomMaterial) {
     return;
   }
 
   ImGui::Separator();
   ImGui::Spacing();
 
-  // Solid Color exposes the color picker
+  const auto& surface = vm_->GetSurfaceState();
   if (surface.use_constant_base_color) {
-    if (ImGui::ColorEdit3("Base Color", &surface.constant_base_color_rgb.x)) {
-      vm_->SetCubeRebuildNeeded();
+    auto color = surface.constant_base_color_rgb;
+    if (ImGui::ColorEdit3("Base Color", &color.x)) {
+      commands_->RunRgb(kBaseColor, color);
     }
   }
-
-  if (ImGui::SliderFloat("Metalness", &surface.metalness, 0.0F, 1.0F)) {
-    vm_->SetCubeRebuildNeeded();
+  float metalness = surface.metalness;
+  if (ImGui::SliderFloat("Metalness", &metalness, 0.0F, 1.0F)) {
+    commands_->RunFloat(kMetalness, metalness);
   }
-  if (ImGui::SliderFloat("Roughness", &surface.roughness, 0.0F, 1.0F)) {
-    vm_->SetCubeRebuildNeeded();
-  }
-
-  // UV controls are only applicable when at least one slot is Custom
-  const bool any_custom = (vm_->GetSphereTextureState().mode
-      == oxygen::examples::textured_cube::TextureIndexMode::kCustom
-    || vm_->GetCubeTextureState().mode
-      == oxygen::examples::textured_cube::TextureIndexMode::kCustom);
-
-  if (any_custom) {
-    ImGui::Spacing();
-    ImGui::SeparatorText("UV Transform");
-    ImGui::Spacing();
-
-    if (ImGui::Button("Reset UV")) {
-      uv.scale = { 1.0F, 1.0F };
-      uv.offset = { 0.0F, 0.0F };
-    }
-    ImGui::DragFloat2("Scale", &uv.scale.x, 0.01F);
-    ImGui::DragFloat2("Offset", &uv.offset.x, 0.01F);
-
-    // UV/Image Origin options
-    static const std::array<MaterialsSandboxVm::UvOrigin, 2> kUvOrigins
-      = { MaterialsSandboxVm::UvOrigin::kBottomLeft,
-          MaterialsSandboxVm::UvOrigin::kTopLeft };
-    DrawEnumCombo("UV Origin", uv.uv_origin, kUvOrigins);
-
-    ImGui::Checkbox("Extra Flip U", &uv.extra_flip_u);
-    ImGui::SameLine();
-    ImGui::Checkbox("Extra Flip V", &uv.extra_flip_v);
-
-    ImGui::Spacing();
+  float roughness = surface.roughness;
+  if (ImGui::SliderFloat("Roughness", &roughness, 0.0F, 1.0F)) {
+    commands_->RunFloat(kRoughness, roughness);
   }
 }
 
 auto MaterialsSandboxPanel::DrawBrowserSection() -> void
 {
-  auto& cooked = vm_->GetCookedEntries();
-
-  // Determine state for local UI logic
-  const auto state = vm_->GetImportState().workflow_state;
   const bool is_idle
-    = (state == MaterialsSandboxVm::ImportState::WorkflowState::Idle);
-  const bool is_configuring
-    = (state != MaterialsSandboxVm::ImportState::WorkflowState::Idle);
+    = vm_->GetImportState().workflow_state == WorkflowState::Idle;
 
   if (ImGui::Button(ICON_FA_ARROW_ROTATE_RIGHT " Refresh List")) {
-    vm_->RequestRefresh();
+    commands_->Run(kRefresh);
   }
-
   ImGui::SameLine();
-
   ImGui::BeginDisabled(!is_idle);
   if (ImGui::Button(ICON_FA_FILE_IMPORT " Import Texture...")) {
     vm_->StartImportFlow();
   }
   ImGui::EndDisabled();
 
-  // Inline Import Section (pushes content down)
-  if (is_configuring) {
+  if (!is_idle) {
     ImGui::Spacing();
     ImGui::SeparatorText("Import");
     ImGui::Spacing();
     DrawImportSection();
     ImGui::Spacing();
-    ImGui::SeparatorText("Import");
-    ImGui::Spacing();
   }
 
   ImGui::BeginDisabled(!is_idle);
-
   const float texture_list_height
     = std::max(160.0F, ImGui::GetContentRegionAvail().y);
-  ImGui::BeginChild("CookedList", ImVec2(0, texture_list_height), true);
-  for (const auto& entry : cooked) {
-    ImGui::PushID((int)entry.index);
+  ImGui::BeginChild("CookedList", ImVec2(0, texture_list_height), 1);
+  for (const auto& entry : vm_->GetCookedEntries()) {
+    ImGui::PushID(static_cast<int>(entry.index));
 
-    std::string label = entry.name.empty()
+    const std::string label = entry.name.empty()
       ? fmt::format("[{}] <unnamed>", entry.index)
       : fmt::format("[{}] {}", entry.index, entry.name);
-
-    std::string metadata = fmt::format("{}x{} {} mips={} {}", entry.width,
+    const std::string metadata = fmt::format("{}x{} {} mips={} {}", entry.width,
       entry.height, nostd::to_string(entry.format), entry.mip_levels,
       nostd::to_string(entry.texture_type));
 
-    // Selection Actions
-    const bool is_2d = (entry.texture_type == oxygen::TextureType::kTexture2D);
-    const bool is_cube
-      = (entry.texture_type == oxygen::TextureType::kTextureCube);
-
-    // Enable selection buttons only if the respective slot is in Custom mode.
-    const bool sphere_can_select = is_2d
-      && (vm_->GetSphereTextureState().mode
-        == oxygen::examples::textured_cube::TextureIndexMode::kCustom);
-    const bool cube_can_select = is_2d
-      && (vm_->GetCubeTextureState().mode
-        == oxygen::examples::textured_cube::TextureIndexMode::kCustom);
+    const bool is_2d = entry.texture_type == TextureType::kTexture2D;
+    const bool is_cube = entry.texture_type == TextureType::kTextureCube;
+    const bool sphere_can_select
+      = is_2d && vm_->GetSphereTextureState().mode == TextureIndexMode::kCustom;
+    const bool cube_can_select
+      = is_2d && vm_->GetCubeTextureState().mode == TextureIndexMode::kCustom;
 
     ImGui::BeginDisabled(!sphere_can_select);
     if (ImGui::Button("Sphere")) {
-      vm_->SelectTextureForSlot(entry.index, true);
+      commands_->Run(
+        kTexture, { { "index", entry.index }, { "object", "sphere" } });
     }
     ImGui::EndDisabled();
-
     ImGui::SameLine();
-
     ImGui::BeginDisabled(!cube_can_select);
     if (ImGui::Button("Cube")) {
-      vm_->SelectTextureForSlot(entry.index, false);
+      commands_->Run(
+        kTexture, { { "index", entry.index }, { "object", "cube" } });
     }
     ImGui::EndDisabled();
-
     ImGui::SameLine();
-    // Sky selection should be available for cubemap entries regardless of
-    // per-slot texture modes (this applies a global skybox to the scene).
-    const bool sky_can_select = is_cube;
-    ImGui::BeginDisabled(!sky_can_select);
+    // A cubemap is the scene's skybox whatever the slots' modes are.
+    ImGui::BeginDisabled(!is_cube);
     if (ImGui::Button("Sky")) {
-      vm_->SelectSkybox(entry.index, nullptr);
+      commands_->RunInt(kSkybox, entry.index);
     }
     ImGui::EndDisabled();
 
@@ -532,13 +573,10 @@ auto MaterialsSandboxPanel::DrawBrowserSection() -> void
     if (ImGui::IsItemHovered()) {
       ImGui::BeginTooltip();
       ImGui::TextUnformatted(metadata.c_str());
-
-      std::string settings_json = vm_->GetMetadataJson(entry.index);
+      const std::string settings_json = vm_->GetMetadataJson(entry.index);
       if (!settings_json.empty()) {
         ImGui::Spacing();
         ImGui::SeparatorText("Import Settings");
-        ImGui::Spacing();
-        ImGui::TextColored(ImVec4(0.7F, 0.7F, 1.0F, 1.0F), "Import Settings:");
         ImGui::TextUnformatted(settings_json.c_str());
       }
       ImGui::EndTooltip();
@@ -553,12 +591,11 @@ auto MaterialsSandboxPanel::DrawBrowserSection() -> void
 auto MaterialsSandboxPanel::DrawMaterialBrowserSection() -> void
 {
   if (ImGui::Button(ICON_FA_ARROW_ROTATE_RIGHT " Refresh Materials")) {
-    vm_->RequestRefresh();
+    commands_->Run(kRefresh);
   }
-
   ImGui::SameLine();
   if (ImGui::Button("Clear Selection")) {
-    vm_->ClearSelectedCustomMaterial();
+    commands_->Run(kClearMaterial);
   }
 
   const auto selected_key = vm_->GetSelectedCustomMaterialKey();
@@ -566,28 +603,26 @@ auto MaterialsSandboxPanel::DrawMaterialBrowserSection() -> void
 
   const float material_list_height
     = std::max(160.0F, ImGui::GetContentRegionAvail().y);
-  ImGui::BeginChild(
-    "CookedMaterialList", ImVec2(0, material_list_height), true);
+  ImGui::BeginChild("CookedMaterialList", ImVec2(0, material_list_height), 1);
   if (entries.empty()) {
     ImGui::TextDisabled("No cooked materials found in current cooked root.");
   }
-
   for (std::size_t i = 0; i < entries.size(); ++i) {
     const auto& entry = entries[i];
     ImGui::PushID(static_cast<int>(i));
-
     const bool is_selected
       = selected_key.has_value() && selected_key.value() == entry.key;
     const std::string label = entry.virtual_path.empty()
       ? fmt::format("material:{} ({})", i, entry.descriptor_relpath)
       : entry.virtual_path;
-    if (ImGui::Selectable(label.c_str(), is_selected)) {
-      vm_->SelectCustomMaterialByEntryIndex(i);
+    if (ImGui::Selectable(label.c_str(), is_selected) && !is_selected) {
+      commands_->RunInt(kMaterial, static_cast<std::int64_t>(i));
     }
-
     ImGui::PopID();
   }
   ImGui::EndChild();
 }
 
 } // namespace oxygen::examples::textured_cube::ui
+
+// NOLINTEND(cppcoreguidelines-pro-type-vararg, bugprone-signed-bitwise)
