@@ -3,6 +3,8 @@
 import ctypes
 import subprocess
 
+ERROR_ACCESS_DENIED = 5
+
 
 class WindowsJob:
     """Own the child process tree without invoking taskkill or WMI."""
@@ -25,8 +27,11 @@ class WindowsJob:
             raise ctypes.WinError(ctypes.get_last_error())
         if not self.kernel.AssignProcessToJobObject(self.handle, int(process._handle)):
             error = ctypes.get_last_error()
-            self.close()
-            raise ctypes.WinError(error)
+            # Windows refuses to assign a process that has already exited, which
+            # a short-lived child can do before this call. It owns no tree then.
+            if not (error == ERROR_ACCESS_DENIED and process.poll() is not None):
+                self.close()
+                raise ctypes.WinError(error)
 
     def terminate(self) -> None:
         self.kernel.TerminateJobObject(self.handle, 130)
