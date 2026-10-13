@@ -87,7 +87,7 @@ JOINED = ("-std=", "-std:", "/std:", "-W", "-f", "-m", "/Zc:", "-D", "-U")
 
 @dataclass(frozen=True)
 class ClangdConfig:
-    database: Path | None
+    database: Path
     add: tuple[str, ...]
     remove: tuple[str, ...]
     compiler: str | None = None

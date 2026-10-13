@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass
 from functools import cached_property
@@ -47,7 +48,7 @@ class Scope(Ownership):
     include_tests: bool
 
     @classmethod
-    def load(
+    def select(
         cls,
         root: Path,
         paths: list[str],
@@ -82,14 +83,20 @@ class Scope(Ownership):
         return scope
 
     def eligible(self, path: Path) -> bool:
-        return self.owned(path) and (
+        return self._eligible(path.resolve())
+
+    def _eligible(self, resolved: Path) -> bool:
+        return self.owned_resolved(resolved) and (
             self.include_tests
-            or "test" not in {p.casefold() for p in path.relative_to(self.root).parts}
+            or "test"
+            not in {p.casefold() for p in resolved.relative_to(self._root).parts}
         )
 
     def contains(self, path: Path) -> bool:
-        canonical = path.resolve()
-        return self._index.contains(canonical) and self.eligible(canonical)
+        return self._contains(path.resolve())
+
+    def _contains(self, resolved: Path) -> bool:
+        return self._index.contains(resolved) and self._eligible(resolved)
 
     @cached_property
     def _index(self) -> _PathIndex:
@@ -105,8 +112,8 @@ class Scope(Ownership):
         return list({path_key(root): root for root in roots}.values())
 
     def discovery_contains(self, path: Path) -> bool:
-        canonical = path.resolve()
-        return self._discovery_index.contains(canonical) and self.eligible(canonical)
+        resolved = path.resolve()
+        return self._discovery_index.contains(resolved) and self._eligible(resolved)
 
     @cached_property
     def _discovery_index(self) -> _PathIndex:
@@ -116,12 +123,11 @@ class Scope(Ownership):
         found = {}
         for root in self._index.traversal_roots():
             for path in root.rglob("*") if root.is_dir() else [root]:
-                if (
-                    path.is_file()
-                    and path.suffix.lower() in SOURCES | HEADERS
-                    and self.contains(path.resolve())
-                ):
-                    found[path_key(path)] = path.resolve()
+                if not path.is_file() or path.suffix.lower() not in SOURCES | HEADERS:
+                    continue
+                resolved = path.resolve()
+                if self._contains(resolved):
+                    found[os.path.normcase(str(resolved))] = resolved
         if not found:
             raise ToolError(
                 "The scope contains no eligible project source/header files"
@@ -140,12 +146,22 @@ class Scope(Ownership):
         # structured diagnostics and every proposed replacement.
         return r"(^|.*[/\\])(" + "|".join(fragments) + ")$"
 
-    def dependency_filter(self, names: list[str], directory: Path) -> str:
-        """Match compiler spellings, including uncollapsed ../ include paths."""
+    def dependency_filter(
+        self,
+        names: list[str],
+        directory: Path,
+        resolved: dict[str, Path] | None = None,
+    ) -> str:
+        """Match compiler spellings, including uncollapsed ../ include paths.
+
+        `resolved` maps names the caller already resolved for this query.
+        """
         spellings = set()
         for name in names:
-            canonical = absolute(name, directory)
-            if not self.contains(canonical):
+            canonical = (
+                resolved[name] if resolved is not None else absolute(name, directory)
+            )
+            if not self._contains(canonical):
                 continue
             raw = Path(name)
             lexical = directory / raw

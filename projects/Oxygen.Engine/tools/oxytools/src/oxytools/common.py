@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -74,12 +75,41 @@ def digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
+# Files written this recently are always re-read: a same-size rewrite within
+# the filesystem's timestamp granularity keeps the same size and mtime.
+_RACY_WINDOW_NS = 2_000_000_000
+_hashes: dict[str, tuple[int, int, str]] = {}
+
+
 def file_hash(path: str | Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    """SHA-256 of a file, reused while its size and mtime are unchanged.
+
+    Every compilation context fingerprints its dependencies, so a run would
+    otherwise re-read the same toolchain, SDK and project headers once per
+    context.
+    """
+    path = Path(path)
+    stat = path.stat()
+    # Keyed by spelling, not by resolving again: stat() already follows links,
+    # and resolving costs more than the cached lookup it guards.
+    key = os.path.normcase(os.path.abspath(path))
+    signature = (stat.st_mtime_ns, stat.st_size)
+    cached = _hashes.get(key)
+    if cached is not None and cached[:2] == signature:
+        return cached[2]
+    value = hashlib.sha256(path.read_bytes()).hexdigest()
+    if time.time_ns() - stat.st_mtime_ns > _RACY_WINDOW_NS:
+        _hashes[key] = (*signature, value)
+    return value
 
 
 def fingerprint(paths: list[Path]) -> dict[str, str]:
     return {path_key(path): file_hash(path) for path in sorted(set(paths))}
+
+
+def fingerprint_resolved(paths: list[Path]) -> dict[str, str]:
+    """fingerprint() for paths the caller already resolved; same keys."""
+    return {os.path.normcase(str(path)): file_hash(path) for path in sorted(set(paths))}
 
 
 def unchanged(snapshot: dict[str, str]) -> bool:

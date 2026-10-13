@@ -15,6 +15,7 @@ from oxytools.common import (
     absolute,
     digest,
     fingerprint,
+    fingerprint_resolved,
     unchanged,
     validate,
     write_json,
@@ -232,12 +233,14 @@ class Analyzer:
                 names.extend(command["file-deps"])
         for module in data["modules"]:
             names.extend(module["file-deps"])
+        # Resolve each dependency once; the filter and snapshot share it.
+        resolved = {name: absolute(name, context.directory) for name in names}
         config["HeaderFilterRegex"] = self.scope.dependency_filter(
-            names, context.directory
+            names, context.directory, resolved
         )
         write_json(folder / "effective.clang-tidy", config)
-        dependencies = sorted({absolute(name, context.directory) for name in names})
-        snapshot = fingerprint(dependencies)
+        dependencies = sorted(set(resolved.values()))
+        snapshot = fingerprint_resolved(dependencies)
         snapshot.update(response_inputs)
         cache_key = digest(
             {

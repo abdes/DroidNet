@@ -50,7 +50,7 @@ class Fixture(unittest.TestCase):
         return path
 
     def scope(self, *paths, tests=False):
-        return Scope.load(self.root, list(paths), False, tests)
+        return Scope.select(self.root, list(paths), False, tests)
 
     def database(self, files, *, arguments=None):
         compiler = (
@@ -1232,15 +1232,17 @@ class LLVMTests(Fixture):
 
     def test_explicit_project_root_overrides_the_tools_checkout(self):
         self.source_pair()
-        code, report = self.invoke(
-            "--project-root",
-            os.path.relpath(self.root, Path.cwd()),
-            "src/a.h",
-            "--fail-on",
-            "warning",
-            "--verbose",
-            implicit_root=self.root / "not-the-target",
-        )
+        # A relative path cannot cross drives; work beside the temporary root.
+        with contextlib.chdir(self.root.parent):
+            code, report = self.invoke(
+                "--project-root",
+                os.path.relpath(self.root),
+                "src/a.h",
+                "--fail-on",
+                "warning",
+                "--verbose",
+                implicit_root=self.root / "not-the-target",
+            )
         self.assertEqual(code, 1, report)
         self.assertEqual(report["project_root"], str(self.root))
         self.assertEqual(report["build_dir"], str(self.root))
@@ -1270,14 +1272,16 @@ class LLVMTests(Fixture):
             "policy/ownership.json", (self.root / ".oxytools.json").read_text()
         )
         (self.root / ".oxytools.json").unlink()
-        code, report = self.invoke(
-            "--project-root",
-            str(self.root),
-            "--ownership-file",
-            os.path.relpath(policy, Path.cwd()),
-            "src/a.h",
-            implicit_root=self.root / "not-the-target",
-        )
+        # A relative path cannot cross drives; work beside the temporary root.
+        with contextlib.chdir(self.root.parent):
+            code, report = self.invoke(
+                "--project-root",
+                str(self.root),
+                "--ownership-file",
+                os.path.relpath(policy),
+                "src/a.h",
+                implicit_root=self.root / "not-the-target",
+            )
         self.assertEqual(code, 0, report)
         self.assertEqual(report["ownership_file"], str(policy))
         self.assertEqual(report["counts"]["unique_findings"], 1)

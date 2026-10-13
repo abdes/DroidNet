@@ -5,6 +5,7 @@ from __future__ import annotations
 import fnmatch
 import json
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 
 from .common import ToolError, absolute, display, validate, within
@@ -50,11 +51,31 @@ class Ownership:
         return cls(root, projects, data["exclude"])
 
     def owned(self, path: Path) -> bool:
-        path = path.resolve()
-        if not any(within(path, project) for project in self.project_roots):
+        return self.owned_resolved(path.resolve())
+
+    def owned_resolved(self, path: Path) -> bool:
+        """Ownership of a path the caller resolved for this query.
+
+        Queries resolve their path fresh, so a retargeted link is never judged
+        by its old target; only the configured roots resolve once.
+        """
+        if not any(path.is_relative_to(project) for project in self._project_roots):
             return False
-        name = display(path, self.root)
+        root = self._root
+        name = (
+            path.relative_to(root).as_posix()
+            if path.is_relative_to(root)
+            else str(path)
+        )
         return not any(fnmatch.fnmatchcase(name, pattern) for pattern in self.excludes)
+
+    @cached_property
+    def _root(self) -> Path:
+        return self.root.resolve()
+
+    @cached_property
+    def _project_roots(self) -> tuple[Path, ...]:
+        return tuple(project.resolve() for project in self.project_roots)
 
     def may_contain_owned_files(self, directory: Path) -> bool:
         """Prune only exclusions that cover a whole subtree, never file globs."""

@@ -286,7 +286,7 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
     summary["ownership_file"] = str(ownership_file)
     summary["ownership_selection"] = ownership_reason
     runner.reporter.ownership(ownership_file, ownership_reason)
-    scope = Scope.load(
+    scope = Scope.select(
         root, args.paths, args.all, args.include_tests, ownership_file=ownership_file
     )
     inputs = scope.inputs()
