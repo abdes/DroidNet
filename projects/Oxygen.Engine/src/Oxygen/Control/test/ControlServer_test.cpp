@@ -42,6 +42,12 @@
 
 namespace {
 
+//! Discovery files of the tests stay out of the per-user folder.
+auto TestDiscoveryFolder() -> std::filesystem::path
+{
+  return std::filesystem::temp_directory_path() / "oxygen-control-tests";
+}
+
 using namespace std::chrono_literals;
 using nlohmann::json;
 using oxygen::observer_ptr;
@@ -163,7 +169,10 @@ protected:
   CommandDispatcher dispatcher_ {
     observer_ptr<oxygen::IAsyncEngine> { &engine_ }, observer_ptr { &events_ }
   };
-  ControlServerConfig config_ { .application = "ControlServerTest" };
+  ControlServerConfig config_ {
+    .application = "ControlServerTest",
+    .discovery_folder = TestDiscoveryFolder(),
+  };
   std::unique_ptr<ControlServer> server_;
 };
 
@@ -349,7 +358,7 @@ NOLINT_TEST(ControlServerDiscovery, FileLivesWithTheServer)
     };
     ControlServer server { observer_ptr<oxygen::IAsyncEngine> { &engine },
       observer_ptr { &dispatcher }, observer_ptr { &events }, io,
-      ControlServerConfig {} };
+      ControlServerConfig { .discovery_folder = TestDiscoveryFolder() } };
     oxygen::co::Run(io, [&]() -> Co<> {
       OXCO_WITH_NURSERY(n)
       {
@@ -363,6 +372,44 @@ NOLINT_TEST(ControlServerDiscovery, FileLivesWithTheServer)
   }
   EXPECT_FALSE(path.empty());
   EXPECT_FALSE(std::filesystem::exists(path));
+}
+
+//! Starting a server removes the discovery files of processes that are gone,
+//! and its own file names the instance.
+NOLINT_TEST(ControlServerDiscovery, RemovesStaleFilesAndNamesTheInstance)
+{
+  const auto folder = TestDiscoveryFolder();
+  std::filesystem::create_directories(folder);
+  // No process has this id; the file is what a killed application leaves.
+  const auto stale = folder / "999999990.json";
+  std::ofstream(stale) << "{}";
+  ASSERT_TRUE(std::filesystem::exists(stale));
+
+  asio::io_context io;
+  TestEngine engine;
+  EventLog events;
+  CommandDispatcher dispatcher { observer_ptr<oxygen::IAsyncEngine> { &engine },
+    observer_ptr { &events } };
+  ControlServer server { observer_ptr<oxygen::IAsyncEngine> { &engine },
+    observer_ptr { &dispatcher }, observer_ptr { &events }, io,
+    ControlServerConfig {
+      .application = "ControlServerTest",
+      .name = "left",
+      .discovery_folder = folder,
+    } };
+  oxygen::co::Run(io, [&]() -> Co<> {
+    OXCO_WITH_NURSERY(n)
+    {
+      co_await n.Start(&ControlServer::ActivateAsync, &server);
+      server.Run();
+      EXPECT_FALSE(std::filesystem::exists(stale));
+      auto file = std::ifstream(server.DiscoveryFile());
+      const auto discovery = json::parse(file);
+      EXPECT_EQ(discovery.at("name"), "left");
+      EXPECT_FALSE(discovery.at("started").get<std::string>().empty());
+      co_return oxygen::co::kCancel;
+    };
+  });
 }
 
 } // namespace

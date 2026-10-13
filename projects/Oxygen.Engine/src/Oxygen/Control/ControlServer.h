@@ -39,6 +39,11 @@ struct ControlServerConfig {
   //! Stop the engine when the owning client disconnects, or when no owner
   //! connects within the grace period.
   bool exit_when_owner_leaves { false };
+  //! Label the launcher gives this instance, so a client can tell instances
+  //! of one application apart; empty for none.
+  std::string name;
+  //! Folder of the discovery file; empty for the per-user folder.
+  std::filesystem::path discovery_folder;
 };
 
 //! JSON-RPC 2.0 control server: every command is a method.

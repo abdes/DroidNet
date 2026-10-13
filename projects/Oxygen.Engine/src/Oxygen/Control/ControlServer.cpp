@@ -11,12 +11,12 @@
 #include <cstdint>
 #include <cstdlib>
 #include <deque>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <ios>
 #include <memory>
 #include <random>
-#include <stdlib.h>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -38,7 +38,17 @@
 
 #ifdef _WIN32
 #  include <process.h>
+#  ifndef NOMINMAX
+#    define NOMINMAX
+#  endif
+#  ifndef WIN32_LEAN_AND_MEAN
+#    define WIN32_LEAN_AND_MEAN
+#  endif
+#  include <windows.h> // IWYU pragma: keep
 #else
+#  include <cerrno>
+#  include <csignal>
+
 #  include <unistd.h>
 #endif
 
@@ -62,11 +72,20 @@ namespace oxygen::control {
 
 namespace {
 
+  using asio::ip::tcp;
   using nlohmann::json;
-  using tcp = asio::ip::tcp;
+
+  //! Close a socket that is done with; a failure leaves nothing to do.
+  auto CloseSocket(tcp::socket& socket) -> void
+  {
+    auto error = std::error_code {};
+    if (socket.close(error)) {
+      DLOG_F(1, "control server: closing a socket failed: {}", error.message());
+    }
+  }
 
   constexpr int kProtocolVersion = 1;
-  constexpr std::size_t kMaxLineBytes = 1024U * 1024U;
+  constexpr auto kMaxLineBytes = std::size_t { 1024U } * 1024U;
   constexpr auto kOwnerGrace = std::chrono::seconds(10);
   constexpr std::size_t kTokenBytes = 32U;
   constexpr std::size_t kMaxEventsPerRequest = 1000U;
@@ -82,13 +101,66 @@ namespace {
   constexpr int kCommandDenied = -32002;
   constexpr int kCommandCancelled = -32003;
 
-  auto ProcessId() -> long long
+  auto ProcessId() -> std::int64_t
   {
 #ifdef _WIN32
     return _getpid();
 #else
     return getpid();
 #endif
+  }
+
+  //! True while process `pid` exists.
+  auto IsProcessRunning(const std::int64_t pid) -> bool
+  {
+#ifdef _WIN32
+    auto* const process
+      = OpenProcess(SYNCHRONIZE, FALSE, static_cast<DWORD>(pid));
+    if (process == nullptr) {
+      // Access denied still means the process exists.
+      return GetLastError() == ERROR_ACCESS_DENIED;
+    }
+    const bool running = WaitForSingleObject(process, 0) == WAIT_TIMEOUT;
+    CloseHandle(process);
+    return running;
+#else
+    return kill(static_cast<pid_t>(pid), 0) == 0 || errno == EPERM;
+#endif
+  }
+
+  //! Removes the discovery files of processes that no longer run; a killed
+  //! application never deletes its own.
+  auto RemoveStaleDiscoveryFiles(const std::filesystem::path& folder) -> void
+  {
+    auto error = std::error_code {};
+    for (const auto& entry :
+      std::filesystem::directory_iterator(folder, error)) {
+      const auto& path = entry.path();
+      if (path.extension() != ".json") {
+        continue;
+      }
+      auto pid = std::int64_t { 0 };
+      try {
+        pid = std::stoll(path.stem().string());
+      } catch (const std::exception&) {
+        continue;
+      }
+      if (pid != ProcessId() && !IsProcessRunning(pid)) {
+        auto removed = std::error_code {};
+        if (std::filesystem::remove(path, removed)) {
+          LOG_F(INFO, "control server: removed the stale discovery file '{}'",
+            path.string());
+        }
+      }
+    }
+  }
+
+  //! Current UTC time as ISO 8601.
+  auto UtcNow() -> std::string
+  {
+    return fmt::format("{:%Y-%m-%dT%H:%M:%SZ}",
+      std::chrono::floor<std::chrono::seconds>(
+        std::chrono::system_clock::now()));
   }
 
   auto MakeToken() -> std::string
@@ -110,6 +182,7 @@ namespace {
 #ifdef _WIN32
     char* value = nullptr;
     std::size_t length = 0U;
+    // NOLINTNEXTLINE(misc-include-cleaner) - MSVC declares it in <cstdlib>
     if (_dupenv_s(&value, &length, "LOCALAPPDATA") == 0 && value != nullptr) {
       root = value;
     }
@@ -327,8 +400,11 @@ auto ControlServer::Run() -> void
   acceptor.listen();
   impl_->port = acceptor.local_endpoint().port();
 
-  const auto folder = DiscoveryFolder();
+  const auto folder = impl_->config.discovery_folder.empty()
+    ? DiscoveryFolder()
+    : impl_->config.discovery_folder;
   std::filesystem::create_directories(folder);
+  RemoveStaleDiscoveryFiles(folder);
   impl_->discovery_file = folder / fmt::format("{}.json", ProcessId());
   {
     auto file = std::ofstream(impl_->discovery_file, std::ios::trunc);
@@ -336,6 +412,9 @@ auto ControlServer::Run() -> void
       { "protocol", kProtocolVersion },
       { "pid", ProcessId() },
       { "application", impl_->config.application },
+      { "name", impl_->config.name },
+      { "started", UtcNow() },
+      { "command_line", loguru::arguments() },
       { "port", impl_->port },
       { "token", impl_->token },
     }
@@ -401,8 +480,7 @@ auto ControlServer::AcceptLoop() -> co::Co<>
         + '\n';
       static_cast<void>(co_await asio::async_write(
         connection->socket, asio::buffer(refusal), co::asio_nothrow_awaitable));
-      auto ignored = std::error_code {};
-      connection->socket.close(ignored);
+      CloseSocket(connection->socket);
       continue;
     }
     nursery_->Start(&ControlServer::Serve, this, std::move(connection));
@@ -427,7 +505,7 @@ auto ControlServer::Serve(std::shared_ptr<Connection> connection) -> co::Co<>
     [impl = impl_.get()] noexcept -> void { --impl->connections; });
   OXCO_WITH_NURSERY(n)
   {
-    n.Start([connection]() -> co::Co<> {
+    n.Start([connection] -> co::Co<> {
       for (;;) {
         while (connection->outbox.empty()) {
           co_await connection->outbox_ready.Park();
@@ -489,6 +567,7 @@ auto ControlServer::Serve(std::shared_ptr<Connection> connection) -> co::Co<>
           {
             { "protocol", kProtocolVersion },
             { "application", impl_->config.application },
+            { "name", impl_->config.name },
             { "pid", ProcessId() },
             { "owner", connection->owner },
             { "event_seq", impl_->events->LatestSeq() },
@@ -511,8 +590,7 @@ auto ControlServer::Serve(std::shared_ptr<Connection> connection) -> co::Co<>
     impl_->events->RemoveInterest(topic);
   }
   connection->topics.clear();
-  auto ignored = std::error_code {};
-  connection->socket.close(ignored);
+  CloseSocket(connection->socket);
   LOG_F(INFO, "control server: '{}' disconnected", connection->client);
   if (connection->owner) {
     impl_->owner_connected = false;
