@@ -141,7 +141,7 @@ NOLINT_TEST_F(
   EXPECT_EQ(FakeState().move_kinematic_calls, 0U);
 }
 
-#if defined(NDEBUG)
+#ifdef NDEBUG
 NOLINT_TEST_F(
   PhysicsModuleSyncTest, CharacterNodeTransformWriteIsIgnoredInRelease)
 {
@@ -167,7 +167,7 @@ NOLINT_TEST_F(
 }
 #endif
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterNodeTransformWrite_Death)
 {
   auto node = scene_->CreateNode("character-authority-death");
@@ -369,7 +369,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, CharacterMoveThenSyncObserversIsStable)
   EXPECT_EQ(FakeState().move_kinematic_calls, 0U);
 }
 
-#if defined(NDEBUG)
+#ifdef NDEBUG
 NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyFailsWhenCharacterExists)
 {
   auto node = scene_->CreateNode("authority-conflict");
@@ -390,7 +390,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyFailsWhenCharacterExists)
 }
 #endif
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyWhenCharacterExists_Death)
 {
   auto node = scene_->CreateNode("authority-conflict-death");
@@ -412,7 +412,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyWhenCharacterExists_Death)
 }
 #endif
 
-#if defined(NDEBUG)
+#ifdef NDEBUG
 NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterFailsWhenRigidBodyExists)
 {
   auto node = scene_->CreateNode("authority-conflict-reverse");
@@ -433,7 +433,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterFailsWhenRigidBodyExists)
 }
 #endif
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterWhenRigidBodyExists_Death)
 {
   auto node = scene_->CreateNode("authority-conflict-reverse-death");
@@ -454,7 +454,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterWhenRigidBodyExists_Death)
 }
 #endif
 
-#if defined(NDEBUG)
+#ifdef NDEBUG
 NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyFailsWhenAggregateExists)
 {
   auto node = scene_->CreateNode("aggregate-conflict-body");
@@ -476,7 +476,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyFailsWhenAggregateExists)
 }
 #endif
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyWhenAggregateExists_Death)
 {
   auto node = scene_->CreateNode("aggregate-conflict-body-death");
@@ -499,7 +499,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyWhenAggregateExists_Death)
 }
 #endif
 
-#if defined(NDEBUG)
+#ifdef NDEBUG
 NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterFailsWhenAggregateExists)
 {
   auto node = scene_->CreateNode("aggregate-conflict-character");
@@ -520,7 +520,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterFailsWhenAggregateExists)
 }
 #endif
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterWhenAggregateExists_Death)
 {
   auto node = scene_->CreateNode("aggregate-conflict-character-death");
@@ -542,7 +542,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachCharacterWhenAggregateExists_Death)
 #endif
 
 // In release builds, contract violations return nullopt.
-#if defined(NDEBUG)
+#ifdef NDEBUG
 NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyFailsForUnobservedSceneNode)
 {
   auto observed_node = scene_->CreateNode("observed");
@@ -565,7 +565,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyFailsForUnobservedSceneNode)
 #endif
 
 // In assertions-enabled builds, the same contract violation is fatal.
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyUnobservedSceneNode_Death)
 {
   auto observed_node = scene_->CreateNode("observed");
@@ -589,7 +589,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, AttachRigidBodyUnobservedSceneNode_Death)
 }
 #endif
 
-#if defined(NDEBUG)
+#ifdef NDEBUG
 NOLINT_TEST_F(
   PhysicsModuleSyncTest, RegisterAggregateMappingIgnoresUnobservedSceneNode)
 {
@@ -611,7 +611,7 @@ NOLINT_TEST_F(
 }
 #endif
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 NOLINT_TEST_F(
   PhysicsModuleSyncTest, RegisterAggregateMappingUnobservedSceneNode_Death)
 {
@@ -1626,7 +1626,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest,
   EXPECT_FALSE(scene_events[0].node_b.has_value());
 }
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 NOLINT_TEST_F(PhysicsModuleSyncTest, OnGameplayWrongPhase_Death)
 {
   frame_.SetCurrentPhase(
@@ -1641,7 +1641,7 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, OnGameplayWrongPhase_Death)
 }
 #endif
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 NOLINT_TEST_F(PhysicsModuleSyncTest, OnSceneMutationWrongPhase_Death)
 {
   frame_.SetCurrentPhase(

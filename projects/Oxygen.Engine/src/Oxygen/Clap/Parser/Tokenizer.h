@@ -92,7 +92,7 @@ private:
 
 } // namespace oxygen::clap::parser
 
-#if !defined(DOXYGEN_DOCUMENTATION_BUILD)
+#ifndef DOXYGEN_DOCUMENTATION_BUILD
 template <> struct fmt::formatter<oxygen::clap::parser::TokenType> {
   template <typename ParseContext>
   static constexpr auto parse(ParseContext& ctx)

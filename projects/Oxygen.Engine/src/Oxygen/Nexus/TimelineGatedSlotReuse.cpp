@@ -68,7 +68,7 @@ TimelineGatedSlotReuse::TimelineGatedSlotReuse(AllocateFn allocate, FreeFn free)
 {
 }
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 namespace {
 // Debug-only global config for stall warnings
 constexpr int64_t kDefaultWarnBaseMs = 2000; // 2s
@@ -441,7 +441,7 @@ auto TimelineGatedSlotReuse::ProcessFor(
   std::vector<std::pair<FenceValue, std::vector<PendingFree>>> to_process;
   {
     std::lock_guard<std::mutex> lk(qdptr->lock);
-#if !defined(NDEBUG)
+#ifndef NDEBUG
     auto& config = GetStallWarningConfig();
     // Progress tracking for throttled stuck-fence warnings (debug-only)
     const auto now = std::chrono::steady_clock::now();

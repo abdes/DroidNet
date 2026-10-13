@@ -7,7 +7,7 @@
 #pragma once
 
 // Helper for MSVC
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
 #  include <intrin.h>
 #  pragma intrinsic(_ReturnAddress)
 namespace oxygen::detail {

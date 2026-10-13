@@ -20,7 +20,7 @@
 #include <minwindef.h>
 
 #include <Oxygen/Base/Logging.h>
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 #  include <Oxygen/Base/NoStd.h>
 #endif
 #include <Oxygen/Base/Windows/ComError.h>

@@ -238,7 +238,7 @@ CommandQueue::CommandQueue(
     }
     LOG_F(INFO, "D3D12 Fence [name=`{}`] created", fence_name);
 
-#if defined(OXYGEN_WITH_TRACY)
+#ifdef OXYGEN_WITH_TRACY
     tracy_context_
       = oxygen::tracy::d3d12::CreateContext(CurrentDevice(), command_queue_);
     if (tracy_context_ != nullptr) {
@@ -277,7 +277,7 @@ CommandQueue::~CommandQueue() noexcept
   }
   ReleaseUsesAfterDeviceLoss();
 
-#if defined(OXYGEN_WITH_TRACY)
+#ifdef OXYGEN_WITH_TRACY
   if (tracy_context_ != nullptr) {
     oxygen::tracy::d3d12::AdvanceContextFrame(tracy_context_);
     oxygen::tracy::d3d12::CollectContext(tracy_context_);
@@ -484,7 +484,7 @@ auto CommandQueue::Flush() const -> void
   if (GetCompletedValue() == (std::numeric_limits<uint64_t>::max)()) {
     ReportDeviceRemovalIfPresent(CurrentDevice());
   }
-#if defined(OXYGEN_WITH_TRACY)
+#ifdef OXYGEN_WITH_TRACY
   if (tracy_context_ != nullptr) {
     oxygen::tracy::d3d12::CollectContext(tracy_context_);
   }
@@ -493,7 +493,7 @@ auto CommandQueue::Flush() const -> void
 
 auto CommandQueue::BeginProfilingFrame() const -> void
 {
-#if defined(OXYGEN_WITH_TRACY)
+#ifdef OXYGEN_WITH_TRACY
   if (tracy_context_ != nullptr) {
     oxygen::tracy::d3d12::AdvanceContextFrame(tracy_context_);
     oxygen::tracy::d3d12::CollectContext(tracy_context_);

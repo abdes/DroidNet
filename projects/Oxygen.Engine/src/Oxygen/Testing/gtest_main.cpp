@@ -23,7 +23,7 @@ auto main(int argc, char** argv) -> int
   }
 
   if (!list_tests) {
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
     // Enable memory leak detection in debug mode
     _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
@@ -35,7 +35,7 @@ auto main(int argc, char** argv) -> int
     loguru::g_preamble_uptime = false;
     loguru::g_preamble_thread = true;
     loguru::g_preamble_header = false;
-#if !defined(NDEBUG)
+#ifndef NDEBUG
     loguru::g_global_verbosity = loguru::Verbosity_WARNING;
 #else
     loguru::g_global_verbosity = loguru::Verbosity_0;

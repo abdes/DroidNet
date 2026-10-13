@@ -22,9 +22,9 @@ protected:
 
   [[nodiscard]] auto HasBackend() const noexcept -> bool
   {
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
     return true;
-#elif defined(OXGN_PHYS_BACKEND_NONE)
+#elifdef OXGN_PHYS_BACKEND_NONE
     return false;
 #else
 #  error "No physics backend compile definition is set"
@@ -33,10 +33,10 @@ protected:
 
   auto AssertBackendAvailabilityContract() const -> void
   {
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
     ASSERT_TRUE(system_result_.has_value());
     ASSERT_TRUE(system_result_.value() != nullptr);
-#elif defined(OXGN_PHYS_BACKEND_NONE)
+#elifdef OXGN_PHYS_BACKEND_NONE
     ASSERT_TRUE(system_result_.has_error());
     EXPECT_EQ(system_result_.error(), PhysicsError::kBackendUnavailable);
 #else

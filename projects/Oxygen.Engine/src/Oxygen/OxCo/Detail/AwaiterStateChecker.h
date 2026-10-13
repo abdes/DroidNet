@@ -9,7 +9,7 @@
 #include <Oxygen/OxCo/Config.h>
 #include <Oxygen/OxCo/Coroutine.h>
 
-#if !defined(OXCO_AWAITER_STATE_DEBUG)
+#ifndef OXCO_AWAITER_STATE_DEBUG
 namespace oxygen::co::detail {
 
 //! A runtime validator for the awaiter state machine.

@@ -152,7 +152,7 @@ auto GetBackendModuleDllName(const BackendType backend) -> std::string
       std::string("backend not yet implemented: ") + nostd::to_string(backend));
   }
   return "Oxygen.Graphics." + engine_name +
-#if !defined(NDEBUG)
+#ifndef NDEBUG
     "-d" +
 #endif
     ".dll";

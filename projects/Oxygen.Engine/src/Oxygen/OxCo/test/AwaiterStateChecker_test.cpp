@@ -60,7 +60,7 @@ NOLINT_TEST(AwaiterStateChecker, DiscardableMustResumeHookRunsOnce)
   EXPECT_EQ(calls, 1);
 }
 
-#if defined(OXCO_AWAITER_STATE_DEBUG)
+#ifdef OXCO_AWAITER_STATE_DEBUG
 
 NOLINT_TEST(AwaiterStateChecker, ImmediateCompletionAndEarlyCancellation)
 {

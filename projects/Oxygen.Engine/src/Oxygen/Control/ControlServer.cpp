@@ -36,7 +36,7 @@
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #  include <process.h>
 #else
 #  include <unistd.h>
@@ -84,7 +84,7 @@ namespace {
 
   auto ProcessId() -> long long
   {
-#if defined(_WIN32)
+#ifdef _WIN32
     return _getpid();
 #else
     return getpid();
@@ -107,7 +107,7 @@ namespace {
   auto DiscoveryFolder() -> std::filesystem::path
   {
     auto root = std::string {};
-#if defined(_WIN32)
+#ifdef _WIN32
     char* value = nullptr;
     std::size_t length = 0U;
     if (_dupenv_s(&value, &length, "LOCALAPPDATA") == 0 && value != nullptr) {

@@ -12,7 +12,7 @@ namespace oxygen {
 
 [[noreturn]] inline void Unreachable()
 {
-#if defined(__cpp_lib_unreachable)
+#ifdef __cpp_lib_unreachable
   std::unreachable();
 #elif defined(__GNUC__) || defined(__clang__)
   __builtin_unreachable();

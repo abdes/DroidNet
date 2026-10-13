@@ -7,7 +7,7 @@
 #pragma once
 
 #include <atomic>
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 #  include <chrono>
 #endif // !NDEBUG
 #include <cstdint>
@@ -111,7 +111,7 @@ public:
   OXGN_NXS_NDAPI auto GetTelemetrySnapshot() const noexcept
     -> TelemetrySnapshot;
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   //! Configure debug stall warning parameters (debug builds only)
   OXGN_NXS_API static void SetDebugStallWarningConfig(
     std::chrono::milliseconds base, double multiplier,
@@ -202,7 +202,7 @@ private:
     //! Fence-ordered buckets of pending frees
     std::map<graphics::FenceValue, std::vector<PendingFree>> buckets;
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
     //! Debug-only stall detection state
     //! Last observed completed fence
     graphics::FenceValue last_completed;

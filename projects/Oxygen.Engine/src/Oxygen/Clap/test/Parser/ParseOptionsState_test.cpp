@@ -182,7 +182,7 @@ namespace {
   }
 
 // Contracts are not enforced in release builds
-#if defined(ASAP_IS_DEBUG_BUILD)
+#ifdef ASAP_IS_DEBUG_BUILD
   // NOLINTNEXTLINE
   TEST(ParseOptionsStateContractTests, EnteringWithEndOfInputBreaksContract)
   {

@@ -15,7 +15,7 @@ namespace oxygen {
 
 constexpr auto DefaultGraphicsDebugLayerEnabled() noexcept -> bool
 {
-#if defined(NDEBUG)
+#ifdef NDEBUG
   return false;
 #else
   return true;

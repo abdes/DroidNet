@@ -132,7 +132,7 @@ auto oxygen::to_string(FrameSlotNumber s) -> std::string
   if (s == frame::kInvalidSlot) {
     return fmt::format("Frame(slot:__Invalid__)");
   }
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   // Validate slot range: valid slots are [0, kFramesInFlight)
   if (s.get() >= frame::kFramesInFlight.get()) {
     return fmt::format("Frame(slot:{}-OOB)", s.get());

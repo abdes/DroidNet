@@ -351,7 +351,7 @@ struct DoNothing {
   [[nodiscard]] static auto Data() noexcept -> const std::any&
   {
     OXYGEN_DIAGNOSTIC_PUSH
-#if defined(ASAP_CLANG_VERSION)
+#ifdef ASAP_CLANG_VERSION
     ASAP_PRAGMA(clang diagnostic ignored "-Wexit-time-destructors")
 #endif
     // Nothing to worry about here for the exit time destructor.

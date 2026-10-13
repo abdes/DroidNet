@@ -6,7 +6,7 @@
 
 #pragma once
 
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
 #  define OXYGEN_NOINLINE __declspec(noinline)
 #elif defined(__GNUC__) || defined(__clang__)
 #  define OXYGEN_NOINLINE __attribute__((noinline))

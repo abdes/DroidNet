@@ -19,7 +19,7 @@
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/TextWrap/TextWrap.h>
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #  include <windows.h> // IWYU pragma: keep
 #else
 #  include <sys/ioctl.h>
@@ -49,7 +49,7 @@ namespace {
 
   auto TryParseColumnsEnv() -> std::optional<unsigned int>
   {
-#if defined(_WIN32)
+#ifdef _WIN32
     char* columns = nullptr;
     size_t length = 0;
     if (_dupenv_s(&columns, &length, "COLUMNS") != 0 || columns == nullptr) {
@@ -82,7 +82,7 @@ namespace {
 
   auto GetTerminalWidth() -> std::optional<unsigned int>
   {
-#if defined(_WIN32)
+#ifdef _WIN32
     const HANDLE handle = GetStdHandle(STD_OUTPUT_HANDLE);
     if (handle == INVALID_HANDLE_VALUE || handle == nullptr) {
       return TryParseColumnsEnv();

@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#if !defined(NDEBUG)
+#ifndef NDEBUG
 #  include <limits>
 #endif
 #include <cstdint>

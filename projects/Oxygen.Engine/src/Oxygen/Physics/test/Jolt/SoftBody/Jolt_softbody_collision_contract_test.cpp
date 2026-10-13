@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
 #  include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 #endif
 
@@ -17,7 +17,7 @@
 
 #include <Oxygen/Testing/GTest.h>
 
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
 #  include <Jolt/Core/Memory.h>
 #  include <Jolt/Core/Reference.h>
 #  include <Jolt/Core/StreamWrapper.h>
@@ -38,7 +38,7 @@ namespace {
 
   [[nodiscard]] auto MakeZeroVolumeSurfaceSettingsBlob() -> std::vector<uint8_t>
   {
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
     static std::once_flag once {};
     std::call_once(once, [] -> void { JPH::RegisterDefaultAllocator(); });
 
@@ -82,7 +82,7 @@ namespace {
   [[nodiscard]] auto MakeZeroVolumeComplianceCubeSettingsBlob()
     -> std::vector<uint8_t>
   {
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
     static std::once_flag once {};
     std::call_once(once, [] -> void { JPH::RegisterDefaultAllocator(); });
 

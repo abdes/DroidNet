@@ -20,13 +20,13 @@ https://github.com/nothings/stb.
 
 #pragma once
 
-#if defined(LOGURU_IMPLEMENTATION)
+#ifdef LOGURU_IMPLEMENTATION
 #  error                                                                       \
     "You are defining LOGURU_IMPLEMENTATION. This is for older versions of Loguru. You should now instead include loguru.cpp (or build it and link with it)"
 #endif
 
 // Disable all warnings from gcc/clang:
-#if defined(__clang__)
+#ifdef __clang__
 #  pragma clang system_header
 #elif defined(__GNUC__)
 #  pragma GCC system_header

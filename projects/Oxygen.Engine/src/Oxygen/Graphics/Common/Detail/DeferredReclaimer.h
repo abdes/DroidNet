@@ -146,7 +146,7 @@ private:
   template <typename T>
   static auto LogRelease([[maybe_unused]] const T* resource) -> void
   {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
     if (!resource) {
       return;
     }

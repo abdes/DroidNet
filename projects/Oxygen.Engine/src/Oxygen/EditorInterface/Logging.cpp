@@ -10,7 +10,7 @@
 #include <string_view>
 #include <vector>
 
-#if defined(_WIN32)
+#ifdef _WIN32
 #  include <Windows.h> // IWYU pragma: keep
 #else
 #  include <unistd.h>
@@ -65,7 +65,7 @@ auto ConfigureLogging(const LoggingConfig& config) -> bool
 
   // Low-level error reporting function that won't allocate memory
   auto report_error = [](std::string_view message) noexcept -> void {
-#if defined(_WIN32)
+#ifdef _WIN32
     HANDLE stderr_handle = GetStdHandle(STD_ERROR_HANDLE);
     DWORD bytes_written { 0UL };
     WriteFile(stderr_handle, message.data(), static_cast<DWORD>(message.size()),

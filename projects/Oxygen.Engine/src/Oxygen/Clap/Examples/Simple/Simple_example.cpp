@@ -33,7 +33,7 @@ auto main(int argc, char** argv) -> int
     loguru::g_preamble_uptime = false;
     loguru::g_preamble_thread = true;
     loguru::g_preamble_header = false;
-#if !defined(NDEBUG)
+#ifndef NDEBUG
     loguru::g_global_verbosity = loguru::Verbosity_OFF;
 #else
     loguru::g_global_verbosity = loguru::Verbosity_0;

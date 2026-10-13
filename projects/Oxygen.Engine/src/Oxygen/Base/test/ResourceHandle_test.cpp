@@ -80,7 +80,7 @@ NOLINT_TEST(ResourceHandleTest, NewGeneration)
     ASSERT_EQ(handle.ResourceType(), 0x03);
     ASSERT_EQ(handle.Generation(), gen + 1);
   }
-#if defined(ASAP_IS_DEBUG_BUILD)
+#ifdef ASAP_IS_DEBUG_BUILD
   ASSERT_DEATH(handle.NewGeneration(), "");
 #else
   handle.NewGeneration();

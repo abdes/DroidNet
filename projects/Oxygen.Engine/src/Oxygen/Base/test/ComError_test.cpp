@@ -14,7 +14,7 @@
 
 #include <Oxygen/Base/Platforms.h>
 
-#if defined(OXYGEN_WINDOWS)
+#ifdef OXYGEN_WINDOWS
 
 #  include <windows.h> // IWYU pragma: keep
 

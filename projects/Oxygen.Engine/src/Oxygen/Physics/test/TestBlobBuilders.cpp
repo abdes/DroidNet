@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
 #  include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 #endif
 
@@ -19,7 +19,7 @@
 #include <string>
 #include <vector>
 
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
 #  include <Jolt/Core/Memory.h>
 #  include <Jolt/Core/Reference.h>
 #  include <Jolt/Core/StreamWrapper.h>
@@ -38,7 +38,7 @@
 
 namespace oxygen::physics::test {
 
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
 namespace {
 
   auto ToBytes(std::string blob) -> std::vector<uint8_t>
@@ -59,7 +59,7 @@ namespace {
 auto MakeSoftBodySettingsBlob(const uint32_t cluster_count)
   -> std::vector<uint8_t>
 {
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
   EnsureJoltAllocatorReady();
   const auto grid_size = std::clamp(cluster_count, 2U, 8U);
   auto shared = JPH::SoftBodySharedSettings::sCreateCube(
@@ -95,7 +95,7 @@ auto MakeSoftBodyUvSphereSettingsBlob(const uint32_t latitude_segments,
   const float shear_compliance, const float bend_compliance)
   -> std::vector<uint8_t>
 {
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
   EnsureJoltAllocatorReady();
   if (latitude_segments < 3U || longitude_segments < 3U
     || !std::isfinite(edge_compliance) || edge_compliance < 0.0F
@@ -193,7 +193,7 @@ auto MakeSoftBodyUvSphereSettingsBlob(const uint32_t latitude_segments,
 auto MakeVehicleConstraintSettingsBlob(
   const size_t wheel_count, const bool tracked) -> std::vector<uint8_t>
 {
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
   EnsureJoltAllocatorReady();
   auto settings = JPH::VehicleConstraintSettings {};
   settings.mUp = JPH::Vec3 {

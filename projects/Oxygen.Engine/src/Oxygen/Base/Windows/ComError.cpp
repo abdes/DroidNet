@@ -10,7 +10,7 @@
 
 #include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Base/StringUtils.h>
-#if defined(OXYGEN_WINDOWS)
+#ifdef OXYGEN_WINDOWS
 
 #  include <Windows.h> // IWYU pragma: keep
 

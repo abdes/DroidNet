@@ -15,11 +15,11 @@ const auto kUnsupportedPlatform = "__UNSUPPORTED__";
 
 auto PlatformInfo() -> std::string
 {
-#if defined(OXYGEN_LINUX)
+#ifdef OXYGEN_LINUX
   return "Linux";
-#elif defined(OXYGEN_WINDOWS)
+#elifdef OXYGEN_WINDOWS
   return "Windows";
-#elif defined(OXYGEN_APPLE_OSX)
+#elifdef OXYGEN_APPLE_OSX
   return "Apple OS X";
 #else
   return cUnsupportedPlatform;

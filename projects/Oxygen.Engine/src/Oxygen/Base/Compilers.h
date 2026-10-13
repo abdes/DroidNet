@@ -18,18 +18,18 @@
 // Compiler detection
 // ----------------------------------------------------------------------------
 
-#if !defined(DOXYGEN_DOCUMENTATION_BUILD)
+#ifndef DOXYGEN_DOCUMENTATION_BUILD
 
-#  if defined(OXYGEN_VERSION_ENCODE_INTERNAL_)
+#  ifdef OXYGEN_VERSION_ENCODE_INTERNAL_
 #    undef OXYGEN_VERSION_ENCODE_INTERNAL_
 #  endif
 #  define OXYGEN_VERSION_ENCODE_INTERNAL_(major, minor, revision)              \
     (((major) * 1000000) + ((minor) * 1000) + (revision))
 
-#  if defined(OXYGEN_CLANG_VERSION)
+#  ifdef OXYGEN_CLANG_VERSION
 #    undef OXYGEN_CLANG_VERSION
 #  endif
-#  if defined(__clang__)
+#  ifdef __clang__
 #    define OXYGEN_CLANG_VERSION                                               \
       OXYGEN_VERSION_ENCODE_INTERNAL_(                                         \
         __clang_major__, __clang_minor__, __clang_patchlevel__)
@@ -54,10 +54,10 @@
 #  define OXYGEN_CLANG_VERSION 0
 #endif // DOXYGEN_DOCUMENTATION_BUILD
 
-#if defined(OXYGEN_CLANG_VERSION_CHECK)
+#ifdef OXYGEN_CLANG_VERSION_CHECK
 #  undef OXYGEN_CLANG_VERSION_CHECK
 #endif
-#if defined(OXYGEN_CLANG_VERSION)
+#ifdef OXYGEN_CLANG_VERSION
 #  define OXYGEN_CLANG_VERSION_CHECK(major, minor, patch)                      \
     (OXYGEN_CLANG_VERSION                                                      \
       >= OXYGEN_VERSION_ENCODE_INTERNAL_(major, minor, patch))
@@ -89,9 +89,9 @@
  * \see OXYGEN_CLANG_VERSION
  */
 
-#if !defined(DOXYGEN_DOCUMENTATION_BUILD)
+#ifndef DOXYGEN_DOCUMENTATION_BUILD
 
-#  if defined(OXYGEN_MSVC_VERSION)
+#  ifdef OXYGEN_MSVC_VERSION
 #    undef OXYGEN_MSVC_VERSION
 #  endif
 #  if defined(_MSC_FULL_VER) && (_MSC_FULL_VER >= 140000000) && !defined(__ICL)
@@ -126,10 +126,10 @@
 #  define OXYGEN_MSVC_VERSION 0
 #endif // DOXYGEN_DOCUMENTATION_BUILD
 
-#if defined(OXYGEN_MSVC_VERSION_CHECK)
+#ifdef OXYGEN_MSVC_VERSION_CHECK
 #  undef OXYGEN_MSVC_VERSION_CHECK
 #endif
-#if !defined(OXYGEN_MSVC_VERSION)
+#ifndef OXYGEN_MSVC_VERSION
 #  define OXYGEN_MSVC_VERSION_CHECK(major, minor, patch) (0)
 #elif defined(_MSC_VER) && (_MSC_VER >= 1400)
 #  define OXYGEN_MSVC_VERSION_CHECK(major, minor, patch)                       \
@@ -161,7 +161,7 @@
  * \see OXYGEN_MSVC_VERSION
  */
 
-#if !defined(DOXYGEN_DOCUMENTATION_BUILD)
+#ifndef DOXYGEN_DOCUMENTATION_BUILD
 
 /*
  * Note that the GNUC and GCC macros are different. Many compilers masquerade as
@@ -174,14 +174,14 @@
  * __GCC__.
  */
 
-#  if defined(OXYGEN_GNUC_VERSION)
+#  ifdef OXYGEN_GNUC_VERSION
 #    undef OXYGEN_GNUC_VERSION
 #  endif
 #  if defined(__GNUC__) && defined(__GNUC_PATCHLEVEL__)
 #    define OXYGEN_GNUC_VERSION                                                \
       OXYGEN_VERSION_ENCODE_INTERNAL_(                                         \
         __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__)
-#  elif defined(__GNUC__)
+#  elifdef __GNUC__
 #    define OXYGEN_GNUC_VERSION                                                \
       OXYGEN_VERSION_ENCODE_INTERNAL_(__GNUC__, __GNUC_MINOR__, 0)
 #  endif
@@ -205,10 +205,10 @@
 #  define OXYGEN_GNUC_VERSION 0
 #endif // DOXYGEN_DOCUMENTATION_BUILD
 
-#if defined(OXYGEN_GNUC_VERSION_CHECK)
+#ifdef OXYGEN_GNUC_VERSION_CHECK
 #  undef OXYGEN_GNUC_VERSION_CHECK
 #endif
-#if defined(OXYGEN_GNUC_VERSION)
+#ifdef OXYGEN_GNUC_VERSION
 #  define OXYGEN_GNUC_VERSION_CHECK(major, minor, patch)                       \
     (OXYGEN_GNUC_VERSION                                                       \
       >= OXYGEN_VERSION_ENCODE_INTERNAL_(major, minor, patch))
@@ -235,9 +235,9 @@
  * \see OXYGEN_GNUC_VERSION
  */
 
-#if !defined(DOXYGEN_DOCUMENTATION_BUILD)
+#ifndef DOXYGEN_DOCUMENTATION_BUILD
 
-#  if defined(OXYGEN_GCC_VERSION)
+#  ifdef OXYGEN_GCC_VERSION
 #    undef OXYGEN_GCC_VERSION
 #  endif
 #  if defined(OXYGEN_GNUC_VERSION) && !defined(__clang__)
@@ -264,10 +264,10 @@
 #  define OXYGEN_GCC_VERSION 0
 #endif // DOXYGEN_DOCUMENTATION_BUILD
 
-#if defined(OXYGEN_GCC_VERSION_CHECK)
+#ifdef OXYGEN_GCC_VERSION_CHECK
 #  undef OXYGEN_GCC_VERSION_CHECK
 #endif
-#if defined(OXYGEN_GCC_VERSION)
+#ifdef OXYGEN_GCC_VERSION
 #  define OXYGEN_GCC_VERSION_CHECK(major, minor, patch)                        \
     (OXYGEN_GCC_VERSION >= OXYGEN_VERSION_ENCODE_INTERNAL_(major, minor, patch))
 #else
@@ -297,10 +297,10 @@
 // Compiler attribute check
 // -----------------------------------------------------------------------------
 
-#if defined(OXYGEN_HAS_ATTRIBUTE)
+#ifdef OXYGEN_HAS_ATTRIBUTE
 #  undef OXYGEN_HAS_ATTRIBUTE
 #endif
-#if defined(__has_attribute)
+#ifdef __has_attribute
 #  define OXYGEN_HAS_ATTRIBUTE(attribute) __has_attribute(attribute)
 #else
 #  define OXYGEN_HAS_ATTRIBUTE(attribute) (0)
@@ -323,7 +323,7 @@
  * \return non-zero value if the attribute is supported by the compiler.
  */
 
-#if defined(OXYGEN_HAS_CPP_ATTRIBUTE)
+#ifdef OXYGEN_HAS_CPP_ATTRIBUTE
 #  undef OXYGEN_HAS_CPP_ATTRIBUTE
 #endif
 #if defined(__has_cpp_attribute) && defined(__cplusplus)
@@ -351,10 +351,10 @@
 // Compiler builtin check
 // -----------------------------------------------------------------------------
 
-#if defined(OXYGEN_HAS_BUILTIN)
+#ifdef OXYGEN_HAS_BUILTIN
 #  undef OXYGEN_HAS_BUILTIN
 #endif
-#if defined(__has_builtin)
+#ifdef __has_builtin
 #  define OXYGEN_HAS_BUILTIN(builtin) __has_builtin(builtin)
 #else
 #  define OXYGEN_HAS_BUILTIN(builtin) (0)
@@ -380,10 +380,10 @@
 // Compiler feature check
 // -----------------------------------------------------------------------------
 
-#if defined(OXYGEN_HAS_FEATURE)
+#ifdef OXYGEN_HAS_FEATURE
 #  undef OXYGEN_HAS_FEATURE
 #endif
-#if defined(__has_feature)
+#ifdef __has_feature
 #  define OXYGEN_HAS_FEATURE(feature) __has_feature(feature)
 #else
 #  define OXYGEN_HAS_FEATURE(feature) (0)
@@ -430,32 +430,32 @@
 // Compiler diagnostics
 // -----------------------------------------------------------------------------
 
-#if defined(OXYGEN_DIAGNOSTIC_PUSH)
+#ifdef OXYGEN_DIAGNOSTIC_PUSH
 #  undef OXYGEN_DIAGNOSTIC_PUSH
 #endif
-#if defined(OXYGEN_DIAGNOSTIC_POP)
+#ifdef OXYGEN_DIAGNOSTIC_POP
 #  undef OXYGEN_DIAGNOSTIC_POP
 #endif
-#if defined(OXYGEN_DIAGNOSTIC_DISABLE)
+#ifdef OXYGEN_DIAGNOSTIC_DISABLE
 #  undef OXYGEN_DIAGNOSTIC_DISABLE
 #endif
-#if defined(OXYGEN_DIAGNOSTIC_DISABLE_CLANG)
+#ifdef OXYGEN_DIAGNOSTIC_DISABLE_CLANG
 #  undef OXYGEN_DIAGNOSTIC_DISABLE_CLANG
 #endif
-#if defined(OXYGEN_DIAGNOSTIC_DISABLE_MSVC)
+#ifdef OXYGEN_DIAGNOSTIC_DISABLE_MSVC
 #  undef OXYGEN_DIAGNOSTIC_DISABLE_MSVC
 #endif
-#if defined(OXYGEN_DIAGNOSTIC_DISABLE_GCC)
+#ifdef OXYGEN_DIAGNOSTIC_DISABLE_GCC
 #  undef OXYGEN_DIAGNOSTIC_DISABLE_GCC
 #endif
 
-#if defined(OXYGEN_CLANG_VERSION)
+#ifdef OXYGEN_CLANG_VERSION
 #  define OXYGEN_DIAGNOSTIC_PUSH _Pragma("clang diagnostic push")
 #  define OXYGEN_DIAGNOSTIC_POP _Pragma("clang diagnostic pop")
 #  define OXYGEN_DIAGNOSTIC_DISABLE(id)                                        \
     OXYGEN_PRAGMA(clang diagnostic ignored id)
 #  define OXYGEN_DIAGNOSTIC_DISABLE_CLANG(id) OXYGEN_DIAGNOSTIC_DISABLE(id)
-#  if defined(OXYGEN_MSVC_VERSION)
+#  ifdef OXYGEN_MSVC_VERSION
 #    define OXYGEN_DIAGNOSTIC_DISABLE_MSVC(id) __pragma(warning(disable : id))
 #  else
 #    define OXYGEN_DIAGNOSTIC_DISABLE_MSVC(id)
@@ -542,10 +542,10 @@
  * \see OXYGEN_DIAGNOSTIC_POP
  */
 
-#if defined(OXYGEN_HAS_WARNING)
+#ifdef OXYGEN_HAS_WARNING
 #  undef OXYGEN_HAS_WARNING
 #endif
-#if defined(__has_warning)
+#ifdef __has_warning
 #  define OXYGEN_HAS_WARNING(warning) __has_warning(warning)
 #else
 #  define OXYGEN_HAS_WARNING(warning) (0)
@@ -571,13 +571,13 @@
 // assume, unreachable, unreachable return
 // -----------------------------------------------------------------------------
 
-#if defined(OXYGEN_UNREACHABLE)
+#ifdef OXYGEN_UNREACHABLE
 #  undef OXYGEN_UNREACHABLE
 #endif
-#if defined(OXYGEN_UNREACHABLE_RETURN)
+#ifdef OXYGEN_UNREACHABLE_RETURN
 #  undef OXYGEN_UNREACHABLE_RETURN
 #endif
-#if defined(OXYGEN_ASSUME)
+#ifdef OXYGEN_ASSUME
 #  undef OXYGEN_ASSUME
 #endif
 #if OXYGEN_MSVC_VERSION_CHECK(13, 10, 0)
@@ -588,10 +588,10 @@
 #if OXYGEN_HAS_BUILTIN(__builtin_unreachable)                                  \
   || OXYGEN_GCC_VERSION_CHECK(4, 5, 0)
 #  define OXYGEN_UNREACHABLE() __builtin_unreachable()
-#elif defined(OXYGEN_ASSUME)
+#elifdef OXYGEN_ASSUME
 #  define OXYGEN_UNREACHABLE() OXYGEN_ASSUME(0)
 #endif
-#if !defined(OXYGEN_ASSUME)
+#ifndef OXYGEN_ASSUME
 #  if defined(OXYGEN_UNREACHABLE)
 #    define OXYGEN_ASSUME(expr)                                                \
       OXYGEN_STATIC_CAST(void, ((expr) ? 1 : (OXYGEN_UNREACHABLE(), 1)))
@@ -599,12 +599,12 @@
 #    define OXYGEN_ASSUME(expr) OXYGEN_STATIC_CAST(void, expr)
 #  endif
 #endif
-#if defined(OXYGEN_UNREACHABLE)
+#ifdef OXYGEN_UNREACHABLE
 #  define OXYGEN_UNREACHABLE_RETURN(value) OXYGEN_UNREACHABLE()
 #else
 #  define OXYGEN_UNREACHABLE_RETURN(value) return (value)
 #endif
-#if !defined(OXYGEN_UNREACHABLE)
+#ifndef OXYGEN_UNREACHABLE
 #  define OXYGEN_UNREACHABLE() OXYGEN_ASSUME(0)
 #endif
 
@@ -680,7 +680,7 @@
 // fallthrough
 // -----------------------------------------------------------------------------
 
-#if defined(OXYGEN_FALL_THROUGH)
+#ifdef OXYGEN_FALL_THROUGH
 #  undef OXYGEN_FALL_THROUGH
 #endif
 #if OXYGEN_HAS_ATTRIBUTE(fallthrough) || OXYGEN_GCC_VERSION_CHECK(7, 0, 0)
@@ -713,10 +713,10 @@
 // no unique address
 // -----------------------------------------------------------------------------
 
-#if defined(OXYGEN_NO_UNIQUE_ADDRESS)
+#ifdef OXYGEN_NO_UNIQUE_ADDRESS
 #  undef OXYGEN_NO_UNIQUE_ADDRESS
 #endif
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
 #  define OXYGEN_NO_UNIQUE_ADDRESS [[msvc::no_unique_address]]
 #else
 #  define OXYGEN_NO_UNIQUE_ADDRESS [[no_unique_address]]

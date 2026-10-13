@@ -236,7 +236,7 @@ OXGN_COOK_API auto to_string(ScriptingImportKind value) -> std::string;
 [[nodiscard]] constexpr auto EffectiveContentHashingEnabled(
   const bool requested) noexcept -> bool
 {
-#if defined(NDEBUG)
+#ifdef NDEBUG
   static_cast<void>(requested);
   return true;
 #else

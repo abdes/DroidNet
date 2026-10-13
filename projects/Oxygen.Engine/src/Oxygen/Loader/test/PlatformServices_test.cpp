@@ -85,7 +85,7 @@ NOLINT_TEST(PlatformServicesTest, LoadAndCloseSystemLibrary)
 // Load a system library that should be available on all platforms
 #ifdef _WIN32
   const std::string library_name = "kernel32.dll";
-#elif defined(__APPLE__)
+#elifdef __APPLE__
   const std::string library_name = "libSystem.dylib";
 #else
   const std::string library_name = "libdl.so";
@@ -111,7 +111,7 @@ NOLINT_TEST(PlatformServicesTest, GetFunctionAddressFromSystemLibrary)
   const std::string library_name = "kernel32.dll";
   const std::string function_name = "GetCurrentProcess";
   using FunctionType = void* (*)();
-#elif defined(__APPLE__)
+#elifdef __APPLE__
   const std::string library_name = "libSystem.dylib";
   const std::string function_name = "malloc";
   using FunctionType = void* (*)(size_t);
@@ -155,7 +155,7 @@ NOLINT_TEST(PlatformServicesTest, GetFunctionAddressWithInvalidSymbol_Fails)
 #ifdef _WIN32
   const std::string library_name = "kernel32.dll";
   using FunctionType = void* (*)();
-#elif defined(__APPLE__)
+#elifdef __APPLE__
   const std::string library_name = "libSystem.dylib";
   using FunctionType = void* (*)(size_t);
 #else
@@ -187,7 +187,7 @@ NOLINT_TEST(PlatformServicesTest, CallGetFunctionAddressResult)
   const std::string library_name = "kernel32.dll";
   const std::string function_name = "GetCurrentProcessId";
   using ProcessIdFn = uint32_t (*)();
-#elif defined(__APPLE__)
+#elifdef __APPLE__
   const std::string library_name = "libSystem.dylib";
   const std::string function_name = "getpid";
   using ProcessIdFn = int (*)();

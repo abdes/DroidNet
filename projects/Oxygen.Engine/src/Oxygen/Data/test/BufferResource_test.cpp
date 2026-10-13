@@ -28,7 +28,7 @@ class BufferResourceDeathTest : public testing::Test { };
 //! multiple of its element_stride (uint32 indices) triggers a fatal check.
 NOLINT_TEST_F(BufferResourceDeathTest, IndexBufferSizeNotAligned_Throws)
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   // Arrange
   // Crafted descriptor: size_bytes=3, element_stride=4 (invalid alignment)
   oxygen::data::pak::core::BufferResourceDesc bad_desc = {
@@ -55,7 +55,7 @@ NOLINT_TEST_F(BufferResourceDeathTest, IndexBufferSizeNotAligned_Throws)
 //! with nonzero stride triggers a fatal check.
 NOLINT_TEST_F(BufferResourceDeathTest, FormattedBufferNonzeroStride_Throws)
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   // Arrange
   oxygen::data::pak::core::BufferResourceDesc bad_desc = {
     .data_offset = 0,
@@ -78,7 +78,7 @@ NOLINT_TEST_F(BufferResourceDeathTest, FormattedBufferNonzeroStride_Throws)
 //! stride > 1) with stride == 0 triggers a fatal check.
 NOLINT_TEST_F(BufferResourceDeathTest, StructuredBufferZeroStride_Throws)
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   // Arrange
   oxygen::data::pak::core::BufferResourceDesc bad_desc = {
     .data_offset = 0,

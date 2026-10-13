@@ -13,7 +13,7 @@
 #include <Oxygen/Profiling/CpuScopeObserver.h>
 #include <Oxygen/Profiling/Internal/CpuProfileCoordinator.h>
 #include <Oxygen/Profiling/ProfileScope.h>
-#if defined(OXYGEN_WITH_TRACY)
+#ifdef OXYGEN_WITH_TRACY
 #  include <span>
 
 #  include <Oxygen/Tracy/Cpu.h>
@@ -59,7 +59,7 @@ namespace internal {
       state.flags |= kCpuScopeFlagObserverActive;
     }
 
-#if defined(OXYGEN_WITH_TRACY)
+#ifdef OXYGEN_WITH_TRACY
     const auto effective_color = desc.color.IsSpecified()
       ? desc.color
       : DefaultProfileColor(desc.category);
@@ -86,7 +86,7 @@ namespace internal {
     }
 #endif
 
-#if defined(OXYGEN_WITH_TRACY)
+#ifdef OXYGEN_WITH_TRACY
     if ((state.flags & kCpuScopeFlagTracyActive) != 0U) {
       oxygen::tracy::cpu::EndZone(std::span { state.tracy_zone_state });
     }

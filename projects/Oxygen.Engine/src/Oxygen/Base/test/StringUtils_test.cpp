@@ -19,7 +19,7 @@
 #include <Oxygen/Base/Windows/Exceptions.h>
 #include <Oxygen/Testing/GTest.h>
 
-#if defined(OXYGEN_WINDOWS)
+#ifdef OXYGEN_WINDOWS
 using oxygen::windows::WindowsException;
 #endif
 
@@ -81,7 +81,7 @@ NOLINT_TEST_F(ToWideTest, RejectsInvalidUtf8Sequence)
   try {
     Utf8ToWide(&invalid_utf8[0], output);
     FAIL() << "Expected an invalid-sequence exception";
-#if defined(OXYGEN_WINDOWS)
+#ifdef OXYGEN_WINDOWS
   } catch (const WindowsException& ex) {
     static_assert(ERROR_NO_UNICODE_TRANSLATION >= 0);
     EXPECT_EQ(ex.GetErrorCode(),
@@ -169,7 +169,7 @@ NOLINT_TEST_F(ToUtf8Test, RejectsInvalidWideSequence)
   try {
     WideToUtf8(&invalid_wide[0], output);
     FAIL() << "Expected an invalid-sequence exception";
-#if defined(OXYGEN_WINDOWS)
+#ifdef OXYGEN_WINDOWS
   } catch (const WindowsException& ex) {
     static_assert(ERROR_NO_UNICODE_TRANSLATION >= 0);
     EXPECT_EQ(

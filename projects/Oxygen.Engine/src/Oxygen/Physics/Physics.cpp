@@ -13,10 +13,10 @@
 #include <Oxygen/Physics/PhysicsError.h>
 #include <Oxygen/Physics/System/IPhysicsSystem.h>
 
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
 #  include <Oxygen/Physics/Jolt/JoltBackend.h>
 #endif
-#if defined(OXGN_PHYS_BACKEND_PHYSX)
+#ifdef OXGN_PHYS_BACKEND_PHYSX
 #  include <Oxygen/Physics/PhysX/PhysXBackend.h>
 #endif
 
@@ -24,9 +24,9 @@ auto oxygen::physics::GetSelectedBackend() noexcept -> PhysicsBackend
 {
 #if defined(OXGN_PHYS_BACKEND_JOLT) && defined(OXGN_PHYS_BACKEND_NONE)
 #  error "Multiple physics backends selected. Select exactly one backend."
-#elif defined(OXGN_PHYS_BACKEND_JOLT)
+#elifdef OXGN_PHYS_BACKEND_JOLT
   return PhysicsBackend::kJolt;
-#elif defined(OXGN_PHYS_BACKEND_NONE)
+#elifdef OXGN_PHYS_BACKEND_NONE
   return PhysicsBackend::kNone;
 #else
 #  error "No physics backend selected. Set OXYGEN_PHYSICS_BACKEND in CMake."
@@ -45,13 +45,13 @@ auto oxygen::physics::CreatePhysicsSystem(const PhysicsBackend backend)
   case PhysicsBackend::kNone:
     return Err(PhysicsError::kBackendUnavailable);
   case PhysicsBackend::kJolt:
-#if defined(OXGN_PHYS_BACKEND_JOLT)
+#ifdef OXGN_PHYS_BACKEND_JOLT
     return oxygen::physics::jolt::CreatePhysicsSystem();
 #else
     return Err(PhysicsError::kBackendUnavailable);
 #endif
   case PhysicsBackend::kPhysX:
-#if defined(OXGN_PHYS_BACKEND_PHYSX)
+#ifdef OXGN_PHYS_BACKEND_PHYSX
     return oxygen::physics::physx::CreatePhysicsSystem();
 #else
     return Err(PhysicsError::kBackendUnavailable);

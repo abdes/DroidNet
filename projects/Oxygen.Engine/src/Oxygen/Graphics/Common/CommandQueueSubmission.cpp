@@ -16,7 +16,7 @@
 #include <Oxygen/Graphics/Common/Submission.h>
 #include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
-#if defined(OXYGEN_WITH_TRACY)
+#ifdef OXYGEN_WITH_TRACY
 #  include <Oxygen/Profiling/CpuProfileScope.h>
 #endif
 
@@ -288,7 +288,7 @@ auto CommandQueue::SubmitPrepared(
         ? submission_->lifetime->AcquireOperation()
         : BackendOperation {};
       std::unique_lock lock(submission_->mutex, std::defer_lock);
-#if defined(OXYGEN_WITH_TRACY)
+#ifdef OXYGEN_WITH_TRACY
       {
         static const profiling::CpuProfileScopeDesc kWait { .label
           = "Graphics.Queue.Submission.LockWait",

@@ -564,7 +564,7 @@ auto SerializeRootSignature(const PipelineDesc& desc)
     }
   }
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   // Sanity check: all original binding indices must have been processed
   for (size_t i = 0; i < state.param_filled.size(); ++i) {
     DCHECK_F(state.param_filled[i],
@@ -586,7 +586,7 @@ auto SerializeRootSignature(const PipelineDesc& desc)
       |= D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
   }
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   // Verify both direct indexing flags are enabled per Section 3 contract
   const D3D12_ROOT_SIGNATURE_FLAGS kRequiredDirectIndexingFlags
     = static_cast<D3D12_ROOT_SIGNATURE_FLAGS>(

@@ -69,7 +69,7 @@ GitHub](https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator)
 // defining D3D12MA_USING_DIRECTX_HEADERS will include them rather the ones
 // provided by the Windows SDK.
 #ifndef D3D12MA_D3D12_HEADERS_ALREADY_INCLUDED
-#  if defined(D3D12MA_USING_DIRECTX_HEADERS)
+#  ifdef D3D12MA_USING_DIRECTX_HEADERS
 #    include <directx/d3d12.h>
 #    include <dxguids/dxguids.h>
 #  else
@@ -140,7 +140,7 @@ std::atomic.
 
 #ifdef D3D12MA_EXPORTS
 #  define D3D12MA_API __declspec(dllexport)
-#elif defined(D3D12MA_IMPORTS)
+#elifdef D3D12MA_IMPORTS
 #  define D3D12MA_API __declspec(dllimport)
 #else
 #  define D3D12MA_API

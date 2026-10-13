@@ -105,7 +105,7 @@ NOLINT_TEST_F(RefStorageTest, WrapAndUnwrapValue)
   // St::Wrap(14);
   // St::Wrap(std::move(14));
 
-#if defined(OXYGEN_WITH_SANITIZER)
+#ifdef OXYGEN_WITH_SANITIZER
   int* wrapped;
   {
     int temp = 14;
@@ -128,7 +128,7 @@ NOLINT_TEST_F(RRefStorageTest, WrapAndUnwrapValue)
   EXPECT_EQ(St::Unwrap(St::Wrap(Value(14))), 14);
   EXPECT_EQ(St::Unwrap(St::Wrap(14)), 14);
 
-#if defined(OXYGEN_WITH_SANITIZER)
+#ifdef OXYGEN_WITH_SANITIZER
   auto* wrapped = St::Wrap(14);
   auto die = [&wrapped]() {
     const auto bad = St::Unwrap(wrapped);

@@ -13,7 +13,7 @@
 
 #include <Oxygen/Base/Platforms.h>
 
-#if defined(OXYGEN_WINDOWS)
+#ifdef OXYGEN_WINDOWS
 #  include <windows.h> // IWYU pragma: keep
 
 #  include <Oxygen/Base/Windows/Exceptions.h>
@@ -23,7 +23,7 @@
 
 namespace oxygen::string_utils {
 
-#if !defined(OXYGEN_WINDOWS)
+#ifndef OXYGEN_WINDOWS
 namespace detail {
   // Strict, locale-independent UTF-8 / UTF-16 / UTF-32 codec for platforms
   // where wchar_t holds one Unicode scalar value. Rejects overlong forms,
@@ -148,7 +148,7 @@ void Utf8ToWide(const InputType& in, std::wstring& out)
   const std::string_view sv_in(
     reinterpret_cast<const char*>(in.data()), in.size());
 
-#if defined(OXYGEN_WINDOWS)
+#ifdef OXYGEN_WINDOWS
   const int size_needed = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
     sv_in.data(), static_cast<int>(sv_in.size()), nullptr, 0);
   if (size_needed <= 0) {
@@ -202,7 +202,7 @@ void WideToUtf8(const std::wstring_view& in, OutputType& out)
     out.clear();
     return;
   }
-#if defined(OXYGEN_WINDOWS)
+#ifdef OXYGEN_WINDOWS
   int size_needed = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
     in.data(), static_cast<int>(in.size()), nullptr, 0, nullptr, nullptr);
   if (size_needed <= 0) {
@@ -240,7 +240,7 @@ inline void WideToUtf8(const wchar_t* in, std::string& out)
 
 inline void WideToUtf8(const char16_t* in, std::string& out)
 {
-#if defined(OXYGEN_WINDOWS)
+#ifdef OXYGEN_WINDOWS
   // wchar_t is UTF-16 on Windows.
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   WideToUtf8(std::wstring_view(reinterpret_cast<const wchar_t*>(in)), out);
@@ -265,7 +265,7 @@ inline void WideToUtf8(const wchar_t* in, std::u8string& out)
 
 inline void WideToUtf8(const char16_t* in, std::u8string& out)
 {
-#if defined(OXYGEN_WINDOWS)
+#ifdef OXYGEN_WINDOWS
   // wchar_t is UTF-16 on Windows.
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   WideToUtf8(std::wstring_view(reinterpret_cast<const wchar_t*>(in)), out);

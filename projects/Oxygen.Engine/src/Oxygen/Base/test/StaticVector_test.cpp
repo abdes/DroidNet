@@ -442,7 +442,7 @@ namespace {
 */
 NOLINT_TEST(StaticVectorDeathTest, CountConstructorExceedsCapacity)
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   EXPECT_DEATH(([] -> void { StaticVector<int, 2> vec(3, 42); })(),
     "count exceeds maximum size");
 #endif
@@ -455,7 +455,7 @@ NOLINT_TEST(StaticVectorDeathTest, CountConstructorExceedsCapacity)
 */
 NOLINT_TEST(StaticVectorDeathTest, ExplicitCountConstructorExceedsCapacity)
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   EXPECT_DEATH(([] -> void { StaticVector<int, 2> vec(3); })(),
     "count exceeds maximum size");
 #endif
@@ -468,7 +468,7 @@ NOLINT_TEST(StaticVectorDeathTest, ExplicitCountConstructorExceedsCapacity)
 */
 NOLINT_TEST(StaticVectorDeathTest, AssignmentFromInitializerListExceedsCapacity)
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   StaticVector<int, 2> vec;
   EXPECT_DEATH(
     (void)(vec = { 1, 2, 3 }), "initializer list size exceeds maximum size");
@@ -505,7 +505,7 @@ NOLINT_TEST(StaticVectorDeathTest, EmplaceBackWhenFullThrows)
 */
 NOLINT_TEST(StaticVectorDeathTest, RangeConstructorExceedsCapacity)
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   std::array arr = { 1, 2, 3, 4, 5, 6, 7 };
   EXPECT_DEATH(
     ([&] -> void { StaticVector<int, 5> vec2(arr.begin(), arr.end()); })(),
@@ -521,7 +521,7 @@ NOLINT_TEST(StaticVectorDeathTest, RangeConstructorExceedsCapacity)
 */
 NOLINT_TEST(StaticVectorDeathTest, InitializerListConstructorExceedsCapacity)
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   EXPECT_DEATH(
     ([] -> void { StaticVector<int, 3> vec2 = { 1, 2, 3, 4, 5 }; })(),
     "initializer list size exceeds maximum size");
@@ -534,7 +534,7 @@ NOLINT_TEST(StaticVectorDeathTest, InitializerListConstructorExceedsCapacity)
 */
 NOLINT_TEST(StaticVectorDeathTest, OutOfBoundsOperatorIndex)
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   StaticVector<int, 3> vec = { 1, 2 };
   EXPECT_DEATH((void)vec[2], "out of bounds access");
 #endif
@@ -545,7 +545,7 @@ NOLINT_TEST(StaticVectorDeathTest, OutOfBoundsOperatorIndex)
 */
 NOLINT_TEST(StaticVectorDeathTest, FrontOnEmpty)
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   StaticVector<int, 3> vec;
   EXPECT_DEATH((void)vec.front(), "empty");
 #endif
@@ -556,7 +556,7 @@ NOLINT_TEST(StaticVectorDeathTest, FrontOnEmpty)
 */
 NOLINT_TEST(StaticVectorDeathTest, BackOnEmpty)
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   StaticVector<int, 3> vec;
   EXPECT_DEATH((void)vec.back(), "empty");
 #endif
@@ -568,7 +568,7 @@ NOLINT_TEST(StaticVectorDeathTest, BackOnEmpty)
 */
 NOLINT_TEST(StaticVectorDeathTest, PopBackOnEmpty)
 {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   StaticVector<int, 3> vec;
   EXPECT_DEATH(vec.pop_back(), "pop_back called on empty container");
 #endif

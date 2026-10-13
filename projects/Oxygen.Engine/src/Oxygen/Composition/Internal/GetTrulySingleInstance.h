@@ -8,14 +8,14 @@
 
 #include <Oxygen/Base/Platforms.h>
 
-#if defined(OXYGEN_WINDOWS)
+#ifdef OXYGEN_WINDOWS
 // clang-format off
 #  include <windows.h> // IWYU pragma: keep
 #  include <psapi.h>
 #  include <array>
 #  include <span>
 // clang-format on
-#elif defined(OXYGEN_APPLE)
+#elifdef OXYGEN_APPLE
 #  include <dlfcn.h>
 #  include <mach-o/dyld.h>
 #elif defined(OXYGEN_LINUX)
@@ -68,7 +68,7 @@ auto GetTrulySingleInstance(std::string_view type_name) -> InstanceT&
   static std::mutex instance_mutex;
   std::lock_guard lock(instance_mutex);
   if (instance == nullptr) {
-#if defined(OXYGEN_WINDOWS)
+#ifdef OXYGEN_WINDOWS
     // Maximum number of modules to enumerate
     constexpr size_t kMaxModules = 1024;
     std::array<HMODULE, kMaxModules> modules {};

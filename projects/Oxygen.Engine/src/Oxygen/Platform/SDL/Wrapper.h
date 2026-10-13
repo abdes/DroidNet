@@ -54,12 +54,12 @@ inline auto GetNativeWindow(SDL_Window* window) -> window::NativeHandles
 {
   window::NativeHandles native_window {};
 
-#if defined(SDL_PLATFORM_WIN32)
+#ifdef SDL_PLATFORM_WIN32
   void* native_window_handle
     = SDL_GetPointerProperty(SDL_GetWindowProperties(window),
       SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
   native_window.window_handle = native_window_handle;
-#elif defined(SDL_PLATFORM_MACOS)
+#elifdef SDL_PLATFORM_MACOS
   void* nswindow = SDL_GetPointerProperty(SDL_GetWindowProperties(window),
     SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, NULL);
   native_window.window_handle = nswindow;
@@ -264,7 +264,7 @@ inline auto GetDisplayUsableBounds(
   return value;
 }
 
-#if defined(OXYGEN_VULKAN)
+#ifdef OXYGEN_VULKAN
 [[nodiscard]] inline auto GetRequiredVulkanExtensions()
   -> std::vector<const char*>
 {

@@ -56,7 +56,7 @@ Composition::PooledEntry::~PooledEntry() noexcept
   }
   try {
     DLOG_SCOPE_F(2, "Destroy Pooled Component");
-#if !defined(NDEBUG)
+#ifndef NDEBUG
     if (const auto* comp = pool_ptr->GetUntyped(handle)) {
       DLOG_F(2, "{}/{}", comp->GetTypeId(), comp->GetTypeNamePretty());
       DLOG_F(2, "{}", oxygen::to_string_compact(handle));

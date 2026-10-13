@@ -19,7 +19,7 @@
 
 #include <Oxygen/Config/PathFinderConfig.h>
 
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
 #  include <crtdbg.h>
 #endif
 
@@ -457,7 +457,7 @@ auto RunShaderBakeCli(std::span<const char*> args) -> int
 
 auto main(int argc, char** argv) noexcept -> int
 {
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
   // Enable memory leak detection in debug mode.
   _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
@@ -472,7 +472,7 @@ auto main(int argc, char** argv) noexcept -> int
 
   // Low-level error reporting function that won't allocate memory.
   auto report_error = [](std::string_view message) noexcept -> void {
-#if defined(_WIN32)
+#ifdef _WIN32
     HANDLE stderr_handle = GetStdHandle(STD_ERROR_HANDLE);
     DWORD bytes_written { 0UL };
     WriteFile(stderr_handle, message.data(), static_cast<DWORD>(message.size()),

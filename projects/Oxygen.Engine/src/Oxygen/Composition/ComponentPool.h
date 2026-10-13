@@ -388,7 +388,7 @@ private:
         PooledComponentType::ClassTypeId(),
         PooledComponentType::ClassTypeNamePretty(), comp_ptr->GetTypeId(),
         comp_ptr->GetTypeNamePretty());
-#if !defined(NDEBUG)
+#ifndef NDEBUG
       // In DEBUG builds, we will assert to force fixing this programming error.
       ABORT_F("{}", msg);
 #else

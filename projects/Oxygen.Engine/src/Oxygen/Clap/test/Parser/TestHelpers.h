@@ -82,7 +82,7 @@ public:
   static auto predefined_commands() -> std::map<std::string, CommandPtr>&
   {
     OXYGEN_DIAGNOSTIC_PUSH
-#if defined(ASAP_CLANG_VERSION)
+#ifdef ASAP_CLANG_VERSION
     OXYGEN_PRAGMA(clang diagnostic ignored "-Wexit-time-destructors")
 #endif
     static std::map<std::string, CommandPtr> predefined_commands_ {

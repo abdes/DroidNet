@@ -7,7 +7,7 @@
 #include <exception>
 
 #include <Oxygen/Base/Platforms.h>
-#if defined(OXYGEN_WINDOWS)
+#ifdef OXYGEN_WINDOWS
 
 #  include <string>
 

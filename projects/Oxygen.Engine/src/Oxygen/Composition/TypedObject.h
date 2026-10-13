@@ -37,7 +37,7 @@
  @see Object, Component, Composition
 */
 
-#if defined(OXYGEN_MSVC_VERSION)
+#ifdef OXYGEN_MSVC_VERSION
 #  define OXYGEN_TYPE_NAME_IMPL() __FUNCSIG__
 #elif defined(OXYGEN_GNUC_VERSION_CHECK) || defined(OXYGEN_CLANG_VERSION)
 #  define OXYGEN_TYPE_NAME_IMPL() __PRETTY_FUNCTION__

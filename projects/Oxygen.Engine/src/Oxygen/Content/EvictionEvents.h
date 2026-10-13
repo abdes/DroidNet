@@ -47,7 +47,7 @@ struct EvictionEvent final {
   TypeId type_id { kInvalidTypeId };
   EvictionReason reason { EvictionReason::kRefCountZero };
 
-#if !defined(NDEBUG)
+#ifndef NDEBUG
   uint64_t cache_key { 0 };
 #endif
 };

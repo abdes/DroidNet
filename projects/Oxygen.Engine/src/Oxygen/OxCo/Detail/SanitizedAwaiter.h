@@ -49,7 +49,7 @@ public:
 
   [[nodiscard]] auto await_suspend(Handle h) -> Handle
   {
-#if defined(OXCO_AWAITER_STATE_DEBUG)
+#ifdef OXCO_AWAITER_STATE_DEBUG
     try {
       return AwaitSuspend(awaiter_, checker_.AboutToSuspend(h));
     } catch (...) {

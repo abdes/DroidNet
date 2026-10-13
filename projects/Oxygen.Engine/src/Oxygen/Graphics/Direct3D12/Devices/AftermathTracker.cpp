@@ -59,7 +59,7 @@ namespace {
     const auto tt = clock::to_time_t(now);
 
     std::tm tm = {};
-#if defined(_WIN32)
+#ifdef _WIN32
     localtime_s(&tm, &tt);
 #else
     localtime_r(&tt, &tm);

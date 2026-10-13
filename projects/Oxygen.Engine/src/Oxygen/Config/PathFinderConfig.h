@@ -36,7 +36,7 @@ public:
   [[nodiscard]] static constexpr auto DefaultShaderBuildConfigName() noexcept
     -> std::string_view
   {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
     return "Debug";
 #else
     return "Release";
@@ -46,7 +46,7 @@ public:
   [[nodiscard]] static constexpr auto DefaultShaderModeName() noexcept
     -> std::string_view
   {
-#if !defined(NDEBUG)
+#ifndef NDEBUG
     return "dev";
 #else
     return "production";
