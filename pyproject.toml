@@ -11,7 +11,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["bindless-codegen[test]", "pre-commit>=4.5,<5", "ruff>=0.15,<0.16"]
+dev = ["bindless-codegen[test]", "pre-commit>=4.5,<5", "pyright[nodejs]>=1.1.400,<2", "ruff>=0.15,<0.16"]
 build-tools = ["setuptools>=77,<83", "wheel"]
 graphics = ["oxygen-atmosphere-tools", "oxygen-vortex-tools[images,numerics]"]
 
