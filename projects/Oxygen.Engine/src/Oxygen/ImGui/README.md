@@ -16,11 +16,14 @@ the runtime is unified. This affects how APIs must be designed and called.
   owns D3D12 ImGui backend implementation (`D3D12ImGuiGraphicsBackend`),
   creates and destroys the ImGui context, and renders draw data.
 - `Oxygen.Platform`:
-  owns SDL3 ImGui platform backend (`ImGuiSdl3Backend`) for input/events and
-  display integration.
+  knows nothing about ImGui. It offers a backend-independent UI surface: a UI
+  event filter (`Platform::RegisterUiEventFilter`, fed with `platform::UiEvent`),
+  per-window size and display scale, and `Platform::Ui()` for the clipboard,
+  mouse cursor, mouse capture and text input placement.
 - `Oxygen.ImGui`:
   owns `ImGuiModule` (context binding, window binding, frame start/end,
-  style/fonts), UI assets and generic widgets.
+  style/fonts), the platform backend (`PlatformBackend`), UI assets and generic
+  widgets. It never touches the windowing backend (SDL, Win32...) directly.
 - `Oxygen.Vortex`:
   knows only surface layer sources
   ([multi-view composition §12.4](../../../design/vortex/lld/multi-view-composition.md#124-surface-layer-sources)):
@@ -38,7 +41,7 @@ the runtime is unified. This affects how APIs must be designed and called.
    `Graphics::CreateImGuiGraphicsBackend()` and initializes it (`Init`), which
    creates the ImGui context and initializes `imgui_impl_dx12`, then binds the
    context and applies style/fonts/assets.
-3. `ImGuiModule::SetWindowId` creates `ImGuiSdl3Backend` for a valid window;
+3. `ImGuiModule::SetWindowId` creates `PlatformBackend` for a valid window;
    no frame starts while no window is bound.
 4. Each frame:
    - `OnFrameStart`: platform backend `NewFrame`, validate display metrics,
@@ -51,22 +54,34 @@ the runtime is unified. This affects how APIs must be designed and called.
    detaches and the graphics backend shuts down (with deferred GPU-safe
    cleanup when available).
 
-## Platform ImGui Backend (SDL3)
+## Platform Backend
 
-`platform::imgui::ImGuiSdl3Backend` responsibilities:
+`imgui::PlatformBackend` connects one platform window to the ImGui context
+using only the platform abstraction, so a different windowing backend needs no
+change here. Responsibilities:
 
-- initialize `imgui_impl_sdl3` for the target window.
-- apply DPI scaling (`io.FontGlobalScale` and `style.ScaleAllSizes`).
-- register an event filter so ImGui sees platform events first.
-- forward SDL events to `ImGui_ImplSDL3_ProcessEvent`.
-- mark events handled when `io.WantCaptureKeyboard` or
-  `io.WantCaptureMouse` applies.
-- cleanly unregister event filter and shutdown `imgui_impl_sdl3`.
+- apply DPI scaling (`io.FontGlobalScale` and `style.ScaleAllSizes`) and, each
+  frame, the display size, framebuffer scale and time step.
+- register as the platform's UI event filter so ImGui sees input first, and
+  feed it keys, text, mouse motion, buttons and wheel, and focus changes; the
+  modifier state is derived from the modifier keys.
+- consume the events ImGui wants (`io.WantCaptureKeyboard`,
+  `io.WantCaptureMouse`) so game input never sees them.
+- give ImGui the clipboard, set the mouse cursor, capture the mouse during
+  drags, and place the text input (IME) at the caret.
+- unregister the filter and release capture and text input on destruction.
+
+`Oxygen::Key` is layout based: punctuation keys map to ImGui's by key code, not
+by scan code, and keys outside the Oxygen vocabulary (F16 and above, media keys)
+are not delivered. Gamepad navigation is not provided.
 
 **Key implementation files:**
 
-- `src/Oxygen/Platform/ImGui/ImGuiSdl3Backend.h`
-- `src/Oxygen/Platform/ImGui/ImGuiSdl3Backend.cpp`
+- `src/Oxygen/ImGui/PlatformBackend.h`
+- `src/Oxygen/ImGui/PlatformBackend.cpp`
+- `src/Oxygen/Platform/UiEvent.h` (the neutral event and service types)
+- `src/Oxygen/Platform/SDL/UiEvents.cpp`, `UiServices.cpp` (the SDL3
+  implementation of them)
 
 ## API Design Rules (Cross-DLL Safe)
 

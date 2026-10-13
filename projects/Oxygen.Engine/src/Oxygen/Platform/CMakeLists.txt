@@ -21,7 +21,6 @@ asap_push_module("${META_MODULE_NAME}")
 find_package(fmt CONFIG REQUIRED)
 if(OXYGEN_BUILD_FULL_ENGINE)
   find_package(SDL3 CONFIG REQUIRED)
-  find_package(imgui CONFIG REQUIRED)
 endif()
 
 # ==============================================================================
@@ -73,9 +72,8 @@ set(
   "Display.h"
   "Platform.h"
   "PlatformEvent.h"
+  "UiEvent.h"
   "Window.h"
-  "SDL/Wrapper.h"
-  "ImGui/ImGuiSdl3Backend.h"
   "api_export.h"
 )
 set(
@@ -84,7 +82,13 @@ set(
   "Detail/Window_ManagerInterface.h"
   "Platform.cpp"
   # SDL Specific
+  "SDL/InputTranslation.cpp"
+  "SDL/InputTranslation.h"
+  "SDL/UiEvents.cpp"
+  "SDL/UiEvents.h"
+  "SDL/UiServices.cpp"
   "SDL/Wrapper.cpp"
+  "SDL/Wrapper.h"
   "SDL/Window.cpp"
   "SDL/Display.cpp"
   "SDL/EventPump.cpp"
@@ -92,10 +96,6 @@ set(
   "SDL/InputEvents.cpp"
   "SDL/Init.cpp"
   "SDL/SdlEventUtils.cpp"
-  # ImGui
-  "ImGui/imgui_impl_sdl3.h"
-  "ImGui/imgui_impl_sdl3.cpp"
-  "ImGui/ImGuiSdl3Backend.cpp"
 )
 
 function(oxygen_platform_exact_file_patterns out_var)
@@ -204,8 +204,6 @@ arrange_target_files_for_ide(
 target_compile_definitions(
   ${META_MODULE_TARGET}
   PUBLIC
-    $<$<BOOL:${OXYGEN_BUILD_UI_TESTS}>:IMGUI_ENABLE_TEST_ENGINE=1>
-    $<$<BOOL:${OXYGEN_BUILD_UI_TESTS}>:IMGUI_TEST_ENGINE_ENABLE_COROUTINE_STDTHREAD_IMPL=1>
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_PLAT_STATIC>
 )
 
@@ -218,8 +216,8 @@ target_link_libraries(
     oxygen::oxco
     oxygen::core
     ${META_MODULE_TARGET_ALIAS}-input
+  PRIVATE
     SDL3::SDL3
-    imgui::imgui
 )
 
 # ------------------------------------------------------------------------------

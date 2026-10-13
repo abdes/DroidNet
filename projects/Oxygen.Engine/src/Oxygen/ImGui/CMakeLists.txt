@@ -70,6 +70,8 @@ set(
   "Console/ConsoleHost.cpp"
   "Icons/OxygenIcons.cpp"
   "ImGuiModule.cpp"
+  "PlatformBackend.cpp"
+  "PlatformBackend.h"
   "Styles/Spectrum.cpp"
   "Styles/SourceSansProRegular.cpp"
   "Styles/FontAwesome-400.cpp"
@@ -96,6 +98,8 @@ target_compile_definitions(
   PRIVATE
     OXYGEN_IMGUI_USE_DARK_THEME
   PUBLIC
+    $<$<BOOL:${OXYGEN_BUILD_UI_TESTS}>:IMGUI_ENABLE_TEST_ENGINE=1>
+    $<$<BOOL:${OXYGEN_BUILD_UI_TESTS}>:IMGUI_TEST_ENGINE_ENABLE_COROUTINE_STDTHREAD_IMPL=1>
     $<$<NOT:$<BOOL:${BUILD_SHARED_LIBS}>>:OXGN_IMGUI_STATIC>
 )
 

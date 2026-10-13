@@ -11,6 +11,8 @@
 #include <concepts>
 #include <functional>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <system_error>
 #include <type_traits>
 #include <unordered_map>
@@ -41,6 +43,7 @@
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/PlatformEvent.h>
 #include <Oxygen/Platform/Types.h>
+#include <Oxygen/Platform/UiEvent.h>
 #include <Oxygen/Platform/Window.h>
 #include <Oxygen/Platform/api_export.h>
 
@@ -267,6 +270,10 @@ namespace platform {
     //! Scan for windows that are pending close and queue them
     OXGN_PLAT_API auto ScanForPendingCloses() -> void;
 
+    //! The window with the given id, or `nullptr` when there is none.
+    OXGN_PLAT_NDAPI auto FindWindow(WindowIdType window_id) const
+      -> std::shared_ptr<Window>;
+
   protected:
     auto UpdateDependencies(
       const std::function<Component&(TypeId)>& get_component) noexcept
@@ -300,6 +307,42 @@ namespace platform {
 
     std::vector<std::shared_ptr<Window>> windows_;
     std::vector<WindowIdType> pending_close_windows_;
+  };
+
+  //! Services a UI layer needs from the windowing system: the clipboard, the
+  //! mouse cursor, mouse capture and text input (IME) placement.
+  /*!
+   These are backend-independent. Calling them has no effect in headless mode.
+  */
+  class UiServices final : public Component {
+    OXYGEN_COMPONENT(UiServices)
+  public:
+    OXGN_PLAT_API UiServices();
+    OXGN_PLAT_API ~UiServices() override;
+
+    OXYGEN_MAKE_NON_COPYABLE(UiServices)
+    OXYGEN_MAKE_NON_MOVABLE(UiServices)
+
+    OXGN_PLAT_NDAPI auto GetClipboardText() const -> std::string;
+    OXGN_PLAT_API auto SetClipboardText(std::string_view text) -> void;
+
+    //! Sets the shape of the cursor while it is over any window of the
+    //! application.
+    OXGN_PLAT_API auto SetMouseCursor(MouseCursor cursor) -> void;
+
+    //! While captured, mouse motion keeps being reported to the window that
+    //! has the mouse even when the cursor leaves it, such as during a drag.
+    OXGN_PLAT_API auto CaptureMouse(bool capture) -> void;
+
+    //! Enables text input for the window, and places the input method editor
+    //! at `area`.
+    OXGN_PLAT_API auto StartTextInput(
+      WindowIdType window_id, const TextInputArea& area) -> void;
+    OXGN_PLAT_API auto StopTextInput(WindowIdType window_id) -> void;
+
+  private:
+    struct Cursors;
+    std::unique_ptr<Cursors> cursors_;
   };
 
 } // namespace platform
@@ -360,28 +403,24 @@ public:
   {
     return GetComponent<platform::WindowManager>();
   }
-
-  //! Register a single platform event filter callable executed before
-  //! standard platform processors. Only one filter is supported; attempts
-  //! to register a second one will abort.
-  /*!
-    Accept any `Callable` that is invocable with a single argument of type
-    `PlatformEvent&` and whose return type is exactly `void`. The callable is
-    type-erased and stored as `std::function<void(PlatformEvent&)>`.
-  */
-  template <typename Callable>
-    requires std::invocable<Callable, const platform::PlatformEvent&>
-    && std::same_as<void,
-      std::invoke_result_t<Callable, const platform::PlatformEvent&>>
-  void RegisterEventFilter(Callable&& filter)
+  auto Ui() -> platform::UiServices&
   {
-    CHECK_F(!event_filter_, "only one platform event filter is supported");
-    // Erase the callable into a std::function<void(platform::PlatformEvent&)>
-    event_filter_ = std::function<void(const platform::PlatformEvent&)>(
-      std::forward<Callable>(filter));
+    return GetComponent<platform::UiServices>();
   }
 
-  void ClearEventFilter() { event_filter_ = {}; }
+  //! Receives UI events ahead of the standard platform processors and returns
+  //! `true` when it consumed the event, so that nothing else sees it.
+  using UiEventFilter = std::function<bool(const platform::UiEvent&)>;
+
+  //! Registers the single UI event filter. Only one filter is supported;
+  //! registering a second one aborts.
+  void RegisterUiEventFilter(UiEventFilter filter)
+  {
+    CHECK_F(!ui_event_filter_, "only one UI event filter is supported");
+    ui_event_filter_ = std::move(filter);
+  }
+
+  void ClearUiEventFilter() { ui_event_filter_ = {}; }
 
   [[nodiscard]] auto GetPhysicalClock() const noexcept
     -> const time::PhysicalClock&
@@ -396,7 +435,7 @@ private:
   auto Compose(const PlatformConfig& config) -> void;
 
   [[nodiscard]] auto FilterPlatformEvents() -> co::Co<>;
-  std::function<void(const platform::PlatformEvent&)> event_filter_;
+  UiEventFilter ui_event_filter_;
 
   time::PhysicalClock physical_clock_;
 };

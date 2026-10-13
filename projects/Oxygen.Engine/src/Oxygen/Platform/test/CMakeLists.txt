@@ -57,5 +57,9 @@ m_gtest_program(
   Backend
   SOURCES
     "InputEvents_test.cpp"
+    "UiEvents_test.cpp"
     "Window_test.cpp"
 )
+
+# The backend tests exercise the SDL implementation directly.
+target_link_libraries("${META_MODULE_NAME}.Backend.Tests" PRIVATE SDL3::SDL3)

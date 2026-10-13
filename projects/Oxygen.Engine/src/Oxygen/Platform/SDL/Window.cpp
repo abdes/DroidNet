@@ -264,6 +264,17 @@ auto Window::FrameBufferSize() const -> window::ExtentT
   return extent;
 }
 
+auto Window::DisplayScale() const -> float
+{
+  return sdl::GetWindowDisplayScale(GetComponent<Data>().sdl_window_.get());
+}
+
+auto Window::HasInputFocus() const -> bool
+{
+  const auto flag = sdl::GetWindowFlags(GetComponent<Data>().sdl_window_.get());
+  return (flag & SDL_WINDOW_INPUT_FOCUS) != 0U;
+}
+
 auto Window::FullScreen() const -> bool
 {
   const auto flag = sdl::GetWindowFlags(GetComponent<Data>().sdl_window_.get());

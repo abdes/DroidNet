@@ -103,7 +103,7 @@ auto WindowManager::ProcessPlatformEvents() -> co::Co<>
       break;
     }
 
-    auto& event = co_await event_pump_->NextEvent();
+    const auto& event = co_await event_pump_->NextEvent();
     auto _ = co_await event_pump_->Lock();
     if (event.IsHandled()) {
       continue;
@@ -145,6 +145,14 @@ auto WindowManager::ProcessPlatformEvents() -> co::Co<>
     }
   }
   DLOG_F(INFO, "DONE: window manager async processing");
+}
+
+auto WindowManager::FindWindow(const WindowIdType window_id) const
+  -> std::shared_ptr<Window>
+{
+  const auto found = std::ranges::find_if(
+    windows_, [window_id](auto& window) { return window->Id() == window_id; });
+  return found != windows_.end() ? *found : nullptr;
 }
 
 auto WindowManager::WindowFromId(WindowIdType window_id) const -> Window&

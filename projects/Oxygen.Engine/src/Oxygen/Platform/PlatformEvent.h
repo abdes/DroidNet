@@ -1,8 +1,10 @@
 #pragma once
 
 #include <memory>
+#include <type_traits>
 
 #include <Oxygen/Composition/Object.h>
+#include <Oxygen/Composition/TypedObject.h>
 
 namespace oxygen::platform {
 template <typename T>

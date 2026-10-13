@@ -23,10 +23,10 @@
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/Icons/OxygenIcons.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
+#include <Oxygen/ImGui/PlatformBackend.h>
 #include <Oxygen/ImGui/Styles/FontAwesome-400.h>
 #include <Oxygen/ImGui/Styles/IconsFontAwesome.h>
 #include <Oxygen/ImGui/Styles/Spectrum.h>
-#include <Oxygen/Platform/ImGui/ImGuiSdl3Backend.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/Types.h>
 
@@ -142,7 +142,7 @@ auto ImGuiModule::SetWindowId(const platform::WindowIdType window_id) -> void
   }
 
   try {
-    platform_backend_ = std::make_unique<platform::imgui::ImGuiSdl3Backend>(
+    platform_backend_ = std::make_unique<PlatformBackend>(
       platform_, window_id, graphics_backend_->GetImGuiContext());
     window_destroy_handler_token_
       = platform_->RegisterWindowAboutToBeDestroyedHandler(

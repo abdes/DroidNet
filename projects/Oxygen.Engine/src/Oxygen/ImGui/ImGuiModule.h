@@ -28,12 +28,11 @@ namespace graphics {
     class ImGuiGraphicsBackend;
   } // namespace imgui
 } // namespace graphics
-namespace platform::imgui {
-  class ImGuiSdl3Backend;
-} // namespace platform::imgui
 } // namespace oxygen
 
 namespace oxygen::imgui {
+
+class PlatformBackend;
 
 //! Owns the engine's ImGui context and its frame lifecycle.
 /*!
@@ -106,7 +105,7 @@ private:
 
   std::shared_ptr<Platform> platform_;
   std::unique_ptr<graphics::imgui::ImGuiGraphicsBackend> graphics_backend_;
-  std::unique_ptr<platform::imgui::ImGuiSdl3Backend> platform_backend_;
+  std::unique_ptr<PlatformBackend> platform_backend_;
   platform::WindowIdType window_id_ { platform::kInvalidWindowId };
   std::size_t window_destroy_handler_token_ { 0U };
   bool frame_started_ { false };

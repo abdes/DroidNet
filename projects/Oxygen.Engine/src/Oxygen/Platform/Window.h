@@ -115,6 +115,12 @@ public:
   OXGN_PLAT_NDAPI auto Valid() const -> bool;
   OXGN_PLAT_NDAPI auto Size() const -> window::ExtentT;
   OXGN_PLAT_NDAPI auto FrameBufferSize() const -> window::ExtentT;
+  //! The factor between the window's logical size and what the display needs
+  //! to show it at the same physical size (1.0 for a standard-density
+  //! display, 2.0 at 200% scaling).
+  OXGN_PLAT_NDAPI auto DisplayScale() const -> float;
+  //! True when the window has keyboard focus.
+  OXGN_PLAT_NDAPI auto HasInputFocus() const -> bool;
   OXGN_PLAT_NDAPI auto FullScreen() const -> bool;
   OXGN_PLAT_NDAPI auto Maximized() const -> bool;
   OXGN_PLAT_NDAPI auto Minimized() const -> bool;

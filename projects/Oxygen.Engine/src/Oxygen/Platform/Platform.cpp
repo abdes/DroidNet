@@ -14,12 +14,17 @@
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Platform/Platform.h>
+#include <Oxygen/Platform/SDL/UiEvents.h>
 
 using namespace std::chrono_literals;
 
 namespace oxygen {
 
-using namespace platform;
+using platform::AsyncOps;
+using platform::EventPump;
+using platform::InputEvents;
+using platform::UiServices;
+using platform::WindowManager;
 
 auto Platform::FilterPlatformEvents() -> co::Co<>
 {
@@ -32,9 +37,9 @@ auto Platform::FilterPlatformEvents() -> co::Co<>
       break;
     }
 
-    auto& event = co_await Events().NextEvent();
+    const auto& event = co_await Events().NextEvent();
     // If we do not have an installed filter, just continue
-    if (!event_filter_) {
+    if (!ui_event_filter_) {
       continue;
     }
 
@@ -46,8 +51,12 @@ auto Platform::FilterPlatformEvents() -> co::Co<>
     if (event.IsHandled()) {
       continue;
     }
-    // Invoke the filtering callable
-    event_filter_(event);
+    // Offer the event to the UI filter; when it consumes it, nothing else
+    // sees it.
+    if (const auto ui_event = platform::sdl::TranslateUiEvent(event);
+      ui_event.has_value() && ui_event_filter_(*ui_event)) {
+      event.SetHandled();
+    }
   }
   DLOG_F(INFO, "DONE: platform event filter");
   co_return;
@@ -101,8 +110,8 @@ auto Platform::Shutdown() -> co::Co<>
     co_await Async().SleepFor(1us);
 
     DCHECK_F(!Events().IsRunning());
-    DCHECK_F(!WindowManager().IsRunning());
-    DCHECK_F(!InputEvents().IsRunning());
+    DCHECK_F(!Windows().IsRunning());
+    DCHECK_F(!Input().IsRunning());
   }
 }
 
@@ -188,6 +197,7 @@ auto Platform::Compose(const PlatformConfig& config) -> void
   AddComponent<EventPump>();
   AddComponent<WindowManager>();
   AddComponent<InputEvents>();
+  AddComponent<UiServices>();
 }
 
 } // namespace oxygen
