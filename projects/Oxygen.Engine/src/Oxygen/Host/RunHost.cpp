@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <exception>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -19,6 +20,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Commands/Command.h>
+#include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Control/CommandDispatcher.h>
 #include <Oxygen/Control/ControlServer.h>
 #include <Oxygen/Core/EngineModule.h>
@@ -26,6 +29,7 @@
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Host/HostConfig.h>
+#include <Oxygen/Host/PersistenceLock.h>
 #include <Oxygen/Host/RunHost.h>
 #include <Oxygen/ImGui/ImGuiModule.h>
 #include <Oxygen/Input/InputSystem.h>
@@ -193,6 +197,31 @@ auto RunHost(HostConfig config, const RegisterModules& register_modules) -> int
   HostContext host {};
   host.headless = config.platform.headless;
   host.window = config.window;
+  if (config.control) {
+    host.instance_name = config.control->name;
+  }
+
+  // The first instance of an application owns its saved state; a later one
+  // runs without saving rather than overwrite the owner's changes on exit.
+  auto persistence_lock = std::unique_ptr<PersistenceLock> {};
+  if (config.engine.persist_console_state) {
+    const auto folder = PathFinder(std::make_shared<const PathFinderConfig>(
+                                     config.engine.path_finder_config),
+      std::filesystem::current_path())
+                          .CVarsArchivePath()
+                          .parent_path()
+                          .lexically_normal()
+                          .make_preferred();
+    persistence_lock = std::make_unique<PersistenceLock>(folder);
+    host.owns_persistence = persistence_lock->IsOwner();
+    if (!host.owns_persistence) {
+      config.engine.persist_console_state = false;
+      LOG_F(WARNING,
+        "{}: another instance owns the saved state in '{}'; this instance "
+        "will not save its settings, console variables or history",
+        application, folder.string());
+    }
+  }
 
   // The host is a library: the loader's first call does not come from the
   // executable, so it uses the relaxed singleton.

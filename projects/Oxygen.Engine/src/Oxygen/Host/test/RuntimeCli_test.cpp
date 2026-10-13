@@ -80,6 +80,7 @@ protected:
   }
 
   [[nodiscard]] auto Config() const -> const HostConfig& { return config_; }
+  auto MutableConfig() -> HostConfig& { return config_; }
 
 private:
   RuntimeCliState state_ { .target_fps = kDefaultFps };
@@ -199,6 +200,90 @@ NOLINT_TEST_F(RuntimeCliTest, UnknownCaptureProviderIsRejected)
 {
   NOLINT_EXPECT_THROW(
     ParseAndApply({ "--capture-provider=nsight" }), RuntimeCliError);
+}
+
+//! PIX cannot capture the startup frame: frame 0 has no PIX attachment yet.
+NOLINT_TEST_F(RuntimeCliTest, PixCaptureFromFrameZeroIsRejected)
+{
+  NOLINT_EXPECT_THROW(ParseAndApply({ "--capture-provider=pix",
+                        "--capture-load=search", "--capture-frame-count=1" }),
+    RuntimeCliError);
+}
+
+//! A PIX capture of later frames is accepted.
+NOLINT_TEST_F(RuntimeCliTest, PixCaptureFromPositiveFrameIsAccepted)
+{
+  ParseAndApply({
+    "--capture-provider=pix",
+    "--capture-load=search",
+    "--capture-from-frame=1",
+    "--capture-frame-count=1",
+  });
+
+  const auto& capture = Config().engine.graphics.frame_capture;
+  EXPECT_EQ(capture.provider, FrameCaptureProvider::kPix);
+  EXPECT_EQ(capture.init_mode, FrameCaptureInitMode::kSearchPath);
+  EXPECT_EQ(capture.from_frame, 1U);
+  EXPECT_EQ(capture.frame_count, 1U);
+}
+
+//! Without `--control` there is no control server.
+NOLINT_TEST_F(RuntimeCliTest, ControlServerIsOffByDefault)
+{
+  ParseAndApply({});
+
+  EXPECT_FALSE(Config().control.has_value());
+}
+
+//! `--control` alone takes an ephemeral port; with a value, that port.
+NOLINT_TEST_F(RuntimeCliTest, ControlStartsTheServer)
+{
+  ParseAndApply({ "--control" });
+  ASSERT_TRUE(Config().control.has_value());
+  EXPECT_EQ(Config().control->port, 0U);
+
+  ParseAndApply({ "--control=50513" });
+  ASSERT_TRUE(Config().control.has_value());
+  EXPECT_EQ(Config().control->port, 50513U);
+}
+
+//! The command line's port keeps the ownership rule the application set.
+NOLINT_TEST_F(RuntimeCliTest, ControlPortKeepsTheOwnershipRule)
+{
+  MutableConfig().control = oxygen::control::ControlServerConfig {
+    .port = 1U,
+    .application = "Launcher",
+    .exit_when_owner_leaves = true,
+  };
+
+  ParseAndApply({ "--control=50513" });
+
+  ASSERT_TRUE(Config().control.has_value());
+  EXPECT_EQ(Config().control->port, 50513U);
+  EXPECT_EQ(Config().control->application, "Launcher");
+  EXPECT_TRUE(Config().control->exit_when_owner_leaves);
+}
+
+//! `--control-name` labels the instance for control clients.
+NOLINT_TEST_F(RuntimeCliTest, ControlNameLabelsTheInstance)
+{
+  ParseAndApply({ "--control", "--control-name=left" });
+
+  ASSERT_TRUE(Config().control.has_value());
+  EXPECT_EQ(Config().control->name, "left");
+}
+
+//! A label without a control server labels nothing.
+NOLINT_TEST_F(RuntimeCliTest, ControlNameWithoutControlIsRejected)
+{
+  NOLINT_EXPECT_THROW(
+    ParseAndApply({ "--control-name=left" }), RuntimeCliError);
+}
+
+//! A port beyond 16 bits is rejected.
+NOLINT_TEST_F(RuntimeCliTest, ControlPortOutOfRangeIsRejected)
+{
+  NOLINT_EXPECT_THROW(ParseAndApply({ "--control=70000" }), RuntimeCliError);
 }
 
 //! An explicit capture library path is required with `--capture-load=path`.

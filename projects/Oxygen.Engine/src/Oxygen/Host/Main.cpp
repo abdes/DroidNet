@@ -88,7 +88,7 @@ auto main(int argc, char** argv) noexcept -> int
     loguru::g_preamble_uptime = false;
     loguru::g_preamble_thread = true;
     loguru::g_preamble_header = false;
-    loguru::g_global_verbosity = loguru::Verbosity_1;
+    loguru::g_global_verbosity = loguru::Verbosity_INFO;
     loguru::g_colorlogtostderr = true;
     // Optional, but useful to time-stamp the start of the log.
     // Will also detect verbosity level on command line as -v.

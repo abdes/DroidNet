@@ -87,7 +87,11 @@ auto HostModule::OnAttached(const observer_ptr<IAsyncEngine> engine) noexcept
   -> bool
 {
   try {
-    if (window_ && !window_->Create(BuildWindowProperties())) {
+    auto properties = BuildWindowProperties();
+    if (!host_.instance_name.empty()) {
+      properties.title += " [" + host_.instance_name + "]";
+    }
+    if (window_ && !window_->Create(properties)) {
       LOG_F(ERROR, "{}: could not create the host window", GetName());
       return false;
     }

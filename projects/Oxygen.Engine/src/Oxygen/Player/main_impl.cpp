@@ -68,8 +68,6 @@ struct EngineCli {
   //! `NAME=VALUE` console variable assignments, applied at startup.
   std::vector<std::string> cvars;
   bool verify_hashes { false };
-  //! Control server port; negative leaves the server off, 0 is ephemeral.
-  int control_port { -1 };
 };
 
 auto MakeEngineOptions(EngineCli& engine) -> std::shared_ptr<Options>
@@ -96,35 +94,16 @@ auto MakeEngineOptions(EngineCli& engine) -> std::shared_ptr<Options>
       .UserFriendlyName("enabled")
       .StoreTo(&engine.verify_hashes)
       .Build());
-  options->Add(Option::WithKey("control")
-      .About("Start the JSON-RPC control server on a loopback port (0 picks "
-             "one); clients find it in the discovery file")
-      .Long("control")
-      .WithValue<int>()
-      .DefaultValue(-1)
-      .ImplicitValue(0)
-      .UserFriendlyName("port")
-      .StoreTo(&engine.control_port)
-      .Build());
   return options;
 }
 
 //! Adds the `--cvar` assignments to the startup plan.
 /*!
-        hrows host::RuntimeCliError for an assignment without `=` or a name.
+ \throws host::RuntimeCliError for an assignment without `=` or a name.
 */
 auto ApplyEngineCli(const EngineCli& engine, host::HostConfig& config) -> void
 {
   config.engine.asset_loader.verify_content_hashes = engine.verify_hashes;
-  if (engine.control_port >= 0) {
-    // The command line's port wins; the launch file's owner rule stays.
-    auto control
-      = config.control.value_or(oxygen::control::ControlServerConfig {
-        .application = "Oxygen.Player",
-      });
-    control.port = static_cast<uint16_t>(engine.control_port);
-    config.control = std::move(control);
-  }
   for (const auto& assignment : engine.cvars) {
     const auto separator = assignment.find('=');
     if (separator == std::string::npos || separator == 0U) {
@@ -220,17 +199,18 @@ auto MakeHostConfig(const player::PlayerLaunch& launch,
         .WithShaderLibraryPath(paths.shader_library)
         .WithScriptSourceRoots(launch.script_source_roots)
         .Build();
+  // `--control` overrides the launch file's port.
+  if (launch.control.has_value()) {
+    config.control = oxygen::control::ControlServerConfig {
+      .port = launch.control->port,
+      .application = config.engine.application.name,
+      .exit_when_owner_leaves = launch.control->exit_when_owner_leaves,
+    };
+  }
   host::ApplyRuntimeCli(context, runtime, config);
   config.startup_cvars.Set(
     "ngin.target_fps", static_cast<std::int64_t>(runtime.target_fps));
   config.startup_cvars.Set("gfx.vsync", runtime.vsync);
-  if (launch.control.has_value()) {
-    config.control = oxygen::control::ControlServerConfig {
-      .port = launch.control->port,
-      .application = "Oxygen.Player",
-      .exit_when_owner_leaves = launch.control->exit_when_owner_leaves,
-    };
-  }
   // Explicit assignments come last, so they win.
   ApplyEngineCli(engine, config);
   return config;

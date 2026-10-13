@@ -62,6 +62,9 @@ inline constexpr auto kStatsCVars = std::array {
  frame; Play and Stop appear only when the application registers
  `ngin.session.begin`.
 
+ A scene view whose rendering failed is named in a banner under the strip,
+ also while the toolbar is hidden.
+
  Shortcuts, ignored while a text field has focus: F1 toggles
  `host.ui.visible`; Alt+4, Alt+3 and Alt+2 select lit, unlit and wireframe.
 */
@@ -88,6 +91,18 @@ public:
   //! renderer goes away.
   OXGN_HOST_API auto ReleaseGpuTimeline() noexcept -> void;
 
+  //! Height of the strip drawn this frame; zero while the toolbar is hidden.
+  //! The GPU work overlay, whose position an application may keep.
+  [[nodiscard]] auto GpuWork() noexcept -> GpuWorkOverlay&
+  {
+    return gpu_work_overlay_;
+  }
+
+  [[nodiscard]] auto TopInset() const noexcept -> float
+  {
+    return strip_visible_ ? strip_height_ : 0.0F;
+  }
+
 private:
   auto DrawStrip(IAsyncEngine& engine,
     observer_ptr<const vortex::Renderer> renderer,
@@ -100,6 +115,7 @@ private:
   imgui::StatsOverlay stats_overlay_;
   GpuWorkOverlay gpu_work_overlay_;
   float strip_height_ { 0.0F };
+  bool strip_visible_ { false };
 };
 
 } // namespace oxygen::host

@@ -33,6 +33,7 @@
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
 #include <Oxygen/Vortex/Diagnostics/ViewModeCatalog.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/ViewRenderStatus.h>
 
 namespace oxygen::host {
 
@@ -340,6 +341,46 @@ namespace {
     }
   }
 
+  //! Names every scene view whose rendering failed this frame.
+  auto DrawViewFailures(const engine::FrameContext& context,
+    const vortex::Renderer& renderer, const float top) -> void
+  {
+    constexpr float kMargin = 12.0F;
+    bool opened = false;
+    bool visible = false;
+    for (const auto entry : context.GetViews()) {
+      const auto& view = entry.get();
+      if (!view.metadata.is_scene_view) {
+        continue;
+      }
+      const auto status = renderer.InspectViewRenderStatus(view.id);
+      if (!status || status->state != vortex::ViewRenderState::kFailed) {
+        continue;
+      }
+      if (!opened) {
+        const auto* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(
+          { viewport->WorkPos.x + (viewport->WorkSize.x * 0.5F),
+            viewport->WorkPos.y + top + kMargin },
+          ImGuiCond_Always, { 0.5F, 0.0F });
+        constexpr auto kFlags = static_cast<ImGuiWindowFlags>(
+          static_cast<unsigned>(ImGuiWindowFlags_NoDecoration)
+          | static_cast<unsigned>(ImGuiWindowFlags_AlwaysAutoResize)
+          | static_cast<unsigned>(ImGuiWindowFlags_NoInputs)
+          | static_cast<unsigned>(ImGuiWindowFlags_NoSavedSettings));
+        visible = ImGui::Begin("Rendering failed", nullptr, kFlags);
+        opened = true;
+      }
+      if (visible) {
+        const auto line = view.metadata.name + ": rendering failed";
+        ImGui::TextUnformatted(line.c_str());
+      }
+    }
+    if (opened) {
+      ImGui::End();
+    }
+  }
+
 } // namespace
 
 auto ViewportToolbar::RegisterConsoleBindings(console::Console& console) -> void
@@ -348,7 +389,7 @@ auto ViewportToolbar::RegisterConsoleBindings(console::Console& console) -> void
     .name = std::string(kUiVisibleCVar),
     .help = "Show the viewport toolbar and the stats overlay (F1)",
     .default_value = true,
-    .flags = console::CVarFlags::kNone,
+    .flags = console::CVarFlags::kArchive,
     .min_value = std::nullopt,
     .max_value = std::nullopt,
     .allowed_values = {},
@@ -358,7 +399,7 @@ auto ViewportToolbar::RegisterConsoleBindings(console::Console& console) -> void
       .name = std::string(stats.cvar),
       .help = "Show " + std::string(stats.label) + " in the stats overlay",
       .default_value = false,
-      .flags = console::CVarFlags::kNone,
+      .flags = console::CVarFlags::kArchive,
       .min_value = std::nullopt,
       .max_value = std::nullopt,
       .allowed_values = {},
@@ -381,16 +422,20 @@ auto ViewportToolbar::Draw(IAsyncEngine& engine,
     .show_engine_timing = ReadBool(console, kStatsCVars[1].cvar, false),
     .show_budget_stats = ReadBool(console, kStatsCVars[3].cvar, false),
   };
-  if (!ReadBool(console, kUiVisibleCVar, true)) {
+  strip_visible_ = ReadBool(console, kUiVisibleCVar, true);
+  if (!strip_visible_) {
     // Keep the overlay's averages warm while hidden.
     stats_overlay_.Draw(context, {});
     gpu_work_overlay_.Draw(renderer, false, main_view, {}, 0.0F);
-    return;
+  } else {
+    DrawStrip(engine, renderer, console_ui, run);
+    stats_overlay_.Draw(context, stats_config, strip_height_);
+    gpu_work_overlay_.Draw(renderer, ReadBool(console, kGpuWorkCVar, false),
+      main_view, context.GetBudgetStats().gpu_budget, strip_height_);
   }
-  DrawStrip(engine, renderer, console_ui, run);
-  stats_overlay_.Draw(context, stats_config, strip_height_);
-  gpu_work_overlay_.Draw(renderer, ReadBool(console, kGpuWorkCVar, false),
-    main_view, context.GetBudgetStats().gpu_budget, strip_height_);
+  if (renderer) {
+    DrawViewFailures(context, *renderer, TopInset());
+  }
 }
 
 auto ViewportToolbar::ReleaseGpuTimeline() noexcept -> void

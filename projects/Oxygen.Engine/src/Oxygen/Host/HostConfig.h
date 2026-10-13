@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
@@ -68,6 +69,12 @@ struct HostConfig {
 struct HostContext {
   bool headless { false };
   HostWindowConfig window;
+  //! The control server's launch label; shown in the window title so a
+  //! person can tell instances apart. Empty without one.
+  std::string instance_name;
+  //! False when another instance of the application owns its saved state;
+  //! this instance then must not save settings of its own.
+  bool owns_persistence { true };
 
   graphics::SharedTransferQueueStrategy queue_strategy;
 

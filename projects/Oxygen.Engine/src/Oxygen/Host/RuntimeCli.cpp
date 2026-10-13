@@ -27,6 +27,7 @@
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Clap/OptionValue.h>
 #include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Control/ControlServer.h>
 #include <Oxygen/Host/HostConfig.h>
 #include <Oxygen/Host/RuntimeCli.h>
 
@@ -189,6 +190,26 @@ auto MakeRuntimeOptions(RuntimeCliState& state,
         .WithValue<std::string>()
         .UserFriendlyName("WIDTHxHEIGHT")
         .StoreTo(&state.resolution)
+        .Build());
+  }
+  if (selection.control) {
+    options->Add(clap::Option::WithKey("control")
+        .About("Start the JSON-RPC control server on a loopback port (0 picks "
+               "one); clients find it in the discovery file")
+        .Long("control")
+        .WithValue<int>()
+        .DefaultValue(state.control_port)
+        .ImplicitValue(0)
+        .UserFriendlyName("port")
+        .StoreTo(&state.control_port)
+        .Build());
+    options->Add(clap::Option::WithKey("control-name")
+        .About("Label of this instance for control clients and the window "
+               "title; needs --control")
+        .Long("control-name")
+        .WithValue<std::string>()
+        .UserFriendlyName("label")
+        .StoreTo(&state.control_name)
         .Build());
   }
   return options;
@@ -384,6 +405,24 @@ auto ApplyRuntimeCli(const clap::CommandLineContext& context,
   config.window.fullscreen = state.fullscreen;
   if (!state.resolution.empty()) {
     config.window.resolution = ParseWindowResolution(state.resolution);
+  }
+  if (std::cmp_greater(
+        state.control_port, std::numeric_limits<std::uint16_t>::max())) {
+    throw RuntimeCliError("--control expects a port up to 65535");
+  }
+  if (!state.control_name.empty() && state.control_port < 0) {
+    throw RuntimeCliError("--control-name needs --control");
+  }
+  if (state.control_port >= 0) {
+    // The port wins; an ownership rule the application set stays.
+    auto control = config.control.value_or(control::ControlServerConfig {
+      .application = config.engine.application.name,
+    });
+    control.port = static_cast<std::uint16_t>(state.control_port);
+    if (!state.control_name.empty()) {
+      control.name = state.control_name;
+    }
+    config.control = std::move(control);
   }
 
   // Explicit options win over persisted console values.

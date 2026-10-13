@@ -54,34 +54,43 @@ struct ShowFlagInfo {
 
 //! The show flags in menu order.
 inline constexpr auto kShowFlags = std::array {
-  ShowFlagInfo { ShowFlag::kShadows, "host.show.shadows", "Shadows" },
+  ShowFlagInfo { .flag = ShowFlag::kShadows,
+    .cvar = "host.show.shadows",
+    .label = "Shadows" },
   ShowFlagInfo {
-    ShowFlag::kEnvironment,
-    "host.show.environment",
-    "Environment",
+    .flag = ShowFlag::kEnvironment,
+    .cvar = "host.show.environment",
+    .label = "Environment",
   },
   ShowFlagInfo {
-    ShowFlag::kTranslucency,
-    "host.show.translucency",
-    "Translucency",
+    .flag = ShowFlag::kTranslucency,
+    .cvar = "host.show.translucency",
+    .label = "Translucency",
   },
   ShowFlagInfo {
-    ShowFlag::kVolumetrics,
-    "host.show.volumetrics",
-    "Volumetrics",
+    .flag = ShowFlag::kVolumetrics,
+    .cvar = "host.show.volumetrics",
+    .label = "Volumetrics",
   },
-  ShowFlagInfo { ShowFlag::kGrid, "host.show.grid", "Grid" },
-  ShowFlagInfo { ShowFlag::kAtmosphere, "host.show.atmosphere", "Atmosphere" },
-  ShowFlagInfo { ShowFlag::kHeightFog, "host.show.height_fog", "Height Fog" },
-  ShowFlagInfo { ShowFlag::kLocalFog, "host.show.local_fog", "Local Fog" },
+  ShowFlagInfo {
+    .flag = ShowFlag::kGrid, .cvar = "host.show.grid", .label = "Grid" },
+  ShowFlagInfo { .flag = ShowFlag::kAtmosphere,
+    .cvar = "host.show.atmosphere",
+    .label = "Atmosphere" },
+  ShowFlagInfo { .flag = ShowFlag::kHeightFog,
+    .cvar = "host.show.height_fog",
+    .label = "Height Fog" },
+  ShowFlagInfo { .flag = ShowFlag::kLocalFog,
+    .cvar = "host.show.local_fog",
+    .label = "Local Fog" },
 };
 
 //! How the main game view renders, read from the `host.*` console variables.
 /*!
  Only the main view gets these settings; other views are configured by the
  code that creates them. A show flag only removes a feature the view asked
- for, and the view mode overrides the view's render settings unless it is
- `lit`, which leaves them as the view set them.
+ for. The view mode replaces the view's render and debug modes; `lit`
+ removes any the view set.
 */
 struct MainViewOptions {
   std::string view_mode { kDefaultViewMode };

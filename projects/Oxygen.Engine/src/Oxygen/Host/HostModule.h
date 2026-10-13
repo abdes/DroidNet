@@ -174,6 +174,23 @@ protected:
   {
     return publisher_;
   }
+  //! The console and command palette windows' state, for an application
+  //! that persists their placement.
+  [[nodiscard]] auto ConsoleUi() noexcept -> imgui::consoleui::ConsoleUiState&
+  {
+    return console_host_.State();
+  }
+  //! The GPU work overlay, for an application that keeps its position.
+  [[nodiscard]] auto GpuWork() noexcept -> GpuWorkOverlay&
+  {
+    return toolbar_.GpuWork();
+  }
+  //! Height the toolbar covers at the top of the window this frame; zero
+  //! while it is hidden. Valid after the base `OnGuiUpdate` ran.
+  [[nodiscard]] auto UiTopInset() const noexcept -> float
+  {
+    return toolbar_.TopInset();
+  }
 
   //! True when headless, or while the window is open and not closing.
   OXGN_HOST_NDAPI auto HasRenderableWindow() const noexcept -> bool;

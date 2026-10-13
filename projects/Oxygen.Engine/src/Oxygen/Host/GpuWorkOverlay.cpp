@@ -4,7 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <ratio>
@@ -25,6 +28,8 @@
 #include <Oxygen/Vortex/Diagnostics/GpuWorkSummary.h>
 #include <Oxygen/Vortex/Renderer.h>
 
+// NOLINTBEGIN(cppcoreguidelines-pro-type-vararg) - ImGui
+
 namespace oxygen::host {
 
 namespace {
@@ -34,11 +39,12 @@ namespace {
   constexpr float kBackgroundAlpha = 0.6F;
   constexpr std::uint32_t kViewColor = 0x5A6A7AU;
   constexpr std::uint32_t kIdleColor = 0x505050U;
+  //! How much of a restored overlay stays inside the window.
+  constexpr float kMinReachable = 48.0F;
 
   constexpr auto kWindowFlags = static_cast<ImGuiWindowFlags>(
     static_cast<unsigned>(ImGuiWindowFlags_NoDecoration)
     | static_cast<unsigned>(ImGuiWindowFlags_AlwaysAutoResize)
-    | static_cast<unsigned>(ImGuiWindowFlags_NoMove)
     | static_cast<unsigned>(ImGuiWindowFlags_NoSavedSettings)
     | static_cast<unsigned>(ImGuiWindowFlags_NoFocusOnAppearing)
     | static_cast<unsigned>(ImGuiWindowFlags_NoNav));
@@ -82,7 +88,7 @@ auto GpuWorkOverlay::RegisterConsoleBindings(console::Console& console) -> void
     .name = std::string(kGpuWorkCVar),
     .help = "Show the GPU work overlay; collects GPU timing while shown",
     .default_value = false,
-    .flags = console::CVarFlags::kNone,
+    .flags = console::CVarFlags::kArchive,
     .min_value = std::nullopt,
     .max_value = std::nullopt,
     .allowed_values = {},
@@ -106,15 +112,34 @@ auto GpuWorkOverlay::Draw(const observer_ptr<vortex::Renderer> renderer,
     leased_renderer_ = renderer;
   }
 
+  // Below the toolbar the first time, unless the application restores a
+  // position; afterwards it stays where it is dragged.
   const auto* viewport = ImGui::GetMainViewport();
-  ImGui::SetNextWindowPos(ImVec2 { viewport->WorkPos.x + kMargin,
-                            viewport->WorkPos.y + top_margin + kMargin },
-    ImGuiCond_Always);
+  if (restore_) {
+    // A position kept from a larger window stays within reach.
+    ImGui::SetNextWindowPos(
+      ImVec2 {
+        viewport->WorkPos.x
+          + std::min((*restore_)[0],
+            std::max(0.0F, viewport->WorkSize.x - kMinReachable)),
+        viewport->WorkPos.y
+          + std::min((*restore_)[1],
+            std::max(0.0F, viewport->WorkSize.y - kMinReachable)),
+      },
+      ImGuiCond_Always);
+    restore_.reset();
+    seen_.reset();
+  } else {
+    ImGui::SetNextWindowPos(ImVec2 { viewport->WorkPos.x + kMargin,
+                              viewport->WorkPos.y + top_margin + kMargin },
+      ImGuiCond_FirstUseEver);
+  }
   // At least kMinWidth; wider when the legend's columns need it.
   ImGui::SetNextWindowSizeConstraints(ImVec2 { kMinWidth, 0.0F },
     ImVec2 { viewport->WorkSize.x, viewport->WorkSize.y });
   ImGui::SetNextWindowBgAlpha(kBackgroundAlpha);
   const bool visible = ImGui::Begin("GPU Work", nullptr, kWindowFlags);
+  TrackPosition();
   if (visible) {
     const auto summary = diagnostics.GetLatestGpuWorkSummary();
     if (!lease_.IsActive()) {
@@ -132,6 +157,34 @@ auto GpuWorkOverlay::Draw(const observer_ptr<vortex::Renderer> renderer,
     }
   }
   ImGui::End();
+}
+
+auto GpuWorkOverlay::RestorePosition(const GpuWorkPosition position) -> void
+{
+  restore_ = position;
+  dropped_ = position;
+}
+
+auto GpuWorkOverlay::TrackPosition() -> void
+{
+  const auto* viewport = ImGui::GetMainViewport();
+  const auto window = ImGui::GetWindowPos();
+  const auto current = GpuWorkPosition {
+    window.x - viewport->WorkPos.x,
+    window.y - viewport->WorkPos.y,
+  };
+  if (!seen_) {
+    // The first frame after a placement is not a move.
+    seen_ = current;
+    return;
+  }
+  constexpr float kMoved = 0.5F;
+  const bool moved = std::abs(current[0] - (*seen_)[0]) > kMoved
+    || std::abs(current[1] - (*seen_)[1]) > kMoved;
+  if (moved && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+    seen_ = current;
+    dropped_ = current;
+  }
 }
 
 auto GpuWorkOverlay::Release() noexcept -> void
@@ -235,3 +288,5 @@ auto GpuWorkOverlay::Rebuild(const vortex::GpuWorkSummary& summary,
 }
 
 } // namespace oxygen::host
+
+// NOLINTEND(cppcoreguidelines-pro-type-vararg)

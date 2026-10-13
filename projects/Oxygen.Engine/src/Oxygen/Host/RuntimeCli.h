@@ -42,6 +42,10 @@ struct RuntimeCliState {
   bool fullscreen { false };
   bool vsync { true };
   std::string resolution;
+  //! Control server port; negative leaves the server off, 0 is ephemeral.
+  int control_port { -1 };
+  //! Launch label of this instance, given with the control server.
+  std::string control_name;
 
   bool enable_debug_layer { DefaultGraphicsDebugLayerEnabled() };
   bool enable_aftermath { DefaultGraphicsAftermathEnabled() };
@@ -62,9 +66,11 @@ struct RuntimeOptionSet {
   bool fullscreen { true };
   bool vsync { true };
   bool resolution { true };
+  bool control { true };
 };
 
-//! Frame count, frame rate, headless, fullscreen, vsync and resolution.
+//! Frame count, frame rate, headless, fullscreen, vsync, resolution and
+//! the control server port.
 OXGN_HOST_NDAPI auto MakeRuntimeOptions(RuntimeCliState& state,
   RuntimeOptionSet selection = {}) -> clap::Options::Ptr;
 
@@ -102,9 +108,9 @@ OXGN_HOST_NDAPI auto ParseWindowResolution(std::string_view value)
 //! Validates the parsed values and writes them into `config`.
 /*!
  Sets the frame count, frame rate, vsync, graphics tooling, frame capture,
- headless and window options, and seeds the `ngin.target_fps` and
- `gfx.vsync` startup variables when those options were passed, so they win
- over persisted console values.
+ headless and window options and the control server port, and seeds the
+ `ngin.target_fps` and `gfx.vsync` startup variables when those options were
+ passed, so they win over persisted console values.
 
  \throws RuntimeCliError for contradictory or malformed values.
 */

@@ -316,7 +316,8 @@ the host and activated in the host's nursery.
 ### 4.1 Transport and threading
 
 - TCP, bound to `127.0.0.1` only. Port `0` (the default) takes an ephemeral
-  port; `--control <port>` fixes it.
+  port; `--control <port>` fixes it. `--control` is a runtime option of
+  every host application.
 - Asio's `ip::tcp` on the platform's `io_context` (`AsyncOps::IoContext()`),
   written as OxCo coroutines with `co::asio_awaitable`: an accept loop, one
   read loop and one write queue per connection, all in the server's nursery.
@@ -340,7 +341,10 @@ folder (`%LOCALAPPDATA%\Oxygen\control\<pid>.json` on Windows,
 {
   "protocol": 1,
   "pid": 41236,
-  "application": "Oxygen.Player",
+  "application": "Oxygen Player",
+  "name": "left",
+  "started": "2026-10-13T17:23:04Z",
+  "command_line": "Oxygen.Player.exe --control --control-name left",
   "port": 50513,
   "token": "9f2c…(64 hex digits)"
 }
@@ -349,8 +353,17 @@ folder (`%LOCALAPPDATA%\Oxygen\control\<pid>.json` on Windows,
 - The token is 256 random bits per run. Only processes of the same user can
   read the file; that, plus loopback, is the access control.
 - A launcher knows the pid it started and waits for that file. A client
-  attaching later lists the folder; a file whose pid is not running is
-  stale, and the client that finds it deletes it.
+  attaching later lists the folder and picks an instance by its `name`, the
+  label the launcher gave with `--control-name`; instances of one
+  application differ only by pid otherwise. The label also ends the window
+  title (`MultiView Example [left]`), so a person can match a window to its
+  file. `started` and `command_line` describe an unlabelled instance.
+- A killed application cannot delete its file. Each server removes the files
+  of processes that no longer run when it starts, and a client that finds
+  one deletes it.
+- Instances of one application share its saved state (console variables,
+  history, settings). The first to start owns it; a later one runs without
+  saving and logs a warning, so it cannot overwrite the owner's changes.
 
 ### 4.3 Connection lifetime and ownership
 
@@ -377,7 +390,7 @@ command.
 
 | Method            | Params                                                         | Result                                                                              |
 | ----------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `rpc.hello`       | `token`, `client` (name), `owner` (bool, optional)             | `protocol`, `application`, `pid`, `owner` (granted), `event_seq` (latest).          |
+| `rpc.hello`       | `token`, `client` (name), `owner` (bool, optional)             | `protocol`, `application`, `name`, `pid`, `owner` (granted), `event_seq` (latest).  |
 | `rpc.subscribe`   | `topics` (array)                                               | Topics now subscribed. Notifications for them start with the next event.            |
 | `rpc.unsubscribe` | `topics`                                                       | Topics still subscribed.                                                            |
 | `rpc.events`      | `since` (seq), `topics` (optional), `limit` (optional, ≤ 1000) | `events`, `next_seq`, `dropped` (events older than the buffer that were asked for). |
