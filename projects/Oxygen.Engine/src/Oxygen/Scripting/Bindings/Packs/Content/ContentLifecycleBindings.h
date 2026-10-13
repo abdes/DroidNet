@@ -6,6 +6,10 @@
 
 #pragma once
 
+#include <span>
+
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+
 struct lua_State;
 
 namespace oxygen::scripting::bindings {
@@ -15,5 +19,7 @@ auto RegisterContentModuleAvailability(lua_State* state, int module_index)
 auto RegisterContentModuleLifecycle(lua_State* state, int module_index) -> void;
 auto RegisterContentModuleLegacyGuards(lua_State* state, int module_index)
   -> void;
+auto ContentAvailabilityFunctions() -> std::span<const BindingFunction>;
+auto ContentLifecycleFunctions() -> std::span<const BindingFunction>;
 
 } // namespace oxygen::scripting::bindings

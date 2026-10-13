@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstddef>
@@ -12,6 +13,7 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -30,6 +32,8 @@
 #include <Oxygen/Data/ProceduralMeshDefaults.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentProceduralBindings.h>
 
@@ -67,7 +71,8 @@ namespace {
     const float a) -> data::AssetKey
   {
     const auto ToChannel = [](const float value) {
-      return static_cast<int>(std::clamp(value, 0.0F, 1.0F) * 255.0F + 0.5F);
+      return static_cast<int>(
+        std::lround(std::clamp(value, 0.0F, 1.0F) * 255.0F));
     };
     const auto key_path = "/Engine/Scripting/Procedural/Materials/BaseColor_"
       + std::to_string(ToChannel(r)) + "_" + std::to_string(ToChannel(g)) + "_"
@@ -76,14 +81,19 @@ namespace {
     return data::AssetKey::FromVirtualPath(key_path);
   }
 
+  //! An optional integer option: its value when absent and its minimum.
+  struct UIntOption {
+    unsigned int fallback = 0U;
+    unsigned int minimum = 1U;
+  };
+
   auto ReadOptionalUInt(lua_State* state, const int table_index,
-    const char* field, const unsigned int fallback_value,
-    const unsigned int minimum_value = 1U) -> unsigned int
+    const char* field, const UIntOption option) -> unsigned int
   {
     lua_getfield(state, table_index, field);
     if (lua_isnil(state, -1) != 0) {
       lua_pop(state, 1);
-      return fallback_value;
+      return option.fallback;
     }
     if (lua_type(state, -1) != LUA_TNUMBER) {
       lua_pop(state, 1);
@@ -94,8 +104,8 @@ namespace {
 
     const double raw = lua_tonumber(state, -1);
     lua_pop(state, 1);
-    if (!std::isfinite(raw) || raw < minimum_value
-      || raw > (std::numeric_limits<unsigned int>::max)()
+    if (!std::isfinite(raw) || raw < option.minimum
+      || raw > std::numeric_limits<unsigned int>::max()
       || std::floor(raw) != raw) {
       luaL_error(state,
         "assets.create_procedural_geometry option '%s' is outside its "
@@ -121,7 +131,7 @@ namespace {
     const double value = lua_tonumber(state, -1);
     lua_pop(state, 1);
     if (!std::isfinite(value)
-      || std::abs(value) > (std::numeric_limits<float>::max)()) {
+      || std::abs(value) > std::numeric_limits<float>::max()) {
       luaL_error(state,
         "assets.create_procedural_geometry option '%s' must be a finite "
         "float32 value",
@@ -189,7 +199,8 @@ namespace {
     }
     const auto read_uint = [&](const char* field, const unsigned int fallback,
                              const unsigned int minimum = 1U) {
-      return has_options ? ReadOptionalUInt(state, 2, field, fallback, minimum)
+      return has_options ? ReadOptionalUInt(state, 2, field,
+                             { .fallback = fallback, .minimum = minimum })
                          : fallback;
     };
     const auto read_float = [&](const char* field, const float fallback) {
@@ -297,10 +308,10 @@ namespace {
 
   auto AssetsCreateMaterialWithBaseColor(lua_State* state) -> int
   {
-    const float r = static_cast<float>(luaL_checknumber(state, 1));
-    const float g = static_cast<float>(luaL_checknumber(state, 2));
-    const float b = static_cast<float>(luaL_checknumber(state, 3));
-    const float a = static_cast<float>(luaL_optnumber(state, 4, 1.0));
+    const auto r = static_cast<float>(luaL_checknumber(state, 1));
+    const auto g = static_cast<float>(luaL_checknumber(state, 2));
+    const auto b = static_cast<float>(luaL_checknumber(state, 3));
+    const auto a = static_cast<float>(luaL_optnumber(state, 4, 1.0));
 
     auto sanitize_channel = [](const float value) {
       if (!std::isfinite(value)) {
@@ -324,23 +335,43 @@ namespace {
     auto material = std::make_shared<const data::MaterialAsset>(key, desc);
     return PushMaterialAsset(state, std::move(material));
   }
+
+  constexpr auto kProceduralFunctions = std::to_array<BindingFunction>({
+    {
+      .name = "create_procedural_geometry",
+      .function = AssetsCreateProceduralGeometry,
+      .signature
+      = "(kind: ProceduralGeometryKind, options: ProceduralGeometryOptions?) "
+        "-> GeometryAsset?",
+    },
+    {
+      .name = "create_default_material",
+      .function = AssetsCreateDefaultMaterial,
+      .signature = "() -> MaterialAsset?",
+    },
+    {
+      .name = "create_debug_material",
+      .function = AssetsCreateDebugMaterial,
+      .signature = "() -> MaterialAsset?",
+    },
+    {
+      .name = "create_material_with_base_color",
+      .function = AssetsCreateMaterialWithBaseColor,
+      .signature
+      = "(r: number, g: number, b: number, a: number?) -> MaterialAsset?",
+    },
+  });
 } // namespace
 
 auto RegisterContentModuleProcedural(lua_State* state, const int module_index)
   -> void
 {
-  lua_pushcfunction(
-    state, AssetsCreateProceduralGeometry, "assets.create_procedural_geometry");
-  lua_setfield(state, module_index, "create_procedural_geometry");
-  lua_pushcfunction(
-    state, AssetsCreateDefaultMaterial, "assets.create_default_material");
-  lua_setfield(state, module_index, "create_default_material");
-  lua_pushcfunction(
-    state, AssetsCreateDebugMaterial, "assets.create_debug_material");
-  lua_setfield(state, module_index, "create_debug_material");
-  lua_pushcfunction(state, AssetsCreateMaterialWithBaseColor,
-    "assets.create_material_with_base_color");
-  lua_setfield(state, module_index, "create_material_with_base_color");
+  RegisterFunctions(state, module_index, kProceduralFunctions);
+}
+
+auto ContentProceduralFunctions() -> std::span<const BindingFunction>
+{
+  return kProceduralFunctions;
 }
 
 } // namespace oxygen::scripting::bindings

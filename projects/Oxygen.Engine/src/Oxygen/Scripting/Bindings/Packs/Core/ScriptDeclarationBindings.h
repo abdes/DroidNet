@@ -6,6 +6,10 @@
 
 #pragma once
 
+#include <span>
+
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+
 struct lua_State;
 
 namespace oxygen::scripting::bindings {
@@ -19,6 +23,8 @@ namespace oxygen::scripting::bindings {
 */
 auto RegisterScriptDeclarationBindings(lua_State* state, int oxygen_table_index)
   -> void;
+auto DescribeScriptDeclarationBindings()
+  -> std::span<const BindingNamespaceDescription>;
 
 //! Whether the value at `index` is a table returned by `oxygen.script`.
 auto IsScriptTable(lua_State* state, int index) -> bool;

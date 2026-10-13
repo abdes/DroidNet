@@ -4,9 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -15,6 +17,8 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/IdsBindings.h>
 
@@ -39,16 +43,15 @@ namespace {
   auto ToUuid(lua_State* state, int index) -> UuidUserdata*
   {
     void* data = lua_touserdata(state, index);
-    if (data != nullptr) {
-      if (lua_getmetatable(state, index) != 0) {
-        lua_getfield(state, LUA_REGISTRYINDEX, kUuidMetatableName);
-        if (lua_rawequal(state, -1, -2) != 0) {
-          lua_pop(state, 2);
-          return static_cast<UuidUserdata*>(data);
-        }
+    if ((data != nullptr) && (lua_getmetatable(state, index) != 0)) {
+      lua_getfield(state, LUA_REGISTRYINDEX, kUuidMetatableName);
+      if (lua_rawequal(state, -1, -2) != 0) {
         lua_pop(state, 2);
+        return static_cast<UuidUserdata*>(data);
       }
+      lua_pop(state, 2);
     }
+
     return nullptr;
   }
 
@@ -157,16 +160,15 @@ namespace {
   auto CheckHash(lua_State* state, int index) -> std::uint64_t
   {
     void* data = lua_touserdata(state, index);
-    if (data != nullptr) {
-      if (lua_getmetatable(state, index) != 0) {
-        lua_getfield(state, LUA_REGISTRYINDEX, kHashMetatableName);
-        if (lua_rawequal(state, -1, -2) != 0) {
-          lua_pop(state, 2);
-          return static_cast<HashUserdata*>(data)->value;
-        }
+    if ((data != nullptr) && (lua_getmetatable(state, index) != 0)) {
+      lua_getfield(state, LUA_REGISTRYINDEX, kHashMetatableName);
+      if (lua_rawequal(state, -1, -2) != 0) {
         lua_pop(state, 2);
+        return static_cast<HashUserdata*>(data)->value;
       }
+      lua_pop(state, 2);
     }
+
     if (lua_isnumber(state, index) != 0) {
       const lua_Number number_value = lua_tonumber(state, index);
       const lua_Integer integer_value = lua_tointeger(state, index);
@@ -228,6 +230,55 @@ namespace {
     return 1;
   }
 
+  constexpr auto kUuidFunctions = std::to_array<BindingFunction>({
+    { .name = "new", .function = LuaUuidNew, .signature = "() -> Uuid" },
+    {
+      .name = "is_valid",
+      .function = LuaUuidIsValid,
+      .signature = "(value: Uuid | string) -> boolean",
+    },
+    {
+      .name = "to_string",
+      .function = LuaUuidToString,
+      .signature = "(id: Uuid) -> string",
+    },
+    {
+      .name = "from_string",
+      .function = LuaUuidFromString,
+      .signature = "(text: string) -> Uuid?",
+    },
+  });
+
+  constexpr auto kHashFunctions = std::to_array<BindingFunction>({
+    {
+      .name = "hash64",
+      .function = LuaHash64,
+      .signature = "(text: string) -> Hash",
+    },
+    {
+      .name = "combine64",
+      .function = LuaHashCombine64,
+      .signature
+      = "(seed: Hash | number | string, value: Hash | number | string) -> Hash",
+    },
+  });
+
+  constexpr auto kUuidClasses = std::to_array<BindingClass>({
+    { .name = "Uuid", .metatable = kUuidMetatableName },
+  });
+
+  constexpr auto kHashClasses = std::to_array<BindingClass>({
+    { .name = "Hash", .metatable = kHashMetatableName },
+  });
+
+  constexpr auto kUuidDescription = std::to_array<BindingNamespaceDescription>({
+    { .path = "uuid", .functions = kUuidFunctions, .classes = kUuidClasses },
+  });
+
+  constexpr auto kHashDescription = std::to_array<BindingNamespaceDescription>({
+    { .path = "hash", .functions = kHashFunctions, .classes = kHashClasses },
+  });
+
 } // namespace
 
 auto RegisterUuidBindings(lua_State* state, const int oxygen_table_index)
@@ -245,16 +296,13 @@ auto RegisterUuidBindings(lua_State* state, const int oxygen_table_index)
   const int module_index
     = PushOxygenSubtable(state, oxygen_table_index, "uuid");
 
-  lua_pushcfunction(state, LuaUuidNew, "uuid.new");
-  lua_setfield(state, module_index, "new");
-  lua_pushcfunction(state, LuaUuidIsValid, "uuid.is_valid");
-  lua_setfield(state, module_index, "is_valid");
-  lua_pushcfunction(state, LuaUuidToString, "uuid.to_string");
-  lua_setfield(state, module_index, "to_string");
-  lua_pushcfunction(state, LuaUuidFromString, "uuid.from_string");
-  lua_setfield(state, module_index, "from_string");
-
+  RegisterFunctions(state, module_index, kUuidFunctions);
   lua_pop(state, 1);
+}
+
+auto DescribeUuidBindings() -> std::span<const BindingNamespaceDescription>
+{
+  return kUuidDescription;
 }
 
 auto RegisterHashBindings(lua_State* state, const int oxygen_table_index)
@@ -271,12 +319,13 @@ auto RegisterHashBindings(lua_State* state, const int oxygen_table_index)
   const int module_index
     = PushOxygenSubtable(state, oxygen_table_index, "hash");
 
-  lua_pushcfunction(state, LuaHash64, "hash.hash64");
-  lua_setfield(state, module_index, "hash64");
-  lua_pushcfunction(state, LuaHashCombine64, "hash.combine64");
-  lua_setfield(state, module_index, "combine64");
-
+  RegisterFunctions(state, module_index, kHashFunctions);
   lua_pop(state, 1);
+}
+
+auto DescribeHashBindings() -> std::span<const BindingNamespaceDescription>
+{
+  return kHashDescription;
 }
 
 } // namespace oxygen::scripting::bindings

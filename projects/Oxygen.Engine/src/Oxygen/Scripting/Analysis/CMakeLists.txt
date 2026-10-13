@@ -65,6 +65,8 @@ set(
   "DiagnosticCatalog.cpp"
   "DiagnosticJson.cpp"
   "DiagnosticRenderer.cpp"
+  "LuauChecks.cpp"
+  "LuauChecks.h"
   "LuauCompiler.cpp"
   "ScriptAnalyzer.cpp"
   "ScriptDiagnostic.cpp"
@@ -96,6 +98,7 @@ target_link_libraries(
     oxygen::base
     oxygen::data
   PRIVATE
+    Luau::Analysis
     Luau::Ast
     Luau::Compiler
     nlohmann_json::nlohmann_json

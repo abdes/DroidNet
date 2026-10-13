@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <span>
 #include <string>
 
 #include <lua.h>
@@ -11,6 +13,8 @@
 
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentUserdataBindings.h>
@@ -320,9 +324,190 @@ namespace {
     return 1;
   }
 
+  constexpr auto kTextureResourceMethods = std::to_array<BindingFunction>({
+    {
+      .name = "is_valid",
+      .function = TextureIsValid,
+      .signature = "() -> boolean",
+    },
+    { .name = "key", .function = TextureKey, .signature = "() -> number" },
+    {
+      .name = "type_name",
+      .function = TextureTypeName,
+      .signature = "() -> string",
+    },
+    {
+      .name = "to_string",
+      .function = TextureToString,
+      .signature = "() -> string",
+    },
+  });
+
+  constexpr auto kBufferResourceMethods = std::to_array<BindingFunction>({
+    {
+      .name = "is_valid",
+      .function = BufferIsValid,
+      .signature = "() -> boolean",
+    },
+    { .name = "key", .function = BufferKey, .signature = "() -> number" },
+    {
+      .name = "type_name",
+      .function = BufferTypeName,
+      .signature = "() -> string",
+    },
+    {
+      .name = "to_string",
+      .function = BufferToString,
+      .signature = "() -> string",
+    },
+  });
+
+  constexpr auto kMaterialAssetMethods = std::to_array<BindingFunction>({
+    {
+      .name = "is_valid",
+      .function = MaterialIsValid,
+      .signature = "() -> boolean",
+    },
+    { .name = "guid", .function = MaterialGuid, .signature = "() -> string?" },
+    {
+      .name = "type_name",
+      .function = MaterialTypeName,
+      .signature = "() -> string",
+    },
+    {
+      .name = "to_string",
+      .function = MaterialToString,
+      .signature = "() -> string",
+    },
+  });
+
+  constexpr auto kGeometryAssetMethods = std::to_array<BindingFunction>({
+    {
+      .name = "is_valid",
+      .function = GeometryIsValid,
+      .signature = "() -> boolean",
+    },
+    { .name = "guid", .function = GeometryGuid, .signature = "() -> string?" },
+    {
+      .name = "type_name",
+      .function = GeometryTypeName,
+      .signature = "() -> string",
+    },
+    {
+      .name = "to_string",
+      .function = GeometryToString,
+      .signature = "() -> string",
+    },
+  });
+
+  constexpr auto kScriptAssetMethods = std::to_array<BindingFunction>({
+    {
+      .name = "is_valid",
+      .function = ScriptIsValid,
+      .signature = "() -> boolean",
+    },
+    { .name = "guid", .function = ScriptGuid, .signature = "() -> string?" },
+    {
+      .name = "type_name",
+      .function = ScriptTypeName,
+      .signature = "() -> string",
+    },
+    {
+      .name = "to_string",
+      .function = ScriptToString,
+      .signature = "() -> string",
+    },
+  });
+
+  constexpr auto kInputActionAssetMethods = std::to_array<BindingFunction>({
+    {
+      .name = "is_valid",
+      .function = InputActionIsValid,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "guid",
+      .function = InputActionGuid,
+      .signature = "() -> string?",
+    },
+    {
+      .name = "type_name",
+      .function = InputActionTypeName,
+      .signature = "() -> string",
+    },
+    {
+      .name = "to_string",
+      .function = InputActionToString,
+      .signature = "() -> string",
+    },
+  });
+
+  constexpr auto kInputMappingContextAssetMethods
+    = std::to_array<BindingFunction>({
+      {
+        .name = "is_valid",
+        .function = InputMappingContextIsValid,
+        .signature = "() -> boolean",
+      },
+      {
+        .name = "guid",
+        .function = InputMappingContextGuid,
+        .signature = "() -> string?",
+      },
+      {
+        .name = "type_name",
+        .function = InputMappingContextTypeName,
+        .signature = "() -> string",
+      },
+      {
+        .name = "to_string",
+        .function = InputMappingContextToString,
+        .signature = "() -> string",
+      },
+    });
+
+  constexpr auto kContentClasses = std::to_array<BindingClass>({
+    {
+      .name = "TextureResource",
+      .metatable = kTextureResourceMetatableName,
+      .methods = kTextureResourceMethods,
+    },
+    {
+      .name = "BufferResource",
+      .metatable = kBufferResourceMetatableName,
+      .methods = kBufferResourceMethods,
+    },
+    {
+      .name = "MaterialAsset",
+      .metatable = kMaterialAssetMetatableName,
+      .methods = kMaterialAssetMethods,
+    },
+    {
+      .name = "GeometryAsset",
+      .metatable = kGeometryAssetMetatableName,
+      .methods = kGeometryAssetMethods,
+    },
+    {
+      .name = "ScriptAsset",
+      .metatable = kScriptAssetMetatableName,
+      .methods = kScriptAssetMethods,
+    },
+    {
+      .name = "InputActionAsset",
+      .metatable = kInputActionAssetMetatableName,
+      .methods = kInputActionAssetMethods,
+    },
+    {
+      .name = "InputMappingContextAsset",
+      .metatable = kInputMappingContextAssetMetatableName,
+      .methods = kInputMappingContextAssetMethods,
+    },
+  });
+
+  //! Creates a metatable whose `__index` table holds the methods.
   auto RegisterMetatable(lua_State* state, const char* name,
-    const lua_CFunction is_valid, const lua_CFunction id_fn,
-    const lua_CFunction type_name_fn, const lua_CFunction tostring_fn) -> void
+    const std::span<const BindingFunction> methods,
+    const lua_CFunction tostring_fn) -> void
   {
     if (luaL_newmetatable(state, name) == 0) {
       lua_pop(state, 1);
@@ -330,42 +515,10 @@ namespace {
     }
 
     lua_newtable(state);
-    lua_pushcfunction(state, is_valid, "assets.userdata.is_valid");
-    lua_setfield(state, -2, "is_valid");
-    lua_pushcfunction(state, id_fn, "assets.userdata.id");
-    lua_setfield(state, -2, "guid");
-    lua_pushcfunction(state, type_name_fn, "assets.userdata.type_name");
-    lua_setfield(state, -2, "type_name");
-    lua_pushcfunction(state, tostring_fn, "assets.userdata.to_string");
-    lua_setfield(state, -2, "to_string");
+    RegisterFunctions(state, -1, methods);
     lua_setfield(state, -2, "__index");
 
-    lua_pushcfunction(state, tostring_fn, "assets.userdata.__tostring");
-    lua_setfield(state, -2, "__tostring");
-    lua_pop(state, 1);
-  }
-
-  auto RegisterResourceMetatable(lua_State* state, const char* name,
-    const lua_CFunction is_valid, const lua_CFunction key_fn,
-    const lua_CFunction type_name_fn, const lua_CFunction tostring_fn) -> void
-  {
-    if (luaL_newmetatable(state, name) == 0) {
-      lua_pop(state, 1);
-      return;
-    }
-
-    lua_newtable(state);
-    lua_pushcfunction(state, is_valid, "assets.resource.is_valid");
-    lua_setfield(state, -2, "is_valid");
-    lua_pushcfunction(state, key_fn, "assets.resource.key");
-    lua_setfield(state, -2, "key");
-    lua_pushcfunction(state, type_name_fn, "assets.resource.type_name");
-    lua_setfield(state, -2, "type_name");
-    lua_pushcfunction(state, tostring_fn, "assets.resource.to_string");
-    lua_setfield(state, -2, "to_string");
-    lua_setfield(state, -2, "__index");
-
-    lua_pushcfunction(state, tostring_fn, "assets.resource.__tostring");
+    lua_pushcfunction(state, tostring_fn, "__tostring");
     lua_setfield(state, -2, "__tostring");
     lua_pop(state, 1);
   }
@@ -392,22 +545,25 @@ auto RegisterContentUserdataMetatables(lua_State* state) -> void
   lua_setuserdatadtor(state, kTagBufferResource, BufferResourceDtor);
   lua_setuserdatadtor(state, kTagAsset, AssetDtor);
 
-  RegisterResourceMetatable(state, kTextureResourceMetatableName,
-    TextureIsValid, TextureKey, TextureTypeName, TextureToString);
-  RegisterResourceMetatable(state, kBufferResourceMetatableName, BufferIsValid,
-    BufferKey, BufferTypeName, BufferToString);
-
-  RegisterMetatable(state, kMaterialAssetMetatableName, MaterialIsValid,
-    MaterialGuid, MaterialTypeName, MaterialToString);
-  RegisterMetatable(state, kGeometryAssetMetatableName, GeometryIsValid,
-    GeometryGuid, GeometryTypeName, GeometryToString);
-  RegisterMetatable(state, kScriptAssetMetatableName, ScriptIsValid, ScriptGuid,
-    ScriptTypeName, ScriptToString);
-  RegisterMetatable(state, kInputActionAssetMetatableName, InputActionIsValid,
-    InputActionGuid, InputActionTypeName, InputActionToString);
+  RegisterMetatable(state, kTextureResourceMetatableName,
+    kTextureResourceMethods, TextureToString);
+  RegisterMetatable(state, kBufferResourceMetatableName, kBufferResourceMethods,
+    BufferToString);
+  RegisterMetatable(state, kMaterialAssetMetatableName, kMaterialAssetMethods,
+    MaterialToString);
+  RegisterMetatable(state, kGeometryAssetMetatableName, kGeometryAssetMethods,
+    GeometryToString);
+  RegisterMetatable(
+    state, kScriptAssetMetatableName, kScriptAssetMethods, ScriptToString);
+  RegisterMetatable(state, kInputActionAssetMetatableName,
+    kInputActionAssetMethods, InputActionToString);
   RegisterMetatable(state, kInputMappingContextAssetMetatableName,
-    InputMappingContextIsValid, InputMappingContextGuid,
-    InputMappingContextTypeName, InputMappingContextToString);
+    kInputMappingContextAssetMethods, InputMappingContextToString);
+}
+
+auto ContentUserdataClasses() -> std::span<const BindingClass>
+{
+  return kContentClasses;
 }
 
 } // namespace oxygen::scripting::bindings

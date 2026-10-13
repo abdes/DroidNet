@@ -92,12 +92,20 @@ m_gtest_program(
     "Bindings_physics_soft_body_test.cpp"
     "Bindings_scene_test.cpp"
     "Bindings_content_test.cpp"
+    "Bindings_definitions_test.cpp"
 )
 target_link_libraries(
   Oxygen.Scripting.Bindings.Tests
   PRIVATE
     oxygen::input
     oxygen::physicsmodule
+    oxygen::scripting-analysis
+)
+# The definitions test type-checks the maintained example scripts.
+target_compile_definitions(
+  Oxygen.Scripting.Bindings.Tests
+  PRIVATE
+    OXYGEN_EXAMPLE_SCENES_DIR="${OXYGEN_SOURCE_DIR}/../Examples/Content/scenes"
 )
 
 # Aggregate target that builds all scripting test targets (excludes LinkTest)

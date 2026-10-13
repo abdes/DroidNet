@@ -1,6 +1,10 @@
 #pragma once
 
+#include <span>
+
 #include <lua.h>
+
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
 
 namespace oxygen::scripting::bindings {
 
@@ -15,5 +19,14 @@ auto RegisterSceneNodeScriptingMethods(lua_State* state, int metatable_index)
 
 auto RegisterSceneNodeComponentMethods(lua_State* state, int metatable_index)
   -> void;
+
+auto DescribeSceneNodeCameraBindings()
+  -> std::span<const BindingNamespaceDescription>;
+auto DescribeSceneNodeLightBindings()
+  -> std::span<const BindingNamespaceDescription>;
+auto DescribeSceneNodeRenderableBindings()
+  -> std::span<const BindingNamespaceDescription>;
+auto DescribeSceneNodeScriptingBindings()
+  -> std::span<const BindingNamespaceDescription>;
 
 } // namespace oxygen::scripting::bindings

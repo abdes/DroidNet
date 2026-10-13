@@ -4,13 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <memory>
+#include <span>
 #include <utility>
 
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Data/BufferResource.h>
@@ -21,6 +24,8 @@
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentAsyncBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
@@ -36,6 +41,9 @@ namespace {
 
   class ScopedLuaStackTop final {
   public:
+    OXYGEN_MAKE_NON_COPYABLE(ScopedLuaStackTop)
+    OXYGEN_MAKE_NON_MOVABLE(ScopedLuaStackTop)
+
     explicit ScopedLuaStackTop(lua_State* state, const char* context) noexcept
       : state_(state)
       , top_(state != nullptr ? lua_gettop(state) : 0)
@@ -395,29 +403,63 @@ namespace {
     lua_pushboolean(state, 0);
     return 1;
   }
+
+  constexpr auto kAsyncFunctions = std::to_array<BindingFunction>({
+    {
+      .name = "load_texture_async",
+      .function = AssetsLoadTextureAsync,
+      .signature
+      = "(key: number, callback: (asset: TextureResource?) -> ()) -> boolean",
+    },
+    {
+      .name = "load_buffer_async",
+      .function = AssetsLoadBufferAsync,
+      .signature
+      = "(key: number, callback: (asset: BufferResource?) -> ()) -> boolean",
+    },
+    {
+      .name = "load_material_async",
+      .function = AssetsLoadMaterialAsync,
+      .signature
+      = "(guid: string, callback: (asset: MaterialAsset?) -> ()) -> boolean",
+    },
+    {
+      .name = "load_geometry_async",
+      .function = AssetsLoadGeometryAsync,
+      .signature
+      = "(guid: string, callback: (asset: GeometryAsset?) -> ()) -> boolean",
+    },
+    {
+      .name = "load_script_async",
+      .function = AssetsLoadScriptAsync,
+      .signature
+      = "(guid: string, callback: (asset: ScriptAsset?) -> ()) -> boolean",
+    },
+    {
+      .name = "load_input_action_async",
+      .function = AssetsLoadInputActionAsync,
+      .signature
+      = "(guid: string, callback: (asset: InputActionAsset?) -> ()) -> boolean",
+    },
+    {
+      .name = "load_input_mapping_context_async",
+      .function = AssetsLoadInputMappingContextAsync,
+      .signature
+      = "(guid: string, callback: (asset: InputMappingContextAsset?) -> ()) -> "
+        "boolean",
+    },
+  });
 } // namespace
 
 auto RegisterContentModuleAsync(lua_State* state, const int module_index)
   -> void
 {
-  lua_pushcfunction(state, AssetsLoadTextureAsync, "assets.load_texture_async");
-  lua_setfield(state, module_index, "load_texture_async");
-  lua_pushcfunction(state, AssetsLoadBufferAsync, "assets.load_buffer_async");
-  lua_setfield(state, module_index, "load_buffer_async");
-  lua_pushcfunction(
-    state, AssetsLoadMaterialAsync, "assets.load_material_async");
-  lua_setfield(state, module_index, "load_material_async");
-  lua_pushcfunction(
-    state, AssetsLoadGeometryAsync, "assets.load_geometry_async");
-  lua_setfield(state, module_index, "load_geometry_async");
-  lua_pushcfunction(state, AssetsLoadScriptAsync, "assets.load_script_async");
-  lua_setfield(state, module_index, "load_script_async");
-  lua_pushcfunction(
-    state, AssetsLoadInputActionAsync, "assets.load_input_action_async");
-  lua_setfield(state, module_index, "load_input_action_async");
-  lua_pushcfunction(state, AssetsLoadInputMappingContextAsync,
-    "assets.load_input_mapping_context_async");
-  lua_setfield(state, module_index, "load_input_mapping_context_async");
+  RegisterFunctions(state, module_index, kAsyncFunctions);
+}
+
+auto ContentAsyncFunctions() -> std::span<const BindingFunction>
+{
+  return kAsyncFunctions;
 }
 
 } // namespace oxygen::scripting::bindings

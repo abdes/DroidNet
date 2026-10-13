@@ -4,8 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <span>
+
 #include <lua.h>
 
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentAsyncBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindings.h>
@@ -30,6 +34,43 @@ auto RegisterContentBindings(lua_State* state, const int oxygen_table_index)
   RegisterContentModuleProcedural(state, module_index);
   RegisterContentModuleLegacyGuards(state, module_index);
   lua_pop(state, 1);
+}
+
+auto DescribeContentBindings() -> std::span<const BindingNamespaceDescription>
+{
+  static constexpr auto kTypes = std::to_array<BindingTypeAlias>({
+    {
+      .name = "ProceduralGeometryKind",
+      .definition = R"("cube" | "subdivided_cube" | "arrow_gizmo" | "sphere" )"
+                    R"(| "capsule" | "icosphere" | "plane" | "cylinder" )"
+                    R"(| "cone" | "torus" | "quad")",
+    },
+    {
+      .name = "ProceduralGeometryOptions",
+      .definition
+      = "{ segments: number?, latitude_segments: number?, "
+        "longitude_segments: number?, hemisphere_segments: number?, "
+        "radial_segments: number?, subdivision_level: number?, "
+        "x_segments: number?, z_segments: number?, "
+        "major_segments: number?, minor_segments: number?, "
+        "height: number?, radius: number?, size: number?, "
+        "major_radius: number?, minor_radius: number?, "
+        "width: number? }",
+    },
+  });
+  static const auto descriptions = std::to_array<BindingNamespaceDescription>({
+    {
+      .path = "assets",
+      .functions = ContentAvailabilityFunctions(),
+      .classes = ContentUserdataClasses(),
+      .types = kTypes,
+    },
+    { .path = "assets", .functions = ContentQueryFunctions() },
+    { .path = "assets", .functions = ContentAsyncFunctions() },
+    { .path = "assets", .functions = ContentLifecycleFunctions() },
+    { .path = "assets", .functions = ContentProceduralFunctions() },
+  });
+  return descriptions;
 }
 
 } // namespace oxygen::scripting::bindings

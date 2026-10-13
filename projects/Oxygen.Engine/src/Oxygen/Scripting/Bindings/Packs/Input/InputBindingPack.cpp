@@ -6,9 +6,11 @@
 
 #include <array>
 #include <memory>
+#include <span>
 #include <string_view>
 
 #include <Oxygen/Scripting/Bindings/BindingRegistry.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Input/InputBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Input/InputBindings.h>
@@ -16,11 +18,13 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
-  constexpr std::array<BindingNamespace, 1> kInputNamespaces = {
+  constexpr auto kInputNamespaces = std::to_array<BindingNamespace>({
     {
-      { .name = "input", .register_fn = RegisterInputBindings },
+      .name = "input",
+      .register_fn = RegisterInputBindings,
+      .describe = DescribeInputBindings,
     },
-  };
+  });
 
   class InputBindingPack final : public contracts::IScriptBindingPack {
   public:
@@ -34,6 +38,12 @@ namespace {
     {
       return RegisterBindingNamespaces(
         context.lua_state, context.runtime_env_ref, kInputNamespaces);
+    }
+
+    [[nodiscard]] auto Namespaces() const
+      -> std::span<const BindingNamespace> override
+    {
+      return kInputNamespaces;
     }
   };
 } // namespace

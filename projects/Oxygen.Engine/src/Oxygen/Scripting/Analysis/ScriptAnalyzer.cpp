@@ -16,6 +16,7 @@
 #include <Luau/Parser.h>
 
 #include <Oxygen/Scripting/Analysis/DeclarationExtractor.h>
+#include <Oxygen/Scripting/Analysis/LuauChecks.h>
 #include <Oxygen/Scripting/Analysis/ScriptAnalyzer.h>
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 
@@ -56,6 +57,17 @@ auto ScriptAnalyzer::Analyze(const ScriptAnalysisRequest& request) const
     *parsed.root, request.source_name, analysis.diagnostics);
   analysis.has_declaration = extracted.has_declaration;
   analysis.declarations = std::move(extracted.declarations);
+
+  if (request.level >= AnalysisLevel::kLint) {
+    detail::RunLuauChecks(
+      detail::LuauCheckRequest {
+        .source_name = request.source_name,
+        .source = source,
+        .type_definitions = request.type_definitions,
+        .check_types = request.level >= AnalysisLevel::kTypes,
+      },
+      analysis.diagnostics);
+  }
   return analysis;
 }
 

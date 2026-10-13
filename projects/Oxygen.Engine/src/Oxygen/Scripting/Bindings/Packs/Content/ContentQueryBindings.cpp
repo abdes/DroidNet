@@ -4,11 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <span>
 #include <utility>
 
 #include <lua.h>
 
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentQueryBindings.h>
 
@@ -189,42 +193,90 @@ namespace {
     }
     return PushInputMappingContextAsset(state, std::move(asset));
   }
+
+  constexpr auto kQueryFunctions = std::to_array<BindingFunction>({
+    {
+      .name = "has_texture",
+      .function = AssetsHasTexture,
+      .signature = "(key: number) -> boolean",
+    },
+    {
+      .name = "get_texture",
+      .function = AssetsGetTexture,
+      .signature = "(key: number) -> TextureResource?",
+    },
+    {
+      .name = "has_buffer",
+      .function = AssetsHasBuffer,
+      .signature = "(key: number) -> boolean",
+    },
+    {
+      .name = "get_buffer",
+      .function = AssetsGetBuffer,
+      .signature = "(key: number) -> BufferResource?",
+    },
+    {
+      .name = "has_material",
+      .function = AssetsHasMaterial,
+      .signature = "(guid: string) -> boolean",
+    },
+    {
+      .name = "get_material",
+      .function = AssetsGetMaterial,
+      .signature = "(guid: string) -> MaterialAsset?",
+    },
+    {
+      .name = "has_geometry",
+      .function = AssetsHasGeometry,
+      .signature = "(guid: string) -> boolean",
+    },
+    {
+      .name = "get_geometry",
+      .function = AssetsGetGeometry,
+      .signature = "(guid: string) -> GeometryAsset?",
+    },
+    {
+      .name = "has_script",
+      .function = AssetsHasScript,
+      .signature = "(guid: string) -> boolean",
+    },
+    {
+      .name = "get_script",
+      .function = AssetsGetScript,
+      .signature = "(guid: string) -> ScriptAsset?",
+    },
+    {
+      .name = "has_input_action",
+      .function = AssetsHasInputAction,
+      .signature = "(guid: string) -> boolean",
+    },
+    {
+      .name = "get_input_action",
+      .function = AssetsGetInputAction,
+      .signature = "(guid: string) -> InputActionAsset?",
+    },
+    {
+      .name = "has_input_mapping_context",
+      .function = AssetsHasInputMappingContext,
+      .signature = "(guid: string) -> boolean",
+    },
+    {
+      .name = "get_input_mapping_context",
+      .function = AssetsGetInputMappingContext,
+      .signature = "(guid: string) -> InputMappingContextAsset?",
+    },
+  });
 } // namespace
 
 auto RegisterContentModuleQuery(lua_State* state, const int module_index)
   -> void
 {
-  lua_pushcfunction(state, AssetsHasTexture, "assets.has_texture");
-  lua_setfield(state, module_index, "has_texture");
-  lua_pushcfunction(state, AssetsGetTexture, "assets.get_texture");
-  lua_setfield(state, module_index, "get_texture");
-  lua_pushcfunction(state, AssetsHasBuffer, "assets.has_buffer");
-  lua_setfield(state, module_index, "has_buffer");
-  lua_pushcfunction(state, AssetsGetBuffer, "assets.get_buffer");
-  lua_setfield(state, module_index, "get_buffer");
+  RegisterFunctions(state, module_index, kQueryFunctions);
+}
 
-  lua_pushcfunction(state, AssetsHasMaterial, "assets.has_material");
-  lua_setfield(state, module_index, "has_material");
-  lua_pushcfunction(state, AssetsGetMaterial, "assets.get_material");
-  lua_setfield(state, module_index, "get_material");
-  lua_pushcfunction(state, AssetsHasGeometry, "assets.has_geometry");
-  lua_setfield(state, module_index, "has_geometry");
-  lua_pushcfunction(state, AssetsGetGeometry, "assets.get_geometry");
-  lua_setfield(state, module_index, "get_geometry");
-  lua_pushcfunction(state, AssetsHasScript, "assets.has_script");
-  lua_setfield(state, module_index, "has_script");
-  lua_pushcfunction(state, AssetsGetScript, "assets.get_script");
-  lua_setfield(state, module_index, "get_script");
-  lua_pushcfunction(state, AssetsHasInputAction, "assets.has_input_action");
-  lua_setfield(state, module_index, "has_input_action");
-  lua_pushcfunction(state, AssetsGetInputAction, "assets.get_input_action");
-  lua_setfield(state, module_index, "get_input_action");
-  lua_pushcfunction(
-    state, AssetsHasInputMappingContext, "assets.has_input_mapping_context");
-  lua_setfield(state, module_index, "has_input_mapping_context");
-  lua_pushcfunction(
-    state, AssetsGetInputMappingContext, "assets.get_input_mapping_context");
-  lua_setfield(state, module_index, "get_input_mapping_context");
+auto ContentQueryFunctions() -> std::span<const BindingFunction>
+{
+  return kQueryFunctions;
 }
 
 } // namespace oxygen::scripting::bindings

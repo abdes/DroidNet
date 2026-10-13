@@ -6,9 +6,11 @@
 
 #include <array>
 #include <memory>
+#include <span>
 #include <string_view>
 
 #include <Oxygen/Scripting/Bindings/BindingRegistry.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/AppBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/ConventionsBindings.h>
@@ -25,15 +27,51 @@ namespace oxygen::scripting::bindings {
 namespace {
   constexpr std::array<BindingNamespace, 9> kCoreNamespaces = {
     {
-      { .name = "app", .register_fn = RegisterAppBindings },
-      { .name = "conventions", .register_fn = RegisterConventionsBindings },
-      { .name = "events", .register_fn = RegisterEventsBindings },
-      { .name = "hash", .register_fn = RegisterHashBindings },
-      { .name = "log", .register_fn = RegisterLogBindings },
-      { .name = "math", .register_fn = RegisterMathBindings },
-      { .name = "script", .register_fn = RegisterScriptDeclarationBindings },
-      { .name = "time", .register_fn = RegisterTimeBindings },
-      { .name = "uuid", .register_fn = RegisterUuidBindings },
+      {
+        .name = "app",
+        .register_fn = RegisterAppBindings,
+        .describe = DescribeAppBindings,
+      },
+      {
+        .name = "conventions",
+        .register_fn = RegisterConventionsBindings,
+        .describe = DescribeConventionsBindings,
+      },
+      {
+        .name = "events",
+        .register_fn = RegisterEventsBindings,
+        .describe = DescribeEventsBindings,
+      },
+      {
+        .name = "hash",
+        .register_fn = RegisterHashBindings,
+        .describe = DescribeHashBindings,
+      },
+      {
+        .name = "log",
+        .register_fn = RegisterLogBindings,
+        .describe = DescribeLogBindings,
+      },
+      {
+        .name = "math",
+        .register_fn = RegisterMathBindings,
+        .describe = DescribeMathBindings,
+      },
+      {
+        .name = "script",
+        .register_fn = RegisterScriptDeclarationBindings,
+        .describe = DescribeScriptDeclarationBindings,
+      },
+      {
+        .name = "time",
+        .register_fn = RegisterTimeBindings,
+        .describe = DescribeTimeBindings,
+      },
+      {
+        .name = "uuid",
+        .register_fn = RegisterUuidBindings,
+        .describe = DescribeUuidBindings,
+      },
     },
   };
 
@@ -49,6 +87,12 @@ namespace {
     {
       return RegisterBindingNamespaces(
         context.lua_state, context.runtime_env_ref, kCoreNamespaces);
+    }
+
+    [[nodiscard]] auto Namespaces() const
+      -> std::span<const BindingNamespace> override
+    {
+      return kCoreNamespaces;
     }
   };
 } // namespace

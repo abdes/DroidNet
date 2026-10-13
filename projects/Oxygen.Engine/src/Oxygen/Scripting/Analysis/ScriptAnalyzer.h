@@ -21,10 +21,14 @@
 
 namespace oxygen::scripting {
 
-//! How deep a script analysis goes.
+//! How deep a script analysis goes; each level includes the ones before it.
 enum class AnalysisLevel : uint8_t {
   //! Parse and extract the `oxygen.script` parameter declarations.
   kDeclarations = 0,
+  //! Also run the Luau linter (S04xx).
+  kLint = 1,
+  //! Also type-check against the Oxygen API definitions (S05xx).
+  kTypes = 2,
 };
 
 //! One parameter a script declares, with its authoring hints.
@@ -61,6 +65,10 @@ struct ScriptAnalysisRequest {
   std::string_view source_name;
   std::span<const std::byte> source;
   AnalysisLevel level = AnalysisLevel::kDeclarations;
+  //! Luau definitions of the `oxygen` API (the generated `oxygen.d.luau`).
+  //! Required by `kTypes`; without them type checking runs as `kLint`, where
+  //! `oxygen` is untyped.
+  std::string_view type_definitions;
 };
 
 //! Result of one script analysis.
@@ -83,7 +91,11 @@ struct ScriptAnalysis {
  `oxygen.script { params = { ... } }` declaration against the declaration
  rules: one top-level declaration assigned to a local the chunk returns,
  literal field values only, and types, defaults and hints that agree. Every
- violation is a diagnostic with a source span. The cooker, the compile
+ violation is a diagnostic with a source span.
+
+ `kLint` adds the Luau linter's warnings and `kTypes` the Luau type checker's
+ errors, in non-strict mode unless the script opts in with `--!strict`. Both
+ run only when the script parses. The cooker, the compile
  service and the editor use this one analyzer, so all of them report the
  same declarations and diagnostics.
 

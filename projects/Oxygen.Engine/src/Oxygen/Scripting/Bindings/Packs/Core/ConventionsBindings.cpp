@@ -4,9 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <span>
+
 #include <lua.h>
 
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/ConventionsBindings.h>
 
@@ -17,6 +21,34 @@ namespace {
   {
     lua_pushvector(state, value.x, value.y, value.z);
   }
+
+  constexpr auto kConventionsFields = std::to_array<BindingField>({
+    { .name = "handedness", .type = "string" },
+    { .name = "world", .type = "Axes" },
+    { .name = "view", .type = "Axes" },
+    { .name = "clip", .type = "ClipConventions" },
+  });
+
+  constexpr auto kConventionsTypes = std::to_array<BindingTypeAlias>({
+    {
+      .name = "Axes",
+      .definition = "{ up: vector, forward: vector, right: vector }",
+    },
+    {
+      .name = "ClipConventions",
+      .definition
+      = "{ z_near: number, z_far: number, front_face_ccw: boolean }",
+    },
+  });
+
+  constexpr auto kConventionsDescription
+    = std::to_array<BindingNamespaceDescription>({
+      {
+        .path = "conventions",
+        .fields = kConventionsFields,
+        .types = kConventionsTypes,
+      },
+    });
 } // namespace
 
 auto RegisterConventionsBindings(lua_State* state, const int oxygen_table_index)
@@ -56,6 +88,12 @@ auto RegisterConventionsBindings(lua_State* state, const int oxygen_table_index)
   lua_setfield(state, conventions_index, "clip");
 
   lua_pop(state, 1);
+}
+
+auto DescribeConventionsBindings()
+  -> std::span<const BindingNamespaceDescription>
+{
+  return kConventionsDescription;
 }
 
 } // namespace oxygen::scripting::bindings

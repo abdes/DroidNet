@@ -77,8 +77,12 @@ ScriptingModule::Init()
               └─ mark oxygen.__namespaces[name] = true
 ```
 
-`BindingNamespace` is a plain struct: `{ const char* name, NamespaceRegisterFn register_fn }`.
-The `name` field is recorded in `oxygen.__namespaces` for runtime introspection.
+`BindingNamespace` (in `Contracts/BindingDescription.h`) is
+`{ name, register_fn, describe }`. `name` is recorded in `oxygen.__namespaces`
+for runtime introspection; `describe` returns the Luau types of everything
+`register_fn` adds (section 6.4). A pack lists its namespaces through
+`IScriptBindingPack::Namespaces()`, which both registration and the generated
+definitions read.
 
 ---
 
@@ -287,17 +291,32 @@ management.
 
 ### 6.1 Namespace Registration
 
-Every `RegisterXBindings(state, oxygen_table_index)` follows this stack discipline:
+A namespace's functions are one `constexpr` table of `BindingFunction` rows,
+`{ name, function, signature }`, registered with `RegisterFunctions`:
 
-```text
-1. PushOxygenSubtable(state, oxygen_table_index, "x")
-   → pushes or creates oxygen.x, returns absolute stack index
-2. lua_pushcfunction + lua_setfield  (repeat for each public function)
-3. lua_pop(state, 1)                 (pop the module table)
+```cpp
+constexpr auto kTimeFunctions = std::to_array<BindingFunction>({
+  { "delta_seconds", LuaTimeDeltaSeconds, "() -> number" },
+  { "is_paused", LuaTimePaused, "() -> boolean" },
+});
+
+auto RegisterTimeBindings(lua_State* state, const int oxygen_table_index)
+  -> void
+{
+  const int module_index
+    = PushOxygenSubtable(state, oxygen_table_index, "time");
+  RegisterFunctions(state, module_index, kTimeFunctions);
+  lua_pop(state, 1);
+}
 ```
 
-`PushOxygenSubtable` normalizes negative stack indices before use, so it is safe
-to call with either absolute or relative indices.
+A function cannot be registered without its Luau signature: the same row
+registers it and describes it. Never call `lua_pushcfunction` and
+`lua_setfield` for an API function; closures with upvalues (such as
+`oxygen.input.on_action`) push the row's `function` and `name` themselves.
+
+`PushOxygenSubtable` and `RegisterFunctions` normalize negative stack indices
+before pushing, so either absolute or relative indices are safe.
 
 ### 6.2 Metatable Registration
 
@@ -305,15 +324,15 @@ to call with either absolute or relative indices.
 luaL_newmetatable(state, kXMetatable)
 lua_setuserdatadtor(state, kTagX, XDtor)   ← non-trivial types only
 lua_pushcfunction / lua_setfield           ← __tostring, __eq, __index, __newindex
-for each method:
-    lua_pushcclosure(state, fn, name, 0)
-    lua_setfield(state, -2, name)
+RegisterFunctions(state, -1, kXMethods)    ← methods, operator metamethods
 lua_pop(state, 1)
 ```
 
 Register metatables **before** any userdata of that type is pushed. For packs
 with multiple userdata types (e.g. Scene), metatable registration is called first
-thing in `RegisterXBindings`, before the module table is pushed.
+thing in `RegisterXBindings`, before the module table is pushed. A type whose
+methods live in an `__index` table (the asset userdata) registers the rows into
+that table instead.
 
 ### 6.3 SceneNode Property Aliases
 
@@ -335,6 +354,36 @@ node.local_position = vec   -- → :set_local_position(vec)
 -- Read-only properties raise a hard error on write
 node.world_position = vec   -- luaL_error: "SceneNode property 'world_position' is read-only"
 ```
+
+### 6.4 Descriptions and Generated Definitions
+
+Each `RegisterXBindings` has a `DescribeXBindings` that returns its
+`BindingNamespaceDescription`s: the dotted `path` under `oxygen`, the function
+rows, `BindingField`s for constants and nested records, `BindingClass`es for
+userdata (name, registry metatable name, method rows, `__index` properties and
+operator metamethods) and `BindingTypeAlias`es for the records the functions
+take and return. A class described in several files, such as `SceneNode` and
+its component methods, is merged by name.
+
+Signatures are Luau function types; a method's signature leaves out `self`.
+An operator metamethod's signature is the full type, `self` included, and may
+be an intersection (`((Quat, Quat) -> Quat) & ((Quat, vector) -> vector)`).
+
+The build writes `oxygen.d.luau` from these descriptions
+(`GenerateLuauDefinitions`, run by `Oxygen.Scripting.Definitions` next to the
+binaries and installed to `share/oxygen/scripting`). `ScriptAnalyzer` loads it
+for `AnalysisLevel::kTypes`, and the same file configures `luau-lsp` in a code
+editor. Physics registers with a null `describe` and is declared `any` until
+physics authoring describes it.
+
+`Bindings_definitions_test.cpp` keeps the descriptions true:
+
+| Test                               | Fails when                                                                                |
+| ---------------------------------- | ----------------------------------------------------------------------------------------- |
+| `DescriptionsCoverTheLiveApi`      | A function, member or userdata method is registered without a description, or the reverse |
+| `GeneratedDefinitionsAreValidLuau` | The generated definitions do not load into Luau                                           |
+| `ExampleScriptsTypeCheck`          | A maintained example script has a type error                                              |
+| `ApiTourRunsAndTypeChecks`         | The tour of every typed pack fails to run or to type-check                                |
 
 ---
 
@@ -478,13 +527,17 @@ In `XBindings.cpp`:
 1. Define the destructor (if non-trivial).
 2. Implement `RegisterXMetatable` — create metatable, register dtor, register
    metamethods and methods.
-3. Implement `RegisterXBindings` — push subtable, register public functions, pop.
-4. Implement `PushX` and `CheckX` if the type is referred to from other files.
+3. Implement `RegisterXBindings` — push subtable, `RegisterFunctions` with the
+   function table, pop.
+4. Implement `DescribeXBindings` — return the namespace, class and type
+   descriptions (section 6.4).
+5. Implement `PushX` and `CheckX` if the type is referred to from other files.
 
 ### Step 4 — Register with the pack
 
-Add the new namespace to the pack's `constexpr std::array<BindingNamespace, N>`
-in `XBindingPack.cpp`. Update the array size `N`.
+Add `{ name, RegisterXBindings, DescribeXBindings }` to the pack's
+`BindingNamespace` table in `XBindingPack.cpp`. The coverage test fails until
+every registered function and method is described.
 
 ### Step 5 — Validate context requirements
 
@@ -514,12 +567,15 @@ Add or extend a `Bindings_x_test.cpp` in `src/Oxygen/Scripting/test` covering:
 
 ### Core Plumbing
 
-| File                             | Purpose                                                                            |
-| -------------------------------- | ---------------------------------------------------------------------------------- |
-| `BindingRegistry.h/.cpp`         | `RegisterBindingNamespaces` — constructs the `oxygen` table hierarchy              |
-| `LuaBindingCommon.h`             | Tag enum, `LuaBindingContext`, context push/get helpers, `PushOxygenSubtable`      |
-| `LuaBindingCommon.cpp`           | All context implementations, `PushScriptParam`, `PushOxygenSubtable` body          |
-| `Contracts/IScriptBindingPack.h` | `IScriptBindingPack` interface, `ScriptBindingPackContext`, `ScriptBindingPackPtr` |
+| File                             | Purpose                                                                              |
+| -------------------------------- | ------------------------------------------------------------------------------------ |
+| `BindingRegistry.h/.cpp`         | `RegisterBindingNamespaces` — constructs the `oxygen` table hierarchy                |
+| `BindingTable.h/.cpp`            | `RegisterFunctions` — registers a table of described functions                       |
+| `Contracts/BindingDescription.h` | `BindingFunction`, `BindingClass`, `BindingNamespaceDescription`, `BindingNamespace` |
+| `LuauDefinitions.h/.cpp`         | `CreateDefaultBindingPacks`, `GenerateLuauDefinitions`                               |
+| `LuaBindingCommon.h`             | Tag enum, `LuaBindingContext`, context push/get helpers, `PushOxygenSubtable`        |
+| `LuaBindingCommon.cpp`           | All context implementations, `PushScriptParam`, `PushOxygenSubtable` body            |
+| `Contracts/IScriptBindingPack.h` | `IScriptBindingPack` interface, `ScriptBindingPackContext`, `ScriptBindingPackPtr`   |
 
 ### Pack Entry Points
 

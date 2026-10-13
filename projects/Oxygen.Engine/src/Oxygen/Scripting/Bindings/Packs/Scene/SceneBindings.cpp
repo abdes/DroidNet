@@ -4,10 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstddef>
 #include <exception>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -20,11 +22,14 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
+#include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeComponentBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneQueryBindings.h>
 
 namespace oxygen::scripting::bindings {
@@ -513,6 +518,91 @@ namespace {
     return 1;
   }
 #endif
+
+  constexpr auto kSceneFunctions = std::to_array<BindingFunction>({
+    {
+      .name = "create_node",
+      .function = LuaSceneCreateNode,
+      .signature = "(name: string, parent: SceneNode?) -> SceneNode?",
+    },
+    {
+      .name = "destroy_node",
+      .function = LuaSceneDestroyNode,
+      .signature = "(node: SceneNode) -> boolean",
+    },
+    {
+      .name = "destroy_hierarchy",
+      .function = LuaSceneDestroyHierarchy,
+      .signature = "(node: SceneNode) -> boolean",
+    },
+    {
+      .name = "reparent",
+      .function = LuaSceneReparent,
+      .signature
+      = "(node: SceneNode, parent: SceneNode, preserve_world: boolean?) "
+        "-> boolean",
+    },
+    {
+      .name = "root_nodes",
+      .function = LuaSceneRootNodes,
+      .signature = "() -> { SceneNode }",
+    },
+    {
+      .name = "active_camera",
+      .function = LuaSceneActiveCamera,
+      .signature = "() -> SceneNode?",
+    },
+    {
+      .name = "set_active_camera",
+      .function = LuaSceneSetActiveCamera,
+      .signature = "(node: SceneNode) -> boolean",
+    },
+    {
+      .name = "find_one",
+      .function = LuaSceneFindOne,
+      .signature = "(path: string, scope: SceneNode?) -> SceneNode?",
+    },
+    {
+      .name = "find_many",
+      .function = LuaSceneFindMany,
+      .signature = "(pattern: string, scope: SceneNode?) -> { SceneNode }",
+    },
+    {
+      .name = "count",
+      .function = LuaSceneCount,
+      .signature = "(pattern: string, scope: SceneNode?) -> number",
+    },
+    {
+      .name = "exists",
+      .function = LuaSceneExists,
+      .signature = "(pattern: string, scope: SceneNode?) -> boolean",
+    },
+    {
+      .name = "query",
+      .function = LuaSceneQuery,
+      .signature = "(pattern: string) -> SceneQuery?",
+    },
+    {
+      .name = "has_environment",
+      .function = LuaSceneHasEnvironment,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "get_environment",
+      .function = LuaSceneGetEnvironment,
+      .signature = "() -> SceneEnvironment?",
+    },
+    {
+      .name = "ensure_environment",
+      .function = LuaSceneEnsureEnvironment,
+      .signature = "() -> SceneEnvironment?",
+    },
+    {
+      .name = "clear_environment",
+      .function = LuaSceneClearEnvironment,
+      .signature = "() -> boolean",
+    },
+  });
 } // namespace
 
 auto RegisterSceneBindings(lua_State* state, const int oxygen_table_index)
@@ -524,42 +614,7 @@ auto RegisterSceneBindings(lua_State* state, const int oxygen_table_index)
 
   const int module_index
     = PushOxygenSubtable(state, oxygen_table_index, "scene");
-
-  lua_pushcfunction(state, LuaSceneCreateNode, "scene.create_node");
-  lua_setfield(state, module_index, "create_node");
-  lua_pushcfunction(state, LuaSceneDestroyNode, "scene.destroy_node");
-  lua_setfield(state, module_index, "destroy_node");
-  lua_pushcfunction(state, LuaSceneDestroyHierarchy, "scene.destroy_hierarchy");
-  lua_setfield(state, module_index, "destroy_hierarchy");
-  lua_pushcfunction(state, LuaSceneReparent, "scene.reparent");
-  lua_setfield(state, module_index, "reparent");
-  lua_pushcfunction(state, LuaSceneRootNodes, "scene.root_nodes");
-  lua_setfield(state, module_index, "root_nodes");
-  lua_pushcfunction(state, LuaSceneActiveCamera, "scene.active_camera");
-  lua_setfield(state, module_index, "active_camera");
-  lua_pushcfunction(state, LuaSceneSetActiveCamera, "scene.set_active_camera");
-  lua_setfield(state, module_index, "set_active_camera");
-
-  lua_pushcfunction(state, LuaSceneFindOne, "scene.find_one");
-  lua_setfield(state, module_index, "find_one");
-  lua_pushcfunction(state, LuaSceneFindMany, "scene.find_many");
-  lua_setfield(state, module_index, "find_many");
-  lua_pushcfunction(state, LuaSceneCount, "scene.count");
-  lua_setfield(state, module_index, "count");
-  lua_pushcfunction(state, LuaSceneExists, "scene.exists");
-  lua_setfield(state, module_index, "exists");
-  lua_pushcfunction(state, LuaSceneQuery, "scene.query");
-  lua_setfield(state, module_index, "query");
-
-  lua_pushcfunction(state, LuaSceneHasEnvironment, "scene.has_environment");
-  lua_setfield(state, module_index, "has_environment");
-  lua_pushcfunction(state, LuaSceneGetEnvironment, "scene.get_environment");
-  lua_setfield(state, module_index, "get_environment");
-  lua_pushcfunction(
-    state, LuaSceneEnsureEnvironment, "scene.ensure_environment");
-  lua_setfield(state, module_index, "ensure_environment");
-  lua_pushcfunction(state, LuaSceneClearEnvironment, "scene.clear_environment");
-  lua_setfield(state, module_index, "clear_environment");
+  RegisterFunctions(state, module_index, kSceneFunctions);
 
 #ifndef NDEBUG
   lua_createtable(state, 0, 1);
@@ -569,6 +624,28 @@ auto RegisterSceneBindings(lua_State* state, const int oxygen_table_index)
 #endif
 
   lua_pop(state, 1);
+}
+
+auto DescribeSceneBindings() -> std::span<const BindingNamespaceDescription>
+{
+  static const auto descriptions = [] {
+    auto all = std::vector<BindingNamespaceDescription> {
+      { .path = "scene", .functions = kSceneFunctions },
+    };
+    for (const auto part : {
+           DescribeSceneNodeBindings(),
+           DescribeSceneNodeCameraBindings(),
+           DescribeSceneNodeLightBindings(),
+           DescribeSceneNodeRenderableBindings(),
+           DescribeSceneNodeScriptingBindings(),
+           DescribeSceneQueryBindings(),
+           DescribeSceneEnvironmentBindings(),
+         }) {
+      all.insert(all.end(), part.begin(), part.end());
+    }
+    return all;
+  }();
+  return descriptions;
 }
 
 } // namespace oxygen::scripting::bindings

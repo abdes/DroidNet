@@ -7,6 +7,7 @@
 #include <array>
 #include <cstddef>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -19,6 +20,8 @@
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
@@ -27,7 +30,6 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
-  constexpr const char* kSceneNodeMetatable = "oxygen.scene.node";
   constexpr const char* kQuatMetatable = "oxygen.quat";
 
   struct SceneNodeUserdata {
@@ -541,12 +543,11 @@ namespace {
       return 1;
     }
     Vec3 up = oxygen::space::look::Up;
-    if (lua_gettop(state) >= 3) {
-      if (!TryCheckVec3(state, 3, up)) {
-        lua_pushboolean(state, 0);
-        return 1;
-      }
+    if ((lua_gettop(state) >= 3) && (!TryCheckVec3(state, 3, up))) {
+      lua_pushboolean(state, 0);
+      return 1;
     }
+
     lua_pushboolean(state, node->GetTransform().LookAt(target, up) ? 1 : 0);
     return 1;
   }
@@ -683,6 +684,197 @@ namespace {
     LOG_F(WARNING, "Unknown SceneNode property '{}'", key);
     return 0;
   }
+
+  constexpr auto kSceneNodeMethods = std::to_array<BindingFunction>({
+    {
+      .name = "is_alive",
+      .function = SceneNodeIsAlive,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "runtime_id",
+      .function = SceneNodeRuntimeId,
+      .signature = "() -> SceneNodeRuntimeId?",
+    },
+    {
+      .name = "get_name",
+      .function = SceneNodeGetName,
+      .signature = "() -> string?",
+    },
+    {
+      .name = "set_name",
+      .function = SceneNodeSetName,
+      .signature = "(name: string) -> boolean",
+    },
+    {
+      .name = "to_string",
+      .function = SceneNodeToString,
+      .signature = "() -> string",
+    },
+    {
+      .name = "get_parent",
+      .function = SceneNodeGetParent,
+      .signature = "() -> SceneNode?",
+    },
+    {
+      .name = "set_parent",
+      .function = SceneNodeSetParent,
+      .signature = "(parent: SceneNode, preserve_world: boolean?) -> boolean",
+    },
+    {
+      .name = "is_root",
+      .function = SceneNodeIsRoot,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "has_parent",
+      .function = SceneNodeHasParent,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "has_children",
+      .function = SceneNodeHasChildren,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "get_children",
+      .function = SceneNodeGetChildren,
+      .signature = "() -> { SceneNode }?",
+    },
+    {
+      .name = "get_first_child",
+      .function = SceneNodeGetFirstChild,
+      .signature = "() -> SceneNode?",
+    },
+    {
+      .name = "get_next_sibling",
+      .function = SceneNodeGetNextSibling,
+      .signature = "() -> SceneNode?",
+    },
+    {
+      .name = "get_prev_sibling",
+      .function = SceneNodeGetPrevSibling,
+      .signature = "() -> SceneNode?",
+    },
+    {
+      .name = "destroy",
+      .function = SceneNodeDestroy,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "get_local_position",
+      .function = SceneNodeGetLocalPosition,
+      .signature = "() -> vector?",
+    },
+    {
+      .name = "set_local_position",
+      .function = SceneNodeSetLocalPosition,
+      .signature = "(position: vector) -> boolean",
+    },
+    {
+      .name = "get_local_rotation",
+      .function = SceneNodeGetLocalRotation,
+      .signature = "() -> Quat?",
+    },
+    {
+      .name = "set_local_rotation",
+      .function = SceneNodeSetLocalRotation,
+      .signature = "(rotation: Quat) -> boolean",
+    },
+    {
+      .name = "get_local_scale",
+      .function = SceneNodeGetLocalScale,
+      .signature = "() -> vector?",
+    },
+    {
+      .name = "set_local_scale",
+      .function = SceneNodeSetLocalScale,
+      .signature = "(scale: vector) -> boolean",
+    },
+    {
+      .name = "set_local_transform",
+      .function = SceneNodeSetLocalTransform,
+      .signature
+      = "(position: vector, rotation: Quat, scale: vector) -> boolean",
+    },
+    {
+      .name = "translate",
+      .function = SceneNodeTranslate,
+      .signature = "(offset: vector, local_space: boolean?) -> boolean",
+    },
+    {
+      .name = "rotate",
+      .function = SceneNodeRotate,
+      .signature = "(delta: Quat, local_space: boolean?) -> boolean",
+    },
+    {
+      .name = "scale_by",
+      .function = SceneNodeScaleBy,
+      .signature = "(factor: vector) -> boolean",
+    },
+    {
+      .name = "get_world_position",
+      .function = SceneNodeGetWorldPosition,
+      .signature = "() -> vector?",
+    },
+    {
+      .name = "get_world_rotation",
+      .function = SceneNodeGetWorldRotation,
+      .signature = "() -> Quat?",
+    },
+    {
+      .name = "get_world_scale",
+      .function = SceneNodeGetWorldScale,
+      .signature = "() -> vector?",
+    },
+    {
+      .name = "look_at",
+      .function = SceneNodeLookAt,
+      .signature = "(target: vector, up: vector?) -> boolean",
+    },
+  });
+
+  //! Fields `__index` and `__newindex` resolve to the matching getters and
+  //! setters; the component fields return the node when it has the component.
+  constexpr auto kSceneNodeProperties = std::to_array<BindingField>({
+    { .name = "name", .type = "string?" },
+    { .name = "parent", .type = "SceneNode?" },
+    { .name = "local_position", .type = "vector?" },
+    { .name = "local_rotation", .type = "Quat?" },
+    { .name = "local_scale", .type = "vector?" },
+    { .name = "world_position", .type = "vector?" },
+    { .name = "world_rotation", .type = "Quat?" },
+    { .name = "world_scale", .type = "vector?" },
+    { .name = "camera_component", .type = "SceneNode?" },
+    { .name = "light_component", .type = "SceneNode?" },
+    { .name = "renderable_component", .type = "SceneNode?" },
+    { .name = "scripting_component", .type = "SceneNode?" },
+  });
+
+  constexpr auto kSceneNodeClasses = std::to_array<BindingClass>({
+    {
+      .name = "SceneNode",
+      .metatable = kSceneNodeMetatable,
+      .methods = kSceneNodeMethods,
+      .properties = kSceneNodeProperties,
+    },
+  });
+
+  constexpr auto kSceneNodeTypes = std::to_array<BindingTypeAlias>({
+    {
+      .name = "SceneNodeRuntimeId",
+      .definition = "{ scene_id: number, node_index: number }",
+    },
+  });
+
+  constexpr auto kSceneNodeDescription
+    = std::to_array<BindingNamespaceDescription>({
+      {
+        .path = "scene",
+        .classes = kSceneNodeClasses,
+        .types = kSceneNodeTypes,
+      },
+    });
 } // namespace
 
 auto RegisterSceneNodeMetatable(lua_State* state) -> void
@@ -701,47 +893,14 @@ auto RegisterSceneNodeMetatable(lua_State* state) -> void
   lua_pushcfunction(state, SceneNodeNewIndex, "__newindex");
   lua_setfield(state, -2, "__newindex");
 
-  constexpr std::array<luaL_Reg, 28> methods {
-    {
-      { .name = "is_alive", .func = SceneNodeIsAlive },
-      { .name = "runtime_id", .func = SceneNodeRuntimeId },
-      { .name = "get_name", .func = SceneNodeGetName },
-      { .name = "set_name", .func = SceneNodeSetName },
-      { .name = "to_string", .func = SceneNodeToString },
-      { .name = "get_parent", .func = SceneNodeGetParent },
-      { .name = "set_parent", .func = SceneNodeSetParent },
-      { .name = "is_root", .func = SceneNodeIsRoot },
-      { .name = "has_parent", .func = SceneNodeHasParent },
-      { .name = "has_children", .func = SceneNodeHasChildren },
-      { .name = "get_children", .func = SceneNodeGetChildren },
-      { .name = "get_first_child", .func = SceneNodeGetFirstChild },
-      { .name = "get_next_sibling", .func = SceneNodeGetNextSibling },
-      { .name = "get_prev_sibling", .func = SceneNodeGetPrevSibling },
-      { .name = "destroy", .func = SceneNodeDestroy },
-      { .name = "get_local_position", .func = SceneNodeGetLocalPosition },
-      { .name = "set_local_position", .func = SceneNodeSetLocalPosition },
-      { .name = "get_local_rotation", .func = SceneNodeGetLocalRotation },
-      { .name = "set_local_rotation", .func = SceneNodeSetLocalRotation },
-      { .name = "get_local_scale", .func = SceneNodeGetLocalScale },
-      { .name = "set_local_scale", .func = SceneNodeSetLocalScale },
-      { .name = "set_local_transform", .func = SceneNodeSetLocalTransform },
-      { .name = "translate", .func = SceneNodeTranslate },
-      { .name = "rotate", .func = SceneNodeRotate },
-      { .name = "scale_by", .func = SceneNodeScaleBy },
-      { .name = "get_world_position", .func = SceneNodeGetWorldPosition },
-      { .name = "get_world_rotation", .func = SceneNodeGetWorldRotation },
-      { .name = "get_world_scale", .func = SceneNodeGetWorldScale },
-    },
-  };
-
-  for (const auto& reg : methods) {
-    lua_pushcclosure(state, reg.func, reg.name, 0);
-    lua_setfield(state, -2, reg.name);
-  }
-  RegisterSceneNodeComponentMethods(state, -2);
-  lua_pushcfunction(state, SceneNodeLookAt, "look_at");
-  lua_setfield(state, -2, "look_at");
+  RegisterFunctions(state, -1, kSceneNodeMethods);
+  RegisterSceneNodeComponentMethods(state, -1);
   lua_pop(state, 1);
+}
+
+auto DescribeSceneNodeBindings() -> std::span<const BindingNamespaceDescription>
+{
+  return kSceneNodeDescription;
 }
 
 auto TryCheckSceneNode(lua_State* state, const int index) -> scene::SceneNode*

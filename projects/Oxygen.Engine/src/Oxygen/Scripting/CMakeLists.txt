@@ -51,7 +51,9 @@ set(
   "Attachment/SceneScriptAttachment.h"
   "Attachment/ScriptOverrideCheck.h"
   "Bindings/BindingRegistry.h"
+  "Bindings/BindingTable.h"
   "Bindings/LuaBindingCommon.h"
+  "Bindings/LuauDefinitions.h"
   "Bindings/Packs/Content/ContentAsyncBindings.h"
   "Bindings/Packs/Content/ContentBindingPack.h"
   "Bindings/Packs/Content/ContentBindings.h"
@@ -97,7 +99,9 @@ set(
   "Attachment/SceneScriptAttachment.cpp"
   "Attachment/ScriptOverrideCheck.cpp"
   "Bindings/BindingRegistry.cpp"
+  "Bindings/BindingTable.cpp"
   "Bindings/LuaBindingCommon.cpp"
+  "Bindings/LuauDefinitions.cpp"
   "Bindings/Packs/Content/ContentAsyncBindings.cpp"
   "Bindings/Packs/Content/ContentBindingPack.cpp"
   "Bindings/Packs/Content/ContentBindings.cpp"
@@ -200,6 +204,59 @@ target_link_libraries(
     oxygen::input
     oxygen::physicsmodule
 )
+
+# ------------------------------------------------------------------------------
+# Luau definitions of the scripting API
+# ------------------------------------------------------------------------------
+
+# oxygen.d.luau is generated from the binding registrations, never edited. The
+# tool rewrites it only when it changes; it sits next to the binaries in the
+# build tree and in share/oxygen/scripting in the SDK.
+add_executable(oxygen-scripting-definitions "Tools/WriteDefinitions.cpp")
+set_target_properties(
+  oxygen-scripting-definitions
+  PROPERTIES
+    OUTPUT_NAME
+      "Oxygen.Scripting.Definitions"
+    FOLDER
+      "Tools"
+)
+target_link_libraries(
+  oxygen-scripting-definitions
+  PRIVATE
+    ${META_MODULE_TARGET}
+)
+set(
+  OXYGEN_SCRIPTING_DEFINITIONS_FILE
+  "$<TARGET_FILE_DIR:oxygen-scripting-definitions>/oxygen.d.luau"
+)
+add_custom_target(
+  oxygen-scripting-definitions-file
+  ALL
+  COMMAND
+    oxygen-scripting-definitions "${OXYGEN_SCRIPTING_DEFINITIONS_FILE}"
+  DEPENDS
+    oxygen-scripting-definitions
+  COMMENT "Writing oxygen.d.luau ($<CONFIG>)"
+  VERBATIM
+)
+set_target_properties(
+  oxygen-scripting-definitions-file
+  PROPERTIES
+    FOLDER
+      "Tools"
+)
+
+if(OXYGEN_INSTALL)
+  oxygen_install_requires(oxygen-scripting-definitions-file)
+  # install-sdk: generated oxygen-scripting-definitions-file
+  install(
+    FILES
+      "${OXYGEN_SCRIPTING_DEFINITIONS_FILE}"
+    DESTINATION "${OXYGEN_INSTALL_DATA}/scripting"
+    COMPONENT Oxygen_data
+  )
+endif()
 
 # ------------------------------------------------------------------------------
 # Tests

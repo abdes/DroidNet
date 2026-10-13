@@ -19,15 +19,17 @@
 #include <vector>
 
 #include <lua.h>
-#include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeComponentBindings.h>
@@ -37,6 +39,9 @@ namespace oxygen::scripting::bindings {
 namespace {
   class ScopedLuaStackTop final {
   public:
+    OXYGEN_MAKE_NON_COPYABLE(ScopedLuaStackTop)
+    OXYGEN_MAKE_NON_MOVABLE(ScopedLuaStackTop)
+
     explicit ScopedLuaStackTop(
       lua_State* state, const char* scope_name) noexcept
       : state_(state)
@@ -461,29 +466,103 @@ namespace {
     }
     return 1;
   }
+
+  constexpr auto kScriptingMethods = std::to_array<BindingFunction>({
+    {
+      .name = "scripting",
+      .function = SceneNodeScripting,
+      .signature = "() -> SceneNode?",
+    },
+    {
+      .name = "attach_scripting",
+      .function = SceneNodeAttachScripting,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "detach_scripting",
+      .function = SceneNodeDetachScripting,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "has_scripting",
+      .function = SceneNodeHasScripting,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "scripting_slots_count",
+      .function = SceneNodeScriptingSlotsCount,
+      .signature = "() -> number",
+    },
+    {
+      .name = "scripting_slots",
+      .function = SceneNodeScriptingSlots,
+      .signature = "() -> { ScriptSlotRef }",
+    },
+    {
+      .name = "scripting_add_slot",
+      .function = SceneNodeScriptingAddSlot,
+      .signature = "(source_path: string) -> boolean",
+    },
+    {
+      .name = "scripting_remove_slot",
+      .function = SceneNodeScriptingRemoveSlot,
+      .signature = "(slot: ScriptSlotRef) -> boolean",
+    },
+    {
+      .name = "scripting_set_param",
+      .function = SceneNodeScriptingSetParam,
+      .signature
+      = "(slot: ScriptSlotRef, key: string, value: ScriptParamValue) -> "
+        "boolean",
+    },
+    {
+      .name = "scripting_get_param",
+      .function = SceneNodeScriptingGetParam,
+      .signature = "(slot: ScriptSlotRef, key: string) -> ScriptParamValue?",
+    },
+    {
+      .name = "scripting_params",
+      .function = SceneNodeScriptingParams,
+      .signature = "(slot: ScriptSlotRef) -> { [string]: ScriptParamValue }",
+    },
+  });
+
+  constexpr auto kScriptingClasses = std::to_array<BindingClass>({
+    {
+      .name = "SceneNode",
+      .metatable = kSceneNodeMetatable,
+      .methods = kScriptingMethods,
+    },
+  });
+
+  constexpr auto kScriptingTypes = std::to_array<BindingTypeAlias>({
+    { .name = "ScriptSlotRef", .definition = "{ index: number }" },
+    {
+      .name = "ScriptParamValue",
+      .definition = "boolean | number | string | vector | { number }",
+    },
+  });
+
+  constexpr auto kScriptingDescription
+    = std::to_array<BindingNamespaceDescription>({
+      {
+        .path = "scene",
+        .classes = kScriptingClasses,
+        .types = kScriptingTypes,
+      },
+    });
 } // namespace
 
 auto RegisterSceneNodeScriptingMethods(
   lua_State* state, const int metatable_index) -> void
 {
-  constexpr auto methods = std::to_array<luaL_Reg>({
-    { .name = "scripting", .func = SceneNodeScripting },
-    { .name = "attach_scripting", .func = SceneNodeAttachScripting },
-    { .name = "detach_scripting", .func = SceneNodeDetachScripting },
-    { .name = "has_scripting", .func = SceneNodeHasScripting },
-    { .name = "scripting_slots_count", .func = SceneNodeScriptingSlotsCount },
-    { .name = "scripting_slots", .func = SceneNodeScriptingSlots },
-    { .name = "scripting_add_slot", .func = SceneNodeScriptingAddSlot },
-    { .name = "scripting_remove_slot", .func = SceneNodeScriptingRemoveSlot },
-    { .name = "scripting_set_param", .func = SceneNodeScriptingSetParam },
-    { .name = "scripting_get_param", .func = SceneNodeScriptingGetParam },
-    { .name = "scripting_params", .func = SceneNodeScriptingParams },
-  });
+  RegisterFunctions(state, metatable_index, kScriptingMethods);
+}
 
-  for (const auto& reg : methods) {
-    lua_pushcclosure(state, reg.func, reg.name, 0);
-    lua_setfield(state, metatable_index, reg.name);
-  }
+auto DescribeSceneNodeScriptingBindings()
+  -> std::span<const BindingNamespaceDescription>
+{
+  return kScriptingDescription;
 }
 
 } // namespace oxygen::scripting::bindings

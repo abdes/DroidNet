@@ -58,22 +58,21 @@ enum class ResourceUserdataKind : int {
 
 struct TextureResourceUserdata {
   content::ResourceKey key {};
-  std::shared_ptr<const data::TextureResource> resource {};
+  std::shared_ptr<const data::TextureResource> resource;
 };
 
 struct BufferResourceUserdata {
   content::ResourceKey key {};
-  std::shared_ptr<const data::BufferResource> resource {};
+  std::shared_ptr<const data::BufferResource> resource;
 };
 
 struct AssetUserdata {
   AssetUserdataKind kind { AssetUserdataKind::kMaterial };
-  std::shared_ptr<const data::MaterialAsset> material {};
-  std::shared_ptr<const data::GeometryAsset> geometry {};
-  std::shared_ptr<const data::ScriptAsset> script {};
-  std::shared_ptr<const data::InputActionAsset> input_action {};
-  std::shared_ptr<const data::InputMappingContextAsset>
-    input_mapping_context {};
+  std::shared_ptr<const data::MaterialAsset> material;
+  std::shared_ptr<const data::GeometryAsset> geometry;
+  std::shared_ptr<const data::ScriptAsset> script;
+  std::shared_ptr<const data::InputActionAsset> input_action;
+  std::shared_ptr<const data::InputMappingContextAsset> input_mapping_context;
 };
 
 auto PushTextureResource(lua_State* state, content::ResourceKey key,
@@ -100,16 +99,5 @@ auto TryParseAssetGuid(std::string_view text) -> std::optional<data::AssetKey>;
 auto GetAssetLoader(lua_State* state) noexcept
   -> observer_ptr<content::IAssetLoader>;
 auto IsAssetLoaderEnabled(lua_State* state) -> bool;
-
-auto RegisterContentUserdataMetatables(lua_State* state) -> void;
-auto RegisterContentModuleAvailability(lua_State* state, int module_index)
-  -> void;
-auto RegisterContentModuleQuery(lua_State* state, int module_index) -> void;
-auto RegisterContentModuleAsync(lua_State* state, int module_index) -> void;
-auto RegisterContentModuleLifecycle(lua_State* state, int module_index) -> void;
-auto RegisterContentModuleProcedural(lua_State* state, int module_index)
-  -> void;
-auto RegisterContentModuleLegacyGuards(lua_State* state, int module_index)
-  -> void;
 
 } // namespace oxygen::scripting::bindings

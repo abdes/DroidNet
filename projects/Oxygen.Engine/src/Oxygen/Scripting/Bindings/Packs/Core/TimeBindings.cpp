@@ -4,13 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <chrono>
+#include <span>
 
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/TimeBindings.h>
 
@@ -89,6 +93,48 @@ namespace {
     lua_pushnumber(state, frame_context->GetCurrentFPS());
     return 1;
   }
+
+  constexpr auto kTimeFunctions = std::to_array<BindingFunction>({
+    {
+      .name = "delta_seconds",
+      .function = LuaTimeDeltaSeconds,
+      .signature = "() -> number",
+    },
+    {
+      .name = "fixed_delta_seconds",
+      .function = LuaTimeFixedDeltaSeconds,
+      .signature = "() -> number",
+    },
+    {
+      .name = "frame_sequence_number",
+      .function = LuaTimeFrameSequenceNumber,
+      .signature = "() -> number",
+    },
+    {
+      .name = "time_scale",
+      .function = LuaTimeScale,
+      .signature = "() -> number",
+    },
+    {
+      .name = "is_paused",
+      .function = LuaTimePaused,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "interpolation_alpha",
+      .function = LuaTimeInterpolationAlpha,
+      .signature = "() -> number",
+    },
+    {
+      .name = "current_fps",
+      .function = LuaTimeCurrentFPS,
+      .signature = "() -> number",
+    },
+  });
+
+  constexpr auto kTimeDescription = std::to_array<BindingNamespaceDescription>({
+    { .path = "time", .functions = kTimeFunctions },
+  });
 } // namespace
 
 auto RegisterTimeBindings(lua_State* state, const int oxygen_table_index)
@@ -96,32 +142,13 @@ auto RegisterTimeBindings(lua_State* state, const int oxygen_table_index)
 {
   const int module_index
     = PushOxygenSubtable(state, oxygen_table_index, "time");
-
-  lua_pushcfunction(state, LuaTimeDeltaSeconds, "time.delta_seconds");
-  lua_setfield(state, module_index, "delta_seconds");
-
-  lua_pushcfunction(
-    state, LuaTimeFixedDeltaSeconds, "time.fixed_delta_seconds");
-  lua_setfield(state, module_index, "fixed_delta_seconds");
-
-  lua_pushcfunction(
-    state, LuaTimeFrameSequenceNumber, "time.frame_sequence_number");
-  lua_setfield(state, module_index, "frame_sequence_number");
-
-  lua_pushcfunction(state, LuaTimeScale, "time.time_scale");
-  lua_setfield(state, module_index, "time_scale");
-
-  lua_pushcfunction(state, LuaTimePaused, "time.is_paused");
-  lua_setfield(state, module_index, "is_paused");
-
-  lua_pushcfunction(
-    state, LuaTimeInterpolationAlpha, "time.interpolation_alpha");
-  lua_setfield(state, module_index, "interpolation_alpha");
-
-  lua_pushcfunction(state, LuaTimeCurrentFPS, "time.current_fps");
-  lua_setfield(state, module_index, "current_fps");
-
+  RegisterFunctions(state, module_index, kTimeFunctions);
   lua_pop(state, 1);
+}
+
+auto DescribeTimeBindings() -> std::span<const BindingNamespaceDescription>
+{
+  return kTimeDescription;
 }
 
 } // namespace oxygen::scripting::bindings

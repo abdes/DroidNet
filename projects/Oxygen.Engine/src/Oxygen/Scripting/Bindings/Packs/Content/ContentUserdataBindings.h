@@ -6,10 +6,15 @@
 
 #pragma once
 
+#include <span>
+
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+
 struct lua_State;
 
 namespace oxygen::scripting::bindings {
 
 auto RegisterContentUserdataMetatables(lua_State* state) -> void;
+auto ContentUserdataClasses() -> std::span<const BindingClass>;
 
 } // namespace oxygen::scripting::bindings

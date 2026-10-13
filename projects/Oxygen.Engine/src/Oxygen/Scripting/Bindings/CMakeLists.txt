@@ -15,7 +15,7 @@ target_sources(
   INTERFACE
     FILE_SET HEADERS
     BASE_DIRS "${OXYGEN_SOURCE_DIR}"
-    FILES "Contracts/IScriptBindingPack.h"
+    FILES "Contracts/BindingDescription.h" "Contracts/IScriptBindingPack.h"
 )
 target_compile_features(${BINDINGS_CONTRACTS_TARGET} INTERFACE cxx_std_20)
 

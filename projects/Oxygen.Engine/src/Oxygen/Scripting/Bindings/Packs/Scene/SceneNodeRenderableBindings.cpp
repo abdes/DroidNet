@@ -13,6 +13,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -20,7 +21,6 @@
 #include <vector>
 
 #include <lua.h>
-#include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
@@ -34,6 +34,8 @@
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
@@ -244,7 +246,7 @@ namespace {
   {
     const auto canonical = CanonicalizeGeometryToken(token);
     auto& registry = GetRenderableAssetRegistry();
-    std::lock_guard lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     if (const auto it = registry.geometry_by_token.find(canonical);
       it != registry.geometry_by_token.end()) {
       return it->second;
@@ -263,7 +265,7 @@ namespace {
     -> std::shared_ptr<const data::MaterialAsset>
   {
     auto& registry = GetRenderableAssetRegistry();
-    std::lock_guard lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     if (const auto it = registry.material_by_token.find(token);
       it != registry.material_by_token.end()) {
       return it->second;
@@ -279,7 +281,7 @@ namespace {
     const std::shared_ptr<const data::GeometryAsset>& geometry) -> std::string
   {
     auto& registry = GetRenderableAssetRegistry();
-    std::lock_guard lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     if (const auto it = registry.token_by_geometry_ptr.find(geometry.get());
       it != registry.token_by_geometry_ptr.end()) {
       return it->second;
@@ -291,7 +293,7 @@ namespace {
     const std::shared_ptr<const data::MaterialAsset>& material) -> std::string
   {
     auto& registry = GetRenderableAssetRegistry();
-    std::lock_guard lock(registry.mutex);
+    std::scoped_lock lock(registry.mutex);
     if (const auto it = registry.token_by_material_ptr.find(material.get());
       it != registry.token_by_material_ptr.end()) {
       return it->second;
@@ -306,13 +308,13 @@ namespace {
   template <typename Index>
   auto ReadLuaIndexAs(lua_State* state, const int index) -> std::optional<Index>
   {
-    using Raw = typename Index::UnderlyingType;
+    using Raw = Index::UnderlyingType;
     if (lua_isnumber(state, index) == 0) {
       return std::nullopt;
     }
     const auto value = lua_tointeger(state, index);
     if (value < 1
-      || std::cmp_greater(value - 1, (std::numeric_limits<Raw>::max)())) {
+      || std::cmp_greater(value - 1, std::numeric_limits<Raw>::max())) {
       return std::nullopt;
     }
     return Index { static_cast<Raw>(value - 1) };
@@ -815,81 +817,154 @@ namespace {
     lua_setfield(state, -2, "max");
     return 1;
   }
+
+  constexpr auto kRenderableMethods = std::to_array<BindingFunction>({
+    {
+      .name = "renderable",
+      .function = SceneNodeRenderable,
+      .signature = "() -> SceneNode?",
+    },
+    {
+      .name = "has_renderable",
+      .function = SceneNodeHasRenderable,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "renderable_has_geometry",
+      .function = SceneNodeRenderableHasGeometry,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "renderable_set_geometry",
+      .function = SceneNodeRenderableSetGeometry,
+      .signature = "(geometry: string | GeometryAsset) -> boolean",
+    },
+    {
+      .name = "renderable_get_geometry",
+      .function = SceneNodeRenderableGetGeometry,
+      .signature = "() -> string?",
+    },
+    {
+      .name = "renderable_detach",
+      .function = SceneNodeRenderableDetach,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "renderable_get_lod_policy",
+      .function = SceneNodeRenderableGetLodPolicy,
+      .signature = "() -> LodPolicy?",
+    },
+    {
+      .name = "renderable_set_lod_policy",
+      .function = SceneNodeRenderableSetLodPolicy,
+      .signature = "(policy: LodPolicyInput) -> boolean",
+    },
+    {
+      .name = "renderable_get_active_lod_index",
+      .function = SceneNodeRenderableGetActiveLodIndex,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "renderable_get_effective_lod_count",
+      .function = SceneNodeRenderableGetEffectiveLodCount,
+      .signature = "() -> number",
+    },
+    {
+      .name = "renderable_is_submesh_visible",
+      .function = SceneNodeRenderableIsSubmeshVisible,
+      .signature = "(lod: number, submesh: number) -> boolean",
+    },
+    {
+      .name = "renderable_set_submesh_visible",
+      .function = SceneNodeRenderableSetSubmeshVisible,
+      .signature
+      = "(lod: number, submesh: number, visible: boolean) -> boolean",
+    },
+    {
+      .name = "renderable_set_all_submeshes_visible",
+      .function = SceneNodeRenderableSetAllSubmeshesVisible,
+      .signature = "(visible: boolean) -> boolean",
+    },
+    {
+      .name = "renderable_set_material_override",
+      .function = SceneNodeRenderableSetMaterialOverride,
+      .signature = "(lod: number, submesh: number, material: (string | "
+                   "MaterialAsset)?) -> "
+                   "boolean",
+    },
+    {
+      .name = "renderable_clear_material_override",
+      .function = SceneNodeRenderableClearMaterialOverride,
+      .signature = "(lod: number, submesh: number) -> boolean",
+    },
+    {
+      .name = "renderable_resolve_submesh_material",
+      .function = SceneNodeRenderableResolveSubmeshMaterial,
+      .signature = "(lod: number, submesh: number) -> string?",
+    },
+    {
+      .name = "renderable_get_world_bounding_sphere",
+      .function = SceneNodeRenderableGetWorldBoundingSphere,
+      .signature = "() -> BoundingSphere?",
+    },
+    {
+      .name = "renderable_get_world_submesh_aabb",
+      .function = SceneNodeRenderableGetWorldSubmeshAabb,
+      .signature = "(submesh: number) -> Aabb?",
+    },
+  });
+
+  constexpr auto kRenderableClasses = std::to_array<BindingClass>({
+    {
+      .name = "SceneNode",
+      .metatable = kSceneNodeMetatable,
+      .methods = kRenderableMethods,
+    },
+  });
+
+  constexpr auto kRenderableTypes = std::to_array<BindingTypeAlias>({
+    {
+      .name = "LodPolicyKind",
+      .definition = R"("fixed" | "distance" | "screen_space_error")",
+    },
+    {
+      .name = "LodPolicy",
+      .definition = R"({ kind: LodPolicyKind | "unknown" })",
+    },
+    {
+      .name = "LodPolicyInput",
+      .definition = "{ kind: LodPolicyKind, index: number?, "
+                    "hysteresis_ratio: number?, thresholds: { number }?, "
+                    "enter_finer_sse: { number }?, "
+                    "exit_coarser_sse: { number }? }",
+    },
+    {
+      .name = "BoundingSphere",
+      .definition = "{ x: number, y: number, z: number, w: number }",
+    },
+    { .name = "Aabb", .definition = "{ min: vector, max: vector }" },
+  });
+
+  constexpr auto kRenderableDescription
+    = std::to_array<BindingNamespaceDescription>({
+      {
+        .path = "scene",
+        .classes = kRenderableClasses,
+        .types = kRenderableTypes,
+      },
+    });
 } // namespace
 
 auto RegisterSceneNodeRenderableMethods(
   lua_State* state, const int metatable_index) -> void
 {
-  constexpr auto methods = std::to_array<luaL_Reg>({
-    { .name = "renderable", .func = SceneNodeRenderable },
-    { .name = "has_renderable", .func = SceneNodeHasRenderable },
-    {
-      .name = "renderable_has_geometry",
-      .func = SceneNodeRenderableHasGeometry,
-    },
-    {
-      .name = "renderable_set_geometry",
-      .func = SceneNodeRenderableSetGeometry,
-    },
-    {
-      .name = "renderable_get_geometry",
-      .func = SceneNodeRenderableGetGeometry,
-    },
-    { .name = "renderable_detach", .func = SceneNodeRenderableDetach },
-    {
-      .name = "renderable_get_lod_policy",
-      .func = SceneNodeRenderableGetLodPolicy,
-    },
-    {
-      .name = "renderable_set_lod_policy",
-      .func = SceneNodeRenderableSetLodPolicy,
-    },
-    {
-      .name = "renderable_get_active_lod_index",
-      .func = SceneNodeRenderableGetActiveLodIndex,
-    },
-    {
-      .name = "renderable_get_effective_lod_count",
-      .func = SceneNodeRenderableGetEffectiveLodCount,
-    },
-    {
-      .name = "renderable_is_submesh_visible",
-      .func = SceneNodeRenderableIsSubmeshVisible,
-    },
-    {
-      .name = "renderable_set_submesh_visible",
-      .func = SceneNodeRenderableSetSubmeshVisible,
-    },
-    {
-      .name = "renderable_set_all_submeshes_visible",
-      .func = SceneNodeRenderableSetAllSubmeshesVisible,
-    },
-    {
-      .name = "renderable_set_material_override",
-      .func = SceneNodeRenderableSetMaterialOverride,
-    },
-    {
-      .name = "renderable_clear_material_override",
-      .func = SceneNodeRenderableClearMaterialOverride,
-    },
-    {
-      .name = "renderable_resolve_submesh_material",
-      .func = SceneNodeRenderableResolveSubmeshMaterial,
-    },
-    {
-      .name = "renderable_get_world_bounding_sphere",
-      .func = SceneNodeRenderableGetWorldBoundingSphere,
-    },
-    {
-      .name = "renderable_get_world_submesh_aabb",
-      .func = SceneNodeRenderableGetWorldSubmeshAabb,
-    },
-  });
+  RegisterFunctions(state, metatable_index, kRenderableMethods);
+}
 
-  for (const auto& reg : methods) {
-    lua_pushcclosure(state, reg.func, reg.name, 0);
-    lua_setfield(state, metatable_index, reg.name);
-  }
+auto DescribeSceneNodeRenderableBindings()
+  -> std::span<const BindingNamespaceDescription>
+{
+  return kRenderableDescription;
 }
 
 } // namespace oxygen::scripting::bindings

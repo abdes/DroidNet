@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -18,6 +20,8 @@
 #include <Oxygen/Commands/Params.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/LogBindings.h>
 
@@ -200,28 +204,30 @@ namespace {
   {
     return LogImpl(state, LuaLogLevel::kError, "error");
   }
+
+  constexpr auto kLogFunctions = std::to_array<BindingFunction>({
+    { .name = "trace", .function = LuaLogTrace, .signature = "(...any) -> ()" },
+    { .name = "debug", .function = LuaLogDebug, .signature = "(...any) -> ()" },
+    { .name = "info", .function = LuaLogInfo, .signature = "(...any) -> ()" },
+    { .name = "warn", .function = LuaLogWarn, .signature = "(...any) -> ()" },
+    { .name = "error", .function = LuaLogError, .signature = "(...any) -> ()" },
+  });
+
+  constexpr auto kLogDescription = std::to_array<BindingNamespaceDescription>({
+    { .path = "log", .functions = kLogFunctions },
+  });
 } // namespace
 
 auto RegisterLogBindings(lua_State* state, const int oxygen_table_index) -> void
 {
   const int module_index = PushOxygenSubtable(state, oxygen_table_index, "log");
-
-  lua_pushcfunction(state, LuaLogTrace, "log.trace");
-  lua_setfield(state, module_index, "trace");
-
-  lua_pushcfunction(state, LuaLogDebug, "log.debug");
-  lua_setfield(state, module_index, "debug");
-
-  lua_pushcfunction(state, LuaLogInfo, "log.info");
-  lua_setfield(state, module_index, "info");
-
-  lua_pushcfunction(state, LuaLogWarn, "log.warn");
-  lua_setfield(state, module_index, "warn");
-
-  lua_pushcfunction(state, LuaLogError, "log.error");
-  lua_setfield(state, module_index, "error");
-
+  RegisterFunctions(state, module_index, kLogFunctions);
   lua_pop(state, 1);
+}
+
+auto DescribeLogBindings() -> std::span<const BindingNamespaceDescription>
+{
+  return kLogDescription;
 }
 
 } // namespace oxygen::scripting::bindings

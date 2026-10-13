@@ -29,7 +29,6 @@ using oxygen::scripting::AnalysisLevel;
 using oxygen::scripting::DiagnosticCode;
 using oxygen::scripting::ScriptAnalysis;
 using oxygen::scripting::ScriptAnalyzer;
-using oxygen::scripting::ScriptDiagnostic;
 using oxygen::scripting::SourcePosition;
 using testing::ElementsAre;
 using testing::IsEmpty;
@@ -404,6 +403,192 @@ NOLINT_TEST_F(ScriptAnalyzerTest, HintTypeMismatchIsRejected)
     Codes(numeric_unit), ElementsAre(DiagnosticCode::kFieldTypeMismatch));
   EXPECT_THAT(
     Codes(string_color), ElementsAre(DiagnosticCode::kFieldTypeMismatch));
+}
+
+//! Definitions in the shape the binding generator writes: an extern type, a
+//! generic script type and the `oxygen` global.
+constexpr std::string_view kDefinitions = R"luau(
+declare extern type SceneNode with
+  function get_name(self): string
+  function set_local_position(self, position: vector): boolean
+end
+
+type OxygenScript<P> = {
+  node: SceneNode,
+  params: P,
+  on_start: ((self: OxygenScript<P>) -> ())?,
+  on_gameplay: ((self: OxygenScript<P>, dt: number) -> ())?,
+  [string]: any,
+}
+
+declare oxygen: {
+  script: <P>(declaration: { params: P }) -> OxygenScript<P>,
+  param: {
+    float: (options: { default: number?, min: number? }) -> number,
+  },
+  scene: {
+    find_one: (path: string) -> SceneNode?,
+  },
+}
+)luau";
+
+class ScriptAnalyzerChecksTest : public ScriptAnalyzerTest {
+protected:
+  [[nodiscard]] auto Check(const std::string_view text,
+    const AnalysisLevel level, const std::string_view definitions = {}) const
+    -> ScriptAnalysis
+  {
+    return analyzer_.Analyze({
+      .source_name = kSourceName,
+      .source = std::as_bytes(std::span(text.data(), text.size())),
+      .level = level,
+      .type_definitions = definitions,
+    });
+  }
+
+private:
+  ScriptAnalyzer analyzer_;
+};
+
+constexpr std::string_view kTypedScript = R"lua(local Script = oxygen.script {
+  params = {
+    speed = oxygen.param.float { default = 1, min = 0 },
+  },
+}
+
+function Script:on_start()
+  self.angle = 0
+end
+
+function Script:on_gameplay(dt)
+  self.angle += self.params.speed * dt
+  self.node:set_local_position(vector.create(self.angle, 0, 0))
+end
+
+return Script
+)lua";
+
+//! A script that uses the API as declared checks clean, with `self.params`
+//! typed by its declaration and script fields on `self` allowed.
+NOLINT_TEST_F(ScriptAnalyzerChecksTest, ValidScriptChecksClean)
+{
+  const auto analysis
+    = Check(kTypedScript, AnalysisLevel::kTypes, kDefinitions);
+
+  EXPECT_THAT(analysis.diagnostics, IsEmpty());
+  EXPECT_THAT(analysis.declarations, SizeIs(1));
+}
+
+//! The valid script also checks clean in strict mode.
+NOLINT_TEST_F(ScriptAnalyzerChecksTest, ValidScriptChecksCleanWhenStrict)
+{
+  const auto text = std::string("--!strict\n") + std::string(kTypedScript);
+
+  const auto analysis = Check(text, AnalysisLevel::kTypes, kDefinitions);
+
+  EXPECT_THAT(analysis.diagnostics, IsEmpty());
+}
+
+//! A misspelled API member is a type error that names the member.
+NOLINT_TEST_F(ScriptAnalyzerChecksTest, MisspelledApiMemberIsReported)
+{
+  constexpr std::string_view kScript
+    = R"lua(local node = oxygen.scene.fnd_one("Player")
+return node
+)lua";
+
+  const auto analysis = Check(kScript, AnalysisLevel::kTypes, kDefinitions);
+
+  ASSERT_THAT(analysis.diagnostics, SizeIs(1));
+  const auto& diagnostic = analysis.diagnostics.front();
+  EXPECT_EQ(diagnostic.code, DiagnosticCode::kUnknownMember);
+  EXPECT_NE(diagnostic.message.find("fnd_one"), std::string::npos);
+  ASSERT_NE(diagnostic.PrimarySpan(), nullptr);
+  EXPECT_EQ(diagnostic.PrimarySpan()->begin.line, 1U);
+  EXPECT_TRUE(diagnostic.help.has_value());
+}
+
+//! In strict mode, parameter values carry their declared types into hook
+//! bodies. Non-strict mode leaves unannotated hook parameters, `self`
+//! included, untyped.
+NOLINT_TEST_F(ScriptAnalyzerChecksTest, ParamTypesReachStrictHooks)
+{
+  constexpr std::string_view kScript = R"lua(--!strict
+local Script = oxygen.script {
+  params = {
+    speed = oxygen.param.float { default = 1 },
+  },
+}
+
+function Script:on_start()
+  local label: string = self.params.speed
+  print(label)
+end
+
+return Script
+)lua";
+
+  const auto analysis = Check(kScript, AnalysisLevel::kTypes, kDefinitions);
+
+  EXPECT_THAT(Codes(analysis), ElementsAre(DiagnosticCode::kTypeMismatch));
+}
+
+//! Wrong argument types to an API function are reported.
+NOLINT_TEST_F(ScriptAnalyzerChecksTest, WrongArgumentTypeIsReported)
+{
+  constexpr std::string_view kScript
+    = R"lua(local node = oxygen.scene.find_one(42)
+return node
+)lua";
+
+  const auto analysis = Check(kScript, AnalysisLevel::kTypes, kDefinitions);
+
+  EXPECT_THAT(Codes(analysis), ElementsAre(DiagnosticCode::kTypeMismatch));
+}
+
+//! Linting reports Luau lint warnings as S04xx and knows `oxygen` without
+//! definitions.
+NOLINT_TEST_F(ScriptAnalyzerChecksTest, LintWarnsWithoutDefinitions)
+{
+  constexpr std::string_view kScript = R"lua(local function f()
+  local unused = oxygen.time.delta_seconds()
+end
+return f
+)lua";
+
+  const auto analysis = Check(kScript, AnalysisLevel::kLint);
+
+  ASSERT_THAT(Codes(analysis), ElementsAre(DiagnosticCode::kLintLocalUnused));
+  EXPECT_EQ(analysis.diagnostics.front().severity,
+    oxygen::scripting::DiagnosticSeverity::kWarning);
+  EXPECT_EQ(to_string(analysis.diagnostics.front().code), "S0407");
+}
+
+//! Types without definitions fall back to linting: no type errors.
+NOLINT_TEST_F(ScriptAnalyzerChecksTest, TypesWithoutDefinitionsOnlyLint)
+{
+  constexpr std::string_view kScript
+    = R"lua(local node = oxygen.scene.fnd_one("Player")
+return node
+)lua";
+
+  const auto analysis = Check(kScript, AnalysisLevel::kTypes);
+
+  EXPECT_THAT(analysis.diagnostics, IsEmpty());
+}
+
+//! The declaration level does not lint or type-check.
+NOLINT_TEST_F(ScriptAnalyzerChecksTest, DeclarationLevelSkipsChecks)
+{
+  constexpr std::string_view kScript
+    = R"lua(local unused = oxygen.scene.fnd_one(1)
+return 1
+)lua";
+
+  const auto analysis
+    = Check(kScript, AnalysisLevel::kDeclarations, kDefinitions);
+
+  EXPECT_THAT(analysis.diagnostics, IsEmpty());
 }
 
 //! Codes print as `S` and four digits.

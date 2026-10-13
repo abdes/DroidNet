@@ -7,7 +7,10 @@
 #pragma once
 
 #include <memory>
+#include <span>
 #include <string_view>
+
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 
 struct lua_State;
 
@@ -20,12 +23,26 @@ struct ScriptBindingPackContext {
 
 class IScriptBindingPack {
 public:
+  IScriptBindingPack() = default;
   virtual ~IScriptBindingPack() = default;
+  IScriptBindingPack(const IScriptBindingPack&) = delete;
+  auto operator=(const IScriptBindingPack&) -> IScriptBindingPack& = delete;
+  IScriptBindingPack(IScriptBindingPack&&) = delete;
+  auto operator=(IScriptBindingPack&&) -> IScriptBindingPack& = delete;
 
   [[nodiscard]] virtual auto Name() const noexcept -> std::string_view = 0;
 
   [[nodiscard]] virtual auto Register(
     const ScriptBindingPackContext& context) const -> bool = 0;
+
+  //! The namespaces the pack registers, with their descriptions; the
+  //! generated Luau definitions are built from them. A pack that returns none
+  //! adds nothing to the definitions.
+  [[nodiscard]] virtual auto Namespaces() const
+    -> std::span<const BindingNamespace>
+  {
+    return {};
+  }
 };
 
 using ScriptBindingPackPtr = std::shared_ptr<const IScriptBindingPack>;

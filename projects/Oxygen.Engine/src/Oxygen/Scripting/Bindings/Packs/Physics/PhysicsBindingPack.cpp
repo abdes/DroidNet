@@ -6,9 +6,11 @@
 
 #include <array>
 #include <memory>
+#include <span>
 #include <string_view>
 
 #include <Oxygen/Scripting/Bindings/BindingRegistry.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsAggregateBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsArticulationBindings.h>
@@ -43,11 +45,15 @@ namespace {
     RegisterPhysicsSoftBodyBindings(state, oxygen_table_index);
   }
 
-  constexpr std::array<BindingNamespace, 1> kPhysicsNamespaces = {
+  //! Physics is declared `any` in the generated definitions until physics
+  //! authoring describes it.
+  constexpr auto kPhysicsNamespaces = std::to_array<BindingNamespace>({
     {
-      { .name = "physics", .register_fn = RegisterPhysicsBindings },
+      .name = "physics",
+      .register_fn = RegisterPhysicsBindings,
+      .describe = nullptr,
     },
-  };
+  });
 
   class PhysicsBindingPack final : public contracts::IScriptBindingPack {
   public:
@@ -61,6 +67,12 @@ namespace {
     {
       return RegisterBindingNamespaces(
         context.lua_state, context.runtime_env_ref, kPhysicsNamespaces);
+    }
+
+    [[nodiscard]] auto Namespaces() const
+      -> std::span<const BindingNamespace> override
+    {
+      return kPhysicsNamespaces;
     }
   };
 

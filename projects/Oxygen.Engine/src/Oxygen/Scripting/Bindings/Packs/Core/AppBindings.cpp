@@ -4,12 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <span>
+
 #include <lua.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/AppBindings.h>
 
@@ -83,38 +88,61 @@ namespace {
     engine->Stop();
     return 0;
   }
+
+  constexpr auto kAppFunctions = std::to_array<BindingFunction>({
+    { .name = "name", .function = LuaAppName, .signature = "() -> string" },
+    {
+      .name = "version",
+      .function = LuaAppVersion,
+      .signature = "() -> number",
+    },
+    {
+      .name = "target_fps",
+      .function = LuaAppTargetFps,
+      .signature = "() -> number",
+    },
+    {
+      .name = "frame_count_limit",
+      .function = LuaAppFrameCountLimit,
+      .signature = "() -> number",
+    },
+    {
+      .name = "asset_loader_enabled",
+      .function = LuaAppAssetLoaderEnabled,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "max_target_fps",
+      .function = LuaAppMaxTargetFps,
+      .signature = "() -> number",
+    },
+    {
+      .name = "is_running",
+      .function = LuaAppIsRunning,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "request_stop",
+      .function = LuaAppRequestStop,
+      .signature = "() -> ()",
+    },
+  });
+
+  constexpr auto kAppDescription = std::to_array<BindingNamespaceDescription>({
+    { .path = "app", .functions = kAppFunctions },
+  });
 } // namespace
 
 auto RegisterAppBindings(lua_State* state, const int oxygen_table_index) -> void
 {
   const int module_index = PushOxygenSubtable(state, oxygen_table_index, "app");
-
-  lua_pushcfunction(state, LuaAppName, "app.name");
-  lua_setfield(state, module_index, "name");
-
-  lua_pushcfunction(state, LuaAppVersion, "app.version");
-  lua_setfield(state, module_index, "version");
-
-  lua_pushcfunction(state, LuaAppTargetFps, "app.target_fps");
-  lua_setfield(state, module_index, "target_fps");
-
-  lua_pushcfunction(state, LuaAppFrameCountLimit, "app.frame_count_limit");
-  lua_setfield(state, module_index, "frame_count_limit");
-
-  lua_pushcfunction(
-    state, LuaAppAssetLoaderEnabled, "app.asset_loader_enabled");
-  lua_setfield(state, module_index, "asset_loader_enabled");
-
-  lua_pushcfunction(state, LuaAppMaxTargetFps, "app.max_target_fps");
-  lua_setfield(state, module_index, "max_target_fps");
-
-  lua_pushcfunction(state, LuaAppIsRunning, "app.is_running");
-  lua_setfield(state, module_index, "is_running");
-
-  lua_pushcfunction(state, LuaAppRequestStop, "app.request_stop");
-  lua_setfield(state, module_index, "request_stop");
-
+  RegisterFunctions(state, module_index, kAppFunctions);
   lua_pop(state, 1);
+}
+
+auto DescribeAppBindings() -> std::span<const BindingNamespaceDescription>
+{
+  return kAppDescription;
 }
 
 } // namespace oxygen::scripting::bindings

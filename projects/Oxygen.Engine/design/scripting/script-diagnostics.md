@@ -168,10 +168,26 @@ declared `any`, so physics calls are not checked and raise no false errors.
 Scripts are checked in Luau's non-strict mode by default, so unannotated code
 gets errors only where inference is certain; `--!strict` opts in to more.
 
-`ScriptAnalyzer` loads the generated file for level `kTypes`. The same file
-configures `luau-lsp` in the user's code editor, which then offers
+`ScriptAnalyzer` takes the generated text as `type_definitions` for level
+`kTypes` (`kLint` runs the linter alone, with `oxygen` declared `any`). The
+same file configures `luau-lsp` in the user's code editor, which then offers
 completion and the same type errors while typing. `oxygen.script` is typed so
-that `self.params` carries the declared parameter types into hook bodies.
+that `self.params` carries the declared parameter types into hook bodies:
+`oxygen.param.<type>` returns the type of the parameter's value, and
+`oxygen.script` returns `OxygenScript<P>` with `params: P`. In non-strict mode
+unannotated hook parameters, `self` included, stay untyped, so the parameter
+types are checked in hook bodies under `--!strict` and used for completion
+otherwise.
+
+As built: the analyzer runs the Luau frontend with the stable solver; lint
+warnings map one to one to `S0400` plus the Luau lint code (`S0407` is an
+unused local), and type errors map to `S0501`–`S0510` (type mismatch,
+unknown global, unknown member, argument count, not callable, optional
+access, deprecated API, unsupported `require`, other type errors, incomplete
+check). Unknown globals and members carry help pointing at
+`Types/oxygen.d.luau`. The build writes `oxygen.d.luau` next to the binaries
+and the SDK installs it to `share/oxygen/scripting`; the binding registration
+pattern is in the [Bindings guide](../../src/Oxygen/Scripting/Bindings/README.md#64-descriptions-and-generated-definitions).
 
 ## 6. Exit gates
 

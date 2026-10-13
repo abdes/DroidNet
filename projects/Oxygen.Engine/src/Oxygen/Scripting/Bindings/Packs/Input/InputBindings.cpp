@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <span>
 #include <string>
 #include <string_view>
 
@@ -20,6 +21,8 @@
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Input/InputSystem.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Input/InputBindings.h>
@@ -253,6 +256,71 @@ namespace {
   {
     return LuaInputOnActionImpl(state);
   }
+
+  constexpr auto kInputFunctions = std::to_array<BindingFunction>({
+    {
+      .name = "event_name",
+      .function = LuaInputEventName,
+      .signature = "(action: string, edge: InputEdge) -> string",
+    },
+    {
+      .name = "activate_context",
+      .function = LuaInputActivateContext,
+      .signature = "(context: string) -> boolean",
+    },
+    {
+      .name = "deactivate_context",
+      .function = LuaInputDeactivateContext,
+      .signature = "(context: string) -> boolean",
+    },
+  });
+
+  //! Closures over `oxygen.events.on` and `oxygen.events.once`.
+  constexpr auto kInputListenFunctions = std::to_array<BindingFunction>({
+    {
+      .name = "on_action",
+      .function = LuaInputOnAction,
+      .signature
+      = "(action: string, edge: InputEdge, callback: (payload: any) -> (), "
+        "options: EventListenOptions?) -> EventConnection",
+    },
+    {
+      .name = "once_action",
+      .function = LuaInputOnceAction,
+      .signature
+      = "(action: string, edge: InputEdge, callback: (payload: any) -> (), "
+        "options: EventListenOptions?) -> EventConnection",
+    },
+  });
+
+  constexpr auto kInputFields = std::to_array<BindingField>({
+    { .name = "edges", .type = "InputEdges" },
+  });
+
+  constexpr auto kInputTypes = std::to_array<BindingTypeAlias>({
+    {
+      .name = "InputEdge",
+      .definition = R"("triggered" | "completed" | "canceled" | "released" | )"
+                    R"("value_updated")",
+    },
+    {
+      .name = "InputEdges",
+      .definition = R"({ triggered: "triggered", completed: "completed", )"
+                    R"(canceled: "canceled", released: "released", )"
+                    R"(value_updated: "value_updated" })",
+    },
+  });
+
+  constexpr auto kInputDescription
+    = std::to_array<BindingNamespaceDescription>({
+      {
+        .path = "input",
+        .functions = kInputFunctions,
+        .fields = kInputFields,
+        .types = kInputTypes,
+      },
+      { .path = "input", .functions = kInputListenFunctions },
+    });
 } // namespace
 
 auto RegisterInputBindings(lua_State* state, const int oxygen_table_index)
@@ -261,14 +329,7 @@ auto RegisterInputBindings(lua_State* state, const int oxygen_table_index)
   const int module_index
     = PushOxygenSubtable(state, oxygen_table_index, "input");
 
-  lua_pushcfunction(state, LuaInputEventName, "input.event_name");
-  lua_setfield(state, module_index, "event_name");
-  lua_pushcfunction(
-    state, LuaInputActivateContext, "oxygen.input.activate_context");
-  lua_setfield(state, module_index, "activate_context");
-  lua_pushcfunction(
-    state, LuaInputDeactivateContext, "oxygen.input.deactivate_context");
-  lua_setfield(state, module_index, "deactivate_context");
+  RegisterFunctions(state, module_index, kInputFunctions);
 
   lua_getfield(state, oxygen_table_index, "events");
   if (lua_istable(state, -1) == 0) {
@@ -283,8 +344,9 @@ auto RegisterInputBindings(lua_State* state, const int oxygen_table_index)
     (void)luaL_error(state, "oxygen.input requires oxygen.events.on");
     return;
   }
-  lua_pushcclosure(state, LuaInputOnAction, "oxygen.input.on_action", 1);
-  lua_setfield(state, module_index, "on_action");
+  const auto& on_action = kInputListenFunctions[0];
+  lua_pushcclosure(state, on_action.function, on_action.name, 1);
+  lua_setfield(state, module_index, on_action.name);
 
   lua_getfield(state, -1, "once");
   if (lua_isfunction(state, -1) == 0) {
@@ -292,8 +354,9 @@ auto RegisterInputBindings(lua_State* state, const int oxygen_table_index)
     (void)luaL_error(state, "oxygen.input requires oxygen.events.once");
     return;
   }
-  lua_pushcclosure(state, LuaInputOnceAction, "oxygen.input.once_action", 1);
-  lua_setfield(state, module_index, "once_action");
+  const auto& once_action = kInputListenFunctions[1];
+  lua_pushcclosure(state, once_action.function, once_action.name, 1);
+  lua_setfield(state, module_index, once_action.name);
 
   lua_pop(state, 1); // events table
 
@@ -305,6 +368,11 @@ auto RegisterInputBindings(lua_State* state, const int oxygen_table_index)
   lua_setfield(state, module_index, "edges");
 
   lua_pop(state, 1);
+}
+
+auto DescribeInputBindings() -> std::span<const BindingNamespaceDescription>
+{
+  return kInputDescription;
 }
 
 } // namespace oxygen::scripting::bindings

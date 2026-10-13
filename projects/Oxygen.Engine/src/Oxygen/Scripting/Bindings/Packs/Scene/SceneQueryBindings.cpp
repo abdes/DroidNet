@@ -17,6 +17,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneQuery.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneQueryBindings.h>
@@ -227,6 +229,54 @@ namespace {
     lua_pushboolean(state, 0);
     return 1;
   }
+
+  //! Scoping methods return the query, so calls chain.
+  constexpr auto kSceneQueryMethods = std::to_array<BindingFunction>({
+    {
+      .name = "scope",
+      .function = SceneQueryScope,
+      .signature = "(node: SceneNode) -> SceneQuery",
+    },
+    {
+      .name = "scope_many",
+      .function = SceneQueryScopeMany,
+      .signature = "(nodes: { SceneNode }) -> SceneQuery",
+    },
+    {
+      .name = "clear_scope",
+      .function = SceneQueryClearScope,
+      .signature = "() -> SceneQuery",
+    },
+    {
+      .name = "first",
+      .function = SceneQueryFirst,
+      .signature = "() -> SceneNode?",
+    },
+    {
+      .name = "all",
+      .function = SceneQueryAll,
+      .signature = "() -> { SceneNode }",
+    },
+    {
+      .name = "count",
+      .function = SceneQueryCount,
+      .signature = "() -> number",
+    },
+    { .name = "any", .function = SceneQueryAny, .signature = "() -> boolean" },
+  });
+
+  constexpr auto kSceneQueryClasses = std::to_array<BindingClass>({
+    {
+      .name = "SceneQuery",
+      .metatable = kSceneQueryMetatable,
+      .methods = kSceneQueryMethods,
+    },
+  });
+
+  constexpr auto kSceneQueryDescription
+    = std::to_array<BindingNamespaceDescription>({
+      { .path = "scene", .classes = kSceneQueryClasses },
+    });
 } // namespace
 
 auto RegisterSceneQueryMetatable(lua_State* state) -> void
@@ -239,22 +289,14 @@ auto RegisterSceneQueryMetatable(lua_State* state) -> void
   lua_pushvalue(state, -1);
   lua_setfield(state, -2, "__index");
 
-  constexpr std::array<luaL_Reg, 7> methods {
-    {
-      { .name = "scope", .func = SceneQueryScope },
-      { .name = "scope_many", .func = SceneQueryScopeMany },
-      { .name = "clear_scope", .func = SceneQueryClearScope },
-      { .name = "first", .func = SceneQueryFirst },
-      { .name = "all", .func = SceneQueryAll },
-      { .name = "count", .func = SceneQueryCount },
-      { .name = "any", .func = SceneQueryAny },
-    },
-  };
-  for (const auto& method : methods) {
-    lua_pushcclosure(state, method.func, method.name, 0);
-    lua_setfield(state, -2, method.name);
-  }
+  RegisterFunctions(state, -1, kSceneQueryMethods);
   lua_pop(state, 1);
+}
+
+auto DescribeSceneQueryBindings()
+  -> std::span<const BindingNamespaceDescription>
+{
+  return kSceneQueryDescription;
 }
 
 auto PushSceneQuery(

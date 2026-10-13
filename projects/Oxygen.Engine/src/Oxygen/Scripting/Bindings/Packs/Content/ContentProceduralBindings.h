@@ -6,11 +6,16 @@
 
 #pragma once
 
+#include <span>
+
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+
 struct lua_State;
 
 namespace oxygen::scripting::bindings {
 
 auto RegisterContentModuleProcedural(lua_State* state, int module_index)
   -> void;
+auto ContentProceduralFunctions() -> std::span<const BindingFunction>;
 
 } // namespace oxygen::scripting::bindings

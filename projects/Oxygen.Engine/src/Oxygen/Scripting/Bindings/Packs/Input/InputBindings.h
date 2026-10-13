@@ -6,10 +6,15 @@
 
 #pragma once
 
+#include <span>
+
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+
 struct lua_State;
 
 namespace oxygen::scripting::bindings {
 
 auto RegisterInputBindings(lua_State* state, int oxygen_table_index) -> void;
+auto DescribeInputBindings() -> std::span<const BindingNamespaceDescription>;
 
 } // namespace oxygen::scripting::bindings

@@ -10,6 +10,7 @@
 #include <functional>
 #include <limits>
 #include <memory>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -21,6 +22,9 @@
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 
@@ -96,6 +100,9 @@ namespace {
 
   class ScopedLuaStackTop final {
   public:
+    OXYGEN_MAKE_NON_COPYABLE(ScopedLuaStackTop)
+    OXYGEN_MAKE_NON_MOVABLE(ScopedLuaStackTop)
+
     explicit ScopedLuaStackTop(lua_State* state) noexcept
       : state_(state)
       , top_(state != nullptr ? lua_gettop(state) : 0)
@@ -336,19 +343,25 @@ namespace {
     return 1;
   }
 
+  constexpr auto kConnectionMethods = std::to_array<BindingFunction>({
+    {
+      .name = "disconnect",
+      .function = LuaConnectionDisconnect,
+      .signature = "() -> ()",
+    },
+    {
+      .name = "connected",
+      .function = LuaConnectionConnected,
+      .signature = "() -> boolean",
+    },
+  });
+
   auto PushConnectionObject(lua_State* state, std::uint64_t listener_id) -> int
   {
     lua_newtable(state);
     lua_pushinteger(state, static_cast<lua_Integer>(listener_id));
     lua_setfield(state, -2, kEventConnectionIdFieldName);
-
-    lua_pushcfunction(
-      state, LuaConnectionDisconnect, "events.connection.disconnect");
-    lua_setfield(state, -2, "disconnect");
-
-    lua_pushcfunction(
-      state, LuaConnectionConnected, "events.connection.connected");
-    lua_setfield(state, -2, "connected");
+    RegisterFunctions(state, -1, kConnectionMethods);
     return 1;
   }
 
@@ -373,8 +386,7 @@ namespace {
       return a.sequence < b.sequence;
     };
 
-    auto it = std::upper_bound(
-      listeners.begin(), listeners.end(), new_listener, compare);
+    auto it = std::ranges::upper_bound(listeners, new_listener, compare);
     listeners.insert(it, new_listener);
   }
 
@@ -596,6 +608,64 @@ namespace {
     lua_remove(state, traceback_index);
     return true;
   }
+
+  constexpr auto kEventsFunctions = std::to_array<BindingFunction>({
+    {
+      .name = "on",
+      .function = LuaEventsOn,
+      .signature = "(event: string, callback: (payload: any) -> (), "
+                   "options: EventListenOptions?) -> EventConnection",
+    },
+    {
+      .name = "once",
+      .function = LuaEventsOnce,
+      .signature = "(event: string, callback: (payload: any) -> (), "
+                   "options: EventListenOptions?) -> EventConnection",
+    },
+    {
+      .name = "emit",
+      .function = LuaEventsEmit,
+      .signature
+      = "(event: string, payload: any?, options: EventEmitOptions?) -> ()",
+    },
+    {
+      .name = "listener_count",
+      .function = LuaEventsListenerCount,
+      .signature = "(event: string) -> number",
+    },
+    {
+      .name = "stats",
+      .function = LuaEventsStats,
+      .signature = "(event: string) -> EventStats",
+    },
+  });
+
+  constexpr auto kEventsClasses = std::to_array<BindingClass>({
+    { .name = "EventConnection", .methods = kConnectionMethods },
+  });
+
+  constexpr auto kEventsTypes = std::to_array<BindingTypeAlias>({
+    {
+      .name = "EventListenOptions",
+      .definition = "{ phase: string?, priority: number? }",
+    },
+    { .name = "EventEmitOptions", .definition = "{ phase: string? }" },
+    {
+      .name = "EventStats",
+      .definition
+      = "{ fired: number, listeners: number, errors: number, dropped: number }",
+    },
+  });
+
+  constexpr auto kEventsDescription
+    = std::to_array<BindingNamespaceDescription>({
+      {
+        .path = "events",
+        .functions = kEventsFunctions,
+        .classes = kEventsClasses,
+        .types = kEventsTypes,
+      },
+    });
 } // namespace
 
 auto CreateEventListenerOwner(lua_State* state, std::function<bool()> is_live)
@@ -669,23 +739,13 @@ auto RegisterEventsBindings(lua_State* state, const int oxygen_table_index)
 {
   const int module_index
     = PushOxygenSubtable(state, oxygen_table_index, "events");
-
-  lua_pushcfunction(state, LuaEventsOn, "events.on");
-  lua_setfield(state, module_index, "on");
-
-  lua_pushcfunction(state, LuaEventsOnce, "events.once");
-  lua_setfield(state, module_index, "once");
-
-  lua_pushcfunction(state, LuaEventsEmit, "events.emit");
-  lua_setfield(state, module_index, "emit");
-
-  lua_pushcfunction(state, LuaEventsListenerCount, "events.listener_count");
-  lua_setfield(state, module_index, "listener_count");
-
-  lua_pushcfunction(state, LuaEventsStats, "events.stats");
-  lua_setfield(state, module_index, "stats");
-
+  RegisterFunctions(state, module_index, kEventsFunctions);
   lua_pop(state, 1);
+}
+
+auto DescribeEventsBindings() -> std::span<const BindingNamespaceDescription>
+{
+  return kEventsDescription;
 }
 
 auto QueueEngineEvent(lua_State* state, const std::string_view event_name,

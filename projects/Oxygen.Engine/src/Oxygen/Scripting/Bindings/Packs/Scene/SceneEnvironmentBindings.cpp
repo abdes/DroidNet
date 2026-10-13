@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <iterator>
 #include <limits>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -33,6 +34,8 @@
 #include <Oxygen/Scene/Environment/VolumetricClouds.h>
 #include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 
@@ -571,7 +574,7 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const float v = static_cast<float>(lua_tonumber(state, 2));
+    const auto v = static_cast<float>(lua_tonumber(state, 2));
     (fog.get()->*Setter)(v);
     lua_pushboolean(state, 1);
     return 1;
@@ -1392,163 +1395,472 @@ namespace {
     return 1;
   }
 
+  constexpr auto kEnvironmentMethods = std::to_array<BindingFunction>({
+    {
+      .name = "systems",
+      .function = EnvironmentSystems,
+      .signature = "() -> { EnvironmentSystemName }",
+    },
+    {
+      .name = "has_system",
+      .function = EnvironmentHasSystem,
+      .signature = "(name: EnvironmentSystemName) -> boolean",
+    },
+    {
+      .name = "remove_system",
+      .function = EnvironmentRemoveSystem,
+      .signature = "(name: EnvironmentSystemName) -> boolean",
+    },
+    {
+      .name = "ensure_fog",
+      .function = EnvironmentEnsureFog,
+      .signature = "() -> FogSystem?",
+    },
+    {
+      .name = "fog",
+      .function = EnvironmentGetFog,
+      .signature = "() -> FogSystem?",
+    },
+    {
+      .name = "ensure_sky_atmosphere",
+      .function = EnvironmentEnsureSkyAtmosphere,
+      .signature = "() -> SkyAtmosphereSystem?",
+    },
+    {
+      .name = "sky_atmosphere",
+      .function = EnvironmentGetSkyAtmosphere,
+      .signature = "() -> SkyAtmosphereSystem?",
+    },
+    {
+      .name = "ensure_sky_light",
+      .function = EnvironmentEnsureSkyLight,
+      .signature = "() -> SkyLightSystem?",
+    },
+    {
+      .name = "sky_light",
+      .function = EnvironmentGetSkyLight,
+      .signature = "() -> SkyLightSystem?",
+    },
+    {
+      .name = "ensure_sky_sphere",
+      .function = EnvironmentEnsureSkySphere,
+      .signature = "() -> SkySphereSystem?",
+    },
+    {
+      .name = "sky_sphere",
+      .function = EnvironmentGetSkySphere,
+      .signature = "() -> SkySphereSystem?",
+    },
+    {
+      .name = "ensure_clouds",
+      .function = EnvironmentEnsureClouds,
+      .signature = "() -> CloudsSystem?",
+    },
+    {
+      .name = "clouds",
+      .function = EnvironmentGetClouds,
+      .signature = "() -> CloudsSystem?",
+    },
+    {
+      .name = "ensure_post_process",
+      .function = EnvironmentEnsurePostProcess,
+      .signature = "() -> PostProcessSystem?",
+    },
+    {
+      .name = "post_process",
+      .function = EnvironmentGetPostProcess,
+      .signature = "() -> PostProcessSystem?",
+    },
+  });
+
+  constexpr auto kFogMethods = std::to_array<BindingFunction>({
+    {
+      .name = "get_model",
+      .function = FogGetModel,
+      .signature = "() -> FogModel?",
+    },
+    {
+      .name = "set_model",
+      .function = FogSetModel,
+      .signature = "(model: FogModel) -> boolean",
+    },
+    {
+      .name = "get_extinction_sigma_t_per_meter",
+      .function
+      = FogGetFloat<&scene::environment::Fog::GetExtinctionSigmaTPerMeter>,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "set_extinction_sigma_t_per_meter",
+      .function
+      = FogSetFloat<&scene::environment::Fog::SetExtinctionSigmaTPerMeter>,
+      .signature = "(value: number) -> boolean",
+    },
+    {
+      .name = "get_height_falloff_per_meter",
+      .function
+      = FogGetFloat<&scene::environment::Fog::GetHeightFalloffPerMeter>,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "set_height_falloff_per_meter",
+      .function
+      = FogSetFloat<&scene::environment::Fog::SetHeightFalloffPerMeter>,
+      .signature = "(value: number) -> boolean",
+    },
+    {
+      .name = "get_height_offset_meters",
+      .function = FogGetFloat<&scene::environment::Fog::GetHeightOffsetMeters>,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "set_height_offset_meters",
+      .function = FogSetFloat<&scene::environment::Fog::SetHeightOffsetMeters>,
+      .signature = "(value: number) -> boolean",
+    },
+    {
+      .name = "get_start_distance_meters",
+      .function = FogGetFloat<&scene::environment::Fog::GetStartDistanceMeters>,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "set_start_distance_meters",
+      .function = FogSetFloat<&scene::environment::Fog::SetStartDistanceMeters>,
+      .signature = "(value: number) -> boolean",
+    },
+    {
+      .name = "get_max_opacity",
+      .function = FogGetFloat<&scene::environment::Fog::GetMaxOpacity>,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "set_max_opacity",
+      .function = FogSetFloat<&scene::environment::Fog::SetMaxOpacity>,
+      .signature = "(value: number) -> boolean",
+    },
+    {
+      .name = "get_single_scattering_albedo_rgb",
+      .function = FogGetSingleScatteringAlbedoRgb,
+      .signature = "() -> vector?",
+    },
+    {
+      .name = "set_single_scattering_albedo_rgb",
+      .function = FogSetSingleScatteringAlbedoRgb,
+      .signature = "(albedo: vector) -> boolean",
+    },
+    {
+      .name = "get_anisotropy",
+      .function = FogGetFloat<&scene::environment::Fog::GetAnisotropy>,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "set_anisotropy",
+      .function = FogSetFloat<&scene::environment::Fog::SetAnisotropy>,
+      .signature = "(value: number) -> boolean",
+    },
+  });
+
+  constexpr auto kSkyAtmosphereMethods = std::to_array<BindingFunction>({
+    {
+      .name = "get",
+      .function = SkyAtmosphereGet,
+      .signature = "() -> SkyAtmosphereSettings?",
+    },
+    {
+      .name = "set",
+      .function = SkyAtmosphereSet,
+      .signature = "(settings: SkyAtmosphereSettingsInput) -> boolean",
+    },
+  });
+
+  constexpr auto kSkyLightMethods = std::to_array<BindingFunction>({
+    {
+      .name = "get",
+      .function = SkyLightGet,
+      .signature = "() -> SkyLightSettings?",
+    },
+    {
+      .name = "set",
+      .function = SkyLightSet,
+      .signature = "(settings: SkyLightSettingsInput) -> boolean",
+    },
+  });
+
+  constexpr auto kSkySphereMethods = std::to_array<BindingFunction>({
+    {
+      .name = "get",
+      .function = SkySphereGet,
+      .signature = "() -> SkySphereSettings?",
+    },
+    {
+      .name = "set",
+      .function = SkySphereSet,
+      .signature = "(settings: SkySphereSettingsInput) -> boolean",
+    },
+  });
+
+  constexpr auto kCloudsMethods = std::to_array<BindingFunction>({
+    {
+      .name = "get",
+      .function = CloudsGet,
+      .signature = "() -> CloudsSettings?",
+    },
+    {
+      .name = "set",
+      .function = CloudsSet,
+      .signature = "(settings: CloudsSettingsInput) -> boolean",
+    },
+  });
+
+  constexpr auto kPostProcessMethods = std::to_array<BindingFunction>({
+    {
+      .name = "get",
+      .function = PostProcessGet,
+      .signature = "() -> PostProcessSettings?",
+    },
+    {
+      .name = "set",
+      .function = PostProcessSet,
+      .signature = "(settings: PostProcessSettingsInput) -> (boolean, string?)",
+    },
+  });
+
+  constexpr auto kEnvironmentClasses = std::to_array<BindingClass>({
+    {
+      .name = "SceneEnvironment",
+      .metatable = kEnvironmentMetatable,
+      .methods = kEnvironmentMethods,
+    },
+    {
+      .name = "FogSystem",
+      .metatable = kFogSystemMetatable,
+      .methods = kFogMethods,
+    },
+    {
+      .name = "SkyAtmosphereSystem",
+      .metatable = kSkyAtmosphereMetatable,
+      .methods = kSkyAtmosphereMethods,
+    },
+    {
+      .name = "SkyLightSystem",
+      .metatable = kSkyLightMetatable,
+      .methods = kSkyLightMethods,
+    },
+    {
+      .name = "SkySphereSystem",
+      .metatable = kSkySphereMetatable,
+      .methods = kSkySphereMethods,
+    },
+    {
+      .name = "CloudsSystem",
+      .metatable = kCloudsMetatable,
+      .methods = kCloudsMethods,
+    },
+    {
+      .name = "PostProcessSystem",
+      .metatable = kPostProcessMetatable,
+      .methods = kPostProcessMethods,
+    },
+  });
+
+  constexpr auto kEnvironmentTypes = std::to_array<BindingTypeAlias>({
+    {
+      .name = "EnvironmentSystemName",
+      .definition = R"("fog" | "sky_atmosphere" | "sky_light" | "sky_sphere" )"
+                    R"(| "clouds" | "post_process")",
+    },
+    {
+      .name = "FogModel",
+      .definition = R"("exponential_height" | "volumetric")",
+    },
+    {
+      .name = "SkyLightSource",
+      .definition = R"("captured_scene" | "specified_cubemap")",
+    },
+    {
+      .name = "SkySphereSource",
+      .definition = R"("cubemap" | "solid_color")",
+    },
+    {
+      .name = "ToneMapper",
+      .definition = R"("none" | "aces_fitted" | "filmic" | "reinhard")",
+    },
+    {
+      .name = "ExposureMode",
+      .definition = R"("manual" | "manual_camera" | "auto")",
+    },
+    {
+      .name = "MeteringMode",
+      .definition = R"("average" | "center_weighted" | "spot")",
+    },
+    {
+      .name = "ExposureCurveKey",
+      .definition = "{ metered_ev: number, compensation_ev: number }",
+    },
+    {
+      .name = "SkyAtmosphereSettings",
+      .definition
+      = "{ transform_mode: number, planet_radius_meters: number, "
+        "atmosphere_height_meters: number, "
+        "planet_anchor_world_position: vector, "
+        "ground_albedo_rgb: vector, rayleigh_scattering_rgb: vector, "
+        "rayleigh_scale_height_meters: number, "
+        "mie_scattering_rgb: vector, mie_scale_height_meters: number, "
+        "mie_absorption_rgb: vector, mie_anisotropy: number, "
+        "ozone_absorption_rgb: vector, "
+        "multi_scattering_factor: number, sun_disk_enabled: boolean, "
+        "aerial_perspective_distance_scale: number, "
+        "aerial_scattering_strength: number }",
+    },
+    {
+      .name = "SkyAtmosphereSettingsInput",
+      .definition = "{ transform_mode: number?, planet_radius_meters: number?, "
+                    "atmosphere_height_meters: number?, "
+                    "planet_anchor_world_position: vector?, "
+                    "ground_albedo_rgb: vector?, "
+                    "rayleigh_scattering_rgb: vector?, "
+                    "rayleigh_scale_height_meters: number?, "
+                    "mie_scattering_rgb: vector?, "
+                    "mie_scale_height_meters: number?, "
+                    "mie_absorption_rgb: vector?, mie_anisotropy: number?, "
+                    "ozone_absorption_rgb: vector?, "
+                    "multi_scattering_factor: number?, "
+                    "sun_disk_enabled: boolean?, "
+                    "aerial_perspective_distance_scale: number?, "
+                    "aerial_scattering_strength: number? }",
+    },
+    {
+      .name = "SkyLightSettings",
+      .definition = "{ source: SkyLightSource, cubemap_resource_key: number, "
+                    "intensity_mul: number, tint_rgb: vector, "
+                    "diffuse_intensity: number, specular_intensity: number, "
+                    "illuminance_lux: number }",
+    },
+    {
+      .name = "SkyLightSettingsInput",
+      .definition = "{ source: SkyLightSource?, cubemap_resource_key: number?, "
+                    "intensity_mul: number?, tint_rgb: vector?, "
+                    "diffuse_intensity: number?, specular_intensity: number?, "
+                    "illuminance_lux: number? }",
+    },
+    {
+      .name = "SkySphereSettings",
+      .definition = "{ source: SkySphereSource, cubemap_resource_key: number, "
+                    "solid_color_rgb: vector, intensity: number, "
+                    "rotation_radians: number, illuminance_lux: number, "
+                    "tint_rgb: vector }",
+    },
+    {
+      .name = "SkySphereSettingsInput",
+      .definition
+      = "{ source: SkySphereSource?, cubemap_resource_key: number?, "
+        "solid_color_rgb: vector?, intensity: number?, "
+        "rotation_radians: number?, illuminance_lux: number?, "
+        "tint_rgb: vector? }",
+    },
+    {
+      .name = "CloudsSettings",
+      .definition = "{ base_altitude_meters: number, "
+                    "layer_thickness_meters: number, coverage: number, "
+                    "extinction_sigma_t_per_meter: number, "
+                    "single_scattering_albedo_rgb: vector, "
+                    "phase_anisotropy: number, wind_direction_ws: vector, "
+                    "wind_speed_mps: number, shadow_strength: number }",
+    },
+    {
+      .name = "CloudsSettingsInput",
+      .definition = "{ base_altitude_meters: number?, "
+                    "layer_thickness_meters: number?, coverage: number?, "
+                    "extinction_sigma_t_per_meter: number?, "
+                    "single_scattering_albedo_rgb: vector?, "
+                    "phase_anisotropy: number?, wind_direction_ws: vector?, "
+                    "wind_speed_mps: number?, shadow_strength: number? }",
+    },
+    {
+      .name = "PostProcessSettings",
+      .definition
+      = "{ tone_mapper: ToneMapper, exposure_mode: ExposureMode, "
+        "exposure_enabled: boolean, exposure_compensation_ev: number, "
+        "exposure_key: number, manual_exposure_ev: number, "
+        "auto_exposure_min_ev: number, auto_exposure_max_ev: number, "
+        "auto_exposure_speed_up: number, "
+        "auto_exposure_speed_down: number, "
+        "auto_exposure_low_percentile: number, "
+        "auto_exposure_high_percentile: number, "
+        "auto_exposure_min_log_luminance: number, "
+        "auto_exposure_log_luminance_range: number, "
+        "auto_exposure_target_luminance: number, "
+        "auto_exposure_spot_meter_radius: number, "
+        "auto_exposure_black_influence: number, "
+        "auto_exposure_transition_distance_ev: number, "
+        "auto_exposure_metering_mask: string, "
+        "auto_exposure_compensation_curve: { ExposureCurveKey }, "
+        "auto_exposure_metering_mode: MeteringMode, "
+        "bloom_intensity: number, bloom_threshold: number, "
+        "saturation: number, contrast: number, "
+        "vignette_intensity: number, display_gamma: number }",
+    },
+    {
+      .name = "PostProcessSettingsInput",
+      .definition
+      = "{ tone_mapper: ToneMapper?, exposure_mode: ExposureMode?, "
+        "exposure_enabled: boolean?, "
+        "exposure_compensation_ev: number?, exposure_key: number?, "
+        "manual_exposure_ev: number?, auto_exposure_min_ev: number?, "
+        "auto_exposure_max_ev: number?, "
+        "auto_exposure_speed_up: number?, "
+        "auto_exposure_speed_down: number?, "
+        "auto_exposure_low_percentile: number?, "
+        "auto_exposure_high_percentile: number?, "
+        "auto_exposure_min_log_luminance: number?, "
+        "auto_exposure_log_luminance_range: number?, "
+        "auto_exposure_target_luminance: number?, "
+        "auto_exposure_spot_meter_radius: number?, "
+        "auto_exposure_black_influence: number?, "
+        "auto_exposure_transition_distance_ev: number?, "
+        "auto_exposure_metering_mask: string?, "
+        "auto_exposure_compensation_curve: { ExposureCurveKey }?, "
+        "auto_exposure_metering_mode: MeteringMode?, "
+        "bloom_intensity: number?, bloom_threshold: number?, "
+        "saturation: number?, contrast: number?, "
+        "vignette_intensity: number?, display_gamma: number? }",
+    },
+  });
+
+  constexpr auto kEnvironmentDescription
+    = std::to_array<BindingNamespaceDescription>({
+      {
+        .path = "scene",
+        .classes = kEnvironmentClasses,
+        .types = kEnvironmentTypes,
+      },
+    });
 } // namespace
 
 auto RegisterSceneEnvironmentMetatables(lua_State* state) -> void
 {
-  luaL_newmetatable(state, kEnvironmentMetatable);
-  lua_pushvalue(state, -1);
-  lua_setfield(state, -2, "__index");
-  constexpr std::array<luaL_Reg, 15> env_methods {
-    {
-      { .name = "systems", .func = EnvironmentSystems },
-      { .name = "has_system", .func = EnvironmentHasSystem },
-      { .name = "remove_system", .func = EnvironmentRemoveSystem },
-      { .name = "ensure_fog", .func = EnvironmentEnsureFog },
-      { .name = "fog", .func = EnvironmentGetFog },
-      {
-        .name = "ensure_sky_atmosphere",
-        .func = EnvironmentEnsureSkyAtmosphere,
-      },
-      { .name = "sky_atmosphere", .func = EnvironmentGetSkyAtmosphere },
-      { .name = "ensure_sky_light", .func = EnvironmentEnsureSkyLight },
-      { .name = "sky_light", .func = EnvironmentGetSkyLight },
-      { .name = "ensure_sky_sphere", .func = EnvironmentEnsureSkySphere },
-      { .name = "sky_sphere", .func = EnvironmentGetSkySphere },
-      { .name = "ensure_clouds", .func = EnvironmentEnsureClouds },
-      { .name = "clouds", .func = EnvironmentGetClouds },
-      { .name = "ensure_post_process", .func = EnvironmentEnsurePostProcess },
-      { .name = "post_process", .func = EnvironmentGetPostProcess },
-    },
+  const auto register_methods
+    = [state](const char* metatable_name,
+        const std::span<const BindingFunction> methods) -> void {
+    luaL_newmetatable(state, metatable_name);
+    lua_pushvalue(state, -1);
+    lua_setfield(state, -2, "__index");
+    RegisterFunctions(state, -1, methods);
+    lua_pop(state, 1);
   };
-  for (const auto& reg : env_methods) {
-    lua_pushcclosure(state, reg.func, reg.name, 0);
-    lua_setfield(state, -2, reg.name);
-  }
-  lua_pop(state, 1);
+  register_methods(kEnvironmentMetatable, kEnvironmentMethods);
+  register_methods(kFogSystemMetatable, kFogMethods);
+  register_methods(kSkyAtmosphereMetatable, kSkyAtmosphereMethods);
+  register_methods(kSkyLightMetatable, kSkyLightMethods);
+  register_methods(kSkySphereMetatable, kSkySphereMethods);
+  register_methods(kCloudsMetatable, kCloudsMethods);
+  register_methods(kPostProcessMetatable, kPostProcessMethods);
+}
 
-  luaL_newmetatable(state, kFogSystemMetatable);
-  lua_pushvalue(state, -1);
-  lua_setfield(state, -2, "__index");
-  constexpr std::array<luaL_Reg, 16> fog_methods {
-    {
-      {
-        .name = "get_model",
-        .func = FogGetModel,
-      },
-      { .name = "set_model", .func = FogSetModel },
-      {
-        .name = "get_extinction_sigma_t_per_meter",
-        .func
-        = FogGetFloat<&scene::environment::Fog::GetExtinctionSigmaTPerMeter>,
-      },
-      {
-        .name = "set_extinction_sigma_t_per_meter",
-        .func
-        = FogSetFloat<&scene::environment::Fog::SetExtinctionSigmaTPerMeter>,
-      },
-      {
-        .name = "get_height_falloff_per_meter",
-        .func = FogGetFloat<&scene::environment::Fog::GetHeightFalloffPerMeter>,
-      },
-      {
-        .name = "set_height_falloff_per_meter",
-        .func = FogSetFloat<&scene::environment::Fog::SetHeightFalloffPerMeter>,
-      },
-      {
-        .name = "get_height_offset_meters",
-        .func = FogGetFloat<&scene::environment::Fog::GetHeightOffsetMeters>,
-      },
-      {
-        .name = "set_height_offset_meters",
-        .func = FogSetFloat<&scene::environment::Fog::SetHeightOffsetMeters>,
-      },
-      {
-        .name = "get_start_distance_meters",
-        .func = FogGetFloat<&scene::environment::Fog::GetStartDistanceMeters>,
-      },
-      {
-        .name = "set_start_distance_meters",
-        .func = FogSetFloat<&scene::environment::Fog::SetStartDistanceMeters>,
-      },
-      {
-        .name = "get_max_opacity",
-        .func = FogGetFloat<&scene::environment::Fog::GetMaxOpacity>,
-      },
-      {
-        .name = "set_max_opacity",
-        .func = FogSetFloat<&scene::environment::Fog::SetMaxOpacity>,
-      },
-      {
-        .name = "get_single_scattering_albedo_rgb",
-        .func = FogGetSingleScatteringAlbedoRgb,
-      },
-      {
-        .name = "set_single_scattering_albedo_rgb",
-        .func = FogSetSingleScatteringAlbedoRgb,
-      },
-      {
-        .name = "get_anisotropy",
-        .func = FogGetFloat<&scene::environment::Fog::GetAnisotropy>,
-      },
-      {
-        .name = "set_anisotropy",
-        .func = FogSetFloat<&scene::environment::Fog::SetAnisotropy>,
-      },
-    },
-  };
-  for (const auto& reg : fog_methods) {
-    lua_pushcclosure(state, reg.func, reg.name, 0);
-    lua_setfield(state, -2, reg.name);
-  }
-  lua_pop(state, 1);
-
-  auto register_methods
-    = [&](const char* metatable_name, const std::array<luaL_Reg, 2>& methods) {
-        luaL_newmetatable(state, metatable_name);
-        lua_pushvalue(state, -1);
-        lua_setfield(state, -2, "__index");
-        for (const auto& reg : methods) {
-          lua_pushcclosure(state, reg.func, reg.name, 0);
-          lua_setfield(state, -2, reg.name);
-        }
-        lua_pop(state, 1);
-      };
-  register_methods(kSkyAtmosphereMetatable,
-    {
-      {
-        { .name = "get", .func = SkyAtmosphereGet },
-        { .name = "set", .func = SkyAtmosphereSet },
-      },
-    });
-  register_methods(kSkyLightMetatable,
-    {
-      {
-        { .name = "get", .func = SkyLightGet },
-        { .name = "set", .func = SkyLightSet },
-      },
-    });
-  register_methods(kSkySphereMetatable,
-    {
-      {
-        { .name = "get", .func = SkySphereGet },
-        { .name = "set", .func = SkySphereSet },
-      },
-    });
-  register_methods(kCloudsMetatable,
-    {
-      {
-        { .name = "get", .func = CloudsGet },
-        { .name = "set", .func = CloudsSet },
-      },
-    });
-  register_methods(kPostProcessMetatable,
-    {
-      {
-        { .name = "get", .func = PostProcessGet },
-        { .name = "set", .func = PostProcessSet },
-      },
-    });
+auto DescribeSceneEnvironmentBindings()
+  -> std::span<const BindingNamespaceDescription>
+{
+  return kEnvironmentDescription;
 }
 
 auto PushSceneEnvironment(

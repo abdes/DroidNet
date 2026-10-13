@@ -9,11 +9,11 @@
 #include <limits>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <utility>
 
 #include <lua.h>
-#include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/CameraAspectMode.h>
@@ -21,6 +21,8 @@
 #include <Oxygen/Scene/Camera/CameraExposure.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeComponentBindings.h>
 
@@ -570,7 +572,7 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const float v = static_cast<float>(lua_tonumber(state, 2));
+    const auto v = static_cast<float>(lua_tonumber(state, 2));
     (cam->get().*Setter)(v);
     lua_pushboolean(state, 1);
     return 1;
@@ -585,79 +587,203 @@ namespace {
   {
     return SceneNodeCameraSetOrthographic(state);
   }
+
+  using spc = scene::PerspectiveCamera;
+
+  constexpr auto kCameraMethods = std::to_array<BindingFunction>({
+    {
+      .name = "camera",
+      .function = SceneNodeCamera,
+      .signature = "() -> SceneNode?",
+    },
+    {
+      .name = "attach_perspective_camera",
+      .function = SceneNodeAttachPerspectiveCamera,
+      .signature = "(options: PerspectiveCameraOptions?) -> boolean",
+    },
+    {
+      .name = "attach_orthographic_camera",
+      .function = SceneNodeAttachOrthographicCamera,
+      .signature = "(options: OrthographicCameraOptions?) -> boolean",
+    },
+    {
+      .name = "detach_camera",
+      .function = SceneNodeDetachCamera,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "has_camera",
+      .function = SceneNodeHasCamera,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "camera_type",
+      .function = SceneNodeCameraType,
+      .signature = "() -> CameraType?",
+    },
+    {
+      .name = "camera_get_perspective",
+      .function = SceneNodeCameraGetPerspective,
+      .signature = "() -> PerspectiveCameraSettings?",
+    },
+    {
+      .name = "camera_set_perspective",
+      .function = SceneNodeCameraSetPerspective,
+      .signature = "(settings: PerspectiveCameraOptions) -> boolean",
+    },
+    {
+      .name = "camera_get_orthographic",
+      .function = SceneNodeCameraGetOrthographic,
+      .signature = "() -> OrthographicCameraSettings?",
+    },
+    {
+      .name = "camera_set_orthographic",
+      .function = SceneNodeCameraSetOrthographic,
+      .signature = "(extents: OrthographicCameraOptions) -> boolean",
+    },
+    {
+      .name = "camera_get_viewport",
+      .function = SceneNodeCameraGetViewport,
+      .signature = "() -> CameraViewport?",
+    },
+    {
+      .name = "camera_set_viewport",
+      .function = SceneNodeCameraSetViewport,
+      .signature = "(viewport: CameraViewportInput?) -> boolean",
+    },
+    {
+      .name = "camera_get_exposure",
+      .function = SceneNodeCameraGetExposure,
+      .signature = "() -> CameraExposure?",
+    },
+    {
+      .name = "camera_set_exposure",
+      .function = SceneNodeCameraSetExposure,
+      .signature = "(exposure: CameraExposureInput) -> boolean",
+    },
+    {
+      .name = "camera_get_fov_y_radians",
+      .function = CameraGetPerspectiveFloat<&spc::GetFieldOfView>,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "camera_set_fov_y_radians",
+      .function = CameraSetPerspectiveFloat<&spc::SetFieldOfView>,
+      .signature = "(radians: number) -> boolean",
+    },
+    {
+      .name = "camera_get_aspect_ratio",
+      .function = CameraGetPerspectiveFloat<&spc::GetAspectRatio>,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "camera_set_aspect_ratio",
+      .function = CameraSetPerspectiveFloat<&spc::SetAspectRatio>,
+      .signature = "(ratio: number) -> boolean",
+    },
+    {
+      .name = "camera_get_near_plane",
+      .function = CameraGetPerspectiveFloat<&spc::GetNearPlane>,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "camera_set_near_plane",
+      .function = CameraSetPerspectiveFloat<&spc::SetNearPlane>,
+      .signature = "(distance: number) -> boolean",
+    },
+    {
+      .name = "camera_get_far_plane",
+      .function = CameraGetPerspectiveFloat<&spc::GetFarPlane>,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "camera_set_far_plane",
+      .function = CameraSetPerspectiveFloat<&spc::SetFarPlane>,
+      .signature = "(distance: number) -> boolean",
+    },
+    {
+      .name = "camera_get_extents",
+      .function = SceneNodeCameraGetExtents,
+      .signature = "() -> OrthographicCameraSettings?",
+    },
+    {
+      .name = "camera_set_extents",
+      .function = SceneNodeCameraSetExtents,
+      .signature = "(extents: OrthographicCameraOptions) -> boolean",
+    },
+  });
+
+  constexpr auto kCameraClasses = std::to_array<BindingClass>({
+    {
+      .name = "SceneNode",
+      .metatable = kSceneNodeMetatable,
+      .methods = kCameraMethods,
+    },
+  });
+
+  constexpr auto kCameraTypes = std::to_array<BindingTypeAlias>({
+    { .name = "CameraType", .definition = R"("perspective" | "orthographic")" },
+    { .name = "CameraAspectMode", .definition = R"("auto" | "fixed")" },
+    {
+      .name = "PerspectiveCameraSettings",
+      .definition = "{ fov_y: number, aspect: number, "
+                    "aspect_mode: CameraAspectMode, near_plane: number, "
+                    "far_plane: number }",
+    },
+    {
+      .name = "PerspectiveCameraOptions",
+      .definition = "{ fov_y: number?, aspect: number?, "
+                    "aspect_mode: CameraAspectMode?, near_plane: number?, "
+                    "far_plane: number? }",
+    },
+    {
+      .name = "OrthographicCameraSettings",
+      .definition = "{ left: number, right: number, bottom: number, "
+                    "top: number, near_plane: number, far_plane: number }",
+    },
+    {
+      .name = "OrthographicCameraOptions",
+      .definition = "{ left: number?, right: number?, bottom: number?, "
+                    "top: number?, near_plane: number?, far_plane: number? }",
+    },
+    {
+      .name = "CameraViewport",
+      .definition = "{ x: number, y: number, width: number, height: number, "
+                    "min_depth: number, max_depth: number }",
+    },
+    {
+      .name = "CameraViewportInput",
+      .definition = "{ x: number, y: number, width: number, height: number, "
+                    "min_depth: number?, max_depth: number? }",
+    },
+    {
+      .name = "CameraExposure",
+      .definition = "{ aperture_f: number, shutter_rate: number, iso: number, "
+                    "ev: number }",
+    },
+    {
+      .name = "CameraExposureInput",
+      .definition = "{ aperture_f: number?, shutter_rate: number?, "
+                    "iso: number? }",
+    },
+  });
+
+  constexpr auto kCameraDescription
+    = std::to_array<BindingNamespaceDescription>({
+      { .path = "scene", .classes = kCameraClasses, .types = kCameraTypes },
+    });
 } // namespace
 
 auto RegisterSceneNodeCameraMethods(lua_State* state, const int metatable_index)
   -> void
 {
-  using spc = scene::PerspectiveCamera;
-  constexpr auto methods = std::to_array<luaL_Reg>({
-    { .name = "camera", .func = SceneNodeCamera },
-    {
-      .name = "attach_perspective_camera",
-      .func = SceneNodeAttachPerspectiveCamera,
-    },
-    {
-      .name = "attach_orthographic_camera",
-      .func = SceneNodeAttachOrthographicCamera,
-    },
-    { .name = "detach_camera", .func = SceneNodeDetachCamera },
-    { .name = "has_camera", .func = SceneNodeHasCamera },
-    { .name = "camera_type", .func = SceneNodeCameraType },
-    { .name = "camera_get_perspective", .func = SceneNodeCameraGetPerspective },
-    { .name = "camera_set_perspective", .func = SceneNodeCameraSetPerspective },
-    {
-      .name = "camera_get_orthographic",
-      .func = SceneNodeCameraGetOrthographic,
-    },
-    {
-      .name = "camera_set_orthographic",
-      .func = SceneNodeCameraSetOrthographic,
-    },
-    { .name = "camera_get_viewport", .func = SceneNodeCameraGetViewport },
-    { .name = "camera_set_viewport", .func = SceneNodeCameraSetViewport },
-    { .name = "camera_get_exposure", .func = SceneNodeCameraGetExposure },
-    { .name = "camera_set_exposure", .func = SceneNodeCameraSetExposure },
-    {
-      .name = "camera_get_fov_y_radians",
-      .func = CameraGetPerspectiveFloat<&spc::GetFieldOfView>,
-    },
-    {
-      .name = "camera_set_fov_y_radians",
-      .func = CameraSetPerspectiveFloat<&spc::SetFieldOfView>,
-    },
-    {
-      .name = "camera_get_aspect_ratio",
-      .func = CameraGetPerspectiveFloat<&spc::GetAspectRatio>,
-    },
-    {
-      .name = "camera_set_aspect_ratio",
-      .func = CameraSetPerspectiveFloat<&spc::SetAspectRatio>,
-    },
-    {
-      .name = "camera_get_near_plane",
-      .func = CameraGetPerspectiveFloat<&spc::GetNearPlane>,
-    },
-    {
-      .name = "camera_set_near_plane",
-      .func = CameraSetPerspectiveFloat<&spc::SetNearPlane>,
-    },
-    {
-      .name = "camera_get_far_plane",
-      .func = CameraGetPerspectiveFloat<&spc::GetFarPlane>,
-    },
-    {
-      .name = "camera_set_far_plane",
-      .func = CameraSetPerspectiveFloat<&spc::SetFarPlane>,
-    },
-    { .name = "camera_get_extents", .func = SceneNodeCameraGetExtents },
-    { .name = "camera_set_extents", .func = SceneNodeCameraSetExtents },
-  });
+  RegisterFunctions(state, metatable_index, kCameraMethods);
+}
 
-  for (const auto& reg : methods) {
-    lua_pushcclosure(state, reg.func, reg.name, 0);
-    lua_setfield(state, metatable_index, reg.name);
-  }
+auto DescribeSceneNodeCameraBindings()
+  -> std::span<const BindingNamespaceDescription>
+{
+  return kCameraDescription;
 }
 
 } // namespace oxygen::scripting::bindings

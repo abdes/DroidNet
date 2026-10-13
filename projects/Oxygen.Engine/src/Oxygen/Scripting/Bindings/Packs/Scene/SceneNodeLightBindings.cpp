@@ -9,12 +9,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
+#include <span>
 #include <string_view>
 #include <type_traits>
 #include <utility>
 
 #include <lua.h>
-#include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
@@ -22,6 +23,8 @@
 #include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeComponentBindings.h>
 
@@ -73,6 +76,34 @@ namespace {
       return "ultra";
     }
     return "medium";
+  }
+
+  auto AtmosphereLightSlotName(const scene::AtmosphereLightSlot slot) -> const
+    char*
+  {
+    switch (slot) {
+    case scene::AtmosphereLightSlot::kPrimary:
+      return "primary";
+    case scene::AtmosphereLightSlot::kSecondary:
+      return "secondary";
+    default:
+      return "none";
+    }
+  }
+
+  auto TryParseAtmosphereLightSlot(const std::string_view name)
+    -> std::optional<scene::AtmosphereLightSlot>
+  {
+    if (name == "primary") {
+      return scene::AtmosphereLightSlot::kPrimary;
+    }
+    if (name == "secondary") {
+      return scene::AtmosphereLightSlot::kSecondary;
+    }
+    if (name == "none") {
+      return scene::AtmosphereLightSlot::kNone;
+    }
+    return std::nullopt;
   }
 
   auto TryParseShadowResolutionHint(
@@ -183,14 +214,18 @@ namespace {
   template <typename Fn> auto EditAny(lua_State* state, Fn&& fn) -> bool
   {
     auto* node = TryCheckSceneNode(state, 1);
-    if (!node)
+    if (!node) {
       return false;
-    if (node->GetLightAs<scene::DirectionalLight>())
+    }
+    if (node->GetLightAs<scene::DirectionalLight>()) {
       return EditDirectional(state, std::forward<Fn>(fn));
-    if (node->GetLightAs<scene::PointLight>())
+    }
+    if (node->GetLightAs<scene::PointLight>()) {
       return EditPoint(state, std::forward<Fn>(fn));
-    if (node->GetLightAs<scene::SpotLight>())
+    }
+    if (node->GetLightAs<scene::SpotLight>()) {
       return EditSpot(state, std::forward<Fn>(fn));
+    }
     return false;
   }
 
@@ -263,8 +298,9 @@ namespace {
 
   auto ValidLightTable(lua_State* state, int table) -> bool
   {
-    if (lua_type(state, table) != LUA_TTABLE)
+    if (lua_type(state, table) != LUA_TTABLE) {
       return false;
+    }
     for (const char* key : {
            "attenuation_model",
            "decay_exponent",
@@ -274,8 +310,9 @@ namespace {
       lua_getfield(state, table, key);
       const bool obsolete = lua_type(state, -1) != LUA_TNIL;
       lua_pop(state, 1);
-      if (obsolete)
+      if (obsolete) {
         return false;
+      }
     }
     for (const char* key : {
            "range",
@@ -290,8 +327,9 @@ namespace {
       lua_getfield(state, table, key);
       const auto type = lua_type(state, -1);
       lua_pop(state, 1);
-      if (type != LUA_TNIL && type != LUA_TNUMBER)
+      if (type != LUA_TNIL && type != LUA_TNUMBER) {
         return false;
+      }
     }
     for (const char* key : {
            "affects_world",
@@ -301,16 +339,18 @@ namespace {
       lua_getfield(state, table, key);
       const auto type = lua_type(state, -1);
       lua_pop(state, 1);
-      if (type != LUA_TNIL && type != LUA_TBOOLEAN)
+      if (type != LUA_TNIL && type != LUA_TBOOLEAN) {
         return false;
+      }
     }
     for (const char* key :
       { "color_rgb", "atmosphere_disk_luminance_scale_rgb" }) {
       lua_getfield(state, table, key);
       const auto type = lua_type(state, -1);
       lua_pop(state, 1);
-      if (type != LUA_TNIL && type != LUA_TVECTOR)
+      if (type != LUA_TNIL && type != LUA_TVECTOR) {
         return false;
+      }
     }
     lua_getfield(state, table, "mobility");
     const auto mobility_type = lua_type(state, -1);
@@ -319,9 +359,7 @@ namespace {
       || (mobility_type == LUA_TSTRING
         && TryParseMobility(lua_tostring(state, -1), mobility));
     lua_pop(state, 1);
-    if (!mobility_valid)
-      return false;
-    return true;
+    return mobility_valid;
   }
 
   auto ReadShadow(lua_State* state, int table, scene::ShadowSettings& shadow)
@@ -333,19 +371,23 @@ namespace {
          }) {
       lua_getfield(state, table, key);
       const auto type = lua_type(state, -1);
-      if (type == LUA_TNUMBER)
+      if (type == LUA_TNUMBER) {
         *value = static_cast<float>(lua_tonumber(state, -1));
+      }
       lua_pop(state, 1);
-      if (type != LUA_TNIL && type != LUA_TNUMBER)
+      if (type != LUA_TNIL && type != LUA_TNUMBER) {
         return false;
+      }
     }
     lua_getfield(state, table, "contact_shadows");
     const auto type = lua_type(state, -1);
-    if (type == LUA_TBOOLEAN)
+    if (type == LUA_TBOOLEAN) {
       shadow.contact_shadows = lua_toboolean(state, -1) != 0;
+    }
     lua_pop(state, 1);
-    if (type != LUA_TNIL && type != LUA_TBOOLEAN)
+    if (type != LUA_TNIL && type != LUA_TBOOLEAN) {
       return false;
+    }
     lua_getfield(state, table, "resolution_hint");
     bool valid = lua_type(state, -1) == LUA_TNIL;
     if (lua_type(state, -1) == LUA_TSTRING) {
@@ -368,27 +410,32 @@ namespace {
          }) {
       lua_getfield(state, table, key);
       const auto type = lua_type(state, -1);
-      if (type == LUA_TNUMBER)
+      if (type == LUA_TNUMBER) {
         *value = static_cast<float>(lua_tonumber(state, -1));
+      }
       lua_pop(state, 1);
-      if (type != LUA_TNIL && type != LUA_TNUMBER)
+      if (type != LUA_TNIL && type != LUA_TNUMBER) {
         return false;
+      }
     }
     for (const char* key : { "cascade_count", "split_mode" }) {
       lua_getfield(state, table, key);
       const auto type = lua_type(state, -1);
       const auto number = type == LUA_TNUMBER ? lua_tonumber(state, -1) : 0.0;
       lua_pop(state, 1);
-      if (type == LUA_TNIL)
+      if (type == LUA_TNIL) {
         continue;
+      }
       if (type != LUA_TNUMBER || !std::isfinite(number) || number < 0
-        || number > 4 || std::floor(number) != number)
+        || number > 4 || std::floor(number) != number) {
         return false;
-      if (std::string_view(key) == "cascade_count")
+      }
+      if (std::string_view(key) == "cascade_count") {
         csm.cascade_count = static_cast<std::uint32_t>(number);
-      else
+      } else {
         csm.split_mode = static_cast<scene::DirectionalCsmSplitMode>(
           static_cast<unsigned>(number));
+      }
     }
     lua_getfield(state, table, "cascade_distances");
     if (lua_type(state, -1) == LUA_TNIL) {
@@ -402,8 +449,9 @@ namespace {
     for (int i = 0; i < 4; ++i) {
       lua_rawgeti(state, -1, i + 1);
       const auto type = lua_type(state, -1);
-      if (type == LUA_TNUMBER)
+      if (type == LUA_TNUMBER) {
         csm.cascade_distances[i] = static_cast<float>(lua_tonumber(state, -1));
+      }
       lua_pop(state, 1);
       if (type != LUA_TNUMBER) {
         lua_pop(state, 1);
@@ -417,8 +465,9 @@ namespace {
   template <typename T>
   auto ApplyLightPatch(lua_State* state, int table, T& light) -> bool
   {
-    if (!ValidLightTable(state, table))
+    if (!ValidLightTable(state, table)) {
       return false;
+    }
     ApplyCommon(state, table, light.Common());
     lua_getfield(state, table, "shadow");
     const auto shadow_type = lua_type(state, -1);
@@ -426,22 +475,27 @@ namespace {
       || (shadow_type == LUA_TTABLE
         && ReadShadow(state, lua_gettop(state), light.Common().shadow));
     lua_pop(state, 1);
-    if (!shadow_ok)
+    if (!shadow_ok) {
       return false;
-    float number;
+    }
+    float number = NAN;
     if constexpr (std::is_same_v<T, scene::DirectionalLight>) {
-      if (TryGetNumberField(state, table, "intensity_lux", number))
+      if (TryGetNumberField(state, table, "intensity_lux", number)) {
         light.SetIntensityLux(number);
-      if (TryGetNumberField(state, table, "angular_size_radians", number))
+      }
+      if (TryGetNumberField(state, table, "angular_size_radians", number)) {
         light.SetAngularSizeRadians(number);
-      bool enabled;
+      }
+      bool enabled = false;
       if (TryGetBoolField(
-            state, table, "use_per_pixel_atmosphere_transmittance", enabled))
+            state, table, "use_per_pixel_atmosphere_transmittance", enabled)) {
         light.SetUsePerPixelAtmosphereTransmittance(enabled);
+      }
       Vec3 scale;
       if (TryGetVec3Field(
-            state, table, "atmosphere_disk_luminance_scale_rgb", scale))
+            state, table, "atmosphere_disk_luminance_scale_rgb", scale)) {
         light.SetAtmosphereDiskLuminanceScale(scale);
+      }
       lua_getfield(state, table, "atmosphere_light_slot");
       const auto type = lua_type(state, -1);
       const auto slot = type == LUA_TSTRING
@@ -449,29 +503,38 @@ namespace {
         : std::string_view {};
       lua_pop(state, 1);
       if (type != LUA_TNIL) {
-        if (slot == "none")
+        if (slot == "none") {
           light.SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kNone);
-        else if (slot == "primary")
+        } else if (slot == "primary") {
           light.SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
-        else if (slot == "secondary")
+        } else if (slot == "secondary") {
           light.SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kSecondary);
-        else
+        } else {
           return false;
+        }
       }
-      if (!ReadCsm(state, table, light.CascadedShadows()))
+      if (!ReadCsm(state, table, light.CascadedShadows())) {
         return false;
+      }
     } else {
-      if (TryGetNumberField(state, table, "range", number))
+      if (TryGetNumberField(state, table, "range", number)) {
         light.SetRange(number);
-      if (TryGetNumberField(state, table, "source_radius", number))
+      }
+      if (TryGetNumberField(state, table, "source_radius", number)) {
         light.SetSourceRadius(number);
-      if (TryGetNumberField(state, table, "luminous_flux_lm", number))
+      }
+      if (TryGetNumberField(state, table, "luminous_flux_lm", number)) {
         light.SetLuminousFluxLm(number);
+      }
       if constexpr (std::is_same_v<T, scene::SpotLight>) {
-        if (TryGetNumberField(state, table, "inner_cone_angle_radians", number))
+        if (TryGetNumberField(
+              state, table, "inner_cone_angle_radians", number)) {
           light.SetInnerConeAngleRadians(number);
-        if (TryGetNumberField(state, table, "outer_cone_angle_radians", number))
+        }
+        if (TryGetNumberField(
+              state, table, "outer_cone_angle_radians", number)) {
           light.SetOuterConeAngleRadians(number);
+        }
       }
     }
     return true;
@@ -487,14 +550,14 @@ namespace {
   {
     return PatchTyped<scene::DirectionalLight>(state, patch)
       || PatchTyped<scene::PointLight>(state, patch)
-      || PatchTyped<scene::SpotLight>(state, patch);
+      || PatchTyped<scene::SpotLight>(state, std::forward<Patch>(patch));
   }
 
   auto SceneNodeLightUpdate(lua_State* state) -> int
   {
-    lua_pushboolean(state, PatchAny(state, [state](auto& light) {
-      return ApplyLightPatch(state, 2, light);
-    }));
+    lua_pushboolean(state,
+      static_cast<int>(PatchAny(state,
+        [state](auto& light) { return ApplyLightPatch(state, 2, light); })));
     return 1;
   }
 
@@ -520,8 +583,9 @@ namespace {
     const auto type = lua_type(state, 2);
     const bool valid = type == LUA_TNONE || type == LUA_TNIL
       || (type == LUA_TTABLE && ApplyLightPatch(state, 2, *light));
-    lua_pushboolean(
-      state, node && valid && node->AttachLight(std::move(light)));
+    const bool attached
+      = node != nullptr && valid && node->AttachLight(std::move(light));
+    lua_pushboolean(state, attached ? 1 : 0);
     return 1;
   }
 
@@ -532,8 +596,9 @@ namespace {
     const auto type = lua_type(state, 2);
     const bool valid = type == LUA_TNONE || type == LUA_TNIL
       || (type == LUA_TTABLE && ApplyLightPatch(state, 2, *light));
-    lua_pushboolean(
-      state, node && valid && node->AttachLight(std::move(light)));
+    const bool attached
+      = node != nullptr && valid && node->AttachLight(std::move(light));
+    lua_pushboolean(state, attached ? 1 : 0);
     return 1;
   }
 
@@ -544,8 +609,9 @@ namespace {
     const auto type = lua_type(state, 2);
     const bool valid = type == LUA_TNONE || type == LUA_TNIL
       || (type == LUA_TTABLE && ApplyLightPatch(state, 2, *light));
-    lua_pushboolean(
-      state, node && valid && node->AttachLight(std::move(light)));
+    const bool attached
+      = node != nullptr && valid && node->AttachLight(std::move(light));
+    lua_pushboolean(state, attached ? 1 : 0);
     return 1;
   }
 
@@ -717,7 +783,7 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const float v = static_cast<float>(lua_tonumber(state, 2));
+    const auto v = static_cast<float>(lua_tonumber(state, 2));
     lua_pushboolean(state,
       EditAny(state, [v](auto& l) { l.Common().exposure_compensation_ev = v; })
         ? 1
@@ -753,7 +819,7 @@ namespace {
       && PatchAny(state, [state](auto& light) {
            return ReadShadow(state, 2, light.Common().shadow);
          });
-    lua_pushboolean(state, ok);
+    lua_pushboolean(state, static_cast<int>(ok));
     return 1;
   }
 
@@ -794,7 +860,7 @@ namespace {
       && PatchTyped<scene::DirectionalLight>(state, [state](auto& light) {
            return ReadCsm(state, 2, light.CascadedShadows());
          });
-    lua_pushboolean(state, ok);
+    lua_pushboolean(state, static_cast<int>(ok));
     return 1;
   }
 
@@ -871,7 +937,7 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const float v = static_cast<float>(lua_tonumber(state, 2));
+    const auto v = static_cast<float>(lua_tonumber(state, 2));
     const bool ok
       = EditPoint(state, [v, &fn](auto& l) { std::forward<Fn>(fn)(l, v); })
       || EditSpot(state, [v, &fn](auto& l) { std::forward<Fn>(fn)(l, v); });
@@ -931,7 +997,7 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const float v = static_cast<float>(lua_tonumber(state, 2));
+    const auto v = static_cast<float>(lua_tonumber(state, 2));
     lua_pushboolean(state,
       EditSpot(state, [v](auto& l) { l.SetInnerConeAngleRadians(v); }) ? 1 : 0);
     return 1;
@@ -954,7 +1020,7 @@ namespace {
       lua_pushboolean(state, 0);
       return 1;
     }
-    const float v = static_cast<float>(lua_tonumber(state, 2));
+    const auto v = static_cast<float>(lua_tonumber(state, 2));
     lua_pushboolean(state,
       EditSpot(state, [v](auto& l) { l.SetOuterConeAngleRadians(v); }) ? 1 : 0);
     return 1;
@@ -968,27 +1034,22 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    lua_pushstring(state,
-      slot == scene::AtmosphereLightSlot::kPrimary       ? "primary"
-        : slot == scene::AtmosphereLightSlot::kSecondary ? "secondary"
-                                                         : "none");
+    lua_pushstring(state, AtmosphereLightSlotName(slot));
     return 1;
   }
 
   auto SceneNodeLightSetAtmosphereLightSlot(lua_State* state) -> int
   {
     if (lua_type(state, 2) != LUA_TSTRING) {
-      lua_pushboolean(state, false);
+      lua_pushboolean(state, 0);
       return 1;
     }
     const auto name = std::string_view(lua_tostring(state, 2));
-    const auto slot = name == "primary" ? scene::AtmosphereLightSlot::kPrimary
-      : name == "secondary"             ? scene::AtmosphereLightSlot::kSecondary
-                                        : scene::AtmosphereLightSlot::kNone;
-    const bool ok = (name == "primary" || name == "secondary" || name == "none")
+    const auto slot = TryParseAtmosphereLightSlot(name);
+    const bool ok = slot.has_value()
       && EditDirectional(
-        state, [slot](auto& light) { light.SetAtmosphereLightSlot(slot); });
-    lua_pushboolean(state, ok);
+        state, [slot](auto& light) { light.SetAtmosphereLightSlot(*slot); });
+    lua_pushboolean(state, static_cast<int>(ok));
     return 1;
   }
 
@@ -1001,7 +1062,7 @@ namespace {
       lua_pushnil(state);
       return 1;
     }
-    lua_pushboolean(state, enabled);
+    lua_pushboolean(state, static_cast<int>(enabled));
     return 1;
   }
 
@@ -1012,7 +1073,7 @@ namespace {
            light.SetUsePerPixelAtmosphereTransmittance(
              lua_toboolean(state, 2) != 0);
          });
-    lua_pushboolean(state, ok);
+    lua_pushboolean(state, static_cast<int>(ok));
     return 1;
   }
 
@@ -1034,7 +1095,7 @@ namespace {
     const bool ok = TryCheckVec3(state, 2, value)
       && EditDirectional(state,
         [value](auto& light) { light.SetAtmosphereDiskLuminanceScale(value); });
-    lua_pushboolean(state, ok);
+    lua_pushboolean(state, static_cast<int>(ok));
     return 1;
   }
 
@@ -1047,154 +1108,321 @@ namespace {
              static_cast<float>(lua_tonumber(state, 2)),
              static_cast<float>(lua_tonumber(state, 3)));
          });
-    lua_pushboolean(state, ok);
+    lua_pushboolean(state, static_cast<int>(ok));
     return 1;
   }
+
+  constexpr auto kLightMethods = std::to_array<BindingFunction>({
+    {
+      .name = "light",
+      .function = SceneNodeLight,
+      .signature = "() -> SceneNode?",
+    },
+    {
+      .name = "light_update",
+      .function = SceneNodeLightUpdate,
+      .signature = "(properties: LightProperties) -> boolean",
+    },
+    {
+      .name = "light_get_atmosphere_light_slot",
+      .function = SceneNodeLightGetAtmosphereLightSlot,
+      .signature = "() -> AtmosphereLightSlot?",
+    },
+    {
+      .name = "light_set_atmosphere_light_slot",
+      .function = SceneNodeLightSetAtmosphereLightSlot,
+      .signature = "(slot: AtmosphereLightSlot) -> boolean",
+    },
+    {
+      .name = "light_get_use_per_pixel_atmosphere_transmittance",
+      .function = SceneNodeLightGetPerPixelTransmittance,
+      .signature = "() -> boolean?",
+    },
+    {
+      .name = "light_set_use_per_pixel_atmosphere_transmittance",
+      .function = SceneNodeLightSetPerPixelTransmittance,
+      .signature = "(enabled: boolean) -> boolean",
+    },
+    {
+      .name = "light_get_atmosphere_disk_luminance_scale_rgb",
+      .function = SceneNodeLightGetDiskScale,
+      .signature = "() -> vector?",
+    },
+    {
+      .name = "light_set_atmosphere_disk_luminance_scale_rgb",
+      .function = SceneNodeLightSetDiskScale,
+      .signature = "(scale: vector) -> boolean",
+    },
+    {
+      .name = "light_set_cone_angles_radians",
+      .function = SceneNodeLightSetConeAngles,
+      .signature = "(inner: number, outer: number) -> boolean",
+    },
+    {
+      .name = "attach_directional_light",
+      .function = SceneNodeAttachDirectionalLight,
+      .signature = "(properties: LightProperties?) -> boolean",
+    },
+    {
+      .name = "attach_point_light",
+      .function = SceneNodeAttachPointLight,
+      .signature = "(properties: LightProperties?) -> boolean",
+    },
+    {
+      .name = "attach_spot_light",
+      .function = SceneNodeAttachSpotLight,
+      .signature = "(properties: LightProperties?) -> boolean",
+    },
+    {
+      .name = "detach_light",
+      .function = SceneNodeDetachLight,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "has_light",
+      .function = SceneNodeHasLight,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "light_type",
+      .function = SceneNodeLightType,
+      .signature = "() -> LightType?",
+    },
+    {
+      .name = "light_get_affects_world",
+      .function = SceneNodeLightGetAffectsWorld,
+      .signature = "() -> boolean?",
+    },
+    {
+      .name = "light_set_affects_world",
+      .function = SceneNodeLightSetAffectsWorld,
+      .signature = "(affects: boolean) -> boolean",
+    },
+    {
+      .name = "light_get_color_rgb",
+      .function = SceneNodeLightGetColorRgb,
+      .signature = "() -> vector?",
+    },
+    {
+      .name = "light_set_color_rgb",
+      .function = SceneNodeLightSetColorRgb,
+      .signature = "(color: vector) -> boolean",
+    },
+    {
+      .name = "light_get_mobility",
+      .function = SceneNodeLightGetMobility,
+      .signature = "() -> LightMobility?",
+    },
+    {
+      .name = "light_set_mobility",
+      .function = SceneNodeLightSetMobility,
+      .signature = "(mobility: LightMobility) -> boolean",
+    },
+    {
+      .name = "light_get_casts_shadows",
+      .function = SceneNodeLightGetCastsShadows,
+      .signature = "() -> boolean?",
+    },
+    {
+      .name = "light_set_casts_shadows",
+      .function = SceneNodeLightSetCastsShadows,
+      .signature = "(casts: boolean) -> boolean",
+    },
+    {
+      .name = "light_get_exposure_compensation_ev",
+      .function = SceneNodeLightGetExposureCompensationEv,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "light_set_exposure_compensation_ev",
+      .function = SceneNodeLightSetExposureCompensationEv,
+      .signature = "(ev: number) -> boolean",
+    },
+    {
+      .name = "light_get_shadow_settings",
+      .function = SceneNodeLightGetShadowSettings,
+      .signature = "() -> ShadowSettings?",
+    },
+    {
+      .name = "light_set_shadow_settings",
+      .function = SceneNodeLightSetShadowSettings,
+      .signature = "(settings: ShadowSettingsInput) -> boolean",
+    },
+    {
+      .name = "light_get_intensity_lux",
+      .function = SceneNodeLightGetIntensityLux,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "light_set_intensity_lux",
+      .function = SceneNodeLightSetIntensityLux,
+      .signature = "(lux: number) -> boolean",
+    },
+    {
+      .name = "light_get_angular_size_radians",
+      .function = SceneNodeLightGetAngularSizeRadians,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "light_set_angular_size_radians",
+      .function = SceneNodeLightSetAngularSizeRadians,
+      .signature = "(radians: number) -> boolean",
+    },
+    {
+      .name = "light_get_cascaded_shadows",
+      .function = SceneNodeLightGetCascadedShadows,
+      .signature = "() -> CascadedShadowSettings?",
+    },
+    {
+      .name = "light_set_cascaded_shadows",
+      .function = SceneNodeLightSetCascadedShadows,
+      .signature = "(settings: CascadedShadowSettingsInput) -> boolean",
+    },
+    {
+      .name = "light_get_range",
+      .function = SceneNodeLightGetRange,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "light_set_range",
+      .function = SceneNodeLightSetRange,
+      .signature = "(range: number) -> boolean",
+    },
+    {
+      .name = "light_get_source_radius",
+      .function = SceneNodeLightGetSourceRadius,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "light_set_source_radius",
+      .function = SceneNodeLightSetSourceRadius,
+      .signature = "(radius: number) -> boolean",
+    },
+    {
+      .name = "light_get_luminous_flux_lm",
+      .function = SceneNodeLightGetLuminousFluxLm,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "light_set_luminous_flux_lm",
+      .function = SceneNodeLightSetLuminousFluxLm,
+      .signature = "(lumens: number) -> boolean",
+    },
+    {
+      .name = "light_get_inner_cone_angle_radians",
+      .function = SceneNodeLightGetInnerConeAngleRadians,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "light_set_inner_cone_angle_radians",
+      .function = SceneNodeLightSetInnerConeAngleRadians,
+      .signature = "(radians: number) -> boolean",
+    },
+    {
+      .name = "light_get_outer_cone_angle_radians",
+      .function = SceneNodeLightGetOuterConeAngleRadians,
+      .signature = "() -> number?",
+    },
+    {
+      .name = "light_set_outer_cone_angle_radians",
+      .function = SceneNodeLightSetOuterConeAngleRadians,
+      .signature = "(radians: number) -> boolean",
+    },
+  });
+
+  constexpr auto kLightClasses = std::to_array<BindingClass>({
+    {
+      .name = "SceneNode",
+      .metatable = kSceneNodeMetatable,
+      .methods = kLightMethods,
+    },
+  });
+
+  constexpr auto kLightTypes = std::to_array<BindingTypeAlias>({
+    {
+      .name = "LightType",
+      .definition = R"("directional" | "point" | "spot")",
+    },
+    {
+      .name = "LightMobility",
+      .definition = R"("realtime" | "mixed" | "baked")",
+    },
+    {
+      .name = "ShadowResolutionHint",
+      .definition = R"("low" | "medium" | "high" | "ultra")",
+    },
+    {
+      .name = "AtmosphereLightSlot",
+      .definition = R"("none" | "primary" | "secondary")",
+    },
+    {
+      .name = "ShadowSettings",
+      .definition = "{ bias: number, normal_bias: number, "
+                    "contact_shadows: boolean, "
+                    "resolution_hint: ShadowResolutionHint }",
+    },
+    {
+      .name = "ShadowSettingsInput",
+      .definition = "{ bias: number?, normal_bias: number?, "
+                    "contact_shadows: boolean?, "
+                    "resolution_hint: ShadowResolutionHint? }",
+    },
+    {
+      .name = "CascadedShadowSettings",
+      .definition = "{ cascade_count: number, split_mode: number, "
+                    "max_shadow_distance: number, "
+                    "distribution_exponent: number, "
+                    "transition_fraction: number, "
+                    "distance_fadeout_fraction: number, "
+                    "cascade_distances: { number } }",
+    },
+    {
+      .name = "CascadedShadowSettingsInput",
+      .definition = "{ cascade_count: number?, split_mode: number?, "
+                    "max_shadow_distance: number?, "
+                    "distribution_exponent: number?, "
+                    "transition_fraction: number?, "
+                    "distance_fadeout_fraction: number?, "
+                    "cascade_distances: { number }? }",
+    },
+    {
+      .name = "LightProperties",
+      .definition = "{ affects_world: boolean?, color_rgb: vector?, "
+                    "mobility: LightMobility?, casts_shadows: boolean?, "
+                    "exposure_compensation_ev: number?, "
+                    "shadow: ShadowSettingsInput?, intensity_lux: number?, "
+                    "angular_size_radians: number?, "
+                    "use_per_pixel_atmosphere_transmittance: boolean?, "
+                    "atmosphere_disk_luminance_scale_rgb: vector?, "
+                    "atmosphere_light_slot: AtmosphereLightSlot?, "
+                    "cascade_count: number?, split_mode: number?, "
+                    "max_shadow_distance: number?, "
+                    "distribution_exponent: number?, "
+                    "transition_fraction: number?, "
+                    "distance_fadeout_fraction: number?, "
+                    "cascade_distances: { number }?, range: number?, "
+                    "source_radius: number?, luminous_flux_lm: number?, "
+                    "inner_cone_angle_radians: number?, "
+                    "outer_cone_angle_radians: number? }",
+    },
+  });
+
+  constexpr auto kLightDescription
+    = std::to_array<BindingNamespaceDescription>({
+      { .path = "scene", .classes = kLightClasses, .types = kLightTypes },
+    });
 } // namespace
 
 auto RegisterSceneNodeLightMethods(lua_State* state, const int metatable_index)
   -> void
 {
-  constexpr auto methods = std::to_array<luaL_Reg>({
-    { .name = "light", .func = SceneNodeLight },
-    { .name = "light_update", .func = SceneNodeLightUpdate },
-    {
-      .name = "light_get_atmosphere_light_slot",
-      .func = SceneNodeLightGetAtmosphereLightSlot,
-    },
-    {
-      .name = "light_set_atmosphere_light_slot",
-      .func = SceneNodeLightSetAtmosphereLightSlot,
-    },
-    {
-      .name = "light_get_use_per_pixel_atmosphere_transmittance",
-      .func = SceneNodeLightGetPerPixelTransmittance,
-    },
-    {
-      .name = "light_set_use_per_pixel_atmosphere_transmittance",
-      .func = SceneNodeLightSetPerPixelTransmittance,
-    },
-    {
-      .name = "light_get_atmosphere_disk_luminance_scale_rgb",
-      .func = SceneNodeLightGetDiskScale,
-    },
-    {
-      .name = "light_set_atmosphere_disk_luminance_scale_rgb",
-      .func = SceneNodeLightSetDiskScale,
-    },
-    {
-      .name = "light_set_cone_angles_radians",
-      .func = SceneNodeLightSetConeAngles,
-    },
-    {
-      .name = "attach_directional_light",
-      .func = SceneNodeAttachDirectionalLight,
-    },
-    { .name = "attach_point_light", .func = SceneNodeAttachPointLight },
-    { .name = "attach_spot_light", .func = SceneNodeAttachSpotLight },
-    { .name = "detach_light", .func = SceneNodeDetachLight },
-    { .name = "has_light", .func = SceneNodeHasLight },
-    { .name = "light_type", .func = SceneNodeLightType },
-    {
-      .name = "light_get_affects_world",
-      .func = SceneNodeLightGetAffectsWorld,
-    },
-    {
-      .name = "light_set_affects_world",
-      .func = SceneNodeLightSetAffectsWorld,
-    },
-    { .name = "light_get_color_rgb", .func = SceneNodeLightGetColorRgb },
-    { .name = "light_set_color_rgb", .func = SceneNodeLightSetColorRgb },
-    { .name = "light_get_mobility", .func = SceneNodeLightGetMobility },
-    { .name = "light_set_mobility", .func = SceneNodeLightSetMobility },
-    {
-      .name = "light_get_casts_shadows",
-      .func = SceneNodeLightGetCastsShadows,
-    },
-    {
-      .name = "light_set_casts_shadows",
-      .func = SceneNodeLightSetCastsShadows,
-    },
-    {
-      .name = "light_get_exposure_compensation_ev",
-      .func = SceneNodeLightGetExposureCompensationEv,
-    },
-    {
-      .name = "light_set_exposure_compensation_ev",
-      .func = SceneNodeLightSetExposureCompensationEv,
-    },
-    {
-      .name = "light_get_shadow_settings",
-      .func = SceneNodeLightGetShadowSettings,
-    },
-    {
-      .name = "light_set_shadow_settings",
-      .func = SceneNodeLightSetShadowSettings,
-    },
-    {
-      .name = "light_get_intensity_lux",
-      .func = SceneNodeLightGetIntensityLux,
-    },
-    {
-      .name = "light_set_intensity_lux",
-      .func = SceneNodeLightSetIntensityLux,
-    },
-    {
-      .name = "light_get_angular_size_radians",
-      .func = SceneNodeLightGetAngularSizeRadians,
-    },
-    {
-      .name = "light_set_angular_size_radians",
-      .func = SceneNodeLightSetAngularSizeRadians,
-    },
-    {
-      .name = "light_get_cascaded_shadows",
-      .func = SceneNodeLightGetCascadedShadows,
-    },
-    {
-      .name = "light_set_cascaded_shadows",
-      .func = SceneNodeLightSetCascadedShadows,
-    },
-    { .name = "light_get_range", .func = SceneNodeLightGetRange },
-    { .name = "light_set_range", .func = SceneNodeLightSetRange },
-    {
-      .name = "light_get_source_radius",
-      .func = SceneNodeLightGetSourceRadius,
-    },
-    {
-      .name = "light_set_source_radius",
-      .func = SceneNodeLightSetSourceRadius,
-    },
-    {
-      .name = "light_get_luminous_flux_lm",
-      .func = SceneNodeLightGetLuminousFluxLm,
-    },
-    {
-      .name = "light_set_luminous_flux_lm",
-      .func = SceneNodeLightSetLuminousFluxLm,
-    },
-    {
-      .name = "light_get_inner_cone_angle_radians",
-      .func = SceneNodeLightGetInnerConeAngleRadians,
-    },
-    {
-      .name = "light_set_inner_cone_angle_radians",
-      .func = SceneNodeLightSetInnerConeAngleRadians,
-    },
-    {
-      .name = "light_get_outer_cone_angle_radians",
-      .func = SceneNodeLightGetOuterConeAngleRadians,
-    },
-    {
-      .name = "light_set_outer_cone_angle_radians",
-      .func = SceneNodeLightSetOuterConeAngleRadians,
-    },
-  });
+  RegisterFunctions(state, metatable_index, kLightMethods);
+}
 
-  for (const auto& reg : methods) {
-    lua_pushcclosure(state, reg.func, reg.name, 0);
-    lua_setfield(state, metatable_index, reg.name);
-  }
+auto DescribeSceneNodeLightBindings()
+  -> std::span<const BindingNamespaceDescription>
+{
+  return kLightDescription;
 }
 
 } // namespace oxygen::scripting::bindings

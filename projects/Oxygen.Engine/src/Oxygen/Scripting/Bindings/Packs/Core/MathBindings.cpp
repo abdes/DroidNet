@@ -22,6 +22,8 @@
 
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/MathBindings.h>
 
@@ -134,7 +136,7 @@ namespace {
   auto ToGlmQuat(const QuatUserdata* u) -> Quat
   {
     // GLM uses w, x, y, z constructor
-    return Quat(u->w, u->x, u->y, u->z);
+    return { u->w, u->x, u->y, u->z };
   }
 
   auto ToGlmMat4(const Mat4Userdata* u) -> Mat4
@@ -215,16 +217,15 @@ namespace {
     auto* q = CheckQuat(state, 1);
 
     void* data = lua_touserdata(state, 2);
-    if (data != nullptr) {
-      // Check for Quat * Quat
-      if (lua_getmetatable(state, 2) != 0) {
-        lua_getfield(state, LUA_REGISTRYINDEX, kQuatMetatableName);
-        bool is_quat = lua_rawequal(state, -1, -2) != 0;
-        lua_pop(state, 2);
-        if (is_quat) {
-          auto* q2 = static_cast<QuatUserdata*>(data);
-          return PushQuat(state, ToGlmQuat(q) * ToGlmQuat(q2));
-        }
+    if ((data != nullptr) && (lua_getmetatable(state, 2) != 0))
+    // Check for Quat * Quat
+    {
+      lua_getfield(state, LUA_REGISTRYINDEX, kQuatMetatableName);
+      bool is_quat = lua_rawequal(state, -1, -2) != 0;
+      lua_pop(state, 2);
+      if (is_quat) {
+        auto* q2 = static_cast<QuatUserdata*>(data);
+        return PushQuat(state, ToGlmQuat(q) * ToGlmQuat(q2));
       }
     }
 
@@ -598,6 +599,181 @@ namespace {
       state, "oxygen.math.near_equal expects comparable numeric/math types");
   }
 
+  constexpr auto kMathFunctions = std::to_array<BindingFunction>({
+    {
+      .name = "deg_to_rad",
+      .function = LuaMathDegToRad,
+      .signature = "(degrees: number) -> number",
+    },
+    {
+      .name = "rad_to_deg",
+      .function = LuaMathRadToDeg,
+      .signature = "(radians: number) -> number",
+    },
+    {
+      .name = "clamp01",
+      .function = LuaMathClamp01,
+      .signature = "(value: number) -> number",
+    },
+    {
+      .name = "normalize_angle_rad",
+      .function = LuaMathNormalizeAngleRad,
+      .signature = "(radians: number) -> number",
+    },
+    {
+      .name = "normalize_angle_deg",
+      .function = LuaMathNormalizeAngleDeg,
+      .signature = "(degrees: number) -> number",
+    },
+    {
+      .name = "vec2",
+      .function = LuaMathVec2,
+      .signature = "(x: number, y: number) -> vector",
+    },
+    {
+      .name = "vec3",
+      .function = LuaMathVec3,
+      .signature = "(x: number, y: number, z: number) -> vector",
+    },
+    {
+      .name = "vec4",
+      .function = LuaMathVec4,
+      .signature = "(x: number, y: number, z: number, w: number) -> Vec4",
+    },
+    {
+      .name = "quat",
+      .function = LuaMathQuat,
+      .signature = "(x: number, y: number, z: number, w: number) -> Quat",
+    },
+    {
+      .name = "quat_normalize",
+      .function = LuaMathQuatNormalize,
+      .signature = "(q: Quat) -> Quat",
+    },
+    {
+      .name = "quat_mul",
+      .function = LuaMathQuatMul,
+      .signature
+      = "((a: Quat, b: Quat) -> Quat) & ((q: Quat, v: vector) -> vector)",
+    },
+    {
+      .name = "quat_from_euler_xyz",
+      .function = LuaMathQuatFromEulerXyz,
+      .signature = "(x: number, y: number, z: number) -> Quat",
+    },
+    {
+      .name = "euler_xyz_from_quat",
+      .function = LuaMathEulerXyzFromQuat,
+      .signature = "(q: Quat) -> vector",
+    },
+    {
+      .name = "rotate_vec3",
+      .function = LuaMathRotateVec3,
+      .signature = "(q: Quat, v: vector) -> vector",
+    },
+    {
+      .name = "mat4_identity",
+      .function = LuaMathMat4Identity,
+      .signature = "() -> Mat4",
+    },
+    {
+      .name = "mat4_trs",
+      .function = LuaMathMat4Trs,
+      .signature
+      = "(translation: vector?, rotation: Quat?, scale: vector?) -> Mat4",
+    },
+    {
+      .name = "mat4_mul",
+      .function = LuaMathMat4Mul,
+      .signature = "(a: Mat4, b: Mat4) -> Mat4",
+    },
+    {
+      .name = "mat4_transform_point",
+      .function = LuaMathMat4TransformPoint,
+      .signature = "(m: Mat4, point: vector) -> vector",
+    },
+    {
+      .name = "mat4_transform_direction",
+      .function = LuaMathMat4TransformDirection,
+      .signature = "(m: Mat4, direction: vector) -> vector",
+    },
+    {
+      .name = "mat4_look_at_rh",
+      .function = LuaMathMat4LookAtRh,
+      .signature = "(eye: vector, target: vector, up: vector?) -> Mat4",
+    },
+    {
+      .name = "is_finite",
+      .function = LuaMathIsFinite,
+      .signature = "(value: MathValue) -> boolean",
+    },
+    {
+      .name = "near_equal",
+      .function = LuaMathNearEqual,
+      .signature = "(a: MathValue, b: MathValue, epsilon: number?) -> boolean",
+    },
+  });
+
+  constexpr auto kComponentProperties = std::to_array<BindingField>({
+    { .name = "x", .type = "number" },
+    { .name = "y", .type = "number" },
+    { .name = "z", .type = "number" },
+    { .name = "w", .type = "number" },
+  });
+
+  //! Operators; their signatures are full Luau types, `self` included.
+  constexpr auto kQuatMetamethods = std::to_array<BindingFunction>({
+    { .name = "__unm", .function = QuatUnm, .signature = "(Quat) -> Quat" },
+    {
+      .name = "__mul",
+      .function = QuatMul,
+      .signature = "((Quat, Quat) -> Quat) & ((Quat, vector) -> vector)",
+    },
+  });
+
+  constexpr auto kMat4Metamethods = std::to_array<BindingFunction>({
+    {
+      .name = "__mul",
+      .function = LuaMathMat4Mul,
+      .signature = "(Mat4, Mat4) -> Mat4",
+    },
+  });
+
+  constexpr auto kMathClasses = std::to_array<BindingClass>({
+    {
+      .name = "Vec4",
+      .metatable = kVec4MetatableName,
+      .properties = kComponentProperties,
+    },
+    {
+      .name = "Quat",
+      .metatable = kQuatMetatableName,
+      .properties = kComponentProperties,
+      .metamethods = kQuatMetamethods,
+    },
+    {
+      .name = "Mat4",
+      .metatable = kMat4MetatableName,
+      .metamethods = kMat4Metamethods,
+    },
+  });
+
+  constexpr auto kMathTypes = std::to_array<BindingTypeAlias>({
+    {
+      .name = "MathValue",
+      .definition = "number | vector | Vec4 | Quat | Mat4",
+    },
+  });
+
+  constexpr auto kMathDescription = std::to_array<BindingNamespaceDescription>({
+    {
+      .path = "math",
+      .functions = kMathFunctions,
+      .classes = kMathClasses,
+      .types = kMathTypes,
+    },
+  });
+
 } // namespace
 
 auto RegisterMathBindings(lua_State* state, const int oxygen_table_index)
@@ -616,78 +792,26 @@ auto RegisterMathBindings(lua_State* state, const int oxygen_table_index)
     lua_setfield(state, -2, "__tostring");
     lua_pushcfunction(state, QuatIndex, "__index");
     lua_setfield(state, -2, "__index");
-    lua_pushcfunction(state, QuatUnm, "__unm");
-    lua_setfield(state, -2, "__unm");
-    lua_pushcfunction(state, QuatMul, "__mul");
-    lua_setfield(state, -2, "__mul");
+    RegisterFunctions(state, -1, kQuatMetamethods);
   }
   lua_pop(state, 1);
 
   if (luaL_newmetatable(state, kMat4MetatableName) != 0) {
     lua_pushcfunction(state, Mat4ToString, "__tostring");
     lua_setfield(state, -2, "__tostring");
-    lua_pushcfunction(state, LuaMathMat4Mul, "__mul");
-    lua_setfield(state, -2, "__mul");
+    RegisterFunctions(state, -1, kMat4Metamethods);
   }
   lua_pop(state, 1);
 
   const int module_index
     = PushOxygenSubtable(state, oxygen_table_index, "math");
-
-  lua_pushcfunction(state, LuaMathDegToRad, "math.deg_to_rad");
-  lua_setfield(state, module_index, "deg_to_rad");
-  lua_pushcfunction(state, LuaMathRadToDeg, "math.rad_to_deg");
-  lua_setfield(state, module_index, "rad_to_deg");
-  lua_pushcfunction(state, LuaMathClamp01, "math.clamp01");
-  lua_setfield(state, module_index, "clamp01");
-  lua_pushcfunction(
-    state, LuaMathNormalizeAngleRad, "math.normalize_angle_rad");
-  lua_setfield(state, module_index, "normalize_angle_rad");
-  lua_pushcfunction(
-    state, LuaMathNormalizeAngleDeg, "math.normalize_angle_deg");
-  lua_setfield(state, module_index, "normalize_angle_deg");
-
-  lua_pushcfunction(state, LuaMathVec2, "math.vec2");
-  lua_setfield(state, module_index, "vec2");
-  lua_pushcfunction(state, LuaMathVec3, "math.vec3");
-  lua_setfield(state, module_index, "vec3");
-  lua_pushcfunction(state, LuaMathVec4, "math.vec4");
-  lua_setfield(state, module_index, "vec4");
-
-  lua_pushcfunction(state, LuaMathQuat, "math.quat");
-  lua_setfield(state, module_index, "quat");
-  lua_pushcfunction(state, LuaMathQuatNormalize, "math.quat_normalize");
-  lua_setfield(state, module_index, "quat_normalize");
-  lua_pushcfunction(state, LuaMathQuatMul, "math.quat_mul");
-  lua_setfield(state, module_index, "quat_mul");
-  lua_pushcfunction(state, LuaMathQuatFromEulerXyz, "math.quat_from_euler_xyz");
-  lua_setfield(state, module_index, "quat_from_euler_xyz");
-  lua_pushcfunction(state, LuaMathEulerXyzFromQuat, "math.euler_xyz_from_quat");
-  lua_setfield(state, module_index, "euler_xyz_from_quat");
-  lua_pushcfunction(state, LuaMathRotateVec3, "math.rotate_vec3");
-  lua_setfield(state, module_index, "rotate_vec3");
-
-  lua_pushcfunction(state, LuaMathMat4Identity, "math.mat4_identity");
-  lua_setfield(state, module_index, "mat4_identity");
-  lua_pushcfunction(state, LuaMathMat4Trs, "math.mat4_trs");
-  lua_setfield(state, module_index, "mat4_trs");
-  lua_pushcfunction(state, LuaMathMat4Mul, "math.mat4_mul");
-  lua_setfield(state, module_index, "mat4_mul");
-  lua_pushcfunction(
-    state, LuaMathMat4TransformPoint, "math.mat4_transform_point");
-  lua_setfield(state, module_index, "mat4_transform_point");
-  lua_pushcfunction(
-    state, LuaMathMat4TransformDirection, "math.mat4_transform_direction");
-  lua_setfield(state, module_index, "mat4_transform_direction");
-  lua_pushcfunction(state, LuaMathMat4LookAtRh, "math.mat4_look_at_rh");
-  lua_setfield(state, module_index, "mat4_look_at_rh");
-
-  lua_pushcfunction(state, LuaMathIsFinite, "math.is_finite");
-  lua_setfield(state, module_index, "is_finite");
-  lua_pushcfunction(state, LuaMathNearEqual, "math.near_equal");
-  lua_setfield(state, module_index, "near_equal");
-
+  RegisterFunctions(state, module_index, kMathFunctions);
   lua_pop(state, 1);
+}
+
+auto DescribeMathBindings() -> std::span<const BindingNamespaceDescription>
+{
+  return kMathDescription;
 }
 
 } // namespace oxygen::scripting::bindings

@@ -54,13 +54,9 @@
 #include <Oxygen/Scripting/Analysis/ScriptDiagnostic.h>
 #include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
-#include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingPack.h>
-#include <Oxygen/Scripting/Bindings/Packs/Core/CoreBindingPack.h>
+#include <Oxygen/Scripting/Bindings/LuauDefinitions.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/ScriptDeclarationBindings.h>
-#include <Oxygen/Scripting/Bindings/Packs/Input/InputBindingPack.h>
-#include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingPack.h>
-#include <Oxygen/Scripting/Bindings/Packs/Scene/SceneBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Compilers/LuauScriptCompiler.h>
 #include <Oxygen/Scripting/Input/InputScriptEventBridge.h>
@@ -584,15 +580,7 @@ auto ScriptingModule::ApplyConsoleCVars(
 
 auto ScriptingModule::RegisterDefaultBindingPacks() -> bool
 {
-  auto default_packs = std::array {
-    bindings::CreateCoreBindingPack(),
-    bindings::CreateContentBindingPack(),
-    bindings::CreateInputBindingPack(),
-    bindings::CreatePhysicsBindingPack(),
-    bindings::CreateSceneBindingPack(),
-  };
-
-  for (auto& pack : default_packs) {
+  for (auto& pack : bindings::CreateDefaultBindingPacks()) {
     if (!pack || !RegisterBindingPack(std::move(pack))) {
       DLOG_F(ERROR, "failed to register default scripting pack");
       return false;

@@ -4,14 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <cstddef>
 #include <filesystem>
+#include <span>
 #include <string_view>
 
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
+#include <Oxygen/Scripting/Bindings/Contracts/BindingDescription.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentLifecycleBindings.h>
 
@@ -142,37 +146,74 @@ namespace {
     return 1;
   }
 #endif
+
+  constexpr auto kAvailabilityFunctions = std::to_array<BindingFunction>({
+    {
+      .name = "available",
+      .function = AssetsAvailable,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "enabled",
+      .function = AssetsEnabled,
+      .signature = "() -> boolean",
+    },
+  });
+
+  constexpr auto kLifecycleFunctions = std::to_array<BindingFunction>({
+    {
+      .name = "trim_cache",
+      .function = AssetsTrimCache,
+      .signature = "() -> boolean",
+    },
+    {
+      .name = "mint_synthetic_texture_key",
+      .function = AssetsMintSyntheticTextureKey,
+      .signature = "() -> number",
+    },
+    {
+      .name = "mint_synthetic_buffer_key",
+      .function = AssetsMintSyntheticBufferKey,
+      .signature = "() -> number",
+    },
+    {
+      .name = "add_pak_file",
+      .function = AssetsAddPakFile,
+      .signature = "(path: string) -> boolean",
+    },
+    {
+      .name = "add_loose_cooked_root",
+      .function = AssetsAddLooseCookedRoot,
+      .signature = "(path: string) -> boolean",
+    },
+    {
+      .name = "clear_mounts",
+      .function = AssetsClearMounts,
+      .signature = "() -> boolean",
+    },
+  });
 } // namespace
 
 auto RegisterContentModuleAvailability(lua_State* state, const int module_index)
   -> void
 {
-  lua_pushcfunction(state, AssetsAvailable, "assets.available");
-  lua_setfield(state, module_index, "available");
-  lua_pushcfunction(state, AssetsEnabled, "assets.enabled");
-  lua_setfield(state, module_index, "enabled");
+  RegisterFunctions(state, module_index, kAvailabilityFunctions);
 }
 
 auto RegisterContentModuleLifecycle(lua_State* state, const int module_index)
   -> void
 {
-  lua_pushcfunction(state, AssetsTrimCache, "assets.trim_cache");
-  lua_setfield(state, module_index, "trim_cache");
+  RegisterFunctions(state, module_index, kLifecycleFunctions);
+}
 
-  lua_pushcfunction(
-    state, AssetsMintSyntheticTextureKey, "assets.mint_synthetic_texture_key");
-  lua_setfield(state, module_index, "mint_synthetic_texture_key");
-  lua_pushcfunction(
-    state, AssetsMintSyntheticBufferKey, "assets.mint_synthetic_buffer_key");
-  lua_setfield(state, module_index, "mint_synthetic_buffer_key");
+auto ContentAvailabilityFunctions() -> std::span<const BindingFunction>
+{
+  return kAvailabilityFunctions;
+}
 
-  lua_pushcfunction(state, AssetsAddPakFile, "assets.add_pak_file");
-  lua_setfield(state, module_index, "add_pak_file");
-  lua_pushcfunction(
-    state, AssetsAddLooseCookedRoot, "assets.add_loose_cooked_root");
-  lua_setfield(state, module_index, "add_loose_cooked_root");
-  lua_pushcfunction(state, AssetsClearMounts, "assets.clear_mounts");
-  lua_setfield(state, module_index, "clear_mounts");
+auto ContentLifecycleFunctions() -> std::span<const BindingFunction>
+{
+  return kLifecycleFunctions;
 }
 
 auto RegisterContentModuleLegacyGuards(lua_State* state, const int module_index)

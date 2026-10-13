@@ -8,11 +8,13 @@
 
 #include <cstdint>
 #include <functional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Scripting/Bindings/BindingTable.h>
 
 struct lua_State;
 
@@ -29,7 +31,7 @@ struct EventListenerFailure {
 struct EventDispatchStatus {
   bool ok { true };
   std::string message;
-  std::vector<EventListenerFailure> failures {};
+  std::vector<EventListenerFailure> failures;
 };
 
 //! Allocates a unique listener owner for one script-runtime incarnation.
@@ -58,6 +60,7 @@ private:
 };
 
 auto RegisterEventsBindings(lua_State* state, int oxygen_table_index) -> void;
+auto DescribeEventsBindings() -> std::span<const BindingNamespaceDescription>;
 
 auto QueueEngineEvent(lua_State* state, std::string_view event_name,
   std::string_view phase_name) -> void;
