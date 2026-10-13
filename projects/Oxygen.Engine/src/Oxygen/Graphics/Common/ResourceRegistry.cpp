@@ -69,7 +69,7 @@ auto ResourceRegistry::Register(std::shared_ptr<void> resource, TypeId type_id,
     throw std::logic_error("Resource registry is closed");
   }
 
-  LOG_SCOPE_F(1, "Register resource");
+  LOG_SCOPE_F(2, "Register resource");
   DLOG_F(2, "resource : {}", fmt::ptr(resource.get()));
   DLOG_F(2, "type id  : {}", type_id);
 
@@ -123,10 +123,10 @@ auto ResourceRegistry::RegisterViewNoLock(NativeResource resource,
   DCHECK_F(resource->IsValid(), "invalid resource used for view registration");
   DCHECK_F(view_description.has_value(), "View description must be valid");
 
-  LOG_SCOPE_F(1, "Register view");
-  DLOG_F(1, "resource: {}", resource);
-  DLOG_F(1, "view: {}", view);
-  DLOG_F(1, "view handle: {}", view_handle);
+  LOG_SCOPE_F(2, "Register view");
+  DLOG_F(2, "resource: {}", resource);
+  DLOG_F(2, "view: {}", view);
+  DLOG_F(2, "view handle: {}", view_handle);
   DLOG_F(3, "view type: {}, visibility: {}", view_type, visibility);
   DLOG_F(3, "key hash: {}", key_hash);
 
@@ -427,6 +427,7 @@ auto ResourceRegistry::NotifyResourceForgottenNoLock(
 auto ResourceRegistry::AttachDescriptorWithView(
   const NativeResource& dst_resource, const bindless::HeapIndex index,
   DescriptorAllocationHandle descriptor_handle, const NativeView& view,
+  // NOLINTNEXTLINE(performance-unnecessary-value-param) - moved into the entry
   std::any description, const std::size_t key_hash, ViewQuery query) -> void
 {
   DCHECK_F(view->IsValid(), "invalid native view object");
@@ -443,7 +444,7 @@ auto ResourceRegistry::AttachDescriptorWithView(
   }
   bool mapped = false;
   bool committed = false;
-  const ScopeGuard rollback([&]() noexcept -> void {
+  const ScopeGuard rollback([&] noexcept -> void {
     if (!committed) {
       if (mapped) {
         descriptor_to_resource_.erase(index);

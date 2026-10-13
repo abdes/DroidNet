@@ -202,7 +202,7 @@ FramebufferImpl::~FramebufferImpl()
 
   auto gfx = gfx_weak_.lock();
 
-  LOG_SCOPE_F(1, "Destroying framebuffer");
+  LOG_SCOPE_F(2, "Destroying framebuffer");
   auto& resource_registry = gfx->GetResourceRegistry();
   CleanupFramebufferRegistrations(*gfx, resource_registry, textures_,
     owns_resource_registration_, owned_descriptor_handles_, rtvs_, dsv_);

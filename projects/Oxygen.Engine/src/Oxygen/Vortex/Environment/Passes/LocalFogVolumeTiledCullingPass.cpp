@@ -15,6 +15,8 @@
 #include <utility>
 #include <vector>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
@@ -586,9 +588,14 @@ auto LocalFogVolumeTiledCullingPass::Record(RenderContext& ctx,
   products.occupied_tile_draw_args_buffer
     = observer_ptr<const graphics::Buffer> { indirect_args_buffer_.get() };
 
-  LOG_F(INFO, "local_fog_hzb_consumed={} screen_hzb={}x{} mips={}",
-    use_hzb ? "true" : "false", ctx.current_view.screen_hzb_width,
-    ctx.current_view.screen_hzb_height, ctx.current_view.screen_hzb_mip_count);
+  if (auto line
+    = fmt::format("local_fog_hzb_consumed={} screen_hzb={}x{} mips={}",
+      use_hzb ? "true" : "false", ctx.current_view.screen_hzb_width,
+      ctx.current_view.screen_hzb_height,
+      ctx.current_view.screen_hzb_mip_count);
+    hzb_log_.Update(ctx.current_view.view_id, line)) {
+    LOG_F(INFO, "{}", line);
+  }
 
   state.executed = true;
   state.consumed_instance_buffer = products.buffer_ready;

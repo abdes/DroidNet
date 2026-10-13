@@ -123,6 +123,7 @@ set_target_properties(
 set(
   OXYGEN_VORTEX_HEADERS
   "Internal/PerViewStructuredPublisher.h"
+  "Internal/ChangedLogLine.h"
   "Internal/GpuFeedback.h"
   "Internal/RigidTransformHistoryCache.h"
   "Lighting/Types/LightGridResources.h"

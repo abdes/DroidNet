@@ -38,7 +38,7 @@ namespace oxygen::content::loaders {
 inline auto LoadPhysicsSceneAsset(const LoaderContext& context)
   -> std::unique_ptr<data::PhysicsSceneAsset>
 {
-  LOG_SCOPE_FUNCTION(INFO);
+  LOG_SCOPE_FUNCTION(1);
 
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;

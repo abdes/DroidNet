@@ -75,6 +75,8 @@ recording proof.
 - `Verify-VortexBasicRuntimeProof.ps1`
   - lower-level VortexBasic-only wrapper for existing capture + runtime log
     validation
+  - the runtime log must come from a run with `-v=2`: the per-frame
+    draw-metadata counts it checks are trace-level lines
   - now also requires the debugger-backed audit report from the no-capture run
   - runs both:
     - `AnalyzeRenderDocVortexBasicCapture.py` for structural/action-count checks

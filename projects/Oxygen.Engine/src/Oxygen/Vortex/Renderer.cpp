@@ -2116,7 +2116,7 @@ auto Renderer::OnCompositing(observer_ptr<engine::FrameContext> context)
         if (scene_renderer.IsPublishedViewPostProcessed()) {
           auto post_processed = ResolveViewOutputTexture(*context, view_id);
           if (post_processed) {
-            DLOG_F(1,
+            DLOG_F(2,
               "Vortex compositing source for view {}: '{}' (post-process "
               "composite source)",
               view_id.get(), post_processed->GetDescriptor().debug_name);

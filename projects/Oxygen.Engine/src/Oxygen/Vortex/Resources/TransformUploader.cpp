@@ -169,7 +169,7 @@ auto TransformUploader::EnsureFrameResources() -> void
   }
   const auto& pw_alloc = *pw_res;
 
-  DLOG_F(1, "TransformUploader writing {} transforms to {}", count,
+  DLOG_F(2, "TransformUploader writing {} transforms to {}", count,
     fmt::ptr(w_alloc.mapped_ptr));
 
   if (!w_alloc.TryWriteRange(std::span { transforms_ })) {

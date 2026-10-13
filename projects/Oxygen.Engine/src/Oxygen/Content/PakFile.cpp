@@ -49,7 +49,7 @@ auto ComputeCrc32Ieee(std::span<const std::byte> bytes, uint32_t state) noexcept
   // in/out, init 0xFFFFFFFF, final XOR 0xFFFFFFFF.
   static constexpr auto kPoly = 0xEDB88320U;
 
-  auto table = []() consteval -> std::array<uint32_t, 256> {
+  auto table = [] consteval -> std::array<uint32_t, 256> {
     std::array<uint32_t, 256> t {};
     for (uint32_t i = 0; i < 256; ++i) {
       uint32_t c = i;
@@ -161,7 +161,7 @@ struct ParsedBrowseIndex final {
 auto ReadPakHeader(oxygen::serio::FileStream<>& stream,
   oxygen::data::SourceKey& source_key_out) -> PakHeader
 {
-  LOG_SCOPE_FUNCTION(INFO);
+  LOG_SCOPE_FUNCTION(1);
 
   if (auto res = stream.Seek(0); !res) {
     LOG_F(ERROR, "Failed to seek to pak header: {}", res.error().message());
@@ -209,7 +209,7 @@ auto ReadPakHeader(oxygen::serio::FileStream<>& stream,
 
 auto ReadPakFooter(oxygen::serio::FileStream<>& stream) -> PakFooter
 {
-  LOG_SCOPE_FUNCTION(INFO);
+  LOG_SCOPE_FUNCTION(1);
 
   constexpr size_t kPakFooterSize = sizeof(PakFooter);
   auto size_result = stream.Size();
@@ -254,7 +254,7 @@ auto ReadPakDirectory(oxygen::serio::FileStream<>& stream,
   const PakFooter& footer, std::vector<AssetDirectoryEntry>& directory,
   std::unordered_map<AssetKey, size_t>& key_to_index) -> void
 {
-  LOG_SCOPE_FUNCTION(INFO);
+  LOG_SCOPE_FUNCTION(1);
 
   const auto file_size = stream.Size();
   constexpr auto kEntrySize = sizeof(AssetDirectoryEntry);
@@ -403,7 +403,7 @@ auto LoadPakMetadata(oxygen::serio::FileStream<>& stream) -> ParsedPakMetadata
 auto LoadBrowseIndex(oxygen::serio::FileStream<>& stream,
   const size_t file_size, const PakFooter& footer) -> ParsedBrowseIndex
 {
-  LOG_SCOPE_FUNCTION(INFO);
+  LOG_SCOPE_FUNCTION(1);
 
   ParsedBrowseIndex parsed {};
   const oxygen::data::pak::core::OffsetT browse_offset
@@ -565,7 +565,7 @@ PakFile::PakFile(const std::filesystem::path& path)
   , script_data_stream_(OpenFileStream(path))
   , physics_data_stream_(OpenFileStream(path))
 {
-  LOG_SCOPE_FUNCTION(INFO);
+  LOG_SCOPE_FUNCTION(1);
   LOG_F(INFO, "file : {}", path.string());
 
   const auto metadata = LoadPakMetadata(*meta_stream_);

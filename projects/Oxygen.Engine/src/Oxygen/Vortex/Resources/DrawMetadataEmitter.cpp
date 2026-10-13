@@ -614,7 +614,7 @@ auto DrawMetadataEmitter::EnsureFrameResources() -> void
     return;
   }
 
-  DLOG_F(1, "Writing {} draw metadata to {}", count, fmt::ptr(ptr));
+  DLOG_F(2, "Writing {} draw metadata to {}", count, fmt::ptr(ptr));
 
   if (!alloc.TryWriteRange(std::span { Cpu() })) {
     LOG_F(ERROR, "Failed to write draw metadata payload");

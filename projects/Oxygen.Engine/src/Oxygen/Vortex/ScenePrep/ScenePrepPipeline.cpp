@@ -70,7 +70,7 @@ auto ScenePrepPipeline::BeginFrameCollection(const scene::Scene& scene,
     "BeginFrameCollection requires FinalizeView before starting a new frame");
 
   DLOG_SCOPE_F(
-    1, fmt::format("ScenePrep BeginFrameCollection f:{}", fseq.get()).c_str());
+    2, fmt::format("ScenePrep BeginFrameCollection f:{}", fseq.get()).c_str());
 
   prep_state_.reset(&state);
   active_scene_ = &scene;
@@ -136,7 +136,7 @@ auto ScenePrepPipeline::PrepareView(const scene::Scene& scene,
     "BeginFrameCollection");
 
   DLOG_SCOPE_F(
-    1, fmt::format("ScenePrep PrepareView f:{}", fseq.get()).c_str());
+    2, fmt::format("ScenePrep PrepareView f:{}", fseq.get()).c_str());
 
   prep_state_.reset(&state);
   ctx_.emplace(fseq, ::oxygen::observer_ptr<const ResolvedView>(&view), scene);
@@ -215,7 +215,7 @@ auto ScenePrepPipeline::FinalizeView(ScenePrepState& state) -> void
     "FinalizeView requires a current view prepared via PrepareView");
   CHECK_NOTNULL_F(prep_state_);
 
-  DLOG_SCOPE_F(1,
+  DLOG_SCOPE_F(2,
     fmt::format(
       "ScenePrep FinalizeView f:{}", ctx_->GetFrameSequenceNumber().get())
       .c_str());

@@ -17,6 +17,7 @@
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.h>
 #include <Oxygen/Vortex/Environment/Passes/Generated.FogContracts.h>
+#include <Oxygen/Vortex/Internal/ChangedLogLine.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/api_export.h>
 
@@ -86,6 +87,8 @@ namespace environment {
     ShaderVisibleIndex occupied_tile_buffer_uav_ { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex occupied_tile_buffer_srv_ { kInvalidShaderVisibleIndex };
     ShaderVisibleIndex indirect_args_buffer_uav_ { kInvalidShaderVisibleIndex };
+    // The per-view HZB report is logged only when it changes.
+    vortex::internal::ChangedLogLine hzb_log_;
     std::uint32_t tile_data_resolution_x_ { 0U };
     std::uint32_t tile_data_resolution_y_ { 0U };
     std::uint32_t tile_data_slice_count_ { 0U };

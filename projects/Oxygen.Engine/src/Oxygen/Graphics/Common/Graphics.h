@@ -176,7 +176,7 @@ public:
   OXGN_GFX_API virtual auto SetVSyncEnabled(bool enabled) -> void;
   OXGN_GFX_NDAPI virtual auto IsVSyncEnabled() const noexcept -> bool;
   OXGN_GFX_API auto RegisterConsoleBindings(
-    observer_ptr<console::Console> console) noexcept -> void;
+    observer_ptr<console::Console> console) const noexcept -> void;
   OXGN_GFX_API auto RegisterCommands(
     observer_ptr<commands::CommandRegistry> registry) noexcept -> void;
   OXGN_GFX_API auto ApplyConsoleCVars(const console::Console& console) -> void;

@@ -84,7 +84,7 @@ FixedDescriptorSegment::~FixedDescriptorSegment() noexcept
 {
   LOG_SCOPE_F(1, "~FixedDescriptorSegment");
   DLOG_F(1, "view type  : {}", view_type_);
-  DLOG_F(1, "visibility : {}", visibility_);
+  DLOG_F(2, "visibility : {}", visibility_);
   DLOG_F(1, "base index : {}", base_index_);
   DLOG_F(1, "capacity   : {}", capacity_);
   try {
@@ -102,7 +102,7 @@ auto FixedDescriptorSegment::Allocate() noexcept -> bindless::HeapIndex
 {
   LOG_SCOPE_F(2, "Allocate bindless::HeapIndex");
   DLOG_F(2, "view type  : {}", view_type_);
-  DLOG_F(1, "visibility : {}", visibility_);
+  DLOG_F(2, "visibility : {}", visibility_);
   DLOG_F(2, "base index : {}", base_index_);
 
   auto global_index = kInvalidBindlessHeapIndex;
@@ -142,7 +142,7 @@ auto FixedDescriptorSegment::Release(const bindless::HeapIndex index) noexcept
     return false;
   }
   DLOG_F(2, "view type  : {}", view_type_);
-  DLOG_F(1, "visibility : {}", visibility_);
+  DLOG_F(2, "visibility : {}", visibility_);
   DLOG_F(2, "base index : {}", base_index_);
 
   // Convert to local index

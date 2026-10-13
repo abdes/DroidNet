@@ -123,7 +123,7 @@ namespace d3d12 {
 
     const Graphics* gfx_ { nullptr };
     TextureDesc desc_;
-    D3D12_RESOURCE_DESC resource_desc_;
+    D3D12_RESOURCE_DESC resource_desc_ {};
     bool is_readback_surface_ { false };
     bool is_readback_surface_mapped_ { false };
     detail::ReadbackSurfaceLayout readback_surface_layout_ {};

@@ -81,7 +81,7 @@ auto EnvironmentLightingService::InspectSkyLight(
 
 namespace {
 
-  constexpr float kPi = 3.14159265358979323846F;
+  constexpr float kPi = std::numbers::pi_v<float>;
 
   auto CoefficientsPerMeterToPerSkyUnitVec3(const glm::vec3 coefficients_per_m)
     -> glm::vec3
@@ -109,8 +109,9 @@ namespace {
       && ctx.current_view.with_atmosphere) {
       return false;
     }
-    if (environment::ResolveSceneBackground(ctx).has_value())
+    if (environment::ResolveSceneBackground(ctx).has_value()) {
       return false;
+    }
     const auto sky_sphere = env->TryGetSystem<scene::environment::SkySphere>();
     return sky_sphere != nullptr && sky_sphere->IsEnabled();
   }
@@ -289,6 +290,9 @@ auto EnvironmentLightingService::EnsureSkyTextureBinder()
 auto EnvironmentLightingService::RemoveViewState(const ViewId view_id) -> void
 {
   published_views_.erase(view_id);
+  local_fog_log_.Forget(view_id);
+  view_products_log_.Forget(view_id);
+  stage14_log_.Forget(view_id);
   if (sky_view_lut_pass_) {
     sky_view_lut_pass_->RemoveViewState(view_id);
   }
@@ -304,8 +308,9 @@ auto EnvironmentLightingService::AcquireIblCapture(const ViewId view)
   -> Result<environment::IblCaptureLease, environment::IblCaptureError>
 {
   const auto found = published_views_.find(view);
-  if (found == published_views_.end())
+  if (found == published_views_.end()) {
     return Err(environment::IblCaptureError::kUnavailable);
+  }
   return ibl_->AcquireCapture(found->second.ibl);
 }
 
@@ -316,8 +321,9 @@ auto EnvironmentLightingService::OnFrameStart(
   current_sequence_ = sequence;
   current_slot_ = slot;
   published_views_.clear();
-  if (ibl_->OnFrameStart(sequence))
+  if (ibl_->OnFrameStart(sequence)) {
     probe_state_ = {};
+  }
   last_probe_refresh_state_ = {
     .frame_sequence = sequence,
     .frame_slot = slot,
@@ -471,8 +477,11 @@ auto EnvironmentLightingService::PrepareLocalFogForStage14(RenderContext& ctx,
   }
 
   auto& local_fog_products = local_fog_state_->Prepare(ctx);
-  LOG_F(INFO, "local_fog_volume_instance_count={}",
-    local_fog_products.instance_count);
+  if (auto line = fmt::format("local_fog_volume_instance_count={}",
+        local_fog_products.instance_count);
+    local_fog_log_.Update(ctx.current_view.view_id, line)) {
+    LOG_F(INFO, "{}", line);
+  }
   pending_local_fog_culling_state_ = local_fog_tiled_culling_->Record(
     ctx, recorder, scene_textures, local_fog_products);
   pending_local_fog_view_id_ = ctx.current_view.view_id;
@@ -934,8 +943,9 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
   if (probe_state_.valid
     && (!ibl_products
       || !ibl_products->Attach(
-        recorder, renderer_.GetGraphics()->GetResourceRegistry())))
+        recorder, renderer_.GetGraphics()->GetResourceRegistry()))) {
     return kInvalidShaderVisibleIndex;
+  }
   last_probe_refresh_state_ = {
     .frame_sequence = current_sequence_,
     .frame_slot = current_slot_,
@@ -1204,34 +1214,38 @@ auto EnvironmentLightingService::PublishEnvironmentBindings(RenderContext& ctx,
     .volumetric_fog_local_fog_instance_count
     = pending_volumetric_fog_state_.local_fog_instance_count,
   };
-  LOG_F(INFO,
-    "environment_products_published={} environment_view_published={} "
-    "atmosphere_lut_cache_valid={} "
-    "transmittance_lut_published={} multi_scattering_lut_published={} "
-    "distant_sky_light_lut_published={} sky_view_lut_published={} "
-    "camera_aerial_perspective_published={} "
-    "sky_light_authored_enabled={} sky_light_ibl_valid={} "
-    "sky_light_ibl_unavailable={} sky_light_ibl_status={} "
-    "sky_light_ibl_unavailable_reason={} "
-    "volumetric_fog_authored_enabled={} "
-    "integrated_light_scattering_valid={}",
-    last_view_product_generation_state_.environment_view_products_published,
-    last_view_product_generation_state_.environment_view_published,
-    last_view_product_generation_state_.atmosphere_lut_cache_valid,
-    last_view_product_generation_state_.transmittance_lut_srv.IsValid(),
-    last_view_product_generation_state_.multi_scattering_lut_srv.IsValid(),
-    last_view_product_generation_state_.distant_sky_light_lut_srv.IsValid(),
-    last_view_product_generation_state_.sky_view_lut_srv.IsValid(),
-    last_view_product_generation_state_.camera_aerial_perspective_srv.IsValid(),
-    last_view_product_generation_state_.sky_light_authored_enabled,
-    last_view_product_generation_state_.sky_light_ibl_valid,
-    last_view_product_generation_state_.sky_light_ibl_unavailable,
-    StaticSkyLightProductStatusName(
-      last_view_product_generation_state_.sky_light_ibl_status),
-    StaticSkyLightUnavailableReasonName(
-      last_view_product_generation_state_.sky_light_ibl_unavailable_reason),
-    last_view_product_generation_state_.volumetric_fog_authored_enabled,
-    last_view_product_generation_state_.integrated_light_scattering_valid);
+  if (auto line = fmt::format(
+        "environment_products_published={} environment_view_published={} "
+        "atmosphere_lut_cache_valid={} "
+        "transmittance_lut_published={} multi_scattering_lut_published={} "
+        "distant_sky_light_lut_published={} sky_view_lut_published={} "
+        "camera_aerial_perspective_published={} "
+        "sky_light_authored_enabled={} sky_light_ibl_valid={} "
+        "sky_light_ibl_unavailable={} sky_light_ibl_status={} "
+        "sky_light_ibl_unavailable_reason={} "
+        "volumetric_fog_authored_enabled={} "
+        "integrated_light_scattering_valid={}",
+        last_view_product_generation_state_.environment_view_products_published,
+        last_view_product_generation_state_.environment_view_published,
+        last_view_product_generation_state_.atmosphere_lut_cache_valid,
+        last_view_product_generation_state_.transmittance_lut_srv.IsValid(),
+        last_view_product_generation_state_.multi_scattering_lut_srv.IsValid(),
+        last_view_product_generation_state_.distant_sky_light_lut_srv.IsValid(),
+        last_view_product_generation_state_.sky_view_lut_srv.IsValid(),
+        last_view_product_generation_state_.camera_aerial_perspective_srv
+          .IsValid(),
+        last_view_product_generation_state_.sky_light_authored_enabled,
+        last_view_product_generation_state_.sky_light_ibl_valid,
+        last_view_product_generation_state_.sky_light_ibl_unavailable,
+        StaticSkyLightProductStatusName(
+          last_view_product_generation_state_.sky_light_ibl_status),
+        StaticSkyLightUnavailableReasonName(
+          last_view_product_generation_state_.sky_light_ibl_unavailable_reason),
+        last_view_product_generation_state_.volumetric_fog_authored_enabled,
+        last_view_product_generation_state_.integrated_light_scattering_valid);
+    view_products_log_.Update(ctx.current_view.view_id, line)) {
+    LOG_F(INFO, "{}", line);
+  }
 
   return slot;
 }
@@ -1328,45 +1342,49 @@ auto EnvironmentLightingService::RenderSkyAndFog(RenderContext& ctx,
     .volumetric_fog_local_fog_instance_count
     = pending_volumetric_fog_state_.local_fog_instance_count,
   };
-  LOG_F(INFO,
-    "volumetric_fog_requested={} volumetric_fog_executed={} "
-    "integrated_light_scattering_valid={} volumetric_fog_grid={}x{}x{} "
-    "volumetric_fog_dispatch={}x{}x{} "
-    "volumetric_fog_view_constants_bound={} "
-    "volumetric_fog_ue_log_depth_distribution={} "
-    "volumetric_fog_directional_shadowed_light_requested={} "
-    "volumetric_fog_height_fog_media_requested={} "
-    "volumetric_fog_height_fog_media_executed={} "
-    "volumetric_fog_sky_light_injection_requested={} "
-    "volumetric_fog_sky_light_injection_executed={} "
-    "volumetric_fog_temporal_history_requested={} "
-    "volumetric_fog_temporal_history_reprojection_executed={} "
-    "volumetric_fog_temporal_history_reset={} "
-    "volumetric_fog_local_fog_injection_requested={} "
-    "volumetric_fog_local_fog_injection_executed={} "
-    "volumetric_fog_local_fog_instance_count={}",
-    last_stage14_state_.volumetric_fog_requested,
-    last_stage14_state_.volumetric_fog_executed,
-    last_stage14_state_.integrated_light_scattering_valid,
-    last_stage14_state_.volumetric_fog_grid_width,
-    last_stage14_state_.volumetric_fog_grid_height,
-    last_stage14_state_.volumetric_fog_grid_depth,
-    last_stage14_state_.volumetric_fog_dispatch_count_x,
-    last_stage14_state_.volumetric_fog_dispatch_count_y,
-    last_stage14_state_.volumetric_fog_dispatch_count_z,
-    last_stage14_state_.volumetric_fog_view_constants_bound,
-    last_stage14_state_.volumetric_fog_ue_log_depth_distribution,
-    last_stage14_state_.volumetric_fog_directional_shadowed_light_requested,
-    last_stage14_state_.volumetric_fog_height_fog_media_requested,
-    last_stage14_state_.volumetric_fog_height_fog_media_executed,
-    last_stage14_state_.volumetric_fog_sky_light_injection_requested,
-    last_stage14_state_.volumetric_fog_sky_light_injection_executed,
-    last_stage14_state_.volumetric_fog_temporal_history_requested,
-    last_stage14_state_.volumetric_fog_temporal_history_reprojection_executed,
-    last_stage14_state_.volumetric_fog_temporal_history_reset,
-    last_stage14_state_.volumetric_fog_local_fog_injection_requested,
-    last_stage14_state_.volumetric_fog_local_fog_injection_executed,
-    last_stage14_state_.volumetric_fog_local_fog_instance_count);
+  if (auto line
+    = fmt::format(
+      "volumetric_fog_requested={} volumetric_fog_executed={} "
+      "integrated_light_scattering_valid={} volumetric_fog_grid={}x{}x{} "
+      "volumetric_fog_dispatch={}x{}x{} "
+      "volumetric_fog_view_constants_bound={} "
+      "volumetric_fog_ue_log_depth_distribution={} "
+      "volumetric_fog_directional_shadowed_light_requested={} "
+      "volumetric_fog_height_fog_media_requested={} "
+      "volumetric_fog_height_fog_media_executed={} "
+      "volumetric_fog_sky_light_injection_requested={} "
+      "volumetric_fog_sky_light_injection_executed={} "
+      "volumetric_fog_temporal_history_requested={} "
+      "volumetric_fog_temporal_history_reprojection_executed={} "
+      "volumetric_fog_temporal_history_reset={} "
+      "volumetric_fog_local_fog_injection_requested={} "
+      "volumetric_fog_local_fog_injection_executed={} "
+      "volumetric_fog_local_fog_instance_count={}",
+      last_stage14_state_.volumetric_fog_requested,
+      last_stage14_state_.volumetric_fog_executed,
+      last_stage14_state_.integrated_light_scattering_valid,
+      last_stage14_state_.volumetric_fog_grid_width,
+      last_stage14_state_.volumetric_fog_grid_height,
+      last_stage14_state_.volumetric_fog_grid_depth,
+      last_stage14_state_.volumetric_fog_dispatch_count_x,
+      last_stage14_state_.volumetric_fog_dispatch_count_y,
+      last_stage14_state_.volumetric_fog_dispatch_count_z,
+      last_stage14_state_.volumetric_fog_view_constants_bound,
+      last_stage14_state_.volumetric_fog_ue_log_depth_distribution,
+      last_stage14_state_.volumetric_fog_directional_shadowed_light_requested,
+      last_stage14_state_.volumetric_fog_height_fog_media_requested,
+      last_stage14_state_.volumetric_fog_height_fog_media_executed,
+      last_stage14_state_.volumetric_fog_sky_light_injection_requested,
+      last_stage14_state_.volumetric_fog_sky_light_injection_executed,
+      last_stage14_state_.volumetric_fog_temporal_history_requested,
+      last_stage14_state_.volumetric_fog_temporal_history_reprojection_executed,
+      last_stage14_state_.volumetric_fog_temporal_history_reset,
+      last_stage14_state_.volumetric_fog_local_fog_injection_requested,
+      last_stage14_state_.volumetric_fog_local_fog_injection_executed,
+      last_stage14_state_.volumetric_fog_local_fog_instance_count);
+    stage14_log_.Update(ctx.current_view.view_id, line)) {
+    LOG_F(INFO, "{}", line);
+  }
   last_stage15_state_ = {
     .view_id = ctx.current_view.view_id,
     .requested = sky_state.requested || atmosphere_state.requested

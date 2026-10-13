@@ -1856,14 +1856,17 @@ void SceneRenderer::RenderViewFamily(RenderContext& ctx)
   }
 
   const auto allocations_after_frame = scene_texture_pool_.GetAllocationCount();
-  LOG_F(INFO,
-    "Vortex.SceneTextureLeasePool.Churn frame={} scene_views={} "
-    "allocations_before={} allocations_after={} allocations_delta={} "
-    "live_leases={}",
-    ctx.frame_sequence.get(), rendered_scene_view_count,
-    allocations_before_frame, allocations_after_frame,
-    allocations_after_frame - allocations_before_frame,
-    scene_texture_pool_.GetLiveLeaseCount());
+  // Steady frames reuse their leases; only a frame that allocates is logged.
+  if (allocations_after_frame != allocations_before_frame) {
+    LOG_F(INFO,
+      "Vortex.SceneTextureLeasePool.Churn frame={} scene_views={} "
+      "allocations_before={} allocations_after={} allocations_delta={} "
+      "live_leases={}",
+      ctx.frame_sequence.get(), rendered_scene_view_count,
+      allocations_before_frame, allocations_after_frame,
+      allocations_after_frame - allocations_before_frame,
+      scene_texture_pool_.GetLiveLeaseCount());
+  }
 }
 
 auto SceneRenderer::GetResidentContentRevision() const noexcept

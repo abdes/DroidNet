@@ -130,7 +130,7 @@ auto TransientStructuredBuffer::OnFrameStart(
   }
 
   LOG_F(
-    1, "TransientStructuredBuffer::OnFrameStart slot={} resetting", slot_index);
+    2, "TransientStructuredBuffer::OnFrameStart slot={} resetting", slot_index);
   ResetSlot(slot_index);
 }
 
@@ -153,7 +153,7 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
   auto& slot = slots_.at(slot_index);
 
   if (element_count == 0) {
-    LOG_F(1, "TransientStructuredBuffer::Allocate skipped (slot={} count=0)",
+    LOG_F(2, "TransientStructuredBuffer::Allocate skipped (slot={} count=0)",
       slot_index);
     // return an empty (invalid) transient allocation for callers to check
     TransientAllocation out {};
@@ -252,7 +252,7 @@ auto TransientStructuredBuffer::Allocate(std::uint32_t element_count)
       out.size_bytes = size_bytes;
       out.sequence = current_frame_;
       out.slot = current_slot_;
-      LOG_F(1,
+      LOG_F(2,
         "TransientStructuredBuffer::Allocate slot={} bytes={} srv_index={} "
         "ptr={}",
         slot_index, size_bytes, out.srv.get(), fmt::ptr(out.mapped_ptr));
@@ -294,7 +294,7 @@ auto TransientStructuredBuffer::Reset() -> void
   }
   current_slot_ = frame::kInvalidSlot;
   current_frame_ = frame::SequenceNumber { 0 };
-  LOG_F(1, "TransientStructuredBuffer::Reset cleared all slots");
+  LOG_F(2, "TransientStructuredBuffer::Reset cleared all slots");
 }
 
 auto TransientStructuredBuffer::ResetSlot(std::uint32_t slot_index) -> void
@@ -307,7 +307,7 @@ auto TransientStructuredBuffer::ResetSlot(std::uint32_t slot_index) -> void
   for (auto& a : slot.allocs) {
     ReleaseAllocView(a);
     if (a.allocation.has_value()) {
-      LOG_F(1,
+      LOG_F(2,
         "TransientStructuredBuffer::ResetSlot releasing allocation slot={} "
         "srv={}",
         slot_index, a.srv_index.get());
@@ -344,7 +344,7 @@ auto TransientStructuredBuffer::ReleaseAllocView(SlotAlloc& slot) -> void
 
   try {
     registry.UnRegisterView(slot.allocation->Buffer(), slot.native_view);
-    LOG_F(1, "TransientStructuredBuffer::ReleaseAllocView released srv={}",
+    LOG_F(2, "TransientStructuredBuffer::ReleaseAllocView released srv={}",
       slot.srv_index.get());
   } catch (const std::exception& e) {
     LOG_F(ERROR,

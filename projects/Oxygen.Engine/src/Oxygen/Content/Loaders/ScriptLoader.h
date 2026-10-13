@@ -72,7 +72,7 @@ namespace detail {
 inline auto LoadScriptAsset(const LoaderContext& context)
   -> std::unique_ptr<data::ScriptAsset>
 {
-  LOG_SCOPE_FUNCTION(INFO);
+  LOG_SCOPE_FUNCTION(1);
 
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;
@@ -151,7 +151,7 @@ inline auto LoadScriptAsset(const LoaderContext& context)
 inline auto LoadScriptResource(LoaderContext context)
   -> std::unique_ptr<data::ScriptResource>
 {
-  LOG_SCOPE_FUNCTION(INFO);
+  LOG_SCOPE_FUNCTION(1);
 
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
   auto& reader = *context.desc_reader;

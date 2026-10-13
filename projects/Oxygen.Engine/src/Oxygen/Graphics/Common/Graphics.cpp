@@ -482,7 +482,7 @@ auto Graphics::EndFrame(const frame::SequenceNumber frame_number,
 auto Graphics::PresentSurfaces(
   const std::vector<observer_ptr<graphics::Surface>>& surfaces) const -> void
 {
-  DLOG_SCOPE_FUNCTION(1);
+  DLOG_SCOPE_FUNCTION(2);
 
   const auto frame_capture = GetFrameCaptureController();
   for (const auto& surface : surfaces) {
@@ -517,7 +517,7 @@ auto Graphics::SetVSyncEnabled([[maybe_unused]] const bool enabled) -> void { }
 auto Graphics::IsVSyncEnabled() const noexcept -> bool { return true; }
 
 auto Graphics::RegisterConsoleBindings(
-  const observer_ptr<console::Console> console) noexcept -> void
+  const observer_ptr<console::Console> console) const noexcept -> void
 {
   if (console == nullptr) {
     return;

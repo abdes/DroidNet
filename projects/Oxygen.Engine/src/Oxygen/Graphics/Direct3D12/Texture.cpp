@@ -86,10 +86,11 @@ auto CreateTextureResource(const TextureDesc& desc, const Graphics* gfx)
   const D3D12_CLEAR_VALUE clear_value = ConvertTextureClearValue(desc);
 
   constexpr D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_NONE;
-  D3D12MA::ALLOCATION_DESC alloc_desc = {};
-  alloc_desc.HeapType = D3D12_HEAP_TYPE_DEFAULT;
-  alloc_desc.ExtraHeapFlags = heap_flags;
-  alloc_desc.Flags = D3D12MA::ALLOCATION_FLAG_COMMITTED;
+  const D3D12MA::ALLOCATION_DESC alloc_desc {
+    .Flags = D3D12MA::ALLOCATION_FLAG_COMMITTED,
+    .HeapType = D3D12_HEAP_TYPE_DEFAULT,
+    .ExtraHeapFlags = heap_flags,
+  };
 
   D3D12MA::Allocation* d3dma_allocation { nullptr };
   ID3D12Resource* resource { nullptr };
@@ -145,10 +146,11 @@ Texture::Texture(TextureDesc desc, const Graphics* gfx)
       *gfx_->GetCurrentDevice(), texture_resource_desc,
       GetD3D12SubresourceCount(desc_, plane_count_), plane_count_);
 
-    D3D12MA::ALLOCATION_DESC alloc_desc {};
-    alloc_desc.HeapType = D3D12_HEAP_TYPE_READBACK;
-    alloc_desc.ExtraHeapFlags = D3D12_HEAP_FLAG_NONE;
-    alloc_desc.Flags = D3D12MA::ALLOCATION_FLAG_COMMITTED;
+    const D3D12MA::ALLOCATION_DESC alloc_desc {
+      .Flags = D3D12MA::ALLOCATION_FLAG_COMMITTED,
+      .HeapType = D3D12_HEAP_TYPE_READBACK,
+      .ExtraHeapFlags = D3D12_HEAP_FLAG_NONE,
+    };
 
     D3D12_RESOURCE_DESC readback_desc {};
     readback_desc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
@@ -209,7 +211,7 @@ Texture::Texture(
     = gfx_->GetFormatPlaneCount(MakeTextureResourceDesc(desc_).Format);
 }
 
-Texture::~Texture() { DLOG_F(1, "destroying texture: {}", Base::GetName()); }
+Texture::~Texture() { DLOG_F(2, "destroying texture: {}", Base::GetName()); }
 
 Texture::Texture(Texture&& other) noexcept
   : Base(std::move(other))

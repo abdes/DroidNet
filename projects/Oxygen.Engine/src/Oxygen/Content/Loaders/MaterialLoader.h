@@ -31,7 +31,7 @@ namespace oxygen::content::loaders {
 inline auto LoadMaterialAsset(LoaderContext context)
   -> std::unique_ptr<data::MaterialAsset>
 {
-  LOG_SCOPE_FUNCTION(INFO);
+  LOG_SCOPE_FUNCTION(1);
   LOG_F(2, "offline mode   : {}", context.work_offline ? "yes" : "no");
 
   DCHECK_NOTNULL_F(context.desc_reader, "expecting desc_reader not to be null");
@@ -329,7 +329,7 @@ inline auto LoadMaterialAsset(LoaderContext context)
   size_t shader_count = std::popcount(shader_stage_bits);
   std::vector<ShaderReference> shader_refs;
   shader_refs.reserve(shader_count);
-  LOG_F(INFO, "shader references : {}", shader_count);
+  LOG_F(1, "shader references : {}", shader_count);
 
   // For each set bit, read a ShaderReferenceDesc and construct a
   // ShaderReference
@@ -343,9 +343,9 @@ inline auto LoadMaterialAsset(LoaderContext context)
         throw std::runtime_error(
           "ShaderReferenceDesc stage mismatch vs shader_stages bitfield");
       }
-      LOG_F(INFO, "   shader stage {} : {}:{} (defines: '{}', hash: 0x{:016X})",
-        i, shader_refs.back().GetSourcePath(),
-        shader_refs.back().GetEntryPoint(), shader_refs.back().GetDefines(),
+      LOG_F(1, "   shader stage {} : {}:{} (defines: '{}', hash: 0x{:016X})", i,
+        shader_refs.back().GetSourcePath(), shader_refs.back().GetEntryPoint(),
+        shader_refs.back().GetDefines(),
         shader_refs.back().GetShaderSourceHash());
     }
   }

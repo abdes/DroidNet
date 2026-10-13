@@ -23,6 +23,7 @@
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h>
 #include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
+#include <Oxygen/Vortex/Internal/ChangedLogLine.h>
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
@@ -398,6 +399,10 @@ private:
   PublicationState last_publication_state_ {};
   ViewProductGenerationState last_view_product_generation_state_ {};
   Stage14State last_stage14_state_ {};
+  // Per-frame reports are logged only when they change.
+  vortex::internal::ChangedLogLine local_fog_log_;
+  vortex::internal::ChangedLogLine view_products_log_;
+  vortex::internal::ChangedLogLine stage14_log_;
   Stage15State last_stage15_state_ {};
   std::unique_ptr<
     internal::PerViewStructuredPublisher<EnvironmentFrameBindings>>

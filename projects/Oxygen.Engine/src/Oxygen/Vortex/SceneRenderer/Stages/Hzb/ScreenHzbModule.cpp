@@ -15,6 +15,8 @@
 #include <unordered_map>
 #include <utility>
 
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -30,6 +32,7 @@
 #include <Oxygen/Profiling/GpuEventScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
+#include <Oxygen/Vortex/Internal/ChangedLogLine.h>
 #include <Oxygen/Vortex/Internal/TextureViews.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
@@ -373,6 +376,8 @@ struct ScreenHzbModule::Impl {
   Renderer& renderer;
   HzbPyramidBuilder builder;
   std::unordered_map<ViewId, ViewState> view_states;
+  // The published report is logged only when it changes.
+  vortex::internal::ChangedLogLine published_log;
 };
 
 ScreenHzbModule::ScreenHzbModule(
@@ -393,6 +398,7 @@ void ScreenHzbModule::OnFrameStart()
 
 void ScreenHzbModule::RemoveViewState(const ViewId view_id)
 {
+  impl_->published_log.Forget(view_id);
   const auto found = impl_->view_states.find(view_id);
   if (found != impl_->view_states.end()) {
     if (auto gfx = impl_->renderer.GetGraphics()) {
@@ -598,9 +604,13 @@ void ScreenHzbModule::Execute(RenderContext& ctx,
   });
 
   if (current_output_.available) {
-    LOG_F(INFO, "screen_hzb_published=true width={} height={} mips={}",
-      current_output_.bindings.width, current_output_.bindings.height,
-      current_output_.bindings.mip_count);
+    if (auto line
+      = fmt::format("screen_hzb_published=true width={} height={} mips={}",
+        current_output_.bindings.width, current_output_.bindings.height,
+        current_output_.bindings.mip_count);
+      impl_->published_log.Update(view_id, line)) {
+      LOG_F(INFO, "{}", line);
+    }
   }
 }
 
