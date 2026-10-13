@@ -121,8 +121,11 @@ private:
 NOLINT_TEST(ReadbackContractTest, BufferReuseStateGatePreservesFailedError)
 {
   using oxygen::graphics::detail::ValidateBufferReadbackReuseState;
-  for (const auto error : { ReadbackError::kBackendFailure,
-         ReadbackError::kQueueUnavailable, ReadbackError::kShutdown }) {
+  for (const auto error : {
+         ReadbackError::kBackendFailure,
+         ReadbackError::kQueueUnavailable,
+         ReadbackError::kShutdown,
+       }) {
     const auto failed
       = ValidateBufferReadbackReuseState(ReadbackState::kFailed, error);
     ASSERT_FALSE(failed.has_value());
@@ -396,8 +399,13 @@ NOLINT_TEST(
 NOLINT_TEST(
   ReadbackContractTest, TextureMappedViewAllowsOnlyOneActiveMapOwnerAtATime)
 {
-  ContractTextureReadback readback({ std::byte { 0x10 }, std::byte { 0x20 },
-                                     std::byte { 0x30 }, std::byte { 0x40 } },
+  ContractTextureReadback readback(
+    {
+      std::byte { 0x10 },
+      std::byte { 0x20 },
+      std::byte { 0x30 },
+      std::byte { 0x40 },
+    },
     TextureReadbackLayout {
       .format = oxygen::Format::kRGBA8UNorm,
       .texture_type = TextureType::kTexture2D,

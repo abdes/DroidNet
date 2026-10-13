@@ -429,9 +429,10 @@ namespace {
     auto& bucket = runtime->buckets[std::string(event_name_sv)][phase_name];
     InsertListenerSorted(bucket.listeners, listener);
 
-    runtime->id_map[listener_id]
-      = ListenerLocation { .event_name = std::string(event_name_sv),
-          .phase_name = phase_name };
+    runtime->id_map[listener_id] = ListenerLocation {
+      .event_name = std::string(event_name_sv),
+      .phase_name = phase_name,
+    };
 
     return PushConnectionObject(state, listener_id);
   }

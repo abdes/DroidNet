@@ -41,19 +41,23 @@ auto InspectSceneSource(const std::filesystem::path& source_path,
     case ImportFormat::kFbx:
       return adapters::FbxAdapter::InspectSource(source_path, input);
     default:
-      result.diagnostics.push_back({ .severity = ImportSeverity::kError,
+      result.diagnostics.push_back({
+        .severity = ImportSeverity::kError,
         .code = "import.source.unsupported_format",
         .message = "Select a glTF, GLB or FBX source.",
         .source_path = source_id,
-        .object_path = {} });
+        .object_path = {},
+      });
       break;
     }
   } catch (const std::exception& error) {
-    result.diagnostics.push_back({ .severity = ImportSeverity::kError,
+    result.diagnostics.push_back({
+      .severity = ImportSeverity::kError,
       .code = "import.source.inspection_failed",
       .message = error.what(),
       .source_path = source_path.string(),
-      .object_path = {} });
+      .object_path = {},
+    });
   }
   return result;
 }
@@ -64,31 +68,47 @@ auto ExportSceneSourceInspection(const SceneSourceInspection& report)
   using nlohmann::json;
   auto diagnostics = json::array();
   for (const auto& diagnostic : report.diagnostics) {
-    diagnostics.push_back({ { "severity", to_string(diagnostic.severity) },
-      { "code", diagnostic.code }, { "message", diagnostic.message },
+    diagnostics.push_back({
+      { "severity", to_string(diagnostic.severity) },
+      { "code", diagnostic.code },
+      { "message", diagnostic.message },
       { "source_path", diagnostic.source_path },
-      { "object_path", diagnostic.object_path } });
+      { "object_path", diagnostic.object_path },
+    });
   }
   return json {
-    { "version", 1 }, { "parsed", report.parsed },
-    { "supported", report.supported }, { "format", report.format },
+    { "version", 1 },
+    { "parsed", report.parsed },
+    { "supported", report.supported },
+    { "format", report.format },
     { "external_files", report.external_files },
-    { "source_unit_meters",
+    {
+      "source_unit_meters",
       report.source_unit_meters ? json(*report.source_unit_meters)
-                                : json(nullptr) },
-    { "source_axes",
-      { { "right", report.source_right }, { "up", report.source_up },
-        { "front", report.source_front } } },
-    { "source_left_handed",
+                                : json(nullptr),
+    },
+    {
+      "source_axes",
+      {
+        { "right", report.source_right },
+        { "up", report.source_up },
+        { "front", report.source_front },
+      },
+    },
+    {
+      "source_left_handed",
       report.source_left_handed ? json(*report.source_left_handed)
-                                : json(nullptr) },
+                                : json(nullptr),
+    },
     { "target_axes", { { "right", "+X" }, { "up", "+Z" }, { "front", "-Y" } } },
     { "target_unit_meters", 1.0 },
     { "reverses_winding", report.reverses_winding },
     { "mesh_count", report.mesh_count },
     { "material_count", report.material_count },
-    { "node_count", report.node_count }, { "diagnostics", diagnostics }
-  }.dump(2);
+    { "node_count", report.node_count },
+    { "diagnostics", diagnostics },
+  }
+    .dump(2);
 }
 
 } // namespace oxygen::content::import

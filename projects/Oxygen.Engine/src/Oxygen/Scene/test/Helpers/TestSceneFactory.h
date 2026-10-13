@@ -184,8 +184,18 @@ private:
   [[nodiscard]] static auto GenerateSequentialName(const int index)
     -> std::string
   {
-    const std::vector<std::string> names = { "First", "Second", "Third",
-      "Fourth", "Fifth", "Sixth", "Seventh", "Eighth", "Ninth", "Tenth" };
+    const std::vector<std::string> names = {
+      "First",
+      "Second",
+      "Third",
+      "Fourth",
+      "Fifth",
+      "Sixth",
+      "Seventh",
+      "Eighth",
+      "Ninth",
+      "Tenth",
+    };
     return std::cmp_less(index, names.size()) ? names[index]
                                               : "Item" + std::to_string(index);
   }

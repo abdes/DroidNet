@@ -135,12 +135,14 @@ auto ShadowFrameReadSet::Attach(frame::SequenceNumber frame,
   // uses a separate lease with independently retained caller inputs.
   try {
     recorder.RetainOpaqueUse(state_, 0x53484652414D4500ULL, state_.get(),
-      { .valid = [](const void* pointer) noexcept -> bool {
-         const auto& state = *static_cast<const State*>(pointer);
-         std::lock_guard guard(state.mutex);
-         return state.open;
-       },
-        .requires_completion = false });
+      {
+        .valid = [](const void* pointer) noexcept -> bool {
+          const auto& state = *static_cast<const State*>(pointer);
+          std::lock_guard guard(state.mutex);
+          return state.open;
+        },
+        .requires_completion = false,
+      });
   } catch (const std::bad_alloc&) {
     return std::unexpected(ShadowUseError::kAllocationFailed);
   }
@@ -154,8 +156,10 @@ auto ShadowFrameReadSet::Attach(frame::SequenceNumber frame,
       return std::unexpected(attached.error());
     }
   }
-  return ShadowReadAttachmentStats { batch.OpaqueUseCount() - versions,
-    batch.RegistrationCount() - registrations };
+  return ShadowReadAttachmentStats {
+    batch.OpaqueUseCount() - versions,
+    batch.RegistrationCount() - registrations,
+  };
 }
 auto ShadowFrameReadSet::Binding() const noexcept -> ShaderVisibleIndex
 {

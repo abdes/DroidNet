@@ -696,7 +696,7 @@ enum DEFRAGMENTATION_FLAGS {
   /// A bit mask to extract only `ALGORITHM` bits from entire set of flags.
   DEFRAGMENTATION_FLAG_ALGORITHM_MASK = DEFRAGMENTATION_FLAG_ALGORITHM_FAST
     | DEFRAGMENTATION_FLAG_ALGORITHM_BALANCED
-    | DEFRAGMENTATION_FLAG_ALGORITHM_FULL
+    | DEFRAGMENTATION_FLAG_ALGORITHM_FULL,
 };
 
 /** \brief Parameters for defragmentation.
@@ -907,7 +907,7 @@ enum POOL_FLAGS {
   POOL_FLAG_MSAA_TEXTURES_ALWAYS_COMMITTED = 0x2,
 
   // Bit mask to extract only `ALGORITHM` bits from entire set of flags.
-  POOL_FLAG_ALGORITHM_MASK = POOL_FLAG_ALGORITHM_LINEAR
+  POOL_FLAG_ALGORITHM_MASK = POOL_FLAG_ALGORITHM_LINEAR,
 };
 
 /// \brief Parameters of created D3D12MA::Pool object. To be used with
@@ -1520,7 +1520,7 @@ enum VIRTUAL_BLOCK_FLAGS {
   VIRTUAL_BLOCK_FLAG_ALGORITHM_LINEAR = POOL_FLAG_ALGORITHM_LINEAR,
 
   // Bit mask to extract only `ALGORITHM` bits from entire set of flags.
-  VIRTUAL_BLOCK_FLAG_ALGORITHM_MASK = POOL_FLAG_ALGORITHM_MASK
+  VIRTUAL_BLOCK_FLAG_ALGORITHM_MASK = POOL_FLAG_ALGORITHM_MASK,
 };
 
 /// Parameters of created D3D12MA::VirtualBlock object to be passed to

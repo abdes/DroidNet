@@ -21,7 +21,7 @@ namespace {
     auto input = MaterialEvaluationInput {
       .factors = { .ambient_occlusion = 0.5 },
       .samples = { .orm = OrmSample { .roughness = 0.4, .metallic = 0.8 },
-        .occlusion = 0.2 },
+        .occlusion = 0.2, },
       .occlusion_mode = OcclusionMode::kStrength,
     };
     const auto expect_ao = [&](const double expected) -> void {

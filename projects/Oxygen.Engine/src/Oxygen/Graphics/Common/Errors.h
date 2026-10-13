@@ -15,7 +15,7 @@ namespace oxygen::graphics {
 enum class GraphicsError : int {
   kResourceCreationFailed = 1,
   kDescriptorAllocationFailed = 2,
-  kResourceRegistrationFailed = 3
+  kResourceRegistrationFailed = 3,
 };
 
 //! Category for graphics errors.

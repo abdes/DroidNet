@@ -175,9 +175,11 @@ auto ComputeReadbackSurfaceLayout(dx::IDevice& device,
 
   layout.total_bytes = total_bytes;
   for (UINT index = 0; index < subresource_count; ++index) {
-    layout.subresources[index] = { .placed_footprint = footprints[index],
+    layout.subresources[index] = {
+      .placed_footprint = footprints[index],
       .row_count = row_counts[index],
-      .row_size_bytes = row_sizes[index] };
+      .row_size_bytes = row_sizes[index],
+    };
   }
   return layout;
 }
@@ -246,12 +248,14 @@ auto ComputeTextureToBufferCopyInfo(const TextureDesc& desc,
   info.placed_footprint.Footprint.Depth = static_cast<UINT16>(slice.depth);
   info.placed_footprint.Footprint.RowPitch
     = static_cast<UINT>(info.resolved_region.buffer_row_pitch.get());
-  info.source_box = { .left = slice.x,
+  info.source_box = {
+    .left = slice.x,
     .top = slice.y,
     .front = slice.z,
     .right = slice.x + slice.width,
     .bottom = slice.y + slice.height,
-    .back = slice.z + slice.depth };
+    .back = slice.z + slice.depth,
+  };
   info.subresource_index
     = slice.mip_level + (slice.array_slice * desc.mip_levels);
   info.bytes_written = 0;

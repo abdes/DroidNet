@@ -53,7 +53,7 @@ enum class ShaderStageFlags : uint32_t {
     | kPixel, //!< All graphics shader stages.
   kAllRayTracing = kRayGen | kIntersection | kAnyHit | kClosestHit | kMiss
     | kCallable, //!< All ray tracing shader stages.
-  kAll = kAllGraphics | kAllRayTracing | kCompute //!< All shader stages.
+  kAll = kAllGraphics | kAllRayTracing | kCompute, //!< All shader stages.
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(ShaderStageFlags)
 

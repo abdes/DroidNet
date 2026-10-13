@@ -20,7 +20,7 @@ enum class DisplayOrientation : uint8_t {
   kLandscape,
   kLandscapeFlipped,
   kPortrait,
-  kPortraitFlipped
+  kPortraitFlipped,
 };
 
 class Display {

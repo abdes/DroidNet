@@ -36,7 +36,7 @@ enum class RegistrationError : uint8_t {
   kWrongBackend,
   kStaleRegistration,
   kOwnershipConflict,
-  kAllocationFailed
+  kAllocationFailed,
 };
 
 //! Internal allocation ownership; never retains the Graphics facade.

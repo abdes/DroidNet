@@ -139,8 +139,10 @@ protected:
     ASSERT_NE(module_api_, nullptr);
 
     oxygen::SerializedBackendConfig cfg { .json_data = "{}", .size = 2 };
-    oxygen::SerializedPathFinderConfig path_cfg { .json_data = "{}",
-      .size = 2 };
+    oxygen::SerializedPathFinderConfig path_cfg {
+      .json_data = "{}",
+      .size = 2,
+    };
     backend_ = module_api_->CreateBackend(cfg, path_cfg);
     ASSERT_NE(backend_, nullptr);
 

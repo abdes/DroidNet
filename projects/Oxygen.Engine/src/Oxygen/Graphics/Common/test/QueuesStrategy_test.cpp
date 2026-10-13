@@ -915,22 +915,30 @@ NOLINT_TEST(QueuesStrategy, FrameRetirementWaitsForEveryQueue)
 NOLINT_TEST(QueuesStrategy, NativeStateRetirementDoesNotAllocate)
 {
   TestGraphics gfx("retirement");
-  const QueueSpecification a { .key = QueueKey { "graphics" },
+  const QueueSpecification a {
+    .key = QueueKey { "graphics" },
     .role = Role::kGraphics,
     .allocation_preference = Alloc::kDedicated,
-    .sharing_preference = Share::kNamed };
-  const QueueSpecification b { .key = QueueKey { "copy" },
+    .sharing_preference = Share::kNamed,
+  };
+  const QueueSpecification b {
+    .key = QueueKey { "copy" },
     .role = Role::kTransfer,
     .allocation_preference = Alloc::kDedicated,
-    .sharing_preference = Share::kNamed };
+    .sharing_preference = Share::kNamed,
+  };
   auto first = std::make_shared<FakeCommandQueue>("graphics", Role::kGraphics);
   auto second = std::make_shared<FakeCommandQueue>("copy", Role::kTransfer);
   EXPECT_CALL(gfx, CreateCommandQueue(a.key, _)).WillOnce(Return(first));
   EXPECT_CALL(gfx, CreateCommandQueue(b.key, _)).WillOnce(Return(second));
   gfx.CreateCommandQueues(PairStrategy(a, b));
   const NativeResource resource { uint64_t { 1234 }, oxygen::TypeId { 1 } };
-  const std::array states { CommandQueue::KnownResourceState {
-    resource, ResourceStates::kShaderResource } };
+  const std::array states {
+    CommandQueue::KnownResourceState {
+      resource,
+      ResourceStates::kShaderResource,
+    },
+  };
   first->AdoptKnownResourceStates(states);
   second->AdoptKnownResourceStates(states);
   using oxygen::graphics::testing::HeapAllocationFailure;

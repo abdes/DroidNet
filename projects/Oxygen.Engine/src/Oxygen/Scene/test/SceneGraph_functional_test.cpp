@@ -255,8 +255,13 @@ NOLINT_TEST_F(
 {
   // Arrange: Create a vehicle hierarchy (Vehicle -> Body, Wheels)
   auto [vehicle, parts] = CreateHierarchy("Vehicle",
-    { "Body", "FrontLeftWheel", "FrontRightWheel", "RearLeftWheel",
-      "RearRightWheel" });
+    {
+      "Body",
+      "FrontLeftWheel",
+      "FrontRightWheel",
+      "RearLeftWheel",
+      "RearRightWheel",
+    });
   ASSERT_EQ(parts.size(), 5);
 
   // Assert: Verify hierarchy structure

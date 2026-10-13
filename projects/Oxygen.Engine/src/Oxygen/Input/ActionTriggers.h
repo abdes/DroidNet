@@ -29,7 +29,7 @@ enum class ActionTriggerType : uint8_t {
 #define OXNPUT_ACTION_TRIGGER_BEHAVIOR(name, value)
 #include <Oxygen/Core/Meta/Input/ActionTriggers.inc>
 #undef OXNPUT_ACTION_TRIGGER_BEHAVIOR
-#undef OXNPUT_ACTION_TRIGGER_TYPE
+#undef OXNPUT_ACTION_TRIGGER_TYPE // NOLINT
 };
 
 OXGN_NPUT_NDAPI auto to_string(ActionTriggerType value) noexcept
@@ -43,7 +43,7 @@ public:
 #define OXNPUT_ACTION_TRIGGER_BEHAVIOR(name, value) name = value,
 #include <Oxygen/Core/Meta/Input/ActionTriggers.inc>
 #undef OXNPUT_ACTION_TRIGGER_BEHAVIOR
-#undef OXNPUT_ACTION_TRIGGER_TYPE
+#undef OXNPUT_ACTION_TRIGGER_TYPE // NOLINT
   };
 
   explicit ActionTrigger() = default;
@@ -305,7 +305,7 @@ public:
 
   [[nodiscard]] auto IsCompleted() const -> bool override
   {
-    return triggered_once_ && (IsIdle());
+    return triggered_once_ && IsIdle();
   }
 
   //! Releasing after the hold succeeded completes; it is not a cancel.

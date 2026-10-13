@@ -34,7 +34,9 @@ auto CreateBufferBarrierDesc(const NativeResource& native_object,
   const ResourceStates before, const ResourceStates after) -> BufferBarrierDesc
 {
   return BufferBarrierDesc {
-    .resource = native_object, .before = before, .after = after
+    .resource = native_object,
+    .before = before,
+    .after = after,
   };
   // TODO: Could add buffer-specific fields here  or keep a reference to
   // the buffer object itself
@@ -45,7 +47,9 @@ auto CreateTextureBarrierDesc(const NativeResource& native_object,
   const ResourceStates before, const ResourceStates after) -> TextureBarrierDesc
 {
   return TextureBarrierDesc {
-    .resource = native_object, .before = before, .after = after
+    .resource = native_object,
+    .before = before,
+    .after = after,
   };
   // TODO: Could add texture-specific fields here (mip levels, array
   // slices, etc.) or keep a reference to the texture object itself

@@ -66,8 +66,15 @@ NOLINT_TEST(
   PositionalArgumentsTest, RestPositional_AllArgumentsAssignedToRest_Succeeds)
 {
   constexpr auto argc = 5;
-  std::array<const char*, argc> argv { { "/usr/bin/test-program.exe", "r_1",
-    "r_2", "r_3", "r_4" } };
+  std::array<const char*, argc> argv {
+    {
+      "/usr/bin/test-program.exe",
+      "r_1",
+      "r_2",
+      "r_3",
+      "r_4",
+    },
+  };
 
   const std::shared_ptr<Command> default_command {
     CommandBuilder(Command::DEFAULT).WithPositionalArguments(MakeRest()).Build()
@@ -89,8 +96,15 @@ NOLINT_TEST(PositionalArgumentsTest,
   MultiplePositionals_BeforeAndRest_AssignsCorrectly_Succeeds)
 {
   constexpr auto argc = 5;
-  std::array<const char*, argc> argv { { "/usr/bin/test-program.exe", "b_1",
-    "b_2", "r_1", "r_2" } };
+  std::array<const char*, argc> argv {
+    {
+      "/usr/bin/test-program.exe",
+      "b_1",
+      "b_2",
+      "r_1",
+      "r_2",
+    },
+  };
 
   const std::shared_ptr<Command> default_command { CommandBuilder(
     Command::DEFAULT)
@@ -119,8 +133,15 @@ NOLINT_TEST(
   PositionalArgumentsTest, RestPositional_WithTrailingPositional_Throws)
 {
   constexpr auto argc = 5;
-  std::array<const char*, argc> argv { { "/usr/bin/test-program.exe", "r_1",
-    "r_2", "r_3", "a_1" } };
+  std::array<const char*, argc> argv {
+    {
+      "/usr/bin/test-program.exe",
+      "r_1",
+      "r_2",
+      "r_3",
+      "a_1",
+    },
+  };
 
   const std::shared_ptr<Command> default_command { CommandBuilder(
     Command::DEFAULT)
@@ -136,8 +157,15 @@ NOLINT_TEST(
   PositionalArgumentsTest, MultiplePositionals_BeforeRestAndAfterRest_Throws)
 {
   constexpr auto argc = 5;
-  std::array<const char*, argc> argv { { "/usr/bin/test-program.exe", "b_1",
-    "r_1", "r_2", "a_1" } };
+  std::array<const char*, argc> argv {
+    {
+      "/usr/bin/test-program.exe",
+      "b_1",
+      "r_1",
+      "r_2",
+      "a_1",
+    },
+  };
 
   const std::shared_ptr<Command> default_command { CommandBuilder(
     Command::DEFAULT)
@@ -185,8 +213,12 @@ NOLINT_TEST(
   PositionalArgumentsTest, MultipleRequiredPositionals_TooFewArguments_Throws)
 {
   constexpr auto argc = 2;
-  std::array<const char*, argc> argv { { "/usr/bin/test-program.exe",
-    "only_one" } };
+  std::array<const char*, argc> argv {
+    {
+      "/usr/bin/test-program.exe",
+      "only_one",
+    },
+  };
 
   const std::shared_ptr<Command> default_command { CommandBuilder(
     Command::DEFAULT)
@@ -220,8 +252,12 @@ NOLINT_TEST(
   PositionalArgumentsTest, SinglePositional_TypeConversionFails_Throws)
 {
   constexpr auto argc = 2;
-  std::array<const char*, argc> argv { { "/usr/bin/test-program.exe",
-    "not_an_int" } };
+  std::array<const char*, argc> argv {
+    {
+      "/usr/bin/test-program.exe",
+      "not_an_int",
+    },
+  };
 
   auto int_positional
     = Option::Positional("INT_ARG").About("int arg").WithValue<int>().Build();
@@ -241,8 +277,14 @@ NOLINT_TEST(
   PositionalArgumentsTest, RestPositional_MultipleTrailingPositionals_Throws)
 {
   constexpr auto argc = 4;
-  std::array<const char*, argc> argv { { "/usr/bin/test-program.exe", "a", "b",
-    "c" } };
+  std::array<const char*, argc> argv {
+    {
+      "/usr/bin/test-program.exe",
+      "a",
+      "b",
+      "c",
+    },
+  };
 
   const std::shared_ptr<Command> default_command { CommandBuilder(
     Command::DEFAULT)

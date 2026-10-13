@@ -54,7 +54,9 @@ namespace {
     },
     MaterialSource::TextureSlot { "normal", &MaterialTextureBindings::normal },
     MaterialSource::TextureSlot {
-      "metallic", &MaterialTextureBindings::metallic },
+      "metallic",
+      &MaterialTextureBindings::metallic,
+    },
     MaterialSource::TextureSlot {
       "roughness",
       &MaterialTextureBindings::roughness,
@@ -64,9 +66,13 @@ namespace {
       &MaterialTextureBindings::ambient_occlusion,
     },
     MaterialSource::TextureSlot {
-      "emissive", &MaterialTextureBindings::emissive },
+      "emissive",
+      &MaterialTextureBindings::emissive,
+    },
     MaterialSource::TextureSlot {
-      "specular", &MaterialTextureBindings::specular },
+      "specular",
+      &MaterialTextureBindings::specular,
+    },
     MaterialSource::TextureSlot {
       "sheen_color",
       &MaterialTextureBindings::sheen_color,

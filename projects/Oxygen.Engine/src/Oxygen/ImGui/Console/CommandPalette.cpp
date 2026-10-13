@@ -195,12 +195,16 @@ auto CommandPalette::Draw(oxygen::console::Console& console,
     const auto lowered_token = ToLower(symbol.token);
     if (lowered_search.empty()) {
       results.push_back(ScoredSymbol {
-        .symbol = std::move(symbol), .match_rank = kPrefixRank });
+        .symbol = std::move(symbol),
+        .match_rank = kPrefixRank,
+      });
       continue;
     }
     if (lowered_token.starts_with(lowered_search)) {
       results.push_back(ScoredSymbol {
-        .symbol = std::move(symbol), .match_rank = kPrefixRank });
+        .symbol = std::move(symbol),
+        .match_rank = kPrefixRank,
+      });
       continue;
     }
     if (IsSubsequenceMatch(

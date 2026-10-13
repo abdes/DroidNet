@@ -85,8 +85,10 @@ public:
   {
     bindless::HeapIndex::UnderlyingType current_base = 0;
     for (const auto& [view_type_str, desc] : heaps_) {
-      for (const DescriptorVisibility vis : { DescriptorVisibility::kCpuOnly,
-             DescriptorVisibility::kShaderVisible }) {
+      for (const DescriptorVisibility vis : {
+             DescriptorVisibility::kCpuOnly,
+             DescriptorVisibility::kShaderVisible,
+           }) {
         std::string heap_key = view_type_str + ":"
           + (vis == DescriptorVisibility::kCpuOnly ? "cpu" : "gpu");
         const bindless::Capacity capacity

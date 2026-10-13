@@ -104,10 +104,13 @@ NOLINT_TEST(CapsuleTest, RejectsInvalidAndNonFiniteParameters)
   EXPECT_FALSE(MakeCapsuleMeshAsset(8, 257).has_value());
   EXPECT_FALSE(MakeCapsuleMeshAsset(8, 32, 0.9F, 0.5F).has_value());
   EXPECT_TRUE(MakeCapsuleMeshAsset(64, 256).has_value());
-  for (const auto invalid :
-    { 0.0F, -1.0F, std::numeric_limits<float>::quiet_NaN(),
-      std::numeric_limits<float>::infinity(),
-      -std::numeric_limits<float>::infinity() }) {
+  for (const auto invalid : {
+         0.0F,
+         -1.0F,
+         std::numeric_limits<float>::quiet_NaN(),
+         std::numeric_limits<float>::infinity(),
+         -std::numeric_limits<float>::infinity(),
+       }) {
     EXPECT_FALSE(MakeCapsuleMeshAsset(8, 32, invalid, 0.5F).has_value());
     EXPECT_FALSE(MakeCapsuleMeshAsset(8, 32, 2.0F, invalid).has_value());
   }

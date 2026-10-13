@@ -161,7 +161,9 @@ namespace {
     auto input = FrameLightSelection {};
     input.directional_lights = {
       FrameDirectionalLightSelection {
-        .source_node = {}, .illuminance_lux = 10.0F },
+        .source_node = {},
+        .illuminance_lux = 10.0F,
+      },
       FrameDirectionalLightSelection {
         .source_node = {},
         .illuminance_lux = 20.0F,
@@ -198,9 +200,13 @@ namespace {
     auto input = FrameLightSelection {};
     input.directional_lights = {
       FrameDirectionalLightSelection {
-        .source_node = {}, .atmosphere_light_slot = 1U },
+        .source_node = {},
+        .atmosphere_light_slot = 1U,
+      },
       FrameDirectionalLightSelection {
-        .source_node = {}, .atmosphere_light_slot = 1U },
+        .source_node = {},
+        .atmosphere_light_slot = 1U,
+      },
     };
     const auto records = ResolveLightEvaluationRecords(input);
     ASSERT_FALSE(records.has_value());

@@ -260,7 +260,7 @@ inline constexpr std::array<CubeFaceBasis, kCubeFaceCount> kCubeFaceBases = {{
   { {0.0F, 0.0F, +1.0F}, {+1.0F, 0.0F, 0.0F}, {0.0F, -1.0F, 0.0F} },
   // -Z: center (0, 0, -1), right (+1, 0, 0), up (0, +1, 0)
   { {0.0F, 0.0F, -1.0F}, {+1.0F, 0.0F, 0.0F}, {0.0F, +1.0F, 0.0F} },
-}};
+},};
 // clang-format on
 
 //! Cube face basis vectors for standard GPU cubemap convention.
@@ -303,7 +303,7 @@ inline constexpr std::array<CubeFaceBasis, kCubeFaceCount> kGpuCubeFaceBases = {
   { {0.0F, 0.0F, +1.0F}, {+1.0F, 0.0F, 0.0F}, {0.0F, +1.0F, 0.0F} },
   // -Z: center (0, 0, -1), right (-1, 0, 0), up (0, +1, 0)
   { {0.0F, 0.0F, -1.0F}, {-1.0F, 0.0F, 0.0F}, {0.0F, +1.0F, 0.0F} },
-}};
+},};
 // clang-format on
 
 //! Get the basis vectors for a specific cube face.

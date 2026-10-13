@@ -240,13 +240,15 @@ auto RegisterSceneQueryMetatable(lua_State* state) -> void
   lua_setfield(state, -2, "__index");
 
   constexpr std::array<luaL_Reg, 7> methods {
-    { { .name = "scope", .func = SceneQueryScope },
+    {
+      { .name = "scope", .func = SceneQueryScope },
       { .name = "scope_many", .func = SceneQueryScopeMany },
       { .name = "clear_scope", .func = SceneQueryClearScope },
       { .name = "first", .func = SceneQueryFirst },
       { .name = "all", .func = SceneQueryAll },
       { .name = "count", .func = SceneQueryCount },
-      { .name = "any", .func = SceneQueryAny } }
+      { .name = "any", .func = SceneQueryAny },
+    },
   };
   for (const auto& method : methods) {
     lua_pushcclosure(state, method.func, method.name, 0);

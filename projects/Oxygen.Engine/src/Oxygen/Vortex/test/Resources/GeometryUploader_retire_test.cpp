@@ -142,8 +142,10 @@ protected:
   auto GeometryLimits() const
     -> oxygen::vortex::resources::GeometryUploader::MaintenanceLimits override
   {
-    return { .max_pending_upload_visits_per_frame = 1U,
-      .max_reclaimed_lods_per_frame = 1U };
+    return {
+      .max_pending_upload_visits_per_frame = 1U,
+      .max_reclaimed_lods_per_frame = 1U,
+    };
   }
 };
 
@@ -152,9 +154,11 @@ NOLINT_TEST_F(GeometryUploaderBudgetTest, CompletionBudgetCountsUnreadyVisits)
   BeginFrame(Slot { 0 });
   auto& geometry = GeoUploader();
   for (const auto* name : { "waiting", "canceled" }) {
-    (void)geometry.GetOrAllocate({ .asset_key = MakeGeometryAssetKey(name),
+    (void)geometry.GetOrAllocate({
+      .asset_key = MakeGeometryAssetKey(name),
       .lod_index = oxygen::data::LodIndex {},
-      .mesh = MakeValidTriangleMesh(name, false) });
+      .mesh = MakeValidTriangleMesh(name, false),
+    });
   }
   geometry.EnsureFrameResources();
   const auto tickets = geometry.GetPendingUploadTickets();

@@ -114,7 +114,10 @@ namespace {
     for (uint8_t index = 0; index < kAssetCount; ++index) {
       static_cast<void>(registry.Intern(
         AssetIdentity {
-          source, MakeAssetKey(static_cast<uint8_t>(index + 1U)), *view },
+          source,
+          MakeAssetKey(static_cast<uint8_t>(index + 1U)),
+          *view,
+        },
         view));
     }
     static_cast<void>(registry.ProcessExpiredViews(kBudget));
@@ -138,11 +141,20 @@ namespace {
       AssetIdentity { data::SourceInstanceId { 1 }, MakeAssetKey(2) },
       AssetIdentity { data::SourceInstanceId { 2 }, MakeAssetKey(1) },
       CookedResourceIdentity {
-        data::SourceInstanceId { 1 }, ResourceKind::kBuffer, 1 },
+        data::SourceInstanceId { 1 },
+        ResourceKind::kBuffer,
+        1,
+      },
       CookedResourceIdentity {
-        data::SourceInstanceId { 1 }, ResourceKind::kTexture, 1 },
+        data::SourceInstanceId { 1 },
+        ResourceKind::kTexture,
+        1,
+      },
       CookedResourceIdentity {
-        data::SourceInstanceId { 2 }, ResourceKind::kBuffer, 1 },
+        data::SourceInstanceId { 2 },
+        ResourceKind::kBuffer,
+        1,
+      },
       SyntheticResourceIdentity { ResourceKind::kBuffer, 1 },
       SyntheticResourceIdentity { ResourceKind::kTexture, 1 },
     };
@@ -164,9 +176,11 @@ namespace {
   NOLINT_TEST(ContentIdentityRegistry, LookupDoesNotRegisterMissingLocators)
   {
     ContentIdentityRegistry registry;
-    const ContentIdentity identity
-      = CookedResourceIdentity { data::SourceInstanceId { 1 },
-          ResourceKind::kPhysics, 3 };
+    const ContentIdentity identity = CookedResourceIdentity {
+      data::SourceInstanceId { 1 },
+      ResourceKind::kPhysics,
+      3,
+    };
     EXPECT_EQ(registry.Find(identity), ContentId {});
     EXPECT_EQ(registry.Resolve(ContentId { 1 }), nullptr);
     EXPECT_EQ(registry.Size(), 0U);
@@ -182,7 +196,10 @@ namespace {
     constexpr uint32_t kResourceCount = 4096;
     for (uint32_t index = 1; index <= kResourceCount; ++index) {
       static_cast<void>(registry.Intern(CookedResourceIdentity {
-        data::SourceInstanceId { 1 }, ResourceKind::kTexture, index }));
+        data::SourceInstanceId { 1 },
+        ResourceKind::kTexture,
+        index,
+      }));
     }
     EXPECT_EQ(registry.Resolve(id), locator);
     ASSERT_NE(locator, nullptr);
@@ -224,9 +241,11 @@ namespace {
       }
       uint32_t index = 1;
       for (auto& id : previous) {
-        id = registry.Intern(
-          CookedResourceIdentity { data::SourceInstanceId { generation },
-            ResourceKind::kBuffer, index++ });
+        id = registry.Intern(CookedResourceIdentity {
+          data::SourceInstanceId { generation },
+          ResourceKind::kBuffer,
+          index++,
+        });
       }
       if (generation == 1) {
         retained_bytes = memory.live_bytes;
@@ -243,7 +262,10 @@ namespace {
     const auto retired = registry.Intern(
       AssetIdentity { data::SourceInstanceId { 1 }, MakeAssetKey(1) });
     const auto live = registry.Intern(CookedResourceIdentity {
-      data::SourceInstanceId { 2 }, ResourceKind::kTexture, 1 });
+      data::SourceInstanceId { 2 },
+      ResourceKind::kTexture,
+      1,
+    });
     const auto synthetic
       = registry.Intern(SyntheticResourceIdentity { ResourceKind::kBuffer, 1 });
     registry.EraseSources({ data::SourceInstanceId { 1 } });
@@ -298,7 +320,10 @@ namespace {
     const auto start = std::chrono::steady_clock::now();
     for (uint32_t index = 1; index <= kCount; ++index) {
       static_cast<void>(registry.Intern(CookedResourceIdentity {
-        data::SourceInstanceId { 1 }, ResourceKind::kTexture, index }));
+        data::SourceInstanceId { 1 },
+        ResourceKind::kTexture,
+        index,
+      }));
     }
     const auto inserted = std::chrono::steady_clock::now();
     const auto cooked_bytes = memory.live_bytes;
@@ -306,11 +331,13 @@ namespace {
     uint64_t checksum = 0;
     for (uint32_t repeat = 0; repeat < kLookupRepeats; ++repeat) {
       for (uint32_t index = 1; index <= kCount; ++index) {
-        checksum
-          += registry
-               .Find(CookedResourceIdentity {
-                 data::SourceInstanceId { 1 }, ResourceKind::kTexture, index })
-               .get();
+        checksum += registry
+                      .Find(CookedResourceIdentity {
+                        data::SourceInstanceId { 1 },
+                        ResourceKind::kTexture,
+                        index,
+                      })
+                      .get();
       }
     }
     const auto looked_up = std::chrono::steady_clock::now();

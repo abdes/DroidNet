@@ -20,7 +20,7 @@ enum class ActionState : uint8_t {
 #define OXNPUT_ACTION_STATE(name, value)                                       \
   name = ((value) == 0 ? 0 : OXYGEN_FLAG(value)),
 #include <Oxygen/Core/Meta/Input/ActionState.inc>
-#undef OXNPUT_ACTION_STATE
+#undef OXNPUT_ACTION_STATE // NOLINT
 };
 
 OXYGEN_DEFINE_FLAGS_OPERATORS(ActionState)

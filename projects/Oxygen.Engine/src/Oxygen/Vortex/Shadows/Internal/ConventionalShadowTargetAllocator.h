@@ -146,7 +146,7 @@ namespace shadows::internal {
     auto PruneLocalChunks() -> void;
     auto IsRequested(const LocalShadowContentKey& key) const -> bool;
     std::shared_ptr<ShadowSlotPool> local_pool_ {
-      std::make_shared<ShadowSlotPool>()
+      std::make_shared<ShadowSlotPool>(),
     };
     std::vector<std::shared_ptr<SharedShadowBacking>> local_chunks_;
     std::unordered_multimap<std::uint64_t, std::weak_ptr<ShadowMapOwner>>

@@ -29,10 +29,14 @@ struct SceneTextureBindings {
   ShaderVisibleIndex custom_depth_srv { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex custom_stencil_srv { kInvalidShaderVisibleIndex };
   //! Indexed by GBufferIndex.
-  std::array<ShaderVisibleIndex, 6> gbuffer_srvs { kInvalidShaderVisibleIndex,
-    kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex,
-    kInvalidShaderVisibleIndex, kInvalidShaderVisibleIndex,
-    kInvalidShaderVisibleIndex };
+  std::array<ShaderVisibleIndex, 6> gbuffer_srvs {
+    kInvalidShaderVisibleIndex,
+    kInvalidShaderVisibleIndex,
+    kInvalidShaderVisibleIndex,
+    kInvalidShaderVisibleIndex,
+    kInvalidShaderVisibleIndex,
+    kInvalidShaderVisibleIndex,
+  };
   ShaderVisibleIndex scene_color_uav { kInvalidShaderVisibleIndex };
   ShaderVisibleIndex velocity_uav { kInvalidShaderVisibleIndex };
   //! SceneTextureSetupMode flags.

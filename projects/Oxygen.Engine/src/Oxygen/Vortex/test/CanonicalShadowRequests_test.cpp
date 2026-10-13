@@ -26,8 +26,24 @@ using namespace oxygen::vortex::shadows::internal;
 
 struct CanonicalShadowRequestTest : ::testing::Test {
   ShadowCasterDependencies pool;
-  std::array<float, 16> world { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0,
-    1 };
+  std::array<float, 16> world {
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+  };
   std::array<ShadowCasterSource, 1> sources {};
   std::array<MaterialShadingConstants, 1> materials {};
   std::array<uint64_t, 1> revisions { 1 };
@@ -53,9 +69,11 @@ struct CanonicalShadowRequestTest : ::testing::Test {
   auto Request() -> LocalShadowRequest
   {
     LocalShadowRequest request;
-    PreparedViewShadowInput view { .scene_generation = 7,
+    PreparedViewShadowInput view {
+      .scene_generation = 7,
       .shadow_caster_dependencies = dependencies,
-      .shadow_dependencies_available = true };
+      .shadow_dependencies_available = true,
+    };
     PrepareLocalShadowRequest(
       view, light, LightSelectionIndex { 0 }, 512, 1, request);
     return request;

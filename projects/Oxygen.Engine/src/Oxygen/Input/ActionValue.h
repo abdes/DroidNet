@@ -21,7 +21,7 @@ enum class ActionValueType : uint8_t {
 // NOLINTNEXTLINE(*-macro-*)
 #define OXNPUT_ACTION_VALUE_TYPE(name, value) name = value,
 #include <Oxygen/Core/Meta/Input/ActionValue.inc>
-#undef OXNPUT_ACTION_VALUE_TYPE
+#undef OXNPUT_ACTION_VALUE_TYPE // NOLINT
 };
 
 OXGN_NPUT_NDAPI auto to_string(ActionValueType value) noexcept

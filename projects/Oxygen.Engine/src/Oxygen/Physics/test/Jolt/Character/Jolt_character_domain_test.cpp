@@ -43,7 +43,9 @@ NOLINT_TEST_F(JoltCharacterDomainTest, MoveReturnsDesiredVelocity)
 
   const auto move_result = characters.MoveCharacter(world_id, character_id,
     character::CharacterMoveInput {
-      .desired_velocity = Vec3 { 2.0F, 0.0F, -1.0F }, .jump_pressed = false },
+      .desired_velocity = Vec3 { 2.0F, 0.0F, -1.0F },
+      .jump_pressed = false,
+    },
     1.0F / 60.0F);
   ASSERT_TRUE(move_result.has_value());
   EXPECT_FLOAT_EQ(move_result.value().state.velocity.x, 2.0F);

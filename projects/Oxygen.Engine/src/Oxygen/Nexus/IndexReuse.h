@@ -50,7 +50,7 @@ enum class FinalizeDisposition {
   kReusable,
   kExhausted,
   kClosed,
-  kAlreadyResolved
+  kAlreadyResolved,
 };
 
 template <IndexLike IndexType> struct FinalizeResult {
@@ -292,7 +292,7 @@ public:
 private:
   friend struct IndexReuseTestAccess;
   std::shared_ptr<detail::IndexReuseState> state_ {
-    std::make_shared<detail::IndexReuseState>()
+    std::make_shared<detail::IndexReuseState>(),
   };
 };
 

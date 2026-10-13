@@ -125,14 +125,16 @@ protected:
   void SetUp() override
   {
     // Create minimal test data
-    vertices_ = { {
-      .position = { 0.0F, 0.0F, 0.0F },
-      .normal = { 0.0F, 1.0F, 0.0F },
-      .texcoord = { 0.0F, 0.0F },
-      .tangent = { 1.0F, 0.0F, 0.0F },
-      .bitangent = {},
-      .color = {},
-    } };
+    vertices_ = {
+      {
+        .position = { 0.0F, 0.0F, 0.0F },
+        .normal = { 0.0F, 1.0F, 0.0F },
+        .texcoord = { 0.0F, 0.0F },
+        .tangent = { 1.0F, 0.0F, 0.0F },
+        .bitangent = {},
+        .color = {},
+      },
+    };
 
     indices_ = { 0 };
 
@@ -189,14 +191,15 @@ protected:
   void SetUp() override
   {
     // Provide a small but non-trivial owned storage set
-    vertices_ = { {
-                    .position = { 0.0F, 0.0F, 0.0F },
-                    .normal = { 0.0F, 1.0F, 0.0F },
-                    .texcoord = { 0.0F, 0.0F },
-                    .tangent = { 1.0F, 0.0F, 0.0F },
-                    .bitangent = {},
-                    .color = {},
-                  },
+    vertices_ = {
+      {
+        .position = { 0.0F, 0.0F, 0.0F },
+        .normal = { 0.0F, 1.0F, 0.0F },
+        .texcoord = { 0.0F, 0.0F },
+        .tangent = { 1.0F, 0.0F, 0.0F },
+        .bitangent = {},
+        .color = {},
+      },
       {
         .position = { 1.0F, 0.0F, 0.0F },
         .normal = { 0.0F, 1.0F, 0.0F },
@@ -204,7 +207,8 @@ protected:
         .tangent = { 1.0F, 0.0F, 0.0F },
         .bitangent = {},
         .color = {},
-      } };
+      },
+    };
     indices_ = { 0, 1 };
     material_ = MaterialAsset::CreateDefault();
 
@@ -434,26 +438,34 @@ NOLINT_TEST(MeshBuilderErrorMessageTest, BuildWithActiveSubMesh_MentionsActive)
 {
   // Arrange
   MeshBuilder builder;
-  std::vector<Vertex> vertices = { { .position = { 0, 0, 0 },
-                                     .normal = {},
-                                     .texcoord = {},
-                                     .tangent = {},
-                                     .bitangent = {},
-                                     .color = {} },
-    { .position = { 1, 0, 0 },
+  std::vector<Vertex> vertices = {
+    {
+      .position = { 0, 0, 0 },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} } };
+      .color = {},
+    },
+    {
+      .position = { 1, 0, 0 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+  };
   std::vector<uint32_t> indices { 0, 1 };
   auto material = MaterialAsset::CreateDefault();
   builder.WithVertices(vertices).WithIndices(indices);
   auto sm = builder.BeginSubMesh("sm", material);
-  sm.WithMeshView({ .first_index = 0,
+  sm.WithMeshView({
+    .first_index = 0,
     .index_count = 2,
     .first_vertex = 0,
-    .vertex_count = 2 });
+    .vertex_count = 2,
+  });
 
   // Act & Assert
   EXPECT_DEATH([[maybe_unused]] auto _ = builder.Build(), "active SubMesh");
@@ -464,26 +476,34 @@ NOLINT_TEST_F(MeshBuilderErrorTest, SubMeshBuilderReuseAfterEnd_Throws)
 {
   // Arrange
   MeshBuilder builder;
-  std::vector<Vertex> vertices = { { .position = { 0, 0, 0 },
-                                     .normal = {},
-                                     .texcoord = {},
-                                     .tangent = {},
-                                     .bitangent = {},
-                                     .color = {} },
-    { .position = { 1, 0, 0 },
+  std::vector<Vertex> vertices = {
+    {
+      .position = { 0, 0, 0 },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} } };
+      .color = {},
+    },
+    {
+      .position = { 1, 0, 0 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+  };
   std::vector<uint32_t> indices { 0, 1 };
   auto material = MaterialAsset::CreateDefault();
   builder.WithVertices(vertices).WithIndices(indices);
   auto submesh_builder = builder.BeginSubMesh("sm", material);
-  submesh_builder.WithMeshView({ .first_index = 0,
+  submesh_builder.WithMeshView({
+    .first_index = 0,
     .index_count = 2,
     .first_vertex = 0,
-    .vertex_count = 2 });
+    .vertex_count = 2,
+  });
   builder.EndSubMesh(std::move(submesh_builder));
 
   // Act & Assert: attempt to reuse ended builder (undefined behavior -> throw)
@@ -497,26 +517,34 @@ NOLINT_TEST_F(MeshBuilderErrorTest, SubMeshBuilderDoubleEnd_Throws)
 {
   // Arrange
   MeshBuilder builder;
-  std::vector<Vertex> vertices = { { .position = { 0, 0, 0 },
-                                     .normal = {},
-                                     .texcoord = {},
-                                     .tangent = {},
-                                     .bitangent = {},
-                                     .color = {} },
-    { .position = { 1, 0, 0 },
+  std::vector<Vertex> vertices = {
+    {
+      .position = { 0, 0, 0 },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} } };
+      .color = {},
+    },
+    {
+      .position = { 1, 0, 0 },
+      .normal = {},
+      .texcoord = {},
+      .tangent = {},
+      .bitangent = {},
+      .color = {},
+    },
+  };
   std::vector<uint32_t> indices { 0, 1 };
   auto material = MaterialAsset::CreateDefault();
   builder.WithVertices(vertices).WithIndices(indices);
   auto submesh_builder = builder.BeginSubMesh("sm", material);
-  submesh_builder.WithMeshView({ .first_index = 0,
+  submesh_builder.WithMeshView({
+    .first_index = 0,
     .index_count = 2,
     .first_vertex = 0,
-    .vertex_count = 2 });
+    .vertex_count = 2,
+  });
   builder.EndSubMesh(std::move(submesh_builder));
 
   // Act & Assert: second EndSubMesh on already-ended builder
@@ -663,10 +691,12 @@ NOLINT_TEST_F(MeshBuilderDeathTest, BuildWithoutStorage_Death)
   // Arrange
   MeshBuilder builder;
   builder.BeginSubMesh("test", material_)
-    .WithMeshView({ .first_index = 0,
+    .WithMeshView({
+      .first_index = 0,
       .index_count = 1,
       .first_vertex = 0,
-      .vertex_count = 1 })
+      .vertex_count = 1,
+    })
     .EndSubMesh();
 
   // Act & Assert
@@ -681,10 +711,12 @@ NOLINT_TEST_F(MeshBuilderDeathTest, IndicesOnlyThenBuild_Death)
   MeshBuilder builder;
   builder.WithIndices(indices_)
     .BeginSubMesh("test", material_)
-    .WithMeshView({ .first_index = 0,
+    .WithMeshView({
+      .first_index = 0,
       .index_count = 1,
       .first_vertex = 0,
-      .vertex_count = 1 }) // vertex_count placeholder
+      .vertex_count = 1,
+    }) // vertex_count placeholder
     .EndSubMesh();
 
   // Act & Assert
@@ -698,10 +730,12 @@ NOLINT_TEST_F(MeshBuilderDeathTest, VerticesOnlyThenBuild_Death)
   MeshBuilder builder;
   builder.WithVertices(vertices_)
     .BeginSubMesh("test", material_)
-    .WithMeshView({ .first_index = 0,
+    .WithMeshView({
+      .first_index = 0,
       .index_count = 0, // Intentionally zero
       .first_vertex = 0,
-      .vertex_count = static_cast<uint32_t>(vertices_.size()) })
+      .vertex_count = static_cast<uint32_t>(vertices_.size()),
+    })
     .EndSubMesh();
 
   // Act & Assert

@@ -61,11 +61,15 @@ struct ContentAcquisition final {
     if (!acquired) {
       return {};
     }
-    ContentPublication publication { .value = acquired->value,
+    ContentPublication publication {
+      .value = acquired->value,
       .entry = acquired->ticket.Entry(),
-      .type = T::ClassTypeId() };
-    return { .publication = std::move(publication),
-      .owner = releases.Own(cache, std::move(*acquired)) };
+      .type = T::ClassTypeId(),
+    };
+    return {
+      .publication = std::move(publication),
+      .owner = releases.Own(cache, std::move(*acquired)),
+    };
   }
 };
 
@@ -88,15 +92,21 @@ struct SharedContentResult final {
     if (auto acquired
       = cache.StoreAndAcquire(key, value, CheckoutOwner::kInternal,
         ContentReleaseQueue::Cache::UsageKind::kPin)) {
-      ContentPublication publication { .value = std::move(value),
+      ContentPublication publication {
+        .value = std::move(value),
         .entry = acquired->ticket.Entry(),
-        .type = T::ClassTypeId() };
-      return { .publication = std::move(publication),
-        .residency_hold = releases.Own(cache, std::move(*acquired)) };
+        .type = T::ClassTypeId(),
+      };
+      return {
+        .publication = std::move(publication),
+        .residency_hold = releases.Own(cache, std::move(*acquired)),
+      };
     }
-    return { .publication
+    return {
+      .publication
       = { .value = std::move(value), .entry = {}, .type = T::ClassTypeId() },
-      .residency_hold = {} };
+      .residency_hold = {},
+    };
   }
 
   template <IsTyped T>
@@ -109,11 +119,15 @@ struct SharedContentResult final {
     if (!acquired) {
       return {};
     }
-    ContentPublication publication { .value = acquired->value,
+    ContentPublication publication {
+      .value = acquired->value,
       .entry = acquired->ticket.Entry(),
-      .type = T::ClassTypeId() };
-    return { .publication = std::move(publication),
-      .residency_hold = releases.Own(cache, std::move(*acquired)) };
+      .type = T::ClassTypeId(),
+    };
+    return {
+      .publication = std::move(publication),
+      .residency_hold = releases.Own(cache, std::move(*acquired)),
+    };
   }
 };
 

@@ -24,7 +24,7 @@ class SceneNodeImpl;
 enum class FilterResult : uint8_t {
   kAccept, //!< Visit node and traverse children
   kReject, //!< Skip node, but traverse children
-  kRejectSubTree //!< Skip node and skip its entire subtree
+  kRejectSubTree, //!< Skip node and skip its entire subtree
 };
 OXGN_SCN_API const char* to_string(FilterResult value);
 
@@ -32,7 +32,7 @@ OXGN_SCN_API const char* to_string(FilterResult value);
 enum class VisitResult : uint8_t {
   kContinue, //!< Continue traversal as normal
   kSkipSubtree, //!< Do not traverse this node's children
-  kStop //!< Stop traversal entirely
+  kStop, //!< Stop traversal entirely
 };
 OXGN_SCN_API const char* to_string(VisitResult value);
 
@@ -40,7 +40,7 @@ OXGN_SCN_API const char* to_string(VisitResult value);
 enum class TraversalOrder : uint8_t {
   kBreadthFirst, //!< Visit nodes level by level (first child to last sibling)
   kPreOrder, //!< Visit nodes before their children (depth-first pre-order)
-  kPostOrder //!< Visit nodes after their children (depth-first post-order)
+  kPostOrder, //!< Visit nodes after their children (depth-first post-order)
 };
 OXGN_SCN_API const char* to_string(TraversalOrder value);
 

@@ -145,8 +145,14 @@ NOLINT_TEST_F(CommandLineParsingTest, ParsesSeparateVModuleArgs)
   ScopedLogCapture capture("test_cmdline", loguru::Verbosity_9);
 
   // Test: program --vmodule module1=2 --vmodule module2=3
-  ParseArgs({ "program", "--vmodule", "module1=2", "--vmodule", "module2=3",
-    "remaining" });
+  ParseArgs({
+    "program",
+    "--vmodule",
+    "module1=2",
+    "--vmodule",
+    "module2=3",
+    "remaining",
+  });
 
   // Verify arguments are properly removed
   EXPECT_EQ(GetRemainingArgCount(), 2); // program + remaining

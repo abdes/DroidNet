@@ -91,7 +91,7 @@ namespace {
       mutations_.push_back(MutationRecord {
         .sequence = next_sequence_++,
         .payload = LightMutation { .type = LightMutationType::kChanged,
-          .node_handle = node_handle },
+          .node_handle = node_handle, },
       });
     }
 
@@ -103,7 +103,7 @@ namespace {
       mutations_.push_back(MutationRecord {
         .sequence = next_sequence_++,
         .payload = CameraMutation { .type = CameraMutationType::kChanged,
-          .node_handle = node_handle },
+          .node_handle = node_handle, },
       });
     }
 
@@ -115,7 +115,7 @@ namespace {
       mutations_.push_back(MutationRecord {
         .sequence = next_sequence_++,
         .payload = TransformMutation { .type = TransformMutationType::kChanged,
-          .node_handle = node_handle },
+          .node_handle = node_handle, },
       });
     }
 
@@ -128,7 +128,7 @@ namespace {
         .sequence = next_sequence_++,
         .payload
         = NodeDestroyedMutation { .type = NodeDestroyedMutationType::kDestroyed,
-          .node_handle = node_handle },
+          .node_handle = node_handle, },
       });
     }
 

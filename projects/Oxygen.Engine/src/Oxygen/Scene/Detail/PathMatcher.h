@@ -51,7 +51,7 @@ enum class MatchResult {
   //! Pattern partially matched, continue deeper in this subtree
   kPartialMatch,
   //! Pattern completely matched - this node is a target!
-  kCompleteMatch
+  kCompleteMatch,
 };
 
 //! Concept defining requirements for string matching strategies.

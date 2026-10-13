@@ -146,11 +146,12 @@ auto CommandRecording::Finalize(bool receipt) noexcept -> SubmissionResult
   try {
     // Preserve view-owner attribution without allocating the static label on
     // every submit. Observer/Tracy consumers read the description at entry.
-    thread_local profiling::CpuProfileScopeDesc finalize_profile { .label
-      = "Graphics.FinalizeCommandRecorder",
+    thread_local profiling::CpuProfileScopeDesc finalize_profile {
+      .label = "Graphics.FinalizeCommandRecorder",
       .variables
       = profiling::Vars(profiling::Var("recording", std::string_view {})),
-      .category = profiling::ProfileCategory::kGeneral };
+      .category = profiling::ProfileCategory::kGeneral,
+    };
     finalize_profile.variables[0].value.assign(command_list_->GetName());
     const profiling::CpuProfileScope cpu_scope(finalize_profile);
 

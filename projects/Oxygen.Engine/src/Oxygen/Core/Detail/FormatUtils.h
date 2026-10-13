@@ -19,7 +19,7 @@ enum class FormatKind : uint8_t {
   kInteger,
   kNormalized,
   kFloat,
-  kDepthStencil
+  kDepthStencil,
 };
 
 //! Contains information about a specific graphics format.

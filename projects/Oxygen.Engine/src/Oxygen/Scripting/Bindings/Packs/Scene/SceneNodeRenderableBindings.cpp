@@ -823,37 +823,67 @@ auto RegisterSceneNodeRenderableMethods(
   constexpr auto methods = std::to_array<luaL_Reg>({
     { .name = "renderable", .func = SceneNodeRenderable },
     { .name = "has_renderable", .func = SceneNodeHasRenderable },
-    { .name = "renderable_has_geometry",
-      .func = SceneNodeRenderableHasGeometry },
-    { .name = "renderable_set_geometry",
-      .func = SceneNodeRenderableSetGeometry },
-    { .name = "renderable_get_geometry",
-      .func = SceneNodeRenderableGetGeometry },
+    {
+      .name = "renderable_has_geometry",
+      .func = SceneNodeRenderableHasGeometry,
+    },
+    {
+      .name = "renderable_set_geometry",
+      .func = SceneNodeRenderableSetGeometry,
+    },
+    {
+      .name = "renderable_get_geometry",
+      .func = SceneNodeRenderableGetGeometry,
+    },
     { .name = "renderable_detach", .func = SceneNodeRenderableDetach },
-    { .name = "renderable_get_lod_policy",
-      .func = SceneNodeRenderableGetLodPolicy },
-    { .name = "renderable_set_lod_policy",
-      .func = SceneNodeRenderableSetLodPolicy },
-    { .name = "renderable_get_active_lod_index",
-      .func = SceneNodeRenderableGetActiveLodIndex },
-    { .name = "renderable_get_effective_lod_count",
-      .func = SceneNodeRenderableGetEffectiveLodCount },
-    { .name = "renderable_is_submesh_visible",
-      .func = SceneNodeRenderableIsSubmeshVisible },
-    { .name = "renderable_set_submesh_visible",
-      .func = SceneNodeRenderableSetSubmeshVisible },
-    { .name = "renderable_set_all_submeshes_visible",
-      .func = SceneNodeRenderableSetAllSubmeshesVisible },
-    { .name = "renderable_set_material_override",
-      .func = SceneNodeRenderableSetMaterialOverride },
-    { .name = "renderable_clear_material_override",
-      .func = SceneNodeRenderableClearMaterialOverride },
-    { .name = "renderable_resolve_submesh_material",
-      .func = SceneNodeRenderableResolveSubmeshMaterial },
-    { .name = "renderable_get_world_bounding_sphere",
-      .func = SceneNodeRenderableGetWorldBoundingSphere },
-    { .name = "renderable_get_world_submesh_aabb",
-      .func = SceneNodeRenderableGetWorldSubmeshAabb },
+    {
+      .name = "renderable_get_lod_policy",
+      .func = SceneNodeRenderableGetLodPolicy,
+    },
+    {
+      .name = "renderable_set_lod_policy",
+      .func = SceneNodeRenderableSetLodPolicy,
+    },
+    {
+      .name = "renderable_get_active_lod_index",
+      .func = SceneNodeRenderableGetActiveLodIndex,
+    },
+    {
+      .name = "renderable_get_effective_lod_count",
+      .func = SceneNodeRenderableGetEffectiveLodCount,
+    },
+    {
+      .name = "renderable_is_submesh_visible",
+      .func = SceneNodeRenderableIsSubmeshVisible,
+    },
+    {
+      .name = "renderable_set_submesh_visible",
+      .func = SceneNodeRenderableSetSubmeshVisible,
+    },
+    {
+      .name = "renderable_set_all_submeshes_visible",
+      .func = SceneNodeRenderableSetAllSubmeshesVisible,
+    },
+    {
+      .name = "renderable_set_material_override",
+      .func = SceneNodeRenderableSetMaterialOverride,
+    },
+    {
+      .name = "renderable_clear_material_override",
+      .func = SceneNodeRenderableClearMaterialOverride,
+    },
+    {
+      .name = "renderable_resolve_submesh_material",
+      .func = SceneNodeRenderableResolveSubmeshMaterial,
+    },
+    {
+      .name = "renderable_get_world_bounding_sphere",
+      .func = SceneNodeRenderableGetWorldBoundingSphere,
+    },
+    {
+      .name = "renderable_get_world_submesh_aabb",
+      .func = SceneNodeRenderableGetWorldSubmeshAabb,
+    },
   });
 
   for (const auto& reg : methods) {

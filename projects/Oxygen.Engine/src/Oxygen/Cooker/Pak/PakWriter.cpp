@@ -57,7 +57,10 @@ struct WriterState final {
   uint64_t cursor = 0;
   pak::PakStreamingCrc32 crc
     = pak::PakStreamingCrc32(pak::PakStreamingCrc32::Config {
-      .enabled = false, .skip_offset = 0, .skip_size = 0 });
+      .enabled = false,
+      .skip_offset = 0,
+      .skip_size = 0,
+    });
 };
 
 auto AddDiagnostic(WriterState& state,

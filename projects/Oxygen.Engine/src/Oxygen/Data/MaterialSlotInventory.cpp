@@ -37,8 +37,10 @@ namespace {
   auto LocationOf(const MaterialSlotBinding& binding)
     -> MaterialSlotBindingLocation
   {
-    return { .lod_index = binding.lod_index,
-      .submesh_index = binding.submesh_index };
+    return {
+      .lod_index = binding.lod_index,
+      .submesh_index = binding.submesh_index,
+    };
   }
 
   auto HashRecord(const std::string& record) -> base::Sha256Digest

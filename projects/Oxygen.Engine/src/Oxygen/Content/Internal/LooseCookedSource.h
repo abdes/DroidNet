@@ -27,7 +27,7 @@ public:
   enum class OpenMode : uint8_t {
     kIndexOnly,
     kValidateMetadata,
-    kVerifyContent
+    kVerifyContent,
   };
 
   explicit LooseCookedSource(std::filesystem::path cooked_root,

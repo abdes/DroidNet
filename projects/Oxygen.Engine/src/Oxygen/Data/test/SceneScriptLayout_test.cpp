@@ -33,7 +33,9 @@ protected:
       = static_cast<uint8_t>(data::AssetType::kScene);
     descriptor_.header.version = world::kSceneAssetVersion;
     descriptor_.nodes = {
-      .offset = sizeof(descriptor_), .count = 1U, .entry_size = sizeof(node_)
+      .offset = sizeof(descriptor_),
+      .count = 1U,
+      .entry_size = sizeof(node_),
     };
     descriptor_.scene_strings.offset = sizeof(descriptor_) + sizeof(node_);
     descriptor_.scene_strings.size = 1U;
@@ -42,17 +44,19 @@ protected:
     descriptor_.component_table_count = 1U;
     table_.component_type
       = static_cast<uint32_t>(data::ComponentType::kScripting);
-    table_.table = { .offset
-      = descriptor_.component_table_directory_offset + sizeof(table_),
+    table_.table = {
+      .offset = descriptor_.component_table_directory_offset + sizeof(table_),
       .count = 1U,
-      .entry_size = sizeof(component_) };
+      .entry_size = sizeof(component_),
+    };
     component_.slot_count = 2U;
     node_.node_id = data::AssetKey::FromVirtualPath("/test/root");
     node_.parent_index = 0U;
-    descriptor_.script_slots
-      = { .offset = table_.table.offset + sizeof(component_),
-          .count = 2U,
-          .entry_size = sizeof(script::ScriptSlotRecord) };
+    descriptor_.script_slots = {
+      .offset = table_.table.offset + sizeof(component_),
+      .count = 2U,
+      .entry_size = sizeof(script::ScriptSlotRecord),
+    };
     auto offset = descriptor_.script_slots.offset + sizeof(slots_);
     for (size_t i = 0; i < slots_.size(); ++i) {
       auto& slot = slots_.at(i);

@@ -58,30 +58,38 @@ NOLINT_TEST_F(MeshBoundingSphereOwnedTest, ComputedSphereContainsAllVertices)
 {
   // Arrange
   std::vector<Vertex> vertices {
-    { .position = { -1.0F, -2.0F, 0.5F },
+    {
+      .position = { -1.0F, -2.0F, 0.5F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} },
-    { .position = { 3.0F, 1.0F, -0.5F },
+      .color = {},
+    },
+    {
+      .position = { 3.0F, 1.0F, -0.5F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} },
-    { .position = { 0.0F, 4.0F, 2.0F },
+      .color = {},
+    },
+    {
+      .position = { 0.0F, 4.0F, 2.0F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} },
-    { .position = { -2.0F, 0.0F, -3.0F },
+      .color = {},
+    },
+    {
+      .position = { -2.0F, 0.0F, -3.0F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} },
+      .color = {},
+    },
   };
   std::vector<std::uint32_t> indices { 0, 1, 2, 2, 3, 0 };
   const glm::vec3 bounds_min { -2.0F, -2.0F, -3.0F };
@@ -94,10 +102,12 @@ NOLINT_TEST_F(MeshBoundingSphereOwnedTest, ComputedSphereContainsAllVertices)
     .WithIndices(indices)
     .WithDescriptor(desc)
     .BeginSubMesh("owned", material)
-    .WithMeshView({ .first_index = 0,
+    .WithMeshView({
+      .first_index = 0,
       .index_count = static_cast<uint32_t>(indices.size()),
       .first_vertex = 0,
-      .vertex_count = static_cast<uint32_t>(vertices.size()) })
+      .vertex_count = static_cast<uint32_t>(vertices.size()),
+    })
     .EndSubMesh();
   auto mesh = builder.Build();
 
@@ -123,30 +133,38 @@ NOLINT_TEST_F(
 {
   // Arrange: reuse geometry from owned test to ensure identical bounds
   std::vector<Vertex> vertices {
-    { .position = { -1.0F, -2.0F, 0.5F },
+    {
+      .position = { -1.0F, -2.0F, 0.5F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} },
-    { .position = { 3.0F, 1.0F, -0.5F },
+      .color = {},
+    },
+    {
+      .position = { 3.0F, 1.0F, -0.5F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} },
-    { .position = { 0.0F, 4.0F, 2.0F },
+      .color = {},
+    },
+    {
+      .position = { 0.0F, 4.0F, 2.0F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} },
-    { .position = { -2.0F, 0.0F, -3.0F },
+      .color = {},
+    },
+    {
+      .position = { -2.0F, 0.0F, -3.0F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
-      .color = {} },
+      .color = {},
+    },
   };
   std::vector<std::uint32_t> indices { 0, 1, 2, 2, 3, 0 };
   const glm::vec3 bounds_min { -2.0F, -2.0F, -3.0F };
@@ -158,10 +176,12 @@ NOLINT_TEST_F(
   temp_builder.WithVertices(vertices)
     .WithIndices(indices)
     .BeginSubMesh("tmp", MaterialAsset::CreateDefault())
-    .WithMeshView({ .first_index = 0,
+    .WithMeshView({
+      .first_index = 0,
       .index_count = static_cast<uint32_t>(indices.size()),
       .first_vertex = 0,
-      .vertex_count = static_cast<uint32_t>(vertices.size()) })
+      .vertex_count = static_cast<uint32_t>(vertices.size()),
+    })
     .EndSubMesh();
   auto temp_mesh = temp_builder.Build();
 
@@ -203,10 +223,12 @@ NOLINT_TEST_F(
   builder.WithBufferResources(vertex_buffer, index_buffer)
     .WithDescriptor(desc)
     .BeginSubMesh("ref", material)
-    .WithMeshView({ .first_index = 0,
+    .WithMeshView({
+      .first_index = 0,
       .index_count = static_cast<uint32_t>(indices.size()),
       .first_vertex = 0,
-      .vertex_count = static_cast<uint32_t>(vertices.size()) })
+      .vertex_count = static_cast<uint32_t>(vertices.size()),
+    })
     .EndSubMesh();
   auto mesh = builder.Build();
 

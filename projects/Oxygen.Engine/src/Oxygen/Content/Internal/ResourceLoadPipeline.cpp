@@ -179,8 +179,10 @@ namespace {
       return {};
     }
     return WithResourceType(publication.type, [&]<typename T>() -> auto {
-      return ContentAcquisition { .publication = publication,
-        .owner = publication.Acquire<T>(cache, releases, owner) };
+      return ContentAcquisition {
+        .publication = publication,
+        .owner = publication.Acquire<T>(cache, releases, owner),
+      };
     });
   }
 
@@ -457,10 +459,11 @@ namespace {
     if (callbacks.on_resource_cache_miss) {
       callbacks.on_resource_cache_miss(resource_type);
     }
-    const InFlightOperationTable::RequestMeta meta { .priority
-      = request.priority,
+    const InFlightOperationTable::RequestMeta meta {
+      .priority = request.priority,
       .intent = request.intent,
-      .sequence = request_sequence };
+      .sequence = request_sequence,
+    };
     if (auto joined = in_flight_ops.Find(resource_type, key.get(), meta)) {
       if (callbacks.on_resource_joined_inflight) {
         callbacks.on_resource_joined_inflight(resource_type);
@@ -559,7 +562,9 @@ auto ResourceLoadPipeline::LoadErased(const TypeId resource_type,
     : 0U;
   co_return co_await RunResourceLoadSharedStages(resource_type, key,
     SourceReadAccess {
-      .registry = observer_ptr { &source_registry_ }, .instance = source_id },
+      .registry = observer_ptr { &source_registry_ },
+      .instance = source_id,
+    },
     content_cache_, in_flight_ops_, callbacks_, releases_, request, owner,
     request_sequence, std::move(decode_fn));
 }

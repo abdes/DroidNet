@@ -11,6 +11,6 @@ enum class ShadowUseError : std::uint8_t {
   kNotReady,
   kWrongBackend,
   kWrongQueue,
-  kAllocationFailed
+  kAllocationFailed,
 };
 }

@@ -446,9 +446,11 @@ namespace {
       desc.bc7_quality = Bc7Quality::kNone;
     }
 
-    return { .cooked
+    return {
+      .cooked
       = CookTexture(std::move(image), desc, policy, with_content_hashing),
-      .decode_duration = decode_duration };
+      .decode_duration = decode_duration,
+    };
   }
 
   //! Decode and cook a single source payload.
@@ -497,14 +499,18 @@ namespace {
         = std::chrono::duration_cast<std::chrono::microseconds>(
           decode_end - decode_start);
       if (!decoded) {
-        return { .cooked = Err(decoded.error()),
-          .decode_duration = decode_duration };
+        return {
+          .cooked = Err(decoded.error()),
+          .decode_duration = decode_duration,
+        };
       }
 
       auto float_image = ConvertToFloatImage(std::move(*decoded));
       if (!float_image) {
-        return { .cooked = Err(float_image.error()),
-          .decode_duration = decode_duration };
+        return {
+          .cooked = Err(float_image.error()),
+          .decode_duration = decode_duration,
+        };
       }
 
       EquirectToCubeOptions options {
@@ -514,8 +520,10 @@ namespace {
       auto cube
         = ConvertEquirectangularToCube(std::move(float_image.value()), options);
       if (!cube) {
-        return { .cooked = Err(cube.error()),
-          .decode_duration = decode_duration };
+        return {
+          .cooked = Err(cube.error()),
+          .decode_duration = decode_duration,
+        };
       }
 
       return CookDecodedImage(std::move(*cube), desc, policy,
@@ -530,14 +538,18 @@ namespace {
         = std::chrono::duration_cast<std::chrono::microseconds>(
           decode_end - decode_start);
       if (!decoded) {
-        return { .cooked = Err(decoded.error()),
-          .decode_duration = decode_duration };
+        return {
+          .cooked = Err(decoded.error()),
+          .decode_duration = decode_duration,
+        };
       }
 
       auto cube = ExtractCubeFacesFromLayoutImage(*decoded, cubemap_layout);
       if (!cube) {
-        return { .cooked = Err(cube.error()),
-          .decode_duration = decode_duration };
+        return {
+          .cooked = Err(cube.error()),
+          .decode_duration = decode_duration,
+        };
       }
 
       return CookDecodedImage(std::move(*cube), desc, policy,
@@ -551,8 +563,10 @@ namespace {
       = std::chrono::duration_cast<std::chrono::microseconds>(
         decode_end - decode_start);
     if (!decoded) {
-      return { .cooked = Err(decoded.error()),
-        .decode_duration = decode_duration };
+      return {
+        .cooked = Err(decoded.error()),
+        .decode_duration = decode_duration,
+      };
     }
 
     return CookDecodedImage(std::move(*decoded), desc, policy,
@@ -614,20 +628,26 @@ namespace {
       decode_accum += std::chrono::duration_cast<std::chrono::microseconds>(
         decode_end - decode_start);
       if (!decoded) {
-        return { .cooked = Err(decoded.error()),
-          .decode_duration = decode_accum };
+        return {
+          .cooked = Err(decoded.error()),
+          .decode_duration = decode_accum,
+        };
       }
 
       const auto& meta = decoded->Meta();
       if (meta.mip_levels != 1) {
-        return { .cooked = Err(TextureImportError::kInvalidMipPolicy),
-          .decode_duration = decode_accum };
+        return {
+          .cooked = Err(TextureImportError::kInvalidMipPolicy),
+          .decode_duration = decode_accum,
+        };
       }
 
       if (source.subresource.depth_slice != 0
         && desc.texture_type != TextureType::kTexture3D) {
-        return { .cooked = Err(TextureImportError::kUnsupportedFormat),
-          .decode_duration = decode_accum };
+        return {
+          .cooked = Err(TextureImportError::kUnsupportedFormat),
+          .decode_duration = decode_accum,
+        };
       }
 
       decoded_images.push_back(std::move(*decoded));
@@ -638,12 +658,16 @@ namespace {
     for (size_t i = 1; i < decoded_images.size(); ++i) {
       const auto& meta = decoded_images[i].Meta();
       if (meta.width != first_meta.width || meta.height != first_meta.height) {
-        return { .cooked = Err(TextureImportError::kDimensionMismatch),
-          .decode_duration = decode_accum };
+        return {
+          .cooked = Err(TextureImportError::kDimensionMismatch),
+          .decode_duration = decode_accum,
+        };
       }
       if (meta.format != first_meta.format) {
-        return { .cooked = Err(TextureImportError::kOutputFormatInvalid),
-          .decode_duration = decode_accum };
+        return {
+          .cooked = Err(TextureImportError::kOutputFormatInvalid),
+          .decode_duration = decode_accum,
+        };
       }
     }
 
@@ -653,8 +677,10 @@ namespace {
       for (size_t i = 0; i < decoded_images.size(); ++i) {
         const auto face_idx = subresources[i].array_layer;
         if (face_idx >= kCubeFaceCount || filled[face_idx]) {
-          return { .cooked = Err(TextureImportError::kArrayLayerCountInvalid),
-            .decode_duration = decode_accum };
+          return {
+            .cooked = Err(TextureImportError::kArrayLayerCountInvalid),
+            .decode_duration = decode_accum,
+          };
         }
         faces[face_idx] = std::move(decoded_images[i]);
         filled[face_idx] = true;
@@ -662,8 +688,10 @@ namespace {
 
       for (const auto present : filled) {
         if (!present) {
-          return { .cooked = Err(TextureImportError::kArrayLayerCountInvalid),
-            .decode_duration = decode_accum };
+          return {
+            .cooked = Err(TextureImportError::kArrayLayerCountInvalid),
+            .decode_duration = decode_accum,
+          };
         }
       }
 
@@ -678,14 +706,18 @@ namespace {
     }
 
     if (desc.texture_type == TextureType::kTextureCubeArray) {
-      return { .cooked = Err(TextureImportError::kUnsupportedFormat),
-        .decode_duration = decode_accum };
+      return {
+        .cooked = Err(TextureImportError::kUnsupportedFormat),
+        .decode_duration = decode_accum,
+      };
     }
     if (desc.texture_type == TextureType::kTexture3D) {
       auto volume = AssembleVolumeFromSlices(decoded_images, subresources);
       if (!volume) {
-        return { .cooked = Err(volume.error()),
-          .decode_duration = decode_accum };
+        return {
+          .cooked = Err(volume.error()),
+          .decode_duration = decode_accum,
+        };
       }
 
       return CookDecodedImage(std::move(*volume), desc, policy,
@@ -693,8 +725,10 @@ namespace {
     }
     if (desc.texture_type != TextureType::kTexture2D
       && desc.texture_type != TextureType::kTexture2DArray) {
-      return { .cooked = Err(TextureImportError::kUnsupportedFormat),
-        .decode_duration = decode_accum };
+      return {
+        .cooked = Err(TextureImportError::kUnsupportedFormat),
+        .decode_duration = decode_accum,
+      };
     }
 
     uint16_t max_layer = 0;
@@ -713,8 +747,10 @@ namespace {
       if (format == Format::kUnknown) {
         format = meta.format;
       } else if (meta.format != format) {
-        return { .cooked = Err(TextureImportError::kOutputFormatInvalid),
-          .decode_duration = decode_accum };
+        return {
+          .cooked = Err(TextureImportError::kOutputFormatInvalid),
+          .decode_duration = decode_accum,
+        };
       }
 
       if (subresource.mip_level == 0) {
@@ -722,15 +758,19 @@ namespace {
           base_width = meta.width;
           base_height = meta.height;
         } else if (meta.width != base_width || meta.height != base_height) {
-          return { .cooked = Err(TextureImportError::kDimensionMismatch),
-            .decode_duration = decode_accum };
+          return {
+            .cooked = Err(TextureImportError::kDimensionMismatch),
+            .decode_duration = decode_accum,
+          };
         }
       }
     }
 
     if (base_width == 0 || base_height == 0) {
-      return { .cooked = Err(TextureImportError::kInvalidMipPolicy),
-        .decode_duration = decode_accum };
+      return {
+        .cooked = Err(TextureImportError::kInvalidMipPolicy),
+        .decode_duration = decode_accum,
+      };
     }
 
     const auto array_layer_count = static_cast<uint16_t>(max_layer + 1);
@@ -752,8 +792,10 @@ namespace {
 
     ScratchImage assembled = ScratchImage::Create(array_meta);
     if (!assembled.IsValid()) {
-      return { .cooked = Err(TextureImportError::kOutOfMemory),
-        .decode_duration = decode_accum };
+      return {
+        .cooked = Err(TextureImportError::kOutOfMemory),
+        .decode_duration = decode_accum,
+      };
     }
 
     std::vector present(
@@ -766,8 +808,10 @@ namespace {
       const auto index
         = ScratchImage::ComputeSubresourceIndex(layer, mip, mip_level_count);
       if (index >= present.size() || present[index]) {
-        return { .cooked = Err(TextureImportError::kInvalidMipPolicy),
-          .decode_duration = decode_accum };
+        return {
+          .cooked = Err(TextureImportError::kInvalidMipPolicy),
+          .decode_duration = decode_accum,
+        };
       }
       present[index] = true;
 
@@ -779,20 +823,26 @@ namespace {
       const auto src_view = decoded_images[i].GetImage(0, 0);
       if (src_view.width != expected_width
         || src_view.height != expected_height) {
-        return { .cooked = Err(TextureImportError::kDimensionMismatch),
-          .decode_duration = decode_accum };
+        return {
+          .cooked = Err(TextureImportError::kDimensionMismatch),
+          .decode_duration = decode_accum,
+        };
       }
 
       const auto expected_row_bytes = ComputeRowBytes(expected_width, format);
       if (src_view.row_pitch_bytes != expected_row_bytes) {
-        return { .cooked = Err(TextureImportError::kOutputFormatInvalid),
-          .decode_duration = decode_accum };
+        return {
+          .cooked = Err(TextureImportError::kOutputFormatInvalid),
+          .decode_duration = decode_accum,
+        };
       }
 
       auto dst_pixels = assembled.GetMutablePixels(layer, mip);
       if (dst_pixels.size() != src_view.pixels.size()) {
-        return { .cooked = Err(TextureImportError::kDimensionMismatch),
-          .decode_duration = decode_accum };
+        return {
+          .cooked = Err(TextureImportError::kDimensionMismatch),
+          .decode_duration = decode_accum,
+        };
       }
 
       std::ranges::copy(src_view.pixels, dst_pixels.data());
@@ -804,8 +854,10 @@ namespace {
           = ScratchImage::ComputeSubresourceIndex(static_cast<uint16_t>(layer),
             static_cast<uint16_t>(mip), mip_level_count);
         if (index >= present.size() || !present[index]) {
-          return { .cooked = Err(TextureImportError::kInvalidMipPolicy),
-            .decode_duration = decode_accum };
+          return {
+            .cooked = Err(TextureImportError::kInvalidMipPolicy),
+            .decode_duration = decode_accum,
+          };
         }
       }
     }

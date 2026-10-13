@@ -110,9 +110,10 @@ NOLINT_TEST_F(
     int released = 0;
     UseReleaseReason reason {};
   } counts;
-  OpaqueUseHooks hooks { .prepare = [](void* ptr, QueueIdentity) -> void {
-                          ++static_cast<Counts*>(ptr)->prepared;
-                        },
+  OpaqueUseHooks hooks {
+    .prepare = [](void* ptr, QueueIdentity) -> void {
+      ++static_cast<Counts*>(ptr)->prepared;
+    },
     .submitted
     = [](void* ptr, QueueIdentity, const SubmissionResult&) noexcept -> void {
       ++static_cast<Counts*>(ptr)->submitted;
@@ -122,7 +123,8 @@ NOLINT_TEST_F(
       auto& value = *static_cast<Counts*>(ptr);
       ++value.released;
       value.reason = reason;
-    } };
+    },
+  };
   auto list = List();
   auto owner = std::make_shared<int>(5);
   const std::weak_ptr<int> weak = owner;
@@ -180,10 +182,12 @@ NOLINT_TEST_F(SubmissionTest, CpuAdmissionGuardDoesNotAddAnUnneededPrivateFence)
   auto list = List();
   auto permission = std::make_shared<int>(1);
   list->Uses().RetainOpaque(permission, 1, permission.get(),
-    { .valid = [](const void* value) noexcept -> bool {
-       return *static_cast<const int*>(value) == 1;
-     },
-      .requires_completion = false });
+    {
+      .valid = [](const void* value) noexcept -> bool {
+        return *static_cast<const int*>(value) == 1;
+      },
+      .requires_completion = false,
+    });
   EXPECT_TRUE(list->Uses().HasUses());
   EXPECT_FALSE(list->Uses().NeedsCompletion());
   EXPECT_NO_THROW(queue->Submit(list));
@@ -199,9 +203,12 @@ NOLINT_TEST_F(
 {
   using oxygen::graphics::testing::HeapAllocationFailure;
   auto list = List();
-  list->SetRecordedResourceStates(
-    { { NativeResource { uint64_t { 123 }, CommandList::ClassTypeId() },
-      ResourceStates::kCopyDest } });
+  list->SetRecordedResourceStates({
+    {
+      NativeResource { uint64_t { 123 }, CommandList::ClassTypeId() },
+      ResourceStates::kCopyDest,
+    },
+  });
   auto owner = std::make_shared<int>(7);
   list->Uses().RetainOpaque(owner, 1);
   std::optional<HeapAllocationFailure> denied;

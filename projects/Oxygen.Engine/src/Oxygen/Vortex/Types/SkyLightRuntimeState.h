@@ -41,10 +41,10 @@ struct SkyLightRuntimeState {
   std::uint64_t source_age_frames { 0U };
   double cpu_update_ms { 0.0 };
   environment::StaticSkyLightProductStatus status {
-    environment::StaticSkyLightProductStatus::kDisabled
+    environment::StaticSkyLightProductStatus::kDisabled,
   };
   environment::StaticSkyLightUnavailableReason unavailable_reason {
-    environment::StaticSkyLightUnavailableReason::kNone
+    environment::StaticSkyLightUnavailableReason::kNone,
   };
   SkyLightGpuValidation gpu_validation { SkyLightGpuValidation::kNotRequested };
   //! Matching generation checked on the GPU; zero until a readback succeeds.

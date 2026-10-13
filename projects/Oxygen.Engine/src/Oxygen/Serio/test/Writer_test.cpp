@@ -128,9 +128,13 @@ NOLINT_TEST_F(WriterBasicTest, WriteMixedTypes_MaintainsAlignment)
 NOLINT_TEST_F(WriterBasicTest, WriteBlob_Success)
 {
   // Arrange
-  const std::vector<std::byte> test_data
-    = { std::byte { 'a' }, std::byte { 'b' }, std::byte { 'c' },
-        std::byte { 'd' }, std::byte { 'e' } };
+  const std::vector<std::byte> test_data = {
+    std::byte { 'a' },
+    std::byte { 'b' },
+    std::byte { 'c' },
+    std::byte { 'd' },
+    std::byte { 'e' },
+  };
 
   // Act
   ASSERT_TRUE(GetWriter().WriteBlob(test_data));

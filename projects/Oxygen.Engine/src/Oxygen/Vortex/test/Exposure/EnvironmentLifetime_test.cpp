@@ -390,11 +390,11 @@ NOLINT_TEST_F(
     });
     facade.SetSceneSource({ .scene = observer_ptr {
                               scene.get(),
-                            } });
+                            }, });
     facade.SetViewIntent(input);
     facade.SetOutputTarget({ .framebuffer = observer_ptr {
                                targets.at(index).get(),
-                             } });
+                             }, });
     auto session = facade.Finalize();
     CHECK_F(session.has_value());
     return session->ExecuteInsideFrame(frame);

@@ -447,7 +447,10 @@ auto CollectResourceRangesAndValidateResources(ValidationState& state) -> void
     }
 
     state.ranges.push_back(RangeRecord {
-      .start = resource.offset, .end = end, .label = resource_key });
+      .start = resource.offset,
+      .end = end,
+      .label = resource_key,
+    });
   }
 }
 

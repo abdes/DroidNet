@@ -90,33 +90,49 @@ struct Sha256TestVector {
 };
 
 //! Standard SHA-256 test vectors from NIST and other authoritative sources.
-constexpr std::array<Sha256TestVector, 8> kTestVectors = { {
-  // Empty string
-  { "", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
-  // "abc" - NIST short message
-  { "abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" },
-  // "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
-  // NIST 448-bit message
-  { "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
-    "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1" },
-  // "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"
-  // NIST 896-bit message
-  { "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjk"
-    "l"
-    "mnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
-    "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1" },
-  // Single character
-  { "a", "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb" },
-  // Longer message
-  { "The quick brown fox jumps over the lazy dog",
-    "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592" },
-  // With punctuation
-  { "The quick brown fox jumps over the lazy dog.",
-    "ef537f25c895bfa782526529a9b63d97aa631564d5d789c2b765448c8635fb6c" },
-  // 63 bytes - one less than block size
-  { "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde",
-    "057ee79ece0b9a849552ab8d3c335fe9a5f1c46ef5f1d9b190c295728628299c" },
-} };
+constexpr std::array<Sha256TestVector, 8> kTestVectors = {
+  {
+    // Empty string
+    { "", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+    // "abc" - NIST short message
+    {
+      "abc",
+      "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    },
+    // "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq"
+    // NIST 448-bit message
+    {
+      "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq",
+      "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1",
+    },
+    // "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu"
+    // NIST 896-bit message
+    {
+      "abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnop"
+      "jk"
+      "l"
+      "mnopqklmnopqrlmnopqrsmnopqrstnopqrstu",
+      "cf5b16a778af8380036ce59e7b0492370b249b11e8f07a51afac45037afee9d1",
+    },
+    // Single character
+    { "a", "ca978112ca1bbdcafac231b39a23dc4da786eff8147c4e72b9807785afee48bb" },
+    // Longer message
+    {
+      "The quick brown fox jumps over the lazy dog",
+      "d7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592",
+    },
+    // With punctuation
+    {
+      "The quick brown fox jumps over the lazy dog.",
+      "ef537f25c895bfa782526529a9b63d97aa631564d5d789c2b765448c8635fb6c",
+    },
+    // 63 bytes - one less than block size
+    {
+      "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde",
+      "057ee79ece0b9a849552ab8d3c335fe9a5f1c46ef5f1d9b190c295728628299c",
+    },
+  },
+};
 
 // ---------------------------------------------------------------------------
 // Basic SHA-256 Computation Tests
@@ -697,10 +713,16 @@ NOLINT_TEST_F(Sha256EdgeCaseTest, NullByteVsFFByte)
 NOLINT_TEST_F(Sha256EdgeCaseTest, BinaryDataWithEmbeddedNulls)
 {
   // Arrange - Data with embedded null bytes
-  const std::array<std::byte, 8> data
-    = { std::byte { 0x01 }, std::byte { 0x00 }, std::byte { 0x02 },
-        std::byte { 0x00 }, std::byte { 0x03 }, std::byte { 0x00 },
-        std::byte { 0x04 }, std::byte { 0x00 } };
+  const std::array<std::byte, 8> data = {
+    std::byte { 0x01 },
+    std::byte { 0x00 },
+    std::byte { 0x02 },
+    std::byte { 0x00 },
+    std::byte { 0x03 },
+    std::byte { 0x00 },
+    std::byte { 0x04 },
+    std::byte { 0x00 },
+  };
 
   // Act
   const auto result1 = oxygen::base::ComputeSha256(data);

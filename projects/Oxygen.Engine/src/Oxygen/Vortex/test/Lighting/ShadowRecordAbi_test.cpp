@@ -37,8 +37,9 @@ namespace {
       std::uint32_t reversed_depth;
       glm::vec3 normal { 0.0F, 0.0F, 1.0F };
       ShaderVisibleIndex depth_srv;
-      glm::vec3 light_direction { glm::normalize(
-        glm::vec3 { 1.0F, 0.0F, 1.0F }) };
+      glm::vec3 light_direction {
+        glm::normalize(glm::vec3 { 1.0F, 0.0F, 1.0F }),
+      };
       std::uint32_t extent { 64U };
     };
     static_assert(sizeof(Probe) == 176U);
@@ -144,8 +145,12 @@ namespace {
               const auto t = std::clamp((step - 0.20F) / 0.05F, 0.0F, 1.0F);
               const auto end_weight = 1.0F - (t * t * (3.0F - (2.0F * t)));
               const auto edge = std::clamp(64.0F
-                  * (std::min)({ coord.x, coord.y, 1.0F - coord.x,
-                    1.0F - coord.y })
+                  * (std::min)({
+                    coord.x,
+                    coord.y,
+                    1.0F - coord.x,
+                    1.0F - coord.y,
+                  })
                   / 8.0F,
                 0.0F, 1.0F);
               return 1.0F - (end_weight * edge);
@@ -160,12 +165,13 @@ namespace {
           }
           input.depth_srv
             = PublishPackedTexture(Format::kR32Float, pixels, 64U);
-          const auto decoded
-            = Decode({ .records = std::as_bytes(std::span(&input, 1U)),
-              .stride = sizeof(Probe),
-              .record_kind = 26U,
-              .decoded_words = 1U,
-              .count = 1U });
+          const auto decoded = Decode({
+            .records = std::as_bytes(std::span(&input, 1U)),
+            .stride = sizeof(Probe),
+            .record_kind = 26U,
+            .decoded_words = 1U,
+            .count = 1U,
+          });
           ASSERT_EQ(decoded.size(), 1U);
           EXPECT_NEAR(std::bit_cast<float>(decoded[0]), expected, 2.0e-5F);
         }

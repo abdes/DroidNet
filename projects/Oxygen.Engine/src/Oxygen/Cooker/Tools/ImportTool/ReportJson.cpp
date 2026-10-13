@@ -166,14 +166,18 @@ auto BuildStatsJson(const ImportTelemetry& telemetry) -> ordered_json
   return ordered_json {
     { "time_ms_total", DurationToMillis(telemetry.total_duration, "total") },
     { "time_ms_io", DurationToMillis(telemetry.io_duration, "io") },
-    { "time_ms_source_load",
-      DurationToMillis(telemetry.source_load_duration, "source_load") },
+    {
+      "time_ms_source_load",
+      DurationToMillis(telemetry.source_load_duration, "source_load"),
+    },
     { "time_ms_decode", DurationToMillis(telemetry.decode_duration, "decode") },
     { "time_ms_load", DurationToMillis(telemetry.load_duration, "load") },
     { "time_ms_cook", DurationToMillis(telemetry.cook_duration, "cook") },
     { "time_ms_emit", DurationToMillis(telemetry.emit_duration, "emit") },
-    { "time_ms_finalize",
-      DurationToMillis(telemetry.finalize_duration, "finalize") },
+    {
+      "time_ms_finalize",
+      DurationToMillis(telemetry.finalize_duration, "finalize"),
+    },
   };
 }
 

@@ -72,8 +72,10 @@ auto RunDependencyReport(const DependencyReportOptions& options) -> int
         row["key_references"].push_back({
           { "asset_key", nostd::to_string(reference.key) },
           { "target_kind", nostd::to_underlying(reference.kind) },
-          { "expected_asset_type",
-            nostd::to_underlying(reference.expected_type) },
+          {
+            "expected_asset_type",
+            nostd::to_underlying(reference.expected_type),
+          },
         });
         if (reference.kind == data::KeyReferenceKind::kAsset) {
           row["dependencies"].push_back(nostd::to_string(reference.key));

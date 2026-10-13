@@ -21,8 +21,10 @@ public:
     const std::vector<Option::Ptr>& global_options,
     const std::vector<std::pair<Options::Ptr, bool>>& global_option_groups)
     : tokenizer_(_tokenizer)
-    , context_ { detail::ParserContext::New(
-        context, commands, global_options, global_option_groups) }
+    , context_ {
+      detail::ParserContext::New(
+        context, commands, global_options, global_option_groups),
+    }
   {
   }
 

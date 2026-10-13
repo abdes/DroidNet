@@ -92,8 +92,10 @@ public:
     }
 
     oxygen::SerializedBackendConfig cfg { .json_data = "{}", .size = 2 };
-    oxygen::SerializedPathFinderConfig path_cfg { .json_data = "{}",
-      .size = 2 };
+    oxygen::SerializedPathFinderConfig path_cfg {
+      .json_data = "{}",
+      .size = 2,
+    };
     backend_ = module_api_->CreateBackend(cfg, path_cfg);
     if (backend_ == nullptr) {
       throw std::runtime_error("CreateBackend returned null");

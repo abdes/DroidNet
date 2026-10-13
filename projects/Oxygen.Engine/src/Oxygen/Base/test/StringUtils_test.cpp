@@ -240,8 +240,11 @@ NOLINT_TEST(StringUtilsTest, WideToUtf8_Char16IntoUtf8String)
 
 NOLINT_TEST(StringUtilsTest, WideToUtf8_Char16LoneSurrogateThrows)
 {
-  constexpr std::array<char16_t, 3> lone_surrogate { char16_t { 0xD83D },
-    char16_t { 'x' }, char16_t { 0 } };
+  constexpr std::array<char16_t, 3> lone_surrogate {
+    char16_t { 0xD83D },
+    char16_t { 'x' },
+    char16_t { 0 },
+  };
   std::string output;
   NOLINT_EXPECT_THROW(
     WideToUtf8(lone_surrogate.data(), output), std::exception);

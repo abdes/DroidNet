@@ -47,9 +47,9 @@ auto Catalog() -> PakCatalog
     .catalog_digest = {},
     .entries = {
       { .asset_key = Key(1U), .asset_type = AssetType::kMaterial,
-        .descriptor_digest = {}, .transitive_resource_digest = {} },
+        .descriptor_digest = {}, .transitive_resource_digest = {}, },
       { .asset_key = Key(2U), .asset_type = AssetType::kGeometry,
-        .descriptor_digest = {}, .transitive_resource_digest = {} },
+        .descriptor_digest = {}, .transitive_resource_digest = {}, },
     },
     .deleted = { Key(4U), Key(5U) },
     .bases = {

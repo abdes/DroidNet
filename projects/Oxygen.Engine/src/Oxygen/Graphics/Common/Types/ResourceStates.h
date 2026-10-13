@@ -100,7 +100,7 @@ enum class ResourceStates : uint32_t {
   //! Compute).
   //! Avoid using this state unless necessary, as it is not optimal.
   kGenericRead = kVertexBuffer | kConstantBuffer | kIndexBuffer
-    | kShaderResource | kIndirectArgument | kCopySource
+    | kShaderResource | kIndirectArgument | kCopySource,
 };
 
 // Enable bitwise operations for ResourceStates
@@ -128,7 +128,7 @@ enum class ResourceStateTrackingMode : uint8_t {
   //! resources cannot be transitioned using `UpdateResourceState`, and the
   //! command list will discard such requests and log them as errors in
   //! development builds.
-  kPermanentState
+  kPermanentState,
 };
 
 //! String representation of enum values in `QueueFamilyType`.

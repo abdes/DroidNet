@@ -29,20 +29,20 @@ class SceneNode;
 //! Character sets for cross-platform tree visualization
 enum class CharacterSet : uint8_t {
   kAscii, //!< Basic ASCII characters: |, -, +, \, /
-  kUnicode //!< Unicode box drawing: ├, └, │, ─
+  kUnicode, //!< Unicode box drawing: ├, └, │, ─
 };
 
 //! Verbosity levels for scene information display
 enum class VerbosityLevel : uint8_t {
   kNone, //!< Structure only (node names)
   kCompact, //!< Key properties abbreviated
-  kDetailed //!< Full transform and flag information
+  kDetailed, //!< Full transform and flag information
 };
 
 //! Line ending styles
 enum class LineEnding : uint8_t {
   kUnix, //!< Unix-style LF
-  kWindows //!< Windows-style CRLF
+  kWindows, //!< Windows-style CRLF
 };
 
 //=== Internal Details ===----------------------------------------------------//

@@ -214,8 +214,16 @@ NOLINT_TEST_F(ProceduralMeshTest, MeshValidity)
   const auto torus = MakeTorusMeshAsset(8, 8, 1.0F, 0.25F);
   const auto quad = MakeQuadMeshAsset(1.0F, 1.0F);
   std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> assets[]
-    = { sphere, icosphere, subdivided_cube, plane, cylinder, cone, torus,
-        quad };
+    = {
+        sphere,
+        icosphere,
+        subdivided_cube,
+        plane,
+        cylinder,
+        cone,
+        torus,
+        quad,
+      };
 
   // Act & Assert
   for (const auto& f : factories) {

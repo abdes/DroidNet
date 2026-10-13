@@ -22,9 +22,11 @@ namespace detail {
   inline auto LightModifiers(const pak::world::LightCommonRecord& common)
     -> lighting::LightPhotometryModifiers
   {
-    return { .color_rgb
+    return {
+      .color_rgb
       = { common.color_rgb[0], common.color_rgb[1], common.color_rgb[2] },
-      .exposure_compensation_ev = common.exposure_compensation_ev };
+      .exposure_compensation_ev = common.exposure_compensation_ev,
+    };
   }
   inline auto ValidLocalLightRange(float range, float radius) -> bool
   {

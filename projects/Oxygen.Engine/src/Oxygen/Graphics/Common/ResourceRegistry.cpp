@@ -504,12 +504,14 @@ auto ResourceRegistry::LinkViewNoLock(
   const NativeResource& resource, ResourceEntry::ViewEntry& entry) -> void
 {
   DCHECK_F(!entry.cached);
-  const auto group
-    = view_cache_
-        .try_emplace(CacheKey { .resource = resource,
-                       .view_desc_hash = entry.description_hash },
-          nullptr)
-        .first;
+  const auto group = view_cache_
+                       .try_emplace(
+                         CacheKey {
+                           .resource = resource,
+                           .view_desc_hash = entry.description_hash,
+                         },
+                         nullptr)
+                       .first;
   PrependViewNoLock(entry, group->second);
 }
 
@@ -523,7 +525,9 @@ auto ResourceRegistry::UnlinkViewNoLock(const NativeResource& resource,
     entry.cache_previous->cache_next = entry.cache_next;
   } else {
     const auto group = view_cache_.find(CacheKey {
-      .resource = resource, .view_desc_hash = entry.description_hash });
+      .resource = resource,
+      .view_desc_hash = entry.description_hash,
+    });
     DCHECK_F(group != view_cache_.end() && group->second == &entry);
     if (entry.cache_next != nullptr) {
       group->second = entry.cache_next;

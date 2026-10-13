@@ -44,7 +44,7 @@ public:
     CompileKey compile_key;
     ScriptSourceBlob source;
     core::meta::scripting::ScriptCompileMode compile_mode {
-      core::meta::scripting::ScriptCompileMode::kDebug
+      core::meta::scripting::ScriptCompileMode::kDebug,
     };
   };
 

@@ -263,9 +263,11 @@ auto Cli::Print(
 
 auto Cli::EnableVersionCommand() -> void
 {
-  const Command::Ptr command { CommandBuilder(Command::VERSION)
+  const Command::Ptr command {
+    CommandBuilder(Command::VERSION)
       .About(fmt::format(
-        "Display version information.", ProgramName(), ProgramName())) };
+        "Display version information.", ProgramName(), ProgramName())),
+  };
   commands_.push_back(command);
   has_version_command_ = true;
 }
@@ -279,7 +281,8 @@ auto Cli::HandleVersionCommand(const CommandLineContext& context) const -> void
 
 auto Cli::EnableHelpCommand() -> void
 {
-  const Command::Ptr command { CommandBuilder(Command::HELP)
+  const Command::Ptr command {
+    CommandBuilder(Command::HELP)
       .About(fmt::format("Display detailed help information. `{} help` lists "
                          "available sub-commands and a summary of what they "
                          "do. See `{} help <command>` to get detailed help "
@@ -291,7 +294,8 @@ auto Cli::EnableHelpCommand() -> void
                  "sub-command for which help information should be "
                  "displayed.")
           .WithValue<std::string>()
-          .Build()) };
+          .Build()),
+  };
   commands_.push_back(command);
   has_help_command_ = true;
 }

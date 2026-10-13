@@ -207,8 +207,10 @@ auto WriteManifestFile(const std::filesystem::path& manifest_path,
       { "request_key_hex", FormatRequestKeyHex(request.request_key) },
       { "source_path", request.request.source_path },
       { "entry_point", request.request.entry_point },
-      { "stage",
-        std::string(ShaderStageToManifestString(request.request.stage)) },
+      {
+        "stage",
+        std::string(ShaderStageToManifestString(request.request.stage)),
+      },
       { "defines", SerializeDefines(request.request.defines) },
     });
   }

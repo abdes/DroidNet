@@ -55,7 +55,7 @@ enum class ResourceAccessMode : uint8_t {
     \warning Memory accesses must be properly synchronized as it's not
     double-buffered.
   */
-  kReadBack
+  kReadBack,
 };
 
 //! String representation of enum values in `ResourceAccessMode`.

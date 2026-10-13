@@ -27,7 +27,7 @@ enum class TokenType : uint8_t {
   kDashDash,
   kValue,
   kEqualSign,
-  kEndOfInput
+  kEndOfInput,
 };
 
 OXGN_CLP_API auto operator<<(std::ostream& out, const TokenType& token_type)

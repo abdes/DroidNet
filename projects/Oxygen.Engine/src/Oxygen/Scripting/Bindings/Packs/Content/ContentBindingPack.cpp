@@ -16,9 +16,11 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
-  constexpr std::array<BindingNamespace, 1> kContentNamespaces = { {
-    { .name = "assets", .register_fn = RegisterContentBindings },
-  } };
+  constexpr std::array<BindingNamespace, 1> kContentNamespaces = {
+    {
+      { .name = "assets", .register_fn = RegisterContentBindings },
+    },
+  };
 
   class ContentBindingPack final : public contracts::IScriptBindingPack {
   public:

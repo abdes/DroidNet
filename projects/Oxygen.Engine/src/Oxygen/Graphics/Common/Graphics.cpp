@@ -576,7 +576,7 @@ auto Graphics::RegisterCommands(
       .label = "Capture Next Frame",
       .help = "Capture the next rendered frame",
       .messages = { .failure = "failed to arm next-frame capture",
-        .success = "next-frame capture armed" },
+        .success = "next-frame capture armed", },
       .action = [](graphics::FrameCaptureController& capture) -> bool {
         return capture.TriggerNextFrame();
       },
@@ -586,7 +586,7 @@ auto Graphics::RegisterCommands(
       .label = "Begin Capture",
       .help = "Begin a manual frame capture",
       .messages = { .failure = "failed to begin frame capture",
-        .success = "frame capture started" },
+        .success = "frame capture started", },
       .action = [](graphics::FrameCaptureController& capture) -> bool {
         return capture.StartCapture();
       },
@@ -596,7 +596,7 @@ auto Graphics::RegisterCommands(
       .label = "End Capture",
       .help = "End a manual frame capture",
       .messages = { .failure = "failed to end frame capture",
-        .success = "frame capture ended" },
+        .success = "frame capture ended", },
       .action = [](graphics::FrameCaptureController& capture) -> bool {
         return capture.EndCapture();
       },
@@ -606,7 +606,7 @@ auto Graphics::RegisterCommands(
       .label = "Discard Capture",
       .help = "Discard an active frame capture",
       .messages = { .failure = "failed to discard frame capture",
-        .success = "frame capture discarded" },
+        .success = "frame capture discarded", },
       .action = [](graphics::FrameCaptureController& capture) -> bool {
         return capture.DiscardCapture();
       },
@@ -616,7 +616,7 @@ auto Graphics::RegisterCommands(
       .label = "Open Capture Replay UI",
       .help = "Launch the capture provider replay UI",
       .messages = { .failure = "failed to launch replay UI",
-        .success = "replay UI launch requested" },
+        .success = "replay UI launch requested", },
       .action = [](graphics::FrameCaptureController& capture) -> bool {
         return capture.LaunchReplayUI();
       },

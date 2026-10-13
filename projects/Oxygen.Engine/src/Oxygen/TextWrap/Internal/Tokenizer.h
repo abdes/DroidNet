@@ -26,7 +26,7 @@ enum class TokenType : uint8_t {
   //! Marks a paragraph boundary (two consecutive new lines `\n\n`).
   kParagraphMark,
   //! The last token emitted by the tokenizer marking the end of input.
-  kEndOfInput
+  kEndOfInput,
 };
 
 //! String representation of enum values in `TokenType`.

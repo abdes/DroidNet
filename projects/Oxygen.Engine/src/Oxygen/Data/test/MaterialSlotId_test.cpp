@@ -26,8 +26,24 @@ static_assert(!std::is_convertible_v<oxygen::data::AssetKey, MaterialSlotId>);
 
 NOLINT_TEST(MaterialSlotIdTest, PreservesAllOpaqueBytesAndCanonicalText)
 {
-  constexpr MaterialSlotId::ByteArray kBytes { 0x01, 0x23, 0x45, 0x67, 0x89,
-    0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10 };
+  constexpr MaterialSlotId::ByteArray kBytes {
+    0x01,
+    0x23,
+    0x45,
+    0x67,
+    0x89,
+    0xab,
+    0xcd,
+    0xef,
+    0xfe,
+    0xdc,
+    0xba,
+    0x98,
+    0x76,
+    0x54,
+    0x32,
+    0x10,
+  };
   constexpr std::string_view kText = "01234567-89ab-cdef-fedc-ba9876543210";
   constexpr auto kId = MaterialSlotId::FromBytes(kBytes);
   EXPECT_FALSE(kId.IsNil());
@@ -44,8 +60,10 @@ NOLINT_TEST(MaterialSlotIdTest, PreservesAllOpaqueBytesAndCanonicalText)
 
 NOLINT_TEST(MaterialSlotIdTest, RejectsNoncanonicalTextWithoutNormalization)
 {
-  constexpr std::array<std::string_view, 12> kInvalid { "",
-    "0123456789abcdef-fedc-ba9876543210", "01234567-89ab-cdef-fedc-ba987654321",
+  constexpr std::array<std::string_view, 12> kInvalid {
+    "",
+    "0123456789abcdef-fedc-ba9876543210",
+    "01234567-89ab-cdef-fedc-ba987654321",
     "01234567-89ab-cdef-fedc-ba98765432100",
     "01234567-89AB-cdef-fedc-ba9876543210",
     "01234567-89ab-cdef-fedc-ba987654321G",
@@ -54,7 +72,8 @@ NOLINT_TEST(MaterialSlotIdTest, RejectsNoncanonicalTextWithoutNormalization)
     "01234567-89ab-cdef-fedc-ba9876543210 ",
     "01234567_89ab-cdef-fedc-ba9876543210",
     "01234567--9ab-cdef-fedc-ba9876543210",
-    "urn:uuid:01234567-89ab-cdef-fedc-ba9876543210" };
+    "urn:uuid:01234567-89ab-cdef-fedc-ba9876543210",
+  };
   for (const auto text : kInvalid) {
     SCOPED_TRACE(text);
     EXPECT_FALSE(MaterialSlotId::FromString(text).has_value());

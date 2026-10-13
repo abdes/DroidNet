@@ -70,11 +70,15 @@ auto ManyLightBaseline::SnapshotResources() -> nlohmann::json
   const auto queue = Backend()
                        .GetCommandQueue(graphics::QueueRole::kGraphics)
                        ->InspectSubmissionCounters();
-  return { { "allocator", memory.Report() },
-    { "local_sharing",
-      { { "native_bytes", shadow_bytes },
+  return {
+    { "allocator", memory.Report() },
+    {
+      "local_sharing",
+      {
+        { "native_bytes", shadow_bytes },
         { "pending_retirement_bytes", pending_bytes },
-        { "spare_texel_bytes", spare_bytes }, { "aliases", sharing.aliases },
+        { "spare_texel_bytes", spare_bytes },
+        { "aliases", sharing.aliases },
         { "live_versions", sharing.live_versions },
         { "canonical_records", sharing.canonical_records },
         { "canonical_record_bytes", sharing.canonical_record_bytes },
@@ -86,25 +90,36 @@ auto ManyLightBaseline::SnapshotResources() -> nlohmann::json
         { "first_allocations", sharing.first_allocations },
         { "copy_on_write_shape", sharing.copy_on_write_shape },
         { "copy_on_write_family", sharing.copy_on_write_family },
-        { "copy_on_write_reader", sharing.copy_on_write_reader } } },
-    { "graphics_queue",
-      { { "accepted_batches", queue.accepted_batches },
+        { "copy_on_write_reader", sharing.copy_on_write_reader },
+      },
+    },
+    {
+      "graphics_queue",
+      {
+        { "accepted_batches", queue.accepted_batches },
         { "command_lists", queue.command_lists },
         { "completion_signals", queue.completion_signals },
-        { "dependency_waits", queue.dependency_waits } } },
+        { "dependency_waits", queue.dependency_waits },
+      },
+    },
     { "resources", FailureBackend().MeasureTrackedPlacement() },
-    { "lighting_budget",
-      { { "allocated_bytes", budget.allocated.get() },
+    {
+      "lighting_budget",
+      {
+        { "allocated_bytes", budget.allocated.get() },
         { "peak_bytes", budget.peak_allocated.get() },
         { "compact_index_bytes", budget.compact_indices.get() },
-        { "rejected_requests", budget.rejected_requests } } },
+        { "rejected_requests", budget.rejected_requests },
+      },
+    },
     { "created_buffers", counts->buffers },
     { "created_textures", counts->textures },
     { "created_buffer_capacity_bytes", counts->requested_buffer_bytes.get() },
     { "lighting_staging_bytes", lighting_staging.total_bytes_allocated },
     { "lighting_staging_allocations", lighting_staging.total_allocations },
     { "shared_staging_bytes", shared_staging.total_bytes_allocated },
-    { "shared_staging_allocations", shared_staging.total_allocations } };
+    { "shared_staging_allocations", shared_staging.total_allocations },
+  };
 }
 
 auto ManyLightBaseline::Capture(const unsigned motion_frame) -> void
@@ -170,11 +185,14 @@ auto ManyLightBaseline::Capture(const unsigned motion_frame) -> void
         reference_ && options_.light_count > 0U ? kLightGridReasonCapacity
                                                 : kLightGridReasonNone);
       ASSERT_EQ(status.required_index_count.at(1), 0U);
-      grid = { { "state", status.state }, { "reason", status.reason },
+      grid = {
+        { "state", status.state },
+        { "reason", status.reason },
         { "required_indices", status.required_index_count.at(0) },
         { "written_indices", status.written_index_count },
         { "fallback_cells", status.fallback_cell_count },
-        { "index_capacity", captured.bindings.index_capacity } };
+        { "index_capacity", captured.bindings.index_capacity },
+      };
       if (reference_ && options_.light_count > 0U) {
         ASSERT_GT(status.fallback_cell_count, 0U);
       }
@@ -199,11 +217,13 @@ auto ManyLightBaseline::Capture(const unsigned motion_frame) -> void
       }
       std::ranges::sort(occupancy);
       if (!occupancy.empty()) {
-        grid["cell_occupancy"]
-          = { { "p50", occupancy.at(occupancy.size() / 2U) },
-              { "p95", occupancy.at((occupancy.size() - 1U) * 95U / 100U) },
-              { "max", occupancy.back() }, { "cells", occupancy.size() },
-              { "candidate_references", references } };
+        grid["cell_occupancy"] = {
+          { "p50", occupancy.at(occupancy.size() / 2U) },
+          { "p95", occupancy.at((occupancy.size() - 1U) * 95U / 100U) },
+          { "max", occupancy.back() },
+          { "cells", occupancy.size() },
+          { "candidate_references", references },
+        };
       }
     }
     const auto wide = options_.spot_outer_half_angle_radians
@@ -224,30 +244,43 @@ auto ManyLightBaseline::Capture(const unsigned motion_frame) -> void
       && options_.distribution == WorkloadDistribution::kSparse) {
       ASSERT_GE(contributors, 256U);
     }
-    images_.push_back({ { "file", filename }, { "phase", motion_frame },
-      { "view", index }, { "width", recipe.width }, { "height", recipe.height },
-      { "pre_exposure", domain.pre_exposure }, { "lit_pixels", lit_pixels },
-      { "mean_red", sum / pixels.size() }, { "maximum_rgb", maximum },
+    images_.push_back({
+      { "file", filename },
+      { "phase", motion_frame },
+      { "view", index },
+      { "width", recipe.width },
+      { "height", recipe.height },
+      { "pre_exposure", domain.pre_exposure },
+      { "lit_pixels", lit_pixels },
+      { "mean_red", sum / pixels.size() },
+      { "maximum_rgb", maximum },
       { "guaranteed_visible_unshadowed_contributors", contributors },
       { "local_count", captured.bindings.local_count },
       { "draws", captured.draws },
       { "point_shadow_maps", captured.point_shadows },
       { "spot_shadow_maps", captured.spot_shadows },
-      { "grid", std::move(grid) } });
+      { "grid", std::move(grid) },
+    });
   }
 }
 
 auto ManyLightBaseline::WriteResults() -> void
 {
-  auto result
-    = nlohmann::json { { "schema_version", 1U }, { "request", request_ },
-        { "complete", !HasFailure() }, { "images", images_ },
-        { "memory", snapshots_ }, { "warmup_frames", warmup_frames_ + 12U },
-        { "sample_frames", samples_.size() },
-        { "scope",
-          "Native offscreen production renderer; no presentation FPS claim. "
-          "Frame start includes GPU waits. CPU spans are elapsed wall time. "
-          "Readbacks and resource inventories are outside timed frames." } };
+  auto result = nlohmann::json {
+    { "schema_version", 1U },
+    { "request", request_ },
+    { "complete", !HasFailure() },
+    { "images", images_ },
+    { "memory", snapshots_ },
+    { "warmup_frames", warmup_frames_ + 12U },
+    { "sample_frames", samples_.size() },
+    {
+      "scope",
+      "Native offscreen production renderer; no presentation FPS claim. "
+      "Frame start includes GPU waits. CPU spans are elapsed wall time. "
+      "Readbacks and resource inventories are outside timed frames.",
+    },
+  };
   const auto adapter = Backend().GetCurrentDevice()->GetAdapterLuid();
   result["adapter_luid"] = { adapter.LowPart, adapter.HighPart };
   if (measure_) {

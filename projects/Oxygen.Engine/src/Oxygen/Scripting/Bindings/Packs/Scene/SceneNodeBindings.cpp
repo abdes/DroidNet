@@ -584,15 +584,19 @@ namespace {
     }
 
     constexpr std::array<std::pair<std::string_view, const char*>, 11> aliases {
-      { { "name", "get_name" }, { "parent", "get_parent" },
+      {
+        { "name", "get_name" },
+        { "parent", "get_parent" },
         { "local_position", "get_local_position" },
         { "local_rotation", "get_local_rotation" },
         { "local_scale", "get_local_scale" },
         { "world_position", "get_world_position" },
         { "world_rotation", "get_world_rotation" },
-        { "world_scale", "get_world_scale" }, { "camera_component", "camera" },
+        { "world_scale", "get_world_scale" },
+        { "camera_component", "camera" },
         { "light_component", "light" },
-        { "renderable_component", "renderable" } }
+        { "renderable_component", "renderable" },
+      },
     };
 
     const std::string_view key_sv(key);
@@ -698,7 +702,8 @@ auto RegisterSceneNodeMetatable(lua_State* state) -> void
   lua_setfield(state, -2, "__newindex");
 
   constexpr std::array<luaL_Reg, 28> methods {
-    { { .name = "is_alive", .func = SceneNodeIsAlive },
+    {
+      { .name = "is_alive", .func = SceneNodeIsAlive },
       { .name = "runtime_id", .func = SceneNodeRuntimeId },
       { .name = "get_name", .func = SceneNodeGetName },
       { .name = "set_name", .func = SceneNodeSetName },
@@ -725,7 +730,8 @@ auto RegisterSceneNodeMetatable(lua_State* state) -> void
       { .name = "scale_by", .func = SceneNodeScaleBy },
       { .name = "get_world_position", .func = SceneNodeGetWorldPosition },
       { .name = "get_world_rotation", .func = SceneNodeGetWorldRotation },
-      { .name = "get_world_scale", .func = SceneNodeGetWorldScale } }
+      { .name = "get_world_scale", .func = SceneNodeGetWorldScale },
+    },
   };
 
   for (const auto& reg : methods) {

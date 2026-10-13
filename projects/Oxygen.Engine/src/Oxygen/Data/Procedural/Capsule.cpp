@@ -111,7 +111,7 @@ auto oxygen::data::MakeCapsuleMeshAsset(const unsigned int hemisphere_segments,
         .normal = normal,
         .texcoord
         = { static_cast<float>(longitude) / static_cast<float>(radial_segments),
-          v },
+          v, },
         .tangent = tangent,
         .bitangent = glm::cross(normal, tangent),
         .color = { 1, 1, 1, 1 },

@@ -18,25 +18,68 @@
 
 namespace oxygen::vortex::environment::internal {
 namespace {
-  constexpr auto kShaders
-    = std::array<std::string_view, 13> { "IblInitializeCS", "IblPrepareCS",
-        "IblCapturePrepareCS", "IblRangeCS", "IblNormalizeCS", "IblMipCS",
-        "IblShCS", "IblShReduceCS", "IblPrefilterCS", "IblNarrowCS",
-        "IblPrecisionRangeCS", "IblPrecisionReduceCS", "IblCompleteCS" };
+  constexpr auto kShaders = std::array<std::string_view, 13> {
+    "IblInitializeCS",
+    "IblPrepareCS",
+    "IblCapturePrepareCS",
+    "IblRangeCS",
+    "IblNormalizeCS",
+    "IblMipCS",
+    "IblShCS",
+    "IblShReduceCS",
+    "IblPrefilterCS",
+    "IblNarrowCS",
+    "IblPrecisionRangeCS",
+    "IblPrecisionReduceCS",
+    "IblCompleteCS",
+  };
   // Reference work at 128-face resolution. Seeds use retained stage attribution
   // and native batch measurements; completed samples correct them per device.
-  constexpr auto kReferenceUnits = std::array<double, 13> { 1, 98304, 98304,
-    1536, 98304, 32766, 98304, 15360, 4456320, 262140, 264192, 4128, 1 };
-  constexpr auto kWorkMs = std::array<double, 13> { 0, 0.021, 0.028, 0.012,
-    0.016, 0.026, 0.039, 0.033, 0.250, 0.060, 0.077, 0.016, 0 };
-  constexpr auto kTimingLabels
-    = std::array<const char*, 13> { "IBL.Batch.IblInitializeCS",
-        "IBL.Batch.IblPrepareCS", "IBL.Batch.IblCapturePrepareCS",
-        "IBL.Batch.IblRangeCS", "IBL.Batch.IblNormalizeCS",
-        "IBL.Batch.IblMipCS", "IBL.Batch.IblShCS", "IBL.Batch.IblShReduceCS",
-        "IBL.Batch.IblPrefilterCS", "IBL.Batch.IblNarrowCS",
-        "IBL.Batch.IblPrecisionRangeCS", "IBL.Batch.IblPrecisionReduceCS",
-        "IBL.Batch.IblCompleteCS" };
+  constexpr auto kReferenceUnits = std::array<double, 13> {
+    1,
+    98304,
+    98304,
+    1536,
+    98304,
+    32766,
+    98304,
+    15360,
+    4456320,
+    262140,
+    264192,
+    4128,
+    1,
+  };
+  constexpr auto kWorkMs = std::array<double, 13> {
+    0,
+    0.021,
+    0.028,
+    0.012,
+    0.016,
+    0.026,
+    0.039,
+    0.033,
+    0.250,
+    0.060,
+    0.077,
+    0.016,
+    0,
+  };
+  constexpr auto kTimingLabels = std::array<const char*, 13> {
+    "IBL.Batch.IblInitializeCS",
+    "IBL.Batch.IblPrepareCS",
+    "IBL.Batch.IblCapturePrepareCS",
+    "IBL.Batch.IblRangeCS",
+    "IBL.Batch.IblNormalizeCS",
+    "IBL.Batch.IblMipCS",
+    "IBL.Batch.IblShCS",
+    "IBL.Batch.IblShReduceCS",
+    "IBL.Batch.IblPrefilterCS",
+    "IBL.Batch.IblNarrowCS",
+    "IBL.Batch.IblPrecisionRangeCS",
+    "IBL.Batch.IblPrecisionReduceCS",
+    "IBL.Batch.IblCompleteCS",
+  };
 
   auto Kind(std::string_view shader) -> std::size_t
   {
@@ -61,10 +104,12 @@ auto IblWorkBudget::TimingLabel(const char* shader) noexcept -> const char*
 IblWorkBudget::IblWorkBudget()
 {
   for (std::size_t kind = 0; kind < estimates_.size(); ++kind)
-    estimates_[kind] = { kind == 0U || kind == 12U               ? 0.006
+    estimates_[kind] = {
+      kind == 0U || kind == 12U                                  ? 0.006
         : kind == 3U || kind == 7U || kind == 10U || kind == 11U ? 0.004
                                                                  : 0.001,
-      kWorkMs[kind] };
+      kWorkMs[kind],
+    };
 }
 
 auto IblWorkBudget::Predict(const IblGpuDispatch& work) const -> double

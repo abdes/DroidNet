@@ -77,7 +77,7 @@ auto Geometry(const ViewPickRect rect) -> ViewPickPass::PickGeometry
       .width = 100.0F,
       .height = 100.0F,
       .min_depth = 0.0F,
-      .max_depth = 1.0F },
+      .max_depth = 1.0F, },
     .inv_view_proj = glm::mat4 { 1.0F },
     .reverse_z = true,
   };
@@ -144,10 +144,14 @@ NOLINT_TEST(ViewPickPassTest, NodeDrawsMergeIntoOneHitWithClosestSlot)
   image.Set(1U, 1U, 0U, 0.4F);
   image.Set(0U, 0U, 1U, 0.8F);
   const auto sources = std::vector<DrawSource> {
-    { .node = NodeHandle(7U),
-      .submesh_index = oxygen::data::SubmeshIndex { 3U } },
-    { .node = NodeHandle(7U),
-      .submesh_index = oxygen::data::SubmeshIndex { 5U } },
+    {
+      .node = NodeHandle(7U),
+      .submesh_index = oxygen::data::SubmeshIndex { 3U },
+    },
+    {
+      .node = NodeHandle(7U),
+      .submesh_index = oxygen::data::SubmeshIndex { 5U },
+    },
   };
 
   const auto result = ViewPickPass::ResolveHits(image.View(), sources,

@@ -16,7 +16,7 @@ enum class ScriptCompileMode : uint8_t {
 // NOLINTNEXTLINE(*-macro-*)
 #define OXGN_SCRIPT_COMPILE_MODE(name, value) name = value,
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.inc>
-#undef OXGN_SCRIPT_COMPILE_MODE
+#undef OXGN_SCRIPT_COMPILE_MODE // NOLINT
 };
 
 static_assert(

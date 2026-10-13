@@ -153,12 +153,14 @@ namespace {
       scene->GetEnvironment()
         ->TryGetSystem<scene::environment::PostProcessVolume>()
         ->SetExposureSettings(settings);
-      auto target = CreateRegisteredTexture({ .width = width,
+      auto target = CreateRegisteredTexture({
+        .width = width,
         .height = height,
         .format = Format::kRGBA32Float,
         .debug_name = "IBL.Scene.Output",
         .is_render_target = true,
-        .initial_state = graphics::ResourceStates::kCommon });
+        .initial_state = graphics::ResourceStates::kCommon,
+      });
       framebuffer = Backend().CreateFramebuffer(
         graphics::FramebufferDesc {}.AddColorAttachment(target));
       frame.SetScene(observer_ptr { scene.get() });
@@ -188,14 +190,18 @@ namespace {
         const auto stats = ibl.GetActivePoolStats();
         const auto counts = FailureBackend().resource_creations.Snapshot();
         CHECK_F(counts.has_value());
-        memory.push_back({ { "frame_seq", sequence },
+        memory.push_back({
+          { "frame_seq", sequence },
           { "storage_creations", stats.storage_creations },
           { "allocated_slots", stats.allocated },
-          { "registered_resources",
-            Backend().GetResourceRegistry().GetRegisteredResourceCount() },
+          {
+            "registered_resources",
+            Backend().GetResourceRegistry().GetRegisteredResourceCount(),
+          },
           { "created_buffers", counts->buffers },
           { "created_textures", counts->textures },
-          { "resources", FailureBackend().MeasureTrackedPlacement() } });
+          { "resources", FailureBackend().MeasureTrackedPlacement() },
+        });
       };
       auto source_frames = std::unordered_map<std::uint64_t, unsigned> {};
       unsigned previous_revision = 0U;
@@ -328,15 +334,15 @@ namespace {
         { "mode",
           mode == Mode::kStatic      ? "static"
             : mode == Mode::kRuntime ? "runtime"
-                                     : "authoring" },
+                                     : "authoring", },
         { "width", width }, { "height", height }, { "warmup", warmup },
         { "samples", samples }, { "hz", 60 },
         { "scene",
           "MultiView mixed scene; fixed camera; two atmosphere lights; "
           "captured "
-          "height fog; deferred and translucent shading with shadows" },
+          "height fog; deferred and translucent shading with shadows", },
         { "manual_ev", settings.manual_ev },
-        { "first_use_wall_ms", first_use_wall_ms }, { "memory", memory }
+        { "first_use_wall_ms", first_use_wall_ms }, { "memory", memory },
       }.dump(2) << '\n';
     }
   }

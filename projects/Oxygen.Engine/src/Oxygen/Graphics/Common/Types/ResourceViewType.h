@@ -45,7 +45,7 @@ enum class ResourceViewType : uint8_t {
   // traditional and bindless binding systems. They're directly passed to the
   // shader through root constants (DX12) or push constants (Vulkan).
 
-  kMaxResourceViewType //!< Maximum value sentinel
+  kMaxResourceViewType, //!< Maximum value sentinel
 };
 
 //! Check if the given resource view type is valid.

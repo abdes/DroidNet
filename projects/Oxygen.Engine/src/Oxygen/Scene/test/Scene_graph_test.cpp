@@ -449,8 +449,11 @@ NOLINT_TEST_F(
   children = scene_->GetChildren(parent);
 
   // Assert: Final verification of all children
-  const auto expected_handles = std::set { child1_opt->GetHandle(),
-    child2_opt->GetHandle(), child3_opt->GetHandle() };
+  const auto expected_handles = std::set {
+    child1_opt->GetHandle(),
+    child2_opt->GetHandle(),
+    child3_opt->GetHandle(),
+  };
   const auto found_handles = std::set(children.begin(), children.end());
   EXPECT_EQ(found_handles, expected_handles);
 }

@@ -55,9 +55,11 @@ namespace {
       return input.distance;
     return 0.05
       / (1.0e-10
-        * std::max({ std::abs(double(input.direction[0])),
+        * std::max({
+          std::abs(double(input.direction[0])),
           std::abs(double(input.direction[1])),
-          std::abs(double(input.direction[2])) }));
+          std::abs(double(input.direction[2])),
+        }));
   }
 
   // Exact double exponential integration, with the established clipping order.
@@ -65,8 +67,11 @@ namespace {
   {
     const auto& f = input.environment.fog;
     const auto distance = Distance(input);
-    auto ray = std::array<double, 3> { input.direction[0] * distance,
-      input.direction[1] * distance, input.direction[2] * distance };
+    auto ray = std::array<double, 3> {
+      input.direction[0] * distance,
+      input.direction[1] * distance,
+      input.direction[2] * distance,
+    };
     auto observer = double(input.origin[2]);
     if (f.primary_density > 0.0F)
       observer
@@ -110,10 +115,14 @@ namespace {
     LightingGpuAbiTest, HeightFogDistantRaysMatchIndependentIntegral)
   {
     auto inputs = std::vector<FogInput> {};
-    for (auto direction :
-      { std::array { 1.0F, 0.0F, 0.0F }, std::array { 1.0F, 1.0F, 0.0F },
-        std::array { 1.0F, 1.0F, 1.0F }, std::array { 0.0F, 0.0F, 1.0F },
-        std::array { 0.0F, 0.0F, -1.0F }, std::array { 1.0F, 0.0F, -0.4F } }) {
+    for (auto direction : {
+           std::array { 1.0F, 0.0F, 0.0F },
+           std::array { 1.0F, 1.0F, 0.0F },
+           std::array { 1.0F, 1.0F, 1.0F },
+           std::array { 0.0F, 0.0F, 1.0F },
+           std::array { 0.0F, 0.0F, -1.0F },
+           std::array { 1.0F, 0.0F, -0.4F },
+         }) {
       const auto norm = std::sqrt(direction[0] * direction[0]
         + direction[1] * direction[1] + direction[2] * direction[2]);
       for (auto& value : direction)
@@ -140,11 +149,13 @@ namespace {
         }
       }
     }
-    const auto result = Decode({ .records = std::as_bytes(std::span(inputs)),
+    const auto result = Decode({
+      .records = std::as_bytes(std::span(inputs)),
       .stride = sizeof(FogInput),
       .record_kind = 34U,
       .decoded_words = 8U,
-      .count = static_cast<std::uint32_t>(inputs.size()) });
+      .count = static_cast<std::uint32_t>(inputs.size()),
+    });
     for (auto i = 0U; i < inputs.size(); ++i) {
       SCOPED_TRACE(i);
       const auto opacity = ReferenceOpacity(inputs[i]);
@@ -175,11 +186,13 @@ namespace {
     inputs[6].view.flags = 0U;
     inputs[7] = inputs[6];
     inputs[7].mode = 1U;
-    const auto values = Decode({ .records = std::as_bytes(std::span(inputs)),
+    const auto values = Decode({
+      .records = std::as_bytes(std::span(inputs)),
       .stride = sizeof(FogInput),
       .record_kind = 34U,
       .decoded_words = 8U,
-      .count = 8U });
+      .count = 8U,
+    });
     for (auto i = 0U; i < inputs.size(); ++i) {
       SCOPED_TRACE(i);
       const bool enabled = i != 2U && i != 4U && i != 6U;
@@ -208,11 +221,13 @@ namespace {
     inputs[2] = inputs[1];
     inputs[2].view.atmosphere_light0_disk_luminance_rgb = { 200, 400, 600, 1 };
     inputs[2].view.atmosphere_light1_disk_luminance_rgb = { 70, 60, 50, 1 };
-    const auto values = Decode({ .records = std::as_bytes(std::span(inputs)),
+    const auto values = Decode({
+      .records = std::as_bytes(std::span(inputs)),
       .stride = sizeof(FogInput),
       .record_kind = 34U,
       .decoded_words = 8U,
-      .count = 3U });
+      .count = 3U,
+    });
     for (auto c = 0U; c < 3U; ++c) {
       EXPECT_GT(std::bit_cast<float>(values[c]), 0.0F);
       EXPECT_GT(

@@ -16,9 +16,11 @@
 namespace oxygen::scripting::bindings {
 
 namespace {
-  constexpr std::array<BindingNamespace, 1> kInputNamespaces = { {
-    { .name = "input", .register_fn = RegisterInputBindings },
-  } };
+  constexpr std::array<BindingNamespace, 1> kInputNamespaces = {
+    {
+      { .name = "input", .register_fn = RegisterInputBindings },
+    },
+  };
 
   class InputBindingPack final : public contracts::IScriptBindingPack {
   public:

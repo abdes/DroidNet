@@ -51,22 +51,22 @@ public:
     float sky_view_sample_count_min { 4.0F };
     float sky_view_sample_count_max { Defaults::kSkyViewSampleCountMax };
     float sky_view_distance_to_sample_count_max_m {
-      Defaults::kSkyViewDistanceToSampleCountMaxM
+      Defaults::kSkyViewDistanceToSampleCountMaxM,
     };
     std::uint32_t camera_aerial_width { 64U };
     std::uint32_t camera_aerial_height { 64U };
     std::uint32_t camera_aerial_depth_resolution { 32U };
     float camera_aerial_depth_km { Defaults::kCameraAerialDepthKm };
     float camera_aerial_depth_slice_length_km {
-      Defaults::kCameraAerialDepthSliceLengthKm
+      Defaults::kCameraAerialDepthSliceLengthKm,
     };
     float camera_aerial_sample_count_per_slice { 2.0F };
     float transmittance_sample_count { Defaults::kTransmittanceSampleCount };
     float multi_scattering_sample_count {
-      Defaults::kMultiScatteringSampleCount
+      Defaults::kMultiScatteringSampleCount,
     };
     float distant_sky_light_sample_altitude_km {
-      Defaults::kDistantSkyLightSampleAltitudeKm
+      Defaults::kDistantSkyLightSampleAltitudeKm,
     };
     glm::vec3 sky_luminance_factor_rgb { 1.0F, 1.0F, 1.0F };
     glm::vec3 sky_and_aerial_perspective_luminance_factor_rgb {

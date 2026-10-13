@@ -58,7 +58,7 @@ auto TextureImportSettings::Prepare(std::ostream& error_stream) const
       request.additional_sources.push_back({ .path = path,
         .subresource = { .array_layer = mapping.layer,
           .mip_level = mapping.mip,
-          .depth_slice = mapping.slice } });
+          .depth_slice = mapping.slice, }, });
     }
   }
 

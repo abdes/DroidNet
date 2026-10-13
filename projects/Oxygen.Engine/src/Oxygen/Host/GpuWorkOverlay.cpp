@@ -172,10 +172,12 @@ auto GpuWorkOverlay::Rebuild(const vortex::GpuWorkSummary& summary,
   }
   for (const auto& view : summary.views) {
     if (&view != main) {
-      frame.segments.push_back({ .label = ViewLabel(view),
+      frame.segments.push_back({
+        .label = ViewLabel(view),
         .color_rgb = kViewColor,
         .cost = ToCost(view.time),
-        .items = {} });
+        .items = {},
+      });
     }
   }
   if (!summary.frame_work.empty()) {
@@ -188,12 +190,14 @@ auto GpuWorkOverlay::Rebuild(const vortex::GpuWorkSummary& summary,
       .items = {},
     });
   }
-  frame.segments.push_back({ .label = "GPU idle",
+  frame.segments.push_back({
+    .label = "GPU idle",
     .color_rgb = kIdleColor,
     .cost = ToCost(summary.idle),
     .tooltip = "No command list ran: the GPU waited for the CPU or for "
                "presentation",
-    .items = {} });
+    .items = {},
+  });
   chart_.rows.push_back(std::move(frame));
 
   for (const auto& view : summary.views) {

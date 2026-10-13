@@ -317,22 +317,30 @@ auto SerializeManifestToJson(const data::PatchManifest& manifest) -> std::string
     { "created", std::move(created) },
     { "replaced", std::move(replaced) },
     { "deleted", std::move(deleted) },
-    { "compatibility_envelope",
+    {
+      "compatibility_envelope",
       ordered_json {
         { "required_base_layers", std::move(required_base_layers) },
-        { "patch_content_version",
-          manifest.compatibility_envelope.patch_content_version },
-      } },
+        {
+          "patch_content_version",
+          manifest.compatibility_envelope.patch_content_version,
+        },
+      },
+    },
     { "diff_basis_identifier", manifest.diff_basis_identifier },
     { "patch_source_key", data::to_string(manifest.patch_source_key) },
-    { "patch_pak_digest",
+    {
+      "patch_pak_digest",
       manifest.patch_pak_digest.has_value()
         ? ordered_json(ToHex(std::span { *manifest.patch_pak_digest }))
-        : ordered_json(nullptr) },
-    { "patch_pak_crc32",
+        : ordered_json(nullptr),
+    },
+    {
+      "patch_pak_crc32",
       manifest.patch_pak_crc32.has_value()
         ? ordered_json(*manifest.patch_pak_crc32)
-        : ordered_json(nullptr) },
+        : ordered_json(nullptr),
+    },
   };
 
   return document.dump(2);

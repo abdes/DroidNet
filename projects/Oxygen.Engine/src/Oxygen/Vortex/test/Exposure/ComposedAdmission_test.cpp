@@ -733,31 +733,41 @@ NOLINT_TEST_F(ExposureGpuTest, SkyVolumetricFogBoundContainsTransmittanceError)
     bool covers_volume;
   };
   const std::array cases {
-    Case { .name = "sky only",
+    Case {
+      .name = "sky only",
       .usage = kSkyUsage,
       .background = 0.0F,
       .valid = true,
-      .covers_volume = false },
-    Case { .name = "sky behind the volume",
+      .covers_volume = false,
+    },
+    Case {
+      .name = "sky behind the volume",
       .usage = kSkyUsage | kSkyVolumetricUsage,
       .background = kBackground,
       .valid = true,
-      .covers_volume = true },
-    Case { .name = "fog-only background behind the volume",
+      .covers_volume = true,
+    },
+    Case {
+      .name = "fog-only background behind the volume",
       .usage = kSkyVolumetricUsage,
       .background = kBackground,
       .valid = true,
-      .covers_volume = true },
-    Case { .name = "invalid background",
+      .covers_volume = true,
+    },
+    Case {
+      .name = "invalid background",
       .usage = kSkyUsage | kSkyVolumetricUsage | kInvalidSkyInput,
       .background = 0.0F,
       .valid = false,
-      .covers_volume = false },
-    Case { .name = "infinite background",
+      .covers_volume = false,
+    },
+    Case {
+      .name = "infinite background",
       .usage = kSkyUsage | kSkyVolumetricUsage,
       .background = std::numeric_limits<float>::infinity(),
       .valid = false,
-      .covers_volume = false },
+      .covers_volume = false,
+    },
   };
   constexpr auto kSkyIndex = 0U;
   constexpr auto kFogIndex = 2U;

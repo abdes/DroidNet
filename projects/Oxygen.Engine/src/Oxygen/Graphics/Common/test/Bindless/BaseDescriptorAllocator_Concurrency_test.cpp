@@ -52,22 +52,44 @@ public:
   // Setup the segment factory with base indices for different type/visibility
   // combinations
   std::map<std::pair<ResourceViewType, DescriptorVisibility>, b::HeapIndex>
-    base_indices_ = { { { ResourceViewType::kTexture_SRV,
-                          DescriptorVisibility::kShaderVisible },
-                        b::HeapIndex { 1000 } },
-      { { ResourceViewType::kTexture_UAV,
-          DescriptorVisibility::kShaderVisible },
-        b::HeapIndex { 2000 } },
-      { { ResourceViewType::kRawBuffer_SRV,
-          DescriptorVisibility::kShaderVisible },
-        b::HeapIndex { 3000 } },
-      { { ResourceViewType::kRawBuffer_UAV,
-          DescriptorVisibility::kShaderVisible },
-        b::HeapIndex { 4000 } },
-      { { ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly },
-        b::HeapIndex { 5000 } },
-      { { ResourceViewType::kTexture_UAV, DescriptorVisibility::kCpuOnly },
-        b::HeapIndex { 6000 } } };
+    base_indices_ = {
+      {
+        {
+          ResourceViewType::kTexture_SRV,
+          DescriptorVisibility::kShaderVisible,
+        },
+        b::HeapIndex { 1000 },
+      },
+      {
+        {
+          ResourceViewType::kTexture_UAV,
+          DescriptorVisibility::kShaderVisible,
+        },
+        b::HeapIndex { 2000 },
+      },
+      {
+        {
+          ResourceViewType::kRawBuffer_SRV,
+          DescriptorVisibility::kShaderVisible,
+        },
+        b::HeapIndex { 3000 },
+      },
+      {
+        {
+          ResourceViewType::kRawBuffer_UAV,
+          DescriptorVisibility::kShaderVisible,
+        },
+        b::HeapIndex { 4000 },
+      },
+      {
+        { ResourceViewType::kTexture_SRV, DescriptorVisibility::kCpuOnly },
+        b::HeapIndex { 5000 },
+      },
+      {
+        { ResourceViewType::kTexture_UAV, DescriptorVisibility::kCpuOnly },
+        b::HeapIndex { 6000 },
+      },
+    };
 
   std::map<std::pair<ResourceViewType, DescriptorVisibility>,
     std::atomic<b::HeapIndex::UnderlyingType>>
@@ -279,9 +301,12 @@ NOLINT_TEST_F(
   };
 
   // Resource types to test with
-  const std::vector types
-    = { ResourceViewType::kTexture_SRV, ResourceViewType::kTexture_UAV,
-        ResourceViewType::kRawBuffer_SRV, ResourceViewType::kRawBuffer_UAV };
+  const std::vector types = {
+    ResourceViewType::kTexture_SRV,
+    ResourceViewType::kTexture_UAV,
+    ResourceViewType::kRawBuffer_SRV,
+    ResourceViewType::kRawBuffer_UAV,
+  };
 
   // Visibilities to test with
   const std::vector visibilities

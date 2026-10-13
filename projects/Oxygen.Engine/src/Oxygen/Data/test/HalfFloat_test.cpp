@@ -63,11 +63,16 @@ NOLINT_TEST(HalfFloatTest, SubnormalRoundingCarriesIntoMinimumNormal)
     std::uint16_t expected;
   };
   // The midpoint 2^-14 - 2^-25 ties to the even minimum-normal significand.
-  const std::array cases { Case { 0x387fdfffU, 0x03ffU },
-    Case { 0x387fe000U, 0x0400U }, Case { 0x387fe001U, 0x0400U },
-    Case { 0x387fffffU, 0x0400U }, Case { 0xb87fdfffU, 0x83ffU },
-    Case { 0xb87fe000U, 0x8400U }, Case { 0xb87fe001U, 0x8400U },
-    Case { 0xb87fffffU, 0x8400U } };
+  const std::array cases {
+    Case { 0x387fdfffU, 0x03ffU },
+    Case { 0x387fe000U, 0x0400U },
+    Case { 0x387fe001U, 0x0400U },
+    Case { 0x387fffffU, 0x0400U },
+    Case { 0xb87fdfffU, 0x83ffU },
+    Case { 0xb87fe000U, 0x8400U },
+    Case { 0xb87fe001U, 0x8400U },
+    Case { 0xb87fffffU, 0x8400U },
+  };
   for (const auto test : cases) {
     EXPECT_EQ(
       oxygen::data::HalfFloat { std::bit_cast<float>(test.input) }.get(),

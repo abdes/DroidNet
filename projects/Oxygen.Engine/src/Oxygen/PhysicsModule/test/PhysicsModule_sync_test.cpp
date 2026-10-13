@@ -237,7 +237,8 @@ NOLINT_TEST_F(PhysicsModuleSyncTest, GetCharacterReturnsHandleForAttachedNode)
   const auto move = ScenePhysics::MoveCharacter(
     observer_ptr<PhysicsModule> { module_.get() }, *queried,
     character::CharacterMoveInput {
-      .desired_velocity = Vec3 { 1.0F, 2.0F, 3.0F } },
+      .desired_velocity = Vec3 { 1.0F, 2.0F, 3.0F },
+    },
     1.0F / 60.0F);
   ASSERT_TRUE(move.has_value());
   EXPECT_EQ(FakeState().character_move_calls, 1U);

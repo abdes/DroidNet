@@ -324,9 +324,11 @@ namespace {
       if (!key || !digest) {
         return Result<data::PakCatalog>::Err(std::errc::invalid_argument);
       }
-      catalog.bases.push_back({ .source_key = *key,
+      catalog.bases.push_back({
+        .source_key = *key,
         .content_version = item.at("content_version").get<uint16_t>(),
-        .catalog_digest = *digest });
+        .catalog_digest = *digest,
+      });
     }
     if (!catalog.Validate()) {
       return Result<data::PakCatalog>::Err(std::errc::invalid_argument);

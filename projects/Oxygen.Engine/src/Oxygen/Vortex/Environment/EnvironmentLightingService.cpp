@@ -502,12 +502,13 @@ auto EnvironmentLightingService::ReportUncalibratedSkyCubemap(
     "(HDR) cube to calibrate it.",
     cubemap.get(), to_string(format), target_lux);
   // The ledger reports it every frame; the log once per cubemap.
-  renderer_.GetDiagnosticsService().ReportIssue(
-    { .severity = DiagnosticsSeverity::kWarning,
-      .code = "sky.uncalibrated",
-      .message = message,
-      .pass_name = "Vortex.Environment.Sky",
-      .product_name = "SkySphere" });
+  renderer_.GetDiagnosticsService().ReportIssue({
+    .severity = DiagnosticsSeverity::kWarning,
+    .code = "sky.uncalibrated",
+    .message = message,
+    .pass_name = "Vortex.Environment.Sky",
+    .product_name = "SkySphere",
+  });
   if (logged_uncalibrated_sky_cubemap_ != cubemap) {
     LOG_F(WARNING, "{}", message);
     logged_uncalibrated_sky_cubemap_ = cubemap;

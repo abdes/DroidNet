@@ -226,8 +226,12 @@ NOLINT_TEST_F(CommandListPoolBasicTest,
   AcquireCommandList_DifferentQueueRoles_CreatesAppropriateCommandLists)
 {
   // Arrange
-  const std::vector<QueueRole> queue_roles = { QueueRole::kGraphics,
-    QueueRole::kCompute, QueueRole::kTransfer, QueueRole::kPresent };
+  const std::vector<QueueRole> queue_roles = {
+    QueueRole::kGraphics,
+    QueueRole::kCompute,
+    QueueRole::kTransfer,
+    QueueRole::kPresent,
+  };
 
   // Act
   std::vector<std::shared_ptr<CommandList>> command_lists;

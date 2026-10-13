@@ -50,22 +50,26 @@ namespace {
     };
     auto vertices = std::vector<data::Vertex>(positions.size());
     for (std::size_t index = 0; index < vertices.size(); ++index) {
-      vertices.at(index) = { .position = positions.at(index),
+      vertices.at(index) = {
+        .position = positions.at(index),
         .normal = { 0, 0, 1 },
         .texcoord = { 0.5F, 0.5F },
         .tangent = { 1, 0, 0 },
         .bitangent = { 0, 1, 0 },
-        .color = { 1, 1, 1, 1 } };
+        .color = { 1, 1, 1, 1 },
+      };
     }
     std::shared_ptr<data::Mesh> mesh
       = data::MeshBuilder()
           .WithVertices(vertices)
           .WithIndices(std::vector<std::uint32_t> { 0, 1, 2, 0, 2, 3 })
           .BeginSubMesh(name, data::MaterialAsset::CreateDefault())
-          .WithMeshView({ .first_index = 0,
+          .WithMeshView({
+            .first_index = 0,
             .index_count = 6,
             .first_vertex = 0,
-            .vertex_count = 4 })
+            .vertex_count = 4,
+          })
           .EndSubMesh()
           .Build();
     auto desc = data::pak::geometry::GeometryAssetDesc {};
@@ -125,8 +129,11 @@ auto CreateLightingWorkloadScene(const LightingWorkload& workload)
     const auto initialize = [&](auto& light) -> void {
       light.Common().affects_world = source.enabled;
       light.Common().casts_shadows = source.casts_shadows;
-      light.Common().color_rgb = { source.color_rgb.at(0),
-        source.color_rgb.at(1), source.color_rgb.at(2) };
+      light.Common().color_rgb = {
+        source.color_rgb.at(0),
+        source.color_rgb.at(1),
+        source.color_rgb.at(2),
+      };
       light.SetLuminousFluxLm(source.flux_lm);
       light.SetRange(source.range_m);
       light.SetSourceRadius(source.source_radius_m);
@@ -165,10 +172,12 @@ auto CreateLightingWorkloadScene(const LightingWorkload& workload)
       = result.scene->CreateNode("Camera " + std::to_string(view.id.get()));
     camera.GetTransform().SetLocalPosition(
       { view.eye_ws.at(0), view.eye_ws.at(1), view.eye_ws.at(2) });
-    const auto viewport = ViewPort { .top_left_x = view.content_origin_px.at(0),
+    const auto viewport = ViewPort {
+      .top_left_x = view.content_origin_px.at(0),
       .top_left_y = view.content_origin_px.at(1),
       .width = static_cast<float>(view.width),
-      .height = static_cast<float>(view.height) };
+      .height = static_cast<float>(view.height),
+    };
     const auto aspect = static_cast<float>(view.width) / view.height;
     if (view.projection == WorkloadProjection::kPerspective) {
       auto lens = std::make_unique<scene::PerspectiveCamera>();

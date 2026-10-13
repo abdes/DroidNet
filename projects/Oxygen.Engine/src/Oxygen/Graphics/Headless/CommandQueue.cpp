@@ -134,8 +134,10 @@ auto CommandQueue::PrepareNativeSubmission(
   uint64_t last_signal = request.legacy_marker.value_or(0);
   for (const auto& list : request.lists) {
     const auto actions = list->SubmitActions();
-    chunks.push_back({ { actions.begin(), actions.end() },
-      static_cast<CommandList&>(*list).StealCommands() });
+    chunks.push_back({
+      { actions.begin(), actions.end() },
+      static_cast<CommandList&>(*list).StealCommands(),
+    });
     for (const auto& action : actions) {
       if (action.kind
         == graphics::CommandList::SubmitQueueActionKind::kSignal) {

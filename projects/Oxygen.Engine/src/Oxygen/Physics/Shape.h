@@ -17,19 +17,19 @@ namespace oxygen::physics {
 // NOLINTBEGIN(*-macro-usage)
 #define OXPHYS_SHAPE_TYPE(name, value) name = (value),
 enum class ShapeType : uint8_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc> // NOLINT
 };
 #undef OXPHYS_SHAPE_TYPE
 
 #define OXPHYS_SHAPE_PAYLOAD_TYPE(name, value) name = (value),
 enum class ShapePayloadType : uint8_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc> // NOLINT
 };
 #undef OXPHYS_SHAPE_PAYLOAD_TYPE
 
 #define OXPHYS_WORLD_BOUNDARY_MODE(name, value) name = (value),
 enum class WorldBoundaryMode : uint32_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc> // NOLINT
 };
 #undef OXPHYS_WORLD_BOUNDARY_MODE
 // NOLINTEND(*-macro-usage)

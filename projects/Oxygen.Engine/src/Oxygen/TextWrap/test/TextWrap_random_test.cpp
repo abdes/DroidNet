@@ -30,8 +30,24 @@ auto RandomWordChar() -> char
 }
 auto RandomWhiteSpace() -> char
 {
-  static constexpr auto white_space = std::array<const char, 14> { { ' ', ' ',
-    ' ', ' ', ' ', ' ', ' ', ' ', ' ', '\t', '\v', '\f', '\r', '\n' } };
+  static constexpr auto white_space = std::array<const char, 14> {
+    {
+      ' ',
+      ' ',
+      ' ',
+      ' ',
+      ' ',
+      ' ',
+      ' ',
+      ' ',
+      ' ',
+      '\t',
+      '\v',
+      '\f',
+      '\r',
+      '\n',
+    },
+  };
   return (white_space.at(ws_generator(rng)));
 }
 auto GenerateWord(size_t length) -> std::string

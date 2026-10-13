@@ -89,20 +89,27 @@ namespace {
       std::uint32_t packed {};
       std::memcpy(&packed, texel, sizeof(packed));
       if (format == Format::kR11G11B10Float) {
-        return { SmallFloat(packed & 0x7FFU, 6U),
+        return {
+          SmallFloat(packed & 0x7FFU, 6U),
           SmallFloat((packed >> 11U) & 0x7FFU, 6U),
-          SmallFloat((packed >> 22U) & 0x3FFU, 5U) };
+          SmallFloat((packed >> 22U) & 0x3FFU, 5U),
+        };
       }
       // Three 9-bit mantissas share a 5-bit exponent (bias 15).
       const auto scale = std::ldexp(1.0, static_cast<int>(packed >> 27U) - 24);
-      return { (packed & 0x1FFU) * scale, ((packed >> 9U) & 0x1FFU) * scale,
-        ((packed >> 18U) & 0x1FFU) * scale };
+      return {
+        (packed & 0x1FFU) * scale,
+        ((packed >> 9U) & 0x1FFU) * scale,
+        ((packed >> 18U) & 0x1FFU) * scale,
+      };
     }
     std::array<std::uint16_t, 3> bits {};
     std::memcpy(bits.data(), texel, sizeof(bits));
-    return { data::HalfFloat { bits[0] }.ToFloat(),
+    return {
+      data::HalfFloat { bits[0] }.ToFloat(),
       data::HalfFloat { bits[1] }.ToFloat(),
-      data::HalfFloat { bits[2] }.ToFloat() };
+      data::HalfFloat { bits[2] }.ToFloat(),
+    };
   }
 } // namespace
 

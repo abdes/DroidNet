@@ -104,7 +104,7 @@ protected:
     // Used by PostOrder to track if children have been processed
     enum class ProcessingState : uint8_t {
       kPending, //!< Node children not yet processed
-      kChildrenProcessed //!< Node children already visited (post-order only)
+      kChildrenProcessed, //!< Node children already visited (post-order only)
     } state { ProcessingState::kPending };
   };
 
@@ -168,7 +168,7 @@ protected:
         .node_impl = nullptr, // Do not update the node_impl here, it will be
         // updated during traversal because the table may
         // change
-        .depth = child_depth // Set the correct depth for children
+        .depth = child_depth, // Set the correct depth for children
       });
       child_handle = child_node->AsGraphNode().GetNextSibling();
     }

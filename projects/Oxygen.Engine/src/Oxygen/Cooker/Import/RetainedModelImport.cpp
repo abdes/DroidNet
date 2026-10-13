@@ -320,19 +320,23 @@ auto RetainedModelImport::MakeRecipe(const SceneImportSettings& settings,
       "Retained model source must be glTF, GLB or FBX");
   }
   auto job = TextureRecipe(settings.texture_defaults);
-  job.update({ { "id", "model" },
+  job.update({
+    { "id", "model" },
     { "type", format == ImportFormat::kFbx ? "fbx" : "gltf" },
     { "source", Absolute(settings.source_path).generic_string() },
     { "content_hashing", settings.with_content_hashing },
-    { "content_flags",
+    {
+      "content_flags",
       {
         { "textures", settings.import_textures },
         { "materials", settings.import_materials },
         { "geometry", settings.import_geometry },
         { "scene", settings.import_scene },
-      } },
+      },
+    },
     { "bake_transforms", settings.bake_transforms },
-    { "gltf_omitted_light_range_m", settings.gltf_omitted_light_range_m } });
+    { "gltf_omitted_light_range_m", settings.gltf_omitted_light_range_m },
+  });
   const auto add = [&](const char* name, const std::string& value) -> void {
     if (!value.empty()) {
       job.update({ { name, value } });
@@ -431,8 +435,12 @@ auto RetainedModelImport::SaveRecipe(const std::filesystem::path& record_path,
   const auto within_content = source.lexically_relative(root);
   if (!within_content.empty() && !within_content.is_absolute()
     && *within_content.begin() != "..") {
-    recipe.at("jobs").at(0).update({ { "source",
-      source.lexically_relative(path.parent_path()).generic_string() } });
+    recipe.at("jobs").at(0).update({
+      {
+        "source",
+        source.lexically_relative(path.parent_path()).generic_string(),
+      },
+    });
   }
   std::filesystem::create_directories(base::ToNativePath(path.parent_path()));
   const auto lock = RecordLock(path);
@@ -700,14 +708,18 @@ auto RetainedModelImport::ValidateCandidate(const ImportReport& report) -> void
   auto record = state_->record;
   record.update(
     { { "material_slot_provenance", json::parse(provenance->Serialize()) } });
-  record.update({ { "published_generation",
+  record.update({
     {
-      { "id", state_->generation.ToString() },
+      "published_generation",
       {
-        "index_sha256",
-        fmt::format("{:02x}", fmt::join(*state_->validated_index, "")),
+        { "id", state_->generation.ToString() },
+        {
+          "index_sha256",
+          fmt::format("{:02x}", fmt::join(*state_->validated_index, "")),
+        },
       },
-    } } });
+    },
+  });
   state_->serialized_candidate = record.dump(2);
 }
 

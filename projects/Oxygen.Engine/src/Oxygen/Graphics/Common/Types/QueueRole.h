@@ -26,7 +26,7 @@ enum class QueueRole : uint8_t {
   kTransfer = 2, //!< Copy command queue.
   kPresent = 3, //!< Presentation command queue.
 
-  kMax = 4 // Must be last
+  kMax = 4, // Must be last
 };
 
 //! String representation of enum values in `QueueRole`.

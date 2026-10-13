@@ -186,10 +186,13 @@ NOLINT_TEST(CanonicalPrimitivesTest, AxialFramesRespectSurfaceAndUvDirections)
 
 NOLINT_TEST(CanonicalPrimitivesTest, RejectsInvalidFloatDimensions)
 {
-  for (const auto invalid :
-    { 0.0F, -1.0F, std::numeric_limits<float>::quiet_NaN(),
-      std::numeric_limits<float>::infinity(),
-      -std::numeric_limits<float>::infinity() }) {
+  for (const auto invalid : {
+         0.0F,
+         -1.0F,
+         std::numeric_limits<float>::quiet_NaN(),
+         std::numeric_limits<float>::infinity(),
+         -std::numeric_limits<float>::infinity(),
+       }) {
     EXPECT_FALSE(MakePlaneMeshAsset(1, 1, invalid).has_value());
     EXPECT_FALSE(MakeQuadMeshAsset(invalid, 1.0F).has_value());
     EXPECT_FALSE(MakeQuadMeshAsset(1.0F, invalid).has_value());

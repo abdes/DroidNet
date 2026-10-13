@@ -86,11 +86,13 @@ auto WriteArchivedInt(const PathFinder& path_finder,
 {
   json payload = json::object();
   payload["version"] = 1;
-  payload["cvars"] = json::array({ json::object({
-    { "name", name },
-    { "type", "Int" },
-    { "value", value },
-  }) });
+  payload["cvars"] = json::array({
+    json::object({
+      { "name", name },
+      { "type", "Int" },
+      { "value", value },
+    }),
+  });
 
   const auto archive_path = path_finder.CVarsArchivePath();
   std::filesystem::create_directories(archive_path.parent_path());

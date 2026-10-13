@@ -70,18 +70,24 @@ struct UploadRecord {
   {
     if (failure) {
       return UploadResult {
-        .success = false, .bytes_uploaded = 0, .error = failure
+        .success = false,
+        .bytes_uploaded = 0,
+        .error = failure,
       };
     }
     if (fence <= timeline->progress.completed) {
       return UploadResult {
-        .success = true, .bytes_uploaded = bytes, .error = std::nullopt
+        .success = true,
+        .bytes_uploaded = bytes,
+        .error = std::nullopt,
       };
     }
     if (timeline->progress.closed) {
-      return UploadResult { .success = false,
+      return UploadResult {
+        .success = false,
         .bytes_uploaded = 0,
-        .error = timeline->progress.closed };
+        .error = timeline->progress.closed,
+      };
     }
     return std::nullopt;
   }

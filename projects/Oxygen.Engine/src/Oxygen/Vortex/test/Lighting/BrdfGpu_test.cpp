@@ -50,10 +50,12 @@ namespace {
     for (const auto roughness : { 0.045F, 0.1F, 0.25F, 0.5F, 0.75F, 1.0F }) {
       for (const auto cosine :
         { 0.0F, 0.0001F, 0.001F, 0.01F, 0.1F, 0.25F, 0.5F, 0.75F, 1.0F }) {
-        inputs.push_back({ .roughness = roughness,
+        inputs.push_back({
+          .roughness = roughness,
           .view_cosine = cosine,
           .energy_srv = texture,
-          .reserved = 0U });
+          .reserved = 0U,
+        });
         const auto oracle = reference::IntegrateGgxMoments(
           reference::PerceptualRoughness { roughness },
           reference::ViewCosine { cosine });
@@ -61,11 +63,13 @@ namespace {
         expected.push_back(*oracle);
       }
     }
-    const auto output = Decode({ .records = std::as_bytes(std::span(inputs)),
+    const auto output = Decode({
+      .records = std::as_bytes(std::span(inputs)),
       .stride = sizeof(MomentProbeInput),
       .record_kind = 21U,
       .decoded_words = 4U,
-      .count = static_cast<std::uint32_t>(inputs.size()) });
+      .count = static_cast<std::uint32_t>(inputs.size()),
+    });
     ASSERT_EQ(output.size(), inputs.size() * 4U);
     double maximum_energy_error = 0.0, maximum_bias_error = 0.0;
     for (std::size_t index = 0; index < inputs.size(); ++index) {
@@ -452,19 +456,23 @@ namespace {
             auto response = std::array<double, 3> {};
             auto reflectance = std::array<double, 3> {};
             const auto lobes = reference::EvaluateRasterGgxBrdf(
-              { .roughness = reference::PerceptualRoughness { roughness },
+              {
+                .roughness = reference::PerceptualRoughness { roughness },
                 .light = reference::LightCosine { input.light_cosine },
                 .view = reference::ViewCosine { input.view_cosine },
-                .azimuth = reference::RelativeAzimuth { azimuth } },
+                .azimuth = reference::RelativeAzimuth { azimuth },
+              },
               channels, *view);
             ASSERT_TRUE(lobes.has_value());
             const auto filter = reference::SampleProductionGgxEnergy(
               roughness, input.view_cosine);
             const auto sampled = reference::EvaluateRasterGgxBrdf(
-              { .roughness = reference::PerceptualRoughness { roughness },
+              {
+                .roughness = reference::PerceptualRoughness { roughness },
                 .light = reference::LightCosine { input.light_cosine },
                 .view = reference::ViewCosine { input.view_cosine },
-                .azimuth = reference::RelativeAzimuth { azimuth } },
+                .azimuth = reference::RelativeAzimuth { azimuth },
+              },
               channels, filter.moments);
             ASSERT_TRUE(sampled.has_value());
             auto sampled_response = std::array<double, 3> {};

@@ -72,9 +72,11 @@ NamingService::NamingService(Config config)
 }
 
 NamingService::NamingService(std::shared_ptr<const NamingStrategy> strategy)
-  : config_ { .strategy = std::move(strategy),
+  : config_ {
+    .strategy = std::move(strategy),
     .enable_namespacing = true,
-    .enforce_uniqueness = true }
+    .enforce_uniqueness = true,
+  }
 {
   if (!config_.strategy) {
     auto options = NormalizeNamingStrategy::Options {};

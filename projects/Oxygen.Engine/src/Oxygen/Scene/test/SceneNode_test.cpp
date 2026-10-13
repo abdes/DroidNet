@@ -178,8 +178,11 @@ NOLINT_TEST_F(SceneNodeFlagsTest, RootsAreLocalOnAndChildrenInheritVisualFlags)
   ASSERT_TRUE(root_flags.has_value());
   ASSERT_TRUE(child_flags.has_value());
   scene_->Update();
-  for (const auto flag : { SceneNodeFlags::kVisible,
-         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+  for (const auto flag : {
+         SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows,
+         SceneNodeFlags::kReceivesShadows,
+       }) {
     EXPECT_FALSE(root_flags->get().IsInherited(flag));
     EXPECT_TRUE(root_flags->get().GetEffectiveValue(flag));
     EXPECT_TRUE(child_flags->get().IsInherited(flag));
@@ -190,29 +193,41 @@ NOLINT_TEST_F(SceneNodeFlagsTest, RootsAreLocalOnAndChildrenInheritVisualFlags)
 NOLINT_TEST_F(SceneNodeFlagsTest, InheritedRootsResolveSceneDefaults)
 {
   auto source = SceneNode::Flags {};
-  for (const auto flag : { SceneNodeFlags::kVisible,
-         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+  for (const auto flag : {
+         SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows,
+         SceneNodeFlags::kReceivesShadows,
+       }) {
     source.SetFlag(flag, SceneFlag {}.SetInheritedBit(true));
   }
   auto root = scene_->CreateNode("InheritedRoot", source);
   scene_->Update();
   const auto flags = root.GetFlags();
   ASSERT_TRUE(flags.has_value());
-  for (const auto flag : { SceneNodeFlags::kVisible,
-         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+  for (const auto flag : {
+         SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows,
+         SceneNodeFlags::kReceivesShadows,
+       }) {
     EXPECT_TRUE(flags->get().IsInherited(flag));
     EXPECT_TRUE(flags->get().GetEffectiveValue(flag));
     flags->get().SetLocalValue(flag, false);
   }
   scene_->Update();
-  for (const auto flag : { SceneNodeFlags::kVisible,
-         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+  for (const auto flag : {
+         SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows,
+         SceneNodeFlags::kReceivesShadows,
+       }) {
     EXPECT_FALSE(flags->get().GetEffectiveValue(flag));
     flags->get().SetInherited(flag, true);
   }
   scene_->Update();
-  for (const auto flag : { SceneNodeFlags::kVisible,
-         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+  for (const auto flag : {
+         SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows,
+         SceneNodeFlags::kReceivesShadows,
+       }) {
     EXPECT_TRUE(flags->get().GetEffectiveValue(flag));
   }
 }
@@ -232,22 +247,31 @@ NOLINT_TEST_F(
   ASSERT_TRUE(hidden_flags.has_value());
   ASSERT_TRUE(inherited_flags.has_value());
   ASSERT_TRUE(local_flags.has_value());
-  for (const auto flag : { SceneNodeFlags::kVisible,
-         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+  for (const auto flag : {
+         SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows,
+         SceneNodeFlags::kReceivesShadows,
+       }) {
     hidden_flags->get().SetLocalValue(flag, false);
     local_flags->get().SetLocalValue(flag, true);
   }
   scene_->Update();
-  for (const auto flag : { SceneNodeFlags::kVisible,
-         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+  for (const auto flag : {
+         SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows,
+         SceneNodeFlags::kReceivesShadows,
+       }) {
     EXPECT_FALSE(inherited_flags->get().GetEffectiveValue(flag));
     EXPECT_TRUE(local_flags->get().GetEffectiveValue(flag));
     EXPECT_FALSE(local_flags->get().IsInherited(flag));
   }
   ASSERT_TRUE(scene_->ReparentNode(inherited.value(), shown, false));
   scene_->Update();
-  for (const auto flag : { SceneNodeFlags::kVisible,
-         SceneNodeFlags::kCastsShadows, SceneNodeFlags::kReceivesShadows }) {
+  for (const auto flag : {
+         SceneNodeFlags::kVisible,
+         SceneNodeFlags::kCastsShadows,
+         SceneNodeFlags::kReceivesShadows,
+       }) {
     EXPECT_TRUE(inherited_flags->get().IsInherited(flag));
     EXPECT_TRUE(inherited_flags->get().GetEffectiveValue(flag));
   }

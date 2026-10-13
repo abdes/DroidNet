@@ -204,9 +204,11 @@ namespace {
     EXPECT_LT(exhausted.error().failed_view->get(), 1.0);
     const auto outer_exhausted
       = IntegrateGgxMeanMoments(PerceptualRoughness { 1.0 },
-        { .refinement_tolerance = 1.0e-14,
+        {
+          .refinement_tolerance = 1.0e-14,
           .initial_order = 4U,
-          .maximum_order = 16U });
+          .maximum_order = 16U,
+        });
     ASSERT_FALSE(outer_exhausted.has_value());
     EXPECT_EQ(
       outer_exhausted.error().reason, MomentIntegrationError::kDidNotConverge);

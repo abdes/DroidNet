@@ -103,15 +103,30 @@ namespace {
   auto DirectionAt(std::uint32_t face, float x, float y, std::uint32_t size)
     -> glm::vec3
   {
-    constexpr auto centers = std::array { glm::vec3 { 1, 0, 0 },
-      glm::vec3 { -1, 0, 0 }, glm::vec3 { 0, 1, 0 }, glm::vec3 { 0, -1, 0 },
-      glm::vec3 { 0, 0, 1 }, glm::vec3 { 0, 0, -1 } };
-    constexpr auto rights = std::array { glm::vec3 { 0, 0, -1 },
-      glm::vec3 { 0, 0, 1 }, glm::vec3 { 1, 0, 0 }, glm::vec3 { 1, 0, 0 },
-      glm::vec3 { 1, 0, 0 }, glm::vec3 { -1, 0, 0 } };
-    constexpr auto downs = std::array { glm::vec3 { 0, -1, 0 },
-      glm::vec3 { 0, -1, 0 }, glm::vec3 { 0, 0, 1 }, glm::vec3 { 0, 0, -1 },
-      glm::vec3 { 0, -1, 0 }, glm::vec3 { 0, -1, 0 } };
+    constexpr auto centers = std::array {
+      glm::vec3 { 1, 0, 0 },
+      glm::vec3 { -1, 0, 0 },
+      glm::vec3 { 0, 1, 0 },
+      glm::vec3 { 0, -1, 0 },
+      glm::vec3 { 0, 0, 1 },
+      glm::vec3 { 0, 0, -1 },
+    };
+    constexpr auto rights = std::array {
+      glm::vec3 { 0, 0, -1 },
+      glm::vec3 { 0, 0, 1 },
+      glm::vec3 { 1, 0, 0 },
+      glm::vec3 { 1, 0, 0 },
+      glm::vec3 { 1, 0, 0 },
+      glm::vec3 { -1, 0, 0 },
+    };
+    constexpr auto downs = std::array {
+      glm::vec3 { 0, -1, 0 },
+      glm::vec3 { 0, -1, 0 },
+      glm::vec3 { 0, 0, 1 },
+      glm::vec3 { 0, 0, -1 },
+      glm::vec3 { 0, -1, 0 },
+      glm::vec3 { 0, -1, 0 },
+    };
     const auto u = 2.0F * (x + 0.5F) / size - 1.0F;
     const auto v = 2.0F * (y + 0.5F) / size - 1.0F;
     const auto p = centers[face] + u * rights[face] + v * downs[face];
@@ -192,9 +207,11 @@ namespace {
         : double(maximum_mip);
       const auto world = tangent * direction.x + bitangent * direction.y
         + normal * direction.z;
-      result.samples.push_back(
-        { { float(world.x), float(world.y), float(world.z) }, float(lod),
-          source.get() });
+      result.samples.push_back({
+        { float(world.x), float(world.y), float(world.z) },
+        float(lod),
+        source.get(),
+      });
       result.weights.push_back(weight);
     }
     return result;
@@ -277,14 +294,16 @@ namespace {
     auto Shade(const IblGpuProducts& products,
       std::span<const SurfaceInput> inputs) -> std::vector<std::array<float, 6>>
     {
-      const auto words = Decode({ .records = std::as_bytes(inputs),
+      const auto words = Decode({
+        .records = std::as_bytes(inputs),
         .stride = sizeof(SurfaceInput),
         .record_kind = 32U,
         .decoded_words = 6U,
         .count = static_cast<std::uint32_t>(inputs.size()),
         .prepare = [&](graphics::CommandRecorder& recorder) -> void {
           CHECK_F(products.Attach(recorder, Backend().GetResourceRegistry()));
-        } });
+        },
+      });
       auto result = std::vector<std::array<float, 6>>(inputs.size());
       std::memcpy(
         result.data(), words.data(), words.size() * sizeof(std::uint32_t));
@@ -293,42 +312,50 @@ namespace {
 
     auto BrdfResponse(const SurfaceInput& input) -> std::array<float, 2>
     {
-      const auto lookup_input = std::array<float, 4> { 1.0F, input.roughness,
-        std::bit_cast<float>(input.brdf_srv), 0.0F };
-      const auto lut
-        = Decode({ .records = std::as_bytes(std::span(lookup_input)),
-          .stride = 16U,
-          .record_kind = 31U,
-          .decoded_words = 2U,
-          .count = 1U });
+      const auto lookup_input = std::array<float, 4> {
+        1.0F,
+        input.roughness,
+        std::bit_cast<float>(input.brdf_srv),
+        0.0F,
+      };
+      const auto lut = Decode({
+        .records = std::as_bytes(std::span(lookup_input)),
+        .stride = 16U,
+        .record_kind = 31U,
+        .decoded_words = 2U,
+        .count = 1U,
+      });
       return { std::bit_cast<float>(lut[0]), std::bit_cast<float>(lut[1]) };
     }
 
     auto SelectedSpecular(const IblGpuProducts& products,
       std::span<const SurfaceInput> inputs) -> std::vector<std::uint32_t>
     {
-      return Decode({ .records = std::as_bytes(inputs),
+      return Decode({
+        .records = std::as_bytes(inputs),
         .stride = sizeof(SurfaceInput),
         .record_kind = 37U,
         .decoded_words = 1U,
         .count = static_cast<std::uint32_t>(inputs.size()),
         .prepare = [&](graphics::CommandRecorder& recorder) -> void {
           CHECK_F(products.Attach(recorder, Backend().GetResourceRegistry()));
-        } });
+        },
+      });
     }
 
     auto Reference(const IblGpuProducts& products, const ReferencePlan& plan)
       -> glm::dvec3
     {
-      const auto samples
-        = Decode({ .records = std::as_bytes(std::span(plan.samples)),
-          .stride = sizeof(ReferenceSample),
-          .record_kind = 33U,
-          .decoded_words = 3U,
-          .count = static_cast<std::uint32_t>(plan.samples.size()),
-          .prepare = [&](graphics::CommandRecorder& recorder) -> void {
-            CHECK_F(products.Attach(recorder, Backend().GetResourceRegistry()));
-          } });
+      const auto samples = Decode({
+        .records = std::as_bytes(std::span(plan.samples)),
+        .stride = sizeof(ReferenceSample),
+        .record_kind = 33U,
+        .decoded_words = 3U,
+        .count = static_cast<std::uint32_t>(plan.samples.size()),
+        .prepare = [&](graphics::CommandRecorder& recorder) -> void {
+          CHECK_F(products.Attach(recorder, Backend().GetResourceRegistry()));
+        },
+      });
       auto sum = glm::dvec3 {};
       auto total = 0.0;
       for (auto i = 0U; i < plan.weights.size(); ++i) {
@@ -344,14 +371,16 @@ namespace {
         texel) -> Source
     {
       auto& graphics = Backend();
-      auto texture = graphics.CreateTexture({ .width = size,
+      auto texture = graphics.CreateTexture({
+        .width = size,
         .height = size,
         .array_size = 6U,
         .format = Format::kRGBA32Float,
         .texture_type = TextureType::kTextureCube,
         .debug_name = "IBL.ReferenceSource",
         .is_shader_resource = true,
-        .initial_state = ResourceStates::kCommon });
+        .initial_state = ResourceStates::kCommon,
+      });
       auto registration
         = graphics.GetResourceRegistry().RegisterManaged(texture);
       CHECK_F(registration.has_value());
@@ -363,9 +392,11 @@ namespace {
           upload::UploadPolicy {
             graphics.QueueKeyFor(graphics::QueueRole::kGraphics) });
       CHECK_F(plan.has_value());
-      auto staging = CreateRegisteredBuffer({ .size_bytes = plan->total_bytes,
+      auto staging = CreateRegisteredBuffer({
+        .size_bytes = plan->total_bytes,
         .memory = graphics::BufferMemory::kUpload,
-        .debug_name = "IBL.ReferenceUpload" });
+        .debug_name = "IBL.ReferenceUpload",
+      });
       auto row = std::vector<Pixel>(size);
       for (auto face = 0U; face < 6U; ++face) {
         const auto& region = plan->regions[face];
@@ -479,11 +510,12 @@ namespace {
       EXPECT_EQ(ma.average_brightness, mb.average_brightness);
       EXPECT_EQ(ma.maximum_half_gain, mb.maximum_half_gain);
       EXPECT_EQ(ma.precision_flags, mb.precision_flags);
-      const auto pairs = std::array { std::pair { expected.processed_cube,
-                                        actual.processed_cube },
+      const auto pairs = std::array {
+        std::pair { expected.processed_cube, actual.processed_cube },
         std::pair { expected.specular_cube, actual.specular_cube },
         std::pair { expected.processed_half_cube, actual.processed_half_cube },
-        std::pair { expected.specular_half_cube, actual.specular_half_cube } };
+        std::pair { expected.specular_half_cube, actual.specular_half_cube },
+      };
       for (const auto& [reference, candidate] : pairs) {
         for (unsigned mip = 0U; mip <= expected.maximum_mip; ++mip) {
           for (unsigned face = 0U; face < 6U; ++face) {
@@ -549,12 +581,14 @@ namespace {
     {
       auto source = environment::internal::IblSkySource {};
       source.environment.atmosphere.enabled = 1U;
-      auto sky_view = CreateTexture({ .width = 4U,
+      auto sky_view = CreateTexture({
+        .width = 4U,
         .height = 4U,
         .format = Format::kRGBA32Float,
         .texture_type = TextureType::kTexture2D,
         .debug_name = "Allocation test sky LUT",
-        .is_shader_resource = true });
+        .is_shader_resource = true,
+      });
       auto distant = CreateRegisteredBuffer(
         { .size_bytes = 16U, .debug_name = "Allocation test distant LUT" });
       working_sky_ = sky_view;
@@ -574,10 +608,11 @@ namespace {
         = upload::UploadPlanner::PlanTexture2D({ .dst = sky_view },
           subresources, upload::UploadPolicy { QueueKeyFor() });
       CHECK_F(plan.has_value());
-      auto staging
-        = CreateRegisteredBuffer({ .size_bytes = plan->total_bytes + 16U,
-          .memory = graphics::BufferMemory::kUpload,
-          .debug_name = "Allocation test LUT upload" });
+      auto staging = CreateRegisteredBuffer({
+        .size_bytes = plan->total_bytes + 16U,
+        .memory = graphics::BufferMemory::kUpload,
+        .debug_name = "Allocation test LUT upload",
+      });
       const auto row = std::array { pixel, pixel, pixel, pixel };
       const auto& region = plan->regions.front();
       for (unsigned y = 0U; y < 4U; ++y)
@@ -626,10 +661,13 @@ namespace {
     const auto atmosphere = MakeAtmosphereSource();
     unsigned total_failures = 0U;
     enum class Scenario { kCold, kResize, kFog, kAtmosphere, kFirstUse };
-    const std::array cases { std::pair { Scenario::kCold, 9U },
-      std::pair { Scenario::kResize, 9U }, std::pair { Scenario::kFog, 10U },
+    const std::array cases {
+      std::pair { Scenario::kCold, 9U },
+      std::pair { Scenario::kResize, 9U },
+      std::pair { Scenario::kFog, 10U },
       std::pair { Scenario::kAtmosphere, 12U },
-      std::pair { Scenario::kFirstUse, 9U } };
+      std::pair { Scenario::kFirstUse, 9U },
+    };
     for (const auto [scenario, expected_failures] : cases) {
       bool completed = false;
       unsigned failures = 0U;
@@ -660,8 +698,10 @@ namespace {
         const auto process
           = [&]() -> std::expected<std::shared_ptr<const IblGpuProducts>,
                     environment::internal::IblProcessError> {
-          const auto settings = IblProcessSettings { .face_size = 32U,
-            .lower_hemisphere_solid_color = false };
+          const auto settings = IblProcessSettings {
+            .face_size = 32U,
+            .lower_hemisphere_solid_color = false,
+          };
           return scenario == Scenario::kFog
             ? Processor().ProcessSky(sky, brdf, settings, 802U)
             : scenario == Scenario::kAtmosphere
@@ -785,9 +825,11 @@ namespace {
       return Pixel { float(1U + face + x), 0.5F * (1U + y), 0.125F, 1 };
     });
     const auto brdf = PrepareBrdf();
-    const auto settings = IblProcessSettings { .face_size = 32U,
+    const auto settings = IblProcessSettings {
+      .face_size = 32U,
       .lower_hemisphere_solid_color = false,
-      .dispatch_tile_size = 8U };
+      .dispatch_tile_size = 8U,
+    };
     const auto reference = Processor().Process(
       source.texture, source.registration, brdf, settings, 980U);
     ASSERT_TRUE(reference);
@@ -879,9 +921,11 @@ namespace {
   {
     auto source = MakeAtmosphereSource();
     const auto brdf = PrepareBrdf();
-    const auto settings = IblProcessSettings { .face_size = 16U,
+    const auto settings = IblProcessSettings {
+      .face_size = 16U,
       .lower_hemisphere_solid_color = false,
-      .dispatch_tile_size = 8U };
+      .dispatch_tile_size = 8U,
+    };
     const auto reference = Processor().ProcessSky(source, brdf, settings, 982U);
     ASSERT_TRUE(reference);
     const auto job = Processor().BeginSky(source, brdf, settings, 983U);
@@ -964,8 +1008,12 @@ namespace {
   NOLINT_TEST_F(IblConvolutionGpuTest, SpatialTilesMatchWholeDispatchProducts)
   {
     const auto source = MakeSource(32U, [](auto face, auto x, auto y) -> Pixel {
-      return Pixel { 100000.0F * (1U + face) + 100.0F * x, 0.25F * (1U + y),
-        0x1p-24F * (1U + x + y), 1.0F };
+      return Pixel {
+        100000.0F * (1U + face) + 100.0F * x,
+        0.25F * (1U + y),
+        0x1p-24F * (1U + x + y),
+        1.0F,
+      };
     });
     auto sky = environment::internal::IblSkySource {};
     sky.origin = { 0, 0, 2 };
@@ -981,9 +1029,11 @@ namespace {
       const auto build = [&](unsigned tile_size)
         -> std::expected<std::shared_ptr<const IblGpuProducts>,
           environment::internal::IblProcessError> {
-        const auto settings = IblProcessSettings { .face_size = 32U,
+        const auto settings = IblProcessSettings {
+          .face_size = 32U,
           .lower_hemisphere_solid_color = false,
-          .dispatch_tile_size = tile_size };
+          .dispatch_tile_size = tile_size,
+        };
         return captured
           ? Processor().ProcessSky(sky, brdf, settings, ++revision)
           : Processor().Process(
@@ -1023,13 +1073,14 @@ namespace {
           expected_metadata.maximum_half_gain);
         EXPECT_EQ(
           actual_metadata.precision_flags, expected_metadata.precision_flags);
-        const auto pairs = std::array { std::pair { (*whole)->processed_cube,
-                                          (*tiled)->processed_cube },
+        const auto pairs = std::array {
+          std::pair { (*whole)->processed_cube, (*tiled)->processed_cube },
           std::pair { (*whole)->specular_cube, (*tiled)->specular_cube },
           std::pair {
             (*whole)->processed_half_cube, (*tiled)->processed_half_cube },
           std::pair {
-            (*whole)->specular_half_cube, (*tiled)->specular_half_cube } };
+            (*whole)->specular_half_cube, (*tiled)->specular_half_cube },
+        };
         for (const auto& [expected, actual] : pairs) {
           for (unsigned mip = 0U; mip <= (*whole)->maximum_mip; ++mip) {
             for (unsigned face = 0U; face < 6U; ++face) {
@@ -1051,8 +1102,12 @@ namespace {
     IblConvolutionGpuTest, HalfMirrorsNarrowCompletedCanonicalChains)
   {
     const auto source = MakeSource(16U, [](auto face, auto x, auto y) -> Pixel {
-      return Pixel { 0.001337F * (1U + face + x), 0.212345F * (1U + y),
-        0x1p-30F * (1U + x + y), 1.0F };
+      return Pixel {
+        0.001337F * (1U + face + x),
+        0.212345F * (1U + y),
+        0x1p-30F * (1U + x + y),
+        1.0F,
+      };
     });
     const auto built
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
@@ -1064,9 +1119,10 @@ namespace {
     EXPECT_EQ(metadata.processing_flags, 3U);
     EXPECT_NE(metadata.processed_half_srv, kInvalidBindlessIndex);
     EXPECT_NE(metadata.specular_half_srv, kInvalidBindlessIndex);
-    const auto pairs = std::array { std::pair { products.processed_cube,
-                                      products.processed_half_cube },
-      std::pair { products.specular_cube, products.specular_half_cube } };
+    const auto pairs = std::array {
+      std::pair { products.processed_cube, products.processed_half_cube },
+      std::pair { products.specular_cube, products.specular_half_cube },
+    };
     for (const auto& [canonical, half] : pairs) {
       ASSERT_EQ(canonical->GetDescriptor().format, Format::kRGBA32Float);
       ASSERT_EQ(half->GetDescriptor().format, Format::kRGBA16Float);
@@ -1137,8 +1193,19 @@ namespace {
           const auto n = Direction(face, x, y, 16U);
           directions.push_back({ n.x, n.z, -n.y });
         }
-    constexpr auto edge = std::array { -1.00001F, -1.0F, -0.99999F, -0.999F,
-      -0.5F, 0.0F, 0.5F, 0.999F, 0.99999F, 1.0F, 1.00001F };
+    constexpr auto edge = std::array {
+      -1.00001F,
+      -1.0F,
+      -0.99999F,
+      -0.999F,
+      -0.5F,
+      0.0F,
+      0.5F,
+      0.999F,
+      0.99999F,
+      1.0F,
+      1.00001F,
+    };
     for (auto axis = 0U; axis < 3U; ++axis)
       for (const auto sign : { -1.0F, 1.0F })
         for (const auto u : edge)
@@ -1149,8 +1216,16 @@ namespace {
             direction[(axis + 2U) % 3U] = v;
             directions.push_back(direction);
           }
-    constexpr auto phases = std::array { -0x1p-9F, 0.0F, 0x1p-9F,
-      0.5F - 0x1p-9F, 0.5F, 0.5F + 0x1p-9F, 1.0F - 0x1p-9F, 1.0F + 0x1p-9F };
+    constexpr auto phases = std::array {
+      -0x1p-9F,
+      0.0F,
+      0x1p-9F,
+      0.5F - 0x1p-9F,
+      0.5F,
+      0.5F + 0x1p-9F,
+      1.0F - 0x1p-9F,
+      1.0F + 0x1p-9F,
+    };
     for (auto face = 0U; face < 6U; ++face)
       for (const auto x : { 0U, 63U, 127U })
         for (const auto y : { 0U, 63U, 127U })
@@ -1186,9 +1261,12 @@ namespace {
             * std::pow(std::max(0.0F,
                          glm::dot(n, glm::normalize(glm::vec3 { 1, 2, 3 }))),
               64.0F);
-          return Pixel { 4.1F + 16.3F * n.z * n.z + sun,
+          return Pixel {
+            4.1F + 16.3F * n.z * n.z + sun,
             7.3F + 24.1F * n.z * n.z + 0.6F * sun,
-            12.7F + 40.3F * n.z * n.z + 0.2F * sun, 1.0F };
+            12.7F + 40.3F * n.z * n.z + 0.2F * sun,
+            1.0F,
+          };
         });
       const auto built = Processor().Process(source.texture,
         source.registration, PrepareBrdf(),
@@ -1202,19 +1280,30 @@ namespace {
       const auto surface = std::array { Surface(products) };
       EXPECT_EQ(
         SelectedSpecular(products, surface)[0], metadata.specular_half_srv);
-      const auto mapping_input = std::array<float, 4> { 1.0F, 0.0F,
-        float(products.maximum_mip), 0.04F };
-      const auto mapping
-        = Decode({ .records = std::as_bytes(std::span(mapping_input)),
-          .stride = 16U,
-          .record_kind = 30U,
-          .decoded_words = 3U,
-          .count = 1U });
+      const auto mapping_input = std::array<float, 4> {
+        1.0F,
+        0.0F,
+        float(products.maximum_mip),
+        0.04F,
+      };
+      const auto mapping = Decode({
+        .records = std::as_bytes(std::span(mapping_input)),
+        .stride = 16U,
+        .record_kind = 30U,
+        .decoded_words = 3U,
+        .count = 1U,
+      });
       const auto maximum_consumer_lod = std::bit_cast<float>(mapping[0]);
-      for (const auto descriptors : { std::array { products.processed_srv.get(),
-                                        metadata.processed_half_srv },
+      for (const auto descriptors : {
              std::array {
-               products.specular_srv.get(), metadata.specular_half_srv } }) {
+               products.processed_srv.get(),
+               metadata.processed_half_srv,
+             },
+             std::array {
+               products.specular_srv.get(),
+               metadata.specular_half_srv,
+             },
+           }) {
         auto samples = std::vector<ReferenceSample> {};
         samples.reserve(directions.size() * lods.size() * 2U);
         for (const auto& direction : directions)
@@ -1230,7 +1319,8 @@ namespace {
           first += kBatchRecords) {
           const auto batch = std::span(samples).subspan(first,
             std::min(std::size_t(kBatchRecords), samples.size() - first));
-          const auto decoded = Decode({ .records = std::as_bytes(batch),
+          const auto decoded = Decode({
+            .records = std::as_bytes(batch),
             .stride = sizeof(ReferenceSample),
             .record_kind = 33U,
             .decoded_words = 3U,
@@ -1238,7 +1328,8 @@ namespace {
             .prepare = [&](graphics::CommandRecorder& recorder) -> void {
               CHECK_F(
                 products.Attach(recorder, Backend().GetResourceRegistry()));
-            } });
+            },
+          });
           words.insert(words.end(), decoded.begin(), decoded.end());
         }
         auto chain_rgb_error = 0.0;
@@ -1545,8 +1636,11 @@ namespace {
           **products, *(*products)->metadata);
         EXPECT_EQ(metadata.processing_flags, 3U);
         EXPECT_EQ(metadata.product_revision, revision);
-        const auto expected = std::array { capture_visible ? 7.5e7F : 0.0F,
-          capture_visible ? 1.5e6F : 0.0F, capture_visible ? 6.0F : 0.0F };
+        const auto expected = std::array {
+          capture_visible ? 7.5e7F : 0.0F,
+          capture_visible ? 1.5e6F : 0.0F,
+          capture_visible ? 6.0F : 0.0F,
+        };
         EXPECT_NEAR(metadata.source_radiance_scale,
           std::max(1.0F, expected[0] / 65504.0F), 0.001F);
         for (const auto& texture :
@@ -1642,8 +1736,10 @@ namespace {
     source.environment.fog.primary_density = 0.01F;
     source.environment.fog.fog_inscattering_luminance_rgb
       = { 1.0F, 2.0F, 3.0F };
-    const auto settings = IblProcessSettings { .face_size = 16U,
-      .lower_hemisphere_solid_color = false };
+    const auto settings = IblProcessSettings {
+      .face_size = 16U,
+      .lower_hemisphere_solid_color = false,
+    };
     auto first = Processor().ProcessSky(source, PrepareBrdf(), settings, 220U);
     ASSERT_TRUE(first.has_value());
     source.environment.fog.fog_inscattering_luminance_rgb
@@ -1712,8 +1808,12 @@ namespace {
     const auto source
       = MakeSource(128U, [](auto face, auto x, auto y) -> Pixel {
           const auto n = Direction(face, x, y, 128U);
-          return Pixel { 1.0F + 0.75F * n.x, 1.0F + 0.75F * n.y,
-            1.0F + 0.75F * n.z, 1.0F };
+          return Pixel {
+            1.0F + 0.75F * n.x,
+            1.0F + 0.75F * n.y,
+            1.0F + 0.75F * n.z,
+            1.0F,
+          };
         });
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
@@ -1721,9 +1821,14 @@ namespace {
     ASSERT_TRUE(products.has_value());
     const auto sh = ReadBuffer<std::array<glm::vec4, 8>>(
       **products, *(*products)->diffuse_sh);
-    for (const auto n : { glm::vec3 { 1, 0, 0 }, glm::vec3 { -1, 0, 0 },
-           glm::vec3 { 0, 1, 0 }, glm::vec3 { 0, -1, 0 }, glm::vec3 { 0, 0, 1 },
-           glm::vec3 { 0, 0, -1 } }) {
+    for (const auto n : {
+           glm::vec3 { 1, 0, 0 },
+           glm::vec3 { -1, 0, 0 },
+           glm::vec3 { 0, 1, 0 },
+           glm::vec3 { 0, -1, 0 },
+           glm::vec3 { 0, 0, 1 },
+           glm::vec3 { 0, 0, -1 },
+         }) {
       const auto diffuse
         = environment::internal::EvaluatePackedStaticSkyLightDiffuseSh(sh, n);
       EXPECT_NEAR(diffuse.r, 1.0F + 0.5F * n.x, 0.001F);
@@ -1747,8 +1852,12 @@ namespace {
   NOLINT_TEST_F(IblConvolutionGpuTest, InvalidSourceCannotPublishValidMetadata)
   {
     const auto source = MakeSource(16U, [](auto, auto, auto) -> Pixel {
-      return Pixel { std::numeric_limits<float>::quiet_NaN(), 1.0F, 1.0F,
-        1.0F };
+      return Pixel {
+        std::numeric_limits<float>::quiet_NaN(),
+        1.0F,
+        1.0F,
+        1.0F,
+      };
     });
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
@@ -1763,9 +1872,12 @@ namespace {
   NOLINT_TEST_F(IblConvolutionGpuTest, SourceMipsUseFourChildBoxReduction)
   {
     const auto source = MakeSource(16U, [](auto face, auto x, auto y) -> Pixel {
-      return Pixel { 1.0F + static_cast<float>(x % 2U),
-        2.0F + static_cast<float>(y % 2U), static_cast<float>(face) + 0.5F,
-        1.0F };
+      return Pixel {
+        1.0F + static_cast<float>(x % 2U),
+        2.0F + static_cast<float>(y % 2U),
+        static_cast<float>(face) + 0.5F,
+        1.0F,
+      };
     });
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
@@ -2003,8 +2115,12 @@ namespace {
             = std::max(0.0F, (0.4F * n.x - 0.2F * n.y + n.z) / std::sqrt(1.2F));
           const auto sun = std::pow(sun_cosine, 128.0F);
           const auto sky = 0.3F + 0.7F * std::max(0.0F, n.z);
-          return Pixel { 0.1F * sky + 40.0F * sun, 0.2F * sky + 24.0F * sun,
-            0.4F * sky + 12.0F * sun, 1.0F };
+          return Pixel {
+            0.1F * sky + 40.0F * sun,
+            0.2F * sky + 24.0F * sun,
+            0.4F * sky + 12.0F * sun,
+            1.0F,
+          };
         });
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
@@ -2081,7 +2197,8 @@ namespace {
     ASSERT_TRUE(built.has_value());
     auto products = std::move(*built);
     const auto inputs = std::array { Surface(*products) };
-    const auto result = Decode({ .records = std::as_bytes(std::span(inputs)),
+    const auto result = Decode({
+      .records = std::as_bytes(std::span(inputs)),
       .stride = sizeof(SurfaceInput),
       .record_kind = 32U,
       .decoded_words = 6U,
@@ -2092,7 +2209,8 @@ namespace {
         products.reset();
         brdf_resources_.reset();
         Backend().GetResourceRegistry().PollManagedRetirements();
-      } });
+      },
+    });
     for (const auto word : result) {
       EXPECT_TRUE(std::isfinite(std::bit_cast<float>(word)));
       EXPECT_GT(std::bit_cast<float>(word), 0.0F);
@@ -2667,8 +2785,12 @@ namespace {
       = MakeSource(128U, [](auto face, auto x, auto y) -> Pixel {
           const auto n = Direction(face, x, y, 128U);
           const auto peak = std::pow(std::max(0.0F, n.z), 32.0F);
-          return Pixel { 1.0F + 0.5F * n.x, 1.0F + 0.5F * n.y,
-            0.2F + 5.0F * peak, 1.0F };
+          return Pixel {
+            1.0F + 0.5F * n.x,
+            1.0F + 0.5F * n.y,
+            0.2F + 5.0F * peak,
+            1.0F,
+          };
         });
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
@@ -2684,9 +2806,12 @@ namespace {
       for (auto face = 0U; face < 6U; ++face) {
         const auto values
           = ReadFace(**products, *(*products)->specular_cube, face, mip);
-        const auto points = std::array { std::array { 0U, 0U },
-          std::array { 0U, size / 2U }, std::array { size / 2U, size / 2U },
-          std::array { size - 1U, size - 1U } };
+        const auto points = std::array {
+          std::array { 0U, 0U },
+          std::array { 0U, size / 2U },
+          std::array { size / 2U, size / 2U },
+          std::array { size - 1U, size - 1U },
+        };
         for (auto point = 0U; point < (size == 1U ? 1U : points.size());
           ++point) {
           const auto [x, y] = points[point];

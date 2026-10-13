@@ -52,12 +52,14 @@ namespace {
     std::vector<ImportDiagnostic>& diagnostics) -> void
   {
     if (present) {
-      diagnostics.push_back({ .severity = ImportSeverity::kError,
+      diagnostics.push_back({
+        .severity = ImportSeverity::kError,
         .code = "import.static.unsupported",
         .message
         = "Static import does not support " + std::string(feature) + ".",
         .source_path = std::string(source_path),
-        .object_path = std::string(object_path) });
+        .object_path = std::string(object_path),
+      });
     }
   }
 
@@ -98,12 +100,19 @@ auto ValidateStaticSource(const cgltf_data& source,
   Reject(source.variants_count != 0U, "material variants", source_path,
     "/extensions/KHR_materials_variants", diagnostics);
 
-  const auto known_extensions
-    = std::to_array<std::string_view>({ "KHR_materials_unlit",
-      "KHR_materials_ior", "KHR_materials_specular", "KHR_materials_sheen",
-      "KHR_materials_clearcoat", "KHR_materials_transmission",
-      "KHR_materials_volume", "KHR_lights_punctual", "KHR_materials_variants",
-      "KHR_texture_transform", "KHR_mesh_quantization" });
+  const auto known_extensions = std::to_array<std::string_view>({
+    "KHR_materials_unlit",
+    "KHR_materials_ior",
+    "KHR_materials_specular",
+    "KHR_materials_sheen",
+    "KHR_materials_clearcoat",
+    "KHR_materials_transmission",
+    "KHR_materials_volume",
+    "KHR_lights_punctual",
+    "KHR_materials_variants",
+    "KHR_texture_transform",
+    "KHR_mesh_quantization",
+  });
   auto extensions = std::set<std::string_view> {};
   for (const auto* extension :
     std::span(source.extensions_used, source.extensions_used_count)) {
@@ -224,8 +233,14 @@ auto ValidateStaticSource(const ufbx_scene& source,
 {
   const auto previous_count = diagnostics.size();
   const auto& settings = source.settings;
-  const auto axis_properties = std::array { "UpAxis", "UpAxisSign", "FrontAxis",
-    "FrontAxisSign", "CoordAxis", "CoordAxisSign" };
+  const auto axis_properties = std::array {
+    "UpAxis",
+    "UpAxisSign",
+    "FrontAxis",
+    "FrontAxisSign",
+    "CoordAxis",
+    "CoordAxisSign",
+  };
   const auto has_axes = ufbx_coordinate_axes_valid(settings.axes)
     && std::ranges::all_of(axis_properties, [&](const char* name) -> bool {
          return HasAuthoredProperty(settings.props, name);
@@ -234,13 +249,15 @@ auto ValidateStaticSource(const ufbx_scene& source,
     && settings.unit_meters > 0.0
     && HasAuthoredProperty(settings.props, "UnitScaleFactor");
   if (!has_axes || !has_units) {
-    diagnostics.push_back({ .severity = ImportSeverity::kError,
+    diagnostics.push_back({
+      .severity = ImportSeverity::kError,
       .code = "import.static.coordinate_metadata",
       .message
       = "FBX import requires explicit valid source axes and units. Export the "
         "file with its coordinate-system and unit metadata.",
       .source_path = std::string(source_path),
-      .object_path = "/GlobalSettings" });
+      .object_path = "/GlobalSettings",
+    });
   }
 
   Reject(source.anim_curves.count != 0U, "animation", source_path,

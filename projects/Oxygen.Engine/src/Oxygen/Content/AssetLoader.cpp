@@ -1717,7 +1717,7 @@ auto AssetLoader::RegisterCommands(
         .type = commands::ParamType::kEnum,
         .default_value = commands::ParamValue { std::string { "all" } },
         .allowed_values = { "all", "asset", "resource", "pressure", "trim",
-          "eviction", "cache", "inflight" },
+          "eviction", "cache", "inflight", },
       },
     },
     .flags = commands::CommandFlags::kDevOnly,

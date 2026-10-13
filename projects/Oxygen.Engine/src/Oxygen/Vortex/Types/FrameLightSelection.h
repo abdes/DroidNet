@@ -96,10 +96,10 @@ struct FrameLocalLightSelection {
   glm::vec3 direction { 0.0F, -1.0F, 0.0F };
 
   float inner_cone_half_angle_radians {
-    scene::SpotLight::kDefaultInnerConeAngle
+    scene::SpotLight::kDefaultInnerConeAngle,
   };
   float outer_cone_half_angle_radians {
-    scene::SpotLight::kDefaultOuterConeAngle
+    scene::SpotLight::kDefaultOuterConeAngle,
   };
   float source_radius { 0.0F };
   std::uint32_t flags { 0U };

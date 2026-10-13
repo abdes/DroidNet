@@ -97,8 +97,9 @@ namespace {
     bool crash_dumps_enabled { false };
     bool dx12_initialized { false };
 
-    std::filesystem::path output_dir { std::filesystem::path("logs")
-      / "aftermath" };
+    std::filesystem::path output_dir {
+      std::filesystem::path("logs") / "aftermath",
+    };
 
     uint64_t next_marker_token { 1 };
     std::unordered_map<ID3D12GraphicsCommandList*,

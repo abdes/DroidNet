@@ -195,10 +195,11 @@ NOLINT_TEST_F(ResourceRegistryBasicTest, UnRegisterView_RemovesOnlyTarget)
 NOLINT_TEST_F(
   ResourceRegistryBasicTest, BatchRemovalPreservesOtherViewsAndResources)
 {
-  const auto first
-    = TestViewDesc { .view_type = ResourceViewType::kConstantBuffer,
-        .visibility = DescriptorVisibility::kShaderVisible,
-        .id = 101 };
+  const auto first = TestViewDesc {
+    .view_type = ResourceViewType::kConstantBuffer,
+    .visibility = DescriptorVisibility::kShaderVisible,
+    .id = 101,
+  };
   auto second = first;
   second.id = 102;
   auto retained = first;
@@ -782,9 +783,11 @@ NOLINT_TEST_F(
       for (int i = 0; i < num_iterations; ++i) {
         // Register/unregister against the shared registry
         registry_->Register(resources.at(static_cast<std::size_t>(t)));
-        TestViewDesc desc { .view_type = ResourceViewType::kConstantBuffer,
+        TestViewDesc desc {
+          .view_type = ResourceViewType::kConstantBuffer,
           .visibility = DescriptorVisibility::kShaderVisible,
-          .id = static_cast<uint64_t>(i) };
+          .id = static_cast<uint64_t>(i),
+        };
         // Allocate from the shared, thread-safe descriptor namespace.
         DescriptorAllocationHandle descriptor
           = allocator_->AllocateRaw(desc.view_type, desc.visibility);

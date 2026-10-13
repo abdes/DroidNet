@@ -56,11 +56,20 @@ struct ShowFlagInfo {
 inline constexpr auto kShowFlags = std::array {
   ShowFlagInfo { ShowFlag::kShadows, "host.show.shadows", "Shadows" },
   ShowFlagInfo {
-    ShowFlag::kEnvironment, "host.show.environment", "Environment" },
+    ShowFlag::kEnvironment,
+    "host.show.environment",
+    "Environment",
+  },
   ShowFlagInfo {
-    ShowFlag::kTranslucency, "host.show.translucency", "Translucency" },
+    ShowFlag::kTranslucency,
+    "host.show.translucency",
+    "Translucency",
+  },
   ShowFlagInfo {
-    ShowFlag::kVolumetrics, "host.show.volumetrics", "Volumetrics" },
+    ShowFlag::kVolumetrics,
+    "host.show.volumetrics",
+    "Volumetrics",
+  },
   ShowFlagInfo { ShowFlag::kGrid, "host.show.grid", "Grid" },
   ShowFlagInfo { ShowFlag::kAtmosphere, "host.show.atmosphere", "Atmosphere" },
   ShowFlagInfo { ShowFlag::kHeightFog, "host.show.height_fog", "Height Fog" },

@@ -105,20 +105,27 @@ auto RunInventoryReport(const InventoryReportOptions& options) -> int
     };
     auto files = json::array();
     for (const auto& file : index.GetFileInventory()) {
-      files.push_back({ { "relative_path", file.relative_path },
-        { "size", file.size }, { "sha256", hex(file.sha256) },
-        { "file_kind",
+      files.push_back({
+        { "relative_path", file.relative_path },
+        { "size", file.size },
+        { "sha256", hex(file.sha256) },
+        {
+          "file_kind",
           file.kind.has_value() ? json(static_cast<uint16_t>(file.kind.value()))
-                                : json(nullptr) } });
+                                : json(nullptr),
+        },
+      });
     }
     lc::Inspection inspection;
     inspection.LoadFromRoot(root);
     auto assets = json::array();
     for (const auto& asset : inspection.Assets()) {
-      assets.push_back({ { "asset_key", nostd::to_string(asset.key) },
+      assets.push_back({
+        { "asset_key", nostd::to_string(asset.key) },
         { "asset_type", asset.asset_type },
         { "virtual_path", asset.virtual_path },
-        { "descriptor_relative_path", asset.descriptor_relpath } });
+        { "descriptor_relative_path", asset.descriptor_relpath },
+      });
     }
     auto resources = json::array();
     for (const auto& file : inspection.Files()) {
@@ -131,9 +138,11 @@ auto RunInventoryReport(const InventoryReportOptions& options) -> int
         resource_index = static_cast<uint32_t>(
           inspection.ReadTextureDescriptor(file.relpath).index);
       }
-      resources.push_back(
-        { { "kind", "texture" }, { "descriptor_relative_path", file.relpath },
-          { "resource_index", std::move(resource_index) } });
+      resources.push_back({
+        { "kind", "texture" },
+        { "descriptor_relative_path", file.relpath },
+        { "resource_index", std::move(resource_index) },
+      });
     }
     if (base::ComputeFileSha256(index_path) != index_digest) {
       throw std::runtime_error(

@@ -94,7 +94,7 @@ auto MakeDummyViewContext() -> oxygen::engine::ViewContext
       .purpose = "test",
     },
     .render_target = nullptr,
-    .composite_source = nullptr
+    .composite_source = nullptr,
   };
 }
 

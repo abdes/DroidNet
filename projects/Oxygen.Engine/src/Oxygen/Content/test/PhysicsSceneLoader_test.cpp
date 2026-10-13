@@ -325,20 +325,33 @@ NOLINT_TEST_F(PhysicsSceneLoaderValidationTest, LoadEntrySizeMismatchThrows)
     uint32_t expected_size;
   };
 
-  const std::array<Case, 7> cases { {
-    { pak7::PhysicsBindingType::kRigidBody,
-      sizeof(pak7::RigidBodyBindingRecord) },
-    { pak7::PhysicsBindingType::kCollider,
-      sizeof(pak7::ColliderBindingRecord) },
-    { pak7::PhysicsBindingType::kCharacter,
-      sizeof(pak7::CharacterBindingRecord) },
-    { pak7::PhysicsBindingType::kSoftBody,
-      sizeof(pak7::SoftBodyBindingRecord) },
-    { pak7::PhysicsBindingType::kJoint, sizeof(pak7::JointBindingRecord) },
-    { pak7::PhysicsBindingType::kVehicle, sizeof(pak7::VehicleBindingRecord) },
-    { pak7::PhysicsBindingType::kAggregate,
-      sizeof(pak7::AggregateBindingRecord) },
-  } };
+  const std::array<Case, 7> cases {
+    {
+      {
+        pak7::PhysicsBindingType::kRigidBody,
+        sizeof(pak7::RigidBodyBindingRecord),
+      },
+      {
+        pak7::PhysicsBindingType::kCollider,
+        sizeof(pak7::ColliderBindingRecord),
+      },
+      {
+        pak7::PhysicsBindingType::kCharacter,
+        sizeof(pak7::CharacterBindingRecord),
+      },
+      {
+        pak7::PhysicsBindingType::kSoftBody,
+        sizeof(pak7::SoftBodyBindingRecord),
+      },
+      { pak7::PhysicsBindingType::kJoint, sizeof(pak7::JointBindingRecord) },
+      { pak7::PhysicsBindingType::kVehicle,
+        sizeof(pak7::VehicleBindingRecord) },
+      {
+        pak7::PhysicsBindingType::kAggregate,
+        sizeof(pak7::AggregateBindingRecord),
+      },
+    },
+  };
 
   for (const auto& tc : cases) {
     MockStream local_stream {};
@@ -390,12 +403,42 @@ NOLINT_TEST_F(PhysicsSceneLoaderHappyPathTest,
   rec.linear_damping = 0.1F;
   rec.angular_damping = 0.2F;
   rec.gravity_factor = 0.5F;
-  rec.shape_asset_key
-    = oxygen::data::AssetKey::FromBytes({ 0x10, 0x01, 0x02, 0x03, 0x44, 0x55,
-      0x66, 0x77, 0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0x01 });
-  rec.material_asset_key
-    = oxygen::data::AssetKey::FromBytes({ 0x20, 0x11, 0x22, 0x33, 0x54, 0x65,
-      0x76, 0x87, 0x98, 0xa9, 0xba, 0xcb, 0xdc, 0xed, 0xfe, 0x02 });
+  rec.shape_asset_key = oxygen::data::AssetKey::FromBytes({
+    0x10,
+    0x01,
+    0x02,
+    0x03,
+    0x44,
+    0x55,
+    0x66,
+    0x77,
+    0x88,
+    0x99,
+    0xaa,
+    0xbb,
+    0xcc,
+    0xdd,
+    0xee,
+    0x01,
+  });
+  rec.material_asset_key = oxygen::data::AssetKey::FromBytes({
+    0x20,
+    0x11,
+    0x22,
+    0x33,
+    0x54,
+    0x65,
+    0x76,
+    0x87,
+    0x98,
+    0xa9,
+    0xba,
+    0xcb,
+    0xdc,
+    0xed,
+    0xfe,
+    0x02,
+  });
 
   WriteOneRigidBodyTable(rec);
 

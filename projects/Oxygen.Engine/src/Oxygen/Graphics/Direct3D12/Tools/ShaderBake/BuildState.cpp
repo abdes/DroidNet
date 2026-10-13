@@ -348,8 +348,10 @@ auto WriteBuildStateFile(const std::filesystem::path& build_state_path,
       { "entry_point", module.request.entry_point },
       { "stage", std::string(ShaderStageToStateString(module.request.stage)) },
       { "defines", SerializeDefines(module.request.defines) },
-      { "module_artifact_relpath",
-        module.module_artifact_relpath.generic_string() },
+      {
+        "module_artifact_relpath",
+        module.module_artifact_relpath.generic_string(),
+      },
     });
   }
 

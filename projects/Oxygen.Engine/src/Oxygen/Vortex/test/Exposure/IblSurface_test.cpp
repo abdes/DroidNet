@@ -93,9 +93,14 @@ namespace {
   {
     const auto u = 2.0F * (x + 0.5F) / size - 1.0F;
     const auto v = 2.0F * (y + 0.5F) / size - 1.0F;
-    const std::array directions { glm::vec3 { 1, -v, -u },
-      glm::vec3 { -1, -v, u }, glm::vec3 { u, 1, v }, glm::vec3 { u, -1, -v },
-      glm::vec3 { u, -v, 1 }, glm::vec3 { -u, -v, -1 } };
+    const std::array directions {
+      glm::vec3 { 1, -v, -u },
+      glm::vec3 { -1, -v, u },
+      glm::vec3 { u, 1, v },
+      glm::vec3 { u, -1, -v },
+      glm::vec3 { u, -v, 1 },
+      glm::vec3 { -u, -v, -1 },
+    };
     const auto cube = glm::normalize(directions.at(face));
     return { cube.x, -cube.z, cube.y };
   }
@@ -217,10 +222,11 @@ namespace {
             }
           }
         }
-        layouts.push_back(
-          { .offset_bytes = static_cast<std::uint32_t>(face * face_bytes),
-            .row_pitch_bytes = static_cast<std::uint32_t>(size * texel_bytes),
-            .size_bytes = static_cast<std::uint32_t>(face_bytes) });
+        layouts.push_back({
+          .offset_bytes = static_cast<std::uint32_t>(face * face_bytes),
+          .row_pitch_bytes = static_cast<std::uint32_t>(size * texel_bytes),
+          .size_bytes = static_cast<std::uint32_t>(face_bytes),
+        });
       }
       auto payload
         = vortex::testing::detail::BuildV4TexturePayload(desc, layouts, bytes);
@@ -286,12 +292,16 @@ namespace {
         auto& textures = owner->GetSceneTextures();
         // Capture while the view scope is active; SceneRenderer restores its
         // default resources when RenderSurface returns.
-        packed_input_slots = { bindings.gbuffer_srvs[2].get(),
-          bindings.gbuffer_srvs[1].get(), bindings.gbuffer_srvs[0].get() };
-        packed_input_textures
-          = { textures.GetGBufferBaseColor().shared_from_this(),
-              textures.GetGBufferMaterial().shared_from_this(),
-              textures.GetGBufferNormal().shared_from_this() };
+        packed_input_slots = {
+          bindings.gbuffer_srvs[2].get(),
+          bindings.gbuffer_srvs[1].get(),
+          bindings.gbuffer_srvs[0].get(),
+        };
+        packed_input_textures = {
+          textures.GetGBufferBaseColor().shared_from_this(),
+          textures.GetGBufferMaterial().shared_from_this(),
+          textures.GetGBufferNormal().shared_from_this(),
+        };
       };
     }
 
@@ -302,16 +312,29 @@ namespace {
       const auto half = std::bit_cast<std::uint32_t>(0.5F);
       const auto one = std::bit_cast<std::uint32_t>(1.0F);
       constexpr std::uint32_t point_clamp_sampler = 2U;
-      const auto inputs
-        = std::array { std::array<std::uint32_t, 4> { packed_input_slots[0],
-                         point_clamp_sampler, half, half },
-            std::array<std::uint32_t, 4> { one, 0, 0, 0 },
-            std::array<std::uint32_t, 4> {
-              packed_input_slots[1], point_clamp_sampler, half, half },
-            std::array<std::uint32_t, 4> { one, 0, 0, 0 },
-            std::array<std::uint32_t, 4> {
-              packed_input_slots[2], point_clamp_sampler, half, half },
-            std::array<std::uint32_t, 4> { one, 0, 0, 0 } };
+      const auto inputs = std::array {
+        std::array<std::uint32_t, 4> {
+          packed_input_slots[0],
+          point_clamp_sampler,
+          half,
+          half,
+        },
+        std::array<std::uint32_t, 4> { one, 0, 0, 0 },
+        std::array<std::uint32_t, 4> {
+          packed_input_slots[1],
+          point_clamp_sampler,
+          half,
+          half,
+        },
+        std::array<std::uint32_t, 4> { one, 0, 0, 0 },
+        std::array<std::uint32_t, 4> {
+          packed_input_slots[2],
+          point_clamp_sampler,
+          half,
+          half,
+        },
+        std::array<std::uint32_t, 4> { one, 0, 0, 0 },
+      };
       const auto values = RunToneProbe(std::as_bytes(std::span(inputs)), 3U,
         512U, false, [&](graphics::CommandRecorder& recorder) -> void {
           for (const auto& texture : packed_input_textures) {
@@ -320,23 +343,30 @@ namespace {
               *texture, graphics::ResourceStates::kShaderResource);
           }
         });
-      return { Pixel { values[0][0], values[0][1], values[0][2], values[0][3] },
+      return {
+        Pixel { values[0][0], values[0][1], values[0][2], values[0][3] },
         Pixel { values[1][0], values[1][1], values[1][2], values[1][3] },
-        Pixel { values[2][0], values[2][1], values[2][2], values[2][3] } };
+        Pixel { values[2][0], values[2][1], values[2][2], values[2][3] },
+      };
     }
 
     auto Receiver(bool backface) -> void
     {
-      const std::array positions { glm::vec3 { -2, -2, -1 },
-        glm::vec3 { 2, -2, -1 }, glm::vec3 { 0, 2, -1 } };
+      const std::array positions {
+        glm::vec3 { -2, -2, -1 },
+        glm::vec3 { 2, -2, -1 },
+        glm::vec3 { 0, 2, -1 },
+      };
       std::vector<data::Vertex> vertices(3);
       for (unsigned i = 0; i < 3; ++i) {
-        vertices[i] = { .position = positions[i],
+        vertices[i] = {
+          .position = positions[i],
           .normal = { 0, 0, backface ? -1.0F : 1.0F },
           .texcoord = { 0.5F, 0.5F },
           .tangent = { 1, 0, 0 },
           .bitangent = { 0, backface ? -1.0F : 1.0F, 0 },
-          .color = { 1, 1, 1, 1 } };
+          .color = { 1, 1, 1, 1 },
+        };
       }
       auto mesh
         = data::MeshBuilder()
@@ -344,10 +374,12 @@ namespace {
             .WithIndices(backface ? std::vector<std::uint32_t> { 0, 2, 1 }
                                   : std::vector<std::uint32_t> { 0, 1, 2 })
             .BeginSubMesh("IBL receiver", data::MaterialAsset::CreateDefault())
-            .WithMeshView({ .first_index = 0,
+            .WithMeshView({
+              .first_index = 0,
               .index_count = 3,
               .first_vertex = 0,
-              .vertex_count = 3 })
+              .vertex_count = 3,
+            })
             .EndSubMesh()
             .Build();
       data::pak::geometry::GeometryAssetDesc desc {};
@@ -796,8 +828,10 @@ namespace {
       Texture(16U, true, [&](auto, auto, auto) -> auto { return radiance; }));
     // Exact endpoints isolate IBL from sRGB GBuffer quantization. Zero green
     // also exercises the retained F90=50*F0.g rule on a colored metal.
-    const std::array colors { glm::vec3 { 1.0F, 0.0F, 1.0F },
-      glm::vec3 { 0.8F, 0.4F, 0.2F } };
+    const std::array colors {
+      glm::vec3 { 1.0F, 0.0F, 1.0F },
+      glm::vec3 { 0.8F, 0.4F, 0.2F },
+    };
     struct Controls {
       float diffuse;
       float specular;
@@ -815,9 +849,11 @@ namespace {
     };
     unsigned cases = 0;
     for (const bool forward : { false, true }) {
-      for (const auto domain :
-        { data::MaterialDomain::kOpaque, data::MaterialDomain::kMasked,
-          data::MaterialDomain::kAlphaBlended }) {
+      for (const auto domain : {
+             data::MaterialDomain::kOpaque,
+             data::MaterialDomain::kMasked,
+             data::MaterialDomain::kAlphaBlended,
+           }) {
         const bool forward_shader
           = forward || domain == data::MaterialDomain::kAlphaBlended;
         CapturePackedInputs(!forward_shader);
@@ -907,8 +943,12 @@ namespace {
     Sky().SetCubemapResource(
       Texture(16U, true, [](auto face, auto x, auto y) -> Pixel {
         const auto z = WorldDirection(face, x, y, 16U).z;
-        return Pixel { 0.75F + 0.5F * z, 0.5F + 0.25F * z, 0.25F + 0.125F * z,
-          1.0F };
+        return Pixel {
+          0.75F + 0.5F * z,
+          0.5F + 0.25F * z,
+          0.25F + 0.125F * z,
+          1.0F,
+        };
       }));
     Sky().SetSpecularIntensity(0.0F);
     const auto normal = Texture(1U, false, [](auto, auto, auto) -> Pixel {
@@ -916,9 +956,11 @@ namespace {
     });
     unsigned cases = 0;
     for (const bool forward : { false, true }) {
-      for (const auto domain :
-        { data::MaterialDomain::kOpaque, data::MaterialDomain::kMasked,
-          data::MaterialDomain::kAlphaBlended }) {
+      for (const auto domain : {
+             data::MaterialDomain::kOpaque,
+             data::MaterialDomain::kMasked,
+             data::MaterialDomain::kAlphaBlended,
+           }) {
         const double coverage
           = domain == data::MaterialDomain::kAlphaBlended ? 0.5 : 1.0;
         for (const bool backface : { false, true }) {
@@ -957,8 +999,12 @@ namespace {
     Sky().SetCubemapResource(
       Texture(32U, true, [](auto face, auto x, auto y) -> Pixel {
         const auto z = WorldDirection(face, x, y, 32U).z;
-        return Pixel { 0.75F + 0.5F * z, 0.5F + 0.25F * z, 0.25F + 0.125F * z,
-          1.0F };
+        return Pixel {
+          0.75F + 0.5F * z,
+          0.5F + 0.25F * z,
+          0.25F + 0.125F * z,
+          1.0F,
+        };
       }));
     Sky().SetDiffuseIntensity(0.0F);
     const auto normal = Texture(1U, false, [](auto, auto, auto) -> Pixel {
@@ -967,9 +1013,11 @@ namespace {
     std::array<Pixel, 4> reference {};
     unsigned cases = 0;
     for (const bool forward : { false, true }) {
-      for (const auto domain :
-        { data::MaterialDomain::kOpaque, data::MaterialDomain::kMasked,
-          data::MaterialDomain::kAlphaBlended }) {
+      for (const auto domain : {
+             data::MaterialDomain::kOpaque,
+             data::MaterialDomain::kMasked,
+             data::MaterialDomain::kAlphaBlended,
+           }) {
         const float coverage
           = domain == data::MaterialDomain::kAlphaBlended ? 0.5F : 1.0F;
         std::array<Pixel, 4> actual {};
@@ -1023,8 +1071,10 @@ namespace {
     fog.SetVisibleInRealTimeSkyCaptures(true);
     unsigned cases = 0;
     for (const bool forward : { false, true }) {
-      for (const auto domain : { data::MaterialDomain::kOpaque,
-             data::MaterialDomain::kAlphaBlended }) {
+      for (const auto domain : {
+             data::MaterialDomain::kOpaque,
+             data::MaterialDomain::kAlphaBlended,
+           }) {
         const double coverage
           = domain == data::MaterialDomain::kAlphaBlended ? 0.5 : 1.0;
         for (const float roughness : { 0.0F, 1.0F }) {
@@ -1080,9 +1130,11 @@ namespace {
     Sky().SetDiffuseIntensity(0.0F);
     unsigned cases = 0;
     for (const bool forward : { false, true }) {
-      for (const auto domain :
-        { data::MaterialDomain::kOpaque, data::MaterialDomain::kMasked,
-          data::MaterialDomain::kAlphaBlended }) {
+      for (const auto domain : {
+             data::MaterialDomain::kOpaque,
+             data::MaterialDomain::kMasked,
+             data::MaterialDomain::kAlphaBlended,
+           }) {
         const double coverage
           = domain == data::MaterialDomain::kAlphaBlended ? 0.5 : 1.0;
         for (const float roughness : { 0.0F, 1.0F }) {
@@ -1149,9 +1201,11 @@ namespace {
           *owner, context.current_view.view_id);
     };
     for (const bool forward : { false, true })
-      for (const auto domain :
-        { data::MaterialDomain::kOpaque, data::MaterialDomain::kMasked,
-          data::MaterialDomain::kAlphaBlended })
+      for (const auto domain : {
+             data::MaterialDomain::kOpaque,
+             data::MaterialDomain::kMasked,
+             data::MaterialDomain::kAlphaBlended,
+           })
         for (const float roughness : { 0.0F, 0.1F, 0.5F, 1.0F })
           for (const auto tint :
             { glm::vec3 { 1, 1, 1 }, glm::vec3 { 0, 1, 0 } }) {
@@ -1404,9 +1458,12 @@ namespace {
     }
     namespace env = environment::internal;
     using graphics::testing::HeapAllocationFailure;
-    for (const auto [replacement, authoring] :
-      { std::pair { false, false }, std::pair { false, true },
-        std::pair { true, false }, std::pair { true, true } }) {
+    for (const auto [replacement, authoring] : {
+           std::pair { false, false },
+           std::pair { false, true },
+           std::pair { true, false },
+           std::pair { true, true },
+         }) {
       SCOPED_TRACE(::testing::Message()
         << "replacement=" << replacement << " authoring=" << authoring);
       auto processor = env::IblProcessor(*renderer_);
@@ -1643,8 +1700,10 @@ namespace {
     };
     unsigned cases = 0;
     for (const bool forward : { false, true }) {
-      for (const auto domain : { data::MaterialDomain::kOpaque,
-             data::MaterialDomain::kAlphaBlended }) {
+      for (const auto domain : {
+             data::MaterialDomain::kOpaque,
+             data::MaterialDomain::kAlphaBlended,
+           }) {
         const bool forward_shader
           = forward || domain == data::MaterialDomain::kAlphaBlended;
         CapturePackedInputs(!forward_shader);
@@ -1775,8 +1834,12 @@ namespace {
         Sky().SetCubemapResource(
           Texture(32U, true, [](auto face, auto x, auto y) -> Pixel {
             const auto direction = WorldDirection(face, x, y, 32U);
-            return Pixel { .5F + .1F * direction.x, .5F + .1F * direction.y,
-              .5F + .1F * direction.z, 1 };
+            return Pixel {
+              .5F + .1F * direction.x,
+              .5F + .1F * direction.y,
+              .5F + .1F * direction.z,
+              1,
+            };
           }));
       } else if (source == 1) {
         auto& fog = SetCapturedUniformFog();
@@ -1922,11 +1985,14 @@ namespace {
                 ASSERT_NO_FATAL_FAILURE(save(name + "-baseline", baseline));
                 ASSERT_NO_FATAL_FAILURE(save(name + "-lit", lit));
                 ASSERT_NO_FATAL_FAILURE(save(name + "-display", display));
-                records.push_back({ { "name", name }, { "coverage", coverage },
+                records.push_back({
+                  { "name", name },
+                  { "coverage", coverage },
                   { "exposure_ev", ev },
                   { "maximum_relative_error", peak_error },
                   { "display_peak_code_equivalents", display_peak_codes },
-                  { "display_rms_code_equivalents", display_rms_codes } });
+                  { "display_rms_code_equivalents", display_rms_codes },
+                });
                 ++cases;
               }
             }
@@ -1944,8 +2010,12 @@ namespace {
           ASSERT_GT(normal.z, 0);
           const auto normal_texture
             = Texture(1U, false, [&](auto, auto, auto) -> Pixel {
-                return Pixel { .5F + .5F * normal.x, .5F + .5F * normal.y,
-                  .5F + .5F * normal.z, 1 };
+                return Pixel {
+                  .5F + .5F * normal.x,
+                  .5F + .5F * normal.y,
+                  .5F + .5F * normal.z,
+                  1,
+                };
               });
           CapturePackedInputs(false);
           Material(data::MaterialDomain::kOpaque, roughness, metallic,
@@ -2014,10 +2084,13 @@ namespace {
               ASSERT_GT(f, 0);
               canonical_residual
                 = std::max(canonical_residual, std::abs(d - f) / d);
-              for (const auto pair :
-                { std::array<double, 2> { reference[i][c], d },
-                  std::array<double, 2> {
-                    double(lit[i][c]) - baseline[i][c], f } }) {
+              for (const auto pair : {
+                     std::array<double, 2> { reference[i][c], d },
+                     std::array<double, 2> {
+                       double(lit[i][c]) - baseline[i][c],
+                       f,
+                     },
+                   }) {
                 filter_rgb
                   = std::max(filter_rgb, std::abs(pair[0] - pair[1]) / pair[1]);
                 filter_ev
@@ -2038,14 +2111,16 @@ namespace {
             save(name + "-canonical-deferred", canonical_deferred));
           ASSERT_NO_FATAL_FAILURE(
             save(name + "-canonical-forward", canonical_forward));
-          packed_references.push_back(
-            { { "name", name }, { "packed_inputs", packed },
-              { "normal", { normal.x, normal.y, normal.z } },
-              { "f0_relative_bound", f0_bound },
-              { "maximum_residual", maximum_residual },
-              { "canonical_residual", canonical_residual },
-              { "filter_relative_rgb", filter_rgb },
-              { "filter_stops", filter_ev } });
+          packed_references.push_back({
+            { "name", name },
+            { "packed_inputs", packed },
+            { "normal", { normal.x, normal.y, normal.z } },
+            { "f0_relative_bound", f0_bound },
+            { "maximum_residual", maximum_residual },
+            { "canonical_residual", canonical_residual },
+            { "filter_relative_rgb", filter_rgb },
+            { "filter_stops", filter_ev },
+          });
         }
       }
     }
@@ -2059,7 +2134,7 @@ namespace {
         { "maximum_display_peak_code_equivalents", maximum_display_peak_codes },
         { "maximum_display_rms_code_equivalents", maximum_display_rms_codes },
         { "display_limits",
-          { { "peak_code_equivalents", 4 }, { "rms_code_equivalents", 1 } } }
+          { { "peak_code_equivalents", 4 }, { "rms_code_equivalents", 1 } }, },
       }.dump(2);
       ASSERT_TRUE(manifest.good());
     }

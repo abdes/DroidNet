@@ -198,9 +198,15 @@ public:
     if (found == map_.end()) {
       return std::nullopt;
     }
-    UsageTicket ticket { EntryReference { found->first, *identity_,
-                           found->second.incarnation },
-      owner, UsageKind::kPin };
+    UsageTicket ticket {
+      EntryReference {
+        found->first,
+        *identity_,
+        found->second.incarnation,
+      },
+      owner,
+      UsageKind::kPin,
+    };
     AddUsage(found->second, owner, UsageKind::kPin);
     return ticket;
   }
@@ -228,9 +234,11 @@ public:
     --count;
     ticket.active_ = false;
     if (evicted) {
-      RetiredEntry retired { .entry = std::move(ticket.entry_),
+      RetiredEntry retired {
+        .entry = std::move(ticket.entry_),
         .value = eviction_.EntryValue(*evicted),
-        .type = eviction_.EntryTypeId(*evicted) };
+        .type = eviction_.EntryTypeId(*evicted),
+      };
       map_.erase(found);
       lock.unlock();
       Rethrow(
@@ -315,8 +323,10 @@ public:
     if (!result.usage) {
       return std::nullopt;
     }
-    return Acquisition<V> { .value = std::move(value),
-      .ticket = std::move(*result.usage) };
+    return Acquisition<V> {
+      .value = std::move(value),
+      .ticket = std::move(*result.usage),
+    };
   }
 
   //! Replace an existing value by key. Returns false if key not present or not
@@ -819,9 +829,11 @@ private:
   auto SnapshotRetired(const KeyType& key, const Record& record) const
     -> RetiredEntry
   {
-    return { .entry = EntryReference { key, *identity_, record.incarnation },
+    return {
+      .entry = EntryReference { key, *identity_, record.incarnation },
       .value = eviction_.ValueOf(record.policy),
-      .type = eviction_.TypeOf(record.policy) };
+      .type = eviction_.TypeOf(record.policy),
+    };
   }
 
   auto EnforceBudget(std::vector<RetiredEntry>& retired) -> PolicyBudgetStatus
@@ -875,7 +887,7 @@ private:
       .value = std::static_pointer_cast<V>(eviction_.ValueOf(record.policy)),
       .ticket
       = UsageTicket { EntryReference { key, *identity_, record.incarnation },
-        owner, kind },
+        owner, kind, },
     };
     AddUsage(record, owner, kind);
     return result;
@@ -924,9 +936,11 @@ private:
     if (usage) {
       OwnerCounts validation {};
       static_cast<void>(UsageCount(validation, usage->owner, usage->kind));
-      ticket.emplace(
-        UsageTicket { EntryReference { key, *identity_, incarnation },
-          usage->owner, usage->kind });
+      ticket.emplace(UsageTicket {
+        EntryReference { key, *identity_, incarnation },
+        usage->owner,
+        usage->kind,
+      });
     }
     const auto [position, inserted] = map_.try_emplace(key);
     bool admitted = false;
@@ -981,8 +995,9 @@ private:
   }
 
   std::unordered_map<KeyType, Record, Hash> map_;
-  std::shared_ptr<const Uuid> identity_ { std::make_shared<const Uuid>(
-    Uuid::Generate()) };
+  std::shared_ptr<const Uuid> identity_ {
+    std::make_shared<const Uuid>(Uuid::Generate()),
+  };
   uint64_t next_incarnation_ = 1;
 
   auto AllocateIncarnation() -> uint64_t

@@ -116,9 +116,11 @@ NOLINT_TEST_F(LightingGpuAbiTest, NativeShadowAllocationRequirements)
     auto total_native_bytes = std::uint64_t { 0U };
     auto surfaces = std::vector<std::shared_ptr<graphics::Texture>> {};
     auto next_light = std::uint32_t { 1U };
-    const auto input = PreparedViewShadowInput { .view_id = view,
+    const auto input = PreparedViewShadowInput {
+      .view_id = view,
       .scene_generation = 1U,
-      .shadow_dependencies_available = true };
+      .shadow_dependencies_available = true,
+    };
     for (const auto& request : requests) {
       SCOPED_TRACE(request.name);
       auto local_requests
@@ -198,11 +200,14 @@ NOLINT_TEST_F(LightingGpuAbiTest, NativeShadowAllocationRequirements)
       }
       surfaces.push_back(std::move(surface));
       report.at("requirements")
-        .push_back({ { "name", request.name }, { "format", "D32" },
+        .push_back({
+          { "name", request.name },
+          { "format", "D32" },
           { "resolution", request.resolution },
           { "layers", native.DepthOrArraySize },
           { "size_bytes", allocation.SizeInBytes },
-          { "alignment_bytes", allocation.Alignment } });
+          { "alignment_bytes", allocation.Alignment },
+        });
     }
     report["charged_shadow_bytes"] = total_native_bytes;
   }

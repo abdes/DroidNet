@@ -36,14 +36,14 @@ namespace {
     .branch = "|-- ", // branch
     .last_child = "`-- ", // last child
     .continuation = "|   ", // continuation
-    .spacing = "    " // no continuation
+    .spacing = "    ", // no continuation
   };
 
   constexpr TreeChars kUnicodeChars = {
     .branch = "├── ", // branch (U+251C, U+2500, U+2500, space)
     .last_child = "└── ", // last child (U+2514, U+2500, U+2500, space)
     .continuation = "│   ", // continuation (U+2502, space, space, space)
-    .spacing = "    " // no continuation
+    .spacing = "    ", // no continuation
   };
 
   //! Get character set for tree drawing

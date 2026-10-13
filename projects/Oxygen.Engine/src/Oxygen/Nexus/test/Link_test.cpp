@@ -40,12 +40,15 @@ auto main(int /*argc*/, char** /*argv*/) -> int
   {
     std::cout << "Testing DomainKey construction and equality...\n";
 
-    const DomainKey domain1 { .domain
-      = oxygen::bindless::generated::kTexturesDomain };
-    const DomainKey domain2 { .domain
-      = oxygen::bindless::generated::kTexturesDomain };
-    const DomainKey domain3 { .domain
-      = oxygen::bindless::generated::kGlobalSrvDomain };
+    const DomainKey domain1 {
+      .domain = oxygen::bindless::generated::kTexturesDomain,
+    };
+    const DomainKey domain2 {
+      .domain = oxygen::bindless::generated::kTexturesDomain,
+    };
+    const DomainKey domain3 {
+      .domain = oxygen::bindless::generated::kGlobalSrvDomain,
+    };
 
     if (domain1 == domain2 && !(domain1 == domain3)) {
       std::cout << "✓ DomainKey equality works correctly\n";

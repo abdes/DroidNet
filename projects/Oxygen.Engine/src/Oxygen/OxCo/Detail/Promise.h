@@ -157,7 +157,7 @@ namespace detail {
       //!< handled was `Resume()`ed).
       kRunning = 1, //!< Used for tasks currently being executed (i.e. whose
       //!< real handle was `Resume()`ed).
-      kStub = 2 //!< Used for promises not associated with a coroutine, such as
+      kStub = 2, //!< Used for promises not associated with a coroutine, such as
       //!< `Just` or `NoOp`.
 
       // Anything else is a coroutine suspended on an `Awaitable` and its
@@ -176,7 +176,7 @@ namespace detail {
       //! Used for `kRunning` or `kReady` tasks that have been requested
       //! to be cancelled. Such a task will get cancelled as soon as
       //! possible.
-      kRequested = 1
+      kRequested = 1,
     };
 
     //! The `CancellationControlBlock` and the coroutine state, living

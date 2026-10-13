@@ -826,9 +826,11 @@ auto BuildOutputCatalog(const pak::PakBuildRequest& request,
   };
   if (request.mode == pak::BuildMode::kPatch) {
     for (const auto& base : request.base_catalogs) {
-      catalog.bases.push_back({ .source_key = base.source_key,
+      catalog.bases.push_back({
+        .source_key = base.source_key,
         .content_version = base.content_version,
-        .catalog_digest = base.catalog_digest });
+        .catalog_digest = base.catalog_digest,
+      });
     }
     for (const auto& action : actions) {
       if (action.action == pak::PakPatchAction::kDelete) {
@@ -1099,18 +1101,22 @@ auto LoadSourceMetadata(PlanningState& state, SourceCollection& context) -> void
     source_assets.assign(
       inspection.Assets().begin(), inspection.Assets().end());
     source_files.assign(inspection.Files().begin(), inspection.Files().end());
-    state.layers.push_back({ .source_key = inspection.Guid(),
+    state.layers.push_back({
+      .source_key = inspection.Guid(),
       .content_version = 0U,
-      .catalog_digest = {} });
+      .catalog_digest = {},
+    });
   } else {
     pak_file.emplace(source_root);
     const auto& catalog = pak_file->Catalog();
     if (const auto valid = catalog.ValidateBaseLayers(state.layers); !valid) {
       throw std::runtime_error(valid.error());
     }
-    state.layers.push_back({ .source_key = catalog.source_key,
+    state.layers.push_back({
+      .source_key = catalog.source_key,
       .content_version = catalog.content_version,
-      .catalog_digest = catalog.catalog_digest });
+      .catalog_digest = catalog.catalog_digest,
+    });
     for (const auto& key : catalog.deleted) {
       state.tombstones.insert(key);
     }
@@ -1979,9 +1985,11 @@ auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
         valid.error());
       continue;
     }
-    base_layers.push_back({ .source_key = catalog.source_key,
+    base_layers.push_back({
+      .source_key = catalog.source_key,
       .content_version = catalog.content_version,
-      .catalog_digest = catalog.catalog_digest });
+      .catalog_digest = catalog.catalog_digest,
+    });
     if (catalog.source_key == state.request->source_key
       || !base_sources.insert(catalog.source_key).second) {
       AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,

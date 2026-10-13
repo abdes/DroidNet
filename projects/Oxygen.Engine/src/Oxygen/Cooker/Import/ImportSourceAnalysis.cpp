@@ -195,18 +195,22 @@ namespace {
     auto Reference(std::string path, const Kind kind, std::string location)
       -> void
     {
-      report.references.push_back({ .virtual_path = std::move(path),
+      report.references.push_back({
+        .virtual_path = std::move(path),
         .kind = kind,
         .object_path = std::move(location),
-        .required = true });
+        .required = true,
+      });
     }
 
     auto Output(std::string path, const Kind kind) -> void
     {
-      report.outputs.push_back({ .virtual_path = std::move(path),
+      report.outputs.push_back({
+        .virtual_path = std::move(path),
         .kind = kind,
         .object_path = {},
-        .required = true });
+        .required = true,
+      });
     }
   };
 
@@ -238,26 +242,31 @@ namespace {
     AppendDiagnostics(report.diagnostics, std::move(geometry.diagnostics));
     AppendDiagnostics(report.diagnostics, std::move(textures.diagnostics));
     for (const auto& material : materials.sources) {
-      report.outputs.push_back({ .virtual_path
+      report.outputs.push_back({
+        .virtual_path
         = layout.MaterialVirtualPath(material.material.storage_name),
         .kind = Kind::kMaterial,
         .object_path = {},
-        .required = true });
+        .required = true,
+      });
     }
     for (const auto& source : geometry.sources) {
-      report.outputs.push_back(
-        { .virtual_path = layout.GeometryVirtualPath(source.name),
-          .kind = Kind::kGeometry,
-          .object_path = {},
-          .required = true });
+      report.outputs.push_back({
+        .virtual_path = layout.GeometryVirtualPath(source.name),
+        .kind = Kind::kGeometry,
+        .object_path = {},
+        .required = true,
+      });
     }
     for (const auto& texture : textures.sources) {
-      report.outputs.push_back({ .virtual_path
+      report.outputs.push_back({
+        .virtual_path
         = layout.DescriptorVirtualPath(layout.TextureDescriptorRelPath(
           texture.source_id, texture.source_id)),
         .kind = Kind::kTexture,
         .object_path = {},
-        .required = false });
+        .required = false,
+      });
       if (!texture.embedded && !texture.source_path.empty()) {
         report.files.push_back(
           { .path = texture.source_path, .required = false });
@@ -268,11 +277,12 @@ namespace {
         report.files.push_back({ .path = std::move(path), .required = true });
       }
     }
-    report.outputs.push_back(
-      { .virtual_path = layout.SceneVirtualPath(input.request.GetSceneName()),
-        .kind = Kind::kScene,
-        .object_path = {},
-        .required = true });
+    report.outputs.push_back({
+      .virtual_path = layout.SceneVirtualPath(input.request.GetSceneName()),
+      .kind = Kind::kScene,
+      .object_path = {},
+      .required = true,
+    });
     report.complete = materials.success && geometry.success && textures.success;
     return report;
   }
@@ -491,11 +501,13 @@ namespace {
     report.job_type = job.job_type;
     auto snapshot
       = detail::ImportSourceSnapshot(reader, pool, std::move(captured_inputs));
-    auto context = AnalysisContext { .reader = snapshot,
+    auto context = AnalysisContext {
+      .reader = snapshot,
       .pool = pool,
       .report = report,
       .stop = stop,
-      .files = {} };
+      .files = {},
+    };
     auto prepared = false;
     try {
       prepared = co_await PrepareJob(job, context);
@@ -609,10 +621,12 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
     -> nlohmann::json {
     auto array = json::array();
     for (const auto& dependency : dependencies) {
-      array.push_back({ { "virtual_path", dependency.virtual_path },
+      array.push_back({
+        { "virtual_path", dependency.virtual_path },
         { "kind", KindName(dependency.kind) },
         { "object_path", dependency.object_path },
-        { "required", dependency.required } });
+        { "required", dependency.required },
+      });
     }
     return array;
   };
@@ -630,9 +644,11 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
     for (const auto& observation : job.observations) {
       auto reads = json::array();
       for (const auto& read : observation.reads) {
-        reads.push_back(
-          { { "offset", read.offset }, { "max_bytes", read.max_bytes },
-            { "sha256", DigestText(read.digest) } });
+        reads.push_back({
+          { "offset", read.offset },
+          { "max_bytes", read.max_bytes },
+          { "sha256", DigestText(read.digest) },
+        });
       }
       auto metadata
         = observation.metadata
@@ -645,36 +661,52 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
               const auto fraction
                 = std::chrono::duration_cast<std::chrono::nanoseconds>(
                   timestamp - seconds);
-              return json { { "size", info.size },
+              return json {
+                { "size", info.size },
                 { "is_directory", info.is_directory },
                 { "is_symlink", info.is_symlink },
                 { "last_modified_seconds", seconds.time_since_epoch().count() },
-                { "last_modified_nanoseconds", fraction.count() } };
+                { "last_modified_nanoseconds", fraction.count() },
+              };
             })
             .value_or(json(nullptr));
-      observations.push_back({ { "path", PathText(observation.path) },
-        { "exists", observation.exists }, { "metadata", std::move(metadata) },
-        { "reads", std::move(reads) } });
+      observations.push_back({
+        { "path", PathText(observation.path) },
+        { "exists", observation.exists },
+        { "metadata", std::move(metadata) },
+        { "reads", std::move(reads) },
+      });
     }
     auto diagnostics = json::array();
     for (const auto& diagnostic : job.diagnostics) {
-      diagnostics.push_back({ { "severity", to_string(diagnostic.severity) },
-        { "code", diagnostic.code }, { "message", diagnostic.message },
+      diagnostics.push_back({
+        { "severity", to_string(diagnostic.severity) },
+        { "code", diagnostic.code },
+        { "message", diagnostic.message },
         { "source_path", diagnostic.source_path },
-        { "object_path", diagnostic.object_path } });
+        { "object_path", diagnostic.object_path },
+      });
     }
-    serialized_jobs.push_back({ { "id", job.id }, { "job_type", job.job_type },
+    serialized_jobs.push_back({
+      { "id", job.id },
+      { "job_type", job.job_type },
       { "source_path", PathText(job.source_path) },
-      { "complete", job.complete }, { "outputs", logical(job.outputs) },
-      { "references", logical(job.references) }, { "files", std::move(files) },
+      { "complete", job.complete },
+      { "outputs", logical(job.outputs) },
+      { "references", logical(job.references) },
+      { "files", std::move(files) },
       { "observations", std::move(observations) },
       { "accessed_paths", std::move(accessed) },
-      { "diagnostics", std::move(diagnostics) } });
+      { "diagnostics", std::move(diagnostics) },
+    });
   }
   return json {
-    { "version", version }, { "producer_version", producer_version },
-    { "complete", complete }, { "jobs", std::move(serialized_jobs) }
-  }.dump(2);
+    { "version", version },
+    { "producer_version", producer_version },
+    { "complete", complete },
+    { "jobs", std::move(serialized_jobs) },
+  }
+    .dump(2);
 }
 
 } // namespace oxygen::content::import

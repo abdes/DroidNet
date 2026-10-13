@@ -29,7 +29,7 @@ enum class MeshType : uint8_t {
   kVoxel          = 9,  //!< Voxel/volumetric mesh
 
   //!< Maximum value sentinel
-  kMaxMeshType    = kVoxel
+  kMaxMeshType    = kVoxel,
   // clang-format on
 };
 

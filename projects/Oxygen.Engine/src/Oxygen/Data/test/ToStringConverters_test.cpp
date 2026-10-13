@@ -46,9 +46,18 @@ NOLINT_TEST_F(
   auto s = to_string(all_flags);
 
   // Assert: each token appears exactly once separated by " | ".
-  const char* tokens[] = { "VertexBuffer", "IndexBuffer", "ConstantBuffer",
-    "StorageBuffer", "IndirectBuffer", "CPUWritable", "CPUReadable", "Dynamic",
-    "Static", "Immutable" };
+  const char* tokens[] = {
+    "VertexBuffer",
+    "IndexBuffer",
+    "ConstantBuffer",
+    "StorageBuffer",
+    "IndirectBuffer",
+    "CPUWritable",
+    "CPUReadable",
+    "Dynamic",
+    "Static",
+    "Immutable",
+  };
 
   for (auto* t : tokens) {
     auto first_pos = s.find(t);

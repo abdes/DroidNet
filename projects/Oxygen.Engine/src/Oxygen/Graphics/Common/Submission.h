@@ -52,7 +52,7 @@ enum class CompletionStatus : uint8_t {
   kPending,
   kComplete,
   kDeviceLost,
-  kInvalid
+  kInvalid,
 };
 struct SubmissionResult {
   SubmissionOutcome outcome { SubmissionOutcome::kDiscarded };
@@ -83,6 +83,6 @@ enum class UseReleaseReason : uint8_t {
   kDiscarded,
   kCompleted,
   kDeviceLost,
-  kAdmissionResolved
+  kAdmissionResolved,
 };
 } // namespace oxygen::graphics

@@ -20,7 +20,9 @@ namespace oxygen::vortex::upload {
 
 namespace {
   constexpr UploadResult kInvalidResult {
-    .success = false, .bytes_uploaded = 0, .error = UploadError::kTicketNotFound
+    .success = false,
+    .bytes_uploaded = 0,
+    .error = UploadError::kTicketNotFound,
   };
 }
 

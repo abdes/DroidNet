@@ -146,7 +146,7 @@ constexpr struct {
     D3D12_CPU_PAGE_PROPERTY_UNKNOWN, // CPUPageProperty
     D3D12_MEMORY_POOL_UNKNOWN, // MemoryPoolPreference
     0, // CreationNodeMask
-    0 // VisibleNodeMask
+    0, // VisibleNodeMask
   };
 } kHeapProperties;
 
@@ -162,7 +162,7 @@ constexpr struct {
     0, // MultisampleEnable
     0, // AntialiasedLineEnable
     0, // ForcedSampleCount
-    D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF // ConservativeRaster
+    D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF, // ConservativeRaster
   };
 
   D3D12_RASTERIZER_DESC backface_cull {
@@ -176,7 +176,7 @@ constexpr struct {
     0, // MultisampleEnable
     0, // AntialiasedLineEnable
     0, // ForcedSampleCount
-    D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF // ConservativeRaster
+    D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF, // ConservativeRaster
   };
 
   D3D12_RASTERIZER_DESC frontface_cull {
@@ -190,7 +190,7 @@ constexpr struct {
     0, // MultisampleEnable
     0, // AntialiasedLineEnable
     0, // ForcedSampleCount
-    D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF // ConservativeRaster
+    D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF, // ConservativeRaster
   };
 
   D3D12_RASTERIZER_DESC wireframe {
@@ -204,7 +204,7 @@ constexpr struct {
     0, // MultisampleEnable
     0, // AntialiasedLineEnable
     0, // ForcedSampleCount
-    D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF // ConservativeRaster
+    D3D12_CONSERVATIVE_RASTERIZATION_MODE_OFF, // ConservativeRaster
   };
 } kRasterizerState;
 
@@ -229,7 +229,7 @@ constexpr struct {
     0, // StencilWriteMask
     {}, // FrontFace
     {}, // BackFace
-    0 // DepthBoundsTestEnable
+    0, // DepthBoundsTestEnable
   };
 
   D3D12_DEPTH_STENCIL_DESC1 enabled_readonly {
@@ -241,7 +241,7 @@ constexpr struct {
     0, // StencilWriteMask
     {}, // FrontFace
     {}, // BackFace
-    0 // DepthBoundsTestEnable
+    0, // DepthBoundsTestEnable
   };
 
   D3D12_DEPTH_STENCIL_DESC1 reversed {
@@ -253,7 +253,7 @@ constexpr struct {
     0, // StencilWriteMask
     {}, // FrontFace
     {}, // BackFace
-    0 // DepthBoundsTestEnable
+    0, // DepthBoundsTestEnable
   };
 
   D3D12_DEPTH_STENCIL_DESC1 reversed_readonly {
@@ -265,14 +265,16 @@ constexpr struct {
     0, // StencilWriteMask
     {}, // FrontFace
     {}, // BackFace
-    0 // DepthBoundsTestEnable
+    0, // DepthBoundsTestEnable
   };
 } kDepthState;
 
 constexpr struct {
-  D3D12_BLEND_DESC disabled { 0, // AlphaToCoverageEnable
+  D3D12_BLEND_DESC disabled {
+    0, // AlphaToCoverageEnable
     0, // IndependentBlendEnable
-    { {
+    {
+      {
         0, // BlendEnable
         0, // LogicOpEnable
         D3D12_BLEND_SRC_ALPHA, // SrcBlend
@@ -282,13 +284,23 @@ constexpr struct {
         D3D12_BLEND_ONE, // DestBlendAlpha
         D3D12_BLEND_OP_ADD, // BlendOpAlpha
         D3D12_LOGIC_OP_NOOP, // LogicOp
-        D3D12_COLOR_WRITE_ENABLE_ALL // RenderTargetWriteMask
+        D3D12_COLOR_WRITE_ENABLE_ALL, // RenderTargetWriteMask
       },
-      {}, {}, {}, {}, {}, {}, {} } };
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+    },
+  };
 
-  D3D12_BLEND_DESC alpha_blend { 0, // AlphaToCoverageEnable
+  D3D12_BLEND_DESC alpha_blend {
+    0, // AlphaToCoverageEnable
     0, // IndependentBlendEnable
-    { {
+    {
+      {
         1, // BlendEnable
         0, // LogicOpEnable
         D3D12_BLEND_SRC_ALPHA, // SrcBlend
@@ -298,13 +310,23 @@ constexpr struct {
         D3D12_BLEND_ONE, // DestBlendAlpha
         D3D12_BLEND_OP_ADD, // BlendOpAlpha
         D3D12_LOGIC_OP_NOOP, // LogicOp
-        D3D12_COLOR_WRITE_ENABLE_ALL // RenderTargetWriteMask
+        D3D12_COLOR_WRITE_ENABLE_ALL, // RenderTargetWriteMask
       },
-      {}, {}, {}, {}, {}, {}, {} } };
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+    },
+  };
 
-  D3D12_BLEND_DESC additive { 0, // AlphaToCoverageEnable
+  D3D12_BLEND_DESC additive {
+    0, // AlphaToCoverageEnable
     0, // IndependentBlendEnable
-    { {
+    {
+      {
         1, // BlendEnable
         0, // LogicOpEnable
         D3D12_BLEND_ONE, // SrcBlend
@@ -314,13 +336,23 @@ constexpr struct {
         D3D12_BLEND_ONE, // DestBlendAlpha
         D3D12_BLEND_OP_ADD, // BlendOpAlpha
         D3D12_LOGIC_OP_NOOP, // LogicOp
-        D3D12_COLOR_WRITE_ENABLE_ALL // RenderTargetWriteMask
+        D3D12_COLOR_WRITE_ENABLE_ALL, // RenderTargetWriteMask
       },
-      {}, {}, {}, {}, {}, {}, {} } };
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+    },
+  };
 
-  D3D12_BLEND_DESC premultiplied { 0, // AlphaToCoverageEnable
+  D3D12_BLEND_DESC premultiplied {
+    0, // AlphaToCoverageEnable
     0, // IndependentBlendEnable
-    { {
+    {
+      {
         0, // BlendEnable
         0, // LogicOpEnable
         D3D12_BLEND_ONE, // SrcBlend
@@ -330,9 +362,17 @@ constexpr struct {
         D3D12_BLEND_ONE, // DestBlendAlpha
         D3D12_BLEND_OP_ADD, // BlendOpAlpha
         D3D12_LOGIC_OP_NOOP, // LogicOp
-        D3D12_COLOR_WRITE_ENABLE_ALL // RenderTargetWriteMask
+        D3D12_COLOR_WRITE_ENABLE_ALL, // RenderTargetWriteMask
       },
-      {}, {}, {}, {}, {}, {}, {} } };
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+    },
+  };
 } kBlendState;
 
 constexpr auto align_size_for_constant_buffer(const uint64_t size) -> uint64_t
@@ -353,8 +393,14 @@ struct D3d12DescriptorRange : public D3D12_DESCRIPTOR_RANGE1 {
     const D3D12_DESCRIPTOR_RANGE_FLAGS flags = D3D12_DESCRIPTOR_RANGE_FLAG_NONE,
     const uint32_t offset_from_table_start
     = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND)
-    : D3D12_DESCRIPTOR_RANGE1 { range_type, descriptor_count, shader_register,
-      space, flags, offset_from_table_start }
+    : D3D12_DESCRIPTOR_RANGE1 {
+      range_type,
+      descriptor_count,
+      shader_register,
+      space,
+      flags,
+      offset_from_table_start,
+    }
   {
   }
 };
@@ -429,14 +475,14 @@ auto create_root_signature(const D3d12RootSignatureDesc& desc)
 struct D3d12RootSignatureDesc : public D3D12_ROOT_SIGNATURE_DESC1 {
   constexpr static D3D12_ROOT_SIGNATURE_FLAGS default_flags {
     D3D12_ROOT_SIGNATURE_FLAG_DENY_VERTEX_SHADER_ROOT_ACCESS
-    | D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS
-    | D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS
-    | D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS
-    | D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS
-    | D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS
-    | D3D12_ROOT_SIGNATURE_FLAG_DENY_MESH_SHADER_ROOT_ACCESS
-    | D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
-    | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED
+      | D3D12_ROOT_SIGNATURE_FLAG_DENY_HULL_SHADER_ROOT_ACCESS
+      | D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS
+      | D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS
+      | D3D12_ROOT_SIGNATURE_FLAG_DENY_PIXEL_SHADER_ROOT_ACCESS
+      | D3D12_ROOT_SIGNATURE_FLAG_DENY_AMPLIFICATION_SHADER_ROOT_ACCESS
+      | D3D12_ROOT_SIGNATURE_FLAG_DENY_MESH_SHADER_ROOT_ACCESS
+      | D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
+      | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED,
   };
 
   constexpr explicit D3d12RootSignatureDesc(
@@ -444,8 +490,13 @@ struct D3d12RootSignatureDesc : public D3D12_ROOT_SIGNATURE_DESC1 {
     const D3D12_ROOT_SIGNATURE_FLAGS flags = default_flags,
     const D3D12_STATIC_SAMPLER_DESC* static_samplers = nullptr,
     const uint32_t sampler_count = 0)
-    : D3D12_ROOT_SIGNATURE_DESC1 { parameter_count, parameters, sampler_count,
-      static_samplers, flags }
+    : D3D12_ROOT_SIGNATURE_DESC1 {
+      parameter_count,
+      parameters,
+      sampler_count,
+      static_samplers,
+      flags,
+    }
   {
   }
 
@@ -545,8 +596,10 @@ struct D3d12PipelineStateSubObjectStream {
   D3D12PipelineStateSubObject_primitive_topology primitive_topology {};
   D3D12PipelineStateSubObject_render_target_formats render_target_formats {};
   D3D12PipelineStateSubObject_depth_stencil_format depth_stencil_format {};
-  D3D12PipelineStateSubObject_sample_desc sample_desc { { .Count = 1,
-    .Quality = 0 } };
+  D3D12PipelineStateSubObject_sample_desc sample_desc { {
+    .Count = 1,
+    .Quality = 0,
+  } };
   D3D12PipelineStateSubObject_node_mask node_mask {};
   D3D12PipelineStateSubObject_cached_pso cached_pso {};
   D3D12PipelineStateSubObject_flags flags {};

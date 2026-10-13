@@ -92,7 +92,7 @@ auto ImportSourceDocument::Observation() const -> ImportSourceObservation
     .exists = true,
     .metadata = {},
     .reads = { ImportSourceReadProof {
-      .offset = 0U, .max_bytes = 0U, .digest = digest } },
+      .offset = 0U, .max_bytes = 0U, .digest = digest, }, },
   };
 }
 

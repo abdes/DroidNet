@@ -66,38 +66,45 @@ NOLINT_TEST(GraphicsPipelineDescTest, BuilderBasicUsage)
 
 NOLINT_TEST(GraphicsPipelineDescTest, BuilderFullConfiguration)
 {
-  const auto pipeline
-    = GraphicsPipelineDesc::Builder {}
-        .SetVertexShader({
-          .stage = ShaderType::kVertex,
-          .source_path = "test_vs",
-          .entry_point = "VSMain",
-        })
-        .SetPixelShader({
-          .stage = ShaderType::kPixel,
-          .source_path = "test_ps",
-          .entry_point = "PSMain",
-        })
-        .SetGeometryShader({
-          .stage = ShaderType::kGeometry,
-          .source_path = "test_gs",
-          .entry_point = "GSMain",
-        })
-        .SetPrimitiveTopology(PrimitiveType::kTriangleStrip)
-        .SetRasterizerState({ .fill_mode = FillMode::kWireframe,
-          .cull_mode = CullMode::kNone,
-          .multisample_enable = true })
-        .SetDepthStencilState({ .depth_test_enable = true,
-          .depth_write_enable = true,
-          .depth_func = CompareOp::kLess })
-        .AddBlendTarget({ .blend_enable = true,
-          .src_blend = BlendFactor::kSrcAlpha,
-          .dest_blend = BlendFactor::kInvSrcAlpha,
-          .blend_op = BlendOp::kAdd })
-        .SetFramebufferLayout({ .color_target_formats = { Format::kRGBA8UNorm },
-          .depth_stencil_format = Format::kDepth32,
-          .sample_count = 1 })
-        .Build(); // Verify full configuration
+  const auto pipeline = GraphicsPipelineDesc::Builder {}
+                          .SetVertexShader({
+                            .stage = ShaderType::kVertex,
+                            .source_path = "test_vs",
+                            .entry_point = "VSMain",
+                          })
+                          .SetPixelShader({
+                            .stage = ShaderType::kPixel,
+                            .source_path = "test_ps",
+                            .entry_point = "PSMain",
+                          })
+                          .SetGeometryShader({
+                            .stage = ShaderType::kGeometry,
+                            .source_path = "test_gs",
+                            .entry_point = "GSMain",
+                          })
+                          .SetPrimitiveTopology(PrimitiveType::kTriangleStrip)
+                          .SetRasterizerState({
+                            .fill_mode = FillMode::kWireframe,
+                            .cull_mode = CullMode::kNone,
+                            .multisample_enable = true,
+                          })
+                          .SetDepthStencilState({
+                            .depth_test_enable = true,
+                            .depth_write_enable = true,
+                            .depth_func = CompareOp::kLess,
+                          })
+                          .AddBlendTarget({
+                            .blend_enable = true,
+                            .src_blend = BlendFactor::kSrcAlpha,
+                            .dest_blend = BlendFactor::kInvSrcAlpha,
+                            .blend_op = BlendOp::kAdd,
+                          })
+                          .SetFramebufferLayout({
+                            .color_target_formats = { Format::kRGBA8UNorm },
+                            .depth_stencil_format = Format::kDepth32,
+                            .sample_count = 1,
+                          })
+                          .Build(); // Verify full configuration
   EXPECT_TRUE(pipeline.VertexShader().has_value());
   EXPECT_EQ(pipeline.VertexShader()->source_path, "test_vs");
   EXPECT_EQ(pipeline.VertexShader()->entry_point, "VSMain");
@@ -150,14 +157,19 @@ NOLINT_TEST(GraphicsPipelineDescTest, MultipleBlendTargets)
           .source_path = "test_ps",
           .entry_point = "PSMain",
         })
-        .AddBlendTarget({ .blend_enable = true,
+        .AddBlendTarget({
+          .blend_enable = true,
           .src_blend = BlendFactor::kOne,
           .dest_blend = BlendFactor::kOne,
-          .blend_op = BlendOp::kAdd })
-        .AddBlendTarget({ .blend_enable = false,
-          .write_mask = ColorWriteMask::kR | ColorWriteMask::kG })
-        .SetFramebufferLayout({ .color_target_formats
-          = { Format::kRGBA8UNorm, Format::kRGBA8UNorm } })
+          .blend_op = BlendOp::kAdd,
+        })
+        .AddBlendTarget({
+          .blend_enable = false,
+          .write_mask = ColorWriteMask::kR | ColorWriteMask::kG,
+        })
+        .SetFramebufferLayout({
+          .color_target_formats = { Format::kRGBA8UNorm, Format::kRGBA8UNorm },
+        })
         .Build();
   EXPECT_EQ(pipeline.BlendState().size(), 2);
 
@@ -291,20 +303,23 @@ NOLINT_TEST(GraphicsPipelineDescTest, ValidDepthOnlyConfiguration)
 NOLINT_TEST(GraphicsPipelineDescTest, AddRootBinding)
 {
   // Test push constants binding
-  RootBindingItem push(
-    { .binding_slot_desc = { .register_index = 0, .register_space = 0 },
-      .visibility = ShaderStageFlags::kAll,
-      .data = PushConstantsBinding { .size = 16 } });
+  RootBindingItem push({
+    .binding_slot_desc = { .register_index = 0, .register_space = 0 },
+    .visibility = ShaderStageFlags::kAll,
+    .data = PushConstantsBinding { .size = 16 },
+  });
   // Test direct buffer binding
-  RootBindingItem buffer(
-    { .binding_slot_desc = { .register_index = 1, .register_space = 0 },
-      .visibility = ShaderStageFlags::kAll,
-      .data = DirectBufferBinding {} });
+  RootBindingItem buffer({
+    .binding_slot_desc = { .register_index = 1, .register_space = 0 },
+    .visibility = ShaderStageFlags::kAll,
+    .data = DirectBufferBinding {},
+  });
   // Test direct texture binding
-  RootBindingItem texture(
-    { .binding_slot_desc = { .register_index = 2, .register_space = 0 },
-      .visibility = ShaderStageFlags::kAll,
-      .data = DirectTextureBinding {} });
+  RootBindingItem texture({
+    .binding_slot_desc = { .register_index = 2, .register_space = 0 },
+    .visibility = ShaderStageFlags::kAll,
+    .data = DirectTextureBinding {},
+  });
   // Test descriptor table binding with explicit range
   RootBindingItem table(
     { .binding_slot_desc = { .register_index = 3, .register_space = 0 },
@@ -312,7 +327,7 @@ NOLINT_TEST(GraphicsPipelineDescTest, AddRootBinding)
       .data
       = DescriptorTableBinding { .view_type = ResourceViewType::kTexture_SRV,
         .base_index = 5,
-        .count = 8 } });
+        .count = 8, }, });
 
   // Add each binding individually
   auto pipeline = GraphicsPipelineDesc::Builder {}
@@ -416,20 +431,23 @@ NOLINT_TEST(GraphicsPipelineDescTest, AddRootBinding)
 NOLINT_TEST(ComputePipelineDescTest, AddRootBinding)
 {
   // Test push constants binding
-  RootBindingItem push(
-    { .binding_slot_desc = { .register_index = 0, .register_space = 0 },
-      .visibility = ShaderStageFlags::kAll,
-      .data = PushConstantsBinding { .size = 8 } });
+  RootBindingItem push({
+    .binding_slot_desc = { .register_index = 0, .register_space = 0 },
+    .visibility = ShaderStageFlags::kAll,
+    .data = PushConstantsBinding { .size = 8 },
+  });
   // Test direct buffer binding
-  RootBindingItem buffer(
-    { .binding_slot_desc = { .register_index = 1, .register_space = 0 },
-      .visibility = ShaderStageFlags::kAll,
-      .data = DirectBufferBinding {} });
+  RootBindingItem buffer({
+    .binding_slot_desc = { .register_index = 1, .register_space = 0 },
+    .visibility = ShaderStageFlags::kAll,
+    .data = DirectBufferBinding {},
+  });
   // Test direct texture binding
-  RootBindingItem texture(
-    { .binding_slot_desc = { .register_index = 2, .register_space = 0 },
-      .visibility = ShaderStageFlags::kAll,
-      .data = DirectTextureBinding {} });
+  RootBindingItem texture({
+    .binding_slot_desc = { .register_index = 2, .register_space = 0 },
+    .visibility = ShaderStageFlags::kAll,
+    .data = DirectTextureBinding {},
+  });
   // Test descriptor table binding
   RootBindingItem table(
     { .binding_slot_desc = { .register_index = 3, .register_space = 0 },
@@ -437,7 +455,7 @@ NOLINT_TEST(ComputePipelineDescTest, AddRootBinding)
       .data
       = DescriptorTableBinding { .view_type = ResourceViewType::kTexture_SRV,
         .base_index = 7,
-        .count = 32 } });
+        .count = 32, }, });
 
   // Add each binding individually
   auto pipeline = ComputePipelineDesc::Builder {}
@@ -508,10 +526,11 @@ NOLINT_TEST(ComputePipelineDescTest, AddRootBinding)
 
 NOLINT_TEST(RootBindingItemTest, RootParameterIndexAssignment)
 {
-  RootBindingItem item(
-    { .binding_slot_desc = { .register_index = 0, .register_space = 0 },
-      .visibility = ShaderStageFlags::kAll,
-      .data = PushConstantsBinding { .size = 4 } });
+  RootBindingItem item({
+    .binding_slot_desc = { .register_index = 0, .register_space = 0 },
+    .visibility = ShaderStageFlags::kAll,
+    .data = PushConstantsBinding { .size = 4 },
+  });
   EXPECT_EQ(item.GetRootParameterIndex(), ~0U);
   item.SetRootParameterIndex(5);
   EXPECT_EQ(item.GetRootParameterIndex(), 5U);
@@ -533,7 +552,7 @@ NOLINT_TEST(RootBindingItemTest, Equality)
       .data
       = DescriptorTableBinding { .view_type = ResourceViewType::kTexture_SRV,
         .base_index = 0,
-        .count = 16 } });
+        .count = 16, }, });
   RootBindingItem b = a;
   RootBindingItem c = a;
   c.binding_slot_desc = { .register_index = 2, .register_space = 2 };
@@ -653,39 +672,59 @@ NOLINT_TEST(GraphicsPipelineDescTest, Hashing_AllFieldsAffectHash)
 {
   struct Baseline {
     ShaderRequest vs {
-      .stage = ShaderType::kVertex, .source_path = "vs", .entry_point = "VSMain"
+      .stage = ShaderType::kVertex,
+      .source_path = "vs",
+      .entry_point = "VSMain",
     };
     ShaderRequest ps {
-      .stage = ShaderType::kPixel, .source_path = "ps", .entry_point = "PSMain"
+      .stage = ShaderType::kPixel,
+      .source_path = "ps",
+      .entry_point = "PSMain",
     };
-    ShaderRequest gs { .stage = ShaderType::kGeometry,
+    ShaderRequest gs {
+      .stage = ShaderType::kGeometry,
       .source_path = "gs",
-      .entry_point = "GSMain" };
+      .entry_point = "GSMain",
+    };
     ShaderRequest hs {
-      .stage = ShaderType::kHull, .source_path = "hs", .entry_point = "HSMain"
+      .stage = ShaderType::kHull,
+      .source_path = "hs",
+      .entry_point = "HSMain",
     };
     ShaderRequest ds {
-      .stage = ShaderType::kDomain, .source_path = "ds", .entry_point = "DSMain"
+      .stage = ShaderType::kDomain,
+      .source_path = "ds",
+      .entry_point = "DSMain",
     };
     PrimitiveType primitive_topology = PrimitiveType::kTriangleStrip;
-    RasterizerStateDesc rasterizer { .fill_mode = FillMode::kWireframe,
+    RasterizerStateDesc rasterizer {
+      .fill_mode = FillMode::kWireframe,
       .cull_mode = CullMode::kNone,
-      .multisample_enable = true };
-    DepthStencilStateDesc depth_stencil { .depth_test_enable = true,
+      .multisample_enable = true,
+    };
+    DepthStencilStateDesc depth_stencil {
+      .depth_test_enable = true,
       .depth_write_enable = true,
-      .depth_func = CompareOp::kLess };
-    BlendTargetDesc blend_target { .blend_enable = true,
+      .depth_func = CompareOp::kLess,
+    };
+    BlendTargetDesc blend_target {
+      .blend_enable = true,
       .src_blend = BlendFactor::kSrcAlpha,
       .dest_blend = BlendFactor::kInvSrcAlpha,
-      .blend_op = BlendOp::kAdd };
-    FramebufferLayoutDesc framebuffer { .color_target_formats
-      = { Format::kRGBA8UNorm },
+      .blend_op = BlendOp::kAdd,
+    };
+    FramebufferLayoutDesc framebuffer {
+      .color_target_formats = { Format::kRGBA8UNorm },
       .depth_stencil_format = Format::kDepth32,
-      .sample_count = 4 };
-    std::vector<RootBindingItem> root_bindings { RootBindingItem(
-      { .binding_slot_desc = { 0, 0 },
+      .sample_count = 4,
+    };
+    std::vector<RootBindingItem> root_bindings {
+      RootBindingItem({
+        .binding_slot_desc = { 0, 0 },
         .visibility = ShaderStageFlags::kAll,
-        .data = PushConstantsBinding { 16 } }) };
+        .data = PushConstantsBinding { 16 },
+      }),
+    };
   };
 
   auto build = [](const Baseline& b) -> GraphicsPipelineDesc {
@@ -715,91 +754,147 @@ NOLINT_TEST(GraphicsPipelineDescTest, Hashing_AllFieldsAffectHash)
     std::function<void(Baseline&)> apply;
   };
   std::vector<Delta> deltas = {
-    { "VertexShader.source_path not included in hash",
-      [](Baseline& b) -> void { b.vs.source_path = "vs2"; } },
-    { "VertexShader.entry_point not included in hash",
-      [](Baseline& b) -> void { b.vs.entry_point = "VSMain2"; } },
-    { "VertexShader.defines not included in hash",
+    {
+      "VertexShader.source_path not included in hash",
+      [](Baseline& b) -> void { b.vs.source_path = "vs2"; },
+    },
+    {
+      "VertexShader.entry_point not included in hash",
+      [](Baseline& b) -> void { b.vs.entry_point = "VSMain2"; },
+    },
+    {
+      "VertexShader.defines not included in hash",
       [](Baseline& b) -> void {
         b.vs.defines = {
           ShaderDefine { .name = "FOO", .value = "1" },
         };
-      } },
-    { "PixelShader.source_path not included in hash",
-      [](Baseline& b) -> void { b.ps.source_path = "ps2"; } },
-    { "PixelShader.entry_point not included in hash",
-      [](Baseline& b) -> void { b.ps.entry_point = "PSMain2"; } },
-    { "GeometryShader.source_path not included in hash",
-      [](Baseline& b) -> void { b.gs.source_path = "gs2"; } },
-    { "GeometryShader.entry_point not included in hash",
-      [](Baseline& b) -> void { b.gs.entry_point = "GSMain2"; } },
-    { "HullShader.source_path not included in hash",
-      [](Baseline& b) -> void { b.hs.source_path = "hs2"; } },
-    { "HullShader.entry_point not included in hash",
-      [](Baseline& b) -> void { b.hs.entry_point = "HSMain2"; } },
-    { "DomainShader.source_path not included in hash",
-      [](Baseline& b) -> void { b.ds.source_path = "ds2"; } },
-    { "DomainShader.entry_point not included in hash",
-      [](Baseline& b) -> void { b.ds.entry_point = "DSMain2"; } },
-    { "PrimitiveTopology not included in hash",
+      },
+    },
+    {
+      "PixelShader.source_path not included in hash",
+      [](Baseline& b) -> void { b.ps.source_path = "ps2"; },
+    },
+    {
+      "PixelShader.entry_point not included in hash",
+      [](Baseline& b) -> void { b.ps.entry_point = "PSMain2"; },
+    },
+    {
+      "GeometryShader.source_path not included in hash",
+      [](Baseline& b) -> void { b.gs.source_path = "gs2"; },
+    },
+    {
+      "GeometryShader.entry_point not included in hash",
+      [](Baseline& b) -> void { b.gs.entry_point = "GSMain2"; },
+    },
+    {
+      "HullShader.source_path not included in hash",
+      [](Baseline& b) -> void { b.hs.source_path = "hs2"; },
+    },
+    {
+      "HullShader.entry_point not included in hash",
+      [](Baseline& b) -> void { b.hs.entry_point = "HSMain2"; },
+    },
+    {
+      "DomainShader.source_path not included in hash",
+      [](Baseline& b) -> void { b.ds.source_path = "ds2"; },
+    },
+    {
+      "DomainShader.entry_point not included in hash",
+      [](Baseline& b) -> void { b.ds.entry_point = "DSMain2"; },
+    },
+    {
+      "PrimitiveTopology not included in hash",
       [](Baseline& b) -> void {
         b.primitive_topology = PrimitiveType::kLineList;
-      } },
-    { "RasterizerState.fill_mode not included in hash",
-      [](Baseline& b) -> void { b.rasterizer.fill_mode = FillMode::kSolid; } },
-    { "RasterizerState.cull_mode not included in hash",
-      [](Baseline& b) -> void { b.rasterizer.cull_mode = CullMode::kFront; } },
-    { "RasterizerState.multisample_enable not included in hash",
-      [](Baseline& b) -> void { b.rasterizer.multisample_enable = false; } },
-    { "DepthStencilState.depth_test_enable not included in hash",
-      [](Baseline& b) -> void { b.depth_stencil.depth_test_enable = false; } },
-    { "DepthStencilState.depth_write_enable not included in hash",
-      [](Baseline& b) -> void { b.depth_stencil.depth_write_enable = false; } },
-    { "DepthStencilState.depth_func not included in hash",
+      },
+    },
+    {
+      "RasterizerState.fill_mode not included in hash",
+      [](Baseline& b) -> void { b.rasterizer.fill_mode = FillMode::kSolid; },
+    },
+    {
+      "RasterizerState.cull_mode not included in hash",
+      [](Baseline& b) -> void { b.rasterizer.cull_mode = CullMode::kFront; },
+    },
+    {
+      "RasterizerState.multisample_enable not included in hash",
+      [](Baseline& b) -> void { b.rasterizer.multisample_enable = false; },
+    },
+    {
+      "DepthStencilState.depth_test_enable not included in hash",
+      [](Baseline& b) -> void { b.depth_stencil.depth_test_enable = false; },
+    },
+    {
+      "DepthStencilState.depth_write_enable not included in hash",
+      [](Baseline& b) -> void { b.depth_stencil.depth_write_enable = false; },
+    },
+    {
+      "DepthStencilState.depth_func not included in hash",
       [](Baseline& b) -> void {
         b.depth_stencil.depth_func = CompareOp::kGreater;
-      } },
-    { "BlendState.blend_enable not included in hash",
-      [](Baseline& b) -> void { b.blend_target.blend_enable = false; } },
-    { "BlendState.src_blend not included in hash",
-      [](Baseline& b) -> void {
-        b.blend_target.src_blend = BlendFactor::kOne;
-      } },
-    { "BlendState.dest_blend not included in hash",
+      },
+    },
+    {
+      "BlendState.blend_enable not included in hash",
+      [](Baseline& b) -> void { b.blend_target.blend_enable = false; },
+    },
+    {
+      "BlendState.src_blend not included in hash",
+      [](Baseline& b) -> void { b.blend_target.src_blend = BlendFactor::kOne; },
+    },
+    {
+      "BlendState.dest_blend not included in hash",
       [](Baseline& b) -> void {
         b.blend_target.dest_blend = BlendFactor::kZero;
-      } },
-    { "BlendState.blend_op not included in hash",
-      [](Baseline& b) -> void {
-        b.blend_target.blend_op = BlendOp::kSubtract;
-      } },
-    { "FramebufferLayout.color_target_formats not included in hash",
+      },
+    },
+    {
+      "BlendState.blend_op not included in hash",
+      [](Baseline& b) -> void { b.blend_target.blend_op = BlendOp::kSubtract; },
+    },
+    {
+      "FramebufferLayout.color_target_formats not included in hash",
       [](Baseline& b) -> void {
         b.framebuffer.color_target_formats = { Format::kBGRA8UNorm };
-      } },
-    { "FramebufferLayout.depth_stencil_format not included in hash",
+      },
+    },
+    {
+      "FramebufferLayout.depth_stencil_format not included in hash",
       [](Baseline& b) -> void {
         b.framebuffer.depth_stencil_format = Format::kDepth16;
-      } },
-    { "FramebufferLayout.sample_count not included in hash",
-      [](Baseline& b) -> void { b.framebuffer.sample_count = 8; } },
-    { "FramebufferLayout.sample_quality not included in hash",
-      [](Baseline& b) -> void { b.framebuffer.sample_quality = 8; } },
-    { "RootBindings not included in hash",
+      },
+    },
+    {
+      "FramebufferLayout.sample_count not included in hash",
+      [](Baseline& b) -> void { b.framebuffer.sample_count = 8; },
+    },
+    {
+      "FramebufferLayout.sample_quality not included in hash",
+      [](Baseline& b) -> void { b.framebuffer.sample_quality = 8; },
+    },
+    {
+      "RootBindings not included in hash",
       [](Baseline& b) -> void {
-        b.root_bindings = { RootBindingItem({ .binding_slot_desc = { 0, 0 },
-          .visibility = ShaderStageFlags::kAll,
-          .data = PushConstantsBinding { 32 } }) };
-      } },
-    { "RootBindings not included in hash",
+        b.root_bindings = {
+          RootBindingItem({
+            .binding_slot_desc = { 0, 0 },
+            .visibility = ShaderStageFlags::kAll,
+            .data = PushConstantsBinding { 32 },
+          }),
+        };
+      },
+    },
+    {
+      "RootBindings not included in hash",
       [](Baseline& b) -> void {
         b.root_bindings = { RootBindingItem({ .binding_slot_desc = { 0, 0 },
           .visibility = ShaderStageFlags::kAll,
           .data = DescriptorTableBinding {
             .view_type = ResourceViewType::kTexture_UAV,
             .base_index = 100,
-            .count = 250 } }) };
-      } },
+            .count = 250, }, }), };
+      },
+    },
   };
 
   for (const auto& delta : deltas) {
@@ -814,13 +909,18 @@ NOLINT_TEST(GraphicsPipelineDescTest, Hashing_AllFieldsAffectHash)
 NOLINT_TEST(ComputePipelineDescTest, Hashing_AllFieldsAffectHash)
 {
   struct Baseline {
-    ShaderRequest cs { .stage = ShaderType::kCompute,
+    ShaderRequest cs {
+      .stage = ShaderType::kCompute,
       .source_path = "cs",
-      .entry_point = "CSMain" };
-    std::vector<RootBindingItem> root_bindings { RootBindingItem(
-      { .binding_slot_desc = { 0, 0 },
+      .entry_point = "CSMain",
+    };
+    std::vector<RootBindingItem> root_bindings {
+      RootBindingItem({
+        .binding_slot_desc = { 0, 0 },
         .visibility = ShaderStageFlags::kAll,
-        .data = PushConstantsBinding { 8 } }) };
+        .data = PushConstantsBinding { 8 },
+      }),
+    };
   };
 
   auto build = [](const Baseline& b) -> ComputePipelineDesc {
@@ -841,31 +941,45 @@ NOLINT_TEST(ComputePipelineDescTest, Hashing_AllFieldsAffectHash)
     std::function<void(Baseline&)> apply;
   };
   std::vector<Delta> deltas = {
-    { "ComputeShader.source_path not included in hash",
-      [](Baseline& b) -> void { b.cs.source_path = "cs2"; } },
-    { "ComputeShader.entry_point not included in hash",
-      [](Baseline& b) -> void { b.cs.entry_point = "CSMain2"; } },
-    { "ComputeShader.defines not included in hash",
+    {
+      "ComputeShader.source_path not included in hash",
+      [](Baseline& b) -> void { b.cs.source_path = "cs2"; },
+    },
+    {
+      "ComputeShader.entry_point not included in hash",
+      [](Baseline& b) -> void { b.cs.entry_point = "CSMain2"; },
+    },
+    {
+      "ComputeShader.defines not included in hash",
       [](Baseline& b) -> void {
         b.cs.defines = {
           ShaderDefine { .name = "BAR" },
         };
-      } },
-    { "RootBindings not included in hash",
+      },
+    },
+    {
+      "RootBindings not included in hash",
       [](Baseline& b) -> void {
-        b.root_bindings = { RootBindingItem({ .binding_slot_desc = { 0, 0 },
-          .visibility = ShaderStageFlags::kAll,
-          .data = PushConstantsBinding { 16 } }) };
-      } },
-    { "RootBindings not included in hash",
+        b.root_bindings = {
+          RootBindingItem({
+            .binding_slot_desc = { 0, 0 },
+            .visibility = ShaderStageFlags::kAll,
+            .data = PushConstantsBinding { 16 },
+          }),
+        };
+      },
+    },
+    {
+      "RootBindings not included in hash",
       [](Baseline& b) -> void {
         b.root_bindings = { RootBindingItem({ .binding_slot_desc = { 0, 0 },
           .visibility = ShaderStageFlags::kAll,
           .data = DescriptorTableBinding {
             .view_type = ResourceViewType::kTexture_UAV,
             .base_index = 100,
-            .count = 250 } }) };
-      } },
+            .count = 250, }, }), };
+      },
+    },
   };
 
   for (const auto& delta : deltas) {

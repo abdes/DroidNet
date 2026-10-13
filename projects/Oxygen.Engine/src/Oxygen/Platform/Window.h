@@ -61,7 +61,7 @@ namespace window {
     kLeaveFullscreen, //!< The window has left fullscreen mode
     kDestroyed, //!< The window is about to be destroyed and should not be used
     //!< after this event
-    kHdrStateChanged //!< Window HDR properties have changed
+    kHdrStateChanged, //!< Window HDR properties have changed
   };
 
   struct InitialFlags {

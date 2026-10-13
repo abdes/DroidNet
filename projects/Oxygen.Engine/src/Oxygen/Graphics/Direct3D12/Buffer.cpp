@@ -83,17 +83,18 @@ Buffer::Buffer(BufferDesc desc, const Graphics* gfx)
     break;
   }
 
-  D3D12_RESOURCE_DESC resource_desc
-    = { .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
-        .Alignment = 0,
-        .Width = desc_.size_bytes,
-        .Height = 1,
-        .DepthOrArraySize = 1,
-        .MipLevels = 1,
-        .Format = DXGI_FORMAT_UNKNOWN,
-        .SampleDesc = { .Count = 1, .Quality = 0 },
-        .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
-        .Flags = D3D12_RESOURCE_FLAG_NONE };
+  D3D12_RESOURCE_DESC resource_desc = {
+    .Dimension = D3D12_RESOURCE_DIMENSION_BUFFER,
+    .Alignment = 0,
+    .Width = desc_.size_bytes,
+    .Height = 1,
+    .DepthOrArraySize = 1,
+    .MipLevels = 1,
+    .Format = DXGI_FORMAT_UNKNOWN,
+    .SampleDesc = { .Count = 1, .Quality = 0 },
+    .Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR,
+    .Flags = D3D12_RESOURCE_FLAG_NONE,
+  };
 
   // Set appropriate resource flags based on buffer usage
   resource_desc.Flags = D3D12_RESOURCE_FLAG_NONE;

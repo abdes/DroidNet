@@ -1013,7 +1013,9 @@ namespace {
       .member = &scene::ExposureSettings::compensation_ev,
     },
     ExposureFloatField {
-      .name = "exposure_key", .member = &scene::ExposureSettings::key },
+      .name = "exposure_key",
+      .member = &scene::ExposureSettings::key,
+    },
     ExposureFloatField {
       .name = "manual_exposure_ev",
       .member = &scene::ExposureSettings::manual_ev,
@@ -1513,20 +1515,40 @@ auto RegisterSceneEnvironmentMetatables(lua_State* state) -> void
         lua_pop(state, 1);
       };
   register_methods(kSkyAtmosphereMetatable,
-    { { { .name = "get", .func = SkyAtmosphereGet },
-      { .name = "set", .func = SkyAtmosphereSet } } });
+    {
+      {
+        { .name = "get", .func = SkyAtmosphereGet },
+        { .name = "set", .func = SkyAtmosphereSet },
+      },
+    });
   register_methods(kSkyLightMetatable,
-    { { { .name = "get", .func = SkyLightGet },
-      { .name = "set", .func = SkyLightSet } } });
+    {
+      {
+        { .name = "get", .func = SkyLightGet },
+        { .name = "set", .func = SkyLightSet },
+      },
+    });
   register_methods(kSkySphereMetatable,
-    { { { .name = "get", .func = SkySphereGet },
-      { .name = "set", .func = SkySphereSet } } });
+    {
+      {
+        { .name = "get", .func = SkySphereGet },
+        { .name = "set", .func = SkySphereSet },
+      },
+    });
   register_methods(kCloudsMetatable,
-    { { { .name = "get", .func = CloudsGet },
-      { .name = "set", .func = CloudsSet } } });
+    {
+      {
+        { .name = "get", .func = CloudsGet },
+        { .name = "set", .func = CloudsSet },
+      },
+    });
   register_methods(kPostProcessMetatable,
-    { { { .name = "get", .func = PostProcessGet },
-      { .name = "set", .func = PostProcessSet } } });
+    {
+      {
+        { .name = "get", .func = PostProcessGet },
+        { .name = "set", .func = PostProcessSet },
+      },
+    });
 }
 
 auto PushSceneEnvironment(

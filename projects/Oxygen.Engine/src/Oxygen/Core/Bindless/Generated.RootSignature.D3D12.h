@@ -66,18 +66,18 @@ struct RootParamDesc {
 
 static constexpr std::array<RootParamRange, 1> kRootParam0Ranges = { {
     RootParamRange{ RangeType::SRV, 0U, 0U, (std::numeric_limits<uint32_t>::max)() },
-} };
+}, };
 
 static constexpr std::array<RootParamRange, 1> kRootParam1Ranges = { {
     RootParamRange{ RangeType::Sampler, 0U, 0U, 256U },
-} };
+}, };
 
 static constexpr std::array<RootParamDesc, 4> kRootParamTable = { {
   RootParamDesc{ RootParamKind::DescriptorTable, 0U, 0U, std::span<const RootParamRange>{ kRootParam0Ranges.data(), kRootParam0Ranges.size() }, static_cast<uint32_t>(kRootParam0Ranges.size()), 0U },
   RootParamDesc{ RootParamKind::DescriptorTable, 0U, 0U, std::span<const RootParamRange>{ kRootParam1Ranges.data(), kRootParam1Ranges.size() }, static_cast<uint32_t>(kRootParam1Ranges.size()), 0U },
   RootParamDesc{ RootParamKind::CBV, 1U, 0U, std::span<const RootParamRange>{}, 0U, 0U },
   RootParamDesc{ RootParamKind::RootConstants, 2U, 0U, std::span<const RootParamRange>{}, 0U, 2U },
-} };
+}, };
 
 static constexpr auto kRootParamTableCount = static_cast<uint32_t>(kRootParamTable.size());
 

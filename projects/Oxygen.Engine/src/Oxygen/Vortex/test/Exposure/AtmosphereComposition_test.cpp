@@ -333,7 +333,7 @@ namespace {
               .dst_slice = { .width = 1U,
                 .height = 1U,
                 .depth = 1U,
-                .array_slice = slice },
+                .array_slice = slice, },
               .dst_subresources
               = { .base_array_slice = slice, .num_array_slices = 1U },
             },
@@ -843,8 +843,12 @@ namespace {
 
   auto Scaled(const Pixel& value, const float scale) -> Pixel
   {
-    return { value.at(0) * scale, value.at(1) * scale, value.at(2) * scale,
-      value.at(3) };
+    return {
+      value.at(0) * scale,
+      value.at(1) * scale,
+      value.at(2) * scale,
+      value.at(3),
+    };
   }
 } // namespace
 

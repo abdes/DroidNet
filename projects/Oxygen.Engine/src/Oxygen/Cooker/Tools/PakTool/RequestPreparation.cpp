@@ -395,7 +395,9 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
     });
   }
   distinct_paths.push_back(NamedPath {
-    .label = "output-pak", .path = publication_plan.pak.final_path });
+    .label = "output-pak",
+    .path = publication_plan.pak.final_path,
+  });
   distinct_paths.push_back(NamedPath {
     .label = "output-pak.staged",
     .path = publication_plan.pak.staged_path,

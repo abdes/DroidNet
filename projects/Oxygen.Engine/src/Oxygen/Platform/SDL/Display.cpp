@@ -38,16 +38,20 @@ auto Display::Bounds() const -> PixelBounds
 {
   SDL_Rect bounds;
   sdl::GetDisplayBounds(Id(), &bounds);
-  return { { .x = bounds.x, .y = bounds.y },
-    { .width = bounds.w, .height = bounds.h } };
+  return {
+    { .x = bounds.x, .y = bounds.y },
+    { .width = bounds.w, .height = bounds.h },
+  };
 }
 
 auto Display::UsableBounds() const -> PixelBounds
 {
   SDL_Rect bounds;
   sdl::GetDisplayUsableBounds(Id(), &bounds);
-  return { { .x = bounds.x, .y = bounds.y },
-    { .width = bounds.w, .height = bounds.h } };
+  return {
+    { .x = bounds.x, .y = bounds.y },
+    { .width = bounds.w, .height = bounds.h },
+  };
 }
 
 auto Display::Orientation() const -> DisplayOrientation

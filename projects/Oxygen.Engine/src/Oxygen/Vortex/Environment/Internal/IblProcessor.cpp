@@ -56,12 +56,15 @@ namespace {
     -> EnvironmentProbeState
   {
     auto result = EnvironmentProbeState {};
-    result.probes = { .environment_map_srv = product.processed_srv,
+    result.probes = {
+      .environment_map_srv = product.processed_srv,
       .diffuse_sh_srv = product.diffuse_sh_srv,
       .prefiltered_map_srv = product.specular_srv,
       .probe_revision = product.revision,
-      .product_metadata_srv = product.metadata_srv };
-    result.static_sky_light = { .key = key,
+      .product_metadata_srv = product.metadata_srv,
+    };
+    result.static_sky_light = {
+      .key = key,
       .processed_cubemap_srv = product.processed_srv,
       .diffuse_irradiance_sh_srv = product.diffuse_sh_srv,
       .prefiltered_cubemap_srv = product.specular_srv,
@@ -69,7 +72,8 @@ namespace {
       .prefiltered_cubemap_max_mip = product.maximum_mip,
       .product_revision = product.revision,
       .status = enabled ? StaticSkyLightProductStatus::kValidCurrentKey
-                        : StaticSkyLightProductStatus::kDisabled };
+                        : StaticSkyLightProductStatus::kDisabled,
+    };
     result.valid = true;
     result.flags = kEnvironmentProbeStateFlagResourcesValid;
     return result;
@@ -135,7 +139,7 @@ struct IblProcessor::Cache {
     std::unique_ptr<IblGpuValidation> validation;
     bool validation_allocation_failed { false };
     StaticSkyLightUnavailableReason logged_reason {
-      StaticSkyLightUnavailableReason::kNone
+      StaticSkyLightUnavailableReason::kNone,
     };
     content::ResourceKey logged_uncalibrated;
   };
@@ -185,18 +189,19 @@ auto IblProcessor::OnFrameStart(const frame::SequenceNumber sequence) -> bool
             continue;
           const bool invalid
             = observed->status == SkyLightGpuValidation::kInvalid;
-          diagnostics.ReportIssue(
-            { .severity = invalid ? DiagnosticsSeverity::kError
-                                  : DiagnosticsSeverity::kWarning,
-              .code = invalid ? "ibl.gpu-invalid" : "ibl.readback-unavailable",
-              .message = std::string(invalid
-                             ? "Invalid GPU sky-light generation "
-                             : "Readback unavailable for sky-light generation ")
-                + std::to_string(observed->revision) + " in scene "
-                + std::to_string(lifetime)
-                + (invalid ? ". Its lighting contribution is zero." : "."),
-              .pass_name = "Vortex.Diagnostics.IBL.Metadata",
-              .product_name = "SkyLight" });
+          diagnostics.ReportIssue({
+            .severity = invalid ? DiagnosticsSeverity::kError
+                                : DiagnosticsSeverity::kWarning,
+            .code = invalid ? "ibl.gpu-invalid" : "ibl.readback-unavailable",
+            .message = std::string(invalid
+                           ? "Invalid GPU sky-light generation "
+                           : "Readback unavailable for sky-light generation ")
+              + std::to_string(observed->revision) + " in scene "
+              + std::to_string(lifetime)
+              + (invalid ? ". Its lighting contribution is zero." : "."),
+            .pass_name = "Vortex.Diagnostics.IBL.Metadata",
+            .product_name = "SkyLight",
+          });
         }
       }
       if (!collect || !scene.published || !scene.processor
@@ -216,12 +221,14 @@ auto IblProcessor::OnFrameStart(const frame::SequenceNumber sequence) -> bool
       if (!scene.validation
         || scene.validation->Inspect(*scene.published, collect).gpu_validation
           == SkyLightGpuValidation::kUnavailable)
-        diagnostics.ReportIssue({ .severity = DiagnosticsSeverity::kWarning,
+        diagnostics.ReportIssue({
+          .severity = DiagnosticsSeverity::kWarning,
           .code = "ibl.readback-unavailable",
           .message = "GPU sky-light validation unavailable for scene "
             + std::to_string(lifetime),
           .pass_name = "Vortex.Diagnostics.IBL.Metadata",
-          .product_name = "SkyLight" });
+          .product_name = "SkyLight",
+        });
     } catch (const std::bad_alloc&) {
       // Reporting an unavailable diagnostic must not reject a healthy frame.
     }
@@ -277,7 +284,8 @@ auto IblProcessor::InspectState(const std::uint64_t scene_lifetime) const
   const auto& cached = found->second;
   const auto& state = cached.frame_result.probe_state;
   const bool open = cached.processor && cached.processor->IsOpen();
-  auto result = SkyLightRuntimeState { .observed = cached.has_frame,
+  auto result = SkyLightRuntimeState {
+    .observed = cached.has_frame,
     .enabled = cached.enabled,
     .usable = state.valid && open && cached.published != nullptr,
     .empty_capture = cached.empty_capture,
@@ -295,7 +303,8 @@ auto IblProcessor::InspectState(const std::uint64_t scene_lifetime) const
       : 0U,
     .cpu_update_ms = cached.cpu_update_ms,
     .status = state.static_sky_light.status,
-    .unavailable_reason = state.static_sky_light.unavailable_reason };
+    .unavailable_reason = state.static_sky_light.unavailable_reason,
+  };
   if (cached.processor && !open) {
     result.status = StaticSkyLightProductStatus::kUnavailable;
     result.unavailable_reason
@@ -314,11 +323,12 @@ auto IblProcessor::InspectState(const std::uint64_t scene_lifetime) const
         DiagnosticsFeature::kFrameLedger);
     const auto validation = cached.validation
       ? cached.validation->Inspect(*cached.published, collect)
-      : SkyLightRuntimeState { .gpu_validation
-          = cached.validation_allocation_failed
+      : SkyLightRuntimeState {
+          .gpu_validation = cached.validation_allocation_failed
             ? SkyLightGpuValidation::kUnavailable
             : collect ? SkyLightGpuValidation::kPending
-                      : SkyLightGpuValidation::kNotRequested };
+                      : SkyLightGpuValidation::kNotRequested,
+        };
     result.gpu_validation = validation.gpu_validation;
     result.validated_revision = validation.validated_revision;
     result.last_failed_gpu_revision = validation.last_failed_gpu_revision;
@@ -379,12 +389,13 @@ try {
       const auto message = std::string("Sky light has no image-based "
                                        "lighting in scene ")
         + std::to_string(lifetime) + ": " + UnavailableMessage(reason) + ".";
-      renderer_.GetDiagnosticsService().ReportIssue(
-        { .severity = DiagnosticsSeverity::kWarning,
-          .code = "ibl.unavailable",
-          .message = message,
-          .pass_name = "Vortex.Environment.IBL",
-          .product_name = "SkyLight" });
+      renderer_.GetDiagnosticsService().ReportIssue({
+        .severity = DiagnosticsSeverity::kWarning,
+        .code = "ibl.unavailable",
+        .message = message,
+        .pass_name = "Vortex.Environment.IBL",
+        .product_name = "SkyLight",
+      });
       if (scene_cache.logged_reason != reason) {
         LOG_F(WARNING, "{}", message);
         scene_cache.logged_reason = reason;
@@ -402,14 +413,15 @@ try {
     scene_cache.enabled = light.enabled;
     scene_cache.source = light.source;
     scene_cache.empty_capture = false;
-    scene_cache.desired_key
-      = { .source_cubemap = light.source == kSkyLightSourceSpecifiedCubemap
-            ? light.cubemap_resource
-            : content::ResourceKey {},
-          .source_revision
-          = light.enabled && light.source == kSkyLightSourceCapturedScene
-            ? HashSkyCaptureInputs(stable)
-            : 0U };
+    scene_cache.desired_key = {
+      .source_cubemap = light.source == kSkyLightSourceSpecifiedCubemap
+        ? light.cubemap_resource
+        : content::ResourceKey {},
+      .source_revision
+      = light.enabled && light.source == kSkyLightSourceCapturedScene
+        ? HashSkyCaptureInputs(stable)
+        : 0U,
+    };
     scene_cache.last_frame = ctx.frame_sequence;
     scene_cache.has_frame = true;
     scene_cache.cpu_update_ms = 0.0;
@@ -548,12 +560,13 @@ try {
         + std::to_string(cube_resource.get()) + " in scene "
         + std::to_string(lifetime) + " is " + to_string(source_desc.format)
         + ", which cannot be measured: it lights the scene uncalibrated.";
-      renderer_.GetDiagnosticsService().ReportIssue(
-        { .severity = DiagnosticsSeverity::kWarning,
-          .code = "ibl.uncalibrated",
-          .message = message,
-          .pass_name = "Vortex.Environment.IBL",
-          .product_name = "SkyLight" });
+      renderer_.GetDiagnosticsService().ReportIssue({
+        .severity = DiagnosticsSeverity::kWarning,
+        .code = "ibl.uncalibrated",
+        .message = message,
+        .pass_name = "Vortex.Environment.IBL",
+        .product_name = "SkyLight",
+      });
       if (scene_cache.logged_uncalibrated != cube_resource) {
         LOG_F(WARNING, "{}", message);
         scene_cache.logged_uncalibrated = cube_resource;
@@ -577,10 +590,12 @@ try {
   const auto resident_view = [&]() -> IblCubeView {
     if (!resident)
       return {};
-    return { .texture = resident->texture,
+    return {
+      .texture = resident->texture,
       .srv = resident->srv,
       .owner = std::make_shared<ResidentOwner>(
-        ResidentOwner { .binder = binder, .texture = resident }) };
+        ResidentOwner { .binder = binder, .texture = resident }),
+    };
   };
   constexpr auto capture_fog_flags = kGpuFogFlagEnabled
     | kGpuFogFlagHeightFogEnabled | kGpuFogFlagVisibleInRealTimeSkyCaptures;
@@ -656,7 +671,7 @@ try {
       .source_scale = specified ? calibration : 1.0F,
       .lower_hemisphere_solid_color = key.lower_hemisphere_solid_color,
       .lower_hemisphere_color = { key.lower_hemisphere_color.x,
-        key.lower_hemisphere_color.y, key.lower_hemisphere_color.z },
+        key.lower_hemisphere_color.y, key.lower_hemisphere_color.z, },
       .lower_hemisphere_blend_alpha = key.lower_hemisphere_blend_alpha,
       .dispatch_tile_size = immediate ? 0U : 64U,
     };

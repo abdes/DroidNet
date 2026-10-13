@@ -1871,11 +1871,15 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
           : job.job_type;
 
         ordered_json job_json = ordered_json::object();
-        job_json.update(
-          { { "index", DisplayJobNumber(index) }, { "type", job_type },
-            { "work_items",
-              BuildWorkItemsJson(progress_traces.at(index), job_type,
-                job.request.source_path.string()) } });
+        job_json.update({
+          { "index", DisplayJobNumber(index) },
+          { "type", job_type },
+          {
+            "work_items",
+            BuildWorkItemsJson(progress_traces.at(index), job_type,
+              job.request.source_path.string()),
+          },
+        });
         if (report.has_value()) {
           const auto& report_value = *report;
           total_io_ms += ComputeIoMillis(report_value.telemetry);
@@ -1886,26 +1890,37 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
             { { "outputs", BuildOutputsJson(report_value.outputs) } });
           if (report_value.success
             && !report_value.material_slot_provenance_json.empty()) {
-            job_json.update({ { "material_slot_provenance",
-              ordered_json::parse(
-                report_value.material_slot_provenance_json) } });
+            job_json.update({
+              {
+                "material_slot_provenance",
+                ordered_json::parse(report_value.material_slot_provenance_json),
+              },
+            });
           }
           job_json.update(
             { { "stats", BuildStatsJson(report_value.telemetry) } });
-          job_json.update({ { "diagnostics",
-            BuildDiagnosticsJson(report_value.diagnostics) } });
+          job_json.update({
+            {
+              "diagnostics",
+              BuildDiagnosticsJson(report_value.diagnostics),
+            },
+          });
         } else {
-          job_json.update({ { "status", "not_submitted" },
+          job_json.update({
+            { "status", "not_submitted" },
             { "outputs", ordered_json::array() },
             { "stats", BuildEmptyStatsJson() },
-            { "diagnostics", ordered_json::array() } });
+            { "diagnostics", ordered_json::array() },
+          });
         }
         jobs_json.push_back(std::move(job_json));
       }
 
       ordered_json payload = ordered_json::object();
-      payload.update({ { "report_version", std::string(kReportVersion) },
-        { "session",
+      payload.update({
+        { "report_version", std::string(kReportVersion) },
+        {
+          "session",
           {
             { "id", MakeSessionId(session_started) },
             { "started_utc", FormatUtcTimestamp(session_started) },
@@ -1913,8 +1928,10 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
             { "tool_version", std::string(OXYGEN_IMPORT_TOOL_VERSION) },
             { "command_line", std::string(global_options_->command_line) },
             { "cooked_root", cooked_root->string() },
-          } },
-        { "summary",
+          },
+        },
+        {
+          "summary",
           {
             { "jobs_total", jobs.size() },
             { "jobs_succeeded", counts.succeeded },
@@ -1924,8 +1941,10 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
             { "time_ms_total", elapsed_ms },
             { "time_ms_io", total_io_ms },
             { "time_ms_cpu", total_cpu_ms },
-          } },
-        { "jobs", std::move(jobs_json) } });
+          },
+        },
+        { "jobs", std::move(jobs_json) },
+      });
 
       if (!WriteJsonReport(payload, *resolved_path, std::cerr)) {
         deferred_error = std::make_error_code(std::errc::io_error);

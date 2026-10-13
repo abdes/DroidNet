@@ -224,7 +224,7 @@ static_assert(offsetof(VolumetricFogSkyLightControl1, intensity_mul) == 12U);
 
 struct alignas(16) VolumetricFogTemporalHistoryControl0 {
   std::uint32_t previous_light_scattering_srv {
-    kInvalidShaderVisibleIndex.get()
+    kInvalidShaderVisibleIndex.get(),
   };
   std::uint32_t enabled { 0U };
   float history_weight { 0.0F };
@@ -278,7 +278,7 @@ struct alignas(16) VolumetricFogPassConstants {
   std::array<float, 4> light1_direction_enabled { 0.0F, 0.0F, 1.0F, 0.0F };
   std::array<float, 4> light1_illuminance_rgb {};
   std::uint32_t previous_frame_exposure_srv {
-    kInvalidShaderVisibleIndex.get()
+    kInvalidShaderVisibleIndex.get(),
   };
   std::uint32_t light_scattering_srv { kInvalidShaderVisibleIndex.get() };
   std::uint32_t exposure_fp16_store { 0U };
@@ -363,7 +363,7 @@ static_assert(offsetof(LocalFogComposePassConstants, _pad1) == 52U);
 struct alignas(16) LocalFogTiledCullingPassConstants {
   std::uint32_t instance_buffer_slot { kInvalidShaderVisibleIndex.get() };
   std::uint32_t instance_culling_buffer_slot {
-    kInvalidShaderVisibleIndex.get()
+    kInvalidShaderVisibleIndex.get(),
   };
   std::uint32_t tile_data_texture_slot { kInvalidShaderVisibleIndex.get() };
   std::uint32_t occupied_tile_buffer_slot { kInvalidShaderVisibleIndex.get() };

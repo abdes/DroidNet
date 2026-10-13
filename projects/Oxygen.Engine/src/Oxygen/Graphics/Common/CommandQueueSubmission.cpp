@@ -101,7 +101,7 @@ struct CommandQueue::SubmissionState {
   mutable std::mutex mutex;
   uint64_t next_private { 1 };
   internal::SubmissionFailurePoint failure {
-    internal::SubmissionFailurePoint::kNone
+    internal::SubmissionFailurePoint::kNone,
   };
   std::atomic<uint64_t> last_private_emitted { 0 };
   uint64_t last_legacy_emitted { 0 };
@@ -399,17 +399,23 @@ auto CommandQueue::SubmitPrepared(
         throw SubmissionException({});
       }
       work->native = PrepareNativeSubmission(
-        { work->lists, work->dependencies, marker, {},
+        {
+          work->lists,
+          work->dependencies,
+          marker,
+          {},
           failure == internal::SubmissionFailurePoint::kAfterIssueBeforeMarker,
-          failure == internal::SubmissionFailurePoint::kAfterFirstList },
+          failure == internal::SubmissionFailurePoint::kAfterFirstList,
+        },
         std::move(work->native));
       if (!work->native) {
         throw std::runtime_error("Native preparation failed");
       }
       std::lock_guard states_lock(known_resource_states_mutex_);
       PrepareStateAdoption(*work);
-      internal::NativeSubmissionProgress progress { .last_legacy_signal
-        = submission_->last_legacy_emitted };
+      internal::NativeSubmissionProgress progress {
+        .last_legacy_signal = submission_->last_legacy_emitted,
+      };
       bool accepted = false;
       try {
         work->native->Execute(progress);

@@ -259,8 +259,19 @@ NOLINT_TEST_F(FileStreamBasicTest, Read_Success)
 NOLINT_TEST_F(FileStreamBasicTest, Seek_Success)
 {
   // Arrange
-  const std::vector bytes = { 'h'_b, 'e'_b, 'l'_b, 'l'_b, 'o'_b, ' '_b, 'w'_b,
-    'o'_b, 'r'_b, 'l'_b, 'd'_b };
+  const std::vector bytes = {
+    'h'_b,
+    'e'_b,
+    'l'_b,
+    'l'_b,
+    'o'_b,
+    ' '_b,
+    'w'_b,
+    'o'_b,
+    'r'_b,
+    'l'_b,
+    'd'_b,
+  };
   mock_stream_->set_data(bytes);
 
   // Act
@@ -280,8 +291,19 @@ NOLINT_TEST_F(FileStreamBasicTest, Seek_Success)
 NOLINT_TEST_F(FileStreamBasicTest, Size_Success)
 {
   // Arrange
-  const std::vector bytes = { 'h'_b, 'e'_b, 'l'_b, 'l'_b, 'o'_b, ' '_b, 'w'_b,
-    'o'_b, 'r'_b, 'l'_b, 'd'_b };
+  const std::vector bytes = {
+    'h'_b,
+    'e'_b,
+    'l'_b,
+    'l'_b,
+    'o'_b,
+    ' '_b,
+    'w'_b,
+    'o'_b,
+    'r'_b,
+    'l'_b,
+    'd'_b,
+  };
   mock_stream_->set_data(bytes);
 
   // Act
@@ -309,8 +331,19 @@ NOLINT_TEST_F(FileStreamBasicTest, Flush_Success)
 NOLINT_TEST_F(FileStreamBasicTest, Position_Success)
 {
   // Arrange
-  const std::vector bytes = { 'h'_b, 'e'_b, 'l'_b, 'l'_b, 'o'_b, ' '_b, 'w'_b,
-    'o'_b, 'r'_b, 'l'_b, 'd'_b };
+  const std::vector bytes = {
+    'h'_b,
+    'e'_b,
+    'l'_b,
+    'l'_b,
+    'o'_b,
+    ' '_b,
+    'w'_b,
+    'o'_b,
+    'r'_b,
+    'l'_b,
+    'd'_b,
+  };
   mock_stream_->set_data(bytes);
   const auto success = sut_->Seek(6);
 
@@ -378,8 +411,19 @@ NOLINT_TEST_F(FileStreamBasicTest, PartialReadWrite_Success)
 {
   // Arrange
   const auto temp_file = create_temp_file();
-  const std::vector data = { 'h'_b, 'e'_b, 'l'_b, 'l'_b, 'o'_b, ' '_b, 'w'_b,
-    'o'_b, 'r'_b, 'l'_b, 'd'_b };
+  const std::vector data = {
+    'h'_b,
+    'e'_b,
+    'l'_b,
+    'l'_b,
+    'o'_b,
+    ' '_b,
+    'w'_b,
+    'o'_b,
+    'r'_b,
+    'l'_b,
+    'd'_b,
+  };
 
   // Act
   {

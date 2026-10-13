@@ -148,8 +148,11 @@ namespace {
 
   auto Reply(const json& id, json result) -> json
   {
-    return { { "jsonrpc", "2.0" }, { "id", id },
-      { "result", std::move(result) } };
+    return {
+      { "jsonrpc", "2.0" },
+      { "id", id },
+      { "result", std::move(result) },
+    };
   }
 
   auto ErrorReply(const json& id, const int code, std::string message,
@@ -159,8 +162,11 @@ namespace {
     if (!data.is_null()) {
       error["data"] = std::move(data);
     }
-    return { { "jsonrpc", "2.0" }, { "id", id },
-      { "error", std::move(error) } };
+    return {
+      { "jsonrpc", "2.0" },
+      { "id", id },
+      { "error", std::move(error) },
+    };
   }
 
   auto Dump(const json& message) -> std::string

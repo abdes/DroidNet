@@ -41,9 +41,17 @@ namespace {
       IblProductMetadata { 8.0F, 0.5F, 3U, 0U },
       IblProductMetadata { 8.0F, 0.5F, 7U, 77U },
       IblProductMetadata {
-        std::numeric_limits<float>::infinity(), 0.5F, 3U, 77U },
+        std::numeric_limits<float>::infinity(),
+        0.5F,
+        3U,
+        77U,
+      },
       IblProductMetadata {
-        1.0F, std::numeric_limits<float>::quiet_NaN(), 3U, 77U },
+        1.0F,
+        std::numeric_limits<float>::quiet_NaN(),
+        3U,
+        77U,
+      },
       IblProductMetadata { 0.5F, 0.5F, 3U, 77U },
     };
     const auto result = Decode({
@@ -92,7 +100,7 @@ namespace {
     constexpr auto half_srv = bindless::generated::kTexturesShaderIndexBase;
     auto valid = Input { .metadata
       = { 4.0F, 1.0F, 3U, 77U, 1.0F, environment::kIblHalfCertificateComplete,
-        half_srv, half_srv } };
+        half_srv, half_srv, }, };
     auto inputs = std::array<Input, 12> {};
     inputs.fill(valid);
     inputs[1].metadata.precision_flags = 0U;
@@ -109,11 +117,13 @@ namespace {
     inputs[10] = inputs[9];
     inputs[10].gain[0] = std::bit_cast<float>(1U);
     inputs[11].metadata.processing_flags = environment::kIblProductFinite;
-    const auto result = Decode({ .records = std::as_bytes(std::span(inputs)),
+    const auto result = Decode({
+      .records = std::as_bytes(std::span(inputs)),
       .stride = sizeof(Input),
       .record_kind = 38U,
       .decoded_words = 1U,
-      .count = static_cast<std::uint32_t>(inputs.size()) });
+      .count = static_cast<std::uint32_t>(inputs.size()),
+    });
     for (auto i = 0U; i < inputs.size(); ++i) {
       SCOPED_TRACE(i);
       EXPECT_EQ(result[i], i == 0U || i == 9U ? half_srv : 123U);
@@ -250,19 +260,31 @@ namespace {
     auto expected = std::vector<std::array<float, 2>> {};
     for (auto y = 0U; y < 32U; ++y) {
       for (auto x = 0U; x < 128U; ++x) {
-        records.push_back({ (x + 0.5F) / 128.0F, (y + 0.5F) / 32.0F,
-          std::bit_cast<float>(texture.get()), 0.0F });
-        expected.push_back({ lookup[y * 128U + x][0] / 65535.0F,
-          lookup[y * 128U + x][1] / 65535.0F });
+        records.push_back({
+          (x + 0.5F) / 128.0F,
+          (y + 0.5F) / 32.0F,
+          std::bit_cast<float>(texture.get()),
+          0.0F,
+        });
+        expected.push_back({
+          lookup[y * 128U + x][0] / 65535.0F,
+          lookup[y * 128U + x][1] / 65535.0F,
+        });
       }
     }
     // Hardware clamp at the four domain corners, including zero roughness.
     for (const auto y : { 0U, 31U }) {
       for (const auto x : { 0U, 127U }) {
-        records.push_back({ x == 0U ? 0.0F : 1.0F, y == 0U ? 0.0F : 1.0F,
-          std::bit_cast<float>(texture.get()), 0.0F });
-        expected.push_back({ lookup[y * 128U + x][0] / 65535.0F,
-          lookup[y * 128U + x][1] / 65535.0F });
+        records.push_back({
+          x == 0U ? 0.0F : 1.0F,
+          y == 0U ? 0.0F : 1.0F,
+          std::bit_cast<float>(texture.get()),
+          0.0F,
+        });
+        expected.push_back({
+          lookup[y * 128U + x][0] / 65535.0F,
+          lookup[y * 128U + x][1] / 65535.0F,
+        });
       }
     }
     const auto result = Decode({

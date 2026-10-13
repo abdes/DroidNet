@@ -33,7 +33,7 @@ enum class DescriptorVisibility : std::uint8_t {
   kCpuOnly, //!< CPU-only descriptor heap/pool, not directly accessible to
             //!< shaders.
 
-  kMaxDescriptorVisibility //!< Sentinel value for the number of visibilities.
+  kMaxDescriptorVisibility, //!< Sentinel value for the number of visibilities.
 };
 
 //! Check if the given resource view type is valid.

@@ -114,7 +114,9 @@ struct FramebufferDesc {
     std::shared_ptr<Texture> texture, const TextureSubResourceSet sub_resources)
   {
     color_attachments.push_back(FramebufferAttachment {
-      .texture = std::move(texture), .sub_resources = sub_resources });
+      .texture = std::move(texture),
+      .sub_resources = sub_resources,
+    });
     return *this;
   }
 
@@ -133,8 +135,10 @@ struct FramebufferDesc {
   auto SetDepthAttachment(
     std::shared_ptr<Texture> texture, const TextureSubResourceSet sub_resources)
   {
-    depth_attachment = FramebufferAttachment { .texture = std::move(texture),
-      .sub_resources = sub_resources };
+    depth_attachment = FramebufferAttachment {
+      .texture = std::move(texture),
+      .sub_resources = sub_resources,
+    };
     return *this;
   }
 
@@ -154,9 +158,10 @@ struct FramebufferDesc {
   auto SetShadingRateAttachment(
     std::shared_ptr<Texture> texture, const TextureSubResourceSet sub_resources)
   {
-    shading_rate_attachment
-      = FramebufferAttachment { .texture = std::move(texture),
-          .sub_resources = sub_resources };
+    shading_rate_attachment = FramebufferAttachment {
+      .texture = std::move(texture),
+      .sub_resources = sub_resources,
+    };
     return *this;
   }
 };

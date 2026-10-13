@@ -43,7 +43,7 @@ enum class QueueAllocationPreference : uint8_t {
   kAllInOne,
 
   //! Prefer using distinct queues per logical role when possible.
-  kDedicated
+  kDedicated,
 };
 
 OXGN_GFX_API auto to_string(QueueAllocationPreference value) -> const char*;
@@ -63,7 +63,7 @@ enum class QueueSharingPreference : uint8_t {
   kShared,
 
   //! Prefers being returned only for specific requests by QueueKey.
-  kNamed
+  kNamed,
 };
 
 //! Convert a QueueSharingPreference value to a textual name.

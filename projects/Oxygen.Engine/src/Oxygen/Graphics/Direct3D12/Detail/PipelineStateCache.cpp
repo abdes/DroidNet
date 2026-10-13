@@ -403,8 +403,8 @@ void ProcessPushConstantsBinding(
     = { .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
         .Constants = { .ShaderRegister = item.binding_slot_desc.register_index,
           .RegisterSpace = item.binding_slot_desc.register_space,
-          .Num32BitValues = push.size },
-        .ShaderVisibility = ConvertShaderVisibility(item.visibility) };
+          .Num32BitValues = push.size, },
+        .ShaderVisibility = ConvertShaderVisibility(item.visibility), };
   state.intermediate_root_params[original_idx] = param;
   state.is_slot_active_as_root_param[original_idx] = true;
 }
@@ -417,8 +417,8 @@ void ProcessDirectBufferBinding(
 {
   D3D12_ROOT_PARAMETER param = { .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
     .Descriptor = { .ShaderRegister = item.binding_slot_desc.register_index,
-      .RegisterSpace = item.binding_slot_desc.register_space },
-    .ShaderVisibility = ConvertShaderVisibility(item.visibility) };
+      .RegisterSpace = item.binding_slot_desc.register_space, },
+    .ShaderVisibility = ConvertShaderVisibility(item.visibility), };
   state.intermediate_root_params[original_idx] = param;
   state.is_slot_active_as_root_param[original_idx] = true;
 }
@@ -431,8 +431,8 @@ void ProcessDirectTextureBinding(
 {
   D3D12_ROOT_PARAMETER param = { .ParameterType = D3D12_ROOT_PARAMETER_TYPE_SRV,
     .Descriptor = { .ShaderRegister = item.binding_slot_desc.register_index,
-      .RegisterSpace = item.binding_slot_desc.register_space },
-    .ShaderVisibility = ConvertShaderVisibility(item.visibility) };
+      .RegisterSpace = item.binding_slot_desc.register_space, },
+    .ShaderVisibility = ConvertShaderVisibility(item.visibility), };
   state.intermediate_root_params[original_idx] = param;
   state.is_slot_active_as_root_param[original_idx] = true;
 }

@@ -61,8 +61,12 @@ auto Location(const std::uint32_t lod, const std::uint32_t submesh)
 
 auto GeometryBindings() -> std::array<MaterialSlotBinding, 4>
 {
-  return { Binding(0, 0, MaterialA()), Binding(0, 1),
-    Binding(0, 2, MaterialA()), Binding(1, 0, MaterialB()) };
+  return {
+    Binding(0, 0, MaterialA()),
+    Binding(0, 1),
+    Binding(0, 2, MaterialA()),
+    Binding(1, 0, MaterialB()),
+  };
 }
 
 auto MakeInventory() -> MaterialSlotInventory
@@ -167,32 +171,42 @@ NOLINT_TEST(MaterialSlotInventoryTest, EveryLayoutIdentityFieldAffectsRevision)
     void (*apply)(MaterialSlotInventory&);
   };
   const std::array cases {
-    Mutation { "default key",
+    Mutation {
+      "default key",
       [](auto& value) -> auto {
         value.slots.front().bindings.front().default_material_key = MaterialA();
-      } },
-    Mutation { "LOD",
+      },
+    },
+    Mutation {
+      "LOD",
       [](auto& value) -> auto {
         value.slots.front().bindings.front().lod_index
           = oxygen::data::LodIndex { 2U };
-      } },
-    Mutation { "submesh",
+      },
+    },
+    Mutation {
+      "submesh",
       [](auto& value) -> auto {
         value.slots.front().bindings.back().submesh_index
           = oxygen::data::SubmeshIndex { 3U };
-      } },
-    Mutation { "slot ID",
+      },
+    },
+    Mutation {
+      "slot ID",
       [](auto& value) -> auto {
         value.slots.front().slot_id
           = MaterialSlotId::FromString("11223344-5566-7788-99aa-bbccddeeff00")
               .value();
-      } },
-    Mutation { "surface owner",
+      },
+    },
+    Mutation {
+      "surface owner",
       [](auto& value) -> auto {
         value.slots.back().bindings.push_back(
           value.slots.front().bindings.back());
         value.slots.front().bindings.pop_back();
-      } },
+      },
+    },
   };
   for (const auto& mutation : cases) {
     SCOPED_TRACE(mutation.name);
@@ -231,29 +245,39 @@ NOLINT_TEST(MaterialSlotInventoryTest, RejectsInvalidSlotOwnershipBeforeHashing)
     ErrorCode expected;
   };
   const std::array cases {
-    InvalidCase { "nil ID",
+    InvalidCase {
+      "nil ID",
       [](auto& value) -> auto { value.slots.front().slot_id = {}; },
-      ErrorCode::kNilSlotId },
-    InvalidCase { "duplicate ID",
+      ErrorCode::kNilSlotId,
+    },
+    InvalidCase {
+      "duplicate ID",
       [](auto& value) -> auto {
         value.slots.front().slot_id = value.slots.back().slot_id;
       },
-      ErrorCode::kDuplicateSlotId },
-    InvalidCase { "unbound slot",
+      ErrorCode::kDuplicateSlotId,
+    },
+    InvalidCase {
+      "unbound slot",
       [](auto& value) -> auto { value.slots.front().bindings.clear(); },
-      ErrorCode::kEmptySlotBindings },
-    InvalidCase { "duplicate within slot",
+      ErrorCode::kEmptySlotBindings,
+    },
+    InvalidCase {
+      "duplicate within slot",
       [](auto& value) -> auto {
         value.slots.front().bindings.push_back(
           value.slots.front().bindings.front());
       },
-      ErrorCode::kDuplicateBinding },
-    InvalidCase { "duplicate across slots",
+      ErrorCode::kDuplicateBinding,
+    },
+    InvalidCase {
+      "duplicate across slots",
       [](auto& value) -> auto {
         value.slots.front().bindings.push_back(
           value.slots.back().bindings.front());
       },
-      ErrorCode::kDuplicateBinding },
+      ErrorCode::kDuplicateBinding,
+    },
   };
   for (const auto& invalid : cases) {
     SCOPED_TRACE(invalid.name);
@@ -385,9 +409,12 @@ NOLINT_TEST(
 {
   auto inventory = MakeInventory();
   inventory.slots.resize(1);
-  inventory.slots.front().bindings = { Binding(1, 10), Binding(1, 2),
+  inventory.slots.front().bindings = {
+    Binding(1, 10),
+    Binding(1, 2),
     Binding((std::numeric_limits<std::uint32_t>::max)(),
-      (std::numeric_limits<std::uint32_t>::max)()) };
+      (std::numeric_limits<std::uint32_t>::max)()),
+  };
   const auto canonical = WriteCanonicalMaterialSlotLayout(inventory.slots);
   ASSERT_TRUE(canonical.has_value());
   const auto index_two = canonical.value().find("\"submesh_index\":2,");

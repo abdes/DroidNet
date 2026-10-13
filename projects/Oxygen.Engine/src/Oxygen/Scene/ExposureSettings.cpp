@@ -79,13 +79,23 @@ auto ResolveExposureSettings(
     && settings.mode != engine::ExposureMode::kAuto) {
     return ::oxygen::Err(Error::kUnknownMode);
   }
-  const auto scalars
-    = std::array { settings.manual_ev, settings.compensation_ev, settings.key,
-        settings.min_ev, settings.max_ev, settings.speed_up,
-        settings.speed_down, settings.low_percentile, settings.high_percentile,
-        settings.min_log_luminance, settings.log_luminance_range,
-        settings.target_luminance, settings.spot_meter_radius,
-        settings.black_influence, settings.transition_distance };
+  const auto scalars = std::array {
+    settings.manual_ev,
+    settings.compensation_ev,
+    settings.key,
+    settings.min_ev,
+    settings.max_ev,
+    settings.speed_up,
+    settings.speed_down,
+    settings.low_percentile,
+    settings.high_percentile,
+    settings.min_log_luminance,
+    settings.log_luminance_range,
+    settings.target_luminance,
+    settings.spot_meter_radius,
+    settings.black_influence,
+    settings.transition_distance,
+  };
   if (!std::ranges::all_of(
         scalars, [](const float value) { return std::isfinite(value); })) {
     return ::oxygen::Err(Error::kNonFinite);
@@ -166,12 +176,16 @@ auto ResolveExposureSettings(
     const double bounded_ev
       = std::clamp(raw_ev, static_cast<double>(settings.min_ev),
         static_cast<double>(settings.max_ev));
-    return AccurateSum({ settings.compensation_ev, CurveValue(settings, raw_ev),
-      -bounded_ev, log_key,
+    return AccurateSum({
+      settings.compensation_ev,
+      CurveValue(settings, raw_ev),
+      -bounded_ev,
+      log_key,
       settings.target_luminance > 0.0F
         ? std::log2(
             static_cast<double>(settings.target_luminance) / kMiddleGrey)
-        : 0.0 });
+        : 0.0,
+    });
   };
   const auto valid_target
     = [&](const double ev) { return SupportedGain(target_at(ev)); };
@@ -199,8 +213,10 @@ auto ResolveExposureSettings(
     || !valid_target(std::clamp(0.0F, settings.min_ev, settings.max_ev))) {
     return ::oxygen::Err(Error::kUnsupportedGain);
   }
-  for (const double ev : { static_cast<double>(settings.min_ev),
-         static_cast<double>(settings.max_ev) }) {
+  for (const double ev : {
+         static_cast<double>(settings.min_ev),
+         static_cast<double>(settings.max_ev),
+       }) {
     if (ev > raw_min && ev < raw_max && !valid_target(ev)) {
       return ::oxygen::Err(Error::kUnsupportedGain);
     }
@@ -214,8 +230,10 @@ auto ResolveExposureSettings(
   // Normalize the complete target function before float32 GPU consumption.
   // Its breakpoints are the authored knots, clamp edges and supported radiance
   // endpoints. Last-valid metering survives changes to the histogram window.
-  auto positions = std::vector<float> { static_cast<float>(raw_min),
-    static_cast<float>(raw_max) };
+  auto positions = std::vector<float> {
+    static_cast<float>(raw_min),
+    static_cast<float>(raw_max),
+  };
   for (const float ev : { settings.min_ev, settings.max_ev }) {
     if (ev > raw_min && ev < raw_max) {
       positions.push_back(ev);
@@ -251,12 +269,15 @@ auto ResolveExposureSeedLogGain(const ResolvedExposureSettings& resolved,
   }
   // Explicit seeds are not metered targets: do not clamp their EV or form
   // 0.18*exp2(EV). Opposing authored terms must cancel before float upload.
-  const double log_gain = AccurateSum({ settings.compensation_ev,
-    CurveValue(settings, seed_ev), -static_cast<double>(seed_ev),
+  const double log_gain = AccurateSum({
+    settings.compensation_ev,
+    CurveValue(settings, seed_ev),
+    -static_cast<double>(seed_ev),
     std::log2(static_cast<double>(settings.key) / 12.5),
     settings.target_luminance > 0.0F
       ? std::log2(static_cast<double>(settings.target_luminance) / kMiddleGrey)
-      : 0.0 });
+      : 0.0,
+  });
   if (!SupportedGain(log_gain)) {
     return ::oxygen::Err(ExposureSettingsError::kUnsupportedGain);
   }

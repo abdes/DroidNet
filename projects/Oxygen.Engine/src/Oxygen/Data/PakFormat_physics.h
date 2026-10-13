@@ -23,31 +23,31 @@ namespace oxygen::data::pak::physics {
 // NOLINTBEGIN(*-macro-usage)
 #define OXPHYS_RESOURCE_FORMAT(name, value) name = (value),
 enum class PhysicsResourceFormat : uint8_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
 };
 #undef OXPHYS_RESOURCE_FORMAT
 
 #define OXPHYS_COMBINE_MODE(name, value) name = (value),
 enum class PhysicsCombineMode : uint8_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
 };
 #undef OXPHYS_COMBINE_MODE
 
 #define OXPHYS_SHAPE_TYPE(name, value) name = (value),
 enum class ShapeType : uint8_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc> // NOLINT
 };
 #undef OXPHYS_SHAPE_TYPE
 
 #define OXPHYS_SHAPE_PAYLOAD_TYPE(name, value) name = (value),
 enum class ShapePayloadType : uint8_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc> // NOLINT
 };
 #undef OXPHYS_SHAPE_PAYLOAD_TYPE
 
 #define OXPHYS_WORLD_BOUNDARY_MODE(name, value) name = (value),
 enum class WorldBoundaryMode : uint32_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysicsShape.inc> // NOLINT
 };
 #undef OXPHYS_WORLD_BOUNDARY_MODE
 
@@ -60,43 +60,43 @@ enum class WorldBoundaryMode : uint32_t {
 
 #define OXPHYS_BODY_TYPE(name, value) name = (value),
 enum class PhysicsBodyType : uint8_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
 };
 #undef OXPHYS_BODY_TYPE
 
 #define OXPHYS_MOTION_QUALITY(name, value) name = (value),
 enum class PhysicsMotionQuality : uint8_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
 };
 #undef OXPHYS_MOTION_QUALITY
 
 #define OXPHYS_SOFT_BODY_TETHER_MODE(name, value) name = (value),
 enum class SoftBodyTetherMode : uint8_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
 };
 #undef OXPHYS_SOFT_BODY_TETHER_MODE
 
 #define OXPHYS_VEHICLE_CONTROLLER_TYPE(name, value) name = (value),
 enum class VehicleControllerType : uint32_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
 };
 #undef OXPHYS_VEHICLE_CONTROLLER_TYPE
 
 #define OXPHYS_VEHICLE_WHEEL_SIDE(name, value) name = (value),
 enum class VehicleWheelSide : uint8_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
 };
 #undef OXPHYS_VEHICLE_WHEEL_SIDE
 
 #define OXPHYS_AGGREGATE_AUTHORITY(name, value) name = (value),
 enum class AggregateAuthority : uint8_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
 };
 #undef OXPHYS_AGGREGATE_AUTHORITY
 
 #define OXPHYS_BINDING_TYPE(name, value) name = (value),
 enum class PhysicsBindingType : uint32_t {
-#include <Oxygen/Core/Meta/Physics/PakPhysics.inc>
+#include <Oxygen/Core/Meta/Physics/PakPhysics.inc> // NOLINT
 };
 #undef OXPHYS_BINDING_TYPE
 // NOLINTEND(*-macro-usage)

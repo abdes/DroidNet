@@ -34,8 +34,20 @@ namespace {
     const std::array<float, 2> content_uv = { 0.5F, 0.5F },
     const float gamma = 1.0F) -> GradingCase
   {
-    return GradingCase { rgb[0], rgb[1], rgb[2], exposure, saturation, contrast,
-      vignette, gamma, content_uv[0], content_uv[1], kNone, 0.0F };
+    return GradingCase {
+      rgb[0],
+      rgb[1],
+      rgb[2],
+      exposure,
+      saturation,
+      contrast,
+      vignette,
+      gamma,
+      content_uv[0],
+      content_uv[1],
+      kNone,
+      0.0F,
+    };
   }
 } // namespace
 

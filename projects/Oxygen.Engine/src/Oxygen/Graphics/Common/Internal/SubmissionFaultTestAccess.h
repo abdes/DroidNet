@@ -15,7 +15,7 @@ namespace internal {
     kNone,
     kBeforeIssue,
     kAfterFirstList,
-    kAfterIssueBeforeMarker
+    kAfterIssueBeforeMarker,
   };
   class SubmissionFaultTestAccess final {
   public:

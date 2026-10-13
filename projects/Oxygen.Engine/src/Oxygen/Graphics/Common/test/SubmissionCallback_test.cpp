@@ -102,7 +102,9 @@ NOLINT_TEST(
   int calls = 0;
   {
     SubmissionCallback callback(Capture {
-      .owner = std::make_unique<Lifetime>(destroyed), .calls = &calls });
+      .owner = std::make_unique<Lifetime>(destroyed),
+      .calls = &calls,
+    });
     auto moved = SubmissionCallback(std::move(callback));
     EXPECT_EQ(destroyed, 0);
     moved(SubmissionOutcome::kDiscarded);

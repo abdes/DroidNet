@@ -92,10 +92,12 @@ NOLINT_TEST_F(
 
   const auto a = Strategy().Allocate(domain);
   const auto bhandle = Strategy().Allocate(domain);
-  const std::array<std::pair<DomainKey, VersionedBindlessHandle>, 2> batch { {
-    { domain, a },
-    { domain, bhandle },
-  } };
+  const std::array<std::pair<DomainKey, VersionedBindlessHandle>, 2> batch {
+    {
+      { domain, a },
+      { domain, bhandle },
+    },
+  };
 
   Strategy().ReleaseBatch(
     queue, oxygen::graphics::FenceValue { 3U }, std::span(batch));

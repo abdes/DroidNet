@@ -145,8 +145,11 @@ try {
       params.enabled = 1U;
       params.source = sphere.solid_color ? kSkySphereSourceSolidColor
                                          : kSkySphereSourceCubemap;
-      params.solid_color_rgb = { sphere.solid_color_rgb.x,
-        sphere.solid_color_rgb.y, sphere.solid_color_rgb.z };
+      params.solid_color_rgb = {
+        sphere.solid_color_rgb.x,
+        sphere.solid_color_rgb.y,
+        sphere.solid_color_rgb.z,
+      };
       params.rotation_radians = sphere.rotation_radians;
       params.intensity = sky_sphere_scale;
       if (!sphere.solid_color) {

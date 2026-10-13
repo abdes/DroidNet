@@ -258,7 +258,7 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest,
       facade.SetFrameSession(MakeFrameSession(sequence));
       facade.SetSceneSource({ .scene = oxygen::observer_ptr {
                                 scene_.get(),
-                              } });
+                              }, });
       facade.SetOutputTarget(MakeOutputTarget());
       auto exposure = oxygen::scene::ExposureSettings {};
       exposure.manual_ev = 4;
@@ -345,7 +345,7 @@ NOLINT_TEST_F(OffscreenSceneFacadeTest, BothExecutionPathsPreserveLocalScissor)
   facade.SetFrameSession(MakeFrameSession());
   facade.SetSceneSource({ .scene = oxygen::observer_ptr {
                             scene_.get(),
-                          } });
+                          }, });
   facade.SetOutputTarget(MakeOutputTarget());
   facade.SetViewIntent(Renderer::OffscreenSceneViewInput::FromCamera("Inset",
     ViewId {
@@ -732,7 +732,7 @@ NOLINT_TEST_F(
   facade.SetFrameSession(MakeFrameSession());
   facade.SetSceneSource({ .scene = oxygen::observer_ptr {
                             scene_.get(),
-                          } });
+                          }, });
   facade.SetOutputTarget(MakeOutputTarget());
   auto input = Renderer::OffscreenSceneViewInput::FromCamera("SharedOffscreen",
     ViewId {

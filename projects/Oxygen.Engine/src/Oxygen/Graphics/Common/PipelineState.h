@@ -30,7 +30,7 @@ enum class FillMode : uint8_t {
   kSolid, //!< Solid fill for polygons.
   kWireframe, //!< Wire-frame rendering.
 
-  kMaxFillMode //!< Not a valid mode; sentinel for enum size.
+  kMaxFillMode, //!< Not a valid mode; sentinel for enum size.
 };
 OXGN_GFX_API auto to_string(FillMode mode) -> std::string;
 
@@ -41,7 +41,7 @@ enum class CullMode : uint8_t {
   kBack = OXYGEN_FLAG(1), //!< Cull back faces.
   kFrontAndBack = kFront | kBack, //!< Cull both front and back faces.
 
-  kMaxCullMode = OXYGEN_FLAG(2) //!< Not a valid mode; sentinel for enum size.
+  kMaxCullMode = OXYGEN_FLAG(2), //!< Not a valid mode; sentinel for enum size.
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(CullMode)
 OXGN_GFX_API auto to_string(CullMode value) -> std::string;
@@ -57,7 +57,7 @@ enum class CompareOp : uint8_t {
   kGreaterOrEqual, //!< Passes if source >= dest.
   kAlways, //!< Always passes.
 
-  kMaxCompareOp //!< Not a valid op; sentinel for enum size.
+  kMaxCompareOp, //!< Not a valid op; sentinel for enum size.
 };
 OXGN_GFX_API auto to_string(CompareOp value) -> std::string;
 
@@ -82,7 +82,7 @@ enum class BlendFactor : uint8_t {
   kInvSrc1Alpha, //!< Dual-source blend: inverse alpha from second color
                  //!< attachment
 
-  kMaxBlendValue //!< Not a valid value; sentinel for enum size.
+  kMaxBlendValue, //!< Not a valid value; sentinel for enum size.
 };
 OXGN_GFX_API auto to_string(BlendFactor value) -> std::string;
 
@@ -94,7 +94,7 @@ enum class BlendOp : uint8_t {
   kMin, //!< Minimum of source and destination.
   kMax, //!< Maximum of source and destination.
 
-  kMaxBlendOp //!< Not a valid op; sentinel for enum size.
+  kMaxBlendOp, //!< Not a valid op; sentinel for enum size.
 };
 OXGN_GFX_API auto to_string(BlendOp value) -> std::string;
 
@@ -109,7 +109,7 @@ enum class StencilOp : uint8_t {
   kIncr,
   kDecr,
 
-  kMaxStencilOp
+  kMaxStencilOp,
 };
 OXGN_GFX_API auto to_string(StencilOp value) -> std::string;
 
@@ -122,7 +122,7 @@ enum class ColorWriteMask : uint8_t {
   kA = OXYGEN_FLAG(3), //!< Alpha channel.
   kAll = kR | kG | kB | kA, //!< All color channels enabled.
 
-  kMaxColorWriteMask = 0x10 //!< Not a valid mask; sentinel for enum size.
+  kMaxColorWriteMask = 0x10, //!< Not a valid mask; sentinel for enum size.
 };
 OXYGEN_DEFINE_FLAGS_OPERATORS(ColorWriteMask)
 OXGN_GFX_API auto to_string(ColorWriteMask value) -> std::string;
@@ -143,7 +143,7 @@ enum class PrimitiveType : uint8_t {
   kTriangleListWithAdjacency, //!< Triangle list with adjacency information
   kTriangleStripWithAdjacency, //!< Triangle strip with adjacency information
 
-  kMaxPrimitiveType //!< Not a valid type; sentinel for enum size.
+  kMaxPrimitiveType, //!< Not a valid type; sentinel for enum size.
 };
 OXGN_GFX_API auto to_string(PrimitiveType value) -> std::string;
 
@@ -151,7 +151,7 @@ OXGN_GFX_API auto to_string(PrimitiveType value) -> std::string;
 //! depth bias, and multisampling options.
 struct RasterizerStateDesc {
   FillMode fill_mode {
-    FillMode::kSolid
+    FillMode::kSolid,
   }; //!< Fill mode for polygons (solid or wire-frame).
   CullMode cull_mode { CullMode::kBack }; //!< Face culling mode for polygons.
 
@@ -167,7 +167,7 @@ struct RasterizerStateDesc {
   float depth_bias { 0.0F }; //!< Constant depth value added to each pixel.
   float depth_bias_clamp { 0.0F }; //!< Maximum depth bias value.
   float slope_scaled_depth_bias {
-    0.0F
+    0.0F,
   }; //!< Depth bias scale factor for polygon slope.
   bool depth_clip_enable { true }; //!< Enable clipping based on depth.
   bool multisample_enable { false }; //!< Enable MSAA.
@@ -242,7 +242,7 @@ struct DepthStencilStateDesc {
   bool depth_test_enable { false }; //!< Enable depth testing.
   bool depth_write_enable { false }; //!< Enable writing to depth buffer.
   CompareOp depth_func {
-    CompareOp::kLess
+    CompareOp::kLess,
   }; //!< Comparison function for depth testing.
   bool stencil_enable { false }; //!< Enable stencil testing.
   uint8_t stencil_read_mask { 0xFF }; //!< Mask for reading from stencil buffer.
@@ -255,9 +255,11 @@ struct DepthStencilStateDesc {
   //! Static factory for depth/stencil state with all operations disabled.
   static auto Disabled() -> DepthStencilStateDesc
   {
-    return DepthStencilStateDesc { .depth_test_enable = false,
+    return DepthStencilStateDesc {
+      .depth_test_enable = false,
       .depth_write_enable = false,
-      .stencil_enable = false };
+      .stencil_enable = false,
+    };
   }
 };
 
@@ -267,14 +269,14 @@ struct BlendTargetDesc {
   bool blend_enable { false }; //!< Enable blending for this render target.
   BlendFactor src_blend { BlendFactor::kOne }; //!< Source color blend factor.
   BlendFactor dest_blend {
-    BlendFactor::kZero
+    BlendFactor::kZero,
   }; //!< Destination color blend factor.
   BlendOp blend_op { BlendOp::kAdd }; //!< Color blend operation.
   BlendFactor src_blend_alpha {
-    BlendFactor::kOne
+    BlendFactor::kOne,
   }; //!< Source alpha blend factor.
   BlendFactor dest_blend_alpha {
-    BlendFactor::kZero
+    BlendFactor::kZero,
   }; //!< Destination alpha blend factor.
   BlendOp blend_op_alpha { BlendOp::kAdd }; //!< Alpha blend operation.
   std::optional<ColorWriteMask> write_mask {
@@ -293,10 +295,10 @@ struct FramebufferLayoutDesc {
   std::optional<Format>
     depth_stencil_format {}; //!< Optional depth/stencil attachment format.
   uint32_t sample_count {
-    1
+    1,
   }; //!< Number of MSAA samples (1 for no multisampling).
   uint32_t sample_quality {
-    0
+    0,
   }; //!< MSAA quality level (0 = default/highest available).
 
   auto operator==(const FramebufferLayoutDesc&) const -> bool = default;
@@ -528,7 +530,7 @@ private:
     domain_shader_; //!< Domain/tessellation evaluation shader.
 
   PrimitiveType primitive_topology_ {
-    PrimitiveType::kTriangleList
+    PrimitiveType::kTriangleList,
   }; //!< Primitive topology.
 
   RasterizerStateDesc rasterizer_state_; //!< Rasterizer state.

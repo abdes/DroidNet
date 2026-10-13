@@ -29,7 +29,7 @@ NOLINT_TEST(EnumIndexedArrayTest, IndexByEnum)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
   EnumIndexedArray<MyEnum, int> arr {};
 
@@ -48,7 +48,7 @@ NOLINT_TEST(EnumIndexedArrayTest, IndexByNumber)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
   EnumIndexedArray<MyEnum, int> arr {};
   size_t idx = 1U;
@@ -68,7 +68,7 @@ NOLINT_TEST(EnumIndexedArrayTest, IndexByEnumAsIndex)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
   EnumIndexedArray<MyEnum, int> arr {};
 
@@ -87,7 +87,7 @@ NOLINT_TEST(EnumIndexedArrayTest, IteratorsAndSize)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
   EnumIndexedArray<MyEnum, int> arr {};
   arr[MyEnum::kFirst] = 1;
@@ -116,7 +116,7 @@ NOLINT_TEST(EnumIndexedArrayTest, IndexByNamedIndexWrapper)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
   EnumIndexedArray<MyEnum, int> arr {};
   MyIndex idx { 1 };
@@ -162,7 +162,7 @@ NOLINT_TEST(EnumIndexedArrayDeathTest, IndexWithEndTerminates)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
   EnumIndexedArray<MyEnum, int> arr {};
 
@@ -198,7 +198,7 @@ NOLINT_TEST(EnumIndexedArrayTest, NonTrivialElementTypeUniquePtr)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
   EnumIndexedArray<MyEnum, std::unique_ptr<int>> arr {};
 
@@ -219,7 +219,7 @@ NOLINT_TEST(EnumIndexedArrayTest, RangesAccumulate)
     kFirst = 0,
     kSecond,
     kThird,
-    kCount
+    kCount,
   };
   EnumIndexedArray<MyEnum, int> arr {};
   arr[MyEnum::kFirst] = 1;
@@ -242,7 +242,7 @@ NOLINT_TEST(EnumIndexedArrayTest, RangesTransformView)
     kFirst = 0,
     kSecond,
     kThird,
-    kCount
+    kCount,
   };
   EnumIndexedArray<MyEnum, int> arr {};
   arr[MyEnum::kFirst] = 1;
@@ -268,7 +268,7 @@ NOLINT_TEST(EnumIndexedArrayTest, RangesReverseView)
     kFirst = 0,
     kSecond,
     kThird,
-    kCount
+    kCount,
   };
   EnumIndexedArray<MyEnum, int> arr {};
   arr[MyEnum::kFirst] = 10;
@@ -294,7 +294,7 @@ NOLINT_TEST(EnumIndexedArrayTest, RangesFindAlgorithm)
     kFirst = 0,
     kSecond,
     kThird,
-    kCount
+    kCount,
   };
   EnumIndexedArray<MyEnum, int> arr {};
   arr[MyEnum::kFirst] = 5;
@@ -317,7 +317,7 @@ NOLINT_TEST(EnumIndexedArrayTest, RangesFindIfAlgorithm)
     kFirst = 0,
     kSecond,
     kThird,
-    kCount
+    kCount,
   };
   EnumIndexedArray<MyEnum, int> arr {};
   arr[MyEnum::kFirst] = 2;

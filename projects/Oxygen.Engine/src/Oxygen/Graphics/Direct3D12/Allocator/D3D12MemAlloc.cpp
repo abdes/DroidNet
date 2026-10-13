@@ -179,7 +179,7 @@ static const D3D12_HEAP_TYPE D3D12_HEAP_TYPE_GPU_UPLOAD_COPY
 enum DXGI_MEMORY_SEGMENT_GROUP_COPY {
   DXGI_MEMORY_SEGMENT_GROUP_LOCAL_COPY = 0,
   DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL_COPY = 1,
-  DXGI_MEMORY_SEGMENT_GROUP_COUNT
+  DXGI_MEMORY_SEGMENT_GROUP_COUNT,
 };
 
 enum class ResourceClass { Unknown, Buffer, Non_RT_DS_Texture, RT_DS_Texture };
@@ -1876,9 +1876,11 @@ typename PoolAllocator<T>::ItemBlock& PoolAllocator<T>::CreateNewBlock()
     ? m_FirstBlockCapacity
     : m_ItemBlocks.back().Capacity * 3 / 2;
 
-  const ItemBlock newBlock
-    = { D3D12MA_NEW_ARRAY(m_AllocationCallbacks, Item, newBlockCapacity),
-        newBlockCapacity, 0 };
+  const ItemBlock newBlock = {
+    D3D12MA_NEW_ARRAY(m_AllocationCallbacks, Item, newBlockCapacity),
+    newBlockCapacity,
+    0,
+  };
 
   m_ItemBlocks.push_back(newBlock);
 
@@ -5418,7 +5420,7 @@ struct CREATE_RESOURCE_PARAMS {
     VARIANT_INVALID = 0,
     VARIANT_WITH_STATE,
     VARIANT_WITH_STATE_AND_DESC1,
-    VARIANT_WITH_LAYOUT
+    VARIANT_WITH_LAYOUT,
   };
 
   VARIANT Variant = VARIANT_INVALID;
@@ -7680,9 +7682,11 @@ D3D12_RESOURCE_ALLOCATION_INFO AllocatorPimpl::GetResourceAllocationInfo(
   */
   if (inOutResourceDesc.Alignment == 0
     && inOutResourceDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER) {
-    return { AlignUp<UINT64>(inOutResourceDesc.Width,
-               D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT), // SizeInBytes
-      D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT }; // Alignment
+    return {
+      AlignUp<UINT64>(inOutResourceDesc.Width,
+        D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT), // SizeInBytes
+      D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT,
+    }; // Alignment
   }
 #    endif // #ifdef __ID3D12Device1_INTERFACE_DEFINED__
 

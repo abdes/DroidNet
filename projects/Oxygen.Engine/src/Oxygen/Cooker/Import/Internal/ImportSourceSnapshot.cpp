@@ -76,7 +76,10 @@ auto ImportSourceSnapshot::BeginParserRead(const std::filesystem::path& path)
       if (!input->exists) {
         static_cast<void>(RecordObservation(logical,
           Observation {
-            .exists = false, .metadata = {}, .content_read = false }));
+            .exists = false,
+            .metadata = {},
+            .content_read = false,
+          }));
         throw std::filesystem::filesystem_error(
           "Source was absent when captured", logical,
           std::make_error_code(std::errc::no_such_file_or_directory));
@@ -113,9 +116,11 @@ auto ImportSourceSnapshot::RecordPreparation(
     BeginRead(path);
     auto release = ScopeGuard([this]() noexcept -> void { EndRead(); });
     if (!RecordObservation(path,
-          Observation { .exists = input.exists,
+          Observation {
+            .exists = input.exists,
             .metadata = input.metadata,
-            .content_read = !input.reads.empty() })) {
+            .content_read = !input.reads.empty(),
+          })) {
       throw std::runtime_error(
         "Conflicting source preparation observations: " + path.string());
     }
@@ -332,7 +337,10 @@ auto ImportSourceSnapshot::ReadFile(
         // probe.
         static_cast<void>(RecordObservation(std::get<0>(key),
           Observation {
-            .exists = false, .metadata = {}, .content_read = false }));
+            .exists = false,
+            .metadata = {},
+            .content_read = false,
+          }));
       }
       co_return result;
     }
@@ -391,14 +399,19 @@ auto ImportSourceSnapshot::GetFileInfo(const std::filesystem::path& path)
       if (result.error().code == FileError::kNotFound) {
         static_cast<void>(RecordObservation(normalized,
           Observation {
-            .exists = false, .metadata = {}, .content_read = false }));
+            .exists = false,
+            .metadata = {},
+            .content_read = false,
+          }));
       }
       co_return result;
     }
     if (!RecordObservation(normalized,
-          Observation { .exists = true,
+          Observation {
+            .exists = true,
             .metadata = result.value(),
-            .content_read = false })) {
+            .content_read = false,
+          })) {
       throw std::runtime_error(
         "Source metadata changed between observations: " + normalized.string());
     }
@@ -440,14 +453,19 @@ auto ImportSourceSnapshot::Exists(const std::filesystem::path& path)
       if (result.error().code == FileError::kNotFound) {
         static_cast<void>(RecordObservation(normalized,
           Observation {
-            .exists = false, .metadata = {}, .content_read = false }));
+            .exists = false,
+            .metadata = {},
+            .content_read = false,
+          }));
       }
       co_return result;
     }
     if (!RecordObservation(normalized,
-          Observation { .exists = result.value(),
+          Observation {
+            .exists = result.value(),
             .metadata = {},
-            .content_read = false })) {
+            .content_read = false,
+          })) {
       throw std::runtime_error(
         "Source presence changed between observations: " + normalized.string());
     }

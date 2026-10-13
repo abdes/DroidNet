@@ -65,7 +65,7 @@ struct RendererConfig {
   //! This is not authored scene state. It selects the directional shadow
   //! implementation family used by the renderer.
   DirectionalShadowImplementationPolicy directional_shadow_policy {
-    DirectionalShadowImplementationPolicy::kConventionalOnly
+    DirectionalShadowImplementationPolicy::kConventionalOnly,
   };
 
   //! Renderer-wide lighting/shadow allocation ceilings, including retained

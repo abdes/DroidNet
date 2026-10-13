@@ -365,11 +365,15 @@ namespace {
         // approximation. It no longer dictates the real-time algorithm.
         maximum_fraction = std::max(
           maximum_fraction, std::abs(measured - lobes.at(lobe)) / tolerance);
-        measurements.push_back({ { "case", index }, { "lobe", lobe },
+        measurements.push_back({
+          { "case", index },
+          { "lobe", lobe },
           { "kind", inputs.at(index).light.kind },
           { "roughness", inputs.at(index).roughness },
           { "radius", inputs.at(index).light.source_radius_m },
-          { "reference", lobes.at(lobe) }, { "measured", measured } });
+          { "reference", lobes.at(lobe) },
+          { "measured", measured },
+        });
         const auto& light = inputs.at(index).light;
         const auto center_distance = glm::length(light.position_ws);
         if (light.range_m == 0.0F || center_distance >= light.range_m)

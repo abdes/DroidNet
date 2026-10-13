@@ -323,8 +323,16 @@ namespace {
     std::string_view display_kind) -> UtilizationFormat
   {
     if (display_kind.empty()) {
-      return { "", 0.0F, "", "", "", Color::GrayLight, Color::GrayLight,
-        false };
+      return {
+        "",
+        0.0F,
+        "",
+        "",
+        "",
+        Color::GrayLight,
+        Color::GrayLight,
+        false,
+      };
     }
     const auto lookup_kind
       = (display_kind == "Mesh") ? "MeshBuild" : display_kind;

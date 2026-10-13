@@ -45,9 +45,11 @@ NOLINT_TEST(FakeResource_basic_test, InvalidViewReturnsInvalid)
 {
   // Arrange
   auto fake = FakeResource {}.WithInvalidView();
-  constexpr TestViewDesc desc { .view_type = ResourceViewType::kConstantBuffer,
+  constexpr TestViewDesc desc {
+    .view_type = ResourceViewType::kConstantBuffer,
     .visibility = DescriptorVisibility::kShaderVisible,
-    .id = 2ULL };
+    .id = 2ULL,
+  };
 
   // Act
   const oxygen::graphics::DescriptorAllocationHandle

@@ -418,10 +418,14 @@ public:
       const auto config_json = SerializeConfigToJson(config, backend);
       const auto path_json
         = SerializePathFinderConfigToJson(path_finder_config);
-      const SerializedBackendConfig serialized_config { config_json.c_str(),
-        config_json.size() };
-      const SerializedPathFinderConfig serialized_path { path_json.c_str(),
-        path_json.size() };
+      const SerializedBackendConfig serialized_config {
+        config_json.c_str(),
+        config_json.size(),
+      };
+      const SerializedPathFinderConfig serialized_path {
+        path_json.c_str(),
+        path_json.size(),
+      };
       auto* owner = new BackendOwner { nullptr, api->DestroyBackend };
       canonical = oxygen::graphics::AdoptBackendObject(
         owner,

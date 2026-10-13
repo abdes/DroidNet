@@ -26,7 +26,7 @@ enum class MaterialDomain : uint8_t {
   kPostProcess       = 6, //!< Post-processing effects
 
   //!< Maximum value sentinel
-  kMaxMaterialDomain = kPostProcess
+  kMaxMaterialDomain = kPostProcess,
   // clang-format on
 };
 

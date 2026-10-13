@@ -167,15 +167,19 @@ namespace {
       { "content_version", snapshot.request.content_version },
       { "sources", std::move(sources) },
       { "base_paks", std::move(base_catalogs) },
-      { "options",
+      {
+        "options",
         ordered_json {
           { "deterministic", snapshot.request.options.deterministic },
           { "embed_browse_index", snapshot.request.options.embed_browse_index },
           { "compute_crc32", snapshot.request.options.compute_crc32 },
           { "fail_on_warnings", snapshot.request.options.fail_on_warnings },
-          { "emit_manifest_in_full",
-            snapshot.request.options.emit_manifest_in_full },
-        } },
+          {
+            "emit_manifest_in_full",
+            snapshot.request.options.emit_manifest_in_full,
+          },
+        },
+      },
 
     };
   }
@@ -201,54 +205,74 @@ namespace {
       && input.publication_result.report->published;
 
     return ordered_json {
-      { "pak",
+      {
+        "pak",
         ordered_json {
           { "final_path", input.publication_plan.pak.final_path.string() },
           { "staged_path", input.publication_plan.pak.staged_path.string() },
           { "published", input.publication_result.pak.published },
-          { "size_bytes",
+          {
+            "size_bytes",
             pak_metadata_available ? ordered_json(input.build_result.file_size)
-                                   : ordered_json(nullptr) },
-          { "crc32",
+                                   : ordered_json(nullptr),
+          },
+          {
+            "crc32",
             pak_metadata_available
                 && input.request_snapshot.request.options.compute_crc32
               ? ordered_json(input.build_result.pak_crc32)
-              : ordered_json(nullptr) },
-        } },
-      { "catalog",
+              : ordered_json(nullptr),
+          },
+        },
+      },
+      {
+        "catalog",
         ordered_json {
           { "final_path", input.publication_plan.catalog.final_path.string() },
-          { "staged_path",
-            input.publication_plan.catalog.staged_path.string() },
+          {
+            "staged_path",
+            input.publication_plan.catalog.staged_path.string(),
+          },
           { "published", input.publication_result.catalog.published },
-          { "catalog_digest",
+          {
+            "catalog_digest",
             catalog_available
               ? ordered_json(ToHex(std::span {
                   input.build_result.output_catalog.catalog_digest }))
-              : ordered_json(nullptr) },
-        } },
-      { "manifest",
+              : ordered_json(nullptr),
+          },
+        },
+      },
+      {
+        "manifest",
         ordered_json {
           { "requested", manifest_requested },
           { "emitted", manifest_emitted },
-          { "final_path",
+          {
+            "final_path",
             manifest_requested
               ? ordered_json(
                   input.publication_plan.manifest->final_path.string())
-              : ordered_json(nullptr) },
-          { "staged_path",
+              : ordered_json(nullptr),
+          },
+          {
+            "staged_path",
             manifest_requested
               ? ordered_json(
                   input.publication_plan.manifest->staged_path.string())
-              : ordered_json(nullptr) },
+              : ordered_json(nullptr),
+          },
           { "published", manifest_published },
-        } },
-      { "report",
+        },
+      },
+      {
+        "report",
         ordered_json {
           { "final_path", report_final_path },
           { "staged_path", report_staged_path },
           { "published", report_published },
-        } },
+        },
+      },
     };
   }
 
@@ -273,16 +297,26 @@ namespace {
     -> ordered_json
   {
     return ordered_json {
-      { "time_ms_planning",
-        ToMillis(input.build_result.telemetry.planning_duration) },
-      { "time_ms_writing",
-        ToMillis(input.build_result.telemetry.writing_duration) },
-      { "time_ms_manifest",
-        ToMillis(input.build_result.telemetry.manifest_duration) },
-      { "time_ms_publish",
-        ToMillis(input.publication_result.publish_duration) },
-      { "time_ms_total",
-        ToMillis(input.build_result.telemetry.total_duration) },
+      {
+        "time_ms_planning",
+        ToMillis(input.build_result.telemetry.planning_duration),
+      },
+      {
+        "time_ms_writing",
+        ToMillis(input.build_result.telemetry.writing_duration),
+      },
+      {
+        "time_ms_manifest",
+        ToMillis(input.build_result.telemetry.manifest_duration),
+      },
+      {
+        "time_ms_publish",
+        ToMillis(input.publication_result.publish_duration),
+      },
+      {
+        "time_ms_total",
+        ToMillis(input.build_result.telemetry.total_duration),
+      },
     };
   }
 
@@ -391,7 +425,9 @@ auto WriteReportFile(const std::filesystem::path& output_path,
   }
 
   return ReportWriteResult {
-    .success = true, .error_code = {}, .error_message = {}
+    .success = true,
+    .error_code = {},
+    .error_message = {},
   };
 }
 

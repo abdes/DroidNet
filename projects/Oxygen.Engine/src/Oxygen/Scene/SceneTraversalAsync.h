@@ -181,7 +181,9 @@ co::Co<TraversalResult> AsyncSceneTraversal<SceneT>::TraverseAsync(
   std::ranges::transform(root_handles, std::back_inserter(root_impl_nodes),
     [this](const NodeHandle& handle) {
       return VisitedNode {
-        .handle = handle, .node_impl = this->GetNodeImpl(handle), .depth = 0
+        .handle = handle,
+        .node_impl = this->GetNodeImpl(handle),
+        .depth = 0,
       };
     });
 
@@ -246,9 +248,11 @@ co::Co<TraversalResult> AsyncSceneTraversal<SceneT>::TraverseHierarchiesAsync(
     [this](const SceneNode& node) {
       CHECK_F(GetScene().Contains(node),
         "Starting nodes for traversal must be part of this scene");
-      return VisitedNode { .handle = node.GetHandle(),
+      return VisitedNode {
+        .handle = node.GetHandle(),
         .node_impl = this->GetNodeImpl(node.GetHandle()),
-        .depth = 0 };
+        .depth = 0,
+      };
     });
 
   co_return co_await TraverseDispatchAsync(root_impl_nodes,

@@ -33,7 +33,7 @@ enum class WorkloadSecondaryLayout : std::uint8_t {
   kOffsetHalf,
   kMatched,
   kOffsetFull,
-  kPartialOverlap
+  kPartialOverlap,
 };
 struct LightingWorkloadOptions {
   std::uint32_t light_count { 1024U };
@@ -44,7 +44,7 @@ struct LightingWorkloadOptions {
   std::uint32_t motion_frame { 0U };
   bool secondary_view { false };
   WorkloadSecondaryLayout secondary_layout {
-    WorkloadSecondaryLayout::kOffsetHalf
+    WorkloadSecondaryLayout::kOffsetHalf,
   };
   bool reverse_lights { false };
   bool reverse_views { false };

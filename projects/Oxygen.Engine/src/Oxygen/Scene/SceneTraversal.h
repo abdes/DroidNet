@@ -207,7 +207,9 @@ TraversalResult SceneTraversal<SceneT>::Traverse(
   std::ranges::transform(root_handles, std::back_inserter(root_impl_nodes),
     [this](const NodeHandle& handle) {
       return VisitedNode {
-        .handle = handle, .node_impl = this->GetNodeImpl(handle), .depth = 0
+        .handle = handle,
+        .node_impl = this->GetNodeImpl(handle),
+        .depth = 0,
       };
     });
 
@@ -270,9 +272,11 @@ TraversalResult SceneTraversal<SceneT>::TraverseHierarchies(
     [this](const SceneNode& node) {
       CHECK_F(GetScene().Contains(node),
         "Starting nodes for traversal must be part of this scene");
-      return VisitedNode { .handle = node.GetHandle(),
+      return VisitedNode {
+        .handle = node.GetHandle(),
         .node_impl = this->GetNodeImpl(node.GetHandle()),
-        .depth = 0 };
+        .depth = 0,
+      };
     });
 
   return TraverseDispatch(root_impl_nodes, std::forward<VisitorFunc>(visitor),
@@ -519,9 +523,11 @@ auto SceneTraversal<SceneT>::PrepareDirtyFlagsAndSubtreeCounts(
         const auto previously_ignored_parent
           = flags.GetEffectiveValue(SceneNodeFlags::kIgnoreParentTransform);
         if (node_impl.AsGraphNode().IsRoot()) {
-          for (const auto flag :
-            { SceneNodeFlags::kVisible, SceneNodeFlags::kCastsShadows,
-              SceneNodeFlags::kReceivesShadows }) {
+          for (const auto flag : {
+                 SceneNodeFlags::kVisible,
+                 SceneNodeFlags::kCastsShadows,
+                 SceneNodeFlags::kReceivesShadows,
+               }) {
             if (flags.IsInherited(flag)) {
               flags.UpdateValueFromParent(
                 flag, SceneNodeImpl::kDefaultRootFlags);

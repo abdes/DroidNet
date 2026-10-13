@@ -49,30 +49,38 @@ auto oxygen::data::MakeQuadMeshAsset(const float width, const float height)
     return std::nullopt;
   }
   std::vector<Vertex> vertices = {
-    { .position = { -half_w, 0.0F, -half_h },
+    {
+      .position = { -half_w, 0.0F, -half_h },
       .normal = { 0, -1, 0 },
       .texcoord = { 0, 1 },
       .tangent = { 1, 0, 0 },
       .bitangent = { 0, 0, -1 },
-      .color = { 1, 1, 1, 1 } },
-    { .position = { half_w, 0.0F, -half_h },
+      .color = { 1, 1, 1, 1 },
+    },
+    {
+      .position = { half_w, 0.0F, -half_h },
       .normal = { 0, -1, 0 },
       .texcoord = { 1, 1 },
       .tangent = { 1, 0, 0 },
       .bitangent = { 0, 0, -1 },
-      .color = { 1, 1, 1, 1 } },
-    { .position = { half_w, 0.0F, half_h },
+      .color = { 1, 1, 1, 1 },
+    },
+    {
+      .position = { half_w, 0.0F, half_h },
       .normal = { 0, -1, 0 },
       .texcoord = { 1, 0 },
       .tangent = { 1, 0, 0 },
       .bitangent = { 0, 0, -1 },
-      .color = { 1, 1, 1, 1 } },
-    { .position = { -half_w, 0.0F, half_h },
+      .color = { 1, 1, 1, 1 },
+    },
+    {
+      .position = { -half_w, 0.0F, half_h },
       .normal = { 0, -1, 0 },
       .texcoord = { 0, 0 },
       .tangent = { 1, 0, 0 },
       .bitangent = { 0, 0, -1 },
-      .color = { 1, 1, 1, 1 } },
+      .color = { 1, 1, 1, 1 },
+    },
   };
   std::vector<uint32_t> indices = {
     0,

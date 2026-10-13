@@ -157,11 +157,13 @@ auto oxygen::graphics::ComputeLinearTextureCopyFootprint(const Format format,
   const auto total_bytes
     = SizeBytes { slice_pitch.get() * static_cast<uint64_t>(slice_count) };
 
-  return { .row_pitch = row_pitch,
+  return {
+    .row_pitch = row_pitch,
     .slice_pitch = slice_pitch,
     .total_bytes = total_bytes,
     .row_count = row_count,
-    .slice_count = slice_count };
+    .slice_count = slice_count,
+  };
 }
 
 auto oxygen::graphics::ComputeLinearTextureCopyFootprint(

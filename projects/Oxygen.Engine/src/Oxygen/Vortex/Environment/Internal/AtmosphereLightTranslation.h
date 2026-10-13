@@ -175,9 +175,11 @@ inline auto BuildAtmosphereLightModel(
   model.angular_size_radians = resolved.Light().GetAngularSizeRadians();
   const auto illuminance = oxygen::lighting::ResolveDirectionalIlluminanceRgb(
     resolved.Light().GetIntensityLux(),
-    { .color_rgb = resolved.Light().Common().color_rgb,
+    {
+      .color_rgb = resolved.Light().Common().color_rgb,
       .exposure_compensation_ev
-      = resolved.Light().Common().exposure_compensation_ev });
+      = resolved.Light().Common().exposure_compensation_ev,
+    });
   if (!illuminance)
     throw std::invalid_argument("Invalid atmosphere light photometry");
   model.illuminance_rgb_lux = *illuminance;

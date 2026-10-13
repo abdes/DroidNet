@@ -410,11 +410,14 @@ void ActionTriggerCombo::AddComboStep(std::shared_ptr<Action> action,
 {
   assert(action);
   if (action) {
-    combo_steps_.push_back({ .action = std::move(action),
+    combo_steps_.push_back({
+      .action = std::move(action),
       .completion_states = completion_states,
-      .time_to_complete = oxygen::time::CanonicalDuration {
-        std::chrono::duration_cast<std::chrono::nanoseconds>(
-          std::chrono::duration<float>(time_to_complete_seconds)) } });
+      .time_to_complete
+      = oxygen::time::CanonicalDuration { std::chrono::duration_cast<
+        std::chrono::nanoseconds>(
+        std::chrono::duration<float>(time_to_complete_seconds)) },
+    });
   }
 }
 

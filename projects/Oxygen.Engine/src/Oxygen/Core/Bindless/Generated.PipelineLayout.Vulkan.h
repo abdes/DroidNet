@@ -87,14 +87,14 @@ struct PipelineLayoutEntryDesc {
 inline constexpr std::array<DescriptorSetDesc, 1>
   kDescriptorSetTable = {{
   DescriptorSetDesc{ DescriptorSet::kBindlessMain, "bindless_main", 0U },
-}};
+},};
 
 inline constexpr std::array<BindingDesc, 4> kBindingTable = {{
   BindingDesc{ Binding::kTexturesBinding, "textures_binding", DescriptorSet::kBindlessMain, 0U, DescriptorType::kSampledImage, 0U, true, true },
   BindingDesc{ Binding::kGlobalBuffersBinding, "global_buffers_binding", DescriptorSet::kBindlessMain, 1U, DescriptorType::kStorageBuffer, 0U, true, true },
   BindingDesc{ Binding::kSamplersBinding, "samplers_binding", DescriptorSet::kBindlessMain, 2U, DescriptorType::kSampler, 256U, false, false },
   BindingDesc{ Binding::kViewConstantsBinding, "view_constants_binding", DescriptorSet::kBindlessMain, 3U, DescriptorType::kUniformBuffer, 1U, false, false },
-}};
+},};
 
 inline constexpr std::array<DomainBindingDesc, 4>
   kDomainBindingTable = {{
@@ -102,13 +102,13 @@ inline constexpr std::array<DomainBindingDesc, 4>
   DomainBindingDesc{ "srv_global", Binding::kGlobalBuffersBinding, 1U, 32768U },
   DomainBindingDesc{ "materials", Binding::kGlobalBuffersBinding, 32769U, 3047U },
   DomainBindingDesc{ "samplers", Binding::kSamplersBinding, 0U, 256U },
-}};
+},};
 
 inline constexpr std::array<PipelineLayoutEntryDesc, 2>
   kPipelineLayoutTable = {{
   PipelineLayoutEntryDesc{ LayoutEntry::kBindlessMain, "BindlessMain", LayoutEntryKind::DescriptorSet, 0U, 0U, "" },
   PipelineLayoutEntryDesc{ LayoutEntry::kRootConstants, "RootConstants", LayoutEntryKind::PushConstants, 4294967295U, 8U, "ALL" },
-}};
+},};
 
 } // namespace oxygen::bindless::generated::vulkan
 // clang-format on

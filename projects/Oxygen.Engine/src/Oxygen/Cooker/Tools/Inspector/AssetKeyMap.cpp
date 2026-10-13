@@ -61,12 +61,18 @@ auto RunAssetKeyMap(const AssetKeyMapOptions& options) -> int
     auto assets = nlohmann::json::array();
     for (const auto& entry : request.at("virtual_paths")) {
       const auto path = entry.get<std::string>();
-      assets.push_back({ { "virtual_path", path },
-        { "asset_key",
-          nostd::to_string(data::AssetKey::FromVirtualPath(path)) } });
+      assets.push_back({
+        { "virtual_path", path },
+        {
+          "asset_key",
+          nostd::to_string(data::AssetKey::FromVirtualPath(path)),
+        },
+      });
     }
-    const nlohmann::json report = { { "schema", "oxygen.asset-key-map.v1" },
-      { "assets", std::move(assets) } };
+    const nlohmann::json report = {
+      { "schema", "oxygen.asset-key-map.v1" },
+      { "assets", std::move(assets) },
+    };
     std::ofstream output(options.output, std::ios::binary | std::ios::trunc);
     output << report.dump(2);
     output.close();

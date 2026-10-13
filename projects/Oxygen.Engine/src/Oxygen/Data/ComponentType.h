@@ -22,7 +22,7 @@ enum class ComponentType : uint32_t {
 // NOLINTNEXTLINE(*-macro-*)
 #define OXDAT_COMPONENT_TYPE(name, value) name = value,
 #include <Oxygen/Core/Meta/Data/ComponentType.inc>
-#undef OXDAT_COMPONENT_TYPE
+#undef OXDAT_COMPONENT_TYPE // NOLINT
 };
 
 static_assert(sizeof(ComponentType) == sizeof(uint32_t),

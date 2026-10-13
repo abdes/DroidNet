@@ -125,7 +125,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, ShutdownCanResumeAnOwnerDestroyingConsumer)
       .debug_name = "Reentrant shutdown",
       .desc = UploadBufferDesc { .dst = destination,
         .size_bytes = kPayloadBytes,
-        .dst_offset = 0 },
+        .dst_offset = 0, },
       .subresources = {},
       .data = UploadDataView { .bytes = source },
     };
@@ -173,7 +173,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, DeviceLossClosesPendingUploadResults)
     .debug_name = "Device loss",
     .desc = UploadBufferDesc { .dst = destination,
       .size_bytes = kPayloadBytes,
-      .dst_offset = 0 },
+      .dst_offset = 0, },
     .subresources = {},
     .data = UploadDataView { .bytes = source },
   };

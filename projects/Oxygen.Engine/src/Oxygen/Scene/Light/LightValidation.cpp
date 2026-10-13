@@ -25,8 +25,10 @@ namespace {
   auto Reject(std::string_view field, std::string_view message)
     -> std::optional<LightValidationError>
   {
-    return LightValidationError { .field = std::string(field),
-      .message = std::string(message) };
+    return LightValidationError {
+      .field = std::string(field),
+      .message = std::string(message),
+    };
   }
 
   auto Nonnegative(float value) -> bool
@@ -66,8 +68,10 @@ namespace {
   auto Modifiers(const CommonLightProperties& common)
     -> lighting::LightPhotometryModifiers
   {
-    return { .color_rgb = common.color_rgb,
-      .exposure_compensation_ev = common.exposure_compensation_ev };
+    return {
+      .color_rgb = common.color_rgb,
+      .exposure_compensation_ev = common.exposure_compensation_ev,
+    };
   }
 
   auto ValidateLocal(float range, float source_radius)

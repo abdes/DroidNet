@@ -389,7 +389,7 @@ auto PlayerModule::RegisterCommands(
             { "scene", { { "type", "string" } } },
             { "camera", { { "type", "string" } } },
             { "issues", { { "type", "array" } } },
-          } },
+          }, },
       },
     }));
   } catch (const std::exception& ex) {

@@ -414,9 +414,11 @@ auto TextureImportJob::LoadSource(ImportSession& session)
         source.is_hdr_input
           = IsHdrFormat(bytes, mapping.path.extension().string());
       }
-      sources.Add({ .bytes = std::move(bytes),
+      sources.Add({
+        .bytes = std::move(bytes),
         .subresource = mapping.subresource,
-        .source_id = mapping.path.string() });
+        .source_id = mapping.path.string(),
+      });
     }
     source.source_set = std::move(sources);
     source.success = true;
@@ -791,9 +793,11 @@ auto TextureImportJob::CookTexture(
       });
       // Ensure the texture emitter is initialized for fallback index use.
       [[maybe_unused]] auto& texture_emitter = session.TextureEmitter();
-      co_return { .payload = std::nullopt,
+      co_return {
+        .payload = std::nullopt,
         .telemetry = result.telemetry,
-        .used_fallback = true };
+        .used_fallback = true,
+      };
     }
 
     session.AddDiagnostic({
@@ -803,14 +807,18 @@ auto TextureImportJob::CookTexture(
       .source_path = Request().source_path.string(),
       .object_path = {},
     });
-    co_return { .payload = std::nullopt,
+    co_return {
+      .payload = std::nullopt,
       .telemetry = result.telemetry,
-      .used_fallback = false };
+      .used_fallback = false,
+    };
   }
 
-  co_return { .payload = std::move(result.cooked.value()),
+  co_return {
+    .payload = std::move(result.cooked.value()),
     .telemetry = result.telemetry,
-    .used_fallback = false };
+    .used_fallback = false,
+  };
 }
 
 //! Emit the cooked texture via TextureEmitter.

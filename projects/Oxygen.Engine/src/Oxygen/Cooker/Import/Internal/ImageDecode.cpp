@@ -789,8 +789,12 @@ auto DecodeImageRgba8FromFile(const std::filesystem::path& path)
 
 auto IsExrSignature(std::span<const std::byte> bytes) noexcept -> bool
 {
-  constexpr std::array magic { std::byte { 0x76 }, std::byte { 0x2F },
-    std::byte { 0x31 }, std::byte { 0x01 } };
+  constexpr std::array magic {
+    std::byte { 0x76 },
+    std::byte { 0x2F },
+    std::byte { 0x31 },
+    std::byte { 0x01 },
+  };
   return std::ranges::starts_with(bytes, magic);
 }
 

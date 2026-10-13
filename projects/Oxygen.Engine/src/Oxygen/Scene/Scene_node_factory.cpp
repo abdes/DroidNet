@@ -70,8 +70,10 @@ using oxygen::scene::SpotLight;
 template <typename... Args>
 auto Scene::CreateNodeImpl(Args&&... args) noexcept -> SceneNode
 {
-  const NodeHandle handle { nodes_->Emplace(std::forward<Args>(args)...),
-    GetId() };
+  const NodeHandle handle {
+    nodes_->Emplace(std::forward<Args>(args)...),
+    GetId(),
+  };
   DCHECK_F(handle.IsValid(), "expecting a valid handle for a new node");
 
   AddRootNode(handle);
@@ -154,7 +156,8 @@ auto Scene::CreateChildNodeImpl(SceneNode& parent, Args&&... args) noexcept
       DCHECK_NOTNULL_F(state.node_impl);
 
       const NodeHandle child_handle {
-        nodes_->Emplace(std::forward<Args>(args)...), GetId()
+        nodes_->Emplace(std::forward<Args>(args)...),
+        GetId(),
       };
       DCHECK_F(
         child_handle.IsValid(), "expecting a valid handle for a new node");
@@ -773,7 +776,8 @@ auto Scene::CloneHierarchy(const SceneNode& starting_node)
         const auto cloned_impl = node.node_impl->Clone();
         cloned_impl->SetName(name);
         const NodeHandle cloned_handle {
-          nodes_->Insert(std::move(*cloned_impl)), GetId()
+          nodes_->Insert(std::move(*cloned_impl)),
+          GetId(),
         };
         DCHECK_F(
           cloned_handle.IsValid(), "expecting a valid handle for cloned node");

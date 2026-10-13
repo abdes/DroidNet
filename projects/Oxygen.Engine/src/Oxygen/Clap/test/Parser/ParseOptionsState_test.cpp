@@ -95,7 +95,7 @@ namespace {
       default:;
       }
       return TerminateWithError {
-        "Illegal token used to enter ParseOptionsState"
+        "Illegal token used to enter ParseOptionsState",
       };
     }
 

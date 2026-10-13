@@ -265,25 +265,39 @@ namespace {
   {
     if (lua_type(state, table) != LUA_TTABLE)
       return false;
-    for (const char* key : { "attenuation_model", "decay_exponent",
-           "environment_contribution", "is_sun_light" }) {
+    for (const char* key : {
+           "attenuation_model",
+           "decay_exponent",
+           "environment_contribution",
+           "is_sun_light",
+         }) {
       lua_getfield(state, table, key);
       const bool obsolete = lua_type(state, -1) != LUA_TNIL;
       lua_pop(state, 1);
       if (obsolete)
         return false;
     }
-    for (const char* key : { "range", "source_radius", "luminous_flux_lm",
-           "intensity_lux", "angular_size_radians", "inner_cone_angle_radians",
-           "outer_cone_angle_radians", "exposure_compensation_ev" }) {
+    for (const char* key : {
+           "range",
+           "source_radius",
+           "luminous_flux_lm",
+           "intensity_lux",
+           "angular_size_radians",
+           "inner_cone_angle_radians",
+           "outer_cone_angle_radians",
+           "exposure_compensation_ev",
+         }) {
       lua_getfield(state, table, key);
       const auto type = lua_type(state, -1);
       lua_pop(state, 1);
       if (type != LUA_TNIL && type != LUA_TNUMBER)
         return false;
     }
-    for (const char* key : { "affects_world", "casts_shadows",
-           "use_per_pixel_atmosphere_transmittance" }) {
+    for (const char* key : {
+           "affects_world",
+           "casts_shadows",
+           "use_per_pixel_atmosphere_transmittance",
+         }) {
       lua_getfield(state, table, key);
       const auto type = lua_type(state, -1);
       lua_pop(state, 1);
@@ -313,8 +327,10 @@ namespace {
   auto ReadShadow(lua_State* state, int table, scene::ShadowSettings& shadow)
     -> bool
   {
-    for (const auto& [key, value] : { std::pair { "bias", &shadow.bias },
-           std::pair { "normal_bias", &shadow.normal_bias } }) {
+    for (const auto& [key, value] : {
+           std::pair { "bias", &shadow.bias },
+           std::pair { "normal_bias", &shadow.normal_bias },
+         }) {
       lua_getfield(state, table, key);
       const auto type = lua_type(state, -1);
       if (type == LUA_TNUMBER)
@@ -343,12 +359,13 @@ namespace {
   auto ReadCsm(lua_State* state, int table, scene::CascadedShadowSettings& csm)
     -> bool
   {
-    for (const auto& [key, value] :
-      { std::pair { "max_shadow_distance", &csm.max_shadow_distance },
-        std::pair { "distribution_exponent", &csm.distribution_exponent },
-        std::pair { "transition_fraction", &csm.transition_fraction },
-        std::pair {
-          "distance_fadeout_fraction", &csm.distance_fadeout_fraction } }) {
+    for (const auto& [key, value] : {
+           std::pair { "max_shadow_distance", &csm.max_shadow_distance },
+           std::pair { "distribution_exponent", &csm.distribution_exponent },
+           std::pair { "transition_fraction", &csm.transition_fraction },
+           std::pair {
+             "distance_fadeout_fraction", &csm.distance_fadeout_fraction },
+         }) {
       lua_getfield(state, table, key);
       const auto type = lua_type(state, -1);
       if (type == LUA_TNUMBER)
@@ -1041,77 +1058,137 @@ auto RegisterSceneNodeLightMethods(lua_State* state, const int metatable_index)
   constexpr auto methods = std::to_array<luaL_Reg>({
     { .name = "light", .func = SceneNodeLight },
     { .name = "light_update", .func = SceneNodeLightUpdate },
-    { .name = "light_get_atmosphere_light_slot",
-      .func = SceneNodeLightGetAtmosphereLightSlot },
-    { .name = "light_set_atmosphere_light_slot",
-      .func = SceneNodeLightSetAtmosphereLightSlot },
-    { .name = "light_get_use_per_pixel_atmosphere_transmittance",
-      .func = SceneNodeLightGetPerPixelTransmittance },
-    { .name = "light_set_use_per_pixel_atmosphere_transmittance",
-      .func = SceneNodeLightSetPerPixelTransmittance },
-    { .name = "light_get_atmosphere_disk_luminance_scale_rgb",
-      .func = SceneNodeLightGetDiskScale },
-    { .name = "light_set_atmosphere_disk_luminance_scale_rgb",
-      .func = SceneNodeLightSetDiskScale },
-    { .name = "light_set_cone_angles_radians",
-      .func = SceneNodeLightSetConeAngles },
-    { .name = "attach_directional_light",
-      .func = SceneNodeAttachDirectionalLight },
+    {
+      .name = "light_get_atmosphere_light_slot",
+      .func = SceneNodeLightGetAtmosphereLightSlot,
+    },
+    {
+      .name = "light_set_atmosphere_light_slot",
+      .func = SceneNodeLightSetAtmosphereLightSlot,
+    },
+    {
+      .name = "light_get_use_per_pixel_atmosphere_transmittance",
+      .func = SceneNodeLightGetPerPixelTransmittance,
+    },
+    {
+      .name = "light_set_use_per_pixel_atmosphere_transmittance",
+      .func = SceneNodeLightSetPerPixelTransmittance,
+    },
+    {
+      .name = "light_get_atmosphere_disk_luminance_scale_rgb",
+      .func = SceneNodeLightGetDiskScale,
+    },
+    {
+      .name = "light_set_atmosphere_disk_luminance_scale_rgb",
+      .func = SceneNodeLightSetDiskScale,
+    },
+    {
+      .name = "light_set_cone_angles_radians",
+      .func = SceneNodeLightSetConeAngles,
+    },
+    {
+      .name = "attach_directional_light",
+      .func = SceneNodeAttachDirectionalLight,
+    },
     { .name = "attach_point_light", .func = SceneNodeAttachPointLight },
     { .name = "attach_spot_light", .func = SceneNodeAttachSpotLight },
     { .name = "detach_light", .func = SceneNodeDetachLight },
     { .name = "has_light", .func = SceneNodeHasLight },
     { .name = "light_type", .func = SceneNodeLightType },
-    { .name = "light_get_affects_world",
-      .func = SceneNodeLightGetAffectsWorld },
-    { .name = "light_set_affects_world",
-      .func = SceneNodeLightSetAffectsWorld },
+    {
+      .name = "light_get_affects_world",
+      .func = SceneNodeLightGetAffectsWorld,
+    },
+    {
+      .name = "light_set_affects_world",
+      .func = SceneNodeLightSetAffectsWorld,
+    },
     { .name = "light_get_color_rgb", .func = SceneNodeLightGetColorRgb },
     { .name = "light_set_color_rgb", .func = SceneNodeLightSetColorRgb },
     { .name = "light_get_mobility", .func = SceneNodeLightGetMobility },
     { .name = "light_set_mobility", .func = SceneNodeLightSetMobility },
-    { .name = "light_get_casts_shadows",
-      .func = SceneNodeLightGetCastsShadows },
-    { .name = "light_set_casts_shadows",
-      .func = SceneNodeLightSetCastsShadows },
-    { .name = "light_get_exposure_compensation_ev",
-      .func = SceneNodeLightGetExposureCompensationEv },
-    { .name = "light_set_exposure_compensation_ev",
-      .func = SceneNodeLightSetExposureCompensationEv },
-    { .name = "light_get_shadow_settings",
-      .func = SceneNodeLightGetShadowSettings },
-    { .name = "light_set_shadow_settings",
-      .func = SceneNodeLightSetShadowSettings },
-    { .name = "light_get_intensity_lux",
-      .func = SceneNodeLightGetIntensityLux },
-    { .name = "light_set_intensity_lux",
-      .func = SceneNodeLightSetIntensityLux },
-    { .name = "light_get_angular_size_radians",
-      .func = SceneNodeLightGetAngularSizeRadians },
-    { .name = "light_set_angular_size_radians",
-      .func = SceneNodeLightSetAngularSizeRadians },
-    { .name = "light_get_cascaded_shadows",
-      .func = SceneNodeLightGetCascadedShadows },
-    { .name = "light_set_cascaded_shadows",
-      .func = SceneNodeLightSetCascadedShadows },
+    {
+      .name = "light_get_casts_shadows",
+      .func = SceneNodeLightGetCastsShadows,
+    },
+    {
+      .name = "light_set_casts_shadows",
+      .func = SceneNodeLightSetCastsShadows,
+    },
+    {
+      .name = "light_get_exposure_compensation_ev",
+      .func = SceneNodeLightGetExposureCompensationEv,
+    },
+    {
+      .name = "light_set_exposure_compensation_ev",
+      .func = SceneNodeLightSetExposureCompensationEv,
+    },
+    {
+      .name = "light_get_shadow_settings",
+      .func = SceneNodeLightGetShadowSettings,
+    },
+    {
+      .name = "light_set_shadow_settings",
+      .func = SceneNodeLightSetShadowSettings,
+    },
+    {
+      .name = "light_get_intensity_lux",
+      .func = SceneNodeLightGetIntensityLux,
+    },
+    {
+      .name = "light_set_intensity_lux",
+      .func = SceneNodeLightSetIntensityLux,
+    },
+    {
+      .name = "light_get_angular_size_radians",
+      .func = SceneNodeLightGetAngularSizeRadians,
+    },
+    {
+      .name = "light_set_angular_size_radians",
+      .func = SceneNodeLightSetAngularSizeRadians,
+    },
+    {
+      .name = "light_get_cascaded_shadows",
+      .func = SceneNodeLightGetCascadedShadows,
+    },
+    {
+      .name = "light_set_cascaded_shadows",
+      .func = SceneNodeLightSetCascadedShadows,
+    },
     { .name = "light_get_range", .func = SceneNodeLightGetRange },
     { .name = "light_set_range", .func = SceneNodeLightSetRange },
-    { .name = "light_get_source_radius",
-      .func = SceneNodeLightGetSourceRadius },
-    { .name = "light_set_source_radius",
-      .func = SceneNodeLightSetSourceRadius },
-    { .name = "light_get_luminous_flux_lm",
-      .func = SceneNodeLightGetLuminousFluxLm },
-    { .name = "light_set_luminous_flux_lm",
-      .func = SceneNodeLightSetLuminousFluxLm },
-    { .name = "light_get_inner_cone_angle_radians",
-      .func = SceneNodeLightGetInnerConeAngleRadians },
-    { .name = "light_set_inner_cone_angle_radians",
-      .func = SceneNodeLightSetInnerConeAngleRadians },
-    { .name = "light_get_outer_cone_angle_radians",
-      .func = SceneNodeLightGetOuterConeAngleRadians },
-    { .name = "light_set_outer_cone_angle_radians",
-      .func = SceneNodeLightSetOuterConeAngleRadians },
+    {
+      .name = "light_get_source_radius",
+      .func = SceneNodeLightGetSourceRadius,
+    },
+    {
+      .name = "light_set_source_radius",
+      .func = SceneNodeLightSetSourceRadius,
+    },
+    {
+      .name = "light_get_luminous_flux_lm",
+      .func = SceneNodeLightGetLuminousFluxLm,
+    },
+    {
+      .name = "light_set_luminous_flux_lm",
+      .func = SceneNodeLightSetLuminousFluxLm,
+    },
+    {
+      .name = "light_get_inner_cone_angle_radians",
+      .func = SceneNodeLightGetInnerConeAngleRadians,
+    },
+    {
+      .name = "light_set_inner_cone_angle_radians",
+      .func = SceneNodeLightSetInnerConeAngleRadians,
+    },
+    {
+      .name = "light_get_outer_cone_angle_radians",
+      .func = SceneNodeLightGetOuterConeAngleRadians,
+    },
+    {
+      .name = "light_set_outer_cone_angle_radians",
+      .func = SceneNodeLightSetOuterConeAngleRadians,
+    },
   });
 
   for (const auto& reg : methods) {

@@ -295,8 +295,10 @@ auto RunImportJob(const ImportRequest& request,
     CHECK_F(!cooked_root.empty(), "Cooked root is required in report output");
 
     ordered_json payload = ordered_json::object();
-    payload.update({ { "report_version", std::string(kReportVersion) },
-      { "session",
+    payload.update({
+      { "report_version", std::string(kReportVersion) },
+      {
+        "session",
         {
           { "id", MakeSessionId(session_started) },
           { "started_utc", FormatUtcTimestamp(session_started) },
@@ -304,45 +306,67 @@ auto RunImportJob(const ImportRequest& request,
           { "tool_version", std::string(OXYGEN_IMPORT_TOOL_VERSION) },
           { "command_line", std::string(command_line) },
           { "cooked_root", cooked_root.string() },
-        } } });
+        },
+      },
+    });
 
     const auto stats_json = BuildStatsJson(report_copy.telemetry);
     const auto time_ms_io = ComputeIoMillis(report_copy.telemetry);
     const auto time_ms_cpu = ComputeCpuMillis(report_copy.telemetry);
 
-    payload.update({ { "summary",
+    payload.update({
       {
-        { "jobs_total", 1 },
-        { "jobs_succeeded", report_copy.success ? 1 : 0 },
-        { "jobs_failed", report_copy.success ? 0 : 1 },
-        { "jobs_skipped", 0 },
-        { "time_ms_total", elapsed_ms },
-        { "time_ms_io", time_ms_io },
-        { "time_ms_cpu", time_ms_cpu },
-      } } });
+        "summary",
+        {
+          { "jobs_total", 1 },
+          { "jobs_succeeded", report_copy.success ? 1 : 0 },
+          { "jobs_failed", report_copy.success ? 0 : 1 },
+          { "jobs_skipped", 0 },
+          { "time_ms_total", elapsed_ms },
+          { "time_ms_io", time_ms_io },
+          { "time_ms_cpu", time_ms_cpu },
+        },
+      },
+    });
 
     const auto job_type = ResolveReportJobType(request);
     ordered_json job = ordered_json::object();
     job.update({ { "index", 1 } });
     job.update({ { "type", job_type } });
-    job.update({ { "work_items",
-      BuildWorkItemsJson(
-        progress_trace, job_type, request.source_path.string()) } });
+    job.update({
+      {
+        "work_items",
+        BuildWorkItemsJson(
+          progress_trace, job_type, request.source_path.string()),
+      },
+    });
     job.update({ { "status", std::string(JobStatusFromReport(report_copy)) } });
     job.update({ { "outputs", BuildOutputsJson(report_copy.outputs) } });
     job.update({ { "cooked_root", report_copy.cooked_root.generic_string() } });
     if (report_copy.retained_record_path) {
-      job.update({ { "retained_record_path",
-        report_copy.retained_record_path->generic_string() } });
+      job.update({
+        {
+          "retained_record_path",
+          report_copy.retained_record_path->generic_string(),
+        },
+      });
     }
     if (report_copy.previous_cooked_root) {
-      job.update({ { "previous_cooked_root",
-        report_copy.previous_cooked_root->generic_string() } });
+      job.update({
+        {
+          "previous_cooked_root",
+          report_copy.previous_cooked_root->generic_string(),
+        },
+      });
     }
     if (report_copy.success
       && !report_copy.material_slot_provenance_json.empty()) {
-      job.update({ { "material_slot_provenance",
-        ordered_json::parse(report_copy.material_slot_provenance_json) } });
+      job.update({
+        {
+          "material_slot_provenance",
+          ordered_json::parse(report_copy.material_slot_provenance_json),
+        },
+      });
     }
     job.update({ { "stats", stats_json } });
     job.update(

@@ -94,7 +94,7 @@ public:
       { "just do it", CommandBuilder("just", "do", "it") },
       { "just do nothing", CommandBuilder("just", "do", "nothing") },
       { "justice", CommandBuilder("justice") },
-      { "partial", CommandBuilder("partial") }
+      { "partial", CommandBuilder("partial") },
     };
     OXYGEN_DIAGNOSTIC_POP
     return predefined_commands_;

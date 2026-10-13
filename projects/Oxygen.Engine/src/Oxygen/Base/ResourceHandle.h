@@ -355,7 +355,7 @@ constexpr auto ResourceHandle::NewGeneration() -> void
   const auto current_generation = Generation();
   assert(current_generation <= kGenerationMax);
   const auto new_generation {
-    current_generation == kGenerationMax ? 0 : current_generation + 1U
+    current_generation == kGenerationMax ? 0 : current_generation + 1U,
   };
   // Wrap around
   handle_ = (handle_ & kGenerationSetMask)

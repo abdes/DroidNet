@@ -35,19 +35,21 @@ struct BuiltinGeometryDefinition {
   Category authoring_category = Category::kStandard;
 };
 
-constexpr auto kDefinitions = std::array<BuiltinGeometryDefinition, 11> { {
-  { "Cube" },
-  { "SubdividedCube", Category::kAdvanced },
-  { "Sphere" },
-  { "Capsule" },
-  { "IcoSphere" },
-  { "Plane" },
-  { "Cylinder" },
-  { "Cone" },
-  { "Torus" },
-  { "Quad" },
-  { "ArrowGizmo", Category::kInternal },
-} };
+constexpr auto kDefinitions = std::array<BuiltinGeometryDefinition, 11> {
+  {
+    { "Cube" },
+    { "SubdividedCube", Category::kAdvanced },
+    { "Sphere" },
+    { "Capsule" },
+    { "IcoSphere" },
+    { "Plane" },
+    { "Cylinder" },
+    { "Cone" },
+    { "Torus" },
+    { "Quad" },
+    { "ArrowGizmo", Category::kInternal },
+  },
+};
 
 constexpr auto kNames = []->std::array<std::string_view, kDefinitions.size()>
 {
@@ -146,12 +148,13 @@ auto ResolveBuiltinGeometryIdentity(const std::string_view asset_uri)
   for (const auto& definition : kDefinitions) {
     const auto name = definition.name;
     if (EqualsName(requested, name)) {
-      return BuiltinGeometryIdentity { .name = name,
+      return BuiltinGeometryIdentity {
+        .name = name,
         .generator = name,
         .authoring_category = definition.authoring_category,
         .asset_uri = std::string(kUriPrefix) + std::string(name),
-        .descriptor_name
-        = "Engine_Generated_BasicShapes_" + std::string(name) };
+        .descriptor_name = "Engine_Generated_BasicShapes_" + std::string(name),
+      };
     }
   }
   return std::nullopt;

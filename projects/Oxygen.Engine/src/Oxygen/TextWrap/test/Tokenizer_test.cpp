@@ -46,13 +46,17 @@ TEST(TokenizerTest, Example)
   //! [Tokenizer example]
 
   const auto expected = std::vector<Token> {
-    Token { TokenType::kChunk, "Why?" }, Token { TokenType::kWhiteSpace, " " },
-    Token { TokenType::kNewLine, "" }, Token { TokenType::kChunk, "Just" },
-    Token { TokenType::kWhiteSpace, " " }, Token { TokenType::kChunk, "plain" },
+    Token { TokenType::kChunk, "Why?" },
+    Token { TokenType::kWhiteSpace, " " },
+    Token { TokenType::kNewLine, "" },
+    Token { TokenType::kChunk, "Just" },
+    Token { TokenType::kWhiteSpace, " " },
+    Token { TokenType::kChunk, "plain" },
     Token { TokenType::kWhiteSpace, " " },
     Token { TokenType::kChunk, "finger-" },
     Token { TokenType::kChunk, "licking" },
-    Token { TokenType::kWhiteSpace, " " }, Token { TokenType::kChunk, "good!" }
+    Token { TokenType::kWhiteSpace, " " },
+    Token { TokenType::kChunk, "good!" },
   };
 
   EXPECT_THAT(status, IsTrue());

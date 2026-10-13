@@ -468,10 +468,12 @@ NOLINT_TEST(ContentBindingBundleTest, ParentRetainsChildrenAcrossCacheClear)
     cache, *queue, 1, std::make_shared<TrackedValue>(destroyed));
   const oxygen::content::ResourceKey key { 1 };
   std::vector<BoundResource> resources;
-  resources.push_back({ .key = key,
+  resources.push_back({
+    .key = key,
     .publication = result.publication,
     .owner = result.publication.Acquire<TrackedValue>(
-      cache, *queue, CheckoutOwner::kInternal) });
+      cache, *queue, CheckoutOwner::kInternal),
+  });
   auto parent = std::make_shared<MaterialAsset>(
     oxygen::data::AssetKey {}, oxygen::data::pak::render::MaterialAssetDesc {});
   parent->SetRuntimeBindings(std::make_shared<ContentBindingBundle>(

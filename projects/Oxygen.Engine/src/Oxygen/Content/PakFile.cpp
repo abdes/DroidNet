@@ -342,13 +342,22 @@ auto LoadPakCatalog(oxygen::serio::FileStream<>& stream,
   };
   require_before_catalog(footer.directory_offset, footer.directory_size);
   require_before_catalog(footer.browse_index_offset, footer.browse_index_size);
-  for (const auto& region : { footer.texture_region, footer.buffer_region,
-         footer.audio_region, footer.script_region, footer.physics_region }) {
+  for (const auto& region : {
+         footer.texture_region,
+         footer.buffer_region,
+         footer.audio_region,
+         footer.script_region,
+         footer.physics_region,
+       }) {
     require_before_catalog(region.offset, region.size);
   }
-  for (const auto& table :
-    { footer.texture_table, footer.buffer_table, footer.audio_table,
-      footer.script_resource_table, footer.physics_resource_table }) {
+  for (const auto& table : {
+         footer.texture_table,
+         footer.buffer_table,
+         footer.audio_table,
+         footer.script_resource_table,
+         footer.physics_resource_table,
+       }) {
     require_before_catalog(
       table.offset, uint64_t { table.count } * table.entry_size);
   }

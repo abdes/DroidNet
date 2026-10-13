@@ -43,9 +43,11 @@ namespace {
     RegisterPhysicsSoftBodyBindings(state, oxygen_table_index);
   }
 
-  constexpr std::array<BindingNamespace, 1> kPhysicsNamespaces = { {
-    { .name = "physics", .register_fn = RegisterPhysicsBindings },
-  } };
+  constexpr std::array<BindingNamespace, 1> kPhysicsNamespaces = {
+    {
+      { .name = "physics", .register_fn = RegisterPhysicsBindings },
+    },
+  };
 
   class PhysicsBindingPack final : public contracts::IScriptBindingPack {
   public:

@@ -164,8 +164,17 @@ protected:
     auto current = CreateNode("NodeA");
     nodes.push_back(current);
 
-    const std::vector<std::string> names = { "NodeB", "NodeC", "NodeD", "NodeE",
-      "NodeF", "NodeG", "NodeH", "NodeI", "NodeJ" };
+    const std::vector<std::string> names = {
+      "NodeB",
+      "NodeC",
+      "NodeD",
+      "NodeE",
+      "NodeF",
+      "NodeG",
+      "NodeH",
+      "NodeI",
+      "NodeJ",
+    };
     for (int i = 1; i < depth && i < static_cast<int>(names.size()) + 1; ++i) {
       auto child_opt = CreateChildNode(current, names[i - 1]);
       EXPECT_TRUE(child_opt.has_value());
@@ -426,7 +435,7 @@ NOLINT_TEST_F(SceneReparentTest, MakeNodesRoot_ValidNodes_AllSucceed)
     hierarchy1.child, // child node
     hierarchy2.child1, // another child node
     hierarchy2.child2, // yet another child node
-    standalone_root // already root node
+    standalone_root, // already root node
   };
 
   // Verify initial state
@@ -1017,7 +1026,7 @@ NOLINT_TEST_F(
     hierarchy.child, // valid child node
     invalid_node, // invalid node handle
     hierarchy.parent, // valid root node (already root)
-    lazy_invalid_node // lazily invalidated node
+    lazy_invalid_node, // lazily invalidated node
   };
 
   // Verify initial state

@@ -32,7 +32,7 @@ enum class FlagBitPosition : uint8_t {
   kInheritance = 1, //!< Whether value is inherited from parent
   kPendingValue = 2, //!< Pending value to become effective after update
   kDirty = 3, //!< Needs update in scene update pass
-  kPreviousValue = 4 //!< Previous effective value for transition detection
+  kPreviousValue = 4, //!< Previous effective value for transition detection
 };
 
 //! Single flag state wrapper with 5-bit layout for scene graph operations.
@@ -693,8 +693,10 @@ public:
   //! Dereference operator returns flag-state pair.
   [[nodiscard]] constexpr auto operator*() const noexcept -> value_type
   {
-    return { static_cast<FlagEnum>(index_),
-      flags_->GetFlag(static_cast<FlagEnum>(index_)) };
+    return {
+      static_cast<FlagEnum>(index_),
+      flags_->GetFlag(static_cast<FlagEnum>(index_)),
+    };
   }
 
   //! Arrow proxy for member access.

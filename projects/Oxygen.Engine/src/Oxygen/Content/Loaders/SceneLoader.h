@@ -613,7 +613,9 @@ inline auto LoadSceneAsset(const LoaderContext& context)
   auto asset = std::make_unique<data::SceneAsset>(context.current_asset_key,
     std::move(bytes),
     data::SourceOrigin {
-      .key = context.source_key, .instance = context.source_instance });
+      .key = context.source_key,
+      .instance = context.source_instance,
+    });
   if (context.asset_references) {
     std::vector<data::KeyReference> keys;
     const auto add_asset

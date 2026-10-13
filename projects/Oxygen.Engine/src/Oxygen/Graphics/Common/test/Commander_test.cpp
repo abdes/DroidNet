@@ -126,9 +126,12 @@ NOLINT_TEST(ResourceRegistryStateTest,
   auto registry = oxygen::graphics::ResourceRegistry("state-cache");
   auto resource = std::make_shared<RegistryNativeResource>(1U);
   const auto native = resource->GetNativeResource();
-  const auto states
-    = std::array { CommandQueue::KnownResourceState { .resource = native,
-      .state = oxygen::graphics::ResourceStates::kShaderResource } };
+  const auto states = std::array {
+    CommandQueue::KnownResourceState {
+      .resource = native,
+      .state = oxygen::graphics::ResourceStates::kShaderResource,
+    },
+  };
   queue.AdoptKnownResourceStates(states);
   registry.Register(resource);
   const auto weak = std::weak_ptr { resource };
@@ -165,10 +168,14 @@ NOLINT_TEST(ResourceRegistryStateTest,
     const auto previous_native = previous->GetNativeResource();
     const auto replacement_native = replacement->GetNativeResource();
     const auto states = std::array {
-      CommandQueue::KnownResourceState { .resource = previous_native,
-        .state = oxygen::graphics::ResourceStates::kShaderResource },
-      CommandQueue::KnownResourceState { .resource = replacement_native,
-        .state = oxygen::graphics::ResourceStates::kDepthWrite },
+      CommandQueue::KnownResourceState {
+        .resource = previous_native,
+        .state = oxygen::graphics::ResourceStates::kShaderResource,
+      },
+      CommandQueue::KnownResourceState {
+        .resource = replacement_native,
+        .state = oxygen::graphics::ResourceStates::kDepthWrite,
+      },
     };
     queue.AdoptKnownResourceStates(states);
     registry.Register(previous);
@@ -207,9 +214,12 @@ NOLINT_TEST(
   auto registry = oxygen::graphics::ResourceRegistry("view-state");
   auto resource = std::make_shared<RegistryNativeResource>(1U);
   const auto native = resource->GetNativeResource();
-  const auto states
-    = std::array { CommandQueue::KnownResourceState { .resource = native,
-      .state = oxygen::graphics::ResourceStates::kShaderResource } };
+  const auto states = std::array {
+    CommandQueue::KnownResourceState {
+      .resource = native,
+      .state = oxygen::graphics::ResourceStates::kShaderResource,
+    },
+  };
   queue.AdoptKnownResourceStates(states);
   registry.Register(resource);
   registry.SetResourceUnregisteredCallback([&](const auto& forgotten) -> void {

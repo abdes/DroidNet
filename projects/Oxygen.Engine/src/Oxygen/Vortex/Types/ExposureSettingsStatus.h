@@ -21,7 +21,7 @@ enum class ExposureMaskStatus : std::uint8_t {
   kAbsent,
   kPending,
   kReady,
-  kFailed
+  kFailed,
 };
 
 [[nodiscard]] inline auto to_string(const ExposureMaskStatus status) noexcept

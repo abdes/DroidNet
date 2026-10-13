@@ -64,9 +64,11 @@ inline auto SampleProductionGgxEnergy(double roughness, double cosine)
     // D3D filtering weights have at least eight fractional bits.
     bound = std::max(bound, (dx + dy) / 256.0 + 2.0e-6);
   }
-  return { .moments
+  return {
+    .moments
     = { .directional_albedo = values.at(0), .schlick_moment = values.at(1) },
-    .filtering_error_bound = bound };
+    .filtering_error_bound = bound,
+  };
 }
 
 } // namespace oxygen::vortex::testing::reference

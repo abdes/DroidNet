@@ -67,9 +67,11 @@ auto MakeCube(const std::uint32_t size,
         }
       }
     }
-    layouts.push_back({ .offset_bytes = face * face_bytes,
+    layouts.push_back({
+      .offset_bytes = face * face_bytes,
       .row_pitch_bytes = size * texel_bytes,
-      .size_bytes = face_bytes });
+      .size_bytes = face_bytes,
+    });
   }
   auto payload = oxygen::vortex::testing::detail::BuildV4TexturePayload(
     desc, layouts, bytes);

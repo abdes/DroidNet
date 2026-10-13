@@ -135,8 +135,12 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
   for (uint32_t y = 0; y < texture_desc.height; ++y) {
     for (uint32_t x = 0; x < texture_desc.width; ++x) {
       WriteRgbaTexel(upload_bytes, kD3D12RowPitch, x, y,
-        { static_cast<uint8_t>(10U * y + x), static_cast<uint8_t>(100U + x),
-          static_cast<uint8_t>(150U + y), static_cast<uint8_t>(200U + x + y) });
+        {
+          static_cast<uint8_t>(10U * y + x),
+          static_cast<uint8_t>(100U + x),
+          static_cast<uint8_t>(150U + y),
+          static_cast<uint8_t>(200U + x + y),
+        });
     }
   }
   upload->Update(upload_bytes.data(), upload_bytes.size(), 0);

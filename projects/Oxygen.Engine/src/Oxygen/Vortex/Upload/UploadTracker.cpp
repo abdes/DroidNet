@@ -34,11 +34,13 @@ auto UploadTracker::Register(const FenceValue fence, const std::uint64_t bytes)
   const auto id = timeline->next_ticket;
   timeline->next_ticket = TicketId { id.get() + 1 };
   return UploadTicket { std::make_shared<internal::UploadRecord>(
-    internal::UploadRecord { .timeline = timeline,
+    internal::UploadRecord {
+      .timeline = timeline,
       .id = id,
       .fence = fence,
       .bytes = bytes,
-      .failure = timeline->progress.closed }) };
+      .failure = timeline->progress.closed,
+    }) };
 }
 
 auto UploadTracker::RegisterFailedImmediate(const UploadError error)
@@ -49,11 +51,13 @@ auto UploadTracker::RegisterFailedImmediate(const UploadError error)
   const auto id = timeline->next_ticket;
   timeline->next_ticket = TicketId { id.get() + 1 };
   return UploadTicket { std::make_shared<internal::UploadRecord>(
-    internal::UploadRecord { .timeline = timeline,
+    internal::UploadRecord {
+      .timeline = timeline,
       .id = id,
       .fence = timeline->progress.completed,
       .bytes = 0,
-      .failure = error }) };
+      .failure = error,
+    }) };
 }
 
 auto UploadTracker::RecordSubmission(const FenceValue fence) -> void

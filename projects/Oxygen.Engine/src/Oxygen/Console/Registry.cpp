@@ -1344,7 +1344,7 @@ void Registry::RegisterBuiltinCommands()
         .type = ParamType::kEnum,
         .default_value = ParamValue { std::string(kListModeAll) },
         .allowed_values = { std::string(kListModeAll),
-          std::string(kListModeCommands), std::string(kListModeCVars) },
+          std::string(kListModeCommands), std::string(kListModeCVars), },
       },
     },
     .handler = [this](const CommandArgs& args,

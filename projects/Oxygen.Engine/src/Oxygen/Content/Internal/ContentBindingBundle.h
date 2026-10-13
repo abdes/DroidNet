@@ -151,9 +151,11 @@ public:
     auto owned = std::static_pointer_cast<T>(std::move(acquired.owner));
     const auto [found, inserted]
       = assets_.insert_or_assign(owned->GetAssetKey(),
-        BoundAsset { .key = owned->GetAssetKey(),
+        BoundAsset {
+          .key = owned->GetAssetKey(),
           .publication = std::move(acquired.publication),
-          .owner = owned });
+          .owner = owned,
+        });
     static_cast<void>(inserted);
     return std::static_pointer_cast<T>(found->second.owner);
   }
@@ -167,9 +169,11 @@ public:
     }
     auto owned = std::static_pointer_cast<T>(std::move(acquired.owner));
     const auto [found, inserted] = resources_.insert_or_assign(key,
-      BoundResource { .key = key,
+      BoundResource {
+        .key = key,
         .publication = std::move(acquired.publication),
-        .owner = owned });
+        .owner = owned,
+      });
     static_cast<void>(inserted);
     return std::static_pointer_cast<T>(found->second.owner);
   }

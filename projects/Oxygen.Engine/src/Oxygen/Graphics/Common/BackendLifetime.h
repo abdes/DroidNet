@@ -43,7 +43,7 @@ enum class BackendLifecycle : uint8_t {
   kActive,
   kClosing,
   kRetiring,
-  kReleased
+  kReleased,
 };
 
 //! Shared admission gate and module pin; never owns Graphics or its queues.

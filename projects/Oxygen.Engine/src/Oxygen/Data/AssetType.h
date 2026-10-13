@@ -18,7 +18,7 @@ enum class AssetType : uint8_t {
 // NOLINTNEXTLINE(*-macro-*)
 #define OXDAT_ASSET_TYPE(name, value) name = value,
 #include <Oxygen/Core/Meta/Data/AssetType.inc>
-#undef OXDAT_ASSET_TYPE
+#undef OXDAT_ASSET_TYPE // NOLINT
 };
 
 static_assert(sizeof(std::underlying_type_t<AssetType>) <= sizeof(uint8_t),

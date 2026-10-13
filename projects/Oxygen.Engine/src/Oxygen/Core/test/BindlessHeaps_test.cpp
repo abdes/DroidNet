@@ -54,8 +54,13 @@ NOLINT_TEST(BindlessHeapsTest, ParseEmbeddedJson_VerifyMetaAndHeaps)
     ASSERT_TRUE(v.is_object()) << "Entry '" << key << "' must be an object";
 
     // Mandatory fields
-    for (const char* field : { "capacity", "allow_growth", "growth_factor",
-           "max_growth_iterations", "base_index" }) {
+    for (const char* field : {
+           "capacity",
+           "allow_growth",
+           "growth_factor",
+           "max_growth_iterations",
+           "base_index",
+         }) {
       EXPECT_TRUE(v.contains(field))
         << "Entry '" << key << "' missing field '" << field << "'";
     }

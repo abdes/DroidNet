@@ -126,8 +126,9 @@ inline constexpr glm::vec3 kDefaultMieAbsorptionRgb { 4.405e-7F, 4.405e-7F,
   4.405e-7F };
 
 //! Mie extinction (scattering + absorption) at sea level.
-inline constexpr glm::vec3 kDefaultMieExtinctionRgb { kDefaultMieScatteringRgb
-  + kDefaultMieAbsorptionRgb };
+inline constexpr glm::vec3 kDefaultMieExtinctionRgb {
+  kDefaultMieScatteringRgb + kDefaultMieAbsorptionRgb,
+};
 
 //! Mie scale height in meters (Earth ≈ 1.2km).
 inline constexpr float kDefaultMieScaleHeightM = 1200.0F;

@@ -609,12 +609,12 @@ NOLINT_TEST_F(InternalBufferMemoryStreamTest, WriteGrowsAndMaintainsContent)
   // Arrange
   const std::vector data1_bytes {
     // clang-format off
-    'h'_b, 'e'_b, 'l'_b, 'l'_b, 'o'_b
+    'h'_b, 'e'_b, 'l'_b, 'l'_b, 'o'_b,
     // clang-format on
   };
   const std::vector data2_bytes {
     // clang-format off
-    ' '_b, 'w'_b, 'o'_b, 'r'_b, 'l'_b, 'd'_b
+    ' '_b, 'w'_b, 'o'_b, 'r'_b, 'l'_b, 'd'_b,
     // clang-format on
   };
 

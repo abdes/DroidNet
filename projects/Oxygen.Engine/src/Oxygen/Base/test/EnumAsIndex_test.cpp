@@ -32,7 +32,7 @@ NOLINT_TEST(EnumAsIndexHarnessTest, RuntimeConstructionAndValidity)
     kFirst = 0,
     kSecond,
     kThird,
-    kCount
+    kCount,
   };
 
   // Act
@@ -53,7 +53,7 @@ NOLINT_TEST(EnumAsIndexHarnessDeathTest, RuntimeOutOfRangeTerminates)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
 
   // Act & Assert: death-test must evaluate the expression that terminates.
@@ -67,7 +67,7 @@ NOLINT_TEST(EnumAsIndexTest, BracedInitDeduction)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
 
   // Use deduction guide enabled in EnumIndexedArray.h
@@ -84,7 +84,7 @@ NOLINT_TEST(EnumAsIndexHarnessTest, ArithmeticAndDistance)
     kFirst = 0,
     kSecond,
     kThird,
-    kCount
+    kCount,
   };
   auto it = EnumAsIndex { MyEnum::kFirst };
 
@@ -112,7 +112,7 @@ NOLINT_TEST(EnumAsIndexHarnessTest, IterationAndComparisons)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
   auto begin = EnumAsIndex { MyEnum::kFirst };
   auto end = EnumAsIndex<MyEnum>::end();
@@ -134,7 +134,7 @@ NOLINT_TEST(EnumAsIndexHarnessTest, EnumIndexedArrayIndexing)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
   EnumIndexedArray<MyEnum, int> arr {};
 
@@ -154,7 +154,7 @@ NOLINT_TEST(EnumAsIndexHarnessTest, Hashability)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
   EnumAsIndex<MyEnum> a = EnumAsIndex<MyEnum>::Checked(MyEnum::kFirst);
   EnumAsIndex<MyEnum> b = EnumAsIndex<MyEnum>::Checked(MyEnum::kSecond);
@@ -177,7 +177,7 @@ NOLINT_TEST(EnumAsIndexHarnessTest, EndSentinel_IsNotValid)
     kFirst = 0,
     kSecond,
     kThird,
-    kCount
+    kCount,
   };
 
   // Act
@@ -195,7 +195,7 @@ NOLINT_TEST(EnumAsIndexHarnessTest, LastIndex_IsValid)
     kFirst = 0,
     kSecond,
     kThird,
-    kCount
+    kCount,
   };
 
   // Act
@@ -213,7 +213,7 @@ NOLINT_TEST(EnumAsIndexHarnessTest, ToEnum_Roundtrips)
     kFirst = 0,
     kSecond,
     kThird,
-    kCount
+    kCount,
   };
 
   // Act
@@ -230,7 +230,7 @@ NOLINT_TEST(EnumAsIndexHarnessDeathTest, ArithmeticUnderflowTerminates)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
 
   // Act & Assert: moving before kFirst should terminate.
@@ -248,7 +248,7 @@ NOLINT_TEST(EnumAsIndexHarnessDeathTest, ArithmeticOverflowTerminates)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
 
   // Act & Assert: moving past end() should terminate.
@@ -293,7 +293,7 @@ NOLINT_TEST(EnumAsIndexConstexprTest, CompileTimeChecked)
   using MyEnum = enum class MyEnum : std::size_t {
     kFirst = 0,
     kSecond,
-    kCount
+    kCount,
   };
 
   // Use the consteval template form to perform a compile-time check.
@@ -313,7 +313,7 @@ NOLINT_TEST(EnumAsIndexConstexprTest, CompileTimeArithmeticAndToEnum)
     kFirst = 0,
     kSecond,
     kThird,
-    kCount
+    kCount,
   };
 
   // Constexpr checked indices

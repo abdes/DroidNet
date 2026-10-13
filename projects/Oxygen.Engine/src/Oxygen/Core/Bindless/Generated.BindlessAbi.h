@@ -81,10 +81,12 @@ struct DomainDesc {
 inline constexpr IndexSpaceToken kSrvUavCbvIndexSpace { 0U };
 inline constexpr IndexSpaceToken kSamplerIndexSpace { 1U };
 
-inline constexpr std::array<IndexSpaceDesc, 2> kIndexSpaceTable = { {
-  IndexSpaceDesc { kSrvUavCbvIndexSpace, "srv_uav_cbv" },
-  IndexSpaceDesc { kSamplerIndexSpace, "sampler" },
-} };
+inline constexpr std::array<IndexSpaceDesc, 2> kIndexSpaceTable = {
+  {
+    IndexSpaceDesc { kSrvUavCbvIndexSpace, "srv_uav_cbv" },
+    IndexSpaceDesc { kSamplerIndexSpace, "sampler" },
+  },
+};
 
 // Unified global bindless table sized for production large geometry-heavy
 // scenes
@@ -117,17 +119,46 @@ inline constexpr uint32_t kPointClampSamplerIndex = 2U;
 // energy from the opposite edge
 inline constexpr uint32_t kLinearClampSamplerIndex = 3U;
 
-inline constexpr std::array<DomainDesc, 4> kDomainTable = { {
-  DomainDesc { kGlobalSrvDomain, "srv_global", "GlobalSRV",
-    kSrvUavCbvIndexSpace, kGlobalSrvShaderIndexBase, kGlobalSrvCapacity,
-    "buffer_srv" },
-  DomainDesc { kMaterialsDomain, "materials", "Materials", kSrvUavCbvIndexSpace,
-    kMaterialsShaderIndexBase, kMaterialsCapacity, "buffer_srv" },
-  DomainDesc { kTexturesDomain, "textures", "Textures", kSrvUavCbvIndexSpace,
-    kTexturesShaderIndexBase, kTexturesCapacity, "texture_srv" },
-  DomainDesc { kSamplersDomain, "samplers", "Samplers", kSamplerIndexSpace,
-    kSamplersShaderIndexBase, kSamplersCapacity, "sampler" },
-} };
+inline constexpr std::array<DomainDesc, 4> kDomainTable = {
+  {
+    DomainDesc {
+      kGlobalSrvDomain,
+      "srv_global",
+      "GlobalSRV",
+      kSrvUavCbvIndexSpace,
+      kGlobalSrvShaderIndexBase,
+      kGlobalSrvCapacity,
+      "buffer_srv",
+    },
+    DomainDesc {
+      kMaterialsDomain,
+      "materials",
+      "Materials",
+      kSrvUavCbvIndexSpace,
+      kMaterialsShaderIndexBase,
+      kMaterialsCapacity,
+      "buffer_srv",
+    },
+    DomainDesc {
+      kTexturesDomain,
+      "textures",
+      "Textures",
+      kSrvUavCbvIndexSpace,
+      kTexturesShaderIndexBase,
+      kTexturesCapacity,
+      "texture_srv",
+    },
+    DomainDesc {
+      kSamplersDomain,
+      "samplers",
+      "Samplers",
+      kSamplerIndexSpace,
+      kSamplersShaderIndexBase,
+      kSamplersCapacity,
+      "sampler",
+    },
+  },
+};
 
 inline constexpr auto kIndexSpaceCount
   = static_cast<uint32_t>(kIndexSpaceTable.size());

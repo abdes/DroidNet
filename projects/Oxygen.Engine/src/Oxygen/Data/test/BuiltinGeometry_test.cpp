@@ -67,61 +67,83 @@ NOLINT_TEST(
     = std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
   const auto factories = std::vector<
     std::pair<std::string_view, std::function<Buffers()>>> {
-    { "Cube",
+    {
+      "Cube",
       []
       -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
         return MakeCubeMeshAsset();
-      } },
-    { "SubdividedCube",
+      },
+    },
+    {
+      "SubdividedCube",
       []
       -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
         return MakeSubdividedCubeMeshAsset();
-      } },
-    { "Sphere",
+      },
+    },
+    {
+      "Sphere",
       []
       -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
         return MakeSphereMeshAsset();
-      } },
-    { "Capsule",
+      },
+    },
+    {
+      "Capsule",
       []
       -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
         return MakeCapsuleMeshAsset();
-      } },
-    { "IcoSphere",
+      },
+    },
+    {
+      "IcoSphere",
       []
       -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
         return MakeIcoSphereMeshAsset();
-      } },
-    { "Plane",
+      },
+    },
+    {
+      "Plane",
       []
       -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
         return MakePlaneMeshAsset();
-      } },
-    { "Cylinder",
+      },
+    },
+    {
+      "Cylinder",
       []
       -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
         return MakeCylinderMeshAsset();
-      } },
-    { "Cone",
+      },
+    },
+    {
+      "Cone",
       []
       -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
         return MakeConeMeshAsset();
-      } },
-    { "Torus",
+      },
+    },
+    {
+      "Torus",
       []
       -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
         return MakeTorusMeshAsset();
-      } },
-    { "Quad",
+      },
+    },
+    {
+      "Quad",
       []
       -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
         return MakeQuadMeshAsset();
-      } },
-    { "ArrowGizmo",
+      },
+    },
+    {
+      "ArrowGizmo",
       []
       -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
         return MakeArrowGizmoMeshAsset();
-      } },
+      },
+    },
   };
   for (const auto& [name, factory] : factories) {
     SCOPED_TRACE(name);

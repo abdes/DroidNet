@@ -79,9 +79,11 @@ auto ContentIdentityRegistry::RegisterViewIdentity(
   const ContentId id, const std::shared_ptr<const BindingViewId>& view) -> void
 {
   const auto [bucket, inserted] = view_buckets_.try_emplace(*view,
-    ViewBucket { .lifetime = view,
+    ViewBucket {
+      .lifetime = view,
       .identities
-      = std::pmr::vector<ContentId>(identities_.get_allocator().resource()) });
+      = std::pmr::vector<ContentId>(identities_.get_allocator().resource()),
+    });
   bool ordered = false;
   try {
     if (inserted) {

@@ -154,10 +154,12 @@ namespace {
   {
     auto owners = std::unordered_set<std::uint32_t> {};
     for (unsigned phase = 0U; phase < 240U; ++phase) {
-      const auto workload = BuildLightingWorkload({ .moving = true,
+      const auto workload = BuildLightingWorkload({
+        .moving = true,
         .motion_frame = phase,
         .point_shadow_requests = 5U,
-        .spot_shadow_requests = 9U });
+        .spot_shadow_requests = 9U,
+      });
       auto current = std::unordered_set<std::uint32_t> {};
       for (const auto& light : workload.lights) {
         if (light.casts_shadows) {

@@ -260,8 +260,12 @@ NOLINT_TEST_F(ControlServerTest, RpcCancelCancelsARequestInFlight)
 
     co_await client.Send(
       { { "jsonrpc", "2.0" }, { "id", 2 }, { "method", "test.forever" } });
-    co_await client.Send({ { "jsonrpc", "2.0" }, { "id", 3 },
-      { "method", "rpc.cancel" }, { "params", { { "id", 2 } } } });
+    co_await client.Send({
+      { "jsonrpc", "2.0" },
+      { "id", 3 },
+      { "method", "rpc.cancel" },
+      { "params", { { "id", 2 } } },
+    });
     auto replies = std::map<int, json> {};
     while (replies.size() < 2U) {
       auto message = co_await client.Receive();

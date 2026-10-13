@@ -116,32 +116,39 @@ namespace reference_blobs {
 
   auto GenerateBindlessCbvSrvTable() -> std::vector<uint8_t>
   {
-    std::vector<D3D12_DESCRIPTOR_RANGE> ranges
-      = { D3D12_DESCRIPTOR_RANGE { .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV,
-            .NumDescriptors = 1,
-            .BaseShaderRegister = 0,
-            .RegisterSpace = 0,
-            .OffsetInDescriptorsFromTableStart = 0 },
-          D3D12_DESCRIPTOR_RANGE { .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-            .NumDescriptors = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-            .BaseShaderRegister = 0,
-            .RegisterSpace = 0,
-            .OffsetInDescriptorsFromTableStart = 1 } };
+    std::vector<D3D12_DESCRIPTOR_RANGE> ranges = {
+      D3D12_DESCRIPTOR_RANGE {
+        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV,
+        .NumDescriptors = 1,
+        .BaseShaderRegister = 0,
+        .RegisterSpace = 0,
+        .OffsetInDescriptorsFromTableStart = 0,
+      },
+      D3D12_DESCRIPTOR_RANGE {
+        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+        .NumDescriptors = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
+        .BaseShaderRegister = 0,
+        .RegisterSpace = 0,
+        .OffsetInDescriptorsFromTableStart = 1,
+      },
+    };
     D3D12_ROOT_PARAMETER root_param = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
             .DescriptorTable = {
                 .NumDescriptorRanges = static_cast<UINT>(ranges.size()),
                 .pDescriptorRanges = ranges.data(),
             },
-            .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL
+            .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
         };
-    D3D12_ROOT_SIGNATURE_DESC desc = { .NumParameters = 1,
+    D3D12_ROOT_SIGNATURE_DESC desc = {
+      .NumParameters = 1,
       .pParameters = &root_param,
       .NumStaticSamplers = 0,
       .pStaticSamplers = nullptr,
       .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
         | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED
-        | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT };
+        | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
+    };
     return SerializeRootSignature(desc);
   }
 
@@ -152,98 +159,115 @@ namespace reference_blobs {
                 .ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV,
                 .Descriptor = {
                     .ShaderRegister = 0,
-                    .RegisterSpace = 0 },
-                .ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX },
+                    .RegisterSpace = 0, },
+                .ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX, },
             D3D12_ROOT_PARAMETER { .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE, .DescriptorTable = {
                                                                                                     .NumDescriptorRanges = 1,
-                                                                                                    .pDescriptorRanges = nullptr // will set below
+                                                                                                    .pDescriptorRanges = nullptr, // will set below
                                                                                                 },
-                .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL }
+                .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL, },
         };
-    D3D12_DESCRIPTOR_RANGE srv_range
-      = { .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-          .NumDescriptors = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-          .BaseShaderRegister = 0,
-          .RegisterSpace = 0,
-          .OffsetInDescriptorsFromTableStart = 0 };
+    D3D12_DESCRIPTOR_RANGE srv_range = {
+      .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+      .NumDescriptors = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
+      .BaseShaderRegister = 0,
+      .RegisterSpace = 0,
+      .OffsetInDescriptorsFromTableStart = 0,
+    };
     root_params[1].DescriptorTable.pDescriptorRanges = &srv_range;
-    D3D12_ROOT_SIGNATURE_DESC desc = { .NumParameters = 2,
+    D3D12_ROOT_SIGNATURE_DESC desc = {
+      .NumParameters = 2,
       .pParameters = root_params,
       .NumStaticSamplers = 0,
       .pStaticSamplers = nullptr,
       .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
         | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED
-        | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT };
+        | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
+    };
     return SerializeRootSignature(desc);
   }
 
   auto GeneratePushConstantsOnly() -> std::vector<uint8_t>
   {
-    D3D12_ROOT_PARAMETER root_param
-      = { .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
-          .Constants
-          = { .ShaderRegister = 0, .RegisterSpace = 0, .Num32BitValues = 16 },
-          .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL };
-    D3D12_ROOT_SIGNATURE_DESC desc = { .NumParameters = 1,
+    D3D12_ROOT_PARAMETER root_param = {
+      .ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS,
+      .Constants
+      = { .ShaderRegister = 0, .RegisterSpace = 0, .Num32BitValues = 16 },
+      .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
+    };
+    D3D12_ROOT_SIGNATURE_DESC desc = {
+      .NumParameters = 1,
       .pParameters = &root_param,
       .NumStaticSamplers = 0,
       .pStaticSamplers = nullptr,
       .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
         | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED
-        | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT };
+        | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
+    };
     return SerializeRootSignature(desc);
   }
 
   auto GenerateSamplerTableOnly() -> std::vector<uint8_t>
   {
-    D3D12_DESCRIPTOR_RANGE sampler_range
-      = { .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,
-          .NumDescriptors = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-          .BaseShaderRegister = 0,
-          .RegisterSpace = 0,
-          .OffsetInDescriptorsFromTableStart = 0 };
-    D3D12_ROOT_PARAMETER root_param
-      = { .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
-          .DescriptorTable
-          = { .NumDescriptorRanges = 1, .pDescriptorRanges = &sampler_range },
-          .ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL };
-    D3D12_ROOT_SIGNATURE_DESC desc = { .NumParameters = 1,
+    D3D12_DESCRIPTOR_RANGE sampler_range = {
+      .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER,
+      .NumDescriptors = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
+      .BaseShaderRegister = 0,
+      .RegisterSpace = 0,
+      .OffsetInDescriptorsFromTableStart = 0,
+    };
+    D3D12_ROOT_PARAMETER root_param = {
+      .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
+      .DescriptorTable
+      = { .NumDescriptorRanges = 1, .pDescriptorRanges = &sampler_range },
+      .ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL,
+    };
+    D3D12_ROOT_SIGNATURE_DESC desc = {
+      .NumParameters = 1,
       .pParameters = &root_param,
       .NumStaticSamplers = 0,
       .pStaticSamplers = nullptr,
       .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
         | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED
-        | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT };
+        | D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT,
+    };
     return SerializeRootSignature(desc);
   }
 
   auto GenerateComputeBindlessCbvSrv() -> std::vector<uint8_t>
   {
-    std::vector<D3D12_DESCRIPTOR_RANGE> ranges
-      = { D3D12_DESCRIPTOR_RANGE { .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV,
-            .NumDescriptors = 1,
-            .BaseShaderRegister = 0,
-            .RegisterSpace = 0,
-            .OffsetInDescriptorsFromTableStart = 0 },
-          D3D12_DESCRIPTOR_RANGE { .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
-            .NumDescriptors = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
-            .BaseShaderRegister = 0,
-            .RegisterSpace = 0,
-            .OffsetInDescriptorsFromTableStart = 1 } };
+    std::vector<D3D12_DESCRIPTOR_RANGE> ranges = {
+      D3D12_DESCRIPTOR_RANGE {
+        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_CBV,
+        .NumDescriptors = 1,
+        .BaseShaderRegister = 0,
+        .RegisterSpace = 0,
+        .OffsetInDescriptorsFromTableStart = 0,
+      },
+      D3D12_DESCRIPTOR_RANGE {
+        .RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV,
+        .NumDescriptors = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND,
+        .BaseShaderRegister = 0,
+        .RegisterSpace = 0,
+        .OffsetInDescriptorsFromTableStart = 1,
+      },
+    };
     D3D12_ROOT_PARAMETER root_param = {
             .ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE,
             .DescriptorTable = {
                 .NumDescriptorRanges = static_cast<UINT>(ranges.size()),
                 .pDescriptorRanges = ranges.data(),
             },
-            .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL
+            .ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL,
         };
-    D3D12_ROOT_SIGNATURE_DESC desc = { .NumParameters = 1,
+    D3D12_ROOT_SIGNATURE_DESC desc = {
+      .NumParameters = 1,
       .pParameters = &root_param,
       .NumStaticSamplers = 0,
       .pStaticSamplers = nullptr,
       .Flags = D3D12_ROOT_SIGNATURE_FLAG_CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED
-        | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED };
+        | D3D12_ROOT_SIGNATURE_FLAG_SAMPLER_HEAP_DIRECTLY_INDEXED,
+    };
     return SerializeRootSignature(desc);
   }
 
@@ -378,12 +402,16 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_BindlessCbvSrvTable)
     };
   const auto pipeline_desc
     = GraphicsPipelineDesc::Builder {}
-        .SetVertexShader({ .stage = ShaderType::kVertex,
+        .SetVertexShader({
+          .stage = ShaderType::kVertex,
           .source_path = "test_vs",
-          .entry_point = "VSMain" })
-        .SetPixelShader({ .stage = ShaderType::kPixel,
+          .entry_point = "VSMain",
+        })
+        .SetPixelShader({
+          .stage = ShaderType::kPixel,
           .source_path = "test_ps",
-          .entry_point = "PSMain" })
+          .entry_point = "PSMain",
+        })
         .SetFramebufferLayout(
           { .color_target_formats = { Format::kRGBA8UNorm } })
         // Single descriptor table with CBV and SRV ranges
@@ -590,7 +618,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_MixedParameters)
               .AddRootBinding(RootBindingDesc {
                   .binding_slot_desc = { .register_index = 1, .register_space = 0 },
                   .visibility = ShaderStageFlags::kAll,
-                  .data = DirectBufferBinding {} })
+                  .data = DirectBufferBinding {}, })
               // SRV table at root parameter 2
               .AddRootBinding(RootBindingDesc {
                   .binding_slot_desc = { .register_index = 0, .register_space = 0 },
@@ -598,8 +626,8 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_MixedParameters)
                   .data = DescriptorTableBinding {
                       .view_type = ResourceViewType::kTexture_SRV,
                       .base_index = 0,
-                      .count = 32 // Bounded table
-                  } })
+                      .count = 32, // Bounded table
+                  }, })
               // Sampler table at root parameter 3
               .AddRootBinding(RootBindingDesc {
                   .binding_slot_desc = { .register_index = 0, .register_space = 0 },
@@ -636,7 +664,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, ShaderVisibilityMapping)
               .AddRootBinding(RootBindingDesc {
                   .binding_slot_desc = { .register_index = 0, .register_space = 0 },
                   .visibility = ShaderStageFlags::kVertex, // Should map to
-                  .data = DirectBufferBinding {} })
+                  .data = DirectBufferBinding {}, })
               // Pixel-only SRV table
               .AddRootBinding(RootBindingDesc {
                   .binding_slot_desc = { .register_index = 0, .register_space = 0 },
@@ -715,16 +743,22 @@ NOLINT_TEST_F(PipelineStateCacheTest, InvalidRootParameterIndex)
   // root parameter index validation. The current implementation appears
   // to use implicit indexing based on order.
 
-  const auto pipeline_desc = GraphicsPipelineDesc::Builder {}
-                               .SetVertexShader({ .stage = ShaderType::kVertex,
-                                 .source_path = "test_vs",
-                                 .entry_point = "VSMain" })
-                               .SetPixelShader({ .stage = ShaderType::kPixel,
-                                 .source_path = "test_ps",
-                                 .entry_point = "PSMain" })
-                               .SetFramebufferLayout({ .color_target_formats
-                                 = { Format::kRGBA8UNorm } })
-                               .Build();
+  const auto pipeline_desc
+    = GraphicsPipelineDesc::Builder {}
+        .SetVertexShader({
+          .stage = ShaderType::kVertex,
+          .source_path = "test_vs",
+          .entry_point = "VSMain",
+        })
+        .SetPixelShader({
+          .stage = ShaderType::kPixel,
+          .source_path = "test_ps",
+          .entry_point = "PSMain",
+        })
+        .SetFramebufferLayout({
+          .color_target_formats = { Format::kRGBA8UNorm },
+        })
+        .Build();
 
   // Should succeed with valid pipeline
   dx::IRootSignature* root_sig
@@ -737,12 +771,16 @@ NOLINT_TEST_F(PipelineStateCacheTest, CachingBehavior)
 {
   const auto pipeline_desc
     = GraphicsPipelineDesc::Builder {}
-        .SetVertexShader({ .stage = ShaderType::kVertex,
+        .SetVertexShader({
+          .stage = ShaderType::kVertex,
           .source_path = "test_vs",
-          .entry_point = "VSMain" })
-        .SetPixelShader({ .stage = ShaderType::kPixel,
+          .entry_point = "VSMain",
+        })
+        .SetPixelShader({
+          .stage = ShaderType::kPixel,
           .source_path = "test_ps",
-          .entry_point = "PSMain" })
+          .entry_point = "PSMain",
+        })
         .SetFramebufferLayout(
           { .color_target_formats = { Format::kRGBA8UNorm } })
         .AddRootBinding(RootBindingDesc {
@@ -786,9 +824,11 @@ NOLINT_TEST_F(PipelineStateCacheTest, ComputeShadersShareTheirRootLayout)
   const auto make_pipeline
     = [](const std::string_view entry_point) -> ComputePipelineDesc {
     return ComputePipelineDesc::Builder {}
-      .SetComputeShader({ .stage = ShaderType::kCompute,
+      .SetComputeShader({
+        .stage = ShaderType::kCompute,
         .source_path = "shared_layout",
-        .entry_point = std::string(entry_point) })
+        .entry_point = std::string(entry_point),
+      })
       .AddRootBinding(RootBindingDesc {
         .binding_slot_desc = { .register_index = 2, .register_space = 0 },
         .visibility = ShaderStageFlags::kCompute,
@@ -817,9 +857,11 @@ NOLINT_TEST_F(
   // Arrange
   const auto make_pipeline = [](const uint32_t count) -> ComputePipelineDesc {
     return ComputePipelineDesc::Builder {}
-      .SetComputeShader({ .stage = ShaderType::kCompute,
+      .SetComputeShader({
+        .stage = ShaderType::kCompute,
         .source_path = "layout",
-        .entry_point = "Main" })
+        .entry_point = "Main",
+      })
       .AddRootBinding(RootBindingDesc {
         .binding_slot_desc = { .register_index = 2, .register_space = 0 },
         .visibility = ShaderStageFlags::kCompute,
@@ -851,18 +893,24 @@ NOLINT_TEST_F(
     .data = PushConstantsBinding { .size = 2 },
   };
   const auto compute = ComputePipelineDesc::Builder {}
-                         .SetComputeShader({ .stage = ShaderType::kCompute,
+                         .SetComputeShader({
+                           .stage = ShaderType::kCompute,
                            .source_path = "flags",
-                           .entry_point = "Main" })
+                           .entry_point = "Main",
+                         })
                          .AddRootBinding(binding)
                          .Build();
   const auto graphics = GraphicsPipelineDesc::Builder {}
-                          .SetVertexShader({ .stage = ShaderType::kVertex,
+                          .SetVertexShader({
+                            .stage = ShaderType::kVertex,
                             .source_path = "flags",
-                            .entry_point = "Main" })
-                          .SetPixelShader({ .stage = ShaderType::kPixel,
+                            .entry_point = "Main",
+                          })
+                          .SetPixelShader({
+                            .stage = ShaderType::kPixel,
                             .source_path = "flags",
-                            .entry_point = "PixelMain" })
+                            .entry_point = "PixelMain",
+                          })
                           .SetFramebufferLayout(
                             { .color_target_formats = { Format::kRGBA8UNorm } })
                           .AddRootBinding(binding)

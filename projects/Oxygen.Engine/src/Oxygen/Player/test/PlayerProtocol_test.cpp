@@ -49,12 +49,16 @@ NOLINT_TEST(PlayerProtocolTest, LifecycleEventsMatchTheSchema)
 
   const auto issues
     = std::vector<oxygen::instantiation::SceneInstantiationIssue> {
-        { .scene = oxygen::data::AssetKey::FromVirtualPath("/Scenes/A.oscene"),
+        {
+          .scene = oxygen::data::AssetKey::FromVirtualPath("/Scenes/A.oscene"),
           .node_index = 3U,
-          .message = "unsupported record" },
-        { .scene = oxygen::data::AssetKey::FromVirtualPath("/Scenes/A.oscene"),
+          .message = "unsupported record",
+        },
+        {
+          .scene = oxygen::data::AssetKey::FromVirtualPath("/Scenes/A.oscene"),
           .node_index = std::nullopt,
-          .message = "no starting camera" },
+          .message = "no starting camera",
+        },
       };
   const auto failed = CheckEvent("lifecycle",
     LifecycleData(LifecycleState::kSceneFailed, "/Scenes/A.oscene",
@@ -64,9 +68,13 @@ NOLINT_TEST(PlayerProtocolTest, LifecycleEventsMatchTheSchema)
   EXPECT_EQ(failed["issues"][0]["node_index"], 3);
   EXPECT_FALSE(failed["issues"][1].contains("node_index"));
 
-  for (const auto state : { LifecycleState::kSceneLoaded,
-         LifecycleState::kPaused, LifecycleState::kResumed,
-         LifecycleState::kSessionEnded, LifecycleState::kStopping }) {
+  for (const auto state : {
+         LifecycleState::kSceneLoaded,
+         LifecycleState::kPaused,
+         LifecycleState::kResumed,
+         LifecycleState::kSessionEnded,
+         LifecycleState::kStopping,
+       }) {
     static_cast<void>(CheckEvent("lifecycle", LifecycleData(state)));
   }
 }
@@ -82,7 +90,7 @@ NOLINT_TEST(PlayerProtocolTest, DiagnosticEventsCarryTheDiagnosticJson)
     .help = std::nullopt,
     .slot = oxygen::scripting::SlotContext { .node = "Cube",
       .slot_index = 0U,
-      .hook = "compile" },
+      .hook = "compile", },
   };
 
   const auto data = CheckEvent("diagnostic", DiagnosticData(diagnostic));
@@ -107,8 +115,8 @@ NOLINT_TEST(PlayerProtocolTest, GpuWorkEventsMirrorTheSummary)
       .time = { .avg_ms = 2.0F, .max_ms = 3.0F },
       .items = { { .id = "base_pass.opaque",
         .name = "Opaque",
-        .time = { .avg_ms = 2.0F, .max_ms = 3.0F } } },
-    } },
+        .time = { .avg_ms = 2.0F, .max_ms = 3.0F }, }, },
+    }, },
   });
   summary.frame_work.push_back({
     .bucket = GpuWorkBucket::kBackground,

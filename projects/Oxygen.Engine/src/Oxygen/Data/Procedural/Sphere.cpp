@@ -82,7 +82,7 @@ auto oxygen::data::MakeSphereMeshAsset(
         .texcoord
         = { static_cast<float>(lon) / static_cast<float>(longitude_segments),
           1.0F
-            - static_cast<float>(lat) / static_cast<float>(latitude_segments) },
+            - static_cast<float>(lat) / static_cast<float>(latitude_segments), },
         .tangent = { -sin_phi, cos_phi, 0.0F },
         .bitangent = { -cos_theta * cos_phi, -cos_theta * sin_phi, sin_theta },
         .color = { 1, 1, 1, 1 },

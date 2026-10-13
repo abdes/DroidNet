@@ -334,10 +334,12 @@ void CommandQueue::CreateCommandQueue(
       fmt::format("Unsupported CommandQueue role: {}", nostd::to_string(role)));
   }
 
-  const D3D12_COMMAND_QUEUE_DESC queue_desc = { .Type = d3d12_type,
+  const D3D12_COMMAND_QUEUE_DESC queue_desc = {
+    .Type = d3d12_type,
     .Priority = D3D12_COMMAND_QUEUE_PRIORITY_NORMAL,
     .Flags = D3D12_COMMAND_QUEUE_FLAG_NONE,
-    .NodeMask = 0 };
+    .NodeMask = 0,
+  };
 
   ThrowOnFailed(
     device->CreateCommandQueue(&queue_desc, IID_PPV_ARGS(&command_queue_)),

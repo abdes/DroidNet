@@ -54,7 +54,7 @@ enum class InputTriggerType : uint8_t {
 #define OXNPUT_ACTION_TRIGGER_BEHAVIOR(name, value)
 #include <Oxygen/Core/Meta/Input/ActionTriggers.inc>
 #undef OXNPUT_ACTION_TRIGGER_BEHAVIOR
-#undef OXNPUT_ACTION_TRIGGER_TYPE
+#undef OXNPUT_ACTION_TRIGGER_TYPE // NOLINT
 };
 OXGN_DATA_NDAPI auto to_string(InputTriggerType value) noexcept
   -> std::string_view;
@@ -65,7 +65,7 @@ enum class InputTriggerBehavior : uint8_t {
 #define OXNPUT_ACTION_TRIGGER_BEHAVIOR(name, value) name = value,
 #include <Oxygen/Core/Meta/Input/ActionTriggers.inc>
 #undef OXNPUT_ACTION_TRIGGER_BEHAVIOR
-#undef OXNPUT_ACTION_TRIGGER_TYPE
+#undef OXNPUT_ACTION_TRIGGER_TYPE // NOLINT
 };
 OXGN_DATA_NDAPI auto to_string(InputTriggerBehavior value) noexcept
   -> std::string_view;

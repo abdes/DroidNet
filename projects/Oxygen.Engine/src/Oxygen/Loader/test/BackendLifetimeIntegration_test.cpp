@@ -67,10 +67,11 @@ NOLINT_TEST_P(BackendLifetimeIntegration,
   ASSERT_TRUE(graphics);
   EXPECT_FALSE(graphics->IsRunning());
   graphics->CreateCommandQueues(SingleQueueStrategy());
-  auto budget = std::make_shared<AllocationBudget>(
-    AllocationBudgetLimits { .total = SizeBytes { 16U * 1024U * 1024U },
-      .compact_indices = SizeBytes { 0 },
-      .driver_headroom = SizeBytes { 0 } });
+  auto budget = std::make_shared<AllocationBudget>(AllocationBudgetLimits {
+    .total = SizeBytes { 16U * 1024U * 1024U },
+    .compact_indices = SizeBytes { 0 },
+    .driver_headroom = SizeBytes { 0 },
+  });
   auto desc = TextureDesc {};
   desc.width = desc.height = 32;
   desc.format = Format::kRGBA8UNorm;
@@ -81,9 +82,11 @@ NOLINT_TEST_P(BackendLifetimeIntegration,
   auto texture = graphics->CreateTexture(desc);
   ASSERT_TRUE(texture);
   EXPECT_EQ(texture->shared_from_this(), texture);
-  auto buffer = graphics->CreateBuffer(BufferDesc { .size_bytes = 4096,
+  auto buffer = graphics->CreateBuffer(BufferDesc {
+    .size_bytes = 4096,
     .debug_name = "Lifetime retained buffer",
-    .allocation_budget = { .owner = budget } });
+    .allocation_budget = { .owner = budget },
+  });
   auto& registry = graphics->GetResourceRegistry();
   registry.Register(texture);
   registry.Register(buffer);
@@ -92,7 +95,9 @@ NOLINT_TEST_P(BackendLifetimeIntegration,
   ASSERT_TRUE(descriptor.IsValid());
   const auto view = registry.RegisterView(*texture, std::move(descriptor),
     TextureViewDescription {
-      .format = desc.format, .dimension = desc.texture_type });
+      .format = desc.format,
+      .dimension = desc.texture_type,
+    });
   EXPECT_TRUE(view->IsValid());
 
   {
@@ -146,10 +151,11 @@ NOLINT_TEST_P(
   config.enable_debug_layer = true;
   auto graphics = loader.LoadBackend(GetParam(), config, {}).lock();
   ASSERT_TRUE(graphics);
-  auto budget = std::make_shared<AllocationBudget>(
-    AllocationBudgetLimits { .total = SizeBytes { 16U * 1024U * 1024U },
-      .compact_indices = SizeBytes { 0 },
-      .driver_headroom = SizeBytes { 0 } });
+  auto budget = std::make_shared<AllocationBudget>(AllocationBudgetLimits {
+    .total = SizeBytes { 16U * 1024U * 1024U },
+    .compact_indices = SizeBytes { 0 },
+    .driver_headroom = SizeBytes { 0 },
+  });
   TextureDesc desc;
   desc.width = desc.height = 32;
   desc.array_size = 6;
@@ -165,8 +171,10 @@ NOLINT_TEST_P(
   auto lease = registry.RegisterManaged(texture);
   ASSERT_TRUE(lease);
   const auto id = lease->Identity();
-  const TextureViewDescription srv_desc { .format = Format::kR32Float,
-    .dimension = TextureType::kTextureCubeArray };
+  const TextureViewDescription srv_desc {
+    .format = Format::kR32Float,
+    .dimension = TextureType::kTextureCubeArray,
+  };
   const auto srv = registry.AcquireManagedView<Texture>(*lease, srv_desc);
   ASSERT_TRUE(srv);
   EXPECT_TRUE(srv->shader_visible_index.IsValid());
@@ -174,12 +182,13 @@ NOLINT_TEST_P(
               ->shader_visible_index,
     srv->shader_visible_index);
   for (uint32_t layer = 0; layer < 6; ++layer) {
-    const TextureViewDescription dsv_desc { .view_type
-      = ResourceViewType::kTexture_DSV,
+    const TextureViewDescription dsv_desc {
+      .view_type = ResourceViewType::kTexture_DSV,
       .visibility = DescriptorVisibility::kCpuOnly,
       .format = Format::kDepth32,
       .dimension = TextureType::kTexture2DArray,
-      .sub_resources = { .base_array_slice = layer, .num_array_slices = 1 } };
+      .sub_resources = { .base_array_slice = layer, .num_array_slices = 1 },
+    };
     const auto dsv = registry.AcquireManagedView<Texture>(*lease, dsv_desc);
     ASSERT_TRUE(dsv);
     EXPECT_TRUE(dsv->view->IsValid());

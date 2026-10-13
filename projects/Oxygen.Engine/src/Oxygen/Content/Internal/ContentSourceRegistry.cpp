@@ -101,13 +101,17 @@ auto ContentSourceRegistry::ValidateMount(const IContentSource& source,
         !valid) {
         throw std::invalid_argument(valid.error());
       }
-      lower_layers.push_back({ .source_key = catalog->source_key,
+      lower_layers.push_back({
+        .source_key = catalog->source_key,
         .content_version = catalog->content_version,
-        .catalog_digest = catalog->catalog_digest });
+        .catalog_digest = catalog->catalog_digest,
+      });
     } else {
-      lower_layers.push_back({ .source_key = candidate.GetSourceKey(),
+      lower_layers.push_back({
+        .source_key = candidate.GetSourceKey(),
         .content_version = 0U,
-        .catalog_digest = {} });
+        .catalog_digest = {},
+      });
     }
   }
   if (source.GetAssetCount() > std::numeric_limits<uint32_t>::max()) {

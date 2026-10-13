@@ -75,11 +75,12 @@ NOLINT_TEST_F(
     oxygen::graphics::DescriptorVisibility::kShaderVisible);
   ASSERT_TRUE(handle.IsValid());
   const auto index = allocator.GetShaderVisibleIndex(handle);
-  const auto description = oxygen::graphics::BufferViewDescription { .view_type
-    = oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
+  const auto description = oxygen::graphics::BufferViewDescription {
+    .view_type = oxygen::graphics::ResourceViewType::kStructuredBuffer_SRV,
     .visibility = oxygen::graphics::DescriptorVisibility::kShaderVisible,
     .range = { first->Offset().get(), 16U },
-    .stride = 16U };
+    .stride = 16U,
+  };
   registry.RegisterView(first->Buffer(), std::move(handle), description);
   auto grown = provider->Allocate(
     SizeBytes { provider->GetStats().current_buffer_size + 1U }, "growth");

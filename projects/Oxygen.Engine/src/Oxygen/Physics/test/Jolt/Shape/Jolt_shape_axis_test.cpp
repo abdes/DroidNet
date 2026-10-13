@@ -49,8 +49,11 @@ namespace {
   };
 
   constexpr auto kTolerance = 2.0e-5F;
-  constexpr std::array kAxes { space::move::Right, space::move::Back,
-    space::move::Up };
+  constexpr std::array kAxes {
+    space::move::Right,
+    space::move::Back,
+    space::move::Up,
+  };
 
   auto ExpectNear(const Vec3& actual, const Vec3& expected) -> void
   {
@@ -83,7 +86,10 @@ NOLINT_TEST_F(JoltShapeAxisTest, CapsuleMatchesRenderMeshBoundsAndSurface)
   // The first case is the shared default recipe; custom and sphere-limit
   // dimensions catch assumptions about fixed height or a nonzero cylinder.
   for (const auto dimensions : std::array {
-         Vec2 { 2.0F, 0.5F }, Vec2 { 3.5F, 0.375F }, Vec2 { 1.0F, 0.5F } }) {
+         Vec2 { 2.0F, 0.5F },
+         Vec2 { 3.5F, 0.375F },
+         Vec2 { 1.0F, 0.5F },
+       }) {
     SCOPED_TRACE(testing::Message()
       << "height=" << dimensions.x << " radius=" << dimensions.y);
     const auto height = dimensions.x;
@@ -136,9 +142,12 @@ NOLINT_TEST_F(JoltShapeAxisTest, CylinderUsesOxygenZAxis)
 NOLINT_TEST_F(JoltShapeAxisTest, AxialPrimitiveDimensionsRejectInvalidValues)
 {
   AssertBackendAvailabilityContract();
-  for (const auto invalid : { -1.0F, std::numeric_limits<float>::quiet_NaN(),
+  for (const auto invalid : {
+         -1.0F,
+         std::numeric_limits<float>::quiet_NaN(),
          std::numeric_limits<float>::infinity(),
-         -std::numeric_limits<float>::infinity() }) {
+         -std::numeric_limits<float>::infinity(),
+       }) {
     EXPECT_TRUE(backend::MakeShape(CapsuleShape { invalid, 0.5F }).has_error());
     EXPECT_TRUE(backend::MakeShape(CapsuleShape { 0.5F, invalid }).has_error());
     EXPECT_TRUE(
