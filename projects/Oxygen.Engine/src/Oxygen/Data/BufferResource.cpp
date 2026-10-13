@@ -69,7 +69,7 @@ BufferResource::BufferResource(
   // Invariants (validated eagerly so mis-authored PAK data fails fast):
   // 1. Formatted buffers (element_format != 0) must have element_stride == 0.
   if (desc_.element_format != 0) {
-    DCHECK_EQ_F(desc_.element_stride, 0u,
+    DCHECK_EQ_F(desc_.element_stride, 0U,
       "formatted buffer must have zero element_stride (was {})",
       desc_.element_stride);
   }

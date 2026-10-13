@@ -55,8 +55,8 @@ protected:
 
   // Helper: Create a game object with specific transform and flags
   [[nodiscard]] auto CreateGameObject(const std::string& name,
-    const ::oxygen::Vec3& position = ::oxygen::Vec3 { 0.0f, 0.0f, 0.0f },
-    const ::oxygen::Vec3& scale = ::oxygen::Vec3 { 1.0f, 1.0f, 1.0f },
+    const ::oxygen::Vec3& position = ::oxygen::Vec3 { 0.0F, 0.0F, 0.0F },
+    const ::oxygen::Vec3& scale = ::oxygen::Vec3 { 1.0F, 1.0F, 1.0F },
     const bool visible = true, const bool static_obj = false) const -> SceneNode
   {
     const auto flags = SceneNode::Flags {}
@@ -68,8 +68,8 @@ protected:
     auto node = scene_->CreateNode(name, flags);
 
     // Set transform if not default
-    if (position != ::oxygen::Vec3 { 0.0f, 0.0f, 0.0f }
-      || scale != ::oxygen::Vec3 { 1.0f, 1.0f, 1.0f }) {
+    if (position != ::oxygen::Vec3 { 0.0F, 0.0F, 0.0F }
+      || scale != ::oxygen::Vec3 { 1.0F, 1.0F, 1.0F }) {
       auto transform = node.GetTransform();
       transform.SetLocalPosition(position);
       transform.SetLocalScale(scale);
@@ -182,14 +182,14 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, NodeLifecycle_CreateModifyDestroy)
   EXPECT_EQ(scene_->GetNodeCount(), 0);
 
   // Act: Create a game object
-  auto player = CreateGameObject("Player", ::oxygen::Vec3 { 10.0f, 5.0f, 0.0f },
-    ::oxygen::Vec3 { 1.5f, 1.5f, 1.5f });
+  auto player = CreateGameObject("Player", ::oxygen::Vec3 { 10.0F, 5.0F, 0.0F },
+    ::oxygen::Vec3 { 1.5F, 1.5F, 1.5F });
 
   // Assert: Node should be created correctly
   EXPECT_TRUE(player.IsValid());
   EXPECT_EQ(scene_->GetNodeCount(), 1);
-  ExpectTransformValues(player, ::oxygen::Vec3 { 10.0f, 5.0f, 0.0f },
-    ::oxygen::Vec3 { 1.5f, 1.5f, 1.5f });
+  ExpectTransformValues(player, ::oxygen::Vec3 { 10.0F, 5.0F, 0.0F },
+    ::oxygen::Vec3 { 1.5F, 1.5F, 1.5F });
 
   // Act: Modify the game object
   const auto impl_opt = player.GetImpl();
@@ -198,12 +198,12 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, NodeLifecycle_CreateModifyDestroy)
   impl.SetName("MainPlayer");
 
   auto transform = player.GetTransform();
-  transform.SetLocalPosition(::oxygen::Vec3 { 20.0f, 10.0f, 5.0f });
+  transform.SetLocalPosition(::oxygen::Vec3 { 20.0F, 10.0F, 5.0F });
 
   // Assert: Modifications should be preserved
   EXPECT_EQ(impl.GetName(), "MainPlayer");
-  ExpectTransformValues(player, ::oxygen::Vec3 { 20.0f, 10.0f, 5.0f },
-    ::oxygen::Vec3 { 1.5f, 1.5f, 1.5f });
+  ExpectTransformValues(player, ::oxygen::Vec3 { 20.0F, 10.0F, 5.0F },
+    ::oxygen::Vec3 { 1.5F, 1.5F, 1.5F });
 
   // Act: Destroy the node
   scene_->DestroyNode(player);
@@ -276,7 +276,7 @@ NOLINT_TEST_F(
 
   // Act: Move vehicle and verify all parts move with it (conceptually)
   auto vehicle_transform = vehicle.GetTransform();
-  vehicle_transform.SetLocalPosition(::oxygen::Vec3 { 100.0f, 0.0f, 50.0f });
+  vehicle_transform.SetLocalPosition(::oxygen::Vec3 { 100.0F, 0.0F, 50.0F });
 
   // Assert: Verify scene integrity after modification
   VerifySceneIntegrity();
@@ -490,14 +490,14 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, TransformHierarchy_WorldSpaceTransforms)
 {
   // Arrange: Create parent-child hierarchy with transforms
   auto parent
-    = CreateGameObject("Parent", { 10.0f, 20.0f, 30.0f }, { 2.0f, 2.0f, 2.0f });
+    = CreateGameObject("Parent", { 10.0F, 20.0F, 30.0F }, { 2.0F, 2.0F, 2.0F });
   const auto child_opt = scene_->CreateChildNode(parent, "Child");
   ASSERT_TRUE(child_opt.has_value());
   auto child = child_opt.value();
 
   auto child_transform = child.GetTransform();
-  child_transform.SetLocalPosition(::oxygen::Vec3 { 5.0f, 10.0f, 15.0f });
-  child_transform.SetLocalScale(::oxygen::Vec3 { 0.5f, 0.5f, 0.5f });
+  child_transform.SetLocalPosition(::oxygen::Vec3 { 5.0F, 10.0F, 15.0F });
+  child_transform.SetLocalScale(::oxygen::Vec3 { 0.5F, 0.5F, 0.5F });
 
   // Act: Update transforms to compute world space values
   const auto parent_impl_opt = parent.GetImpl();
@@ -526,20 +526,20 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, TransformHierarchy_WorldSpaceTransforms)
   // Expected: parent_pos + (parent_rotation * (parent_scale * child_pos))
   // Since no rotation: (10,20,30) + (2,2,2) * (5,10,15) = (10,20,30) +
   // (10,20,30) = (20,40,60)
-  EXPECT_EQ(child_world_pos, glm::vec3(20.0f, 40.0f, 60.0f));
+  EXPECT_EQ(child_world_pos, glm::vec3(20.0F, 40.0F, 60.0F));
 
   // Expected: parent_scale * child_scale = (2,2,2) * (0.5,0.5,0.5) = (1,1,1)
-  EXPECT_EQ(child_world_scale, glm::vec3(1.0f, 1.0f, 1.0f));
+  EXPECT_EQ(child_world_scale, glm::vec3(1.0F, 1.0F, 1.0F));
 }
 
 NOLINT_TEST_F(SceneGraphFunctionalTest, TransformOperations_LocalAndWorldSpace)
 {
   // Arrange: Create object with specific transform
-  auto object = CreateGameObject("MovableObject", { 0.0f, 0.0f, 0.0f });
+  auto object = CreateGameObject("MovableObject", { 0.0F, 0.0F, 0.0F });
   auto transform = object.GetTransform();
 
   // Act: Perform various transform operations
-  transform.SetLocalPosition(::oxygen::Vec3 { 10.0f, 0.0f, 0.0f });
+  transform.SetLocalPosition(::oxygen::Vec3 { 10.0F, 0.0F, 0.0F });
 
   // Apply local translation (should be in object's local space)
   const auto impl_opt = object.GetImpl();
@@ -549,19 +549,19 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, TransformOperations_LocalAndWorldSpace)
 
   // Set rotation first
   const auto rotation = glm::quat(
-    glm::radians(glm::vec3(0.0f, 90.0f, 0.0f))); // 90 degrees around Y
+    glm::radians(glm::vec3(0.0F, 90.0F, 0.0F))); // 90 degrees around Y
   transform_component.SetLocalRotation(rotation);
 
   // Translate in local space (should be rotated)
-  transform_component.Translate({ 5.0f, 0.0f, 0.0f }, true); // Local space
+  transform_component.Translate({ 5.0F, 0.0F, 0.0F }, true); // Local space
 
   // Assert: Verify the result accounts for rotation
   const auto final_position = transform_component.GetLocalPosition();
   // Original position (10,0,0) + rotated offset (90° Y rotation of (5,0,0) =
   // (0,0,-5)) = (10,0,-5)
-  EXPECT_NEAR(final_position.x, 10.0f, 1e-5f);
-  EXPECT_NEAR(final_position.y, 0.0f, 1e-5f);
-  EXPECT_NEAR(final_position.z, -5.0f, 1e-5f);
+  EXPECT_NEAR(final_position.x, 10.0F, 1e-5F);
+  EXPECT_NEAR(final_position.y, 0.0F, 1e-5F);
+  EXPECT_NEAR(final_position.z, -5.0F, 1e-5F);
 }
 
 //------------------------------------------------------------------------------
@@ -610,9 +610,9 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, FlagModification_DynamicFlagChanges)
 {
   // Arrange: Create game objects with different visibility states
   auto visible_object = CreateGameObject(
-    "VisibleObject", { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, true);
+    "VisibleObject", { 0.0F, 0.0F, 0.0F }, { 1.0F, 1.0F, 1.0F }, true);
   auto hidden_object = CreateGameObject(
-    "HiddenObject", { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, false);
+    "HiddenObject", { 0.0F, 0.0F, 0.0F }, { 1.0F, 1.0F, 1.0F }, false);
 
   // Act: Toggle visibility flags
   const auto visible_impl_opt = visible_object.GetImpl();
@@ -668,7 +668,7 @@ NOLINT_TEST_F(SceneGraphFunctionalTest, LargeSceneManagement_ManyObjects)
     auto expected_pos = glm::vec3 { static_cast<float>(random_index % 100),
       static_cast<float>(random_index / 100 % 100),
       static_cast<float>(random_index / 10000) };
-    ExpectTransformValues(object, expected_pos, { 1.0f, 1.0f, 1.0f });
+    ExpectTransformValues(object, expected_pos, { 1.0F, 1.0F, 1.0F });
   }
 
   // Act: Clean up by destroying all objects
@@ -775,7 +775,7 @@ NOLINT_TEST_F(
     // Act: Modify object to test functionality
     auto transform = object.GetTransform();
     transform.SetLocalPosition(
-      ::oxygen::Vec3 { static_cast<float>(i), 0.0f, 0.0f });
+      ::oxygen::Vec3 { static_cast<float>(i), 0.0F, 0.0F });
 
     // Act: Verify modification worked
     auto position = transform.GetLocalPosition();

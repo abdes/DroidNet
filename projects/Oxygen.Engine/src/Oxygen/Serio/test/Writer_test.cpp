@@ -325,7 +325,7 @@ NOLINT_TYPED_TEST(WriterIntegralTest, WriteIntegralType)
 {
   // Arrange
   using ValueType = TypeParam;
-  ValueType value = static_cast<ValueType>(0x5A5A5A5A5A5A5A5Aull);
+  ValueType value = static_cast<ValueType>(0x5A5A5A5A5A5A5A5AULL);
 
   // Act
   ASSERT_TRUE(this->GetAnyWriter().Write(value));
@@ -340,7 +340,7 @@ class WriterFloatTest : public WriterBasicTest { };
 NOLINT_TEST_F(WriterFloatTest, WriteFloat)
 {
   // Arrange
-  constexpr float value = 1.234567f;
+  constexpr float value = 1.234567F;
 
   // Act
   ASSERT_TRUE(GetAnyWriter().Write(value));

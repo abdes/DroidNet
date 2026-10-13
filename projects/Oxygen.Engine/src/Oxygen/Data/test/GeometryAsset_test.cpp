@@ -88,12 +88,12 @@ public:
     // Minimal header setup (name left default). Lod count implied by vector
     // size
     desc.lod_count = 2;
-    desc.bounding_box_min[0] = 0.0f;
-    desc.bounding_box_min[1] = 0.0f;
-    desc.bounding_box_min[2] = 0.0f;
-    desc.bounding_box_max[0] = 11.0f; // covers second mesh shifted by 10
-    desc.bounding_box_max[1] = 1.0f;
-    desc.bounding_box_max[2] = 0.0f;
+    desc.bounding_box_min[0] = 0.0F;
+    desc.bounding_box_min[1] = 0.0F;
+    desc.bounding_box_min[2] = 0.0F;
+    desc.bounding_box_max[0] = 11.0F; // covers second mesh shifted by 10
+    desc.bounding_box_max[1] = 1.0F;
+    desc.bounding_box_max[2] = 0.0F;
 
     std::vector<std::shared_ptr<Mesh>> lods = { mesh0, mesh1 };
     return std::make_unique<GeometryAsset>(
@@ -114,12 +114,12 @@ NOLINT_TEST(GeometryAssetBasicTest, LodAccessors_ReturnExpected)
   size_t lod_count = asset->LodCount();
 
   // Assert
-  EXPECT_EQ(lods.size(), 2u);
-  EXPECT_EQ(lod_count, 2u);
+  EXPECT_EQ(lods.size(), 2U);
+  EXPECT_EQ(lod_count, 2U);
   EXPECT_NE(lod0, nullptr);
   EXPECT_NE(lod1, nullptr);
-  EXPECT_EQ(lod0->VertexCount(), 3u);
-  EXPECT_EQ(lod1->VertexCount(), 3u);
+  EXPECT_EQ(lod0->VertexCount(), 3U);
+  EXPECT_EQ(lod1->VertexCount(), 3U);
 }
 
 //! Verifies MeshAt() returns null shared_ptr for out-of-range index.
@@ -147,8 +147,8 @@ NOLINT_TEST(GeometryAssetBasicTest, BoundingBoxMatchesDescriptor)
   auto max = asset->BoundingBoxMax();
 
   // Assert
-  EXPECT_EQ(min, ::oxygen::Vec3(0.0f, 0.0f, 0.0f));
-  EXPECT_EQ(max, ::oxygen::Vec3(11.0f, 1.0f, 0.0f));
+  EXPECT_EQ(min, ::oxygen::Vec3(0.0F, 0.0F, 0.0F));
+  EXPECT_EQ(max, ::oxygen::Vec3(11.0F, 1.0F, 0.0F));
 }
 
 } // namespace

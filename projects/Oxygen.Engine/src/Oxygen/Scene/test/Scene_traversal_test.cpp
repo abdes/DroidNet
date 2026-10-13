@@ -172,7 +172,7 @@ protected:
     ASSERT_TRUE(impl.has_value());
     if (const auto pos = node.GetTransform().GetLocalPosition()) {
       node.GetTransform().SetLocalPosition(
-        *pos + glm::vec3(0.001f, 0.0f, 0.0f));
+        *pos + glm::vec3(0.001F, 0.0F, 0.0F));
     }
     // Also mark the node itself as transform dirty
     impl->get().MarkTransformDirty();

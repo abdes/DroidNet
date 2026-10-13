@@ -305,9 +305,9 @@ NOLINT_TEST_F(TestSceneFactoryExample, ComplexHierarchyTemplate)
   auto player_transform = player.GetTransform();
   auto player_pos = player_transform.GetLocalPosition();
   ASSERT_TRUE(player_pos.has_value());
-  EXPECT_FLOAT_EQ(player_pos->x, 0.0f);
-  EXPECT_FLOAT_EQ(player_pos->y, 1.0f);
-  EXPECT_FLOAT_EQ(player_pos->z, 0.0f);
+  EXPECT_FLOAT_EQ(player_pos->x, 0.0F);
+  EXPECT_FLOAT_EQ(player_pos->y, 1.0F);
+  EXPECT_FLOAT_EQ(player_pos->z, 0.0F);
 
   // Validate WeaponMount exists and has correct position
   auto first_child = player.GetFirstChild();
@@ -325,9 +325,9 @@ NOLINT_TEST_F(TestSceneFactoryExample, ComplexHierarchyTemplate)
       auto weapon_transform = current_child->GetTransform();
       auto weapon_pos = weapon_transform.GetLocalPosition();
       ASSERT_TRUE(weapon_pos.has_value());
-      EXPECT_FLOAT_EQ(weapon_pos->x, 0.5f);
-      EXPECT_FLOAT_EQ(weapon_pos->y, 0.8f);
-      EXPECT_FLOAT_EQ(weapon_pos->z, 0.0f);
+      EXPECT_FLOAT_EQ(weapon_pos->x, 0.5F);
+      EXPECT_FLOAT_EQ(weapon_pos->y, 0.8F);
+      EXPECT_FLOAT_EQ(weapon_pos->z, 0.0F);
 
       // Check that WeaponMount has Rifle child
       EXPECT_TRUE(current_child->HasChildren());
@@ -394,11 +394,11 @@ NOLINT_TEST_F(TestSceneFactoryExample, DirectJsonCreation)
 
   // The rotation should be approximately 45 degrees around X-axis
   // Note: glm::quat constructor from euler angles expects radians
-  auto expected_quat = glm::quat(glm::radians(glm::vec3(45.0f, 0.0f, 0.0f)));
-  EXPECT_NEAR(rotation->w, expected_quat.w, 1e-5f);
-  EXPECT_NEAR(rotation->x, expected_quat.x, 1e-5f);
-  EXPECT_NEAR(rotation->y, expected_quat.y, 1e-5f);
-  EXPECT_NEAR(rotation->z, expected_quat.z, 1e-5f);
+  auto expected_quat = glm::quat(glm::radians(glm::vec3(45.0F, 0.0F, 0.0F)));
+  EXPECT_NEAR(rotation->w, expected_quat.w, 1e-5F);
+  EXPECT_NEAR(rotation->x, expected_quat.x, 1e-5F);
+  EXPECT_NEAR(rotation->y, expected_quat.y, 1e-5F);
+  EXPECT_NEAR(rotation->z, expected_quat.z, 1e-5F);
 }
 
 NOLINT_TEST_F(TestSceneFactoryExample, MixedNamingJson)
@@ -539,7 +539,7 @@ NOLINT_TEST_F(TestSceneFactoryExample, LargeSceneFromJson)
               }}
             ]
           }})",
-      i, i * 2.0f, i * 3.0f, 2.0f + i * 0.5f, i, i, 2.0f + i * 0.5f);
+      i, i * 2.0F, i * 3.0F, 2.0F + i * 0.5F, i, i, 2.0F + i * 0.5F);
   }
 
   large_scene += R"(

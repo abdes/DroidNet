@@ -67,7 +67,7 @@ auto oxygen::data::MakeSphereMeshAsset(
     float cos_theta = std::cos(theta);
 
     for (unsigned int lon = 0; lon <= longitude_segments; ++lon) {
-      float phi = 2.0f * pi * static_cast<float>(lon)
+      float phi = 2.0F * pi * static_cast<float>(lon)
         / static_cast<float>(longitude_segments);
       float sin_phi = std::sin(phi);
       float cos_phi = std::cos(phi);
@@ -77,13 +77,13 @@ auto oxygen::data::MakeSphereMeshAsset(
       float z = cos_theta; // Z is UP
 
       Vertex v {
-        .position = { x * 0.5f, y * 0.5f, z * 0.5f },
+        .position = { x * 0.5F, y * 0.5F, z * 0.5F },
         .normal = { x, y, z },
         .texcoord
         = { static_cast<float>(lon) / static_cast<float>(longitude_segments),
-          1.0f
+          1.0F
             - static_cast<float>(lat) / static_cast<float>(latitude_segments) },
-        .tangent = { -sin_phi, cos_phi, 0.0f },
+        .tangent = { -sin_phi, cos_phi, 0.0F },
         .bitangent = { -cos_theta * cos_phi, -cos_theta * sin_phi, sin_theta },
         .color = { 1, 1, 1, 1 },
       };

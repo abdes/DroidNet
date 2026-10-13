@@ -265,7 +265,7 @@ auto SwapChain::CreateRenderTargets() -> void
         = Format::kRGBA8UNorm, // TODO(abdes): Use the format of the swap chain
         .debug_name = "SwapChain BackBuffer",
         .is_render_target = true,
-        .clear_value = Color { 0.0f, 0.0f, 0.0f, 1.0f },
+        .clear_value = Color { 0.0F, 0.0F, 0.0F, 1.0F },
         .initial_state = ResourceStates::kPresent,
       },
       NativeResource(back_buffer, ClassTypeId()), graphics_);

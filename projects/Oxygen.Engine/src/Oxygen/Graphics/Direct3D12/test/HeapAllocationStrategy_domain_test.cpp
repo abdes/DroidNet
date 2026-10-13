@@ -217,10 +217,10 @@ NOLINT_TEST(D3D12DomainTest, ProviderConfiguredBaseIndexHonored)
   // Verify the strategy reports the configured base indices
   EXPECT_EQ(strat.GetHeapBaseIndex(ResourceViewType::kTexture_SRV,
               DescriptorVisibility::kShaderVisible),
-    b::HeapIndex { 12345u });
+    b::HeapIndex { 12345U });
   EXPECT_EQ(strat.GetHeapBaseIndex(
               ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible),
-    b::HeapIndex { 20000u });
+    b::HeapIndex { 20000U });
 
   // Verify allocator reservation uses the same values
   auto strat_ptr
@@ -228,10 +228,10 @@ NOLINT_TEST(D3D12DomainTest, ProviderConfiguredBaseIndexHonored)
   TestD3D12Allocator alloc { strat_ptr };
   EXPECT_EQ(alloc.ReserveRaw(ResourceViewType::kTexture_SRV,
               DescriptorVisibility::kShaderVisible, b::Count { 1 }),
-    std::optional<b::HeapIndex> { b::HeapIndex { 12345u } });
+    std::optional<b::HeapIndex> { b::HeapIndex { 12345U } });
   EXPECT_EQ(alloc.ReserveRaw(ResourceViewType::kSampler,
               DescriptorVisibility::kShaderVisible, b::Count { 1 }),
-    std::optional<b::HeapIndex> { b::HeapIndex { 20000u } });
+    std::optional<b::HeapIndex> { b::HeapIndex { 20000U } });
 }
 
 NOLINT_TEST(D3D12DomainTest, ReserveExceedingCapacityFails)

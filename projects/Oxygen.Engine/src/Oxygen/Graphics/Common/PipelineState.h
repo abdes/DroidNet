@@ -164,10 +164,10 @@ struct RasterizerStateDesc {
   */
   bool front_counter_clockwise { true };
 
-  float depth_bias { 0.0f }; //!< Constant depth value added to each pixel.
-  float depth_bias_clamp { 0.0f }; //!< Maximum depth bias value.
+  float depth_bias { 0.0F }; //!< Constant depth value added to each pixel.
+  float depth_bias_clamp { 0.0F }; //!< Maximum depth bias value.
   float slope_scaled_depth_bias {
-    0.0f
+    0.0F
   }; //!< Depth bias scale factor for polygon slope.
   bool depth_clip_enable { true }; //!< Enable clipping based on depth.
   bool multisample_enable { false }; //!< Enable MSAA.
@@ -380,7 +380,7 @@ struct RootBindingItem {
   }
   auto SetRootParameterIndex(const uint32_t idx) -> void
   {
-    if (root_parameter_index_ != ~0u) {
+    if (root_parameter_index_ != ~0U) {
       throw std::logic_error(
         "RootBindingItem: root_parameter_index already set");
     }
@@ -390,7 +390,7 @@ struct RootBindingItem {
   auto operator==(const RootBindingItem&) const -> bool = default;
 
 private:
-  uint32_t root_parameter_index_ = ~0u;
+  uint32_t root_parameter_index_ = ~0U;
 };
 
 // -------------------------------------------------------------------------- //

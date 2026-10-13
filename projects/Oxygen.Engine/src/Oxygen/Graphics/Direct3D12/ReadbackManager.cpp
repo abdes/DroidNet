@@ -195,11 +195,11 @@ namespace {
     -> void
   {
     static_cast<void>(desc);
-    const auto mip_width = (std::max)(1u, desc.width >> slice.mip_level);
-    const auto mip_height = (std::max)(1u, desc.height >> slice.mip_level);
+    const auto mip_width = (std::max)(1U, desc.width >> slice.mip_level);
+    const auto mip_height = (std::max)(1U, desc.height >> slice.mip_level);
     const auto mip_depth = desc.texture_type == TextureType::kTexture3D
-      ? (std::max)(1u, desc.depth >> slice.mip_level)
-      : 1u;
+      ? (std::max)(1U, desc.depth >> slice.mip_level)
+      : 1U;
 
     CHECK_LE_F(static_cast<uint64_t>(slice.x) + slice.width,
       static_cast<uint64_t>(mip_width),
@@ -225,9 +225,9 @@ namespace {
   {
     const auto& format_info = GetFormatInfo(desc.format);
     const auto block_size
-      = (std::max)(1u, static_cast<uint32_t>(format_info.block_size));
+      = (std::max)(1U, static_cast<uint32_t>(format_info.block_size));
 
-    if ((slice.x % block_size) != 0u || (slice.y % block_size) != 0u) {
+    if ((slice.x % block_size) != 0U || (slice.y % block_size) != 0U) {
       return std::unexpected(ReadbackError::kInvalidArgument);
     }
 

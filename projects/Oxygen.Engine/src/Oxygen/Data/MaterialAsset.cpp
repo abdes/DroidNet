@@ -116,20 +116,20 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     desc.shader_stages = 0; // No shaders initially (filled by renderer)
 
     // PBR material values - neutral defaults
-    desc.base_color[0] = 1.0f; // R
-    desc.base_color[1] = 1.0f; // G
-    desc.base_color[2] = 1.0f; // B
-    desc.base_color[3] = 1.0f; // A
-    desc.normal_scale = 1.0f;
-    desc.metalness = Unorm16 { 0.0f }; // Non-metallic
-    desc.roughness = Unorm16 { 0.8f }; // Fairly rough (diffuse-like)
-    desc.ambient_occlusion = Unorm16 { 1.0f }; // No AO
+    desc.base_color[0] = 1.0F; // R
+    desc.base_color[1] = 1.0F; // G
+    desc.base_color[2] = 1.0F; // B
+    desc.base_color[3] = 1.0F; // A
+    desc.normal_scale = 1.0F;
+    desc.metalness = Unorm16 { 0.0F }; // Non-metallic
+    desc.roughness = Unorm16 { 0.8F }; // Fairly rough (diffuse-like)
+    desc.ambient_occlusion = Unorm16 { 1.0F }; // No AO
 
-    desc.uv_scale[0] = 1.0f;
-    desc.uv_scale[1] = 1.0f;
-    desc.uv_offset[0] = 0.0f;
-    desc.uv_offset[1] = 0.0f;
-    desc.uv_rotation_radians = 0.0f;
+    desc.uv_scale[0] = 1.0F;
+    desc.uv_scale[1] = 1.0F;
+    desc.uv_offset[0] = 0.0F;
+    desc.uv_offset[1] = 0.0F;
+    desc.uv_rotation_radians = 0.0F;
     desc.uv_set = 0;
 
     // No shader references initially - renderer will provide appropriate
@@ -173,11 +173,11 @@ auto MaterialAsset::CreateDebug() -> std::shared_ptr<const MaterialAsset>
   debug_desc.header.name[copy_len] = '\0';
 
   // Bright magenta color - highly visible for debugging
-  debug_desc.base_color[0] = 1.0f; // R - full red
-  debug_desc.base_color[1] = 0.0f; // G - no green
-  debug_desc.base_color[2] = 1.0f; // B - full blue
-  debug_desc.base_color[3] = 1.0f; // A - fully opaque
-  debug_desc.roughness = Unorm16 { 1.0f }; // Fully rough (no reflections)
+  debug_desc.base_color[0] = 1.0F; // R - full red
+  debug_desc.base_color[1] = 0.0F; // G - no green
+  debug_desc.base_color[2] = 1.0F; // B - full blue
+  debug_desc.base_color[3] = 1.0F; // A - fully opaque
+  debug_desc.roughness = Unorm16 { 1.0F }; // Fully rough (no reflections)
 
   return std::make_shared<const MaterialAsset>(
     kDebugMaterialAssetKey, debug_desc, std::vector<ShaderReference> {});

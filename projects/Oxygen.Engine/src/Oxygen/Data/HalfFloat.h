@@ -56,20 +56,20 @@ static_assert(std::is_trivially_copyable_v<HalfFloat>);
 [[nodiscard]] constexpr auto HalfFloat::Encode(float value) noexcept -> uint16_t
 {
   const uint32_t bits = std::bit_cast<uint32_t>(value);
-  const uint32_t sign = (bits >> 31) & 0x1u;
-  const uint32_t exp = (bits >> 23) & 0xFFu;
-  const uint32_t mantissa = bits & 0x7FFFFFu;
+  const uint32_t sign = (bits >> 31) & 0x1U;
+  const uint32_t exp = (bits >> 23) & 0xFFU;
+  const uint32_t mantissa = bits & 0x7FFFFFU;
 
   const uint32_t sign_out = sign << 15;
 
   // NaN / Inf
-  if (exp == 0xFFu) {
+  if (exp == 0xFFU) {
     if (mantissa == 0) {
-      return static_cast<uint16_t>(sign_out | 0x7C00u);
+      return static_cast<uint16_t>(sign_out | 0x7C00U);
     }
     // Quiet NaN, preserve some payload bits.
-    const uint32_t payload = (mantissa >> 13) & 0x3FFu;
-    return static_cast<uint16_t>(sign_out | 0x7C00u | payload | 0x0200u);
+    const uint32_t payload = (mantissa >> 13) & 0x3FFU;
+    return static_cast<uint16_t>(sign_out | 0x7C00U | payload | 0x0200U);
   }
 
   // Zero / subnormal in f32
@@ -83,7 +83,7 @@ static_assert(std::is_trivially_copyable_v<HalfFloat>);
 
   // Overflow -> Inf
   if (exp_half >= 31) {
-    return static_cast<uint16_t>(sign_out | 0x7C00u);
+    return static_cast<uint16_t>(sign_out | 0x7C00U);
   }
 
   // Underflow -> subnormal/zero
@@ -94,23 +94,23 @@ static_assert(std::is_trivially_copyable_v<HalfFloat>);
     }
 
     // Convert to subnormal half.
-    uint32_t mant = mantissa | 0x800000u; // implicit leading 1
+    uint32_t mant = mantissa | 0x800000U; // implicit leading 1
     const uint32_t shift = static_cast<uint32_t>(1 - exp_half);
 
     // We need to shift mantissa from 23-bit to 10-bit, plus extra shift for
     // subnormal exponent.
-    const uint32_t total_shift = 13u + shift;
+    const uint32_t total_shift = 13U + shift;
 
     uint32_t mant_out = mant >> total_shift;
 
     // Round to nearest-even.
-    const uint32_t remainder_mask = (1u << total_shift) - 1u;
+    const uint32_t remainder_mask = (1U << total_shift) - 1U;
     const uint32_t remainder = mant & remainder_mask;
-    const uint32_t halfway = 1u << (total_shift - 1u);
+    const uint32_t halfway = 1U << (total_shift - 1U);
 
     if (remainder > halfway
-      || (remainder == halfway && ((mant_out & 1u) != 0))) {
-      mant_out += 1u;
+      || (remainder == halfway && ((mant_out & 1U) != 0))) {
+      mant_out += 1U;
     }
 
     // Rounding can carry from 0x03ff to the minimum normal encoding 0x0400.
@@ -121,29 +121,29 @@ static_assert(std::is_trivially_copyable_v<HalfFloat>);
   uint32_t mant_out = mantissa >> 13;
 
   // Round to nearest-even.
-  const uint32_t remainder = mantissa & 0x1FFFu;
-  if (remainder > 0x1000u || (remainder == 0x1000u && ((mant_out & 1u) != 0))) {
-    mant_out += 1u;
-    if (mant_out == 0x400u) {
+  const uint32_t remainder = mantissa & 0x1FFFU;
+  if (remainder > 0x1000U || (remainder == 0x1000U && ((mant_out & 1U) != 0))) {
+    mant_out += 1U;
+    if (mant_out == 0x400U) {
       // Mantissa overflow; increment exponent.
       mant_out = 0;
       const uint32_t exp_out = static_cast<uint32_t>(exp_half + 1);
-      if (exp_out >= 31u) {
-        return static_cast<uint16_t>(sign_out | 0x7C00u);
+      if (exp_out >= 31U) {
+        return static_cast<uint16_t>(sign_out | 0x7C00U);
       }
       return static_cast<uint16_t>(sign_out | (exp_out << 10));
     }
   }
 
   return static_cast<uint16_t>(
-    sign_out | (static_cast<uint32_t>(exp_half) << 10) | (mant_out & 0x3FFu));
+    sign_out | (static_cast<uint32_t>(exp_half) << 10) | (mant_out & 0x3FFU));
 }
 
 [[nodiscard]] constexpr auto HalfFloat::Decode(uint16_t bits) noexcept -> float
 {
-  const uint32_t sign = (static_cast<uint32_t>(bits) >> 15) & 0x1u;
-  const uint32_t exp = (static_cast<uint32_t>(bits) >> 10) & 0x1Fu;
-  const uint32_t mantissa = static_cast<uint32_t>(bits) & 0x3FFu;
+  const uint32_t sign = (static_cast<uint32_t>(bits) >> 15) & 0x1U;
+  const uint32_t exp = (static_cast<uint32_t>(bits) >> 10) & 0x1FU;
+  const uint32_t mantissa = static_cast<uint32_t>(bits) & 0x3FFU;
 
   uint32_t out_sign = sign << 31;
   uint32_t out_exp = 0;
@@ -158,11 +158,11 @@ static_assert(std::is_trivially_copyable_v<HalfFloat>);
     // Subnormal half -> normalized float.
     uint32_t mant = mantissa;
     uint32_t e = 1;
-    while ((mant & 0x400u) == 0) {
-      mant <<= 1u;
-      e += 1u;
+    while ((mant & 0x400U) == 0) {
+      mant <<= 1U;
+      e += 1U;
     }
-    mant &= 0x3FFu;
+    mant &= 0x3FFU;
 
     // Subnormals start at exponent 1-bias (-14), before normalization shifts.
     out_exp = static_cast<uint32_t>(127 - 14 - (e - 1));
@@ -174,7 +174,7 @@ static_assert(std::is_trivially_copyable_v<HalfFloat>);
 
   if (exp == 31) {
     // Inf/NaN
-    out_exp = 0xFFu;
+    out_exp = 0xFFU;
     out_mant = mantissa << 13;
     const uint32_t out_bits = out_sign | (out_exp << 23) | out_mant;
     return std::bit_cast<float>(out_bits);

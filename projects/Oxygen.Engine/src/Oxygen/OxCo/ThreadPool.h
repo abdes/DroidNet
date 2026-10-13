@@ -596,7 +596,7 @@ inline auto ThreadPool::PopFromSubmitQueue() -> Task*
     if (ret && update_cutoff) {
       d_->sq_spin_cutoff.store(
         std::max<uint32_t>(
-          200u, static_cast<uint32_t>(static_cast<double>(spins) * 1.25)),
+          200U, static_cast<uint32_t>(static_cast<double>(spins) * 1.25)),
         std::memory_order_relaxed);
     }
 

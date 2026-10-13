@@ -147,9 +147,9 @@ auto TransformComponent::GetLocalMatrix() const -> Mat4
 {
   // Compose TRS matrix: T * R * S
   const Mat4 translation_matrix
-    = glm::translate(Mat4 { 1.0f }, local_position_);
+    = glm::translate(Mat4 { 1.0F }, local_position_);
   const Mat4 rotation_matrix = glm::mat4_cast(local_rotation_);
-  const Mat4 scale_matrix = glm::scale(Mat4 { 1.0f }, local_scale_);
+  const Mat4 scale_matrix = glm::scale(Mat4 { 1.0F }, local_scale_);
 
   return translation_matrix * rotation_matrix * scale_matrix;
 }
@@ -250,7 +250,7 @@ auto TransformComponent::GetWorldRotation() const -> Quat
   }
 
   // Fallback to identity if decomposition fails
-  return Quat { 1.0f, 0.0f, 0.0f, 0.0f };
+  return Quat { 1.0F, 0.0F, 0.0F, 0.0F };
 }
 
 /*!
@@ -273,5 +273,5 @@ auto TransformComponent::GetWorldScale() const -> Vec3
   }
 
   // Fallback to unit scale if decomposition fails
-  return Vec3 { 1.0f, 1.0f, 1.0f };
+  return Vec3 { 1.0F, 1.0F, 1.0F };
 }

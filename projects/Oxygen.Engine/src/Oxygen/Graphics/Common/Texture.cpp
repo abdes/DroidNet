@@ -55,16 +55,16 @@ auto TextureSlice::Resolve(const TextureDesc& desc) const -> TextureSlice
     mip_level, desc.mip_levels);
 
   if (width == kWholeExtent) {
-    ret.width = (std::max)(desc.width >> mip_level, 1u);
+    ret.width = (std::max)(desc.width >> mip_level, 1U);
   }
 
   if (height == kWholeExtent) {
-    ret.height = (std::max)(desc.height >> mip_level, 1u);
+    ret.height = (std::max)(desc.height >> mip_level, 1U);
   }
 
   if (depth == kWholeExtent) {
     if (desc.texture_type == TextureType::kTexture3D) {
-      ret.depth = (std::max)(desc.depth >> mip_level, 1u);
+      ret.depth = (std::max)(desc.depth >> mip_level, 1U);
     } else {
       ret.depth = 1;
     }
@@ -85,7 +85,7 @@ auto TextureSubResourceSet::Resolve(const TextureDesc& desc,
     const auto last_mip_level_plus_one
       = (std::min)(base_mip_level + num_mip_levels, desc.mip_levels);
     ret.num_mip_levels = static_cast<MipLevel>(
-      (std::max)(0u, last_mip_level_plus_one - base_mip_level));
+      (std::max)(0U, last_mip_level_plus_one - base_mip_level));
   }
 
   switch (desc.texture_type) // NOLINT(clang-diagnostic-switch-enum)
@@ -99,7 +99,7 @@ auto TextureSubResourceSet::Resolve(const TextureDesc& desc,
     const auto last_array_slice_plus_one
       = (std::min)(base_array_slice + num_array_slices, desc.array_size);
     ret.num_array_slices = static_cast<ArraySlice>(
-      (std::max)(0u, last_array_slice_plus_one - base_array_slice));
+      (std::max)(0U, last_array_slice_plus_one - base_array_slice));
     break;
   }
   default:
@@ -114,7 +114,7 @@ auto TextureSubResourceSet::Resolve(const TextureDesc& desc,
 auto TextureSubResourceSet::IsEntireTexture(const TextureDesc& desc) const
   -> bool
 {
-  if (base_mip_level > 0u
+  if (base_mip_level > 0U
     || base_mip_level + num_mip_levels < desc.mip_levels) {
     return false;
   }
@@ -126,7 +126,7 @@ auto TextureSubResourceSet::IsEntireTexture(const TextureDesc& desc) const
   case TextureType::kTextureCube:
   case TextureType::kTextureCubeArray:
   case TextureType::kTexture2DMultiSampleArray:
-    if (base_array_slice > 0u
+    if (base_array_slice > 0U
       || base_array_slice + num_array_slices < desc.array_size) {
       return false;
     }

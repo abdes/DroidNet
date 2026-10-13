@@ -46,34 +46,34 @@ auto oxygen::data::MakeArrowGizmoMeshAsset()
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
   constexpr unsigned int segments = 16;
-  constexpr float shaft_length = 0.7f;
-  constexpr float head_length = 0.18f;
-  constexpr float base_z = -0.1f;
+  constexpr float shaft_length = 0.7F;
+  constexpr float head_length = 0.18F;
+  constexpr float base_z = -0.1F;
   constexpr float shaft_top_z = base_z + shaft_length;
   constexpr float head_top_z = shaft_top_z + head_length;
-  constexpr glm::vec4 shaft_color = { 0.2f, 0.6f, 1.0f, 1.0f }; // blueish
-  constexpr glm::vec4 head_color = { 1.0f, 0.8f, 0.2f, 1.0f }; // yellowish
+  constexpr glm::vec4 shaft_color = { 0.2F, 0.6F, 1.0F, 1.0F }; // blueish
+  constexpr glm::vec4 head_color = { 1.0F, 0.8F, 0.2F, 1.0F }; // yellowish
   constexpr float pi = std::numbers::pi_v<float>;
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
 
   // Shaft (cylinder)
   for (unsigned int i = 0; i <= segments; ++i) {
-    constexpr float shaft_radius = 0.025f;
+    constexpr float shaft_radius = 0.025F;
     float theta
-      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
+      = 2.0F * pi * static_cast<float>(i) / static_cast<float>(segments);
     float x = std::cos(theta);
     float y = std::sin(theta);
-    glm::vec3 normal = { x, y, 0.0f };
-    glm::vec3 tangent = { -y, x, 0.0f };
-    glm::vec3 bitangent = { 0.0f, 0.0f, 1.0f };
+    glm::vec3 normal = { x, y, 0.0F };
+    glm::vec3 tangent = { -y, x, 0.0F };
+    glm::vec3 bitangent = { 0.0F, 0.0F, 1.0F };
     float u = static_cast<float>(i) / static_cast<float>(segments);
 
     // Bottom ring
     vertices.push_back(Vertex {
       .position = { x * shaft_radius, y * shaft_radius, base_z },
       .normal = normal,
-      .texcoord = { u, 1.0f },
+      .texcoord = { u, 1.0F },
       .tangent = tangent,
       .bitangent = bitangent,
       .color = shaft_color,
@@ -82,7 +82,7 @@ auto oxygen::data::MakeArrowGizmoMeshAsset()
     vertices.push_back(Vertex {
       .position = { x * shaft_radius, y * shaft_radius, shaft_top_z },
       .normal = normal,
-      .texcoord = { u, 0.0f },
+      .texcoord = { u, 0.0F },
       .tangent = tangent,
       .bitangent = bitangent,
       .color = shaft_color,
@@ -107,20 +107,20 @@ auto oxygen::data::MakeArrowGizmoMeshAsset()
   // Head (cone)
   uint32_t cone_base_start = static_cast<uint32_t>(vertices.size());
   for (unsigned int i = 0; i <= segments; ++i) {
-    constexpr float head_radius = 0.06f;
+    constexpr float head_radius = 0.06F;
     float theta
-      = 2.0f * pi * static_cast<float>(i) / static_cast<float>(segments);
+      = 2.0F * pi * static_cast<float>(i) / static_cast<float>(segments);
     float x = std::cos(theta);
     float y = std::sin(theta);
     float u = static_cast<float>(i) / static_cast<float>(segments);
     glm::vec3 pos = { x * head_radius, y * head_radius, shaft_top_z };
     glm::vec3 dir = glm::normalize(glm::vec3(x, y, head_radius / head_length));
-    glm::vec3 tangent = { -y, x, 0.0f };
+    glm::vec3 tangent = { -y, x, 0.0F };
     glm::vec3 bitangent = glm::cross(dir, tangent);
     vertices.push_back(Vertex {
       .position = pos,
       .normal = dir,
-      .texcoord = { u, 1.0f },
+      .texcoord = { u, 1.0F },
       .tangent = tangent,
       .bitangent = bitangent,
       .color = head_color,
@@ -128,9 +128,9 @@ auto oxygen::data::MakeArrowGizmoMeshAsset()
   }
   // Cone apex
   vertices.push_back(Vertex {
-    .position = { 0.0f, 0.0f, head_top_z },
-    .normal = { 0.0f, 0.0f, 1.0f },
-    .texcoord = { 0.5f, 0.0f },
+    .position = { 0.0F, 0.0F, head_top_z },
+    .normal = { 0.0F, 0.0F, 1.0F },
+    .texcoord = { 0.5F, 0.0F },
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = head_color,
@@ -144,9 +144,9 @@ auto oxygen::data::MakeArrowGizmoMeshAsset()
   }
   // Cone base center
   vertices.push_back(Vertex {
-    .position = { 0.0f, 0.0f, shaft_top_z },
-    .normal = { 0.0f, 0.0f, -1.0f },
-    .texcoord = { 0.5f, 0.5f },
+    .position = { 0.0F, 0.0F, shaft_top_z },
+    .normal = { 0.0F, 0.0F, -1.0F },
+    .texcoord = { 0.5F, 0.5F },
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = head_color,

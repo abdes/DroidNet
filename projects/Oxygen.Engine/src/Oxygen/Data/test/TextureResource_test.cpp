@@ -81,7 +81,7 @@ NOLINT_TEST(TextureResourceBasicTest, AccessorsReturnDescriptorValues)
 
   };
   auto payload = MakeValidPayload(desc.array_layers, desc.mip_levels,
-    /*bytes_per_subresource=*/4u, desc.content_hash);
+    /*bytes_per_subresource=*/4U, desc.content_hash);
   desc.size_bytes = static_cast<uint32_t>(payload.size());
 
   // Arrange
@@ -90,16 +90,16 @@ NOLINT_TEST(TextureResourceBasicTest, AccessorsReturnDescriptorValues)
   TextureResource tex { desc, std::move(payload) };
 
   // Assert
-  EXPECT_EQ(tex.GetDataOffset(), 4096u);
+  EXPECT_EQ(tex.GetDataOffset(), 4096U);
   EXPECT_EQ(tex.GetPayload().size(), desc.size_bytes);
-  EXPECT_EQ(tex.GetDataSize(), 20u);
-  EXPECT_EQ(tex.GetWidth(), 128u);
-  EXPECT_EQ(tex.GetHeight(), 64u);
-  EXPECT_EQ(tex.GetDepth(), 1u);
-  EXPECT_EQ(tex.GetArrayLayers(), 1u);
-  EXPECT_EQ(tex.GetMipCount(), 5u);
+  EXPECT_EQ(tex.GetDataSize(), 20U);
+  EXPECT_EQ(tex.GetWidth(), 128U);
+  EXPECT_EQ(tex.GetHeight(), 64U);
+  EXPECT_EQ(tex.GetDepth(), 1U);
+  EXPECT_EQ(tex.GetArrayLayers(), 1U);
+  EXPECT_EQ(tex.GetMipCount(), 5U);
   EXPECT_EQ(tex.GetFormat(), oxygen::Format::kRGBA8UNorm);
-  EXPECT_EQ(tex.GetDataAlignment(), 256u);
+  EXPECT_EQ(tex.GetDataAlignment(), 256U);
 }
 
 //! Death test verifying invalid descriptor (zero width) triggers invariant (ID
@@ -125,7 +125,7 @@ NOLINT_TEST_F(TextureResourceValidationTest, MoveConstructor_TransfersOwnership)
 
   };
   auto payload = MakeValidPayload(desc.array_layers, desc.mip_levels,
-    /*bytes_per_subresource=*/8u, desc.content_hash);
+    /*bytes_per_subresource=*/8U, desc.content_hash);
   desc.size_bytes = static_cast<uint32_t>(payload.size());
 
   // Arrange
@@ -135,9 +135,9 @@ NOLINT_TEST_F(TextureResourceValidationTest, MoveConstructor_TransfersOwnership)
   auto moved = std::move(original);
 
   // Assert
-  EXPECT_EQ(moved.GetDataSize(), 8u);
-  EXPECT_EQ(original.GetDataSize(), 0u); // NOLINT(bugprone-use-after-move)
-  EXPECT_EQ(original.GetPayload().size(), 0u);
+  EXPECT_EQ(moved.GetDataSize(), 8U);
+  EXPECT_EQ(original.GetDataSize(), 0U); // NOLINT(bugprone-use-after-move)
+  EXPECT_EQ(original.GetPayload().size(), 0U);
 }
 
 //! Invalid descriptor: zero width must throw.
@@ -159,7 +159,7 @@ NOLINT_TEST_F(TextureResourceValidationTest, InvalidDescriptor_ZeroWidth_Throws)
 
   };
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
-    /*bytes_per_subresource=*/4u, bad.content_hash);
+    /*bytes_per_subresource=*/4U, bad.content_hash);
   bad.size_bytes = static_cast<uint32_t>(payload.size());
 
   // Arrange
@@ -190,7 +190,7 @@ NOLINT_TEST_F(
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
-    /*bytes_per_subresource=*/4u, bad.content_hash);
+    /*bytes_per_subresource=*/4U, bad.content_hash);
   bad.size_bytes = static_cast<uint32_t>(payload.size());
 
   // Arrange
@@ -221,7 +221,7 @@ NOLINT_TEST_F(
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
-    /*bytes_per_subresource=*/4u, bad.content_hash);
+    /*bytes_per_subresource=*/4U, bad.content_hash);
   bad.size_bytes = static_cast<uint32_t>(payload.size());
 
   // Arrange
@@ -252,7 +252,7 @@ NOLINT_TEST_F(
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
-    /*bytes_per_subresource=*/4u, bad.content_hash);
+    /*bytes_per_subresource=*/4U, bad.content_hash);
   bad.size_bytes = static_cast<uint32_t>(payload.size());
 
   // Arrange
@@ -285,7 +285,7 @@ NOLINT_TEST_F(
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
-    /*bytes_per_subresource=*/4u, bad.content_hash);
+    /*bytes_per_subresource=*/4U, bad.content_hash);
   bad.size_bytes = static_cast<uint32_t>(payload.size());
 
   // Arrange
@@ -317,7 +317,7 @@ NOLINT_TEST_F(
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
-    /*bytes_per_subresource=*/4u, bad.content_hash);
+    /*bytes_per_subresource=*/4U, bad.content_hash);
   bad.size_bytes = static_cast<uint32_t>(payload.size());
 
   // Arrange
@@ -348,7 +348,7 @@ NOLINT_TEST_F(
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
-    /*bytes_per_subresource=*/4u, bad.content_hash);
+    /*bytes_per_subresource=*/4U, bad.content_hash);
   bad.size_bytes = static_cast<uint32_t>(payload.size() + 1);
 
   // Arrange
@@ -379,7 +379,7 @@ NOLINT_TEST_F(
   };
 
   auto payload = MakeValidPayload(bad.array_layers, bad.mip_levels,
-    /*bytes_per_subresource=*/4u, bad.content_hash);
+    /*bytes_per_subresource=*/4U, bad.content_hash);
   bad.size_bytes = static_cast<uint32_t>(payload.size());
 
   // Arrange
@@ -410,7 +410,7 @@ NOLINT_TEST_F(
   };
 
   auto payload = MakeValidPayload(weird.array_layers, weird.mip_levels,
-    /*bytes_per_subresource=*/1u, weird.content_hash);
+    /*bytes_per_subresource=*/1U, weird.content_hash);
   weird.size_bytes = static_cast<uint32_t>(payload.size());
 
   // Arrange

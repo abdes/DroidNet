@@ -302,7 +302,7 @@ struct CoordinateConversionPolicy final {
    @note This factor is applied to linear distances only (see
     `UnitNormalizationPolicy` for the exact requirements).
   */
-  float unit_scale = 1.0f;
+  float unit_scale = 1.0F;
 
   //! Importers must always output Oxygen world coordinates.
 };
@@ -587,7 +587,7 @@ struct ImportOptions final {
     HdrHandling hdr_handling = HdrHandling::kTonemapAuto;
 
     //! Exposure adjustment in EV (applied before tonemapping).
-    float exposure_ev = 0.0f;
+    float exposure_ev = 0.0F;
 
     //! Bake HDR content to LDR via tonemap + exposure.
     bool bake_hdr_to_ldr = false;

@@ -75,10 +75,10 @@ auto oxygen::data::MakePlaneMeshAsset(
         return std::nullopt;
       }
       Vertex v {
-        .position = { x_pos, y_pos, 0.0f },
-        .normal = { 0.0f, 0.0f, 1.0f },
-        .texcoord = { x_frac, 1.0f - y_frac },
-        .tangent = { 1.0f, 0.0f, 0.0f },
+        .position = { x_pos, y_pos, 0.0F },
+        .normal = { 0.0F, 0.0F, 1.0F },
+        .texcoord = { x_frac, 1.0F - y_frac },
+        .tangent = { 1.0F, 0.0F, 0.0F },
         .bitangent = { 0.0F, -1.0F, 0.0F },
         .color = { 1, 1, 1, 1 },
       };

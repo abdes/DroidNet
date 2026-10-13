@@ -30,7 +30,7 @@ private:
   const Texture* texture_ = nullptr;
   NativeView dsv_ {};
   ClearFlags flags_ {};
-  float depth_ = 1.0f;
+  float depth_ = 1.0F;
   uint8_t stencil_ = 0;
 };
 

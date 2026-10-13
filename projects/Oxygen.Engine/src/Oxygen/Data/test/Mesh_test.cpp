@@ -76,8 +76,8 @@ protected:
     using oxygen::data::MeshType;
 
     auto material = MaterialAsset::CreateDefault();
-    const glm::vec3 bounds_min { 0.0f, 0.0f, 0.0f };
-    const glm::vec3 bounds_max { 1.0f, 1.0f, 0.0f };
+    const glm::vec3 bounds_min { 0.0F, 0.0F, 0.0F };
+    const glm::vec3 bounds_max { 1.0F, 1.0F, 0.0F };
     oxygen::data::pak::geometry::MeshDesc desc {};
     desc.mesh_type
       = static_cast<std::underlying_type_t<MeshType>>(MeshType::kStandard);
@@ -119,7 +119,7 @@ NOLINT_TEST_F(MeshAssetBasicTest, Immutability)
 
   // Assert
   EXPECT_EQ(vertices_before.size(), 3);
-  EXPECT_EQ(indices_before.Count(), 3u);
+  EXPECT_EQ(indices_before.Count(), 3U);
 }
 
 //! Checks that Mesh computes correct bounding box.

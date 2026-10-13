@@ -765,8 +765,8 @@ static auto CanUseSmallAlignment(const D3D12_RESOURCE_DESC_T& resourceDesc)
     return false;
 
   if (IsFormatCompressed(resourceDesc.Format)) {
-    sizeX = DivideRoundingUp(sizeX, 4u);
-    sizeY = DivideRoundingUp(sizeY, 4u);
+    sizeX = DivideRoundingUp(sizeX, 4U);
+    sizeY = DivideRoundingUp(sizeY, 4U);
     bitsPerPixel *= 16;
   }
 
@@ -811,7 +811,7 @@ static auto ValidateAllocateMemoryParameters(const ALLOCATION_DESC* pAllocDesc,
       || pAllocInfo->Alignment
         == D3D12_DEFAULT_MSAA_RESOURCE_PLACEMENT_ALIGNMENT)
     && pAllocInfo->SizeInBytes != 0
-    && pAllocInfo->SizeInBytes % (64ull * 1024) == 0;
+    && pAllocInfo->SizeInBytes % (64ULL * 1024) == 0;
 }
 
 #endif // _D3D12MA_FUNCTIONS
@@ -9060,7 +9060,7 @@ auto CreateAllocator(const ALLOCATOR_DESC* pDesc, Allocator** ppAllocator)
   if (!pDesc || !ppAllocator || !pDesc->pDevice || !pDesc->pAdapter
     || !(pDesc->PreferredBlockSize == 0
       || (pDesc->PreferredBlockSize >= 16
-        && pDesc->PreferredBlockSize < 0x10000000000ull))) {
+        && pDesc->PreferredBlockSize < 0x10000000000ULL))) {
     D3D12MA_ASSERT(0 && "Invalid arguments passed to CreateAllocator.");
     return E_INVALIDARG;
   }
@@ -9130,7 +9130,7 @@ ULONG STDMETHODCALLTYPE IUnknownImpl::Release()
 void Allocation::PackedData::SetType(Type type)
 {
   const UINT u = (UINT)type;
-  D3D12MA_ASSERT(u < (1u << 2));
+  D3D12MA_ASSERT(u < (1U << 2));
   m_Type = u;
 }
 
@@ -9138,7 +9138,7 @@ void Allocation::PackedData::SetResourceDimension(
   D3D12_RESOURCE_DIMENSION resourceDimension)
 {
   const UINT u = (UINT)resourceDimension;
-  D3D12MA_ASSERT(u < (1u << 3));
+  D3D12MA_ASSERT(u < (1U << 3));
   m_ResourceDimension = u;
 }
 
@@ -9146,7 +9146,7 @@ void Allocation::PackedData::SetResourceFlags(
   D3D12_RESOURCE_FLAGS resourceFlags)
 {
   const UINT u = (UINT)resourceFlags;
-  D3D12MA_ASSERT(u < (1u << 24));
+  D3D12MA_ASSERT(u < (1U << 24));
   m_ResourceFlags = u;
 }
 
@@ -9154,7 +9154,7 @@ void Allocation::PackedData::SetTextureLayout(
   D3D12_TEXTURE_LAYOUT textureLayout)
 {
   const UINT u = (UINT)textureLayout;
-  D3D12MA_ASSERT(u < (1u << 9));
+  D3D12MA_ASSERT(u < (1U << 9));
   m_TextureLayout = u;
 }
 

@@ -72,12 +72,12 @@ NOLINT_TEST(TextureReadbackLayoutTest,
       },
     });
 
-  EXPECT_EQ(info.placed_footprint.Footprint.RowPitch, 256u);
-  EXPECT_EQ(info.resolved_region.buffer_row_pitch.get(), 256u);
-  EXPECT_EQ(info.resolved_region.buffer_slice_pitch.get(), 256u * 3u);
-  EXPECT_EQ(info.source_box.right, 5u);
-  EXPECT_EQ(info.source_box.bottom, 3u);
-  EXPECT_EQ(info.subresource_index, 0u);
+  EXPECT_EQ(info.placed_footprint.Footprint.RowPitch, 256U);
+  EXPECT_EQ(info.resolved_region.buffer_row_pitch.get(), 256U);
+  EXPECT_EQ(info.resolved_region.buffer_slice_pitch.get(), 256U * 3U);
+  EXPECT_EQ(info.source_box.right, 5U);
+  EXPECT_EQ(info.source_box.bottom, 3U);
+  EXPECT_EQ(info.subresource_index, 0U);
 }
 
 NOLINT_TEST(TextureReadbackLayoutTest,
@@ -106,11 +106,11 @@ NOLINT_TEST(TextureReadbackLayoutTest,
       },
     });
 
-  EXPECT_EQ(info.placed_footprint.Offset, 512u);
-  EXPECT_EQ(info.placed_footprint.Footprint.RowPitch, 256u);
-  EXPECT_EQ(info.resolved_region.buffer_slice_pitch.get(), 1024u);
-  EXPECT_EQ(info.source_box.left, 4u);
-  EXPECT_EQ(info.source_box.right, 8u);
+  EXPECT_EQ(info.placed_footprint.Offset, 512U);
+  EXPECT_EQ(info.placed_footprint.Footprint.RowPitch, 256U);
+  EXPECT_EQ(info.resolved_region.buffer_slice_pitch.get(), 1024U);
+  EXPECT_EQ(info.source_box.left, 4U);
+  EXPECT_EQ(info.source_box.right, 8U);
 }
 
 NOLINT_TEST(
@@ -127,14 +127,14 @@ NOLINT_TEST(
   const auto layout
     = ComputeReadbackSurfaceLayout(device, MakeTextureResourceDesc(desc), 6, 1);
 
-  EXPECT_EQ(device.observed_first_subresource_, 0u);
-  EXPECT_EQ(device.observed_num_subresources_, 6u);
-  ASSERT_EQ(layout.subresources.size(), 6u);
-  EXPECT_EQ(layout.subresource_count, 6u);
-  EXPECT_EQ(layout.total_bytes, 6u * 512u);
-  EXPECT_EQ(layout.subresources[1].placed_footprint.Offset, 512u);
-  EXPECT_EQ(layout.subresources[1].row_count, 4u);
-  EXPECT_EQ(layout.subresources[1].row_size_bytes, 32u);
+  EXPECT_EQ(device.observed_first_subresource_, 0U);
+  EXPECT_EQ(device.observed_num_subresources_, 6U);
+  ASSERT_EQ(layout.subresources.size(), 6U);
+  EXPECT_EQ(layout.subresource_count, 6U);
+  EXPECT_EQ(layout.total_bytes, 6U * 512U);
+  EXPECT_EQ(layout.subresources[1].placed_footprint.Offset, 512U);
+  EXPECT_EQ(layout.subresources[1].row_count, 4U);
+  EXPECT_EQ(layout.subresources[1].row_size_bytes, 32U);
 }
 
 NOLINT_TEST(TextureReadbackLayoutTest,

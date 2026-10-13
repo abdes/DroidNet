@@ -35,7 +35,7 @@ void DistancePolicy::NormalizeThresholds() noexcept
         thresholds[i] = thresholds[i - 1];
     }
   }
-  hysteresis_ratio = (std::clamp)(hysteresis_ratio, 0.0f, 0.99f);
+  hysteresis_ratio = (std::clamp)(hysteresis_ratio, 0.0F, 0.99F);
 }
 
 auto DistancePolicy::SelectBase(
@@ -69,8 +69,8 @@ auto DistancePolicy::ApplyHysteresis(std::optional<LodIndex> current,
     return base;
   }
   const float t = thresholds[boundary];
-  const float enter = t * (1.0f + hysteresis_ratio);
-  const float exit = t * (1.0f - hysteresis_ratio);
+  const float enter = t * (1.0F + hysteresis_ratio);
+  const float exit = t * (1.0F - hysteresis_ratio);
   if (base > last) {
     return (normalized_distance >= enter) ? base : last;
   } else {
@@ -99,7 +99,7 @@ auto ScreenSpaceErrorPolicy::ValidateSizes(std::size_t lod_count) const noexcept
 {
   if (lod_count == 0)
     return true;
-  const auto need = (lod_count > 0) ? (lod_count - 1) : 0u;
+  const auto need = (lod_count > 0) ? (lod_count - 1) : 0U;
   if (!enter_finer_sse.empty() && enter_finer_sse.size() < need)
     return false;
   if (!exit_coarser_sse.empty() && exit_coarser_sse.size() < need)

@@ -54,7 +54,7 @@ namespace {
       }
       return 0;
     };
-    digest[i] = static_cast<uint8_t>((nibble(hi) << 4u) | nibble(lo));
+    digest[i] = static_cast<uint8_t>((nibble(hi) << 4U) | nibble(lo));
   }
   return digest;
 }
@@ -67,8 +67,8 @@ namespace {
   result.reserve(64);
   for (uint8_t byte : digest) {
     constexpr char hex_chars[] = "0123456789abcdef";
-    result.push_back(hex_chars[byte >> 4u]);
-    result.push_back(hex_chars[byte & 0xFu]);
+    result.push_back(hex_chars[byte >> 4U]);
+    result.push_back(hex_chars[byte & 0xFU]);
   }
   return result;
 }
@@ -730,7 +730,7 @@ NOLINT_TEST_F(Sha256EdgeCaseTest, AvalancheEffect)
     }
   }
   // SHA-256 should show significant difference (most bytes should differ)
-  EXPECT_GT(different_bytes, 20u);
+  EXPECT_GT(different_bytes, 20U);
 }
 
 } // namespace

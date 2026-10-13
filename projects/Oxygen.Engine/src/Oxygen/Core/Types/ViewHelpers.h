@@ -20,10 +20,10 @@ namespace oxygen {
 inline auto PixelJitterToNdc(
   const glm::vec2& pixel_jitter_px, const ViewPort& vp) -> glm::vec2
 {
-  const float w = std::max(1.0f, static_cast<float>(vp.width));
-  const float h = std::max(1.0f, static_cast<float>(vp.height));
-  const float ndc_x = (2.0f * pixel_jitter_px.x) / w;
-  const float ndc_y = (2.0f * pixel_jitter_px.y) / h;
+  const float w = std::max(1.0F, static_cast<float>(vp.width));
+  const float h = std::max(1.0F, static_cast<float>(vp.height));
+  const float ndc_x = (2.0F * pixel_jitter_px.x) / w;
+  const float ndc_y = (2.0F * pixel_jitter_px.y) / h;
   // Pixel Y is defined positive-down; NDC Y is positive-up, so invert Y here.
   return glm::vec2(ndc_x, -ndc_y);
 }
@@ -34,10 +34,10 @@ inline auto PixelJitterToNdc(
 inline auto ApplyJitterToProjection(const glm::mat4& proj,
   const glm::vec2& pixel_jitter_px, const ViewPort& vp) -> glm::mat4
 {
-  if (pixel_jitter_px == glm::vec2(0.0f))
+  if (pixel_jitter_px == glm::vec2(0.0F))
     return proj;
   const glm::vec2 ndc = PixelJitterToNdc(pixel_jitter_px, vp);
-  glm::mat4 jitter(1.0f);
+  glm::mat4 jitter(1.0F);
   jitter[3][0] = ndc.x;
   jitter[3][1] = ndc.y;
   return jitter * proj;
@@ -50,15 +50,15 @@ inline auto RemapProjectionDepthRange(
 {
   if (from == to)
     return proj;
-  glm::mat4 remap(1.0f);
+  glm::mat4 remap(1.0F);
   if (from == NdcDepthRange::MinusOneToOne && to == NdcDepthRange::ZeroToOne) {
-    remap[2][2] = 0.5f;
-    remap[3][2] = 0.5f;
+    remap[2][2] = 0.5F;
+    remap[3][2] = 0.5F;
     return remap * proj;
   }
   if (from == NdcDepthRange::ZeroToOne && to == NdcDepthRange::MinusOneToOne) {
-    remap[2][2] = 2.0f;
-    remap[3][2] = -1.0f;
+    remap[2][2] = 2.0F;
+    remap[3][2] = -1.0F;
     return remap * proj;
   }
   return proj;

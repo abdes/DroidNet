@@ -38,7 +38,7 @@ NOLINT_TEST(HeadlessTextureTest, Texture_BasicMipOffsetsAndReadWrite)
   // Compute a per-slice total using the layout strategy
   const auto& strat = tex.GetLayoutStrategy();
   const auto per_slice = strat.ComputeTotalBytesPerArraySlice(desc);
-  EXPECT_GT(per_slice, 0u);
+  EXPECT_GT(per_slice, 0U);
 
   // Act: write a small pattern at mip 0 base and read it back
   std::vector<uint8_t> src { 1, 2, 3, 4, 5, 6, 7, 8 };
@@ -97,7 +97,7 @@ NOLINT_TEST(HeadlessTextureTest, Texture_SRVContainsCorrectOffsets)
   const auto& layout = texture->GetLayoutStrategy();
   const auto expected_base = layout.ComputeSliceMipBaseOffset(desc, 1, 1);
   uint32_t expected_total = 0;
-  for (auto m = 1u; m < 1u + 2u; ++m) {
+  for (auto m = 1U; m < 1U + 2U; ++m) {
     expected_total += layout.ComputeMipSizeBytes(desc, m);
   }
 
@@ -142,7 +142,7 @@ NOLINT_TEST(HeadlessTextureTest, Texture_UAVContainsCorrectOffsets)
   const auto& layout = texture->GetLayoutStrategy();
   const auto expected_base = layout.ComputeSliceMipBaseOffset(desc, 1, 1);
   uint32_t expected_total = 0;
-  for (auto m = 1u; m < 1u + 2u; ++m) {
+  for (auto m = 1U; m < 1U + 2U; ++m) {
     expected_total += layout.ComputeMipSizeBytes(desc, m);
   }
 
@@ -166,7 +166,7 @@ NOLINT_TEST(HeadlessTextureTest, Texture_Layout_TotalSizeMatchesMipSum)
 
   // Act: compute total by summing mips
   uint32_t sum = 0;
-  for (auto mip = 0u; mip < desc.mip_levels; ++mip) {
+  for (auto mip = 0U; mip < desc.mip_levels; ++mip) {
     sum += layout.ComputeMipSizeBytes(desc, mip);
   }
   const auto total = layout.ComputeTotalBytesPerArraySlice(desc);
@@ -256,7 +256,7 @@ NOLINT_TEST(HeadlessTextureTest, Texture_ViewPayloadBoundsWithinBacking)
   // Assert: payload fields are within per-slice backing
   EXPECT_EQ(srv->base_offset, expected_base);
   EXPECT_EQ(srv->total_size, expected_total);
-  EXPECT_LT(srv->base_offset + srv->total_size, per_slice + 1u); // <= per_slice
+  EXPECT_LT(srv->base_offset + srv->total_size, per_slice + 1U); // <= per_slice
 }
 
 //! Out-of-range reads should be no-ops and not crash
@@ -297,10 +297,10 @@ NOLINT_TEST(HeadlessTextureTest, Texture_BC1_BlockSizeAndOffsets)
   const auto& layout = tex.GetLayoutStrategy();
 
   // Act/Assert: each mip size must be a multiple of the block bytes
-  for (auto m = 0u; m < desc.mip_levels; ++m) {
+  for (auto m = 0U; m < desc.mip_levels; ++m) {
     const auto sz = layout.ComputeMipSizeBytes(desc, m);
     const auto finfo = oxygen::graphics::detail::GetFormatInfo(desc.format);
-    EXPECT_EQ(sz % finfo.bytes_per_block, 0u);
+    EXPECT_EQ(sz % finfo.bytes_per_block, 0U);
   }
 
   // Ensure payload offsets produced for an SRV are within backing
@@ -338,11 +338,11 @@ NOLINT_TEST(HeadlessTextureTest, Texture_BC3_BC5_PerSliceTotals)
   const auto& layout = tex.GetLayoutStrategy();
 
   const auto per_slice = layout.ComputeTotalBytesPerArraySlice(desc);
-  EXPECT_GT(per_slice, 0u);
+  EXPECT_GT(per_slice, 0U);
 
   // For BC3, bytes_per_block should be 16
   auto finfo = oxygen::graphics::detail::GetFormatInfo(desc.format);
-  EXPECT_EQ(finfo.bytes_per_block, 16u);
+  EXPECT_EQ(finfo.bytes_per_block, 16U);
 
   // Verify that offsets for the second slice are per_slice apart
   const auto off0 = layout.ComputeSliceMipBaseOffset(desc, 0, 0);

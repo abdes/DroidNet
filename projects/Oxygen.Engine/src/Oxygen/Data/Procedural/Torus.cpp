@@ -96,7 +96,7 @@ auto oxygen::data::MakeTorusMeshAsset(unsigned int major_segments,
         = { static_cast<float>(i) / static_cast<float>(major_segments),
             static_cast<float>(j) / static_cast<float>(minor_segments) };
 
-      glm::vec3 tangent = { -sin_major, cos_major, 0.0f };
+      glm::vec3 tangent = { -sin_major, cos_major, 0.0F };
       glm::vec3 bitangent
         = { -cos_major * sin_minor, -sin_major * sin_minor, cos_minor };
 

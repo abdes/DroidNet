@@ -85,8 +85,8 @@ NOLINT_TEST_F(RepeatableSharedTest, WeatherMonitoring)
   // Create the fetcher function
   auto make_fetcher = [this]() -> Co<WeatherData> {
     co_await el_->Sleep(100ms);
-    co_return WeatherData { .temperature = 20.0f, // Fixed value for testing
-      .humidity = 65.0f, // Fixed value for testing
+    co_return WeatherData { .temperature = 20.0F, // Fixed value for testing
+      .humidity = 65.0F, // Fixed value for testing
       .timestamp = el_->Now() };
   };
 

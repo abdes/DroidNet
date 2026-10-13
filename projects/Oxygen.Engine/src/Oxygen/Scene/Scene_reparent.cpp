@@ -147,7 +147,7 @@ void Scene::PreserveWorldTransform(SceneNode& node, SceneNodeImpl* node_impl,
     const auto inverse_parent_rotation = glm::inverse(parent_world_rotation);
     // Note: Ensure parent_world_scale components are not zero to avoid division
     // by zero. Assuming Vec3 has component-wise division.
-    const Vec3 inverse_parent_scale = Vec3(1.0f) / parent_world_scale;
+    const Vec3 inverse_parent_scale = Vec3(1.0F) / parent_world_scale;
 
     // Transform world position to local space of new parent
     const auto relative_position = world_position - parent_world_position;

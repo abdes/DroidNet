@@ -17,10 +17,10 @@ struct Color {
   static constexpr float epsilon = std::numeric_limits<float>::epsilon() * 100;
 
   Color()
-    : r(0.f)
-    , g(0.f)
-    , b(0.f)
-    , a(0.f)
+    : r(0.F)
+    , g(0.F)
+    , b(0.F)
+    , a(0.F)
   {
   }
 
@@ -43,7 +43,7 @@ struct Color {
   {
     auto almost_equal = [](const float x, const float y) -> bool {
       return std::abs(x - y)
-        <= epsilon * (std::max)({ 1.0f, std::abs(x), std::abs(y) });
+        <= epsilon * (std::max)({ 1.0F, std::abs(x), std::abs(y) });
     };
     return almost_equal(r, other.r) && almost_equal(g, other.g)
       && almost_equal(b, other.b) && almost_equal(a, other.a);

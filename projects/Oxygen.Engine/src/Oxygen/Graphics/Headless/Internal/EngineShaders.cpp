@@ -25,8 +25,8 @@ namespace {
     -> std::shared_ptr<IShaderByteCode>
   {
     std::vector<uint32_t> blob(4);
-    blob[0] = static_cast<uint32_t>(key & 0xffffffffu);
-    blob[1] = static_cast<uint32_t>((key >> 32) & 0xffffffffu);
+    blob[0] = static_cast<uint32_t>(key & 0xffffffffU);
+    blob[1] = static_cast<uint32_t>((key >> 32) & 0xffffffffU);
     blob[2] = ~blob[0];
     blob[3] = ~blob[1];
 

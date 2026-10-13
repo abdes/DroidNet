@@ -80,10 +80,10 @@ NOLINT_TEST_F(TimeBindingsTest, OnFrameStartTimeBindingUsesFrameContextValues)
     ModuleTimingData {
       .game_delta_time = time::CanonicalDuration { 10ms },
       .fixed_delta_time = time::CanonicalDuration { 20ms },
-      .time_scale = 1.5f,
+      .time_scale = 1.5F,
       .is_paused = true,
-      .interpolation_alpha = 0.25f,
-      .current_fps = 120.0f,
+      .interpolation_alpha = 0.25F,
+      .current_fps = 120.0F,
     },
     Tag::Get());
 

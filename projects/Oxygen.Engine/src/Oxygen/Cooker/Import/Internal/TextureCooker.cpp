@@ -416,8 +416,8 @@ namespace {
         for (size_t i = 0; i < pixel_count; ++i) {
           for (size_t c = 0; c < 4; ++c) {
             const float value = src_ptr[i * 4 + c];
-            const float clamped = (std::max)(0.0f, (std::min)(1.0f, value));
-            dst_ptr[i * 4 + c] = static_cast<uint8_t>(clamped * 255.0f + 0.5f);
+            const float clamped = (std::max)(0.0F, (std::min)(1.0F, value));
+            dst_ptr[i * 4 + c] = static_cast<uint8_t>(clamped * 255.0F + 0.5F);
           }
         }
       }
@@ -468,7 +468,7 @@ namespace {
         for (size_t i = 0; i < pixel_count; ++i) {
           for (size_t c = 0; c < 4; ++c) {
             const uint8_t byte_val = static_cast<uint8_t>(src_ptr[i * 4 + c]);
-            dst_ptr[i * 4 + c] = static_cast<float>(byte_val) / 255.0f;
+            dst_ptr[i * 4 + c] = static_cast<float>(byte_val) / 255.0F;
           }
         }
       }

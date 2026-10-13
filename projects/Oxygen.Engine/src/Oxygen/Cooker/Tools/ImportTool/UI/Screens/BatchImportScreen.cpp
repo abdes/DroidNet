@@ -73,7 +73,7 @@ namespace {
       return "";
     }
     const int filled
-      = std::clamp(static_cast<int>(progress * width + 0.5f), 0, width);
+      = std::clamp(static_cast<int>(progress * width + 0.5F), 0, width);
     std::string bar;
     bar.reserve(static_cast<size_t>(width) * kFullBlock.size());
     for (int i = 0; i < width; ++i) {
@@ -97,9 +97,9 @@ namespace {
       "\xE2\x96\x88\xE2\x96\x8C", // █▌
       "\xE2\x96\x88\xE2\x96\x88", // ██ 100%
     };
-    const float clamped = std::clamp(queue_load, 0.0f, 1.0f);
+    const float clamped = std::clamp(queue_load, 0.0F, 1.0F);
     const int bucket
-      = std::clamp(static_cast<int>(clamped * 10.0f + 1e-4f), 0, 10);
+      = std::clamp(static_cast<int>(clamped * 10.0F + 1e-4F), 0, 10);
     return kGlyphs[static_cast<size_t>(bucket)];
   }
 
@@ -191,9 +191,9 @@ namespace {
 
   auto LoadColor(float queue_load) -> Color
   {
-    const float clamped = std::clamp(queue_load, 0.0f, 1.0f);
+    const float clamped = std::clamp(queue_load, 0.0F, 1.0F);
     const int percent
-      = std::clamp(static_cast<int>(clamped * 100.0f + 0.5f), 0, 100);
+      = std::clamp(static_cast<int>(clamped * 100.0F + 0.5F), 0, 100);
     if (percent >= 100) {
       return Color::Red;
     }
@@ -275,7 +275,7 @@ namespace {
 
     for (size_t index = 0; index < state.active_jobs.size(); ++index) {
       const auto& job = state.active_jobs[index];
-      const int percent = static_cast<int>(job.progress * 100.0f + 0.5f);
+      const int percent = static_cast<int>(job.progress * 100.0F + 0.5F);
       const std::string bar = BuildMiniBar(job.progress, 18);
       const std::string source = ShortName(job.source);
       const size_t row_index = index + 1U;
@@ -309,7 +309,7 @@ namespace {
 
   struct UtilizationFormat {
     std::string label;
-    float ratio = 0.0f;
+    float ratio = 0.0F;
     std::string input_glyph;
     std::string output_glyph;
     std::string counts;
@@ -323,7 +323,7 @@ namespace {
     std::string_view display_kind) -> UtilizationFormat
   {
     if (display_kind.empty()) {
-      return { "", 0.0f, "", "", "", Color::GrayLight, Color::GrayLight,
+      return { "", 0.0F, "", "", "", Color::GrayLight, Color::GrayLight,
         false };
     }
     const auto lookup_kind
@@ -338,7 +338,7 @@ namespace {
     }
     const float ratio = entry.total > 0U
       ? static_cast<float>(entry.active) / static_cast<float>(entry.total)
-      : 0.0f;
+      : 0.0F;
     const std::string_view input_glyph = QueueGlyph(entry.input_queue_load);
     const std::string_view output_glyph = QueueGlyph(entry.output_queue_load);
     const auto active = static_cast<int>(std::min(entry.active, 99U));

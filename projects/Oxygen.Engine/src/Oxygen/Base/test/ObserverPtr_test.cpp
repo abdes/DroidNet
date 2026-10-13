@@ -244,7 +244,7 @@ NOLINT_TEST(ObserverPtrTest, HashSupport)
   ptr_set.insert(b);
   ptr_set.insert(c); // Should not increase size since c == a
 
-  EXPECT_EQ(ptr_set.size(), 2u);
+  EXPECT_EQ(ptr_set.size(), 2U);
   EXPECT_TRUE(ptr_set.contains(a));
   EXPECT_TRUE(ptr_set.contains(b));
   EXPECT_TRUE(ptr_set.contains(c));
@@ -255,7 +255,7 @@ NOLINT_TEST(ObserverPtrTest, HashSupport)
   ptr_map[b] = "second";
   ptr_map[c] = "updated_first"; // Should update a's value
 
-  EXPECT_EQ(ptr_map.size(), 2u);
+  EXPECT_EQ(ptr_map.size(), 2U);
   EXPECT_EQ(ptr_map[a], "updated_first");
   EXPECT_EQ(ptr_map[c], "updated_first");
   EXPECT_EQ(ptr_map[b], "second");

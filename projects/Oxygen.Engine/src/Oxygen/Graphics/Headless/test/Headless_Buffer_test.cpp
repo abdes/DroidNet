@@ -58,7 +58,7 @@ NOLINT_TEST(HeadlessBufferTest, MapUnmap_WriteMappedMemory)
 
   // Act: write sequential bytes
   auto bytes = static_cast<uint8_t*>(p);
-  for (auto i = 0u; i < desc.size_bytes; ++i) {
+  for (auto i = 0U; i < desc.size_bytes; ++i) {
     bytes[i] = static_cast<uint8_t>(i + 1);
   }
 
@@ -76,7 +76,7 @@ NOLINT_TEST(HeadlessBufferTest, UpdateReadWrite_BoundsChecks)
 
   // Act: prepare source data and update
   std::vector<uint8_t> src(16);
-  for (auto i = 0u; i < src.size(); ++i) {
+  for (auto i = 0U; i < src.size(); ++i) {
     src[i] = static_cast<uint8_t>(0xA0 + i);
   }
   buf.Update(src.data(), src.size(), 8);
@@ -115,7 +115,7 @@ NOLINT_TEST(HeadlessBufferTest, GPUVirtualAddress_StableNonZero)
 
   // Assert
   EXPECT_EQ(addr1, addr2);
-  EXPECT_NE(addr1, 0u);
+  EXPECT_NE(addr1, 0U);
 }
 
 //! Zero-size buffers: Map returns nullptr and Read/Write/Update are safe no-ops

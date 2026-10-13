@@ -596,7 +596,7 @@ NOLINT_TEST(StaticVectorExceptionSafetyTest, CopyConstructionRollsBackOnThrow)
   // Assert: the constructed prefix was destroyed on rollback; only the
   // source still exists.
   EXPECT_EQ(ThrowOnCopy::live_, live_before);
-  EXPECT_EQ(source.size(), 2u);
+  EXPECT_EQ(source.size(), 2U);
 }
 
 //! Copy assignment with a throwing element copy must leave the target a
@@ -620,12 +620,12 @@ NOLINT_TEST(
   // Assert: the cleared old element is gone, the partial copy was rolled
   // back, and the target remains a consistent (empty) container.
   EXPECT_TRUE(target.empty());
-  EXPECT_EQ(source.size(), 2u);
+  EXPECT_EQ(source.size(), 2U);
   EXPECT_EQ(ThrowOnCopy::live_, live_before - 1);
 
   // The target is usable again afterwards.
   target = source;
-  EXPECT_EQ(target.size(), 2u);
+  EXPECT_EQ(target.size(), 2U);
   EXPECT_EQ(ThrowOnCopy::live_, live_before + 1);
 }
 

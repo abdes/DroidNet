@@ -60,14 +60,14 @@ public:
 
   // Default construct to 1 (one frame slot) rather than zero.
   constexpr FrameSlotCount() noexcept
-    : Base { 1u }
+    : Base { 1U }
   {
   }
 
   // Construct from an explicit value; enforce value >= 1.
   explicit constexpr FrameSlotCount(uint32_t v)
     : Base { [](uint32_t v) -> uint32_t {
-      if (v >= 1u)
+      if (v >= 1U)
         return v;
       throw std::invalid_argument("FrameSlotCount must be >= 1");
     }(v) }

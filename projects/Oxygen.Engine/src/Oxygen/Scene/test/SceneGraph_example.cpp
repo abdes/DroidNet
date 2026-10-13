@@ -74,24 +74,24 @@ struct DemoState {
 
   // Demo configuration
   struct AnimationConfig {
-    float duration = 3.0f;
-    float time_step = 0.5f;
+    float duration = 3.0F;
+    float time_step = 0.5F;
 
     struct OrbitalParams {
-      float radius = 5.0f;
-      float speed = 1.0f;
-      glm::vec3 center { 0.0f, 0.0f, 0.0f };
+      float radius = 5.0F;
+      float speed = 1.0F;
+      glm::vec3 center { 0.0F, 0.0F, 0.0F };
     } orbital;
 
     struct PendulumParams {
-      float amplitude = 45.0f;
-      float period = 3.0f;
+      float amplitude = 45.0F;
+      float period = 3.0F;
     } pendulum;
 
     struct PulsingParams {
-      float base_scale = 1.0f;
-      float pulse_amplitude = 0.5f;
-      float pulse_frequency = 2.0f;
+      float base_scale = 1.0F;
+      float pulse_amplitude = 0.5F;
+      float pulse_frequency = 2.0F;
     } pulsing;
   } anim_config;
 
@@ -129,7 +129,7 @@ auto CreateLookAtRotation(const glm::vec3& from, const glm::vec3& to,
 
   // Create rotation matrix (note: -forward because we use -Z as forward in
   // some systems)
-  glm::mat4 look_matrix(1.0f);
+  glm::mat4 look_matrix(1.0F);
   look_matrix[0] = glm::vec4(right, 0);
   look_matrix[1] = glm::vec4(actual_up, 0);
   look_matrix[2] = glm::vec4(-forward, 0);
@@ -327,9 +327,9 @@ auto CreateTransformNode(Scene& scene, const std::string& name,
   // All nodes created via Scene have TransformComponent automatically
   // Just initialize with identity transform
   auto transform = node.GetTransform();
-  transform.SetLocalTransform(glm::vec3 { 0.0f, 0.0f, 0.0f }, // position
-    glm::quat { 1.0f, 0.0f, 0.0f, 0.0f }, // rotation (identity)
-    glm::vec3 { 1.0f, 1.0f, 1.0f } // scale
+  transform.SetLocalTransform(glm::vec3 { 0.0F, 0.0F, 0.0F }, // position
+    glm::quat { 1.0F, 0.0F, 0.0F, 0.0F }, // rotation (identity)
+    glm::vec3 { 1.0F, 1.0F, 1.0F } // scale
   );
 
   return node;
@@ -354,17 +354,17 @@ auto RunTransformDemo(DemoState& state) -> void
   std::cout
     << "  * STEP 1: Preparing transform data (setting local values)...\n";
   auto root_transform = state.transform_root->GetTransform();
-  root_transform.SetLocalPosition({ 0.0f, 5.0f, 0.0f });
+  root_transform.SetLocalPosition({ 0.0F, 5.0F, 0.0F });
   std::cout << "    - Set TransformRoot position to (0, 5, 0)\n";
 
   auto orbit_transform = state.orbit_node->GetTransform();
-  orbit_transform.SetLocalPosition({ 3.0f, 0.0f, 0.0f });
-  orbit_transform.SetLocalRotation(CreateRotationFromEuler(0.0f, 45.0f, 0.0f));
+  orbit_transform.SetLocalPosition({ 3.0F, 0.0F, 0.0F });
+  orbit_transform.SetLocalRotation(CreateRotationFromEuler(0.0F, 45.0F, 0.0F));
   std::cout
     << "    - Set OrbitDemo position to (3, 0, 0) and rotation to 45° Y\n";
 
   auto scale_transform = state.scaling_node->GetTransform();
-  scale_transform.SetLocalScale({ 2.0f, 0.5f, 2.0f });
+  scale_transform.SetLocalScale({ 2.0F, 0.5F, 2.0F });
   std::cout << "    - Set ScaleDemo scale to (2, 0.5, 2)\n";
 
   // FRAME CYCLE DEMO: Scene update phase
@@ -386,15 +386,15 @@ auto RunTransformDemo(DemoState& state) -> void
   std::cout << "  * STEP 1: Applying transform operations (preparing next "
                "frame)...\n";
   orbit_transform.Translate(
-    { 1.0f, 0.0f, 1.0f }, true); // Local space translation
+    { 1.0F, 0.0F, 1.0F }, true); // Local space translation
   std::cout << "    - Translated OrbitDemo by (1, 0, 1) in local space\n";
 
   scale_transform.Rotate(
-    CreateRotationFromEuler(0.0f, 0.0f, 30.0f), true); // Local rotation
+    CreateRotationFromEuler(0.0F, 0.0F, 30.0F), true); // Local rotation
   std::cout << "    - Rotated ScaleDemo by 30 degrees around Z axis in local "
                "space\n";
 
-  scale_transform.Scale({ 1.5f, 1.0f, 1.5f }); // Scale multiplication
+  scale_transform.Scale({ 1.5F, 1.0F, 1.5F }); // Scale multiplication
   std::cout << "    - Scaled ScaleDemo by factor (1.5, 1.0, 1.5)\n";
 
   std::cout << "  * STEP 2: Scene::Update() - propagating changes...\n";
@@ -431,7 +431,7 @@ auto UpdateOrbitalTransform(SceneNode& node, const float time,
   auto transform = node.GetTransform();
 
   const float angle = time * params.speed;
-  const glm::vec3 offset { params.radius * std::cos(angle), 0.0f,
+  const glm::vec3 offset { params.radius * std::cos(angle), 0.0F,
     params.radius * std::sin(angle) };
 
   const glm::vec3 position = params.center + offset;
@@ -447,8 +447,8 @@ auto UpdatePendulumTransform(SceneNode& node, const float time,
   auto transform = node.GetTransform();
 
   const float swing_angle = params.amplitude
-    * std::sin(2.0f * std::numbers::pi_v<float> * time / params.period);
-  const auto rotation = CreateRotationFromEuler(0.0f, 0.0f, swing_angle);
+    * std::sin(2.0F * std::numbers::pi_v<float> * time / params.period);
+  const auto rotation = CreateRotationFromEuler(0.0F, 0.0F, swing_angle);
 
   transform.SetLocalRotation(rotation);
 }
@@ -461,7 +461,7 @@ auto UpdatePulsingScale(SceneNode& node, const float time,
   const float scale_factor = params.base_scale
     + params.pulse_amplitude
       * std::sin(
-        2.0f * std::numbers::pi_v<float> * params.pulse_frequency * time);
+        2.0F * std::numbers::pi_v<float> * params.pulse_frequency * time);
   const glm::vec3 scale { scale_factor, scale_factor, scale_factor };
 
   transform.SetLocalScale(scale);
@@ -472,7 +472,7 @@ auto SetupAnimatedScene(DemoState& state) -> void
 {
   // Create root node
   auto root = CreateTransformNode(*state.animation_scene, "AnimationRoot");
-  root.GetTransform().SetLocalPosition({ 0.0f, 0.0f, 0.0f });
+  root.GetTransform().SetLocalPosition({ 0.0F, 0.0F, 0.0F });
   state.animated_nodes.push_back(root);
 
   // Create orbital parent (revolves around origin)
@@ -484,14 +484,14 @@ auto SetupAnimatedScene(DemoState& state) -> void
   auto pendulum
     = CreateTransformNode(*state.animation_scene, "Pendulum", &orbital_parent);
   pendulum.GetTransform().SetLocalPosition(
-    { 3.0f, 0.0f, 0.0f }); // Offset from parent
+    { 3.0F, 0.0F, 0.0F }); // Offset from parent
   state.animated_nodes.push_back(pendulum);
 
   // Create pulsing grandchild (scales relative to pendulum)
   auto pulser
     = CreateTransformNode(*state.animation_scene, "Pulser", &pendulum);
   pulser.GetTransform().SetLocalPosition(
-    { 1.0f, 2.0f, 0.0f }); // Offset from pendulum
+    { 1.0F, 2.0F, 0.0F }); // Offset from pendulum
   state.animated_nodes.push_back(pulser);
 }
 
@@ -534,7 +534,7 @@ auto RunAnimationDemo(DemoState& state) -> void
   std::cout << "  2. Scene::Update() (propagate transforms)\n";
   std::cout << "  3. Process/Display (read world transforms)\n\n";
 
-  for (float time = 0.0f; time <= state.anim_config.duration;
+  for (float time = 0.0F; time <= state.anim_config.duration;
     time += state.anim_config.time_step) {
     std::cout << "=== FRAME at Time: " << std::fixed << std::setprecision(2)
               << time << "s ===\n";

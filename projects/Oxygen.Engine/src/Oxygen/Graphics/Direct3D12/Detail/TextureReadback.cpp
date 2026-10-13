@@ -52,11 +52,11 @@ auto GetArrayLayerCount(const oxygen::graphics::TextureDesc& desc) -> UINT
 auto ValidateResolvedSlice(const oxygen::graphics::TextureDesc& desc,
   const oxygen::graphics::TextureSlice& slice) -> void
 {
-  const auto mip_width = (std::max)(1u, desc.width >> slice.mip_level);
-  const auto mip_height = (std::max)(1u, desc.height >> slice.mip_level);
+  const auto mip_width = (std::max)(1U, desc.width >> slice.mip_level);
+  const auto mip_height = (std::max)(1U, desc.height >> slice.mip_level);
   const auto mip_depth = desc.texture_type == oxygen::TextureType::kTexture3D
-    ? (std::max)(1u, desc.depth >> slice.mip_level)
-    : 1u;
+    ? (std::max)(1U, desc.depth >> slice.mip_level)
+    : 1U;
 
   CHECK_LE_F(static_cast<uint64_t>(slice.x) + slice.width,
     static_cast<uint64_t>(mip_width),
@@ -80,7 +80,7 @@ auto GetD3D12SubresourceCount(const TextureDesc& desc, const UINT plane_count)
   -> UINT
 {
   return static_cast<UINT>(desc.mip_levels) * GetArrayLayerCount(desc)
-    * (std::max)(1u, plane_count);
+    * (std::max)(1U, plane_count);
 }
 
 auto MakeTextureResourceDesc(const TextureDesc& desc) -> D3D12_RESOURCE_DESC
@@ -162,7 +162,7 @@ auto ComputeReadbackSurfaceLayout(dx::IDevice& device,
   const UINT plane_count) -> ReadbackSurfaceLayout
 {
   ReadbackSurfaceLayout layout {};
-  layout.plane_count = (std::max)(1u, plane_count);
+  layout.plane_count = (std::max)(1U, plane_count);
   layout.subresource_count = subresource_count;
   layout.subresources.resize(subresource_count);
 
@@ -211,7 +211,7 @@ auto ComputeTextureToBufferCopyInfo(const TextureDesc& desc,
     : region.buffer_row_pitch;
   CHECK_EQ_F(info.resolved_region.buffer_row_pitch.get()
       % D3D12_TEXTURE_DATA_PITCH_ALIGNMENT,
-    0u, "D3D12 texture readback row pitch must be {}-byte aligned: {}",
+    0U, "D3D12 texture readback row pitch must be {}-byte aligned: {}",
     D3D12_TEXTURE_DATA_PITCH_ALIGNMENT,
     info.resolved_region.buffer_row_pitch.get());
   CHECK_GE_F(info.resolved_region.buffer_row_pitch.get(),
@@ -234,7 +234,7 @@ auto ComputeTextureToBufferCopyInfo(const TextureDesc& desc,
     info.resolved_region.buffer_row_pitch.get(), aligned_footprint.row_count);
   CHECK_EQ_F(info.resolved_region.buffer_offset.get()
       % D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT,
-    0u, "D3D12 texture readback buffer offsets must be {}-byte aligned: {}",
+    0U, "D3D12 texture readback buffer offsets must be {}-byte aligned: {}",
     D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT,
     info.resolved_region.buffer_offset.get());
 

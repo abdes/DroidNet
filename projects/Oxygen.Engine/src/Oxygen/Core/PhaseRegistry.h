@@ -108,7 +108,7 @@ using PhaseMask = std::uint32_t;
 */
 constexpr auto MakePhaseMask(PhaseId id) noexcept
 {
-  return 1u << static_cast<std::underlying_type_t<PhaseId>>(id);
+  return 1U << static_cast<std::underlying_type_t<PhaseId>>(id);
 }
 
 //! Barrier identifiers

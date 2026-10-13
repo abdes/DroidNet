@@ -37,17 +37,17 @@ struct Unorm16 final
 private:
   [[nodiscard]] static constexpr auto Encode(float value) noexcept -> uint16_t
   {
-    const float clamped = value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
-    const float scaled = clamped * 65535.0f + 0.5f;
-    const uint32_t as_u32 = scaled >= 65535.0f
-      ? 65535u
-      : (scaled <= 0.0f ? 0u : static_cast<uint32_t>(scaled));
+    const float clamped = value < 0.0F ? 0.0F : (value > 1.0F ? 1.0F : value);
+    const float scaled = clamped * 65535.0F + 0.5F;
+    const uint32_t as_u32 = scaled >= 65535.0F
+      ? 65535U
+      : (scaled <= 0.0F ? 0U : static_cast<uint32_t>(scaled));
     return static_cast<uint16_t>(as_u32);
   }
 
   [[nodiscard]] static constexpr auto Decode(uint16_t u_value) noexcept -> float
   {
-    return static_cast<float>(u_value) / 65535.0f;
+    return static_cast<float>(u_value) / 65535.0F;
   }
 };
 static_assert(sizeof(Unorm16) == sizeof(uint16_t));

@@ -341,8 +341,8 @@ NOLINT_TEST(GraphicsPipelineDescTest, AddRootBinding)
   EXPECT_THAT(span[3], HasSameDescription(table));
   // Check descriptor table binding range
   const auto& table_binding = std::get<DescriptorTableBinding>(span[3].data);
-  EXPECT_EQ(table_binding.base_index, 5u);
-  EXPECT_EQ(table_binding.count, 8u);
+  EXPECT_EQ(table_binding.base_index, 5U);
+  EXPECT_EQ(table_binding.count, 8U);
   // Check root parameter indices
   for (size_t i = 0; i < span.size(); ++i) {
     EXPECT_EQ(span[i].GetRootParameterIndex(), i);
@@ -512,9 +512,9 @@ NOLINT_TEST(RootBindingItemTest, RootParameterIndexAssignment)
     { .binding_slot_desc = { .register_index = 0, .register_space = 0 },
       .visibility = ShaderStageFlags::kAll,
       .data = PushConstantsBinding { .size = 4 } });
-  EXPECT_EQ(item.GetRootParameterIndex(), ~0u);
+  EXPECT_EQ(item.GetRootParameterIndex(), ~0U);
   item.SetRootParameterIndex(5);
-  EXPECT_EQ(item.GetRootParameterIndex(), 5u);
+  EXPECT_EQ(item.GetRootParameterIndex(), 5U);
   // Setting again should throw
   EXPECT_THROW(item.SetRootParameterIndex(6), std::logic_error);
 }

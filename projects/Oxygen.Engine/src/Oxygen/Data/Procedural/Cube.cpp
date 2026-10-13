@@ -38,7 +38,7 @@ auto oxygen::data::MakeCubeMeshAsset()
   -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>
 {
   // Vertices for a unit cube centered at the origin, 24 vertices (4 per face)
-  constexpr float h = 0.5f;
+  constexpr float h = 0.5F;
   std::vector<Vertex> vertices = {
     // clang-format off
     // -Z face (bottom)

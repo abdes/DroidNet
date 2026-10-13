@@ -354,7 +354,7 @@ private:
     uint16_t max_mip_levels = 1;
     uint32_t tmp = max_dim;
     while (tmp > 1) {
-      tmp >>= 1u;
+      tmp >>= 1U;
       ++max_mip_levels;
     }
     if (desc_.mip_levels > max_mip_levels) {

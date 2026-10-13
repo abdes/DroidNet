@@ -29,7 +29,7 @@ static inline auto clampf(float value, float low, float high) -> float
 }
 static inline auto saturate(float value) -> float
 {
-  return clampf(value, 0, 1.0f);
+  return clampf(value, 0, 1.0F);
 }
 static inline auto minimumub(uint8_t a, uint8_t b) -> uint8_t
 {
@@ -193,8 +193,8 @@ static inline auto vec4F_normalize_in_place(vec4F* pV) -> vec4F*
 {
   float s = pV->m_c[0] * pV->m_c[0] + pV->m_c[1] * pV->m_c[1]
     + pV->m_c[2] * pV->m_c[2] + pV->m_c[3] * pV->m_c[3];
-  if (s != 0.0f) {
-    s = 1.0f / sqrtf(s);
+  if (s != 0.0F) {
+    s = 1.0F / sqrtf(s);
     pV->m_c[0] *= s;
     pV->m_c[1] *= s;
     pV->m_c[2] *= s;
@@ -210,25 +210,25 @@ static const uint32_t g_bc7_weights4[16]
   = { 0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64 };
 // Precomputed weight constants used during least fit determination. For each
 // entry in g_bc7_weights[]: w * w, (1.0f - w) * w, (1.0f - w) * (1.0f - w), w
-static const float g_bc7_weights2x[4 * 4] = { 0.000000f, 0.000000f, 1.000000f,
-  0.000000f, 0.107666f, 0.220459f, 0.451416f, 0.328125f, 0.451416f, 0.220459f,
-  0.107666f, 0.671875f, 1.000000f, 0.000000f, 0.000000f, 1.000000f };
-static const float g_bc7_weights3x[8 * 4] = { 0.000000f, 0.000000f, 1.000000f,
-  0.000000f, 0.019775f, 0.120850f, 0.738525f, 0.140625f, 0.079102f, 0.202148f,
-  0.516602f, 0.281250f, 0.177979f, 0.243896f, 0.334229f, 0.421875f, 0.334229f,
-  0.243896f, 0.177979f, 0.578125f, 0.516602f, 0.202148f, 0.079102f, 0.718750f,
-  0.738525f, 0.120850f, 0.019775f, 0.859375f, 1.000000f, 0.000000f, 0.000000f,
-  1.000000f };
-static const float g_bc7_weights4x[16 * 4] = { 0.000000f, 0.000000f, 1.000000f,
-  0.000000f, 0.003906f, 0.058594f, 0.878906f, 0.062500f, 0.019775f, 0.120850f,
-  0.738525f, 0.140625f, 0.041260f, 0.161865f, 0.635010f, 0.203125f, 0.070557f,
-  0.195068f, 0.539307f, 0.265625f, 0.107666f, 0.220459f, 0.451416f, 0.328125f,
-  0.165039f, 0.241211f, 0.352539f, 0.406250f, 0.219727f, 0.249023f, 0.282227f,
-  0.468750f, 0.282227f, 0.249023f, 0.219727f, 0.531250f, 0.352539f, 0.241211f,
-  0.165039f, 0.593750f, 0.451416f, 0.220459f, 0.107666f, 0.671875f, 0.539307f,
-  0.195068f, 0.070557f, 0.734375f, 0.635010f, 0.161865f, 0.041260f, 0.796875f,
-  0.738525f, 0.120850f, 0.019775f, 0.859375f, 0.878906f, 0.058594f, 0.003906f,
-  0.937500f, 1.000000f, 0.000000f, 0.000000f, 1.000000f };
+static const float g_bc7_weights2x[4 * 4] = { 0.000000F, 0.000000F, 1.000000F,
+  0.000000F, 0.107666F, 0.220459F, 0.451416F, 0.328125F, 0.451416F, 0.220459F,
+  0.107666F, 0.671875F, 1.000000F, 0.000000F, 0.000000F, 1.000000F };
+static const float g_bc7_weights3x[8 * 4] = { 0.000000F, 0.000000F, 1.000000F,
+  0.000000F, 0.019775F, 0.120850F, 0.738525F, 0.140625F, 0.079102F, 0.202148F,
+  0.516602F, 0.281250F, 0.177979F, 0.243896F, 0.334229F, 0.421875F, 0.334229F,
+  0.243896F, 0.177979F, 0.578125F, 0.516602F, 0.202148F, 0.079102F, 0.718750F,
+  0.738525F, 0.120850F, 0.019775F, 0.859375F, 1.000000F, 0.000000F, 0.000000F,
+  1.000000F };
+static const float g_bc7_weights4x[16 * 4] = { 0.000000F, 0.000000F, 1.000000F,
+  0.000000F, 0.003906F, 0.058594F, 0.878906F, 0.062500F, 0.019775F, 0.120850F,
+  0.738525F, 0.140625F, 0.041260F, 0.161865F, 0.635010F, 0.203125F, 0.070557F,
+  0.195068F, 0.539307F, 0.265625F, 0.107666F, 0.220459F, 0.451416F, 0.328125F,
+  0.165039F, 0.241211F, 0.352539F, 0.406250F, 0.219727F, 0.249023F, 0.282227F,
+  0.468750F, 0.282227F, 0.249023F, 0.219727F, 0.531250F, 0.352539F, 0.241211F,
+  0.165039F, 0.593750F, 0.451416F, 0.220459F, 0.107666F, 0.671875F, 0.539307F,
+  0.195068F, 0.070557F, 0.734375F, 0.635010F, 0.161865F, 0.041260F, 0.796875F,
+  0.738525F, 0.120850F, 0.019775F, 0.859375F, 0.878906F, 0.058594F, 0.003906F,
+  0.937500F, 1.000000F, 0.000000F, 0.000000F, 1.000000F };
 
 static const uint8_t g_bc7_partition1[16]
   = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -1371,17 +1371,17 @@ void bc7enc_compress_block_init()
     for (uint32_t i = 0; i < 32; i++) {
       uint32_t vl = ((i << 1) | p) << 2;
       vl |= (vl >> 6);
-      float lo = vl / 255.0f;
+      float lo = vl / 255.0F;
 
       uint32_t vh = ((minimumi(31, (i + 1)) << 1) | p) << 2;
       vh |= (vh >> 6);
-      float hi = vh / 255.0f;
+      float hi = vh / 255.0F;
 
       // g_mode7_quant_values[i][p] = lo;
       if (i == 31)
-        g_mode7_rgba_midpoints[i][p] = 1.0f;
+        g_mode7_rgba_midpoints[i][p] = 1.0F;
       else
-        g_mode7_rgba_midpoints[i][p] = (lo + hi) / 2.0f;
+        g_mode7_rgba_midpoints[i][p] = (lo + hi) / 2.0F;
     }
   }
 
@@ -1390,17 +1390,17 @@ void bc7enc_compress_block_init()
     for (uint32_t i = 0; i < 64; i++) {
       uint32_t vl = ((i << 1) | p) << 1;
       vl |= (vl >> 7);
-      float lo = vl / 255.0f;
+      float lo = vl / 255.0F;
 
       uint32_t vh = ((minimumi(63, (i + 1)) << 1) | p) << 1;
       vh |= (vh >> 7);
-      float hi = vh / 255.0f;
+      float hi = vh / 255.0F;
 
       // g_mode1_quant_values[i][p] = lo;
       if (i == 63)
-        g_mode1_rgba_midpoints[i][p] = 1.0f;
+        g_mode1_rgba_midpoints[i][p] = 1.0F;
       else
-        g_mode1_rgba_midpoints[i][p] = (lo + hi) / 2.0f;
+        g_mode1_rgba_midpoints[i][p] = (lo + hi) / 2.0F;
     }
   }
 
@@ -1408,27 +1408,27 @@ void bc7enc_compress_block_init()
   for (uint32_t i = 0; i < 128; i++) {
     uint32_t vl = (i << 1);
     vl |= (vl >> 7);
-    float lo = vl / 255.0f;
+    float lo = vl / 255.0F;
 
     uint32_t vh = minimumi(127, i + 1) << 1;
     vh |= (vh >> 7);
-    float hi = vh / 255.0f;
+    float hi = vh / 255.0F;
 
     if (i == 127)
-      g_mode5_rgba_midpoints[i] = 1.0f;
+      g_mode5_rgba_midpoints[i] = 1.0F;
     else
-      g_mode5_rgba_midpoints[i] = (lo + hi) / 2.0f;
+      g_mode5_rgba_midpoints[i] = (lo + hi) / 2.0F;
   }
 
   for (uint32_t p = 0; p < 2; p++) {
     for (uint32_t i = 0; i < 2048; i++) {
-      float f = i / 2047.0f;
+      float f = i / 2047.0F;
 
-      float best_err = 1e+9f;
+      float best_err = 1e+9F;
       int best_index = 0;
       for (int j = 0; j < 64; j++) {
         int ik = (j * 127 + 31) / 63;
-        float k = ((ik << 1) + p) / 255.0f;
+        float k = ((ik << 1) + p) / 255.0F;
 
         float e = fabsf(k - f);
         if (e < best_err) {
@@ -1518,11 +1518,11 @@ static void compute_least_squares_endpoints_rgba(uint32_t N,
   // http://www.cs.cornell.edu/~bindel/class/cs3220-s12/notes/lec10.pdf I did
   // this in matrix form first, expanded out all the ops, then optimized it a
   // bit.
-  float z00 = 0.0f, z01 = 0.0f, z10 = 0.0f, z11 = 0.0f;
-  float q00_r = 0.0f, q10_r = 0.0f, t_r = 0.0f;
-  float q00_g = 0.0f, q10_g = 0.0f, t_g = 0.0f;
-  float q00_b = 0.0f, q10_b = 0.0f, t_b = 0.0f;
-  float q00_a = 0.0f, q10_a = 0.0f, t_a = 0.0f;
+  float z00 = 0.0F, z01 = 0.0F, z10 = 0.0F, z11 = 0.0F;
+  float q00_r = 0.0F, q10_r = 0.0F, t_r = 0.0F;
+  float q00_g = 0.0F, q10_g = 0.0F, t_g = 0.0F;
+  float q00_b = 0.0F, q10_b = 0.0F, t_b = 0.0F;
+  float q00_a = 0.0F, q10_a = 0.0F, t_a = 0.0F;
   for (uint32_t i = 0; i < N; i++) {
     const uint32_t sel = pSelectors[i];
     z00 += pSelector_weights[sel].m_c[0];
@@ -1547,8 +1547,8 @@ static void compute_least_squares_endpoints_rgba(uint32_t N,
   z01 = z10;
 
   float det = z00 * z11 - z01 * z10;
-  if (det != 0.0f)
-    det = 1.0f / det;
+  if (det != 0.0F)
+    det = 1.0F / det;
 
   float iz00, iz01, iz10, iz11;
   iz00 = z11 * det;
@@ -1566,7 +1566,7 @@ static void compute_least_squares_endpoints_rgba(uint32_t N,
   pXh->m_c[3] = iz10 * q00_a + iz11 * q10_a;
 
   for (uint32_t c = 0; c < 4; c++) {
-    if ((pXl->m_c[c] < 0.0f) || (pXh->m_c[c] > 255.0f)) {
+    if ((pXl->m_c[c] < 0.0F) || (pXh->m_c[c] > 255.0F)) {
       uint32_t lo_v = UINT32_MAX, hi_v = 0;
       for (uint32_t i = 0; i < N; i++) {
         lo_v = minimumu(lo_v, pColors[i].m_c[c]);
@@ -1585,10 +1585,10 @@ static void compute_least_squares_endpoints_rgb(uint32_t N,
   const uint8_t* pSelectors, const vec4F* pSelector_weights, vec4F* pXl,
   vec4F* pXh, const color_rgba* pColors)
 {
-  float z00 = 0.0f, z01 = 0.0f, z10 = 0.0f, z11 = 0.0f;
-  float q00_r = 0.0f, q10_r = 0.0f, t_r = 0.0f;
-  float q00_g = 0.0f, q10_g = 0.0f, t_g = 0.0f;
-  float q00_b = 0.0f, q10_b = 0.0f, t_b = 0.0f;
+  float z00 = 0.0F, z01 = 0.0F, z10 = 0.0F, z11 = 0.0F;
+  float q00_r = 0.0F, q10_r = 0.0F, t_r = 0.0F;
+  float q00_g = 0.0F, q10_g = 0.0F, t_g = 0.0F;
+  float q00_b = 0.0F, q10_b = 0.0F, t_b = 0.0F;
   for (uint32_t i = 0; i < N; i++) {
     const uint32_t sel = pSelectors[i];
     z00 += pSelector_weights[sel].m_c[0];
@@ -1610,8 +1610,8 @@ static void compute_least_squares_endpoints_rgb(uint32_t N,
   z01 = z10;
 
   float det = z00 * z11 - z01 * z10;
-  if (det != 0.0f)
-    det = 1.0f / det;
+  if (det != 0.0F)
+    det = 1.0F / det;
 
   float iz00, iz01, iz10, iz11;
   iz00 = z11 * det;
@@ -1625,11 +1625,11 @@ static void compute_least_squares_endpoints_rgb(uint32_t N,
   pXh->m_c[1] = iz10 * q00_g + iz11 * q10_g;
   pXl->m_c[2] = iz00 * q00_b + iz01 * q10_b;
   pXh->m_c[2] = iz10 * q00_b + iz11 * q10_b;
-  pXl->m_c[3] = 255.0f;
-  pXh->m_c[3] = 255.0f;
+  pXl->m_c[3] = 255.0F;
+  pXh->m_c[3] = 255.0F;
 
   for (uint32_t c = 0; c < 3; c++) {
-    if ((pXl->m_c[c] < 0.0f) || (pXh->m_c[c] > 255.0f)) {
+    if ((pXl->m_c[c] < 0.0F) || (pXh->m_c[c] > 255.0F)) {
       uint32_t lo_v = UINT32_MAX, hi_v = 0;
       for (uint32_t i = 0; i < N; i++) {
         lo_v = minimumu(lo_v, pColors[i].m_c[c]);
@@ -1652,8 +1652,8 @@ static void compute_least_squares_endpoints_a(uint32_t N,
   // http://www.cs.cornell.edu/~bindel/class/cs3220-s12/notes/lec10.pdf I did
   // this in matrix form first, expanded out all the ops, then optimized it a
   // bit.
-  float z00 = 0.0f, z01 = 0.0f, z10 = 0.0f, z11 = 0.0f;
-  float q00_a = 0.0f, q10_a = 0.0f, t_a = 0.0f;
+  float z00 = 0.0F, z01 = 0.0F, z10 = 0.0F, z11 = 0.0F;
+  float q00_a = 0.0F, q10_a = 0.0F, t_a = 0.0F;
   for (uint32_t i = 0; i < N; i++) {
     const uint32_t sel = pSelectors[i];
 
@@ -1672,8 +1672,8 @@ static void compute_least_squares_endpoints_a(uint32_t N,
   z01 = z10;
 
   float det = z00 * z11 - z01 * z10;
-  if (det != 0.0f)
-    det = 1.0f / det;
+  if (det != 0.0F)
+    det = 1.0F / det;
 
   float iz00, iz01, iz10, iz11;
   iz00 = z11 * det;
@@ -1684,7 +1684,7 @@ static void compute_least_squares_endpoints_a(uint32_t N,
   *pXl = iz00 * q00_a + iz01 * q10_a;
   *pXh = iz10 * q00_a + iz11 * q10_a;
 
-  if ((*pXl < 0.0f) || (*pXh > 255.0f)) {
+  if ((*pXl < 0.0F) || (*pXh > 255.0F)) {
     uint32_t lo_v = UINT32_MAX, hi_v = 0;
     for (uint32_t i = 0; i < N; i++) {
       lo_v = minimumu(lo_v, pColors[i].m_c[3]);
@@ -2101,7 +2101,7 @@ static void fixDegenerateEndpoints(uint32_t mode, color_rgba* pTrialMinColor,
     // voxel, and we loose all freedom (test with grayscale ramps)
     for (uint32_t i = 0; i < 3; i++) {
       if (pTrialMinColor->m_c[i] == pTrialMaxColor->m_c[i]) {
-        if (fabs(pXl->m_c[i] - pXh->m_c[i]) > 0.0f) {
+        if (fabs(pXl->m_c[i] - pXh->m_c[i]) > 0.0F) {
           if (pTrialMinColor->m_c[i] > (iscale >> 1)) {
             if (pTrialMinColor->m_c[i] > 0)
               pTrialMinColor->m_c[i]--;
@@ -2141,23 +2141,23 @@ static auto find_optimal_solution(uint32_t mode, vec4F xl, vec4F xh,
         && (pComp_params->m_quant_mode6_endpoints)) {
         best_pbits[0] = 0;
         bestMinColor.m_c[0]
-          = g_mode6_reduced_quant[(int)((xl.m_c[0] * 2047.0f) + .5f)][0];
+          = g_mode6_reduced_quant[(int)((xl.m_c[0] * 2047.0F) + .5f)][0];
         bestMinColor.m_c[1]
-          = g_mode6_reduced_quant[(int)((xl.m_c[1] * 2047.0f) + .5f)][0];
+          = g_mode6_reduced_quant[(int)((xl.m_c[1] * 2047.0F) + .5f)][0];
         bestMinColor.m_c[2]
-          = g_mode6_reduced_quant[(int)((xl.m_c[2] * 2047.0f) + .5f)][0];
+          = g_mode6_reduced_quant[(int)((xl.m_c[2] * 2047.0F) + .5f)][0];
         bestMinColor.m_c[3]
-          = g_mode6_reduced_quant[(int)((xl.m_c[3] * 2047.0f) + .5f)][0];
+          = g_mode6_reduced_quant[(int)((xl.m_c[3] * 2047.0F) + .5f)][0];
 
         best_pbits[1] = 1;
         bestMaxColor.m_c[0]
-          = g_mode6_reduced_quant[(int)((xh.m_c[0] * 2047.0f) + .5f)][1];
+          = g_mode6_reduced_quant[(int)((xh.m_c[0] * 2047.0F) + .5f)][1];
         bestMaxColor.m_c[1]
-          = g_mode6_reduced_quant[(int)((xh.m_c[1] * 2047.0f) + .5f)][1];
+          = g_mode6_reduced_quant[(int)((xh.m_c[1] * 2047.0F) + .5f)][1];
         bestMaxColor.m_c[2]
-          = g_mode6_reduced_quant[(int)((xh.m_c[2] * 2047.0f) + .5f)][1];
+          = g_mode6_reduced_quant[(int)((xh.m_c[2] * 2047.0F) + .5f)][1];
         bestMaxColor.m_c[3]
-          = g_mode6_reduced_quant[(int)((xh.m_c[3] * 2047.0f) + .5f)][1];
+          = g_mode6_reduced_quant[(int)((xh.m_c[3] * 2047.0F) + .5f)][1];
       } else {
         float best_err0 = 1e+9;
         float best_err1 = 1e+9;
@@ -2174,21 +2174,21 @@ static auto find_optimal_solution(uint32_t mode, vec4F xl, vec4F xh,
           // you get for pbit 1: b=floor((v*(total_levels-1)-1)/2+.5)
           if (pParams->m_comp_bits == 5) {
             for (uint32_t c = 0; c < 4; c++) {
-              int vl = (int)(xl.m_c[c] * 31.0f);
+              int vl = (int)(xl.m_c[c] * 31.0F);
               vl += (xl.m_c[c] > g_mode7_rgba_midpoints[vl][p]);
               xMinColor.m_c[c] = (uint8_t)clampi(vl * 2 + p, p, 63 - 1 + p);
 
-              int vh = (int)(xh.m_c[c] * 31.0f);
+              int vh = (int)(xh.m_c[c] * 31.0F);
               vh += (xh.m_c[c] > g_mode7_rgba_midpoints[vh][p]);
               xMaxColor.m_c[c] = (uint8_t)clampi(vh * 2 + p, p, 63 - 1 + p);
             }
           } else {
             for (uint32_t c = 0; c < 4; c++) {
               xMinColor.m_c[c] = (uint8_t)(clampi(
-                ((int)((xl.m_c[c] * scalep - p) / 2.0f + .5f)) * 2 + p, p,
+                ((int)((xl.m_c[c] * scalep - p) / 2.0F + .5f)) * 2 + p, p,
                 iscalep - 1 + p));
               xMaxColor.m_c[c] = (uint8_t)(clampi(
-                ((int)((xh.m_c[c] * scalep - p) / 2.0f + .5f)) * 2 + p, p,
+                ((int)((xh.m_c[c] * scalep - p) / 2.0F + .5f)) * 2 + p, p,
                 iscalep - 1 + p));
             }
           }
@@ -2198,8 +2198,8 @@ static auto find_optimal_solution(uint32_t mode, vec4F xl, vec4F xh,
 
           float err0 = 0, err1 = 0;
           for (int i = 0; i < totalComps; i++) {
-            err0 += squaref(scaledLow.m_c[i] - xl.m_c[i] * 255.0f);
-            err1 += squaref(scaledHigh.m_c[i] - xh.m_c[i] * 255.0f);
+            err0 += squaref(scaledLow.m_c[i] - xl.m_c[i] * 255.0F);
+            err1 += squaref(scaledHigh.m_c[i] - xh.m_c[i] * 255.0F);
           }
 
           if (p == 1) {
@@ -2230,21 +2230,21 @@ static auto find_optimal_solution(uint32_t mode, vec4F xl, vec4F xh,
       }
     } else {
       if ((mode == 1) && (pComp_params->m_bias_mode1_pbits)) {
-        float x = 0.0f;
+        float x = 0.0F;
         for (uint32_t c = 0; c < 3; c++)
           x = std::max(std::max(x, xl.m_c[c]), xh.m_c[c]);
 
         int p = 0;
-        if (x > (253.0f / 255.0f))
+        if (x > (253.0F / 255.0F))
           p = 1;
 
         color_rgba xMinColor, xMaxColor;
         for (uint32_t c = 0; c < 4; c++) {
-          int vl = (int)(xl.m_c[c] * 63.0f);
+          int vl = (int)(xl.m_c[c] * 63.0F);
           vl += (xl.m_c[c] > g_mode1_rgba_midpoints[vl][p]);
           xMinColor.m_c[c] = (uint8_t)clampi(vl * 2 + p, p, 127 - 1 + p);
 
-          int vh = (int)(xh.m_c[c] * 63.0f);
+          int vh = (int)(xh.m_c[c] * 63.0F);
           vh += (xh.m_c[c] > g_mode1_rgba_midpoints[vh][p]);
           xMaxColor.m_c[c] = (uint8_t)clampi(vh * 2 + p, p, 127 - 1 + p);
         }
@@ -2263,21 +2263,21 @@ static auto find_optimal_solution(uint32_t mode, vec4F xl, vec4F xh,
           color_rgba xMinColor, xMaxColor;
           if (pParams->m_comp_bits == 6) {
             for (uint32_t c = 0; c < 4; c++) {
-              int vl = (int)(xl.m_c[c] * 63.0f);
+              int vl = (int)(xl.m_c[c] * 63.0F);
               vl += (xl.m_c[c] > g_mode1_rgba_midpoints[vl][p]);
               xMinColor.m_c[c] = (uint8_t)clampi(vl * 2 + p, p, 127 - 1 + p);
 
-              int vh = (int)(xh.m_c[c] * 63.0f);
+              int vh = (int)(xh.m_c[c] * 63.0F);
               vh += (xh.m_c[c] > g_mode1_rgba_midpoints[vh][p]);
               xMaxColor.m_c[c] = (uint8_t)clampi(vh * 2 + p, p, 127 - 1 + p);
             }
           } else {
             for (uint32_t c = 0; c < 4; c++) {
               xMinColor.m_c[c] = (uint8_t)(clampi(
-                ((int)((xl.m_c[c] * scalep - p) / 2.0f + .5f)) * 2 + p, p,
+                ((int)((xl.m_c[c] * scalep - p) / 2.0F + .5f)) * 2 + p, p,
                 iscalep - 1 + p));
               xMaxColor.m_c[c] = (uint8_t)(clampi(
-                ((int)((xh.m_c[c] * scalep - p) / 2.0f + .5f)) * 2 + p, p,
+                ((int)((xh.m_c[c] * scalep - p) / 2.0F + .5f)) * 2 + p, p,
                 iscalep - 1 + p));
             }
           }
@@ -2287,8 +2287,8 @@ static auto find_optimal_solution(uint32_t mode, vec4F xl, vec4F xh,
 
           float err = 0;
           for (int i = 0; i < totalComps; i++)
-            err += squaref((scaledLow.m_c[i] / 255.0f) - xl.m_c[i])
-              + squaref((scaledHigh.m_c[i] / 255.0f) - xh.m_c[i]);
+            err += squaref((scaledLow.m_c[i] / 255.0F) - xl.m_c[i])
+              + squaref((scaledHigh.m_c[i] / 255.0F) - xh.m_c[i]);
 
           if (p == 1)
             err *= pComp_params->m_pbit1_weight;
@@ -2323,11 +2323,11 @@ static auto find_optimal_solution(uint32_t mode, vec4F xl, vec4F xh,
     color_rgba trialMinColor, trialMaxColor;
     if (pParams->m_comp_bits == 7) {
       for (uint32_t c = 0; c < 4; c++) {
-        int vl = (int)(xl.m_c[c] * 127.0f);
+        int vl = (int)(xl.m_c[c] * 127.0F);
         vl += (xl.m_c[c] > g_mode5_rgba_midpoints[vl]);
         trialMinColor.m_c[c] = (uint8_t)clampi(vl, 0, 127);
 
-        int vh = (int)(xh.m_c[c] * 127.0f);
+        int vh = (int)(xh.m_c[c] * 127.0F);
         vh += (xh.m_c[c] > g_mode5_rgba_midpoints[vh]);
         trialMaxColor.m_c[c] = (uint8_t)clampi(vh, 0, 127);
       }
@@ -2406,7 +2406,7 @@ static auto color_cell_compression(uint32_t mode,
 
   // Compute partition's mean color and principle axis.
   vec4F meanColor, axis;
-  vec4F_set_scalar(&meanColor, 0.0f);
+  vec4F_set_scalar(&meanColor, 0.0F);
 
   for (uint32_t i = 0; i < pParams->m_num_pixels; i++) {
     vec4F color = vec4F_from_color(&pParams->m_pPixels[i]);
@@ -2414,14 +2414,14 @@ static auto color_cell_compression(uint32_t mode,
   }
 
   vec4F meanColorScaled
-    = vec4F_mul(&meanColor, 1.0f / (float)(pParams->m_num_pixels));
+    = vec4F_mul(&meanColor, 1.0F / (float)(pParams->m_num_pixels));
 
-  meanColor = vec4F_mul(&meanColor, 1.0f / (pParams->m_num_pixels * 255.0f));
+  meanColor = vec4F_mul(&meanColor, 1.0F / (pParams->m_num_pixels * 255.0F));
   vec4F_saturate_in_place(&meanColor);
 
   if (pParams->m_has_alpha) {
     // Use incremental PCA for RGBA PCA, because it's simple.
-    vec4F_set_scalar(&axis, 0.0f);
+    vec4F_set_scalar(&axis, 0.0F);
     for (uint32_t i = 0; i < pParams->m_num_pixels; i++) {
       vec4F color = vec4F_from_color(&pParams->m_pPixels[i]);
       color = vec4F_sub(&color, &meanColorScaled);
@@ -2455,15 +2455,15 @@ static auto color_cell_compression(uint32_t mode,
       cov[5] += b * b;
     }
 
-    float vfr = .9f, vfg = 1.0f, vfb = .7f;
+    float vfr = .9f, vfg = 1.0F, vfb = .7f;
     for (uint32_t iter = 0; iter < 3; iter++) {
       float r = vfr * cov[0] + vfg * cov[1] + vfb * cov[2];
       float g = vfr * cov[1] + vfg * cov[3] + vfb * cov[4];
       float b = vfr * cov[2] + vfg * cov[4] + vfb * cov[5];
 
       float m = maximumf(maximumf(fabsf(r), fabsf(g)), fabsf(b));
-      if (m > 1e-10f) {
-        m = 1.0f / m;
+      if (m > 1e-10F) {
+        m = 1.0F / m;
         r *= m;
         g *= m;
         b *= m;
@@ -2475,10 +2475,10 @@ static auto color_cell_compression(uint32_t mode,
     }
 
     float len = vfr * vfr + vfg * vfg + vfb * vfb;
-    if (len < 1e-10f)
-      vec4F_set_scalar(&axis, 0.0f);
+    if (len < 1e-10F)
+      vec4F_set_scalar(&axis, 0.0F);
     else {
-      len = 1.0f / sqrtf(len);
+      len = 1.0F / sqrtf(len);
       vfr *= len;
       vfg *= len;
       vfb *= len;
@@ -2493,11 +2493,11 @@ static auto color_cell_compression(uint32_t mode,
     if (pParams->m_perceptual)
       vec4F_set(&axis, .213f, .715f, .072f, pParams->m_has_alpha ? .715f : 0);
     else
-      vec4F_set(&axis, 1.0f, 1.0f, 1.0f, pParams->m_has_alpha ? 1.0f : 0);
+      vec4F_set(&axis, 1.0F, 1.0F, 1.0F, pParams->m_has_alpha ? 1.0F : 0);
     vec4F_normalize_in_place(&axis);
   }
 
-  float l = 1e+9f, h = -1e+9f;
+  float l = 1e+9F, h = -1e+9F;
 
   for (uint32_t i = 0; i < pParams->m_num_pixels; i++) {
     vec4F color = vec4F_from_color(&pParams->m_pPixels[i]);
@@ -2509,8 +2509,8 @@ static auto color_cell_compression(uint32_t mode,
     h = maximumf(h, d);
   }
 
-  l *= (1.0f / 255.0f);
-  h *= (1.0f / 255.0f);
+  l *= (1.0F / 255.0F);
+  h *= (1.0F / 255.0F);
 
   vec4F b0 = vec4F_mul(&axis, l);
   vec4F b1 = vec4F_mul(&axis, h);
@@ -2520,7 +2520,7 @@ static auto color_cell_compression(uint32_t mode,
   vec4F maxColor = vec4F_saturate(&c1);
 
   vec4F whiteVec;
-  vec4F_set_scalar(&whiteVec, 1.0f);
+  vec4F_set_scalar(&whiteVec, 1.0F);
 
   if (vec4F_dot(&minColor, &whiteVec) > vec4F_dot(&maxColor, &whiteVec)) {
 #if 0
@@ -2551,8 +2551,8 @@ static auto color_cell_compression(uint32_t mode,
     // Now try to refine the solution using least squares by computing the
     // optimal endpoints from the current selectors.
     vec4F xl, xh;
-    vec4F_set_scalar(&xl, 0.0f);
-    vec4F_set_scalar(&xh, 0.0f);
+    vec4F_set_scalar(&xl, 0.0F);
+    vec4F_set_scalar(&xh, 0.0F);
     if (pParams->m_has_alpha)
       compute_least_squares_endpoints_rgba(pParams->m_num_pixels,
         pResults->m_pSelectors, pParams->m_pSelector_weightsx, &xl, &xh,
@@ -2562,8 +2562,8 @@ static auto color_cell_compression(uint32_t mode,
         pResults->m_pSelectors, pParams->m_pSelector_weightsx, &xl, &xh,
         pParams->m_pPixels);
 
-    xl = vec4F_mul(&xl, (1.0f / 255.0f));
-    xh = vec4F_mul(&xh, (1.0f / 255.0f));
+    xl = vec4F_mul(&xl, (1.0F / 255.0F));
+    xh = vec4F_mul(&xh, (1.0F / 255.0F));
 
     if (!find_optimal_solution(mode, xl, xh, pParams, pResults, pComp_params))
       return 0;
@@ -2594,8 +2594,8 @@ static auto color_cell_compression(uint32_t mode,
     }
 
     vec4F xl, xh;
-    vec4F_set_scalar(&xl, 0.0f);
-    vec4F_set_scalar(&xh, 0.0f);
+    vec4F_set_scalar(&xl, 0.0F);
+    vec4F_set_scalar(&xh, 0.0F);
     if (pParams->m_has_alpha)
       compute_least_squares_endpoints_rgba(pParams->m_num_pixels,
         selectors_temp1, pParams->m_pSelector_weightsx, &xl, &xh,
@@ -2605,8 +2605,8 @@ static auto color_cell_compression(uint32_t mode,
         selectors_temp1, pParams->m_pSelector_weightsx, &xl, &xh,
         pParams->m_pPixels);
 
-    xl = vec4F_mul(&xl, (1.0f / 255.0f));
-    xh = vec4F_mul(&xh, (1.0f / 255.0f));
+    xl = vec4F_mul(&xl, (1.0F / 255.0F));
+    xh = vec4F_mul(&xh, (1.0F / 255.0F));
 
     if (!find_optimal_solution(mode, xl, xh, pParams, pResults, pComp_params))
       return 0;
@@ -2627,8 +2627,8 @@ static auto color_cell_compression(uint32_t mode,
         selectors_temp1, pParams->m_pSelector_weightsx, &xl, &xh,
         pParams->m_pPixels);
 
-    xl = vec4F_mul(&xl, (1.0f / 255.0f));
-    xh = vec4F_mul(&xh, (1.0f / 255.0f));
+    xl = vec4F_mul(&xl, (1.0F / 255.0F));
+    xh = vec4F_mul(&xh, (1.0F / 255.0F));
 
     if (!find_optimal_solution(mode, xl, xh, pParams, pResults, pComp_params))
       return 0;
@@ -2651,8 +2651,8 @@ static auto color_cell_compression(uint32_t mode,
         selectors_temp1, pParams->m_pSelector_weightsx, &xl, &xh,
         pParams->m_pPixels);
 
-    xl = vec4F_mul(&xl, (1.0f / 255.0f));
-    xh = vec4F_mul(&xh, (1.0f / 255.0f));
+    xl = vec4F_mul(&xl, (1.0F / 255.0F));
+    xh = vec4F_mul(&xh, (1.0F / 255.0F));
 
     if (!find_optimal_solution(mode, xl, xh, pParams, pResults, pComp_params))
       return 0;
@@ -2679,8 +2679,8 @@ static auto color_cell_compression(uint32_t mode,
                 0, (float)max_selector);
 
           // vec4F xl, xh;
-          vec4F_set_scalar(&xl, 0.0f);
-          vec4F_set_scalar(&xh, 0.0f);
+          vec4F_set_scalar(&xl, 0.0F);
+          vec4F_set_scalar(&xh, 0.0F);
           if (pParams->m_has_alpha)
             compute_least_squares_endpoints_rgba(pParams->m_num_pixels,
               selectors_temp1, pParams->m_pSelector_weightsx, &xl, &xh,
@@ -2690,8 +2690,8 @@ static auto color_cell_compression(uint32_t mode,
               selectors_temp1, pParams->m_pSelector_weightsx, &xl, &xh,
               pParams->m_pPixels);
 
-          xl = vec4F_mul(&xl, (1.0f / 255.0f));
-          xh = vec4F_mul(&xh, (1.0f / 255.0f));
+          xl = vec4F_mul(&xl, (1.0F / 255.0F));
+          xh = vec4F_mul(&xh, (1.0F / 255.0F));
 
           if (!find_optimal_solution(
                 mode, xl, xh, pParams, pResults, pComp_params))
@@ -2705,9 +2705,9 @@ static auto color_cell_compression(uint32_t mode,
     // Try encoding the partition as a single color by using the optimal singe
     // colors tables to encode the block to its mean.
     color_cell_compressor_results avg_results = *pResults;
-    const uint32_t r = (int)(.5f + meanColor.m_c[0] * 255.0f),
-                   g = (int)(.5f + meanColor.m_c[1] * 255.0f),
-                   b = (int)(.5f + meanColor.m_c[2] * 255.0f);
+    const uint32_t r = (int)(.5f + meanColor.m_c[0] * 255.0F),
+                   g = (int)(.5f + meanColor.m_c[1] * 255.0F),
+                   b = (int)(.5f + meanColor.m_c[2] * 255.0F);
     uint64_t avg_err = pack_mode1_to_one_color(
       pParams, &avg_results, r, g, b, pResults->m_pSelectors_temp);
     if (avg_err < pResults->m_best_overall_err) {
@@ -2720,10 +2720,10 @@ static auto color_cell_compression(uint32_t mode,
     // Try encoding the partition as a single color by using the optimal singe
     // colors tables to encode the block to its mean.
     color_cell_compressor_results avg_results = *pResults;
-    const uint32_t r = (int)(.5f + meanColor.m_c[0] * 255.0f),
-                   g = (int)(.5f + meanColor.m_c[1] * 255.0f),
-                   b = (int)(.5f + meanColor.m_c[2] * 255.0f),
-                   a = (int)(.5f + meanColor.m_c[3] * 255.0f);
+    const uint32_t r = (int)(.5f + meanColor.m_c[0] * 255.0F),
+                   g = (int)(.5f + meanColor.m_c[1] * 255.0F),
+                   b = (int)(.5f + meanColor.m_c[2] * 255.0F),
+                   a = (int)(.5f + meanColor.m_c[3] * 255.0F);
     uint64_t avg_err
       = pack_mode7_to_one_color(pParams, &avg_results, r, g, b, a,
         pResults->m_pSelectors_temp, pParams->m_num_pixels, pParams->m_pPixels);
@@ -3749,11 +3749,11 @@ auto bc7enc_compress_block(void* pBlock, const void* pPixelsRGBA,
   color_cell_compressor_params params;
   if (pComp_params->m_perceptual) {
     // https://en.wikipedia.org/wiki/YCbCr#ITU-R_BT.709_conversion
-    const float pr_weight = (.5f / (1.0f - .2126f)) * (.5f / (1.0f - .2126f));
-    const float pb_weight = (.5f / (1.0f - .0722f)) * (.5f / (1.0f - .0722f));
-    params.m_weights[0] = (int)(pComp_params->m_weights[0] * 4.0f);
-    params.m_weights[1] = (int)(pComp_params->m_weights[1] * 4.0f * pr_weight);
-    params.m_weights[2] = (int)(pComp_params->m_weights[2] * 4.0f * pb_weight);
+    const float pr_weight = (.5f / (1.0F - .2126f)) * (.5f / (1.0F - .2126f));
+    const float pb_weight = (.5f / (1.0F - .0722f)) * (.5f / (1.0F - .0722f));
+    params.m_weights[0] = (int)(pComp_params->m_weights[0] * 4.0F);
+    params.m_weights[1] = (int)(pComp_params->m_weights[1] * 4.0F * pr_weight);
+    params.m_weights[2] = (int)(pComp_params->m_weights[2] * 4.0F * pb_weight);
     params.m_weights[3] = pComp_params->m_weights[3] * 4;
   } else
     memcpy(params.m_weights, pComp_params->m_weights, sizeof(params.m_weights));
@@ -3860,12 +3860,12 @@ public:
 
   auto get_average() const -> float
   {
-    return m_num ? (float)m_total / m_num : 0.0f;
+    return m_num ? (float)m_total / m_num : 0.0F;
   };
   auto get_std_dev() const -> float
   {
     return m_num ? sqrtf((float)(m_num * m_total2 - m_total * m_total)) / m_num
-                 : 0.0f;
+                 : 0.0F;
   }
   auto get_variance() const -> float
   {

@@ -210,7 +210,7 @@ NOLINT_TEST_F(BufferResourceDataSizeTest, DataSizeMatchesDescriptor)
   std::vector<uint8_t> bytes(48, 0x11);
 
   BufferResource resource { desc, std::move(bytes) };
-  EXPECT_EQ(resource.GetDataSize(), 48u);
+  EXPECT_EQ(resource.GetDataSize(), 48U);
 }
 
 } // namespace
@@ -239,15 +239,15 @@ NOLINT_TEST_F(BufferResourceMoveTest, MoveConstructor_TransfersOwnership)
   std::vector<uint8_t> bytes(32, 0x5A);
 
   BufferResource original { desc, std::move(bytes) };
-  ASSERT_EQ(original.GetDataSize(), 32u);
+  ASSERT_EQ(original.GetDataSize(), 32U);
 
   // Act
   BufferResource moved { std::move(original) };
 
   // Assert
-  EXPECT_EQ(moved.GetDataSize(), 32u);
-  EXPECT_EQ(original.GetDataSize(), 0u); // NOLINT(bugprone-use-after-move)
-  EXPECT_EQ(moved.GetDataOffset(), 128u);
+  EXPECT_EQ(moved.GetDataSize(), 32U);
+  EXPECT_EQ(original.GetDataSize(), 0U); // NOLINT(bugprone-use-after-move)
+  EXPECT_EQ(moved.GetDataOffset(), 128U);
 }
 
 //! Tests to_string coverage for combined UsageFlags values.

@@ -35,13 +35,13 @@ using oxygen::graphics::TextureSlice;
 using oxygen::graphics::TextureUploadRegion;
 using oxygen::graphics::d3d12::testing::ReadbackTestFixture;
 
-constexpr auto kD3D12RowPitch = 256u;
+constexpr auto kD3D12RowPitch = 256U;
 
 auto WriteRgbaTexel(std::vector<std::byte>& buffer, const uint32_t row_pitch,
   const uint32_t x, const uint32_t y, const std::array<uint8_t, 4>& rgba)
   -> void
 {
-  const auto offset = static_cast<size_t>(y) * row_pitch + (x * 4u);
+  const auto offset = static_cast<size_t>(y) * row_pitch + (x * 4U);
   buffer[offset + 0] = static_cast<std::byte>(rgba[0]);
   buffer[offset + 1] = static_cast<std::byte>(rgba[1]);
   buffer[offset + 2] = static_cast<std::byte>(rgba[2]);
@@ -94,9 +94,9 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
   const auto& layout = texture->GetReadbackSurfaceLayout();
   EXPECT_EQ(layout.subresource_count, desc.array_size * desc.mip_levels);
   EXPECT_EQ(layout.subresources.size(), desc.array_size * desc.mip_levels);
-  EXPECT_GT(layout.total_bytes, 0u);
+  EXPECT_GT(layout.total_bytes, 0U);
   EXPECT_GT(
-    layout.subresources.front().placed_footprint.Footprint.RowPitch, 0u);
+    layout.subresources.front().placed_footprint.Footprint.RowPitch, 0U);
 
   auto* native = texture->GetNativeResource()->AsPointer<ID3D12Resource>();
   ASSERT_NE(native, nullptr);
@@ -135,8 +135,8 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
   for (uint32_t y = 0; y < texture_desc.height; ++y) {
     for (uint32_t x = 0; x < texture_desc.width; ++x) {
       WriteRgbaTexel(upload_bytes, kD3D12RowPitch, x, y,
-        { static_cast<uint8_t>(10u * y + x), static_cast<uint8_t>(100u + x),
-          static_cast<uint8_t>(150u + y), static_cast<uint8_t>(200u + x + y) });
+        { static_cast<uint8_t>(10U * y + x), static_cast<uint8_t>(100U + x),
+          static_cast<uint8_t>(150U + y), static_cast<uint8_t>(200U + x + y) });
     }
   }
   upload->Update(upload_bytes.data(), upload_bytes.size(), 0);
@@ -193,7 +193,7 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
   WaitForQueueIdle();
 
   auto* mapped = static_cast<const std::byte*>(
-    readback->Map(readback_region.buffer_offset.get(), kD3D12RowPitch * 2u));
+    readback->Map(readback_region.buffer_offset.get(), kD3D12RowPitch * 2U));
   ASSERT_NE(mapped, nullptr);
 
   const auto first_row = ReadBytes(mapped, 8);
@@ -201,9 +201,9 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
   readback->UnMap();
 
   EXPECT_EQ(first_row,
-    (std::vector<uint8_t> { 11u, 101u, 151u, 202u, 12u, 102u, 151u, 203u }));
+    (std::vector<uint8_t> { 11U, 101U, 151U, 202U, 12U, 102U, 151U, 203U }));
   EXPECT_EQ(second_row,
-    (std::vector<uint8_t> { 21u, 101u, 152u, 203u, 22u, 102u, 152u, 204u }));
+    (std::vector<uint8_t> { 21U, 101U, 152U, 203U, 22U, 102U, 152U, 204U }));
 }
 
 NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
@@ -233,10 +233,10 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
 
   std::vector<std::byte> upload_bytes(
     kD3D12RowPitch * texture_desc.height, std::byte { 0 });
-  WriteRgbaTexel(upload_bytes, kD3D12RowPitch, 0, 0, { 1u, 2u, 3u, 4u });
-  WriteRgbaTexel(upload_bytes, kD3D12RowPitch, 1, 0, { 5u, 6u, 7u, 8u });
-  WriteRgbaTexel(upload_bytes, kD3D12RowPitch, 0, 1, { 9u, 10u, 11u, 12u });
-  WriteRgbaTexel(upload_bytes, kD3D12RowPitch, 1, 1, { 13u, 14u, 15u, 16u });
+  WriteRgbaTexel(upload_bytes, kD3D12RowPitch, 0, 0, { 1U, 2U, 3U, 4U });
+  WriteRgbaTexel(upload_bytes, kD3D12RowPitch, 1, 0, { 5U, 6U, 7U, 8U });
+  WriteRgbaTexel(upload_bytes, kD3D12RowPitch, 0, 1, { 9U, 10U, 11U, 12U });
+  WriteRgbaTexel(upload_bytes, kD3D12RowPitch, 1, 1, { 13U, 14U, 15U, 16U });
   upload->Update(upload_bytes.data(), upload_bytes.size(), 0);
 
   const TextureUploadRegion upload_region {
@@ -297,16 +297,16 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
   WaitForQueueIdle();
 
   auto* mapped = static_cast<const std::byte*>(
-    readback->Map(readback_region.buffer_offset.get(), kD3D12RowPitch * 2u));
+    readback->Map(readback_region.buffer_offset.get(), kD3D12RowPitch * 2U));
   ASSERT_NE(mapped, nullptr);
   const auto first_row = ReadBytes(mapped, 8);
   const auto second_row = ReadBytes(mapped + kD3D12RowPitch, 8);
   readback->UnMap();
 
   EXPECT_EQ(
-    first_row, (std::vector<uint8_t> { 1u, 2u, 3u, 4u, 5u, 6u, 7u, 8u }));
+    first_row, (std::vector<uint8_t> { 1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U }));
   EXPECT_EQ(second_row,
-    (std::vector<uint8_t> { 9u, 10u, 11u, 12u, 13u, 14u, 15u, 16u }));
+    (std::vector<uint8_t> { 9U, 10U, 11U, 12U, 13U, 14U, 15U, 16U }));
 }
 
 NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
@@ -395,7 +395,7 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
   WaitForQueueIdle();
 
   auto* mapped = static_cast<const std::byte*>(
-    readback->Map(readback_region.buffer_offset.get(), kD3D12RowPitch * 2u));
+    readback->Map(readback_region.buffer_offset.get(), kD3D12RowPitch * 2U));
   ASSERT_NE(mapped, nullptr);
   const auto first_row = ReadFloats(mapped, 2);
   const auto second_row = ReadFloats(mapped + kD3D12RowPitch, 2);
@@ -417,7 +417,7 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
 
   auto texture = CreateRegisteredTexture(texture_desc);
   auto upload = CreateRegisteredBuffer(BufferDesc {
-    .size_bytes = kD3D12RowPitch * 2u,
+    .size_bytes = kD3D12RowPitch * 2U,
     .usage = BufferUsage::kNone,
     .memory = BufferMemory::kUpload,
     .debug_name = "copy-source-bc1-upload",
@@ -429,18 +429,18 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
     .debug_name = "copy-bc1-readback-buffer",
   });
 
-  std::vector<std::byte> upload_bytes(kD3D12RowPitch * 2u, std::byte { 0 });
-  for (uint32_t index = 0; index < 16u; ++index) {
-    upload_bytes[index] = static_cast<std::byte>(0x40u + index);
+  std::vector<std::byte> upload_bytes(kD3D12RowPitch * 2U, std::byte { 0 });
+  for (uint32_t index = 0; index < 16U; ++index) {
+    upload_bytes[index] = static_cast<std::byte>(0x40U + index);
     upload_bytes[kD3D12RowPitch + index]
-      = static_cast<std::byte>(0x50u + index);
+      = static_cast<std::byte>(0x50U + index);
   }
   upload->Update(upload_bytes.data(), upload_bytes.size(), 0);
 
   const TextureUploadRegion upload_region {
     .buffer_offset = 0,
     .buffer_row_pitch = kD3D12RowPitch,
-    .buffer_slice_pitch = kD3D12RowPitch * 2u,
+    .buffer_slice_pitch = kD3D12RowPitch * 2U,
     .dst_slice = {
       .x = 0,
       .y = 0,
@@ -489,7 +489,7 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
   WaitForQueueIdle();
 
   auto* mapped = static_cast<const std::byte*>(
-    readback->Map(readback_region.buffer_offset.get(), kD3D12RowPitch * 2u));
+    readback->Map(readback_region.buffer_offset.get(), kD3D12RowPitch * 2U));
   ASSERT_NE(mapped, nullptr);
   const auto first_row = ReadBytes(mapped, 8);
   const auto second_row = ReadBytes(mapped + kD3D12RowPitch, 8);
@@ -497,10 +497,10 @@ NOLINT_TEST_F(D3D12TextureReadbackIntegrationTest,
 
   EXPECT_EQ(first_row,
     (std::vector<uint8_t> {
-      0x48u, 0x49u, 0x4Au, 0x4Bu, 0x4Cu, 0x4Du, 0x4Eu, 0x4Fu }));
+      0x48U, 0x49U, 0x4AU, 0x4BU, 0x4CU, 0x4DU, 0x4EU, 0x4FU }));
   EXPECT_EQ(second_row,
     (std::vector<uint8_t> {
-      0x58u, 0x59u, 0x5Au, 0x5Bu, 0x5Cu, 0x5Du, 0x5Eu, 0x5Fu }));
+      0x58U, 0x59U, 0x5AU, 0x5BU, 0x5CU, 0x5DU, 0x5EU, 0x5FU }));
 }
 
 } // namespace

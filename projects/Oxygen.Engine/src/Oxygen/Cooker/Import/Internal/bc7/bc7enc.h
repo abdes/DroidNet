@@ -116,12 +116,12 @@ inline void bc7enc_compress_block_params_init(bc7enc_compress_block_params* p)
   p->m_force_alpha = false;
   p->m_quant_mode6_endpoints = false;
   p->m_bias_mode1_pbits = false;
-  p->m_pbit1_weight = 1.0f;
-  p->m_mode1_error_weight = 1.0f;
-  p->m_mode5_error_weight = 1.0f;
-  p->m_mode6_error_weight = 1.0f;
-  p->m_mode7_error_weight = 1.0f;
-  p->m_low_frequency_partition_weight = 1.0f;
+  p->m_pbit1_weight = 1.0F;
+  p->m_mode1_error_weight = 1.0F;
+  p->m_mode5_error_weight = 1.0F;
+  p->m_mode6_error_weight = 1.0F;
+  p->m_mode7_error_weight = 1.0F;
+  p->m_low_frequency_partition_weight = 1.0F;
   bc7enc_compress_block_params_init_perceptual_weights(p);
 }
 

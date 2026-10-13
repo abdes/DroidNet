@@ -66,7 +66,7 @@ namespace {
   auto WriteString16(
     serio::AnyWriter& w, const std::string& s, const char* what) -> void
   {
-    if (s.size() > 0xFFFFu) {
+    if (s.size() > 0xFFFFU) {
       throw std::runtime_error(std::string(what) + " too long");
     }
     WriteU16(w, static_cast<uint16_t>(s.size()), "write string length");

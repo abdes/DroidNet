@@ -45,7 +45,7 @@ auto ReconstructFromMove(Dst& dst, Src& src) noexcept -> void
 FrameContext::FrameContext()
 {
   // Unified snapshot slots initialize their gameSnapshot by default constructor
-  visible_snapshot_index_ = 0u;
+  visible_snapshot_index_ = 0U;
   std::atomic_store(&atomic_input_snapshot_, InputBlobPtr {});
 }
 
@@ -53,7 +53,7 @@ FrameContext::FrameContext(const Immutable& imm)
   : immutable_(imm)
 {
   // Unified snapshot slots initialize their gameSnapshot by default constructor
-  visible_snapshot_index_ = 0u;
+  visible_snapshot_index_ = 0U;
   std::atomic_store(&atomic_input_snapshot_, InputBlobPtr {});
 }
 
@@ -70,8 +70,8 @@ auto FrameContext::PublishSnapshots(EngineTag) noexcept -> UnifiedSnapshot&
   CHECK_F(engine_state_.current_phase == PhaseId::kSnapshot);
 
   // Decide next version and target buffer while holding the locks.
-  const uint64_t version = snapshot_version_ + 1u;
-  const uint32_t next = (visible_snapshot_index_ + 1u) & 1u;
+  const uint64_t version = snapshot_version_ + 1U;
+  const uint32_t next = (visible_snapshot_index_ + 1U) & 1U;
   auto& unified = snapshot_buffers_.at(static_cast<size_t>(next));
 
   // CreateUnifiedSnapshot expects the caller to hold the relevant mutexes
@@ -326,7 +326,7 @@ auto FrameContext::SetSurfacePresentable(
 
   // Use atomic store for thread-safe access during parallel phases
   std::atomic_ref<uint8_t> flag_ref(presentable_flags_.at(index));
-  flag_ref.store(presentable ? 1u : 0u, std::memory_order_release);
+  flag_ref.store(presentable ? 1U : 0U, std::memory_order_release);
 }
 
 auto FrameContext::IsSurfacePresentable(size_t index) const noexcept -> bool

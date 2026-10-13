@@ -171,7 +171,7 @@ public:
 
       const uint32_t submesh_count = mesh_desc.submesh_count;
       const uint32_t submesh_limit
-        = ctx.verbose ? submesh_count : (std::min)(submesh_count, 8u);
+        = ctx.verbose ? submesh_count : (std::min)(submesh_count, 8U);
 
       if (submesh_count > 0) {
         std::cout << "      SubMeshes (" << submesh_count << "):\n";
@@ -202,7 +202,7 @@ public:
 
         const uint32_t view_count = submesh_desc.mesh_view_count;
         const uint32_t view_limit
-          = ctx.verbose ? view_count : (std::min)(view_count, 8u);
+          = ctx.verbose ? view_count : (std::min)(view_count, 8U);
 
         for (uint32_t v = 0; v < view_limit; ++v) {
           MeshViewDesc view_desc {};

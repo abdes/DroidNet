@@ -25,18 +25,18 @@ NOLINT_TEST_F(VertexBasicTest, AlmostEqual_EpsilonBasedEquality)
 {
   // Arrange
   constexpr Vertex v1 {
-    .position = { 1.0f, 2.0f, 3.0f },
-    .normal = { 0.0f, 1.0f, 0.0f },
-    .texcoord = { 0.5f, 0.5f },
-    .tangent = { 1.0f, 0.0f, 0.0f },
+    .position = { 1.0F, 2.0F, 3.0F },
+    .normal = { 0.0F, 1.0F, 0.0F },
+    .texcoord = { 0.5F, 0.5F },
+    .tangent = { 1.0F, 0.0F, 0.0F },
     .bitangent = {},
     .color = {},
   };
   constexpr Vertex v2 {
-    .position = { 1.0f + 1e-6f, 2.0f - 1e-6f, 3.0f + 1e-6f },
-    .normal = { 0.0f, 1.0f, 0.0f },
-    .texcoord = { 0.5f, 0.5f },
-    .tangent = { 1.0f, 0.0f, 0.0f },
+    .position = { 1.0F + 1e-6F, 2.0F - 1e-6F, 3.0F + 1e-6F },
+    .normal = { 0.0F, 1.0F, 0.0F },
+    .texcoord = { 0.5F, 0.5F },
+    .tangent = { 1.0F, 0.0F, 0.0F },
     .bitangent = {},
     .color = {},
   };
@@ -52,18 +52,18 @@ NOLINT_TEST_F(VertexBasicTest, QuantizedHash_Consistency)
 {
   // Arrange
   constexpr Vertex v1 {
-    .position = { 1.0f, 2.0f, 3.0f },
-    .normal = { 0.0f, 1.0f, 0.0f },
-    .texcoord = { 0.5f, 0.5f },
-    .tangent = { 1.0f, 0.0f, 0.0f },
+    .position = { 1.0F, 2.0F, 3.0F },
+    .normal = { 0.0F, 1.0F, 0.0F },
+    .texcoord = { 0.5F, 0.5F },
+    .tangent = { 1.0F, 0.0F, 0.0F },
     .bitangent = {},
     .color = {},
   };
   constexpr Vertex v2 {
-    .position = { 1.0f + 1e-6f, 2.0f - 1e-6f, 3.0f + 1e-6f },
-    .normal = { 0.0f, 1.0f, 0.0f },
-    .texcoord = { 0.5f, 0.5f },
-    .tangent = { 1.0f, 0.0f, 0.0f },
+    .position = { 1.0F + 1e-6F, 2.0F - 1e-6F, 3.0F + 1e-6F },
+    .normal = { 0.0F, 1.0F, 0.0F },
+    .texcoord = { 0.5F, 0.5F },
+    .tangent = { 1.0F, 0.0F, 0.0F },
     .bitangent = {},
     .color = {},
   };
@@ -85,18 +85,18 @@ NOLINT_TEST_F(VertexEdgeTest, HandlesNaN)
 {
   // Arrange
   Vertex v_nan {
-    .position = { NAN, 0.0f, 0.0f },
-    .normal = { 0.0f, NAN, 0.0f },
-    .texcoord = { 0.0f, 0.0f },
-    .tangent = { 0.0f, 0.0f, NAN },
+    .position = { NAN, 0.0F, 0.0F },
+    .normal = { 0.0F, NAN, 0.0F },
+    .texcoord = { 0.0F, 0.0F },
+    .tangent = { 0.0F, 0.0F, NAN },
     .bitangent = {},
     .color = {},
   };
   Vertex v_zero {
-    .position = { 0.0f, 0.0f, 0.0f },
-    .normal = { 0.0f, 0.0f, 0.0f },
-    .texcoord = { 0.0f, 0.0f },
-    .tangent = { 0.0f, 0.0f, 0.0f },
+    .position = { 0.0F, 0.0F, 0.0F },
+    .normal = { 0.0F, 0.0F, 0.0F },
+    .texcoord = { 0.0F, 0.0F },
+    .tangent = { 0.0F, 0.0F, 0.0F },
     .bitangent = {},
     .color = {},
   };
@@ -113,18 +113,18 @@ NOLINT_TEST_F(VertexEdgeTest, HandlesInf)
 {
   // Arrange
   Vertex v_inf {
-    .position = { INFINITY, 0.0f, 0.0f },
-    .normal = { 0.0f, INFINITY, 0.0f },
-    .texcoord = { 0.0f, 0.0f },
-    .tangent = { 0.0f, 0.0f, INFINITY },
+    .position = { INFINITY, 0.0F, 0.0F },
+    .normal = { 0.0F, INFINITY, 0.0F },
+    .texcoord = { 0.0F, 0.0F },
+    .tangent = { 0.0F, 0.0F, INFINITY },
     .bitangent = {},
     .color = {},
   };
   Vertex v_zero {
-    .position = { 0.0f, 0.0f, 0.0f },
-    .normal = { 0.0f, 0.0f, 0.0f },
-    .texcoord = { 0.0f, 0.0f },
-    .tangent = { 0.0f, 0.0f, 0.0f },
+    .position = { 0.0F, 0.0F, 0.0F },
+    .normal = { 0.0F, 0.0F, 0.0F },
+    .texcoord = { 0.0F, 0.0F },
+    .tangent = { 0.0F, 0.0F, 0.0F },
     .bitangent = {},
     .color = {},
   };
@@ -141,18 +141,18 @@ NOLINT_TEST_F(VertexEdgeTest, HandlesZeroVectors)
 {
   // Arrange
   Vertex v1 {
-    .position = { 0.0f, 0.0f, 0.0f },
-    .normal = { 0.0f, 0.0f, 0.0f },
-    .texcoord = { 0.0f, 0.0f },
-    .tangent = { 0.0f, 0.0f, 0.0f },
+    .position = { 0.0F, 0.0F, 0.0F },
+    .normal = { 0.0F, 0.0F, 0.0F },
+    .texcoord = { 0.0F, 0.0F },
+    .tangent = { 0.0F, 0.0F, 0.0F },
     .bitangent = {},
     .color = {},
   };
   Vertex v2 {
-    .position = { 0.0f, 0.0f, 0.0f },
-    .normal = { 0.0f, 0.0f, 0.0f },
-    .texcoord = { 0.0f, 0.0f },
-    .tangent = { 0.0f, 0.0f, 0.0f },
+    .position = { 0.0F, 0.0F, 0.0F },
+    .normal = { 0.0F, 0.0F, 0.0F },
+    .texcoord = { 0.0F, 0.0F },
+    .tangent = { 0.0F, 0.0F, 0.0F },
     .bitangent = {},
     .color = {},
   };
@@ -173,18 +173,18 @@ NOLINT_TEST_F(VertexHashTest, HashSet_AlmostEqualKey)
   // Arrange
   std::unordered_set<Vertex> vertex_set;
   Vertex v1 {
-    .position = { 1.0f, 2.0f, 3.0f },
-    .normal = { 0.0f, 1.0f, 0.0f },
-    .texcoord = { 0.5f, 0.5f },
-    .tangent = { 1.0f, 0.0f, 0.0f },
+    .position = { 1.0F, 2.0F, 3.0F },
+    .normal = { 0.0F, 1.0F, 0.0F },
+    .texcoord = { 0.5F, 0.5F },
+    .tangent = { 1.0F, 0.0F, 0.0F },
     .bitangent = {},
     .color = {},
   };
   Vertex v2 {
-    .position = { 1.0f + 1e-6f, 2.0f - 1e-6f, 3.0f + 1e-6f },
-    .normal = { 0.0f, 1.0f, 0.0f },
-    .texcoord = { 0.5f, 0.5f },
-    .tangent = { 1.0f, 0.0f, 0.0f },
+    .position = { 1.0F + 1e-6F, 2.0F - 1e-6F, 3.0F + 1e-6F },
+    .normal = { 0.0F, 1.0F, 0.0F },
+    .texcoord = { 0.5F, 0.5F },
+    .tangent = { 1.0F, 0.0F, 0.0F },
     .bitangent = {},
     .color = {},
   };
@@ -194,7 +194,7 @@ NOLINT_TEST_F(VertexHashTest, HashSet_AlmostEqualKey)
   vertex_set.insert(v2);
 
   // Assert
-  EXPECT_EQ(vertex_set.size(), 1u)
+  EXPECT_EQ(vertex_set.size(), 1U)
     << "Hash set should treat almost equal vertices as the same key.";
 }
 
@@ -205,19 +205,19 @@ NOLINT_TEST_F(VertexHashTest, QuantizedHash_DivergentBeyondEpsilon)
   // Arrange
   QuantizedVertexHash hasher; // epsilon = 1e-5
   Vertex v1 {
-    .position = { 1.00000f, 2.00000f, 3.00000f },
-    .normal = { 0.0f, 1.0f, 0.0f },
-    .texcoord = { 0.5f, 0.5f },
-    .tangent = { 1.0f, 0.0f, 0.0f },
+    .position = { 1.00000F, 2.00000F, 3.00000F },
+    .normal = { 0.0F, 1.0F, 0.0F },
+    .texcoord = { 0.5F, 0.5F },
+    .tangent = { 1.0F, 0.0F, 0.0F },
     .bitangent = {},
     .color = {},
   };
   // Choose deltas > epsilon (1e-5) to cross a quantization boundary.
   Vertex v2 {
-    .position = { 1.0f + 2e-5f, 2.0f - 3e-5f, 3.0f + 4e-5f },
-    .normal = { 0.0f, 1.0f, 0.0f },
-    .texcoord = { 0.5f, 0.5f },
-    .tangent = { 1.0f, 0.0f, 0.0f },
+    .position = { 1.0F + 2e-5F, 2.0F - 3e-5F, 3.0F + 4e-5F },
+    .normal = { 0.0F, 1.0F, 0.0F },
+    .texcoord = { 0.5F, 0.5F },
+    .tangent = { 1.0F, 0.0F, 0.0F },
     .bitangent = {},
     .color = {},
   };
@@ -239,22 +239,22 @@ NOLINT_TEST_F(VertexHashTest, WithinEpsilon_EqualSameHash)
   // Arrange (base vertex + variant differing by <= epsilon on each component)
   using oxygen::data::kVertexEpsilon;
   Vertex base {
-    .position = { 10.0f, -2.5f, 0.125f },
-    .normal = { 0.0f, 1.0f, 0.0f },
-    .texcoord = { 0.25f, 0.75f },
-    .tangent = { 1.0f, 0.0f, 0.0f },
-    .bitangent = { 0.0f, 0.0f, 1.0f },
-    .color = { 1.0f, 0.5f, 0.25f, 1.0f },
+    .position = { 10.0F, -2.5F, 0.125F },
+    .normal = { 0.0F, 1.0F, 0.0F },
+    .texcoord = { 0.25F, 0.75F },
+    .tangent = { 1.0F, 0.0F, 0.0F },
+    .bitangent = { 0.0F, 0.0F, 1.0F },
+    .color = { 1.0F, 0.5F, 0.25F, 1.0F },
   };
   // Apply a small delta (<< epsilon) so quantization & equality both match.
-  constexpr float delta = 1e-6f; // one tenth of kVertexEpsilon
+  constexpr float delta = 1e-6F; // one tenth of kVertexEpsilon
   Vertex within {
-    .position = { 10.0f + delta, -2.5f - delta, 0.125f + delta },
-    .normal = { 0.0f, 1.0f - delta, 0.0f + delta },
-    .texcoord = { 0.25f + delta, 0.75f - delta },
-    .tangent = { 1.0f - delta, 0.0f + delta, 0.0f },
-    .bitangent = { 0.0f, 0.0f + delta, 1.0f - delta },
-    .color = { 1.0f - delta, 0.5f + delta, 0.25f - delta, 1.0f },
+    .position = { 10.0F + delta, -2.5F - delta, 0.125F + delta },
+    .normal = { 0.0F, 1.0F - delta, 0.0F + delta },
+    .texcoord = { 0.25F + delta, 0.75F - delta },
+    .tangent = { 1.0F - delta, 0.0F + delta, 0.0F },
+    .bitangent = { 0.0F, 0.0F + delta, 1.0F - delta },
+    .color = { 1.0F - delta, 0.5F + delta, 0.25F - delta, 1.0F },
   };
   QuantizedVertexHash hasher; // epsilon = kVertexEpsilon
 
@@ -276,22 +276,22 @@ NOLINT_TEST_F(VertexHashTest, JustBeyondEpsilon_InequalDifferentHash)
   using oxygen::data::kVertexEpsilon;
   const float e = kVertexEpsilon;
   Vertex base {
-    .position = { 5.0f, 6.0f, 7.0f },
-    .normal = { 0.0f, 0.0f, 1.0f },
-    .texcoord = { 0.1f, 0.9f },
-    .tangent = { 0.0f, 1.0f, 0.0f },
-    .bitangent = { 1.0f, 0.0f, 0.0f },
-    .color = { 0.2f, 0.4f, 0.6f, 0.8f },
+    .position = { 5.0F, 6.0F, 7.0F },
+    .normal = { 0.0F, 0.0F, 1.0F },
+    .texcoord = { 0.1F, 0.9F },
+    .tangent = { 0.0F, 1.0F, 0.0F },
+    .bitangent = { 1.0F, 0.0F, 0.0F },
+    .color = { 0.2F, 0.4F, 0.6F, 0.8F },
   };
   // Use 1.05 * epsilon deltas to minimally exceed tolerance.
-  const float d = e * 1.05f;
+  const float d = e * 1.05F;
   Vertex beyond {
-    .position = { 5.0f + d, 6.0f - d, 7.0f },
-    .normal = { 0.0f, d, 1.0f },
-    .texcoord = { 0.1f, 0.9f + d },
-    .tangent = { 0.0f, 1.0f, d },
-    .bitangent = { 1.0f - d, 0.0f, 0.0f },
-    .color = { 0.2f, 0.4f + d, 0.6f, 0.8f },
+    .position = { 5.0F + d, 6.0F - d, 7.0F },
+    .normal = { 0.0F, d, 1.0F },
+    .texcoord = { 0.1F, 0.9F + d },
+    .tangent = { 0.0F, 1.0F, d },
+    .bitangent = { 1.0F - d, 0.0F, 0.0F },
+    .color = { 0.2F, 0.4F + d, 0.6F, 0.8F },
   };
   QuantizedVertexHash hasher;
 
@@ -313,12 +313,12 @@ NOLINT_TEST_F(VertexHashTest, FieldPerturbations_ChangeHash)
   using oxygen::data::kVertexEpsilon;
   const float e = kVertexEpsilon;
   Vertex base {
-    .position = { 1.0f, 2.0f, 3.0f },
-    .normal = { 0.0f, 1.0f, 0.0f },
-    .texcoord = { 0.5f, 0.25f },
-    .tangent = { 1.0f, 0.0f, 0.0f },
-    .bitangent = { 0.0f, 1.0f, 0.0f },
-    .color = { 0.9f, 0.8f, 0.7f, 1.0f },
+    .position = { 1.0F, 2.0F, 3.0F },
+    .normal = { 0.0F, 1.0F, 0.0F },
+    .texcoord = { 0.5F, 0.25F },
+    .tangent = { 1.0F, 0.0F, 0.0F },
+    .bitangent = { 0.0F, 1.0F, 0.0F },
+    .color = { 0.9F, 0.8F, 0.7F, 1.0F },
   };
   QuantizedVertexHash hasher;
   const auto h_base = hasher(base);

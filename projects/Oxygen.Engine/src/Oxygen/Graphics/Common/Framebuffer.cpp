@@ -30,7 +30,7 @@ auto FramebufferAttachment::ResolveClearColor(
   if (texture && texture->GetDescriptor().use_clear_value) {
     return texture->GetDescriptor().clear_value;
   }
-  return { 0.0f, 0.0f, 0.0f, 0.0f };
+  return { 0.0F, 0.0F, 0.0F, 0.0F };
 }
 
 auto FramebufferAttachment::ResolveDepthStencil(
@@ -45,7 +45,7 @@ auto FramebufferAttachment::ResolveDepthStencil(
 
   // Oxygen's canonical depth convention is reversed-Z, so the implicit
   // far-plane clear is 0.0 unless the caller or attachment overrides it.
-  float depth = 0.0f;
+  float depth = 0.0F;
   uint8_t stencil = 0;
   if (explicit_depth.has_value()) {
     depth = explicit_depth.value();

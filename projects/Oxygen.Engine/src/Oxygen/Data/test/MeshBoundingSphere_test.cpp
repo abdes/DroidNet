@@ -58,25 +58,25 @@ NOLINT_TEST_F(MeshBoundingSphereOwnedTest, ComputedSphereContainsAllVertices)
 {
   // Arrange
   std::vector<Vertex> vertices {
-    { .position = { -1.0f, -2.0f, 0.5f },
+    { .position = { -1.0F, -2.0F, 0.5F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
       .color = {} },
-    { .position = { 3.0f, 1.0f, -0.5f },
+    { .position = { 3.0F, 1.0F, -0.5F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
       .color = {} },
-    { .position = { 0.0f, 4.0f, 2.0f },
+    { .position = { 0.0F, 4.0F, 2.0F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
       .color = {} },
-    { .position = { -2.0f, 0.0f, -3.0f },
+    { .position = { -2.0F, 0.0F, -3.0F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
@@ -84,8 +84,8 @@ NOLINT_TEST_F(MeshBoundingSphereOwnedTest, ComputedSphereContainsAllVertices)
       .color = {} },
   };
   std::vector<std::uint32_t> indices { 0, 1, 2, 2, 3, 0 };
-  const glm::vec3 bounds_min { -2.0f, -2.0f, -3.0f };
-  const glm::vec3 bounds_max { 3.0f, 4.0f, 2.0f };
+  const glm::vec3 bounds_min { -2.0F, -2.0F, -3.0F };
+  const glm::vec3 bounds_max { 3.0F, 4.0F, 2.0F };
   const auto desc = MakeStandardMeshDesc(bounds_min, bounds_max);
 
   auto material = MaterialAsset::CreateDefault();
@@ -109,7 +109,7 @@ NOLINT_TEST_F(MeshBoundingSphereOwnedTest, ComputedSphereContainsAllVertices)
   // Assert
   for (const auto& v : vertices) {
     const float dist = glm::length(v.position - center);
-    EXPECT_LE(dist, radius + 1e-4f)
+    EXPECT_LE(dist, radius + 1e-4F)
       << "Vertex must lie within (or on) computed bounding sphere";
   }
 }
@@ -123,25 +123,25 @@ NOLINT_TEST_F(
 {
   // Arrange: reuse geometry from owned test to ensure identical bounds
   std::vector<Vertex> vertices {
-    { .position = { -1.0f, -2.0f, 0.5f },
+    { .position = { -1.0F, -2.0F, 0.5F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
       .color = {} },
-    { .position = { 3.0f, 1.0f, -0.5f },
+    { .position = { 3.0F, 1.0F, -0.5F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
       .color = {} },
-    { .position = { 0.0f, 4.0f, 2.0f },
+    { .position = { 0.0F, 4.0F, 2.0F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
       .bitangent = {},
       .color = {} },
-    { .position = { -2.0f, 0.0f, -3.0f },
+    { .position = { -2.0F, 0.0F, -3.0F },
       .normal = {},
       .texcoord = {},
       .tangent = {},
@@ -149,8 +149,8 @@ NOLINT_TEST_F(
       .color = {} },
   };
   std::vector<std::uint32_t> indices { 0, 1, 2, 2, 3, 0 };
-  const glm::vec3 bounds_min { -2.0f, -2.0f, -3.0f };
-  const glm::vec3 bounds_max { 3.0f, 4.0f, 2.0f };
+  const glm::vec3 bounds_min { -2.0F, -2.0F, -3.0F };
+  const glm::vec3 bounds_max { 3.0F, 4.0F, 2.0F };
   const auto desc = MakeStandardMeshDesc(bounds_min, bounds_max);
 
   // Build temporary owned mesh to obtain a vertex/index buffer snapshot
@@ -218,7 +218,7 @@ NOLINT_TEST_F(
   // Assert
   for (const auto& v : vertices) {
     const float dist = glm::length(v.position - center);
-    EXPECT_LE(dist, radius + 1e-4f)
+    EXPECT_LE(dist, radius + 1e-4F)
       << "Vertex must lie within (or on) computed bounding sphere";
   }
 }

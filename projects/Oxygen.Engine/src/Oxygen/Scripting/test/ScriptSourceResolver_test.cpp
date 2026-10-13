@@ -151,8 +151,8 @@ NOLINT_TEST_F(
 {
   const auto asset = MakeScriptAsset("external.luau",
     ScriptAssetResourceIndices {
-      .bytecode_index = data::ResourceReferenceIndex { 1u },
-      .source_index = data::ResourceReferenceIndex { 2u },
+      .bytecode_index = data::ResourceReferenceIndex { 1U },
+      .source_index = data::ResourceReferenceIndex { 2U },
     },
     data::pak::scripting::ScriptAssetFlags::kAllowExternalSource);
 
@@ -295,7 +295,7 @@ NOLINT_TEST_F(ScriptSourceResolverTest, ResolveUsesMappedLooseCookedOrigin)
 {
   const auto asset = MakeScriptAsset({},
     ScriptAssetResourceIndices {
-      .bytecode_index = data::ResourceReferenceIndex { 3u },
+      .bytecode_index = data::ResourceReferenceIndex { 3U },
       .source_index = data::kNoResourceReference,
     },
     data::pak::scripting::ScriptAssetFlags::kNone);

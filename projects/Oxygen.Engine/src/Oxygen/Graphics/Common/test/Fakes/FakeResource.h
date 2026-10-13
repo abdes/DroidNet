@@ -64,7 +64,7 @@ public:
     const DescriptorAllocationHandle&, const ViewDescriptionT&)>;
 
   FakeResource() noexcept
-    : instance_id_(s_next_instance_id_.fetch_add(1u, std::memory_order_relaxed))
+    : instance_id_(s_next_instance_id_.fetch_add(1U, std::memory_order_relaxed))
   {
   }
 

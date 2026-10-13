@@ -33,21 +33,21 @@ AllocationStrategy::AllocationStrategy()
   // and tools.
   constexpr std::array heap_configs = {
     // clang-format off
-    HeapConfig{.name="Texture_SRV", .cpu_capacity=32768u, .shader_capacity=32768u},
-    HeapConfig{.name="Texture_UAV", .cpu_capacity=16384u, .shader_capacity=16384u},
-    HeapConfig{.name="TypedBuffer_SRV", .cpu_capacity=8192u, .shader_capacity=8192u},
-    HeapConfig{.name="TypedBuffer_UAV", .cpu_capacity=8192u, .shader_capacity=8192u},
-    HeapConfig{.name="StructuredBuffer_SRV", .cpu_capacity=8192u, .shader_capacity=8192u},
-    HeapConfig{.name="StructuredBuffer_UAV", .cpu_capacity=8192u, .shader_capacity=8192u},
-    HeapConfig{.name="RawBuffer_SRV", .cpu_capacity=8192u, .shader_capacity=8192u},
-    HeapConfig{.name="RawBuffer_UAV", .cpu_capacity=8192u, .shader_capacity=8192u},
-    HeapConfig{.name="ConstantBuffer", .cpu_capacity=8192u, .shader_capacity=8192u},
-    HeapConfig{.name="Sampler", .cpu_capacity=4096u, .shader_capacity=4096u},
-    HeapConfig{.name="SamplerFeedbackTexture_UAV", .cpu_capacity=256u, .shader_capacity=256u},
-    HeapConfig{.name="RayTracingAccelStructure", .cpu_capacity=256u, .shader_capacity=256u},
+    HeapConfig{.name="Texture_SRV", .cpu_capacity=32768U, .shader_capacity=32768U},
+    HeapConfig{.name="Texture_UAV", .cpu_capacity=16384U, .shader_capacity=16384U},
+    HeapConfig{.name="TypedBuffer_SRV", .cpu_capacity=8192U, .shader_capacity=8192U},
+    HeapConfig{.name="TypedBuffer_UAV", .cpu_capacity=8192U, .shader_capacity=8192U},
+    HeapConfig{.name="StructuredBuffer_SRV", .cpu_capacity=8192U, .shader_capacity=8192U},
+    HeapConfig{.name="StructuredBuffer_UAV", .cpu_capacity=8192U, .shader_capacity=8192U},
+    HeapConfig{.name="RawBuffer_SRV", .cpu_capacity=8192U, .shader_capacity=8192U},
+    HeapConfig{.name="RawBuffer_UAV", .cpu_capacity=8192U, .shader_capacity=8192U},
+    HeapConfig{.name="ConstantBuffer", .cpu_capacity=8192U, .shader_capacity=8192U},
+    HeapConfig{.name="Sampler", .cpu_capacity=4096U, .shader_capacity=4096U},
+    HeapConfig{.name="SamplerFeedbackTexture_UAV", .cpu_capacity=256U, .shader_capacity=256U},
+    HeapConfig{.name="RayTracingAccelStructure", .cpu_capacity=256U, .shader_capacity=256U},
     // RTV/DSV are CPU-only; shader_capacity intentionally zero.
-    HeapConfig{.name="Texture_DSV", .cpu_capacity=1024u, .shader_capacity=0u},
-    HeapConfig{.name="Texture_RTV", .cpu_capacity=1024u, .shader_capacity=0u},
+    HeapConfig{.name="Texture_DSV", .cpu_capacity=1024U, .shader_capacity=0U},
+    HeapConfig{.name="Texture_RTV", .cpu_capacity=1024U, .shader_capacity=0U},
     // clang-format on
   };
 

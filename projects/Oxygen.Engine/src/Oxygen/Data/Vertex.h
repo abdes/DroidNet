@@ -49,7 +49,7 @@ struct Vertex {
  containers. Changing it requires updating tests relying on approximate equality
  semantics.
 */
-inline constexpr float kVertexEpsilon = 1e-5f; // domain-tuned tolerance
+inline constexpr float kVertexEpsilon = 1e-5F; // domain-tuned tolerance
 
 //! Strict bitwise-like equality for Vertex (all fields, no epsilon tolerance)
 /*!

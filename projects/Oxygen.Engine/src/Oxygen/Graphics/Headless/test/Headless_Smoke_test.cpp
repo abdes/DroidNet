@@ -130,7 +130,7 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
     = static_cast<oxygen::graphics::headless::HeadlessSurface*>(
       surface.get())) {
     // Use a strong PixelExtent type for SetSize.
-    oxygen::PixelExtent new_size { .width = 16u, .height = 8u };
+    oxygen::PixelExtent new_size { .width = 16U, .height = 8U };
     headless_surface->SetSize(new_size);
 
     // Force a resize and validate that backbuffers are recreated.
@@ -140,7 +140,7 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
     // check the current back buffer index advances modulo kFramesInFlight.
     constexpr auto frames = oxygen::frame::kFramesInFlight.get();
     const auto before = headless_surface->GetCurrentBackBufferIndex();
-    for (auto i = 1u; i <= frames + 1; ++i) {
+    for (auto i = 1U; i <= frames + 1; ++i) {
       headless_surface->Present();
       const auto after = headless_surface->GetCurrentBackBufferIndex();
       // The index should advance by 1 each present (modulo frames)
@@ -150,7 +150,7 @@ NOLINT_TEST_F(HeadlessSmokeTest, TypicalUsage)
 
     // Check that GetBackBuffer(slot) returns a non-null texture for each
     // valid slot.
-    for (auto s = 0u; s < frames; ++s) {
+    for (auto s = 0U; s < frames; ++s) {
       auto bb = headless_surface->GetBackBuffer(s);
       EXPECT_NE(bb, nullptr);
     }

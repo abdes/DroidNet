@@ -38,7 +38,7 @@ public:
     const int depth = static_cast<int>(state.range(0));
     const int width = static_cast<int>(state.range(1));
     const uint32_t seed = static_cast<uint32_t>(
-      0xC0FFEEu ^ (depth * 73856093u) ^ (width * 19349663u));
+      0xC0FFEEU ^ (depth * 73856093U) ^ (width * 19349663U));
     rng_ = std::mt19937(seed);
     static constexpr size_t kBenchmarkSceneCapacity = 4096;
     scene_ = std::make_shared<Scene>("BenchmarkScene", kBenchmarkSceneCapacity);

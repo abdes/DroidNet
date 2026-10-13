@@ -62,7 +62,7 @@ auto oxygen::data::MakeConeMeshAsset(
   constexpr double pi = std::numbers::pi_v<double>;
   std::vector<Vertex> vertices;
   std::vector<uint32_t> indices;
-  glm::vec3 apex_pos = { 0.0f, 0.0f, half_height };
+  glm::vec3 apex_pos = { 0.0F, 0.0F, half_height };
   const auto slant = std::hypot(static_cast<double>(height), radius);
   const auto normal_radius = static_cast<float>(height / slant);
   const auto normal_height = static_cast<float>(radius / slant);
@@ -79,12 +79,12 @@ auto oxygen::data::MakeConeMeshAsset(
     }
     // Normal points out and up
     glm::vec3 dir = { x * normal_radius, y * normal_radius, normal_height };
-    glm::vec3 tangent = { -y, x, 0.0f };
+    glm::vec3 tangent = { -y, x, 0.0F };
     glm::vec3 bitangent = -glm::cross(dir, tangent);
     vertices.push_back(Vertex {
       .position = pos,
       .normal = dir,
-      .texcoord = { u, 1.0f },
+      .texcoord = { u, 1.0F },
       .tangent = tangent,
       .bitangent = bitangent,
       .color = { 1, 1, 1, 1 },
@@ -94,8 +94,8 @@ auto oxygen::data::MakeConeMeshAsset(
   // Apex vertex
   vertices.push_back(Vertex {
     .position = apex_pos,
-    .normal = { 0.0f, 0.0f, 1.0f },
-    .texcoord = { 0.5f, 0.0f },
+    .normal = { 0.0F, 0.0F, 1.0F },
+    .texcoord = { 0.5F, 0.0F },
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 },
@@ -115,8 +115,8 @@ auto oxygen::data::MakeConeMeshAsset(
     const auto theta = 2.0 * pi * i / segments;
     const auto x = static_cast<float>(std::cos(theta));
     const auto y = static_cast<float>(std::sin(theta));
-    float u = (x + 1.0f) * 0.5f;
-    float v = (y + 1.0f) * 0.5f;
+    float u = (x + 1.0F) * 0.5F;
+    float v = (y + 1.0F) * 0.5F;
     vertices.push_back(Vertex {
       .position = { x * radius, y * radius, -half_height },
       .normal = { 0, 0, -1 },
@@ -132,7 +132,7 @@ auto oxygen::data::MakeConeMeshAsset(
   vertices.push_back(Vertex {
     .position = { 0, 0, -half_height },
     .normal = { 0, 0, -1 },
-    .texcoord = { 0.5f, 0.5f },
+    .texcoord = { 0.5F, 0.5F },
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 },

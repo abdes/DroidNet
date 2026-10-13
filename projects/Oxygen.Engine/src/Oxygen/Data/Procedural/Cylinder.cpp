@@ -68,8 +68,8 @@ auto oxygen::data::MakeCylinderMeshAsset(
       && y * radius == vertices.back().position.y) {
       return std::nullopt;
     }
-    glm::vec3 normal = { x, y, 0.0f };
-    glm::vec3 tangent = { -y, x, 0.0f };
+    glm::vec3 normal = { x, y, 0.0F };
+    glm::vec3 tangent = { -y, x, 0.0F };
     glm::vec3 bitangent = { 0.0F, 0.0F, -1.0F };
     float u = static_cast<float>(i) / static_cast<float>(segments);
 
@@ -77,7 +77,7 @@ auto oxygen::data::MakeCylinderMeshAsset(
     vertices.push_back(Vertex {
       .position = { x * radius, y * radius, -half_height },
       .normal = normal,
-      .texcoord = { u, 1.0f },
+      .texcoord = { u, 1.0F },
       .tangent = tangent,
       .bitangent = bitangent,
       .color = { 1, 1, 1, 1 },
@@ -86,7 +86,7 @@ auto oxygen::data::MakeCylinderMeshAsset(
     vertices.push_back(Vertex {
       .position = { x * radius, y * radius, half_height },
       .normal = normal,
-      .texcoord = { u, 0.0f },
+      .texcoord = { u, 0.0F },
       .tangent = tangent,
       .bitangent = bitangent,
       .color = { 1, 1, 1, 1 },
@@ -116,8 +116,8 @@ auto oxygen::data::MakeCylinderMeshAsset(
     const auto theta = 2.0 * pi * i / segments;
     const auto x = static_cast<float>(std::cos(theta));
     const auto y = static_cast<float>(std::sin(theta));
-    float u = (x + 1.0f) * 0.5f;
-    float v = (y + 1.0f) * 0.5f;
+    float u = (x + 1.0F) * 0.5F;
+    float v = (y + 1.0F) * 0.5F;
 
     // Bottom cap rim vertex
     vertices.push_back(Vertex {
@@ -148,7 +148,7 @@ auto oxygen::data::MakeCylinderMeshAsset(
   vertices.push_back(Vertex {
     .position = { 0, 0, -half_height },
     .normal = { 0, 0, -1 },
-    .texcoord = { 0.5f, 0.5f },
+    .texcoord = { 0.5F, 0.5F },
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 },
@@ -157,7 +157,7 @@ auto oxygen::data::MakeCylinderMeshAsset(
   vertices.push_back(Vertex {
     .position = { 0, 0, half_height },
     .normal = { 0, 0, 1 },
-    .texcoord = { 0.5f, 0.5f },
+    .texcoord = { 0.5F, 0.5F },
     .tangent = { 1, 0, 0 },
     .bitangent = { 0, 1, 0 },
     .color = { 1, 1, 1, 1 },

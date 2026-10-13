@@ -168,9 +168,9 @@ namespace {
     };
 
     const bool allow_growth = cfg.value("allow_growth", false);
-    const float growth_factor = cfg.value("growth_factor", 0.0f);
+    const float growth_factor = cfg.value("growth_factor", 0.0F);
     const uint32_t max_growth_iterations
-      = cfg.value("max_growth_iterations", 0u);
+      = cfg.value("max_growth_iterations", 0U);
 
     bindless::HeapIndex base_index { 0 };
     if (cfg.contains("base_index")) {

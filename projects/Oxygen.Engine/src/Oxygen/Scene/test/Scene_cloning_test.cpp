@@ -122,7 +122,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   // Arrange
   auto original = source_scene_->CreateNode("OriginalNode");
   ASSERT_TRUE(original.IsValid());
-  SetTransformValues(original, { 1.0f, 2.0f, 3.0f }, { 1.0f, 1.0f, 1.0f });
+  SetTransformValues(original, { 1.0F, 2.0F, 3.0F }, { 1.0F, 1.0F, 1.0F });
 
   // Act
   auto cloned = target_scene_->CreateNodeFrom(original, "ClonedNode");
@@ -130,7 +130,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   ASSERT_TRUE(cloned->IsValid());
   // Assert initial state
   TRACE_GCHECK_F(
-    ExpectTransformValues(*cloned, { 1.0f, 2.0f, 3.0f }, { 1.0f, 1.0f, 1.0f }),
+    ExpectTransformValues(*cloned, { 1.0F, 2.0F, 3.0F }, { 1.0F, 1.0F, 1.0F }),
     "initial-transform");
 
   // Change original, assert clone unchanged
@@ -138,11 +138,11 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   ASSERT_TRUE(original_impl_opt.has_value());
   auto& original_impl = original_impl_opt->get();
   original_impl.SetName("ModifiedOriginal");
-  SetTransformValues(original, { 10.0f, 20.0f, 30.0f }, { 2.0f, 2.0f, 2.0f });
+  SetTransformValues(original, { 10.0F, 20.0F, 30.0F }, { 2.0F, 2.0F, 2.0F });
 
   TRACE_GCHECK_F(ExpectNodeWithName(*cloned, "ClonedNode"), "clone-unchanged");
   TRACE_GCHECK_F(
-    ExpectTransformValues(*cloned, { 1.0f, 2.0f, 3.0f }, { 1.0f, 1.0f, 1.0f }),
+    ExpectTransformValues(*cloned, { 1.0F, 2.0F, 3.0F }, { 1.0F, 1.0F, 1.0F }),
     "clone-transform");
 
   // Change clone, assert original unchanged
@@ -150,12 +150,12 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   ASSERT_TRUE(cloned_impl_opt.has_value());
   auto& cloned_impl = cloned_impl_opt->get();
   cloned_impl.SetName("ModifiedClone");
-  SetTransformValues(*cloned, { 100.0f, 200.0f, 300.0f }, { 3.0f, 3.0f, 3.0f });
+  SetTransformValues(*cloned, { 100.0F, 200.0F, 300.0F }, { 3.0F, 3.0F, 3.0F });
 
   TRACE_GCHECK_F(
     ExpectNodeWithName(original, "ModifiedOriginal"), "original-unchanged");
   TRACE_GCHECK_F(ExpectTransformValues(
-                   original, { 10.0f, 20.0f, 30.0f }, { 2.0f, 2.0f, 2.0f }),
+                   original, { 10.0F, 20.0F, 30.0F }, { 2.0F, 2.0F, 2.0F }),
     "original-transform");
 }
 
@@ -197,7 +197,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
 
   auto original = source_scene_->CreateNode("OriginalNode");
   ASSERT_TRUE(original.IsValid());
-  SetTransformValues(original, { 5.0f, 10.0f, 15.0f }, { 2.0f, 3.0f, 4.0f });
+  SetTransformValues(original, { 5.0F, 10.0F, 15.0F }, { 2.0F, 3.0F, 4.0F });
 
   const auto original_impl_opt = original.GetImpl();
   ASSERT_TRUE(original_impl_opt.has_value());
@@ -213,7 +213,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   auto child_clone = child_clone_opt.value();
 
   TRACE_GCHECK_F(ExpectTransformValues(
-                   child_clone, { 5.0f, 10.0f, 15.0f }, { 2.0f, 3.0f, 4.0f }),
+                   child_clone, { 5.0F, 10.0F, 15.0F }, { 2.0F, 3.0F, 4.0F }),
     "transform-preserved");
 
   const auto clone_impl_opt = child_clone.GetImpl();
@@ -260,7 +260,7 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   auto original = source_scene_->CreateNode("OriginalNode");
   ASSERT_TRUE(parent.IsValid());
   ASSERT_TRUE(original.IsValid());
-  SetTransformValues(original, { 1.0f, 2.0f, 3.0f }, { 1.0f, 1.0f, 1.0f });
+  SetTransformValues(original, { 1.0F, 2.0F, 3.0F }, { 1.0F, 1.0F, 1.0F });
 
   // Act
   const auto child_clone_opt
@@ -270,18 +270,18 @@ NOLINT_TEST_F(SceneSingleNodeCloningTest,
   auto child_clone = child_clone_opt.value();
 
   TRACE_GCHECK_F(ExpectTransformValues(
-                   child_clone, { 1.0f, 2.0f, 3.0f }, { 1.0f, 1.0f, 1.0f }),
+                   child_clone, { 1.0F, 2.0F, 3.0F }, { 1.0F, 1.0F, 1.0F }),
     "initial-clone");
 
-  SetTransformValues(original, { 10.0f, 20.0f, 30.0f }, { 2.0f, 2.0f, 2.0f });
+  SetTransformValues(original, { 10.0F, 20.0F, 30.0F }, { 2.0F, 2.0F, 2.0F });
   TRACE_GCHECK_F(ExpectTransformValues(
-                   child_clone, { 1.0f, 2.0f, 3.0f }, { 1.0f, 1.0f, 1.0f }),
+                   child_clone, { 1.0F, 2.0F, 3.0F }, { 1.0F, 1.0F, 1.0F }),
     "clone-unchanged");
 
   SetTransformValues(
-    child_clone, { 100.0f, 200.0f, 300.0f }, { 3.0f, 3.0f, 3.0f });
+    child_clone, { 100.0F, 200.0F, 300.0F }, { 3.0F, 3.0F, 3.0F });
   TRACE_GCHECK_F(ExpectTransformValues(
-                   original, { 10.0f, 20.0f, 30.0f }, { 2.0f, 2.0f, 2.0f }),
+                   original, { 10.0F, 20.0F, 30.0F }, { 2.0F, 2.0F, 2.0F }),
     "original-unchanged");
 }
 

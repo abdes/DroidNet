@@ -42,8 +42,8 @@ NOLINT_TEST(EnumAsIndexHarnessTest, RuntimeConstructionAndValidity)
   // Assert
   EXPECT_TRUE(first.IsValid());
   EXPECT_TRUE(second.IsValid());
-  EXPECT_EQ(static_cast<std::size_t>(first.get()), 0u);
-  EXPECT_EQ(static_cast<std::size_t>(second.get()), 1u);
+  EXPECT_EQ(static_cast<std::size_t>(first.get()), 0U);
+  EXPECT_EQ(static_cast<std::size_t>(second.get()), 1U);
 }
 
 //! Death test: constructing an out-of-range runtime index should terminate.
@@ -90,19 +90,19 @@ NOLINT_TEST(EnumAsIndexHarnessTest, ArithmeticAndDistance)
 
   // Act & Assert: pre-increment
   ++it;
-  EXPECT_EQ(it.get(), 1u);
+  EXPECT_EQ(it.get(), 1U);
 
   // Act & Assert: post-increment
   auto tmp = it++;
-  EXPECT_EQ(tmp.get(), 1u);
-  EXPECT_EQ(it.get(), 2u);
+  EXPECT_EQ(tmp.get(), 1U);
+  EXPECT_EQ(it.get(), 2U);
 
   // Distance
   EXPECT_EQ((it - EnumAsIndex { MyEnum::kFirst }), 2);
 
   // Addition and subtraction
-  EXPECT_EQ((EnumAsIndex { MyEnum::kFirst } + 2).get(), 2u);
-  EXPECT_EQ((EnumAsIndex { MyEnum::kThird } - 2).get(), 0u);
+  EXPECT_EQ((EnumAsIndex { MyEnum::kFirst } + 2).get(), 2U);
+  EXPECT_EQ((EnumAsIndex { MyEnum::kThird } - 2).get(), 0U);
 }
 
 //! Iteration sentinel behaviors and comparison operators.
@@ -321,9 +321,9 @@ NOLINT_TEST(EnumAsIndexConstexprTest, CompileTimeArithmeticAndToEnum)
   constexpr auto i1 = EnumAsIndex<MyEnum>::Checked<MyEnum::kSecond>();
   constexpr auto i2 = EnumAsIndex<MyEnum>::Checked<MyEnum::kThird>();
 
-  static_assert(i0.get() == 0u, "i0 must be 0");
-  static_assert(i1.get() == 1u, "i1 must be 1");
-  static_assert(i2.get() == 2u, "i2 must be 2");
+  static_assert(i0.get() == 0U, "i0 must be 0");
+  static_assert(i1.get() == 1U, "i1 must be 1");
+  static_assert(i2.get() == 2U, "i2 must be 2");
 
   // Arithmetic at compile time
   static_assert((i0 + 2).get() == i2.get(), "i0 + 2 == i2");
@@ -348,8 +348,8 @@ NOLINT_TEST(EnumAsIndexConstexprTest, ConstexprLoopSum)
     return s;
   }();
 
-  static_assert(sum == 3u, "compile-time sum must be 3");
-  EXPECT_EQ(sum, 3u);
+  static_assert(sum == 3U, "compile-time sum must be 3");
+  EXPECT_EQ(sum, 3U);
 }
 
 //! Constexpr name table: build a compile-time array of names using enum
@@ -447,7 +447,7 @@ NOLINT_TEST(EnumAsIndexViewTest, HashContainerUsage)
     map.emplace(c, std::string(ColorToString(c)));
   }
 
-  EXPECT_EQ(map.size(), 3u);
+  EXPECT_EQ(map.size(), 3U);
   EXPECT_EQ(map.at(ColorIndex(Color::kRed)), "Red");
   EXPECT_EQ(map.at(ColorIndex(Color::kGreen)), "Green");
   EXPECT_EQ(map.at(ColorIndex(Color::kBlue)), "Blue");

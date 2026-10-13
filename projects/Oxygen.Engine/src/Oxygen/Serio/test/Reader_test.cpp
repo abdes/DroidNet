@@ -206,7 +206,7 @@ NOLINT_TYPED_TEST(ReaderIntegralTest, ReadIntegralType)
   using ValueType = TypeParam;
 
   //! Arrange: Write a test value of the current integral type.
-  ValueType value = static_cast<ValueType>(0x5A5A5A5A5A5A5A5Aull);
+  ValueType value = static_cast<ValueType>(0x5A5A5A5A5A5A5A5AULL);
   this->WritePod(value);
   this->SeekTo(0);
 
@@ -223,7 +223,7 @@ class ReaderFloatTest : public ReaderBasicTest { };
 NOLINT_TEST_F(ReaderFloatTest, ReadFloat)
 {
   //! Arrange: Write a test value of the current integral type.
-  constexpr float value = 1.234567f;
+  constexpr float value = 1.234567F;
   this->WritePod(value);
   this->SeekTo(0);
 

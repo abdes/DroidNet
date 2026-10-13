@@ -33,7 +33,7 @@ struct HeapDescription {
   bool allow_growth { true };
 
   //! Growth factor when expanding descriptor heaps.
-  float growth_factor { 2.0f };
+  float growth_factor { 2.0F };
 
   //! Maximum number of growth iterations before failing allocations.
   uint32_t max_growth_iterations { 3 };

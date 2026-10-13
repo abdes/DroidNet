@@ -132,7 +132,7 @@ struct ModuleTimingData {
    values < 1.0 slow down time, and 0.0 effectively pauses game time.
    Does not affect fixed_delta_time.
   */
-  float time_scale { 1.0f };
+  float time_scale { 1.0F };
 
   //! Whether game time progression is currently paused
   /*!
@@ -148,7 +148,7 @@ struct ModuleTimingData {
    timestep update the current frame represents. Used for smooth visual
    interpolation of physics objects and other fixed-timestep data.
   */
-  float interpolation_alpha { 0.0f };
+  float interpolation_alpha { 0.0F };
 
   //! Current measured frame rate for adaptive quality control
   /*!
@@ -156,7 +156,7 @@ struct ModuleTimingData {
    decisions. Systems can reduce visual fidelity when FPS drops below
    target thresholds.
   */
-  float current_fps { 0.0f };
+  float current_fps { 0.0F };
 
   //! Number of fixed timestep updates executed this frame
   /*!

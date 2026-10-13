@@ -14,17 +14,17 @@
 namespace oxygen {
 
 struct ViewPort {
-  float top_left_x { 0.f };
-  float top_left_y { 0.f };
-  float width { 0.f };
-  float height { 0.f };
-  float min_depth { 0.f };
-  float max_depth { 1.f };
+  float top_left_x { 0.F };
+  float top_left_y { 0.F };
+  float width { 0.F };
+  float height { 0.F };
+  float min_depth { 0.F };
+  float max_depth { 1.F };
 
   [[nodiscard]] auto IsValid() const -> bool
   {
-    return top_left_x >= 0.0f && top_left_y >= 0.0f && width > 0.0f
-      && height > 0.0f && min_depth >= 0.0f && max_depth <= 1.0f
+    return top_left_x >= 0.0F && top_left_y >= 0.0F && width > 0.0F
+      && height > 0.0F && min_depth >= 0.0F && max_depth <= 1.0F
       && min_depth < max_depth;
   }
 };

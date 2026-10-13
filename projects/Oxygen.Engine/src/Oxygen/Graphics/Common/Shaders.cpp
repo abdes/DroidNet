@@ -237,7 +237,7 @@ auto ShaderRequestHash::operator()(const ShaderRequest& request) const noexcept
     if (def.value) {
       hash_combine(std::hash<std::string> {}(*def.value));
     } else {
-      hash_combine(0xA5A5A5A5u);
+      hash_combine(0xA5A5A5A5U);
     }
   }
   return seed;
@@ -267,7 +267,7 @@ auto ComputeShaderRequestKey(const ShaderRequest& request) -> uint64_t
     if (def.value.has_value()) {
       mix(oxygen::ComputeFNV1a64(def.value->data(), def.value->size()));
     } else {
-      mix(uint64_t { 0xA5A5A5A5u });
+      mix(uint64_t { 0xA5A5A5A5U });
     }
   }
 

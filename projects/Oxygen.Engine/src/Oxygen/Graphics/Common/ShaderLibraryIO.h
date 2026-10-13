@@ -55,7 +55,7 @@ namespace serio_utils {
 
   inline auto CheckedU16Size(const size_t n, std::string_view what) -> uint16_t
   {
-    if (n > 0xFFFFu) {
+    if (n > 0xFFFFU) {
       throw std::runtime_error(std::string(what) + " too long");
     }
     return static_cast<uint16_t>(n);

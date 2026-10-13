@@ -32,7 +32,7 @@ struct DomainToken : detail::DomainTokenBase {
   using Base = detail::DomainTokenBase;
   using Base::Base;
 
-  static constexpr uint16_t kInvalidValue = 0xFFFFu;
+  static constexpr uint16_t kInvalidValue = 0xFFFFU;
 
   [[nodiscard]] constexpr auto IsValid() const noexcept -> bool
   {
@@ -44,7 +44,7 @@ struct IndexSpaceToken : detail::IndexSpaceTokenBase {
   using Base = detail::IndexSpaceTokenBase;
   using Base::Base;
 
-  static constexpr uint16_t kInvalidValue = 0xFFFFu;
+  static constexpr uint16_t kInvalidValue = 0xFFFFU;
 
   [[nodiscard]] constexpr auto IsValid() const noexcept -> bool
   {

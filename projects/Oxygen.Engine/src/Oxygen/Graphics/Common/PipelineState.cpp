@@ -45,7 +45,7 @@ inline void HashShaderDefines(
     if (def.value) {
       HashCombine(seed, *def.value);
     } else {
-      HashCombine(seed, uint32_t { 0xA5A5A5A5u });
+      HashCombine(seed, uint32_t { 0xA5A5A5A5U });
     }
   }
 }

@@ -73,20 +73,20 @@ namespace {
 
       // Check for non-default transform values
       if (auto pos = transform.GetLocalPosition();
-        pos && (pos->x != 0.0f || pos->y != 0.0f || pos->z != 0.0f)) {
+        pos && (pos->x != 0.0F || pos->y != 0.0F || pos->z != 0.0F)) {
         parts.emplace_back("T");
       }
 
       if (auto rot = transform.GetLocalRotation(); rot) {
         // Check if rotation is not identity quaternion (0,0,0,1)
-        if (rot->x != 0.0f || rot->y != 0.0f || rot->z != 0.0f
-          || rot->w != 1.0f) {
+        if (rot->x != 0.0F || rot->y != 0.0F || rot->z != 0.0F
+          || rot->w != 1.0F) {
           parts.emplace_back("R");
         }
       }
 
       if (auto scale = transform.GetLocalScale();
-        scale && (scale->x != 1.0f || scale->y != 1.0f || scale->z != 1.0f)) {
+        scale && (scale->x != 1.0F || scale->y != 1.0F || scale->z != 1.0F)) {
         parts.emplace_back("S");
       }
 

@@ -53,13 +53,13 @@ using oxygen::graphics::TextureReadbackRequest;
 using oxygen::graphics::TextureUploadRegion;
 using oxygen::graphics::d3d12::testing::ReadbackTestFixture;
 
-constexpr auto kUploadRowPitch = 256u;
+constexpr auto kUploadRowPitch = 256U;
 
 auto WriteRgbaTexel(std::vector<std::byte>& buffer, const uint32_t row_pitch,
   const uint32_t x, const uint32_t y, const std::array<uint8_t, 4>& rgba)
   -> void
 {
-  const auto offset = static_cast<size_t>(y) * row_pitch + (x * 4u);
+  const auto offset = static_cast<size_t>(y) * row_pitch + (x * 4U);
   buffer[offset + 0] = static_cast<std::byte>(rgba[0]);
   buffer[offset + 1] = static_cast<std::byte>(rgba[1]);
   buffer[offset + 2] = static_cast<std::byte>(rgba[2]);
@@ -236,8 +236,8 @@ NOLINT_TEST_F(
   for (uint32_t y = 0; y < texture_desc.height; ++y) {
     for (uint32_t x = 0; x < texture_desc.width; ++x) {
       WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
-        { static_cast<uint8_t>(10u * y + x), static_cast<uint8_t>(40u + x),
-          static_cast<uint8_t>(80u + y), static_cast<uint8_t>(120u + x + y) });
+        { static_cast<uint8_t>(10U * y + x), static_cast<uint8_t>(40U + x),
+          static_cast<uint8_t>(80U + y), static_cast<uint8_t>(120U + x + y) });
     }
   }
 
@@ -288,8 +288,8 @@ NOLINT_TEST_F(BlockingTextureReadbackTest,
   for (uint32_t y = 0; y < texture_desc.height; ++y) {
     for (uint32_t x = 0; x < texture_desc.width; ++x) {
       WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
-        { static_cast<uint8_t>(5u * y + x), static_cast<uint8_t>(30u + x),
-          static_cast<uint8_t>(60u + y), static_cast<uint8_t>(90u + x + y) });
+        { static_cast<uint8_t>(5U * y + x), static_cast<uint8_t>(30U + x),
+          static_cast<uint8_t>(60U + y), static_cast<uint8_t>(90U + x + y) });
     }
   }
 

@@ -63,7 +63,7 @@ NOLINT_TEST(ShaderBakeCatalogTest, ExpandsCanonicalizesAndSortsRequests)
 
   const auto expanded = ExpandShaderCatalog(entries);
 
-  ASSERT_EQ(expanded.size(), 4u);
+  ASSERT_EQ(expanded.size(), 4U);
 
   EXPECT_EQ(expanded[0].request.source_path, "Alpha/Path.hlsl");
   EXPECT_EQ(expanded[0].request.stage, ShaderType::kVertex);
@@ -71,14 +71,14 @@ NOLINT_TEST(ShaderBakeCatalogTest, ExpandsCanonicalizesAndSortsRequests)
 
   EXPECT_EQ(expanded[1].request.source_path, "Alpha/Path.hlsl");
   EXPECT_EQ(expanded[1].request.stage, ShaderType::kPixel);
-  ASSERT_EQ(expanded[1].request.defines.size(), 1u);
+  ASSERT_EQ(expanded[1].request.defines.size(), 1U);
   EXPECT_EQ(expanded[1].request.defines[0].name, "ALPHA");
   ASSERT_TRUE(expanded[1].request.defines[0].value.has_value());
   EXPECT_EQ(*expanded[1].request.defines[0].value, "1");
 
   EXPECT_EQ(expanded[2].request.source_path, "Alpha/Path.hlsl");
   EXPECT_EQ(expanded[2].request.stage, ShaderType::kPixel);
-  ASSERT_EQ(expanded[2].request.defines.size(), 2u);
+  ASSERT_EQ(expanded[2].request.defines.size(), 2U);
   EXPECT_EQ(expanded[2].request.defines[0].name, "ALPHA");
   EXPECT_EQ(expanded[2].request.defines[1].name, "BETA");
 

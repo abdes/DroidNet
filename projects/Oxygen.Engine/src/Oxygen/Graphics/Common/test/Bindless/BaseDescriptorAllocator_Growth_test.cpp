@@ -196,7 +196,7 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthFactorRespected)
     const float actual_ratio
       = static_cast<float>(static_cast<double>(requested_sizes[i])
         / static_cast<double>(requested_sizes[i - 1]));
-    EXPECT_NEAR(actual_ratio, growth_factor, 0.1f);
+    EXPECT_NEAR(actual_ratio, growth_factor, 0.1F);
   }
 }
 

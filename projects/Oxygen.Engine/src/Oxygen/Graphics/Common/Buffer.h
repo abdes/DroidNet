@@ -57,7 +57,7 @@ struct BufferDesc {
 // --- BufferRange definition ---
 struct BufferRange {
   uint64_t offset_bytes = 0;
-  uint64_t size_bytes = ~0ull;
+  uint64_t size_bytes = ~0ULL;
 
   BufferRange() = default;
 
@@ -84,7 +84,7 @@ struct BufferRange {
     -> bool
   {
     return (offset_bytes == 0)
-      && (size_bytes == ~0ull || size_bytes == desc.size_bytes);
+      && (size_bytes == ~0ULL || size_bytes == desc.size_bytes);
   }
 
   constexpr auto operator==(const BufferRange& other) const -> bool

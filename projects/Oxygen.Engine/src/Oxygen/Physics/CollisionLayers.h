@@ -27,7 +27,7 @@ using CollisionMask = NamedType<uint32_t, struct CollisionMaskTag,
   Hashable>; // clang-format on
 
 constexpr CollisionLayer kCollisionLayerDefault { 0 };
-constexpr CollisionMask kCollisionMaskAll { ~0u };
+constexpr CollisionMask kCollisionMaskAll { ~0U };
 
 OXGN_PHYS_NDAPI auto to_string(CollisionLayer value) -> std::string;
 OXGN_PHYS_NDAPI auto to_string(CollisionMask value) -> std::string;

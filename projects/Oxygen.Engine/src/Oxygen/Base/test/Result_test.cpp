@@ -67,7 +67,7 @@ NOLINT_TEST(ResultTest, FactoriesWork)
 NOLINT_TEST(ResultTest, ErrConverts)
 {
   // Arrange
-  const uint32_t raw = 2u;
+  const uint32_t raw = 2U;
 
   // Act
   const oxygen::Result<int, TestError> r

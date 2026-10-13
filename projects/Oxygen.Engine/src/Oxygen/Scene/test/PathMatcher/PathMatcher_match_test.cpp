@@ -229,7 +229,7 @@ NOLINT_TEST_F(PathMatcherStateTest, PartialMatch_PreservesState)
 
   // Assert - state reflects partial progress
   EXPECT_EQ(last_result, MatchResult::kPartialMatch);
-  EXPECT_EQ(state.path_stack.size(), 2u)
+  EXPECT_EQ(state.path_stack.size(), 2U)
     << "Should have 2 elements in path after matching 'a' and 'b'";
   EXPECT_EQ(state.path_stack[0], "a");
   EXPECT_EQ(state.path_stack[1], "b");
@@ -256,7 +256,7 @@ NOLINT_TEST_F(PathMatcherStateTest, CompletePattern_IgnoresAdditionalNodes)
        "streaming mode";
 
   // The path in state should still contain all processed nodes
-  EXPECT_EQ(state.path_stack.size(), 3u)
+  EXPECT_EQ(state.path_stack.size(), 3U)
     << "Path stack should contain all processed nodes";
   EXPECT_EQ(state.path_stack[0], "a");
   EXPECT_EQ(state.path_stack[1], "b");
@@ -308,7 +308,7 @@ NOLINT_TEST_F(PathMatcherErrorTest, EmptyPattern_MatchesNothing)
     << "Empty pattern should not match any nodes";
 
   // Path stack should still be updated even on no match
-  EXPECT_EQ(state.path_stack.size(), 1u)
+  EXPECT_EQ(state.path_stack.size(), 1U)
     << "Path stack should contain the processed node";
   EXPECT_EQ(state.path_stack[0], "anything");
 }

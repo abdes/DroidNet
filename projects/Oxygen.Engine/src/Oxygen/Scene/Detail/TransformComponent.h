@@ -186,17 +186,17 @@ protected:
 
 private:
   //! Local position (translation) component in local coordinate space.
-  alignas(16) Vec3 local_position_ { 0.0f, 0.0f, 0.0f };
+  alignas(16) Vec3 local_position_ { 0.0F, 0.0F, 0.0F };
 
   //! Local rotation component as normalized quaternion (w, x, y, z).
-  alignas(16) Quat local_rotation_ { 1.0f, 0.0f, 0.0f, 0.0f };
+  alignas(16) Quat local_rotation_ { 1.0F, 0.0F, 0.0F, 0.0F };
 
   //! Local scale component (multiplicative scale factors per axis).
-  alignas(16) Vec3 local_scale_ { 1.0f, 1.0f, 1.0f };
+  alignas(16) Vec3 local_scale_ { 1.0F, 1.0F, 1.0F };
 
   //! Cached world transformation matrix (lazy-computed, mutable for const
   //! access).
-  alignas(16) mutable Mat4 world_matrix_ { 1.0f };
+  alignas(16) mutable Mat4 world_matrix_ { 1.0F };
 
   ObjectMetadata* meta_data_ { nullptr };
 

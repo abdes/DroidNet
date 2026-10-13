@@ -54,7 +54,7 @@ auto BufferToTextureCommand::DoExecute(CommandContext& /*ctx*/) -> void
   if (!is_block) {
     const auto bytes_per_pixel = static_cast<uint32_t>(finfo.bytes_per_block);
     const auto mip = dst_slice.mip_level;
-    const auto mip_w = (std::max)(1u, dst_desc.width >> mip);
+    const auto mip_w = (std::max)(1U, dst_desc.width >> mip);
     const auto texture_row_stride = mip_w * bytes_per_pixel; // dst stride
     const auto copy_bytes_per_row
       = dst_slice.width * bytes_per_pixel; // src bytes to copy
@@ -65,8 +65,8 @@ auto BufferToTextureCommand::DoExecute(CommandContext& /*ctx*/) -> void
       : buffer_row_pitch * dst_slice.height;
 
     // For each array slice / mip in the resolved subresources, copy rows.
-    for (auto s = 0u; s < subresources.num_array_slices; ++s) {
-      for (auto y = 0u; y < dst_slice.height; ++y) {
+    for (auto s = 0U; s < subresources.num_array_slices; ++s) {
+      for (auto y = 0U; y < dst_slice.height; ++y) {
         const auto row_index_in_buffer = region_.buffer_offset
           + (s * buffer_slice_pitch) + (y * buffer_row_pitch);
 
@@ -107,15 +107,15 @@ auto BufferToTextureCommand::DoExecute(CommandContext& /*ctx*/) -> void
 
     const auto& layout = dst_h->GetLayoutStrategy();
 
-    for (auto s = 0u; s < subresources.num_array_slices; ++s) {
+    for (auto s = 0U; s < subresources.num_array_slices; ++s) {
       const auto array_index = dst_slice.array_slice + s;
       const auto mip = dst_slice.mip_level;
 
       // Precompute mip-specific values
-      const auto mip_w = (std::max)(1u, dst_desc.width >> mip);
+      const auto mip_w = (std::max)(1U, dst_desc.width >> mip);
       const auto mip_blocks_x = (mip_w + block_w - 1) / block_w;
 
-      for (auto by = 0u; by < blocks_y; ++by) {
+      for (auto by = 0U; by < blocks_y; ++by) {
         const auto row_index_in_buffer = region_.buffer_offset
           + (s * buffer_slice_pitch) + (by * buffer_row_pitch);
 

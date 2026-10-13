@@ -48,7 +48,7 @@ struct TextureImportSettings {
   std::string packing_policy;
   std::string cube_layout;
   std::string hdr_handling;
-  float exposure_ev = 0.0f;
+  float exposure_ev = 0.0F;
   uint32_t max_mip_levels = 0;
   uint32_t cube_face_size = 0;
   bool flip_y = false;

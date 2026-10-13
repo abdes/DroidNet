@@ -70,22 +70,22 @@ struct MaterialTextureBindings {
 
 //! Scalar material inputs.
 struct MaterialInputs {
-  float base_color[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
-  float normal_scale = 1.0f;
-  float metalness = 0.0f;
-  float roughness = 1.0f;
-  float ambient_occlusion = 1.0f;
-  float emissive_factor[3] = { 0.0f, 0.0f, 0.0f };
-  float alpha_cutoff = 0.5f;
-  float ior = 1.5f;
-  float specular_factor = 1.0f;
-  float sheen_color_factor[3] = { 0.0f, 0.0f, 0.0f };
-  float clearcoat_factor = 0.0f;
-  float clearcoat_roughness = 0.0f;
-  float transmission_factor = 0.0f;
-  float thickness_factor = 0.0f;
-  float attenuation_color[3] = { 1.0f, 1.0f, 1.0f };
-  float attenuation_distance = 0.0f;
+  float base_color[4] = { 1.0F, 1.0F, 1.0F, 1.0F };
+  float normal_scale = 1.0F;
+  float metalness = 0.0F;
+  float roughness = 1.0F;
+  float ambient_occlusion = 1.0F;
+  float emissive_factor[3] = { 0.0F, 0.0F, 0.0F };
+  float alpha_cutoff = 0.5F;
+  float ior = 1.5F;
+  float specular_factor = 1.0F;
+  float sheen_color_factor[3] = { 0.0F, 0.0F, 0.0F };
+  float clearcoat_factor = 0.0F;
+  float clearcoat_roughness = 0.0F;
+  float transmission_factor = 0.0F;
+  float thickness_factor = 0.0F;
+  float attenuation_color[3] = { 1.0F, 1.0F, 1.0F };
+  float attenuation_distance = 0.0F;
   bool double_sided = false;
   bool unlit = false;
   bool roughness_as_glossiness = false;

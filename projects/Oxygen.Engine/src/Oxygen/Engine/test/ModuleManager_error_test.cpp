@@ -159,7 +159,7 @@ NOLINT_TEST_F(SyncModuleErrorTest, NonCriticalSyncRemoved)
   mgr_.RegisterModule(std::move(throwing_module));
   mgr_.RegisterModule(std::move(normal_module));
 
-  ASSERT_EQ(GetModuleCount(), 2u);
+  ASSERT_EQ(GetModuleCount(), 2U);
   ASSERT_TRUE(IsModuleRegistered("throwing"));
   ASSERT_TRUE(IsModuleRegistered("normal"));
 
@@ -171,7 +171,7 @@ NOLINT_TEST_F(SyncModuleErrorTest, NonCriticalSyncRemoved)
 
   // Assert
   // Non-critical throwing module should be removed
-  EXPECT_EQ(GetModuleCount(), 1u);
+  EXPECT_EQ(GetModuleCount(), 1U);
   EXPECT_FALSE(IsModuleRegistered("throwing"));
   EXPECT_TRUE(IsModuleRegistered("normal"));
 
@@ -179,7 +179,7 @@ NOLINT_TEST_F(SyncModuleErrorTest, NonCriticalSyncRemoved)
   EXPECT_FALSE(HasErrors()); // Errors cleared when non-critical module removed
 
   // Normal module should have executed successfully
-  ASSERT_GE(normal_ptr->calls.size(), 1u);
+  ASSERT_GE(normal_ptr->calls.size(), 1U);
   EXPECT_EQ(normal_ptr->calls.front(), "OnFrameStart");
 
   // NOTE: Cannot check throwing_ptr->calls because the module has been deleted!
@@ -201,7 +201,7 @@ NOLINT_TEST_F(SyncModuleErrorTest, CriticalSyncKept)
   mgr_.RegisterModule(std::move(critical_module));
   mgr_.RegisterModule(std::move(normal_module));
 
-  ASSERT_EQ(GetModuleCount(), 2u);
+  ASSERT_EQ(GetModuleCount(), 2U);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -211,20 +211,20 @@ NOLINT_TEST_F(SyncModuleErrorTest, CriticalSyncKept)
 
   // Assert
   // Critical module should NOT be removed
-  EXPECT_EQ(GetModuleCount(), 2u);
+  EXPECT_EQ(GetModuleCount(), 2U);
   EXPECT_TRUE(IsModuleRegistered("critical"));
   EXPECT_TRUE(IsModuleRegistered("normal"));
 
   // Error should remain in context for engine to handle
   EXPECT_TRUE(HasErrors());
-  EXPECT_EQ(GetErrorCount(), 1u);
+  EXPECT_EQ(GetErrorCount(), 1U);
   EXPECT_TRUE(FindErrorContaining("Test exception from OnFrameStart"));
 
   // Both modules should have attempted execution
-  ASSERT_GE(critical_ptr->calls.size(), 1u);
+  ASSERT_GE(critical_ptr->calls.size(), 1U);
   EXPECT_EQ(critical_ptr->calls.front(), "OnFrameStart-before-throw");
 
-  ASSERT_GE(normal_ptr->calls.size(), 1u);
+  ASSERT_GE(normal_ptr->calls.size(), 1U);
   EXPECT_EQ(normal_ptr->calls.front(), "OnFrameStart");
 }
 
@@ -274,7 +274,7 @@ NOLINT_TEST_F(AsyncModuleErrorTest, NonCriticalAsyncRemoved)
   mgr_.RegisterModule(std::move(throwing_module));
   mgr_.RegisterModule(std::move(normal_module));
 
-  ASSERT_EQ(GetModuleCount(), 2u);
+  ASSERT_EQ(GetModuleCount(), 2U);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -284,7 +284,7 @@ NOLINT_TEST_F(AsyncModuleErrorTest, NonCriticalAsyncRemoved)
 
   // Assert
   // Non-critical throwing module should be removed
-  EXPECT_EQ(GetModuleCount(), 1u);
+  EXPECT_EQ(GetModuleCount(), 1U);
   EXPECT_FALSE(IsModuleRegistered("throwing"));
   EXPECT_TRUE(IsModuleRegistered("normal"));
 
@@ -292,7 +292,7 @@ NOLINT_TEST_F(AsyncModuleErrorTest, NonCriticalAsyncRemoved)
   EXPECT_FALSE(HasErrors());
 
   // Normal module should have completed successfully
-  ASSERT_GE(normal_ptr->calls.size(), 2u);
+  ASSERT_GE(normal_ptr->calls.size(), 2U);
   EXPECT_EQ(normal_ptr->calls.front(), "OnInput-start");
   EXPECT_EQ(normal_ptr->calls.back(), "OnInput-end");
 
@@ -316,7 +316,7 @@ NOLINT_TEST_F(AsyncModuleErrorTest, CriticalAsyncKept)
   mgr_.RegisterModule(std::move(critical_module));
   mgr_.RegisterModule(std::move(normal_module));
 
-  ASSERT_EQ(GetModuleCount(), 2u);
+  ASSERT_EQ(GetModuleCount(), 2U);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -326,17 +326,17 @@ NOLINT_TEST_F(AsyncModuleErrorTest, CriticalAsyncKept)
 
   // Assert
   // Critical module should NOT be removed
-  EXPECT_EQ(GetModuleCount(), 2u);
+  EXPECT_EQ(GetModuleCount(), 2U);
   EXPECT_TRUE(IsModuleRegistered("critical"));
   EXPECT_TRUE(IsModuleRegistered("normal"));
 
   // Error should remain in context for engine to handle
   EXPECT_TRUE(HasErrors());
-  EXPECT_EQ(GetErrorCount(), 1u);
+  EXPECT_EQ(GetErrorCount(), 1U);
   EXPECT_TRUE(FindErrorContaining("Test exception from OnGameplay"));
 
   // Critical module should have attempted execution
-  ASSERT_GE(critical_ptr->calls.size(), 1u);
+  ASSERT_GE(critical_ptr->calls.size(), 1U);
   EXPECT_EQ(critical_ptr->calls.front(), "OnGameplay-before-throw");
 }
 
@@ -376,7 +376,7 @@ NOLINT_TEST_F(MultiModuleErrorTest, CriticalModuleThrows_RemainsRegistered)
       MakeModuleMask<PhaseId::kInput>(), &loop_, true /* critical */);
 
   mgr_.RegisterModule(std::move(critical_module));
-  ASSERT_EQ(GetModuleCount(), 1u);
+  ASSERT_EQ(GetModuleCount(), 1U);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -385,10 +385,10 @@ NOLINT_TEST_F(MultiModuleErrorTest, CriticalModuleThrows_RemainsRegistered)
   });
 
   // Assert
-  EXPECT_EQ(GetModuleCount(), 1u);
+  EXPECT_EQ(GetModuleCount(), 1U);
   EXPECT_TRUE(IsModuleRegistered("critical"));
   EXPECT_TRUE(HasErrors());
-  EXPECT_EQ(GetErrorCount(), 1u);
+  EXPECT_EQ(GetErrorCount(), 1U);
   EXPECT_TRUE(FindErrorContaining("Test exception from OnInput"));
 }
 
@@ -401,7 +401,7 @@ NOLINT_TEST_F(MultiModuleErrorTest, NonCriticalModuleThrows_RemovedFromManager)
     false /* non-critical */);
 
   mgr_.RegisterModule(std::move(noncritical_module));
-  ASSERT_EQ(GetModuleCount(), 1u);
+  ASSERT_EQ(GetModuleCount(), 1U);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -410,7 +410,7 @@ NOLINT_TEST_F(MultiModuleErrorTest, NonCriticalModuleThrows_RemovedFromManager)
   });
 
   // Assert
-  EXPECT_EQ(GetModuleCount(), 0u);
+  EXPECT_EQ(GetModuleCount(), 0U);
   EXPECT_FALSE(IsModuleRegistered("noncritical"));
   EXPECT_FALSE(HasErrors()); // Errors cleared when non-critical module removed
 }
@@ -428,7 +428,7 @@ NOLINT_TEST_F(MultiModuleErrorTest, MixedCriticality_OnlyCriticalErrorsPersist)
 
   mgr_.RegisterModule(std::move(critical_module));
   mgr_.RegisterModule(std::move(noncritical_module));
-  ASSERT_EQ(GetModuleCount(), 2u);
+  ASSERT_EQ(GetModuleCount(), 2U);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -438,13 +438,13 @@ NOLINT_TEST_F(MultiModuleErrorTest, MixedCriticality_OnlyCriticalErrorsPersist)
 
   // Assert
   // Only non-critical module should be removed
-  EXPECT_EQ(GetModuleCount(), 1u);
+  EXPECT_EQ(GetModuleCount(), 1U);
   EXPECT_TRUE(IsModuleRegistered("critical"));
   EXPECT_FALSE(IsModuleRegistered("noncritical"));
 
   // Only critical module error should remain
   EXPECT_TRUE(HasErrors());
-  EXPECT_EQ(GetErrorCount(), 1u);
+  EXPECT_EQ(GetErrorCount(), 1U);
   EXPECT_TRUE(FindErrorContaining("Test exception from OnInput"));
 }
 
@@ -464,7 +464,7 @@ NOLINT_TEST_F(
 
   mgr_.RegisterModule(std::move(throwing_module));
   mgr_.RegisterModule(std::move(normal_module));
-  ASSERT_EQ(GetModuleCount(), 2u);
+  ASSERT_EQ(GetModuleCount(), 2U);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -475,7 +475,7 @@ NOLINT_TEST_F(
   // Assert
   // Normal module should have completed successfully despite other module
   // failing
-  ASSERT_GE(normal_ptr->calls.size(), 2u);
+  ASSERT_GE(normal_ptr->calls.size(), 2U);
   EXPECT_EQ(normal_ptr->calls.front(), "OnInput-start");
   EXPECT_EQ(normal_ptr->calls.back(), "OnInput-end");
 }
@@ -493,7 +493,7 @@ NOLINT_TEST_F(MultiModuleErrorTest, MultipleNonCriticalFail_AllRemoved)
 
   mgr_.RegisterModule(std::move(module1));
   mgr_.RegisterModule(std::move(module2));
-  ASSERT_EQ(GetModuleCount(), 2u);
+  ASSERT_EQ(GetModuleCount(), 2U);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -502,7 +502,7 @@ NOLINT_TEST_F(MultiModuleErrorTest, MultipleNonCriticalFail_AllRemoved)
   });
 
   // Assert
-  EXPECT_EQ(GetModuleCount(), 0u);
+  EXPECT_EQ(GetModuleCount(), 0U);
   EXPECT_FALSE(IsModuleRegistered("fail1"));
   EXPECT_FALSE(IsModuleRegistered("fail2"));
   EXPECT_FALSE(HasErrors()); // All errors cleared when modules removed
@@ -520,7 +520,7 @@ NOLINT_TEST_F(
 
   const auto expected_type_id = critical_module->GetTypeId();
   mgr_.RegisterModule(std::move(critical_module));
-  ASSERT_EQ(GetModuleCount(), 1u);
+  ASSERT_EQ(GetModuleCount(), 1U);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -529,12 +529,12 @@ NOLINT_TEST_F(
   });
 
   // Assert
-  EXPECT_EQ(GetModuleCount(), 1u); // Critical module remains
+  EXPECT_EQ(GetModuleCount(), 1U); // Critical module remains
   EXPECT_TRUE(HasErrors());
-  EXPECT_EQ(GetErrorCount(), 1u);
+  EXPECT_EQ(GetErrorCount(), 1U);
 
   const auto errors = ctx_.GetErrors();
-  ASSERT_EQ(errors.size(), 1u);
+  ASSERT_EQ(errors.size(), 1U);
   const auto& error = errors[0];
   EXPECT_EQ(error.source_type_id, expected_type_id);
   EXPECT_TRUE(error.message.find("Test exception from OnFrameStart")
@@ -552,7 +552,7 @@ NOLINT_TEST_F(
     true /* critical */);
 
   mgr_.RegisterModule(std::move(critical_module));
-  ASSERT_EQ(GetModuleCount(), 1u);
+  ASSERT_EQ(GetModuleCount(), 1U);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -561,12 +561,12 @@ NOLINT_TEST_F(
   });
 
   // Assert
-  EXPECT_EQ(GetModuleCount(), 1u); // Critical module remains
+  EXPECT_EQ(GetModuleCount(), 1U); // Critical module remains
   EXPECT_TRUE(HasErrors());
-  EXPECT_EQ(GetErrorCount(), 1u);
+  EXPECT_EQ(GetErrorCount(), 1U);
 
   const auto errors = ctx_.GetErrors();
-  ASSERT_EQ(errors.size(), 1u);
+  ASSERT_EQ(errors.size(), 1U);
   const auto& error = errors[0];
   EXPECT_TRUE(error.source_key.has_value());
   EXPECT_EQ(error.source_key.value(), "test_module");
@@ -590,7 +590,7 @@ NOLINT_TEST_F(MultiModuleErrorTest,
 
   mgr_.RegisterModule(std::move(module1));
   mgr_.RegisterModule(std::move(module2));
-  ASSERT_EQ(GetModuleCount(), 2u);
+  ASSERT_EQ(GetModuleCount(), 2U);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -599,9 +599,9 @@ NOLINT_TEST_F(MultiModuleErrorTest,
   });
 
   // Assert
-  EXPECT_EQ(GetModuleCount(), 2u); // Both critical modules remain
+  EXPECT_EQ(GetModuleCount(), 2U); // Both critical modules remain
   EXPECT_TRUE(HasErrors());
-  EXPECT_EQ(GetErrorCount(), 2u);
+  EXPECT_EQ(GetErrorCount(), 2U);
 
   // Find and verify first module error
   const auto errors = ctx_.GetErrors();
@@ -639,7 +639,7 @@ NOLINT_TEST_F(EdgeCaseErrorTest, EmptyPhaseExecution)
     std::make_unique<DummyModule>("dummy", ModulePriority { 100 },
       MakeModuleMask<PhaseId::kGameplay>())); // Different phase
 
-  ASSERT_EQ(GetModuleCount(), 1u);
+  ASSERT_EQ(GetModuleCount(), 1U);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -648,7 +648,7 @@ NOLINT_TEST_F(EdgeCaseErrorTest, EmptyPhaseExecution)
   });
 
   // Assert
-  EXPECT_EQ(GetModuleCount(), 1u);
+  EXPECT_EQ(GetModuleCount(), 1U);
   EXPECT_FALSE(HasErrors());
 }
 
@@ -672,7 +672,7 @@ NOLINT_TEST_F(EdgeCaseErrorTest, UnknownExceptionHandling)
     std::make_unique<CustomThrowingModule>("custom", ModulePriority { 100 },
       MakeModuleMask<PhaseId::kFrameStart>(), nullptr, false));
 
-  ASSERT_EQ(GetModuleCount(), 1u);
+  ASSERT_EQ(GetModuleCount(), 1U);
 
   // Act
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -682,7 +682,7 @@ NOLINT_TEST_F(EdgeCaseErrorTest, UnknownExceptionHandling)
 
   // Assert
   // Module should be removed due to unknown exception
-  EXPECT_EQ(GetModuleCount(), 0u);
+  EXPECT_EQ(GetModuleCount(), 0U);
   EXPECT_FALSE(IsModuleRegistered("custom"));
   EXPECT_FALSE(HasErrors()); // Error cleared when module removed
 }
@@ -698,7 +698,7 @@ NOLINT_TEST_F(EdgeCaseErrorTest, ConditionalThrowing)
   auto* conditional_ptr = conditional_module.get();
   mgr_.RegisterModule(std::move(conditional_module));
 
-  ASSERT_EQ(GetModuleCount(), 1u);
+  ASSERT_EQ(GetModuleCount(), 1U);
 
   // Act & Assert - First run without errors
   oxygen::co::Run(loop_, [&]() -> Co<> {
@@ -706,9 +706,9 @@ NOLINT_TEST_F(EdgeCaseErrorTest, ConditionalThrowing)
     co_return;
   });
 
-  EXPECT_EQ(GetModuleCount(), 1u);
+  EXPECT_EQ(GetModuleCount(), 1U);
   EXPECT_FALSE(HasErrors());
-  ASSERT_GE(conditional_ptr->calls.size(), 1u);
+  ASSERT_GE(conditional_ptr->calls.size(), 1U);
   EXPECT_EQ(conditional_ptr->calls.back(), "OnFrameStart");
 
   // Act & Assert - Second run with sync error
@@ -719,7 +719,7 @@ NOLINT_TEST_F(EdgeCaseErrorTest, ConditionalThrowing)
   });
 
   // Module should be removed after throwing
-  EXPECT_EQ(GetModuleCount(), 0u);
+  EXPECT_EQ(GetModuleCount(), 0U);
   EXPECT_FALSE(HasErrors()); // Error cleared when module removed
 }
 
@@ -741,15 +741,15 @@ NOLINT_TEST_F(SingleModuleErrorTest, ProperErrorReporting)
 
   // Assert
   // Module should have reported error but not thrown exception
-  ASSERT_GE(module_ptr->calls.size(), 2u);
+  ASSERT_GE(module_ptr->calls.size(), 2U);
   EXPECT_EQ(module_ptr->calls[0], "OnFrameStart-before-error");
   EXPECT_EQ(module_ptr->calls[1], "OnFrameStart-after-error");
 
   // Error should be tracked with proper source key (module name)
   EXPECT_TRUE(HasErrors());
-  EXPECT_EQ(GetErrorCount(), 1u);
+  EXPECT_EQ(GetErrorCount(), 1U);
   const auto& errors = ctx_.GetErrors();
-  EXPECT_EQ(errors.size(), 1u);
+  EXPECT_EQ(errors.size(), 1U);
 
   const auto& error = errors[0];
   EXPECT_TRUE(error.source_key.has_value());
@@ -760,7 +760,7 @@ NOLINT_TEST_F(SingleModuleErrorTest, ProperErrorReporting)
     != std::string::npos);
 
   // Critical module with error should remain registered
-  EXPECT_EQ(GetModuleCount(), 1u);
+  EXPECT_EQ(GetModuleCount(), 1U);
   EXPECT_TRUE(IsModuleRegistered("proper_reporting"));
 }
 

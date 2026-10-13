@@ -89,11 +89,11 @@ inline uint64_t ByteSwap64(const uint64_t value)
  */
 template <typename T>
   requires std::is_trivially_copyable_v<T>
-  && (sizeof(T) == 1u || sizeof(T) == sizeof(uint16_t)
+  && (sizeof(T) == 1U || sizeof(T) == sizeof(uint16_t)
     || sizeof(T) == sizeof(uint32_t) || sizeof(T) == sizeof(uint64_t))
 constexpr auto ByteSwap(T value) noexcept -> T
 {
-  if constexpr (sizeof(T) == 1u) {
+  if constexpr (sizeof(T) == 1U) {
     return value;
   } else if constexpr (sizeof(T) == sizeof(uint16_t)) {
     return std::bit_cast<T>(ByteSwap16(std::bit_cast<uint16_t>(value)));

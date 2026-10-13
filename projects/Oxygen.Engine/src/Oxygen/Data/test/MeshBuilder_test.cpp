@@ -46,26 +46,26 @@ protected:
     // Create sample vertices and indices for owned storage tests
     vertices_ = {
       {
-        .position = { 0.0f, 0.0f, 0.0f },
-        .normal = { 0.0f, 1.0f, 0.0f },
-        .texcoord = { 0.0f, 0.0f },
-        .tangent = { 1.0f, 0.0f, 0.0f },
+        .position = { 0.0F, 0.0F, 0.0F },
+        .normal = { 0.0F, 1.0F, 0.0F },
+        .texcoord = { 0.0F, 0.0F },
+        .tangent = { 1.0F, 0.0F, 0.0F },
         .bitangent = {},
         .color = {},
       },
       {
-        .position = { 1.0f, 0.0f, 0.0f },
-        .normal = { 0.0f, 1.0f, 0.0f },
-        .texcoord = { 1.0f, 0.0f },
-        .tangent = { 1.0f, 0.0f, 0.0f },
+        .position = { 1.0F, 0.0F, 0.0F },
+        .normal = { 0.0F, 1.0F, 0.0F },
+        .texcoord = { 1.0F, 0.0F },
+        .tangent = { 1.0F, 0.0F, 0.0F },
         .bitangent = {},
         .color = {},
       },
       {
-        .position = { 0.5f, 1.0f, 0.0f },
-        .normal = { 0.0f, 1.0f, 0.0f },
-        .texcoord = { 0.5f, 1.0f },
-        .tangent = { 1.0f, 0.0f, 0.0f },
+        .position = { 0.5F, 1.0F, 0.0F },
+        .normal = { 0.0F, 1.0F, 0.0F },
+        .texcoord = { 0.5F, 1.0F },
+        .tangent = { 1.0F, 0.0F, 0.0F },
         .bitangent = {},
         .color = {},
       },
@@ -126,10 +126,10 @@ protected:
   {
     // Create minimal test data
     vertices_ = { {
-      .position = { 0.0f, 0.0f, 0.0f },
-      .normal = { 0.0f, 1.0f, 0.0f },
-      .texcoord = { 0.0f, 0.0f },
-      .tangent = { 1.0f, 0.0f, 0.0f },
+      .position = { 0.0F, 0.0F, 0.0F },
+      .normal = { 0.0F, 1.0F, 0.0F },
+      .texcoord = { 0.0F, 0.0F },
+      .tangent = { 1.0F, 0.0F, 0.0F },
       .bitangent = {},
       .color = {},
     } };
@@ -190,18 +190,18 @@ protected:
   {
     // Provide a small but non-trivial owned storage set
     vertices_ = { {
-                    .position = { 0.0f, 0.0f, 0.0f },
-                    .normal = { 0.0f, 1.0f, 0.0f },
-                    .texcoord = { 0.0f, 0.0f },
-                    .tangent = { 1.0f, 0.0f, 0.0f },
+                    .position = { 0.0F, 0.0F, 0.0F },
+                    .normal = { 0.0F, 1.0F, 0.0F },
+                    .texcoord = { 0.0F, 0.0F },
+                    .tangent = { 1.0F, 0.0F, 0.0F },
                     .bitangent = {},
                     .color = {},
                   },
       {
-        .position = { 1.0f, 0.0f, 0.0f },
-        .normal = { 0.0f, 1.0f, 0.0f },
-        .texcoord = { 1.0f, 0.0f },
-        .tangent = { 1.0f, 0.0f, 0.0f },
+        .position = { 1.0F, 0.0F, 0.0F },
+        .normal = { 0.0F, 1.0F, 0.0F },
+        .texcoord = { 1.0F, 0.0F },
+        .tangent = { 1.0F, 0.0F, 0.0F },
         .bitangent = {},
         .color = {},
       } };
@@ -638,7 +638,7 @@ NOLINT_TEST_F(
   // Assert
   ASSERT_NE(mesh, nullptr);
   EXPECT_EQ(mesh->VertexCount(), vertices_.size());
-  EXPECT_EQ(mesh->IndexCount(), 0u);
+  EXPECT_EQ(mesh->IndexCount(), 0U);
   EXPECT_FALSE(mesh->IsIndexed());
   EXPECT_THAT(mesh->SubMeshes(), SizeIs(1));
 }

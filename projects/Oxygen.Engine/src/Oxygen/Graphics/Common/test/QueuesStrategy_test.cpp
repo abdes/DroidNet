@@ -378,7 +378,7 @@ NOLINT_TEST(QueuesStrategy, ForEachQueue_VisitsEachUniqueQueueOnce)
 
   // Deduplicate and verify we visited exactly the two unique created objects.
   std::unordered_set<const CommandQueue*> uniq(visited.begin(), visited.end());
-  EXPECT_EQ(uniq.size(), 2u);
+  EXPECT_EQ(uniq.size(), 2U);
   EXPECT_TRUE(uniq.count(q_universal.get()));
   EXPECT_TRUE(uniq.count(q_named.get()));
 }

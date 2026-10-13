@@ -22,7 +22,7 @@ struct ActiveJobView {
   std::string item_event;
   uint32_t items_completed = 0U;
   uint32_t items_total = 0U;
-  float progress = 0.0f;
+  float progress = 0.0F;
 };
 
 struct WorkerUtilizationView {
@@ -30,8 +30,8 @@ struct WorkerUtilizationView {
   uint32_t completed = 0U;
   uint32_t total = 0U;
   uint32_t active = 0U;
-  float input_queue_load = 0.0f;
-  float output_queue_load = 0.0f;
+  float input_queue_load = 0.0F;
+  float output_queue_load = 0.0F;
 };
 
 struct BatchViewModel {
@@ -47,7 +47,7 @@ struct BatchViewModel {
   std::vector<ActiveJobView> active_jobs;
   std::vector<WorkerUtilizationView> worker_utilization;
   std::vector<std::string> recent_logs;
-  float progress = 0.0f;
+  float progress = 0.0F;
 };
 
 } // namespace oxygen::content::import::tool

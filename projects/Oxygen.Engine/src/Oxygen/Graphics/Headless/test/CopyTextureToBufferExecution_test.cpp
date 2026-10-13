@@ -182,7 +182,7 @@ NOLINT_TEST(CopyTextureToBufferExecution,
   ASSERT_NE(buffer, nullptr);
 
   std::vector<uint8_t> source(texture->GetBackingSize());
-  for (auto index = 0u; index < source.size(); ++index) {
+  for (auto index = 0U; index < source.size(); ++index) {
     source[index] = static_cast<uint8_t>(index + 1);
   }
   texture->WriteBacking(source.data(), 0, static_cast<uint32_t>(source.size()));
@@ -219,16 +219,16 @@ NOLINT_TEST(CopyTextureToBufferExecution,
   std::vector<uint8_t> actual(static_cast<size_t>(buffer_desc.size_bytes));
   buffer->ReadBacking(actual.data(), 0, actual.size());
 
-  const auto row_bytes = 2u * 4u;
-  const auto slice_bytes = row_bytes * 2u;
-  const auto texture_row_stride = 4u * 4u;
-  const auto texture_depth_stride = texture_row_stride * 2u;
+  const auto row_bytes = 2U * 4U;
+  const auto slice_bytes = row_bytes * 2U;
+  const auto texture_row_stride = 4U * 4U;
+  const auto texture_depth_stride = texture_row_stride * 2U;
   std::vector<uint8_t> expected = sentinel;
-  for (auto z = 0u; z < 2u; ++z) {
-    for (auto y = 0u; y < 2u; ++y) {
+  for (auto z = 0U; z < 2U; ++z) {
+    for (auto y = 0U; y < 2U; ++y) {
       const auto source_offset
-        = (1u + z) * texture_depth_stride + y * texture_row_stride + 1u * 4u;
-      const auto buffer_offset = 5u + z * slice_bytes + y * row_bytes;
+        = (1U + z) * texture_depth_stride + y * texture_row_stride + 1U * 4U;
+      const auto buffer_offset = 5U + z * slice_bytes + y * row_bytes;
       std::copy_n(source.begin() + source_offset, row_bytes,
         expected.begin() + buffer_offset);
     }
@@ -258,7 +258,7 @@ NOLINT_TEST(CopyTextureToBufferExecution,
   ASSERT_NE(buffer, nullptr);
 
   std::vector<uint8_t> blocks(texture->GetBackingSize());
-  for (auto index = 0u; index < blocks.size(); ++index) {
+  for (auto index = 0U; index < blocks.size(); ++index) {
     blocks[index] = static_cast<uint8_t>(0x40 + index);
   }
   texture->WriteBacking(blocks.data(), 0, static_cast<uint32_t>(blocks.size()));
@@ -297,11 +297,11 @@ NOLINT_TEST(CopyTextureToBufferExecution,
   buffer->ReadBacking(actual.data(), 0, actual.size());
 
   std::vector<uint8_t> expected = sentinel;
-  const auto block_bytes = 8u;
-  const auto block_row_stride = 2u * block_bytes;
-  for (auto row = 0u; row < 2u; ++row) {
+  const auto block_bytes = 8U;
+  const auto block_row_stride = 2U * block_bytes;
+  for (auto row = 0U; row < 2U; ++row) {
     const auto source_offset = row * block_row_stride + block_bytes;
-    const auto buffer_offset = 2u + row * 12u;
+    const auto buffer_offset = 2U + row * 12U;
     std::copy_n(blocks.begin() + source_offset, block_bytes,
       expected.begin() + buffer_offset);
   }

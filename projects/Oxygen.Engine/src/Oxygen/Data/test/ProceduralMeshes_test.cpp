@@ -81,10 +81,10 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
     bool valid;
     const char* note;
   } plane_cases[] = {
-    { 0, 1, 1.0f, false, "x=0 invalid" },
-    { 1, 0, 1.0f, false, "z=0 invalid" },
-    { 1, 1, 0.0f, false, "size=0 invalid" },
-    { 2, 2, 1.0f, true, "baseline valid" },
+    { 0, 1, 1.0F, false, "x=0 invalid" },
+    { 1, 0, 1.0F, false, "z=0 invalid" },
+    { 1, 1, 0.0F, false, "size=0 invalid" },
+    { 2, 2, 1.0F, true, "baseline valid" },
   };
 
   struct CylinderCase {
@@ -94,10 +94,10 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
     bool valid;
     const char* note;
   } cylinder_cases[] = {
-    { 2, 1.0f, 0.5f, false, "segments below min" },
-    { 8, -1.0f, 0.5f, false, "negative height" },
-    { 8, 1.0f, -0.5f, false, "negative radius" },
-    { 8, 1.0f, 0.5f, true, "valid" },
+    { 2, 1.0F, 0.5F, false, "segments below min" },
+    { 8, -1.0F, 0.5F, false, "negative height" },
+    { 8, 1.0F, -0.5F, false, "negative radius" },
+    { 8, 1.0F, 0.5F, true, "valid" },
   };
 
   struct ConeCase {
@@ -107,10 +107,10 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
     bool valid;
     const char* note;
   } cone_cases[] = {
-    { 2, 1.0f, 0.5f, false, "segments below min" },
-    { 8, -1.0f, 0.5f, false, "negative height" },
-    { 8, 1.0f, -0.5f, false, "negative radius" },
-    { 8, 1.0f, 0.5f, true, "valid" },
+    { 2, 1.0F, 0.5F, false, "segments below min" },
+    { 8, -1.0F, 0.5F, false, "negative height" },
+    { 8, 1.0F, -0.5F, false, "negative radius" },
+    { 8, 1.0F, 0.5F, true, "valid" },
   };
 
   struct TorusCase {
@@ -121,11 +121,11 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
     bool valid;
     const char* note;
   } torus_cases[] = {
-    { 2, 8, 1.0f, 0.25f, false, "major segments below min" },
-    { 8, 2, 1.0f, 0.25f, false, "minor segments below min" },
-    { 8, 8, -1.0f, 0.25f, false, "negative major radius" },
-    { 8, 8, 1.0f, -0.25f, false, "negative minor radius" },
-    { 8, 8, 1.0f, 0.25f, true, "valid" },
+    { 2, 8, 1.0F, 0.25F, false, "major segments below min" },
+    { 8, 2, 1.0F, 0.25F, false, "minor segments below min" },
+    { 8, 8, -1.0F, 0.25F, false, "negative major radius" },
+    { 8, 8, 1.0F, -0.25F, false, "negative minor radius" },
+    { 8, 8, 1.0F, 0.25F, true, "valid" },
   };
 
   struct QuadCase {
@@ -134,9 +134,9 @@ NOLINT_TEST_F(ProceduralMeshTest, ValidInvalidInput)
     bool valid;
     const char* note;
   } quad_cases[] = {
-    { 0.0f, 1.0f, false, "zero width" },
-    { 1.0f, 0.0f, false, "zero height" },
-    { 1.0f, 1.0f, true, "valid" },
+    { 0.0F, 1.0F, false, "zero width" },
+    { 1.0F, 0.0F, false, "zero height" },
+    { 1.0F, 1.0F, true, "valid" },
   };
 
   // Act & Assert
@@ -208,11 +208,11 @@ NOLINT_TEST_F(ProceduralMeshTest, MeshValidity)
   const auto sphere = MakeSphereMeshAsset(8, 8);
   const auto icosphere = MakeIcoSphereMeshAsset(2);
   const auto subdivided_cube = MakeSubdividedCubeMeshAsset(6);
-  const auto plane = MakePlaneMeshAsset(2, 2, 1.0f);
-  const auto cylinder = MakeCylinderMeshAsset(8, 1.0f, 0.5f);
-  const auto cone = MakeConeMeshAsset(8, 1.0f, 0.5f);
-  const auto torus = MakeTorusMeshAsset(8, 8, 1.0f, 0.25f);
-  const auto quad = MakeQuadMeshAsset(1.0f, 1.0f);
+  const auto plane = MakePlaneMeshAsset(2, 2, 1.0F);
+  const auto cylinder = MakeCylinderMeshAsset(8, 1.0F, 0.5F);
+  const auto cone = MakeConeMeshAsset(8, 1.0F, 0.5F);
+  const auto torus = MakeTorusMeshAsset(8, 8, 1.0F, 0.25F);
+  const auto quad = MakeQuadMeshAsset(1.0F, 1.0F);
   std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> assets[]
     = { sphere, icosphere, subdivided_cube, plane, cylinder, cone, torus,
         quad };
@@ -222,14 +222,14 @@ NOLINT_TEST_F(ProceduralMeshTest, MeshValidity)
     auto mesh_opt = f.fn();
     ASSERT_TRUE(mesh_opt.has_value()) << f.name;
     const auto& [vertices, indices] = *mesh_opt;
-    EXPECT_GT(vertices.size(), 0u) << f.name;
-    EXPECT_GT(indices.size(), 0u) << f.name;
+    EXPECT_GT(vertices.size(), 0U) << f.name;
+    EXPECT_GT(indices.size(), 0U) << f.name;
   }
   for (const auto& mesh_opt : assets) {
     ASSERT_TRUE(mesh_opt.has_value());
     const auto& [vertices, indices] = *mesh_opt;
-    EXPECT_GT(vertices.size(), 0u);
-    EXPECT_GT(indices.size(), 0u);
+    EXPECT_GT(vertices.size(), 0U);
+    EXPECT_GT(indices.size(), 0U);
   }
 }
 
@@ -256,8 +256,8 @@ NOLINT_TEST_F(ProceduralMeshTest, BoundingBox)
   EXPECT_LE(min.y, max.y);
   EXPECT_LE(min.z, max.z);
   // Cube should be centered at origin, size 1
-  EXPECT_EQ(min, glm::vec3(-0.5f, -0.5f, -0.5f));
-  EXPECT_EQ(max, glm::vec3(0.5f, 0.5f, 0.5f));
+  EXPECT_EQ(min, glm::vec3(-0.5F, -0.5F, -0.5F));
+  EXPECT_EQ(max, glm::vec3(0.5F, 0.5F, 0.5F));
 }
 
 //! Boundary tests for minimum valid sphere segment counts.
@@ -327,23 +327,23 @@ NOLINT_TEST_F(ProceduralMeshTest, PlaneMinimumResolution)
   using namespace oxygen::data;
   // Invalid just-below boundaries
   // Act & Assert
-  EXPECT_FALSE(MakePlaneMeshAsset(0, 1, 1.0f).has_value())
+  EXPECT_FALSE(MakePlaneMeshAsset(0, 1, 1.0F).has_value())
     << "x_segments=0 invalid";
-  EXPECT_FALSE(MakePlaneMeshAsset(1, 0, 1.0f).has_value())
+  EXPECT_FALSE(MakePlaneMeshAsset(1, 0, 1.0F).has_value())
     << "z_segments=0 invalid";
-  EXPECT_FALSE(MakePlaneMeshAsset(1, 1, 0.0f).has_value()) << "size<=0 invalid";
+  EXPECT_FALSE(MakePlaneMeshAsset(1, 1, 0.0F).has_value()) << "size<=0 invalid";
   // Minimum valid (1,1,size>0) should succeed according to generator but
   // existing ValidInvalidInput test expects (2,2) as first positive. We
   // confirm behavior explicitly: if (1,1,1.0f) becomes valid later this test
   // will capture the change.
-  auto one_one = MakePlaneMeshAsset(1, 1, 1.0f);
+  auto one_one = MakePlaneMeshAsset(1, 1, 1.0F);
   // Accept either current (nullopt) or future (has_value) behavior without
   // failing the suite; we only assert that (2,2) definitely succeeds.
   if (one_one.has_value()) {
-    EXPECT_GT(one_one->first.size(), 0u);
-    EXPECT_GT(one_one->second.size(), 0u);
+    EXPECT_GT(one_one->first.size(), 0U);
+    EXPECT_GT(one_one->second.size(), 0U);
   }
-  EXPECT_TRUE(MakePlaneMeshAsset(2, 2, 1.0f).has_value())
+  EXPECT_TRUE(MakePlaneMeshAsset(2, 2, 1.0F).has_value())
     << "(2,2) must be valid";
 }
 
@@ -358,8 +358,8 @@ NOLINT_TEST_F(ProceduralMeshTest, DefaultView)
 
   // Act & Assert: the only view is the full data
   // Cube uses 24 per-face vertices (separate normals/tangents per face)
-  EXPECT_EQ(vertices.size(), 24u);
-  EXPECT_EQ(indices.size(), 36u); // Cube should have 36 indices
+  EXPECT_EQ(vertices.size(), 24U);
+  EXPECT_EQ(indices.size(), 36U); // Cube should have 36 indices
 }
 
 //! Checks each procedural mesh type for expected geometry and view properties.
@@ -377,11 +377,11 @@ NOLINT_TEST_F(ProceduralMeshTest, PerMeshType)
     { "SubdividedCube", MakeSubdividedCubeMeshAsset(6), 218, 1296 },
     { "Sphere", MakeSphereMeshAsset(8, 8), 81, 384 },
     { "IcoSphere", MakeIcoSphereMeshAsset(2), 162, 960 },
-    { "Plane", MakePlaneMeshAsset(2, 2, 1.0f), 9, 24 },
-    { "Cylinder", MakeCylinderMeshAsset(8, 1.0f, 0.5f), 18, 72 },
-    { "Cone", MakeConeMeshAsset(8, 1.0f, 0.5f), 11, 48 },
-    { "Torus", MakeTorusMeshAsset(8, 8, 1.0f, 0.25f), 81, 384 },
-    { "Quad", MakeQuadMeshAsset(1.0f, 1.0f), 4, 6 },
+    { "Plane", MakePlaneMeshAsset(2, 2, 1.0F), 9, 24 },
+    { "Cylinder", MakeCylinderMeshAsset(8, 1.0F, 0.5F), 18, 72 },
+    { "Cone", MakeConeMeshAsset(8, 1.0F, 0.5F), 11, 48 },
+    { "Torus", MakeTorusMeshAsset(8, 8, 1.0F, 0.25F), 81, 384 },
+    { "Quad", MakeQuadMeshAsset(1.0F, 1.0F), 4, 6 },
     { "ArrowGizmo", MakeArrowGizmoMeshAsset(), 0, 0 },
   };
 
@@ -414,11 +414,11 @@ NOLINT_TEST_F(ProceduralMeshTest, ShapesTopologyValid)
     { "SubdividedCube", MakeSubdividedCubeMeshAsset(6) },
     { "Sphere", MakeSphereMeshAsset(8, 8) },
     { "IcoSphere", MakeIcoSphereMeshAsset(2) },
-    { "Plane", MakePlaneMeshAsset(2, 2, 1.0f) },
-    { "Cylinder", MakeCylinderMeshAsset(8, 1.0f, 0.5f) },
-    { "Cone", MakeConeMeshAsset(8, 1.0f, 0.5f) },
-    { "Torus", MakeTorusMeshAsset(8, 8, 1.0f, 0.25f) },
-    { "Quad", MakeQuadMeshAsset(1.0f, 1.0f) },
+    { "Plane", MakePlaneMeshAsset(2, 2, 1.0F) },
+    { "Cylinder", MakeCylinderMeshAsset(8, 1.0F, 0.5F) },
+    { "Cone", MakeConeMeshAsset(8, 1.0F, 0.5F) },
+    { "Torus", MakeTorusMeshAsset(8, 8, 1.0F, 0.25F) },
+    { "Quad", MakeQuadMeshAsset(1.0F, 1.0F) },
   };
 
   // Act & Assert
@@ -428,7 +428,7 @@ NOLINT_TEST_F(ProceduralMeshTest, ShapesTopologyValid)
     const auto& indices = a.asset->second;
     ASSERT_FALSE(vertices.empty()) << a.name;
     ASSERT_FALSE(indices.empty()) << a.name;
-    EXPECT_EQ(indices.size() % 3, 0u)
+    EXPECT_EQ(indices.size() % 3, 0U)
       << a.name << " index count must be multiple of 3";
     for (uint32_t idx : indices) {
       EXPECT_LT(idx, vertices.size()) << a.name << " index out of range";
@@ -445,10 +445,10 @@ NOLINT_TEST_F(ProceduralMeshTest, ShapesNormalsAndUVsValid)
   auto sphere = MakeSphereMeshAsset(8, 8);
   auto icosphere = MakeIcoSphereMeshAsset(2);
   auto subdivided_cube = MakeSubdividedCubeMeshAsset(6);
-  auto plane = MakePlaneMeshAsset(2, 2, 1.0f);
-  auto cylinder = MakeCylinderMeshAsset(8, 1.0f, 0.5f);
-  auto cone = MakeConeMeshAsset(8, 1.0f, 0.5f);
-  auto torus = MakeTorusMeshAsset(8, 8, 1.0f, 0.25f);
+  auto plane = MakePlaneMeshAsset(2, 2, 1.0F);
+  auto cylinder = MakeCylinderMeshAsset(8, 1.0F, 0.5F);
+  auto cone = MakeConeMeshAsset(8, 1.0F, 0.5F);
+  auto torus = MakeTorusMeshAsset(8, 8, 1.0F, 0.25F);
   std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> shapes[]
     = {
         sphere,
@@ -461,17 +461,17 @@ NOLINT_TEST_F(ProceduralMeshTest, ShapesNormalsAndUVsValid)
       };
 
   constexpr float kNormTol
-    = 1e-3f; // loosen vs vertex epsilon for accumulated ops
+    = 1e-3F; // loosen vs vertex epsilon for accumulated ops
   for (const auto& s : shapes) {
     ASSERT_TRUE(s.has_value());
     const auto& vertices = s->first;
     for (const auto& v : vertices) {
       float len = glm::length(v.normal);
-      EXPECT_NEAR(len, 1.0f, kNormTol);
+      EXPECT_NEAR(len, 1.0F, kNormTol);
       EXPECT_GE(v.texcoord.x, -kNormTol);
       EXPECT_GE(v.texcoord.y, -kNormTol);
-      EXPECT_LE(v.texcoord.x, 1.0f + kNormTol);
-      EXPECT_LE(v.texcoord.y, 1.0f + kNormTol);
+      EXPECT_LE(v.texcoord.x, 1.0F + kNormTol);
+      EXPECT_LE(v.texcoord.y, 1.0F + kNormTol);
     }
   }
 }
@@ -483,12 +483,12 @@ NOLINT_TEST_F(ProceduralMeshTest, Torus_NoDegenerateTriangles)
 {
   // Arrange
   using namespace oxygen::data;
-  auto torus = MakeTorusMeshAsset(8, 8, 1.0f, 0.25f);
+  auto torus = MakeTorusMeshAsset(8, 8, 1.0F, 0.25F);
   ASSERT_TRUE(torus.has_value());
   const auto& indices = torus->second;
 
   // Act & Assert
-  ASSERT_EQ(indices.size() % 3, 0u);
+  ASSERT_EQ(indices.size() % 3, 0U);
   for (size_t i = 0; i < indices.size(); i += 3) {
     uint32_t a = indices[i];
     uint32_t b = indices[i + 1];

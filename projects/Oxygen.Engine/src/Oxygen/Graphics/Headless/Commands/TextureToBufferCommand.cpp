@@ -81,9 +81,9 @@ auto TextureToBufferCommand::DoExecute(CommandContext& /*ctx*/) -> void
   const auto& layout = src_h->GetLayoutStrategy();
   const auto& finfo = GetFormatInfo(src_desc.format);
   const auto mip = slice.mip_level;
-  const auto mip_width = (std::max)(1u, src_desc.width >> mip);
-  const auto mip_height = (std::max)(1u, src_desc.height >> mip);
-  const auto mip_depth = (std::max)(1u, src_desc.depth >> mip);
+  const auto mip_width = (std::max)(1U, src_desc.width >> mip);
+  const auto mip_height = (std::max)(1U, src_desc.height >> mip);
+  const auto mip_depth = (std::max)(1U, src_desc.depth >> mip);
   const auto mip_base
     = layout.ComputeSliceMipBaseOffset(src_desc, slice.array_slice, mip);
 
@@ -97,8 +97,8 @@ auto TextureToBufferCommand::DoExecute(CommandContext& /*ctx*/) -> void
     const auto texture_row_stride = mip_width * bytes_per_pixel;
     const auto texture_depth_stride = texture_row_stride * mip_height;
 
-    for (auto z = 0u; z < slice.depth; ++z) {
-      for (auto y = 0u; y < slice.height; ++y) {
+    for (auto z = 0U; z < slice.depth; ++z) {
+      for (auto y = 0U; y < slice.height; ++y) {
         const auto texture_offset = static_cast<uint64_t>(mip_base)
           + static_cast<uint64_t>(slice.z + z) * texture_depth_stride
           + static_cast<uint64_t>(slice.y + y) * texture_row_stride
@@ -118,10 +118,10 @@ auto TextureToBufferCommand::DoExecute(CommandContext& /*ctx*/) -> void
   const auto block_width = static_cast<uint32_t>(finfo.block_size);
   const auto block_height = static_cast<uint32_t>(finfo.block_size);
   const auto bytes_per_block = static_cast<uint32_t>(finfo.bytes_per_block);
-  CHECK_EQ_F(slice.x % block_width, 0u,
+  CHECK_EQ_F(slice.x % block_width, 0U,
     "Block-compressed copies require block-aligned x: x={} block_width={}",
     slice.x, block_width);
-  CHECK_EQ_F(slice.y % block_height, 0u,
+  CHECK_EQ_F(slice.y % block_height, 0U,
     "Block-compressed copies require block-aligned y: y={} block_height={}",
     slice.y, block_height);
 
@@ -132,8 +132,8 @@ auto TextureToBufferCommand::DoExecute(CommandContext& /*ctx*/) -> void
   const auto texture_block_row_stride = mip_blocks_x * bytes_per_block;
   const auto texture_depth_stride = texture_block_row_stride * mip_blocks_y;
 
-  for (auto z = 0u; z < slice.depth; ++z) {
-    for (auto row_index = 0u; row_index < tight_footprint.row_count;
+  for (auto z = 0U; z < slice.depth; ++z) {
+    for (auto row_index = 0U; row_index < tight_footprint.row_count;
       ++row_index) {
       const auto texture_offset = static_cast<uint64_t>(mip_base)
         + static_cast<uint64_t>(slice.z + z) * texture_depth_stride

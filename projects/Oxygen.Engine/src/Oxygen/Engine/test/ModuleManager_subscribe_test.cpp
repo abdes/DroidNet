@@ -35,14 +35,14 @@ TEST(ModuleManagerSubscribe, SubscribeWithReplay_ReturnsExisting)
     /*replay_existing=*/true);
 
   // Replay should deliver both existing modules in attach order
-  ASSERT_EQ(seen.size(), 2u);
+  ASSERT_EQ(seen.size(), 2U);
   EXPECT_EQ(seen[0], "a");
   EXPECT_EQ(seen[1], "b");
 
   // New module should also be delivered
   mgr.RegisterModule(std::make_unique<DummyModule>("c", ModulePriority { 30 },
     MakeModuleMask<oxygen::core::PhaseId::kInput>()));
-  ASSERT_EQ(seen.size(), 3u);
+  ASSERT_EQ(seen.size(), 3U);
   EXPECT_EQ(seen.back(), "c");
 }
 
@@ -58,7 +58,7 @@ TEST(ModuleManagerSubscribe, SubscribeWithoutReplay_OnlyFuture)
   // Register a module after subscribe -> should be delivered
   mgr.RegisterModule(std::make_unique<DummyModule>("x", ModulePriority { 5 },
     MakeModuleMask<oxygen::core::PhaseId::kInput>()));
-  ASSERT_EQ(seen.size(), 1u);
+  ASSERT_EQ(seen.size(), 1U);
   EXPECT_EQ(seen[0], "x");
 
   // Pre-registered modules are not delivered (none present)

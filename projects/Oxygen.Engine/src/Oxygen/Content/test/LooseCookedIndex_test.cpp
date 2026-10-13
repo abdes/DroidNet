@@ -1478,7 +1478,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootUnknownFlagsThrows)
   FillTestGuid(header);
   header.version = oxygen::data::loose_cooked::kIndexVersion;
   header.content_version = 0;
-  header.flags = 0x80000000u;
+  header.flags = 0x80000000U;
   header.string_table_offset = sizeof(IndexHeader);
   header.string_table_size = 1; // "\0"
   header.asset_entries_offset

@@ -41,13 +41,13 @@ NOLINT_TEST_F(IndexBufferViewSliceTest, SliceElements_ValidProducesCorrectCount)
   // Assert
   EXPECT_FALSE(slice.Empty());
   EXPECT_EQ(slice.type, IndexType::kUInt32);
-  EXPECT_EQ(slice.Count(), 3u);
-  EXPECT_EQ(slice.bytes.size(), 3u * sizeof(std::uint32_t));
+  EXPECT_EQ(slice.Count(), 3U);
+  EXPECT_EQ(slice.bytes.size(), 3U * sizeof(std::uint32_t));
   auto as_u32 = slice.AsU32();
-  ASSERT_EQ(as_u32.size(), 3u);
-  EXPECT_EQ(as_u32[0], 4u);
-  EXPECT_EQ(as_u32[1], 6u);
-  EXPECT_EQ(as_u32[2], 8u);
+  ASSERT_EQ(as_u32.size(), 3U);
+  EXPECT_EQ(as_u32[0], 4U);
+  EXPECT_EQ(as_u32[1], 6U);
+  EXPECT_EQ(as_u32[2], 8U);
 }
 
 //! (21) SliceElements: Invalid (out-of-range) slice returns empty view.
@@ -58,7 +58,7 @@ NOLINT_TEST_F(IndexBufferViewSliceTest, SliceElements_InvalidReturnsEmpty)
   auto bytes = std::as_bytes(
     std::span<const std::uint32_t>(indices.data(), indices.size()));
   IndexBufferView full { bytes, IndexType::kUInt32 };
-  ASSERT_EQ(full.Count(), 4u);
+  ASSERT_EQ(full.Count(), 4U);
 
   // Act
   // Start inside but length too large (overflow end) -> empty
@@ -69,8 +69,8 @@ NOLINT_TEST_F(IndexBufferViewSliceTest, SliceElements_InvalidReturnsEmpty)
   // Assert
   EXPECT_TRUE(overflow_slice.Empty());
   EXPECT_TRUE(past_end_slice.Empty());
-  EXPECT_EQ(overflow_slice.Count(), 0u);
-  EXPECT_EQ(past_end_slice.Count(), 0u);
+  EXPECT_EQ(overflow_slice.Count(), 0U);
+  EXPECT_EQ(past_end_slice.Count(), 0U);
 }
 
 //! Fixture for widened iteration behavior on sliced views.
@@ -88,7 +88,7 @@ NOLINT_TEST_F(
   ASSERT_EQ(full.Count(), indices16.size());
 
   auto slice = full.SliceElements(1, 4); // values 11,12,13,14
-  ASSERT_EQ(slice.Count(), 4u);
+  ASSERT_EQ(slice.Count(), 4U);
 
   // Act
   std::vector<uint32_t> widened;
@@ -97,11 +97,11 @@ NOLINT_TEST_F(
   }
 
   // Assert
-  ASSERT_EQ(widened.size(), 4u);
-  EXPECT_EQ(widened[0], 11u);
-  EXPECT_EQ(widened[1], 12u);
-  EXPECT_EQ(widened[2], 13u);
-  EXPECT_EQ(widened[3], 14u);
+  ASSERT_EQ(widened.size(), 4U);
+  EXPECT_EQ(widened[0], 11U);
+  EXPECT_EQ(widened[1], 12U);
+  EXPECT_EQ(widened[2], 13U);
+  EXPECT_EQ(widened[3], 14U);
 }
 
 //! Fixture for invariant-related IndexBufferView tests.
@@ -122,8 +122,8 @@ NOLINT_TEST_F(IndexBufferViewInvariantsTest, EmptyWhenTypeNone)
   EXPECT_TRUE(with_type_none.Empty())
     << "IndexBufferView should report empty when type==kNone even if bytes are "
        "non-empty.";
-  EXPECT_EQ(with_type_none.Count(), 0u);
-  EXPECT_EQ(with_type_none.ElementSize(), 0u);
+  EXPECT_EQ(with_type_none.Count(), 0U);
+  EXPECT_EQ(with_type_none.ElementSize(), 0U);
 }
 
 } // namespace

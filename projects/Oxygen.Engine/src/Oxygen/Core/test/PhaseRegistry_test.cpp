@@ -34,7 +34,7 @@ static_assert(BarrierIndex::end().get() == kBarrierRegistry.size(),
 // MakePhaseMask correctness
 constexpr auto inputIndex = PhaseIndex { PhaseId::kInput }.get();
 static_assert(
-  MakePhaseMask(PhaseId::kInput) == (static_cast<PhaseMask>(1u) << inputIndex),
+  MakePhaseMask(PhaseId::kInput) == (static_cast<PhaseMask>(1U) << inputIndex),
   "MakePhaseMask must set the correct bit for a PhaseId");
 
 // Verify mutation flags for a couple of representative phases
@@ -267,9 +267,9 @@ NOLINT_TEST(PhaseRegistryRuntime, MaskCompatibility)
     = MakePhaseMask(PhaseId::kInput) | MakePhaseMask(PhaseId::kGameplay);
 
   // Act & Assert: check contained bits and popcount.
-  EXPECT_NE((mask & MakePhaseMask(PhaseId::kInput)), 0u);
-  EXPECT_NE((mask & MakePhaseMask(PhaseId::kGameplay)), 0u);
-  EXPECT_EQ(std::bitset<32>(mask).count(), 2u);
+  EXPECT_NE((mask & MakePhaseMask(PhaseId::kInput)), 0U);
+  EXPECT_NE((mask & MakePhaseMask(PhaseId::kGameplay)), 0U);
+  EXPECT_EQ(std::bitset<32>(mask).count(), 2U);
 }
 
 //! Verify UsesCoroutines reports true for barriered concurrency phases.

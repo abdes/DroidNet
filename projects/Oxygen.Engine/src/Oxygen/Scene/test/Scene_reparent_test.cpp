@@ -262,7 +262,7 @@ protected:
 
   // Helper: Verify vectors are approximately equal
   static auto ExpectVec3Near(const TransformComponent::Vec3& actual,
-    const TransformComponent::Vec3& expected, const float tolerance = 1e-5f)
+    const TransformComponent::Vec3& expected, const float tolerance = 1e-5F)
     -> void
   {
     EXPECT_NEAR(actual.x, expected.x, tolerance);
@@ -272,7 +272,7 @@ protected:
 
   // Helper: Verify quaternions are approximately equal
   static auto ExpectQuatNear(const TransformComponent::Quat& actual,
-    const TransformComponent::Quat& expected, const float tolerance = 1e-5f)
+    const TransformComponent::Quat& expected, const float tolerance = 1e-5F)
     -> void
   {
     EXPECT_NEAR(actual.w, expected.w, tolerance);

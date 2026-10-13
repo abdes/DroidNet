@@ -136,8 +136,8 @@ auto CompositionSwapChain::Resize(uint32_t width, uint32_t height) -> void
   ReleaseRenderTargets(true);
 
   try {
-    const auto target_width = std::max<uint32_t>(1u, width);
-    const auto target_height = std::max<uint32_t>(1u, height);
+    const auto target_width = std::max<uint32_t>(1U, width);
+    const auto target_height = std::max<uint32_t>(1U, height);
 
     ThrowOnFailed(swap_chain_->ResizeBuffers(frame::kFramesInFlight.get(),
       target_width, target_height, format_, kSwapChainFlags));

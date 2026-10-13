@@ -137,7 +137,7 @@ Texture::Texture(TextureDesc desc, const Graphics* gfx)
       !desc_.is_shader_resource && !desc_.is_render_target && !desc_.is_uav,
       "D3D12 readback textures are linear staging surfaces and cannot expose "
       "SRV/RTV/UAV flags");
-    CHECK_EQ_F(desc_.sample_count, 1u,
+    CHECK_EQ_F(desc_.sample_count, 1U,
       "D3D12 readback textures do not support multisampled layouts at T06");
 
     const auto texture_resource_desc = MakeTextureResourceDesc(desc_);

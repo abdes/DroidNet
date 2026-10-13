@@ -109,10 +109,10 @@ NOLINT_TEST_F(TextureLoaderBasicTestTest, LoadTextureV4PayloadSucceeds)
   const auto asset = LoadTextureResource(context);
 
   ASSERT_THAT(asset, NotNull());
-  EXPECT_EQ(asset->GetWidth(), 128u);
-  EXPECT_EQ(asset->GetHeight(), 64u);
-  EXPECT_EQ(asset->GetMipCount(), 1u);
-  EXPECT_EQ(asset->GetArrayLayers(), 1u);
+  EXPECT_EQ(asset->GetWidth(), 128U);
+  EXPECT_EQ(asset->GetHeight(), 64U);
+  EXPECT_EQ(asset->GetMipCount(), 1U);
+  EXPECT_EQ(asset->GetArrayLayers(), 1U);
   EXPECT_EQ(asset->GetFormat(), oxygen::Format::kR8SInt);
   EXPECT_EQ(asset->GetData().size(),
     payload_bytes.size()

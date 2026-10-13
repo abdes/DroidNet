@@ -463,9 +463,9 @@ NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_CreatesIndependentCopy)
 
   // Arrange: Modify transform component
   auto& transform = original.GetComponent<TransformComponent>();
-  transform.SetLocalPosition({ 1.0f, 2.0f, 3.0f });
-  transform.SetLocalRotation({ 0.707f, 0.707f, 0.0f, 0.0f });
-  transform.SetLocalScale({ 2.0f, 2.0f, 2.0f });
+  transform.SetLocalPosition({ 1.0F, 2.0F, 3.0F });
+  transform.SetLocalRotation({ 0.707F, 0.707F, 0.0F, 0.0F });
+  transform.SetLocalScale({ 2.0F, 2.0F, 2.0F });
 
   // Act: Clone the node
   const auto clone = original.Clone();
@@ -480,8 +480,8 @@ NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_PreservesTransformData)
   // Arrange: Create original with specific transform
   auto original = SceneNodeImpl("OriginalNode");
   auto& transform = original.GetComponent<TransformComponent>();
-  transform.SetLocalPosition({ 1.0f, 2.0f, 3.0f });
-  transform.SetLocalScale({ 2.0f, 2.0f, 2.0f });
+  transform.SetLocalPosition({ 1.0F, 2.0F, 3.0F });
+  transform.SetLocalScale({ 2.0F, 2.0F, 2.0F });
 
   // Act: Clone the node
   const auto clone = original.Clone();
@@ -489,8 +489,8 @@ NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_PreservesTransformData)
   // Assert: Clone should preserve transform data
   ASSERT_NE(clone, nullptr);
   const auto& clone_transform = clone->GetComponent<TransformComponent>();
-  EXPECT_EQ(clone_transform.GetLocalPosition(), glm::vec3(1.0f, 2.0f, 3.0f));
-  EXPECT_EQ(clone_transform.GetLocalScale(), glm::vec3(2.0f, 2.0f, 2.0f));
+  EXPECT_EQ(clone_transform.GetLocalPosition(), glm::vec3(1.0F, 2.0F, 3.0F));
+  EXPECT_EQ(clone_transform.GetLocalScale(), glm::vec3(2.0F, 2.0F, 2.0F));
 }
 
 NOLINT_TEST_F(SceneNodeImplCloningTest, Clone_ClonesAreIndependent)

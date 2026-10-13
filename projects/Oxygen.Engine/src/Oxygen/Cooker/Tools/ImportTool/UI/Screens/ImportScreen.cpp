@@ -47,7 +47,7 @@ namespace {
   auto BuildHeader(const JobViewModel& state) -> Element
   {
     const std::string status
-      = std::format("{} {:.0f}%", state.status, state.progress * 100.0f);
+      = std::format("{} {:.0f}%", state.status, state.progress * 100.0F);
     return hbox({ text(std::format("Status: {}", status)) });
   }
 

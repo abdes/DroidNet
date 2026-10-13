@@ -107,8 +107,8 @@ auto CopyTextureRegionBytes(const std::vector<std::byte>& source,
   const TextureDesc& desc, const TextureSlice& resolved_slice)
   -> std::vector<std::byte>
 {
-  const auto mip_width = (std::max)(1u, desc.width >> resolved_slice.mip_level);
-  const auto bytes_per_pixel = 4u;
+  const auto mip_width = (std::max)(1U, desc.width >> resolved_slice.mip_level);
+  const auto bytes_per_pixel = 4U;
   const auto row_stride = mip_width * bytes_per_pixel;
   std::vector<std::byte> result(static_cast<size_t>(resolved_slice.width
     * resolved_slice.height * resolved_slice.depth * bytes_per_pixel));
@@ -118,7 +118,7 @@ auto CopyTextureRegionBytes(const std::vector<std::byte>& source,
     for (uint32_t y = 0; y < resolved_slice.height; ++y) {
       const auto src_offset
         = static_cast<size_t>((resolved_slice.z + z) * row_stride
-            * (std::max)(1u, desc.height >> resolved_slice.mip_level))
+            * (std::max)(1U, desc.height >> resolved_slice.mip_level))
         + static_cast<size_t>(resolved_slice.y + y) * row_stride
         + static_cast<size_t>(resolved_slice.x) * bytes_per_pixel;
       std::copy_n(source.begin() + static_cast<std::ptrdiff_t>(src_offset),

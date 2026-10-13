@@ -69,9 +69,9 @@ TEST_F(ModuleManagerBasicTest, RegisterMultipleModules_CountAndQueryWork)
   const auto count = mgr_.GetModuleCount();
 
   // Assert
-  EXPECT_EQ(count, 2u);
+  EXPECT_EQ(count, 2U);
   auto list = GetModulesForPhase(PhaseId::kInput);
-  EXPECT_GE(list.size(), 2u);
+  EXPECT_GE(list.size(), 2U);
 }
 
 //! Verify module lifecycle callbacks are invoked during registration and
@@ -123,7 +123,7 @@ TEST_F(ModuleManagerBasicTest, AsyncPhaseExecution_BarrieredConcurrency)
   });
 
   // Assert: the AsyncModule recorded the start and end markers
-  ASSERT_GE(am_ptr->calls.size(), 2u);
+  ASSERT_GE(am_ptr->calls.size(), 2U);
   EXPECT_EQ(am_ptr->calls.front(), "OnInput-start");
   EXPECT_EQ(am_ptr->calls.back(), "OnInput-end");
 }
@@ -139,15 +139,15 @@ TEST_F(ModuleManagerBasicTest, UnregisterModule_RemovesFromManagerAndPhaseCache)
     "y", ModulePriority { 20 }, MakeModuleMask<PhaseId::kInput>()));
 
   // Precondition
-  EXPECT_EQ(mgr_.GetModuleCount(), 2u);
+  EXPECT_EQ(mgr_.GetModuleCount(), 2U);
   auto before = GetModulesForPhase(PhaseId::kInput);
-  EXPECT_GE(before.size(), 2u);
+  EXPECT_GE(before.size(), 2U);
 
   // Act
   mgr_.UnregisterModule("x");
 
   // Assert
-  EXPECT_EQ(mgr_.GetModuleCount(), 1u);
+  EXPECT_EQ(mgr_.GetModuleCount(), 1U);
   auto after = GetModulesForPhase(PhaseId::kInput);
   EXPECT_EQ(after.size(), before.size() - 1);
 }
@@ -165,7 +165,7 @@ TEST_F(ModuleManagerBasicTest, EqualPriorities_PreserveRegistrationOrder)
   auto list = GetModulesForPhase(PhaseId::kFrameStart);
 
   // Assert: registration order preserved for tie priorities (first then second)
-  ASSERT_GE(list.size(), 2u);
+  ASSERT_GE(list.size(), 2U);
   EXPECT_EQ(list[0]->GetName(), std::string_view("first"));
   EXPECT_EQ(list[1]->GetName(), std::string_view("second"));
 }
@@ -195,8 +195,8 @@ TEST_F(ModuleManagerBasicTest, SyncPhaseExecution_OrderedByPriority)
   });
 
   // Assert: high-priority (10) should have been called before low (200)
-  ASSERT_GE(p1->calls.size(), 1u);
-  ASSERT_GE(p2->calls.size(), 1u);
+  ASSERT_GE(p1->calls.size(), 1U);
+  ASSERT_GE(p2->calls.size(), 1U);
   // both had OnFrameStart appended; order: p1 then p2
   EXPECT_EQ(p1->calls.front(), "OnFrameStart");
   EXPECT_EQ(p2->calls.front(), "OnFrameStart");
@@ -229,8 +229,8 @@ TEST_F(ModuleManagerBasicTest, MultipleAsyncModules_ConcurrentExecution)
   });
 
   // Assert: both modules ran their OnInput handlers
-  ASSERT_GE(p1->calls.size(), 2u);
-  ASSERT_GE(p2->calls.size(), 2u);
+  ASSERT_GE(p1->calls.size(), 2U);
+  ASSERT_GE(p2->calls.size(), 2U);
   EXPECT_EQ(p1->calls.front(), "OnInput-start");
   EXPECT_EQ(p1->calls.back(), "OnInput-end");
   EXPECT_EQ(p2->calls.front(), "OnInput-start");

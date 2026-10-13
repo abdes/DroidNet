@@ -25,7 +25,7 @@ NOLINT_TEST(ShaderManagerTest, MissingArchiveLeavesCacheEmpty)
     .archive_dir = archive_dir,
   });
 
-  EXPECT_EQ(manager.GetShaderCount(), 0u);
+  EXPECT_EQ(manager.GetShaderCount(), 0U);
 
   std::filesystem::remove_all(archive_dir);
 }

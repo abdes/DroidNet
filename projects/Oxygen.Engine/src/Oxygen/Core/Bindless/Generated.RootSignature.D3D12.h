@@ -32,14 +32,14 @@ enum class RootParam : uint32_t {
 
 static constexpr uint32_t kRootConstantsConstantsCount = 2U;
 
-static constexpr uint32_t kBindlessSrvTableRegister = 0u; // 't0'
-static constexpr uint32_t kBindlessSrvTableSpace = 0u; // 'space0'
-static constexpr uint32_t kSamplerTableRegister = 0u; // 's0'
-static constexpr uint32_t kSamplerTableSpace = 0u; // 'space0'
-static constexpr uint32_t kViewConstantsRegister = 1u; // 'b1'
-static constexpr uint32_t kViewConstantsSpace = 0u; // 'space0'
-static constexpr uint32_t kRootConstantsRegister = 2u; // 'b2'
-static constexpr uint32_t kRootConstantsSpace = 0u; // 'space0'
+static constexpr uint32_t kBindlessSrvTableRegister = 0U; // 't0'
+static constexpr uint32_t kBindlessSrvTableSpace = 0U; // 'space0'
+static constexpr uint32_t kSamplerTableRegister = 0U; // 's0'
+static constexpr uint32_t kSamplerTableSpace = 0U; // 'space0'
+static constexpr uint32_t kViewConstantsRegister = 1U; // 'b1'
+static constexpr uint32_t kViewConstantsSpace = 0U; // 'space0'
+static constexpr uint32_t kRootConstantsRegister = 2U; // 'b2'
+static constexpr uint32_t kRootConstantsSpace = 0U; // 'space0'
 
 
 // Root parameter runtime descriptors (C++20 idiomatic)

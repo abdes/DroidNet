@@ -357,8 +357,8 @@ NOLINT_TEST_F(PolicyRulesTest, RTVAndDSVAreAlwaysCpuOnly)
     ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly));
   auto dsv_desc = strat.GetHeapDescription(strat.GetHeapKey(
     ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly));
-  EXPECT_EQ(rtv_desc.shader_visible_capacity, b::Capacity { 0u });
-  EXPECT_EQ(dsv_desc.shader_visible_capacity, b::Capacity { 0u });
+  EXPECT_EQ(rtv_desc.shader_visible_capacity, b::Capacity { 0U });
+  EXPECT_EQ(dsv_desc.shader_visible_capacity, b::Capacity { 0U });
 }
 
 NOLINT_TEST_F(PolicyRulesTest, OnlyCBVSRVUAVAndSamplerCanBeShaderVisible)
@@ -371,10 +371,10 @@ NOLINT_TEST_F(PolicyRulesTest, OnlyCBVSRVUAVAndSamplerCanBeShaderVisible)
     ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly));
   auto dsv_desc = strat.GetHeapDescription(strat.GetHeapKey(
     ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly));
-  EXPECT_GT(cbv_desc.shader_visible_capacity, b::Capacity { 0u });
-  EXPECT_GT(sampler_desc.shader_visible_capacity, b::Capacity { 0u });
-  EXPECT_EQ(rtv_desc.shader_visible_capacity, b::Capacity { 0u });
-  EXPECT_EQ(dsv_desc.shader_visible_capacity, b::Capacity { 0u });
+  EXPECT_GT(cbv_desc.shader_visible_capacity, b::Capacity { 0U });
+  EXPECT_GT(sampler_desc.shader_visible_capacity, b::Capacity { 0U });
+  EXPECT_EQ(rtv_desc.shader_visible_capacity, b::Capacity { 0U });
+  EXPECT_EQ(dsv_desc.shader_visible_capacity, b::Capacity { 0U });
 }
 
 NOLINT_TEST_F(PolicyRulesTest, OnlyOneShaderVisibleHeapPerType_CBVSRVUAV)
@@ -483,12 +483,12 @@ NOLINT_TEST_P(HeapDescriptionTest, ValidCpuVisibleCapacity)
   const auto* key = GetParam();
   const auto& desc = strat.GetHeapDescription(key);
   if (std::string(key).find("gpu") != std::string::npos) {
-    EXPECT_EQ(desc.cpu_visible_capacity, b::Capacity { 0u });
-    EXPECT_GT(desc.shader_visible_capacity, b::Capacity { 0u });
+    EXPECT_EQ(desc.cpu_visible_capacity, b::Capacity { 0U });
+    EXPECT_GT(desc.shader_visible_capacity, b::Capacity { 0U });
   } else {
     // If the key has a CPU heap, the CPU capacity should be greater than 0
-    EXPECT_GT(desc.cpu_visible_capacity, b::Capacity { 0u });
-    EXPECT_EQ(desc.shader_visible_capacity, b::Capacity { 0u });
+    EXPECT_GT(desc.cpu_visible_capacity, b::Capacity { 0U });
+    EXPECT_EQ(desc.shader_visible_capacity, b::Capacity { 0U });
   }
 }
 
@@ -535,22 +535,22 @@ NOLINT_TEST(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
   EXPECT_EQ(cbv_gpu_key, std::string("CBV_SRV_UAV:gpu"));
   const auto& cbv_gpu_desc = strat.GetHeapDescription(cbv_gpu_key);
-  EXPECT_EQ(cbv_gpu_desc.cpu_visible_capacity, b::Capacity { 0u });
-  EXPECT_EQ(cbv_gpu_desc.shader_visible_capacity, b::Capacity { 123u });
+  EXPECT_EQ(cbv_gpu_desc.cpu_visible_capacity, b::Capacity { 0U });
+  EXPECT_EQ(cbv_gpu_desc.shader_visible_capacity, b::Capacity { 123U });
   EXPECT_EQ(strat.GetHeapBaseIndex(ResourceViewType::kTexture_SRV,
               DescriptorVisibility::kShaderVisible),
-    b::HeapIndex { 1000u });
+    b::HeapIndex { 1000U });
 
   // Validate CPU RTV
   const auto rtv_cpu_key = strat.GetHeapKey(
     ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly);
   EXPECT_EQ(rtv_cpu_key, std::string("RTV:cpu"));
   const auto& rtv_desc = strat.GetHeapDescription(rtv_cpu_key);
-  EXPECT_EQ(rtv_desc.cpu_visible_capacity, b::Capacity { 456u });
-  EXPECT_EQ(rtv_desc.shader_visible_capacity, b::Capacity { 0u });
+  EXPECT_EQ(rtv_desc.cpu_visible_capacity, b::Capacity { 456U });
+  EXPECT_EQ(rtv_desc.shader_visible_capacity, b::Capacity { 0U });
   EXPECT_EQ(strat.GetHeapBaseIndex(
               ResourceViewType::kTexture_RTV, DescriptorVisibility::kCpuOnly),
-    b::HeapIndex { 2000u });
+    b::HeapIndex { 2000U });
 }
 
 NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, InvalidKey_RTVGpu_Throws)
@@ -705,11 +705,11 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig, ZeroCapacitySemantics)
     ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible);
   EXPECT_EQ(key, std::string("SAMPLER:gpu"));
   const auto& desc = strat.GetHeapDescription(key);
-  EXPECT_EQ(desc.shader_visible_capacity, b::Capacity { 0u });
-  EXPECT_EQ(desc.cpu_visible_capacity, b::Capacity { 0u });
+  EXPECT_EQ(desc.shader_visible_capacity, b::Capacity { 0U });
+  EXPECT_EQ(desc.cpu_visible_capacity, b::Capacity { 0U });
   EXPECT_EQ(strat.GetHeapBaseIndex(
               ResourceViewType::kSampler, DescriptorVisibility::kShaderVisible),
-    b::HeapIndex { 5u });
+    b::HeapIndex { 5U });
 }
 
 NOLINT_TEST(
@@ -807,6 +807,6 @@ NOLINT_TEST(HeapAllocationStrategy_ProviderConfig,
     }
     EXPECT_EQ(k, gpu_key);
     EXPECT_EQ(strat.GetHeapBaseIndex(vt, DescriptorVisibility::kShaderVisible),
-      b::HeapIndex { 777u });
+      b::HeapIndex { 777U });
   }
 }

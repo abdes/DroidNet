@@ -65,39 +65,39 @@ auto AudioImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   auto& session = Session();
 
-  ReportPhaseProgress(ImportPhase::kLoading, 0.0f, "Loading audio source...");
+  ReportPhaseProgress(ImportPhase::kLoading, 0.0F, "Loading audio source...");
   const auto load_start = std::chrono::steady_clock::now();
   const auto source = co_await LoadSource(session);
   const auto load_end = std::chrono::steady_clock::now();
   session.AddSourceLoadDuration(MakeDuration(load_start, load_end));
   if (!source.success) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Audio load failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "Audio load failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  ReportPhaseProgress(ImportPhase::kWorking, 0.4f, "Cooking audio...");
+  ReportPhaseProgress(ImportPhase::kWorking, 0.4F, "Cooking audio...");
   const auto cook_start = std::chrono::steady_clock::now();
   const bool cooked = co_await CookAudio(source, session);
   const auto cook_end = std::chrono::steady_clock::now();
   session.AddCookDuration(MakeDuration(cook_start, cook_end));
   if (!cooked) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Audio cook failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "Audio cook failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  ReportPhaseProgress(ImportPhase::kFinalizing, 0.7f, "Emitting audio...");
+  ReportPhaseProgress(ImportPhase::kFinalizing, 0.7F, "Emitting audio...");
   const auto emit_start = std::chrono::steady_clock::now();
   const bool emitted = co_await EmitAudio(source, session);
   const auto emit_end = std::chrono::steady_clock::now();
   session.AddEmitDuration(MakeDuration(emit_start, emit_end));
   if (!emitted) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Audio emit failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "Audio emit failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
   auto report = co_await FinalizeWithTelemetry(session);
 
   ReportPhaseProgress(
-    report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0f,
+    report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0F,
     report.success ? "Import complete" : "Import failed");
 
   co_return report;

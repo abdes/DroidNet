@@ -27,7 +27,7 @@ NOLINT_TEST(OptionValuesMapTest, StoreAndRetrieveSingleValue)
 
   // Assert
   EXPECT_TRUE(ovm.HasOption("count"));
-  EXPECT_EQ(ovm.OccurrencesOf("count"), 1u);
+  EXPECT_EQ(ovm.OccurrencesOf("count"), 1U);
   EXPECT_EQ(std::any_cast<int>(ovm.ValuesOf("count")[0].Value()), 42);
 }
 
@@ -45,7 +45,7 @@ NOLINT_TEST(OptionValuesMapTest, StoreMultipleValuesForSameOption)
 
   // Assert
   EXPECT_TRUE(ovm.HasOption("file"));
-  EXPECT_EQ(ovm.OccurrencesOf("file"), 2u);
+  EXPECT_EQ(ovm.OccurrencesOf("file"), 2U);
   EXPECT_EQ(std::any_cast<std::string>(ovm.ValuesOf("file")[0].Value()), "foo");
   EXPECT_EQ(std::any_cast<std::string>(ovm.ValuesOf("file")[1].Value()), "bar");
 }
@@ -58,7 +58,7 @@ NOLINT_TEST(OptionValuesMapTest, MissingOptionReturnsFalseAndZero)
 
   // Act & Assert
   EXPECT_FALSE(ovm.HasOption("not_present"));
-  EXPECT_EQ(ovm.OccurrencesOf("not_present"), 0u);
+  EXPECT_EQ(ovm.OccurrencesOf("not_present"), 0U);
 }
 
 //! Verifies ValuesOf returns an empty vector for missing option (never throws).
@@ -91,8 +91,8 @@ NOLINT_TEST(OptionValuesMapTest, StoreAndRetrieveMultipleOptions)
   // Assert
   EXPECT_TRUE(ovm.HasOption("num"));
   EXPECT_TRUE(ovm.HasOption("name"));
-  EXPECT_EQ(ovm.OccurrencesOf("num"), 2u);
-  EXPECT_EQ(ovm.OccurrencesOf("name"), 1u);
+  EXPECT_EQ(ovm.OccurrencesOf("num"), 2U);
+  EXPECT_EQ(ovm.OccurrencesOf("name"), 1U);
   EXPECT_EQ(std::any_cast<int>(ovm.ValuesOf("num")[0].Value()), 1);
   EXPECT_EQ(std::any_cast<int>(ovm.ValuesOf("num")[1].Value()), 2);
   EXPECT_EQ(
@@ -115,8 +115,8 @@ NOLINT_TEST(OptionValuesMapTest, OptionNameIsolation)
   // Assert
   EXPECT_TRUE(ovm.HasOption("opt"));
   EXPECT_TRUE(ovm.HasOption("optX"));
-  EXPECT_EQ(ovm.OccurrencesOf("opt"), 1u);
-  EXPECT_EQ(ovm.OccurrencesOf("optX"), 1u);
+  EXPECT_EQ(ovm.OccurrencesOf("opt"), 1U);
+  EXPECT_EQ(ovm.OccurrencesOf("optX"), 1U);
   EXPECT_EQ(std::any_cast<int>(ovm.ValuesOf("opt")[0].Value()), 7);
   EXPECT_EQ(std::any_cast<int>(ovm.ValuesOf("optX")[0].Value()), 8);
 }
@@ -133,7 +133,7 @@ NOLINT_TEST(OptionValuesMapTest, StoreAndRetrieveBoolFlag)
 
   // Assert
   EXPECT_TRUE(ovm.HasOption("verbose"));
-  EXPECT_EQ(ovm.OccurrencesOf("verbose"), 1u);
+  EXPECT_EQ(ovm.OccurrencesOf("verbose"), 1U);
   EXPECT_TRUE(std::any_cast<bool>(ovm.ValuesOf("verbose")[0].Value()));
 }
 

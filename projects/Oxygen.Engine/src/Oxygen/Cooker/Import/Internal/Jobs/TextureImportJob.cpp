@@ -241,7 +241,7 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
       .on_io_duration = {},
     });
 
-  ReportPhaseProgress(ImportPhase::kLoading, 0.0f, "Loading texture source...");
+  ReportPhaseProgress(ImportPhase::kLoading, 0.0F, "Loading texture source...");
   const auto load_start = std::chrono::steady_clock::now();
   auto source = co_await LoadSource(session);
   const auto load_end = std::chrono::steady_clock::now();
@@ -253,7 +253,7 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
     session.AddDecodeDuration(*source.decode_duration);
   }
   if (!source.success) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Texture load failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "Texture load failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
@@ -272,9 +272,9 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   const auto item_name = Request().source_path.filename().string();
-  ReportPhaseProgress(ImportPhase::kWorking, 0.0f, "Cooking texture...");
+  ReportPhaseProgress(ImportPhase::kWorking, 0.0F, "Cooking texture...");
   ReportItemProgress(ProgressEventKind::kItemStarted, ImportPhase::kWorking,
-    0.4f, "Texture item started", "Texture", item_name);
+    0.4F, "Texture item started", "Texture", item_name);
   auto cooked = co_await CookTexture(source, session, pipeline);
   if (cooked.telemetry.decode_duration.has_value()) {
     session.AddDecodeDuration(*cooked.telemetry.decode_duration);
@@ -286,15 +286,15 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
     session.AddCookDuration(*cooked.telemetry.cook_duration);
   }
   if (!cooked.payload.has_value() && !cooked.used_fallback) {
-    ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Texture cook failed");
+    ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "Texture cook failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
   if (cooked.payload.has_value()) {
-    ReportPhaseProgress(ImportPhase::kFinalizing, 0.7f, "Emitting texture...");
+    ReportPhaseProgress(ImportPhase::kFinalizing, 0.7F, "Emitting texture...");
     const auto emit_start = std::chrono::steady_clock::now();
     if (!co_await EmitTexture(std::move(*cooked.payload), session)) {
-      ReportPhaseProgress(ImportPhase::kFailed, 1.0f, "Texture emit failed");
+      ReportPhaseProgress(ImportPhase::kFailed, 1.0F, "Texture emit failed");
       co_return co_await FinalizeWithTelemetry(session);
     }
     const auto emit_end = std::chrono::steady_clock::now();
@@ -338,12 +338,12 @@ auto TextureImportJob::ExecuteAsync() -> co::Co<ImportReport>
   }
 
   ReportItemProgress(ProgressEventKind::kItemFinished, ImportPhase::kWorking,
-    1.0f, "Texture item finished", "Texture", item_name);
-  ReportPhaseProgress(ImportPhase::kFinalizing, 0.9f, "Finalizing import...");
+    1.0F, "Texture item finished", "Texture", item_name);
+  ReportPhaseProgress(ImportPhase::kFinalizing, 0.9F, "Finalizing import...");
   auto report = co_await FinalizeWithTelemetry(session);
 
   ReportPhaseProgress(
-    report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0f,
+    report.success ? ImportPhase::kComplete : ImportPhase::kFailed, 1.0F,
     report.success ? "Import complete" : "Import failed");
 
   co_return report;

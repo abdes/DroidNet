@@ -406,7 +406,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_BindlessCbvSrvTable)
 
   // Basic structural validation
   EXPECT_GT(blob_capture_.captured_blob.size(),
-    100u); // Root signature should be substantial
+    100U); // Root signature should be substantial
 }
 
 // Test direct CBV binding with SRV table
@@ -452,7 +452,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_DirectCbvSrvTable)
   const auto& ref_blobs = reference_blobs::GetReferenceBlobs();
   EXPECT_TRUE(blob_capture_.MatchesSnapshot(ref_blobs.direct_cbv_srv_table));
 
-  EXPECT_GT(blob_capture_.captured_blob.size(), 80u);
+  EXPECT_GT(blob_capture_.captured_blob.size(), 80U);
 }
 
 // Test push constants only root signature
@@ -486,7 +486,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_PushConstantsOnly)
   const auto& ref_blobs = reference_blobs::GetReferenceBlobs();
   EXPECT_TRUE(blob_capture_.MatchesSnapshot(ref_blobs.push_constants_only));
 
-  EXPECT_GT(blob_capture_.captured_blob.size(), 60u);
+  EXPECT_GT(blob_capture_.captured_blob.size(), 60U);
 }
 
 // Test sampler table root signature
@@ -524,7 +524,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_SamplerTable)
   const auto& ref_blobs = reference_blobs::GetReferenceBlobs();
   EXPECT_TRUE(blob_capture_.MatchesSnapshot(ref_blobs.sampler_table_only));
 
-  EXPECT_GT(blob_capture_.captured_blob.size(), 70u);
+  EXPECT_GT(blob_capture_.captured_blob.size(), 70U);
 }
 
 // Test compute pipeline root signature (should not have input assembler flag)
@@ -567,7 +567,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, ComputePipeline_BindlessCbvSrv)
   EXPECT_TRUE(
     blob_capture_.MatchesSnapshot(ref_blobs.compute_bindless_cbv_srv));
 
-  EXPECT_GT(blob_capture_.captured_blob.size(), 100u);
+  EXPECT_GT(blob_capture_.captured_blob.size(), 100U);
 }
 
 // Test mixed root signature with multiple parameter types
@@ -617,7 +617,7 @@ NOLINT_TEST_F(PipelineStateCacheTest, GraphicsPipeline_MixedParameters)
 
   EXPECT_NE(root_sig, nullptr);
   EXPECT_TRUE(blob_capture_.blob_captured);
-  EXPECT_GT(blob_capture_.captured_blob.size(), 150u); // Complex root signature
+  EXPECT_GT(blob_capture_.captured_blob.size(), 150U); // Complex root signature
 }
 
 // Test shader visibility mapping

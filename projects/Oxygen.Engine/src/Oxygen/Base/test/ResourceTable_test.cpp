@@ -538,7 +538,7 @@ NOLINT_TEST(ResourceTableTest, Defragment)
 
   // The dense set must be ordered by comp as documented ("ordered before"):
   // ascending. Only the key 44 has to move into the sorted prefix [41, 45].
-  EXPECT_EQ(swaps, 1u);
+  EXPECT_EQ(swaps, 1U);
   const std::vector<int> expected { 41, 44, 45 };
   EXPECT_TRUE(std::ranges::equal(table.Items(), expected));
 
@@ -654,15 +654,15 @@ NOLINT_TEST(
   // A failed construction before the first success must not consume a
   // sparse slot: the next insert still lands on index 0.
   NOLINT_EXPECT_THROW(table.Emplace(true), std::runtime_error);
-  EXPECT_EQ(table.Size(), 0u);
+  EXPECT_EQ(table.Size(), 0U);
   const auto first = table.Emplace();
-  EXPECT_EQ(first.Index(), 0u);
+  EXPECT_EQ(first.Index(), 0U);
   EXPECT_TRUE(table.Contains(first));
 
   // A failed construction must not claim the freed hole either, so the
   // following insert reuses the hole's slot.
   const auto doomed = table.Emplace();
-  ASSERT_EQ(table.Erase(doomed), 1u);
+  ASSERT_EQ(table.Erase(doomed), 1U);
   NOLINT_EXPECT_THROW(table.Emplace(true), std::runtime_error);
   const auto reused = table.Emplace();
   EXPECT_EQ(reused.Index(), doomed.Index());
@@ -670,10 +670,10 @@ NOLINT_TEST(
   // Lookups and removal still work on every live handle.
   EXPECT_TRUE(table.Contains(first));
   EXPECT_TRUE(table.Contains(reused));
-  EXPECT_EQ(table.Size(), 2u);
-  EXPECT_EQ(table.Erase(first), 1u);
-  EXPECT_EQ(table.Erase(reused), 1u);
-  EXPECT_EQ(table.Size(), 0u);
+  EXPECT_EQ(table.Size(), 2U);
+  EXPECT_EQ(table.Erase(first), 1U);
+  EXPECT_EQ(table.Erase(reused), 1U);
+  EXPECT_EQ(table.Size(), 0U);
 }
 
 } // namespace

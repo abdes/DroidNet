@@ -43,7 +43,7 @@ Texture::Texture(const TextureDesc& desc)
           "ContiguousLayout::MipDim: mip ({}) >= 32, clamping to 31", mip);
         mip = 31;
       }
-      return (std::max)(1u, base >> mip);
+      return (std::max)(1U, base >> mip);
     }
 
     auto ComputeMipSizeBytes(const TextureDesc& desc, uint32_t mip) const
@@ -94,7 +94,7 @@ Texture::Texture(const TextureDesc& desc)
   // Compute full backing using the same layout strategy used by this class.
   ContiguousLayout layout_tmp;
   const uint32_t per_slice = layout_tmp.ComputeTotalBytesPerArraySlice(desc_);
-  const uint32_t layers = std::max<uint32_t>(1u, desc_.array_size);
+  const uint32_t layers = std::max<uint32_t>(1U, desc_.array_size);
   const uint64_t bytes = static_cast<uint64_t>(per_slice) * layers;
   if (desc_.allocation_budget.owner) {
     auto charge = desc_.allocation_budget.owner->TryReserve(
@@ -104,7 +104,7 @@ Texture::Texture(const TextureDesc& desc)
     }
     budget_reservation_ = std::move(*charge);
   }
-  constexpr uint64_t kMaxBacking = 1024ull * 1024ull * 128ull; // 128MB cap
+  constexpr uint64_t kMaxBacking = 1024ULL * 1024ULL * 128ULL; // 128MB cap
   if (bytes > 0 && bytes <= kMaxBacking) {
     data_.resize(bytes);
   }

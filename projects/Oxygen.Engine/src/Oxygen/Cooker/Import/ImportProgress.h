@@ -88,7 +88,7 @@ struct ProgressHeader {
   ImportJobId job_id = kInvalidJobId;
   ImportPhase phase = ImportPhase::kPending;
   ProgressEventKind kind = ProgressEventKind::kPhaseUpdate;
-  float overall_progress = 0.0f;
+  float overall_progress = 0.0F;
   std::string message;
   std::vector<ImportDiagnostic> new_diagnostics;
 };
@@ -97,8 +97,8 @@ struct ProgressHeader {
 struct ItemProgress {
   std::string item_kind;
   std::string item_name;
-  float input_queue_load = -1.0f;
-  float output_queue_load = -1.0f;
+  float input_queue_load = -1.0F;
+  float output_queue_load = -1.0F;
 };
 
 //! Variant payload for progress events.
@@ -163,8 +163,8 @@ struct ProgressEvent {
   event.payload = ItemProgress {
     .item_kind = std::move(item_kind),
     .item_name = std::move(item_name),
-    .input_queue_load = -1.0f,
-    .output_queue_load = -1.0f,
+    .input_queue_load = -1.0F,
+    .output_queue_load = -1.0F,
   };
   return event;
 }

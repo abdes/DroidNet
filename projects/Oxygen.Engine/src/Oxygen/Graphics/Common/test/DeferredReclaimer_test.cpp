@@ -479,7 +479,7 @@ NOLINT_TEST_F(DeferredReclaimerTest,
   manager->OnBeginFrame(frame::Slot { 0 });
 
   // Assert
-  ASSERT_EQ(order.size(), 3u);
+  ASSERT_EQ(order.size(), 3U);
   EXPECT_EQ(order.at(0), 1);
   EXPECT_EQ(order.at(1), 2);
   EXPECT_EQ(order.at(2), 3);

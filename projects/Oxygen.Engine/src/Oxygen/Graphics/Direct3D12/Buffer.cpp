@@ -290,9 +290,9 @@ auto Buffer::CreateConstantBufferView(
     // CB size must be a multiple of 256 bytes (D3D12 requirement)
     .SizeInBytes
     = static_cast<UINT>(
-        (resolved.size_bytes == ~0ull ? desc_.size_bytes : resolved.size_bytes)
+        (resolved.size_bytes == ~0ULL ? desc_.size_bytes : resolved.size_bytes)
         + 255)
-      & ~255u,
+      & ~255U,
   };
 
   auto [gpu_ptr] = allocator->GetGpuHandle(view_handle);
@@ -334,7 +334,7 @@ auto Buffer::CreateShaderResourceView(
     srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     srv_desc.Buffer.FirstElement = resolved.offset_bytes / stride;
     srv_desc.Buffer.NumElements = static_cast<UINT>(
-      (resolved.size_bytes == ~0ull ? desc_.size_bytes : resolved.size_bytes)
+      (resolved.size_bytes == ~0ULL ? desc_.size_bytes : resolved.size_bytes)
       / stride);
     srv_desc.Buffer.StructureByteStride = stride;
     srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
@@ -346,7 +346,7 @@ auto Buffer::CreateShaderResourceView(
     UINT element_size = GetFormatInfo(format).bytes_per_block;
     srv_desc.Buffer.FirstElement = resolved.offset_bytes / element_size;
     srv_desc.Buffer.NumElements = static_cast<UINT>(
-      (resolved.size_bytes == ~0ull ? desc_.size_bytes : resolved.size_bytes)
+      (resolved.size_bytes == ~0ULL ? desc_.size_bytes : resolved.size_bytes)
       / element_size);
     srv_desc.Buffer.StructureByteStride = 0;
     srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_NONE;
@@ -357,7 +357,7 @@ auto Buffer::CreateShaderResourceView(
     srv_desc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
     srv_desc.Buffer.FirstElement = resolved.offset_bytes / 4;
     srv_desc.Buffer.NumElements = static_cast<UINT>(
-      (resolved.size_bytes == ~0ull ? desc_.size_bytes : resolved.size_bytes)
+      (resolved.size_bytes == ~0ULL ? desc_.size_bytes : resolved.size_bytes)
       / 4);
     srv_desc.Buffer.StructureByteStride = 0;
     srv_desc.Buffer.Flags = D3D12_BUFFER_SRV_FLAG_RAW;
@@ -407,7 +407,7 @@ auto Buffer::CreateUnorderedAccessView(
   view_desc.stride = stride;
 
   auto resolved_size_bytes
-    = (resolved.size_bytes == ~0ull ? desc_.size_bytes : resolved.size_bytes);
+    = (resolved.size_bytes == ~0ULL ? desc_.size_bytes : resolved.size_bytes);
 
   if (view_desc.IsStructuredBuffer()) {
     // Structured buffer view

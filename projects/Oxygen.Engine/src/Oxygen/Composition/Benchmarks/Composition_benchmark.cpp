@@ -70,7 +70,7 @@ public:
   std::vector<float> floats;
   LocalComponentC(std::string t)
     : text(std::move(t))
-    , floats(100, 3.14f)
+    , floats(100, 3.14F)
   {
   }
 };
@@ -131,7 +131,7 @@ public:
   std::vector<float> floats;
   PooledComponentC(std::string t)
     : text(std::move(t))
-    , floats(100, 2.71f)
+    , floats(100, 2.71F)
   {
   }
 };
@@ -263,7 +263,7 @@ BENCHMARK_F(CompositionBenchmark, RandomAccessLocalComponents)(
       benchmark::DoNotOptimize(c.floats[0]);
       if (c.text != "Gamma")
         benchmark::DoNotOptimize(false);
-      if (c.floats[0] != 3.14f)
+      if (c.floats[0] != 3.14F)
         benchmark::DoNotOptimize(false);
       benchmark::DoNotOptimize(d.id);
       benchmark::DoNotOptimize(d.label);
@@ -325,7 +325,7 @@ BENCHMARK_F(CompositionBenchmark, RandomAccessPooledComponents)(
       benchmark::DoNotOptimize(c.floats[0]);
       if (c.text != "Theta")
         benchmark::DoNotOptimize(false);
-      if (c.floats[0] != 2.71f)
+      if (c.floats[0] != 2.71F)
         benchmark::DoNotOptimize(false);
       benchmark::DoNotOptimize(d.id);
       benchmark::DoNotOptimize(d.label);

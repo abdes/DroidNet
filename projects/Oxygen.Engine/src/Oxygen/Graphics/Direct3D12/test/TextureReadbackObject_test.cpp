@@ -68,13 +68,13 @@ using oxygen::graphics::TextureSlice;
 using oxygen::graphics::TextureUploadRegion;
 using oxygen::graphics::d3d12::testing::ReadbackTestFixture;
 
-constexpr auto kUploadRowPitch = 256u;
+constexpr auto kUploadRowPitch = 256U;
 
 auto WriteRgbaTexel(std::vector<std::byte>& buffer, const uint32_t row_pitch,
   const uint32_t x, const uint32_t y, const std::array<uint8_t, 4>& rgba)
   -> void
 {
-  const auto offset = static_cast<size_t>(y) * row_pitch + (x * 4u);
+  const auto offset = static_cast<size_t>(y) * row_pitch + (x * 4U);
   buffer[offset + 0] = static_cast<std::byte>(rgba[0]);
   buffer[offset + 1] = static_cast<std::byte>(rgba[1]);
   buffer[offset + 2] = static_cast<std::byte>(rgba[2]);
@@ -248,7 +248,7 @@ NOLINT_TEST_F(TextureReadbackSubmissionTest, EnqueueCopyReturnsPendingTicket)
 
   std::vector<std::byte> upload_bytes(
     kUploadRowPitch * texture_desc.height, std::byte { 0 });
-  WriteRgbaTexel(upload_bytes, kUploadRowPitch, 0, 0, { 1u, 2u, 3u, 4u });
+  WriteRgbaTexel(upload_bytes, kUploadRowPitch, 0, 0, { 1U, 2U, 3U, 4U });
   auto texture = CreateInitializedColorTexture(
     texture_desc, upload_bytes, "pending-texture");
   auto readback = CreateTextureReadback("pending-texture-readback");
@@ -401,8 +401,8 @@ NOLINT_TEST_F(TextureReadbackMappingTest, TryMapReturnsExpectedBytesAndLayout)
   for (uint32_t y = 0; y < texture_desc.height; ++y) {
     for (uint32_t x = 0; x < texture_desc.width; ++x) {
       WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
-        { static_cast<uint8_t>(10u * y + x), static_cast<uint8_t>(40u + x),
-          static_cast<uint8_t>(80u + y), static_cast<uint8_t>(120u + x + y) });
+        { static_cast<uint8_t>(10U * y + x), static_cast<uint8_t>(40U + x),
+          static_cast<uint8_t>(80U + y), static_cast<uint8_t>(120U + x + y) });
     }
   }
 
@@ -463,8 +463,8 @@ NOLINT_TEST_F(TextureReadbackMappingTest, TryMapRejectsSecondActiveMap)
   for (uint32_t y = 0; y < texture_desc.height; ++y) {
     for (uint32_t x = 0; x < texture_desc.width; ++x) {
       WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
-        { static_cast<uint8_t>(7u * y + x), static_cast<uint8_t>(50u + x),
-          static_cast<uint8_t>(90u + y), static_cast<uint8_t>(130u + x + y) });
+        { static_cast<uint8_t>(7U * y + x), static_cast<uint8_t>(50U + x),
+          static_cast<uint8_t>(90U + y), static_cast<uint8_t>(130U + x + y) });
     }
   }
 
@@ -518,8 +518,8 @@ NOLINT_TEST_F(TextureReadbackMappingTest,
   for (uint32_t y = 0; y < texture_desc.height; ++y) {
     for (uint32_t x = 0; x < texture_desc.width; ++x) {
       WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
-        { static_cast<uint8_t>(9u * y + x), static_cast<uint8_t>(55u + x),
-          static_cast<uint8_t>(95u + y), static_cast<uint8_t>(135u + x + y) });
+        { static_cast<uint8_t>(9U * y + x), static_cast<uint8_t>(55U + x),
+          static_cast<uint8_t>(95U + y), static_cast<uint8_t>(135U + x + y) });
     }
   }
 
@@ -577,8 +577,8 @@ NOLINT_TEST_F(TextureReadbackMappingTest, MapNowReturnsExpectedBytesAndLayout)
   for (uint32_t y = 0; y < texture_desc.height; ++y) {
     for (uint32_t x = 0; x < texture_desc.width; ++x) {
       WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
-        { static_cast<uint8_t>(20u * y + x), static_cast<uint8_t>(60u + x),
-          static_cast<uint8_t>(100u + y), static_cast<uint8_t>(140u + x + y) });
+        { static_cast<uint8_t>(20U * y + x), static_cast<uint8_t>(60U + x),
+          static_cast<uint8_t>(100U + y), static_cast<uint8_t>(140U + x + y) });
     }
   }
 
@@ -867,8 +867,8 @@ NOLINT_TEST_F(TextureReadbackManagerTest,
   for (uint32_t y = 0; y < texture_desc.height; ++y) {
     for (uint32_t x = 0; x < texture_desc.width; ++x) {
       WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
-        { static_cast<uint8_t>(10u * y + x), static_cast<uint8_t>(40u + x),
-          static_cast<uint8_t>(80u + y), static_cast<uint8_t>(120u + x + y) });
+        { static_cast<uint8_t>(10U * y + x), static_cast<uint8_t>(40U + x),
+          static_cast<uint8_t>(80U + y), static_cast<uint8_t>(120U + x + y) });
     }
   }
 
@@ -919,8 +919,8 @@ NOLINT_TEST_F(TextureReadbackFrameLifecycleTest,
   for (uint32_t y = 0; y < texture_desc.height; ++y) {
     for (uint32_t x = 0; x < texture_desc.width; ++x) {
       WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
-        { static_cast<uint8_t>(30u * y + x), static_cast<uint8_t>(20u + x),
-          static_cast<uint8_t>(90u + y), static_cast<uint8_t>(110u + x + y) });
+        { static_cast<uint8_t>(30U * y + x), static_cast<uint8_t>(20U + x),
+          static_cast<uint8_t>(90U + y), static_cast<uint8_t>(110U + x + y) });
     }
   }
 
@@ -971,8 +971,8 @@ NOLINT_TEST_F(TextureReadbackCoroutineTest,
   for (uint32_t y = 0; y < texture_desc.height; ++y) {
     for (uint32_t x = 0; x < texture_desc.width; ++x) {
       WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
-        { static_cast<uint8_t>(15u * y + x), static_cast<uint8_t>(50u + x),
-          static_cast<uint8_t>(70u + y), static_cast<uint8_t>(100u + x + y) });
+        { static_cast<uint8_t>(15U * y + x), static_cast<uint8_t>(50U + x),
+          static_cast<uint8_t>(70U + y), static_cast<uint8_t>(100U + x + y) });
     }
   }
 
@@ -1023,8 +1023,8 @@ NOLINT_TEST_F(TextureReadbackCoroutineTest,
   for (uint32_t y = 0; y < texture_desc.height; ++y) {
     for (uint32_t x = 0; x < texture_desc.width; ++x) {
       WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y,
-        { static_cast<uint8_t>(12u * y + x), static_cast<uint8_t>(20u + x),
-          static_cast<uint8_t>(40u + y), static_cast<uint8_t>(60u + x + y) });
+        { static_cast<uint8_t>(12U * y + x), static_cast<uint8_t>(20U + x),
+          static_cast<uint8_t>(40U + y), static_cast<uint8_t>(60U + x + y) });
     }
   }
 

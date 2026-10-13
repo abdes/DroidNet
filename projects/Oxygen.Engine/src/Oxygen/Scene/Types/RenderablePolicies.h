@@ -26,7 +26,7 @@ struct FixedPolicy {
 
 struct DistancePolicy {
   std::vector<float> thresholds; // boundaries between i and i+1
-  float hysteresis_ratio { 0.1f }; // symmetric band around boundary
+  float hysteresis_ratio { 0.1F }; // symmetric band around boundary
   // Ensure thresholds are non-decreasing and clamp hysteresis into [0, 0.99]
   void NormalizeThresholds() noexcept;
   // Base selection without hysteresis

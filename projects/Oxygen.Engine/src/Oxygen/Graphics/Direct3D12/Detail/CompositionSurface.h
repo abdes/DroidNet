@@ -100,15 +100,15 @@ public:
 
     const auto width = pending_width_.load(std::memory_order_acquire);
     const auto height = pending_height_.load(std::memory_order_acquire);
-    const auto clamped_width = std::max<uint32_t>(1u, width);
-    const auto clamped_height = std::max<uint32_t>(1u, height);
+    const auto clamped_width = std::max<uint32_t>(1U, width);
+    const auto clamped_height = std::max<uint32_t>(1U, height);
     Resize(clamped_width, clamped_height);
   }
 
   void Resize(uint32_t width, uint32_t height)
   {
-    const auto target_width = std::max<uint32_t>(1u, width);
-    const auto target_height = std::max<uint32_t>(1u, height);
+    const auto target_width = std::max<uint32_t>(1U, width);
+    const auto target_height = std::max<uint32_t>(1U, height);
     GetComponent<CompositionSwapChain>().Resize(target_width, target_height);
     ShouldResize(false);
   }

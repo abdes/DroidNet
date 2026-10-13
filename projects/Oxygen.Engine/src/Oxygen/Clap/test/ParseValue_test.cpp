@@ -77,8 +77,8 @@ INSTANTIATE_TEST_SUITE_P(ValidInputs, StringToFlagValueTest,
     std::make_pair("+1", 1),
     std::make_pair("-0", -1),
     std::make_pair("+0", -1),
-    std::make_pair("9223372036854775807", 9223372036854775807ll),
-    std::make_pair("-9223372036854775807", -9223372036854775807ll)
+    std::make_pair("9223372036854775807", 9223372036854775807LL),
+    std::make_pair("-9223372036854775807", -9223372036854775807LL)
     // clang-format on
     ));
 

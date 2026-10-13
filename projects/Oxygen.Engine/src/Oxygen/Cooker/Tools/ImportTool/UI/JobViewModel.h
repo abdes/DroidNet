@@ -17,7 +17,7 @@ struct JobViewModel {
   std::string phase;
   std::string item_kind;
   std::string item_name;
-  float progress = 0.0f;
+  float progress = 0.0F;
   std::vector<std::string> recent_logs;
   std::chrono::seconds elapsed { 0 };
   bool completed = false;

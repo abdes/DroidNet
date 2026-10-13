@@ -67,7 +67,7 @@ struct DummySurface final : oxygen::graphics::Surface {
   ~DummySurface() override = default;
 
   auto Resize() -> void override { }
-  auto GetCurrentBackBufferIndex() const -> uint32_t override { return 0u; }
+  auto GetCurrentBackBufferIndex() const -> uint32_t override { return 0U; }
   auto GetCurrentBackBuffer() const
     -> std::shared_ptr<oxygen::graphics::Texture> override
   {
@@ -79,8 +79,8 @@ struct DummySurface final : oxygen::graphics::Surface {
     return nullptr;
   }
   auto Present() const -> void override { }
-  auto Width() const -> uint32_t override { return 0u; }
-  auto Height() const -> uint32_t override { return 0u; }
+  auto Width() const -> uint32_t override { return 0U; }
+  auto Height() const -> uint32_t override { return 0U; }
 };
 
 // Helper to create a minimal ViewContext for testing
@@ -114,7 +114,7 @@ NOLINT_TEST(FrameContext_basic_test, StageModuleData)
   const auto version = snap.gameSnapshot.version;
 
   // Assert
-  EXPECT_GT(version, 0u);
+  EXPECT_GT(version, 0U);
 
   // Check module data using new facade
   const auto& module_data = snap.moduleData;
@@ -136,7 +136,7 @@ NOLINT_TEST(FrameContext_basic_test, ModuleDataQueries)
   struct AnotherPayload {
     static constexpr auto ClassTypeId() -> oxygen::TypeId
     {
-      return 0xABCDEF02ull;
+      return 0xABCDEF02ULL;
     }
 
     std::string name;
@@ -151,7 +151,7 @@ NOLINT_TEST(FrameContext_basic_test, ModuleDataQueries)
   const auto version = snap.gameSnapshot.version;
 
   // Assert
-  EXPECT_GT(version, 0u);
+  EXPECT_GT(version, 0U);
 
   const auto& module_data = snap.moduleData;
 
@@ -161,7 +161,7 @@ NOLINT_TEST(FrameContext_basic_test, ModuleDataQueries)
 
   // Check Keys() method
   auto keys = module_data.Keys();
-  EXPECT_EQ(keys.size(), 2u);
+  EXPECT_EQ(keys.size(), 2U);
 
   // Verify we can retrieve both payloads
   auto payload1 = module_data.Get<TestPayload>();
@@ -189,7 +189,7 @@ NOLINT_TEST(FrameContext_basic_test, StageOutsideMutationPhasesRejected)
   const auto v1 = snap.gameSnapshot.version;
 
   // Assert
-  EXPECT_GT(v1, 0u);
+  EXPECT_GT(v1, 0U);
 
   const auto& module_data = snap.moduleData;
   EXPECT_FALSE(module_data.Has<TestPayload>());
@@ -248,7 +248,7 @@ NOLINT_TEST(FrameContext_basic_test, ViewsBlockedInNonGameStateMutationPhases)
 
   // Add a view (should succeed in GameState mutation phase)
   ctx.RegisterView(MakeDummyViewContext());
-  EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
+  EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1U);
 
   // Move to snapshot phase (allows FrameState but not GameState mutations)
   ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
@@ -258,7 +258,7 @@ NOLINT_TEST(FrameContext_basic_test, ViewsBlockedInNonGameStateMutationPhases)
   // restrictions. Use ASSERT_DEATH to verify behavior in tests.
   NOLINT_ASSERT_DEATH(ctx.RegisterView(MakeDummyViewContext()), ".*");
   // The visible views should remain unchanged after the failed mutation.
-  EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
+  EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1U);
 }
 
 NOLINT_TEST(FrameContext_basic_test, SetViewRenderTargetUpdatesOnlyRenderTarget)
@@ -303,7 +303,7 @@ NOLINT_TEST(FrameContext_basic_test, ViewTargetsArePublishedInSnapshot)
 
   ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
   auto& snap = ctx.PublishSnapshots(Tag::Get());
-  ASSERT_EQ(snap.gameSnapshot.views.size(), 1u);
+  ASSERT_EQ(snap.gameSnapshot.views.size(), 1U);
   EXPECT_EQ(snap.gameSnapshot.views[0].id, view_id);
   EXPECT_EQ(snap.gameSnapshot.views[0].render_target.get(), render_fb);
   EXPECT_EQ(snap.gameSnapshot.views[0].composite_source.get(), composite_fb);
@@ -330,7 +330,7 @@ NOLINT_TEST(FrameContext_basic_test, ViewMetadataPublishesExposureViewId)
 
   ctx.SetCurrentPhase(PhaseId::kSnapshot, Tag::Get());
   auto& snap = ctx.PublishSnapshots(Tag::Get());
-  ASSERT_EQ(snap.gameSnapshot.views.size(), 2u);
+  ASSERT_EQ(snap.gameSnapshot.views.size(), 2U);
 
   const auto it = std::find_if(snap.gameSnapshot.views.begin(),
     snap.gameSnapshot.views.end(), [dependent_id](const auto& view) -> bool {
@@ -437,7 +437,7 @@ NOLINT_TEST(FrameContext_basic_test, ViewsPhaseMatrix)
 {
   using Tag = oxygen::engine::internal::EngineTagFactory;
 
-  for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
+  for (uint32_t ui = 0U; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
     ctx.SetCurrentPhase(phase, Tag::Get());
@@ -445,9 +445,9 @@ NOLINT_TEST(FrameContext_basic_test, ViewsPhaseMatrix)
     if (ui < static_cast<uint32_t>(PhaseId::kSnapshot)) {
       // Allowed: adding/clearing views before Snapshot
       ctx.RegisterView(MakeDummyViewContext());
-      EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1u);
+      EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 1U);
       ctx.ClearViews(Tag::Get());
-      EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 0u);
+      EXPECT_EQ(std::ranges::distance(ctx.GetViews()), 0U);
     } else {
       // Disallowed: should be fatal
       NOLINT_ASSERT_DEATH(ctx.RegisterView(MakeDummyViewContext()), ".*");
@@ -461,7 +461,7 @@ NOLINT_TEST(FrameContext_basic_test, SurfacesPhaseMatrix)
   using oxygen::observer_ptr;
   using Tag = oxygen::engine::internal::EngineTagFactory;
 
-  for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
+  for (uint32_t ui = 0U; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
     ctx.SetCurrentPhase(phase, Tag::Get());
@@ -472,10 +472,10 @@ NOLINT_TEST(FrameContext_basic_test, SurfacesPhaseMatrix)
     if (ui < static_cast<uint32_t>(PhaseId::kSnapshot)) {
       // Structural mutations allowed before Snapshot
       ctx.AddSurface(surface_ptr);
-      EXPECT_EQ(ctx.GetPresentableSurfaces().size(), 0u);
+      EXPECT_EQ(ctx.GetPresentableSurfaces().size(), 0U);
 
       // Removing the surface should succeed
-      EXPECT_TRUE(ctx.RemoveSurfaceAt(0u));
+      EXPECT_TRUE(ctx.RemoveSurfaceAt(0U));
 
       // Clear and replace operations should succeed
       ctx.AddSurface(surface_ptr);
@@ -494,7 +494,7 @@ NOLINT_TEST(FrameContext_basic_test, PresentableFlagsPhaseMatrix)
   using oxygen::observer_ptr;
   using Tag = oxygen::engine::internal::EngineTagFactory;
 
-  for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
+  for (uint32_t ui = 0U; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
 
@@ -509,10 +509,10 @@ NOLINT_TEST(FrameContext_basic_test, PresentableFlagsPhaseMatrix)
 
     if (ui < static_cast<uint32_t>(PhaseId::kPresent)) {
       // Allowed to set/clear presentable flags before Present
-      ctx.SetSurfacePresentable(0u, true);
-      EXPECT_TRUE(ctx.IsSurfacePresentable(0u));
+      ctx.SetSurfacePresentable(0U, true);
+      EXPECT_TRUE(ctx.IsSurfacePresentable(0U));
       ctx.ClearPresentableFlags(Tag::Get());
-      EXPECT_FALSE(ctx.IsSurfacePresentable(0u));
+      EXPECT_FALSE(ctx.IsSurfacePresentable(0U));
     } else {
       // Disallowed at or after Present
       NOLINT_ASSERT_DEATH(ctx.SetSurfacePresentable(0u, true), ".*");
@@ -527,7 +527,7 @@ NOLINT_TEST(FrameContext_basic_test, SetScenePhaseMatrix)
   using oxygen::scene::Scene;
   using Tag = oxygen::engine::internal::EngineTagFactory;
 
-  for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
+  for (uint32_t ui = 0U; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
     ctx.SetCurrentPhase(phase, Tag::Get());
@@ -550,7 +550,7 @@ NOLINT_TEST(FrameContext_basic_test, RemoveSurfaceAtOutOfRangeAllowedPhase)
   // should return false rather than fatal.
   FrameContext ctx;
   ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
-  EXPECT_FALSE(ctx.RemoveSurfaceAt(42u)); // out-of-range
+  EXPECT_FALSE(ctx.RemoveSurfaceAt(42U)); // out-of-range
 }
 
 NOLINT_TEST(FrameContext_basic_test, RemoveSurfaceAtOutOfRangeDiesInSnapshot)
@@ -577,8 +577,8 @@ NOLINT_TEST(FrameContext_basic_test, SetSurfacePresentableOutOfRangeNoOp)
   // trigger before any bounds access.
   FrameContext ctx;
   ctx.SetCurrentPhase(PhaseId::kSceneMutation, Tag::Get());
-  ctx.SetSurfacePresentable(999u, true); // should be ignored
-  EXPECT_FALSE(ctx.IsSurfacePresentable(999u));
+  ctx.SetSurfacePresentable(999U, true); // should be ignored
+  EXPECT_FALSE(ctx.IsSurfacePresentable(999U));
 
   // In Present phase the phase-guard runs first and will cause a fatal
   // assertion for any attempt to mutate presentable flags. Ensure this
@@ -591,7 +591,7 @@ NOLINT_TEST(FrameContext_basic_test, PublishSnapshotsPhaseMatrix)
 {
   using Tag = oxygen::engine::internal::EngineTagFactory;
 
-  for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
+  for (uint32_t ui = 0U; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
     ctx.SetCurrentPhase(phase, Tag::Get());
@@ -609,7 +609,7 @@ NOLINT_TEST(FrameContext_basic_test, SetInputSnapshotPhaseMatrix)
 {
   using Tag = oxygen::engine::internal::EngineTagFactory;
 
-  for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
+  for (uint32_t ui = 0U; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
     ctx.SetCurrentPhase(phase, Tag::Get());
@@ -628,7 +628,7 @@ NOLINT_TEST(FrameContext_basic_test, GetStagingModuleDataPhaseMatrix)
 {
   using Tag = oxygen::engine::internal::EngineTagFactory;
 
-  for (uint32_t ui = 0u; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
+  for (uint32_t ui = 0U; ui < static_cast<uint32_t>(PhaseId::kCount); ++ui) {
     const auto phase = static_cast<PhaseId>(ui);
     FrameContext ctx;
     ctx.SetCurrentPhase(phase, Tag::Get());
@@ -715,7 +715,7 @@ NOLINT_TEST(FrameContext_basic_test, ModuleDataKeysAndMembership)
   struct P2 {
     static constexpr auto ClassTypeId() -> oxygen::TypeId
     {
-      return 0xABCDEF10ull;
+      return 0xABCDEF10ULL;
     }
     int x { 0 };
   };
@@ -728,7 +728,7 @@ NOLINT_TEST(FrameContext_basic_test, ModuleDataKeysAndMembership)
 
   // Assert - order agnostic
   auto keys1 = md1.Keys();
-  EXPECT_EQ(keys1.size(), 2u);
+  EXPECT_EQ(keys1.size(), 2U);
   EXPECT_TRUE(md1.Has<TestPayload>());
   EXPECT_TRUE(md1.Has<P2>());
 }
@@ -770,7 +770,7 @@ NOLINT_TEST(FrameContext_basic_test, MoveOnlyPayloadStagingAndAccess)
   struct MoveOnlyPayload {
     static constexpr auto ClassTypeId() -> oxygen::TypeId
     {
-      return 0xABCDEF20ull;
+      return 0xABCDEF20ULL;
     }
     MoveOnlyPayload() = default;
     explicit MoveOnlyPayload(int v)
@@ -814,7 +814,7 @@ NOLINT_TEST(FrameContext_basic_test, ModuleDataExactKeysSet)
   struct P3 {
     static constexpr auto ClassTypeId() -> oxygen::TypeId
     {
-      return 0xABCDEF30ull;
+      return 0xABCDEF30ULL;
     }
     int a { 0 };
   };
