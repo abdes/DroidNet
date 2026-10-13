@@ -92,6 +92,8 @@ target_link_libraries(
     oxygen::serio
     nlohmann_json::nlohmann_json
     dxc::dxcompiler
+    # ActionKey.cpp reads file versions through the Windows version library.
+    $<$<PLATFORM_ID:Windows>:version>
 )
 
 # dxil.dll is loaded by DXC at runtime; it is not an import-library dependency.

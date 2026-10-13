@@ -94,6 +94,8 @@ gtest_program(
     "../Tools/ShaderBake/ModuleArtifact.cpp"
     "../Tools/ShaderBake/ModuleArtifact.h"
   DEPS
+    # ActionKey.cpp reads file versions through the Windows version library.
+    $<$<PLATFORM_ID:Windows>:version>
     oxygen::graphics-common
     oxygen::serio
     oxygen::testing
@@ -153,6 +155,8 @@ gtest_program(
     "../Tools/ShaderBake/ModuleArtifact.cpp"
     "../Tools/ShaderBake/ModuleArtifact.h"
   DEPS
+    # ActionKey.cpp reads file versions through the Windows version library.
+    $<$<PLATFORM_ID:Windows>:version>
     oxygen::graphics-common
     oxygen::serio
     oxygen::testing
@@ -184,6 +188,8 @@ gtest_program(
     "../Tools/ShaderBake/ModuleArtifact.h"
     "../Tools/ShaderBake/RequestCompilation.h"
   DEPS
+    # ActionKey.cpp reads file versions through the Windows version library.
+    $<$<PLATFORM_ID:Windows>:version>
     oxygen::graphics-common
     oxygen::serio
     oxygen::testing
@@ -211,6 +217,8 @@ gtest_program(
     "../Tools/ShaderBake/TrackingIncludeHandler.cpp"
     "../Tools/ShaderBake/TrackingIncludeHandler.h"
   DEPS
+    # ActionKey.cpp reads file versions through the Windows version library.
+    $<$<PLATFORM_ID:Windows>:version>
     oxygen::graphics-common
     oxygen::serio
     oxygen::testing
