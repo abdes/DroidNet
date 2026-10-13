@@ -269,10 +269,6 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
           cvars.Set("cntt.verify_content_hashes", developer.verify_hashes);
         }
         if (!startup.scene_name.empty()) {
-          cvars.Set("vtx.local_fog.enable", true);
-          cvars.Set("vtx.local_fog.render_into_volumetric_fog", true);
-          cvars.Set("vtx.volumetric_fog.directional_shadows", true);
-          cvars.Set("vtx.volumetric_fog.temporal_reprojection", true);
           LOG_F(INFO, "RenderScene: startup scene '{}'", startup.scene_name);
         }
       },

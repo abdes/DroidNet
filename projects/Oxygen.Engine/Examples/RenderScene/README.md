@@ -122,12 +122,6 @@ Saved selections resolve by asset key within their recorded source. Display-labe
 changes do not invalidate that identity; selections without a key require an
 exact name match.
 
-`--scene` also seeds these startup CVars to `true`:
-`vtx.local_fog.enable`, `vtx.local_fog.render_into_volumetric_fog`,
-`vtx.volumetric_fog.directional_shadows`, and
-`vtx.volumetric_fog.temporal_reprojection`. Account for these when comparing
-CLI-selected and UI-selected runs.
-
 | Option                                    | Purpose                                                                                                                                                 |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `--verify-hashes=true`                    | Enable mounted-content hash verification.                                                                                                               |
