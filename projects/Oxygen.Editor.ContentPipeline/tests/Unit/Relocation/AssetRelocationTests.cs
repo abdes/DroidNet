@@ -169,6 +169,36 @@ public sealed class AssetRelocationTests
         _ = Snapshot(workspace.Root).Should().BeEquivalentTo(before);
     }
 
+    /// <summary>A script cannot be renamed next to a source with the same name: both would cook to one script.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task ScriptRenameThatWouldCollideIsRejected()
+    {
+        using var workspace = CreateContent();
+        _ = workspace.Write("Content/Player/jump.lua", "return {}");
+        _ = workspace.Write("Content/Player/move.luau", "return {}");
+        var request = new AssetRelocationRequest { Moves = [new("/Content/Player/jump.lua", "/Content/Player/move.lua")] };
+
+        Func<Task> work = () => workspace.Service.RelocateAsync(request, this.TestContext.CancellationToken);
+
+        _ = await work.Should().ThrowAsync<AssetRelocationException>().WithMessage("*move.luau*same script*").ConfigureAwait(false);
+        _ = workspace.Exists("Content/Player/jump.lua").Should().BeTrue();
+    }
+
+    /// <summary>A copied script takes a name that does not collide with another source.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task ScriptCopyAvoidsACollidingName()
+    {
+        using var workspace = CreateContent();
+        _ = workspace.Write("Content/Scripts/move.lua", "return {}");
+        _ = workspace.Write("Content/Player/move.luau", "return {}");
+
+        var copies = await workspace.Service.CopyAsync(["/Content/Scripts/move.lua"], "/Content/Player", this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = copies.Should().ContainSingle().Which.Should().EndWith("move (2).lua");
+    }
+
     /// <summary>An output group cannot overlap another import's group.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]

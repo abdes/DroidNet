@@ -23,7 +23,8 @@ public abstract partial class AssetsLayoutViewModel(
     IProjectContextService projectContextService,
     ContentBrowserState contentBrowserState,
     HostingContext hostingContext,
-    IBuiltinCatalogDiscovery builtins) : ObservableObject, IRoutingAware, IDisposable
+    IBuiltinCatalogDiscovery builtins,
+    Scripts.IScriptAnalysisService? scripts = null) : ObservableObject, IRoutingAware, IDisposable
 {
     private readonly IContentBrowserAssetProvider assetProvider = assetProvider;
     private readonly IProjectContextService projectContextService = projectContextService;
@@ -33,6 +34,7 @@ public abstract partial class AssetsLayoutViewModel(
 
     private IDisposable? subscription;
     private IDisposable? builtinChanges;
+    private IDisposable? scriptChanges;
     private bool disposed;
     private Task? initialization;
     private TaskCompletionSource? initialSnapshotCompletion;
@@ -307,6 +309,7 @@ public abstract partial class AssetsLayoutViewModel(
                 _ = this.initialSnapshotCompletion?.TrySetCanceled();
                 this.subscription?.Dispose();
                 this.builtinChanges?.Dispose();
+                this.scriptChanges?.Dispose();
                 this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
                 this.Query.Changed -= this.OnQueryChanged;
                 this.Presentation.SortChanged -= this.OnQueryChanged;
@@ -352,12 +355,30 @@ public abstract partial class AssetsLayoutViewModel(
                || normalizedCandidate.StartsWith(folder + "/", StringComparison.OrdinalIgnoreCase);
     }
 
+    private void ApplyScriptProblems(AssetBrowserRow row)
+    {
+        if (scripts is not null && row.Item is { Kind: AssetKind.Script, SourcePath: { } source })
+        {
+            row.SetScriptProblems(scripts.Find(source));
+        }
+    }
+
+    private void OnScriptAnalyzed(Scripts.ScriptAnalysisSnapshot analysis)
+    {
+        foreach (var row in this.Assets.Where(row => row.Item is { Kind: AssetKind.Script, SourcePath: { } source }
+            && string.Equals(source, analysis.SourcePath, StringComparison.OrdinalIgnoreCase)))
+        {
+            row.SetScriptProblems(analysis.IsRemoved ? null : analysis);
+        }
+    }
+
     private async Task InitializeAsync()
     {
         var firstSnapshot = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         this.initialSnapshotCompletion = firstSnapshot;
         this.subscription?.Dispose();
         this.builtinChanges?.Dispose();
+        this.scriptChanges?.Dispose();
         this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
         this.Query.Changed -= this.OnQueryChanged;
         this.Presentation.SortChanged -= this.OnQueryChanged;
@@ -366,6 +387,9 @@ public abstract partial class AssetsLayoutViewModel(
                 handler => this.builtins.Changed -= handler)
             .ObserveOn(this.hostingContext.DispatcherScheduler)
             .Subscribe(_ => this.NotifyBuiltinStatus());
+        this.scriptChanges = scripts?.Changes
+            .ObserveOn(this.hostingContext.DispatcherScheduler)
+            .Subscribe(this.OnScriptAnalyzed);
         this.subscription = this.assetProvider.Items
             .ObserveOn(this.hostingContext.DispatcherScheduler)
             .Subscribe(
@@ -435,6 +459,7 @@ public abstract partial class AssetsLayoutViewModel(
                 if (existing.TryGetValue(item.IdentityUri.AbsoluteUri, out var row))
                 {
                     row.Update(item);
+                    this.ApplyScriptProblems(row);
                     if (!ReferenceEquals(this.Assets[index], row))
                     {
                         this.Assets.Move(this.Assets.IndexOf(row), index);
@@ -442,7 +467,9 @@ public abstract partial class AssetsLayoutViewModel(
                 }
                 else
                 {
-                    this.Assets.Insert(index, new(item));
+                    var added = new AssetBrowserRow(item);
+                    this.ApplyScriptProblems(added);
+                    this.Assets.Insert(index, added);
                 }
             }
 

@@ -91,6 +91,7 @@ public sealed record ContentBrowserAssetItem(
         AssetKind.ForeignSource => Path.GetExtension(this.IdentityUri.AbsolutePath).ToUpperInvariant() switch { ".GLTF" => "glTF source", ".GLB" => "GLB source", ".FBX" => "FBX source", _ => "Source model" },
         AssetKind.CookedData => "Cooked Data",
         AssetKind.CookedTable => "Cooked Table",
+        AssetKind.InputFile => "Input file",
         _ => this.Kind.ToString(),
     };
 

@@ -119,7 +119,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             NormalizeSource(input.SourceRelativePath),
             dependsOn,
             Output: null,
-            Name: Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(input.SourceRelativePath)))
+            Name: input.Kind == ContentCookAssetKind.Input ? null : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(input.SourceRelativePath)))
         {
             Layout = CreateJobLayout(input),
             VirtualPath = input.Kind == ContentCookAssetKind.Texture ? input.OutputVirtualPath : null,
@@ -201,6 +201,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.Geometry => layout with { GeometryDirectory = folder },
             ContentCookAssetKind.Scene => layout with { ScenesDirectory = folder },
             ContentCookAssetKind.Texture => layout,
+            ContentCookAssetKind.Input => layout with { InputDirectory = folder },
             _ => null,
         };
     }
@@ -212,6 +213,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.Geometry => "geometry-descriptor",
             ContentCookAssetKind.Scene => "scene-descriptor",
             ContentCookAssetKind.Texture => "texture-descriptor",
+            ContentCookAssetKind.Input => "input",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported manifest job asset kind."),
         };
 
@@ -226,6 +228,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             ContentCookAssetKind.Scene => "scene",
             ContentCookAssetKind.Texture => "texture",
             ContentCookAssetKind.ForeignSource => "model",
+            ContentCookAssetKind.Input => "input",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unsupported manifest job asset kind."),
         };
 

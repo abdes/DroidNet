@@ -1,6 +1,6 @@
 # Script Authoring LLD
 
-Status: `design; owner decisions SD-1–SD-7 taken 2026-10-11`; delivered by
+Status: `design; decisions SD-1–SD-7 (2026-10-11) and SD-8–SD-12 (2026-10-13)`; delivered by
 [ED-M08.10](../plan/ED-M08-runtime-parity-and-standalone-validation.md#m0810--engine-capability-parity-in-the-editor).
 
 Summary: users write Luau scripts in their own code editor and do everything
@@ -72,9 +72,10 @@ produce the same virtual path; both show the error
 `OXE.SCRIPT.IDENTITY_COLLISION` and neither cooks until one is renamed. New
 Script, rename and move reject a name that would collide before writing.
 
-**New Script** (Content Browser, context menu and New): asks for a name,
-writes `<Name>.lua` to the target folder (default `Content/Scripts`), selects
-it and opens it in the code editor. The template:
+**New Script** (Content Browser New menu, beside New Material; SD-9): a
+dialog asks for a name and a folder, prefilled with a free name and the
+folder being browsed (`Content/Scripts` at a mount root). It writes
+`<Name>.lua`, selects it and opens it in the code editor. The template:
 
 ```lua
 local Script = oxygen.script {
@@ -95,9 +96,12 @@ return Script
 
 **Edit Script**: double-click or the Edit command opens the file in the
 configured code editor, at a line and column when invoked from a diagnostic.
-The preference (Settings, editor-scoped) offers the system default, VS Code
-(`code --goto file:line:column`) and a custom command with `{file}`, `{line}`
-and `{column}` placeholders. A failed launch is an operation result
+The choices are VS Code (`code --goto file:line:column`), the system default
+for the file type, and a custom command with `{file}`, `{line}` and
+`{column}` placeholders. The first Edit asks which one to use, with VS Code
+preselected when `code` is found and **Remember my choice** checked; the
+choice is a per-user editor setting. **Open with** on the Edit button changes
+it later (SD-8). A failed launch is an operation result
 (`OXE.SCRIPT.EDITOR_LAUNCH_FAILED`) naming the command.
 
 **Details pane**: the declared parameters (name, type, default) and the
@@ -107,10 +111,14 @@ follow the existing transactions and retarget slot references.
 **Input files**: users write the cooker's input files by hand
 (`*.input.json` for mapping contexts with their actions,
 `*.input-action.json` for single actions, validated by
-`oxygen.input.schema.json`). Files under authoring mounts are Input sources;
-the cook emits one `input` job per file, its actions and mapping contexts
-appear in the Content Browser and in asset and Play-section pickers, Edit
-opens the file in the code editor (the input editor once
+`oxygen.input.schema.json`). **New Input File** in the New menu writes
+`<Name>.input.json` with its `$schema` set, one sample action and one sample
+context, and opens it in the code editor. Files under authoring mounts are
+Input sources, shown as one Input tile; the cook emits one `input` job per
+file, and each declared action and mapping context then appears as its own
+tile in the file's folder (SD-12) and in asset and Play-section pickers. The
+details pane of an action or context names its file. Edit on the file or on
+any of its assets opens the file in the code editor (the input editor once
 [ED-M09](../plan/ED-M09-input-authoring.md) delivers it, with **Open in code
 editor** kept), and schema or import errors fail the cook in the cooking
 panel. Input assets are identified by their source location,
@@ -125,11 +133,14 @@ cooker runs (`OXE.SCRIPT.INPUT_REFERENCE_UNSUPPORTED`), so the result never
 depends on job order. ED-M09.4 retires that code when it enables references
 by virtual path.
 
-**Project tooling**: projects contain `.luaurc` and `Types/oxygen.d.luau`
-copied from the SDK, refreshed when the SDK's copy differs, so VS Code with
-`luau-lsp` completes the `oxygen` API and reports the same type errors the
-engine reports. New projects get both from the template; opening an older
-project adds them and logs the change.
+**Project tooling** (SD-11): projects contain `.luaurc`,
+`Types/oxygen.d.luau` copied from the SDK and `.vscode/settings.json`
+pointing `luau-lsp` at those definitions, so VS Code completes the `oxygen`
+API and reports the same type errors the engine reports. `.luaurc` cannot
+name definition files; the VS Code setting does. Opening a project creates
+missing files, refreshes `Types/oxygen.d.luau` when the SDK's copy differs,
+and adds only missing keys to an existing `.vscode/settings.json`, never
+overwriting a value. Each change is logged to Output.
 
 ## 5. Analysis
 
@@ -296,11 +307,16 @@ explanation. Double-click opens the code editor at the primary span. Runtime
 entries name the node and slot and select the node on request. Analysis
 entries clear when the file is fixed; session entries clear on the next Play.
 
+Problems docks as a tab beside Output and Cooking. Its title carries the
+error and warning counts, and the script's tile and inspector card carry
+badges. A save never brings Problems forward, so it never takes focus from
+the code editor; runtime errors during Play do (SD-10).
+
 ## 10. Operation results
 
 Editor-side codes: `OXE.SCRIPT.*` (create, launch the code editor, analysis
 unavailable, identity collision, input file referencing another file's
-action) and `OXE.PLAY.*` (cook failed, player missing from the SDK,
+action, project tooling not updated) and `OXE.PLAY.*` (cook failed, player missing from the SDK,
 launch failed, session ended unexpectedly). Engine diagnostic codes (`S0xxx`)
 stay as reported.
 

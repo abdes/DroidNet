@@ -37,4 +37,9 @@ public sealed record ContentImportLayout(
     [JsonPropertyName("texture_descriptors_subdir")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? TextureDescriptorsDirectory { get; init; }
+
+    /// <summary>Gets the folder for input actions and mapping contexts, relative to the descriptors directory.</summary>
+    [JsonPropertyName("input_subdir")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? InputDirectory { get; init; }
 }

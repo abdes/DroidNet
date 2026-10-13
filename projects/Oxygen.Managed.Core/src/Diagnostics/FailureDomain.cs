@@ -133,4 +133,9 @@ public enum FailureDomain
     /// Embedded runtime loop execution and lifetime.
     /// </summary>
     RuntimeExecution,
+
+    /// <summary>
+    /// Script assets, script analysis, code-editor launch and hand-written input files.
+    /// </summary>
+    ScriptAuthoring,
 }

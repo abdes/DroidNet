@@ -255,6 +255,13 @@ prefix for post-cook catalog refresh failures. It may continue to use
 `OXE.CONTENTPIPELINE.MATERIAL.*` for the ED-M05 material cook slice when the
 operation is still material-document scoped.
 
+ED-M08 prefix allocations:
+
+| Prefix         | Owner                                                                                                                                           |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OXE.SCRIPT.*` | Script assets, script analysis, code-editor launch and hand-written input files ([script authoring](script-authoring.md#10-operation-results)). |
+| `OXE.PLAY.*`   | Play sessions: cook before play, player launch and session control ([script authoring](script-authoring.md#8-play)).                            |
+
 ED-M09 prefix allocations:
 
 | Prefix        | Owner                                                                                                                                                |

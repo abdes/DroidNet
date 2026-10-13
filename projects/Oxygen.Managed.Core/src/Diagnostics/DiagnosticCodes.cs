@@ -88,4 +88,14 @@ public static class DiagnosticCodes
     /// Asset cook diagnostic code prefix.
     /// </summary>
     public const string AssetCookPrefix = "OXE.ASSETCOOK.";
+
+    /// <summary>
+    /// Script authoring diagnostic code prefix: script assets, analysis, code-editor launch and input files.
+    /// </summary>
+    public const string ScriptPrefix = "OXE.SCRIPT.";
+
+    /// <summary>
+    /// Play session diagnostic code prefix.
+    /// </summary>
+    public const string PlayPrefix = "OXE.PLAY.";
 }

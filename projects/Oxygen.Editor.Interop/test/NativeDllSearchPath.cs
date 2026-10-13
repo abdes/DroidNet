@@ -37,6 +37,13 @@ internal static partial class NativeDllSearchPath
         AddDirectory(ResolveEngineBinDirectory());
     }
 
+    /// <summary>
+    /// Gets the installed engine SDK the interop assembly runs against.
+    /// </summary>
+    /// <returns>The SDK root, <c>projects/Oxygen.Engine/out/install/{Configuration}</c>.</returns>
+    internal static string ResolveEngineInstallDirectory()
+        => Path.Combine(FindRepositoryRoot().FullName, "projects", "Oxygen.Engine", "out", "install", ResolveConfiguration());
+
     private static void EnsureWindowsDllSearchMode()
     {
         if (SetDefaultDllDirectories(LoadLibrarySearchSystem32 | LoadLibrarySearchUserDirs))
@@ -64,12 +71,7 @@ internal static partial class NativeDllSearchPath
         // RemoveDllDirectory is called. The tests do not need to unregister it.
     }
 
-    private static string ResolveEngineBinDirectory()
-    {
-        var repositoryRoot = FindRepositoryRoot();
-        var configuration = ResolveConfiguration();
-        return Path.Combine(repositoryRoot.FullName, "projects", "Oxygen.Engine", "out", "install", configuration, "bin");
-    }
+    private static string ResolveEngineBinDirectory() => Path.Combine(ResolveEngineInstallDirectory(), "bin");
 
     private static DirectoryInfo FindRepositoryRoot()
     {

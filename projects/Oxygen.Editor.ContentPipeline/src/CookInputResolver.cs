@@ -44,6 +44,11 @@ internal static class CookInputResolver
     public static ContentCookInput Resolve(ProjectContext project, Uri uri, ContentCookInputRole role)
     {
         var path = Uri.UnescapeDataString(uri.AbsolutePath);
+        if (InputFileReferences.IsInputFile(path))
+        {
+            return ResolveInputFile(project, uri, path, role);
+        }
+
         var extension = Path.GetExtension(path.EndsWith(".json", StringComparison.OrdinalIgnoreCase) ? path[..^5] : path).ToUpperInvariant();
         var kind = extension switch
         {
@@ -71,5 +76,24 @@ internal static class CookInputResolver
             || relative.Split('/')[0].ToUpperInvariant() is ".COOKED" or ".BUILD" or ".PIPELINE" or ".IMPORTED"
             ? throw new InvalidDataException($"Cook dependency '{uri}' does not resolve to a retained authoring file in this project.")
             : new(kind == ContentCookAssetKind.ForeignSource ? uri : new Uri($"{AssetUris.Scheme}://{nativePath}.json"), kind, mount.Name, relative, absolute, kind == ContentCookAssetKind.ForeignSource ? null : outputPath, role);
+    }
+
+    // An input file keeps its own identity; its output path is the file itself, whose folder receives its actions
+    // and mapping contexts.
+    private static ContentCookInput ResolveInputFile(ProjectContext project, Uri uri, string path, ContentCookInputRole role)
+    {
+        if (!ContentPipelinePaths.IsCanonicalVirtualPath(path))
+        {
+            throw new InvalidDataException($"Input file '{uri}' is not a canonical virtual path.");
+        }
+
+        var slash = path.IndexOf('/', 1);
+        var mount = (slash <= 1 ? null : project.AuthoringMounts.FirstOrDefault(mount => string.Equals(mount.Name, path[1..slash], StringComparison.OrdinalIgnoreCase)))
+            ?? throw new InvalidDataException($"Input file '{uri}' refers to an unknown authoring mount.");
+        var absolute = Path.GetFullPath(Path.Combine(project.ProjectRoot, mount.RelativePath, path[(slash + 1)..]));
+        var relative = Path.GetRelativePath(project.ProjectRoot, absolute).Replace('\\', '/');
+        return Path.IsPathRooted(relative) || relative.StartsWith("../", StringComparison.Ordinal)
+            ? throw new InvalidDataException($"Input file '{uri}' does not resolve to a file in this project.")
+            : new(uri, ContentCookAssetKind.Input, mount.Name, relative, absolute, path, role);
     }
 }

@@ -38,6 +38,7 @@ public sealed partial class AssetBrowserQuery : ObservableObject
         new("Scripts", static asset => asset.Kind == AssetKind.Script),
         new("Input actions", static asset => asset.Kind == AssetKind.InputAction),
         new("Input mapping contexts", static asset => asset.Kind == AssetKind.InputMappingContext),
+        new("Input files", static asset => asset.Kind == AssetKind.InputFile),
         new("Physics scenes", static asset => asset.Kind == AssetKind.PhysicsScene),
         new("Textures and images", static asset => asset.Kind is AssetKind.Texture or AssetKind.Image),
         new("Source models", static asset => asset.Kind == AssetKind.ForeignSource),

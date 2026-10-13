@@ -68,6 +68,24 @@
                                         <FontIcon Glyph="&#xE8B9;" />
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
+                                <MenuFlyoutItem
+                                    AccessKey="S"
+                                    AutomationProperties.AutomationId="InnerNavigationToolbarNewScriptButton"
+                                    Command="{x:Bind ViewModel.CreateScriptCommand}"
+                                    Text="Script…">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE943;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem
+                                    AccessKey="I"
+                                    AutomationProperties.AutomationId="InnerNavigationToolbarNewInputFileButton"
+                                    Command="{x:Bind ViewModel.CreateInputFileCommand}"
+                                    Text="Input File…">
+                                    <MenuFlyoutItem.Icon>
+                                        <FontIcon Glyph="&#xE765;" />
+                                    </MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
                             </MenuFlyout>
                         </dnc:ToolBarButton.Flyout>
                     </dnc:ToolBarButton>
@@ -172,6 +190,23 @@
 
                     <dnc:ToolBarSeparator />
 
+                    <dnc:ToolBarElementHost dnc:ToolBar.OverflowPriority="2">
+                        <SplitButton
+                            Padding="8,4"
+                            AutomationProperties.AutomationId="InnerNavigationToolbarEditButton"
+                            AutomationProperties.Name="Edit in code editor"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Command="{x:Bind ViewModel.EditSelectedCommand}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.EditToolTip, Mode=OneWay}">
+                            <FontIcon FontSize="16" Glyph="&#xE943;" />
+                            <SplitButton.Flyout>
+                                <MenuFlyout Placement="BottomEdgeAlignedLeft">
+                                    <MenuFlyoutItem Command="{x:Bind ViewModel.OpenSelectedWithCommand}" Text="Open with…" />
+                                </MenuFlyout>
+                            </SplitButton.Flyout>
+                        </SplitButton>
+                    </dnc:ToolBarElementHost>
                     <dnc:ToolBarButton
                         dnc:ToolBar.OverflowPriority="2"
                         Command="{x:Bind ViewModel.RenameSelectedCommand}"

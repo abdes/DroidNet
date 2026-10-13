@@ -424,9 +424,20 @@
     <Filter Include="Base">
       <UniqueIdentifier>{3187e374-ea51-469d-8e36-92d80e02fc13}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Scripting">
+      <UniqueIdentifier>{5b0c7e21-3f4a-4d8e-9c61-2a7d9e0b4f13}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Commands">
       <UniqueIdentifier>{8a9b2c3d-4e5f-6071-8293-a4b5c6d7e8f9}</UniqueIdentifier>
     </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Scripting\ScriptAnalysis.cpp">
+      <Filter>Scripting</Filter>
+    </ClCompile>
+    <ClInclude Include="Scripting\ScriptAnalysis.h">
+      <Filter>Scripting</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="EditorModule\SceneAssetRequests.cpp">

@@ -20,6 +20,7 @@ public sealed class ContentImportManifestValidator : IContentImportManifestValid
         "scene-descriptor",
         "gltf",
         "fbx",
+        "input",
     ];
 
     /// <inheritdoc />

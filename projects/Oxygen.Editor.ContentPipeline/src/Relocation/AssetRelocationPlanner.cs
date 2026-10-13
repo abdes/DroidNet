@@ -197,6 +197,11 @@ internal static class AssetRelocationPlanner
         {
             throw new AssetRelocationException($"The destination folder '{RelocationPaths.GetParent(move.TargetPath)}' does not exist.");
         }
+
+        if (!isDirectory && ScriptSourceNames.FindCollision(target, ignored: source) is { } collision)
+        {
+            throw new AssetRelocationException($"'{Path.GetFileName(collision)}' is already in '{RelocationPaths.GetParent(move.TargetPath)}'; both would cook to the same script. Choose another name.");
+        }
     }
 
     private static bool IsSameOrInside(string path, string folder)

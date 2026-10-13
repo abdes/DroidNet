@@ -323,7 +323,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         var extension = isDirectory ? string.Empty : RelocationPaths.GetExtension(name);
         var stem = name[..^extension.Length];
         var candidate = Path.Combine(folder, name);
-        for (var index = 2; File.Exists(candidate) || Directory.Exists(candidate) || reserved.Contains(candidate); index++)
+        for (var index = 2; File.Exists(candidate) || Directory.Exists(candidate) || reserved.Contains(candidate) || ScriptSourceNames.FindCollision(candidate) is not null; index++)
         {
             candidate = Path.Combine(folder, string.Create(CultureInfo.InvariantCulture, $"{stem} ({index}){extension}"));
         }

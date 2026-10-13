@@ -224,6 +224,7 @@ public sealed partial class ContentBrowserViewModel(
             this.childContainer.Register<IAssetShell, WindowsAssetShell>(Reuse.Singleton);
             this.childContainer.Register<Relocation.IAssetRelocationWorkflow, Relocation.AssetRelocationWorkflow>(Reuse.Singleton);
             this.childContainer.Register<AssetDetailsViewModel>(Reuse.Singleton);
+            this.childContainer.Register<Scripts.ScriptAssetCreation>(Reuse.Singleton);
 
             this.childContainer.Register<ProjectLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
             this.childContainer.Register<ProjectLayoutView>(Reuse.Transient);

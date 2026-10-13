@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.World.Problems.ProblemsView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Oxygen.Editor.World.Problems"
+    x:Name="Root"
+    Background="{ThemeResource LayerFillColorDefaultBrush}">
+    <UserControl.Resources>
+        <CollectionViewSource
+            x:Name="ProblemsSource"
+            IsSourceGrouped="True"
+            ItemsPath="Entries" />
+        <Style x:Key="ProblemItem" TargetType="ListViewItem">
+            <Setter Property="MinHeight" Value="28" />
+            <Setter Property="Padding" Value="12,2,8,2" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        </Style>
+        <DataTemplate x:Key="ProblemTemplate" x:DataType="local:ProblemEntry">
+            <Grid
+                AutomationProperties.Name="{x:Bind AccessibleName}"
+                ColumnSpacing="8"
+                DoubleTapped="OnProblemDoubleTapped"
+                ToolTipService.ToolTip="{x:Bind SeverityText}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <FontIcon
+                    FontSize="14"
+                    Foreground="{x:Bind local:ProblemsView.SeverityBrush(IsError, IsWarning)}"
+                    Glyph="{x:Bind Glyph}" />
+                <TextBlock
+                    Grid.Column="1"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{x:Bind Code}" />
+                <TextBlock
+                    Grid.Column="2"
+                    Text="{x:Bind Message}"
+                    TextTrimming="CharacterEllipsis"
+                    ToolTipService.ToolTip="{x:Bind Message}" />
+                <TextBlock
+                    Grid.Column="3"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="{x:Bind Location}" />
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <!--  Empty state: one centered message for the whole panel.  -->
+        <StackPanel
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Spacing="4"
+            Visibility="{x:Bind ViewModel.IsEmpty, Mode=OneWay}">
+            <FontIcon
+                FontSize="20"
+                Foreground="{ThemeResource SystemFillColorSuccessBrush}"
+                Glyph="&#xE73E;" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                Style="{ThemeResource BodyStrongTextBlockStyle}"
+                Text="No problems in your scripts and input files" />
+            <TextBlock
+                HorizontalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="Problems appear here when you save a script or an input file." />
+            <Button
+                Margin="0,8,0,0"
+                HorizontalAlignment="Center"
+                Command="{x:Bind ViewModel.CheckScriptsCommand}"
+                Content="Check scripts"
+                ToolTipService.ToolTip="Check every script of the project again" />
+        </StackPanel>
+
+        <!--  Problems: the list fills the panel; the details open beside it for the selected problem.  -->
+        <Grid ColumnSpacing="4" Visibility="{x:Bind local:ProblemsView.CollapsedWhen(ViewModel.IsEmpty), Mode=OneWay}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="3*" MinWidth="260" />
+                <ColumnDefinition x:Name="DetailColumn" Width="0" />
+            </Grid.ColumnDefinitions>
+
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Button
+                Margin="8,4"
+                Padding="8,2"
+                Background="Transparent"
+                BorderThickness="0"
+                Command="{x:Bind ViewModel.CheckScriptsCommand}"
+                ToolTipService.ToolTip="Check every script of the project again">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <FontIcon FontSize="12" Glyph="&#xE72C;" />
+                    <TextBlock Text="Check scripts" />
+                </StackPanel>
+            </Button>
+
+            <ListView
+                x:Name="ProblemList"
+                Grid.Row="1"
+                AutomationProperties.Name="Problems"
+                IsItemClickEnabled="False"
+                ItemContainerStyle="{StaticResource ProblemItem}"
+                ItemTemplate="{StaticResource ProblemTemplate}"
+                KeyDown="OnProblemListKeyDown"
+                SelectionChanged="OnSelectionChanged"
+                SelectionMode="Single">
+                <ListView.GroupStyle>
+                    <GroupStyle>
+                        <GroupStyle.HeaderTemplate>
+                            <DataTemplate x:DataType="local:ProblemFileGroup">
+                                <TextBlock
+                                    Style="{ThemeResource BodyStrongTextBlockStyle}"
+                                    Text="{x:Bind Header}"
+                                    ToolTipService.ToolTip="{x:Bind DisplayPath}" />
+                            </DataTemplate>
+                        </GroupStyle.HeaderTemplate>
+                    </GroupStyle>
+                </ListView.GroupStyle>
+            </ListView>
+
+            <Grid
+                Grid.RowSpan="2"
+                Grid.Column="1"
+                Padding="8"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1,0,0,0"
+                RowSpacing="8"
+                Visibility="{x:Bind ViewModel.HasSelection, Mode=OneWay}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Auto">
+                    <TextBlock
+                        FontFamily="Cascadia Mono, Consolas"
+                        FontSize="12"
+                        IsTextSelectionEnabled="True"
+                        Text="{x:Bind ViewModel.Selected.Rendered, Mode=OneWay, FallbackValue=''}" />
+                </ScrollViewer>
+                <Expander
+                    Grid.Row="1"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Stretch"
+                    Header="Explain">
+                    <TextBlock Text="{x:Bind ViewModel.Selected.Explanation, Mode=OneWay, FallbackValue=''}" TextWrapping="Wrap" />
+                </Expander>
+                <Button
+                    Grid.Row="2"
+                    Command="{x:Bind ViewModel.OpenSelectedCommand}"
+                    Content="Open in code editor" />
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

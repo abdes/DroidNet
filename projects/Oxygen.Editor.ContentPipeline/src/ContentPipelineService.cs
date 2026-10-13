@@ -183,6 +183,11 @@ public sealed partial class ContentPipelineService(
                 ? OperationStatus.SucceededWithWarnings
                 : OperationStatus.Succeeded;
 
+    private static bool OwnsByReport(ContentCookInput input, CookedAssetEntry asset, NativeImportResult import)
+        => asset.DescriptorRelativePath is not null
+            && import.OutputsBySource.TryGetValue(input.SourceRelativePath, out var outputs)
+            && outputs.Contains(asset.DescriptorRelativePath, StringComparer.OrdinalIgnoreCase);
+
     private static List<ContentCookedAsset> CreateCookedAssets(
         ContentCookScope scope,
         CookInspectionResult inspection,
@@ -192,8 +197,9 @@ public sealed partial class ContentPipelineService(
         var result = new List<ContentCookedAsset>();
         foreach (var asset in inspection.Assets)
         {
-            var input = scope.Inputs.FirstOrDefault(input => input.OwnsOutput(asset.VirtualPath));
-            if (input is not null && (input.Kind != ContentCookAssetKind.ForeignSource
+            var input = scope.Inputs.FirstOrDefault(input => input.OwnsOutput(asset.VirtualPath)
+                && (input.Kind != ContentCookAssetKind.Input || OwnsByReport(input, asset, import)));
+            if (input is not null && (input.Kind is not (ContentCookAssetKind.ForeignSource or ContentCookAssetKind.Input)
                 || (asset.DescriptorRelativePath is not null
                     && import.OutputsBySource.TryGetValue(input.SourceRelativePath, out var outputs)
                     && outputs.Contains(asset.DescriptorRelativePath, StringComparer.OrdinalIgnoreCase))))
@@ -245,8 +251,54 @@ public sealed partial class ContentPipelineService(
             _ when path.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase)
                 || path.EndsWith(".oscene", StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.Scene,
             _ when path.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".glb", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase) => ContentCookAssetKind.ForeignSource,
+            _ when InputFileReferences.IsInputFile(path) => ContentCookAssetKind.Input,
             _ => throw new ArgumentException($"Unsupported content cook asset URI '{assetUri}'.", nameof(assetUri)),
         };
+    }
+
+    /// <summary>Removes the jobs of input files that use actions declared in other files, reporting each file.</summary>
+    /// <param name="operationId">The cook operation.</param>
+    /// <param name="scope">The cook scope.</param>
+    /// <param name="manifest">The manifest.</param>
+    /// <returns>The manifest without those jobs, and one error per rejected file.</returns>
+    internal static (ContentImportManifest Manifest, IReadOnlyList<DiagnosticRecord> Diagnostics) RejectInputFilesWithForeignActions(
+        Guid operationId,
+        ContentCookScope scope,
+        ContentImportManifest manifest)
+    {
+        var rejected = new HashSet<string>(StringComparer.Ordinal);
+        var diagnostics = new List<DiagnosticRecord>();
+        foreach (var input in scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.Input))
+        {
+            string text;
+            try
+            {
+                text = File.ReadAllText(input.SourceAbsolutePath);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                continue; // The cooker reports the unreadable source.
+            }
+
+            if (InputFileReferences.FindUndeclaredActions(text) is { Count: > 0 } foreign)
+            {
+                _ = rejected.Add(input.SourceRelativePath.Replace('\\', '/').TrimStart('/'));
+                diagnostics.Add(new DiagnosticRecord
+                {
+                    OperationId = operationId,
+                    Domain = FailureDomain.ScriptAuthoring,
+                    Severity = DiagnosticSeverity.Error,
+                    Code = ScriptDiagnosticCodes.InputReferenceUnsupported,
+                    Message = $"{Path.GetFileName(input.SourceAbsolutePath)} uses {string.Join(", ", foreign.Select(static name => "'" + name + "'"))}, which it does not declare. Declare every action an input file uses in that file; input files cannot share actions yet.",
+                    AffectedPath = input.SourceAbsolutePath,
+                    AffectedVirtualPath = input.OutputVirtualPath,
+                });
+            }
+        }
+
+        return rejected.Count == 0
+            ? (manifest, diagnostics)
+            : (manifest with { Jobs = [.. manifest.Jobs.Where(job => !(job.Type == "input" && rejected.Contains(job.Source)))] }, diagnostics);
     }
 
     private static string GetMountName(string virtualPath)
@@ -271,6 +323,7 @@ public sealed partial class ContentPipelineService(
            || path.EndsWith(".otex.json", StringComparison.OrdinalIgnoreCase)
            || path.EndsWith(".ogeo.json", StringComparison.OrdinalIgnoreCase)
            || path.EndsWith(".oscene.json", StringComparison.OrdinalIgnoreCase)
+           || InputFileReferences.IsInputFile(path)
            || ((path.EndsWith(".gltf", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".glb", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase))
                && File.Exists(path + Import.NativeSceneImportSettings.SidecarSuffix));
 
@@ -465,6 +518,13 @@ public sealed partial class ContentPipelineService(
         var output = scope.Output ?? throw new InvalidOperationException("The cook has no generation owner.");
         manifest = PruneReusableJobs(scope, manifest, output.SourceKey);
         scope = scope with { Inputs = scope.Inputs.Where(input => !scope.ReusableSources.Contains(input.AssetUri)).ToArray() };
+        (manifest, var inputDiagnostics) = RejectInputFilesWithForeignActions(operationId, scope, manifest);
+        diagnostics = [.. diagnostics, .. inputDiagnostics];
+        if (manifest.Jobs.Count == 0 && inputDiagnostics.Count > 0)
+        {
+            return CreateFailedImport(operationId, targetKind, [.. diagnostics]);
+        }
+
         var manifestDiagnostics = this.manifestValidator.Validate(operationId, manifest);
         if (HasError(manifestDiagnostics))
         {

@@ -142,6 +142,10 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
                 {
                     Outlet = "cook", Path = "cook", MatchMethod = PathMatch.Full, ViewModelType = typeof(CookingPanelViewModel),
                 },
+                new Route
+                {
+                    Outlet = ProblemsDockId, Path = ProblemsDockId, MatchMethod = PathMatch.Full, ViewModelType = typeof(Oxygen.Editor.World.Problems.ProblemsViewModel),
+                },
             ]),
         },
     ]);
@@ -154,6 +158,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         {
             cookingDock.Title = "Cooking";
         }
+
+        this.OnScriptingNavigated();
 
         // Ensure messenger is available (resolve from container as fallback)
         this.messenger ??= this.container.Resolve<IMessenger>();
@@ -272,6 +278,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<ContentBrowserViewModel>(Reuse.Transient);
         childContainer.Register<ContentBrowserView>(Reuse.Transient);
         this.RegisterOutputPanels(childContainer);
+        this.RegisterScriptServices(childContainer);
 
         childContainer.Register<SceneNodeEditorViewModel>(Reuse.Transient);
         childContainer.Register<SceneNodeEditorView>(Reuse.Transient);
@@ -284,7 +291,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     /// <inheritdoc />
     protected override Task OnInitialNavigationAsync(ILocalRouterContext context)
         => context.LocalRouter.NavigateAsync(
-            "/(renderer:dx//se:se;right;w=350//props:props;bottom=se//cb:cb;bottom;h=340//log:log;with=cb//cook:cook;with=cb)");
+            "/(renderer:dx//se:se;right;w=350//props:props;bottom=se//cb:cb;bottom;h=340//log:log;with=cb//cook:cook;with=cb//problems:problems;with=cb)");
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
@@ -298,6 +305,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
             this.editingViewMask?.Dispose();
             this.editingViewMask = null;
+            this.DisposeScriptServices();
 
             this.publicationRegistration?.Dispose();
             this.publicationRegistration = null;

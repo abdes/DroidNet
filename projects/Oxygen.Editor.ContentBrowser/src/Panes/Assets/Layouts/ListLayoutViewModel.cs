@@ -18,13 +18,15 @@ namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 /// <param name="contentBrowserState">The content-browser state.</param>
 /// <param name="hostingContext">The hosting context.</param>
 /// <param name="builtins">The engine catalog availability.</param>
+/// <param name="scripts">The script analysis, which shows script problems in each row's status.</param>
 public partial class ListLayoutViewModel(
     IContentBrowserAssetProvider assetProvider,
     IProjectContextService projectContextService,
     ContentBrowserState contentBrowserState,
     HostingContext hostingContext,
-    IBuiltinCatalogDiscovery builtins)
-    : AssetsLayoutViewModel(assetProvider, projectContextService, contentBrowserState, hostingContext, builtins)
+    IBuiltinCatalogDiscovery builtins,
+    Scripts.IScriptAnalysisService? scripts = null)
+    : AssetsLayoutViewModel(assetProvider, projectContextService, contentBrowserState, hostingContext, builtins, scripts)
 {
     /// <summary>
     /// Invokes the item.

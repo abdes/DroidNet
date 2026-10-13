@@ -45,6 +45,8 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="windowManagerService">The window manager service.</param>
 /// <param name="shell">The clipboard and File Explorer actions.</param>
 /// <param name="relocation">The rename, move, copy and delete workflow; without it those commands are unavailable.</param>
+/// <param name="scripts">New Script and New Input File; without it those commands are unavailable.</param>
+/// <param name="codeEditor">The code editor that opens scripts and input files; without it Edit is unavailable.</param>
 public partial class AssetsViewModel(
     Oxygen.Editor.ContentPipeline.Cooking.ICookRunService cookRuns,
     ViewModelToView vmToViewConverter,
@@ -61,7 +63,9 @@ public partial class AssetsViewModel(
     IDialogService dialogService,
     IWindowManagerService windowManagerService,
     IAssetShell shell,
-    Relocation.IAssetRelocationWorkflow? relocation = null) : AbstractOutletContainer, IRoutingAware
+    Relocation.IAssetRelocationWorkflow? relocation = null,
+    Scripts.ScriptAssetCreation? scripts = null,
+    Scripts.ICodeEditorService? codeEditor = null) : AbstractOutletContainer, IRoutingAware
 {
     private bool disposed;
 
@@ -486,6 +490,11 @@ public partial class AssetsViewModel(
 
         Debug.WriteLine(
             $"[AssetsViewModel] Item invoked: {args.InvokedItem.DisplayName}, Kind: {args.InvokedItem.Kind}, URI: {args.InvokedItem.IdentityUri}");
+
+        if (await this.TryEditInvokedAsync(args.InvokedItem).ConfigureAwait(true))
+        {
+            return;
+        }
 
         if (args.InvokedItem.Kind != AssetKind.Folder
             && (args.InvokedItem.IsBuiltin || (args.InvokedItem.DescriptorPath is null && args.InvokedItem.CookedUri is not null)))

@@ -38,4 +38,9 @@ public enum ContentCookAssetKind
     /// Unknown or unsupported asset kind.
     /// </summary>
     Unknown,
+
+    /// <summary>
+    /// Hand-written input file whose actions and mapping contexts cook next to it.
+    /// </summary>
+    Input,
 }

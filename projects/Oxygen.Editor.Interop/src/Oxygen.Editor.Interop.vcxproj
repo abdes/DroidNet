@@ -175,6 +175,9 @@
     <ClCompile Include="World\NodeObservation.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="Scripting\ScriptAnalysis.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj">
@@ -196,6 +199,7 @@
     <ClInclude Include="Commands\ObserveNodeCommand.h" />
     <ClInclude Include="Utils\EditorRotation.h" />
     <ClInclude Include="World\EnvironmentStateManaged.h" />
+    <ClInclude Include="Scripting\ScriptAnalysis.h" />
     <ClInclude Include="Commands\SetMaterialOverrideCommand.h" />
     <ClInclude Include="Commands\SetViewCameraControlModeCommand.h" />
     <ClInclude Include="Commands\SetViewCameraMovementSpeedCommand.h" />
@@ -360,7 +364,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Platform-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Platform.Input-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Input-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Content-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Graphics.Direct3D12-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Core-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Scene-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.SceneSync-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Data-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Vortex-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Engine.EditorInterface-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Base-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Composition-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Platform-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Platform.Input-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Input-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Content-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Engine-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Graphics.Common-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Graphics.Direct3D12-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Core-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Scene-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.SceneSync-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Data-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Vortex-d.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Scripting.Analysis-d.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
@@ -379,7 +383,7 @@
       <LanguageStandard_C>stdc17</LanguageStandard_C>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Engine.EditorInterface.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Base.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Composition.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Platform.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Platform.Input.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Input.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Content.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Engine.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Graphics.Common.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Graphics.Direct3D12.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Core.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Scene.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.SceneSync.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Data.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Vortex.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Engine.EditorInterface.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Base.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Composition.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Platform.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Platform.Input.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Input.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Content.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Engine.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Graphics.Common.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Graphics.Direct3D12.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Core.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Scene.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.SceneSync.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Data.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Vortex.lib;$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib\Oxygen.Scripting.Analysis.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
       <AdditionalLibraryDirectories>$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>

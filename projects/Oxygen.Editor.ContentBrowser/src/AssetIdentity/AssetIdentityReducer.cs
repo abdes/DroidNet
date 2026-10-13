@@ -4,6 +4,7 @@
 
 using System.Security.Cryptography;
 using System.Text.Json;
+using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
@@ -105,6 +106,7 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             ".omat.json", ".omat", ".ogeo.json", ".ogeo", ".oscene.json", ".oscene",
             ".oscript.json", ".oscript", ".oiact.json", ".oiact", ".oimap.json", ".oimap",
             ".opscene.json", ".opscene", ".otex.json", ".otex",
+            ScriptSources.InputActionFileSuffix, ScriptSources.InputFileSuffix, ".luau", ScriptSources.ScriptExtension,
         })
         {
             if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
@@ -205,9 +207,11 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             path = uri.AbsolutePath;
         }
 
-        return path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-            ? path[..^".json".Length]
-            : path;
+        return ScriptSources.IsScriptSource(path)
+            ? ScriptSources.ToCookedScriptPath(path)
+            : path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                ? path[..^".json".Length]
+                : path;
     }
 
     private static string? TryResolveSourcePath(ProjectContext project, Uri uri)
@@ -315,6 +319,16 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
             return AssetKind.Texture;
         }
 
+        if (ScriptSources.IsScriptSource(path))
+        {
+            return AssetKind.Script;
+        }
+
+        if (ScriptSources.IsInputSource(path))
+        {
+            return AssetKind.InputFile;
+        }
+
         var ext = Path.GetExtension(path).ToUpperInvariant();
         return ext switch
         {
@@ -350,7 +364,10 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
 
         var sourcePath = source is null ? null : TryResolveSourcePath(project, source.Uri);
         var descriptorPath = descriptor is null ? null : TryResolveSourcePath(project, descriptor.Uri);
-        var cookedUri = cooked?.Uri ?? (descriptor is null ? null : ToCookedUri(descriptor.Uri));
+        var scriptUri = source is not null && ScriptSources.IsScriptSource(source.Uri.AbsolutePath)
+            ? new Uri($"{AssetUris.Scheme}://{ScriptSources.ToCookedScriptPath(AssetUriHelper.GetVirtualPath(source.Uri))}")
+            : null;
+        var cookedUri = cooked?.Uri ?? scriptUri ?? (descriptor is null ? null : ToCookedUri(descriptor.Uri));
         var cookedPath = cooked?.Cooked is { } metadata ? TryResolveIndexedDescriptorPath(metadata) : null;
         var diagnostics = new List<string>();
 
@@ -372,7 +389,7 @@ public sealed class AssetIdentityReducer : IAssetIdentityReducer
         }
 
         return new ContentBrowserAssetItem(
-            IdentityUri: descriptor?.Uri ?? selected.Uri,
+            IdentityUri: descriptor?.Uri ?? scriptUri ?? selected.Uri,
             DisplayName: GetDisplayName(descriptor?.Uri ?? selected.Uri),
             Kind: GetKind(descriptor ?? cooked ?? selected),
             PrimaryState: primaryState,

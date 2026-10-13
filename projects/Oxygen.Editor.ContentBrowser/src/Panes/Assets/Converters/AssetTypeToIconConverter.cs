@@ -25,6 +25,7 @@ public partial class AssetTypeToIconConverter : IValueConverter
                 AssetKind.Script => "\uE943",
                 AssetKind.InputAction => "\uE765",
                 AssetKind.InputMappingContext => "\uE721",
+                AssetKind.InputFile => "\uE943",
                 AssetKind.PhysicsScene => "\uE9D9",
                 AssetKind.Geometry => "\uF158",
                 AssetKind.Material => "\uE790",

@@ -83,4 +83,10 @@ public enum AssetKind
     /// Physics-scene descriptor or cooked physics scene.
     /// </summary>
     PhysicsScene,
+
+    /// <summary>
+    /// Hand-written input file (<c>*.input.json</c> or <c>*.input-action.json</c>) that declares input actions and
+    /// mapping contexts; each cooks to its own <see cref="InputAction"/> or <see cref="InputMappingContext"/>.
+    /// </summary>
+    InputFile,
 }

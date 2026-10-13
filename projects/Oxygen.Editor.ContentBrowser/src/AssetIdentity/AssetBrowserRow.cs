@@ -15,6 +15,7 @@ public sealed partial class AssetBrowserRow(ContentBrowserAssetItem item) : Obse
     private AssetFileFacts? fileFacts;
     private MaterialPreviewColor? baseColor;
     private bool baseColorRead;
+    private Scripts.ScriptAnalysisSnapshot? scriptAnalysis;
 
     /// <summary>Gets the current asset snapshot used by display bindings and commands.</summary>
     public ContentBrowserAssetItem Item => this.item;
@@ -22,11 +23,18 @@ public sealed partial class AssetBrowserRow(ContentBrowserAssetItem item) : Obse
     /// <summary>Gets the asset type used by layout commands.</summary>
     public AssetKind Kind => this.item.Kind;
 
-    /// <summary>Gets the displayed status.</summary>
-    public string StatusText => this.item.PrimaryBadge;
+    /// <summary>Gets the displayed status; a script with problems shows its error and warning counts instead.</summary>
+    public string StatusText => this.scriptAnalysis is { ErrorCount: > 0 } or { WarningCount: > 0 }
+        ? this.scriptAnalysis.ProblemSummary
+        : this.item.PrimaryBadge;
 
     /// <summary>Gets the semantic tone of the displayed status: Neutral, Caution, Critical or Success.</summary>
-    public string StatusTone => AssetStatusPresentation.GetToneForText(this.item.PrimaryBadge);
+    public string StatusTone => this.scriptAnalysis switch
+    {
+        { ErrorCount: > 0 } => "Critical",
+        { WarningCount: > 0 } => "Caution",
+        _ => AssetStatusPresentation.GetToneForText(this.item.PrimaryBadge),
+    };
 
     /// <summary>Gets the folder that holds the asset.</summary>
     public string Location
@@ -68,6 +76,20 @@ public sealed partial class AssetBrowserRow(ContentBrowserAssetItem item) : Obse
 
     /// <summary>Gets a value indicating whether the row shows its type glyph.</summary>
     public bool HasGlyph => !this.HasSwatch;
+
+    /// <summary>Shows a script's problems in the row status.</summary>
+    /// <param name="analysis">The script's analysis, or <see langword="null"/> when unknown.</param>
+    internal void SetScriptProblems(Scripts.ScriptAnalysisSnapshot? analysis)
+    {
+        if (ReferenceEquals(this.scriptAnalysis, analysis))
+        {
+            return;
+        }
+
+        this.scriptAnalysis = analysis;
+        this.OnPropertyChanged(nameof(this.StatusText));
+        this.OnPropertyChanged(nameof(this.StatusTone));
+    }
 
     /// <summary>Updates presentation without replacing the row or its selection identity.</summary>
     /// <param name="replacement">The latest snapshot of this asset.</param>

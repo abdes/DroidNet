@@ -31,8 +31,15 @@ public sealed record ContentCookInput(
     /// <summary>Tests output ownership without treating the whole mount as an imported namespace.</summary>
     /// <param name="virtualPath">The native output identity.</param>
     /// <returns>Whether this input owns the exact asset or its imported folder.</returns>
-    public bool OwnsOutput(string virtualPath) => this.Kind == ContentCookAssetKind.ForeignSource
-        ? this.OutputNamespaces.Any(prefix => virtualPath.StartsWith(prefix, StringComparison.Ordinal))
-            || (this.OutputNamespaces.IsEmpty && this.OutputVirtualPath is { } prefix && virtualPath.StartsWith(prefix, StringComparison.Ordinal))
-        : string.Equals(this.OutputVirtualPath, virtualPath, StringComparison.Ordinal);
+    public bool OwnsOutput(string virtualPath) => this.Kind switch
+    {
+        ContentCookAssetKind.ForeignSource => this.OutputNamespaces.Any(prefix => virtualPath.StartsWith(prefix, StringComparison.Ordinal))
+            || (this.OutputNamespaces.IsEmpty && this.OutputVirtualPath is { } prefix && virtualPath.StartsWith(prefix, StringComparison.Ordinal)),
+
+        // An input file's actions and contexts cook into its own folder; the import report says which file made each.
+        ContentCookAssetKind.Input => this.OutputVirtualPath is { } file
+            && string.Equals(virtualPath[..(virtualPath.LastIndexOf('/') + 1)], file[..(file.LastIndexOf('/') + 1)], StringComparison.Ordinal)
+            && (virtualPath.EndsWith(".oiact", StringComparison.Ordinal) || virtualPath.EndsWith(".oimap", StringComparison.Ordinal)),
+        _ => string.Equals(this.OutputVirtualPath, virtualPath, StringComparison.Ordinal),
+    };
 }

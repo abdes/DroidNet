@@ -140,6 +140,7 @@ public partial class AssetsViewModel
         this.DeleteSelectedCommand.NotifyCanExecuteChanged();
         this.FindReferencesCommand.NotifyCanExecuteChanged();
         this.UndoRelocationCommand.NotifyCanExecuteChanged();
+        this.NotifyEditCommands();
         foreach (var name in (string[])[
             nameof(this.CreateFolderToolTip),
             nameof(this.CookSelectedToolTip),
