@@ -81,6 +81,22 @@ if(OXYGEN_INSTALL)
   endif()
 endif()
 
+# Record targets that must be built before the SDK is installed. Every target
+# given to oxygen_module_install() is recorded automatically; call this for the
+# producer of anything else an install() rule copies out of the build tree.
+function(oxygen_install_requires)
+  if(NOT OXYGEN_INSTALL)
+    return()
+  endif()
+  set_property(
+    GLOBAL
+    APPEND
+    PROPERTY
+      OXYGEN_SDK_BUILD_TARGETS
+        ${ARGN}
+  )
+endfunction()
+
 function(oxygen_module_install)
   if(NOT OXYGEN_INSTALL)
     return()
@@ -105,6 +121,7 @@ function(oxygen_module_install)
     if(NOT TARGET "${_target}")
       message(FATAL_ERROR "Cannot install missing target ${_target}.")
     endif()
+    oxygen_install_requires("${_target}")
     get_target_property(_type "${_target}" TYPE)
     if(_type STREQUAL "EXECUTABLE")
       install(
@@ -159,10 +176,38 @@ function(oxygen_module_install)
   endforeach()
 endfunction()
 
+# `install` depends on `all`, so it builds every test and example test. This
+# target depends only on what the SDK installs, then runs the same install step.
+function(oxygen_define_install_sdk)
+  if(NOT PROJECT_IS_TOP_LEVEL OR OXYGEN_CONAN_PACKAGE_BUILD)
+    return()
+  endif()
+  get_property(_targets GLOBAL PROPERTY OXYGEN_SDK_BUILD_TARGETS)
+  if(NOT _targets)
+    return()
+  endif()
+  list(REMOVE_DUPLICATES _targets)
+  foreach(_target IN LISTS _targets)
+    if(NOT TARGET "${_target}")
+      message(FATAL_ERROR "install-sdk: required target ${_target} is missing.")
+    endif()
+  endforeach()
+  add_custom_target(
+    install-sdk
+    COMMAND
+      "${CMAKE_COMMAND}" --install "${CMAKE_BINARY_DIR}" --config "$<CONFIG>"
+    USES_TERMINAL
+    VERBATIM
+    COMMENT "Installing the Oxygen SDK without building tests ($<CONFIG>)"
+  )
+  add_dependencies(install-sdk ${_targets})
+endfunction()
+
 function(oxygen_finalize_install)
   if(NOT OXYGEN_INSTALL)
     return()
   endif()
+  oxygen_define_install_sdk()
   get_property(
     OXYGEN_INSTALLED_MODULES
     GLOBAL

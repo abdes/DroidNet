@@ -76,6 +76,8 @@ add_custom_target(
 add_dependencies(${META_MODULE_TARGET} ${META_MODULE_TARGET}_shaders)
 
 if(OXYGEN_INSTALL)
+  oxygen_install_requires(${META_MODULE_TARGET}_shaders)
+  # install-sdk: generated ${META_MODULE_TARGET}_shaders
   install(
     FILES
       "${SHADER_LIBRARY_OUTPUT}"

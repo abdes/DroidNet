@@ -776,6 +776,7 @@ if(WIN32)
 
     # Install the runtime DLL alongside executables.
     if(DEFINED OXYGEN_INSTALL_BIN)
+      # install-sdk: static
       install(
         FILES
           "${OXYGEN_WINPIXEVENTRUNTIME_DLL}"
@@ -842,6 +843,7 @@ if(WIN32)
 
       # Install the RenderDoc runtime DLL alongside executables.
       if(DEFINED OXYGEN_INSTALL_BIN)
+        # install-sdk: static
         install(
           FILES
             "${OXYGEN_RENDERDOC_DLL}"
@@ -924,6 +926,7 @@ if(WIN32)
 
       # Install the runtime DLL alongside executables.
       if(DEFINED OXYGEN_INSTALL_BIN)
+        # install-sdk: static
         install(
           FILES
             "${OXYGEN_AFTERMATH_DLL}"

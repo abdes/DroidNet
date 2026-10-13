@@ -264,6 +264,8 @@ function(oxygen_add_version_metadata target)
   )
   # One source capsule accompanies the native SDK, independent of configuration.
   if(OXYGEN_INSTALL)
+    oxygen_install_requires(${target}_version_info)
+    # install-sdk: generated ${target}_version_info
     install(
       FILES
         "${OXYGEN_VERSION_CAPSULE}"

@@ -95,12 +95,14 @@ oxygen_module_install(
 asap_pop_module("${META_MODULE_NAME}")
 
 if(OXYGEN_INSTALL)
+  # install-sdk: static
   install(
     FILES
       "${CMAKE_CURRENT_SOURCE_DIR}/README.md"
     DESTINATION "${OXYGEN_INSTALL_DATA}/RenderScene"
     COMPONENT Oxygen_data
   )
+  # install-sdk: static
   install(
     FILES
       "${CMAKE_CURRENT_SOURCE_DIR}/RenderScene.ps1"

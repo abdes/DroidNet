@@ -512,6 +512,7 @@ endif()
 # ==============================================================================
 
 if(OXYGEN_INSTALL)
+  # install-sdk: static
   install(
     DIRECTORY
       "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/"

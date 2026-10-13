@@ -418,6 +418,36 @@ each argument combination must exercise singleton first access in a fresh proces
 Bindless generated-header compilation remains a mandatory Core build prerequisite
 and an explicit build target; CTest runs its Python tests without invoking a build.
 
+## Installing the SDK without building tests
+
+The generated `install` target depends on `all`, so it also builds every test.
+To install the SDK without them, build and install through `install-sdk`:
+
+```powershell
+cmake --build --preset oxygen-ninja-debug --target install-sdk
+```
+
+`install-sdk` depends only on the targets the SDK installs and then runs the
+same install step, so it installs exactly what `install` does. Ordinary builds
+and `install` are unchanged. The target exists in developer builds only, not in
+Conan package builds.
+
+Nothing keeps a list of those targets. `oxygen_module_install()` records each
+target it installs. Anything else an `install()` rule copies out of the build
+tree needs its producer registered with `oxygen_install_requires(<target>)`.
+
+Every `install()` call outside `Install.cmake` carries a comment on the line
+above it:
+
+- `# install-sdk: static` for files that already exist (sources, schemas,
+  prebuilt third-party libraries);
+- `# install-sdk: generated <target>` for files the build produces, naming the
+  target that produces them. The same file must call
+  `oxygen_install_requires(<target>)` for it.
+
+`tools/presets/tests/test_install_registration.py` fails when a call has no
+marker, or names a producer it does not register.
+
 ## Compiler caching
 
 `OXYGEN_USE_CCACHE=ON` selects an installed `ccache` for C/C++ when the corresponding

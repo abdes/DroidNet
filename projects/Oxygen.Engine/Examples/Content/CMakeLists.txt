@@ -97,6 +97,8 @@ add_custom_target(
     "${OXYGEN_SHOWCASE_STAMP}"
 )
 if(OXYGEN_INSTALL)
+  oxygen_install_requires(oxygen-showcase-content)
+  # install-sdk: generated oxygen-showcase-content
   install(
     CODE
       "
@@ -107,6 +109,7 @@ if(OXYGEN_INSTALL)
   "
     COMPONENT Oxygen_data
   )
+  # install-sdk: static
   install(
     FILES
       "${CMAKE_CURRENT_SOURCE_DIR}/showcase-assets.schema.json"
@@ -114,6 +117,7 @@ if(OXYGEN_INSTALL)
     DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
     COMPONENT Oxygen_data
   )
+  # install-sdk: generated oxygen-showcase-content
   install(
     DIRECTORY
       "${OXYGEN_SHOWCASE_CONTENT}/"
@@ -123,6 +127,7 @@ if(OXYGEN_INSTALL)
     "*.report.json"
       EXCLUDE
   )
+  # install-sdk: static
   install(
     FILES
       "${OXYGEN_PROJECT_SOURCE_DIR}/tools/cli/BuildSelection.ps1"

@@ -122,6 +122,7 @@ endif()
 # ------------------------------------------------------------------------------
 
 if(${META_PROJECT_ID}_INSTALL)
+  # install-sdk: static
   install(
     FILES
       "${CMAKE_CURRENT_SOURCE_DIR}/Schemas/oxygen.pak-build-report.schema.json"
