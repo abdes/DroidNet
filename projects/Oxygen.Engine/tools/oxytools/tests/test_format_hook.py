@@ -23,6 +23,9 @@ PRE_COMMIT_PYTHON = os.environ.get("OXYTOOLS_TEST_PRE_COMMIT_PYTHON") or (
 )
 
 
+LOCKED_PYTHON = "uv run --locked --no-sync --no-active python "
+
+
 def hook_from(path: Path) -> dict:
     config = yaml.safe_load(path.read_text())
     return next(
@@ -40,7 +43,8 @@ class HookConfigurationTests(unittest.TestCase):
         self.assertFalse((ENGINE / ".pre-commit-config.yaml").exists())
         self.assertNotIn("--fix", hook["entry"])
         self.assertNotIn("--all", hook["entry"])
-        self.assertNotIn("uv", hook["entry"])
+        # The hook uses the locked root environment and never syncs it.
+        self.assertTrue(hook["entry"].startswith(LOCKED_PYTHON))
         self.assertTrue(hook["require_serial"])
         self.assertEqual(hook["stages"], ["pre-commit"])
 
@@ -67,15 +71,20 @@ class HookIntegrationTests(unittest.TestCase):
                 )
             )
             (engine / ".clang-format").write_text("BasedOnStyle: LLVM\n")
+            # The fixture has no uv project; run the hook's script with this
+            # interpreter, which has the oxytools dependencies.
+            hook = hook_from(REPOSITORY / ".pre-commit-config.yaml")
+            interpreter = Path(sys.executable).as_posix()
+            hook["entry"] = f'"{interpreter}" ' + hook["entry"].removeprefix(
+                LOCKED_PYTHON
+            )
             (root / ".pre-commit-config.yaml").write_text(
                 yaml.safe_dump(
                     {
                         "repos": [
                             {
                                 "repo": "local",
-                                "hooks": [
-                                    hook_from(REPOSITORY / ".pre-commit-config.yaml")
-                                ],
+                                "hooks": [hook],
                             }
                         ]
                     }

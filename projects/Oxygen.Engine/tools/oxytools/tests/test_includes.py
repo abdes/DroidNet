@@ -73,9 +73,10 @@ class RepositoryIncludeStyleTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[3]
         source = (
             b'#include "Oxygen/Zeta.h"\n#include <vector>\n'
-            b"#include <fmt/format.h>\n#include <gtest/gtest.h>\n"
-            b"#include <Windows.h>\n#include <thirdparty>\n"
-            b"#include <Oxygen/Alpha.h>\n#include <array>\n#include <stdio.h>\n"
+            b"#include <fmt/format.h>\n#include <gtest/gtest.h>\n#include <unknwn.h>\n"
+            b"#include <Windows.h>\n#include <thirdparty>\n#include <Jolt/Core/Core.h>\n"
+            b"#include <Oxygen/Alpha.h>\n#include <array>\n#include <Jolt/Jolt.h>\n"
+            b"#include <stdio.h>\n"
         )
         normalized, _ = prepare_includes(source)
         command = [
@@ -88,10 +89,14 @@ class RepositoryIncludeStyleTests(unittest.TestCase):
         formatted = subprocess.run(
             command, input=normalized, capture_output=True, check=True
         ).stdout
+        # Order-sensitive headers lead: Jolt.h alone, then Windows.h with
+        # unknwn.h directly after it (dxcapi.h needs IUnknown).
         self.assertEqual(
             formatted,
+            b"#include <Jolt/Jolt.h>\n\n"
+            b"#include <Windows.h>\n#include <unknwn.h>\n\n"
             b"#include <array>\n#include <stdio.h>\n#include <vector>\n\n"
-            b"#include <Windows.h>\n#include <fmt/format.h>\n"
+            b"#include <Jolt/Core/Core.h>\n#include <fmt/format.h>\n"
             b"#include <gtest/gtest.h>\n#include <thirdparty>\n\n"
             b"#include <Oxygen/Alpha.h>\n#include <Oxygen/Zeta.h>\n",
         )
