@@ -324,7 +324,7 @@ template <class... Args, class F> auto MakeNamedArgFunction(F&& f)
   // argument deduces F as a reference type and AnyOrderCallable would hold a
   // dangling reference to the caller's object.
   return nt_detail::AnyOrderCallable<std::remove_cvref_t<F>, Args...> {
-    std::forward<F>(f)
+    std::forward<F>(f),
   };
 }
 

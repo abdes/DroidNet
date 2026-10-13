@@ -122,12 +122,12 @@ using BindlessHeapCapacity = NamedType<uint32_t, struct BindlessHeapCapacityTag,
 
 //! Sentinel value representing an invalid bindless handle.
 static constexpr BindlessHeapIndex kInvalidBindlessHeapIndex {
-  kInvalidBindlessIndex
+  kInvalidBindlessIndex,
 };
 
 //! Sentinel value representing an invalid bindless handle.
 static constexpr ShaderVisibleIndex kInvalidShaderVisibleIndex {
-  kInvalidBindlessIndex
+  kInvalidBindlessIndex,
 };
 
 //! Convert a BindlessHeapIndex to a human-readable string representation.
