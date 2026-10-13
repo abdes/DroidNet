@@ -608,9 +608,15 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
   const auto archive_path = path_finder.CVarsArchivePath();
   std::ifstream stream(archive_path);
   if (!stream.is_open()) {
-    LOG_F(WARNING,
-      "Console CVar persistence load skipped: archive file not found '{}'",
-      archive_path.generic_string());
+    // No archive is the normal state until the application first saves one.
+    std::error_code error;
+    if (std::filesystem::exists(archive_path, error)) {
+      LOG_F(WARNING, "Console CVar archive '{}' exists but cannot be opened",
+        archive_path.generic_string());
+    } else {
+      LOG_F(INFO, "No saved console variables yet at '{}'; using defaults",
+        archive_path.generic_string());
+    }
     return {
       .status = ExecutionStatus::kNotFound,
       .output = {},
@@ -827,9 +833,15 @@ auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
   const auto history_path = HistoryPathFor(path_finder);
   std::ifstream stream(history_path);
   if (!stream.is_open()) {
-    LOG_F(WARNING,
-      "Console history persistence load skipped: history file not found '{}'",
-      history_path.generic_string());
+    // No history is the normal state until the console first saves one.
+    std::error_code error;
+    if (std::filesystem::exists(history_path, error)) {
+      LOG_F(WARNING, "Console history '{}' exists but cannot be opened",
+        history_path.generic_string());
+    } else {
+      LOG_F(INFO, "No saved console history yet at '{}'",
+        history_path.generic_string());
+    }
     return {
       .status = ExecutionStatus::kNotFound,
       .output = {},
