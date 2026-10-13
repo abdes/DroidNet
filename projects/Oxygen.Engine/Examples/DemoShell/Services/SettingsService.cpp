@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -359,6 +360,46 @@ auto SettingsService::SetString(std::string_view key, std::string value) -> void
   auto* node = static_cast<nlohmann::json*>(ResolveNode(key));
   *node = std::move(value);
   dirty_ = true;
+}
+
+auto SettingsService::GetInt(std::string_view key) const
+  -> std::optional<std::int64_t>
+{
+  std::shared_lock lock(mutex_);
+  CHECK_F(loaded_, "SettingsService: settings not loaded");
+  const auto* node = static_cast<const nlohmann::json*>(FindNode(key));
+  if (node == nullptr || !node->is_number_integer()) {
+    return std::nullopt;
+  }
+  return node->get<std::int64_t>();
+}
+
+auto SettingsService::SetInt(std::string_view key, const std::int64_t value)
+  -> void
+{
+  std::unique_lock lock(mutex_);
+  CHECK_F(loaded_, "SettingsService: settings not loaded");
+  auto* node = static_cast<nlohmann::json*>(ResolveNode(key));
+  *node = value;
+  dirty_ = true;
+}
+
+auto SettingsService::GetChildKeys(std::string_view key) const
+  -> std::vector<std::string>
+{
+  std::shared_lock lock(mutex_);
+  CHECK_F(loaded_, "SettingsService: settings not loaded");
+  const auto* node = static_cast<const nlohmann::json*>(FindNode(key));
+  auto keys = std::vector<std::string> {};
+  if (node == nullptr || !node->is_object()) {
+    return keys;
+  }
+  keys.reserve(node->size());
+  for (const auto& [name, value] : node->items()) {
+    static_cast<void>(value);
+    keys.push_back(name);
+  }
+  return keys;
 }
 
 auto SettingsService::GetBool(std::string_view key) const -> std::optional<bool>

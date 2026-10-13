@@ -311,7 +311,8 @@ NOLINT_TEST(OrbitCameraController, SettingsRestoreUsesPersistedWorldPivot)
   // state even on an assertion failure; no settings file is written/deleted.
   const ScopeGuard restore_settings(
     [&]() noexcept -> void { settings->Load(); });
-  constexpr auto prefix = "camera_rig.OrbitWorldRestoreTest";
+  const auto prefix = CameraSettingsService::CameraKey(
+    "RestoreWorldOrbit", "OrbitWorldRestoreTest");
   settings->SetString(std::string(prefix) + ".mode", "orbit");
   settings->SetFloat(std::string(prefix) + ".orbit.target.x", kWorldPivot.x);
   settings->SetFloat(std::string(prefix) + ".orbit.target.y", kWorldPivot.y);

@@ -793,8 +793,10 @@ auto MainModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
       if (swap.asset && loader) {
         DCHECK_F(!Stage().HasStagedScene(),
           "scene build path expects no pre-existing staged scene");
-        Stage().Stage(
-          std::make_shared<scene::Scene>("RenderScene", kSceneInitialCapacity));
+        // Named by its asset, so per-scene settings such as the saved camera
+        // pose follow the content rather than the application.
+        Stage().Stage(std::make_shared<scene::Scene>(
+          data::to_string(swap.scene_key), kSceneInitialCapacity));
         auto staged_scene = Stage().GetStagedScene();
         scene::SceneNode staged_main_camera;
         try {

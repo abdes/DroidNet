@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -84,6 +85,16 @@ public:
 
   //! Sets a string stored under the given key.
   auto SetString(std::string_view key, std::string value) -> void;
+
+  //! Gets an integer stored under the given key.
+  auto GetInt(std::string_view key) const -> std::optional<std::int64_t>;
+
+  //! Sets an integer stored under the given key.
+  auto SetInt(std::string_view key, std::int64_t value) -> void;
+
+  //! The names of the entries under `key`; empty when it holds no object.
+  [[nodiscard]] auto GetChildKeys(std::string_view key) const
+    -> std::vector<std::string>;
 
   //! Gets a boolean stored under the given key.
   auto GetBool(std::string_view key) const -> std::optional<bool>;

@@ -8,6 +8,7 @@
 
 #include <array>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -32,17 +33,17 @@ namespace ui {
   class CameraRigController;
 } // namespace ui
 
-//! Settings persistence for camera control panel options.
+//! Settings persistence for the camera rig and the active camera.
 /*!
- Owns UI-facing settings for camera control mode, orbit mode, and fly speed,
- delegating persistence to `SettingsService` and exposing an epoch for cache
- invalidation.
+ Saves each camera's pose, lens, controller and drone settings per scene, so
+ returning to a scene restores where its camera was, and two scenes with a
+ camera of the same name keep separate state. Settings are kept for the
+ `kRememberedScenes` most recently activated scenes; older scenes, and
+ entries saved in the earlier per-camera layout, are removed when a scene is
+ activated. The orbit mode is one setting for every camera.
 
-### Key Features
-
-- **Passive state**: Reads and writes via SettingsService without caching.
-- **Epoch tracking**: Increments on each effective change.
-- **Testable**: Virtual getters and setters for overrides in tests.
+ Settings are read and written through `SettingsService` without caching;
+ the epoch increments on each effective change.
 
 @see SettingsService
 */
@@ -50,6 +51,13 @@ class CameraSettingsService : public DomainService {
 public:
   using CameraControlMode = ui::CameraControlMode;
   using OrbitMode = ui::OrbitMode;
+
+  //! Scenes whose camera settings are kept; older ones are forgotten.
+  static constexpr std::size_t kRememberedScenes = 8;
+
+  //! The settings key under which `camera` in `scene` keeps its state.
+  [[nodiscard]] static auto CameraKey(
+    std::string_view scene, std::string_view camera) -> std::string;
 
   auto SetSceneActivationPolicy(SceneActivationPolicy policy) -> void;
 
@@ -263,6 +271,10 @@ private:
   void ApplyViewportToActive(const ViewPort& viewport);
   [[nodiscard]] auto RestoreActiveCameraSettings() -> bool;
   [[nodiscard]] auto CaptureActiveCameraState() -> PersistedCameraState;
+  //! The active camera's settings key; empty without an active camera.
+  [[nodiscard]] auto ActiveCameraKey() const -> std::string;
+  //! Mark the active scene as the most recent and forget the oldest scenes.
+  auto RememberActiveScene(SettingsService& settings) -> void;
 
   static constexpr auto kOrbitModeKey = "camera.orbit_mode";
 
@@ -289,6 +301,7 @@ private:
   PersistedCameraState last_saved_state_ {};
   mutable std::atomic_uint64_t epoch_ { 0 };
   std::string active_camera_id_;
+  std::string active_scene_name_;
   // NOLINTEND(*-magic-numbers)
 };
 

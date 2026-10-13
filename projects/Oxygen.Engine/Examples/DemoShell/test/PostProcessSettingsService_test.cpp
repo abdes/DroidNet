@@ -247,10 +247,12 @@ NOLINT_TEST(PostProcessAuthoringTest,
 {
   const auto saved = SettingsService::ForDemoApp();
   saved->SetPersistenceEnabled(false);
-  saved->SetFloat("camera_rig.RecipeCamera.position.x", 90.0F);
-  saved->SetBool("camera_rig.RecipeCamera.camera.has_perspective", true);
-  saved->SetBool("camera_rig.RecipeCamera.camera.exposure.enabled", true);
-  saved->SetFloat("camera_rig.RecipeCamera.camera.exposure.aperture_f", 2.0F);
+  const auto key
+    = CameraSettingsService::CameraKey("Camera recipe", "RecipeCamera");
+  saved->SetFloat(key + ".position.x", 90.0F);
+  saved->SetBool(key + ".camera.has_perspective", true);
+  saved->SetBool(key + ".camera.exposure.enabled", true);
+  saved->SetFloat(key + ".camera.exposure.aperture_f", 2.0F);
   auto world = std::make_shared<scene::Scene>("Camera recipe", 16);
   auto node = world->CreateNode("RecipeCamera");
   auto camera = std::make_unique<scene::PerspectiveCamera>();
@@ -266,10 +268,8 @@ NOLINT_TEST(PostProcessAuthoringTest,
   const auto component = node.GetCameraAs<scene::PerspectiveCamera>();
   ASSERT_TRUE(component.has_value());
   EXPECT_FLOAT_EQ(component->get().Exposure().aperture_f, 8.0F);
-  EXPECT_EQ(saved->GetFloat("camera_rig.RecipeCamera.position.x"), 90.0F);
-  EXPECT_EQ(
-    saved->GetFloat("camera_rig.RecipeCamera.camera.exposure.aperture_f"),
-    2.0F);
+  EXPECT_EQ(saved->GetFloat(key + ".position.x"), 90.0F);
+  EXPECT_EQ(saved->GetFloat(key + ".camera.exposure.aperture_f"), 2.0F);
   service.SetSceneActivationPolicy(SceneActivationPolicy::kRestorePreferences);
   service.OnSceneActivated(*world);
   service.OnMainViewReady(ViewId { 1U }, node, ViewPort {});

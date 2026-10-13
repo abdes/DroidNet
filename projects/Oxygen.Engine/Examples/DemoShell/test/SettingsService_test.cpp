@@ -98,6 +98,25 @@ namespace {
     EXPECT_NE(saved.find("axes"), std::string::npos);
   }
 
+  //! Integers keep their type, and an object's entries can be listed.
+  NOLINT_TEST(SettingsServicePersistenceTest, StoresIntegersAndListsChildren)
+  {
+    const auto path = std::filesystem::temp_directory_path()
+      / ("oxygen-settings-" + Uuid::Generate().ToString() + ".json");
+    SettingsService settings(path);
+    settings.SetPersistenceEnabled(false);
+    settings.SetInt("scenes.a.last_use", 9007199254740993);
+    settings.SetFloat("scenes.b.last_use", 2.5F);
+    settings.SetBool("flag", true);
+
+    EXPECT_EQ(settings.GetInt("scenes.a.last_use"), 9007199254740993);
+    EXPECT_FALSE(settings.GetInt("scenes.b.last_use").has_value());
+    EXPECT_THAT(settings.GetChildKeys("scenes"),
+      ::testing::UnorderedElementsAre("a", "b"));
+    EXPECT_TRUE(settings.GetChildKeys("flag").empty());
+    EXPECT_TRUE(settings.GetChildKeys("missing").empty());
+  }
+
   NOLINT_TEST(ContentImportSettingsTest, FastDefaultsPreserveExplicitUserTuning)
   {
     const auto path = std::filesystem::temp_directory_path()

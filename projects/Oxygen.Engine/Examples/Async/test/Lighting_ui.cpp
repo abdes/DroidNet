@@ -13,6 +13,7 @@
 #include "Async/AsyncShowcase.h"
 #include "Async/MainModule.h"
 #include "DemoShell/DemoShell.h"
+#include "DemoShell/Services/CameraSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/CameraControlPanel.h"
 #include "DemoShell/UI/CameraRigController.h"
@@ -41,6 +42,9 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
 {
   constexpr float kTourWarningSeconds = 90.0F;
   constexpr float kTourTimeoutSeconds = 120.0F;
+  static const auto kCameraModeKey
+    = CameraSettingsService::CameraKey("Async Showcase", "MainCamera")
+    + ".mode";
   auto& test_io = ImGuiTestEngine_GetIO(engine);
   test_io.ConfigWatchdogWarning = kTourWarningSeconds;
   test_io.ConfigWatchdogKillTest = kTourTimeoutSeconds;
@@ -158,7 +162,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
     const auto original_rotation
       = app.main_camera_.GetTransform().GetLocalRotation().value();
     const auto original_mode
-      = SettingsService::ForDemoApp()->GetString("camera_rig.MainCamera.mode");
+      = SettingsService::ForDemoApp()->GetString(kCameraModeKey);
     const auto original_flux = app.vm_->GetSpotlightIntensity();
     const auto original_range = app.vm_->GetSpotlightRange();
     const auto scene = app.GetShell().TryGetScene();
@@ -223,8 +227,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       1.0F - kPoseTolerance);
     IM_CHECK_EQ(app.vm_->GetSpotlightIntensity(), original_flux);
     IM_CHECK_EQ(app.vm_->GetSpotlightRange(), original_range);
-    IM_CHECK(
-      SettingsService::ForDemoApp()->GetString("camera_rig.MainCamera.mode")
+    IM_CHECK(SettingsService::ForDemoApp()->GetString(kCameraModeKey)
       == original_mode);
   };
 

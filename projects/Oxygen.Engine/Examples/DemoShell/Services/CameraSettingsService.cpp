@@ -6,15 +6,18 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "DemoShell/Runtime/SceneActivationPolicy.h"
 #include "DemoShell/Services/CameraSettingsService.h"
@@ -141,7 +144,92 @@ namespace {
     // NOLINTEND(*-magic-numbers)
   }
 
+  constexpr std::string_view kCameraRigKey = "camera_rig";
+  constexpr std::string_view kScenesKey = "camera_rig.scenes";
+  constexpr std::string_view kNextUseKey = "camera_rig.next_use";
+
+  //! `name` as one segment of a dotted settings key: characters other than
+  //! letters, digits, '-' and '_' become '_'.
+  auto KeySegment(const std::string_view name) -> std::string
+  {
+    if (name.empty()) {
+      return "_";
+    }
+    auto segment = std::string(name);
+    std::ranges::replace_if(
+      segment,
+      [](const char c) -> bool {
+        return std::isalnum(static_cast<unsigned char>(c)) == 0 && c != '-'
+          && c != '_';
+      },
+      '_');
+    return segment;
+  }
+
+  auto SceneKey(const std::string_view scene) -> std::string
+  {
+    return std::string(kScenesKey) + "." + KeySegment(scene);
+  }
+
 } // namespace
+
+auto CameraSettingsService::CameraKey(
+  const std::string_view scene, const std::string_view camera) -> std::string
+{
+  return SceneKey(scene) + ".cameras." + KeySegment(camera);
+}
+
+auto CameraSettingsService::ActiveCameraKey() const -> std::string
+{
+  if (active_camera_id_.empty()) {
+    return {};
+  }
+  return CameraKey(active_scene_name_, active_camera_id_);
+}
+
+auto CameraSettingsService::RememberActiveScene(SettingsService& settings)
+  -> void
+{
+  // Entries from the per-camera layout, keyed by camera name alone.
+  auto legacy = 0U;
+  for (const auto& child : settings.GetChildKeys(kCameraRigKey)) {
+    if (child != "scenes" && child != "next_use"
+      && settings.Remove(std::string(kCameraRigKey) + "." + child)) {
+      ++legacy;
+    }
+  }
+  if (legacy > 0U) {
+    LOG_F(INFO, "Camera settings: removed {} camera(s) saved without a scene",
+      legacy);
+  }
+
+  const auto use = settings.GetInt(kNextUseKey).value_or(1);
+  settings.SetInt(kNextUseKey, use + 1);
+  settings.SetInt(SceneKey(active_scene_name_) + ".last_use", use);
+
+  struct Remembered {
+    std::int64_t last_use;
+    std::string name;
+  };
+  auto scenes = std::vector<Remembered> {};
+  for (auto& name : settings.GetChildKeys(kScenesKey)) {
+    const auto last_use
+      = settings.GetInt(std::string(kScenesKey) + "." + name + ".last_use")
+          .value_or(0);
+    scenes.push_back({ .last_use = last_use, .name = std::move(name) });
+  }
+  if (scenes.size() <= kRememberedScenes) {
+    return;
+  }
+  std::ranges::sort(scenes, std::ranges::greater {}, &Remembered::last_use);
+  for (auto i = kRememberedScenes; i < scenes.size(); ++i) {
+    const auto& forgotten = scenes.at(i).name;
+    if (settings.Remove(std::string(kScenesKey) + "." + forgotten)) {
+      LOG_F(INFO, "Camera settings: forgot scene '{}', used least recently",
+        forgotten);
+    }
+  }
+}
 
 auto CameraSettingsService::SetSceneActivationPolicy(
   const SceneActivationPolicy policy) -> void
@@ -159,7 +247,7 @@ auto CameraSettingsService::GetCameraControlMode() const -> CameraControlMode
   DCHECK_NOTNULL_F(settings);
 
   if (!active_camera_id_.empty()) {
-    const std::string prefix = "camera_rig." + active_camera_id_;
+    const std::string prefix = ActiveCameraKey();
     if (const auto value = settings->GetString(prefix + ".mode")) {
       if (*value == "fly") {
         return CameraControlMode::kFly;
@@ -182,7 +270,7 @@ auto CameraSettingsService::SetCameraControlMode(CameraControlMode mode) -> void
     return;
   }
 
-  const std::string prefix = "camera_rig." + active_camera_id_;
+  const std::string prefix = ActiveCameraKey();
   const auto* value = "orbit";
   if (mode == CameraControlMode::kFly) {
     value = "fly";
@@ -222,8 +310,14 @@ auto CameraSettingsService::OnFrameStart(
 {
 }
 
-auto CameraSettingsService::OnSceneActivated(scene::Scene& /*scene*/) -> void
+auto CameraSettingsService::OnSceneActivated(scene::Scene& scene) -> void
 {
+  active_scene_name_ = std::string(scene.GetName());
+  if (activation_policy_ == SceneActivationPolicy::kRestorePreferences) {
+    if (const auto settings = SettingsService::ForDemoApp()) {
+      RememberActiveScene(*settings);
+    }
+  }
   active_camera_ = {};
   pending_sync_ = false;
   pending_reset_ = false;
@@ -283,7 +377,7 @@ auto CameraSettingsService::GetDroneSpeed() const -> float
   if (active_camera_id_.empty()) {
     return kDefaultDroneSpeed;
   }
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   return settings->GetFloat(prefix + kDroneSpeedKey)
     .value_or(kDefaultDroneSpeed);
 }
@@ -295,7 +389,7 @@ auto CameraSettingsService::SetDroneSpeed(float speed) -> void
   }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   settings->SetFloat(prefix + kDroneSpeedKey, speed);
   ++epoch_;
 }
@@ -307,7 +401,7 @@ auto CameraSettingsService::GetDroneDamping() const -> float
   if (active_camera_id_.empty()) {
     return kDefaultDroneDamping;
   }
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   return settings->GetFloat(prefix + kDroneDampingKey)
     .value_or(kDefaultDroneDamping);
 }
@@ -319,7 +413,7 @@ auto CameraSettingsService::SetDroneDamping(float damping) -> void
   }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   settings->SetFloat(prefix + kDroneDampingKey, damping);
   ++epoch_;
 }
@@ -331,7 +425,7 @@ auto CameraSettingsService::GetDroneFocusHeight() const -> float
   if (active_camera_id_.empty()) {
     return kDefaultDroneFocusHeight;
   }
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   return settings->GetFloat(prefix + kDroneFocusHeightKey)
     .value_or(kDefaultDroneFocusHeight);
 }
@@ -343,7 +437,7 @@ auto CameraSettingsService::SetDroneFocusHeight(float height) -> void
   }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   settings->SetFloat(prefix + kDroneFocusHeightKey, height);
   ++epoch_;
 }
@@ -355,7 +449,7 @@ auto CameraSettingsService::GetDroneFocusOffsetX() const -> float
   if (active_camera_id_.empty()) {
     return 0.0F;
   }
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   return settings->GetFloat(prefix + kDroneFocusOffsetXKey).value_or(0.0F);
 }
 
@@ -366,7 +460,7 @@ auto CameraSettingsService::SetDroneFocusOffsetX(float offset) -> void
   }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   settings->SetFloat(prefix + kDroneFocusOffsetXKey, offset);
   ++epoch_;
 }
@@ -378,7 +472,7 @@ auto CameraSettingsService::GetDroneFocusOffsetY() const -> float
   if (active_camera_id_.empty()) {
     return 0.0F;
   }
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   return settings->GetFloat(prefix + kDroneFocusOffsetYKey).value_or(0.0F);
 }
 
@@ -389,7 +483,7 @@ auto CameraSettingsService::SetDroneFocusOffsetY(float offset) -> void
   }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   settings->SetFloat(prefix + kDroneFocusOffsetYKey, offset);
   ++epoch_;
 }
@@ -401,7 +495,7 @@ auto CameraSettingsService::GetDroneRunning() const -> bool
   if (active_camera_id_.empty()) {
     return true;
   }
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   return settings->GetBool(prefix + kDroneRunningKey).value_or(true);
 }
 
@@ -412,7 +506,7 @@ auto CameraSettingsService::SetDroneRunning(bool running) -> void
   }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   settings->SetBool(prefix + kDroneRunningKey, running);
   ++epoch_;
 }
@@ -424,7 +518,7 @@ auto CameraSettingsService::GetDroneBobAmplitude() const -> float
   if (active_camera_id_.empty()) {
     return kDefaultDroneBobAmplitude;
   }
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   return settings->GetFloat(prefix + kDroneBobAmpKey)
     .value_or(kDefaultDroneBobAmplitude);
 }
@@ -436,7 +530,7 @@ auto CameraSettingsService::SetDroneBobAmplitude(float amp) -> void
   }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   settings->SetFloat(prefix + kDroneBobAmpKey, amp);
   ++epoch_;
 }
@@ -448,7 +542,7 @@ auto CameraSettingsService::GetDroneBobFrequency() const -> float
   if (active_camera_id_.empty()) {
     return kDefaultDroneBobFrequency;
   }
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   return settings->GetFloat(prefix + kDroneBobFreqKey)
     .value_or(kDefaultDroneBobFrequency);
 }
@@ -460,7 +554,7 @@ auto CameraSettingsService::SetDroneBobFrequency(float hz) -> void
   }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   settings->SetFloat(prefix + kDroneBobFreqKey, hz);
   ++epoch_;
 }
@@ -472,7 +566,7 @@ auto CameraSettingsService::GetDroneNoiseAmplitude() const -> float
   if (active_camera_id_.empty()) {
     return kDefaultDroneNoiseAmplitude;
   }
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   return settings->GetFloat(prefix + kDroneNoiseAmpKey)
     .value_or(kDefaultDroneNoiseAmplitude);
 }
@@ -484,7 +578,7 @@ auto CameraSettingsService::SetDroneNoiseAmplitude(float amp) -> void
   }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   settings->SetFloat(prefix + kDroneNoiseAmpKey, amp);
   ++epoch_;
 }
@@ -496,7 +590,7 @@ auto CameraSettingsService::GetDroneBankFactor() const -> float
   if (active_camera_id_.empty()) {
     return kDefaultDroneBankFactor;
   }
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   return settings->GetFloat(prefix + kDroneBankFactorKey)
     .value_or(kDefaultDroneBankFactor);
 }
@@ -508,7 +602,7 @@ auto CameraSettingsService::SetDroneBankFactor(float factor) -> void
   }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   settings->SetFloat(prefix + kDroneBankFactorKey, factor);
   ++epoch_;
 }
@@ -520,7 +614,7 @@ auto CameraSettingsService::GetDronePOISlowdownRadius() const -> float
   if (active_camera_id_.empty()) {
     return kDefaultDronePoiRadius;
   }
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   return settings->GetFloat(prefix + kDronePOIRadiusKey)
     .value_or(kDefaultDronePoiRadius);
 }
@@ -532,7 +626,7 @@ auto CameraSettingsService::SetDronePOISlowdownRadius(float radius) -> void
   }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   settings->SetFloat(prefix + kDronePOIRadiusKey, radius);
   ++epoch_;
 }
@@ -544,7 +638,7 @@ auto CameraSettingsService::GetDronePOIMinSpeed() const -> float
   if (active_camera_id_.empty()) {
     return kDefaultDronePoiMinSpeed;
   }
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   return settings->GetFloat(prefix + kDronePOIMinSpeedKey)
     .value_or(kDefaultDronePoiMinSpeed);
 }
@@ -556,7 +650,7 @@ auto CameraSettingsService::SetDronePOIMinSpeed(float factor) -> void
   }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   settings->SetFloat(prefix + kDronePOIMinSpeedKey, factor);
   ++epoch_;
 }
@@ -568,7 +662,7 @@ auto CameraSettingsService::GetDroneShowPath() const -> bool
   if (active_camera_id_.empty()) {
     return false;
   }
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   return settings->GetBool(prefix + kDroneShowPathKey).value_or(false);
 }
 
@@ -579,7 +673,7 @@ auto CameraSettingsService::SetDroneShowPath(bool show) -> void
   }
   const auto settings = SettingsService::ForDemoApp();
   DCHECK_NOTNULL_F(settings);
-  const std::string prefix = "camera_rig." + active_camera_id_ + ".";
+  const std::string prefix = ActiveCameraKey() + ".";
   settings->SetBool(prefix + kDroneShowPathKey, show);
   ++epoch_;
 }
@@ -878,7 +972,7 @@ auto CameraSettingsService::PersistActiveCameraSettings() -> void
     return;
   }
 
-  const std::string prefix = "camera_rig." + current.camera_id;
+  const std::string& prefix = current.camera_id;
 
   if (mode_dirty) {
     settings->SetString(prefix + ".mode",
@@ -940,7 +1034,7 @@ auto CameraSettingsService::RestoreActiveCameraSettings() -> bool
     return false;
   }
 
-  const std::string prefix = "camera_rig." + camera_id;
+  const std::string prefix = CameraKey(active_scene_name_, camera_id);
   std::string mode_label = "default";
 
   if (camera_rig_) {
@@ -1154,7 +1248,7 @@ auto CameraSettingsService::CaptureActiveCameraState() -> PersistedCameraState
   }
 
   current.valid = true;
-  current.camera_id = camera_id;
+  current.camera_id = CameraKey(active_scene_name_, camera_id);
   current.camera_mode
     = camera_rig_ ? static_cast<int>(camera_rig_->GetMode()) : 0;
 
