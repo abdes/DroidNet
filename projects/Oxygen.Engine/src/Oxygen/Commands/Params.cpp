@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -56,8 +57,12 @@ namespace {
   }
 
   template <typename T>
-  auto ParseNumber(const std::string_view text) -> std::optional<T>
+  auto ParseNumber(std::string_view text) -> std::optional<T>
   {
+    // People type "+1" for a positive offset; from_chars does not take it.
+    if (text.starts_with('+') && text.size() > 1U && text[1] != '-') {
+      text.remove_prefix(1U);
+    }
     auto value = T {};
     const auto* const end = std::to_address(text.end());
     const auto parsed
@@ -89,6 +94,10 @@ namespace {
     } else if (const auto* real = std::get_if<double>(&value)) {
       number = *real;
     }
+    // NaN and infinities pass every limit test, so they are refused first.
+    if (number && !std::isfinite(*number)) {
+      return fmt::format("{}: expected a finite number", param.name);
+    }
     if (number && param.min_value && *number < *param.min_value) {
       return fmt::format("{}: {} is below the minimum {}", param.name, *number,
         *param.min_value);
@@ -110,7 +119,7 @@ namespace {
   auto FromText(const CommandParam& param, const std::string& text)
     -> Result<ParamValue, std::string>
   {
-    const auto fail = [&]() -> Result<ParamValue, std::string> {
+    const auto fail = [&] -> Result<ParamValue, std::string> {
       return Err(fmt::format(
         "{}: expected {}, got '{}'", param.name, Expected(param.type), text));
     };
@@ -142,7 +151,7 @@ namespace {
   auto FromJson(const CommandParam& param, const json& value)
     -> Result<ParamValue, std::string>
   {
-    const auto fail = [&]() -> Result<ParamValue, std::string> {
+    const auto fail = [&] -> Result<ParamValue, std::string> {
       return Err(fmt::format("{}: expected {}, got {}", param.name,
         Expected(param.type), value.dump()));
     };
@@ -198,6 +207,11 @@ namespace {
   auto Accept(const CommandParam& param, Convert&& convert, Binding& binding)
     -> void
   {
+    if (std::ranges::contains(binding.given, param.name)) {
+      binding.errors.push_back(
+        fmt::format("{}: given more than once", param.name));
+      return;
+    }
     binding.given.emplace_back(param.name);
     auto value = std::forward<Convert>(convert)();
     if (!value) {

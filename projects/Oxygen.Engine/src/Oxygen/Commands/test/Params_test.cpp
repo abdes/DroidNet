@@ -123,6 +123,51 @@ NOLINT_TEST(CommandParams, RejectsBadArguments)
     ElementsAre(HasSubstr("missing required argument")));
 }
 
+//! A leading plus sign is accepted on numbers, as people type offsets.
+NOLINT_TEST(CommandParams, AcceptsALeadingPlusSign)
+{
+  const auto params = std::vector<CommandParam> {
+    CommandParam { .name = "x", .type = ParamType::kDouble, .required = true },
+    CommandParam { .name = "n", .type = ParamType::kInt, .required = true },
+  };
+
+  const auto args = BindText(params, std::vector<std::string> { "+1.5", "+2" });
+
+  ASSERT_TRUE(args);
+  EXPECT_EQ(args.value().GetDouble("x"), 1.5);
+  EXPECT_EQ(args.value().GetInt("n"), 2);
+  EXPECT_FALSE(BindText(params, std::vector<std::string> { "+-1", "2" }));
+}
+
+//! A parameter given twice is an error, not a silent replacement.
+NOLINT_TEST(CommandParams, RejectsAParameterGivenTwice)
+{
+  const auto params = StepParams();
+  const auto tokens = std::vector<std::string> { "frames=2", "frames=3" };
+
+  const auto args = BindText(params, tokens);
+
+  ASSERT_FALSE(args);
+  EXPECT_THAT(
+    args.error().messages, ElementsAre(HasSubstr("given more than once")));
+}
+
+//! NaN and infinities are not numbers any command can use.
+NOLINT_TEST(CommandParams, RejectsNonFiniteNumbers)
+{
+  const auto params = std::vector<CommandParam> {
+    CommandParam { .name = "x", .type = ParamType::kDouble, .required = true },
+  };
+
+  for (const auto* text : { "nan", "inf", "-inf" }) {
+    const auto args = BindText(params, std::vector<std::string> { text });
+    ASSERT_FALSE(args) << text;
+    EXPECT_THAT(
+      args.error().messages, ElementsAre(HasSubstr("expected a finite number")))
+      << text;
+  }
+}
+
 //! The generated schema describes types, defaults, ranges and enums.
 NOLINT_TEST(CommandParams, SchemaDescribesParameters)
 {
