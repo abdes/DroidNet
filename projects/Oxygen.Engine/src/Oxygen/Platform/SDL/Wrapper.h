@@ -59,7 +59,7 @@ inline auto GetNativeWindow(SDL_Window* window) -> window::NativeHandles
     = SDL_GetPointerProperty(SDL_GetWindowProperties(window),
       SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
   native_window.window_handle = native_window_handle;
-#elifdef SDL_PLATFORM_MACOS
+#elif defined(SDL_PLATFORM_MACOS)
   void* nswindow = SDL_GetPointerProperty(SDL_GetWindowProperties(window),
     SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, NULL);
   native_window.window_handle = nswindow;

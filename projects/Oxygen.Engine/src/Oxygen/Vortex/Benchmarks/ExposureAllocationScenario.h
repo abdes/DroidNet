@@ -122,7 +122,7 @@ private:
     const bool tracked = std::exchange(backend_->track_resources, false);
     const bool accounted
       = std::exchange(backend_->account_texture_allocations, false);
-    auto restore = ScopeGuard([&] noexcept -> void {
+    auto restore = ScopeGuard([&]() noexcept -> void {
       backend_->track_resources = tracked;
       backend_->account_texture_allocations = accounted;
     });

@@ -24,7 +24,7 @@ protected:
   {
 #ifdef OXGN_PHYS_BACKEND_JOLT
     return true;
-#elifdef OXGN_PHYS_BACKEND_NONE
+#elif defined(OXGN_PHYS_BACKEND_NONE)
     return false;
 #else
 #  error "No physics backend compile definition is set"
@@ -36,7 +36,7 @@ protected:
 #ifdef OXGN_PHYS_BACKEND_JOLT
     ASSERT_TRUE(system_result_.has_value());
     ASSERT_TRUE(system_result_.value() != nullptr);
-#elifdef OXGN_PHYS_BACKEND_NONE
+#elif defined(OXGN_PHYS_BACKEND_NONE)
     ASSERT_TRUE(system_result_.has_error());
     EXPECT_EQ(system_result_.error(), PhysicsError::kBackendUnavailable);
 #else

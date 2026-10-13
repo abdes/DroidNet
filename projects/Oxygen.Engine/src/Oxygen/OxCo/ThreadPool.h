@@ -475,7 +475,7 @@ ThreadPool::ThreadPool(EventLoopT& el, const unsigned thread_count)
 
   d_->threads.reserve(thread_count);
   for (size_t i = 0; i < thread_count; ++i) {
-    d_->threads.emplace_back([this] -> void { ThreadBody(); });
+    d_->threads.emplace_back([this]() -> void { ThreadBody(); });
   }
 }
 

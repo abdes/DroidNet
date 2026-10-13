@@ -15,7 +15,7 @@
 #  include <array>
 #  include <span>
 // clang-format on
-#elifdef OXYGEN_APPLE
+#elif defined(OXYGEN_APPLE)
 #  include <dlfcn.h>
 #  include <mach-o/dyld.h>
 #elif defined(OXYGEN_LINUX)

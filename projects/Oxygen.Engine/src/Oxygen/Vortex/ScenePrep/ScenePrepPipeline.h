@@ -142,14 +142,14 @@ public:
     if constexpr (CollectionCfg::has_pre_filter) {
       if (!seeded_from_frame_cache) {
         if (!run_stage("pre_filter",
-              [&] -> auto { collection_.pre_filter(*ctx, state, item); })) {
+              [&]() -> auto { collection_.pre_filter(*ctx, state, item); })) {
           return;
         }
       }
     }
     if constexpr (CollectionCfg::has_transform_resolve) {
       if (!item.GetTransformHandle().IsValid()) {
-        if (!run_stage("transform_resolve", [&] -> auto {
+        if (!run_stage("transform_resolve", [&]() -> auto {
               collection_.transform_resolve(*ctx, state, item);
             })) {
           return;
@@ -158,15 +158,16 @@ public:
     }
     if constexpr (CollectionCfg::has_mesh_resolver) {
       if (ctx && ctx->HasView()) {
-        if (!run_stage("mesh_resolver",
-              [&] -> auto { collection_.mesh_resolver(*ctx, state, item); })) {
+        if (!run_stage("mesh_resolver", [&]() -> auto {
+              collection_.mesh_resolver(*ctx, state, item);
+            })) {
           return;
         }
       }
     }
     if constexpr (CollectionCfg::has_visibility_filter) {
       if (ctx && ctx->HasView()) {
-        if (!run_stage("visibility_filter", [&] -> auto {
+        if (!run_stage("visibility_filter", [&]() -> auto {
               collection_.visibility_filter(*ctx, state, item);
             })) {
           return;
@@ -180,7 +181,7 @@ public:
     if constexpr (CollectionCfg::has_producer) {
       if (ctx && ctx->HasView()) {
         if (!run_stage("producer",
-              [&] -> auto { collection_.producer(*ctx, state, item); })) {
+              [&]() -> auto { collection_.producer(*ctx, state, item); })) {
           return;
         }
       }

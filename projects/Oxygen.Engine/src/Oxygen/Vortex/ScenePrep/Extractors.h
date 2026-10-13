@@ -349,7 +349,7 @@ inline auto EmitPerVisibleSubmesh(const ScenePrepContext& ctx,
     };
 
     // Material selection chain as a local lambda
-    auto resolve_material = [&] -> ResolvedMaterial {
+    auto resolve_material = [&]() -> ResolvedMaterial {
       if (auto mat = item.Renderable().ResolveSubmeshMaterial(lod, submesh)) {
         const auto key = mat->GetAssetKey();
         return {

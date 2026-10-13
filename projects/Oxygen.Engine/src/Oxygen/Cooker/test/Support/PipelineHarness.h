@@ -34,7 +34,7 @@ auto RunPipeline(content::import::ImportEventLoop& loop,
   std::vector<typename Pipeline::WorkResult> results;
   results.reserve(items.size());
 
-  co::Run(loop, [&] -> co::Co<> {
+  co::Run(loop, [&]() -> co::Co<> {
     Pipeline pipeline(std::forward<Args>(ctor_args)...);
 
     OXCO_WITH_NURSERY(n)

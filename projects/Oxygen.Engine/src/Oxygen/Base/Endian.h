@@ -37,7 +37,7 @@ inline auto ByteSwap64(const uint64_t value) -> uint64_t
 {
   return _byteswap_uint64(value);
 }
-#elifdef OXYGEN_APPLE
+#elif defined(OXYGEN_APPLE)
 #  include <libkern/OSByteOrder.h>
 inline uint16_t ByteSwap16(const uint16_t value) { return OSSwapInt16(value); }
 inline uint32_t ByteSwap32(const uint32_t value) { return OSSwapInt32(value); }

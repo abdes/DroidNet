@@ -377,14 +377,14 @@ template <typename URef>
 auto ResourceTable<T>::Insert(URef&& item) -> ResourceHandle
 {
   return InsertImpl(
-    [&] -> void { items_.push_back(std::forward<URef>(item)); });
+    [&]() -> void { items_.push_back(std::forward<URef>(item)); });
 }
 
 template <typename T>
 template <typename... Params>
 auto ResourceTable<T>::Emplace(Params&&... args) -> ResourceHandle
 {
-  return InsertImpl([&] -> void {
+  return InsertImpl([&]() -> void {
     // Use perfect forwarding to construct the item in place
     items_.emplace_back(std::forward<Params>(args)...);
   });

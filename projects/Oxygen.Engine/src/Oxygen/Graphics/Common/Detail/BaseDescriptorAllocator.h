@@ -165,7 +165,7 @@ public:
   auto AllocateBindless(const bindless::DomainToken domain,
     const ResourceViewType view_type) -> BindlessHandle override
   {
-    return AbortOnFailed(__func__, [&] -> BindlessHandle {
+    return AbortOnFailed(__func__, [&]() -> BindlessHandle {
       return AllocateBindlessOrThrow(domain, view_type);
     });
   }
@@ -187,7 +187,7 @@ public:
         "cannot release a handle that does not belong to this allocator");
     }
     if (handle.IsBindless()) {
-      AbortOnFailed(__func__, [&] -> void {
+      AbortOnFailed(__func__, [&]() -> void {
         std::scoped_lock lock(mutex_);
         auto it = bindless_domains_.find(handle.GetDomain().get());
         if (it == bindless_domains_.end()) {
@@ -240,7 +240,7 @@ public:
     const DescriptorVisibility visibility) const noexcept
     -> bindless::Count override
   {
-    return AbortOnFailed(__func__, [&] -> bindless::Count {
+    return AbortOnFailed(__func__, [&]() -> bindless::Count {
       std::scoped_lock lock(mutex_);
       bindless::Count::UnderlyingType total = 0;
       const auto& key = keys_.at(HeapIndex(view_type, visibility));
@@ -278,7 +278,7 @@ public:
     }
 
     if (handle.IsBindless()) {
-      return AbortOnFailed(__func__, [&] -> bool {
+      return AbortOnFailed(__func__, [&]() -> bool {
         std::scoped_lock lock(mutex_);
         const auto it = bindless_domains_.find(handle.GetDomain().get());
         return it != bindless_domains_.end()
@@ -286,7 +286,7 @@ public:
       });
     }
 
-    return AbortOnFailed(__func__, [&] -> bool {
+    return AbortOnFailed(__func__, [&]() -> bool {
       std::scoped_lock lock(mutex_);
       const auto view_type = handle.GetViewType();
       const auto visibility = handle.GetVisibility();
@@ -313,7 +313,7 @@ public:
     const ResourceViewType view_type,
     const DescriptorVisibility visibility) const -> bindless::Count override
   {
-    return AbortOnFailed(__func__, [&] -> bindless::Count {
+    return AbortOnFailed(__func__, [&]() -> bindless::Count {
       std::scoped_lock lock(mutex_);
       const auto& key = keys_.at(HeapIndex(view_type, visibility));
       // If no segments were created yet for this heap key, return zero.
@@ -345,7 +345,7 @@ public:
     const bindless::DomainToken domain) const
     -> bindless::ShaderVisibleIndex override
   {
-    return AbortOnFailed(__func__, [&] -> bindless::ShaderVisibleIndex {
+    return AbortOnFailed(__func__, [&]() -> bindless::ShaderVisibleIndex {
       const auto* const desc = bindless::generated::TryGetDomainDesc(domain);
       if (desc == nullptr) {
         throw std::runtime_error("Unknown bindless domain token");
@@ -358,7 +358,7 @@ public:
     const DescriptorVisibility visibility, const bindless::Count count)
     -> std::optional<bindless::HeapIndex> override
   {
-    return AbortOnFailed(__func__, [&] -> std::optional<bindless::HeapIndex> {
+    return AbortOnFailed(__func__, [&]() -> std::optional<bindless::HeapIndex> {
       std::scoped_lock lock(mutex_);
       // Some (type, visibility) pairs may be unsupported by the strategy.
       // If the precomputed key is empty, treat it as unsupported.

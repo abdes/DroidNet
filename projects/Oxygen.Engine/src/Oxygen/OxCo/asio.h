@@ -320,7 +320,7 @@ public:
 
   void Post(asio::io_context& io, void (*fn)(void*), void* arg) noexcept
   {
-    asio::dispatch(io, [fn, arg] -> void { fn(arg); });
+    asio::dispatch(io, [fn, arg]() -> void { fn(arg); });
   }
 };
 

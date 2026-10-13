@@ -206,7 +206,7 @@ public:
       scene->GetComponents<ScriptingComponentRecord>().size());
     std::cout << "\n";
 
-    const auto DumpRenderables = [&] -> void {
+    const auto DumpRenderables = [&]() -> void {
       const auto renderables = scene->GetComponents<RenderableRecord>();
       if (renderables.empty()) {
         return;
@@ -223,7 +223,7 @@ public:
       std::cout << "\n";
     };
 
-    const auto DumpDirectionalLights = [&] -> void {
+    const auto DumpDirectionalLights = [&]() -> void {
       const auto lights = scene->GetComponents<DirectionalLightRecord>();
       if (lights.empty()) {
         return;
@@ -262,7 +262,7 @@ public:
       std::cout << "\n";
     };
 
-    const auto DumpPointLights = [&] -> void {
+    const auto DumpPointLights = [&]() -> void {
       const auto lights = scene->GetComponents<PointLightRecord>();
       if (lights.empty()) {
         return;
@@ -283,7 +283,7 @@ public:
       std::cout << "\n";
     };
 
-    const auto DumpSpotLights = [&] -> void {
+    const auto DumpSpotLights = [&]() -> void {
       const auto lights = scene->GetComponents<SpotLightRecord>();
       if (lights.empty()) {
         return;
@@ -306,7 +306,7 @@ public:
       std::cout << "\n";
     };
 
-    const auto DumpLocalFogVolumes = [&] -> void {
+    const auto DumpLocalFogVolumes = [&]() -> void {
       const auto volumes = scene->GetComponents<LocalFogVolumeRecord>();
       if (volumes.empty()) {
         return;

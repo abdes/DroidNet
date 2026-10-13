@@ -140,7 +140,7 @@ std::atomic.
 
 #ifdef D3D12MA_EXPORTS
 #  define D3D12MA_API __declspec(dllexport)
-#elifdef D3D12MA_IMPORTS
+#elif defined(D3D12MA_IMPORTS)
 #  define D3D12MA_API __declspec(dllimport)
 #else
 #  define D3D12MA_API

@@ -181,7 +181,7 @@
 #    define OXYGEN_GNUC_VERSION                                                \
       OXYGEN_VERSION_ENCODE_INTERNAL_(                                         \
         __GNUC__, __GNUC_MINOR__, __GNUC_PATCHLEVEL__)
-#  elifdef __GNUC__
+#  elif defined(__GNUC__)
 #    define OXYGEN_GNUC_VERSION                                                \
       OXYGEN_VERSION_ENCODE_INTERNAL_(__GNUC__, __GNUC_MINOR__, 0)
 #  endif
@@ -588,7 +588,7 @@
 #if OXYGEN_HAS_BUILTIN(__builtin_unreachable)                                  \
   || OXYGEN_GCC_VERSION_CHECK(4, 5, 0)
 #  define OXYGEN_UNREACHABLE() __builtin_unreachable()
-#elifdef OXYGEN_ASSUME
+#elif defined(OXYGEN_ASSUME)
 #  define OXYGEN_UNREACHABLE() OXYGEN_ASSUME(0)
 #endif
 #ifndef OXYGEN_ASSUME

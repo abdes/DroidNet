@@ -282,7 +282,7 @@ protected:
   {
     std::unique_lock lock(mutex_);
     auto type_id = T::ClassTypeId();
-    auto remove_pooled = [&] -> auto {
+    auto remove_pooled = [&]() -> auto {
       auto it = pooled_components_.find(type_id);
       if (it == pooled_components_.end()) {
         return;
@@ -290,7 +290,7 @@ protected:
       EnsureNotRequired(type_id);
       pooled_components_.erase(it);
     };
-    auto remove_local = [&] -> auto {
+    auto remove_local = [&]() -> auto {
       auto it = std::ranges::find_if(
         local_components_, [&](const auto& local_comp) -> auto {
           return local_comp->GetTypeId() == type_id;
