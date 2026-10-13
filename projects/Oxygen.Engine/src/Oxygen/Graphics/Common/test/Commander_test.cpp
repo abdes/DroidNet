@@ -578,7 +578,8 @@ NOLINT_TEST_F(CommanderTestBase, NativeCloseExceptionDiscardsAndInvalidatesList)
   {
     auto recording = commander->PrepareCommandRecorder(
       std::move(recorder), SubmissionPolicy::kExplicit);
-    recording->OnSubmission([&](auto outcome) { publication = outcome; });
+    recording->OnSubmission(
+      [&](auto outcome) -> void { publication = outcome; });
     EXPECT_NO_THROW(recording.Discard());
   }
   EXPECT_EQ(publication, SubmissionOutcome::kDiscarded);

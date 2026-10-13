@@ -87,7 +87,8 @@ NOLINT_TEST_F(LightingGpuAbiTest, NativeShadowAllocationRequirements)
     = Backend().QueueKeyFor(graphics::QueueRole::kGraphics).get();
   auto renderer = Renderer(
     GetGraphicsShared(), config, RendererCapabilityFamily::kLightingData);
-  const auto shutdown = ScopeGuard([&]() noexcept { renderer.OnShutdown(); });
+  const auto shutdown
+    = ScopeGuard([&]() noexcept -> void { renderer.OnShutdown(); });
   const auto budget = renderer.GetLightingAllocationBudget();
   const auto baseline = budget->Snapshot().allocated.get();
   Backend().BeginFrame(frame::SequenceNumber { 1U }, frame::Slot { 0U });

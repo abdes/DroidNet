@@ -80,8 +80,8 @@ auto MakeCube(const std::uint32_t size,
 
 NOLINT_TEST(CubeIlluminanceTest, UniformSkyDeliversPiTimesItsLuminance)
 {
-  const auto cube
-    = MakeCube(32U, [](auto, auto, auto) { return Rgb { 2.0F, 2.0F, 2.0F }; });
+  const auto cube = MakeCube(
+    32U, [](auto, auto, auto) -> Rgb { return Rgb { 2.0F, 2.0F, 2.0F }; });
 
   const auto measured = MeasureCubeIlluminance(*cube);
 
@@ -94,7 +94,7 @@ NOLINT_TEST(CubeIlluminanceTest, UniformSkyDeliversPiTimesItsLuminance)
 NOLINT_TEST(CubeIlluminanceTest, OnlyTheUpperHemisphereCounts)
 {
   // Cube face 3 (-Y) is straight down in Oxygen world space.
-  const auto cube = MakeCube(32U, [](const auto face, auto, auto) {
+  const auto cube = MakeCube(32U, [](const auto face, auto, auto) -> Rgb {
     return face == 3U ? Rgb { 1000.0F, 1000.0F, 1000.0F } : Rgb {};
   });
 
@@ -107,7 +107,7 @@ NOLINT_TEST(CubeIlluminanceTest, OnlyTheUpperHemisphereCounts)
 NOLINT_TEST(CubeIlluminanceTest, PackedFloatCubesAreMeasured)
 {
   constexpr auto kExpected = 2.0F * std::numbers::pi_v<float>;
-  const auto none = [](auto, auto, auto) { return Rgb {}; };
+  const auto none = [](auto, auto, auto) -> Rgb { return Rgb {}; };
   // 2.0 as unsigned small floats: exponent 16 (bias 15), zero mantissa.
   constexpr auto kR11G11B10Two
     = (16U << 6U) | ((16U << 6U) << 11U) | ((16U << 5U) << 22U);
@@ -129,7 +129,7 @@ NOLINT_TEST(CubeIlluminanceTest, PackedFloatCubesAreMeasured)
 NOLINT_TEST(CubeIlluminanceTest, LdrCubesCannotBeMeasured)
 {
   const auto cube = MakeCube(
-    32U, [](auto, auto, auto) { return Rgb {}; }, Format::kRGBA8UNorm,
+    32U, [](auto, auto, auto) -> Rgb { return Rgb {}; }, Format::kRGBA8UNorm,
     0xFFFFFFFFU);
 
   EXPECT_FALSE(MeasureCubeIlluminance(*cube).has_value());

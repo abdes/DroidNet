@@ -49,14 +49,14 @@ auto RecordingUseBatch::Bind(BackendIncarnationId backend, QueueIdentity queue)
 auto RecordingUseBatch::NeedsCompletion() const noexcept -> bool
 {
   return !registrations_.empty()
-    || std::ranges::any_of(
-      opaque_, [](const auto& use) { return use.hooks.requires_completion; });
+    || std::ranges::any_of(opaque_,
+      [](const auto& use) -> bool { return use.hooks.requires_completion; });
 }
 
 auto RecordingUseBatch::Contains(RegistrationIdentity id) const noexcept -> bool
 {
-  return std::ranges::any_of(
-    registrations_, [&](const auto& pin) { return pin.Identity() == id; });
+  return std::ranges::any_of(registrations_,
+    [&](const auto& pin) -> bool { return pin.Identity() == id; });
 }
 auto RecordingUseBatch::Retain(ResourceRegistry& registry,
   const RegistrationOwner& owner) -> Result<void, RegistrationError>
@@ -91,7 +91,7 @@ auto RecordingUseBatch::RetainOpaque(std::shared_ptr<const void> owner,
   if (resolved_ || !owner) {
     throw std::logic_error("Invalid opaque recording use");
   }
-  if (std::ranges::any_of(opaque_, [&](const auto& pin) {
+  if (std::ranges::any_of(opaque_, [&](const auto& pin) -> bool {
         return pin.owner.get() == owner.get() && pin.kind == kind;
       })) {
     return;

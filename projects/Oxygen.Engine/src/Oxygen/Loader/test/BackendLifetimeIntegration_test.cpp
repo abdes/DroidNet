@@ -202,7 +202,7 @@ NOLINT_TEST_P(
   EXPECT_THROW((void)loader.LoadBackend(GetParam(), config, {}),
     loader::InvalidOperationError);
   std::jthread cleanup(
-    [pin = std::move(*use)]() mutable { pin = RegistrationUse {}; });
+    [pin = std::move(*use)]() mutable -> void { pin = RegistrationUse {}; });
   cleanup.join();
   EXPECT_TRUE(weak_texture.expired());
   EXPECT_EQ(budget->Snapshot().allocated.get(), 0U);
@@ -361,7 +361,8 @@ NOLINT_TEST_P(BackendLifetimeIntegration,
   }
   failed->FlushBarriers();
   SubmissionOutcome callback = SubmissionOutcome::kSubmitted;
-  failed->OnSubmission([&](SubmissionOutcome outcome) { callback = outcome; });
+  failed->OnSubmission(
+    [&](SubmissionOutcome outcome) -> void { callback = outcome; });
   auto queue = graphics->GetCommandQueue(QueueRole::kGraphics);
   internal::SubmissionFaultTestAccess::FailNext(
     *queue, internal::SubmissionFailurePoint::kAfterIssueBeforeMarker);

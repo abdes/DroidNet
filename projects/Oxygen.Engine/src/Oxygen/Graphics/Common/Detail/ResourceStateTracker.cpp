@@ -234,7 +234,7 @@ auto ResourceStateTracker::OnCommandListClosed() -> void
     // share the same condition for determining whether the initial state
     // should be restored.
     std::visit(
-      [&]<typename TDescriptor>(TDescriptor& info) {
+      [&]<typename TDescriptor>(TDescriptor& info) -> void {
         if (!info.is_permanent && info.keep_initial_state
           && info.current_state != info.initial_state) {
           // Create the appropriate barrier descriptor and add it to
@@ -272,7 +272,7 @@ auto ResourceStateTracker::SnapshotTrackedStates() const
   tracked_states.reserve(tracking_.size());
   for (const auto& [resource, tracking] : tracking_) {
     std::visit(
-      [&](const auto& info) {
+      [&](const auto& info) -> void {
         tracked_states.push_back(
           { .resource = resource, .state = info.current_state });
       },

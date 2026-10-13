@@ -118,7 +118,8 @@ NOLINT_TEST_F(ValueTest, UntilMatchesSuspendsUntilPredicate)
 
     co_await AllOf(
       [&]() -> Co<> {
-        co_await v.UntilMatches([](const int& value) { return value > 2; });
+        co_await v.UntilMatches(
+          [](const int& value) -> bool { return value > 2; });
         EXPECT_EQ(v.Get(), 3);
       },
       [&]() -> Co<> {
@@ -142,7 +143,7 @@ NOLINT_TEST_F(ValueTest, UntilChangedWithCustomPredicate)
     co_await AllOf(
       [&]() -> Co<> {
         auto [from, to] = co_await v.UntilChanged(
-          [](const int& f, const int& t) { return f < t; });
+          [](const int& f, const int& t) -> bool { return f < t; });
         EXPECT_EQ(from, 0);
         EXPECT_EQ(to, 2);
       },

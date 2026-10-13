@@ -27,7 +27,7 @@ void SetupLoguru(int& argc, const char** argv)
   loguru::g_global_verbosity = loguru::Verbosity_1;
 }
 
-int main(int argc, char** argv)
+auto main(int argc, char** argv) -> int
 {
   SetupLoguru(argc, const_cast<const char**>(argv));
 

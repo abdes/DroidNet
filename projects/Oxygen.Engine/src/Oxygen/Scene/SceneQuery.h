@@ -565,7 +565,8 @@ auto SceneQuery::Collect(Container& container, Predicate&& predicate) const
 
   // We do not clear the output container, we will only append to it.
   return CollectImpl(
-    [&container](const SceneNode& node) { container.emplace_back(node); },
+    [&container](
+      const SceneNode& node) -> void { container.emplace_back(node); },
     QueryPredicate(std::forward<Predicate>(predicate)));
 }
 

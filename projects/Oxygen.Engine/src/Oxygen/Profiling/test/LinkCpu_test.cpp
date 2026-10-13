@@ -7,7 +7,7 @@
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 
-int main()
+auto main() -> int
 {
   using oxygen::profiling::CpuProfileScope;
   using oxygen::profiling::ProfileCategory;

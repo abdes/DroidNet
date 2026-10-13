@@ -140,13 +140,15 @@ namespace {
     Entry(kIblDistantSkyLightLutLabel, kBackground, "background.ibl", "IBL"),
   };
 
-  constexpr auto kHashes = [] {
+  constexpr auto kHashes = []->std::array<std::uint64_t, kEntries.size()>
+  {
     auto hashes = std::array<std::uint64_t, kEntries.size()> {};
     for (std::size_t i = 0; i < kEntries.size(); ++i) {
       hashes.at(i) = HashScopeLabel(kEntries.at(i).label);
     }
     return hashes;
-  }();
+  }
+  ();
 } // namespace
 
 auto EnumerateStageEntries() noexcept -> std::span<const StageEntry>

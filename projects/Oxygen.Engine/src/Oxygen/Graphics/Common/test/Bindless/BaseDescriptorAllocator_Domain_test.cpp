@@ -104,10 +104,10 @@ NOLINT_TEST_F(BaseDescriptorAllocatorDomainTest,
 
   // Create segment during ReserveRaw() and verify base index and capacity are
   // honored.
-  allocator_->ext_segment_factory_ = [](const b::Capacity capacity,
-                                       const b::HeapIndex base_index,
-                                       const ResourceViewType vt,
-                                       const DescriptorVisibility vis) {
+  allocator_->ext_segment_factory_
+    = [](const b::Capacity capacity, const b::HeapIndex base_index,
+        const ResourceViewType vt, const DescriptorVisibility vis)
+    -> std::unique_ptr<testing::NiceMock<MockDescriptorSegment>> {
     auto seg = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
     EXPECT_CALL(*seg, GetViewType()).WillRepeatedly(testing::Return(vt));
     EXPECT_CALL(*seg, GetVisibility()).WillRepeatedly(testing::Return(vis));

@@ -112,9 +112,9 @@ NOLINT_TEST(ShaderBakeCatalogTest, EngineCatalogHasUniqueCanonicalRequests)
 NOLINT_TEST(ShaderBakeCatalogTest,
   EngineCatalogUsesVortexEnvironmentShadersAndNoLegacyAtmosphereCatalogEntries)
 {
-  const auto has_path = [](std::string_view path) {
+  const auto has_path = [](std::string_view path) -> bool {
     return std::ranges::any_of(kEngineShaders,
-      [path](const ShaderEntry& entry) { return entry.path == path; });
+      [path](const ShaderEntry& entry) -> bool { return entry.path == path; });
   };
 
   EXPECT_TRUE(

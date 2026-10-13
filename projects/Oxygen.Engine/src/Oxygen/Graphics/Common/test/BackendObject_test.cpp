@@ -29,7 +29,7 @@ NOLINT_TEST(
   int destroyed = 0;
   auto owner = oxygen::graphics::AdoptBackendObject(
     new CleanupProbe { lifetime, &retained, &destroyed },
-    [](void* object) noexcept {
+    [](void* object) noexcept -> void {
       auto* probe = static_cast<CleanupProbe*>(object);
       *probe->retained_during_cleanup = !probe->lifetime.expired();
       ++*probe->destroyed;
@@ -59,7 +59,7 @@ NOLINT_TEST(BackendLifetimeTest, NestedFactoriesRemainAdmittedWhileCloseWaits)
   std::jthread closer;
   {
     const auto outer = lifetime.AcquireOperation();
-    closer = std::jthread([&] {
+    closer = std::jthread([&] -> void {
       closing.set_value();
       (void)lifetime.BeginClose();
       lifetime.FinishClose();

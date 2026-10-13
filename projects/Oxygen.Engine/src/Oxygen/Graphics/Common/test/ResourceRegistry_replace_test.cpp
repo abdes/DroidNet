@@ -54,8 +54,9 @@ protected:
   {
     // Configure allocator to capture the last created segment pointer.
     allocator_ = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
-    allocator_->ext_segment_factory_ = [this](auto capacity, auto base_index,
-                                         auto view_type, auto visibility) {
+    allocator_->ext_segment_factory_
+      = [this](auto capacity, auto base_index, auto view_type,
+          auto visibility) -> std::unique_ptr<FixedDescriptorSegment> {
       auto seg = std::make_unique<FixedDescriptorSegment>(
         capacity, base_index, view_type, visibility);
       last_segment_ = seg.get();
@@ -362,16 +363,17 @@ NOLINT_TEST_F(ResourceRegistryReplaceTest, Replace_MixedViews_TransferAndDrop)
   const auto [v2, idx2] = RegisterViewGetIndex(*old_resource_, k2);
 
   // Act: transfer k1 unchanged, drop k2
-  registry_->Replace(*old_resource_, new_resource_, [&](const TestViewDesc& p) {
-    if (p == k1) {
-      return std::optional(p);
-    }
-    if (p == k2) {
+  registry_->Replace(*old_resource_, new_resource_,
+    [&](const TestViewDesc& p) -> std::optional<TestViewDesc> {
+      if (p == k1) {
+        return std::optional(p);
+      }
+      if (p == k2) {
+        return std::optional<TestViewDesc>(std::nullopt);
+      }
+      ADD_FAILURE() << "unexpected desc";
       return std::optional<TestViewDesc>(std::nullopt);
-    }
-    ADD_FAILURE() << "unexpected desc";
-    return std::optional<TestViewDesc>(std::nullopt);
-  });
+    });
 
   // Assert
   EXPECT_TRUE(registry_->Contains(*new_resource_, k1));
@@ -418,16 +420,17 @@ NOLINT_TEST_F(ResourceRegistryReplaceTest, Replace_AffectsOnlyTargetView)
   const auto [v2, idx2] = RegisterViewGetIndex(*old_resource_, k2);
 
   // Act: update only k1 (change key), keep k2 same
-  registry_->Replace(*old_resource_, new_resource_, [&](const TestViewDesc& d) {
-    if (d == k1_old) {
-      return std::optional(k1_new);
-    }
-    if (d == k2) {
-      return std::optional(d); // keep
-    }
-    ADD_FAILURE() << "unexpected desc";
-    return std::optional<TestViewDesc>(std::nullopt);
-  });
+  registry_->Replace(*old_resource_, new_resource_,
+    [&](const TestViewDesc& d) -> std::optional<TestViewDesc> {
+      if (d == k1_old) {
+        return std::optional(k1_new);
+      }
+      if (d == k2) {
+        return std::optional(d); // keep
+      }
+      ADD_FAILURE() << "unexpected desc";
+      return std::optional<TestViewDesc>(std::nullopt);
+    });
 
   // Assert: k1 moved to new key, k2 preserved; indices stable
   EXPECT_TRUE(registry_->Contains(*new_resource_, k1_new));
@@ -460,7 +463,10 @@ NOLINT_TEST_F(
   // Act: attempt to Replace with changed type/visibility; current semantics do
   // not throw, and FakeResource ignores type/visibility in handle creation.
   EXPECT_NO_THROW(registry_->Replace(*old_resource_, new_resource_,
-    [&](const TestViewDesc&) { return std::optional(d2); }));
+    [&](const TestViewDesc&)
+      -> std::optional<oxygen::graphics::testing::TestViewDesc> {
+      return std::optional(d2);
+    }));
 
   // Assert: new key present, index still usable for the new desc
   EXPECT_TRUE(registry_->Contains(*new_resource_, d2));
@@ -491,7 +497,10 @@ NOLINT_TEST_F(
 
   // Act: Replace with same desc
   registry_->Replace(*old_resource_, new_resource_,
-    [&](const TestViewDesc& p) { return std::optional(p); });
+    [&](const TestViewDesc& p)
+      -> std::optional<oxygen::graphics::testing::TestViewDesc> {
+      return std::optional(p);
+    });
 
   // Assert: slot preserved and allocator counts stable (no release, no alloc)
   EXPECT_TRUE(registry_->UpdateView(*new_resource_, idx, desc));
@@ -524,7 +533,10 @@ NOLINT_TEST_F(ResourceRegistryReplaceTest, Replace_UpdatesCacheAndFind)
 
   // Act
   registry_->Replace(*old_resource_, new_resource_,
-    [&](const TestViewDesc&) { return std::optional(k2); });
+    [&](const TestViewDesc&)
+      -> std::optional<oxygen::graphics::testing::TestViewDesc> {
+      return std::optional(k2);
+    });
 
   // Assert
   EXPECT_FALSE(registry_->Contains(*new_resource_, k1));
@@ -550,7 +562,10 @@ NOLINT_TEST_F(ResourceRegistryReplaceTest, Replace_AfterUnregister_Throws)
   // Case 1: After UnRegisterViews -> Replace should not throw (no views)
   registry_->UnRegisterViews(*old_resource_);
   EXPECT_NO_THROW(registry_->Replace(*old_resource_, new_resource_,
-    [&](const TestViewDesc&) { return std::optional(desc); }));
+    [&](const TestViewDesc&)
+      -> std::optional<oxygen::graphics::testing::TestViewDesc> {
+      return std::optional(desc);
+    }));
 
   // Reset: ensure old_resource_ is registered again with no views
   registry_->Register(old_resource_);
@@ -601,19 +616,25 @@ NOLINT_TEST_F(ResourceRegistryReplaceTest, Replace_ConcurrentUpdates_ThreadSafe)
   [[maybe_unused]] const auto v_b = RegisterView(*old_b, d1_b);
 
   std::atomic start { false };
-  std::thread t1([&] {
+  std::thread t1([&] -> void {
     while (!start.load()) {
       std::this_thread::yield();
     }
-    EXPECT_NO_THROW(registry_->Replace(
-      *old_a, new_a, [&](const TestViewDesc&) { return std::optional(d2_a); }));
+    EXPECT_NO_THROW(registry_->Replace(*old_a, new_a,
+      [&](const TestViewDesc&)
+        -> std::optional<oxygen::graphics::testing::TestViewDesc> {
+        return std::optional(d2_a);
+      }));
   });
-  std::thread t2([&] {
+  std::thread t2([&] -> void {
     while (!start.load()) {
       std::this_thread::yield();
     }
-    EXPECT_NO_THROW(registry_->Replace(
-      *old_b, new_b, [&](const TestViewDesc&) { return std::optional(d2_b); }));
+    EXPECT_NO_THROW(registry_->Replace(*old_b, new_b,
+      [&](const TestViewDesc&)
+        -> std::optional<oxygen::graphics::testing::TestViewDesc> {
+        return std::optional(d2_b);
+      }));
   });
   start = true;
   t1.join();
@@ -654,7 +675,10 @@ NOLINT_TEST_F(
 
   // Act: Replace with identical desc
   registry_->Replace(*old_resource_, new_resource_,
-    [&](const TestViewDesc& d) { return std::optional(d); });
+    [&](const TestViewDesc& d)
+      -> std::optional<oxygen::graphics::testing::TestViewDesc> {
+      return std::optional(d);
+    });
 
   // Assert: only new resource contains the key; view valid
   EXPECT_FALSE(registry_->Contains(*old_resource_, desc));
@@ -674,10 +698,11 @@ NOLINT_TEST_F(ResourceRegistryReplaceTest, Replace_PreservesAllocatorOwnership)
   const auto other_allocator
     = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
   other_allocator->ext_segment_factory_
-    = [](auto capacity, auto base_index, auto view_type, auto visibility) {
-        return std::make_unique<FixedDescriptorSegment>(
-          capacity, base_index, view_type, visibility);
-      };
+    = [](auto capacity, auto base_index, auto view_type,
+        auto visibility) -> std::unique_ptr<FixedDescriptorSegment> {
+    return std::make_unique<FixedDescriptorSegment>(
+      capacity, base_index, view_type, visibility);
+  };
   constexpr TestViewDesc desc {
     .view_type = ResourceViewType::kConstantBuffer,
     .visibility = DescriptorVisibility::kShaderVisible,
@@ -696,7 +721,10 @@ NOLINT_TEST_F(ResourceRegistryReplaceTest, Replace_PreservesAllocatorOwnership)
 
   // Act: Replace should not allocate/release on the allocator
   registry_->Replace(*old_resource_, new_resource_,
-    [&](const TestViewDesc& d) { return std::optional(d); });
+    [&](const TestViewDesc& d)
+      -> std::optional<oxygen::graphics::testing::TestViewDesc> {
+      return std::optional(d);
+    });
 
   // Assert: index usable; counts on other allocator unchanged
   EXPECT_TRUE(registry_->UpdateView(*new_resource_, idx, desc));
@@ -730,7 +758,10 @@ NOLINT_TEST_F(ResourceRegistryReplaceTest, Replace_WrongResource_Throws)
 
   // Act: Replace only moves from old_resource_ to new_resource_
   registry_->Replace(*old_resource_, new_resource_,
-    [&](const TestViewDesc& d) { return std::optional(d); });
+    [&](const TestViewDesc& d)
+      -> std::optional<oxygen::graphics::testing::TestViewDesc> {
+      return std::optional(d);
+    });
 
   // Assert: other remains unaffected; new contains, old and other do not
   EXPECT_TRUE(registry_->Contains(*new_resource_, desc));
@@ -756,7 +787,10 @@ NOLINT_TEST_F(
 
   // Act: Replace with same desc
   registry_->Replace(*old_resource_, new_resource_,
-    [&](const TestViewDesc& d) { return std::optional(d); });
+    [&](const TestViewDesc& d)
+      -> std::optional<oxygen::graphics::testing::TestViewDesc> {
+      return std::optional(d);
+    });
 
   // Assert: index is valid for new resource and not for old anymore
   EXPECT_TRUE(registry_->UpdateView(*new_resource_, idx, desc));
@@ -784,7 +818,10 @@ NOLINT_TEST_F(ResourceRegistryReplaceTest, Replace_SucceedsAfterPreviousFailure)
 
   // Act 1: Replace drops descriptor and does not transfer
   registry_->Replace(*old_resource_, new_resource_,
-    [&](const TestViewDesc& d) { return std::optional(d); });
+    [&](const TestViewDesc& d)
+      -> std::optional<oxygen::graphics::testing::TestViewDesc> {
+      return std::optional(d);
+    });
 
   // Assert post 1: index no longer usable and new does not contain
   EXPECT_FALSE(registry_->Contains(*new_resource_, desc));
@@ -799,7 +836,10 @@ NOLINT_TEST_F(ResourceRegistryReplaceTest, Replace_SucceedsAfterPreviousFailure)
 
   // Act 2: Replace should now transfer
   registry_->Replace(*old_resource_, new_resource_,
-    [&](const TestViewDesc& d) { return std::optional(d); });
+    [&](const TestViewDesc& d)
+      -> std::optional<oxygen::graphics::testing::TestViewDesc> {
+      return std::optional(d);
+    });
 
   // Assert post 2
   EXPECT_TRUE(registry_->Contains(*new_resource_, desc));
@@ -810,7 +850,7 @@ NOLINT_TEST_F(
   ResourceRegistryReplaceTest, NativeAliasesKeepTheirOwnDescriptions)
 {
   old_resource_->WithViewBehavior(
-    [](const DescriptorAllocationHandle&, const TestViewDesc&) {
+    [](const DescriptorAllocationHandle&, const TestViewDesc&) -> NativeView {
       return NativeView { std::uint64_t { 77U }, FakeResource::ClassTypeId() };
     });
   const TestViewDesc first { .id = 11U, .force_hash_collision = true };
@@ -818,8 +858,9 @@ NOLINT_TEST_F(
   ASSERT_EQ(
     RegisterView(*old_resource_, first), RegisterView(*old_resource_, second));
   std::set<std::uint64_t> seen;
-  registry_->Replace(
-    *old_resource_, new_resource_, [&](const TestViewDesc& description) {
+  registry_->Replace(*old_resource_, new_resource_,
+    [&](const TestViewDesc& description)
+      -> std::optional<oxygen::graphics::testing::TestViewDesc> {
       seen.insert(description.id);
       return std::optional { description };
     });

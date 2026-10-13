@@ -84,15 +84,15 @@ public:
 
     std::string out;
     const auto append_feature
-      = [this, &out](const FrameCaptureFeature feature) {
-          if (!SupportsFeature(feature)) {
-            return;
-          }
-          if (!out.empty()) {
-            out += ',';
-          }
-          out += to_string(feature);
-        };
+      = [this, &out](const FrameCaptureFeature feature) -> void {
+      if (!SupportsFeature(feature)) {
+        return;
+      }
+      if (!out.empty()) {
+        out += ',';
+      }
+      out += to_string(feature);
+    };
 
     append_feature(FrameCaptureFeature::kTriggerNextFrame);
     append_feature(FrameCaptureFeature::kManualCapture);

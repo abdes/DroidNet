@@ -212,7 +212,7 @@ auto ReadbackTracker::Await(const ReadbackTicketId id)
     }
 
     const auto woke_for_completion
-      = cv_.wait_for(lk, kAwaitWarningInterval, [&]() noexcept {
+      = cv_.wait_for(lk, kAwaitWarningInterval, [&]() noexcept -> bool {
           const auto current = entries_.find(id);
           return current == entries_.end() || current->second.completed;
         });
@@ -251,9 +251,9 @@ auto ReadbackTracker::AwaitAll(const std::span<const ReadbackTicket> tickets)
     }
   }
 
-  cv_.wait(lk, [&]() {
+  cv_.wait(lk, [&]() -> bool {
     return std::ranges::all_of(
-      tickets, [&](const auto& t) { return entries_[t.id].completed; });
+      tickets, [&](const auto& t) -> bool { return entries_[t.id].completed; });
   });
 
   std::vector<ReadbackResult> results;
@@ -308,7 +308,7 @@ auto ReadbackTracker::HasPending() const -> bool
 {
   std::lock_guard<std::mutex> lk(mu_);
   return std::ranges::any_of(
-    entries_, [](const auto& p) { return !p.second.completed; });
+    entries_, [](const auto& p) -> bool { return !p.second.completed; });
 }
 
 auto ReadbackTracker::LastRegisteredFence() const -> FenceValue

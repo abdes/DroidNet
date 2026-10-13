@@ -239,7 +239,7 @@ auto IblProcessor::RetireExpiredScenes() -> void
     cache.publication_invalidated = true;
     cache.published.reset();
   }
-  std::erase_if(cache.scenes, [](const auto& entry) {
+  std::erase_if(cache.scenes, [](const auto& entry) -> bool {
     return entry.first != 0U && entry.second.scene.expired();
   });
 }
@@ -371,7 +371,8 @@ try {
   const auto& light = stable.view_products.sky_light;
   auto next = EnvironmentProbeState {};
   next.probes.probe_revision = current.probes.probe_revision;
-  const auto unavailable = [&](const StaticSkyLightUnavailableReason reason) {
+  const auto unavailable
+    = [&](const StaticSkyLightUnavailableReason reason) -> RefreshState {
     // A pending upload resolves by itself; every other reason leaves the scene
     // without image-based lighting until its author changes something.
     if (reason != StaticSkyLightUnavailableReason::kGpuProductsPending) {
@@ -420,7 +421,7 @@ try {
     return { false, false, scene_cache.frame_result.probe_state };
   }
   const auto cpu_begin = std::chrono::steady_clock::now();
-  const ScopeGuard cpu_time([&]() noexcept {
+  const ScopeGuard cpu_time([&]() noexcept -> void {
     scene_cache.cpu_update_ms = std::chrono::duration<double, std::milli>(
       std::chrono::steady_clock::now() - cpu_begin)
                                   .count();
@@ -456,7 +457,7 @@ try {
   // A specified cubemap is identified by its content and calibration; a
   // captured cube by the capture inputs, which include its calibration, and
   // its content.
-  const auto cube_revision = [&](const std::uint64_t content) {
+  const auto cube_revision = [&](const std::uint64_t content) -> std::uint64_t {
     return CombineRevision(specified
         ? std::uint64_t { std::bit_cast<std::uint32_t>(light.illuminance_lux) }
         : capture_hash,
@@ -610,7 +611,7 @@ try {
   bool snapshot_started = false;
   bool refreshed = false;
   const auto publish = [&](const std::shared_ptr<const IblGpuProducts>& product,
-                         const StaticSkyLightProductKey& product_key) {
+                         const StaticSkyLightProductKey& product_key) -> void {
     scene_cache.published = product;
     scene_cache.key = product_key;
     scene_cache.published_frame
@@ -619,7 +620,7 @@ try {
     scene_cache.logged_reason = StaticSkyLightUnavailableReason::kNone;
     refreshed = true;
   };
-  const auto processing_failed = [&]() {
+  const auto processing_failed = [&]() -> RefreshState {
     if (immediate || !scene_cache.processor || !scene_cache.processor->IsOpen())
       return unavailable(StaticSkyLightUnavailableReason::kProcessingFailed);
     scene_cache.candidate.reset();

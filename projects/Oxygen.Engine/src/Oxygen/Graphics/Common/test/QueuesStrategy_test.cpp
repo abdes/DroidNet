@@ -374,7 +374,7 @@ NOLINT_TEST(QueuesStrategy, ForEachQueue_VisitsEachUniqueQueueOnce)
   auto& qm = gfx.GetComponent<internal::QueueManager>();
   std::vector<const CommandQueue*> visited;
   qm.ForEachQueue(
-    [&](CommandQueue& q) { visited.push_back(std::addressof(q)); });
+    [&](CommandQueue& q) -> void { visited.push_back(std::addressof(q)); });
 
   // Deduplicate and verify we visited exactly the two unique created objects.
   std::unordered_set<const CommandQueue*> uniq(visited.begin(), visited.end());
@@ -814,7 +814,7 @@ NOLINT_TEST(QueuesStrategy, BootstrapRetirementDrainsPreFrameWorkOnce)
   gfx.CreateCommandQueues(SingleQueueStrategy {});
   const auto startup_fence = queue->SignalSubmittedWork();
   auto retired = false;
-  gfx.GetDeferredReclaimer().RegisterDeferredAction([&] {
+  gfx.GetDeferredReclaimer().RegisterDeferredAction([&] -> void {
     EXPECT_GE(queue->GetCompletedValue(), startup_fence);
     retired = true;
   });
@@ -842,7 +842,7 @@ NOLINT_TEST(QueuesStrategy, FrameReuseWaitsForItsSlotBeforeRetirement)
     gfx.BeginFrame(oxygen::frame::SequenceNumber { slot + 1U },
       oxygen::frame::Slot { slot });
     if (slot == 0U) {
-      gfx.GetDeferredReclaimer().RegisterDeferredAction([&] {
+      gfx.GetDeferredReclaimer().RegisterDeferredAction([&] -> void {
         EXPECT_EQ(queue->GetCompletedValue(), 1U);
         retired = true;
       });
@@ -888,7 +888,7 @@ NOLINT_TEST(QueuesStrategy, FrameRetirementWaitsForEveryQueue)
     oxygen::frame::SequenceNumber { 1U }, oxygen::frame::Slot { 0U });
   const auto upload_fence = copy->SignalSubmittedWork();
   auto retired = false;
-  gfx.GetDeferredReclaimer().RegisterDeferredAction([&] {
+  gfx.GetDeferredReclaimer().RegisterDeferredAction([&] -> void {
     EXPECT_EQ(graphics->GetCompletedValue(), 1U);
     EXPECT_EQ(copy->GetCompletedValue(), upload_fence + 1U);
     retired = true;

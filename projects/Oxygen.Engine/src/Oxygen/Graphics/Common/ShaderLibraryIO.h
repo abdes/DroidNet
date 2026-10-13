@@ -196,8 +196,8 @@ public:
       for (const auto& m : modules) {
         ComputedEntry e;
         e.sorted_defines.assign(m.defines.begin(), m.defines.end());
-        std::ranges::sort(
-          e.sorted_defines, {}, [](const ShaderDefine& d) { return d.name; });
+        std::ranges::sort(e.sorted_defines, {},
+          [](const ShaderDefine& d) -> std::string { return d.name; });
 
         table_size += size_of_entry(m, e.sorted_defines);
         computed.push_back(std::move(e));

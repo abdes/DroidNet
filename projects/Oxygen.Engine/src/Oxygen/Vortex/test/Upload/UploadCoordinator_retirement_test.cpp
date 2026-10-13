@@ -134,7 +134,7 @@ NOLINT_TEST_F(UploadCoordinatorTest, ShutdownCanResumeAnOwnerDestroyingConsumer)
     ASSERT_TRUE(first.has_value());
     ASSERT_TRUE(later.has_value());
     co::testing::TestEventLoop loop;
-    loop.Schedule(std::chrono::milliseconds { 1 }, [&]() {
+    loop.Schedule(std::chrono::milliseconds { 1 }, [&]() -> void {
       queue->CompleteThrough(
         finish_all ? later->Fence().get() : first->Fence().get());
       const auto outcome

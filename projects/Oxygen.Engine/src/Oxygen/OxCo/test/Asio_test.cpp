@@ -159,8 +159,8 @@ protected:
 NOLINT_TEST_F(AsioThreadPoolTest, Smoke)
 {
   ::Run(*io_, [&]() -> Co<> {
-    const auto tid
-      = co_await tp_->Run([] { return std::this_thread::get_id(); });
+    const auto tid = co_await tp_->Run(
+      [] -> std::thread::id { return std::this_thread::get_id(); });
     EXPECT_NE(tid, std::this_thread::get_id());
   });
 }
@@ -169,7 +169,7 @@ NOLINT_TEST_F(AsioThreadPoolTest, Exception)
 {
   ::Run(*io_, [&]() -> Co<> {
     try {
-      co_await tp_->Run([] { throw std::runtime_error("Boom!"); });
+      co_await tp_->Run([] -> void { throw std::runtime_error("Boom!"); });
     } catch (const std::exception&) {
       // Expected exception, do nothing
       (void)0;
@@ -182,7 +182,7 @@ NOLINT_TEST_F(AsioThreadPoolTest, Cancellation_Confirmed)
   ::Run(*io_, [&]() -> Co<> {
     std::atomic<bool> confirmed { false };
     auto body = [&]() -> Co<> {
-      co_await tp_->Run([&](ThreadPool::CancelToken cancelled) {
+      co_await tp_->Run([&](ThreadPool::CancelToken cancelled) -> void {
         while (!cancelled) { }
         confirmed = true;
       });
@@ -198,7 +198,7 @@ NOLINT_TEST_F(AsioThreadPoolTest, Cancellation_UnConfirmed)
   ::Run(*io_, [&]() -> Co<> {
     std::atomic<bool> cancelled { false };
     auto body = [&]() -> Co<int> {
-      int ret = co_await tp_->Run([&](ThreadPool::CancelToken) {
+      int ret = co_await tp_->Run([&](ThreadPool::CancelToken) -> int {
         while (!cancelled.load(std::memory_order_relaxed)) { }
         return 42;
       });
@@ -225,7 +225,8 @@ NOLINT_TEST_F(AsioThreadPoolTest, Stress)
         while (count--) {
           n.Start([&sem, &ret, this, length]() -> Co<> {
             auto lk = co_await sem.Lock(); // limit concurrency
-            ret += co_await tp_->Run([length] { return DoWork(length); });
+            ret += co_await tp_->Run(
+              [length] -> uint64_t { return DoWork(length); });
           });
         }
         co_return kJoin;

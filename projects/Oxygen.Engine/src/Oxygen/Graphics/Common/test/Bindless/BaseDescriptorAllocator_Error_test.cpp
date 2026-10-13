@@ -100,7 +100,9 @@ NOLINT_TEST_F(
   const auto allocator2
     = std::make_unique<testing::NiceMock<MockDescriptorAllocator>>();
 
-  allocator1->segment_factory_ = [](auto, auto) {
+  allocator1->segment_factory_
+    = [](auto,
+        auto) -> std::unique_ptr<oxygen::graphics::detail::DescriptorSegment> {
     // Create test segment for first allocator
     auto segment1
       = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();

@@ -96,7 +96,7 @@ NOLINT_TEST_F(ExecutorTest, MultipleTasksExecuteInOrder)
 NOLINT_TEST_F(ExecutorTest, CaptureExecutesTasksInCapturedList)
 {
   int value = 0;
-  executor_.Capture([&] {
+  executor_.Capture([&] -> void {
     executor_.Schedule(TestFunction, &value);
     EXPECT_EQ(value, 0);
   });
@@ -120,7 +120,9 @@ NOLINT_TEST_F(ExecutorTest, RunSoonFromAnotherExecutor)
   another_executor_.Schedule(OuterFunction, &other_context);
   executor_.Schedule(RunTestFunction, &this_context);
   executor_.RunSoon(
-    +[](const Context* context) noexcept { context->executor->RunSoon(); },
+    +[](const Context* context) noexcept -> void {
+      context->executor->RunSoon();
+    },
     &other_context);
   EXPECT_EQ(value, 2);
 }
@@ -133,7 +135,8 @@ NOLINT_TEST_F(ExecutorTest, DrainWhenRunning)
   const Context this_context = { .value = &value, .executor = &executor_ };
 
   executor_.RunSoon(
-    +[](const Context* context) noexcept { context->executor->Drain(); },
+    +[](
+       const Context* context) noexcept -> void { context->executor->Drain(); },
     &this_context);
 }
 
@@ -173,7 +176,8 @@ NOLINT_TEST_F(ExecutorTest, RunSoonWhileDraining)
   executor_.Schedule(OuterFunction, &this_context);
 
   executor_.RunSoon(
-    +[](const Context* context) noexcept { context->executor->Drain(); },
+    +[](
+       const Context* context) noexcept -> void { context->executor->Drain(); },
     &this_context);
   EXPECT_EQ(value, 1);
 }
@@ -183,7 +187,7 @@ NOLINT_TEST_F(ExecutorTest, ScheduleWhileDraining)
   int value = 0;
   const Context this_context = { .value = &value, .executor = &executor_ };
   executor_.Schedule(
-    +[](const Context* context) noexcept {
+    +[](const Context* context) noexcept -> void {
       context->executor->Schedule(TestFunction, context->value);
     },
     &this_context);

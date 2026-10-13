@@ -80,7 +80,7 @@ inline auto GetObjectName(ID3D12Object* const object,
 /// that is greater than or equal to 'size'
 /// </summary>
 template <uint64_t alignment>
-[[nodiscard]] constexpr uint64_t align_size_up(const uint64_t size)
+[[nodiscard]] constexpr auto align_size_up(const uint64_t size) -> uint64_t
 {
   static_assert(alignment, "Alignment must be non-zero");
   constexpr uint64_t mask { alignment - 1 };
@@ -95,7 +95,7 @@ template <uint64_t alignment>
 /// <param name="size"></param>
 /// <returns></returns>
 template <uint64_t alignment>
-[[nodiscard]] constexpr uint64_t align_size_down(const uint64_t size)
+[[nodiscard]] constexpr auto align_size_down(const uint64_t size) -> uint64_t
 {
   static_assert(alignment, "Alignment must be non-zero");
   constexpr uint64_t mask { alignment - 1 };
@@ -107,8 +107,8 @@ template <uint64_t alignment>
 /// Align by rounding up. Will result in a multiple of 'alignment'
 /// that is greater than or equal to 'size'
 /// </summary>
-[[nodiscard]] constexpr uint64_t align_size_up(
-  const uint64_t size, const uint64_t alignment)
+[[nodiscard]] constexpr auto align_size_up(
+  const uint64_t size, const uint64_t alignment) -> uint64_t
 {
   assert(alignment && "Alignment must be non-zero");
   const uint64_t mask { alignment - 1 };
@@ -123,8 +123,8 @@ template <uint64_t alignment>
 /// <param name="size"></param>
 /// <param name="alignment"></param>
 /// <returns></returns>
-[[nodiscard]] constexpr uint64_t align_size_down(
-  const uint64_t size, const uint64_t alignment)
+[[nodiscard]] constexpr auto align_size_down(
+  const uint64_t size, const uint64_t alignment) -> uint64_t
 {
   assert(alignment && "Alignment must be non-zero");
   const uint64_t mask { alignment - 1 };
@@ -335,12 +335,12 @@ constexpr struct {
       {}, {}, {}, {}, {}, {}, {} } };
 } kBlendState;
 
-constexpr uint64_t align_size_for_constant_buffer(const uint64_t size)
+constexpr auto align_size_for_constant_buffer(const uint64_t size) -> uint64_t
 {
   return align_size_up<D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT>(size);
 }
 
-constexpr uint64_t align_size_for_texture(const uint64_t size)
+constexpr auto align_size_for_texture(const uint64_t size) -> uint64_t
 {
   return align_size_up<D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT>(size);
 }
@@ -418,7 +418,8 @@ private:
 };
 
 struct D3d12RootSignatureDesc;
-ID3D12RootSignature* create_root_signature(const D3d12RootSignatureDesc& desc);
+auto create_root_signature(const D3d12RootSignatureDesc& desc)
+  -> ID3D12RootSignature*;
 
 // Maximum 64 DWORDs (uint32_t's) divided up amongst all root parameters:
 // Root constants = 1 DWORD per 32-bit constant
@@ -448,7 +449,7 @@ struct D3d12RootSignatureDesc : public D3D12_ROOT_SIGNATURE_DESC1 {
   {
   }
 
-  [[nodiscard]] ID3D12RootSignature* create() const
+  [[nodiscard]] auto create() const -> ID3D12RootSignature*
   {
     // TODO: Implement
     return create_root_signature(*this);
@@ -465,7 +466,7 @@ public:
     : sub_object_ { sub_object }
   {
   }
-  D3D12PipelineStateSubObject& operator=(const T& sub_object)
+  auto operator=(const T& sub_object) -> D3D12PipelineStateSubObject&
   {
     sub_object_ = sub_object;
     return *this;
@@ -557,8 +558,9 @@ struct D3d12PipelineStateSubObjectStream {
   D3D12PipelineStateSubObject_ms ms {};
 };
 
-ID3D12PipelineState* create_pipeline_state(
-  const D3D12_PIPELINE_STATE_STREAM_DESC& desc);
-ID3D12PipelineState* create_pipeline_state(void* stream, uint64_t stream_size);
+auto create_pipeline_state(const D3D12_PIPELINE_STATE_STREAM_DESC& desc)
+  -> ID3D12PipelineState*;
+auto create_pipeline_state(void* stream, uint64_t stream_size)
+  -> ID3D12PipelineState*;
 
 } // namespace oxygen::graphics::d3d12

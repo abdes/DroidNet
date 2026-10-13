@@ -193,8 +193,8 @@ enum SuballocationType {
 
 #ifndef _D3D12MA_FUNCTIONS
 
-static void* DefaultAllocate(
-  size_t Size, size_t Alignment, void* /*pPrivateData*/)
+static auto DefaultAllocate(
+  size_t Size, size_t Alignment, void* /*pPrivateData*/) -> void*
 {
 #  ifdef _WIN32
   return _aligned_malloc(Size, Alignment);
@@ -211,8 +211,8 @@ static void DefaultFree(void* pMemory, void* /*pPrivateData*/)
 #  endif
 }
 
-static void* Malloc(
-  const ALLOCATION_CALLBACKS& allocs, size_t size, size_t alignment)
+static auto Malloc(
+  const ALLOCATION_CALLBACKS& allocs, size_t size, size_t alignment) -> void*
 {
   void* const result
     = (*allocs.pAllocate)(size, alignment, allocs.pPrivateData);
@@ -224,12 +224,14 @@ static void Free(const ALLOCATION_CALLBACKS& allocs, void* memory)
   (*allocs.pFree)(memory, allocs.pPrivateData);
 }
 
-template <typename T> static T* Allocate(const ALLOCATION_CALLBACKS& allocs)
+template <typename T>
+static auto Allocate(const ALLOCATION_CALLBACKS& allocs) -> T*
 {
   return (T*)Malloc(allocs, sizeof(T), __alignof(T));
 }
 template <typename T>
-static T* AllocateArray(const ALLOCATION_CALLBACKS& allocs, size_t count)
+static auto AllocateArray(const ALLOCATION_CALLBACKS& allocs, size_t count)
+  -> T*
 {
   return (T*)Malloc(allocs, sizeof(T) * count, __alignof(T));
 }
@@ -287,11 +289,11 @@ static void SetupAllocationCallbacks(ALLOCATION_CALLBACKS& outAllocs,
       }                                                                        \
     } while (false)
 
-template <typename T> static T D3D12MA_MIN(const T& a, const T& b)
+template <typename T> static auto D3D12MA_MIN(const T& a, const T& b) -> T
 {
   return a <= b ? a : b;
 }
-template <typename T> static T D3D12MA_MAX(const T& a, const T& b)
+template <typename T> static auto D3D12MA_MAX(const T& a, const T& b) -> T
 {
   return a <= b ? b : a;
 }
@@ -305,7 +307,7 @@ template <typename T> static void D3D12MA_SWAP(T& a, T& b)
 
 // Scans integer for index of first nonzero bit from the Least Significant Bit
 // (LSB). If mask is 0 then returns UINT8_MAX
-static UINT8 BitScanLSB(UINT64 mask)
+static auto BitScanLSB(UINT64 mask) -> UINT8
 {
 #  if defined(_MSC_VER) && defined(_WIN64)
   unsigned long pos;
@@ -327,7 +329,7 @@ static UINT8 BitScanLSB(UINT64 mask)
 }
 // Scans integer for index of first nonzero bit from the Least Significant Bit
 // (LSB). If mask is 0 then returns UINT8_MAX
-static UINT8 BitScanLSB(UINT32 mask)
+static auto BitScanLSB(UINT32 mask) -> UINT8
 {
 #  ifdef _MSC_VER
   unsigned long pos;
@@ -350,7 +352,7 @@ static UINT8 BitScanLSB(UINT32 mask)
 
 // Scans integer for index of first nonzero bit from the Most Significant Bit
 // (MSB). If mask is 0 then returns UINT8_MAX
-static UINT8 BitScanMSB(UINT64 mask)
+static auto BitScanMSB(UINT64 mask) -> UINT8
 {
 #  if defined(_MSC_VER) && defined(_WIN64)
   unsigned long pos;
@@ -372,7 +374,7 @@ static UINT8 BitScanMSB(UINT64 mask)
 }
 // Scans integer for index of first nonzero bit from the Most Significant Bit
 // (MSB). If mask is 0 then returns UINT8_MAX
-static UINT8 BitScanMSB(UINT32 mask)
+static auto BitScanMSB(UINT32 mask) -> UINT8
 {
 #  ifdef _MSC_VER
   unsigned long pos;
@@ -398,34 +400,37 @@ Returns true if given number is a power of two.
 T must be unsigned integer number or signed integer but always nonnegative.
 For 0 returns true.
 */
-template <typename T> static bool IsPow2(T x) { return (x & (x - 1)) == 0; }
+template <typename T> static auto IsPow2(T x) -> bool
+{
+  return (x & (x - 1)) == 0;
+}
 
 // Aligns given value up to nearest multiply of align value. For example:
 // AlignUp(11, 8) = 16. Use types like UINT, uint64_t as T.
-template <typename T> static T AlignUp(T val, T alignment)
+template <typename T> static auto AlignUp(T val, T alignment) -> T
 {
   D3D12MA_HEAVY_ASSERT(IsPow2(alignment));
   return (val + alignment - 1) & ~(alignment - 1);
 }
 // Aligns given value down to nearest multiply of align value. For example:
 // AlignUp(11, 8) = 8. Use types like UINT, uint64_t as T.
-template <typename T> static T AlignDown(T val, T alignment)
+template <typename T> static auto AlignDown(T val, T alignment) -> T
 {
   D3D12MA_HEAVY_ASSERT(IsPow2(alignment));
   return val & ~(alignment - 1);
 }
 
 // Division with mathematical rounding to nearest number.
-template <typename T> static T RoundDiv(T x, T y)
+template <typename T> static auto RoundDiv(T x, T y) -> T
 {
   return (x + (y / (T)2)) / y;
 }
-template <typename T> static T DivideRoundingUp(T x, T y)
+template <typename T> static auto DivideRoundingUp(T x, T y) -> T
 {
   return (x + y - 1) / y;
 }
 
-static WCHAR HexDigitToChar(UINT8 digit)
+static auto HexDigitToChar(UINT8 digit) -> WCHAR
 {
   if (digit < 10)
     return L'0' + digit;
@@ -443,8 +448,8 @@ Returned value is the found element, if present in the collection or place where
 new element with value (key) should be inserted.
 */
 template <typename CmpLess, typename IterT, typename KeyT>
-static IterT BinaryFindFirstNotLess(
-  IterT beg, IterT end, const KeyT& key, const CmpLess& cmp)
+static auto BinaryFindFirstNotLess(
+  IterT beg, IterT end, const KeyT& key, const CmpLess& cmp) -> IterT
 {
   size_t down = 0, up = (end - beg);
   while (down < up) {
@@ -468,8 +473,8 @@ Returned value is the found element, if present in the collection or end if not
 found.
 */
 template <typename CmpLess, typename IterT, typename KeyT>
-static IterT BinaryFindSorted(
-  const IterT& beg, const IterT& end, const KeyT& value, const CmpLess& cmp)
+static auto BinaryFindSorted(const IterT& beg, const IterT& end,
+  const KeyT& value, const CmpLess& cmp) -> IterT
 {
   IterT it = BinaryFindFirstNotLess<CmpLess, IterT, KeyT>(beg, end, value, cmp);
   if (it == end || (!cmp(*it, value) && !cmp(value, *it))) {
@@ -478,7 +483,7 @@ static IterT BinaryFindSorted(
   return end;
 }
 
-static UINT StandardHeapTypeToIndex(D3D12_HEAP_TYPE type)
+static auto StandardHeapTypeToIndex(D3D12_HEAP_TYPE type) -> UINT
 {
   switch (type) {
   case D3D12_HEAP_TYPE_DEFAULT:
@@ -495,7 +500,7 @@ static UINT StandardHeapTypeToIndex(D3D12_HEAP_TYPE type)
   }
 }
 
-static D3D12_HEAP_TYPE IndexToStandardHeapType(UINT heapTypeIndex)
+static auto IndexToStandardHeapType(UINT heapTypeIndex) -> D3D12_HEAP_TYPE
 {
   switch (heapTypeIndex) {
   case 0:
@@ -512,8 +517,8 @@ static D3D12_HEAP_TYPE IndexToStandardHeapType(UINT heapTypeIndex)
   }
 }
 
-static UINT64 HeapFlagsToAlignment(
-  D3D12_HEAP_FLAGS flags, bool denyMsaaTextures)
+static auto HeapFlagsToAlignment(D3D12_HEAP_FLAGS flags, bool denyMsaaTextures)
+  -> UINT64
 {
   /*
   Documentation of D3D12_HEAP_DESC structure says:
@@ -538,7 +543,8 @@ static UINT64 HeapFlagsToAlignment(
                                : D3D12_DEFAULT_RESOURCE_PLACEMENT_ALIGNMENT;
 }
 
-static ResourceClass HeapFlagsToResourceClass(D3D12_HEAP_FLAGS heapFlags)
+static auto HeapFlagsToResourceClass(D3D12_HEAP_FLAGS heapFlags)
+  -> ResourceClass
 {
   const bool allowBuffers = (heapFlags & D3D12_HEAP_FLAG_DENY_BUFFERS) == 0;
   const bool allowRtDsTextures
@@ -558,15 +564,15 @@ static ResourceClass HeapFlagsToResourceClass(D3D12_HEAP_FLAGS heapFlags)
   return ResourceClass::Buffer;
 }
 
-static bool IsHeapTypeStandard(D3D12_HEAP_TYPE type)
+static auto IsHeapTypeStandard(D3D12_HEAP_TYPE type) -> bool
 {
   return type == D3D12_HEAP_TYPE_DEFAULT || type == D3D12_HEAP_TYPE_UPLOAD
     || type == D3D12_HEAP_TYPE_READBACK
     || type == D3D12_HEAP_TYPE_GPU_UPLOAD_COPY;
 }
 
-static D3D12_HEAP_PROPERTIES StandardHeapTypeToHeapProperties(
-  D3D12_HEAP_TYPE type)
+static auto StandardHeapTypeToHeapProperties(D3D12_HEAP_TYPE type)
+  -> D3D12_HEAP_PROPERTIES
 {
   D3D12MA_ASSERT(IsHeapTypeStandard(type));
   D3D12_HEAP_PROPERTIES result = {};
@@ -574,7 +580,7 @@ static D3D12_HEAP_PROPERTIES StandardHeapTypeToHeapProperties(
   return result;
 }
 
-static bool IsFormatCompressed(DXGI_FORMAT format)
+static auto IsFormatCompressed(DXGI_FORMAT format) -> bool
 {
   switch (format) {
   case DXGI_FORMAT_BC1_TYPELESS:
@@ -605,7 +611,7 @@ static bool IsFormatCompressed(DXGI_FORMAT format)
 }
 
 // Only some formats are supported. For others it returns 0.
-static UINT GetBitsPerPixel(DXGI_FORMAT format)
+static auto GetBitsPerPixel(DXGI_FORMAT format) -> UINT
 {
   switch (format) {
   case DXGI_FORMAT_R32G32B32A32_TYPELESS:
@@ -720,8 +726,8 @@ static UINT GetBitsPerPixel(DXGI_FORMAT format)
 }
 
 template <typename D3D12_RESOURCE_DESC_T>
-static ResourceClass ResourceDescToResourceClass(
-  const D3D12_RESOURCE_DESC_T& resDesc)
+static auto ResourceDescToResourceClass(const D3D12_RESOURCE_DESC_T& resDesc)
+  -> ResourceClass
 {
   if (resDesc.Dimension == D3D12_RESOURCE_DIMENSION_BUFFER)
     return ResourceClass::Buffer;
@@ -737,7 +743,8 @@ static ResourceClass ResourceDescToResourceClass(
 
 // This algorithm is overly conservative.
 template <typename D3D12_RESOURCE_DESC_T>
-static bool CanUseSmallAlignment(const D3D12_RESOURCE_DESC_T& resourceDesc)
+static auto CanUseSmallAlignment(const D3D12_RESOURCE_DESC_T& resourceDesc)
+  -> bool
 {
   if (resourceDesc.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D)
     return false;
@@ -794,8 +801,9 @@ static bool CanUseSmallAlignment(const D3D12_RESOURCE_DESC_T& resourceDesc)
   return tileCount <= 16;
 }
 
-static bool ValidateAllocateMemoryParameters(const ALLOCATION_DESC* pAllocDesc,
+static auto ValidateAllocateMemoryParameters(const ALLOCATION_DESC* pAllocDesc,
   const D3D12_RESOURCE_ALLOCATION_INFO* pAllocInfo, Allocation** ppAllocation)
+  -> bool
 {
   return pAllocDesc && pAllocInfo && ppAllocation
     && (pAllocInfo->Alignment == 0
@@ -1011,32 +1019,32 @@ public:
   Vector(const Vector<T>& src);
   ~Vector();
 
-  const ALLOCATION_CALLBACKS& GetAllocs() const
+  auto GetAllocs() const -> const ALLOCATION_CALLBACKS&
   {
     return m_AllocationCallbacks;
   }
-  bool empty() const { return m_Count == 0; }
-  size_t size() const { return m_Count; }
-  T* data() { return m_pArray; }
-  const T* data() const { return m_pArray; }
+  auto empty() const -> bool { return m_Count == 0; }
+  auto size() const -> size_t { return m_Count; }
+  auto data() -> T* { return m_pArray; }
+  auto data() const -> const T* { return m_pArray; }
   void clear(bool freeMemory = false) { resize(0, freeMemory); }
 
-  iterator begin() { return m_pArray; }
-  iterator end() { return m_pArray + m_Count; }
-  const_iterator cbegin() const { return m_pArray; }
-  const_iterator cend() const { return m_pArray + m_Count; }
-  const_iterator begin() const { return cbegin(); }
-  const_iterator end() const { return cend(); }
+  auto begin() -> iterator { return m_pArray; }
+  auto end() -> iterator { return m_pArray + m_Count; }
+  auto cbegin() const -> const_iterator { return m_pArray; }
+  auto cend() const -> const_iterator { return m_pArray + m_Count; }
+  auto begin() const -> const_iterator { return cbegin(); }
+  auto end() const -> const_iterator { return cend(); }
 
   void push_front(const T& src) { insert(0, src); }
   void push_back(const T& src);
   void pop_front();
   void pop_back();
 
-  T& front();
+  auto front() -> T&;
   T& back();
-  const T& front() const;
-  const T& back() const;
+  auto front() const -> const T&;
+  auto back() const -> const T&;
 
   void reserve(size_t newCapacity, bool freeMemory = false);
   void resize(size_t newCount, bool freeMemory = false);
@@ -1044,13 +1052,13 @@ public:
   void remove(size_t index);
 
   template <typename CmpLess>
-  size_t InsertSorted(const T& value, const CmpLess& cmp);
+  auto InsertSorted(const T& value, const CmpLess& cmp) -> size_t;
   template <typename CmpLess>
-  bool RemoveSorted(const T& value, const CmpLess& cmp);
+  auto RemoveSorted(const T& value, const CmpLess& cmp) -> bool;
 
-  Vector& operator=(const Vector<T>& rhs);
+  auto operator=(const Vector<T>& rhs) -> Vector&;
   T& operator[](size_t index);
-  const T& operator[](size_t index) const;
+  auto operator[](size_t index) const -> const T&;
 
 private:
   const ALLOCATION_CALLBACKS& m_AllocationCallbacks;
@@ -1116,7 +1124,7 @@ template <typename T> void Vector<T>::pop_back()
   resize(size() - 1);
 }
 
-template <typename T> T& Vector<T>::front()
+template <typename T> auto Vector<T>::front() -> T&
 {
   D3D12MA_HEAVY_ASSERT(m_Count > 0);
   return m_pArray[0];
@@ -1128,13 +1136,13 @@ template <typename T> T& Vector<T>::back()
   return m_pArray[m_Count - 1];
 }
 
-template <typename T> const T& Vector<T>::front() const
+template <typename T> auto Vector<T>::front() const -> const T&
 {
   D3D12MA_HEAVY_ASSERT(m_Count > 0);
   return m_pArray[0];
 }
 
-template <typename T> const T& Vector<T>::back() const
+template <typename T> auto Vector<T>::back() const -> const T&
 {
   D3D12MA_HEAVY_ASSERT(m_Count > 0);
   return m_pArray[m_Count - 1];
@@ -1213,7 +1221,7 @@ template <typename T> void Vector<T>::remove(size_t index)
 
 template <typename T>
 template <typename CmpLess>
-size_t Vector<T>::InsertSorted(const T& value, const CmpLess& cmp)
+auto Vector<T>::InsertSorted(const T& value, const CmpLess& cmp) -> size_t
 {
   const size_t indexToInsert = BinaryFindFirstNotLess<CmpLess, iterator, T>(
                                  m_pArray, m_pArray + m_Count, value, cmp)
@@ -1224,7 +1232,7 @@ size_t Vector<T>::InsertSorted(const T& value, const CmpLess& cmp)
 
 template <typename T>
 template <typename CmpLess>
-bool Vector<T>::RemoveSorted(const T& value, const CmpLess& cmp)
+auto Vector<T>::RemoveSorted(const T& value, const CmpLess& cmp) -> bool
 {
   const iterator it
     = BinaryFindFirstNotLess(m_pArray, m_pArray + m_Count, value, cmp);
@@ -1236,7 +1244,8 @@ bool Vector<T>::RemoveSorted(const T& value, const CmpLess& cmp)
   return false;
 }
 
-template <typename T> Vector<T>& Vector<T>::operator=(const Vector<T>& rhs)
+template <typename T>
+auto Vector<T>::operator=(const Vector<T>& rhs) -> Vector<T>&
 {
   if (&rhs != this) {
     resize(rhs.m_Count);
@@ -1253,7 +1262,7 @@ template <typename T> T& Vector<T>::operator[](size_t index)
   return m_pArray[index];
 }
 
-template <typename T> const T& Vector<T>::operator[](size_t index) const
+template <typename T> auto Vector<T>::operator[](size_t index) const -> const T&
 {
   D3D12MA_HEAVY_ASSERT(index < m_Count);
   return m_pArray[index];
@@ -1269,8 +1278,8 @@ public:
   {
   }
 
-  size_t GetLength() const { return m_Data.size(); }
-  LPCWSTR GetData() const { return m_Data.data(); }
+  auto GetLength() const -> size_t { return m_Data.size(); }
+  auto GetData() const -> LPCWSTR { return m_Data.data(); }
 
   void Add(WCHAR ch) { m_Data.push_back(ch); }
   void Add(LPCWSTR str);
@@ -1912,16 +1921,16 @@ public:
     {
     }
 
-    T& operator*() const;
+    auto operator*() const -> T&;
     T* operator->() const;
 
-    iterator& operator++();
-    iterator& operator--();
-    iterator operator++(int);
-    iterator operator--(int);
+    auto operator++() -> iterator&;
+    auto operator--() -> iterator&;
+    auto operator++(int) -> iterator;
+    auto operator--(int) -> iterator;
 
-    bool operator==(const iterator& rhs) const;
-    bool operator!=(const iterator& rhs) const;
+    auto operator==(const iterator& rhs) const -> bool;
+    auto operator!=(const iterator& rhs) const -> bool;
 
   private:
     List<T>* m_pList = NULL;
@@ -1946,16 +1955,16 @@ public:
     {
     }
 
-    T& operator*() const;
-    T* operator->() const;
+    auto operator*() const -> T&;
+    auto operator->() const -> T*;
 
-    reverse_iterator& operator++();
-    reverse_iterator& operator--();
-    reverse_iterator operator++(int);
-    reverse_iterator operator--(int);
+    auto operator++() -> reverse_iterator&;
+    auto operator--() -> reverse_iterator&;
+    auto operator++(int) -> reverse_iterator;
+    auto operator--(int) -> reverse_iterator;
 
-    bool operator==(const reverse_iterator& rhs) const;
-    bool operator!=(const reverse_iterator& rhs) const;
+    auto operator==(const reverse_iterator& rhs) const -> bool;
+    auto operator!=(const reverse_iterator& rhs) const -> bool;
 
   private:
     List<T>* m_pList = NULL;
@@ -1989,17 +1998,17 @@ public:
     {
     }
 
-    iterator dropConst() const;
-    const T& operator*() const;
-    const T* operator->() const;
+    auto dropConst() const -> iterator;
+    auto operator*() const -> const T&;
+    auto operator->() const -> const T*;
 
-    const_iterator& operator++();
-    const_iterator& operator--();
-    const_iterator operator++(int);
-    const_iterator operator--(int);
+    auto operator++() -> const_iterator&;
+    auto operator--() -> const_iterator&;
+    auto operator++(int) -> const_iterator;
+    auto operator--(int) -> const_iterator;
 
-    bool operator==(const const_iterator& rhs) const;
-    bool operator!=(const const_iterator& rhs) const;
+    auto operator==(const const_iterator& rhs) const -> bool;
+    auto operator!=(const const_iterator& rhs) const -> bool;
 
   private:
     const List<T>* m_pList = NULL;
@@ -2033,17 +2042,17 @@ public:
     {
     }
 
-    reverse_iterator dropConst() const;
-    const T& operator*() const;
-    const T* operator->() const;
+    auto dropConst() const -> reverse_iterator;
+    auto operator*() const -> const T&;
+    auto operator->() const -> const T*;
 
-    const_reverse_iterator& operator++();
-    const_reverse_iterator& operator--();
-    const_reverse_iterator operator++(int);
-    const_reverse_iterator operator--(int);
+    auto operator++() -> const_reverse_iterator&;
+    auto operator--() -> const_reverse_iterator&;
+    auto operator++(int) -> const_reverse_iterator;
+    auto operator--(int) -> const_reverse_iterator;
 
-    bool operator==(const const_reverse_iterator& rhs) const;
-    bool operator!=(const const_reverse_iterator& rhs) const;
+    auto operator==(const const_reverse_iterator& rhs) const -> bool;
+    auto operator!=(const const_reverse_iterator& rhs) const -> bool;
 
   private:
     const List<T>* m_pList = NULL;
@@ -2062,58 +2071,61 @@ public:
   // computations to return all items to m_ItemAllocator as free.
   ~List() = default;
 
-  size_t GetCount() const { return m_Count; }
-  bool IsEmpty() const { return m_Count == 0; }
+  auto GetCount() const -> size_t { return m_Count; }
+  auto IsEmpty() const -> bool { return m_Count == 0; }
 
-  Item* Front() { return m_pFront; }
-  const Item* Front() const { return m_pFront; }
-  Item* Back() { return m_pBack; }
-  const Item* Back() const { return m_pBack; }
+  auto Front() -> Item* { return m_pFront; }
+  auto Front() const -> const Item* { return m_pFront; }
+  auto Back() -> Item* { return m_pBack; }
+  auto Back() const -> const Item* { return m_pBack; }
 
-  bool empty() const { return IsEmpty(); }
-  size_t size() const { return GetCount(); }
+  auto empty() const -> bool { return IsEmpty(); }
+  auto size() const -> size_t { return GetCount(); }
   void push_back(const T& value) { PushBack(value); }
-  iterator insert(iterator it, const T& value)
+  auto insert(iterator it, const T& value) -> iterator
   {
     return iterator(this, InsertBefore(it.m_pItem, value));
   }
   void clear() { Clear(); }
   void erase(iterator it) { Remove(it.m_pItem); }
 
-  iterator begin() { return iterator(this, Front()); }
-  iterator end() { return iterator(this, NULL); }
-  reverse_iterator rbegin() { return reverse_iterator(this, Back()); }
-  reverse_iterator rend() { return reverse_iterator(this, NULL); }
+  auto begin() -> iterator { return iterator(this, Front()); }
+  auto end() -> iterator { return iterator(this, NULL); }
+  auto rbegin() -> reverse_iterator { return reverse_iterator(this, Back()); }
+  auto rend() -> reverse_iterator { return reverse_iterator(this, NULL); }
 
-  const_iterator cbegin() const { return const_iterator(this, Front()); }
-  const_iterator cend() const { return const_iterator(this, NULL); }
-  const_iterator begin() const { return cbegin(); }
-  const_iterator end() const { return cend(); }
+  auto cbegin() const -> const_iterator
+  {
+    return const_iterator(this, Front());
+  }
+  auto cend() const -> const_iterator { return const_iterator(this, NULL); }
+  auto begin() const -> const_iterator { return cbegin(); }
+  auto end() const -> const_iterator { return cend(); }
 
-  const_reverse_iterator crbegin() const
+  auto crbegin() const -> const_reverse_iterator
   {
     return const_reverse_iterator(this, Back());
   }
-  const_reverse_iterator crend() const
+  auto crend() const -> const_reverse_iterator
   {
     return const_reverse_iterator(this, NULL);
   }
-  const_reverse_iterator rbegin() const { return crbegin(); }
-  const_reverse_iterator rend() const { return crend(); }
+  auto rbegin() const -> const_reverse_iterator { return crbegin(); }
+  auto rend() const -> const_reverse_iterator { return crend(); }
 
-  Item* PushBack();
-  Item* PushFront();
-  Item* PushBack(const T& value);
-  Item* PushFront(const T& value);
+  auto PushBack() -> Item*;
+  auto PushFront() -> Item*;
+  auto PushBack(const T& value) -> Item*;
+  auto PushFront(const T& value) -> Item*;
   void PopBack();
   void PopFront();
 
   // Item can be null - it means PushBack.
-  Item* InsertBefore(Item* pItem);
+  auto InsertBefore(Item* pItem) -> Item*;
   // Item can be null - it means PushFront.
-  Item* InsertAfter(Item* pItem);
-  Item* InsertBefore(Item* pItem, const T& value);
-  Item* InsertAfter(Item* pItem, const T& value);
+  auto InsertAfter(Item* pItem) -> Item*;
+  auto InsertBefore(Item* pItem, const T& value) -> Item*;
+  auto InsertAfter(Item* pItem, const T& value) -> Item*;
 
   void Clear();
   void Remove(Item* pItem);
@@ -2127,7 +2139,7 @@ private:
 };
 
 #  ifndef _D3D12MA_LIST_ITERATOR_FUNCTIONS
-template <typename T> T& List<T>::iterator::operator*() const
+template <typename T> auto List<T>::iterator::operator*() const -> T&
 {
   D3D12MA_HEAVY_ASSERT(m_pItem != NULL);
   return m_pItem->Value;
@@ -2140,7 +2152,7 @@ template <typename T> T* List<T>::iterator::operator->() const
 }
 
 template <typename T>
-typename List<T>::iterator& List<T>::iterator::operator++()
+auto List<T>::iterator::operator++() -> typename List<T>::iterator&
 {
   D3D12MA_HEAVY_ASSERT(m_pItem != NULL);
   m_pItem = m_pItem->pNext;
@@ -2148,7 +2160,7 @@ typename List<T>::iterator& List<T>::iterator::operator++()
 }
 
 template <typename T>
-typename List<T>::iterator& List<T>::iterator::operator--()
+auto List<T>::iterator::operator--() -> typename List<T>::iterator&
 {
   if (m_pItem != NULL) {
     m_pItem = m_pItem->pPrev;
@@ -2160,7 +2172,7 @@ typename List<T>::iterator& List<T>::iterator::operator--()
 }
 
 template <typename T>
-typename List<T>::iterator List<T>::iterator::operator++(int)
+auto List<T>::iterator::operator++(int) -> typename List<T>::iterator
 {
   iterator result = *this;
   ++*this;
@@ -2168,7 +2180,7 @@ typename List<T>::iterator List<T>::iterator::operator++(int)
 }
 
 template <typename T>
-typename List<T>::iterator List<T>::iterator::operator--(int)
+auto List<T>::iterator::operator--(int) -> typename List<T>::iterator
 {
   iterator result = *this;
   --*this;
@@ -2176,14 +2188,14 @@ typename List<T>::iterator List<T>::iterator::operator--(int)
 }
 
 template <typename T>
-bool List<T>::iterator::operator==(const iterator& rhs) const
+auto List<T>::iterator::operator==(const iterator& rhs) const -> bool
 {
   D3D12MA_HEAVY_ASSERT(m_pList == rhs.m_pList);
   return m_pItem == rhs.m_pItem;
 }
 
 template <typename T>
-bool List<T>::iterator::operator!=(const iterator& rhs) const
+auto List<T>::iterator::operator!=(const iterator& rhs) const -> bool
 {
   D3D12MA_HEAVY_ASSERT(m_pList == rhs.m_pList);
   return m_pItem != rhs.m_pItem;
@@ -2191,20 +2203,21 @@ bool List<T>::iterator::operator!=(const iterator& rhs) const
 #  endif // _D3D12MA_LIST_ITERATOR_FUNCTIONS
 
 #  ifndef _D3D12MA_LIST_REVERSE_ITERATOR_FUNCTIONS
-template <typename T> T& List<T>::reverse_iterator::operator*() const
+template <typename T> auto List<T>::reverse_iterator::operator*() const -> T&
 {
   D3D12MA_HEAVY_ASSERT(m_pItem != NULL);
   return m_pItem->Value;
 }
 
-template <typename T> T* List<T>::reverse_iterator::operator->() const
+template <typename T> auto List<T>::reverse_iterator::operator->() const -> T*
 {
   D3D12MA_HEAVY_ASSERT(m_pItem != NULL);
   return &m_pItem->Value;
 }
 
 template <typename T>
-typename List<T>::reverse_iterator& List<T>::reverse_iterator::operator++()
+auto List<T>::reverse_iterator::operator++() ->
+  typename List<T>::reverse_iterator&
 {
   D3D12MA_HEAVY_ASSERT(m_pItem != NULL);
   m_pItem = m_pItem->pPrev;
@@ -2212,7 +2225,8 @@ typename List<T>::reverse_iterator& List<T>::reverse_iterator::operator++()
 }
 
 template <typename T>
-typename List<T>::reverse_iterator& List<T>::reverse_iterator::operator--()
+auto List<T>::reverse_iterator::operator--() ->
+  typename List<T>::reverse_iterator&
 {
   if (m_pItem != NULL) {
     m_pItem = m_pItem->pNext;
@@ -2224,7 +2238,8 @@ typename List<T>::reverse_iterator& List<T>::reverse_iterator::operator--()
 }
 
 template <typename T>
-typename List<T>::reverse_iterator List<T>::reverse_iterator::operator++(int)
+auto List<T>::reverse_iterator::operator++(int) ->
+  typename List<T>::reverse_iterator
 {
   reverse_iterator result = *this;
   ++*this;
@@ -2232,7 +2247,8 @@ typename List<T>::reverse_iterator List<T>::reverse_iterator::operator++(int)
 }
 
 template <typename T>
-typename List<T>::reverse_iterator List<T>::reverse_iterator::operator--(int)
+auto List<T>::reverse_iterator::operator--(int) ->
+  typename List<T>::reverse_iterator
 {
   reverse_iterator result = *this;
   --*this;
@@ -2240,14 +2256,16 @@ typename List<T>::reverse_iterator List<T>::reverse_iterator::operator--(int)
 }
 
 template <typename T>
-bool List<T>::reverse_iterator::operator==(const reverse_iterator& rhs) const
+auto List<T>::reverse_iterator::operator==(const reverse_iterator& rhs) const
+  -> bool
 {
   D3D12MA_HEAVY_ASSERT(m_pList == rhs.m_pList);
   return m_pItem == rhs.m_pItem;
 }
 
 template <typename T>
-bool List<T>::reverse_iterator::operator!=(const reverse_iterator& rhs) const
+auto List<T>::reverse_iterator::operator!=(const reverse_iterator& rhs) const
+  -> bool
 {
   D3D12MA_HEAVY_ASSERT(m_pList == rhs.m_pList);
   return m_pItem != rhs.m_pItem;
@@ -2256,25 +2274,27 @@ bool List<T>::reverse_iterator::operator!=(const reverse_iterator& rhs) const
 
 #  ifndef _D3D12MA_LIST_CONST_ITERATOR_FUNCTIONS
 template <typename T>
-typename List<T>::iterator List<T>::const_iterator::dropConst() const
+auto List<T>::const_iterator::dropConst() const -> typename List<T>::iterator
 {
   return iterator(const_cast<List<T>*>(m_pList), const_cast<Item*>(m_pItem));
 }
 
-template <typename T> const T& List<T>::const_iterator::operator*() const
+template <typename T>
+auto List<T>::const_iterator::operator*() const -> const T&
 {
   D3D12MA_HEAVY_ASSERT(m_pItem != NULL);
   return m_pItem->Value;
 }
 
-template <typename T> const T* List<T>::const_iterator::operator->() const
+template <typename T>
+auto List<T>::const_iterator::operator->() const -> const T*
 {
   D3D12MA_HEAVY_ASSERT(m_pItem != NULL);
   return &m_pItem->Value;
 }
 
 template <typename T>
-typename List<T>::const_iterator& List<T>::const_iterator::operator++()
+auto List<T>::const_iterator::operator++() -> typename List<T>::const_iterator&
 {
   D3D12MA_HEAVY_ASSERT(m_pItem != NULL);
   m_pItem = m_pItem->pNext;
@@ -2282,7 +2302,7 @@ typename List<T>::const_iterator& List<T>::const_iterator::operator++()
 }
 
 template <typename T>
-typename List<T>::const_iterator& List<T>::const_iterator::operator--()
+auto List<T>::const_iterator::operator--() -> typename List<T>::const_iterator&
 {
   if (m_pItem != NULL) {
     m_pItem = m_pItem->pPrev;
@@ -2294,7 +2314,8 @@ typename List<T>::const_iterator& List<T>::const_iterator::operator--()
 }
 
 template <typename T>
-typename List<T>::const_iterator List<T>::const_iterator::operator++(int)
+auto List<T>::const_iterator::operator++(int) ->
+  typename List<T>::const_iterator
 {
   const_iterator result = *this;
   ++*this;
@@ -2302,7 +2323,8 @@ typename List<T>::const_iterator List<T>::const_iterator::operator++(int)
 }
 
 template <typename T>
-typename List<T>::const_iterator List<T>::const_iterator::operator--(int)
+auto List<T>::const_iterator::operator--(int) ->
+  typename List<T>::const_iterator
 {
   const_iterator result = *this;
   --*this;
@@ -2310,14 +2332,16 @@ typename List<T>::const_iterator List<T>::const_iterator::operator--(int)
 }
 
 template <typename T>
-bool List<T>::const_iterator::operator==(const const_iterator& rhs) const
+auto List<T>::const_iterator::operator==(const const_iterator& rhs) const
+  -> bool
 {
   D3D12MA_HEAVY_ASSERT(m_pList == rhs.m_pList);
   return m_pItem == rhs.m_pItem;
 }
 
 template <typename T>
-bool List<T>::const_iterator::operator!=(const const_iterator& rhs) const
+auto List<T>::const_iterator::operator!=(const const_iterator& rhs) const
+  -> bool
 {
   D3D12MA_HEAVY_ASSERT(m_pList == rhs.m_pList);
   return m_pItem != rhs.m_pItem;
@@ -2326,30 +2350,30 @@ bool List<T>::const_iterator::operator!=(const const_iterator& rhs) const
 
 #  ifndef _D3D12MA_LIST_CONST_REVERSE_ITERATOR_FUNCTIONS
 template <typename T>
-typename List<T>::reverse_iterator
-List<T>::const_reverse_iterator::dropConst() const
+auto List<T>::const_reverse_iterator::dropConst() const ->
+  typename List<T>::reverse_iterator
 {
   return reverse_iterator(
     const_cast<List<T>*>(m_pList), const_cast<Item*>(m_pItem));
 }
 
 template <typename T>
-const T& List<T>::const_reverse_iterator::operator*() const
+auto List<T>::const_reverse_iterator::operator*() const -> const T&
 {
   D3D12MA_HEAVY_ASSERT(m_pItem != NULL);
   return m_pItem->Value;
 }
 
 template <typename T>
-const T* List<T>::const_reverse_iterator::operator->() const
+auto List<T>::const_reverse_iterator::operator->() const -> const T*
 {
   D3D12MA_HEAVY_ASSERT(m_pItem != NULL);
   return &m_pItem->Value;
 }
 
 template <typename T>
-typename List<T>::const_reverse_iterator&
-List<T>::const_reverse_iterator::operator++()
+auto List<T>::const_reverse_iterator::operator++() ->
+  typename List<T>::const_reverse_iterator&
 {
   D3D12MA_HEAVY_ASSERT(m_pItem != NULL);
   m_pItem = m_pItem->pPrev;
@@ -2357,8 +2381,8 @@ List<T>::const_reverse_iterator::operator++()
 }
 
 template <typename T>
-typename List<T>::const_reverse_iterator&
-List<T>::const_reverse_iterator::operator--()
+auto List<T>::const_reverse_iterator::operator--() ->
+  typename List<T>::const_reverse_iterator&
 {
   if (m_pItem != NULL) {
     m_pItem = m_pItem->pNext;
@@ -2370,8 +2394,8 @@ List<T>::const_reverse_iterator::operator--()
 }
 
 template <typename T>
-typename List<T>::const_reverse_iterator
-List<T>::const_reverse_iterator::operator++(int)
+auto List<T>::const_reverse_iterator::operator++(int) ->
+  typename List<T>::const_reverse_iterator
 {
   const_reverse_iterator result = *this;
   ++*this;
@@ -2379,8 +2403,8 @@ List<T>::const_reverse_iterator::operator++(int)
 }
 
 template <typename T>
-typename List<T>::const_reverse_iterator
-List<T>::const_reverse_iterator::operator--(int)
+auto List<T>::const_reverse_iterator::operator--(int) ->
+  typename List<T>::const_reverse_iterator
 {
   const_reverse_iterator result = *this;
   --*this;
@@ -2388,16 +2412,16 @@ List<T>::const_reverse_iterator::operator--(int)
 }
 
 template <typename T>
-bool List<T>::const_reverse_iterator::operator==(
-  const const_reverse_iterator& rhs) const
+auto List<T>::const_reverse_iterator::operator==(
+  const const_reverse_iterator& rhs) const -> bool
 {
   D3D12MA_HEAVY_ASSERT(m_pList == rhs.m_pList);
   return m_pItem == rhs.m_pItem;
 }
 
 template <typename T>
-bool List<T>::const_reverse_iterator::operator!=(
-  const const_reverse_iterator& rhs) const
+auto List<T>::const_reverse_iterator::operator!=(
+  const const_reverse_iterator& rhs) const -> bool
 {
   D3D12MA_HEAVY_ASSERT(m_pList == rhs.m_pList);
   return m_pItem != rhs.m_pItem;
@@ -2430,7 +2454,7 @@ template <typename T> void List<T>::Clear()
   }
 }
 
-template <typename T> typename List<T>::Item* List<T>::PushBack()
+template <typename T> auto List<T>::PushBack() -> typename List<T>::Item*
 {
   Item* const pNewItem = m_ItemAllocator.Alloc();
   pNewItem->pNext = NULL;
@@ -2448,7 +2472,7 @@ template <typename T> typename List<T>::Item* List<T>::PushBack()
   return pNewItem;
 }
 
-template <typename T> typename List<T>::Item* List<T>::PushFront()
+template <typename T> auto List<T>::PushFront() -> typename List<T>::Item*
 {
   Item* const pNewItem = m_ItemAllocator.Alloc();
   pNewItem->pPrev = NULL;
@@ -2466,14 +2490,16 @@ template <typename T> typename List<T>::Item* List<T>::PushFront()
   return pNewItem;
 }
 
-template <typename T> typename List<T>::Item* List<T>::PushBack(const T& value)
+template <typename T>
+auto List<T>::PushBack(const T& value) -> typename List<T>::Item*
 {
   Item* const pNewItem = PushBack();
   pNewItem->Value = value;
   return pNewItem;
 }
 
-template <typename T> typename List<T>::Item* List<T>::PushFront(const T& value)
+template <typename T>
+auto List<T>::PushFront(const T& value) -> typename List<T>::Item*
 {
   Item* const pNewItem = PushFront();
   pNewItem->Value = value;
@@ -2529,7 +2555,8 @@ template <typename T> void List<T>::Remove(Item* pItem)
   --m_Count;
 }
 
-template <typename T> typename List<T>::Item* List<T>::InsertBefore(Item* pItem)
+template <typename T>
+auto List<T>::InsertBefore(Item* pItem) -> typename List<T>::Item*
 {
   if (pItem != NULL) {
     Item* const prevItem = pItem->pPrev;
@@ -2550,7 +2577,8 @@ template <typename T> typename List<T>::Item* List<T>::InsertBefore(Item* pItem)
   }
 }
 
-template <typename T> typename List<T>::Item* List<T>::InsertAfter(Item* pItem)
+template <typename T>
+auto List<T>::InsertAfter(Item* pItem) -> typename List<T>::Item*
 {
   if (pItem != NULL) {
     Item* const nextItem = pItem->pNext;
@@ -2571,7 +2599,8 @@ template <typename T> typename List<T>::Item* List<T>::InsertAfter(Item* pItem)
 }
 
 template <typename T>
-typename List<T>::Item* List<T>::InsertBefore(Item* pItem, const T& value)
+auto List<T>::InsertBefore(Item* pItem, const T& value) ->
+  typename List<T>::Item*
 {
   Item* const newItem = InsertBefore(pItem);
   newItem->Value = value;
@@ -2579,7 +2608,8 @@ typename List<T>::Item* List<T>::InsertBefore(Item* pItem, const T& value)
 }
 
 template <typename T>
-typename List<T>::Item* List<T>::InsertAfter(Item* pItem, const T& value)
+auto List<T>::InsertAfter(Item* pItem, const T& value) ->
+  typename List<T>::Item*
 {
   Item* const newItem = InsertAfter(pItem);
   newItem->Value = value;
@@ -2603,11 +2633,11 @@ struct MyItemTypeTraits
 template <typename ItemTypeTraits> class IntrusiveLinkedList {
 public:
   using ItemType = typename ItemTypeTraits::ItemType;
-  static ItemType* GetPrev(const ItemType* item)
+  static auto GetPrev(const ItemType* item) -> ItemType*
   {
     return ItemTypeTraits::GetPrev(item);
   }
-  static ItemType* GetNext(const ItemType* item)
+  static auto GetNext(const ItemType* item) -> ItemType*
   {
     return ItemTypeTraits::GetNext(item);
   }
@@ -2616,22 +2646,22 @@ public:
   IntrusiveLinkedList() = default;
   IntrusiveLinkedList(const IntrusiveLinkedList&) = delete;
   IntrusiveLinkedList(IntrusiveLinkedList&& src);
-  IntrusiveLinkedList& operator=(const IntrusiveLinkedList&) = delete;
-  IntrusiveLinkedList& operator=(IntrusiveLinkedList&& src);
+  auto operator=(const IntrusiveLinkedList&) -> IntrusiveLinkedList& = delete;
+  auto operator=(IntrusiveLinkedList&& src) -> IntrusiveLinkedList&;
   ~IntrusiveLinkedList() { D3D12MA_HEAVY_ASSERT(IsEmpty()); }
 
-  size_t GetCount() const { return m_Count; }
-  bool IsEmpty() const { return m_Count == 0; }
+  auto GetCount() const -> size_t { return m_Count; }
+  auto IsEmpty() const -> bool { return m_Count == 0; }
 
-  ItemType* Front() { return m_Front; }
-  ItemType* Back() { return m_Back; }
-  const ItemType* Front() const { return m_Front; }
-  const ItemType* Back() const { return m_Back; }
+  auto Front() -> ItemType* { return m_Front; }
+  auto Back() -> ItemType* { return m_Back; }
+  auto Front() const -> const ItemType* { return m_Front; }
+  auto Back() const -> const ItemType* { return m_Back; }
 
   void PushBack(ItemType* item);
   void PushFront(ItemType* item);
-  ItemType* PopBack();
-  ItemType* PopFront();
+  auto PopBack() -> ItemType*;
+  auto PopFront() -> ItemType*;
 
   // MyItem can be null - it means PushBack.
   void InsertBefore(ItemType* existingItem, ItemType* newItem);
@@ -2660,8 +2690,8 @@ IntrusiveLinkedList<ItemTypeTraits>::IntrusiveLinkedList(
 }
 
 template <typename ItemTypeTraits>
-IntrusiveLinkedList<ItemTypeTraits>&
-IntrusiveLinkedList<ItemTypeTraits>::operator=(IntrusiveLinkedList&& src)
+auto IntrusiveLinkedList<ItemTypeTraits>::operator=(IntrusiveLinkedList&& src)
+  -> IntrusiveLinkedList<ItemTypeTraits>&
 {
   if (&src != this) {
     D3D12MA_HEAVY_ASSERT(IsEmpty());
@@ -2709,8 +2739,8 @@ void IntrusiveLinkedList<ItemTypeTraits>::PushFront(ItemType* item)
 }
 
 template <typename ItemTypeTraits>
-typename IntrusiveLinkedList<ItemTypeTraits>::ItemType*
-IntrusiveLinkedList<ItemTypeTraits>::PopBack()
+auto IntrusiveLinkedList<ItemTypeTraits>::PopBack() ->
+  typename IntrusiveLinkedList<ItemTypeTraits>::ItemType*
 {
   D3D12MA_HEAVY_ASSERT(m_Count > 0);
   ItemType* const backItem = m_Back;
@@ -2726,8 +2756,8 @@ IntrusiveLinkedList<ItemTypeTraits>::PopBack()
 }
 
 template <typename ItemTypeTraits>
-typename IntrusiveLinkedList<ItemTypeTraits>::ItemType*
-IntrusiveLinkedList<ItemTypeTraits>::PopFront()
+auto IntrusiveLinkedList<ItemTypeTraits>::PopFront() ->
+  typename IntrusiveLinkedList<ItemTypeTraits>::ItemType*
 {
   D3D12MA_HEAVY_ASSERT(m_Count > 0);
   ItemType* const frontItem = m_Front;
@@ -2847,7 +2877,7 @@ public:
   {
   }
 
-  template <typename... Types> Allocation* Allocate(Types... args);
+  template <typename... Types> auto Allocate(Types... args) -> Allocation*;
   void Free(Allocation* alloc);
 
 private:
@@ -2858,7 +2888,7 @@ private:
 
 #  ifndef _D3D12MA_ALLOCATION_OBJECT_ALLOCATOR_FUNCTIONS
 template <typename... Types>
-Allocation* AllocationObjectAllocator::Allocate(Types... args)
+auto AllocationObjectAllocator::Allocate(Types... args) -> Allocation*
 {
   MutexLock mutexLock(m_Mutex, m_UseMutex);
   return m_Allocator.Alloc(std::forward<Types>(args)...);
@@ -2887,26 +2917,29 @@ using SuballocationList = List<Suballocation>;
 
 // Comparator for offsets.
 struct SuballocationOffsetLess {
-  bool operator()(const Suballocation& lhs, const Suballocation& rhs) const
+  auto operator()(const Suballocation& lhs, const Suballocation& rhs) const
+    -> bool
   {
     return lhs.offset < rhs.offset;
   }
 };
 
 struct SuballocationOffsetGreater {
-  bool operator()(const Suballocation& lhs, const Suballocation& rhs) const
+  auto operator()(const Suballocation& lhs, const Suballocation& rhs) const
+    -> bool
   {
     return lhs.offset > rhs.offset;
   }
 };
 
 struct SuballocationItemSizeLess {
-  bool operator()(const SuballocationList::iterator lhs,
-    const SuballocationList::iterator rhs) const
+  auto operator()(const SuballocationList::iterator lhs,
+    const SuballocationList::iterator rhs) const -> bool
   {
     return lhs->size < rhs->size;
   }
-  bool operator()(const SuballocationList::iterator lhs, UINT64 rhsSize) const
+  auto operator()(const SuballocationList::iterator lhs, UINT64 rhsSize) const
+    -> bool
   {
     return lhs->size < rhsSize;
   }
@@ -2943,16 +2976,16 @@ public:
   virtual void Init(UINT64 size) { m_Size = size; }
   // Validates all data structures inside this object. If not valid, returns
   // false.
-  virtual bool Validate() const = 0;
-  UINT64 GetSize() const { return m_Size; }
-  bool IsVirtual() const { return m_IsVirtual; }
-  virtual size_t GetAllocationCount() const = 0;
-  virtual size_t GetFreeRegionsCount() const = 0;
-  virtual UINT64 GetSumFreeSize() const = 0;
-  virtual UINT64 GetAllocationOffset(AllocHandle allocHandle) const = 0;
+  virtual auto Validate() const -> bool = 0;
+  auto GetSize() const -> UINT64 { return m_Size; }
+  auto IsVirtual() const -> bool { return m_IsVirtual; }
+  virtual auto GetAllocationCount() const -> size_t = 0;
+  virtual auto GetFreeRegionsCount() const -> size_t = 0;
+  virtual auto GetSumFreeSize() const -> UINT64 = 0;
+  virtual auto GetAllocationOffset(AllocHandle allocHandle) const -> UINT64 = 0;
   // Returns true if this block is empty - contains only single free
   // suballocation.
-  virtual bool IsEmpty() const = 0;
+  virtual auto IsEmpty() const -> bool = 0;
 
   virtual void GetAllocationInfo(
     AllocHandle allocHandle, VIRTUAL_ALLOCATION_INFO& outInfo) const = 0;
@@ -2960,9 +2993,9 @@ public:
   // Tries to find a place for suballocation with given parameters inside this
   // block. If succeeded, fills pAllocationRequest and returns true. If failed,
   // returns false.
-  virtual bool CreateAllocationRequest(UINT64 allocSize, UINT64 allocAlignment,
+  virtual auto CreateAllocationRequest(UINT64 allocSize, UINT64 allocAlignment,
     bool upperAddress, UINT32 strategy, AllocationRequest* pAllocationRequest)
-    = 0;
+    -> bool = 0;
 
   // Makes actual allocation based on request. Request must already be checked
   // and valid.
@@ -2975,10 +3008,12 @@ public:
   // pPrivateData of of cleared allocations!
   virtual void Clear() = 0;
 
-  virtual AllocHandle GetAllocationListBegin() const = 0;
-  virtual AllocHandle GetNextAllocation(AllocHandle prevAlloc) const = 0;
-  virtual UINT64 GetNextFreeRegionSize(AllocHandle alloc) const = 0;
-  virtual void* GetAllocationPrivateData(AllocHandle allocHandle) const = 0;
+  virtual auto GetAllocationListBegin() const -> AllocHandle = 0;
+  virtual auto GetNextAllocation(AllocHandle prevAlloc) const -> AllocHandle
+    = 0;
+  virtual auto GetNextFreeRegionSize(AllocHandle alloc) const -> UINT64 = 0;
+  virtual auto GetAllocationPrivateData(AllocHandle allocHandle) const
+    -> void* = 0;
   virtual void SetAllocationPrivateData(
     AllocHandle allocHandle, void* privateData) = 0;
 
@@ -2988,11 +3023,11 @@ public:
   virtual void DebugLogAllAllocations() const = 0;
 
 protected:
-  const ALLOCATION_CALLBACKS* GetAllocs() const
+  auto GetAllocs() const -> const ALLOCATION_CALLBACKS*
   {
     return m_pAllocationCallbacks;
   }
-  UINT64 GetDebugMargin() const
+  auto GetDebugMargin() const -> UINT64
   {
     return IsVirtual() ? 0 : D3D12MA_DEBUG_MARGIN;
   }
@@ -3117,23 +3152,23 @@ public:
     const ALLOCATION_CALLBACKS* allocationCallbacks, bool isVirtual);
   virtual ~BlockMetadata_Linear() = default;
 
-  UINT64 GetSumFreeSize() const override { return m_SumFreeSize; }
-  bool IsEmpty() const override { return GetAllocationCount() == 0; }
-  UINT64 GetAllocationOffset(AllocHandle allocHandle) const override
+  auto GetSumFreeSize() const -> UINT64 override { return m_SumFreeSize; }
+  auto IsEmpty() const -> bool override { return GetAllocationCount() == 0; }
+  auto GetAllocationOffset(AllocHandle allocHandle) const -> UINT64 override
   {
     return (UINT64)allocHandle - 1;
   };
 
   void Init(UINT64 size) override;
-  bool Validate() const override;
-  size_t GetAllocationCount() const override;
-  size_t GetFreeRegionsCount() const override;
+  auto Validate() const -> bool override;
+  auto GetAllocationCount() const -> size_t override;
+  auto GetFreeRegionsCount() const -> size_t override;
   void GetAllocationInfo(
     AllocHandle allocHandle, VIRTUAL_ALLOCATION_INFO& outInfo) const override;
 
-  bool CreateAllocationRequest(UINT64 allocSize, UINT64 allocAlignment,
-    bool upperAddress, UINT32 strategy,
-    AllocationRequest* pAllocationRequest) override;
+  auto CreateAllocationRequest(UINT64 allocSize, UINT64 allocAlignment,
+    bool upperAddress, UINT32 strategy, AllocationRequest* pAllocationRequest)
+    -> bool override;
 
   void Alloc(const AllocationRequest& request, UINT64 allocSize,
     void* privateData) override;
@@ -3141,10 +3176,11 @@ public:
   void Free(AllocHandle allocHandle) override;
   void Clear() override;
 
-  AllocHandle GetAllocationListBegin() const override;
-  AllocHandle GetNextAllocation(AllocHandle prevAlloc) const override;
-  UINT64 GetNextFreeRegionSize(AllocHandle alloc) const override;
-  void* GetAllocationPrivateData(AllocHandle allocHandle) const override;
+  auto GetAllocationListBegin() const -> AllocHandle override;
+  auto GetNextAllocation(AllocHandle prevAlloc) const -> AllocHandle override;
+  auto GetNextFreeRegionSize(AllocHandle alloc) const -> UINT64 override;
+  auto GetAllocationPrivateData(AllocHandle allocHandle) const
+    -> void* override;
   void SetAllocationPrivateData(
     AllocHandle allocHandle, void* privateData) override;
 
@@ -3196,31 +3232,31 @@ private:
   // Number of items in 2nd vector with hAllocation = null.
   size_t m_2ndNullItemsCount;
 
-  SuballocationVectorType& AccessSuballocations1st()
+  auto AccessSuballocations1st() -> SuballocationVectorType&
   {
     return m_1stVectorIndex ? m_Suballocations1 : m_Suballocations0;
   }
-  SuballocationVectorType& AccessSuballocations2nd()
+  auto AccessSuballocations2nd() -> SuballocationVectorType&
   {
     return m_1stVectorIndex ? m_Suballocations0 : m_Suballocations1;
   }
-  const SuballocationVectorType& AccessSuballocations1st() const
+  auto AccessSuballocations1st() const -> const SuballocationVectorType&
   {
     return m_1stVectorIndex ? m_Suballocations1 : m_Suballocations0;
   }
-  const SuballocationVectorType& AccessSuballocations2nd() const
+  auto AccessSuballocations2nd() const -> const SuballocationVectorType&
   {
     return m_1stVectorIndex ? m_Suballocations0 : m_Suballocations1;
   }
 
-  Suballocation& FindSuballocation(UINT64 offset) const;
-  bool ShouldCompact1st() const;
+  auto FindSuballocation(UINT64 offset) const -> Suballocation&;
+  auto ShouldCompact1st() const -> bool;
   void CleanupAfterFree();
 
-  bool CreateAllocationRequest_LowerAddress(UINT64 allocSize,
-    UINT64 allocAlignment, AllocationRequest* pAllocationRequest);
-  bool CreateAllocationRequest_UpperAddress(UINT64 allocSize,
-    UINT64 allocAlignment, AllocationRequest* pAllocationRequest);
+  auto CreateAllocationRequest_LowerAddress(UINT64 allocSize,
+    UINT64 allocAlignment, AllocationRequest* pAllocationRequest) -> bool;
+  auto CreateAllocationRequest_UpperAddress(UINT64 allocSize,
+    UINT64 allocAlignment, AllocationRequest* pAllocationRequest) -> bool;
 
   D3D12MA_CLASS_NO_COPY(BlockMetadata_Linear)
 };
@@ -3247,7 +3283,7 @@ void BlockMetadata_Linear::Init(UINT64 size)
   m_SumFreeSize = size;
 }
 
-bool BlockMetadata_Linear::Validate() const
+auto BlockMetadata_Linear::Validate() const -> bool
 {
   D3D12MA_VALIDATE(GetSumFreeSize() <= GetSize());
   const SuballocationVectorType& suballocations1st = AccessSuballocations1st();
@@ -3380,14 +3416,14 @@ bool BlockMetadata_Linear::Validate() const
   return true;
 }
 
-size_t BlockMetadata_Linear::GetAllocationCount() const
+auto BlockMetadata_Linear::GetAllocationCount() const -> size_t
 {
   return AccessSuballocations1st().size() - m_1stNullItemsBeginCount
     - m_1stNullItemsMiddleCount + AccessSuballocations2nd().size()
     - m_2ndNullItemsCount;
 }
 
-size_t BlockMetadata_Linear::GetFreeRegionsCount() const
+auto BlockMetadata_Linear::GetFreeRegionsCount() const -> size_t
 {
   // Function only used for defragmentation, which is disabled for this
   // algorithm
@@ -3404,9 +3440,9 @@ void BlockMetadata_Linear::GetAllocationInfo(
   outInfo.pPrivateData = suballoc.privateData;
 }
 
-bool BlockMetadata_Linear::CreateAllocationRequest(UINT64 allocSize,
+auto BlockMetadata_Linear::CreateAllocationRequest(UINT64 allocSize,
   UINT64 allocAlignment, bool upperAddress, UINT32 strategy,
-  AllocationRequest* pAllocationRequest)
+  AllocationRequest* pAllocationRequest) -> bool
 {
   D3D12MA_ASSERT(allocSize > 0 && "Cannot allocate empty block!");
   D3D12MA_ASSERT(pAllocationRequest != NULL);
@@ -3581,7 +3617,7 @@ void BlockMetadata_Linear::Clear()
   m_2ndNullItemsCount = 0;
 }
 
-AllocHandle BlockMetadata_Linear::GetAllocationListBegin() const
+auto BlockMetadata_Linear::GetAllocationListBegin() const -> AllocHandle
 {
   // Function only used for defragmentation, which is disabled for this
   // algorithm
@@ -3589,7 +3625,8 @@ AllocHandle BlockMetadata_Linear::GetAllocationListBegin() const
   return (AllocHandle)0;
 }
 
-AllocHandle BlockMetadata_Linear::GetNextAllocation(AllocHandle prevAlloc) const
+auto BlockMetadata_Linear::GetNextAllocation(AllocHandle prevAlloc) const
+  -> AllocHandle
 {
   // Function only used for defragmentation, which is disabled for this
   // algorithm
@@ -3597,7 +3634,8 @@ AllocHandle BlockMetadata_Linear::GetNextAllocation(AllocHandle prevAlloc) const
   return (AllocHandle)0;
 }
 
-UINT64 BlockMetadata_Linear::GetNextFreeRegionSize(AllocHandle alloc) const
+auto BlockMetadata_Linear::GetNextFreeRegionSize(AllocHandle alloc) const
+  -> UINT64
 {
   // Function only used for defragmentation, which is disabled for this
   // algorithm
@@ -3605,8 +3643,8 @@ UINT64 BlockMetadata_Linear::GetNextFreeRegionSize(AllocHandle alloc) const
   return 0;
 }
 
-void* BlockMetadata_Linear::GetAllocationPrivateData(
-  AllocHandle allocHandle) const
+auto BlockMetadata_Linear::GetAllocationPrivateData(
+  AllocHandle allocHandle) const -> void*
 {
   return FindSuballocation((UINT64)allocHandle - 1).privateData;
 }
@@ -4066,7 +4104,8 @@ void BlockMetadata_Linear::DebugLogAllAllocations() const
       DebugLogAllocation(it->offset, it->size, it->privateData);
 }
 
-Suballocation& BlockMetadata_Linear::FindSuballocation(UINT64 offset) const
+auto BlockMetadata_Linear::FindSuballocation(UINT64 offset) const
+  -> Suballocation&
 {
   const SuballocationVectorType& suballocations1st = AccessSuballocations1st();
   const SuballocationVectorType& suballocations2nd = AccessSuballocations2nd();
@@ -4103,7 +4142,7 @@ Suballocation& BlockMetadata_Linear::FindSuballocation(UINT64 offset) const
     suballocations1st.back()); // Should never occur.
 }
 
-bool BlockMetadata_Linear::ShouldCompact1st() const
+auto BlockMetadata_Linear::ShouldCompact1st() const -> bool
 {
   const size_t nullItemCount
     = m_1stNullItemsBeginCount + m_1stNullItemsMiddleCount;
@@ -4206,9 +4245,9 @@ void BlockMetadata_Linear::CleanupAfterFree()
   D3D12MA_HEAVY_ASSERT(Validate());
 }
 
-bool BlockMetadata_Linear::CreateAllocationRequest_LowerAddress(
+auto BlockMetadata_Linear::CreateAllocationRequest_LowerAddress(
   UINT64 allocSize, UINT64 allocAlignment,
-  AllocationRequest* pAllocationRequest)
+  AllocationRequest* pAllocationRequest) -> bool
 {
   const UINT64 blockSize = GetSize();
   SuballocationVectorType& suballocations1st = AccessSuballocations1st();
@@ -4280,9 +4319,9 @@ bool BlockMetadata_Linear::CreateAllocationRequest_LowerAddress(
   return false;
 }
 
-bool BlockMetadata_Linear::CreateAllocationRequest_UpperAddress(
+auto BlockMetadata_Linear::CreateAllocationRequest_UpperAddress(
   UINT64 allocSize, UINT64 allocAlignment,
-  AllocationRequest* pAllocationRequest)
+  AllocationRequest* pAllocationRequest) -> bool
 {
   const UINT64 blockSize = GetSize();
   SuballocationVectorType& suballocations1st = AccessSuballocations1st();
@@ -4344,26 +4383,29 @@ public:
     const ALLOCATION_CALLBACKS* allocationCallbacks, bool isVirtual);
   virtual ~BlockMetadata_TLSF();
 
-  size_t GetAllocationCount() const override { return m_AllocCount; }
-  size_t GetFreeRegionsCount() const override { return m_BlocksFreeCount + 1; }
-  UINT64 GetSumFreeSize() const override
+  auto GetAllocationCount() const -> size_t override { return m_AllocCount; }
+  auto GetFreeRegionsCount() const -> size_t override
+  {
+    return m_BlocksFreeCount + 1;
+  }
+  auto GetSumFreeSize() const -> UINT64 override
   {
     return m_BlocksFreeSize + m_NullBlock->size;
   }
-  bool IsEmpty() const override { return m_NullBlock->offset == 0; }
-  UINT64 GetAllocationOffset(AllocHandle allocHandle) const override
+  auto IsEmpty() const -> bool override { return m_NullBlock->offset == 0; }
+  auto GetAllocationOffset(AllocHandle allocHandle) const -> UINT64 override
   {
     return ((Block*)allocHandle)->offset;
   };
 
   void Init(UINT64 size) override;
-  bool Validate() const override;
+  auto Validate() const -> bool override;
   void GetAllocationInfo(
     AllocHandle allocHandle, VIRTUAL_ALLOCATION_INFO& outInfo) const override;
 
-  bool CreateAllocationRequest(UINT64 allocSize, UINT64 allocAlignment,
-    bool upperAddress, UINT32 strategy,
-    AllocationRequest* pAllocationRequest) override;
+  auto CreateAllocationRequest(UINT64 allocSize, UINT64 allocAlignment,
+    bool upperAddress, UINT32 strategy, AllocationRequest* pAllocationRequest)
+    -> bool override;
 
   void Alloc(const AllocationRequest& request, UINT64 allocSize,
     void* privateData) override;
@@ -4371,10 +4413,11 @@ public:
   void Free(AllocHandle allocHandle) override;
   void Clear() override;
 
-  AllocHandle GetAllocationListBegin() const override;
-  AllocHandle GetNextAllocation(AllocHandle prevAlloc) const override;
-  UINT64 GetNextFreeRegionSize(AllocHandle alloc) const override;
-  void* GetAllocationPrivateData(AllocHandle allocHandle) const override;
+  auto GetAllocationListBegin() const -> AllocHandle override;
+  auto GetNextAllocation(AllocHandle prevAlloc) const -> AllocHandle override;
+  auto GetNextFreeRegionSize(AllocHandle alloc) const -> UINT64 override;
+  auto GetAllocationPrivateData(AllocHandle allocHandle) const
+    -> void* override;
   void SetAllocationPrivateData(
     AllocHandle allocHandle, void* privateData) override;
 
@@ -4403,14 +4446,14 @@ private:
 
     void MarkFree() { prevFree = NULL; }
     void MarkTaken() { prevFree = this; }
-    bool IsFree() const { return prevFree != this; }
-    void*& PrivateData()
+    auto IsFree() const -> bool { return prevFree != this; }
+    auto PrivateData() -> void*&
     {
       D3D12MA_HEAVY_ASSERT(!IsFree());
       return privateData;
     }
-    Block*& PrevFree() { return prevFree; }
-    Block*& NextFree()
+    auto PrevFree() -> Block*& { return prevFree; }
+    auto NextFree() -> Block*&
     {
       D3D12MA_HEAVY_ASSERT(IsFree());
       return nextFree;
@@ -4442,18 +4485,18 @@ private:
   PoolAllocator<Block> m_BlockAllocator;
   Block* m_NullBlock = NULL;
 
-  UINT8 SizeToMemoryClass(UINT64 size) const;
-  UINT16 SizeToSecondIndex(UINT64 size, UINT8 memoryClass) const;
-  UINT32 GetListIndex(UINT8 memoryClass, UINT16 secondIndex) const;
-  UINT32 GetListIndex(UINT64 size) const;
+  auto SizeToMemoryClass(UINT64 size) const -> UINT8;
+  auto SizeToSecondIndex(UINT64 size, UINT8 memoryClass) const -> UINT16;
+  auto GetListIndex(UINT8 memoryClass, UINT16 secondIndex) const -> UINT32;
+  auto GetListIndex(UINT64 size) const -> UINT32;
 
   void RemoveFreeBlock(Block* block);
   void InsertFreeBlock(Block* block);
   void MergeBlock(Block* block, Block* prev);
 
-  Block* FindFreeBlock(UINT64 size, UINT32& listIndex) const;
-  bool CheckBlock(Block& block, UINT32 listIndex, UINT64 allocSize,
-    UINT64 allocAlignment, AllocationRequest* pAllocationRequest);
+  auto FindFreeBlock(UINT64 size, UINT32& listIndex) const -> Block*;
+  auto CheckBlock(Block& block, UINT32 listIndex, UINT64 allocSize,
+    UINT64 allocAlignment, AllocationRequest* pAllocationRequest) -> bool;
 
   D3D12MA_CLASS_NO_COPY(BlockMetadata_TLSF)
 };
@@ -4502,7 +4545,7 @@ void BlockMetadata_TLSF::Init(UINT64 size)
   memset(m_FreeList, 0, m_ListsCount * sizeof(Block*));
 }
 
-bool BlockMetadata_TLSF::Validate() const
+auto BlockMetadata_TLSF::Validate() const -> bool
 {
   D3D12MA_VALIDATE(GetSumFreeSize() <= GetSize());
 
@@ -4590,9 +4633,9 @@ void BlockMetadata_TLSF::GetAllocationInfo(
   outInfo.pPrivateData = block->PrivateData();
 }
 
-bool BlockMetadata_TLSF::CreateAllocationRequest(UINT64 allocSize,
+auto BlockMetadata_TLSF::CreateAllocationRequest(UINT64 allocSize,
   UINT64 allocAlignment, bool upperAddress, UINT32 strategy,
-  AllocationRequest* pAllocationRequest)
+  AllocationRequest* pAllocationRequest) -> bool
 {
   D3D12MA_ASSERT(allocSize > 0 && "Cannot allocate empty block!");
   D3D12MA_ASSERT(!upperAddress
@@ -4899,7 +4942,7 @@ void BlockMetadata_TLSF::Clear()
   memset(m_InnerIsFreeBitmap, 0, m_MemoryClasses * sizeof(UINT32));
 }
 
-AllocHandle BlockMetadata_TLSF::GetAllocationListBegin() const
+auto BlockMetadata_TLSF::GetAllocationListBegin() const -> AllocHandle
 {
   if (m_AllocCount == 0)
     return (AllocHandle)0;
@@ -4914,7 +4957,8 @@ AllocHandle BlockMetadata_TLSF::GetAllocationListBegin() const
   return (AllocHandle)0;
 }
 
-AllocHandle BlockMetadata_TLSF::GetNextAllocation(AllocHandle prevAlloc) const
+auto BlockMetadata_TLSF::GetNextAllocation(AllocHandle prevAlloc) const
+  -> AllocHandle
 {
   Block* startBlock = (Block*)prevAlloc;
   D3D12MA_ASSERT(!startBlock->IsFree() && "Incorrect block!");
@@ -4927,7 +4971,8 @@ AllocHandle BlockMetadata_TLSF::GetNextAllocation(AllocHandle prevAlloc) const
   return (AllocHandle)0;
 }
 
-UINT64 BlockMetadata_TLSF::GetNextFreeRegionSize(AllocHandle alloc) const
+auto BlockMetadata_TLSF::GetNextFreeRegionSize(AllocHandle alloc) const
+  -> UINT64
 {
   Block* block = (Block*)alloc;
   D3D12MA_ASSERT(!block->IsFree() && "Incorrect block!");
@@ -4937,8 +4982,8 @@ UINT64 BlockMetadata_TLSF::GetNextFreeRegionSize(AllocHandle alloc) const
   return 0;
 }
 
-void* BlockMetadata_TLSF::GetAllocationPrivateData(
-  AllocHandle allocHandle) const
+auto BlockMetadata_TLSF::GetAllocationPrivateData(AllocHandle allocHandle) const
+  -> void*
 {
   Block* block = (Block*)allocHandle;
   D3D12MA_ASSERT(!block->IsFree() && "Cannot get user data for free block!");
@@ -5019,15 +5064,15 @@ void BlockMetadata_TLSF::DebugLogAllAllocations() const
   }
 }
 
-UINT8 BlockMetadata_TLSF::SizeToMemoryClass(UINT64 size) const
+auto BlockMetadata_TLSF::SizeToMemoryClass(UINT64 size) const -> UINT8
 {
   if (size > SMALL_BUFFER_SIZE)
     return BitScanMSB(size) - MEMORY_CLASS_SHIFT;
   return 0;
 }
 
-UINT16 BlockMetadata_TLSF::SizeToSecondIndex(
-  UINT64 size, UINT8 memoryClass) const
+auto BlockMetadata_TLSF::SizeToSecondIndex(UINT64 size, UINT8 memoryClass) const
+  -> UINT16
 {
   if (memoryClass == 0) {
     if (IsVirtual())
@@ -5040,8 +5085,8 @@ UINT16 BlockMetadata_TLSF::SizeToSecondIndex(
     ^ (1U << SECOND_LEVEL_INDEX));
 }
 
-UINT32 BlockMetadata_TLSF::GetListIndex(
-  UINT8 memoryClass, UINT16 secondIndex) const
+auto BlockMetadata_TLSF::GetListIndex(
+  UINT8 memoryClass, UINT16 secondIndex) const -> UINT32
 {
   if (memoryClass == 0)
     return secondIndex;
@@ -5055,7 +5100,7 @@ UINT32 BlockMetadata_TLSF::GetListIndex(
     return index + 4;
 }
 
-UINT32 BlockMetadata_TLSF::GetListIndex(UINT64 size) const
+auto BlockMetadata_TLSF::GetListIndex(UINT64 size) const -> UINT32
 {
   UINT8 memoryClass = SizeToMemoryClass(size);
   return GetListIndex(memoryClass, SizeToSecondIndex(size, memoryClass));
@@ -5123,8 +5168,8 @@ void BlockMetadata_TLSF::MergeBlock(Block* block, Block* prev)
   m_BlockAllocator.Free(prev);
 }
 
-BlockMetadata_TLSF::Block* BlockMetadata_TLSF::FindFreeBlock(
-  UINT64 size, UINT32& listIndex) const
+auto BlockMetadata_TLSF::FindFreeBlock(UINT64 size, UINT32& listIndex) const
+  -> BlockMetadata_TLSF::Block*
 {
   UINT8 memoryClass = SizeToMemoryClass(size);
   UINT32 innerFreeMap = m_InnerIsFreeBitmap[memoryClass]
@@ -5145,9 +5190,9 @@ BlockMetadata_TLSF::Block* BlockMetadata_TLSF::FindFreeBlock(
   return m_FreeList[listIndex];
 }
 
-bool BlockMetadata_TLSF::CheckBlock(Block& block, UINT32 listIndex,
+auto BlockMetadata_TLSF::CheckBlock(Block& block, UINT32 listIndex,
   UINT64 allocSize, UINT64 allocAlignment,
-  AllocationRequest* pAllocationRequest)
+  AllocationRequest* pAllocationRequest) -> bool
 {
   D3D12MA_ASSERT(block.IsFree() && "Block is already taken!");
 
@@ -5190,11 +5235,14 @@ public:
     D3D12_HEAP_FLAGS heapFlags, UINT64 size, UINT id);
   virtual ~MemoryBlock();
 
-  const D3D12_HEAP_PROPERTIES& GetHeapProperties() const { return m_HeapProps; }
-  D3D12_HEAP_FLAGS GetHeapFlags() const { return m_HeapFlags; }
-  UINT64 GetSize() const { return m_Size; }
-  UINT GetId() const { return m_Id; }
-  ID3D12Heap* GetHeap() const { return m_Heap; }
+  auto GetHeapProperties() const -> const D3D12_HEAP_PROPERTIES&
+  {
+    return m_HeapProps;
+  }
+  auto GetHeapFlags() const -> D3D12_HEAP_FLAGS { return m_HeapFlags; }
+  auto GetSize() const -> UINT64 { return m_Size; }
+  auto GetId() const -> UINT { return m_Id; }
+  auto GetHeap() const -> ID3D12Heap* { return m_Heap; }
 
 protected:
   AllocatorPimpl* const m_Allocator;
@@ -5203,8 +5251,8 @@ protected:
   const UINT64 m_Size;
   const UINT m_Id;
 
-  HRESULT Init(
-    ID3D12ProtectedResourceSession* pProtectedSession, bool denyMsaaTextures);
+  auto Init(ID3D12ProtectedResourceSession* pProtectedSession,
+    bool denyMsaaTextures) -> HRESULT;
 
 private:
   ID3D12Heap* m_Heap = NULL;
@@ -5228,16 +5276,16 @@ public:
     UINT64 size, UINT id);
   virtual ~NormalBlock();
 
-  BlockVector* GetBlockVector() const { return m_BlockVector; }
+  auto GetBlockVector() const -> BlockVector* { return m_BlockVector; }
 
   // 'algorithm' should be one of the *_ALGORITHM_* flags in enums POOL_FLAGS or
   // VIRTUAL_BLOCK_FLAGS
-  HRESULT Init(UINT32 algorithm,
-    ID3D12ProtectedResourceSession* pProtectedSession, bool denyMsaaTextures);
+  auto Init(UINT32 algorithm, ID3D12ProtectedResourceSession* pProtectedSession,
+    bool denyMsaaTextures) -> HRESULT;
 
   // Validates all data structures inside this object. If not valid, returns
   // false.
-  bool Validate() const;
+  auto Validate() const -> bool;
 
 private:
   BlockVector* m_BlockVector;
@@ -5250,25 +5298,25 @@ private:
 struct CommittedAllocationListItemTraits {
   using ItemType = Allocation;
 
-  static ItemType* GetPrev(const ItemType* item)
+  static auto GetPrev(const ItemType* item) -> ItemType*
   {
     D3D12MA_ASSERT(item->m_PackedData.GetType() == Allocation::TYPE_COMMITTED
       || item->m_PackedData.GetType() == Allocation::TYPE_HEAP);
     return item->m_Committed.prev;
   }
-  static ItemType* GetNext(const ItemType* item)
+  static auto GetNext(const ItemType* item) -> ItemType*
   {
     D3D12MA_ASSERT(item->m_PackedData.GetType() == Allocation::TYPE_COMMITTED
       || item->m_PackedData.GetType() == Allocation::TYPE_HEAP);
     return item->m_Committed.next;
   }
-  static ItemType*& AccessPrev(ItemType* item)
+  static auto AccessPrev(ItemType* item) -> ItemType*&
   {
     D3D12MA_ASSERT(item->m_PackedData.GetType() == Allocation::TYPE_COMMITTED
       || item->m_PackedData.GetType() == Allocation::TYPE_HEAP);
     return item->m_Committed.prev;
   }
-  static ItemType*& AccessNext(ItemType* item)
+  static auto AccessNext(ItemType* item) -> ItemType*&
   {
     D3D12MA_ASSERT(item->m_PackedData.GetType() == Allocation::TYPE_COMMITTED
       || item->m_PackedData.GetType() == Allocation::TYPE_HEAP);
@@ -5288,9 +5336,9 @@ public:
   void Init(bool useMutex, D3D12_HEAP_TYPE heapType, PoolPimpl* pool);
   ~CommittedAllocationList();
 
-  D3D12_HEAP_TYPE GetHeapType() const { return m_HeapType; }
-  PoolPimpl* GetPool() const { return m_Pool; }
-  UINT GetMemorySegmentGroup(AllocatorPimpl* allocator) const;
+  auto GetHeapType() const -> D3D12_HEAP_TYPE { return m_HeapType; }
+  auto GetPool() const -> PoolPimpl* { return m_Pool; }
+  auto GetMemorySegmentGroup(AllocatorPimpl* allocator) const -> UINT;
 
   void AddStatistics(Statistics& inoutStats);
   void AddDetailedStatistics(DetailedStatistics& inoutStats);
@@ -5322,7 +5370,7 @@ struct CommittedAllocationParameters {
   bool m_CanAlias = false;
   D3D12_RESIDENCY_PRIORITY m_ResidencyPriority = D3D12_RESIDENCY_PRIORITY_NONE;
 
-  bool IsValid() const { return m_List != NULL; }
+  auto IsValid() const -> bool { return m_List != NULL; }
 };
 #endif // _D3D12M_COMMITTED_ALLOCATION_PARAMETERS
 
@@ -5375,39 +5423,39 @@ struct CREATE_RESOURCE_PARAMS {
 
   VARIANT Variant = VARIANT_INVALID;
 
-  const D3D12_RESOURCE_DESC* GetResourceDesc() const
+  auto GetResourceDesc() const -> const D3D12_RESOURCE_DESC*
   {
     D3D12MA_ASSERT(Variant == VARIANT_WITH_STATE);
     return pResourceDesc;
   }
-  const D3D12_RESOURCE_DESC*& AccessResourceDesc()
+  auto AccessResourceDesc() -> const D3D12_RESOURCE_DESC*&
   {
     D3D12MA_ASSERT(Variant == VARIANT_WITH_STATE);
     return pResourceDesc;
   }
-  const D3D12_RESOURCE_DESC* GetBaseResourceDesc() const
+  auto GetBaseResourceDesc() const -> const D3D12_RESOURCE_DESC*
   {
     // D3D12_RESOURCE_DESC1 can be cast to D3D12_RESOURCE_DESC by discarding the
     // new members at the end.
     return pResourceDesc;
   }
-  D3D12_RESOURCE_STATES GetInitialResourceState() const
+  auto GetInitialResourceState() const -> D3D12_RESOURCE_STATES
   {
     D3D12MA_ASSERT(Variant < VARIANT_WITH_LAYOUT);
     return InitialResourceState;
   }
-  const D3D12_CLEAR_VALUE* GetOptimizedClearValue() const
+  auto GetOptimizedClearValue() const -> const D3D12_CLEAR_VALUE*
   {
     return pOptimizedClearValue;
   }
 
 #ifdef __ID3D12Device8_INTERFACE_DEFINED__
-  const D3D12_RESOURCE_DESC1* GetResourceDesc1() const
+  auto GetResourceDesc1() const -> const D3D12_RESOURCE_DESC1*
   {
     D3D12MA_ASSERT(Variant >= VARIANT_WITH_STATE_AND_DESC1);
     return pResourceDesc1;
   }
-  const D3D12_RESOURCE_DESC1*& AccessResourceDesc1()
+  auto AccessResourceDesc1() -> const D3D12_RESOURCE_DESC1*&
   {
     D3D12MA_ASSERT(Variant >= VARIANT_WITH_STATE_AND_DESC1);
     return pResourceDesc1;
@@ -5415,17 +5463,17 @@ struct CREATE_RESOURCE_PARAMS {
 #endif
 
 #ifdef __ID3D12Device10_INTERFACE_DEFINED__
-  D3D12_BARRIER_LAYOUT GetInitialLayout() const
+  auto GetInitialLayout() const -> D3D12_BARRIER_LAYOUT
   {
     D3D12MA_ASSERT(Variant >= VARIANT_WITH_LAYOUT);
     return InitialLayout;
   }
-  UINT32 GetNumCastableFormats() const
+  auto GetNumCastableFormats() const -> UINT32
   {
     D3D12MA_ASSERT(Variant >= VARIANT_WITH_LAYOUT);
     return NumCastableFormats;
   }
-  DXGI_FORMAT* GetCastableFormats() const
+  auto GetCastableFormats() const -> DXGI_FORMAT*
   {
     D3D12MA_ASSERT(Variant >= VARIANT_WITH_LAYOUT);
     return pCastableFormats;
@@ -5470,35 +5518,37 @@ public:
     bool denyMsaaTextures, ID3D12ProtectedResourceSession* pProtectedSession,
     D3D12_RESIDENCY_PRIORITY residencyPriority);
   ~BlockVector();
-  D3D12_RESIDENCY_PRIORITY GetResidencyPriority() const
+  auto GetResidencyPriority() const -> D3D12_RESIDENCY_PRIORITY
   {
     return m_ResidencyPriority;
   }
 
-  const D3D12_HEAP_PROPERTIES& GetHeapProperties() const { return m_HeapProps; }
-  D3D12_HEAP_FLAGS GetHeapFlags() const { return m_HeapFlags; }
-  UINT64 GetPreferredBlockSize() const { return m_PreferredBlockSize; }
-  UINT32 GetAlgorithm() const { return m_Algorithm; }
-  bool DeniesMsaaTextures() const { return m_DenyMsaaTextures; }
+  auto GetHeapProperties() const -> const D3D12_HEAP_PROPERTIES&
+  {
+    return m_HeapProps;
+  }
+  auto GetHeapFlags() const -> D3D12_HEAP_FLAGS { return m_HeapFlags; }
+  auto GetPreferredBlockSize() const -> UINT64 { return m_PreferredBlockSize; }
+  auto GetAlgorithm() const -> UINT32 { return m_Algorithm; }
+  auto DeniesMsaaTextures() const -> bool { return m_DenyMsaaTextures; }
   // To be used only while the m_Mutex is locked. Used during defragmentation.
-  size_t GetBlockCount() const { return m_Blocks.size(); }
+  auto GetBlockCount() const -> size_t { return m_Blocks.size(); }
   // To be used only while the m_Mutex is locked. Used during defragmentation.
-  NormalBlock* GetBlock(size_t index) const { return m_Blocks[index]; }
-  D3D12MA_RW_MUTEX& GetMutex() { return m_Mutex; }
+  auto GetBlock(size_t index) const -> NormalBlock* { return m_Blocks[index]; }
+  auto GetMutex() -> D3D12MA_RW_MUTEX& { return m_Mutex; }
 
-  HRESULT CreateMinBlocks();
-  bool IsEmpty();
+  auto CreateMinBlocks() -> HRESULT;
+  auto IsEmpty() -> bool;
 
-  HRESULT Allocate(UINT64 size, UINT64 alignment,
-    const ALLOCATION_DESC& allocDesc, size_t allocationCount,
-    Allocation** pAllocations);
+  auto Allocate(UINT64 size, UINT64 alignment, const ALLOCATION_DESC& allocDesc,
+    size_t allocationCount, Allocation** pAllocations) -> HRESULT;
 
   void Free(Allocation* hAllocation);
 
-  HRESULT CreateResource(UINT64 size, UINT64 alignment,
+  auto CreateResource(UINT64 size, UINT64 alignment,
     const ALLOCATION_DESC& allocDesc,
     const CREATE_RESOURCE_PARAMS& createParams, Allocation** ppAllocation,
-    REFIID riidResource, void** ppvResource);
+    REFIID riidResource, void** ppvResource) -> HRESULT;
 
   void AddStatistics(Statistics& inoutStats);
   void AddDetailedStatistics(DetailedStatistics& inoutStats);
@@ -5531,8 +5581,8 @@ private:
   // Disable incremental sorting when freeing allocations
   void SetIncrementalSort(bool val) { m_IncrementalSort = val; }
 
-  UINT64 CalcSumBlockSize() const;
-  UINT64 CalcMaxBlockSize() const;
+  auto CalcSumBlockSize() const -> UINT64;
+  auto CalcMaxBlockSize() const -> UINT64;
 
   // Finds and removes given block from vector.
   void Remove(NormalBlock* pBlock);
@@ -5542,32 +5592,35 @@ private:
   void IncrementallySortBlocks();
   void SortByFreeSize();
 
-  HRESULT AllocatePage(UINT64 size, UINT64 alignment,
-    const ALLOCATION_DESC& allocDesc, Allocation** pAllocation);
+  auto AllocatePage(UINT64 size, UINT64 alignment,
+    const ALLOCATION_DESC& allocDesc, Allocation** pAllocation) -> HRESULT;
 
-  HRESULT AllocateFromBlock(NormalBlock* pBlock, UINT64 size, UINT64 alignment,
+  auto AllocateFromBlock(NormalBlock* pBlock, UINT64 size, UINT64 alignment,
     ALLOCATION_FLAGS allocFlags, void* pPrivateData, UINT32 strategy,
-    Allocation** pAllocation);
+    Allocation** pAllocation) -> HRESULT;
 
-  HRESULT CommitAllocationRequest(AllocationRequest& allocRequest,
+  auto CommitAllocationRequest(AllocationRequest& allocRequest,
     NormalBlock* pBlock, UINT64 size, UINT64 alignment, void* pPrivateData,
-    Allocation** pAllocation);
+    Allocation** pAllocation) -> HRESULT;
 
-  HRESULT CreateBlock(UINT64 blockSize, size_t* pNewBlockIndex);
+  auto CreateBlock(UINT64 blockSize, size_t* pNewBlockIndex) -> HRESULT;
 };
 #endif // _D3D12MA_BLOCK_VECTOR
 
 #ifndef _D3D12MA_CURRENT_BUDGET_DATA
 class CurrentBudgetData {
 public:
-  bool ShouldUpdateBudget() const { return m_OperationsSinceBudgetFetch >= 30; }
+  auto ShouldUpdateBudget() const -> bool
+  {
+    return m_OperationsSinceBudgetFetch >= 30;
+  }
 
   void GetStatistics(Statistics& outStats, UINT group) const;
   void GetBudget(bool useMutex, UINT64* outLocalUsage, UINT64* outLocalBudget,
     UINT64* outNonLocalUsage, UINT64* outNonLocalBudget);
 
 #  if D3D12MA_DXGI_1_4
-  HRESULT UpdateBudget(IDXGIAdapter3* adapter3, bool useMutex);
+  auto UpdateBudget(IDXGIAdapter3* adapter3, bool useMutex) -> HRESULT;
 #  endif
 
   void AddAllocation(UINT group, UINT64 allocationBytes);
@@ -5634,7 +5687,8 @@ void CurrentBudgetData::GetBudget(bool useMutex, UINT64* outLocalUsage,
 }
 
 #    if D3D12MA_DXGI_1_4
-HRESULT CurrentBudgetData::UpdateBudget(IDXGIAdapter3* adapter3, bool useMutex)
+auto CurrentBudgetData::UpdateBudget(IDXGIAdapter3* adapter3, bool useMutex)
+  -> HRESULT
 {
   D3D12MA_ASSERT(adapter3);
 
@@ -5709,10 +5763,13 @@ public:
   ~DefragmentationContextPimpl();
 
   void GetStats(DEFRAGMENTATION_STATS& outStats) { outStats = m_GlobalStats; }
-  const ALLOCATION_CALLBACKS& GetAllocs() const { return m_Moves.GetAllocs(); }
+  auto GetAllocs() const -> const ALLOCATION_CALLBACKS&
+  {
+    return m_Moves.GetAllocs();
+  }
 
-  HRESULT DefragmentPassBegin(DEFRAGMENTATION_PASS_MOVE_INFO& moveInfo);
-  HRESULT DefragmentPassEnd(DEFRAGMENTATION_PASS_MOVE_INFO& moveInfo);
+  auto DefragmentPassBegin(DEFRAGMENTATION_PASS_MOVE_INFO& moveInfo) -> HRESULT;
+  auto DefragmentPassEnd(DEFRAGMENTATION_PASS_MOVE_INFO& moveInfo) -> HRESULT;
 
 private:
   // Max number of allocations to ignore due to size constraints before ending
@@ -5750,19 +5807,19 @@ private:
   DEFRAGMENTATION_STATS m_PassStats = { 0 };
   void* m_AlgorithmState = NULL;
 
-  static MoveAllocationData GetMoveData(
-    AllocHandle handle, BlockMetadata* metadata);
-  CounterStatus CheckCounters(UINT64 bytes);
-  bool IncrementCounters(UINT64 bytes);
-  bool ReallocWithinBlock(BlockVector& vector, NormalBlock* block);
-  bool AllocInOtherBlock(
-    size_t start, size_t end, MoveAllocationData& data, BlockVector& vector);
+  static auto GetMoveData(AllocHandle handle, BlockMetadata* metadata)
+    -> MoveAllocationData;
+  auto CheckCounters(UINT64 bytes) -> CounterStatus;
+  auto IncrementCounters(UINT64 bytes) -> bool;
+  auto ReallocWithinBlock(BlockVector& vector, NormalBlock* block) -> bool;
+  auto AllocInOtherBlock(size_t start, size_t end, MoveAllocationData& data,
+    BlockVector& vector) -> bool;
 
-  bool ComputeDefragmentation(BlockVector& vector, size_t index);
-  bool ComputeDefragmentation_Fast(BlockVector& vector);
-  bool ComputeDefragmentation_Balanced(
-    BlockVector& vector, size_t index, bool update);
-  bool ComputeDefragmentation_Full(BlockVector& vector);
+  auto ComputeDefragmentation(BlockVector& vector, size_t index) -> bool;
+  auto ComputeDefragmentation_Fast(BlockVector& vector) -> bool;
+  auto ComputeDefragmentation_Balanced(
+    BlockVector& vector, size_t index, bool update) -> bool;
+  auto ComputeDefragmentation_Full(BlockVector& vector) -> bool;
 
   void UpdateVectorStatistics(BlockVector& vector, StateBalanced& state);
 };
@@ -5777,18 +5834,21 @@ public:
   PoolPimpl(AllocatorPimpl* allocator, const POOL_DESC& desc);
   ~PoolPimpl();
 
-  AllocatorPimpl* GetAllocator() const { return m_Allocator; }
-  const POOL_DESC& GetDesc() const { return m_Desc; }
-  bool SupportsCommittedAllocations() const { return m_Desc.BlockSize == 0; }
-  LPCWSTR GetName() const { return m_Name; }
+  auto GetAllocator() const -> AllocatorPimpl* { return m_Allocator; }
+  auto GetDesc() const -> const POOL_DESC& { return m_Desc; }
+  auto SupportsCommittedAllocations() const -> bool
+  {
+    return m_Desc.BlockSize == 0;
+  }
+  auto GetName() const -> LPCWSTR { return m_Name; }
 
-  BlockVector* GetBlockVector() { return m_BlockVector; }
-  CommittedAllocationList* GetCommittedAllocationList()
+  auto GetBlockVector() -> BlockVector* { return m_BlockVector; }
+  auto GetCommittedAllocationList() -> CommittedAllocationList*
   {
     return SupportsCommittedAllocations() ? &m_CommittedAllocations : NULL;
   }
 
-  HRESULT Init();
+  auto Init() -> HRESULT;
   void GetStatistics(Statistics& outStats);
   void CalculateStatistics(DetailedStatistics& outStats);
   void AddDetailedStatistics(DetailedStatistics& inoutStats);
@@ -5808,10 +5868,22 @@ private:
 
 struct PoolListItemTraits {
   using ItemType = PoolPimpl;
-  static ItemType* GetPrev(const ItemType* item) { return item->m_PrevPool; }
-  static ItemType* GetNext(const ItemType* item) { return item->m_NextPool; }
-  static ItemType*& AccessPrev(ItemType* item) { return item->m_PrevPool; }
-  static ItemType*& AccessNext(ItemType* item) { return item->m_NextPool; }
+  static auto GetPrev(const ItemType* item) -> ItemType*
+  {
+    return item->m_PrevPool;
+  }
+  static auto GetNext(const ItemType* item) -> ItemType*
+  {
+    return item->m_NextPool;
+  }
+  static auto AccessPrev(ItemType* item) -> ItemType*&
+  {
+    return item->m_PrevPool;
+  }
+  static auto AccessNext(ItemType* item) -> ItemType*&
+  {
+    return item->m_NextPool;
+  }
 };
 #endif // _D3D12MA_POOL_PIMPL
 
@@ -5828,45 +5900,48 @@ public:
     const ALLOCATOR_DESC& desc);
   ~AllocatorPimpl();
 
-  ID3D12Device* GetDevice() const { return m_Device; }
+  auto GetDevice() const -> ID3D12Device* { return m_Device; }
 #  ifdef __ID3D12Device1_INTERFACE_DEFINED__
-  ID3D12Device1* GetDevice1() const { return m_Device1; }
+  auto GetDevice1() const -> ID3D12Device1* { return m_Device1; }
 #  endif
 #  ifdef __ID3D12Device4_INTERFACE_DEFINED__
-  ID3D12Device4* GetDevice4() const { return m_Device4; }
+  auto GetDevice4() const -> ID3D12Device4* { return m_Device4; }
 #  endif
 #  ifdef __ID3D12Device8_INTERFACE_DEFINED__
-  ID3D12Device8* GetDevice8() const { return m_Device8; }
+  auto GetDevice8() const -> ID3D12Device8* { return m_Device8; }
 #  endif
   // Shortcut for "Allocation Callbacks", because this function is called so
   // often.
-  const ALLOCATION_CALLBACKS& GetAllocs() const
+  auto GetAllocs() const -> const ALLOCATION_CALLBACKS&
   {
     return m_AllocationCallbacks;
   }
-  const D3D12_FEATURE_DATA_D3D12_OPTIONS& GetD3D12Options() const
+  auto GetD3D12Options() const -> const D3D12_FEATURE_DATA_D3D12_OPTIONS&
   {
     return m_D3D12Options;
   }
-  BOOL IsUMA() const { return m_D3D12Architecture.UMA; }
-  BOOL IsCacheCoherentUMA() const
+  auto IsUMA() const -> BOOL { return m_D3D12Architecture.UMA; }
+  auto IsCacheCoherentUMA() const -> BOOL
   {
     return m_D3D12Architecture.CacheCoherentUMA;
   }
-  bool SupportsResourceHeapTier2() const
+  auto SupportsResourceHeapTier2() const -> bool
   {
     return m_D3D12Options.ResourceHeapTier >= D3D12_RESOURCE_HEAP_TIER_2;
   }
-  bool IsGPUUploadHeapSupported() const
+  auto IsGPUUploadHeapSupported() const -> bool
   {
     return m_GPUUploadHeapSupported != FALSE;
   }
-  bool UseMutex() const { return m_UseMutex; }
-  AllocationObjectAllocator& GetAllocationObjectAllocator()
+  auto UseMutex() const -> bool { return m_UseMutex; }
+  auto GetAllocationObjectAllocator() -> AllocationObjectAllocator&
   {
     return m_AllocationObjectAllocator;
   }
-  UINT GetCurrentFrameIndex() const { return m_CurrentFrameIndex.load(); }
+  auto GetCurrentFrameIndex() const -> UINT
+  {
+    return m_CurrentFrameIndex.load();
+  }
   /*
   If SupportsResourceHeapTier2():
       0: D3D12_HEAP_TYPE_DEFAULT
@@ -5887,34 +5962,35 @@ public:
       10: D3D12_HEAP_TYPE_GPU_UPLOAD + texture
       11: D3D12_HEAP_TYPE_GPU_UPLOAD + texture RT or DS
   */
-  UINT GetDefaultPoolCount() const
+  auto GetDefaultPoolCount() const -> UINT
   {
     return SupportsResourceHeapTier2() ? 4 : 12;
   }
-  BlockVector** GetDefaultPools() { return m_BlockVectors; }
+  auto GetDefaultPools() -> BlockVector** { return m_BlockVectors; }
 
-  HRESULT Init(const ALLOCATOR_DESC& desc);
-  bool HeapFlagsFulfillResourceHeapTier(D3D12_HEAP_FLAGS flags) const;
-  UINT StandardHeapTypeToMemorySegmentGroup(D3D12_HEAP_TYPE heapType) const;
-  UINT HeapPropertiesToMemorySegmentGroup(
-    const D3D12_HEAP_PROPERTIES& heapProps) const;
-  UINT64 GetMemoryCapacity(UINT memorySegmentGroup) const;
+  auto Init(const ALLOCATOR_DESC& desc) -> HRESULT;
+  auto HeapFlagsFulfillResourceHeapTier(D3D12_HEAP_FLAGS flags) const -> bool;
+  auto StandardHeapTypeToMemorySegmentGroup(D3D12_HEAP_TYPE heapType) const
+    -> UINT;
+  auto HeapPropertiesToMemorySegmentGroup(
+    const D3D12_HEAP_PROPERTIES& heapProps) const -> UINT;
+  auto GetMemoryCapacity(UINT memorySegmentGroup) const -> UINT64;
 
-  HRESULT CreatePlacedResourceWrap(ID3D12Heap* pHeap, UINT64 HeapOffset,
+  auto CreatePlacedResourceWrap(ID3D12Heap* pHeap, UINT64 HeapOffset,
     const CREATE_RESOURCE_PARAMS& createParams, REFIID riidResource,
-    void** ppvResource);
+    void** ppvResource) -> HRESULT;
 
-  HRESULT CreateResource(const ALLOCATION_DESC* pAllocDesc,
+  auto CreateResource(const ALLOCATION_DESC* pAllocDesc,
     const CREATE_RESOURCE_PARAMS& createParams, Allocation** ppAllocation,
-    REFIID riidResource, void** ppvResource);
+    REFIID riidResource, void** ppvResource) -> HRESULT;
 
-  HRESULT CreateAliasingResource(Allocation* pAllocation,
+  auto CreateAliasingResource(Allocation* pAllocation,
     UINT64 AllocationLocalOffset, const CREATE_RESOURCE_PARAMS& createParams,
-    REFIID riidResource, void** ppvResource);
+    REFIID riidResource, void** ppvResource) -> HRESULT;
 
-  HRESULT AllocateMemory(const ALLOCATION_DESC* pAllocDesc,
-    const D3D12_RESOURCE_ALLOCATION_INFO* pAllocInfo,
-    Allocation** ppAllocation);
+  auto AllocateMemory(const ALLOCATION_DESC* pAllocDesc,
+    const D3D12_RESOURCE_ALLOCATION_INFO* pAllocInfo, Allocation** ppAllocation)
+    -> HRESULT;
 
   // Unregisters allocation from the collection of dedicated allocations.
   // Allocation object must be deleted externally afterwards.
@@ -5987,24 +6063,23 @@ private:
   dedicated allocation (committed resource rather than placed resource).
   */
   template <typename D3D12_RESOURCE_DESC_T>
-  bool PrefersCommittedAllocation(
-    const D3D12_RESOURCE_DESC_T& resourceDesc, ALLOCATION_FLAGS strategy);
+  auto PrefersCommittedAllocation(const D3D12_RESOURCE_DESC_T& resourceDesc,
+    ALLOCATION_FLAGS strategy) -> bool;
 
   // Allocates and registers new committed resource with implicit heap, as
   // dedicated allocation. Creates and returns Allocation object and optionally
   // D3D12 resource.
-  HRESULT AllocateCommittedResource(
+  auto AllocateCommittedResource(
     const CommittedAllocationParameters& committedAllocParams,
     UINT64 resourceSize, bool withinBudget, void* pPrivateData,
     const CREATE_RESOURCE_PARAMS& createParams, Allocation** ppAllocation,
-    REFIID riidResource, void** ppvResource);
+    REFIID riidResource, void** ppvResource) -> HRESULT;
 
   // Allocates and registers new heap without any resources placed in it, as
   // dedicated allocation. Creates and returns Allocation object.
-  HRESULT AllocateHeap(
-    const CommittedAllocationParameters& committedAllocParams,
+  auto AllocateHeap(const CommittedAllocationParameters& committedAllocParams,
     const D3D12_RESOURCE_ALLOCATION_INFO& allocInfo, bool withinBudget,
-    void* pPrivateData, Allocation** ppAllocation);
+    void* pPrivateData, Allocation** ppAllocation) -> HRESULT;
 
   template <typename D3D12_RESOURCE_DESC_T>
   HRESULT CalcAllocationParams(const ALLOCATION_DESC& allocDesc,
@@ -6015,8 +6090,8 @@ private:
     bool& outPreferCommitted);
 
   // Returns UINT32_MAX if index cannot be calculcated.
-  UINT CalcDefaultPoolIndex(
-    const ALLOCATION_DESC& allocDesc, ResourceClass resourceClass) const;
+  auto CalcDefaultPoolIndex(const ALLOCATION_DESC& allocDesc,
+    ResourceClass resourceClass) const -> UINT;
   void CalcDefaultPoolParams(D3D12_HEAP_TYPE& outHeapType,
     D3D12_HEAP_FLAGS& outHeapFlags, UINT index) const;
 
@@ -6025,20 +6100,22 @@ private:
   // Unregisters Pool object from m_Pools.
   void UnregisterPool(Pool* pool, D3D12_HEAP_TYPE heapType);
 
-  HRESULT UpdateD3D12Budget();
+  auto UpdateD3D12Budget() -> HRESULT;
 
-  D3D12_RESOURCE_ALLOCATION_INFO GetResourceAllocationInfoNative(
-    const D3D12_RESOURCE_DESC& resourceDesc) const;
+  auto GetResourceAllocationInfoNative(
+    const D3D12_RESOURCE_DESC& resourceDesc) const
+    -> D3D12_RESOURCE_ALLOCATION_INFO;
 #  ifdef __ID3D12Device8_INTERFACE_DEFINED__
-  D3D12_RESOURCE_ALLOCATION_INFO GetResourceAllocationInfoNative(
-    const D3D12_RESOURCE_DESC1& resourceDesc) const;
+  auto GetResourceAllocationInfoNative(
+    const D3D12_RESOURCE_DESC1& resourceDesc) const
+    -> D3D12_RESOURCE_ALLOCATION_INFO;
 #  endif
 
   template <typename D3D12_RESOURCE_DESC_T>
   D3D12_RESOURCE_ALLOCATION_INFO GetResourceAllocationInfo(
     D3D12_RESOURCE_DESC_T& inOutResourceDesc) const;
 
-  bool NewAllocationWithinBudget(D3D12_HEAP_TYPE heapType, UINT64 size);
+  auto NewAllocationWithinBudget(D3D12_HEAP_TYPE heapType, UINT64 size) -> bool;
 
   // Writes object { } with data of given budget.
   static void WriteBudgetToJson(JsonWriter& json, const Budget& budget);
@@ -6080,7 +6157,7 @@ AllocatorPimpl::AllocatorPimpl(
   m_Adapter->AddRef();
 }
 
-HRESULT AllocatorPimpl::Init(const ALLOCATOR_DESC& desc)
+auto AllocatorPimpl::Init(const ALLOCATOR_DESC& desc) -> HRESULT
 {
 #    if D3D12MA_DXGI_1_4
   desc.pAdapter->QueryInterface(D3D12MA_IID_PPV_ARGS(&m_Adapter3));
@@ -6216,8 +6293,8 @@ AllocatorPimpl::~AllocatorPimpl()
   }
 }
 
-bool AllocatorPimpl::HeapFlagsFulfillResourceHeapTier(
-  D3D12_HEAP_FLAGS flags) const
+auto AllocatorPimpl::HeapFlagsFulfillResourceHeapTier(
+  D3D12_HEAP_FLAGS flags) const -> bool
 {
   if (SupportsResourceHeapTier2()) {
     return true;
@@ -6233,8 +6310,8 @@ bool AllocatorPimpl::HeapFlagsFulfillResourceHeapTier(
   }
 }
 
-UINT AllocatorPimpl::StandardHeapTypeToMemorySegmentGroup(
-  D3D12_HEAP_TYPE heapType) const
+auto AllocatorPimpl::StandardHeapTypeToMemorySegmentGroup(
+  D3D12_HEAP_TYPE heapType) const -> UINT
 {
   D3D12MA_ASSERT(IsHeapTypeStandard(heapType));
   if (IsUMA())
@@ -6245,8 +6322,8 @@ UINT AllocatorPimpl::StandardHeapTypeToMemorySegmentGroup(
     : DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL_COPY;
 }
 
-UINT AllocatorPimpl::HeapPropertiesToMemorySegmentGroup(
-  const D3D12_HEAP_PROPERTIES& heapProps) const
+auto AllocatorPimpl::HeapPropertiesToMemorySegmentGroup(
+  const D3D12_HEAP_PROPERTIES& heapProps) const -> UINT
 {
   if (IsUMA())
     return DXGI_MEMORY_SEGMENT_GROUP_LOCAL_COPY;
@@ -6257,7 +6334,7 @@ UINT AllocatorPimpl::HeapPropertiesToMemorySegmentGroup(
     : DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL_COPY;
 }
 
-UINT64 AllocatorPimpl::GetMemoryCapacity(UINT memorySegmentGroup) const
+auto AllocatorPimpl::GetMemoryCapacity(UINT memorySegmentGroup) const -> UINT64
 {
   switch (memorySegmentGroup) {
   case DXGI_MEMORY_SEGMENT_GROUP_LOCAL_COPY:
@@ -6272,9 +6349,9 @@ UINT64 AllocatorPimpl::GetMemoryCapacity(UINT memorySegmentGroup) const
   }
 }
 
-HRESULT AllocatorPimpl::CreatePlacedResourceWrap(ID3D12Heap* pHeap,
+auto AllocatorPimpl::CreatePlacedResourceWrap(ID3D12Heap* pHeap,
   UINT64 HeapOffset, const CREATE_RESOURCE_PARAMS& createParams,
-  REFIID riidResource, void** ppvResource)
+  REFIID riidResource, void** ppvResource) -> HRESULT
 {
 #    ifdef __ID3D12Device10_INTERFACE_DEFINED__
   if (createParams.Variant == CREATE_RESOURCE_PARAMS::VARIANT_WITH_LAYOUT) {
@@ -6309,9 +6386,9 @@ HRESULT AllocatorPimpl::CreatePlacedResourceWrap(ID3D12Heap* pHeap,
   }
 }
 
-HRESULT AllocatorPimpl::CreateResource(const ALLOCATION_DESC* pAllocDesc,
+auto AllocatorPimpl::CreateResource(const ALLOCATION_DESC* pAllocDesc,
   const CREATE_RESOURCE_PARAMS& createParams, Allocation** ppAllocation,
-  REFIID riidResource, void** ppvResource)
+  REFIID riidResource, void** ppvResource) -> HRESULT
 {
   D3D12MA_ASSERT(
     pAllocDesc && createParams.GetBaseResourceDesc() && ppAllocation);
@@ -6409,8 +6486,9 @@ HRESULT AllocatorPimpl::CreateResource(const ALLOCATION_DESC* pAllocDesc,
   return hr;
 }
 
-HRESULT AllocatorPimpl::AllocateMemory(const ALLOCATION_DESC* pAllocDesc,
+auto AllocatorPimpl::AllocateMemory(const ALLOCATION_DESC* pAllocDesc,
   const D3D12_RESOURCE_ALLOCATION_INFO* pAllocInfo, Allocation** ppAllocation)
+  -> HRESULT
 {
   *ppAllocation = NULL;
 
@@ -6448,9 +6526,9 @@ HRESULT AllocatorPimpl::AllocateMemory(const ALLOCATION_DESC* pAllocDesc,
   return hr;
 }
 
-HRESULT AllocatorPimpl::CreateAliasingResource(Allocation* pAllocation,
+auto AllocatorPimpl::CreateAliasingResource(Allocation* pAllocation,
   UINT64 AllocationLocalOffset, const CREATE_RESOURCE_PARAMS& createParams,
-  REFIID riidResource, void** ppvResource)
+  REFIID riidResource, void** ppvResource) -> HRESULT
 {
   *ppvResource = NULL;
 
@@ -6951,102 +7029,102 @@ void AllocatorPimpl::BuildStatsString(WCHAR** ppStatsString, BOOL detailedMap)
     if (detailedMap) {
       const auto writeHeapInfo
         = [&](BlockVector* blockVector,
-            CommittedAllocationList* committedAllocs, bool customHeap) {
-            D3D12MA_ASSERT(blockVector);
+            CommittedAllocationList* committedAllocs, bool customHeap) -> void {
+        D3D12MA_ASSERT(blockVector);
 
-            D3D12_HEAP_FLAGS flags = blockVector->GetHeapFlags();
-            json.WriteString(L"Flags");
-            json.BeginArray(true);
-            {
-              if (flags & D3D12_HEAP_FLAG_SHARED)
-                json.WriteString(L"HEAP_FLAG_SHARED");
-              if (flags & D3D12_HEAP_FLAG_ALLOW_DISPLAY)
-                json.WriteString(L"HEAP_FLAG_ALLOW_DISPLAY");
-              if (flags & D3D12_HEAP_FLAG_SHARED_CROSS_ADAPTER)
-                json.WriteString(L"HEAP_FLAG_CROSS_ADAPTER");
-              if (flags & D3D12_HEAP_FLAG_HARDWARE_PROTECTED)
-                json.WriteString(L"HEAP_FLAG_HARDWARE_PROTECTED");
-              if (flags & D3D12_HEAP_FLAG_ALLOW_WRITE_WATCH)
-                json.WriteString(L"HEAP_FLAG_ALLOW_WRITE_WATCH");
-              if (flags & D3D12_HEAP_FLAG_ALLOW_SHADER_ATOMICS)
-                json.WriteString(L"HEAP_FLAG_ALLOW_SHADER_ATOMICS");
+        D3D12_HEAP_FLAGS flags = blockVector->GetHeapFlags();
+        json.WriteString(L"Flags");
+        json.BeginArray(true);
+        {
+          if (flags & D3D12_HEAP_FLAG_SHARED)
+            json.WriteString(L"HEAP_FLAG_SHARED");
+          if (flags & D3D12_HEAP_FLAG_ALLOW_DISPLAY)
+            json.WriteString(L"HEAP_FLAG_ALLOW_DISPLAY");
+          if (flags & D3D12_HEAP_FLAG_SHARED_CROSS_ADAPTER)
+            json.WriteString(L"HEAP_FLAG_CROSS_ADAPTER");
+          if (flags & D3D12_HEAP_FLAG_HARDWARE_PROTECTED)
+            json.WriteString(L"HEAP_FLAG_HARDWARE_PROTECTED");
+          if (flags & D3D12_HEAP_FLAG_ALLOW_WRITE_WATCH)
+            json.WriteString(L"HEAP_FLAG_ALLOW_WRITE_WATCH");
+          if (flags & D3D12_HEAP_FLAG_ALLOW_SHADER_ATOMICS)
+            json.WriteString(L"HEAP_FLAG_ALLOW_SHADER_ATOMICS");
 #    ifdef __ID3D12Device8_INTERFACE_DEFINED__
-              if (flags & D3D12_HEAP_FLAG_CREATE_NOT_RESIDENT)
-                json.WriteString(L"HEAP_FLAG_CREATE_NOT_RESIDENT");
-              if (flags & D3D12_HEAP_FLAG_CREATE_NOT_ZEROED)
-                json.WriteString(L"HEAP_FLAG_CREATE_NOT_ZEROED");
+          if (flags & D3D12_HEAP_FLAG_CREATE_NOT_RESIDENT)
+            json.WriteString(L"HEAP_FLAG_CREATE_NOT_RESIDENT");
+          if (flags & D3D12_HEAP_FLAG_CREATE_NOT_ZEROED)
+            json.WriteString(L"HEAP_FLAG_CREATE_NOT_ZEROED");
 #    endif
 
-              if (flags & D3D12_HEAP_FLAG_DENY_BUFFERS)
-                json.WriteString(L"HEAP_FLAG_DENY_BUFFERS");
-              if (flags & D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES)
-                json.WriteString(L"HEAP_FLAG_DENY_RT_DS_TEXTURES");
-              if (flags & D3D12_HEAP_FLAG_DENY_NON_RT_DS_TEXTURES)
-                json.WriteString(L"HEAP_FLAG_DENY_NON_RT_DS_TEXTURES");
+          if (flags & D3D12_HEAP_FLAG_DENY_BUFFERS)
+            json.WriteString(L"HEAP_FLAG_DENY_BUFFERS");
+          if (flags & D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES)
+            json.WriteString(L"HEAP_FLAG_DENY_RT_DS_TEXTURES");
+          if (flags & D3D12_HEAP_FLAG_DENY_NON_RT_DS_TEXTURES)
+            json.WriteString(L"HEAP_FLAG_DENY_NON_RT_DS_TEXTURES");
 
-              flags &= ~(D3D12_HEAP_FLAG_SHARED | D3D12_HEAP_FLAG_DENY_BUFFERS
-                | D3D12_HEAP_FLAG_ALLOW_DISPLAY
-                | D3D12_HEAP_FLAG_SHARED_CROSS_ADAPTER
-                | D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES
-                | D3D12_HEAP_FLAG_DENY_NON_RT_DS_TEXTURES
-                | D3D12_HEAP_FLAG_HARDWARE_PROTECTED
-                | D3D12_HEAP_FLAG_ALLOW_WRITE_WATCH
-                | D3D12_HEAP_FLAG_ALLOW_SHADER_ATOMICS);
+          flags &= ~(D3D12_HEAP_FLAG_SHARED | D3D12_HEAP_FLAG_DENY_BUFFERS
+            | D3D12_HEAP_FLAG_ALLOW_DISPLAY
+            | D3D12_HEAP_FLAG_SHARED_CROSS_ADAPTER
+            | D3D12_HEAP_FLAG_DENY_RT_DS_TEXTURES
+            | D3D12_HEAP_FLAG_DENY_NON_RT_DS_TEXTURES
+            | D3D12_HEAP_FLAG_HARDWARE_PROTECTED
+            | D3D12_HEAP_FLAG_ALLOW_WRITE_WATCH
+            | D3D12_HEAP_FLAG_ALLOW_SHADER_ATOMICS);
 #    ifdef __ID3D12Device8_INTERFACE_DEFINED__
-              flags &= ~(D3D12_HEAP_FLAG_CREATE_NOT_RESIDENT
-                | D3D12_HEAP_FLAG_CREATE_NOT_ZEROED);
+          flags &= ~(D3D12_HEAP_FLAG_CREATE_NOT_RESIDENT
+            | D3D12_HEAP_FLAG_CREATE_NOT_ZEROED);
 #    endif
-              if (flags != 0)
-                json.WriteNumber((UINT)flags);
+          if (flags != 0)
+            json.WriteNumber((UINT)flags);
 
-              if (customHeap) {
-                const D3D12_HEAP_PROPERTIES& properties
-                  = blockVector->GetHeapProperties();
-                switch (properties.MemoryPoolPreference) {
-                default:
-                  D3D12MA_ASSERT(0);
-                case D3D12_MEMORY_POOL_UNKNOWN:
-                  json.WriteString(L"MEMORY_POOL_UNKNOWN");
-                  break;
-                case D3D12_MEMORY_POOL_L0:
-                  json.WriteString(L"MEMORY_POOL_L0");
-                  break;
-                case D3D12_MEMORY_POOL_L1:
-                  json.WriteString(L"MEMORY_POOL_L1");
-                  break;
-                }
-                switch (properties.CPUPageProperty) {
-                default:
-                  D3D12MA_ASSERT(0);
-                case D3D12_CPU_PAGE_PROPERTY_UNKNOWN:
-                  json.WriteString(L"CPU_PAGE_PROPERTY_UNKNOWN");
-                  break;
-                case D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE:
-                  json.WriteString(L"CPU_PAGE_PROPERTY_NOT_AVAILABLE");
-                  break;
-                case D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE:
-                  json.WriteString(L"CPU_PAGE_PROPERTY_WRITE_COMBINE");
-                  break;
-                case D3D12_CPU_PAGE_PROPERTY_WRITE_BACK:
-                  json.WriteString(L"CPU_PAGE_PROPERTY_WRITE_BACK");
-                  break;
-                }
-              }
+          if (customHeap) {
+            const D3D12_HEAP_PROPERTIES& properties
+              = blockVector->GetHeapProperties();
+            switch (properties.MemoryPoolPreference) {
+            default:
+              D3D12MA_ASSERT(0);
+            case D3D12_MEMORY_POOL_UNKNOWN:
+              json.WriteString(L"MEMORY_POOL_UNKNOWN");
+              break;
+            case D3D12_MEMORY_POOL_L0:
+              json.WriteString(L"MEMORY_POOL_L0");
+              break;
+            case D3D12_MEMORY_POOL_L1:
+              json.WriteString(L"MEMORY_POOL_L1");
+              break;
             }
-            json.EndArray();
+            switch (properties.CPUPageProperty) {
+            default:
+              D3D12MA_ASSERT(0);
+            case D3D12_CPU_PAGE_PROPERTY_UNKNOWN:
+              json.WriteString(L"CPU_PAGE_PROPERTY_UNKNOWN");
+              break;
+            case D3D12_CPU_PAGE_PROPERTY_NOT_AVAILABLE:
+              json.WriteString(L"CPU_PAGE_PROPERTY_NOT_AVAILABLE");
+              break;
+            case D3D12_CPU_PAGE_PROPERTY_WRITE_COMBINE:
+              json.WriteString(L"CPU_PAGE_PROPERTY_WRITE_COMBINE");
+              break;
+            case D3D12_CPU_PAGE_PROPERTY_WRITE_BACK:
+              json.WriteString(L"CPU_PAGE_PROPERTY_WRITE_BACK");
+              break;
+            }
+          }
+        }
+        json.EndArray();
 
-            json.WriteString(L"PreferredBlockSize");
-            json.WriteNumber(blockVector->GetPreferredBlockSize());
+        json.WriteString(L"PreferredBlockSize");
+        json.WriteNumber(blockVector->GetPreferredBlockSize());
 
-            json.WriteString(L"Blocks");
-            blockVector->WriteBlockInfoToJson(json);
+        json.WriteString(L"Blocks");
+        blockVector->WriteBlockInfoToJson(json);
 
-            json.WriteString(L"DedicatedAllocations");
-            json.BeginArray();
-            if (committedAllocs)
-              committedAllocs->BuildStatsString(json);
-            json.EndArray();
-          };
+        json.WriteString(L"DedicatedAllocations");
+        json.BeginArray();
+        if (committedAllocs)
+          committedAllocs->BuildStatsString(json);
+        json.EndArray();
+      };
 
       json.WriteString(L"DefaultPools");
       json.BeginObject();
@@ -7130,8 +7208,8 @@ void AllocatorPimpl::FreeStatsString(WCHAR* pStatsString)
 }
 
 template <typename D3D12_RESOURCE_DESC_T>
-bool AllocatorPimpl::PrefersCommittedAllocation(
-  const D3D12_RESOURCE_DESC_T& resourceDesc, ALLOCATION_FLAGS strategy)
+auto AllocatorPimpl::PrefersCommittedAllocation(
+  const D3D12_RESOURCE_DESC_T& resourceDesc, ALLOCATION_FLAGS strategy) -> bool
 {
   // Prefer creating small buffers <= 32 KB as committed, because drivers pack
   // them better, while placed buffers require 64 KB alignment.
@@ -7147,11 +7225,11 @@ bool AllocatorPimpl::PrefersCommittedAllocation(
   return false;
 }
 
-HRESULT AllocatorPimpl::AllocateCommittedResource(
+auto AllocatorPimpl::AllocateCommittedResource(
   const CommittedAllocationParameters& committedAllocParams,
   UINT64 resourceSize, bool withinBudget, void* pPrivateData,
   const CREATE_RESOURCE_PARAMS& createParams, Allocation** ppAllocation,
-  REFIID riidResource, void** ppvResource)
+  REFIID riidResource, void** ppvResource) -> HRESULT
 {
   D3D12MA_ASSERT(committedAllocParams.IsValid());
 
@@ -7285,10 +7363,10 @@ HRESULT AllocatorPimpl::AllocateCommittedResource(
   return hr;
 }
 
-HRESULT AllocatorPimpl::AllocateHeap(
+auto AllocatorPimpl::AllocateHeap(
   const CommittedAllocationParameters& committedAllocParams,
   const D3D12_RESOURCE_ALLOCATION_INFO& allocInfo, bool withinBudget,
-  void* pPrivateData, Allocation** ppAllocation)
+  void* pPrivateData, Allocation** ppAllocation) -> HRESULT
 {
   D3D12MA_ASSERT(committedAllocParams.IsValid());
 
@@ -7429,8 +7507,8 @@ HRESULT AllocatorPimpl::CalcAllocationParams(const ALLOCATION_DESC& allocDesc,
     : E_INVALIDARG;
 }
 
-UINT AllocatorPimpl::CalcDefaultPoolIndex(
-  const ALLOCATION_DESC& allocDesc, ResourceClass resourceClass) const
+auto AllocatorPimpl::CalcDefaultPoolIndex(
+  const ALLOCATION_DESC& allocDesc, ResourceClass resourceClass) const -> UINT
 {
   D3D12_HEAP_FLAGS extraHeapFlags
     = allocDesc.ExtraHeapFlags & ~RESOURCE_CLASS_HEAP_FLAGS;
@@ -7540,7 +7618,7 @@ void AllocatorPimpl::UnregisterPool(Pool* pool, D3D12_HEAP_TYPE heapType)
   m_Pools[heapTypeIndex].Remove(pool->m_Pimpl);
 }
 
-HRESULT AllocatorPimpl::UpdateD3D12Budget()
+auto AllocatorPimpl::UpdateD3D12Budget() -> HRESULT
 {
 #    if D3D12MA_DXGI_1_4
   if (m_Adapter3)
@@ -7552,8 +7630,9 @@ HRESULT AllocatorPimpl::UpdateD3D12Budget()
 #    endif
 }
 
-D3D12_RESOURCE_ALLOCATION_INFO AllocatorPimpl::GetResourceAllocationInfoNative(
+auto AllocatorPimpl::GetResourceAllocationInfoNative(
   const D3D12_RESOURCE_DESC& resourceDesc) const
+  -> D3D12_RESOURCE_ALLOCATION_INFO
 {
   // This is how new D3D12 headers define GetResourceAllocationInfo function -
   // different signature depending on these macros.
@@ -7566,8 +7645,9 @@ D3D12_RESOURCE_ALLOCATION_INFO AllocatorPimpl::GetResourceAllocationInfoNative(
 }
 
 #    ifdef __ID3D12Device8_INTERFACE_DEFINED__
-D3D12_RESOURCE_ALLOCATION_INFO AllocatorPimpl::GetResourceAllocationInfoNative(
+auto AllocatorPimpl::GetResourceAllocationInfoNative(
   const D3D12_RESOURCE_DESC1& resourceDesc) const
+  -> D3D12_RESOURCE_ALLOCATION_INFO
 {
   D3D12MA_ASSERT(m_Device8 != NULL);
   D3D12_RESOURCE_ALLOCATION_INFO1 info1Unused;
@@ -7638,8 +7718,8 @@ D3D12_RESOURCE_ALLOCATION_INFO AllocatorPimpl::GetResourceAllocationInfo(
   return GetResourceAllocationInfoNative(inOutResourceDesc);
 }
 
-bool AllocatorPimpl::NewAllocationWithinBudget(
-  D3D12_HEAP_TYPE heapType, UINT64 size)
+auto AllocatorPimpl::NewAllocationWithinBudget(
+  D3D12_HEAP_TYPE heapType, UINT64 size) -> bool
 {
   Budget budget = {};
   GetBudgetForHeapType(budget, heapType);
@@ -7723,8 +7803,8 @@ MemoryBlock::~MemoryBlock()
   }
 }
 
-HRESULT MemoryBlock::Init(
-  ID3D12ProtectedResourceSession* pProtectedSession, bool denyMsaaTextures)
+auto MemoryBlock::Init(ID3D12ProtectedResourceSession* pProtectedSession,
+  bool denyMsaaTextures) -> HRESULT
 {
   D3D12MA_ASSERT(m_Heap == NULL && m_Size > 0);
 
@@ -7787,8 +7867,9 @@ NormalBlock::~NormalBlock()
   }
 }
 
-HRESULT NormalBlock::Init(UINT32 algorithm,
+auto NormalBlock::Init(UINT32 algorithm,
   ID3D12ProtectedResourceSession* pProtectedSession, bool denyMsaaTextures)
+  -> HRESULT
 {
   HRESULT hr = MemoryBlock::Init(pProtectedSession, denyMsaaTextures);
   if (FAILED(hr)) {
@@ -7812,7 +7893,7 @@ HRESULT NormalBlock::Init(UINT32 algorithm,
   return hr;
 }
 
-bool NormalBlock::Validate() const
+auto NormalBlock::Validate() const -> bool
 {
   D3D12MA_VALIDATE(GetHeap() && m_pMetadata && m_pMetadata->GetSize() != 0
     && m_pMetadata->GetSize() == GetSize());
@@ -7836,8 +7917,8 @@ CommittedAllocationList::~CommittedAllocationList()
   }
 }
 
-UINT CommittedAllocationList::GetMemorySegmentGroup(
-  AllocatorPimpl* allocator) const
+auto CommittedAllocationList::GetMemorySegmentGroup(
+  AllocatorPimpl* allocator) const -> UINT
 {
   if (m_Pool)
     return allocator->HeapPropertiesToMemorySegmentGroup(
@@ -7931,7 +8012,7 @@ BlockVector::~BlockVector()
   }
 }
 
-HRESULT BlockVector::CreateMinBlocks()
+auto BlockVector::CreateMinBlocks() -> HRESULT
 {
   for (size_t i = 0; i < m_MinBlockCount; ++i) {
     HRESULT hr = CreateBlock(m_PreferredBlockSize, NULL);
@@ -7942,15 +8023,15 @@ HRESULT BlockVector::CreateMinBlocks()
   return S_OK;
 }
 
-bool BlockVector::IsEmpty()
+auto BlockVector::IsEmpty() -> bool
 {
   MutexLockRead lock(m_Mutex, m_hAllocator->UseMutex());
   return m_Blocks.empty();
 }
 
-HRESULT BlockVector::Allocate(UINT64 size, UINT64 alignment,
+auto BlockVector::Allocate(UINT64 size, UINT64 alignment,
   const ALLOCATION_DESC& allocDesc, size_t allocationCount,
-  Allocation** pAllocations)
+  Allocation** pAllocations) -> HRESULT
 {
   size_t allocIndex;
   HRESULT hr = S_OK;
@@ -8031,9 +8112,9 @@ void BlockVector::Free(Allocation* hAllocation)
   }
 }
 
-HRESULT BlockVector::CreateResource(UINT64 size, UINT64 alignment,
+auto BlockVector::CreateResource(UINT64 size, UINT64 alignment,
   const ALLOCATION_DESC& allocDesc, const CREATE_RESOURCE_PARAMS& createParams,
-  Allocation** ppAllocation, REFIID riidResource, void** ppvResource)
+  Allocation** ppAllocation, REFIID riidResource, void** ppvResource) -> HRESULT
 {
   HRESULT hr = Allocate(size, alignment, allocDesc, 1, ppAllocation);
   if (SUCCEEDED(hr)) {
@@ -8105,7 +8186,7 @@ void BlockVector::WriteBlockInfoToJson(JsonWriter& json)
   json.EndObject();
 }
 
-UINT64 BlockVector::CalcSumBlockSize() const
+auto BlockVector::CalcSumBlockSize() const -> UINT64
 {
   UINT64 result = 0;
   for (size_t i = m_Blocks.size(); i--;) {
@@ -8114,7 +8195,7 @@ UINT64 BlockVector::CalcSumBlockSize() const
   return result;
 }
 
-UINT64 BlockVector::CalcMaxBlockSize() const
+auto BlockVector::CalcMaxBlockSize() const -> UINT64
 {
   UINT64 result = 0;
   for (size_t i = m_Blocks.size(); i--;) {
@@ -8153,14 +8234,15 @@ void BlockVector::IncrementallySortBlocks()
 
 void BlockVector::SortByFreeSize()
 {
-  D3D12MA_SORT(m_Blocks.begin(), m_Blocks.end(), [](auto* b1, auto* b2) {
-    return b1->m_pMetadata->GetSumFreeSize()
-      < b2->m_pMetadata->GetSumFreeSize();
-  });
+  D3D12MA_SORT(
+    m_Blocks.begin(), m_Blocks.end(), [](auto* b1, auto* b2) -> bool {
+      return b1->m_pMetadata->GetSumFreeSize()
+        < b2->m_pMetadata->GetSumFreeSize();
+    });
 }
 
-HRESULT BlockVector::AllocatePage(UINT64 size, UINT64 alignment,
-  const ALLOCATION_DESC& allocDesc, Allocation** pAllocation)
+auto BlockVector::AllocatePage(UINT64 size, UINT64 alignment,
+  const ALLOCATION_DESC& allocDesc, Allocation** pAllocation) -> HRESULT
 {
   // Early reject: requested allocation size is larger that maximum block size
   // for this block vector.
@@ -8263,9 +8345,9 @@ HRESULT BlockVector::AllocatePage(UINT64 size, UINT64 alignment,
   return E_OUTOFMEMORY;
 }
 
-HRESULT BlockVector::AllocateFromBlock(NormalBlock* pBlock, UINT64 size,
+auto BlockVector::AllocateFromBlock(NormalBlock* pBlock, UINT64 size,
   UINT64 alignment, ALLOCATION_FLAGS allocFlags, void* pPrivateData,
-  UINT32 strategy, Allocation** pAllocation)
+  UINT32 strategy, Allocation** pAllocation) -> HRESULT
 {
   alignment = D3D12MA_MAX(alignment, m_MinAllocationAlignment);
 
@@ -8278,9 +8360,9 @@ HRESULT BlockVector::AllocateFromBlock(NormalBlock* pBlock, UINT64 size,
   return E_OUTOFMEMORY;
 }
 
-HRESULT BlockVector::CommitAllocationRequest(AllocationRequest& allocRequest,
+auto BlockVector::CommitAllocationRequest(AllocationRequest& allocRequest,
   NormalBlock* pBlock, UINT64 size, UINT64 alignment, void* pPrivateData,
-  Allocation** pAllocation)
+  Allocation** pAllocation) -> HRESULT
 {
   // We no longer have an empty Allocation.
   if (pBlock->m_pMetadata->IsEmpty())
@@ -8300,7 +8382,8 @@ HRESULT BlockVector::CommitAllocationRequest(AllocationRequest& allocRequest,
   return S_OK;
 }
 
-HRESULT BlockVector::CreateBlock(UINT64 blockSize, size_t* pNewBlockIndex)
+auto BlockVector::CreateBlock(UINT64 blockSize, size_t* pNewBlockIndex)
+  -> HRESULT
 {
   NormalBlock* const pBlock
     = D3D12MA_NEW(m_hAllocator->GetAllocs(), NormalBlock)(
@@ -8389,8 +8472,8 @@ DefragmentationContextPimpl::~DefragmentationContextPimpl()
   }
 }
 
-HRESULT DefragmentationContextPimpl::DefragmentPassBegin(
-  DEFRAGMENTATION_PASS_MOVE_INFO& moveInfo)
+auto DefragmentationContextPimpl::DefragmentPassBegin(
+  DEFRAGMENTATION_PASS_MOVE_INFO& moveInfo) -> HRESULT
 {
   if (m_PoolBlockVector != NULL) {
     MutexLockWrite lock(m_PoolBlockVector->GetMutex(),
@@ -8440,8 +8523,8 @@ HRESULT DefragmentationContextPimpl::DefragmentPassBegin(
   return S_OK;
 }
 
-HRESULT DefragmentationContextPimpl::DefragmentPassEnd(
-  DEFRAGMENTATION_PASS_MOVE_INFO& moveInfo)
+auto DefragmentationContextPimpl::DefragmentPassEnd(
+  DEFRAGMENTATION_PASS_MOVE_INFO& moveInfo) -> HRESULT
 {
   D3D12MA_ASSERT(moveInfo.MoveCount > 0 ? moveInfo.pMoves != NULL : true);
 
@@ -8582,8 +8665,8 @@ HRESULT DefragmentationContextPimpl::DefragmentPassEnd(
   return result;
 }
 
-bool DefragmentationContextPimpl::ComputeDefragmentation(
-  BlockVector& vector, size_t index)
+auto DefragmentationContextPimpl::ComputeDefragmentation(
+  BlockVector& vector, size_t index) -> bool
 {
   switch (m_Algorithm) {
   case DEFRAGMENTATION_FLAG_ALGORITHM_FAST:
@@ -8597,9 +8680,8 @@ bool DefragmentationContextPimpl::ComputeDefragmentation(
   }
 }
 
-DefragmentationContextPimpl::MoveAllocationData
-DefragmentationContextPimpl::GetMoveData(
-  AllocHandle handle, BlockMetadata* metadata)
+auto DefragmentationContextPimpl::GetMoveData(AllocHandle handle,
+  BlockMetadata* metadata) -> DefragmentationContextPimpl::MoveAllocationData
 {
   MoveAllocationData moveData;
   moveData.move.pSrcAllocation
@@ -8611,8 +8693,8 @@ DefragmentationContextPimpl::GetMoveData(
   return moveData;
 }
 
-DefragmentationContextPimpl::CounterStatus
-DefragmentationContextPimpl::CheckCounters(UINT64 bytes)
+auto DefragmentationContextPimpl::CheckCounters(UINT64 bytes)
+  -> DefragmentationContextPimpl::CounterStatus
 {
   // Ignore allocation if will exceed max size for copy
   if (m_PassStats.BytesMoved + bytes > m_MaxPassBytes) {
@@ -8624,7 +8706,7 @@ DefragmentationContextPimpl::CheckCounters(UINT64 bytes)
   return CounterStatus::Pass;
 }
 
-bool DefragmentationContextPimpl::IncrementCounters(UINT64 bytes)
+auto DefragmentationContextPimpl::IncrementCounters(UINT64 bytes) -> bool
 {
   m_PassStats.BytesMoved += bytes;
   // Early return when max found
@@ -8638,8 +8720,8 @@ bool DefragmentationContextPimpl::IncrementCounters(UINT64 bytes)
   return false;
 }
 
-bool DefragmentationContextPimpl::ReallocWithinBlock(
-  BlockVector& vector, NormalBlock* block)
+auto DefragmentationContextPimpl::ReallocWithinBlock(
+  BlockVector& vector, NormalBlock* block) -> bool
 {
   BlockMetadata* metadata = block->m_pMetadata;
 
@@ -8680,8 +8762,8 @@ bool DefragmentationContextPimpl::ReallocWithinBlock(
   return false;
 }
 
-bool DefragmentationContextPimpl::AllocInOtherBlock(
-  size_t start, size_t end, MoveAllocationData& data, BlockVector& vector)
+auto DefragmentationContextPimpl::AllocInOtherBlock(size_t start, size_t end,
+  MoveAllocationData& data, BlockVector& vector) -> bool
 {
   for (; start < end; ++start) {
     NormalBlock* dstBlock = vector.GetBlock(start);
@@ -8699,8 +8781,8 @@ bool DefragmentationContextPimpl::AllocInOtherBlock(
   return false;
 }
 
-bool DefragmentationContextPimpl::ComputeDefragmentation_Fast(
-  BlockVector& vector)
+auto DefragmentationContextPimpl::ComputeDefragmentation_Fast(
+  BlockVector& vector) -> bool
 {
   // Move only between blocks
 
@@ -8733,8 +8815,8 @@ bool DefragmentationContextPimpl::ComputeDefragmentation_Fast(
   return false;
 }
 
-bool DefragmentationContextPimpl::ComputeDefragmentation_Balanced(
-  BlockVector& vector, size_t index, bool update)
+auto DefragmentationContextPimpl::ComputeDefragmentation_Balanced(
+  BlockVector& vector, size_t index, bool update) -> bool
 {
   // Go over every allocation and try to fit it in previous blocks at lowest
   // offsets, if not possible: realloc within single block to minimize offset
@@ -8814,8 +8896,8 @@ bool DefragmentationContextPimpl::ComputeDefragmentation_Balanced(
   return false;
 }
 
-bool DefragmentationContextPimpl::ComputeDefragmentation_Full(
-  BlockVector& vector)
+auto DefragmentationContextPimpl::ComputeDefragmentation_Full(
+  BlockVector& vector) -> bool
 {
   // Go over every allocation and try to fit it in previous blocks at lowest
   // offsets, if not possible: realloc within single block to minimize offset
@@ -8924,7 +9006,7 @@ PoolPimpl::~PoolPimpl()
   D3D12MA_DELETE(m_Allocator->GetAllocs(), m_BlockVector);
 }
 
-HRESULT PoolPimpl::Init()
+auto PoolPimpl::Init() -> HRESULT
 {
   m_CommittedAllocations.Init(
     m_Allocator->UseMutex(), m_Desc.HeapProperties.Type, this);
@@ -8972,7 +9054,8 @@ void PoolPimpl::FreeName()
 #endif // _D3D12MA_POOL_PIMPL_FUNCTIONS
 
 #ifndef _D3D12MA_PUBLIC_INTERFACE
-HRESULT CreateAllocator(const ALLOCATOR_DESC* pDesc, Allocator** ppAllocator)
+auto CreateAllocator(const ALLOCATOR_DESC* pDesc, Allocator** ppAllocator)
+  -> HRESULT
 {
   if (!pDesc || !ppAllocator || !pDesc->pDevice || !pDesc->pAdapter
     || !(pDesc->PreferredBlockSize == 0
@@ -8997,8 +9080,8 @@ HRESULT CreateAllocator(const ALLOCATOR_DESC* pDesc, Allocator** ppAllocator)
   return hr;
 }
 
-HRESULT CreateVirtualBlock(
-  const VIRTUAL_BLOCK_DESC* pDesc, VirtualBlock** ppVirtualBlock)
+auto CreateVirtualBlock(
+  const VIRTUAL_BLOCK_DESC* pDesc, VirtualBlock** ppVirtualBlock) -> HRESULT
 {
   if (!pDesc || !ppVirtualBlock) {
     D3D12MA_ASSERT(0 && "Invalid arguments passed to CreateVirtualBlock.");
@@ -9075,7 +9158,7 @@ void Allocation::PackedData::SetTextureLayout(
   m_TextureLayout = u;
 }
 
-UINT64 Allocation::GetOffset() const
+auto Allocation::GetOffset() const -> UINT64
 {
   switch (m_PackedData.GetType()) {
   case TYPE_COMMITTED:
@@ -9101,7 +9184,7 @@ void Allocation::SetResource(ID3D12Resource* pResource)
   }
 }
 
-ID3D12Heap* Allocation::GetHeap() const
+auto Allocation::GetHeap() const -> ID3D12Heap*
 {
   switch (m_PackedData.GetType()) {
   case TYPE_COMMITTED:
@@ -9202,7 +9285,7 @@ void Allocation::SwapBlockAllocation(Allocation* allocation)
     m_Placed.allocHandle, this);
 }
 
-AllocHandle Allocation::GetAllocHandle() const
+auto Allocation::GetAllocHandle() const -> AllocHandle
 {
   switch (m_PackedData.GetType()) {
   case TYPE_COMMITTED:
@@ -9216,7 +9299,7 @@ AllocHandle Allocation::GetAllocHandle() const
   }
 }
 
-NormalBlock* Allocation::GetBlock()
+auto Allocation::GetBlock() -> NormalBlock*
 {
   switch (m_PackedData.GetType()) {
   case TYPE_COMMITTED:
@@ -9252,15 +9335,15 @@ void Allocation::FreeName()
 #  endif // _D3D12MA_ALLOCATION_FUNCTIONS
 
 #  ifndef _D3D12MA_DEFRAGMENTATION_CONTEXT_FUNCTIONS
-HRESULT DefragmentationContext::BeginPass(
-  DEFRAGMENTATION_PASS_MOVE_INFO* pPassInfo)
+auto DefragmentationContext::BeginPass(
+  DEFRAGMENTATION_PASS_MOVE_INFO* pPassInfo) -> HRESULT
 {
   D3D12MA_ASSERT(pPassInfo);
   return m_Pimpl->DefragmentPassBegin(*pPassInfo);
 }
 
-HRESULT DefragmentationContext::EndPass(
-  DEFRAGMENTATION_PASS_MOVE_INFO* pPassInfo)
+auto DefragmentationContext::EndPass(DEFRAGMENTATION_PASS_MOVE_INFO* pPassInfo)
+  -> HRESULT
 {
   D3D12MA_ASSERT(pPassInfo);
   return m_Pimpl->DefragmentPassEnd(*pPassInfo);
@@ -9291,7 +9374,7 @@ DefragmentationContext::~DefragmentationContext()
 #  endif // _D3D12MA_DEFRAGMENTATION_CONTEXT_FUNCTIONS
 
 #  ifndef _D3D12MA_POOL_FUNCTIONS
-POOL_DESC Pool::GetDesc() const { return m_Pimpl->GetDesc(); }
+auto Pool::GetDesc() const -> POOL_DESC { return m_Pimpl->GetDesc(); }
 
 void Pool::GetStatistics(Statistics* pStats)
 {
@@ -9313,10 +9396,10 @@ void Pool::SetName(LPCWSTR Name)
   m_Pimpl->SetName(Name);
 }
 
-LPCWSTR Pool::GetName() const { return m_Pimpl->GetName(); }
+auto Pool::GetName() const -> LPCWSTR { return m_Pimpl->GetName(); }
 
-HRESULT Pool::BeginDefragmentation(
-  const DEFRAGMENTATION_DESC* pDesc, DefragmentationContext** ppContext)
+auto Pool::BeginDefragmentation(const DEFRAGMENTATION_DESC* pDesc,
+  DefragmentationContext** ppContext) -> HRESULT
 {
   D3D12MA_ASSERT(pDesc && ppContext);
 
@@ -9351,33 +9434,34 @@ Pool::~Pool()
 #  endif // _D3D12MA_POOL_FUNCTIONS
 
 #  ifndef _D3D12MA_ALLOCATOR_FUNCTIONS
-const D3D12_FEATURE_DATA_D3D12_OPTIONS& Allocator::GetD3D12Options() const
+auto Allocator::GetD3D12Options() const
+  -> const D3D12_FEATURE_DATA_D3D12_OPTIONS&
 {
   return m_Pimpl->GetD3D12Options();
 }
 
-BOOL Allocator::IsUMA() const { return m_Pimpl->IsUMA(); }
+auto Allocator::IsUMA() const -> BOOL { return m_Pimpl->IsUMA(); }
 
-BOOL Allocator::IsCacheCoherentUMA() const
+auto Allocator::IsCacheCoherentUMA() const -> BOOL
 {
   return m_Pimpl->IsCacheCoherentUMA();
 }
 
-BOOL Allocator::IsGPUUploadHeapSupported() const
+auto Allocator::IsGPUUploadHeapSupported() const -> BOOL
 {
   return m_Pimpl->IsGPUUploadHeapSupported();
 }
 
-UINT64 Allocator::GetMemoryCapacity(UINT memorySegmentGroup) const
+auto Allocator::GetMemoryCapacity(UINT memorySegmentGroup) const -> UINT64
 {
   return m_Pimpl->GetMemoryCapacity(memorySegmentGroup);
 }
 
-HRESULT Allocator::CreateResource(const ALLOCATION_DESC* pAllocDesc,
+auto Allocator::CreateResource(const ALLOCATION_DESC* pAllocDesc,
   const D3D12_RESOURCE_DESC* pResourceDesc,
   D3D12_RESOURCE_STATES InitialResourceState,
   const D3D12_CLEAR_VALUE* pOptimizedClearValue, Allocation** ppAllocation,
-  REFIID riidResource, void** ppvResource)
+  REFIID riidResource, void** ppvResource) -> HRESULT
 {
   if (!pAllocDesc || !pResourceDesc || !ppAllocation) {
     D3D12MA_ASSERT(
@@ -9392,11 +9476,11 @@ HRESULT Allocator::CreateResource(const ALLOCATION_DESC* pAllocDesc,
 }
 
 #    ifdef __ID3D12Device8_INTERFACE_DEFINED__
-HRESULT Allocator::CreateResource2(const ALLOCATION_DESC* pAllocDesc,
+auto Allocator::CreateResource2(const ALLOCATION_DESC* pAllocDesc,
   const D3D12_RESOURCE_DESC1* pResourceDesc,
   D3D12_RESOURCE_STATES InitialResourceState,
   const D3D12_CLEAR_VALUE* pOptimizedClearValue, Allocation** ppAllocation,
-  REFIID riidResource, void** ppvResource)
+  REFIID riidResource, void** ppvResource) -> HRESULT
 {
   if (!pAllocDesc || !pResourceDesc || !ppAllocation) {
     D3D12MA_ASSERT(
@@ -9412,11 +9496,11 @@ HRESULT Allocator::CreateResource2(const ALLOCATION_DESC* pAllocDesc,
 #    endif // #ifdef __ID3D12Device8_INTERFACE_DEFINED__
 
 #    ifdef __ID3D12Device10_INTERFACE_DEFINED__
-HRESULT Allocator::CreateResource3(const ALLOCATION_DESC* pAllocDesc,
+auto Allocator::CreateResource3(const ALLOCATION_DESC* pAllocDesc,
   const D3D12_RESOURCE_DESC1* pResourceDesc, D3D12_BARRIER_LAYOUT InitialLayout,
   const D3D12_CLEAR_VALUE* pOptimizedClearValue, UINT32 NumCastableFormats,
   DXGI_FORMAT* pCastableFormats, Allocation** ppAllocation, REFIID riidResource,
-  void** ppvResource)
+  void** ppvResource) -> HRESULT
 {
   if (!pAllocDesc || !pResourceDesc || !ppAllocation) {
     D3D12MA_ASSERT(
@@ -9431,8 +9515,9 @@ HRESULT Allocator::CreateResource3(const ALLOCATION_DESC* pAllocDesc,
 }
 #    endif // #ifdef __ID3D12Device10_INTERFACE_DEFINED__
 
-HRESULT Allocator::AllocateMemory(const ALLOCATION_DESC* pAllocDesc,
+auto Allocator::AllocateMemory(const ALLOCATION_DESC* pAllocDesc,
   const D3D12_RESOURCE_ALLOCATION_INFO* pAllocInfo, Allocation** ppAllocation)
+  -> HRESULT
 {
   if (!ValidateAllocateMemoryParameters(pAllocDesc, pAllocInfo, ppAllocation)) {
     D3D12MA_ASSERT(
@@ -9443,11 +9528,11 @@ HRESULT Allocator::AllocateMemory(const ALLOCATION_DESC* pAllocDesc,
   return m_Pimpl->AllocateMemory(pAllocDesc, pAllocInfo, ppAllocation);
 }
 
-HRESULT Allocator::CreateAliasingResource(Allocation* pAllocation,
+auto Allocator::CreateAliasingResource(Allocation* pAllocation,
   UINT64 AllocationLocalOffset, const D3D12_RESOURCE_DESC* pResourceDesc,
   D3D12_RESOURCE_STATES InitialResourceState,
   const D3D12_CLEAR_VALUE* pOptimizedClearValue, REFIID riidResource,
-  void** ppvResource)
+  void** ppvResource) -> HRESULT
 {
   if (!pAllocation || !pResourceDesc || !ppvResource) {
     D3D12MA_ASSERT(
@@ -9462,11 +9547,11 @@ HRESULT Allocator::CreateAliasingResource(Allocation* pAllocation,
 }
 
 #    ifdef __ID3D12Device8_INTERFACE_DEFINED__
-HRESULT Allocator::CreateAliasingResource1(Allocation* pAllocation,
+auto Allocator::CreateAliasingResource1(Allocation* pAllocation,
   UINT64 AllocationLocalOffset, const D3D12_RESOURCE_DESC1* pResourceDesc,
   D3D12_RESOURCE_STATES InitialResourceState,
   const D3D12_CLEAR_VALUE* pOptimizedClearValue, REFIID riidResource,
-  void** ppvResource)
+  void** ppvResource) -> HRESULT
 {
   if (!pAllocation || !pResourceDesc || !ppvResource) {
     D3D12MA_ASSERT(
@@ -9482,11 +9567,12 @@ HRESULT Allocator::CreateAliasingResource1(Allocation* pAllocation,
 #    endif // #ifdef __ID3D12Device8_INTERFACE_DEFINED__
 
 #    ifdef __ID3D12Device10_INTERFACE_DEFINED__
-HRESULT Allocator::CreateAliasingResource2(Allocation* pAllocation,
+auto Allocator::CreateAliasingResource2(Allocation* pAllocation,
   UINT64 AllocationLocalOffset, const D3D12_RESOURCE_DESC1* pResourceDesc,
   D3D12_BARRIER_LAYOUT InitialLayout,
   const D3D12_CLEAR_VALUE* pOptimizedClearValue, UINT32 NumCastableFormats,
   DXGI_FORMAT* pCastableFormats, REFIID riidResource, void** ppvResource)
+  -> HRESULT
 {
   if (!pAllocation || !pResourceDesc || !ppvResource) {
     D3D12MA_ASSERT(
@@ -9501,7 +9587,7 @@ HRESULT Allocator::CreateAliasingResource2(Allocation* pAllocation,
 }
 #    endif // #ifdef __ID3D12Device10_INTERFACE_DEFINED__
 
-HRESULT Allocator::CreatePool(const POOL_DESC* pPoolDesc, Pool** ppPool)
+auto Allocator::CreatePool(const POOL_DESC* pPoolDesc, Pool** ppPool) -> HRESULT
 {
   if (!pPoolDesc || !ppPool
     || (pPoolDesc->MaxBlockCount > 0
@@ -9594,7 +9680,7 @@ Allocator::~Allocator() { D3D12MA_DELETE(m_Pimpl->GetAllocs(), m_Pimpl); }
 #  endif // _D3D12MA_ALLOCATOR_FUNCTIONS
 
 #  ifndef _D3D12MA_VIRTUAL_BLOCK_FUNCTIONS
-BOOL VirtualBlock::IsEmpty() const
+auto VirtualBlock::IsEmpty() const -> BOOL
 {
   D3D12MA_DEBUG_GLOBAL_MUTEX_LOCK
   return m_Pimpl->m_Metadata->IsEmpty() ? TRUE : FALSE;
@@ -9609,8 +9695,8 @@ void VirtualBlock::GetAllocationInfo(
   m_Pimpl->m_Metadata->GetAllocationInfo(allocation.AllocHandle, *pInfo);
 }
 
-HRESULT VirtualBlock::Allocate(const VIRTUAL_ALLOCATION_DESC* pDesc,
-  VirtualAllocation* pAllocation, UINT64* pOffset)
+auto VirtualBlock::Allocate(const VIRTUAL_ALLOCATION_DESC* pDesc,
+  VirtualAllocation* pAllocation, UINT64* pOffset) -> HRESULT
 {
   if (!pDesc || !pAllocation || pDesc->Size == 0 || !IsPow2(pDesc->Alignment)) {
     D3D12MA_ASSERT(0 && "Invalid arguments passed to VirtualBlock::Allocate.");

@@ -55,7 +55,9 @@ NOLINT_TEST_F(
       std::make_unique<ZeroCapacityDescriptorAllocationStrategy>());
 
   // This factory should never be called since we'll fail on capacity check
-  z_allocator->segment_factory_ = [](auto, auto) {
+  z_allocator->segment_factory_
+    = [](auto,
+        auto) -> std::unique_ptr<oxygen::graphics::detail::DescriptorSegment> {
     ADD_FAILURE() << "Segment factory called despite zero capacity";
     return std::unique_ptr<MockDescriptorSegment> {};
   };

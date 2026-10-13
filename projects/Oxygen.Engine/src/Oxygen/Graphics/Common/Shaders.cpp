@@ -48,10 +48,10 @@ namespace {
       return false;
     }
 
-    const auto is_alpha_underscore = [](const unsigned char c) {
+    const auto is_alpha_underscore = [](const unsigned char c) -> bool {
       return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
     };
-    const auto is_alnum_underscore = [](const unsigned char c) {
+    const auto is_alnum_underscore = [](const unsigned char c) -> bool {
       return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')
         || (c >= '0' && c <= '9') || c == '_';
     };
@@ -73,8 +73,8 @@ namespace {
       return false;
     }
     const auto is_upper
-      = [](const unsigned char c) { return c >= 'A' && c <= 'Z'; };
-    const auto is_upper_digit_underscore = [](const unsigned char c) {
+      = [](const unsigned char c) -> bool { return c >= 'A' && c <= 'Z'; };
+    const auto is_upper_digit_underscore = [](const unsigned char c) -> bool {
       return (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_';
     };
 
@@ -161,7 +161,7 @@ auto CanonicalizeShaderRequest(ShaderRequest request) -> ShaderRequest
   }
 
   std::sort(request.defines.begin(), request.defines.end(),
-    [](const ShaderDefine& a, const ShaderDefine& b) {
+    [](const ShaderDefine& a, const ShaderDefine& b) -> bool {
       if (a.name != b.name) {
         return a.name < b.name;
       }
@@ -225,7 +225,7 @@ auto ShaderRequestHash::operator()(const ShaderRequest& request) const noexcept
   -> size_t
 {
   size_t seed = 0;
-  const auto hash_combine = [&seed](const size_t value) {
+  const auto hash_combine = [&seed](const size_t value) -> void {
     seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6U) + (seed >> 2U);
   };
 
@@ -249,7 +249,7 @@ auto ComputeShaderRequestKey(const ShaderRequest& request) -> uint64_t
 
   auto seed = uint64_t { 0 };
 
-  const auto mix = [&seed](const uint64_t value) {
+  const auto mix = [&seed](const uint64_t value) -> void {
     constexpr uint64_t kGoldenRatio = 0x9e3779b97f4a7c15ULL;
     seed ^= value + kGoldenRatio + (seed << 6U) + (seed >> 2U);
   };

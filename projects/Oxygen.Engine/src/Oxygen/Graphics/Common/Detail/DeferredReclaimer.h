@@ -75,7 +75,7 @@ public:
   auto RegisterDeferredRelease(std::shared_ptr<T> resource) -> void
     requires HasReleaseMethod<T>
   {
-    RegisterDeferredAction([resource = std::move(resource)]() mutable {
+    RegisterDeferredAction([resource = std::move(resource)]() mutable -> void {
       LogRelease(resource.get());
       resource->Release();
       resource.reset();
@@ -92,7 +92,7 @@ public:
   template <typename T>
   auto RegisterDeferredRelease(std::shared_ptr<T> resource) -> void
   {
-    RegisterDeferredAction([resource = std::move(resource)]() mutable {
+    RegisterDeferredAction([resource = std::move(resource)]() mutable -> void {
       LogRelease(resource.get());
       resource.reset();
     });
@@ -105,7 +105,7 @@ public:
   auto RegisterDeferredRelease(T* const resource) noexcept -> void
     requires HasReleaseMethod<T>
   {
-    RegisterDeferredAction([resource]() mutable {
+    RegisterDeferredAction([resource]() mutable -> void {
       if (resource) {
         LogRelease(resource);
         resource->Release();

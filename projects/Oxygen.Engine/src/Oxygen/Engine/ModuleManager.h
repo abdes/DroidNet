@@ -126,7 +126,8 @@ public:
   public:
     Subscription() noexcept = default;
     OXGN_NGIN_API Subscription(Subscription&& other) noexcept;
-    OXGN_NGIN_API Subscription& operator=(Subscription&& other) noexcept;
+    OXGN_NGIN_API auto operator=(Subscription&& other) noexcept
+      -> Subscription&;
     OXGN_NGIN_API ~Subscription() noexcept;
 
     // Explicitly cancel early; otherwise destructor unsubscribes.

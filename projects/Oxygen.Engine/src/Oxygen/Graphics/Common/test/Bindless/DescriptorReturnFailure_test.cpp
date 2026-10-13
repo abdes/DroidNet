@@ -27,10 +27,11 @@ NOLINT_TEST(
   using namespace oxygen::graphics;
   ::testing::NiceMock<bindless::testing::MockDescriptorAllocator> allocator;
   allocator.ext_segment_factory_
-    = [](auto capacity, auto base, auto view, auto visibility) {
-        return std::make_unique<detail::FixedDescriptorSegment>(
-          capacity, base, view, visibility);
-      };
+    = [](auto capacity, auto base, auto view,
+        auto visibility) -> std::unique_ptr<detail::DescriptorSegment> {
+    return std::make_unique<detail::FixedDescriptorSegment>(
+      capacity, base, view, visibility);
+  };
   auto raw = allocator.RealAllocateRawForMock(
     ResourceViewType::kTexture_DSV, DescriptorVisibility::kCpuOnly);
   auto bindless
@@ -38,7 +39,7 @@ NOLINT_TEST(
       ResourceViewType::kTexture_SRV);
   detail::DeferredReclaimer reclaimer;
   bool ran = false;
-  auto action = reclaimer.PrepareDeferredAction([&] { ran = true; });
+  auto action = reclaimer.PrepareDeferredAction([&] -> void { ran = true; });
   const auto rejected_before = HeapAllocationFailure::RejectedCount();
   {
     HeapAllocationFailure reject;
@@ -62,7 +63,8 @@ NOLINT_TEST(
   {
     HeapAllocationFailure reject;
     try {
-      auto action = reclaimer.PrepareDeferredAction([&] { ran = true; });
+      auto action
+        = reclaimer.PrepareDeferredAction([&] -> void { ran = true; });
     } catch (const std::bad_alloc&) {
       failed = true;
     }

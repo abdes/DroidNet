@@ -126,8 +126,9 @@ NOLINT_TEST_F(ReadbackTrackerTest, AwaitAllPending_WaitsForCompletion)
   const auto ticket
     = tracker.Register(FenceValue { 33 }, SizeBytes { 24 }, "wait me");
 
-  auto pending_future = std::async(
-    std::launch::async, [&]() { return tracker.AwaitAllPending(); });
+  auto pending_future = std::async(std::launch::async,
+    [&]() -> std::expected<std::vector<oxygen::graphics::ReadbackResult>,
+            ReadbackError> { return tracker.AwaitAllPending(); });
 
   EXPECT_EQ(pending_future.wait_for(std::chrono::milliseconds { 1 }),
     std::future_status::timeout);
@@ -153,10 +154,12 @@ NOLINT_TEST_F(ReadbackTrackerTest, AwaitAllWaitsForRequestedTickets)
   const auto second
     = tracker.Register(FenceValue { 41 }, SizeBytes { 12 }, "second");
 
-  auto future = std::async(std::launch::async, [&]() {
-    const std::array tickets { first, second };
-    return tracker.AwaitAll(tickets);
-  });
+  auto future = std::async(std::launch::async,
+    [&]() -> std::expected<std::vector<oxygen::graphics::ReadbackResult>,
+            ReadbackError> {
+      const std::array tickets { first, second };
+      return tracker.AwaitAll(tickets);
+    });
 
   EXPECT_EQ(future.wait_for(std::chrono::milliseconds { 1 }),
     std::future_status::timeout);
@@ -183,8 +186,10 @@ NOLINT_TEST_F(
   const auto ticket = tracker.Register(
     FenceValue { 52 }, SizeBytes { 20 }, "retired-while-awaiting");
 
-  auto future = std::async(
-    std::launch::async, [&]() { return tracker.Await(ticket.id); });
+  auto future = std::async(std::launch::async,
+    [&]() -> std::expected<oxygen::graphics::ReadbackResult, ReadbackError> {
+      return tracker.Await(ticket.id);
+    });
 
   EXPECT_EQ(future.wait_for(std::chrono::milliseconds { 1 }),
     std::future_status::timeout);

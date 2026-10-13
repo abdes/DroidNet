@@ -208,7 +208,7 @@ auto RestoreVehicleConstraintSettings(std::span<const uint8_t> blob,
   const oxygen::physics::vehicle::VehicleControlInput& input) noexcept -> bool
 {
   const auto in_range_01
-    = [](const float value) { return value >= 0.0F && value <= 1.0F; };
+    = [](const float value) -> bool { return value >= 0.0F && value <= 1.0F; };
   return input.forward >= -1.0F && input.forward <= 1.0F
     && in_range_01(input.brake) && in_range_01(input.hand_brake)
     && input.steering >= -1.0F && input.steering <= 1.0F;
@@ -322,8 +322,10 @@ auto oxygen::physics::jolt::JoltVehicles::CreateVehicle(const WorldId world_id,
     if (wheel.body_id == desc.chassis_body_id) {
       return Err(PhysicsError::kInvalidArgument);
     }
-    const auto duplicate = std::find_if(wheels.begin(), wheels.end(),
-      [&](const auto& existing) { return existing.body_id == wheel.body_id; });
+    const auto duplicate = std::find_if(
+      wheels.begin(), wheels.end(), [&](const auto& existing) -> bool {
+        return existing.body_id == wheel.body_id;
+      });
     if (duplicate != wheels.end()) {
       return Err(PhysicsError::kAlreadyExists);
     }

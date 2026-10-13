@@ -291,8 +291,9 @@ private:
     if (awaitable_.await_ready()) {
       Invoke();
     } else {
-      resume_fn
-        = +[](CoroutineFrame* frame) { static_cast<Self*>(frame)->Invoke(); };
+      resume_fn = +[](CoroutineFrame* frame) -> void {
+        static_cast<Self*>(frame)->Invoke();
+      };
       try {
         awaitable_.await_suspend(this->ToHandle()).resume();
       } catch (...) {

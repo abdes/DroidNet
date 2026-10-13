@@ -59,8 +59,9 @@ protected:
   {
     // Configure allocator to capture the last created segment pointer.
     allocator_ = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
-    allocator_->ext_segment_factory_ = [this](auto capacity, auto base_index,
-                                         auto view_type, auto visibility) {
+    allocator_->ext_segment_factory_
+      = [this](auto capacity, auto base_index, auto view_type,
+          auto visibility) -> std::unique_ptr<FixedDescriptorSegment> {
       auto seg = std::make_unique<FixedDescriptorSegment>(
         capacity, base_index, view_type, visibility);
       last_segment_ = seg.get();
@@ -576,10 +577,11 @@ NOLINT_TEST_F(
   const auto other_allocator
     = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
   other_allocator->ext_segment_factory_
-    = [](auto capacity, auto base_index, auto view_type, auto visibility) {
-        return std::make_unique<FixedDescriptorSegment>(
-          capacity, base_index, view_type, visibility);
-      };
+    = [](auto capacity, auto base_index, auto view_type,
+        auto visibility) -> std::unique_ptr<FixedDescriptorSegment> {
+    return std::make_unique<FixedDescriptorSegment>(
+      capacity, base_index, view_type, visibility);
+  };
 
   constexpr TestViewDesc desc {
     .view_type = ResourceViewType::kConstantBuffer,
@@ -773,7 +775,7 @@ NOLINT_TEST_F(
   }
   threads.reserve(num_threads);
   for (int t = 0; t < num_threads; ++t) {
-    threads.emplace_back([&, t]() {
+    threads.emplace_back([&, t]() -> void {
       while (!start_flag.load()) {
         std::this_thread::yield();
       }
@@ -816,7 +818,7 @@ NOLINT_TEST_F(
   threads.reserve(num_threads);
 
   for (int thread_index = 0; thread_index < num_threads; ++thread_index) {
-    threads.emplace_back([&]() {
+    threads.emplace_back([&]() -> void {
       while (!start_flag.load()) {
         std::this_thread::yield();
       }
@@ -855,14 +857,15 @@ NOLINT_TEST_F(ResourceRegistryConcurrencyTest,
     allocators.at(static_cast<std::size_t>(index))
       = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
     allocators.at(static_cast<std::size_t>(index))->ext_segment_factory_
-      = [](auto capacity, auto base_index, auto view_type, auto visibility) {
-          return std::make_unique<FixedDescriptorSegment>(
-            capacity, base_index, view_type, visibility);
-        };
+      = [](auto capacity, auto base_index, auto view_type,
+          auto visibility) -> std::unique_ptr<FixedDescriptorSegment> {
+      return std::make_unique<FixedDescriptorSegment>(
+        capacity, base_index, view_type, visibility);
+    };
   }
 
   for (int index = 0; index < num_threads; ++index) {
-    threads.emplace_back([&, index]() {
+    threads.emplace_back([&, index]() -> void {
       while (!start_flag.load()) {
         std::this_thread::yield();
       }
@@ -900,10 +903,11 @@ NOLINT_TEST_F(ResourceRegistryBasicTest,
     = registry_->RegisterView(*resource1_, std::move(allocation), first);
   auto foreign = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
   foreign->ext_segment_factory_
-    = [](auto capacity, auto base, auto type, auto visibility) {
-        return std::make_unique<FixedDescriptorSegment>(
-          capacity, base, type, visibility);
-      };
+    = [](auto capacity, auto base, auto type,
+        auto visibility) -> std::unique_ptr<FixedDescriptorSegment> {
+    return std::make_unique<FixedDescriptorSegment>(
+      capacity, base, type, visibility);
+  };
   auto conflicting = foreign->AllocateRaw(second.view_type, second.visibility);
   ASSERT_EQ(conflicting.GetBindlessHandle(), index);
   EXPECT_THROW(

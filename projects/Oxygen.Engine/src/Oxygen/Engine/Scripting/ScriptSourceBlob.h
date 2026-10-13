@@ -139,7 +139,9 @@ private:
     ScriptBlobOrigin origin, ScriptBlobCanonicalName canonical_name)
     : storage_(std::move(storage))
     , bytes_(std::visit(
-        [](const auto& s) { return std::span<const uint8_t>(s.bytes); },
+        [](const auto& s) -> std::span<const uint8_t> {
+          return std::span<const uint8_t>(s.bytes);
+        },
         storage_))
     , language_(language)
     , compression_(compression)

@@ -819,17 +819,18 @@ NOLINT_TEST_F(TextureReadbackLifecycleTest,
   auto readback = CreateTextureReadback("reuse-readback");
 
   auto MakeTexture
-    = [&](const std::array<uint8_t, 4>& texel, std::string_view debug_name) {
-        std::vector<std::byte> upload_bytes(
-          kUploadRowPitch * texture_desc.height, std::byte { 0 });
-        for (uint32_t y = 0; y < texture_desc.height; ++y) {
-          for (uint32_t x = 0; x < texture_desc.width; ++x) {
-            WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y, texel);
-          }
-        }
-        return CreateInitializedColorTexture(
-          texture_desc, upload_bytes, debug_name);
-      };
+    = [&](const std::array<uint8_t, 4>& texel,
+        std::string_view debug_name) -> std::shared_ptr<Texture> {
+    std::vector<std::byte> upload_bytes(
+      kUploadRowPitch * texture_desc.height, std::byte { 0 });
+    for (uint32_t y = 0; y < texture_desc.height; ++y) {
+      for (uint32_t x = 0; x < texture_desc.width; ++x) {
+        WriteRgbaTexel(upload_bytes, kUploadRowPitch, x, y, texel);
+      }
+    }
+    return CreateInitializedColorTexture(
+      texture_desc, upload_bytes, debug_name);
+  };
 
   auto first = MakeTexture({ 7U, 8U, 9U, 10U }, "reuse-first-texture");
   EnqueueReadback(readback, first, {}, "texture-readback-reuse-first");
@@ -987,7 +988,7 @@ NOLINT_TEST_F(TextureReadbackCoroutineTest,
 
   TestEventLoop loop;
   bool resumed = false;
-  std::jthread completion_pump([this, readback] {
+  std::jthread completion_pump([this, readback] -> void {
     WaitForQueueIdle();
     const auto ready = readback->IsReady();
     CHECK_F(ready.has_value() && *ready, "Readback should become ready");

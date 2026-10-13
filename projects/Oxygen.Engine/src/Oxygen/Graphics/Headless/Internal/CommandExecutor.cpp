@@ -27,7 +27,8 @@ auto CommandExecutor::Prepare(CommandQueue* queue,
 {
   return SerialExecutor::Prepare(
     [queue, chunks = std::move(chunks), before = std::move(before),
-      completed = std::move(completed), failed = std::move(failed)]() mutable {
+      completed = std::move(completed),
+      failed = std::move(failed)]() mutable -> void {
       try {
         before();
         CommandContext context;

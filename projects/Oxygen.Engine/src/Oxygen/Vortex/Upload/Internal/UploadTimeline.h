@@ -41,7 +41,7 @@ struct UploadTimeline {
       return;
     }
     notifying = true;
-    const ScopeGuard reset([this]() noexcept { notifying = false; });
+    const ScopeGuard reset([this]() noexcept -> void { notifying = false; });
     while (true) {
       UploadProgress latest {};
       {

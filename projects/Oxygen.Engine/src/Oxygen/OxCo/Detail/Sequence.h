@@ -232,7 +232,7 @@ public:
     if (this->first_->awaiter.await_ready()) {
       KickOffSecond();
     } else {
-      this->resume_fn = +[](CoroutineFrame* frame) {
+      this->resume_fn = +[](CoroutineFrame* frame) -> void {
         auto* self = static_cast<Sequence*>(frame);
         self->KickOffSecond();
       };
@@ -278,7 +278,7 @@ public:
 
   auto await_resume() -> decltype(auto)
   {
-    ScopeGuard guard([this]() noexcept {
+    ScopeGuard guard([this]() noexcept -> void {
       // Destroy the second stage and the return value of the first stage
       this->SwitchToNone();
     });
@@ -355,7 +355,7 @@ public:
   {
     return detail::SequenceBuilder(
       [fn = std::move(fn_), next = std::move(next)]<class T>(
-        T&& value) mutable {
+        T&& value) mutable -> auto {
         return fn(std::forward<T>(value)) | std::move(next);
       });
   }

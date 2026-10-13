@@ -114,7 +114,7 @@ NOLINT_TEST_F(StartWithoutCancellation, SuspensionRequired)
     .WillRepeatedly(Return(false));
   // Expect await_suspend() to be called with the coroutine handle
   EXPECT_CALL(*awaitable.Mock(), await_suspend(_))
-    .WillOnce([](const std::coroutine_handle<> h) {
+    .WillOnce([](const std::coroutine_handle<> h) -> void {
       // Simulate the awaitable will resume immediately
       h.resume();
     });
@@ -304,7 +304,7 @@ NOLINT_TEST_F(CancellationPending, AwaitableNeedsSuspension)
   EXPECT_CALL(*awaitable.Mock(), await_ready()).WillOnce(Return(false));
   // Expect await_suspend() to be called
   EXPECT_CALL(*awaitable.Mock(), await_suspend(_))
-    .WillOnce([](const std::coroutine_handle<> h) {
+    .WillOnce([](const std::coroutine_handle<> h) -> void {
       // Simulate awaitable resumes after some time
       h.resume();
     });
@@ -381,9 +381,8 @@ NOLINT_TEST_F(CancellationAfterRunning, CancellationPendingUntilResume)
   // Simulate await_ready() returning false
   EXPECT_CALL(*awaitable.Mock(), await_ready()).WillOnce(Return(false));
   // Expect await_suspend() to be called
-  EXPECT_CALL(*awaitable.Mock(), await_suspend(_)).WillOnce([&](Handle handle) {
-    continuation = handle;
-  });
+  EXPECT_CALL(*awaitable.Mock(), await_suspend(_))
+    .WillOnce([&](Handle handle) -> void { continuation = handle; });
 
   // Simulate await_cancel() returning false (cancellation pending)
   EXPECT_CALL(*awaitable.Mock(), await_cancel(_)).WillOnce(Return(false));
@@ -423,9 +422,8 @@ NOLINT_TEST_F(CancellationPendingAwaitableResumes, MustNotResume)
   // Simulate await_ready() returning false
   EXPECT_CALL(*awaitable.Mock(), await_ready()).WillOnce(Return(false));
   // Expect await_suspend() to be called
-  EXPECT_CALL(*awaitable.Mock(), await_suspend(_)).WillOnce([&](Handle handle) {
-    continuation = handle;
-  });
+  EXPECT_CALL(*awaitable.Mock(), await_suspend(_))
+    .WillOnce([&](Handle handle) -> void { continuation = handle; });
 
   // Simulate await_cancel() returning false (cancellation pending)
   EXPECT_CALL(*awaitable.Mock(), await_cancel(_)).WillOnce(Return(false));
@@ -469,9 +467,8 @@ NOLINT_TEST_F(CancellationPendingAwaitableResumes, MustResume)
   // Simulate await_ready() returning false
   EXPECT_CALL(*awaitable.Mock(), await_ready()).WillOnce(Return(false));
   // Expect await_suspend() to be called
-  EXPECT_CALL(*awaitable.Mock(), await_suspend(_)).WillOnce([&](Handle handle) {
-    continuation = handle;
-  });
+  EXPECT_CALL(*awaitable.Mock(), await_suspend(_))
+    .WillOnce([&](Handle handle) -> void { continuation = handle; });
 
   // Simulate await_cancel() returning false (cancellation pending)
   EXPECT_CALL(*awaitable.Mock(), await_cancel(_)).WillOnce(Return(false));
@@ -517,9 +514,8 @@ NOLINT_TEST_F(CancellationPendingAwaitableResumes, AwaitResumeThrows)
   // Simulate await_ready() returning false
   EXPECT_CALL(*awaitable.Mock(), await_ready()).WillOnce(Return(false));
   // Expect await_suspend() to be called
-  EXPECT_CALL(*awaitable.Mock(), await_suspend(_)).WillOnce([&](Handle handle) {
-    continuation = handle;
-  });
+  EXPECT_CALL(*awaitable.Mock(), await_suspend(_))
+    .WillOnce([&](Handle handle) -> void { continuation = handle; });
 
   // Simulate await_cancel() returning false (cancellation pending)
   EXPECT_CALL(*awaitable.Mock(), await_cancel(_)).WillOnce(Return(false));

@@ -42,14 +42,15 @@ namespace oxygen::vortex::shadows::internal {
   const FrameLightSelection& selection, const ResolvedView* view) -> bool
 {
   return std::ranges::any_of(selection.directional_lights,
-           [](const auto& light) {
+           [](const auto& light) -> bool {
              return HasDirectionalShadowInfluence(light)
                && (light.shadow_flags & kLightFlagContactShadows) != 0U;
            })
-    || std::ranges::any_of(selection.local_lights, [view](const auto& light) {
-         return HasLocalShadowInfluence(light, view)
-           && (light.flags & kLightFlagContactShadows) != 0U;
-       });
+    || std::ranges::any_of(
+      selection.local_lights, [view](const auto& light) -> bool {
+        return HasLocalShadowInfluence(light, view)
+          && (light.flags & kLightFlagContactShadows) != 0U;
+      });
 }
 
 } // namespace oxygen::vortex::shadows::internal

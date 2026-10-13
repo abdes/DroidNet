@@ -30,8 +30,8 @@ protected:
   auto SetUp() -> void override
   {
     strategy_ = std::make_unique<oxygen::nexus::TimelineGatedSlotReuse>(
-      [this](DomainKey d) { return alloc_(d); },
-      [this](DomainKey d, b::HeapIndex h) {
+      [this](DomainKey d) -> b::HeapIndex { return alloc_(d); },
+      [this](DomainKey d, b::HeapIndex h) -> void {
         free_(d, h);
         alloc_.free_list.push_back(h.get());
       });

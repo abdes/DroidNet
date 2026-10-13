@@ -204,7 +204,7 @@ namespace detail {
 
       void operator()(DoneCB& doneCB)
       {
-        auto impl = [this, &doneCB]<class... A>(A&&... args) {
+        auto impl = [this, &doneCB]<class... A>(A&&... args) -> void {
           using Sig = void(asio::error_code, Ret...);
           asio::async_initiate<DoneCB, Sig>(
             std::move(init_), doneCB, std::forward<A>(args)...);
@@ -320,7 +320,7 @@ public:
 
   void Post(asio::io_context& io, void (*fn)(void*), void* arg) noexcept
   {
-    asio::dispatch(io, [fn, arg] { fn(arg); });
+    asio::dispatch(io, [fn, arg] -> void { fn(arg); });
   }
 };
 

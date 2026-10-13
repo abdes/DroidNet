@@ -57,7 +57,7 @@ auto UploadTicket::Await() const -> UploadResult
   auto& timeline = *record->timeline;
   std::unique_lock lock(timeline.mutex);
   timeline.changed.wait(
-    lock, [&record]() { return record->Result().has_value(); });
+    lock, [&record]() -> bool { return record->Result().has_value(); });
   if (const auto result = record->Result(); result.has_value()) {
     return *result;
   }
@@ -94,7 +94,7 @@ auto UploadTicket::AwaitGpuCompletion(
   }
   const auto timeline = record->timeline;
   co_await timeline->notification.UntilMatches(
-    [fence = record->fence](const internal::UploadProgress& progress) {
+    [fence = record->fence](const internal::UploadProgress& progress) -> bool {
       return progress.completed >= fence || progress.closed.has_value();
     });
   const std::scoped_lock lock(timeline->mutex);

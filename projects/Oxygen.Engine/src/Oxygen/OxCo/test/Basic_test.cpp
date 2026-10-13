@@ -135,7 +135,8 @@ NOLINT_TEST_F(OxCoBasicTest, Exceptions)
 NOLINT_TEST_F(OxCoBasicTest, Just)
 {
   ::Run(*el_, []() -> Co<> {
-    auto mk_async = [](int n) { return [n]() -> Co<int> { return Just(n); }; };
+    auto mk_async
+      = [](int n) -> auto { return [n]() -> Co<int> { return Just(n); }; };
     const auto x = co_await mk_async(42)();
     EXPECT_EQ(x, 42);
 

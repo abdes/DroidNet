@@ -57,8 +57,8 @@ public:
   // NOLINTEND
   // clang-format off
 
-  DescriptorAllocationHandle RealAllocateRawForMock(
-    const ResourceViewType view_type, const DescriptorVisibility visibility)
+  auto RealAllocateRawForMock(
+    const ResourceViewType view_type, const DescriptorVisibility visibility) -> DescriptorAllocationHandle
   {
     return BaseDescriptorAllocator::AllocateRaw(view_type, visibility);
   }

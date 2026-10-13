@@ -122,7 +122,7 @@ auto CreateLightingWorkloadScene(const LightingWorkload& workload)
       = result.scene->CreateNode("Light " + std::to_string(source.id.get()));
     node.GetTransform().SetLocalPosition({ source.position_ws.at(0),
       source.position_ws.at(1), source.position_ws.at(2) });
-    const auto initialize = [&](auto& light) {
+    const auto initialize = [&](auto& light) -> void {
       light.Common().affects_world = source.enabled;
       light.Common().casts_shadows = source.casts_shadows;
       light.Common().color_rgb = { source.color_rgb.at(0),

@@ -110,19 +110,19 @@ NOLINT_TEST_F(
     int released = 0;
     UseReleaseReason reason {};
   } counts;
-  OpaqueUseHooks hooks { .prepare
-    = [](void* ptr, QueueIdentity) { ++static_cast<Counts*>(ptr)->prepared; },
-    .submitted =
-      [](void* ptr, QueueIdentity, const SubmissionResult&) noexcept {
-        ++static_cast<Counts*>(ptr)->submitted;
-      },
-    .released =
-      [](void* ptr, QueueIdentity, SubmissionOutcome,
-        UseReleaseReason reason) noexcept {
-        auto& value = *static_cast<Counts*>(ptr);
-        ++value.released;
-        value.reason = reason;
-      } };
+  OpaqueUseHooks hooks { .prepare = [](void* ptr, QueueIdentity) -> void {
+                          ++static_cast<Counts*>(ptr)->prepared;
+                        },
+    .submitted
+    = [](void* ptr, QueueIdentity, const SubmissionResult&) noexcept -> void {
+      ++static_cast<Counts*>(ptr)->submitted;
+    },
+    .released = [](void* ptr, QueueIdentity, SubmissionOutcome,
+                  UseReleaseReason reason) noexcept -> void {
+      auto& value = *static_cast<Counts*>(ptr);
+      ++value.released;
+      value.reason = reason;
+    } };
   auto list = List();
   auto owner = std::make_shared<int>(5);
   const std::weak_ptr<int> weak = owner;
@@ -180,10 +180,9 @@ NOLINT_TEST_F(SubmissionTest, CpuAdmissionGuardDoesNotAddAnUnneededPrivateFence)
   auto list = List();
   auto permission = std::make_shared<int>(1);
   list->Uses().RetainOpaque(permission, 1, permission.get(),
-    { .valid =
-        [](const void* value) noexcept {
-          return *static_cast<const int*>(value) == 1;
-        },
+    { .valid = [](const void* value) noexcept -> bool {
+       return *static_cast<const int*>(value) == 1;
+     },
       .requires_completion = false });
   EXPECT_TRUE(list->Uses().HasUses());
   EXPECT_FALSE(list->Uses().NeedsCompletion());
@@ -207,7 +206,7 @@ NOLINT_TEST_F(
   list->Uses().RetainOpaque(owner, 1);
   std::optional<HeapAllocationFailure> denied;
   queue->context = &denied;
-  queue->after_issue = [](void* ptr) noexcept {
+  queue->after_issue = [](void* ptr) noexcept -> void {
     static_cast<std::optional<HeapAllocationFailure>*>(ptr)->emplace();
   };
   const auto rejected_before = HeapAllocationFailure::RejectedCount();

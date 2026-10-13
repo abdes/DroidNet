@@ -110,12 +110,13 @@ auto BuildLightingWorkload(const LightingWorkloadOptions& options)
   for (std::size_t index = 0U; index < shadow_order.size(); ++index) {
     shadow_order.at(index) = index;
   }
-  std::ranges::sort(shadow_order, {}, [&](const std::size_t index) {
-    const auto id = result.lights.at(index).id.get();
-    const auto x = (static_cast<float>(id % columns) - center) * spacing;
-    const auto y = (static_cast<float>(id / columns) - center) * spacing;
-    return std::tuple { x * x + y * y, id };
-  });
+  std::ranges::sort(shadow_order, {},
+    [&](const std::size_t index) -> std::tuple<float, unsigned int> {
+      const auto id = result.lights.at(index).id.get();
+      const auto x = (static_cast<float>(id % columns) - center) * spacing;
+      const auto y = (static_cast<float>(id / columns) - center) * spacing;
+      return std::tuple { x * x + y * y, id };
+    });
   auto remaining_point = options.point_shadow_requests;
   auto remaining_spot = options.spot_shadow_requests;
   for (const auto index : shadow_order) {

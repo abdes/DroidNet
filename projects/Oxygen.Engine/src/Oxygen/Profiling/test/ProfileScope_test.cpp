@@ -51,7 +51,8 @@ namespace {
   {
     RecordingObserver observer;
     ScopedCpuScopeObserver registration(observer);
-    std::thread worker([] { CpuProfileScope unrelated("other thread"); });
+    std::thread worker(
+      [] -> void { CpuProfileScope unrelated("other thread"); });
     worker.join();
     EXPECT_TRUE(observer.events.empty());
   }

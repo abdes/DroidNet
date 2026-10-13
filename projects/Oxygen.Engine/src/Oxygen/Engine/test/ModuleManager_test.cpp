@@ -47,11 +47,11 @@ protected:
 
     return mgr_.GetModules()
       // only modules that support the given phase
-      | filter([id](const EngineModule& m) {
+      | filter([id](const EngineModule& m) -> bool {
           return (m.GetSupportedPhases() & MakePhaseMask(id)) != 0;
         })
       // to EngineModule*
-      | transform([](EngineModule& m) { return &m; })
+      | transform([](EngineModule& m) -> EngineModule* { return &m; })
       // to std::vector<EngineModule*>
       | std::ranges::to<std::vector<EngineModule*>>();
   }

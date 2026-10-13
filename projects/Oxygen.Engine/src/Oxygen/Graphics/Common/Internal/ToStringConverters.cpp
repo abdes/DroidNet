@@ -144,16 +144,16 @@ auto oxygen::graphics::to_string(const ResourceStates value) -> std::string
 
   // Helper lambda to check if a bit is set and append the state name
   auto check_and_append
-    = [&](const ResourceStates state, const char* state_name) {
-        if ((value & state) == state) {
-          if (!first) {
-            result += " | ";
-          }
-          result += state_name;
-          first = false;
-          checked_states |= state;
-        }
-      };
+    = [&](const ResourceStates state, const char* state_name) -> void {
+    if ((value & state) == state) {
+      if (!first) {
+        result += " | ";
+      }
+      result += state_name;
+      first = false;
+      checked_states |= state;
+    }
+  };
 
   check_and_append(ResourceStates::kUndefined, "Undefined");
   check_and_append(ResourceStates::kVertexBuffer, "VertexBuffer");
@@ -207,7 +207,8 @@ auto oxygen::graphics::to_string(const ShaderStageFlags value) -> std::string
   bool first = true;
   auto checked = ShaderStageFlags::kNone;
 
-  auto check_and_append = [&](const ShaderStageFlags flag, const char* name) {
+  auto check_and_append
+    = [&](const ShaderStageFlags flag, const char* name) -> void {
     if ((value & flag) == flag) {
       if (!first) {
         result += "|";
@@ -343,16 +344,16 @@ auto oxygen::graphics::to_string(const ClearFlags value) -> std::string
 
   // Helper to append flag string if present
   auto check_and_append
-    = [&](const ClearFlags flag_to_check, const char* name) {
-        if ((value & flag_to_check) == flag_to_check) {
-          if (!first) {
-            result += "|";
-          }
-          result += name;
-          first = false;
-          checked_states |= flag_to_check;
-        }
-      };
+    = [&](const ClearFlags flag_to_check, const char* name) -> void {
+    if ((value & flag_to_check) == flag_to_check) {
+      if (!first) {
+        result += "|";
+      }
+      result += name;
+      first = false;
+      checked_states |= flag_to_check;
+    }
+  };
 
   check_and_append(ClearFlags::kColor, "Color");
   check_and_append(ClearFlags::kDepth, "Depth");
@@ -389,7 +390,8 @@ auto oxygen::graphics::to_string(const CullMode value) -> std::string
   // Bitmask to track all checked states (following the ClearFlags pattern)
   auto checked_states = CullMode::kNone;
 
-  auto append_flag = [&](const CullMode flag_to_check, const char* name) {
+  auto append_flag
+    = [&](const CullMode flag_to_check, const char* name) -> void {
     if ((value & flag_to_check) == flag_to_check) {
       if (!first) {
         result += "|";
@@ -520,7 +522,8 @@ auto oxygen::graphics::to_string(const ColorWriteMask value) -> std::string
   // Bitmask to track all checked states (following the ClearFlags pattern)
   auto checked_states = ColorWriteMask::kNone;
 
-  auto append_flag = [&](const ColorWriteMask flag_to_check, const char* name) {
+  auto append_flag
+    = [&](const ColorWriteMask flag_to_check, const char* name) -> void {
     if ((value & flag_to_check) == flag_to_check) {
       if (!first) {
         result += "|";

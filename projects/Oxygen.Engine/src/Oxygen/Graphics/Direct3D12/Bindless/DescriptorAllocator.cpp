@@ -163,7 +163,7 @@ auto DescriptorAllocator::UpdateShaderVisibleHeapsSet() const -> void
         // heap per type - check that the heap being added is not already in the
         // set.
         DCHECK_F(std::ranges::find_if(shader_visible_heaps_,
-                   [&](const detail::ShaderVisibleHeapInfo& info) {
+                   [&](const detail::ShaderVisibleHeapInfo& info) -> bool {
                      return info.heap == d3d12_segment->GetHeap();
                    })
             == shader_visible_heaps_.end(),

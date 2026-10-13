@@ -129,7 +129,8 @@ NOLINT_TEST_P(NoCancelTest, NextTaskIs)
 INSTANTIATE_TEST_SUITE_P(NextTaskIs, NoCancelTest,
   ::testing::Values(&NoCancelNextCancellable, &NoCancelNextNonCancellable,
     &NoCancelNextTask, &NoCancelNextNonTrivial),
-  [](const ::testing::TestParamInfo<NoCancelTest::ParamType>& info) {
+  [](const ::testing::TestParamInfo<NoCancelTest::ParamType>& info)
+    -> const char* {
     switch (info.index) {
     case 0:
       return "Cancellable";
@@ -149,7 +150,7 @@ NOLINT_TEST_F(NonCancelableTaskTest, Return)
 {
   ::Run(*el_, [this]() -> Co<> {
     auto t1 = [&]() -> Co<> { co_await el_->Sleep(1ms); };
-    auto t2 = [&] { return NonCancellable(t1()); };
+    auto t2 = [&] -> auto { return NonCancellable(t1()); };
     co_await t2();
     EXPECT_EQ(el_->Now(), 1ms);
   });
@@ -211,13 +212,13 @@ NOLINT_TEST_F(DisposableTest, ComplexNonCancellableDisposableStructure)
 {
   ::Run(*el_, [this]() -> Co<> {
     int stage = 0;
-    auto check_stage = [&stage](const int expected) {
+    auto check_stage = [&stage](const int expected) -> void {
       EXPECT_EQ(stage, expected);
       stage = expected + 1;
     };
-    auto check_stage_on_exit = [&](int expected) {
+    auto check_stage_on_exit = [&](int expected) -> auto {
       return ScopeGuard(
-        [expected, check_stage]() noexcept { check_stage(expected); });
+        [expected, check_stage]() noexcept -> void { check_stage(expected); });
     };
 
     Event evt;

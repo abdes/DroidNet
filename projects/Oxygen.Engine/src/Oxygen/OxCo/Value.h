@@ -69,8 +69,9 @@ public:
   //! (or resumes it immediately if it already does).
   auto UntilEquals(T expected) -> Awaitable<T> auto
   {
-    return UntilMatches([expected = std::move(expected)](
-                          const T& value) { return value == expected; });
+    return UntilMatches(
+      [expected = std::move(expected)](
+        const T& value) -> bool { return value == expected; });
   }
 
   //! Suspends the caller until the transition of the stored value
@@ -90,14 +91,15 @@ public:
   //! y`).
   auto UntilChanged() -> Awaitable<std::pair<T, T>> auto
   {
-    return UntilChanged([](const T& from, const T& to) { return from != to; });
+    return UntilChanged(
+      [](const T& from, const T& to) -> bool { return from != to; });
   }
 
   //! Waits for a transition from `from` to `to`.
   auto UntilChanged(T from, T to) -> Awaitable<std::pair<T, T>> auto
   {
     return UntilChanged([from = std::move(from), to = std::move(to)](const T& f,
-                          const T& t) { return f == from && t == to; });
+                          const T& t) -> bool { return f == from && t == to; });
   }
 
   // Shorthands for comparison operations.
@@ -148,31 +150,31 @@ public:
   // Shorthands proxying arithmetic operations to the stored value.
   //
 
-  T operator++()
+  auto operator++() -> T
     requires(requires(T t) { ++t; })
   {
-    return Modify([](T& v) { ++v; });
+    return Modify([](T& v) -> void { ++v; });
   }
 
-  T operator++(int)
+  auto operator++(int) -> T
     requires(requires(T t) { t++; })
   {
     auto ret = value_;
-    Modify([](T& v) { ++v; });
+    Modify([](T& v) -> void { ++v; });
     return ret;
   }
 
-  T operator--()
+  auto operator--() -> T
     requires(requires(T t) { --t; })
   {
-    return Modify([](T& v) { --v; });
+    return Modify([](T& v) -> void { --v; });
   }
 
-  T operator--(int)
+  auto operator--(int) -> T
     requires(requires(T t) { t--; })
   {
     auto ret = value_;
-    Modify([](T& v) { --v; });
+    Modify([](T& v) -> void { --v; });
     return ret;
   }
 
@@ -198,7 +200,7 @@ public:
 #undef OXCO_DEFINE_ARITHMETIC_OP
 
 private:
-  template <class Fn> Comparison<Fn> MakeComparison(Fn&& fn)
+  template <class Fn> auto MakeComparison(Fn&& fn) -> Comparison<Fn>
   {
     // gcc-14 fails to CTAD Comparison signature here,
     // so wrap its construction into a helper function.
@@ -243,7 +245,7 @@ protected:
   }
 
 private:
-  virtual bool Matches(const T& from, const T& to) = 0;
+  virtual auto Matches(const T& from, const T& to) -> bool = 0;
 
   virtual void OnChanged(const T& from, const T& to)
   {
@@ -301,11 +303,14 @@ template <class T> template <class Fn> class Value<T>::Comparison {
       , fn_(std::move(fn))
     {
     }
-    bool await_ready() const noexcept { return fn_(this->GetValue()); }
+    auto await_ready() const noexcept -> bool { return fn_(this->GetValue()); }
     void await_resume() { }
 
   private:
-    bool Matches(const T& /*from*/, const T& to) override { return fn_(to); }
+    auto Matches(const T& /*from*/, const T& to) -> bool override
+    {
+      return fn_(to);
+    }
 
   private:
     Fn fn_;
@@ -320,7 +325,7 @@ public:
 
   operator bool() const noexcept { return fn_(cond_.value_); }
 
-  friend Awaiter Until(Comparison&& self)
+  friend auto Until(Comparison&& self) -> Awaiter
   {
     return Awaiter(self.cond_, std::move(self.fn_));
   }
@@ -344,7 +349,7 @@ public:
   auto await_resume() && -> std::pair<T, T> { return std::move(*result_); }
 
 private:
-  bool Matches(const T& from, const T& to) override
+  auto Matches(const T& from, const T& to) -> bool override
   {
     if (fn_(from, to)) {
       result_ = std::make_pair(from, to);
@@ -378,7 +383,7 @@ template <class T> T Value<T>::Modify(std::invocable<T&> auto&& fn)
 
 template <class T> void Value<T>::Set(T value)
 {
-  Modify([&](T& v) { v = std::move(value); });
+  Modify([&](T& v) -> void { v = std::move(value); });
 }
 
 template <class T> auto Value<T>::operator=(T value) -> Value&

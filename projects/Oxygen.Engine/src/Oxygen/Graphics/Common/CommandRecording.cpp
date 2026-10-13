@@ -167,13 +167,14 @@ auto CommandRecording::Finalize(bool receipt) noexcept -> SubmissionResult
       }
       receipt = receipt || completed->Uses().NeedsCompletion();
       if (!receipt) {
-        retirement = reclaimer_->PrepareDeferredAction([list = completed] {
-          if (list->IsSubmitted()) {
-            list->OnExecuted();
-          } else {
-            list->OnFailed();
-          }
-        });
+        retirement
+          = reclaimer_->PrepareDeferredAction([list = completed] -> void {
+              if (list->IsSubmitted()) {
+                list->OnExecuted();
+              } else {
+                list->OnFailed();
+              }
+            });
       }
     }
     if (receipt) {

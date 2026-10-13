@@ -471,7 +471,8 @@ NOLINT_TEST_F(RendererCompositionQueueTest,
   constexpr auto intent_view_id = ViewId { 43U };
   auto view = oxygen::View {};
   view.viewport = kTarget;
-  const auto publish = [&](const std::shared_ptr<Framebuffer>& target) {
+  const auto publish
+    = [&](const std::shared_ptr<Framebuffer>& target) -> ViewId {
     return renderer_->PublishRuntimeCompositionView(*frame_context_,
       Renderer::RuntimeViewPublishInput {
         .composition_view

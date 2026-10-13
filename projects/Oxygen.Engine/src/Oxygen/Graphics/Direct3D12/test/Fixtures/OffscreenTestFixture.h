@@ -131,7 +131,8 @@ protected:
     CleanupTrackedResources();
 
     if (graphics_ != nullptr) {
-      const ScopeGuard close_backend([this]() noexcept { graphics_->Close(); });
+      const ScopeGuard close_backend(
+        [this]() noexcept -> void { graphics_->Close(); });
       if (graphics_->GetBackendLifetime()->State()
         == graphics::BackendLifecycle::kActive) {
         graphics_->Flush();
@@ -178,7 +179,7 @@ private:
     auto& shared = SharedBackend();
     if (shared.graphics != nullptr) {
       const ScopeGuard close_backend(
-        [&shared]() noexcept { shared.graphics->Close(); });
+        [&shared]() noexcept -> void { shared.graphics->Close(); });
       if (IsBackendUsable(*shared.graphics)) {
         try {
           shared.graphics->Flush();

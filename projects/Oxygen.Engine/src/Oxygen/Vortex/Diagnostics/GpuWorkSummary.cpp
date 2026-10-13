@@ -69,7 +69,7 @@ namespace {
   };
 
   static_assert(
-    [] {
+    [] -> bool {
       for (std::size_t i = 0; i < kBuckets.size(); ++i) {
         if (static_cast<std::size_t>(kBuckets.at(i).bucket) != i) {
           return false;

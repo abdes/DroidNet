@@ -296,7 +296,7 @@ namespace detail {
         // Invoke callback stashed by makeStub()
         resume_fn(this);
         // Make sure it's only called once
-        resume_fn = +[](CoroutineFrame*) { };
+        resume_fn = +[](CoroutineFrame*) -> void { };
         return true;
       }
       return false;
@@ -352,16 +352,16 @@ namespace detail {
 
       // Since stub promises never use their inline CoroutineFrame,
       // we can reuse them to store callbacks for start and destroy
-      resume_fn = +[](CoroutineFrame* self) {
+      resume_fn = +[](CoroutineFrame* self) -> void {
         (static_cast<Derived*>(self)->*OnStart)();
       };
       if (delete_this_on_destroy) {
-        destroy_fn = +[](CoroutineFrame* self) {
+        destroy_fn = +[](CoroutineFrame* self) -> void {
           // NOLINTNEXTLINE(*-owning-memory)
           delete static_cast<Derived*>(self);
         };
       } else {
-        destroy_fn = +[](CoroutineFrame* /*self*/) { };
+        destroy_fn = +[](CoroutineFrame* /*self*/) -> void { };
       }
     }
 
@@ -388,7 +388,7 @@ namespace detail {
     //! function of the promise.
     template <void (BasePromise::*TrampolineFn)()> void OnResume()
     {
-      resume_fn = +[](CoroutineFrame* frame) {
+      resume_fn = +[](CoroutineFrame* frame) -> void {
         auto* const promise = static_cast<BasePromise*>(frame);
         (promise->*TrampolineFn)();
       };
@@ -411,7 +411,7 @@ namespace detail {
       OnResume<&BasePromise::DoNothing>();
 
       executor_->RunSoon(
-        +[](void* arg) noexcept {
+        +[](void* arg) noexcept -> void {
           const auto h = CoroutineHandle<BasePromise>::from_address(arg);
           BasePromise& self = h.promise();
           DLOG_F(5, "pr {} resumed", fmt::ptr(&self));

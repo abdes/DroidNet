@@ -20,7 +20,7 @@ FrameDrivenSlotReuse::FrameDrivenSlotReuse(AllocateFn allocate, FreeFn free,
   : allocate_(std::move(allocate))
   , free_(std::move(free))
   , impl_(per_frame,
-      [free = free_](bindless::HeapIndex idx, DomainKey key) noexcept {
+      [free = free_](bindless::HeapIndex idx, DomainKey key) noexcept -> void {
         if (free) {
           free(key, idx);
         }

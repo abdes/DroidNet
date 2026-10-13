@@ -99,7 +99,7 @@ auto PrepareLocalShadowRequest(const PreparedViewShadowInput& view,
     hashes.push_back(caster.fingerprint);
   }
   std::ranges::sort(
-    key.casters, {}, [](const auto& record) { return record.get(); });
+    key.casters, {}, [](const auto& record) -> auto { return record.get(); });
   std::ranges::sort(hashes);
   std::size_t hash = 0;
   HashCombine(hash, key.scene_generation);

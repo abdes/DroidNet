@@ -72,8 +72,9 @@ public:
 
   ~Queue() noexcept
   {
-    auto destroy_range
-      = [](std::span<T> range) { std::destroy(range.begin(), range.end()); };
+    auto destroy_range = [](std::span<T> range) -> void {
+      std::destroy(range.begin(), range.end());
+    };
     destroy_range(FirstRange());
     destroy_range(SecondRange());
     free(buffer_);
@@ -155,7 +156,7 @@ private:
     Queue q(std::max<size_t>(8, capacity_ * 2));
     // Same choice as std::move_if_noexcept: copy only when that preserves the
     // strong guarantee; a throwing move-only type has none to preserve.
-    auto move_range = [&](std::span<T> range) {
+    auto move_range = [&](std::span<T> range) -> void {
       if constexpr (std::is_nothrow_move_constructible_v<T>
         || !std::is_copy_constructible_v<T>) {
         q.tail_ = std::uninitialized_move(range.begin(), range.end(), q.tail_);

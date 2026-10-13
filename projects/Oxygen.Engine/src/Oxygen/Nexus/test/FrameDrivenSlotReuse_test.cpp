@@ -35,8 +35,8 @@ NOLINT_TEST(FrameDrivenSlotReuse,
   FreeBackend do_free;
 
   oxygen::nexus::FrameDrivenSlotReuse reuse(
-    [&do_alloc](const DomainKey d) { return do_alloc(d); },
-    [&do_alloc, &do_free](const DomainKey d, const b::HeapIndex h) {
+    [&do_alloc](const DomainKey d) -> b::HeapIndex { return do_alloc(d); },
+    [&do_alloc, &do_free](const DomainKey d, const b::HeapIndex h) -> void {
       do_free(d, h);
       do_alloc.free_list.push_back(h.get());
     },
@@ -63,8 +63,8 @@ NOLINT_TEST(FrameDrivenSlotReuse, DoubleRelease_IsIgnoredViaGenerationCheck)
   FreeBackend do_free;
 
   oxygen::nexus::FrameDrivenSlotReuse reuse(
-    [&do_alloc](const DomainKey d) { return do_alloc(d); },
-    [&do_alloc, &do_free](const DomainKey d, const b::HeapIndex h) {
+    [&do_alloc](const DomainKey d) -> b::HeapIndex { return do_alloc(d); },
+    [&do_alloc, &do_free](const DomainKey d, const b::HeapIndex h) -> void {
       do_free(d, h);
       do_alloc.free_list.push_back(h.get());
     },
@@ -88,8 +88,8 @@ NOLINT_TEST(FrameDrivenSlotReuse, ConcurrentReleases_ReclaimAllHandles)
   FreeBackend do_free;
 
   oxygen::nexus::FrameDrivenSlotReuse reuse(
-    [&do_alloc](const DomainKey d) { return do_alloc(d); },
-    [&do_alloc, &do_free](const DomainKey d, const b::HeapIndex h) {
+    [&do_alloc](const DomainKey d) -> b::HeapIndex { return do_alloc(d); },
+    [&do_alloc, &do_free](const DomainKey d, const b::HeapIndex h) -> void {
       do_free(d, h);
       do_alloc.free_list.push_back(h.get());
     },
@@ -103,7 +103,7 @@ NOLINT_TEST(FrameDrivenSlotReuse, ConcurrentReleases_ReclaimAllHandles)
 
   std::vector<std::thread> workers;
   for (int t = 0; t < 4; ++t) {
-    workers.emplace_back([&, t]() {
+    workers.emplace_back([&, t]() -> void {
       for (size_t i = t; i < handles.size(); i += 4) {
         reuse.Release(domain, handles[i]);
       }

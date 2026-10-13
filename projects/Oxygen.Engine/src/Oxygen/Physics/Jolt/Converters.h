@@ -221,7 +221,7 @@ inline auto IsIdentityRotation(const Quat& value) noexcept -> bool
 {
   const Quat identity { 1.0F, 0.0F, 0.0F, 0.0F };
   const Quat neg_identity { -1.0F, 0.0F, 0.0F, 0.0F };
-  const auto near = [](const Quat& a, const Quat& b) {
+  const auto near = [](const Quat& a, const Quat& b) -> bool {
     return IsNearlyEqual(a.w, b.w) && IsNearlyEqual(a.x, b.x)
       && IsNearlyEqual(a.y, b.y) && IsNearlyEqual(a.z, b.z);
   };

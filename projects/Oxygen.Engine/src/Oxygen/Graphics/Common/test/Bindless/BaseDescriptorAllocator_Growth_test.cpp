@@ -52,7 +52,8 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthPolicyRespected)
 
   // Track segment creation
   auto segment_count = 0U;
-  allocator_->segment_factory_ = [this, &segment_count](auto type, auto vis) {
+  allocator_->segment_factory_ = [this, &segment_count](auto type, auto vis)
+    -> std::unique_ptr<oxygen::graphics::detail::DescriptorSegment> {
     segment_count++;
     if (segment_count == 1) {
       // Setup: Create a segment that will fill up and need to grow
@@ -136,9 +137,10 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, GrowthFactorRespected)
 
   // Setup factory to track the sizes that would be used for segment creation
   b::HeapIndex base_index { 0 };
-  allocator_->segment_factory_ = [&requested_sizes, &base_index,
-                                   initial_capacity,
-                                   growth_factor](auto type, auto vis) {
+  allocator_->segment_factory_
+    = [&requested_sizes, &base_index, initial_capacity, growth_factor](
+        auto type, auto vis)
+    -> std::unique_ptr<oxygen::graphics::detail::DescriptorSegment> {
     size_t expected_size;
 
     // Calculate the expected size based on the number of segments already
@@ -204,7 +206,9 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, SegmentCreatedOnlyWhenNeeded)
 
   auto create_count = 0U;
 
-  allocator_->segment_factory_ = [&create_count](auto, auto) {
+  allocator_->segment_factory_
+    = [&create_count](auto,
+        auto) -> std::unique_ptr<oxygen::graphics::detail::DescriptorSegment> {
     auto segment = std::make_unique<MockDescriptorSegment>();
     EXPECT_CALL(*segment, Allocate())
       .WillOnce(testing::Return(b::HeapIndex { 0 }));
@@ -248,8 +252,9 @@ NOLINT_TEST_F(
   // Setup: Create segments that allow one allocation each, then fail
   uint32_t create_count { 0 };
   b::HeapIndex last_base_index { 0 };
-  allocator_->segment_factory_ = [&create_count, &last_base_index](
-                                   auto type, auto vis) {
+  allocator_->segment_factory_
+    = [&create_count, &last_base_index](auto type, auto vis)
+    -> std::unique_ptr<oxygen::graphics::detail::DescriptorSegment> {
     auto segment = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
     const auto base_index = last_base_index;
     last_base_index
@@ -304,8 +309,9 @@ NOLINT_TEST_F(BaseDescriptorAllocatorGrowthTest, ReuseAfterGrowth)
   // Setup: Create segments that allow one allocation each, then fail
   auto create_count { 0U };
   b::HeapIndex last_base_index { 0 };
-  allocator_->segment_factory_ = [&create_count, &last_base_index](
-                                   auto type, auto vis) {
+  allocator_->segment_factory_
+    = [&create_count, &last_base_index](auto type, auto vis)
+    -> std::unique_ptr<oxygen::graphics::detail::DescriptorSegment> {
     auto segment = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
     const auto base_index = last_base_index;
     last_base_index = b::HeapIndex { base_index.get() + 1 };
@@ -374,36 +380,37 @@ NOLINT_TEST_F(
   auto create_count { 0U };
   b::HeapIndex last_base_index { 0 };
   allocator_->segment_factory_
-    = [&create_count, &last_base_index](auto type, auto vis) {
-        create_count++;
-        if (create_count == 1) {
-          auto segment
-            = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
-          const b::HeapIndex base_index = last_base_index;
-          last_base_index = b::HeapIndex { base_index.get() + 1 };
+    = [&create_count, &last_base_index](auto type, auto vis)
+    -> std::unique_ptr<oxygen::graphics::detail::DescriptorSegment> {
+    create_count++;
+    if (create_count == 1) {
+      auto segment
+        = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
+      const b::HeapIndex base_index = last_base_index;
+      last_base_index = b::HeapIndex { base_index.get() + 1 };
 
-          EXPECT_CALL(*segment, Allocate())
-            .WillOnce(testing::Return(base_index))
-            .WillRepeatedly(testing::Return(kInvalidBindlessHeapIndex));
-          EXPECT_CALL(*segment, Release(base_index))
-            .WillOnce(testing::Return(true));
-          EXPECT_CALL(*segment, GetViewType())
-            .WillRepeatedly(testing::Return(type));
-          EXPECT_CALL(*segment, GetVisibility())
-            .WillRepeatedly(testing::Return(vis));
-          EXPECT_CALL(*segment, GetBaseIndex())
-            .WillRepeatedly(testing::Return(base_index));
-          EXPECT_CALL(*segment, GetCapacity())
-            .WillRepeatedly(testing::Return(b::Capacity { 1 }));
-          EXPECT_CALL(*segment, GetAllocatedCount())
-            .WillOnce(testing::Return(b::Count { 0 }))
-            .WillRepeatedly(testing::Return(b::Count { 1 }));
+      EXPECT_CALL(*segment, Allocate())
+        .WillOnce(testing::Return(base_index))
+        .WillRepeatedly(testing::Return(kInvalidBindlessHeapIndex));
+      EXPECT_CALL(*segment, Release(base_index))
+        .WillOnce(testing::Return(true));
+      EXPECT_CALL(*segment, GetViewType())
+        .WillRepeatedly(testing::Return(type));
+      EXPECT_CALL(*segment, GetVisibility())
+        .WillRepeatedly(testing::Return(vis));
+      EXPECT_CALL(*segment, GetBaseIndex())
+        .WillRepeatedly(testing::Return(base_index));
+      EXPECT_CALL(*segment, GetCapacity())
+        .WillRepeatedly(testing::Return(b::Capacity { 1 }));
+      EXPECT_CALL(*segment, GetAllocatedCount())
+        .WillOnce(testing::Return(b::Count { 0 }))
+        .WillRepeatedly(testing::Return(b::Count { 1 }));
 
-          return segment;
-        }
-        // Return null to simulate segment creation failure
-        return std::unique_ptr<testing::NiceMock<MockDescriptorSegment>> {};
-      };
+      return segment;
+    }
+    // Return null to simulate segment creation failure
+    return std::unique_ptr<testing::NiceMock<MockDescriptorSegment>> {};
+  };
 
   // First allocation should succeed
   const auto handle = allocator_->AllocateRaw(

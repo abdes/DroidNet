@@ -32,19 +32,19 @@ namespace detail {
     {
     }
 
-    bool has_value() const noexcept { return ptr_ != nullptr; }
+    auto has_value() const noexcept -> bool { return ptr_ != nullptr; }
     explicit operator bool() const noexcept { return ptr_ != nullptr; }
 
-    Pointee& operator*() noexcept { return *ptr_; }
-    const Pointee& operator*() const noexcept { return *ptr_; }
+    auto operator*() noexcept -> Pointee& { return *ptr_; }
+    auto operator*() const noexcept -> const Pointee& { return *ptr_; }
 
-    Pointee* operator->() noexcept { return ptr_; }
-    const Pointee* operator->() const noexcept { return ptr_; }
+    auto operator->() noexcept -> Pointee* { return ptr_; }
+    auto operator->() const noexcept -> const Pointee* { return ptr_; }
 
-    Pointee& value() { return ref(); }
-    const Pointee& value() const { return ref(); }
+    auto value() -> Pointee& { return ref(); }
+    auto value() const -> const Pointee& { return ref(); }
 
-    template <class U> Pointee value_or(U&& def) const
+    template <class U> auto value_or(U&& def) const -> Pointee
     {
       return has_value() ? *ptr_ : static_cast<Pointee>(std::forward<U>(def));
     }
@@ -53,7 +53,7 @@ namespace detail {
     void swap(OptionalRef& other) noexcept { std::swap(ptr_, other.ptr_); }
 
   private:
-    Pointee& ref() const
+    auto ref() const -> Pointee&
     {
       if (has_value()) {
         return *ptr_;
@@ -81,7 +81,7 @@ namespace detail {
     {
     }
 
-    bool has_value() const noexcept { return value_; }
+    auto has_value() const noexcept -> bool { return value_; }
     explicit operator bool() const noexcept { return value_; }
 
     void value() const

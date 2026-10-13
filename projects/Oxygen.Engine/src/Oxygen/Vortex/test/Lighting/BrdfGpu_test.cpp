@@ -92,20 +92,20 @@ namespace {
         maximum_bias_error, std::abs(bias - expected.at(index).schlick_moment));
     }
     const auto allocation_bytes
-      = [&](const std::uint64_t width, const std::uint32_t height) {
-          auto description = D3D12_RESOURCE_DESC {};
-          description.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
-          description.Width = width;
-          description.Height = height;
-          description.DepthOrArraySize = 1U;
-          description.MipLevels = 1U;
-          description.Format = DXGI_FORMAT_R32G32_FLOAT;
-          description.SampleDesc.Count = 1U;
-          return Backend()
-            .GetCurrentDevice()
-            ->GetResourceAllocationInfo(0U, 1U, &description)
-            .SizeInBytes;
-        };
+      = [&](const std::uint64_t width, const std::uint32_t height) -> UINT64 {
+      auto description = D3D12_RESOURCE_DESC {};
+      description.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+      description.Width = width;
+      description.Height = height;
+      description.DepthOrArraySize = 1U;
+      description.MipLevels = 1U;
+      description.Format = DXGI_FORMAT_R32G32_FLOAT;
+      description.SampleDesc.Count = 1U;
+      return Backend()
+        .GetCurrentDevice()
+        ->GetResourceAllocationInfo(0U, 1U, &description)
+        .SizeInBytes;
+    };
     const auto backing = allocation_bytes(32U, 32U);
     EXPECT_GE(backing, 8192U);
     RecordProperty("energy_payload_bytes", 8192U);

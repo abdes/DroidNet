@@ -137,8 +137,9 @@ NOLINT_TEST_F(MuxRangeTest, RValueRange)
   oxygen::co::Run(*el_, [this]() -> Co<> {
     // Construct awaitables on the fly
     std::vector values { 3, 2, 5 };
-    co_await AllOf(
-      values | std::views::transform([&](const int x) { return MakeTask(x); }));
+    co_await AllOf(values | std::views::transform([&](const int x) -> Co<int> {
+      return MakeTask(x);
+    }));
   });
 }
 

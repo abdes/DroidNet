@@ -282,7 +282,7 @@ namespace {
         .record_kind = 32U,
         .decoded_words = 6U,
         .count = static_cast<std::uint32_t>(inputs.size()),
-        .prepare = [&](graphics::CommandRecorder& recorder) {
+        .prepare = [&](graphics::CommandRecorder& recorder) -> void {
           CHECK_F(products.Attach(recorder, Backend().GetResourceRegistry()));
         } });
       auto result = std::vector<std::array<float, 6>>(inputs.size());
@@ -312,7 +312,7 @@ namespace {
         .record_kind = 37U,
         .decoded_words = 1U,
         .count = static_cast<std::uint32_t>(inputs.size()),
-        .prepare = [&](graphics::CommandRecorder& recorder) {
+        .prepare = [&](graphics::CommandRecorder& recorder) -> void {
           CHECK_F(products.Attach(recorder, Backend().GetResourceRegistry()));
         } });
     }
@@ -326,7 +326,7 @@ namespace {
           .record_kind = 33U,
           .decoded_words = 3U,
           .count = static_cast<std::uint32_t>(plan.samples.size()),
-          .prepare = [&](graphics::CommandRecorder& recorder) {
+          .prepare = [&](graphics::CommandRecorder& recorder) -> void {
             CHECK_F(products.Attach(recorder, Backend().GetResourceRegistry()));
           } });
       auto sum = glm::dvec3 {};
@@ -377,8 +377,8 @@ namespace {
               + static_cast<std::uint64_t>(y) * region.buffer_row_pitch);
         }
       }
-      SubmitCommands(
-        "IBL reference upload", [&](graphics::CommandRecorder& recorder) {
+      SubmitCommands("IBL reference upload",
+        [&](graphics::CommandRecorder& recorder) -> void {
           CHECK_F(static_cast<bool>(recorder.RetainRegistration(
             graphics.GetResourceRegistry(), *registration)));
           EnsureTracked(recorder, staging, ResourceStates::kGenericRead);
@@ -400,8 +400,8 @@ namespace {
     {
       auto readback
         = GetReadbackManager()->CreateBufferReadback("IBL product check");
-      SubmitCommands(
-        "IBL buffer readback", [&](graphics::CommandRecorder& recorder) {
+      SubmitCommands("IBL buffer readback",
+        [&](graphics::CommandRecorder& recorder) -> void {
           CHECK_F(static_cast<bool>(
             products.Attach(recorder, Backend().GetResourceRegistry())));
           recorder.FlushBarriers();
@@ -423,7 +423,7 @@ namespace {
       auto readback
         = GetReadbackManager()->CreateTextureReadback("IBL face check");
       SubmitCommands(
-        "IBL face readback", [&](graphics::CommandRecorder& recorder) {
+        "IBL face readback", [&](graphics::CommandRecorder& recorder) -> void {
           CHECK_F(static_cast<bool>(
             products.Attach(recorder, Backend().GetResourceRegistry())));
           recorder.FlushBarriers();
@@ -584,8 +584,8 @@ namespace {
         staging->Update(row.data(), sizeof(row),
           region.buffer_offset + y * std::uint64_t(region.buffer_row_pitch));
       staging->Update(pixel.data(), sizeof(pixel), plan->total_bytes);
-      SubmitCommands(
-        "Allocation test LUT upload", [&](graphics::CommandRecorder& recorder) {
+      SubmitCommands("Allocation test LUT upload",
+        [&](graphics::CommandRecorder& recorder) -> void {
           EnsureTracked(recorder, staging, ResourceStates::kGenericRead);
           EnsureTracked(recorder, sky_view,
             Backend()
@@ -616,7 +616,7 @@ namespace {
   {
     const Pixel radiance { 1, 0.5F, 0.25F, 1 };
     const auto source
-      = MakeSource(32U, [&](auto, auto, auto) { return radiance; });
+      = MakeSource(32U, [&](auto, auto, auto) -> auto { return radiance; });
     const auto brdf = PrepareBrdf();
     auto sky = environment::internal::IblSkySource {};
     sky.environment.fog.flags = kGpuFogFlagEnabled | kGpuFogFlagHeightFogEnabled
@@ -657,7 +657,9 @@ namespace {
           warm->reset();
           WaitForQueueIdle();
         }
-        const auto process = [&]() {
+        const auto process
+          = [&]() -> std::expected<std::shared_ptr<const IblGpuProducts>,
+                    environment::internal::IblProcessError> {
           const auto settings = IblProcessSettings { .face_size = 32U,
             .lower_hemisphere_solid_color = false };
           return scenario == Scenario::kFog
@@ -683,8 +685,8 @@ namespace {
           if (retained) {
             const auto pixels
               = ReadFace(*retained, *retained->processed_cube, 0U, 0U);
-            EXPECT_TRUE(std::ranges::all_of(
-              pixels, [&](const auto& pixel) { return pixel == radiance; }));
+            EXPECT_TRUE(std::ranges::all_of(pixels,
+              [&](const auto& pixel) -> bool { return pixel == radiance; }));
           }
           candidate = process();
           ASSERT_TRUE(candidate);
@@ -722,7 +724,7 @@ namespace {
   {
     processor_ = std::make_unique<IblGpuProcessor>(Backend(), 1U);
     const auto source = MakeSource(
-      32U, [](auto, auto, auto) { return Pixel { 2, 1, 0.5F, 1 }; });
+      32U, [](auto, auto, auto) -> Pixel { return Pixel { 2, 1, 0.5F, 1 }; });
     const auto brdf = PrepareBrdf();
     auto whole = Processor().Process(
       source.texture, source.registration, brdf, { .face_size = 32U }, 950U);
@@ -779,7 +781,7 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, MultiFrameJobPublishesOnlyCompleteProducts)
   {
-    const auto source = MakeSource(32U, [](auto face, auto x, auto y) {
+    const auto source = MakeSource(32U, [](auto face, auto x, auto y) -> Pixel {
       return Pixel { float(1U + face + x), 0.5F * (1U + y), 0.125F, 1 };
     });
     const auto brdf = PrepareBrdf();
@@ -799,7 +801,7 @@ namespace {
         = frame::Slot { frame_index % frame::kFramesInFlight.get() };
       Backend().BeginFrame(sequence, slot);
       const ScopeGuard end_frame(
-        [&]() noexcept { Backend().EndFrame(sequence, slot); });
+        [&]() noexcept -> void { Backend().EndFrame(sequence, slot); });
       if (frame_index == 0U) {
         const auto begun = Processor().Begin(
           source.texture, source.registration, brdf, settings, 981U);
@@ -835,7 +837,7 @@ namespace {
     IblConvolutionGpuTest, JobFastPathsRespectClosureAndBackendFault)
   {
     const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 2, 1, 0.5F, 1 }; });
+      16U, [](auto, auto, auto) -> Pixel { return Pixel { 2, 1, 0.5F, 1 }; });
     const auto brdf = PrepareBrdf();
     const auto complete = Processor().Begin(
       source.texture, source.registration, brdf, { .face_size = 16U }, 988U);
@@ -850,8 +852,8 @@ namespace {
     const auto backend = Backend().GetBackendLifetime();
     backend->MarkSubmissionFault();
     const ScopeGuard restore(
-      [backend]() noexcept { backend->ClearSubmissionFault(); });
-    const auto expect_closed = [&]() {
+      [backend]() noexcept -> void { backend->ClearSubmissionFault(); });
+    const auto expect_closed = [&]() -> void {
       for (const auto& job : { *complete, *pending }) {
         for (const auto limit : { 0U, UINT32_MAX }) {
           const auto denied = Processor().Advance(job, limit);
@@ -899,7 +901,7 @@ namespace {
   NOLINT_TEST_F(IblConvolutionGpuTest, RejectedJobBatchDoesNotAdvanceItsCursor)
   {
     const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 2, 1, 0.5F, 1 }; });
+      16U, [](auto, auto, auto) -> Pixel { return Pixel { 2, 1, 0.5F, 1 }; });
     const auto job = Processor().Begin(source.texture, source.registration,
       PrepareBrdf(), { .face_size = 16U, .dispatch_tile_size = 8U }, 984U);
     ASSERT_TRUE(job);
@@ -924,7 +926,7 @@ namespace {
   {
     processor_ = std::make_unique<IblGpuProcessor>(Backend(), 1U);
     const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 2, 1, 0.5F, 1 }; });
+      16U, [](auto, auto, auto) -> Pixel { return Pixel { 2, 1, 0.5F, 1 }; });
     const auto brdf = PrepareBrdf();
     auto job = Processor().Begin(source.texture, source.registration, brdf,
       { .face_size = 16U, .dispatch_tile_size = 8U }, 985U);
@@ -934,7 +936,7 @@ namespace {
     ASSERT_TRUE(SUCCEEDED(Backend().GetCurrentDevice()->CreateFence(
       0U, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gate.GetAddressOf()))));
     const ScopeGuard release_gate(
-      [gate]() noexcept { static_cast<void>(gate->Signal(1U)); });
+      [gate]() noexcept -> void { static_cast<void>(gate->Signal(1U)); });
     auto* queue = static_cast<graphics::d3d12::CommandQueue*>(GetQueue().get());
     ASSERT_TRUE(SUCCEEDED(queue->GetCommandQueue()->Wait(gate.Get(), 1U)));
     const auto partial = Processor().Advance(*job, 3U);
@@ -961,7 +963,7 @@ namespace {
 
   NOLINT_TEST_F(IblConvolutionGpuTest, SpatialTilesMatchWholeDispatchProducts)
   {
-    const auto source = MakeSource(32U, [](auto face, auto x, auto y) {
+    const auto source = MakeSource(32U, [](auto face, auto x, auto y) -> Pixel {
       return Pixel { 100000.0F * (1U + face) + 100.0F * x, 0.25F * (1U + y),
         0x1p-24F * (1U + x + y), 1.0F };
     });
@@ -976,7 +978,9 @@ namespace {
     unsigned revision = 900U;
     unsigned comparisons = 0U;
     for (const bool captured : { false, true }) {
-      const auto build = [&](unsigned tile_size) {
+      const auto build = [&](unsigned tile_size)
+        -> std::expected<std::shared_ptr<const IblGpuProducts>,
+          environment::internal::IblProcessError> {
         const auto settings = IblProcessSettings { .face_size = 32U,
           .lower_hemisphere_solid_color = false,
           .dispatch_tile_size = tile_size };
@@ -1046,7 +1050,7 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, HalfMirrorsNarrowCompletedCanonicalChains)
   {
-    const auto source = MakeSource(16U, [](auto face, auto x, auto y) {
+    const auto source = MakeSource(16U, [](auto face, auto x, auto y) -> Pixel {
       return Pixel { 0.001337F * (1U + face + x), 0.212345F * (1U + y),
         0x1p-30F * (1U + x + y), 1.0F };
     });
@@ -1091,7 +1095,7 @@ namespace {
     // the precision scan's 65,535-group dispatch-row boundary.
     for (const auto size : { 1U, 4U, 512U }) {
       SCOPED_TRACE(size);
-      const auto source = MakeSource(size, [](auto, auto, auto) {
+      const auto source = MakeSource(size, [](auto, auto, auto) -> Pixel {
         return Pixel { 1.0003F, 0.5001F, 0.25003F, 1.0F };
       });
       const auto built = Processor().Process(source.texture,
@@ -1169,22 +1173,23 @@ namespace {
     auto consumer_comparisons = std::uint64_t {};
     auto comparisons = std::uint64_t {};
     for (const bool checker : { false, true }) {
-      const auto source = MakeSource(128U, [&](auto face, auto x, auto y) {
-        if (checker) {
-          const float value = ((x + y + face) & 1U) != 0U ? 1000.3F : 0.1337F;
-          return Pixel { value, value * 0.713F, value * 0.317F, 1.0F };
-        }
-        const auto n = Direction(face, x, y, 128U);
-        if (n.z < 0.0F)
-          return Pixel { 0.0317F, 0.0413F, 0.0171F, 1.0F };
-        const auto sun = 1000.0F
-          * std::pow(
-            std::max(0.0F, glm::dot(n, glm::normalize(glm::vec3 { 1, 2, 3 }))),
-            64.0F);
-        return Pixel { 4.1F + 16.3F * n.z * n.z + sun,
-          7.3F + 24.1F * n.z * n.z + 0.6F * sun,
-          12.7F + 40.3F * n.z * n.z + 0.2F * sun, 1.0F };
-      });
+      const auto source = MakeSource(
+        128U, [&](auto face, auto x, auto y) -> Pixel {
+          if (checker) {
+            const float value = ((x + y + face) & 1U) != 0U ? 1000.3F : 0.1337F;
+            return Pixel { value, value * 0.713F, value * 0.317F, 1.0F };
+          }
+          const auto n = Direction(face, x, y, 128U);
+          if (n.z < 0.0F)
+            return Pixel { 0.0317F, 0.0413F, 0.0171F, 1.0F };
+          const auto sun = 1000.0F
+            * std::pow(std::max(0.0F,
+                         glm::dot(n, glm::normalize(glm::vec3 { 1, 2, 3 }))),
+              64.0F);
+          return Pixel { 4.1F + 16.3F * n.z * n.z + sun,
+            7.3F + 24.1F * n.z * n.z + 0.6F * sun,
+            12.7F + 40.3F * n.z * n.z + 0.2F * sun, 1.0F };
+        });
       const auto built = Processor().Process(source.texture,
         source.registration, PrepareBrdf(),
         { .face_size = 128U, .lower_hemisphere_solid_color = false },
@@ -1230,7 +1235,7 @@ namespace {
             .record_kind = 33U,
             .decoded_words = 3U,
             .count = static_cast<std::uint32_t>(batch.size()),
-            .prepare = [&](graphics::CommandRecorder& recorder) {
+            .prepare = [&](graphics::CommandRecorder& recorder) -> void {
               CHECK_F(
                 products.Attach(recorder, Backend().GetResourceRegistry()));
             } });
@@ -1337,7 +1342,7 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, QualifiedConstantUsesHalfForActualSurfaceEvaluation)
   {
-    const auto source = MakeSource(16U, [](auto, auto, auto) {
+    const auto source = MakeSource(16U, [](auto, auto, auto) -> Pixel {
       return Pixel { 1.0003F, 0.5001F, 0.25003F, 1.0F };
     });
     const auto built
@@ -1380,7 +1385,7 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, IntensityTintAndLobeEditsPromoteWithoutRecapture)
   {
-    const auto source = MakeSource(16U, [](auto, auto, auto) {
+    const auto source = MakeSource(16U, [](auto, auto, auto) -> Pixel {
       return Pixel { 0x1p-50F, 0x1p-50F, 0x1p-50F, 1.0F };
     });
     const auto built
@@ -1429,8 +1434,9 @@ namespace {
 
   NOLINT_TEST_F(IblConvolutionGpuTest, ConstantCubePreservesEveryFaceAndMip)
   {
-    const auto source = MakeSource(128U,
-      [](auto, auto, auto) { return Pixel { 1.0F, 0.5F, 0.125F, 1.0F }; });
+    const auto source = MakeSource(128U, [](auto, auto, auto) -> Pixel {
+      return Pixel { 1.0F, 0.5F, 0.125F, 1.0F };
+    });
     BeginCapture();
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
@@ -1477,7 +1483,7 @@ namespace {
       const Pixel color = wide ? Pixel { 0x1p30F, 0x1p-24F, 0.5F, 1.0F }
                                : Pixel { 0x1p-50F, 0x1p-50F, 0x1p-50F, 1.0F };
       const auto source
-        = MakeSource(16U, [&](auto, auto, auto) { return color; });
+        = MakeSource(16U, [&](auto, auto, auto) -> auto { return color; });
       const auto result = Processor().Process(source.texture,
         source.registration, PrepareBrdf(),
         { .face_size = 16U, .lower_hemisphere_solid_color = false },
@@ -1673,8 +1679,9 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, HdrRangeScaleIsAppliedOnceAfterConvolution)
   {
-    const auto source = MakeSource(32U,
-      [](auto, auto, auto) { return Pixel { 1.0e8F, 2.0e6F, 8.0F, 1.0F }; });
+    const auto source = MakeSource(32U, [](auto, auto, auto) -> Pixel {
+      return Pixel { 1.0e8F, 2.0e6F, 8.0F, 1.0F };
+    });
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
         { .face_size = 32U, .lower_hemisphere_solid_color = false }, 32U);
@@ -1702,11 +1709,12 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, DirectionalCubeMatchesAnalyticDiffuseInOxygenAxes)
   {
-    const auto source = MakeSource(128U, [](auto face, auto x, auto y) {
-      const auto n = Direction(face, x, y, 128U);
-      return Pixel { 1.0F + 0.75F * n.x, 1.0F + 0.75F * n.y, 1.0F + 0.75F * n.z,
-        1.0F };
-    });
+    const auto source
+      = MakeSource(128U, [](auto face, auto x, auto y) -> Pixel {
+          const auto n = Direction(face, x, y, 128U);
+          return Pixel { 1.0F + 0.75F * n.x, 1.0F + 0.75F * n.y,
+            1.0F + 0.75F * n.z, 1.0F };
+        });
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
         { .face_size = 128U, .lower_hemisphere_solid_color = false }, 33U);
@@ -1738,7 +1746,7 @@ namespace {
 
   NOLINT_TEST_F(IblConvolutionGpuTest, InvalidSourceCannotPublishValidMetadata)
   {
-    const auto source = MakeSource(16U, [](auto, auto, auto) {
+    const auto source = MakeSource(16U, [](auto, auto, auto) -> Pixel {
       return Pixel { std::numeric_limits<float>::quiet_NaN(), 1.0F, 1.0F,
         1.0F };
     });
@@ -1754,7 +1762,7 @@ namespace {
 
   NOLINT_TEST_F(IblConvolutionGpuTest, SourceMipsUseFourChildBoxReduction)
   {
-    const auto source = MakeSource(16U, [](auto face, auto x, auto y) {
+    const auto source = MakeSource(16U, [](auto face, auto x, auto y) -> Pixel {
       return Pixel { 1.0F + static_cast<float>(x % 2U),
         2.0F + static_cast<float>(y % 2U), static_cast<float>(face) + 0.5F,
         1.0F };
@@ -1778,8 +1786,9 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, LowerHemisphereUsesWorldUpBeforeConvolution)
   {
-    const auto source = MakeSource(
-      32U, [](auto, auto, auto) { return Pixel { 1.0F, 0.0F, 0.0F, 1.0F }; });
+    const auto source = MakeSource(32U, [](auto, auto, auto) -> Pixel {
+      return Pixel { 1.0F, 0.0F, 0.0F, 1.0F };
+    });
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
         { .face_size = 32U, .lower_hemisphere_color = { 0.0F, 0.0F, 1.0F } },
@@ -1804,8 +1813,9 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, SubmittedAndUnsubmittedReadersRetainProducts)
   {
-    auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 2.0F, 1.0F, 0.5F, 1.0F }; });
+    auto source = MakeSource(16U, [](auto, auto, auto) -> Pixel {
+      return Pixel { 2.0F, 1.0F, 0.5F, 1.0F };
+    });
     auto built
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
         { .face_size = 16U, .lower_hemisphere_solid_color = false }, 36U);
@@ -1846,8 +1856,9 @@ namespace {
     EXPECT_EQ(first->texture->GetDescriptor().format, Format::kRG16UNorm);
     EXPECT_EQ(first->texture->GetDescriptor().width, 128U);
     EXPECT_EQ(first->texture->GetDescriptor().height, 32U);
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 2.0F, 0.5F, 1.0F, 1.0F }; });
+    const auto source = MakeSource(16U, [](auto, auto, auto) -> Pixel {
+      return Pixel { 2.0F, 0.5F, 1.0F, 1.0F };
+    });
     const auto missing = Processor().Process(
       source.texture, source.registration, {}, { .face_size = 16U }, 40U);
     ASSERT_FALSE(missing.has_value());
@@ -1863,8 +1874,9 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, SurfaceEvaluationMatchesDiffuseAndSplitSumReference)
   {
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 2.0F, 0.5F, 1.0F, 1.0F }; });
+    const auto source = MakeSource(16U, [](auto, auto, auto) -> Pixel {
+      return Pixel { 2.0F, 0.5F, 1.0F, 1.0F };
+    });
     BeginCapture();
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
@@ -1923,8 +1935,9 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, SurfaceGatesAreIndependentAndRejectWrongRevision)
   {
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1.0F, 1.0F, 1.0F, 1.0F }; });
+    const auto source = MakeSource(16U, [](auto, auto, auto) -> Pixel {
+      return Pixel { 1.0F, 1.0F, 1.0F, 1.0F };
+    });
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
         { .face_size = 16U, .lower_hemisphere_solid_color = false }, 43U);
@@ -1954,8 +1967,9 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, SurfaceEvaluationRestoresHdrScaleExactlyOnce)
   {
-    const auto source = MakeSource(16U,
-      [](auto, auto, auto) { return Pixel { 1.0e8F, 2.0e6F, 8.0F, 1.0F }; });
+    const auto source = MakeSource(16U, [](auto, auto, auto) -> Pixel {
+      return Pixel { 1.0e8F, 2.0e6F, 8.0F, 1.0F };
+    });
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
         { .face_size = 16U, .lower_hemisphere_solid_color = false }, 44U);
@@ -1982,15 +1996,16 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, OffscreenDielectricAndMetalRoughnessImage)
   {
-    const auto source = MakeSource(128U, [](auto face, auto x, auto y) {
-      const auto n = Direction(face, x, y, 128U);
-      const auto sun_cosine
-        = std::max(0.0F, (0.4F * n.x - 0.2F * n.y + n.z) / std::sqrt(1.2F));
-      const auto sun = std::pow(sun_cosine, 128.0F);
-      const auto sky = 0.3F + 0.7F * std::max(0.0F, n.z);
-      return Pixel { 0.1F * sky + 40.0F * sun, 0.2F * sky + 24.0F * sun,
-        0.4F * sky + 12.0F * sun, 1.0F };
-    });
+    const auto source
+      = MakeSource(128U, [](auto face, auto x, auto y) -> Pixel {
+          const auto n = Direction(face, x, y, 128U);
+          const auto sun_cosine
+            = std::max(0.0F, (0.4F * n.x - 0.2F * n.y + n.z) / std::sqrt(1.2F));
+          const auto sun = std::pow(sun_cosine, 128.0F);
+          const auto sky = 0.3F + 0.7F * std::max(0.0F, n.z);
+          return Pixel { 0.1F * sky + 40.0F * sun, 0.2F * sky + 24.0F * sun,
+            0.4F * sky + 12.0F * sun, 1.0F };
+        });
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
         { .face_size = 128U, .lower_hemisphere_solid_color = false }, 45U);
@@ -2057,8 +2072,9 @@ namespace {
   NOLINT_TEST_F(IblConvolutionGpuTest,
     SurfaceRecordingRetainsBrdfAfterCacheAndProductRelease)
   {
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1.0F, 1.0F, 1.0F, 1.0F }; });
+    const auto source = MakeSource(16U, [](auto, auto, auto) -> Pixel {
+      return Pixel { 1.0F, 1.0F, 1.0F, 1.0F };
+    });
     auto built
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
         { .face_size = 16U, .lower_hemisphere_solid_color = false }, 46U);
@@ -2070,7 +2086,7 @@ namespace {
       .record_kind = 32U,
       .decoded_words = 6U,
       .count = 1U,
-      .prepare = [&](graphics::CommandRecorder& recorder) {
+      .prepare = [&](graphics::CommandRecorder& recorder) -> void {
         ASSERT_TRUE(
           products->Attach(recorder, Backend().GetResourceRegistry()));
         products.reset();
@@ -2087,8 +2103,9 @@ namespace {
     IblConvolutionGpuTest, NexusReuseKeepsPhysicalProductsAndRejectsLiveOwner)
   {
     processor_ = std::make_unique<IblGpuProcessor>(Backend(), 1U);
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1.0F, 0.5F, 0.25F, 1.0F }; });
+    const auto source = MakeSource(16U, [](auto, auto, auto) -> Pixel {
+      return Pixel { 1.0F, 0.5F, 0.25F, 1.0F };
+    });
     graphics::Texture* physical = nullptr;
     auto descriptor = ShaderVisibleIndex { kInvalidShaderVisibleIndex };
     std::uint32_t generation = 0U;
@@ -2133,8 +2150,9 @@ namespace {
     IblConvolutionGpuTest, UnsubmittedReaderPreventsReuseUntilDiscard)
   {
     processor_ = std::make_unique<IblGpuProcessor>(Backend(), 1U);
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1.0F, 1.0F, 1.0F, 1.0F }; });
+    const auto source = MakeSource(16U, [](auto, auto, auto) -> Pixel {
+      return Pixel { 1.0F, 1.0F, 1.0F, 1.0F };
+    });
     auto result = Processor().Process(source.texture, source.registration,
       PrepareBrdf(), { .face_size = 16U }, 120U);
     ASSERT_TRUE(result.has_value());
@@ -2162,10 +2180,11 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, CaptureAdmissionReservesNormalUpdateCapacity)
   {
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    const auto source = MakeSource(16U,
+      [](auto, auto, auto) -> Pixel { return Pixel { 1, 0.5F, 0.25F, 1 }; });
     const auto brdf = PrepareBrdf();
-    const auto make = [&](std::uint32_t revision) {
+    const auto make
+      = [&](std::uint32_t revision) -> std::shared_ptr<const IblGpuProducts> {
       auto result = Processor().Process(source.texture, source.registration,
         brdf, { .face_size = 16U }, revision);
       CHECK_F(result.has_value());
@@ -2226,8 +2245,8 @@ namespace {
   NOLINT_TEST_F(IblConvolutionGpuTest,
     CaptureRecordingsHoldAdmissionThroughDiscardAndCompletion)
   {
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    const auto source = MakeSource(16U,
+      [](auto, auto, auto) -> Pixel { return Pixel { 1, 0.5F, 0.25F, 1 }; });
     auto result = Processor().Process(source.texture, source.registration,
       PrepareBrdf(), { .face_size = 16U }, 601U);
     ASSERT_TRUE(result);
@@ -2268,8 +2287,8 @@ namespace {
     Microsoft::WRL::ComPtr<ID3D12Fence> gate;
     ASSERT_TRUE(SUCCEEDED(Backend().GetCurrentDevice()->CreateFence(
       0U, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(gate.GetAddressOf()))));
-    const auto release_gate
-      = ScopeGuard([gate]() noexcept { static_cast<void>(gate->Signal(1U)); });
+    const auto release_gate = ScopeGuard(
+      [gate]() noexcept -> void { static_cast<void>(gate->Signal(1U)); });
     auto* queue = static_cast<graphics::d3d12::CommandQueue*>(GetQueue().get());
     ASSERT_TRUE(SUCCEEDED(queue->GetCommandQueue()->Wait(gate.Get(), 1U)));
     ASSERT_TRUE(submitted.Submit());
@@ -2296,8 +2315,8 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, RejectedCaptureSubmissionRetainsRetryableLease)
   {
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    const auto source = MakeSource(16U,
+      [](auto, auto, auto) -> Pixel { return Pixel { 1, 0.5F, 0.25F, 1 }; });
     auto result = Processor().Process(source.texture, source.registration,
       PrepareBrdf(), { .face_size = 16U }, 650U);
     ASSERT_TRUE(result);
@@ -2330,8 +2349,8 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, BackendFaultGateRejectsCaptureAdmissionAndAttachment)
   {
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    const auto source = MakeSource(16U,
+      [](auto, auto, auto) -> Pixel { return Pixel { 1, 0.5F, 0.25F, 1 }; });
     const auto result = Processor().Process(source.texture, source.registration,
       PrepareBrdf(), { .face_size = 16U }, 660U);
     ASSERT_TRUE(result);
@@ -2344,8 +2363,8 @@ namespace {
     const auto backend = Backend().GetBackendLifetime();
     // Exercise the existing admission gate without issuing uncertain GPU work.
     backend->MarkSubmissionFault();
-    const auto restore
-      = ScopeGuard([backend]() noexcept { backend->ClearSubmissionFault(); });
+    const auto restore = ScopeGuard(
+      [backend]() noexcept -> void { backend->ClearSubmissionFault(); });
     const auto denied = (*result)->AcquireCapture();
     ASSERT_FALSE(denied);
     EXPECT_EQ(denied.error(), environment::IblCaptureError::kClosed);
@@ -2359,8 +2378,8 @@ namespace {
 
   NOLINT_TEST_F(IblConvolutionGpuTest, RejectedProducerReturnsNormalCapacity)
   {
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    const auto source = MakeSource(16U,
+      [](auto, auto, auto) -> Pixel { return Pixel { 1, 0.5F, 0.25F, 1 }; });
     const auto brdf = PrepareBrdf();
     WaitForQueueIdle();
     Backend().PollCompletedUses();
@@ -2387,8 +2406,8 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, UncertainCaptureClosesPoolAfterBackendRecovery)
   {
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    const auto source = MakeSource(16U,
+      [](auto, auto, auto) -> Pixel { return Pixel { 1, 0.5F, 0.25F, 1 }; });
     auto result = Processor().Process(source.texture, source.registration,
       PrepareBrdf(), { .face_size = 16U }, 680U);
     ASSERT_TRUE(result);
@@ -2437,8 +2456,8 @@ namespace {
   NOLINT_TEST_F(
     IblConvolutionGpuTest, DeviceLossReleasesCaptureAndClosesAdmission)
   {
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    const auto source = MakeSource(16U,
+      [](auto, auto, auto) -> Pixel { return Pixel { 1, 0.5F, 0.25F, 1 }; });
     auto result = Processor().Process(source.texture, source.registration,
       PrepareBrdf(), { .face_size = 16U }, 690U);
     ASSERT_TRUE(result);
@@ -2472,8 +2491,8 @@ namespace {
 #if defined(_MSC_VER) && defined(_DEBUG)
   NOLINT_TEST_F(IblConvolutionGpuTest, CaptureAllocationFailuresReturnAdmission)
   {
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    const auto source = MakeSource(16U,
+      [](auto, auto, auto) -> Pixel { return Pixel { 1, 0.5F, 0.25F, 1 }; });
     const auto product = Processor().Process(source.texture,
       source.registration, PrepareBrdf(), { .face_size = 16U }, 695U);
     ASSERT_TRUE(product);
@@ -2519,8 +2538,8 @@ namespace {
   NOLINT_TEST_F(IblConvolutionGpuTest, CaptureRetirementDoesNotAllocate)
   {
     using graphics::testing::HeapAllocationFailure;
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1, 0.5F, 0.25F, 1 }; });
+    const auto source = MakeSource(16U,
+      [](auto, auto, auto) -> Pixel { return Pixel { 1, 0.5F, 0.25F, 1 }; });
     for (const bool submit : { false, true }) {
       auto result = Processor().Process(source.texture, source.registration,
         PrepareBrdf(), { .face_size = 16U }, 696U + unsigned(submit));
@@ -2535,9 +2554,9 @@ namespace {
       recording->FlushBarriers();
       unsigned resolved = 0U;
       auto* recorder = recording.operator->();
-      recording->OnSubmission([recorder, &resolved](auto) {
+      recording->OnSubmission([recorder, &resolved](auto) -> void {
         ++resolved;
-        recorder->OnSubmission([&resolved](auto) { ++resolved; });
+        recorder->OnSubmission([&resolved](auto) -> void { ++resolved; });
       });
       const auto rejected_before = HeapAllocationFailure::RejectedCount();
       {
@@ -2574,7 +2593,7 @@ namespace {
     IblConvolutionGpuTest, AdmittedCaptureSurvivesGracefulPoolClosure)
   {
     const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 2, 1, 0.5F, 1 }; });
+      16U, [](auto, auto, auto) -> Pixel { return Pixel { 2, 1, 0.5F, 1 }; });
     auto result
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
         { .face_size = 16U, .lower_hemisphere_solid_color = false }, 701U);
@@ -2599,8 +2618,9 @@ namespace {
 
   NOLINT_TEST_F(IblConvolutionGpuTest, RetainedProductsSurvivePoolClosure)
   {
-    const auto source = MakeSource(
-      16U, [](auto, auto, auto) { return Pixel { 1.0F, 1.0F, 1.0F, 1.0F }; });
+    const auto source = MakeSource(16U, [](auto, auto, auto) -> Pixel {
+      return Pixel { 1.0F, 1.0F, 1.0F, 1.0F };
+    });
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
         { .face_size = 16U, .lower_hemisphere_solid_color = false }, 130U);
@@ -2621,8 +2641,9 @@ namespace {
   NOLINT_TEST_F(IblConvolutionGpuTest, ResizingAFreeSlotReplacesItsResources)
   {
     processor_ = std::make_unique<IblGpuProcessor>(Backend(), 1U);
-    const auto source = MakeSource(
-      32U, [](auto, auto, auto) { return Pixel { 1.0F, 1.0F, 1.0F, 1.0F }; });
+    const auto source = MakeSource(32U, [](auto, auto, auto) -> Pixel {
+      return Pixel { 1.0F, 1.0F, 1.0F, 1.0F };
+    });
     auto first = Processor().Process(source.texture, source.registration,
       PrepareBrdf(), { .face_size = 16U }, 140U);
     ASSERT_TRUE(first.has_value());
@@ -2642,12 +2663,13 @@ namespace {
   NOLINT_TEST_F(IblConvolutionGpuTest,
     GgxMatchesIndependentCpuIntegrationAndHighSampleReference)
   {
-    const auto source = MakeSource(128U, [](auto face, auto x, auto y) {
-      const auto n = Direction(face, x, y, 128U);
-      const auto peak = std::pow(std::max(0.0F, n.z), 32.0F);
-      return Pixel { 1.0F + 0.5F * n.x, 1.0F + 0.5F * n.y, 0.2F + 5.0F * peak,
-        1.0F };
-    });
+    const auto source
+      = MakeSource(128U, [](auto face, auto x, auto y) -> Pixel {
+          const auto n = Direction(face, x, y, 128U);
+          const auto peak = std::pow(std::max(0.0F, n.z), 32.0F);
+          return Pixel { 1.0F + 0.5F * n.x, 1.0F + 0.5F * n.y,
+            0.2F + 5.0F * peak, 1.0F };
+        });
     const auto products
       = Processor().Process(source.texture, source.registration, PrepareBrdf(),
         { .face_size = 128U, .lower_hemisphere_solid_color = false }, 150U);

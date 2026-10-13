@@ -271,12 +271,11 @@ namespace {
       .record_kind = 31U,
       .decoded_words = 2U,
       .count = static_cast<std::uint32_t>(records.size()),
-      .prepare =
-        [&](graphics::CommandRecorder& recorder) {
-          ASSERT_TRUE(static_cast<bool>(recorder.RetainRegistration(
-            Backend().GetResourceRegistry(), (*product)->registration)));
-          recorder.RecordDependency((*product)->producer);
-        },
+      .prepare = [&](graphics::CommandRecorder& recorder) -> void {
+        ASSERT_TRUE(static_cast<bool>(recorder.RetainRegistration(
+          Backend().GetResourceRegistry(), (*product)->registration)));
+        recorder.RecordDependency((*product)->producer);
+      },
     });
     for (auto index = 0U; index < expected.size(); ++index) {
       SCOPED_TRACE(index);

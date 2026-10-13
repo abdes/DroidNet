@@ -88,7 +88,7 @@ namespace detail::channel {
       {
       }
 
-      [[nodiscard]] bool await_ready() const noexcept
+      [[nodiscard]] auto await_ready() const noexcept -> bool
       {
         return !GetReader().Empty() || GetReader().Closed();
       }
@@ -100,23 +100,29 @@ namespace detail::channel {
         this->DoSuspend(h);
       }
 
-      std::shared_ptr<T> await_resume() { return GetReader().TryReceive(); }
+      auto await_resume() -> std::shared_ptr<T>
+      {
+        return GetReader().TryReceive();
+      }
 
     private:
-      [[nodiscard]] MultiplexedReader& GetReader()
+      [[nodiscard]] auto GetReader() -> MultiplexedReader&
       {
         return static_cast<MultiplexedReader&>(Base::Object());
       }
 
-      [[nodiscard]] const MultiplexedReader& GetReader() const
+      [[nodiscard]] auto GetReader() const -> const MultiplexedReader&
       {
         return static_cast<const MultiplexedReader&>(Base::Object());
       }
     };
 
-    Awaitable<std::shared_ptr<T>> auto Receive() { return ReadAwaiter(*this); }
+    auto Receive() -> Awaitable<std::shared_ptr<T>> auto
+    {
+      return ReadAwaiter(*this);
+    }
 
-    std::shared_ptr<T> TryReceive()
+    auto TryReceive() -> std::shared_ptr<T>
     {
       if (buffer_.Empty()) {
         return {};
@@ -131,7 +137,10 @@ namespace detail::channel {
 
     [[nodiscard]] auto Empty() const noexcept { return buffer_.Empty(); }
     [[nodiscard]] auto Size() const noexcept { return buffer_.Size(); }
-    [[nodiscard]] bool Closed() const noexcept { return channel_.Closed(); }
+    [[nodiscard]] auto Closed() const noexcept -> bool
+    {
+      return channel_.Closed();
+    }
 
     BroadcastChannel<T>& channel_;
     Queue<std::shared_ptr<T>> buffer_;
@@ -164,7 +173,7 @@ namespace detail::channel {
       {
       }
 
-      [[nodiscard]] bool await_ready() const noexcept
+      [[nodiscard]] auto await_ready() const noexcept -> bool
       {
         return GetWriter().channel_.Closed()
           || (!GetWriter().channel_.bounded_
@@ -178,7 +187,7 @@ namespace detail::channel {
         this->DoSuspend(h);
       }
 
-      bool await_resume()
+      auto await_resume() -> bool
       {
         return GetWriter().TrySend(std::forward<U>(data_));
       }
@@ -186,12 +195,12 @@ namespace detail::channel {
       using Base::await_cancel;
 
     private:
-      [[nodiscard]] BroadcastingWriter& GetWriter()
+      [[nodiscard]] auto GetWriter() -> BroadcastingWriter&
       {
         return static_cast<BroadcastingWriter&>(Base::Object());
       }
 
-      [[nodiscard]] const BroadcastingWriter& GetWriter() const
+      [[nodiscard]] auto GetWriter() const -> const BroadcastingWriter&
       {
         return static_cast<const BroadcastingWriter&>(Base::Object());
       }
@@ -199,12 +208,12 @@ namespace detail::channel {
       U&& data_; // NOLINT(*-avoid-const-or-ref-data-members)
     };
 
-    template <typename U> Awaitable<bool> auto Send(U&& value)
+    template <typename U> auto Send(U&& value) -> Awaitable<bool> auto
     {
       return WriteAwaiter<U>(*this, std::forward<U>(value));
     }
 
-    template <typename U> bool TrySend(U&& value)
+    template <typename U> auto TrySend(U&& value) -> bool
     {
       if (channel_.Closed()) {
         return false;
@@ -309,8 +318,11 @@ public:
   OXYGEN_DEFAULT_COPYABLE(ReaderContext)
   OXYGEN_DEFAULT_MOVABLE(ReaderContext)
 
-  Awaitable<std::shared_ptr<T>> auto Receive() { return reader_->Receive(); }
-  std::shared_ptr<T> TryReceive() { return reader_->TryReceive(); }
+  auto Receive() -> Awaitable<std::shared_ptr<T>> auto
+  {
+    return reader_->Receive();
+  }
+  auto TryReceive() -> std::shared_ptr<T> { return reader_->TryReceive(); }
 
   //! Returns true if this channel has no buffered objects, i.e., a call to
   //! TryReceive() will return `nullptr`.
@@ -392,7 +404,7 @@ public:
    \return A `ReaderContext` object that can be used to receive messages from
    the channel.
   */
-  [[nodiscard]] ReaderContext<T> ForRead()
+  [[nodiscard]] auto ForRead() -> ReaderContext<T>
   {
     auto reader
       = detail::IntrusivePtr(new detail::channel::MultiplexedReader<T>(*this));
@@ -406,7 +418,7 @@ public:
    send messages to the channel. This is a shared object that can be used by
    multiple writers at the same time.
   */
-  [[nodiscard]] detail::channel::BroadcastingWriter<T>& ForWrite()
+  [[nodiscard]] auto ForWrite() -> detail::channel::BroadcastingWriter<T>&
   {
     return writer_;
   }

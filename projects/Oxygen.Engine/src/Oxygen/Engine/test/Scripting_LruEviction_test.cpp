@@ -119,7 +119,7 @@ TEST(ScriptingLruEviction, EnforceBudgetEvictsFromLeastRecent)
   policy.SetBudget(16);
   std::vector<uint64_t> evicted;
   const auto status = policy.EnforceBudget(
-    [&evicted](const uint64_t key) { evicted.push_back(key); });
+    [&evicted](const uint64_t key) -> void { evicted.push_back(key); });
 
   EXPECT_EQ(status, PolicyBudgetStatus::kSatisfied);
   EXPECT_EQ(policy.Consumed(), 16U);
@@ -142,7 +142,7 @@ TEST(ScriptingLruEviction, EnforceBudgetBestEffortWhenAllEntriesPinned)
 
   std::vector<uint64_t> evicted;
   const auto status = policy.EnforceBudget(
-    [&evicted](const uint64_t key) { evicted.push_back(key); });
+    [&evicted](const uint64_t key) -> void { evicted.push_back(key); });
 
   EXPECT_EQ(status, PolicyBudgetStatus::kUnsatisfiedBestEffort);
   EXPECT_TRUE(evicted.empty());

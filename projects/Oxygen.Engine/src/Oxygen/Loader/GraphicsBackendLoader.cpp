@@ -425,8 +425,9 @@ public:
       auto* owner = new BackendOwner { nullptr, api->DestroyBackend };
       canonical = oxygen::graphics::AdoptBackendObject(
         owner,
-        [](
-          void* object) noexcept { delete static_cast<BackendOwner*>(object); },
+        [](void* object) noexcept -> void {
+          delete static_cast<BackendOwner*>(object);
+        },
         module);
       owner->graphics = static_cast<oxygen::Graphics*>(
         api->CreateBackend(serialized_config, serialized_path));

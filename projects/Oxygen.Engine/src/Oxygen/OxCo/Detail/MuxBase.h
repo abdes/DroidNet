@@ -99,12 +99,13 @@ public:
    */
   auto await_cancel(const Handle h) noexcept
   {
-    const bool all_cancelled = [&] {
+    const bool all_cancelled = [&] -> bool {
       // Avoid resuming our parent while we cancel things; we might
       // want to return true instead.
       Handle original_parent = std::exchange(parent_, std::noop_coroutine());
-      auto guard = ScopeGuard(
-        [this, original_parent]() noexcept { parent_ = original_parent; });
+      auto guard = ScopeGuard([this, original_parent]() noexcept -> void {
+        parent_ = original_parent;
+      });
       return self().InternalCancel();
     }();
 

@@ -389,24 +389,26 @@ auto oxygen::wrap::TextWrapper::Fill(const std::string& str) const
   }
   const auto& wrap = wrap_opt.value();
   std::string result;
-  auto size = std::accumulate(wrap.cbegin(), wrap.cend(),
-    static_cast<size_t>(0), [](const size_t acc, const std::string& line) {
-      return acc + line.length() + 1;
-    });
+  auto size
+    = std::accumulate(wrap.cbegin(), wrap.cend(), static_cast<size_t>(0),
+      [](const size_t acc, const std::string& line) -> size_t {
+        return acc + line.length() + 1;
+      });
   if (size > 0) {
     size -= 1; // remove the end of line from the last line
   }
   result.resize(size);
-  [[maybe_unused]] auto acc = std::accumulate(wrap.cbegin(), wrap.cend(),
-    result.begin(), [&result](const auto& dest, const std::string& line) {
-      auto next_write = std::copy(line.cbegin(), line.cend(), dest);
-      // Do not add a '\n' at the end of the string
-      if (next_write != result.end()) {
-        *next_write = '\n';
-        ++next_write;
-      }
-      return next_write;
-    });
+  [[maybe_unused]] auto acc
+    = std::accumulate(wrap.cbegin(), wrap.cend(), result.begin(),
+      [&result](const auto& dest, const std::string& line) -> auto {
+        auto next_write = std::copy(line.cbegin(), line.cend(), dest);
+        // Do not add a '\n' at the end of the string
+        if (next_write != result.end()) {
+          *next_write = '\n';
+          ++next_write;
+        }
+        return next_write;
+      });
   return std::make_optional(result);
 }
 

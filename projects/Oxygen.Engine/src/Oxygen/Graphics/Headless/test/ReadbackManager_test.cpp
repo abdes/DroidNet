@@ -648,7 +648,7 @@ NOLINT_TEST_F(
 
   TestEventLoop loop;
   bool resumed = false;
-  std::jthread completion_pump([this, readback] {
+  std::jthread completion_pump([this, readback] -> void {
     WaitForQueueIdle();
     const auto ready = readback->IsReady();
     CHECK_F(

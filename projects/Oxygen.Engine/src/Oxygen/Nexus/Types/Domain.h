@@ -23,7 +23,7 @@ namespace oxygen::nexus {
 struct DomainKey {
   oxygen::bindless::DomainToken domain {};
 
-  bool operator==(DomainKey const& o) const noexcept
+  auto operator==(DomainKey const& o) const noexcept -> bool
   {
     return domain == o.domain;
   }
@@ -35,7 +35,7 @@ struct DomainRange {
 };
 
 struct DomainKeyHash {
-  std::size_t operator()(DomainKey const& k) const noexcept
+  auto operator()(DomainKey const& k) const noexcept -> std::size_t
   {
     return static_cast<std::size_t>(k.domain.get());
   }

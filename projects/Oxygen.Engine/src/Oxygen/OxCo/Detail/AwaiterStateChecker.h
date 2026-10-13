@@ -92,7 +92,7 @@ struct AwaiterStateChecker : ProxyFrame {
 
   AwaiterStateChecker()
   {
-    this->resume_fn = +[](CoroutineFrame* frame) {
+    this->resume_fn = +[](CoroutineFrame* frame) -> void {
       const auto* self = static_cast<AwaiterStateChecker*>(frame);
       switch (self->state) {
       case State::kRunning:

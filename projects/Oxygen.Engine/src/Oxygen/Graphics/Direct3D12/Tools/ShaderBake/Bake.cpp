@@ -77,19 +77,19 @@ auto BakeShaderLibrary(const BakeArgs& args) -> int
     .toolchain_hash = toolchain_hash,
     .include_dirs = include_dirs,
     .requests = expanded_requests,
-    .compile_request =
-      [&](const ExpandedShaderRequest& request, const size_t index,
-        const size_t total_count) {
-        return CompileExpandedShaderRequest(
-          RequestCompilerConfig {
-            .workspace_root = args.workspace_root,
-            .shader_source_root = args.shader_source_root,
-            .profile = args.profile,
-            .toolchain_hash = toolchain_hash,
-            .include_dirs = include_dirs,
-          },
-          request, index, total_count);
-      },
+    .compile_request
+    = [&](const ExpandedShaderRequest& request, const size_t index,
+        const size_t total_count) -> RequestCompileOutcome {
+      return CompileExpandedShaderRequest(
+        RequestCompilerConfig {
+          .workspace_root = args.workspace_root,
+          .shader_source_root = args.shader_source_root,
+          .profile = args.profile,
+          .toolchain_hash = toolchain_hash,
+          .include_dirs = include_dirs,
+        },
+        request, index, total_count);
+    },
   };
 
   if (args.command == ShaderBakeCommand::kRebuild) {

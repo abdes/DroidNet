@@ -86,9 +86,9 @@ public:
       // way to hit this is by destroying an UnsafeNursery inside an async
       // task, which deals with the pending callbacks using
       // Executor::drain().
-      scheduled_->buffer_.ForEach([&](Task& task) {
+      scheduled_->buffer_.ForEach([&](Task& task) -> void {
         if (task.second == this) {
-          task.first = +[](void*) noexcept { };
+          task.first = +[](void*) noexcept -> void { };
           task.second = nullptr;
         }
       });
@@ -169,7 +169,8 @@ public:
       && Current()->event_loop_id_ == event_loop_id_) {
       // Schedule the current executor to run our callbacks
       scheduled_ = Current();
-      scheduled_->RunSoon(+[](Executor* ex) noexcept { ex->RunOnce(); }, this);
+      scheduled_->RunSoon(
+        +[](Executor* ex) noexcept -> void { ex->RunOnce(); }, this);
     } else {
       // No current executor, or it's for a different event loop:
       // run our callbacks immediately
@@ -187,11 +188,12 @@ public:
   void Capture(Fn fn, const size_t capacity = Capacity::Small)
   {
     Tasks tmp { capacity };
-    ScopeGuard guard([&]() noexcept { Drain(tmp); });
+    ScopeGuard guard([&]() noexcept -> void { Drain(tmp); });
 
     Tasks* old_ready = ready_;
     ready_ = &tmp;
-    ScopeGuard guard2([&old_ready, this]() noexcept { ready_ = old_ready; });
+    ScopeGuard guard2(
+      [&old_ready, this]() noexcept -> void { ready_ = old_ready; });
 
     fn();
   }
@@ -213,7 +215,7 @@ private:
   {
     Executor* prev = Current();
     Current() = this;
-    ScopeGuard guard([&]() noexcept { Current() = prev; });
+    ScopeGuard guard([&]() noexcept -> void { Current() = prev; });
 
     bool b = true;
     if (running_ == nullptr) {
@@ -222,7 +224,7 @@ private:
       running_ = &b;
     }
     const bool* running = running_;
-    ScopeGuard guard2([&]() noexcept {
+    ScopeGuard guard2([&]() noexcept -> void {
       if (*running && running_ == &b) {
         running_ = nullptr;
       }

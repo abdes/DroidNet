@@ -116,7 +116,7 @@ public:
       milliseconds task_time { 0 };
       {
         std::unique_lock lk(mutex_);
-        cv_.wait(lk, [&] { return !running_ || !events_.empty(); });
+        cv_.wait(lk, [&] -> bool { return !running_ || !events_.empty(); });
         if (!running_ && events_.empty())
           break; // graceful stop
         if (events_.empty())
@@ -211,12 +211,13 @@ public:
       parent_ = h;
       {
         std::scoped_lock lk(event_loop_.mutex_);
-        it_ = event_loop_.events_.emplace(event_loop_.now_ + delay_, [this] {
-          DLOG_F(1, "sleep {} ({} ms) resuming parent", fmt::ptr(this),
-            DelayMilliseconds());
-          suspended_ = false;
-          parent_.resume();
-        });
+        it_ = event_loop_.events_.emplace(
+          event_loop_.now_ + delay_, [this] -> void {
+            DLOG_F(1, "sleep {} ({} ms) resuming parent", fmt::ptr(this),
+              DelayMilliseconds());
+            suspended_ = false;
+            parent_.resume();
+          });
       }
       event_loop_.cv_.notify_one();
     }
@@ -350,7 +351,7 @@ public:
   */
   void Post(testing::TestEventLoop& loop, void (*fn)(void*), void* arg) noexcept
   {
-    loop.Schedule(std::chrono::milliseconds(0), [fn, arg] { fn(arg); });
+    loop.Schedule(std::chrono::milliseconds(0), [fn, arg] -> void { fn(arg); });
   }
 };
 } // namespace oxygen::co

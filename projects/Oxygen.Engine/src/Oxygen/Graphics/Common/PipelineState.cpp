@@ -33,7 +33,7 @@ inline void HashShaderDefines(
 
   std::vector<ShaderDefine> sorted(defines.begin(), defines.end());
   std::sort(sorted.begin(), sorted.end(),
-    [](const ShaderDefine& a, const ShaderDefine& b) {
+    [](const ShaderDefine& a, const ShaderDefine& b) -> bool {
       if (a.name != b.name) {
         return a.name < b.name;
       }
@@ -69,7 +69,7 @@ inline void HashRootBindings(
     HashCombine(
       seed, binding.GetRootParameterIndex()); // Hash the root parameter index
     std::visit(
-      [&seed]<typename BindingType>(const BindingType& item) {
+      [&seed]<typename BindingType>(const BindingType& item) -> void {
         using T = std::decay_t<BindingType>;
         if constexpr (std::is_same_v<T,
                         oxygen::graphics::PushConstantsBinding>) {

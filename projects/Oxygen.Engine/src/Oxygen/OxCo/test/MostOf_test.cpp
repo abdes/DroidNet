@@ -80,7 +80,7 @@ NOLINT_TEST_F(MostOfTest, Exception)
     bool cancelled = false;
     EXPECT_THROW(co_await MostOf(
       [&]() -> Co<> {
-        ScopeGuard guard([&]() noexcept { cancelled = true; });
+        ScopeGuard guard([&]() noexcept -> void { cancelled = true; });
         co_await SuspendForever {};
       },
       [&]() -> Co<> {

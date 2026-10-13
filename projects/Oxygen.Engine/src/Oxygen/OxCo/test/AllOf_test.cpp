@@ -47,15 +47,15 @@ NOLINT_TEST_F(AllOfTest, Empty)
 }
 
 struct LValueQualifiedImm {
-  bool await_ready() const noexcept { return true; }
+  auto await_ready() const noexcept -> bool { return true; }
   void await_suspend(Handle) noexcept { oxygen::Unreachable(); }
-  int await_resume() & { return 42; }
+  auto await_resume() & -> int { return 42; }
 };
 
 struct RValueQualifiedImm {
-  bool await_ready() const noexcept { return true; }
+  auto await_ready() const noexcept -> bool { return true; }
   void await_suspend(Handle) noexcept { oxygen::Unreachable(); }
-  int await_resume() && { return 42; }
+  auto await_resume() && -> int { return 42; }
 };
 
 struct LValueQualified {

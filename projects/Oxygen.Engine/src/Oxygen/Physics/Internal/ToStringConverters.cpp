@@ -125,7 +125,7 @@ auto oxygen::physics::body::to_string(BodyFlags value) -> std::string
   }
 
   std::string result;
-  const auto add_flag = [&](const BodyFlags flag, const char* name) {
+  const auto add_flag = [&](const BodyFlags flag, const char* name) -> void {
     if ((value & flag) != BodyFlags::kNone) {
       if (!result.empty()) {
         result += "|";

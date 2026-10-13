@@ -40,7 +40,7 @@ namespace {
   {
 #if defined(OXGN_PHYS_BACKEND_JOLT)
     static std::once_flag once {};
-    std::call_once(once, [] { JPH::RegisterDefaultAllocator(); });
+    std::call_once(once, [] -> void { JPH::RegisterDefaultAllocator(); });
 
     auto shared = JPH::Ref<JPH::SoftBodySharedSettings> {
       new JPH::SoftBodySharedSettings {}
@@ -84,7 +84,7 @@ namespace {
   {
 #if defined(OXGN_PHYS_BACKEND_JOLT)
     static std::once_flag once {};
-    std::call_once(once, [] { JPH::RegisterDefaultAllocator(); });
+    std::call_once(once, [] -> void { JPH::RegisterDefaultAllocator(); });
 
     auto shared = JPH::SoftBodySharedSettings::sCreateCube(3U, 0.1F);
     if (shared == nullptr) {

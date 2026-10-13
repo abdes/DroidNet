@@ -80,7 +80,7 @@ auto SerialExecutor::WorkerMain() -> void
     Task item;
     {
       std::unique_lock lk(mutex_);
-      cv_.wait(lk, [this] { return stopping_ || tasks_ != nullptr; });
+      cv_.wait(lk, [this] -> bool { return stopping_ || tasks_ != nullptr; });
       if (stopping_ && !tasks_) {
         return;
       }

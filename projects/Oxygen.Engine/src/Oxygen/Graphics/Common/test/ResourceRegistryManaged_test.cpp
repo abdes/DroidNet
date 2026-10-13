@@ -255,7 +255,7 @@ protected:
     graphics_->InstallBackendOwner(graphics_, kTestBackend, {});
     resource_ = std::make_shared<FakeResource>();
     resource_->WithViewBehavior(
-      [this](const auto& handle, const auto& description) -> auto {
+      [this](const auto& handle, const auto& description) -> NativeView {
         last_view_index_ = handle.GetBindlessHandle();
         return NativeView { description.id + 1, FakeResource::ClassTypeId() };
       });
@@ -452,7 +452,7 @@ NOLINT_TEST_F(
   alias->WithNativeResource(native);
   unsigned forgotten = 0;
   Registry().SetResourceUnregisteredCallback(
-    [&](const auto&) -> auto { ++forgotten; });
+    [&](const auto&) -> void { ++forgotten; });
   Registry().Register(Resource());
   Registry().Register(alias);
   Registry().UnRegisterResource(*Resource());

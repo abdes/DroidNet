@@ -38,7 +38,8 @@ inline auto SampleProductionGgxEnergy(double roughness, double cosine)
   const auto iy = static_cast<std::uint32_t>(y);
   const auto nx = std::min(ix + 1U, data->view_nodes - 1U);
   const auto ny = std::min(iy + 1U, data->roughness_nodes - 1U);
-  const auto fetch = [&](std::uint32_t row, std::uint32_t column) {
+  const auto fetch
+    = [&](std::uint32_t row, std::uint32_t column) -> std::array<float, 2> {
     std::array<float, 2> value {};
     std::memcpy(value.data(),
       data->energy.data() + (row * data->view_nodes + column) * sizeof(value),

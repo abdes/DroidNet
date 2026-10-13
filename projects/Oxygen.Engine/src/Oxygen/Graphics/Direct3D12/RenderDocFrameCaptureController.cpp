@@ -86,8 +86,10 @@ auto NormalizePathForComparison(std::filesystem::path path) -> std::wstring
   }
   path = path.lexically_normal();
   auto normalized = path.native();
-  std::ranges::transform(normalized, normalized.begin(),
-    [](const wchar_t ch) { return static_cast<wchar_t>(std::towlower(ch)); });
+  std::ranges::transform(
+    normalized, normalized.begin(), [](const wchar_t ch) -> wchar_t {
+      return static_cast<wchar_t>(std::towlower(ch));
+    });
   return normalized;
 }
 

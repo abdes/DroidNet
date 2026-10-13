@@ -829,7 +829,7 @@ auto ScriptingModule::RegisterBindingPack(
   }
 
   const auto already_registered = std::ranges::any_of(
-    binding_packs_, [&pack](const auto& existing) -> auto {
+    binding_packs_, [&pack](const auto& existing) -> bool {
       return existing && existing->Name() == pack->Name();
     });
   if (already_registered) {

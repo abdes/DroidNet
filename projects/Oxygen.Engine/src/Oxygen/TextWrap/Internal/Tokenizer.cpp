@@ -338,24 +338,25 @@ auto oxygen::wrap::internal::Tokenizer::Tokenize(
           = machine.Handle(NonWhiteSpaceChar { *transformed_cursor });
       }
       // https://en.cppreference.com/w/cpp/utility/variant/visit
-      std::visit(Overload {
-                   [&continue_running](const Continue& /*status*/) noexcept {
-                     continue_running = true;
-                   },
-                   [&continue_running](const Terminate& /*status*/) noexcept {
-                     continue_running = false;
-                   },
-                   [&continue_running, &no_errors](
-                     const TerminateWithError& /*status*/) noexcept {
-                     continue_running = false;
-                     no_errors = false;
-                   },
-                   [&continue_running, &reissue](
-                     const ReissueEvent& /*status*/) noexcept {
-                     reissue = true;
-                     continue_running = true;
-                   },
-                 },
+      std::visit(
+        Overload {
+          [&continue_running](const Continue& /*status*/) noexcept -> void {
+            continue_running = true;
+          },
+          [&continue_running](const Terminate& /*status*/) noexcept -> void {
+            continue_running = false;
+          },
+          [&continue_running, &no_errors](
+            const TerminateWithError& /*status*/) noexcept -> void {
+            continue_running = false;
+            no_errors = false;
+          },
+          [&continue_running, &reissue](
+            const ReissueEvent& /*status*/) noexcept -> void {
+            reissue = true;
+            continue_running = true;
+          },
+        },
         execution_status);
       if (continue_running) {
         if (reissue) {

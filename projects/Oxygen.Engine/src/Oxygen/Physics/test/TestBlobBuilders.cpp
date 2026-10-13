@@ -50,7 +50,7 @@ namespace {
   auto EnsureJoltAllocatorReady() -> void
   {
     static std::once_flag once {};
-    std::call_once(once, [] { JPH::RegisterDefaultAllocator(); });
+    std::call_once(once, [] -> void { JPH::RegisterDefaultAllocator(); });
   }
 
 } // namespace
@@ -132,26 +132,26 @@ auto MakeSoftBodyUvSphereSettingsBlob(const uint32_t latitude_segments,
   shared->mFaces.reserve(
     static_cast<size_t>(latitude_segments) * longitude_segments * 2U);
   const auto add_face
-    = [&](const uint32_t i0, const uint32_t i1, const uint32_t i2) {
-        if (i0 == i1 || i0 == i2 || i1 == i2 || i0 >= shared->mVertices.size()
-          || i1 >= shared->mVertices.size() || i2 >= shared->mVertices.size()) {
-          return;
-        }
-        const auto& p0 = shared->mVertices[i0].mPosition;
-        const auto& p1 = shared->mVertices[i1].mPosition;
-        const auto& p2 = shared->mVertices[i2].mPosition;
-        const auto e10 = JPH::Float3 { p1.x - p0.x, p1.y - p0.y, p1.z - p0.z };
-        const auto e20 = JPH::Float3 { p2.x - p0.x, p2.y - p0.y, p2.z - p0.z };
-        const auto cross = JPH::Float3 { e10.y * e20.z - e10.z * e20.y,
-          e10.z * e20.x - e10.x * e20.z, e10.x * e20.y - e10.y * e20.x };
-        const auto area2_sq
-          = cross.x * cross.x + cross.y * cross.y + cross.z * cross.z;
-        constexpr float kMinArea2Sq = 1.0e-10F;
-        if (area2_sq <= kMinArea2Sq) {
-          return;
-        }
-        shared->mFaces.emplace_back(i0, i1, i2);
-      };
+    = [&](const uint32_t i0, const uint32_t i1, const uint32_t i2) -> void {
+    if (i0 == i1 || i0 == i2 || i1 == i2 || i0 >= shared->mVertices.size()
+      || i1 >= shared->mVertices.size() || i2 >= shared->mVertices.size()) {
+      return;
+    }
+    const auto& p0 = shared->mVertices[i0].mPosition;
+    const auto& p1 = shared->mVertices[i1].mPosition;
+    const auto& p2 = shared->mVertices[i2].mPosition;
+    const auto e10 = JPH::Float3 { p1.x - p0.x, p1.y - p0.y, p1.z - p0.z };
+    const auto e20 = JPH::Float3 { p2.x - p0.x, p2.y - p0.y, p2.z - p0.z };
+    const auto cross = JPH::Float3 { e10.y * e20.z - e10.z * e20.y,
+      e10.z * e20.x - e10.x * e20.z, e10.x * e20.y - e10.y * e20.x };
+    const auto area2_sq
+      = cross.x * cross.x + cross.y * cross.y + cross.z * cross.z;
+    constexpr float kMinArea2Sq = 1.0e-10F;
+    if (area2_sq <= kMinArea2Sq) {
+      return;
+    }
+    shared->mFaces.emplace_back(i0, i1, i2);
+  };
 
   for (uint32_t lat = 0U; lat < latitude_segments; ++lat) {
     for (uint32_t lon = 0U; lon < longitude_segments; ++lon) {

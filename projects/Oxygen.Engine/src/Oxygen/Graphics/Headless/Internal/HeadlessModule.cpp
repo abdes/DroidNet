@@ -34,7 +34,7 @@ OXGN_HDLS_API auto CreateBackendImpl(
       = std::static_pointer_cast<oxygen::graphics::headless::Graphics>(
         oxygen::graphics::AdoptBackendObject(
           static_cast<oxygen::Graphics*>(instance),
-          [](void* object) noexcept {
+          [](void* object) noexcept -> void {
             delete static_cast<oxygen::Graphics*>(object);
           },
           instance->GetBackendLifetime()));

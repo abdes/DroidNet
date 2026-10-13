@@ -60,7 +60,7 @@ DeferredReclaimer::DeferredReclaimer()
 DeferredReclaimer::~DeferredReclaimer()
 {
   if (!std::all_of(impl_->deferred_releases_.begin(),
-        impl_->deferred_releases_.end(), [](const auto& bucket) {
+        impl_->deferred_releases_.end(), [](const auto& bucket) -> bool {
           return bucket.ordinary.empty() && !bucket.prepared;
         })) {
     LOG_F(
@@ -95,7 +95,7 @@ auto DeferredReclaimer::ReleaseDeferredResources(const frame::Slot frame_slot)
   CHECK_LT_F(frame_slot, frame::kMaxSlot, "Frame slot out of bounds");
   const auto u_frame_slot = frame_slot.get();
 
-  const auto dispatch = [](std::function<void()>& action) noexcept {
+  const auto dispatch = [](std::function<void()>& action) noexcept -> void {
     try {
       action();
     } catch (...) {

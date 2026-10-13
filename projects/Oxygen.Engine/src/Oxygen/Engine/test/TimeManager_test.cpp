@@ -114,7 +114,7 @@ TEST(TimeManager, RendererSmokeInterpolatedSampling)
   const auto t_interp = t::presentation::Interpolate(prev_sim, curr_sim, alpha);
 
   // Dummy render hook capturing the time
-  auto RenderAt = [](t::PresentationTime when) {
+  auto RenderAt = [](t::PresentationTime when) -> void {
     // no-op, but ensures type is PresentationTime without assuming epoch > 0
     (void)when;
   };

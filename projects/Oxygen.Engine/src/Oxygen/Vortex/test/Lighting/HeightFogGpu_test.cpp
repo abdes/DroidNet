@@ -88,7 +88,8 @@ namespace {
       : 0.0;
     const auto z = observer + exclude * ray[2];
     const auto dz = (1.0 - exclude) * ray[2];
-    const auto integrate = [&](double density, double falloff, double height) {
+    const auto integrate
+      = [&](double density, double falloff, double height) -> double {
       const auto origin_density = density
         * std::exp2(std::clamp(-falloff * (z - height), -125.0, 126.0));
       const auto q = std::max(-127.0, falloff * dz);

@@ -471,7 +471,7 @@ auto main(int argc, char** argv) noexcept -> int
       "exception of unknown type\n";
 
   // Low-level error reporting function that won't allocate memory.
-  auto report_error = [](std::string_view message) noexcept {
+  auto report_error = [](std::string_view message) noexcept -> void {
 #if defined(_WIN32)
     HANDLE stderr_handle = GetStdHandle(STD_ERROR_HANDLE);
     DWORD bytes_written { 0UL };

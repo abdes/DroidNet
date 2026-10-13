@@ -87,8 +87,8 @@ NOLINT_TEST(UploadTrackerTest, BlockingWaitWakesOnCompletion)
 {
   UploadTracker tracker;
   const auto ticket = tracker.Register(FenceValue { 10 }, 42);
-  auto future
-    = std::async(std::launch::async, [ticket]() { return ticket.Await(); });
+  auto future = std::async(
+    std::launch::async, [ticket]() -> UploadResult { return ticket.Await(); });
   EXPECT_EQ(future.wait_for(0ms), std::future_status::timeout);
   tracker.MarkFenceCompleted(ticket.Fence());
   EXPECT_EQ(future.get().bytes_uploaded, 42U);
@@ -98,8 +98,8 @@ NOLINT_TEST(UploadTrackerTest, BlockingWaitWakesOnOwnerDestruction)
 {
   auto tracker = std::make_unique<UploadTracker>();
   const auto ticket = tracker->Register(FenceValue { 10 }, 42);
-  auto future
-    = std::async(std::launch::async, [ticket]() { return ticket.Await(); });
+  auto future = std::async(
+    std::launch::async, [ticket]() -> UploadResult { return ticket.Await(); });
   tracker.reset();
   EXPECT_EQ(future.get().error, UploadError::kTrackerShutdown);
   EXPECT_FALSE(ticket.Cancel());
@@ -110,8 +110,8 @@ NOLINT_TEST(UploadTrackerTest, CancellationWakesLogicalWaitAndSurvivesClose)
   UploadTracker tracker;
   const auto ticket = tracker.Register(FenceValue { 10 }, 42);
   const auto copy = ticket;
-  auto future
-    = std::async(std::launch::async, [ticket]() { return ticket.Await(); });
+  auto future = std::async(
+    std::launch::async, [ticket]() -> UploadResult { return ticket.Await(); });
   EXPECT_TRUE(copy.Cancel());
   EXPECT_FALSE(ticket.Cancel());
   EXPECT_EQ(future.get().error, UploadError::kCanceled);
@@ -180,8 +180,8 @@ NOLINT_TEST(UploadTrackerTest, AsyncCancellationStillWaitsForPhysicalCompletion)
   const auto ticket = tracker.Register(FenceValue { 5 }, 64);
   oxygen::co::testing::TestEventLoop loop;
   bool physically_completed = false;
-  loop.Schedule(1ms, [ticket]() { EXPECT_TRUE(ticket.Cancel()); });
-  loop.Schedule(2ms, [&]() {
+  loop.Schedule(1ms, [ticket]() -> void { EXPECT_TRUE(ticket.Cancel()); });
+  loop.Schedule(2ms, [&]() -> void {
     physically_completed = true;
     tracker.MarkFenceCompleted(ticket.Fence());
   });
@@ -212,7 +212,8 @@ NOLINT_TEST(UploadTrackerTest, ReentrantDestructionWakesLaterFenceWaiter)
   const auto first = tracker->Register(FenceValue { 5 }, 32);
   const auto later = tracker->Register(FenceValue { 20 }, 64);
   oxygen::co::testing::TestEventLoop loop;
-  loop.Schedule(1ms, [&]() { tracker->MarkFenceCompleted(first.Fence()); });
+  loop.Schedule(
+    1ms, [&]() -> void { tracker->MarkFenceCompleted(first.Fence()); });
   const auto results = oxygen::co::Run(loop,
     oxygen::co::AllOf(
       CloseAfterCompletion(first, tracker), later.AwaitGpuCompletionAsync()));
@@ -227,7 +228,8 @@ NOLINT_TEST(UploadTrackerTest, ReentrantProgressWakesLaterFenceWaiter)
   const auto first = tracker.Register(FenceValue { 5 }, 32);
   const auto later = tracker.Register(FenceValue { 20 }, 64);
   oxygen::co::testing::TestEventLoop loop;
-  loop.Schedule(1ms, [&]() { tracker.MarkFenceCompleted(first.Fence()); });
+  loop.Schedule(
+    1ms, [&]() -> void { tracker.MarkFenceCompleted(first.Fence()); });
   const auto results = oxygen::co::Run(loop,
     oxygen::co::AllOf(
       AdvanceAfterCompletion(first, tracker), later.AwaitGpuCompletionAsync()));

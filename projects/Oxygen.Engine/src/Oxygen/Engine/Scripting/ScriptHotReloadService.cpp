@@ -77,7 +77,7 @@ auto ScriptHotReloadService::WatchLoop() -> co::Co<>
     co_return;
   }
 
-  auto is_script = [](const std::filesystem::path& path) {
+  auto is_script = [](const std::filesystem::path& path) -> bool {
     const auto ext = path.extension();
     return ext == ".luau" || ext == ".lua";
   };

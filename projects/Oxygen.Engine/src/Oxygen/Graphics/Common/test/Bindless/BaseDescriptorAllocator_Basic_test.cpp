@@ -99,14 +99,15 @@ NOLINT_TEST_F(
   // rather than creating new ones
 
   int alloc_count = 0;
-  allocator_->segment_factory_ = [this, &alloc_count](auto, auto) {
+  allocator_->segment_factory_
+    = [this, &alloc_count](auto, auto) -> std::unique_ptr<DescriptorSegment> {
     auto segment = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
     EXPECT_CALL(*segment, Allocate())
-      .WillOnce([&] {
+      .WillOnce([&] -> b::HeapIndex {
         alloc_count++;
         return b::HeapIndex { 0 };
       })
-      .WillOnce([&] {
+      .WillOnce([&] -> b::HeapIndex {
         alloc_count++;
         return b::HeapIndex { 1 };
       });
@@ -141,7 +142,8 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, ReleaseMakesDescriptorAvailable)
 {
-  allocator_->segment_factory_ = [this](auto, auto) {
+  allocator_->segment_factory_
+    = [this](auto, auto) -> std::unique_ptr<DescriptorSegment> {
     auto segment = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
     EXPECT_CALL(*segment, Allocate())
       .WillOnce(testing::Return(b::HeapIndex { 0 }));
@@ -177,7 +179,8 @@ NOLINT_TEST_F(
   BaseDescriptorAllocatorBasicTest, GetRemainingDescriptorsReturnsCorrectCount)
 {
   constexpr auto kAvailableCount = b::Count { 42 };
-  allocator_->segment_factory_ = [&](auto, auto) {
+  allocator_->segment_factory_
+    = [&](auto, auto) -> std::unique_ptr<DescriptorSegment> {
     auto segment = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
     EXPECT_CALL(*segment, GetAvailableCount())
       .WillRepeatedly(testing::Return(kAvailableCount));
@@ -209,7 +212,8 @@ NOLINT_TEST_F(
 
 NOLINT_TEST_F(BaseDescriptorAllocatorBasicTest, HandleRecyclingReusesSameIndex)
 {
-  allocator_->segment_factory_ = [this](auto, auto) {
+  allocator_->segment_factory_
+    = [this](auto, auto) -> std::unique_ptr<DescriptorSegment> {
     auto segment = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
     EXPECT_CALL(*segment, Allocate())
       .WillRepeatedly(testing::Return(b::HeapIndex { 42 }));
@@ -248,7 +252,9 @@ NOLINT_TEST_F(
   std::map<std::pair<ResourceViewType, DescriptorVisibility>, bool>
     segmentCreated;
 
-  allocator_->segment_factory_ = [&segmentCreated](auto type, auto vis) {
+  allocator_->segment_factory_
+    = [&segmentCreated](
+        auto type, auto vis) -> std::unique_ptr<DescriptorSegment> {
     segmentCreated[{ type, vis }] = true;
     auto seg = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
     EXPECT_CALL(*seg, Allocate()).WillOnce(testing::Return(b::HeapIndex { 0 }));

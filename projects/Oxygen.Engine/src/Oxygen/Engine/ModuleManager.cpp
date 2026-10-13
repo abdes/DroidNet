@@ -301,7 +301,7 @@ auto ModuleManager::RegisterModule(
     = priority == oxygen::engine::kRendererModulePriority.get();
 
   if (is_renderer_module) {
-    if (std::ranges::any_of(modules_, [](const auto& existing) -> auto {
+    if (std::ranges::any_of(modules_, [](const auto& existing) -> bool {
           return existing != nullptr
             && existing->GetPriority().get()
             == oxygen::engine::kRendererModulePriority.get();

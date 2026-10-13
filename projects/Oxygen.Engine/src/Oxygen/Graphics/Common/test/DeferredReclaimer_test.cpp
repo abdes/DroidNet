@@ -29,8 +29,9 @@ NOLINT_TEST(
 {
   DeferredReclaimer reclaimer;
   unsigned calls = 0U;
-  auto first = reclaimer.PrepareDeferredAction([&calls]() { ++calls; });
-  auto second = reclaimer.PrepareDeferredAction([&calls]() { ++calls; });
+  auto first = reclaimer.PrepareDeferredAction([&calls]() -> void { ++calls; });
+  auto second
+    = reclaimer.PrepareDeferredAction([&calls]() -> void { ++calls; });
   const auto rejected
     = oxygen::graphics::testing::HeapAllocationFailure::RejectedCount();
   {
@@ -50,8 +51,8 @@ NOLINT_TEST(PreparedDeferredReclaimerTest,
   DeferredReclaimer reclaimer;
   unsigned calls = 0U;
   unsigned after_first = 0U;
-  auto later = reclaimer.PrepareDeferredAction([&calls]() { ++calls; });
-  auto first = reclaimer.PrepareDeferredAction([&]() {
+  auto later = reclaimer.PrepareDeferredAction([&calls]() -> void { ++calls; });
+  auto first = reclaimer.PrepareDeferredAction([&]() -> void {
     ++calls;
     reclaimer.CommitDeferredAction(std::move(later));
   });
@@ -76,11 +77,13 @@ NOLINT_TEST(PreparedDeferredReclaimerTest, PreservesMixedEnqueueOrder)
   DeferredReclaimer reclaimer;
   std::vector<int> observed;
   observed.reserve(4);
-  auto first = reclaimer.PrepareDeferredAction([&] { observed.push_back(2); });
-  auto second = reclaimer.PrepareDeferredAction([&] { observed.push_back(4); });
-  reclaimer.RegisterDeferredAction([&] { observed.push_back(1); });
+  auto first
+    = reclaimer.PrepareDeferredAction([&] -> void { observed.push_back(2); });
+  auto second
+    = reclaimer.PrepareDeferredAction([&] -> void { observed.push_back(4); });
+  reclaimer.RegisterDeferredAction([&] -> void { observed.push_back(1); });
   reclaimer.CommitDeferredAction(std::move(first));
-  reclaimer.RegisterDeferredAction([&] { observed.push_back(3); });
+  reclaimer.RegisterDeferredAction([&] -> void { observed.push_back(3); });
   reclaimer.CommitDeferredAction(std::move(second));
   reclaimer.OnBeginFrame(frame::Slot { 0 });
   EXPECT_EQ(observed, (std::vector<int> { 1, 2, 3, 4 }));
@@ -90,8 +93,8 @@ NOLINT_TEST(PreparedDeferredReclaimerTest, ReentrantEnqueueWaitsForNextDrain)
 {
   DeferredReclaimer reclaimer;
   int count = 0;
-  auto nested = reclaimer.PrepareDeferredAction([&] { ++count; });
-  reclaimer.RegisterDeferredAction([&] {
+  auto nested = reclaimer.PrepareDeferredAction([&] -> void { ++count; });
+  reclaimer.RegisterDeferredAction([&] -> void {
     ++count;
     reclaimer.CommitDeferredAction(std::move(nested));
   });
@@ -106,10 +109,11 @@ NOLINT_TEST(
 {
   DeferredReclaimer reclaimer;
   int count = 0;
-  reclaimer.RegisterDeferredAction([] { throw std::runtime_error("test"); });
-  auto action = reclaimer.PrepareDeferredAction([&] { ++count; });
+  reclaimer.RegisterDeferredAction(
+    [] -> void { throw std::runtime_error("test"); });
+  auto action = reclaimer.PrepareDeferredAction([&] -> void { ++count; });
   reclaimer.CommitDeferredAction(std::move(action));
-  reclaimer.RegisterDeferredAction([&] { ++count; });
+  reclaimer.RegisterDeferredAction([&] -> void { ++count; });
   EXPECT_NO_THROW(reclaimer.OnBeginFrame(frame::Slot { 0 }));
   EXPECT_EQ(count, 2);
 }
@@ -120,7 +124,8 @@ NOLINT_TEST(
   DeferredReclaimer reclaimer;
   bool called = false;
   {
-    auto action = reclaimer.PrepareDeferredAction([&] { called = true; });
+    auto action
+      = reclaimer.PrepareDeferredAction([&] -> void { called = true; });
   }
   reclaimer.OnRendererShutdown();
   EXPECT_FALSE(called);
@@ -348,7 +353,7 @@ NOLINT_TEST_F(DeferredReclaimerTest,
 {
   // Arrange
   std::atomic<bool> ran { false };
-  manager->RegisterDeferredAction([&]() { ran.store(true); });
+  manager->RegisterDeferredAction([&]() -> void { ran.store(true); });
 
   // Act
   manager->OnBeginFrame(frame::Slot { 0 });
@@ -466,9 +471,9 @@ NOLINT_TEST_F(DeferredReclaimerTest,
 {
   // Arrange
   std::vector<int> order;
-  manager->RegisterDeferredAction([&]() { order.push_back(1); });
-  manager->RegisterDeferredAction([&]() { order.push_back(2); });
-  manager->RegisterDeferredAction([&]() { order.push_back(3); });
+  manager->RegisterDeferredAction([&]() -> void { order.push_back(1); });
+  manager->RegisterDeferredAction([&]() -> void { order.push_back(2); });
+  manager->RegisterDeferredAction([&]() -> void { order.push_back(3); });
 
   // Act
   manager->OnBeginFrame(frame::Slot { 0 });
@@ -496,7 +501,7 @@ NOLINT_TEST_F(DeferredReclaimerTest,
 {
   // Arrange
   std::atomic<bool> deleter_ran { false };
-  auto ptr = std::shared_ptr<int>(new int(42), [&](int* p) {
+  auto ptr = std::shared_ptr<int>(new int(42), [&](int* p) -> void {
     delete p;
     deleter_ran.store(true);
   });
@@ -526,7 +531,7 @@ NOLINT_TEST_F(DeferredReclaimerTest,
   // Arrange
   std::vector<std::thread> threads;
   for (int i = 0; i < 32; ++i) {
-    threads.emplace_back([this, i]() {
+    threads.emplace_back([this, i]() -> void {
       auto r = std::make_shared<TestResource>("t" + std::to_string(i));
       manager->RegisterDeferredRelease(r);
     });

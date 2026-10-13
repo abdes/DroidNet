@@ -66,7 +66,7 @@ protected:
   auto FindErrorContaining(std::string_view text) const -> bool
   {
     const auto errors = ctx_.GetErrors();
-    return std::ranges::any_of(errors, [text](const auto& error) {
+    return std::ranges::any_of(errors, [text](const auto& error) -> bool {
       return error.message.find(text) != std::string::npos;
     });
   }
@@ -605,22 +605,24 @@ NOLINT_TEST_F(MultiModuleErrorTest,
 
   // Find and verify first module error
   const auto errors = ctx_.GetErrors();
-  auto module1_error = std::ranges::find_if(errors, [&](const auto& error) {
-    return error.source_type_id == module1_type_id
-      && error.source_key.has_value()
-      && error.source_key.value() == "first_module";
-  });
+  auto module1_error
+    = std::ranges::find_if(errors, [&](const auto& error) -> bool {
+        return error.source_type_id == module1_type_id
+          && error.source_key.has_value()
+          && error.source_key.value() == "first_module";
+      });
 
   ASSERT_NE(module1_error, errors.end());
   EXPECT_TRUE(module1_error->message.find("Test exception from OnFrameStart")
     != std::string::npos);
 
   // Find and verify second module error
-  auto module2_error = std::ranges::find_if(errors, [&](const auto& error) {
-    return error.source_type_id == module2_type_id
-      && error.source_key.has_value()
-      && error.source_key.value() == "second_module";
-  });
+  auto module2_error
+    = std::ranges::find_if(errors, [&](const auto& error) -> bool {
+        return error.source_type_id == module2_type_id
+          && error.source_key.has_value()
+          && error.source_key.value() == "second_module";
+      });
 
   ASSERT_NE(module2_error, errors.end());
   EXPECT_TRUE(module2_error->message.find("Test exception from OnFrameStart")

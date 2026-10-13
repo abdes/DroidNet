@@ -8,11 +8,11 @@
 
 #include <atomic>
 #include <memory>
-#include <numeric>
 #include <thread>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Awaitables.h>
@@ -25,7 +25,7 @@ namespace oxygen::co {
 namespace detail {
   inline auto SpinLoopBody() -> void
   {
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
     _mm_pause();
 #elif defined(__i386__) || defined(__x86_64__)
     __asm__ __volatile__("pause");
@@ -336,7 +336,7 @@ class ThreadPool::TaskImpl final : public Task {
     std::tuple<Args...>&& arg_tuple, CancelToken tok) -> decltype(auto)
   {
     return std::apply(
-      [&f, tok](Args&&... args) {
+      [&f, tok](Args&&... args) -> auto {
         if constexpr (std::is_invocable_v<F, Args..., CancelToken>) {
           return std::forward<F>(f)(std::forward<Args>(args)..., tok);
         } else {
@@ -456,7 +456,7 @@ private:
   }
 
   EventLoopT& event_loop; // NOLINT(*-avoid-const-or-ref-data-members)
-  [[no_unique_address]] ThreadNotification<EventLoopT> impl;
+  OXYGEN_NO_UNIQUE_ADDRESS ThreadNotification<EventLoopT> impl;
 };
 
 // Public API
@@ -475,7 +475,7 @@ ThreadPool::ThreadPool(EventLoopT& el, const unsigned thread_count)
 
   d_->threads.reserve(thread_count);
   for (size_t i = 0; i < thread_count; ++i) {
-    d_->threads.emplace_back([this] { ThreadBody(); });
+    d_->threads.emplace_back([this] -> void { ThreadBody(); });
   }
 }
 

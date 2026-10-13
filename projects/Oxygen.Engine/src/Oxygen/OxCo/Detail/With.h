@@ -292,7 +292,7 @@ private:
 
     MarkStageStarted<S>();
     CoroutineFrame* frame = S::Frame(*this);
-    frame->resume_fn = +[](CoroutineFrame* fr) {
+    frame->resume_fn = +[](CoroutineFrame* fr) -> void {
       S::FromFrame(fr).template OnStageDone<S>().resume();
     };
 

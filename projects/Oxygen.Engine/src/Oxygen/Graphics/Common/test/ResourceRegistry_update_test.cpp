@@ -62,8 +62,9 @@ protected:
   {
     // Arrange allocator to create deterministic segments and capture pointer
     allocator_ = std::make_shared<testing::NiceMock<MockDescriptorAllocator>>();
-    allocator_->ext_segment_factory_ = [this](auto capacity, auto base_index,
-                                         auto view_type, auto visibility) {
+    allocator_->ext_segment_factory_
+      = [this](auto capacity, auto base_index, auto view_type,
+          auto visibility) -> std::unique_ptr<FixedDescriptorSegment> {
       auto seg = std::make_unique<FixedDescriptorSegment>(
         capacity, base_index, view_type, visibility);
       last_segment_ = seg.get();
@@ -416,7 +417,8 @@ NOLINT_TEST_F(ResourceRegistryUpdateViewTest,
   SharedPlaceholderViewsRemainIndexedThroughRehashAndRemoval)
 {
   ON_CALL(*allocator_, GetShaderVisibleIndex(::testing::_))
-    .WillByDefault([](const DescriptorAllocationHandle& handle) {
+    .WillByDefault([](const DescriptorAllocationHandle& handle)
+                     -> oxygen::bindless::ShaderVisibleIndex {
       return oxygen::bindless::ShaderVisibleIndex {
         handle.GetBindlessHandle().get()
       };
@@ -447,13 +449,14 @@ NOLINT_TEST_F(ResourceRegistryUpdateViewTest,
   UpdatingOneNativeAliasPreservesOtherDescription)
 {
   ON_CALL(*allocator_, GetShaderVisibleIndex(::testing::_))
-    .WillByDefault([](const DescriptorAllocationHandle& handle) {
+    .WillByDefault([](const DescriptorAllocationHandle& handle)
+                     -> oxygen::bindless::ShaderVisibleIndex {
       return oxygen::bindless::ShaderVisibleIndex {
         handle.GetBindlessHandle().get()
       };
     });
   resource1_->WithViewBehavior(
-    [](const DescriptorAllocationHandle&, const TestViewDesc&) {
+    [](const DescriptorAllocationHandle&, const TestViewDesc&) -> NativeView {
       return NativeView { std::uint64_t { 77U }, FakeResource::ClassTypeId() };
     });
   const TestViewDesc first { .id = 11U, .force_hash_collision = true };

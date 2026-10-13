@@ -33,9 +33,9 @@ public:
     AwaitSetExecutor(awaiter_, ex);
   }
 
-  bool await_ready() const noexcept { return awaiter_.await_ready(); }
+  auto await_ready() const noexcept -> bool { return awaiter_.await_ready(); }
   auto await_suspend(Handle h) { return awaiter_.await_suspend(h); }
-  decltype(auto) await_resume()
+  auto await_resume() -> decltype(auto)
   {
     return std::forward<Awaiter>(awaiter_).await_resume();
   }
@@ -51,8 +51,8 @@ public:
   //! Implementation of the awaiter interface.
   // NOLINTBEGIN(*-use-nodiscard)
 
-  bool await_early_cancel() noexcept { return false; }
-  bool await_must_resume() const noexcept { return true; }
+  auto await_early_cancel() noexcept -> bool { return false; }
+  auto await_must_resume() const noexcept -> bool { return true; }
 
   // NOLINTEND(*-use-nodiscard)
   //! @}

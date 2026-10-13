@@ -70,8 +70,9 @@ auto CommandListPool::SetNativeLifetime(std::shared_ptr<void> lifetime) -> void
 {
   std::lock_guard lock(state_->mutex);
   if (state_->closed
-    || std::ranges::any_of(state_->buckets,
-      [](const auto& entry) { return entry.second.total_created != 0; })) {
+    || std::ranges::any_of(state_->buckets, [](const auto& entry) -> bool {
+         return entry.second.total_created != 0;
+       })) {
     throw std::logic_error(
       "Cannot replace native lifetime of a used command pool");
   }
@@ -105,23 +106,24 @@ auto CommandListPool::AcquireCommandList(QueueRole role, std::string_view name)
     }
   }
   auto* raw = list.release();
-  return { raw, [state = state_, role](CommandList* returned) mutable noexcept {
-            // Empty the stored deleter, including when weak list observers
-            // survive.
-            auto owner = std::move(state);
-            std::unique_ptr<CommandList> value(returned);
-            {
-              std::lock_guard lock(owner->mutex);
-              auto& bucket = owner->buckets.at(role);
-              if (!owner->closed && returned->IsFree()) {
-                assert(bucket.idle.size() < bucket.idle.capacity());
-                bucket.idle.push_back(std::move(value));
-              } else {
-                --bucket.total_created;
-              }
-            }
-            // A closed/invalid list is destroyed before its native lifetime
-            // owner.
-          } };
+  return { raw,
+    [state = state_, role](CommandList* returned) mutable noexcept -> void {
+      // Empty the stored deleter, including when weak list observers
+      // survive.
+      auto owner = std::move(state);
+      std::unique_ptr<CommandList> value(returned);
+      {
+        std::lock_guard lock(owner->mutex);
+        auto& bucket = owner->buckets.at(role);
+        if (!owner->closed && returned->IsFree()) {
+          assert(bucket.idle.size() < bucket.idle.capacity());
+          bucket.idle.push_back(std::move(value));
+        } else {
+          --bucket.total_created;
+        }
+      }
+      // A closed/invalid list is destroyed before its native lifetime
+      // owner.
+    } };
 }
 } // namespace oxygen::graphics::internal

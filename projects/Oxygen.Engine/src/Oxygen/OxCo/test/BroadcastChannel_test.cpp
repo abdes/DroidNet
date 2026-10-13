@@ -412,11 +412,11 @@ NOLINT_TEST_F(BroadcastChannelTest, StressTestWithManyReadersAndWriters)
 // Small polymorphic hierarchy for testing
 struct Base {
   virtual ~Base() = default;
-  virtual std::string GetName() const = 0;
+  virtual auto GetName() const -> std::string = 0;
 };
 
 struct Derived : Base {
-  std::string GetName() const override { return "Derived"; }
+  auto GetName() const -> std::string override { return "Derived"; }
 };
 
 class BroadcastChannelSmartPtrTest : public OxCoTestFixture { };

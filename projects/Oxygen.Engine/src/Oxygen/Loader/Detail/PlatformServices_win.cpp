@@ -53,7 +53,8 @@ auto GetLastErrorAsString() -> std::string
     LocalFree(message_buffer);
 
     // Remove trailing newlines using modern erase-remove idiom
-    std::erase_if(message, [](const char c) { return c == '\n' || c == '\r'; });
+    std::erase_if(
+      message, [](const char c) -> bool { return c == '\n' || c == '\r'; });
   }
 
   return message;

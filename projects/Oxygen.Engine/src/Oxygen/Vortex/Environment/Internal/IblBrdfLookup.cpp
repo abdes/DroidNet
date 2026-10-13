@@ -69,7 +69,8 @@ namespace {
 auto GetIblBrdfLookup()
   -> std::span<const IblBrdfTexel, kIblBrdfWidth * kIblBrdfHeight>
 {
-  static const auto lookup = [] {
+  static const auto lookup
+    = [] -> std::array<IblBrdfTexel, kIblBrdfWidth * kIblBrdfHeight> {
     auto result = std::array<IblBrdfTexel, kIblBrdfWidth * kIblBrdfHeight> {};
     for (auto y = 0U; y < kIblBrdfHeight; ++y) {
       for (auto x = 0U; x < kIblBrdfWidth; ++x) {

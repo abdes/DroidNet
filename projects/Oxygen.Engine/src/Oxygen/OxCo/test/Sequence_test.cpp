@@ -70,7 +70,10 @@ class SequenceTest : public oxygen::co::testing::OxCoTestFixture { };
 NOLINT_TEST_F(SequenceTest, BasicOperation)
 {
   ::Run(*el_, [&]() -> Co<> {
-    co_await (el_->Sleep(2ms) | Then([&] { return el_->Sleep(3ms); }));
+    co_await (
+      el_->Sleep(2ms) | Then([&] -> TestEventLoop::SleepAwaitable<true> {
+        return el_->Sleep(3ms);
+      }));
     EXPECT_EQ(el_->Now(), 5ms);
   });
 }
@@ -78,8 +81,8 @@ NOLINT_TEST_F(SequenceTest, BasicOperation)
 NOLINT_TEST_F(SequenceTest, WithValueReturnType)
 {
   ::Run(*el_, [&]() -> Co<> {
-    auto r
-      = co_await (Just(42) | Then([](const int v) { return Just(v + 1); }));
+    auto r = co_await (
+      Just(42) | Then([](const int v) -> auto { return Just(v + 1); }));
     EXPECT_EQ(r, 43);
   });
 }
@@ -89,15 +92,15 @@ NOLINT_TEST_F(SequenceTest, WithReferenceReturnType)
   ::Run(*el_, [&]() -> Co<> {
     int arr[2] = { 1, 2 };
     auto r = co_await (
-      Just<int&>(arr[0]) | Then([](int& v) { return Just(&v + 1); }));
+      Just<int&>(arr[0]) | Then([](int& v) -> auto { return Just(&v + 1); }));
     EXPECT_EQ(r, &arr[1]);
   });
 }
 
 NOLINT_TEST_F(SequenceTest, WithVoidReturnType)
 {
-  ::Run(
-    *el_, [&]() -> Co<> { co_await (NoOp() | Then([] { return NoOp(); })); });
+  ::Run(*el_,
+    [&]() -> Co<> { co_await (NoOp() | Then([] -> auto { return NoOp(); })); });
 }
 
 NOLINT_TEST_F(SequenceTest, WithTaskReturnType)
@@ -116,7 +119,7 @@ NOLINT_TEST_F(SequenceTest, ExceptionThrowInFirstTask)
       co_await ([]() -> Co<> {
         co_await kYield;
         throw std::runtime_error("test");
-      } | Then([] { return Just(42); }));
+      } | Then([] -> auto { return Just(42); }));
       ADD_FAILURE() << "expected exception";
     } catch (const std::runtime_error&) {
       // expected
@@ -155,7 +158,7 @@ NOLINT_TEST_F(SequenceTest, ExceptionThrowAfterYield)
 NOLINT_TEST_F(SequenceTest, CancellationFirstTaskCancelled)
 {
   ::Run(*el_, [&]() -> Co<> {
-    auto [r, _] = co_await AnyOf(el_->Sleep(3ms) | Then([] {
+    auto [r, _] = co_await AnyOf(el_->Sleep(3ms) | Then([] -> auto {
       ADD_FAILURE() << "should not reach here";
       return NoOp();
     }),
@@ -169,7 +172,9 @@ NOLINT_TEST_F(SequenceTest, CancellationSecondTaskCancelled)
 {
   ::Run(*el_, [&]() -> Co<> {
     auto [r, _] = co_await AnyOf(
-      el_->Sleep(1ms) | Then([&] { return el_->Sleep(3ms); }) | Then([] {
+      el_->Sleep(1ms) | Then([&] -> TestEventLoop::SleepAwaitable<true> {
+        return el_->Sleep(3ms);
+      }) | Then([] -> auto {
         ADD_FAILURE() << "should not reach here";
         return NoOp();
       }),
@@ -183,10 +188,11 @@ NOLINT_TEST_F(SequenceTest, CancellationWithEventTrigger)
 {
   ::Run(*el_, [&]() -> Co<> {
     Event evt;
-    co_await AnyOf(evt, el_->Sleep(1ms) | Then([&] {
-      evt.Trigger();
-      return el_->Sleep(3ms);
-    }));
+    co_await AnyOf(
+      evt, el_->Sleep(1ms) | Then([&] -> TestEventLoop::SleepAwaitable<true> {
+        evt.Trigger();
+        return el_->Sleep(3ms);
+      }));
   });
 }
 
@@ -194,7 +200,7 @@ NOLINT_TEST_F(SequenceTest, CancellationFirstTaskNonCancellable)
 {
   ::Run(*el_, [&]() -> Co<> {
     auto [r, _] = co_await AnyOf(
-      el_->Sleep(2ms, kNonCancellable) | Then([] { return Just(42); }),
+      el_->Sleep(2ms, kNonCancellable) | Then([] -> auto { return Just(42); }),
       el_->Sleep(1ms));
     EXPECT_EQ(el_->Now(), 2ms);
     EXPECT_EQ(*r, 42);
@@ -205,7 +211,9 @@ NOLINT_TEST_F(SequenceTest, CancellationSecondTaskNonCancellable)
 {
   ::Run(*el_, [&]() -> Co<> {
     auto [r, _] = co_await AnyOf(
-      el_->Sleep(1ms) | Then([&] { return el_->Sleep(3ms, kNonCancellable); }),
+      el_->Sleep(1ms) | Then([&] -> TestEventLoop::SleepAwaitable<false> {
+        return el_->Sleep(3ms, kNonCancellable);
+      }),
       el_->Sleep(2ms));
     EXPECT_EQ(el_->Now(), 4ms);
     EXPECT_TRUE(r);
@@ -216,10 +224,11 @@ NOLINT_TEST_F(SequenceTest, CancellationSecondTaskEarlyCancelable)
 {
   ::Run(*el_, [&]() -> Co<> {
     bool started = false;
-    auto [r, _] = co_await AnyOf(el_->Sleep(2ms, kNonCancellable) | Then([&] {
-      started = true;
-      return el_->Sleep(2ms);
-    }),
+    auto [r, _] = co_await AnyOf(el_->Sleep(2ms, kNonCancellable)
+        | Then([&] -> TestEventLoop::SleepAwaitable<true> {
+            started = true;
+            return el_->Sleep(2ms);
+          }),
       el_->Sleep(1ms));
     EXPECT_EQ(el_->Now(), 2ms);
     EXPECT_TRUE(started);
@@ -232,7 +241,10 @@ NOLINT_TEST_F(SequenceTest, Lifetime)
   ::Run(*el_, [&]() -> Co<> {
     Semaphore sem { 1 };
     co_await AllOf(
-      sem.Lock() | Then([&] { return el_->Sleep(5ms); }), [&]() -> Co<> {
+      sem.Lock() | Then([&] -> TestEventLoop::SleepAwaitable<true> {
+        return el_->Sleep(5ms);
+      }),
+      [&]() -> Co<> {
         co_await el_->Sleep(1ms);
         auto lk = co_await sem.Lock();
         EXPECT_EQ(el_->Now(), 5ms);
@@ -243,8 +255,9 @@ NOLINT_TEST_F(SequenceTest, Lifetime)
 NOLINT_TEST_F(SequenceTest, ChainingThenThen)
 {
   ::Run(*el_, [&]() -> Co<> {
-    auto r = co_await (Just(42) | Then([](const int v) { return Just(v + 1); })
-      | Then([](const int v) { return Just(v + 1); }));
+    auto r = co_await (Just(42) | Then([](const int v) -> auto {
+      return Just(v + 1);
+    }) | Then([](const int v) -> auto { return Just(v + 1); }));
     EXPECT_EQ(r, 44);
   });
 }
@@ -252,9 +265,9 @@ NOLINT_TEST_F(SequenceTest, ChainingThenThen)
 NOLINT_TEST_F(SequenceTest, ChainingGroupedThenThen)
 {
   ::Run(*el_, [&]() -> Co<> {
-    auto r = co_await (Just(42) | (Then([](const int v) {
+    auto r = co_await (Just(42) | (Then([](const int v) -> auto {
       return Just(v + 1);
-    }) | Then([](const int v) { return Just(v + 1); })));
+    }) | Then([](const int v) -> auto { return Just(v + 1); })));
     EXPECT_EQ(r, 44);
   });
 }
@@ -266,11 +279,13 @@ NOLINT_TEST_F(SequenceTest, OperationWithDifferentQualifications)
     LValueQualified lvq;
     int r = co_await (NoOp() | Then([&]() -> auto& { return lvqi; }));
     EXPECT_EQ(r, 42);
-    r = co_await (NoOp() | Then([] { return RValueQualifiedImm {}; }));
+    r = co_await (NoOp()
+      | Then([] -> RValueQualifiedImm { return RValueQualifiedImm {}; }));
     EXPECT_EQ(r, 42);
     r = co_await (NoOp() | Then([&]() -> auto& { return lvq; }));
     EXPECT_EQ(r, 42);
-    r = co_await (NoOp() | Then([] { return RValueQualified {}; }));
+    r = co_await (
+      NoOp() | Then([] -> RValueQualified { return RValueQualified {}; }));
     EXPECT_EQ(r, 42);
   });
 }
@@ -284,16 +299,16 @@ NOLINT_TEST_F(SequenceTest, WithCustomAwaitable)
       static auto await_resume() noexcept -> int { return 99; }
     };
 
-    auto r = co_await (
-      CustomAwaitable {} | Then([](const int v) { return Just(v + 1); }));
+    auto r = co_await (CustomAwaitable {}
+      | Then([](const int v) -> auto { return Just(v + 1); }));
     EXPECT_EQ(r, 100);
   });
 }
 
 NOLINT_TEST_F(SequenceTest, WithEmptySequence)
 {
-  ::Run(
-    *el_, [&]() -> Co<> { co_await (NoOp() | Then([] { return NoOp(); })); });
+  ::Run(*el_,
+    [&]() -> Co<> { co_await (NoOp() | Then([] -> auto { return NoOp(); })); });
 }
 
 } // namespace

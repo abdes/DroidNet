@@ -54,8 +54,10 @@ namespace {
 
   auto ToLower(std::string value) -> std::string
   {
-    std::ranges::transform(value, value.begin(),
-      [](const unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    std::ranges::transform(
+      value, value.begin(), [](const unsigned char c) -> char {
+        return static_cast<char>(std::tolower(c));
+      });
     return value;
   }
 
@@ -209,7 +211,7 @@ auto CommandPalette::Draw(oxygen::console::Console& console,
   }
 
   std::sort(results.begin(), results.end(),
-    [](const ScoredSymbol& lhs, const ScoredSymbol& rhs) {
+    [](const ScoredSymbol& lhs, const ScoredSymbol& rhs) -> bool {
       if (lhs.match_rank != rhs.match_rank) {
         return lhs.match_rank < rhs.match_rank;
       }

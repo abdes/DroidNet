@@ -157,7 +157,7 @@ auto Buffer::CreateConstantBufferView(
   void* raw = operator new(sizeof(CBV));
   auto typed = new (raw) CBV { this, BufferRange {}, Format::kUnknown, 0 };
   const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) {
+  ViewPayloadPtr payload(raw, [](void* p) -> void {
     if (p) {
       // Explicitly call destructor and free raw memory
       static_cast<CBV*>(p)->~CBV();
@@ -175,7 +175,7 @@ auto Buffer::CreateShaderResourceView(
   void* raw = operator new(sizeof(SRV));
   auto typed = new (raw) SRV { this, BufferRange {}, Format::kUnknown, 0 };
   const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) {
+  ViewPayloadPtr payload(raw, [](void* p) -> void {
     if (p) {
       static_cast<SRV*>(p)->~SRV();
       operator delete(p);
@@ -192,7 +192,7 @@ auto Buffer::CreateUnorderedAccessView(
   void* raw = operator new(sizeof(UAV));
   auto typed = new (raw) UAV { this, BufferRange {}, Format::kUnknown, 0 };
   const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) {
+  ViewPayloadPtr payload(raw, [](void* p) -> void {
     if (p) {
       static_cast<UAV*>(p)->~UAV();
       operator delete(p);

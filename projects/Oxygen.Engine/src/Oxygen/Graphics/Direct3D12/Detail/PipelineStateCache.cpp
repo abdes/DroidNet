@@ -503,17 +503,17 @@ auto SerializeRootSignature(const PipelineDesc& desc)
     state.param_filled[original_idx] = true;
 
     std::visit(Overloads {
-                 [&](const DescriptorTableBinding& table_binding) {
+                 [&](const DescriptorTableBinding& table_binding) -> void {
                    ProcessDescriptorTableBinding(
                      table_binding, item, original_idx, state);
                  },
-                 [&](const PushConstantsBinding& push) {
+                 [&](const PushConstantsBinding& push) -> void {
                    ProcessPushConstantsBinding(push, item, original_idx, state);
                  },
-                 [&](const DirectBufferBinding& buf) {
+                 [&](const DirectBufferBinding& buf) -> void {
                    ProcessDirectBufferBinding(buf, item, original_idx, state);
                  },
-                 [&](const DirectTextureBinding& tex) {
+                 [&](const DirectTextureBinding& tex) -> void {
                    ProcessDirectTextureBinding(tex, item, original_idx, state);
                  },
                },

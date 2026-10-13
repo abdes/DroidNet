@@ -195,7 +195,7 @@ auto Texture::CreateShaderResourceView(
   auto typed = new (raw) SRV { this, Format::kUnknown, TextureType::kTexture2D,
     resolved, base_offset, total_size };
   const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) {
+  ViewPayloadPtr payload(raw, [](void* p) -> void {
     if (p) {
       static_cast<SRV*>(p)->~SRV();
       operator delete(p);
@@ -227,7 +227,7 @@ auto Texture::CreateUnorderedAccessView(
   auto typed = new (raw) UAV { this, Format::kUnknown, TextureType::kTexture2D,
     resolved, base_offset, total_size };
   const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) {
+  ViewPayloadPtr payload(raw, [](void* p) -> void {
     if (p) {
       static_cast<UAV*>(p)->~UAV();
       operator delete(p);
@@ -247,7 +247,7 @@ auto Texture::CreateRenderTargetView(
   auto typed = new (raw)
     RTV { this, Format::kUnknown, TextureType::kTexture2D, resolved };
   const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) {
+  ViewPayloadPtr payload(raw, [](void* p) -> void {
     if (p) {
       static_cast<RTV*>(p)->~RTV();
       operator delete(p);
@@ -266,7 +266,7 @@ auto Texture::CreateDepthStencilView(
   auto typed = new (raw) DSV { this, Format::kUnknown, TextureType::kTexture2D,
     resolved, is_read_only };
   const void* payload_ptr = typed;
-  ViewPayloadPtr payload(raw, [](void* p) {
+  ViewPayloadPtr payload(raw, [](void* p) -> void {
     if (p) {
       static_cast<DSV*>(p)->~DSV();
       operator delete(p);

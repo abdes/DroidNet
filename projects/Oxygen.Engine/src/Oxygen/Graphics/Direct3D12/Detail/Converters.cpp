@@ -36,15 +36,17 @@ auto ConvertResourceStates(ResourceStates states) -> D3D12_RESOURCE_STATES
 
   // Helper lambda to check a flag and append D3D12 state(s)
   // Captures 'states' by value and 'd3d_states' by reference.
-  auto append_if_set = [&d3d_states, states](const ResourceStates flag_to_check,
-                         const D3D12_RESOURCE_STATES d3d12_flags_to_add) {
+  auto append_if_set
+    = [&d3d_states, states](const ResourceStates flag_to_check,
+        const D3D12_RESOURCE_STATES d3d12_flags_to_add) -> void {
     if ((states & flag_to_check) == flag_to_check) {
       d3d_states |= d3d12_flags_to_add;
     }
   };
 
-  auto is_set
-    = [states](const ResourceStates flag) { return (states & flag) == flag; };
+  auto is_set = [states](const ResourceStates flag) -> bool {
+    return (states & flag) == flag;
+  };
 
   // kUndefined (OXYGEN_FLAG(0)) is not explicitly mapped to a unique D3D12
   // state bit here. If it's the only state (other than kUnknown/kCommon handled

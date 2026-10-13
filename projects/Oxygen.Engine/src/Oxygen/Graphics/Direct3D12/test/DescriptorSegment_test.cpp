@@ -141,12 +141,13 @@ NOLINT_TEST_F(GoodHeapTest, ConstructorWithDebugNameSetsDebugName)
   EXPECT_CALL(device_, CreateDescriptorHeap(_, _, _)).Times(1);
 
   EXPECT_CALL(heap_, SetPrivateData(_, _, _))
-    .WillOnce([&](const GUID& /*guid*/, UINT /*size*/, const void* data) {
-      // Check that the data is a wide string matching expectedWName
-      const auto name_data = static_cast<const char*>(data);
-      EXPECT_THAT(name_data, ::testing::StrEq(debug_name));
-      return S_OK;
-    });
+    .WillOnce(
+      [&](const GUID& /*guid*/, UINT /*size*/, const void* data) -> HRESULT {
+        // Check that the data is a wide string matching expectedWName
+        const auto name_data = static_cast<const char*>(data);
+        EXPECT_THAT(name_data, ::testing::StrEq(debug_name));
+        return S_OK;
+      });
 
   EXPECT_CALL(device_, GetDescriptorHandleIncrementSize(heap_desc.Type))
     .WillOnce(Return(16));

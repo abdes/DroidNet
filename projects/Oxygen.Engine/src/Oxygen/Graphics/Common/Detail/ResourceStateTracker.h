@@ -98,7 +98,7 @@ public:
   {
     auto& ti = GetTrackingInfo(resource.GetNativeResource());
     std::visit(
-      [&](auto& info) { info.enable_auto_memory_barriers = true; }, ti);
+      [&](auto& info) -> void { info.enable_auto_memory_barriers = true; }, ti);
   }
 
   template <Trackable T>
@@ -106,7 +106,8 @@ public:
   {
     auto& ti = GetTrackingInfo(resource.GetNativeResource());
     std::visit(
-      [&](auto& info) { info.enable_auto_memory_barriers = false; }, ti);
+      [&](auto& info) -> void { info.enable_auto_memory_barriers = false; },
+      ti);
   }
 
   // Require a resource to be in a specific state (non-permanent)
@@ -227,7 +228,7 @@ private:
     if (const auto it = tracking_.find(native_object); it != tracking_.end()) {
       auto& existing_info = it->second;
       std::visit(
-        [&](const auto& info) {
+        [&](const auto& info) -> void {
           const auto expected_state
             = adopted ? info.current_state : info.initial_state;
           if (expected_state != current_state

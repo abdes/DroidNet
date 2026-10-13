@@ -688,7 +688,7 @@ NOLINT_TEST(GraphicsPipelineDescTest, Hashing_AllFieldsAffectHash)
         .data = PushConstantsBinding { 16 } }) };
   };
 
-  auto build = [](const Baseline& b) {
+  auto build = [](const Baseline& b) -> GraphicsPipelineDesc {
     auto builder = GraphicsPipelineDesc::Builder {};
     builder = std::move(builder).SetVertexShader(b.vs);
     builder = std::move(builder).SetPixelShader(b.ps);
@@ -716,73 +716,83 @@ NOLINT_TEST(GraphicsPipelineDescTest, Hashing_AllFieldsAffectHash)
   };
   std::vector<Delta> deltas = {
     { "VertexShader.source_path not included in hash",
-      [](Baseline& b) { b.vs.source_path = "vs2"; } },
+      [](Baseline& b) -> void { b.vs.source_path = "vs2"; } },
     { "VertexShader.entry_point not included in hash",
-      [](Baseline& b) { b.vs.entry_point = "VSMain2"; } },
+      [](Baseline& b) -> void { b.vs.entry_point = "VSMain2"; } },
     { "VertexShader.defines not included in hash",
-      [](Baseline& b) {
+      [](Baseline& b) -> void {
         b.vs.defines = {
           ShaderDefine { .name = "FOO", .value = "1" },
         };
       } },
     { "PixelShader.source_path not included in hash",
-      [](Baseline& b) { b.ps.source_path = "ps2"; } },
+      [](Baseline& b) -> void { b.ps.source_path = "ps2"; } },
     { "PixelShader.entry_point not included in hash",
-      [](Baseline& b) { b.ps.entry_point = "PSMain2"; } },
+      [](Baseline& b) -> void { b.ps.entry_point = "PSMain2"; } },
     { "GeometryShader.source_path not included in hash",
-      [](Baseline& b) { b.gs.source_path = "gs2"; } },
+      [](Baseline& b) -> void { b.gs.source_path = "gs2"; } },
     { "GeometryShader.entry_point not included in hash",
-      [](Baseline& b) { b.gs.entry_point = "GSMain2"; } },
+      [](Baseline& b) -> void { b.gs.entry_point = "GSMain2"; } },
     { "HullShader.source_path not included in hash",
-      [](Baseline& b) { b.hs.source_path = "hs2"; } },
+      [](Baseline& b) -> void { b.hs.source_path = "hs2"; } },
     { "HullShader.entry_point not included in hash",
-      [](Baseline& b) { b.hs.entry_point = "HSMain2"; } },
+      [](Baseline& b) -> void { b.hs.entry_point = "HSMain2"; } },
     { "DomainShader.source_path not included in hash",
-      [](Baseline& b) { b.ds.source_path = "ds2"; } },
+      [](Baseline& b) -> void { b.ds.source_path = "ds2"; } },
     { "DomainShader.entry_point not included in hash",
-      [](Baseline& b) { b.ds.entry_point = "DSMain2"; } },
+      [](Baseline& b) -> void { b.ds.entry_point = "DSMain2"; } },
     { "PrimitiveTopology not included in hash",
-      [](Baseline& b) { b.primitive_topology = PrimitiveType::kLineList; } },
+      [](Baseline& b) -> void {
+        b.primitive_topology = PrimitiveType::kLineList;
+      } },
     { "RasterizerState.fill_mode not included in hash",
-      [](Baseline& b) { b.rasterizer.fill_mode = FillMode::kSolid; } },
+      [](Baseline& b) -> void { b.rasterizer.fill_mode = FillMode::kSolid; } },
     { "RasterizerState.cull_mode not included in hash",
-      [](Baseline& b) { b.rasterizer.cull_mode = CullMode::kFront; } },
+      [](Baseline& b) -> void { b.rasterizer.cull_mode = CullMode::kFront; } },
     { "RasterizerState.multisample_enable not included in hash",
-      [](Baseline& b) { b.rasterizer.multisample_enable = false; } },
+      [](Baseline& b) -> void { b.rasterizer.multisample_enable = false; } },
     { "DepthStencilState.depth_test_enable not included in hash",
-      [](Baseline& b) { b.depth_stencil.depth_test_enable = false; } },
+      [](Baseline& b) -> void { b.depth_stencil.depth_test_enable = false; } },
     { "DepthStencilState.depth_write_enable not included in hash",
-      [](Baseline& b) { b.depth_stencil.depth_write_enable = false; } },
+      [](Baseline& b) -> void { b.depth_stencil.depth_write_enable = false; } },
     { "DepthStencilState.depth_func not included in hash",
-      [](Baseline& b) { b.depth_stencil.depth_func = CompareOp::kGreater; } },
+      [](Baseline& b) -> void {
+        b.depth_stencil.depth_func = CompareOp::kGreater;
+      } },
     { "BlendState.blend_enable not included in hash",
-      [](Baseline& b) { b.blend_target.blend_enable = false; } },
+      [](Baseline& b) -> void { b.blend_target.blend_enable = false; } },
     { "BlendState.src_blend not included in hash",
-      [](Baseline& b) { b.blend_target.src_blend = BlendFactor::kOne; } },
+      [](Baseline& b) -> void {
+        b.blend_target.src_blend = BlendFactor::kOne;
+      } },
     { "BlendState.dest_blend not included in hash",
-      [](Baseline& b) { b.blend_target.dest_blend = BlendFactor::kZero; } },
+      [](Baseline& b) -> void {
+        b.blend_target.dest_blend = BlendFactor::kZero;
+      } },
     { "BlendState.blend_op not included in hash",
-      [](Baseline& b) { b.blend_target.blend_op = BlendOp::kSubtract; } },
+      [](Baseline& b) -> void {
+        b.blend_target.blend_op = BlendOp::kSubtract;
+      } },
     { "FramebufferLayout.color_target_formats not included in hash",
-      [](Baseline& b) {
+      [](Baseline& b) -> void {
         b.framebuffer.color_target_formats = { Format::kBGRA8UNorm };
       } },
     { "FramebufferLayout.depth_stencil_format not included in hash",
-      [](Baseline& b) {
+      [](Baseline& b) -> void {
         b.framebuffer.depth_stencil_format = Format::kDepth16;
       } },
     { "FramebufferLayout.sample_count not included in hash",
-      [](Baseline& b) { b.framebuffer.sample_count = 8; } },
+      [](Baseline& b) -> void { b.framebuffer.sample_count = 8; } },
     { "FramebufferLayout.sample_quality not included in hash",
-      [](Baseline& b) { b.framebuffer.sample_quality = 8; } },
+      [](Baseline& b) -> void { b.framebuffer.sample_quality = 8; } },
     { "RootBindings not included in hash",
-      [](Baseline& b) {
+      [](Baseline& b) -> void {
         b.root_bindings = { RootBindingItem({ .binding_slot_desc = { 0, 0 },
           .visibility = ShaderStageFlags::kAll,
           .data = PushConstantsBinding { 32 } }) };
       } },
     { "RootBindings not included in hash",
-      [](Baseline& b) {
+      [](Baseline& b) -> void {
         b.root_bindings = { RootBindingItem({ .binding_slot_desc = { 0, 0 },
           .visibility = ShaderStageFlags::kAll,
           .data = DescriptorTableBinding {
@@ -813,7 +823,7 @@ NOLINT_TEST(ComputePipelineDescTest, Hashing_AllFieldsAffectHash)
         .data = PushConstantsBinding { 8 } }) };
   };
 
-  auto build = [](const Baseline& b) {
+  auto build = [](const Baseline& b) -> ComputePipelineDesc {
     auto builder = ComputePipelineDesc::Builder {};
     builder = std::move(builder).SetComputeShader(b.cs);
     for (const auto& rb : b.root_bindings) {
@@ -832,23 +842,23 @@ NOLINT_TEST(ComputePipelineDescTest, Hashing_AllFieldsAffectHash)
   };
   std::vector<Delta> deltas = {
     { "ComputeShader.source_path not included in hash",
-      [](Baseline& b) { b.cs.source_path = "cs2"; } },
+      [](Baseline& b) -> void { b.cs.source_path = "cs2"; } },
     { "ComputeShader.entry_point not included in hash",
-      [](Baseline& b) { b.cs.entry_point = "CSMain2"; } },
+      [](Baseline& b) -> void { b.cs.entry_point = "CSMain2"; } },
     { "ComputeShader.defines not included in hash",
-      [](Baseline& b) {
+      [](Baseline& b) -> void {
         b.cs.defines = {
           ShaderDefine { .name = "BAR" },
         };
       } },
     { "RootBindings not included in hash",
-      [](Baseline& b) {
+      [](Baseline& b) -> void {
         b.root_bindings = { RootBindingItem({ .binding_slot_desc = { 0, 0 },
           .visibility = ShaderStageFlags::kAll,
           .data = PushConstantsBinding { 16 } }) };
       } },
     { "RootBindings not included in hash",
-      [](Baseline& b) {
+      [](Baseline& b) -> void {
         b.root_bindings = { RootBindingItem({ .binding_slot_desc = { 0, 0 },
           .visibility = ShaderStageFlags::kAll,
           .data = DescriptorTableBinding {

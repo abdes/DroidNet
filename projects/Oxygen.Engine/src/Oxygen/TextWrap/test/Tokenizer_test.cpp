@@ -34,7 +34,7 @@ TEST(TokenizerTest, Example)
   constexpr auto text = "Why? \nJust plain \tfinger-licking good!";
   std::vector<Token> tokens;
   const auto status = tokenizer.Tokenize(
-    text, [&tokens](TokenType token_type, std::string token) {
+    text, [&tokens](TokenType token_type, std::string token) -> void {
       if (token_type != TokenType::kEndOfInput) {
         tokens.emplace_back(token_type, std::move(token));
       }
@@ -75,7 +75,7 @@ TEST(TokenizerTest, CallsTokenConsumerWhenTokenIsReady)
   //! [Example token consumer]
   std::vector<Token> tokens;
   const auto status = tokenizer.Tokenize(
-    "Hello", [&tokens](TokenType token_type, std::string token) {
+    "Hello", [&tokens](TokenType token_type, std::string token) -> void {
       if (token_type != TokenType::kEndOfInput) {
         tokens.emplace_back(token_type, std::move(token));
       }
@@ -110,7 +110,7 @@ TEST_P(TokenizerScenariosTest, Tokenize)
 
   std::vector<Token> tokens;
   const auto status = tokenizer.Tokenize(
-    text, [&tokens](TokenType token_type, std::string token) {
+    text, [&tokens](TokenType token_type, std::string token) -> void {
       if (token_type != TokenType::kEndOfInput) {
         tokens.emplace_back(token_type, std::move(token));
       }

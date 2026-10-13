@@ -111,7 +111,7 @@ namespace {
     const double fraction = y - low;
     std::array<double, 2> result {};
     for (unsigned c = 0; c < 2; ++c) {
-      const auto at = [&](int row) {
+      const auto at = [&](int row) -> double {
         const auto index = std::clamp(row, 0, int(ibl::kIblBrdfHeight) - 1)
             * ibl::kIblBrdfWidth
           + ibl::kIblBrdfWidth - 1;
@@ -165,8 +165,8 @@ namespace {
       // products and generation; only the half-selection flag is overridden.
       auto upload = CreateUploadBuffer(SizeBytes { sizeof(metadata) });
       upload->Update(&metadata, sizeof(metadata), 0U);
-      SubmitCommands(
-        "IBL precision comparison", [&](graphics::CommandRecorder& recorder) {
+      SubmitCommands("IBL precision comparison",
+        [&](graphics::CommandRecorder& recorder) -> void {
           CHECK_F(products.Attach(recorder, Backend().GetResourceRegistry()));
           EnsureTracked(
             recorder, upload, graphics::ResourceStates::kGenericRead);
@@ -278,7 +278,7 @@ namespace {
       packed_input_textures.fill(nullptr);
       if (!enabled)
         return;
-      probe->after_render = [this](const ViewRenderGpuContext&) {
+      probe->after_render = [this](const ViewRenderGpuContext&) -> void {
         auto* owner
           = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
             *renderer_);
@@ -313,7 +313,7 @@ namespace {
               packed_input_slots[2], point_clamp_sampler, half, half },
             std::array<std::uint32_t, 4> { one, 0, 0, 0 } };
       const auto values = RunToneProbe(std::as_bytes(std::span(inputs)), 3U,
-        512U, false, [&](graphics::CommandRecorder& recorder) {
+        512U, false, [&](graphics::CommandRecorder& recorder) -> void {
           for (const auto& texture : packed_input_textures) {
             CHECK_F(recorder.AdoptKnownResourceState(*texture));
             recorder.RequireResourceState(
@@ -438,10 +438,11 @@ namespace {
     EXPECT_EQ(state.validated_revision, products->revision);
     EXPECT_EQ(state.last_failed_gpu_revision, products->revision);
     const auto ledger = diagnostics.GetLatestSnapshot();
-    EXPECT_TRUE(std::ranges::any_of(ledger.issues, [](const auto& issue) {
-      return issue.code == "ibl.gpu-invalid"
-        && issue.severity == DiagnosticsSeverity::kError;
-    }));
+    EXPECT_TRUE(
+      std::ranges::any_of(ledger.issues, [](const auto& issue) -> bool {
+        return issue.code == "ibl.gpu-invalid"
+          && issue.severity == DiagnosticsSeverity::kError;
+      }));
     diagnostics.SetEnabledFeatures(DiagnosticsFeature::kNone);
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 2U));
     EXPECT_EQ(renderer_->InspectSkyLight(*scene).gpu_validation,
@@ -544,7 +545,7 @@ namespace {
       graphics::internal::SubmissionFailurePoint::kAfterIssueBeforeMarker);
     const auto backend = Backend().GetBackendLifetime();
     const ScopeGuard restore(
-      [backend]() noexcept { backend->ClearSubmissionFault(); });
+      [backend]() noexcept -> void { backend->ClearSubmissionFault(); });
     EXPECT_TRUE(
       IblOwner().OnFrameStart(frame::SequenceNumber { sequence + 1U }));
     EXPECT_EQ(IblOwner().GetPublishedProducts(), nullptr);
@@ -586,8 +587,8 @@ namespace {
       solid.published_revision);
 
     sphere.SetSource(scene::environment::SkySphereSource::kCubemap);
-    sphere.SetCubemapResource(Texture(
-      16U, true, [](auto, auto, auto) { return Pixel { 2, 2, 2, 1 }; }));
+    sphere.SetCubemapResource(Texture(16U, true,
+      [](auto, auto, auto) -> Pixel { return Pixel { 2, 2, 2, 1 }; }));
     scene->NotifyEnvironmentAuthoringChange();
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
     const auto cube = renderer_->InspectSkyLight(*scene);
@@ -613,8 +614,8 @@ namespace {
   {
     Sky().SetSpecularIntensity(0.0F);
     Material(data::MaterialDomain::kOpaque, 1.0F, 0.0F, glm::vec3(1.0F));
-    Sky().SetCubemapResource(Texture(
-      16U, true, [](auto, auto, auto) { return Pixel { 2, 2, 2, 1 }; }));
+    Sky().SetCubemapResource(Texture(16U, true,
+      [](auto, auto, auto) -> Pixel { return Pixel { 2, 2, 2, 1 }; }));
     // The uniform cube delivers 2 pi lux; a pi lux target halves it.
     Sky().SetIlluminanceLux(std::numbers::pi_v<float>);
     renderer_->GetDiagnosticsService().SetEnabledFeatures(
@@ -635,7 +636,7 @@ namespace {
     sphere.SetEnabled(true);
     sphere.SetSource(scene::environment::SkySphereSource::kCubemap);
     sphere.SetCubemapResource(Texture(
-      16U, true, [](auto, auto, auto) { return Pixel { 1, 1, 1, 1 }; },
+      16U, true, [](auto, auto, auto) -> Pixel { return Pixel { 1, 1, 1, 1 }; },
       Format::kRGBA8UNorm));
     sphere.SetIlluminanceLux(10000.0F);
     auto& diagnostics = renderer_->GetDiagnosticsService();
@@ -643,19 +644,24 @@ namespace {
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
     const auto ledger = diagnostics.GetLatestSnapshot();
-    EXPECT_TRUE(std::ranges::any_of(ledger.issues, [](const auto& issue) {
-      return issue.code == "sky.uncalibrated"
-        && issue.severity == DiagnosticsSeverity::kWarning;
-    }));
+    EXPECT_TRUE(
+      std::ranges::any_of(ledger.issues, [](const auto& issue) -> bool {
+        return issue.code == "sky.uncalibrated"
+          && issue.severity == DiagnosticsSeverity::kWarning;
+      }));
     // LDR radiance never lights the scene, calibrated or not.
-    EXPECT_TRUE(std::ranges::any_of(ledger.issues,
-      [](const auto& issue) { return issue.code == "ibl.unavailable"; }));
+    EXPECT_TRUE(
+      std::ranges::any_of(ledger.issues, [](const auto& issue) -> bool {
+        return issue.code == "ibl.unavailable";
+      }));
 
     sphere.SetIlluminanceLux(0.0F);
     scene->NotifyEnvironmentAuthoringChange();
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 1U));
-    EXPECT_TRUE(std::ranges::none_of(diagnostics.GetLatestSnapshot().issues,
-      [](const auto& issue) { return issue.code == "sky.uncalibrated"; }));
+    EXPECT_TRUE(std::ranges::none_of(
+      diagnostics.GetLatestSnapshot().issues, [](const auto& issue) -> bool {
+        return issue.code == "sky.uncalibrated";
+      }));
   }
 
   NOLINT_TEST_F(IblDiagnosticsGpuTest, UnavailableSkyLightIsReportedEachFrame)
@@ -665,10 +671,11 @@ namespace {
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
     EXPECT_FALSE(renderer_->InspectSkyLight(*scene).usable);
     const auto ledger = diagnostics.GetLatestSnapshot();
-    EXPECT_TRUE(std::ranges::any_of(ledger.issues, [](const auto& issue) {
-      return issue.code == "ibl.unavailable"
-        && issue.message.find("has no cubemap") != std::string::npos;
-    }));
+    EXPECT_TRUE(
+      std::ranges::any_of(ledger.issues, [](const auto& issue) -> bool {
+        return issue.code == "ibl.unavailable"
+          && issue.message.find("has no cubemap") != std::string::npos;
+      }));
   }
 
   //! IBL producer time reaches the GPU work summary as frame work, only while
@@ -786,7 +793,7 @@ namespace {
   {
     const Pixel radiance { 0.25F, 0.5F, 1.0F, 1.0F };
     Sky().SetCubemapResource(
-      Texture(16U, true, [&](auto, auto, auto) { return radiance; }));
+      Texture(16U, true, [&](auto, auto, auto) -> auto { return radiance; }));
     // Exact endpoints isolate IBL from sRGB GBuffer quantization. Zero green
     // also exercises the retained F90=50*F0.g rule on a colored metal.
     const std::array colors { glm::vec3 { 1.0F, 0.0F, 1.0F },
@@ -897,14 +904,16 @@ namespace {
   NOLINT_TEST_F(
     IblSurfaceGpuTest, NormalMapsAndBackfacesUseTheMaterialNormalForIrradiance)
   {
-    Sky().SetCubemapResource(Texture(16U, true, [](auto face, auto x, auto y) {
-      const auto z = WorldDirection(face, x, y, 16U).z;
-      return Pixel { 0.75F + 0.5F * z, 0.5F + 0.25F * z, 0.25F + 0.125F * z,
-        1.0F };
-    }));
+    Sky().SetCubemapResource(
+      Texture(16U, true, [](auto face, auto x, auto y) -> Pixel {
+        const auto z = WorldDirection(face, x, y, 16U).z;
+        return Pixel { 0.75F + 0.5F * z, 0.5F + 0.25F * z, 0.25F + 0.125F * z,
+          1.0F };
+      }));
     Sky().SetSpecularIntensity(0.0F);
-    const auto normal = Texture(1U, false,
-      [](auto, auto, auto) { return Pixel { 0.8F, 0.5F, 0.9F, 1.0F }; });
+    const auto normal = Texture(1U, false, [](auto, auto, auto) -> Pixel {
+      return Pixel { 0.8F, 0.5F, 0.9F, 1.0F };
+    });
     unsigned cases = 0;
     for (const bool forward : { false, true }) {
       for (const auto domain :
@@ -945,14 +954,16 @@ namespace {
   NOLINT_TEST_F(
     IblSurfaceGpuTest, GlossyAndRoughReflectionsRespondToNormalMapsAcrossPaths)
   {
-    Sky().SetCubemapResource(Texture(32U, true, [](auto face, auto x, auto y) {
-      const auto z = WorldDirection(face, x, y, 32U).z;
-      return Pixel { 0.75F + 0.5F * z, 0.5F + 0.25F * z, 0.25F + 0.125F * z,
-        1.0F };
-    }));
+    Sky().SetCubemapResource(
+      Texture(32U, true, [](auto face, auto x, auto y) -> Pixel {
+        const auto z = WorldDirection(face, x, y, 32U).z;
+        return Pixel { 0.75F + 0.5F * z, 0.5F + 0.25F * z, 0.25F + 0.125F * z,
+          1.0F };
+      }));
     Sky().SetDiffuseIntensity(0.0F);
-    const auto normal = Texture(1U, false,
-      [](auto, auto, auto) { return Pixel { 0.8F, 0.5F, 0.9F, 1.0F }; });
+    const auto normal = Texture(1U, false, [](auto, auto, auto) -> Pixel {
+      return Pixel { 0.8F, 0.5F, 0.9F, 1.0F };
+    });
     std::array<Pixel, 4> reference {};
     unsigned cases = 0;
     for (const bool forward : { false, true }) {
@@ -1065,7 +1076,7 @@ namespace {
   {
     const Pixel source { 0x1p20F, 0x1p-24F, 1.0F, 1.0F };
     Sky().SetCubemapResource(
-      Texture(16U, true, [&](auto, auto, auto) { return source; }));
+      Texture(16U, true, [&](auto, auto, auto) -> auto { return source; }));
     Sky().SetDiffuseIntensity(0.0F);
     unsigned cases = 0;
     for (const bool forward : { false, true }) {
@@ -1130,7 +1141,7 @@ namespace {
     unsigned changed_channels = 0U;
     unsigned cases = 0U;
     std::shared_ptr<const environment::internal::IblGpuProducts> published;
-    probe->inspect = [&](const auto& context, const auto&, unsigned) {
+    probe->inspect = [&](const auto& context, const auto&, unsigned) -> void {
       auto* owner = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
         *renderer_);
       published
@@ -1223,7 +1234,7 @@ namespace {
     fog.SetVisibleInRealTimeSkyCaptures(true);
     Material(data::MaterialDomain::kOpaque, 1.0F, 0.0F, glm::vec3(1.0F));
     std::uint32_t revision = 0U;
-    probe->inspect = [&](const auto& context, const auto&, unsigned) {
+    probe->inspect = [&](const auto& context, const auto&, unsigned) -> void {
       auto* owner = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
         *renderer_);
       const auto products
@@ -1373,8 +1384,8 @@ namespace {
 #if defined(_MSC_VER) && defined(_DEBUG)
   NOLINT_TEST_F(IblSurfaceGpuTest, SourceResolutionAllocationHonorsUpdatePolicy)
   {
-    const auto cube = Texture(
-      16U, true, [](auto, auto, auto) { return Pixel { 2, 2, 2, 1 }; });
+    const auto cube = Texture(16U, true,
+      [](auto, auto, auto) -> Pixel { return Pixel { 2, 2, 2, 1 }; });
     Sky().SetCubemapResource(cube);
     Material(data::MaterialDomain::kOpaque, 1.0F, 0.0F, glm::vec3(1.0F));
     ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F));
@@ -1479,15 +1490,15 @@ namespace {
   NOLINT_TEST_F(
     IblSurfaceGpuTest, ViewRecreationPreservesSharedIblAndRetainedCapture)
   {
-    Sky().SetCubemapResource(Texture(
-      16U, true, [](auto, auto, auto) { return Pixel { 2, 1, 0.5F, 1 }; }));
+    Sky().SetCubemapResource(Texture(16U, true,
+      [](auto, auto, auto) -> Pixel { return Pixel { 2, 1, 0.5F, 1 }; }));
     Sky().SetSpecularIntensity(0.0F);
     Material(data::MaterialDomain::kOpaque, 1.0F, 0.0F, glm::vec3(1.0F));
     auto acquired
       = Result<environment::IblCaptureLease, environment::IblCaptureError>(
         Err(environment::IblCaptureError::kUnavailable));
     auto published_id = kInvalidViewId;
-    probe->inspect = [&](const auto& context, const auto&, unsigned) {
+    probe->inspect = [&](const auto& context, const auto&, unsigned) -> void {
       published_id = context.current_view.view_id;
       acquired = renderer_->AcquireIblCapture(context.current_view.view_id);
     };
@@ -1512,8 +1523,8 @@ namespace {
     EXPECT_NEAR(ReadFloatTexture(*probe->color).front()[0], 2.0F, 0.0002F);
     auto readback = GetReadbackManager()->CreateBufferReadback(
       "IBL retained through view recreation");
-    SubmitCommands(
-      "IBL retained view metadata", [&](graphics::CommandRecorder& recorder) {
+    SubmitCommands("IBL retained view metadata",
+      [&](graphics::CommandRecorder& recorder) -> void {
         ASSERT_TRUE(retained.Attach(recorder, Backend().GetResourceRegistry()));
         recorder.FlushBarriers();
         ASSERT_TRUE(readback->EnqueueCopy(recorder, *retained.Metadata(),
@@ -1540,13 +1551,14 @@ namespace {
     auto acquired
       = Result<environment::IblCaptureLease, environment::IblCaptureError>(
         Err(environment::IblCaptureError::kUnavailable));
-    probe->inspect = [&](const auto& context, const auto&, unsigned) {
+    probe->inspect = [&](const auto& context, const auto&, unsigned) -> void {
       acquired = renderer_->AcquireIblCapture(context.current_view.view_id);
     };
-    const auto publish = [&](float value) {
-      Sky().SetCubemapResource(Texture(16U, true, [value](auto, auto, auto) {
-        return Pixel { value, value, value, 1 };
-      }));
+    const auto publish = [&](float value) -> void {
+      Sky().SetCubemapResource(
+        Texture(16U, true, [value](auto, auto, auto) -> Pixel {
+          return Pixel { value, value, value, 1 };
+        }));
       RenderSurface(false, 0.0F);
     };
     ASSERT_NO_FATAL_FAILURE(publish(1.0F));
@@ -1576,7 +1588,7 @@ namespace {
     auto metadata_readback = GetReadbackManager()->CreateBufferReadback(
       "Retained renderer IBL metadata");
     graphics::testing::SubmitCommands(Backend(), "IBL capture after shutdown",
-      [&](graphics::CommandRecorder& recorder) {
+      [&](graphics::CommandRecorder& recorder) -> void {
         ASSERT_TRUE(second.Attach(recorder, Backend().GetResourceRegistry()));
         recorder.FlushBarriers();
         ASSERT_TRUE(readback->EnqueueCopy(recorder, *second.ProcessedCube(),
@@ -1604,9 +1616,9 @@ namespace {
   {
     const Pixel radiance { 0.25F, 0.5F, 1.0F, 1.0F };
     Sky().SetCubemapResource(
-      Texture(16U, true, [&](auto, auto, auto) { return radiance; }));
+      Texture(16U, true, [&](auto, auto, auto) -> auto { return radiance; }));
     std::uint32_t revision = 0;
-    probe->inspect = [&](const auto&, const auto&, unsigned) {
+    probe->inspect = [&](const auto&, const auto&, unsigned) -> void {
       revision = vortex::testing::RendererPublicationProbe::GetSceneRenderer(
         *renderer_)
                    ->GetLastEnvironmentLightingState()
@@ -1691,18 +1703,19 @@ namespace {
         .is_render_target = true,
         .initial_state = graphics::ResourceStates::kCommon,
       })));
-    probe->prepare = [](RenderContext&) { };
+    probe->prepare = [](RenderContext&) -> void { };
     verify_manual_p = false;
     renderer_->GetDiagnosticsService().SetHdrPrecisionControl(
       HdrPrecisionControl::kProduction);
     std::shared_ptr<const environment::internal::IblGpuProducts> products;
-    probe->inspect = [&](const RenderContext& context, const auto&, unsigned) {
+    probe->inspect
+      = [&](const RenderContext& context, const auto&, unsigned) -> void {
       auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
       products = RendererPublicationProbe::PublishedIblProducts(
         *owner, context.current_view.view_id);
     };
     const auto clear_inspection
-      = ScopeGuard([&] noexcept { probe->inspect = {}; });
+      = ScopeGuard([&] noexcept -> void { probe->inspect = {}; });
     char* destination = nullptr;
     std::size_t destination_size = 0;
     ASSERT_EQ(
@@ -1716,34 +1729,34 @@ namespace {
     auto records = nlohmann::json::array();
     auto packed_references = nlohmann::json::array();
     const auto save
-      = [&](const std::string& name, const std::vector<Pixel>& pixels) {
-          if (output.empty())
-            return;
-          std::ofstream stream(output.parent_path()
-              / (output.stem().string() + "-" + name + ".rgba32f"),
-            std::ios::binary);
-          ASSERT_TRUE(stream.good());
-          stream.write(reinterpret_cast<const char*>(pixels.data()),
-            static_cast<std::streamsize>(pixels.size() * sizeof(Pixel)));
-          ASSERT_TRUE(stream.good());
-        };
+      = [&](const std::string& name, const std::vector<Pixel>& pixels) -> void {
+      if (output.empty())
+        return;
+      std::ofstream stream(output.parent_path()
+          / (output.stem().string() + "-" + name + ".rgba32f"),
+        std::ios::binary);
+      ASSERT_TRUE(stream.good());
+      stream.write(reinterpret_cast<const char*>(pixels.data()),
+        static_cast<std::streamsize>(pixels.size() * sizeof(Pixel)));
+      ASSERT_TRUE(stream.good());
+    };
     const auto render
-      = [&](bool published, bool forward, float ev, unsigned count) {
-          settings.manual_ev = ev;
-          if (published) {
-            // The published fixture expects resident geometry/materials. Warm
-            // the shared uploads first; the measured frame still uses
-            // publication.
-            if (count > 1)
-              ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev, count));
-            probe->color.reset();
-            ASSERT_NO_FATAL_FAILURE(RenderPublishedSurface(forward));
-          } else {
-            ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev, count));
-          }
-          ASSERT_NE(probe->color, nullptr);
-        };
-    const auto linear = [&]() {
+      = [&](bool published, bool forward, float ev, unsigned count) -> void {
+      settings.manual_ev = ev;
+      if (published) {
+        // The published fixture expects resident geometry/materials. Warm
+        // the shared uploads first; the measured frame still uses
+        // publication.
+        if (count > 1)
+          ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev, count));
+        probe->color.reset();
+        ASSERT_NO_FATAL_FAILURE(RenderPublishedSurface(forward));
+      } else {
+        ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev, count));
+      }
+      ASSERT_NE(probe->color, nullptr);
+    };
+    const auto linear = [&]() -> std::vector<Pixel> {
       const auto domain = Read<FrameExposureData>(
         *probe->exposure->buffer, graphics::ResourceStates::kShaderResource);
       CHECK_F(std::isfinite(domain.pre_exposure) && domain.pre_exposure > 0);
@@ -1760,7 +1773,7 @@ namespace {
     for (unsigned source = 0; source < 3; ++source) {
       if (source == 0) {
         Sky().SetCubemapResource(
-          Texture(32U, true, [](auto face, auto x, auto y) {
+          Texture(32U, true, [](auto face, auto x, auto y) -> Pixel {
             const auto direction = WorldDirection(face, x, y, 32U);
             return Pixel { .5F + .1F * direction.x, .5F + .1F * direction.y,
               .5F + .1F * direction.z, 1 };
@@ -1794,7 +1807,7 @@ namespace {
           const auto capture = source == 2 && metallic == 1 && roughness == .6F
             ? BeginOptionalCapture()
             : observer_ptr<graphics::FrameCaptureController> {};
-          const auto finish_capture = ScopeGuard([&] noexcept {
+          const auto finish_capture = ScopeGuard([&] noexcept -> void {
             if (capture)
               EXPECT_TRUE(capture->EndCapture());
           });
@@ -1921,7 +1934,7 @@ namespace {
           // Compare transport using the actual deferred shading normal. The
           // original images above retain the UNORM10 normal-packing difference.
           // UNORM10 octahedral lanes centre on code 511 (see GBufferHelpers).
-          const auto unpack = [](float stored) {
+          const auto unpack = [](float stored) -> float {
             return (std::round(stored * 1023.0F) - 511.0F) / 511.0F;
           };
           const float nx = unpack(packed[2][0]);
@@ -1929,10 +1942,11 @@ namespace {
           const auto normal = glm::normalize(
             glm::vec3(nx, ny, 1 - std::abs(nx) - std::abs(ny)));
           ASSERT_GT(normal.z, 0);
-          const auto normal_texture = Texture(1U, false, [&](auto, auto, auto) {
-            return Pixel { .5F + .5F * normal.x, .5F + .5F * normal.y,
-              .5F + .5F * normal.z, 1 };
-          });
+          const auto normal_texture
+            = Texture(1U, false, [&](auto, auto, auto) -> Pixel {
+                return Pixel { .5F + .5F * normal.x, .5F + .5F * normal.y,
+                  .5F + .5F * normal.z, 1 };
+              });
           CapturePackedInputs(false);
           Material(data::MaterialDomain::kOpaque, roughness, metallic,
             glm::vec3(1), normal_texture);
@@ -1965,11 +1979,11 @@ namespace {
           canonical_metadata.precision_flags = 0;
           ASSERT_NO_FATAL_FAILURE(
             WriteComparisonMetadata(*comparison_products, canonical_metadata));
-          const auto restore_metadata = ScopeGuard([&] noexcept {
+          const auto restore_metadata = ScopeGuard([&] noexcept -> void {
             WriteComparisonMetadata(*comparison_products, metadata);
           });
           const auto canonical = [&](bool forward, content::ResourceKey normal,
-                                   std::vector<Pixel>& result) {
+                                   std::vector<Pixel>& result) -> void {
             Material(data::MaterialDomain::kOpaque, roughness, metallic,
               glm::vec3(1), normal);
             Sky().SetIntensityMul(0);

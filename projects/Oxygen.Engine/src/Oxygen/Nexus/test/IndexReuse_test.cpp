@@ -56,7 +56,7 @@ NOLINT_TEST(IndexReuseTest, StaleReleaseCannotClaimReactivatedSlot)
   const auto old = core.ActivateSlot(0);
   std::barrier rendezvous(2);
   auto error = RetireError::kUnavailable;
-  std::jthread worker([&] {
+  std::jthread worker([&] -> void {
     // The caller has observed the old handle before another thread recycles it.
     const bool was_current = core.IsHandleCurrent(old);
     rendezvous.arrive_and_wait();
@@ -81,7 +81,7 @@ NOLINT_TEST(IndexReuseTest, GrowthPreservesConcurrentExistingTransitions)
   IndexReuse<uint32_t> core;
   const auto existing = core.ActivateSlot(0);
   std::barrier rendezvous(2);
-  std::jthread worker([&] {
+  std::jthread worker([&] -> void {
     rendezvous.arrive_and_wait();
     auto ticket = core.TryRetire(existing);
     EXPECT_TRUE(ticket);
@@ -175,7 +175,8 @@ NOLINT_TEST(IndexReuseTest, TicketSurvivesFacadeAndMoveClosesDestination)
   destination = std::move(source);
   EXPECT_EQ(ticket->Finalize().disposition, FinalizeDisposition::kClosed);
   EXPECT_TRUE(destination.IsHandleCurrent(source_handle));
-  auto late = [&] {
+  auto late
+    = [&] -> std::expected<RetirementTicket<unsigned int>, RetireError> {
     IndexReuse<uint32_t> transient;
     return transient.TryRetire(transient.ActivateSlot(0));
   }();

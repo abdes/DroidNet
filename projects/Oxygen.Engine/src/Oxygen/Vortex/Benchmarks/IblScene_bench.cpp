@@ -116,7 +116,7 @@ namespace {
       FailureBackend().SetRecorderNameCollectionEnabled(false);
       const auto verbosity = loguru::g_global_verbosity;
       loguru::g_global_verbosity = loguru::Verbosity_WARNING;
-      const ScopeGuard restore([&]() noexcept {
+      const ScopeGuard restore([&]() noexcept -> void {
         probe->inspect = {};
         FailureBackend().track_resources = false;
         FailureBackend().count_resource_creations = false;
@@ -167,7 +167,7 @@ namespace {
         = time::CanonicalDuration { std::chrono::nanoseconds { 16'666'667 } };
       frame.SetModuleTimingData(
         timing, engine::internal::EngineTagFactory::Get());
-      probe->prepare = [](RenderContext& context) {
+      probe->prepare = [](RenderContext& context) -> void {
         context.current_view.depth_prepass_mode
           = DepthPrePassMode::kOpaqueAndMasked;
         context.current_view.with_atmosphere = true;
@@ -182,7 +182,7 @@ namespace {
       cpu << "frame_seq,cpu_frame_ms,revision,source_age,completion_frames,"
              "storage_creations,allocated_slots,registered_resources,draws\n";
       auto memory = nlohmann::json::array();
-      const auto snapshot = [&]() {
+      const auto snapshot = [&]() -> void {
         auto* owner = RendererPublicationProbe::GetSceneRenderer(*renderer_);
         auto& ibl = RendererPublicationProbe::IblOwner(*owner);
         const auto stats = ibl.GetActivePoolStats();
@@ -212,7 +212,7 @@ namespace {
           current, engine::internal::EngineTagFactory::Get());
         renderer_->OnFrameStart(observer_ptr { &frame });
         {
-          const ScopeGuard finish([&]() noexcept {
+          const ScopeGuard finish([&]() noexcept -> void {
             renderer_->OnFrameEnd(observer_ptr { &frame });
             Backend().EndFrame(current, slot);
           });

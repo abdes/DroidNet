@@ -96,15 +96,17 @@ NOLINT_TEST_F(
 
   // Setup the segment factory to create mock segments
   allocator_->segment_factory_ = [this, capacity](const ResourceViewType type,
-                                   const DescriptorVisibility vis) {
+                                   const DescriptorVisibility vis)
+    -> std::unique_ptr<testing::NiceMock<MockDescriptorSegment>> {
     auto segment = std::make_unique<testing::NiceMock<MockDescriptorSegment>>();
 
     // Setup allocate to return sequential indices
-    ON_CALL(*segment, Allocate()).WillByDefault([this, capacity] {
-      const auto idx = next_index_.fetch_add(1);
-      return idx < capacity.get() ? b::HeapIndex { idx }
-                                  : kInvalidBindlessHeapIndex;
-    });
+    ON_CALL(*segment, Allocate())
+      .WillByDefault([this, capacity] -> b::HeapIndex {
+        const auto idx = next_index_.fetch_add(1);
+        return idx < capacity.get() ? b::HeapIndex { idx }
+                                    : kInvalidBindlessHeapIndex;
+      });
 
     // Setup release to always succeed
     ON_CALL(*segment, Release(::testing::_))
@@ -118,7 +120,7 @@ NOLINT_TEST_F(
     ON_CALL(*segment, GetBaseIndex())
       .WillByDefault(testing::Return(b::HeapIndex { 0 }));
     ON_CALL(*segment, GetCapacity()).WillByDefault(testing::Return(capacity));
-    ON_CALL(*segment, GetAllocatedCount()).WillByDefault([this] {
+    ON_CALL(*segment, GetAllocatedCount()).WillByDefault([this] -> b::Count {
       return b::Count { next_index_.load() };
     });
 
@@ -150,7 +152,7 @@ NOLINT_TEST_F(
   std::vector<std::thread> threads;
   threads.reserve(kNumThreads);
   for (size_t t = 0; t < kNumThreads; ++t) {
-    threads.emplace_back([&, t] {
+    threads.emplace_back([&, t] -> void {
       // Wait for the start signal
       while (!start_flag.load(std::memory_order_relaxed)) {
         std::this_thread::yield();
@@ -234,8 +236,9 @@ NOLINT_TEST_F(
 
   constexpr b::Capacity capacity { 500 };
 
-  allocator_->segment_factory_ = [this, capacity](ResourceViewType type,
-                                   DescriptorVisibility vis) {
+  allocator_->segment_factory_
+    = [this, capacity](ResourceViewType type, DescriptorVisibility vis)
+    -> std::unique_ptr<testing::NiceMock<MockDescriptorSegment>> {
     // Skip combinations not in baseIndices to match thread skip logic
     if (!base_indices_.contains({ type, vis })) {
       return std::unique_ptr<testing::NiceMock<MockDescriptorSegment>> {};
@@ -246,7 +249,7 @@ NOLINT_TEST_F(
 
     // Setup allocate to return sequential indices for this type/visibility
     ON_CALL(*segment, Allocate())
-      .WillByDefault([this, type, vis, capacity, base_index] {
+      .WillByDefault([this, type, vis, capacity, base_index] -> b::HeapIndex {
         const auto idx = next_indices_[{ type, vis }].fetch_add(1);
         return (idx - base_index.get()) < capacity.get()
           ? b::HeapIndex { idx }
@@ -266,7 +269,7 @@ NOLINT_TEST_F(
       .WillByDefault(testing::Return(base_index));
     ON_CALL(*segment, GetCapacity()).WillByDefault(testing::Return(capacity));
     ON_CALL(*segment, GetAllocatedCount())
-      .WillByDefault([this, type, vis, base_index] {
+      .WillByDefault([this, type, vis, base_index] -> b::Count {
         const auto count
           = next_indices_[{ type, vis }].load() - base_index.get();
         return b::Count { count };
@@ -293,7 +296,7 @@ NOLINT_TEST_F(
   for (auto type : types) {
     for (auto vis : visibilities) {
       threads.emplace_back(
-        [type, vis, this, &exception_mutex, &exception_messages] {
+        [type, vis, this, &exception_mutex, &exception_messages] -> void {
           // Skip some combinations to avoid too many threads
           if ((type == ResourceViewType::kRawBuffer_SRV
                 || type == ResourceViewType::kRawBuffer_UAV)

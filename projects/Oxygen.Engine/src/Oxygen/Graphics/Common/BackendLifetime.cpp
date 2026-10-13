@@ -99,7 +99,7 @@ auto BackendLifetime::RegisterQueue(
 {
   std::lock_guard lock(queue_mutex_);
   std::erase_if(
-    queues_, [](const auto& entry) { return entry.second.expired(); });
+    queues_, [](const auto& entry) -> bool { return entry.second.expired(); });
   queues_.insert_or_assign(id, std::move(queue));
 }
 auto BackendLifetime::FindQueue(uint64_t id) const

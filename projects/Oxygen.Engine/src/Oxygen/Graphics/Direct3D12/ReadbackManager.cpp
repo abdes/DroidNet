@@ -490,13 +490,14 @@ auto D3D12BufferReadback::EnqueueCopy(
   resolved_range_ = resolved;
   ticket_ = manager_.tracker_.RegisterPendingSubmission(
     SizeBytes { resolved.size_bytes }, debug_name_);
-  manager_.TrackCancellationHandler(ticket_->id, [weak = weak_from_this()]() {
-    if (const auto locked = weak.lock()) {
-      locked->OnManagerCancelled();
-    }
-  });
+  manager_.TrackCancellationHandler(
+    ticket_->id, [weak = weak_from_this()]() -> void {
+      if (const auto locked = weak.lock()) {
+        locked->OnManagerCancelled();
+      }
+    });
   recorder.OnSubmission([manager = &manager_, ticket = *ticket_, signal](
-                          graphics::SubmissionOutcome outcome) {
+                          graphics::SubmissionOutcome outcome) -> void {
     if (outcome == graphics::SubmissionOutcome::kSubmitted) {
       manager->tracker_.MarkSubmitted(
         ticket.id, graphics::FenceValue { signal->Value() });
@@ -572,7 +573,7 @@ auto D3D12BufferReadback::TryMap()
   auto self = shared_from_this();
   auto guard = AdoptBackendObject(
     static_cast<void*>(this),
-    [](void* pointer) noexcept {
+    [](void* pointer) noexcept -> void {
       static_cast<D3D12BufferReadback*>(pointer)->ReleaseMapping();
     },
     std::move(self));
@@ -961,13 +962,14 @@ auto D3D12TextureReadback::EnqueueCopy(
   mapped_size_ = SizeBytes { copy_info.bytes_written };
   ticket_
     = manager_.tracker_.RegisterPendingSubmission(mapped_size_, debug_name_);
-  manager_.TrackCancellationHandler(ticket_->id, [weak = weak_from_this()]() {
-    if (const auto locked = weak.lock()) {
-      locked->OnManagerCancelled();
-    }
-  });
+  manager_.TrackCancellationHandler(
+    ticket_->id, [weak = weak_from_this()]() -> void {
+      if (const auto locked = weak.lock()) {
+        locked->OnManagerCancelled();
+      }
+    });
   recorder.OnSubmission([manager = &manager_, ticket = *ticket_, signal](
-                          graphics::SubmissionOutcome outcome) {
+                          graphics::SubmissionOutcome outcome) -> void {
     if (outcome == graphics::SubmissionOutcome::kSubmitted) {
       manager->tracker_.MarkSubmitted(
         ticket.id, graphics::FenceValue { signal->Value() });
@@ -1043,7 +1045,7 @@ auto D3D12TextureReadback::TryMap()
   auto self = shared_from_this();
   auto guard = AdoptBackendObject(
     static_cast<void*>(this),
-    [](void* pointer) noexcept {
+    [](void* pointer) noexcept -> void {
       static_cast<D3D12TextureReadback*>(pointer)->ReleaseMapping();
     },
     std::move(self));
@@ -1125,7 +1127,7 @@ auto D3D12ReadbackManager::CreateBufferReadback(
   }
   return AdoptBackendObject(
     static_cast<GpuBufferReadback*>(new D3D12BufferReadback(*this, debug_name)),
-    [](void* pointer) noexcept {
+    [](void* pointer) noexcept -> void {
       delete static_cast<D3D12BufferReadback*>(
         static_cast<GpuBufferReadback*>(pointer));
     },
@@ -1143,7 +1145,7 @@ auto D3D12ReadbackManager::CreateTextureReadback(
   return AdoptBackendObject(
     static_cast<GpuTextureReadback*>(
       new D3D12TextureReadback(*this, debug_name)),
-    [](void* pointer) noexcept {
+    [](void* pointer) noexcept -> void {
       delete static_cast<D3D12TextureReadback*>(
         static_cast<GpuTextureReadback*>(pointer));
     },
@@ -1596,10 +1598,10 @@ auto D3D12ReadbackManager::Shutdown(const std::chrono::milliseconds timeout)
     ReadbackTicketId id { 0 };
     {
       std::lock_guard lock(mutex_);
-      const auto pending
-        = std::ranges::find_if(cancellation_handlers_, [&](const auto& item) {
-            return tracker_.IsSubmissionPending(item.first);
-          });
+      const auto pending = std::ranges::find_if(
+        cancellation_handlers_, [&](const auto& item) -> bool {
+          return tracker_.IsSubmissionPending(item.first);
+        });
       if (pending == cancellation_handlers_.end()) {
         break;
       }

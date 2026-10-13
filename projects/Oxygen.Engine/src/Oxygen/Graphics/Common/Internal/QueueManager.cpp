@@ -186,7 +186,7 @@ auto QueueManager::WaitForFrameSlot(const frame::Slot slot) -> void
     // Initialization can submit work before the first frame owns a slot.
     // Drain it once before retiring that bootstrap bucket; subsequent frames
     // wait only on the slot they are about to reuse.
-    ForEachQueue([](CommandQueue& queue) { queue.Flush(); });
+    ForEachQueue([](CommandQueue& queue) -> void { queue.Flush(); });
     frames_started_ = true;
   }
   auto& fences = frame_fences_.at(slot.get());
@@ -222,7 +222,7 @@ auto QueueManager::SignalFrameSlot(const frame::Slot slot) -> void
     fences.reserve(queues_by_key_.size());
     for (const auto& [key, entry] : queues_by_key_) {
       const auto& queue = entry.second;
-      if (queue && std::ranges::none_of(fences, [&](const auto& fence) {
+      if (queue && std::ranges::none_of(fences, [&](const auto& fence) -> bool {
             return fence.queue == queue;
           })) {
         fences.push_back({ .queue = queue });

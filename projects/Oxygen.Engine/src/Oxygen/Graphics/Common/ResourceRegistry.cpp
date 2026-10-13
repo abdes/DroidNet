@@ -443,7 +443,7 @@ auto ResourceRegistry::AttachDescriptorWithView(
   }
   bool mapped = false;
   bool committed = false;
-  const ScopeGuard rollback([&]() noexcept {
+  const ScopeGuard rollback([&]() noexcept -> void {
     if (!committed) {
       if (mapped) {
         descriptor_to_resource_.erase(index);

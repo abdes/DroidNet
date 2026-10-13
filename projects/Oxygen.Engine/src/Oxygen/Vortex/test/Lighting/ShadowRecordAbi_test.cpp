@@ -64,18 +64,18 @@ namespace {
           const auto origin = input.position + 0.001F * input.normal;
           const auto distance = scenario == 1U ? 0.234375F : 0.0625F;
           const auto sample = origin + distance * input.light_direction;
-          const auto project = [&](glm::vec3 position) {
+          const auto project = [&](glm::vec3 position) -> glm::vec3 {
             const auto clip = input.projection * glm::vec4(position, 1.0F);
             return glm::vec3(clip) / clip.w;
           };
-          const auto uv_of = [&](glm::vec3 position) {
+          const auto uv_of = [&](glm::vec3 position) -> glm::vec2 {
             return glm::vec2(project(position)) * glm::vec2(0.5F, -0.5F) + 0.5F;
           };
-          const auto pixel_of = [](glm::vec2 coord) {
+          const auto pixel_of = [](glm::vec2 coord) -> unsigned int {
             return (static_cast<unsigned>(coord.y * 64.0F) * 64U)
               + static_cast<unsigned>(coord.x * 64.0F);
           };
-          const auto inside = [](glm::vec2 coord) {
+          const auto inside = [](glm::vec2 coord) -> bool {
             return coord.x >= 0.0F && coord.x < 1.0F && coord.y >= 0.0F
               && coord.y < 1.0F;
           };

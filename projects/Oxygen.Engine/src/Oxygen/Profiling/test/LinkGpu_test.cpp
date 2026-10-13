@@ -6,7 +6,7 @@
 
 #include <Oxygen/Profiling/ProfileScope.h>
 
-int main()
+auto main() -> int
 {
   using oxygen::profiling::Var;
   using oxygen::profiling::Vars;

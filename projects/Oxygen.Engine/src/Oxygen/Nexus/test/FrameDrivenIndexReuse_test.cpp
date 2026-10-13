@@ -33,8 +33,10 @@ NOLINT_TEST_F(
 {
   DeferredReclaimer reclaimer;
   std::vector<b::HeapIndex> recycled_indices;
-  FrameDrivenIndexReuse<b::HeapIndex> strategy(reclaimer,
-    [&](b::HeapIndex idx, std::monostate) { recycled_indices.push_back(idx); });
+  FrameDrivenIndexReuse<b::HeapIndex> strategy(
+    reclaimer, [&](b::HeapIndex idx, std::monostate) -> void {
+      recycled_indices.push_back(idx);
+    });
 
   constexpr b::HeapIndex kIndex { 10U };
   auto h1 = strategy.ActivateSlot(kIndex);
@@ -50,8 +52,10 @@ NOLINT_TEST_F(
 {
   DeferredReclaimer reclaimer;
   std::vector<b::HeapIndex> recycled_indices;
-  FrameDrivenIndexReuse<b::HeapIndex> strategy(reclaimer,
-    [&](b::HeapIndex idx, std::monostate) { recycled_indices.push_back(idx); });
+  FrameDrivenIndexReuse<b::HeapIndex> strategy(
+    reclaimer, [&](b::HeapIndex idx, std::monostate) -> void {
+      recycled_indices.push_back(idx);
+    });
 
   constexpr b::HeapIndex kIndex { 5U };
   auto h1 = strategy.ActivateSlot(kIndex);
@@ -68,8 +72,10 @@ NOLINT_TEST_F(
 {
   DeferredReclaimer reclaimer;
   std::vector<b::HeapIndex> recycled_indices;
-  FrameDrivenIndexReuse<b::HeapIndex> strategy(reclaimer,
-    [&](b::HeapIndex idx, std::monostate) { recycled_indices.push_back(idx); });
+  FrameDrivenIndexReuse<b::HeapIndex> strategy(
+    reclaimer, [&](b::HeapIndex idx, std::monostate) -> void {
+      recycled_indices.push_back(idx);
+    });
 
   constexpr b::HeapIndex kIndex { 42U };
   auto h1 = strategy.ActivateSlot(kIndex);
@@ -93,8 +99,10 @@ NOLINT_TEST_F(GenericFrameDrivenIndexReuseTest, DoubleReleaseIsSafe)
 {
   DeferredReclaimer reclaimer;
   std::vector<b::HeapIndex> recycled_indices;
-  FrameDrivenIndexReuse<b::HeapIndex> strategy(reclaimer,
-    [&](b::HeapIndex idx, std::monostate) { recycled_indices.push_back(idx); });
+  FrameDrivenIndexReuse<b::HeapIndex> strategy(
+    reclaimer, [&](b::HeapIndex idx, std::monostate) -> void {
+      recycled_indices.push_back(idx);
+    });
 
   constexpr b::HeapIndex kIndex { 99U };
   auto h1 = strategy.ActivateSlot(kIndex);
@@ -115,8 +123,10 @@ NOLINT_TEST_F(GenericFrameDrivenIndexReuseTest, ReuseIncrementsGeneration)
 {
   DeferredReclaimer reclaimer;
   std::vector<b::HeapIndex> recycled_indices;
-  FrameDrivenIndexReuse<b::HeapIndex> strategy(reclaimer,
-    [&](b::HeapIndex idx, std::monostate) { recycled_indices.push_back(idx); });
+  FrameDrivenIndexReuse<b::HeapIndex> strategy(
+    reclaimer, [&](b::HeapIndex idx, std::monostate) -> void {
+      recycled_indices.push_back(idx);
+    });
 
   constexpr b::HeapIndex kIndex { 1U };
 
@@ -148,13 +158,14 @@ NOLINT_TEST_F(
   Strategy* active = nullptr;
   int callbacks = 0;
   VersionedIndex<uint32_t> second;
-  Strategy strategy(reclaimer, [&](uint32_t index, std::monostate) noexcept {
-    ++callbacks;
-    if (callbacks == 1) {
-      second = active->ActivateSlot(index);
-      active->Release(second);
-    }
-  });
+  Strategy strategy(
+    reclaimer, [&](uint32_t index, std::monostate) noexcept -> void {
+      ++callbacks;
+      if (callbacks == 1) {
+        second = active->ActivateSlot(index);
+        active->Release(second);
+      }
+    });
   active = &strategy;
   strategy.Release(strategy.ActivateSlot(0));
   reclaimer.OnBeginFrame(oxygen::frame::Slot { 0 });
@@ -172,8 +183,8 @@ NOLINT_TEST_F(
   DeferredReclaimer reclaimer;
   bool called = false;
   {
-    FrameDrivenIndexReuse<uint32_t> strategy(
-      reclaimer, [&](uint32_t, std::monostate) noexcept { called = true; });
+    FrameDrivenIndexReuse<uint32_t> strategy(reclaimer,
+      [&](uint32_t, std::monostate) noexcept -> void { called = true; });
     strategy.Release(strategy.ActivateSlot(7));
   }
   reclaimer.OnRendererShutdown();
@@ -186,7 +197,7 @@ NOLINT_TEST_F(
   DeferredReclaimer reclaimer;
   int callbacks = 0;
   FrameDrivenIndexReuse<uint32_t> strategy(
-    reclaimer, [&](uint32_t, std::monostate) noexcept { ++callbacks; });
+    reclaimer, [&](uint32_t, std::monostate) noexcept -> void { ++callbacks; });
   const auto handle = strategy.ActivateSlot(2);
   EXPECT_THROW(strategy.ActivateSlot(2), std::logic_error);
   strategy.Release(handle);

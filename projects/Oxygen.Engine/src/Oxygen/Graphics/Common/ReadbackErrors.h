@@ -50,9 +50,12 @@ inline auto to_string(ReadbackError value) -> const char*
 
 class ReadbackErrorCategory : public std::error_category {
 public:
-  const char* name() const noexcept override { return "Readback Error"; }
+  auto name() const noexcept -> const char* override
+  {
+    return "Readback Error";
+  }
 
-  std::string message(int ev) const override
+  auto message(int ev) const -> std::string override
   {
     switch (static_cast<ReadbackError>(ev)) {
     case ReadbackError::kInvalidArgument:

@@ -149,7 +149,7 @@ auto CommandQueue::PrepareNativeSubmission(
   const auto timeline = private_timeline_;
   auto task = executor_->Prepare(
     this, std::move(chunks),
-    [dependencies = std::move(dependencies), timeline] {
+    [dependencies = std::move(dependencies), timeline] -> void {
       if (timeline->completed.load() == kLost) {
         throw std::runtime_error("Headless device lost");
       }
@@ -162,7 +162,7 @@ auto CommandQueue::PrepareNativeSubmission(
       = (request.fail_before_private_marker || request.fail_after_first_list)
         ? std::nullopt
         : request.private_marker,
-      legacy = request.legacy_marker] {
+      legacy = request.legacy_marker] -> void {
       if (legacy) {
         SignalImmediate(*legacy);
       }
@@ -170,7 +170,7 @@ auto CommandQueue::PrepareNativeSubmission(
         timeline->Publish(*marker);
       }
     },
-    [this] { TearDownUncertainDevice(); });
+    [this] -> void { TearDownUncertainDevice(); });
   return std::make_unique<PreparedSubmission>(*this, std::move(task),
     request.fail_after_first_list ? std::min(size_t { 1 }, request.lists.size())
                                   : request.lists.size(),
@@ -242,7 +242,8 @@ auto CommandQueue::Wait(uint64_t value, std::chrono::milliseconds timeout) const
   -> void
 {
   std::unique_lock lock(mutex_);
-  if (!cv_.wait_for(lock, timeout, [&] { return completed_value_ >= value; })) {
+  if (!cv_.wait_for(
+        lock, timeout, [&] -> bool { return completed_value_ >= value; })) {
     throw std::runtime_error("Headless queue wait timed out");
   }
   if (completed_value_ == kLost) {
@@ -252,7 +253,7 @@ auto CommandQueue::Wait(uint64_t value, std::chrono::milliseconds timeout) const
 auto CommandQueue::Wait(uint64_t value) const -> void
 {
   std::unique_lock lock(mutex_);
-  cv_.wait(lock, [&] { return completed_value_ >= value; });
+  cv_.wait(lock, [&] -> bool { return completed_value_ >= value; });
   if (completed_value_ == kLost) {
     throw std::runtime_error("Headless device lost");
   }

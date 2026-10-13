@@ -23,8 +23,8 @@ namespace oxygen::vortex::shadows::internal {
 
 auto ShadowCasterDependencies::LiveRecordCount() const -> std::size_t
 {
-  return std::ranges::count_if(
-    records_, [](const auto& entry) { return !entry.second.expired(); });
+  return std::ranges::count_if(records_,
+    [](const auto& entry) -> bool { return !entry.second.expired(); });
 }
 
 auto ShadowCasterDependencies::Intern(ShadowCasterRecord record,
@@ -43,7 +43,7 @@ auto ShadowCasterDependencies::Intern(ShadowCasterRecord record,
 auto ShadowCasterDependencies::Prune() -> void
 {
   std::erase_if(
-    records_, [](const auto& entry) { return entry.second.expired(); });
+    records_, [](const auto& entry) -> bool { return entry.second.expired(); });
 }
 
 auto ShadowCasterDependencies::Build(const PreparedSceneFrame& scene,
@@ -80,8 +80,8 @@ auto ShadowCasterDependencies::Build(const PreparedSceneFrame& scene,
     };
     std::copy_n(
       scene.world_matrices.data() + transform_offset, 16, record.world.begin());
-    if (!std::ranges::all_of(
-          record.world, [](float value) { return std::isfinite(value); })) {
+    if (!std::ranges::all_of(record.world,
+          [](float value) -> bool { return std::isfinite(value); })) {
       continue;
     }
     auto hash = std::size_t { 0U };

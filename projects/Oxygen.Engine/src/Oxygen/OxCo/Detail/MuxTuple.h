@@ -50,14 +50,15 @@ public:
 
   void await_set_executor(Executor* ex) noexcept
   {
-    auto impl
-      = [ex](auto&... awaitables) { (awaitables.SetExecutor(ex), ...); };
+    auto impl = [ex](auto&... awaitables) -> void {
+      (awaitables.SetExecutor(ex), ...);
+    };
     std::apply(impl, awaitables_);
   }
 
   [[nodiscard]] auto await_ready() const noexcept -> bool
   {
-    auto impl = [](const auto&... aws) {
+    auto impl = [](const auto&... aws) -> bool {
       const size_t n_ready = (static_cast<size_t>(aws.IsReady()) + ...);
       const size_t n_skip_kickoff
         = (static_cast<size_t>(aws.IsReady() || aws.IsSkippable()) + ...);
@@ -70,7 +71,7 @@ public:
   auto await_suspend(Handle h) -> bool
   {
     const bool ret = this->DoSuspend(h);
-    auto impl = [this](auto&... awaitables) {
+    auto impl = [this](auto&... awaitables) -> void {
       (awaitables.Bind(*static_cast<Self*>(this)), ...);
       (awaitables.Suspend(), ...);
     };
@@ -83,7 +84,7 @@ public:
   {
     HandleResumeWithoutSuspend();
     this->ReRaise();
-    auto impl = [](auto&&... awaitables) {
+    auto impl = [](auto&&... awaitables) -> auto {
       return std::make_tuple(std::move(awaitables).AsOptional()...);
     };
     return std::apply(impl, std::move(awaitables_));
@@ -98,7 +99,7 @@ public:
   // `await_cancel()`.
   auto InternalCancel() -> bool
   {
-    auto impl = [](auto&... awaitables) {
+    auto impl = [](auto&... awaitables) -> int {
       // Don't short-circuit; we should try to cancel every remaining
       // awaitable, even if some have completed already.
       return (... & static_cast<int>(awaitables.Cancel()));
@@ -108,7 +109,7 @@ public:
 
   auto await_must_resume() const noexcept
   {
-    auto impl = [](const auto&... awaitables) {
+    auto impl = [](const auto&... awaitables) -> int {
       // Don't short-circuit; we should check mustResume of every
       // awaitable, since it can have side effects.
       return (... | static_cast<int>(awaitables.MustResume()));
@@ -143,7 +144,7 @@ protected:
     // at the same time; we check the first one for convenience only.)
     if (!std::get<0>(awaitables_).IsBound()) {
       [[maybe_unused]] auto _ = this->DoSuspend(std::noop_coroutine());
-      auto extract_results = [this](auto&&... awaitables) {
+      auto extract_results = [this](auto&&... awaitables) -> void {
         (awaitables.Bind(*static_cast<Self*>(this)), ...);
         (awaitables.ReportImmediateResult(), ...);
       };
@@ -202,7 +203,7 @@ public:
     // have a value to report, so we'd be able to construct a tuple of
     // results (or if any awaitable failed, so we'd re-raise and not
     // bother with return value construction).
-    auto impl = [](const auto&... awaitables) {
+    auto impl = [](const auto&... awaitables) -> auto {
       if constexpr (sizeof...(awaitables) == 0) {
         return false;
       } else {
@@ -226,7 +227,7 @@ public:
   {
     this->HandleResumeWithoutSuspend();
     this->ReRaise();
-    auto impl = [](auto&&... awaitables) {
+    auto impl = [](auto&&... awaitables) -> auto {
       return std::make_tuple(std::move(awaitables).Result()...);
     };
     return std::apply(impl, std::move(this->GetAwaiters()));

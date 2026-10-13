@@ -61,7 +61,8 @@ protected:
   auto SetUp() -> void override
   {
     // Setup factory that creates mock command lists
-    factory_ = [this](QueueRole role, std::string_view name) {
+    factory_ = [this](QueueRole role,
+                 std::string_view name) -> std::unique_ptr<CommandList> {
       ++total_created_count_;
       auto cmd_list = std::make_unique<MockCommandList>(name, role);
       cmd_list->IncrementCreationCount();
@@ -97,12 +98,16 @@ protected:
   auto SetUp() -> void override
   {
     // Valid factory for basic setup
-    valid_factory_ = [](QueueRole role, std::string_view name) {
+    valid_factory_
+      = [](QueueRole role,
+          std::string_view name) -> std::unique_ptr<MockCommandList> {
       return std::make_unique<MockCommandList>(name, role);
     };
 
     // Invalid factory that returns nullptr
-    null_factory_ = [](QueueRole /*role*/, std::string_view /*name*/) {
+    null_factory_
+      = [](QueueRole /*role*/,
+          std::string_view /*name*/) -> std::unique_ptr<CommandList> {
       return std::unique_ptr<CommandList>(nullptr);
     };
   }
@@ -116,7 +121,8 @@ class CommandListPoolConcurrencyTest : public ::testing::Test {
 protected:
   auto SetUp() -> void override
   {
-    factory_ = [this](QueueRole role, std::string_view name) {
+    factory_ = [this](QueueRole role,
+                 std::string_view name) -> std::unique_ptr<MockCommandList> {
       std::lock_guard lock(creation_mutex_);
       ++creation_count_;
       return std::make_unique<MockCommandList>(name, role);
@@ -140,7 +146,7 @@ protected:
     std::mutex results_mutex;
 
     for (int i = 0; i < thread_count; ++i) {
-      threads.emplace_back([&, i]() {
+      threads.emplace_back([&, i]() -> void {
         std::vector<std::shared_ptr<CommandList>> thread_lists;
         for (int j = 0; j < lists_per_thread; ++j) {
           auto cmd_list = pool_->AcquireCommandList(QueueRole::kGraphics,
@@ -385,7 +391,7 @@ TEST_F(CommandListPoolConcurrencyTest,
 
   // Act
   for (int i = 0; i < thread_count; ++i) {
-    threads.emplace_back([&, i]() {
+    threads.emplace_back([&, i]() -> void {
       for (int j = 0; j < operations_per_thread; ++j) {
         auto cmd_list = pool_->AcquireCommandList(QueueRole::kGraphics,
           "Thread" + std::to_string(i) + "_Op" + std::to_string(j));
@@ -419,7 +425,7 @@ TEST_F(
 
   // Start worker threads that continuously acquire and release command lists
   for (int i = 0; i < 3; ++i) {
-    worker_threads.emplace_back([&, i]() {
+    worker_threads.emplace_back([&, i]() -> void {
       int operation_count = 0;
       while (should_continue.load()) {
         auto cmd_list = pool_->AcquireCommandList(QueueRole::kGraphics,
@@ -451,7 +457,8 @@ NOLINT_TEST(CommandListPoolLifetime,
   auto native = std::make_shared<int>(42);
   const std::weak_ptr<void> weak_native = native;
   auto pool = std::make_unique<CommandListPool>(
-    [](QueueRole role, std::string_view name) {
+    [](QueueRole role,
+      std::string_view name) -> std::unique_ptr<MockCommandList> {
       return std::make_unique<MockCommandList>(name, role);
     },
     native);

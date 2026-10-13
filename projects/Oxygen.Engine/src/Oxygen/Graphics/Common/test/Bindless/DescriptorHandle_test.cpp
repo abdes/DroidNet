@@ -89,7 +89,9 @@ NOLINT_TEST_F(UnitTests, InvalidateDoesNotRelease)
   EXPECT_CALL(*mock_segment, Release(b::HeapIndex { 42 })).Times(0);
 
   SetSegmentFactory(
-    [&mock_segment](auto, auto) { return std::move(mock_segment); });
+    [&mock_segment](auto, auto) -> std::unique_ptr<DescriptorSegment> {
+      return std::move(mock_segment);
+    });
 
   auto handle = allocator_.AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
@@ -105,7 +107,7 @@ NOLINT_TEST_F(UnitTests, InvalidateDoesNotRelease)
 NOLINT_TEST_F(UnitTests, ReleasingInvalidHandleIsNoop)
 {
   // Invalid handles shouldn't trigger any segment operations
-  SetSegmentFactory([](auto, auto) {
+  SetSegmentFactory([](auto, auto) -> std::unique_ptr<DescriptorSegment> {
     ADD_FAILURE() << "Invalid handle should not try to create segments";
     return std::unique_ptr<DescriptorSegment> {};
   });
@@ -124,7 +126,9 @@ NOLINT_TEST_F(UnitTests, ExplicitReleaseInvalidatesHandle)
   EXPECT_CALL(*mock_segment, Release(b::HeapIndex { 42 })).Times(1);
 
   SetSegmentFactory(
-    [&mock_segment](auto, auto) { return std::move(mock_segment); });
+    [&mock_segment](auto, auto) -> std::unique_ptr<DescriptorSegment> {
+      return std::move(mock_segment);
+    });
 
   auto handle = allocator_.AllocateRaw(
     ResourceViewType::kTexture_SRV, DescriptorVisibility::kShaderVisible);
@@ -145,7 +149,9 @@ NOLINT_TEST_F(UnitTests, DestructorReleasesHandle)
   EXPECT_CALL(*mock_segment, Release(b::HeapIndex { 42 })).Times(1);
 
   SetSegmentFactory(
-    [&mock_segment](auto, auto) { return std::move(mock_segment); });
+    [&mock_segment](auto, auto) -> std::unique_ptr<DescriptorSegment> {
+      return std::move(mock_segment);
+    });
 
   {
     const auto handle = allocator_.AllocateRaw(
@@ -221,7 +227,9 @@ NOLINT_TEST_F(UnitTests, MoveAssignmentReleasesDestinationBeforeAssign)
 
   // Assign the allocator segment factory to always return our mock
   SetSegmentFactory(
-    [&mock_segment](auto, auto) { return std::move(mock_segment); });
+    [&mock_segment](auto, auto) -> std::unique_ptr<DescriptorSegment> {
+      return std::move(mock_segment);
+    });
 
   // Allocate a handle so that it owns index 55
   auto dst = allocator_.AllocateRaw(

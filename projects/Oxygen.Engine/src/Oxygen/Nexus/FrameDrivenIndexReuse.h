@@ -58,7 +58,7 @@ public:
     }
     auto payload = std::make_shared<Payload>();
     auto action = reclaimer_->PrepareDeferredAction(
-      [payload, target = target_]() noexcept {
+      [payload, target = target_]() noexcept -> auto {
         const auto result = payload->ticket->Finalize();
         if (result.disposition == FinalizeDisposition::kReusable
           && !target->closed.load(std::memory_order_acquire)

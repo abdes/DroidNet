@@ -41,7 +41,7 @@ struct Color {
 
   auto operator==(const Color& other) const -> bool
   {
-    auto almost_equal = [](const float x, const float y) {
+    auto almost_equal = [](const float x, const float y) -> bool {
       return std::abs(x - y)
         <= epsilon * (std::max)({ 1.0f, std::abs(x), std::abs(y) });
     };

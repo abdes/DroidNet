@@ -158,7 +158,7 @@ auto D3D12ImGuiGraphicsBackend::Shutdown() -> void
       // longer using the resources.
       reclaimer_->RegisterDeferredAction(
         [heap_keepalive = std::move(heap_keepalive),
-          context_keepalive]() mutable {
+          context_keepalive]() mutable -> void {
           try {
             if (context_keepalive) {
               ImGui::SetCurrentContext(context_keepalive);

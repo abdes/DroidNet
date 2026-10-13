@@ -155,12 +155,18 @@ NOLINT_TEST_F(
         if (!spot_light.has_value()) {
           FAIL() << "Expected spot_light to contain a value";
         }
-        ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>(
-          [kind](auto& light) { light.Common().affects_world = kind == 0; }));
-        ASSERT_TRUE(point_node.EditLight<scene::PointLight>(
-          [kind](auto& light) { light.Common().affects_world = kind == 1; }));
-        ASSERT_TRUE(spot_node.EditLight<scene::SpotLight>(
-          [kind](auto& light) { light.Common().affects_world = kind == 2; }));
+        ASSERT_TRUE(
+          sun.EditLight<scene::DirectionalLight>([kind](auto& light) -> void {
+            light.Common().affects_world = kind == 0;
+          }));
+        ASSERT_TRUE(
+          point_node.EditLight<scene::PointLight>([kind](auto& light) -> void {
+            light.Common().affects_world = kind == 1;
+          }));
+        ASSERT_TRUE(
+          spot_node.EditLight<scene::SpotLight>([kind](auto& light) -> void {
+            light.Common().affects_world = kind == 2;
+          }));
         directional_light = sun.GetLightAs<scene::DirectionalLight>();
         point_light = point_node.GetLightAs<scene::PointLight>();
         spot_light = spot_node.GetLightAs<scene::SpotLight>();
@@ -204,15 +210,14 @@ NOLINT_TEST_F(
             SCOPED_TRACE(ev);
             const auto intensity = static_cast<float>(radiance / coefficient);
             ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>(
-              [intensity](auto& light) { light.SetIntensityLux(intensity); }));
-            ASSERT_TRUE(
-              point_node.EditLight<scene::PointLight>([intensity](auto& light) {
-                light.SetLuminousFluxLm(intensity);
-              }));
-            ASSERT_TRUE(
-              spot_node.EditLight<scene::SpotLight>([intensity](auto& light) {
-                light.SetLuminousFluxLm(intensity);
-              }));
+              [intensity](
+                auto& light) -> void { light.SetIntensityLux(intensity); }));
+            ASSERT_TRUE(point_node.EditLight<scene::PointLight>(
+              [intensity](
+                auto& light) -> void { light.SetLuminousFluxLm(intensity); }));
+            ASSERT_TRUE(spot_node.EditLight<scene::SpotLight>(
+              [intensity](
+                auto& light) -> void { light.SetLuminousFluxLm(intensity); }));
             ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, ev));
             const auto pixels = ReadFloatTexture(*probe->color);
             ASSERT_EQ(pixels.size(), 1U);
@@ -285,11 +290,11 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
           depth_mode = prepass ? DepthPrePassMode::kOpaqueAndMasked
                                : DepthPrePassMode::kDisabled;
           ASSERT_TRUE(point_node.EditLight<scene::PointLight>(
-            [invalid_light](auto& light) {
+            [invalid_light](auto& light) -> void {
               light.SetLuminousFluxLm(invalid_light ? 0.0F : 100.0F);
             }));
           ASSERT_TRUE(fill_node.EditLight<scene::PointLight>(
-            [invalid_light](auto& light) {
+            [invalid_light](auto& light) -> void {
               light.SetLuminousFluxLm(invalid_light ? 200.0F : 0.0F);
             }));
           SetSurface(domain, 1);

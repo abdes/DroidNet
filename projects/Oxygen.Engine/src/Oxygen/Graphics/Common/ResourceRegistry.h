@@ -692,7 +692,7 @@ public:
     auto& destination_descriptors = new_res_it->second.descriptors;
     ResourceEntry::ViewEntry* destination = &previous;
     bool committed = false;
-    const ScopeGuard rollback_destination([&]() noexcept {
+    const ScopeGuard rollback_destination([&]() noexcept -> void {
       if (!committed && !same_resource && destination != &previous) {
         destination_descriptors.erase(index);
       }
@@ -710,7 +710,7 @@ public:
     const auto [target_group, new_group] = view_cache_.try_emplace(
       CacheKey { .resource = new_res_obj, .view_desc_hash = key_hash },
       nullptr);
-    const ScopeGuard rollback_group([&]() noexcept {
+    const ScopeGuard rollback_group([&]() noexcept -> void {
       if (!committed && new_group) {
         view_cache_.erase(target_group);
       }

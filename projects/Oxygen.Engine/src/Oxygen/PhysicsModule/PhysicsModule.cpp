@@ -836,7 +836,7 @@ auto PhysicsModule::OnSceneMutation(observer_ptr<engine::FrameContext> context)
     diagnostics_.scene_pull_success += 1;
   }
 
-  const auto is_unknown_aggregate = [](const PhysicsError error) {
+  const auto is_unknown_aggregate = [](const PhysicsError error) -> bool {
     return error == PhysicsError::kInvalidArgument;
   };
   for (const auto& [aggregate_id, binding_handle] : aggregate_to_binding_) {
@@ -1170,7 +1170,7 @@ auto PhysicsModule::DestroyAggregateByDomain(const AggregateId aggregate_id,
     "PhysicsModule world id must be valid while destroying tracked "
     "aggregates.");
 
-  const auto is_unknown = [](const PhysicsError error) {
+  const auto is_unknown = [](const PhysicsError error) -> bool {
     return error == PhysicsError::kInvalidArgument;
   };
 

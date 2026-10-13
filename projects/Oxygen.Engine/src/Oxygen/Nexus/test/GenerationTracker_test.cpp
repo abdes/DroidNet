@@ -410,7 +410,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   // Act: Multiple threads concurrently loading the same uninitialized slot
   threads.reserve(num_threads);
   for (int t = 0; t < num_threads; ++t) {
-    threads.emplace_back([&tracker, idx, t, &results]() {
+    threads.emplace_back([&tracker, idx, t, &results]() -> void {
       results[static_cast<std::size_t>(t)].reserve(kNumOperations);
       for (int i = 0; i < kNumOperations; ++i) {
         results[static_cast<std::size_t>(t)].push_back(tracker.Load(idx).get());
@@ -456,7 +456,7 @@ NOLINT_TEST_F(
   // Act: Multiple threads concurrently bumping the same slot
   threads.reserve(num_threads);
   for (int t = 0; t < num_threads; ++t) {
-    threads.emplace_back([&tracker, idx]() {
+    threads.emplace_back([&tracker, idx]() -> void {
       for (int i = 0; i < kNumBumpsPerThread; ++i) {
         tracker.Bump(idx);
       }
@@ -497,32 +497,32 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   // Act: Reader threads continuously observe generation values
   threads.reserve(num_reader_threads + num_writer_threads);
   for (int t = 0; t < num_reader_threads; ++t) {
-    threads.emplace_back(
-      [&tracker, idx, &start_flag, &min_observed_gen, &max_observed_gen]() {
-        while (!start_flag.load()) {
-          std::this_thread::yield();
-        }
+    threads.emplace_back([&tracker, idx, &start_flag, &min_observed_gen,
+                           &max_observed_gen]() -> void {
+      while (!start_flag.load()) {
+        std::this_thread::yield();
+      }
 
-        for (int i = 0; i < kNumMixedOperations; ++i) {
-          const auto gen = tracker.Load(idx).get();
+      for (int i = 0; i < kNumMixedOperations; ++i) {
+        const auto gen = tracker.Load(idx).get();
 
-          // Update observed range atomically
-          uint32_t current_min = min_observed_gen.load();
-          while (gen < current_min
-            && !min_observed_gen.compare_exchange_weak(current_min, gen)) { }
+        // Update observed range atomically
+        uint32_t current_min = min_observed_gen.load();
+        while (gen < current_min
+          && !min_observed_gen.compare_exchange_weak(current_min, gen)) { }
 
-          uint32_t current_max = max_observed_gen.load();
-          while (gen > current_max
-            && !max_observed_gen.compare_exchange_weak(current_max, gen)) { }
+        uint32_t current_max = max_observed_gen.load();
+        while (gen > current_max
+          && !max_observed_gen.compare_exchange_weak(current_max, gen)) { }
 
-          std::this_thread::yield();
-        }
-      });
+        std::this_thread::yield();
+      }
+    });
   }
 
   // Writer threads continuously increment generation
   for (int t = 0; t < num_writer_threads; ++t) {
-    threads.emplace_back([&tracker, idx, &start_flag]() {
+    threads.emplace_back([&tracker, idx, &start_flag]() -> void {
       while (!start_flag.load()) {
         std::this_thread::yield();
       }
@@ -584,7 +584,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
     const auto idx = b::HeapIndex { static_cast<uint32_t>(slot) };
 
     for (int t = 0; t < threads_per_slot; ++t) {
-      threads.emplace_back([&tracker, idx, slot, &final_generations]() {
+      threads.emplace_back([&tracker, idx, slot, &final_generations]() -> void {
         // Initialize the slot (lazy)
         [[maybe_unused]] const auto init_gen = tracker.Load(idx);
 
@@ -676,7 +676,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   std::vector<std::thread> writers;
   writers.reserve(kWriterThreads);
   for (int t = 0; t < kWriterThreads; ++t) {
-    writers.emplace_back([&tracker, &start]() {
+    writers.emplace_back([&tracker, &start]() -> void {
       while (!start.load(std::memory_order_acquire)) { }
       for (int i = 0; i < kIters; ++i) {
         tracker.Bump(HeapIndex { 0U });
@@ -688,7 +688,7 @@ NOLINT_TEST_F(GenerationTrackerThreadSafetyTest,
   std::vector<std::thread> readers;
   readers.reserve(kReaderThreads);
   for (int t = 0; t < kReaderThreads; ++t) {
-    readers.emplace_back([&tracker, &start, &max_seen]() {
+    readers.emplace_back([&tracker, &start, &max_seen]() -> void {
       while (!start.load(std::memory_order_acquire)) { }
       uint32_t last = 0;
       for (int i = 0; i < kIters; ++i) {

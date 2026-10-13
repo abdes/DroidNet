@@ -190,7 +190,8 @@ NOLINT_TEST(GraphicsLifecycleTest,
     .WillByDefault(
       ::testing::Return(observer_ptr<ReadbackManager> { &readback_manager }));
   int reclaimed = 0;
-  gfx.GetDeferredReclaimer().RegisterDeferredAction([&] { ++reclaimed; });
+  gfx.GetDeferredReclaimer().RegisterDeferredAction(
+    [&] -> void { ++reclaimed; });
   EXPECT_FALSE(gfx.IsRunning());
   gfx.Close();
   gfx.Close();
@@ -219,7 +220,7 @@ NOLINT_TEST(GraphicsLifecycleTest,
     ++slot) {
     auto& reclaimer = gfx->GetDeferredReclaimer();
     reclaimer.OnBeginFrame(oxygen::frame::Slot { slot });
-    reclaimer.RegisterDeferredAction([owner, registry, &completed]() {
+    reclaimer.RegisterDeferredAction([owner, registry, &completed]() -> void {
       EXPECT_EQ(&owner->GetResourceRegistry(), registry);
       EXPECT_EQ(owner->GetResourceRegistry().GetRegisteredResourceCount(), 0U);
       EXPECT_EQ(owner->GetCommandQueue(oxygen::graphics::QueueRole::kGraphics),

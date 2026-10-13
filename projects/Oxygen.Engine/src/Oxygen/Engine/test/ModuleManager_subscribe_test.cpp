@@ -31,7 +31,7 @@ TEST(ModuleManagerSubscribe, SubscribeWithReplay_ReturnsExisting)
 
   std::vector<std::string> seen;
   auto sub = mgr.SubscribeModuleAttached(
-    [&seen](ModuleEvent const& ev) { seen.push_back(ev.name); },
+    [&seen](ModuleEvent const& ev) -> void { seen.push_back(ev.name); },
     /*replay_existing=*/true);
 
   // Replay should deliver both existing modules in attach order
@@ -52,7 +52,7 @@ TEST(ModuleManagerSubscribe, SubscribeWithoutReplay_OnlyFuture)
 
   std::vector<std::string> seen;
   auto sub = mgr.SubscribeModuleAttached(
-    [&seen](ModuleEvent const& ev) { seen.push_back(ev.name); },
+    [&seen](ModuleEvent const& ev) -> void { seen.push_back(ev.name); },
     /*replay_existing=*/false);
 
   // Register a module after subscribe -> should be delivered
@@ -70,7 +70,7 @@ TEST(ModuleManagerSubscribe, UnsubscribeStopsNotifications)
 
   std::vector<std::string> seen;
   auto sub = mgr.SubscribeModuleAttached(
-    [&seen](ModuleEvent const& ev) { seen.push_back(ev.name); },
+    [&seen](ModuleEvent const& ev) -> void { seen.push_back(ev.name); },
     /*replay_existing=*/false);
 
   // Cancel subscription

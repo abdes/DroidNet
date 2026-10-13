@@ -105,7 +105,7 @@ NOLINT_TEST(DomainIndexMapperTest, ConcurrentReads_AreDeterministic)
   std::atomic<bool> ok { true };
   std::vector<std::thread> threads;
   for (int i = 0; i < 4; ++i) {
-    threads.emplace_back([&]() {
+    threads.emplace_back([&]() -> void {
       for (int j = 0; j < 500; ++j) {
         const auto a = mapper.ResolveDomain(
           b::ShaderVisibleIndex { g::kMaterialsShaderIndexBase });

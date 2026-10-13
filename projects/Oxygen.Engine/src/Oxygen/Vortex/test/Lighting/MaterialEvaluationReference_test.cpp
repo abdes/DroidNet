@@ -24,7 +24,7 @@ namespace {
         .occlusion = 0.2 },
       .occlusion_mode = OcclusionMode::kStrength,
     };
-    const auto expect_ao = [&](const double expected) {
+    const auto expect_ao = [&](const double expected) -> void {
       const auto result = EvaluateMaterial(input);
       if (!result.has_value()) {
         ADD_FAILURE() << "Valid material inputs were rejected";

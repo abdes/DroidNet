@@ -54,16 +54,16 @@ namespace detail {
       Executor executor(*event_loop_);
       executor_ = &executor;
       Executor* prev_exec = std::exchange(CurrentExecutor(), &executor);
-      ScopeGuard guard([this, prev_exec]() noexcept {
+      ScopeGuard guard([this, prev_exec]() noexcept -> void {
         executor_ = nullptr;
         CurrentExecutor() = prev_exec;
       });
 
       if (!awaiter.await_ready()) {
-        resume_fn = +[](CoroutineFrame* frame) {
+        resume_fn = +[](CoroutineFrame* frame) -> void {
           auto runner = static_cast<Runner*>(frame);
           runner->executor_->RunSoon(
-            +[](Runner* r) noexcept {
+            +[](Runner* r) noexcept -> void {
               EventLoop* loop = std::exchange(r->event_loop_, nullptr);
               Traits::Stop(*loop);
             },
@@ -88,7 +88,7 @@ namespace detail {
           // I/O that's not going to happen anymore. Fail.
           // Do our best to clean up if there is a custom implementation
           // of FAIL_FOR_DANGLING_TASKS that throws an exception.
-          ScopeGuard cleanup_guard([&]() noexcept {
+          ScopeGuard cleanup_guard([&]() noexcept -> void {
             if (awaiter.await_cancel(ToHandle())) {
               // cancelled immediately
               return;

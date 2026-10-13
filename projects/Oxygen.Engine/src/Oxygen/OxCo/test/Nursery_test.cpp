@@ -249,7 +249,7 @@ NOLINT_TEST_F(NurseryTest, EarlyCancelsTasks)
     bool started = false;
     OXCO_WITH_NURSERY(nursery)
     {
-      ScopeGuard guard([&]() noexcept {
+      ScopeGuard guard([&]() noexcept -> void {
         nursery.Start([&]() -> Co<> {
           started = true;
           co_await kYield;
@@ -270,7 +270,7 @@ NOLINT_TEST_F(NurseryTest, SynchronousCancellation)
     OXCO_WITH_NURSERY(n)
     {
       n.Start([&]() -> Co<> {
-        ScopeGuard guard([&]() noexcept { cancelled = true; });
+        ScopeGuard guard([&]() noexcept -> void { cancelled = true; });
         co_await el_->Sleep(5ms);
       });
       co_await el_->Sleep(1ms);
@@ -352,7 +352,7 @@ NOLINT_TEST_F(NurseryTest, CancelFromOutside)
     OXCO_WITH_NURSERY(n)
     {
       n.Start([&]() -> Co<> { co_await el_->Sleep(10ms); });
-      el_->Schedule(1ms, [&] { n.Cancel(); });
+      el_->Schedule(1ms, [&] -> void { n.Cancel(); });
       co_return kJoin;
     };
 

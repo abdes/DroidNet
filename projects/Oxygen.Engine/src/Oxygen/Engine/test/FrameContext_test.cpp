@@ -333,8 +333,9 @@ NOLINT_TEST(FrameContext_basic_test, ViewMetadataPublishesExposureViewId)
   ASSERT_EQ(snap.gameSnapshot.views.size(), 2u);
 
   const auto it = std::find_if(snap.gameSnapshot.views.begin(),
-    snap.gameSnapshot.views.end(),
-    [dependent_id](const auto& view) { return view.id == dependent_id; });
+    snap.gameSnapshot.views.end(), [dependent_id](const auto& view) -> bool {
+      return view.id == dependent_id;
+    });
   ASSERT_NE(it, snap.gameSnapshot.views.end());
   EXPECT_EQ(it->metadata.exposure_view_id, owner_id);
 }
@@ -777,9 +778,9 @@ NOLINT_TEST(FrameContext_basic_test, MoveOnlyPayloadStagingAndAccess)
     {
     }
     MoveOnlyPayload(const MoveOnlyPayload&) = delete;
-    MoveOnlyPayload& operator=(const MoveOnlyPayload&) = delete;
+    auto operator=(const MoveOnlyPayload&) -> MoveOnlyPayload& = delete;
     MoveOnlyPayload(MoveOnlyPayload&&) noexcept = default;
-    MoveOnlyPayload& operator=(MoveOnlyPayload&&) noexcept = default;
+    auto operator=(MoveOnlyPayload&&) noexcept -> MoveOnlyPayload& = default;
     int value { 0 };
   };
 

@@ -17,11 +17,11 @@ template <class T> class DisposableAdapter : public CancellableAdapterBase<T> {
 public:
   using CancellableAdapterBase<T>::CancellableAdapterBase;
 
-  bool await_early_cancel() noexcept
+  auto await_early_cancel() noexcept -> bool
   {
     return AwaitEarlyCancel(this->awaiter_);
   }
-  bool await_cancel(Handle h) noexcept
+  auto await_cancel(Handle h) noexcept -> bool
   {
     return AwaitCancel(this->awaiter_, h);
   }

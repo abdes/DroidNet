@@ -41,7 +41,7 @@ struct Person {
   std::vector<float> scores;
   uint8_t is_active; // 0 = inactive, 1 = active (Do not use bool)
 
-  bool operator==(const Person& other) const noexcept
+  auto operator==(const Person& other) const noexcept -> bool
   {
     return id == other.id && name == other.name && scores == other.scores
       && is_active == other.is_active;

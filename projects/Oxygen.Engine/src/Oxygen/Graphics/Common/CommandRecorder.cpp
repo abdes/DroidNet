@@ -436,22 +436,22 @@ auto CommandRecorder::CloseScopeRecord(
   std::exception_ptr first_failure {};
   const auto close_collector
     = [&](const observer_ptr<IGpuProfileCollector> collector,
-        GpuProfileCollectorState& state) {
-        if (collector == nullptr) {
-          return;
-        }
-        try {
-          if (close_kind == ScopeCloseKind::kAbort) {
-            collector->AbortScope(*this, state);
-          } else {
-            collector->EndScope(*this, state);
-          }
-        } catch (...) {
-          if (first_failure == nullptr) {
-            first_failure = std::current_exception();
-          }
-        }
-      };
+        GpuProfileCollectorState& state) -> void {
+    if (collector == nullptr) {
+      return;
+    }
+    try {
+      if (close_kind == ScopeCloseKind::kAbort) {
+        collector->AbortScope(*this, state);
+      } else {
+        collector->EndScope(*this, state);
+      }
+    } catch (...) {
+      if (first_failure == nullptr) {
+        first_failure = std::current_exception();
+      }
+    }
+  };
 
   close_collector(record.trace_collector, record.trace_state);
   close_collector(record.telemetry_collector, record.telemetry_state);
@@ -502,7 +502,7 @@ auto CommandRecorder::DrainActiveProfileScopes(
 
 // -- Private non-template dispatch method implementations for Buffer
 
-bool CommandRecorder::DoIsResourceTracked(const Buffer& resource) const
+auto CommandRecorder::DoIsResourceTracked(const Buffer& resource) const -> bool
 {
   return resource_state_tracker_->IsResourceTracked(resource);
 }
@@ -550,7 +550,7 @@ void CommandRecorder::DoRequireResourceStateFinal(
 
 // -- Private non-template dispatch method implementations for Texture
 
-bool CommandRecorder::DoIsResourceTracked(const Texture& resource) const
+auto CommandRecorder::DoIsResourceTracked(const Texture& resource) const -> bool
 {
   return resource_state_tracker_->IsResourceTracked(resource);
 }
