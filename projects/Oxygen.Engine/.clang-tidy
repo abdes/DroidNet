@@ -51,9 +51,14 @@ Checks: >
     -cppcoreguidelines-pro-bounds-constant-array-index,
     -cppcoreguidelines-pro-type-static-cast-downcast,
     -performance-enum-size,
-    -readability-magic-numbers
+    -readability-magic-numbers,
+    -readability-use-concise-preprocessor-directives
 
 CheckOptions:
+  # Lambdas keep their deduced return type; trailing returns on them are
+  # cosmetic and need C++23 when the parameter list is omitted.
+  - key: modernize-use-trailing-return-type.TransformLambdas
+    value: none
   - key: readability-implicit-bool-conversion.AllowPointerConditions
     value: true
   - key: readability-implicit-bool-conversion.AllowIntegerConditions
