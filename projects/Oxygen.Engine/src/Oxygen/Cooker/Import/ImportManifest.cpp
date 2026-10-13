@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 #include <ostream>
+#include <ranges>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -303,18 +304,17 @@ namespace {
     const auto is_ws = [](const unsigned char ch) -> bool {
       return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n';
     };
-    const auto first
-      = std::find_if(value.begin(), value.end(), [&](const char ch) -> bool {
-          return !is_ws(static_cast<unsigned char>(ch));
-        });
+    const auto first = std::ranges::find_if(value, [&](const char ch) -> bool {
+      return !is_ws(static_cast<unsigned char>(ch));
+    });
     if (first == value.end()) {
       value.clear();
       return;
     }
-    const auto last
-      = std::find_if(value.rbegin(), value.rend(), [&](const char ch) -> bool {
-          return !is_ws(static_cast<unsigned char>(ch));
-        });
+    const auto last = std::ranges::find_if(
+      std::views::reverse(value), [&](const char ch) -> bool {
+        return !is_ws(static_cast<unsigned char>(ch));
+      });
     value = std::string(first, last.base());
   }
 
@@ -355,7 +355,8 @@ namespace {
   auto IsAllowedInputJobKey(const std::string_view key) -> bool
   {
     return key == "id" || key == "type" || key == "source"
-      || key == "depends_on" || key == "output" || key == "source_key";
+      || key == "depends_on" || key == "output" || key == "layout"
+      || key == "source_key";
   }
 
   auto IsAllowedPhysicsSidecarJobKey(const std::string_view key) -> bool
@@ -493,7 +494,7 @@ namespace {
   }
 
   auto ReadFloatField(const json& obj, const char* name, float& target,
-    bool& was_set, std::ostream& errors) -> bool
+    std::ostream& errors) -> bool
   {
     if (!obj.contains(name)) {
       return true;
@@ -503,7 +504,6 @@ namespace {
       return false;
     }
     target = obj.at(name).get<float>();
-    was_set = true;
     return true;
   }
 
@@ -564,9 +564,7 @@ namespace {
     if (!ReadStringField(obj, "hdr_handling", settings.hdr_handling, errors)) {
       return false;
     }
-    bool dummy = false;
-    if (!ReadFloatField(
-          obj, "exposure_ev", settings.exposure_ev, dummy, errors)) {
+    if (!ReadFloatField(obj, "exposure_ev", settings.exposure_ev, errors)) {
       return false;
     }
     if (!ReadUIntField(obj, "max_mips", settings.max_mip_levels, errors)) {
@@ -639,16 +637,16 @@ namespace {
     if (!ReadStringField(obj, "unit_policy", settings.unit_policy, errors)) {
       return false;
     }
-    if (!ReadFloatField(obj, "unit_scale", settings.unit_scale,
-          settings.unit_scale_set, errors)) {
+    if (!ReadFloatField(obj, "unit_scale", settings.unit_scale, errors)) {
       return false;
     }
-    bool omitted_range_set = false;
+    settings.unit_scale_set
+      = settings.unit_scale_set || obj.contains("unit_scale");
     if (!ReadFloatField(obj, "gltf_omitted_light_range_m",
-          settings.gltf_omitted_light_range_m, omitted_range_set, errors)) {
+          settings.gltf_omitted_light_range_m, errors)) {
       return false;
     }
-    if ((obj.contains("bake_transforms"))
+    if (obj.contains("bake_transforms")
       && (!ReadBoolField(
         obj, "bake_transforms", settings.bake_transforms, errors))) {
       return false;
@@ -719,11 +717,8 @@ namespace {
   auto ApplyScriptingSidecarOverrides(const json& obj,
     ScriptingSidecarImportSettings& settings, std::ostream& errors) -> bool
   {
-    if (!ReadStringField(obj, "target_scene_virtual_path",
-          settings.target_scene_virtual_path, errors)) {
-      return false;
-    }
-    return true;
+    return ReadStringField(obj, "target_scene_virtual_path",
+      settings.target_scene_virtual_path, errors);
   }
 
   auto ApplyPhysicsSidecarOverrides(const json& obj,
@@ -1507,7 +1502,8 @@ auto ImportManifest::Parse(const std::string_view text,
           error_stream
             << "ERROR [input.manifest.key_not_allowed]: key '" << it.key()
             << "' is not allowed for input jobs; allowed keys are "
-               "'id', 'type', 'source', 'depends_on', 'output', 'source_key'\n";
+               "'id', 'type', 'source', 'depends_on', 'output', 'layout', "
+               "'source_key'\n";
           return std::nullopt;
         }
       }
@@ -1907,7 +1903,7 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream,
 }
 
 auto ImportManifest::BuildRequests(std::ostream& error_stream,
-  std::shared_ptr<const CapturedInputSet> captured_inputs) const
+  const std::shared_ptr<const CapturedInputSet>& captured_inputs) const
   -> std::vector<ImportRequest>
 {
   std::vector<ImportRequest> requests;

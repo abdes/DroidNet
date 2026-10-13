@@ -27,7 +27,7 @@ namespace detail {
   //! readers.
   OXGN_COOK_NDAPI auto RunSourceAnalysis(const ImportManifest& manifest,
     ImportEventLoop& loop, IAsyncFileReader& reader, co::ThreadPool& pool,
-    std::stop_token stop_token,
+    const std::stop_token& stop_token,
     std::shared_ptr<const CapturedInputSet> captured_inputs = {})
     -> ImportSourceAnalysis;
 } // namespace detail

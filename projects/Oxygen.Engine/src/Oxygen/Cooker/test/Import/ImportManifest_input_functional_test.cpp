@@ -62,6 +62,40 @@ NOLINT_TEST(ImportManifestInputTest, AcceptsInputJobWithDependencies)
   EXPECT_EQ(request->orchestration->depends_on.at(0), "core.actions");
 }
 
+//! A job layout places the actions and contexts of one input file in its own
+//! folder, as the editor cooks hand-written input files next to their source.
+NOLINT_TEST(ImportManifestInputTest, AppliesInputJobLayout)
+{
+  const ScopedTempDir temp;
+  const auto manifest_path
+    = temp.Path() / "input_job_layout" / "import_manifest.json";
+
+  WriteText(manifest_path,
+    R"({
+      "version": 1,
+      "layout": { "virtual_mount_root": "/Content" },
+      "jobs": [
+        {
+          "id": "input:Gameplay/Player.input.json",
+          "type": "input",
+          "source": "Content/Gameplay/Player.input.json",
+          "layout": { "descriptors_dir": "", "input_subdir": "Gameplay" }
+        }
+      ]
+    })");
+
+  std::ostringstream errors;
+  const auto manifest
+    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  ASSERT_HAS_VALUE(manifest) << errors.str();
+
+  std::ostringstream req_errors;
+  const auto request = manifest->jobs.at(0).BuildRequest(req_errors);
+  ASSERT_HAS_VALUE(request) << req_errors.str();
+  EXPECT_EQ(request->loose_cooked_layout.InputActionVirtualPath("Jump"),
+    "/Content/Gameplay/Jump.oiact");
+}
+
 NOLINT_TEST(ImportManifestInputTest, RejectsInputJobWithDisallowedKeys)
 {
   const ScopedTempDir temp;

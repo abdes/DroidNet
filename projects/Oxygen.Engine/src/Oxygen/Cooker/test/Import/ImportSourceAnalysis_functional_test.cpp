@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <fstream>
 #include <ios>
+#include <iterator>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -253,6 +254,39 @@ namespace {
       Path("vertices.bin"), &ImportSourceObservation::path);
     ASSERT_NE(buffer, result.observations.end());
     EXPECT_TRUE(buffer->reads.empty());
+  }
+
+  //! An input file is the only input of its job; every declared action and
+  //! mapping context is an output in the job's layout.
+  NOLINT_TEST_F(
+    ImportSourceAnalysisTest, InputFileDeclaresItsActionsAndContextsAsOutputs)
+  {
+    const auto input = Write("Player.input.json", R"({
+      "actions":[{"name":"Jump","type":"bool"},{"name":"Dash","type":"bool"}],
+      "contexts":[{"name":"Gameplay","mappings":[
+        {"action":"Jump","slot":"Space","trigger":"pressed"}]}]})");
+    auto manifest = ImportManifest {};
+    auto job = ImportManifestJob {};
+    job.id = "input:Gameplay/Player.input.json";
+    job.job_type = "input";
+    job.input.source_path = input.string();
+    job.loose_cooked_layout.virtual_mount_root = "/Content";
+    job.loose_cooked_layout.descriptors_dir = "";
+    job.loose_cooked_layout.input_subdir = "Gameplay";
+    manifest.jobs.push_back(job);
+
+    const auto report = manifest.AnalyzeSources();
+
+    ASSERT_TRUE(report.complete) << report.ToJson();
+    const auto& result = report.jobs.front();
+    auto outputs = std::vector<std::string> {};
+    std::ranges::transform(result.outputs, std::back_inserter(outputs),
+      [](const auto& output) -> std::string { return output.virtual_path; });
+    EXPECT_THAT(outputs,
+      ::testing::ElementsAre("/Content/Gameplay/Jump.oiact",
+        "/Content/Gameplay/Dash.oiact", "/Content/Gameplay/Gameplay.oimap"));
+    EXPECT_TRUE(result.references.empty());
+    ASSERT_EQ(result.observations.size(), 1U);
   }
 
   NOLINT_TEST_F(

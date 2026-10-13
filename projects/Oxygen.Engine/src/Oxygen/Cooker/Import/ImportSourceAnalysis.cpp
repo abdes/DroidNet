@@ -145,9 +145,9 @@ namespace {
   }
 
   struct AnalysisContext final {
-    detail::ImportSourceSnapshot& reader;
-    co::ThreadPool& pool;
-    ImportSourceJobAnalysis& report;
+    observer_ptr<detail::ImportSourceSnapshot> reader;
+    observer_ptr<co::ThreadPool> pool;
+    observer_ptr<ImportSourceJobAnalysis> report;
     std::stop_token stop;
     std::unordered_map<std::string, size_t> files;
 
@@ -160,11 +160,11 @@ namespace {
       const auto normalized
         = std::filesystem::absolute(path).lexically_normal();
       const auto [entry, inserted] = files.try_emplace(
-        base::PathIdentityKey(normalized), report.files.size());
+        base::PathIdentityKey(normalized), report->files.size());
       if (inserted) {
-        report.files.push_back({ .path = normalized, .required = required });
+        report->files.push_back({ .path = normalized, .required = required });
       } else {
-        report.files.at(entry->second).required |= required;
+        report->files.at(entry->second).required |= required;
       }
     }
 
@@ -175,7 +175,7 @@ namespace {
         throw std::runtime_error("Source analysis canceled");
       }
       AddFile(path);
-      auto bytes = co_await reader.ReadFile(path);
+      auto bytes = co_await reader->ReadFile(path);
       if (!bytes) {
         throw std::runtime_error(bytes.error().ToString());
       }
@@ -192,10 +192,10 @@ namespace {
       co_return text;
     }
 
-    auto Reference(std::string path, const Kind kind, std::string location)
-      -> void
+    auto Reference(
+      std::string path, const Kind kind, std::string location) const -> void
     {
-      report.references.push_back({
+      report->references.push_back({
         .virtual_path = std::move(path),
         .kind = kind,
         .object_path = std::move(location),
@@ -203,9 +203,9 @@ namespace {
       });
     }
 
-    auto Output(std::string path, const Kind kind) -> void
+    auto Output(std::string path, const Kind kind) const -> void
     {
-      report.outputs.push_back({
+      report->outputs.push_back({
         .virtual_path = std::move(path),
         .kind = kind,
         .object_path = {},
@@ -216,7 +216,7 @@ namespace {
 
   template <typename Adapter>
   auto PrepareModel(ImportRequest request, const std::vector<std::byte>& bytes,
-    const std::stop_token stop) -> ImportSourceJobAnalysis
+    const std::stop_token& stop) -> ImportSourceJobAnalysis
   {
     auto report = ImportSourceJobAnalysis {};
     report.source_path = request.source_path;
@@ -287,10 +287,65 @@ namespace {
     return report;
   }
 
+  //! Analyzes a hand-written input file: the file is the only input, and each
+  //! declared action and mapping context is an output in the job's layout. A
+  //! file that is not valid JSON declares nothing here; the import reports
+  //! why.
+  auto PrepareInputJob(const ImportManifestJob& job, AnalysisContext& context)
+    -> co::Co<bool>
+  {
+    auto& report = *context.report;
+    const auto& layout = job.loose_cooked_layout;
+    report.source_path = job.input.source_path;
+    const auto text = co_await context.ReadText(report.source_path);
+    const auto root = nlohmann::json::parse(text, nullptr, false, true);
+    if (!root.is_object()) {
+      co_return true;
+    }
+
+    const auto declared_name
+      = [](const nlohmann::json& item) -> std::optional<std::string> {
+      if (!item.is_object() || !item.contains("name")
+        || !item.at("name").is_string()) {
+        return std::nullopt;
+      }
+      return item.at("name").get<std::string>();
+    };
+    const auto file_name = report.source_path.filename().string();
+    if (file_name.ends_with(".input-action.json")) {
+      if (const auto name = declared_name(root); name.has_value()) {
+        context.Output(
+          layout.InputActionVirtualPath(*name), Kind::kInputAction);
+      }
+      co_return true;
+    }
+
+    for (const auto& [key, kind] : {
+           std::pair { "actions", Kind::kInputAction },
+           std::pair { "contexts", Kind::kInputMappingContext },
+         }) {
+      if (!root.contains(key) || !root.at(key).is_array()) {
+        continue;
+      }
+      for (const auto& item : root.at(key)) {
+        if (const auto name = declared_name(item); name.has_value()) {
+          context.Output(kind == Kind::kInputAction
+              ? layout.InputActionVirtualPath(*name)
+              : layout.InputMappingContextVirtualPath(*name),
+            kind);
+        }
+      }
+    }
+    co_return true;
+  }
+
   auto PrepareJob(const ImportManifestJob& job, AnalysisContext& context)
     -> co::Co<bool>
   {
-    auto& report = context.report;
+    if (job.job_type == "input") {
+      co_return co_await PrepareInputJob(job, context);
+    }
+    auto& report = *context.report;
     const auto& layout = job.loose_cooked_layout;
     if (job.job_type == "material-descriptor") {
       report.source_path = job.material_descriptor.descriptor_path;
@@ -437,7 +492,7 @@ namespace {
         && !tuning.equirect_to_cubemap
         && tuning.cubemap_layout == CubeMapImageLayout::kUnknown) {
         const auto faces = co_await detail::DiscoverCubeFacePaths(
-          request->source_path, context.reader);
+          request->source_path, *context.reader);
         if (!faces.has_value()) {
           throw std::runtime_error(faces.error().ToString());
         }
@@ -470,7 +525,7 @@ namespace {
       }
       request->loose_cooked_layout = layout;
       auto bytes = co_await context.Read(report.source_path);
-      auto facts = co_await context.pool.Run(
+      auto facts = co_await context.pool->Run(
         [request = std::move(*request), bytes = std::move(bytes),
           stop = context.stop](
           co::ThreadPool::CancelToken) -> ImportSourceJobAnalysis {
@@ -502,9 +557,9 @@ namespace {
     auto snapshot
       = detail::ImportSourceSnapshot(reader, pool, std::move(captured_inputs));
     auto context = AnalysisContext {
-      .reader = snapshot,
-      .pool = pool,
-      .report = report,
+      .reader = observer_ptr { &snapshot },
+      .pool = observer_ptr { &pool },
+      .report = observer_ptr { &report },
       .stop = stop,
       .files = {},
     };
@@ -581,7 +636,7 @@ namespace {
 namespace detail {
   auto RunSourceAnalysis(const ImportManifest& manifest, ImportEventLoop& loop,
     IAsyncFileReader& reader, co::ThreadPool& pool,
-    const std::stop_token stop_token,
+    const std::stop_token& stop_token,
     std::shared_ptr<const CapturedInputSet> captured_inputs)
     -> ImportSourceAnalysis
   {
@@ -601,7 +656,7 @@ namespace detail {
   }
 } // namespace detail
 
-auto ImportManifest::AnalyzeSources(const std::stop_token stop_token,
+auto ImportManifest::AnalyzeSources(const std::stop_token& stop_token,
   std::shared_ptr<const CapturedInputSet> captured_inputs) const
   -> ImportSourceAnalysis
 {
