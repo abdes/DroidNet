@@ -86,7 +86,8 @@ def render_cpp_abi(
             f"inline constexpr IndexSpaceToken k{cpp_name}IndexSpace {{ {idx}U }};"
         )
         index_space_entries.append(
-            f'  IndexSpaceDesc{{ k{cpp_name}IndexSpace, "{index_space_id}" }},'
+            f"  IndexSpaceDesc{{ .token = k{cpp_name}IndexSpace, "
+            f'.id = "{index_space_id}" }},'
         )
 
     for idx, domain in enumerate(domains):
@@ -114,13 +115,13 @@ def render_cpp_abi(
 
         domain_entries.append(
             "  DomainDesc{ "
-            f"k{cpp_name}Domain, "
-            f'"{domain_id}", '
-            f'"{domain_name}", '
-            f"k{index_space_cpp_name}IndexSpace, "
-            f"k{cpp_name}ShaderIndexBase, "
-            f"k{cpp_name}Capacity, "
-            f'"{access_class}" '
+            f".token = k{cpp_name}Domain, "
+            f'.id = "{domain_id}", '
+            f'.name = "{domain_name}", '
+            f".index_space = k{index_space_cpp_name}IndexSpace, "
+            f".shader_index_base = k{cpp_name}ShaderIndexBase, "
+            f".capacity = k{cpp_name}Capacity, "
+            f'.shader_access_class = "{access_class}" '
             "},"
         )
 

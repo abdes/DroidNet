@@ -9,12 +9,12 @@
 // Source-Version: 2.0.0
 // Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-10-12 12:46:05
+// Generated: 2026-10-13 18:02:51
 
 #ifndef OXYGEN_BINDLESS_ABI_HLSL
 #define OXYGEN_BINDLESS_ABI_HLSL
 
-static const uint K_INVALID_BINDLESS_INDEX = 0XFFFFFFFF;
+static const uint K_INVALID_BINDLESS_INDEX = 0xFFFFFFFF;
 
 static inline bool BX_IsInDomain(uint idx, uint base, uint capacity)
 {
@@ -24,7 +24,7 @@ static inline bool BX_IsInDomain(uint idx, uint base, uint capacity)
 static inline uint BX_TryUseGlobalIndexInDomain(uint idx, uint base, uint capacity)
 {
 #ifdef BINDLESS_VALIDATE
-	return BX_IsInDomain(idx, base, capacity) ? idx : 0XFFFFFFFF;
+	return BX_IsInDomain(idx, base, capacity) ? idx : 0xFFFFFFFF;
 #else
 	return idx;
 #endif

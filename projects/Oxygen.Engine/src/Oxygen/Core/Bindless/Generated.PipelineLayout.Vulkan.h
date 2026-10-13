@@ -3,14 +3,13 @@
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
-// clang-format off
 
 // Generated file - do not edit.
 // Source: projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml
 // Source-Version: 2.0.0
 // Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-04-21 10:29:41
+// Generated: 2026-10-13 18:02:51
 
 #pragma once
 
@@ -84,31 +83,109 @@ struct PipelineLayoutEntryDesc {
   const char* stages;
 };
 
-inline constexpr std::array<DescriptorSetDesc, 1>
-  kDescriptorSetTable = {{
-  DescriptorSetDesc{ DescriptorSet::kBindlessMain, "bindless_main", 0U },
-},};
+inline constexpr std::array<DescriptorSetDesc, 1> kDescriptorSetTable = {
+  {
+    DescriptorSetDesc {
+      .token = DescriptorSet::kBindlessMain,
+      .id = "bindless_main",
+      .set = 0U,
+    },
+  },
+};
 
-inline constexpr std::array<BindingDesc, 4> kBindingTable = {{
-  BindingDesc{ Binding::kTexturesBinding, "textures_binding", DescriptorSet::kBindlessMain, 0U, DescriptorType::kSampledImage, 0U, true, true },
-  BindingDesc{ Binding::kGlobalBuffersBinding, "global_buffers_binding", DescriptorSet::kBindlessMain, 1U, DescriptorType::kStorageBuffer, 0U, true, true },
-  BindingDesc{ Binding::kSamplersBinding, "samplers_binding", DescriptorSet::kBindlessMain, 2U, DescriptorType::kSampler, 256U, false, false },
-  BindingDesc{ Binding::kViewConstantsBinding, "view_constants_binding", DescriptorSet::kBindlessMain, 3U, DescriptorType::kUniformBuffer, 1U, false, false },
-},};
+inline constexpr std::array<BindingDesc, 4> kBindingTable = {
+  {
+    BindingDesc {
+      .token = Binding::kTexturesBinding,
+      .id = "textures_binding",
+      .descriptor_set = DescriptorSet::kBindlessMain,
+      .binding = 0U,
+      .descriptor_type = DescriptorType::kSampledImage,
+      .descriptor_count = 0U,
+      .variable_count = true,
+      .update_after_bind = true,
+    },
+    BindingDesc {
+      .token = Binding::kGlobalBuffersBinding,
+      .id = "global_buffers_binding",
+      .descriptor_set = DescriptorSet::kBindlessMain,
+      .binding = 1U,
+      .descriptor_type = DescriptorType::kStorageBuffer,
+      .descriptor_count = 0U,
+      .variable_count = true,
+      .update_after_bind = true,
+    },
+    BindingDesc {
+      .token = Binding::kSamplersBinding,
+      .id = "samplers_binding",
+      .descriptor_set = DescriptorSet::kBindlessMain,
+      .binding = 2U,
+      .descriptor_type = DescriptorType::kSampler,
+      .descriptor_count = 256U,
+      .variable_count = false,
+      .update_after_bind = false,
+    },
+    BindingDesc {
+      .token = Binding::kViewConstantsBinding,
+      .id = "view_constants_binding",
+      .descriptor_set = DescriptorSet::kBindlessMain,
+      .binding = 3U,
+      .descriptor_type = DescriptorType::kUniformBuffer,
+      .descriptor_count = 1U,
+      .variable_count = false,
+      .update_after_bind = false,
+    },
+  },
+};
 
-inline constexpr std::array<DomainBindingDesc, 4>
-  kDomainBindingTable = {{
-  DomainBindingDesc{ "textures", Binding::kTexturesBinding, 35816U, 65536U },
-  DomainBindingDesc{ "srv_global", Binding::kGlobalBuffersBinding, 1U, 32768U },
-  DomainBindingDesc{ "materials", Binding::kGlobalBuffersBinding, 32769U, 3047U },
-  DomainBindingDesc{ "samplers", Binding::kSamplersBinding, 0U, 256U },
-},};
+inline constexpr std::array<DomainBindingDesc, 4> kDomainBindingTable = {
+  {
+    DomainBindingDesc {
+      .domain_id = "textures",
+      .binding = Binding::kTexturesBinding,
+      .array_element_base = 35816U,
+      .capacity = 65536U,
+    },
+    DomainBindingDesc {
+      .domain_id = "srv_global",
+      .binding = Binding::kGlobalBuffersBinding,
+      .array_element_base = 1U,
+      .capacity = 32768U,
+    },
+    DomainBindingDesc {
+      .domain_id = "materials",
+      .binding = Binding::kGlobalBuffersBinding,
+      .array_element_base = 32769U,
+      .capacity = 3047U,
+    },
+    DomainBindingDesc {
+      .domain_id = "samplers",
+      .binding = Binding::kSamplersBinding,
+      .array_element_base = 0U,
+      .capacity = 256U,
+    },
+  },
+};
 
-inline constexpr std::array<PipelineLayoutEntryDesc, 2>
-  kPipelineLayoutTable = {{
-  PipelineLayoutEntryDesc{ LayoutEntry::kBindlessMain, "BindlessMain", LayoutEntryKind::DescriptorSet, 0U, 0U, "" },
-  PipelineLayoutEntryDesc{ LayoutEntry::kRootConstants, "RootConstants", LayoutEntryKind::PushConstants, 4294967295U, 8U, "ALL" },
-},};
+inline constexpr std::array<PipelineLayoutEntryDesc, 2> kPipelineLayoutTable = {
+  {
+    PipelineLayoutEntryDesc {
+      .token = LayoutEntry::kBindlessMain,
+      .id = "BindlessMain",
+      .kind = LayoutEntryKind::DescriptorSet,
+      .descriptor_set_index = 0U,
+      .size_bytes = 0U,
+      .stages = "",
+    },
+    PipelineLayoutEntryDesc {
+      .token = LayoutEntry::kRootConstants,
+      .id = "RootConstants",
+      .kind = LayoutEntryKind::PushConstants,
+      .descriptor_set_index = 4294967295U,
+      .size_bytes = 8U,
+      .stages = "ALL",
+    },
+  },
+};
 
 } // namespace oxygen::bindless::generated::vulkan
-// clang-format on

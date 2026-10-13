@@ -5,12 +5,8 @@
 # ===-----------------------------------------------------------------------===#
 
 import json
-import subprocess
-import os
-import sys
 from pathlib import Path
 
-import pytest
 
 from bindless_codegen.generator import generate
 

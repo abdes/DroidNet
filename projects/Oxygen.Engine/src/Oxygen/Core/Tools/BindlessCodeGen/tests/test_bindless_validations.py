@@ -9,7 +9,7 @@ import yaml
 
 from bindless_codegen import generator
 
-from spec_fixtures import copy_document, create_full_example_document
+from spec_fixtures import create_full_example_document
 
 
 def write_yaml(path, content):

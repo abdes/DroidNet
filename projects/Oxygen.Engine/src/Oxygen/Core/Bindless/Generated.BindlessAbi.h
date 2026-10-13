@@ -9,12 +9,11 @@
 // Source-Version: 2.0.0
 // Schema-Version: 2.0.0
 // Tool: BindlessCodeGen 1.2.2
-// Generated: 2026-10-12 12:46:05
+// Generated: 2026-10-13 18:08:18
 
 #pragma once
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 
 #include <Oxygen/Base/NamedType.h>
@@ -57,10 +56,10 @@ static_assert(alignof(DomainToken) == alignof(uint16_t));
 static_assert(sizeof(IndexSpaceToken) == sizeof(uint16_t));
 static_assert(alignof(IndexSpaceToken) == alignof(uint16_t));
 
-inline constexpr uint32_t kInvalidBindlessIndex = 0XFFFFFFFFU;
+inline constexpr uint32_t kInvalidBindlessIndex = 0xFFFFFFFFU;
 inline constexpr DomainToken kInvalidDomainToken { DomainToken::kInvalidValue };
 inline constexpr IndexSpaceToken kInvalidIndexSpaceToken {
-  IndexSpaceToken::kInvalidValue
+  IndexSpaceToken::kInvalidValue,
 };
 
 struct IndexSpaceDesc {
@@ -83,8 +82,8 @@ inline constexpr IndexSpaceToken kSamplerIndexSpace { 1U };
 
 inline constexpr std::array<IndexSpaceDesc, 2> kIndexSpaceTable = {
   {
-    IndexSpaceDesc { kSrvUavCbvIndexSpace, "srv_uav_cbv" },
-    IndexSpaceDesc { kSamplerIndexSpace, "sampler" },
+    IndexSpaceDesc { .token = kSrvUavCbvIndexSpace, .id = "srv_uav_cbv" },
+    IndexSpaceDesc { .token = kSamplerIndexSpace, .id = "sampler" },
   },
 };
 
@@ -122,40 +121,40 @@ inline constexpr uint32_t kLinearClampSamplerIndex = 3U;
 inline constexpr std::array<DomainDesc, 4> kDomainTable = {
   {
     DomainDesc {
-      kGlobalSrvDomain,
-      "srv_global",
-      "GlobalSRV",
-      kSrvUavCbvIndexSpace,
-      kGlobalSrvShaderIndexBase,
-      kGlobalSrvCapacity,
-      "buffer_srv",
+      .token = kGlobalSrvDomain,
+      .id = "srv_global",
+      .name = "GlobalSRV",
+      .index_space = kSrvUavCbvIndexSpace,
+      .shader_index_base = kGlobalSrvShaderIndexBase,
+      .capacity = kGlobalSrvCapacity,
+      .shader_access_class = "buffer_srv",
     },
     DomainDesc {
-      kMaterialsDomain,
-      "materials",
-      "Materials",
-      kSrvUavCbvIndexSpace,
-      kMaterialsShaderIndexBase,
-      kMaterialsCapacity,
-      "buffer_srv",
+      .token = kMaterialsDomain,
+      .id = "materials",
+      .name = "Materials",
+      .index_space = kSrvUavCbvIndexSpace,
+      .shader_index_base = kMaterialsShaderIndexBase,
+      .capacity = kMaterialsCapacity,
+      .shader_access_class = "buffer_srv",
     },
     DomainDesc {
-      kTexturesDomain,
-      "textures",
-      "Textures",
-      kSrvUavCbvIndexSpace,
-      kTexturesShaderIndexBase,
-      kTexturesCapacity,
-      "texture_srv",
+      .token = kTexturesDomain,
+      .id = "textures",
+      .name = "Textures",
+      .index_space = kSrvUavCbvIndexSpace,
+      .shader_index_base = kTexturesShaderIndexBase,
+      .capacity = kTexturesCapacity,
+      .shader_access_class = "texture_srv",
     },
     DomainDesc {
-      kSamplersDomain,
-      "samplers",
-      "Samplers",
-      kSamplerIndexSpace,
-      kSamplersShaderIndexBase,
-      kSamplersCapacity,
-      "sampler",
+      .token = kSamplersDomain,
+      .id = "samplers",
+      .name = "Samplers",
+      .index_space = kSamplerIndexSpace,
+      .shader_index_base = kSamplersShaderIndexBase,
+      .capacity = kSamplersCapacity,
+      .shader_access_class = "sampler",
     },
   },
 };

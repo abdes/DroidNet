@@ -750,7 +750,7 @@ def generate(
             # 5) C++ string constants or constexpr variables that include
             # 'Generated' in the identifier, e.g. kBindlessGeneratedAt[] = "...";
             out = re.sub(
-                r'(\b\w*Generated(?:At)?\s*\[\s*\]\s*=\s*")([^"\n]*)(";)',
+                r'(\b\w*Generated(?:At)?\s*(?:\[\s*\])?\s*=\s*")([^"\n]*)(";)',
                 r"\1<TS>\3",
                 out,
                 flags=re.MULTILINE,

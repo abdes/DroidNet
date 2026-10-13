@@ -12,7 +12,6 @@ slot constants. The tool is typically invoked from CMake during builds.
 """
 
 import argparse
-import sys
 from .generator import generate
 from .reporting import Reporter
 from ._version import __version__

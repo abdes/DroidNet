@@ -22,7 +22,6 @@ TEMPLATE_ABI_CPP = """//===-----------------------------------------------------
 #pragma once
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 
 #include <Oxygen/Base/NamedType.h>
@@ -42,7 +41,7 @@ struct DomainToken : detail::DomainTokenBase {{
   using Base = detail::DomainTokenBase;
   using Base::Base;
 
-  static constexpr uint16_t kInvalidValue = 0xFFFFu;
+  static constexpr uint16_t kInvalidValue = 0xFFFFU;
 
   [[nodiscard]] constexpr auto IsValid() const noexcept -> bool
   {{
@@ -54,7 +53,7 @@ struct IndexSpaceToken : detail::IndexSpaceTokenBase {{
   using Base = detail::IndexSpaceTokenBase;
   using Base::Base;
 
-  static constexpr uint16_t kInvalidValue = 0xFFFFu;
+  static constexpr uint16_t kInvalidValue = 0xFFFFU;
 
   [[nodiscard]] constexpr auto IsValid() const noexcept -> bool
   {{
@@ -67,7 +66,7 @@ static_assert(alignof(DomainToken) == alignof(uint16_t));
 static_assert(sizeof(IndexSpaceToken) == sizeof(uint16_t));
 static_assert(alignof(IndexSpaceToken) == alignof(uint16_t));
 
-inline constexpr uint32_t kInvalidBindlessIndex = {invalid:#010X}U;
+inline constexpr uint32_t kInvalidBindlessIndex = 0x{invalid:08X}U;
 inline constexpr DomainToken kInvalidDomainToken {{ DomainToken::kInvalidValue }};
 inline constexpr IndexSpaceToken kInvalidIndexSpaceToken {{
   IndexSpaceToken::kInvalidValue
@@ -166,7 +165,7 @@ TEMPLATE_ABI_HLSL = """//===----------------------------------------------------
 #ifndef OXYGEN_BINDLESS_ABI_HLSL
 #define OXYGEN_BINDLESS_ABI_HLSL
 
-static const uint K_INVALID_BINDLESS_INDEX = {invalid:#010X};
+static const uint K_INVALID_BINDLESS_INDEX = 0x{invalid:08X};
 
 static inline bool BX_IsInDomain(uint idx, uint base, uint capacity)
 {{
@@ -176,7 +175,7 @@ static inline bool BX_IsInDomain(uint idx, uint base, uint capacity)
 static inline uint BX_TryUseGlobalIndexInDomain(uint idx, uint base, uint capacity)
 {{
 #ifdef BINDLESS_VALIDATE
-	return BX_IsInDomain(idx, base, capacity) ? idx : {invalid:#010X};
+	return BX_IsInDomain(idx, base, capacity) ? idx : 0x{invalid:08X};
 #else
 	return idx;
 #endif
@@ -192,7 +191,6 @@ TEMPLATE_RS_D3D12_CPP = """//===------------------------------------------------
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
-// clang-format off
 
 // Generated file - do not edit.
 // Source: {src}
@@ -204,7 +202,6 @@ TEMPLATE_RS_D3D12_CPP = """//===------------------------------------------------
 #pragma once
 
 #include <array>
-#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <span>
@@ -224,7 +221,6 @@ enum class RootParam : uint32_t {{
 {root_param_table}
 
 }} // namespace oxygen::bindless::generated::d3d12
-// clang-format on
 """
 
 TEMPLATE_STRATEGY_D3D12_CPP = """//===----------------------------------------------------------------------===//
@@ -245,7 +241,7 @@ TEMPLATE_STRATEGY_D3D12_CPP = """//===------------------------------------------
 
 namespace oxygen::bindless::generated::d3d12 {{
 
-static constexpr const char kStrategyJson[] = R"OXJ(
+static constexpr const char* kStrategyJson = R"OXJ(
 {json_body}
 )OXJ";
 
@@ -258,7 +254,6 @@ TEMPLATE_PIPELINE_LAYOUT_VULKAN_CPP = """//===----------------------------------
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
-// clang-format off
 
 // Generated file - do not edit.
 // Source: {src}
@@ -348,7 +343,6 @@ inline constexpr std::array<PipelineLayoutEntryDesc, {layout_entry_count}>
 }}}};
 
 }} // namespace oxygen::bindless::generated::vulkan
-// clang-format on
 """
 
 TEMPLATE_META_CPP = """//===----------------------------------------------------------------------===//
@@ -356,7 +350,6 @@ TEMPLATE_META_CPP = """//===----------------------------------------------------
 // copy at https://opensource.org/licenses/BSD-3-Clause.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
-// clang-format off
 
 // Generated file - do not edit.
 // Source: {src}
@@ -369,12 +362,11 @@ TEMPLATE_META_CPP = """//===----------------------------------------------------
 
 namespace oxygen::bindless::generated {{
 
-static constexpr const char kBindlessSourcePath[] = {src_cpp};
-static constexpr const char kBindlessSourceVersion[] = {src_ver_cpp};
-static constexpr const char kBindlessSchemaVersion[] = {schema_ver_cpp};
-static constexpr const char kBindlessToolVersion[] = {tool_ver_cpp};
-static constexpr const char kBindlessGeneratedAt[] = {ts_cpp};
+static constexpr const char* kBindlessSourcePath = {src_cpp};
+static constexpr const char* kBindlessSourceVersion = {src_ver_cpp};
+static constexpr const char* kBindlessSchemaVersion = {schema_ver_cpp};
+static constexpr const char* kBindlessToolVersion = {tool_ver_cpp};
+static constexpr const char* kBindlessGeneratedAt = {ts_cpp};
 
 }} // namespace oxygen::bindless::generated
-// clang-format on
 """

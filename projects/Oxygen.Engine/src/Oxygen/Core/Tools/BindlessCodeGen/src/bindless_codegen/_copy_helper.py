@@ -140,10 +140,8 @@ def run_batch(generated_dir: Path, dest_root: Path, verbose: bool) -> int:
     for p in files:
         if generated_dir and generated_dir in p.parents:
             rel = p.relative_to(generated_dir)
-            rel_display = str(rel)
         else:
             rel = p.name
-            rel_display = p.name
         dst = dest_root / rel
         rc = copy_single(p, dst, verbose)
         if rc != 0:

@@ -111,12 +111,12 @@ def render_cpp_root_signature(
         if reg is not None:
             regs_lines.append(
                 f"static constexpr uint32_t k{cname}Register = "
-                f"{int(_digits(reg) or 0)}u; // '{reg}'"
+                f"{int(_digits(reg) or 0)}U; // '{reg}'"
             )
         if space is not None:
             regs_lines.append(
                 f"static constexpr uint32_t k{cname}Space = "
-                f"{int(_digits(space) or 0)}u; // '{space}'"
+                f"{int(_digits(space) or 0)}U; // '{space}'"
             )
 
         if param.get("type") == "descriptor_table":
@@ -124,15 +124,17 @@ def render_cpp_root_signature(
             descriptor_kind = str(table.get("descriptor_kind"))
             ranges_name = f"kRootParam{idx}Ranges"
             if bool(table.get("unbounded")):
-                num_descriptors = "(std::numeric_limits<uint32_t>::max)()"
+                num_descriptors = "std::numeric_limits<uint32_t>::max()"
             else:
                 num_descriptors = f"{int(table.get('descriptor_count', 0))}U"
             range_line = (
                 "    RootParamRange{ "
-                f"{range_map[descriptor_kind]}, "
+                f".range_type = {range_map[descriptor_kind]}, "
+                ".base_register = "
                 f"{int(_digits(table.get('shader_register')) or 0)}U, "
+                ".register_space = "
                 f"{int(_digits(table.get('register_space')) or 0)}U, "
-                f"{num_descriptors} "
+                f".num_descriptors = {num_descriptors} "
                 "},"
             )
             structs_lines.append(
@@ -140,25 +142,33 @@ def render_cpp_root_signature(
                 f"{ranges_name} = {{ {{\n{range_line}\n}} }};"
             )
             table_entries.append(
-                "  RootParamDesc{ RootParamKind::DescriptorTable, 0U, 0U, "
-                f"std::span<const RootParamRange>{{ {ranges_name}.data(), "
-                f"{ranges_name}.size() }}, "
-                f"static_cast<uint32_t>({ranges_name}.size()), 0U }},"
+                "  RootParamDesc{ .kind = RootParamKind::DescriptorTable, "
+                ".shader_register = 0U, .register_space = 0U, "
+                ".ranges = std::span<const RootParamRange>{ "
+                f"{ranges_name}.data(), {ranges_name}.size() }}, "
+                f".ranges_count = static_cast<uint32_t>({ranges_name}.size()), "
+                ".constants_count = 0U },"
             )
         elif param.get("type") == "cbv":
             table_entries.append(
-                "  RootParamDesc{ RootParamKind::CBV, "
+                "  RootParamDesc{ .kind = RootParamKind::CBV, "
+                ".shader_register = "
                 f"{int(_digits(param.get('shader_register')) or 0)}U, "
+                ".register_space = "
                 f"{int(_digits(param.get('register_space')) or 0)}U, "
-                "std::span<const RootParamRange>{}, 0U, 0U },"
+                ".ranges = std::span<const RootParamRange>{}, "
+                ".ranges_count = 0U, .constants_count = 0U },"
             )
         elif param.get("type") == "root_constants":
             table_entries.append(
-                "  RootParamDesc{ RootParamKind::RootConstants, "
+                "  RootParamDesc{ .kind = RootParamKind::RootConstants, "
+                ".shader_register = "
                 f"{int(_digits(param.get('shader_register')) or 0)}U, "
+                ".register_space = "
                 f"{int(_digits(param.get('register_space')) or 0)}U, "
-                "std::span<const RootParamRange>{}, 0U, "
-                f"{int(param.get('num_32bit_values', 0))}U }},"
+                ".ranges = std::span<const RootParamRange>{}, "
+                ".ranges_count = 0U, "
+                f".constants_count = {int(param.get('num_32bit_values', 0))}U }},"
             )
 
     enum_lines.append(f"  kCount = {len(root_sig or [])},")
@@ -177,12 +187,12 @@ struct RootParamRange {
 };
 
 struct RootParamDesc {
-  RootParamKind kind;
-  uint32_t shader_register;
-  uint32_t register_space;
+  RootParamKind kind { RootParamKind::DescriptorTable };
+  uint32_t shader_register { 0U };
+  uint32_t register_space { 0U };
   std::span<const RootParamRange> ranges; // empty span for non-tables
-  uint32_t ranges_count;
-  uint32_t constants_count; // for root constants
+  uint32_t ranges_count { 0U };
+  uint32_t constants_count { 0U }; // for root constants
 };
 """
 

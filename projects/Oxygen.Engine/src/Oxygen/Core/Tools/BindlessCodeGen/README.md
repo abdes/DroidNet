@@ -91,11 +91,11 @@ static const uint K_TEXTURES_CAPACITY = 65536;
 // Generated: 2025-08-17 20:52:23
 
 namespace oxygen::bindless::generated {
-  static constexpr const char kBindlessSourcePath[] = "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml";
-  static constexpr const char kBindlessSourceVersion[] = "2.0.0";
-  static constexpr const char kBindlessSchemaVersion[] = "2.0.0";
-  static constexpr const char kBindlessToolVersion[] = "1.2.2";
-  static constexpr const char kBindlessGeneratedAt[] = "2025-08-17 20:52:23";
+  static constexpr const char* kBindlessSourcePath = "projects/Oxygen.Engine/src/Oxygen/Core/Meta/Bindless.yaml";
+  static constexpr const char* kBindlessSourceVersion = "2.0.0";
+  static constexpr const char* kBindlessSchemaVersion = "2.0.0";
+  static constexpr const char* kBindlessToolVersion = "1.2.2";
+  static constexpr const char* kBindlessGeneratedAt = "2025-08-17 20:52:23";
 }
 ```
 

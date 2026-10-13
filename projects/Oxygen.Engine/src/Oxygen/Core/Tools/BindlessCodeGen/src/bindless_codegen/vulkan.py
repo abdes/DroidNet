@@ -233,9 +233,9 @@ def render_cpp_pipeline_layout(
         descriptor_set_enums.append(f"  {token_name} = {idx},")
         descriptor_set_entries.append(
             "  DescriptorSetDesc{ "
-            f"DescriptorSet::{token_name}, "
-            f'"{set_id}", '
-            f"{int(descriptor_set.get('set', 0))}U "
+            f".token = DescriptorSet::{token_name}, "
+            f'.id = "{set_id}", '
+            f".set = {int(descriptor_set.get('set', 0))}U "
             "},"
         )
     descriptor_set_enums.append(f"  kCount = {len(descriptor_sets)},")
@@ -270,13 +270,17 @@ def render_cpp_pipeline_layout(
         binding_enums.append(f"  {token_name} = {idx},")
         binding_entries.append(
             "  BindingDesc{ "
-            f"Binding::{token_name}, "
-            f'"{binding_id}", '
+            f".token = Binding::{token_name}, "
+            f'.id = "{binding_id}", '
+            ".descriptor_set = "
             f"DescriptorSet::{set_token_by_id[str(binding.get('set'))]}, "
-            f"{int(binding.get('binding', 0))}U, "
+            f".binding = {int(binding.get('binding', 0))}U, "
+            ".descriptor_type = "
             f"{descriptor_type_expr[str(binding.get('descriptor_type'))]}, "
-            f"{int(descriptor_count)}U, "
+            f".descriptor_count = {int(descriptor_count)}U, "
+            ".variable_count = "
             f"{str(bool(binding.get('variable_count', False))).lower()}, "
+            ".update_after_bind = "
             f"{str(bool(binding.get('update_after_bind', False))).lower()} "
             "},"
         )
@@ -289,10 +293,11 @@ def render_cpp_pipeline_layout(
         domain = domains_by_id[domain_id]
         domain_binding_entries.append(
             "  DomainBindingDesc{ "
-            f'"{domain_id}", '
-            f"Binding::{binding_token_by_id[binding_id]}, "
+            f'.domain_id = "{domain_id}", '
+            f".binding = Binding::{binding_token_by_id[binding_id]}, "
+            ".array_element_base = "
             f"{int(realization.get('array_element_base', 0))}U, "
-            f"{int(domain.get('capacity', 0))}U "
+            f".capacity = {int(domain.get('capacity', 0))}U "
             "},"
         )
 
@@ -314,12 +319,12 @@ def render_cpp_pipeline_layout(
             stages = "|".join(entry.get("stages") or [])
         layout_entry_entries.append(
             "  PipelineLayoutEntryDesc{ "
-            f"LayoutEntry::{token_name}, "
-            f'"{entry_id}", '
-            f"{kind_expr}, "
-            f"{descriptor_set_index}U, "
-            f"{size_bytes}U, "
-            f'"{stages}" '
+            f".token = LayoutEntry::{token_name}, "
+            f'.id = "{entry_id}", '
+            f".kind = {kind_expr}, "
+            f".descriptor_set_index = {descriptor_set_index}U, "
+            f".size_bytes = {size_bytes}U, "
+            f'.stages = "{stages}" '
             "},"
         )
     layout_entry_enums.append(f"  kCount = {len(pipeline_layout)},")
