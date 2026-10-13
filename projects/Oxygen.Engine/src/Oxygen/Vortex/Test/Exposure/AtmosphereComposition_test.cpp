@@ -29,8 +29,9 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -940,7 +941,8 @@ NOLINT_TEST_F(
   constexpr auto kPreExposure = 2.0F;
   constexpr auto kTolerance = 2.0e-5F;
   constexpr auto kFarDepth = 0.0F;
-  console::Console console;
+  oxygen::commands::CommandRegistry command_registry;
+  console::Console console { oxygen::observer_ptr { &command_registry } };
   renderer_->RegisterConsoleBindings(observer_ptr { &console });
   // The renderer reads its cvars through the console until unregistered.
   const auto unregister_console = ScopeGuard(
@@ -951,7 +953,7 @@ NOLINT_TEST_F(
         .Execute(
           std::string { "vtx.local_fog.global_start_distance_m " } + meters)
         .status,
-      console::ExecutionStatus::kOk);
+      commands::ExecutionStatus::kOk);
   };
 
   // A sphere from 20 m to 40 m along the view axis, straddling the volume's

@@ -7,8 +7,9 @@ Plays a cooked example scene in Oxygen.Player.
 Finds the scene among the cooked content under .cooked (the main root and
 every imported model root), writes a launch file that mounts it, and runs
 Oxygen.Player with that launch file. Arguments after `--` go to the player
-unchanged, for example `-- -w 1280x720 -r 60 -c vtx.occlusion.enable=true`;
-run with `-- --help` to list them.
+unchanged, for example `-- -w 1280x720 -r 60 -c vtx.occlusion.enable=true`,
+or `-- --control` to accept JSON-RPC commands on loopback; run with
+`-- --help` to list them.
 
 The launch file mounts .cooked/main and, for an imported scene, its import
 root last so it wins; it uses this folder as the script source root, so
@@ -157,7 +158,7 @@ if ((Test-Path -LiteralPath $mainRoot -PathType Container) -and $target.Root -ne
 $mounts += $target.Root
 
 $launch = [ordered]@{
-    version             = 1
+    version             = 2
     mounts              = $mounts
     scene               = $target.VirtualPath
     script_source_roots = @($ContentDir)

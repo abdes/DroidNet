@@ -14,6 +14,7 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Host/GpuWorkOverlay.h>
 #include <Oxygen/Host/api_export.h>
+#include <Oxygen/ImGui/Console/ConsoleUiState.h>
 #include <Oxygen/ImGui/Widgets/StatsOverlay.h>
 #include <Oxygen/ImGui/Widgets/Toolbar.h>
 
@@ -80,7 +81,8 @@ public:
   OXGN_HOST_API auto Draw(IAsyncEngine& engine,
     const engine::FrameContext& context,
     observer_ptr<vortex::Renderer> renderer, std::optional<ViewId> main_view,
-    imgui::consoleui::ConsoleUiState& console_ui) -> void;
+    imgui::consoleui::ConsoleUiState& console_ui,
+    const imgui::consoleui::LineRunner& run) -> void;
 
   //! Releases the GPU work overlay's timeline lease; call before the
   //! renderer goes away.
@@ -89,7 +91,8 @@ public:
 private:
   auto DrawStrip(IAsyncEngine& engine,
     observer_ptr<const vortex::Renderer> renderer,
-    imgui::consoleui::ConsoleUiState& console_ui) -> void;
+    imgui::consoleui::ConsoleUiState& console_ui,
+    const imgui::consoleui::LineRunner& run) -> void;
 
   imgui::DropdownMenuState view_mode_menu_;
   imgui::DropdownMenuState show_menu_;

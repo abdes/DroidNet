@@ -102,7 +102,8 @@ namespace {
 } // namespace
 
 auto CommandPalette::Draw(oxygen::console::Console& console,
-  ConsoleUiState& state, ImGuiContext* imgui_context) -> void
+  ConsoleUiState& state, ImGuiContext* imgui_context, const LineRunner& run)
+  -> void
 {
   if (imgui_context == nullptr) {
     return;
@@ -328,7 +329,7 @@ auto CommandPalette::Draw(oxygen::console::Console& console,
     if (!arguments.empty()) {
       command_line += " " + arguments;
     }
-    (void)console.Execute(command_line);
+    run(command_line, commands::CommandSource::kUi);
     state.SetConsoleVisible(true);
     state.SetPaletteVisible(false);
   }

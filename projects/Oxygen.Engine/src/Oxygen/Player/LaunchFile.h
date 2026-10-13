@@ -45,6 +45,14 @@ struct LaunchWindow {
   std::uint32_t frame_cap { 0U };
 };
 
+//! The launch file's control server settings.
+struct LaunchControl {
+  //! Loopback TCP port; 0 takes an ephemeral one.
+  std::uint16_t port { 0U };
+  //! Stop when the owning client leaves, or when none connects in time.
+  bool exit_when_owner_leaves { false };
+};
+
 //! The whole input of a player run, read from its launch file.
 struct PlayerLaunch {
   //! Highest precedence last.
@@ -54,8 +62,8 @@ struct PlayerLaunch {
   //! Absolute; non-empty enables source reload.
   std::vector<std::filesystem::path> script_source_roots;
   LaunchWindow window;
-  //! Pipe name without the `\\.\pipe\` prefix.
-  std::optional<std::string> diagnostics_pipe;
+  //! Starts the control server when present.
+  std::optional<LaunchControl> control;
 };
 
 //! Parses launch file text; relative paths resolve against `base_dir`.

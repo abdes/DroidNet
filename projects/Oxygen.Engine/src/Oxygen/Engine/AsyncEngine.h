@@ -15,6 +15,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/PathFinder.h>
@@ -88,6 +89,7 @@ public:
   OXGN_NGIN_API auto Resume() -> void override;
   OXGN_NGIN_NDAPI auto IsPaused() const -> bool override;
   OXGN_NGIN_API auto Step(std::uint32_t frames) -> void override;
+  OXGN_NGIN_NDAPI auto GetPendingSteps() const -> std::uint32_t override;
   OXGN_NGIN_NDAPI auto BeginSession() -> bool override;
   OXGN_NGIN_API auto EndSession() -> void override;
   OXGN_NGIN_NDAPI auto GetSessionState() const -> SessionState override;
@@ -219,6 +221,8 @@ public:
   OXGN_NGIN_NDAPI auto GetConsole() noexcept -> console::Console& override;
   OXGN_NGIN_NDAPI auto GetConsole() const noexcept
     -> const console::Console& override;
+  OXGN_NGIN_NDAPI auto GetCommands() noexcept
+    -> commands::CommandRegistry& override;
 
   OXGN_NGIN_NDAPI auto GetModuleByType(TypeId type_id) const noexcept
     -> std::optional<std::reference_wrapper<engine::EngineModule>> override;
@@ -291,7 +295,6 @@ private:
   auto ApplyAllConsoleCVars() -> void;
   auto ApplyConsoleStateAtFrameStart(observer_ptr<engine::FrameContext> context)
     -> void;
-  auto RegisterRunStateConsoleCommands() -> void;
 
   //! Applies pause, step and session requests; true when this frame is a
   //! frame step.
@@ -335,6 +338,7 @@ private:
 
   std::shared_ptr<Platform> platform_;
   std::weak_ptr<Graphics> gfx_weak_;
+  commands::CommandRegistry commands_;
   console::Console console_;
   std::shared_ptr<const PathFinderConfig> path_finder_config_;
   PathFinder path_finder_ {
@@ -375,7 +379,7 @@ private:
   std::atomic_bool paused_ { false };
   std::atomic<SessionState> session_state_ { SessionState::kNone };
   bool session_active_ { false };
-  std::uint32_t steps_remaining_ { 0U };
+  std::atomic<std::uint32_t> steps_remaining_ { 0U };
 };
 
 } // namespace oxygen

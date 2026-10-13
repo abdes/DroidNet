@@ -13,17 +13,18 @@
 #include "LightBench/LightBenchSettings.h"
 
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Console/Constants.h>
 
 namespace oxygen::examples::light_bench {
 namespace {
-  auto Invalid(const char* message) -> console::ExecutionResult
+  auto Invalid(const char* message) -> commands::CommandResult
   {
     return {
-      .status = console::ExecutionStatus::kInvalidArguments,
-      .exit_code = console::kExitCodeInvalidArguments,
+      .status = commands::ExecutionStatus::kInvalidArguments,
       .error = message,
     };
   }
@@ -43,14 +44,13 @@ LightBenchConsoleBindings::LightBenchConsoleBindings(
       Unregister();
     }
   });
-  handles_.at(0) = console_.RegisterCommand({
+  auto& registry = *console_.Commands();
+  handles_.at(0) = registry.Register({
     .name = "lightbench.presets",
+    .label = "LightBench Presets",
     .help = "List the available complete LightBench presets.",
-    .flags = console::CommandFlags::kNone,
-    .handler = [](const auto& args, const auto&) -> console::ExecutionResult {
-      if (!args.empty()) {
-        return Invalid("lightbench.presets takes no arguments.");
-      }
+    .handler = [](const commands::CommandArgs&,
+                 const commands::CommandContext&) -> commands::CommandResult {
       std::string output;
       for (const auto& preset : GetPresets()) {
         output += std::string(preset.id) + " - " + preset.name + "\n";
@@ -58,21 +58,27 @@ LightBenchConsoleBindings::LightBenchConsoleBindings(
       return { .output = std::move(output) };
     },
   });
-  handles_.at(1) = console_.RegisterCommand({
+  handles_.at(1) = registry.Register({
     .name = "lightbench.preset",
-    .help = "lightbench.preset [id] — inspect active/pending configuration, or "
-            "queue a complete preset for the next frame.",
-    .flags = console::CommandFlags::kNone,
-    .handler
-    = [this](const auto& args, const auto&) -> console::ExecutionResult {
-      if (args.empty()) {
-        return { .output = actions_.inspect() };
-      }
-      if (args.size() != 1) {
-        return Invalid("Expected one preset id; use lightbench.presets.");
+    .label = "LightBench Preset",
+    .help = "Inspect the active and pending configuration, or queue a "
+            "complete preset for the next frame.",
+    .params = {
+      commands::CommandParam {
+        .name = "id",
+        .type = commands::ParamType::kString,
+        .help = "Preset id (see lightbench.presets); empty inspects",
+        .default_value = commands::ParamValue { std::string {} },
+      },
+    },
+    .handler = [this](const commands::CommandArgs& args,
+                 const commands::CommandContext&) -> commands::CommandResult {
+      const auto& id = args.GetString("id");
+      if (id.empty()) {
+        return commands::CommandResult::Success(actions_.inspect());
       }
       for (const auto& preset : GetPresets()) {
-        if (preset.id == args.front()) {
+        if (preset.id == id) {
           actions_.select(preset.preset);
           return {
             .output = "queued preset=" + std::string(preset.id)
@@ -83,16 +89,13 @@ LightBenchConsoleBindings::LightBenchConsoleBindings(
       return Invalid("Unknown preset id; use lightbench.presets.");
     },
   });
-  handles_.at(2) = console_.RegisterCommand({
+  handles_.at(2) = registry.Register({
     .name = "lightbench.reset",
+    .label = "Reset LightBench Preset",
     .help
     = "Queue reset of the active LightBench preset at the next frame boundary.",
-    .flags = console::CommandFlags::kNone,
-    .handler
-    = [this](const auto& args, const auto&) -> console::ExecutionResult {
-      if (!args.empty()) {
-        return Invalid("lightbench.reset takes no arguments.");
-      }
+    .handler = [this](const commands::CommandArgs&,
+                 const commands::CommandContext&) -> commands::CommandResult {
       actions_.reset();
       return {
         .output
@@ -101,7 +104,7 @@ LightBenchConsoleBindings::LightBenchConsoleBindings(
     },
   });
   if (std::ranges::any_of(handles_,
-        [](const auto handle) -> auto { return !handle.IsValid(); })) {
+        [](const auto& handle) -> bool { return !handle.IsValid(); })) {
     throw std::runtime_error("Cannot register LightBench console commands");
   }
   registered = true;
@@ -111,9 +114,9 @@ LightBenchConsoleBindings::~LightBenchConsoleBindings() { Unregister(); }
 auto LightBenchConsoleBindings::Unregister() -> void
 {
   for (const auto handle : handles_) {
-    console_.UnregisterCommand(handle);
+    console_.Commands()->Unregister(handle);
   }
-  handles_.fill(console::CommandHandle {});
+  handles_.fill(commands::CommandHandle {});
 }
 
 } // namespace oxygen::examples::light_bench

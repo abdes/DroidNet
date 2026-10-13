@@ -196,7 +196,7 @@ auto ConsoleUiState::SetSeverityEnabled(
 }
 
 auto ConsoleUiState::AppendLogEntry(
-  std::string command, const oxygen::console::ExecutionResult& result) -> void
+  std::string command, const oxygen::commands::CommandResult& result) -> void
 {
   if (log_entries_.size() >= kMaxLogEntries) {
     log_entries_.erase(log_entries_.begin());
@@ -228,9 +228,9 @@ auto ConsoleUiState::SetProcessedExecutionRecordCount(
 }
 
 auto ConsoleUiState::SeverityFromResult(
-  const oxygen::console::ExecutionResult& result) noexcept -> LogSeverity
+  const oxygen::commands::CommandResult& result) noexcept -> LogSeverity
 {
-  using oxygen::console::ExecutionStatus;
+  using oxygen::commands::ExecutionStatus;
   switch (result.status) {
   case ExecutionStatus::kOk:
     return result.error.empty() ? LogSeverity::kSuccess : LogSeverity::kWarning;

@@ -22,8 +22,9 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/EngineTag.h>
@@ -703,15 +704,16 @@ NOLINT_TEST_F(
       | RendererCapabilityFamily::kLightingData
       | RendererCapabilityFamily::kEnvironmentLighting
       | RendererCapabilityFamily::kFinalOutputComposition);
-  console::Console console;
+  oxygen::commands::CommandRegistry command_registry;
+  console::Console console { oxygen::observer_ptr { &command_registry } };
   renderer_->RegisterConsoleBindings(observer_ptr {
     &console,
   });
   ASSERT_EQ(
     console.Execute("vtx.volumetric_fog.temporal_reprojection false").status,
-    console::ExecutionStatus::kOk);
+    commands::ExecutionStatus::kOk);
   ASSERT_EQ(console.Execute("vtx.volumetric_fog.jitter false").status,
-    console::ExecutionStatus::kOk);
+    commands::ExecutionStatus::kOk);
   auto scene = std::make_shared<scene::Scene>("Producer range", 4U);
   scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
   auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();

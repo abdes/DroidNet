@@ -72,8 +72,11 @@ struct HostViews {
 
  A subclass returns `GetSupportedPhases()` with at least `kHostPhases`, and
  calls the base implementation when it overrides `OnFrameStart`,
- `OnSceneMutation`, `OnGuiUpdate`, `OnShutdown`, `RegisterConsoleBindings`
- or `ApplyConsoleCVars`.
+ `OnSceneMutation`, `OnGuiUpdate`, `OnShutdown`, `RegisterConsoleBindings`,
+ `RegisterCommands` or `ApplyConsoleCVars`.
+
+ Every interaction in the debug UI (toolbar, hotkeys, console, palette) is
+ posted to the host's command dispatcher as a console line.
 */
 class HostModule : public engine::EngineModule {
   OXYGEN_TYPED(HostModule)
@@ -97,6 +100,8 @@ public:
 
   OXGN_HOST_API auto RegisterConsoleBindings(
     observer_ptr<console::Console> console) noexcept -> void override;
+  OXGN_HOST_API auto RegisterCommands(
+    observer_ptr<commands::CommandRegistry> registry) noexcept -> void override;
   OXGN_HOST_API auto ApplyConsoleCVars(
     observer_ptr<const console::Console> console) noexcept -> void override;
 
@@ -178,6 +183,10 @@ protected:
   //! Null when headless.
   OXGN_HOST_NDAPI auto ResolveImGuiModule() const noexcept
     -> observer_ptr<imgui::ImGuiModule>;
+
+  //! Posts a console line to the command dispatcher.
+  OXGN_HOST_API auto PostLine(
+    std::string line, commands::CommandSource source) const -> void;
 
 private:
   const HostContext& host_;

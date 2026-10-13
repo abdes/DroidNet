@@ -10,24 +10,27 @@
 #include <filesystem>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
-#include <type_traits>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include <fmt/format.h>
 #include <imgui.h>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Config/PathFinder.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Control/EventLog.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/View.h>
@@ -44,7 +47,6 @@
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Platform/Window.h>
-#include <Oxygen/Player/EventStream.h>
 #include <Oxygen/Player/LaunchFile.h>
 #include <Oxygen/Player/PlayerModule.h>
 #include <Oxygen/Player/PlayerProtocol.h>
@@ -112,7 +114,7 @@ namespace {
     observer_ptr<content::IAssetLoader> loader;
     observer_ptr<scripting::IScriptCompilationService> compiler;
     observer_ptr<engine::InputSystem> input;
-    observer_ptr<EventStream> events;
+    observer_ptr<control::EventLog> events;
     PathFinder path_finder;
     std::string scene_path;
   };
@@ -154,7 +156,13 @@ struct SessionLoad {
   std::vector<scripting::ScriptDiagnostic> diagnostics;
 };
 
-//! A mount replacement before a launcher's `play`.
+//! A Play waiting for its load outcome.
+struct PlayOutcome {
+  co::Event done;
+  commands::CommandResult result;
+};
+
+//! A mount replacement before a play.
 struct Remount {
   bool finished { false };
   std::string failure;
@@ -199,7 +207,7 @@ namespace {
     const auto scripts
       = scripting::SceneScriptAttachment(*in.loader, resolver, in.compiler,
         [events = in.events](const scripting::ScriptDiagnostic& d) -> void {
-          events->Diagnostic(d);
+          events->Publish("diagnostic", DiagnosticData(d));
         });
     auto instance = co_await instantiation::Instantiate(
       instantiation::SceneInstantiationRequest {
@@ -257,11 +265,10 @@ namespace {
 } // namespace
 
 PlayerModule::PlayerModule(const host::HostContext& host, PlayerLaunch launch,
-  const observer_ptr<EventStream> events,
   std::vector<std::string> startup_cvars)
   : HostModule(host)
   , launch_(std::move(launch))
-  , events_(events)
+  , events_(host.events.get())
   , startup_cvars_(std::move(startup_cvars))
   , next_scene_(launch_.scene)
 {
@@ -307,7 +314,7 @@ auto PlayerModule::OnHostAttached(const observer_ptr<IAsyncEngine> engine)
     diagnostic_handler_ = scripting_->AddDiagnosticHandler(
       [events = events_](
         const scripting::ScriptDiagnostic& diagnostic) -> void {
-        events->Diagnostic(diagnostic);
+        events->Publish("diagnostic", DiagnosticData(diagnostic));
       });
   }
 
@@ -319,6 +326,14 @@ auto PlayerModule::OnHostAttached(const observer_ptr<IAsyncEngine> engine)
 
 auto PlayerModule::OnShutdown() noexcept -> void
 {
+  try {
+    ResolvePlay(commands::CommandResult::Failure(
+      commands::ExecutionStatus::kCancelled, "the engine is shutting down"));
+    Publish(LifecycleState::kStopping);
+  } catch (...) {
+    // Shutdown continues without the replies.
+    play_waiters_.clear();
+  }
   if (load_) {
     load_->cancel.Trigger();
     load_.reset();
@@ -334,39 +349,51 @@ auto PlayerModule::OnShutdown() noexcept -> void
   HostModule::OnShutdown();
 }
 
-auto PlayerModule::RegisterConsoleBindings(
-  const observer_ptr<console::Console> console) noexcept -> void
+auto PlayerModule::RegisterCommands(
+  const observer_ptr<commands::CommandRegistry> registry) noexcept -> void
 {
-  HostModule::RegisterConsoleBindings(console);
   try {
-    static_cast<void>(console->RegisterCommand(console::CommandDefinition {
+    static_cast<void>(registry->Register(commands::CommandDefinition {
       .name = std::string(kSessionBeginCommand),
-      .help = "Play the scene, or the scene at the given virtual path",
-      .flags = console::CommandFlags::kNone,
-      .handler = [this](const std::vector<std::string>& args,
-                   const console::CommandContext&) -> console::ExecutionResult {
-        if (Host().engine->GetSessionState()
-            != IAsyncEngine::SessionState::kNone
-          || remount_) {
-          return {
-            .status = console::ExecutionStatus::kError,
-            .error = "a play session is already running",
-          };
+      .label = "Play",
+      .help = "Remount the content and play the scene, or the scene at the "
+              "given virtual path",
+      .params = {
+        commands::CommandParam {
+          .name = "scene",
+          .type = commands::ParamType::kString,
+          .help = "Scene virtual path; the launch file's scene when empty",
+          .default_value = commands::ParamValue { std::string {} },
+        },
+      },
+      // Replies once the scene has loaded or failed. The waiting coroutine
+      // holds only the shared outcome, never the module.
+      .async_handler
+      = [this](commands::CommandArgs args,
+          commands::CommandContext) -> co::Co<commands::CommandResult> {
+        const auto& scene = args.GetString("scene");
+        auto started = HandlePlay(
+          scene.empty() ? std::nullopt : std::optional<std::string>(scene));
+        if (started.status != commands::ExecutionStatus::kOk) {
+          co_return started;
         }
-        if (!args.empty()) {
-          next_scene_ = args.front();
-        }
-        if (!Host().engine->BeginSession()) {
-          return {
-            .status = console::ExecutionStatus::kError,
-            .error = "a play session is already starting",
-          };
-        }
-        return { .status = console::ExecutionStatus::kOk };
+        const auto outcome = std::make_shared<PlayOutcome>();
+        play_waiters_.push_back(outcome);
+        co_await outcome->done;
+        co_return outcome->result;
+      },
+      .result_schema = nlohmann::json {
+        { "type", "object" },
+        { "properties",
+          {
+            { "scene", { { "type", "string" } } },
+            { "camera", { { "type", "string" } } },
+            { "issues", { { "type", "array" } } },
+          } },
       },
     }));
   } catch (const std::exception& ex) {
-    LOG_F(ERROR, "{}: console registration failed: {}", GetName(), ex.what());
+    LOG_F(ERROR, "{}: command registration failed: {}", GetName(), ex.what());
   }
 }
 
@@ -382,7 +409,7 @@ auto PlayerModule::OnSessionBegin(
     session_scene_ = next_scene_;
     was_paused_ = false;
     status_ = fmt::format("Loading {}", session_scene_);
-    events_->Lifecycle(LifecycleState::kSessionStarted, session_scene_);
+    Publish(LifecycleState::kSessionStarted);
     LOG_F(INFO, "{}: session started on '{}'", GetName(), session_scene_);
 
     load_ = std::make_shared<SessionLoad>();
@@ -422,9 +449,12 @@ auto PlayerModule::OnSessionEnd(
     clear_stage_ = true;
     if (!session_failed_) {
       status_ = std::string(kStoppedStatus);
+      // A session ended before its scene loaded never produced an outcome.
+      ResolvePlay(commands::CommandResult::Failure(
+        commands::ExecutionStatus::kCancelled, "the session ended"));
     }
     session_failed_ = false;
-    events_->Lifecycle(LifecycleState::kSessionEnded, session_scene_);
+    Publish(LifecycleState::kSessionEnded);
     LOG_F(INFO, "{}: session ended", GetName());
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "{}: session end failed: {}", GetName(), ex.what());
@@ -443,15 +473,11 @@ auto PlayerModule::OnFrameStart(
     clear_stage_ = false;
     LogSessionLeftovers();
   }
-  if (events_->IsLauncherGone()) {
-    LOG_F(INFO, "{}: the launcher closed the pipe; stopping", GetName());
-    Host().engine->Stop();
-  }
   ReportUnknownStartupCVars();
-  HandleRequests();
   FinishRemount();
   FinishLoad();
   ReportPauseChanges();
+  UpdateGpuWorkLease();
   ReportGpuWork();
   HostModule::OnFrameStart(context);
 }
@@ -481,54 +507,26 @@ auto PlayerModule::ReportUnknownStartupCVars() -> void
   startup_cvars_.clear();
 }
 
-auto PlayerModule::HandleRequests() -> void
-{
-  for (const auto& line : events_->TakeRequests()) {
-    auto request = ParseRequest(line);
-    if (!request) {
-      LOG_F(WARNING, "{}: ignored request: {}", GetName(), request.error());
-      continue;
-    }
-    std::visit(
-      [this](auto& value) -> void {
-        using T = std::decay_t<decltype(value)>;
-        const auto& engine = Host().engine;
-        if constexpr (std::is_same_v<T, PlayRequest>) {
-          HandlePlay(value.scene);
-        } else if constexpr (std::is_same_v<T, PauseRequest>) {
-          engine->Pause();
-        } else if constexpr (std::is_same_v<T, ResumeRequest>) {
-          engine->Resume();
-        } else if constexpr (std::is_same_v<T, StepRequest>) {
-          engine->Step(value.frames);
-        } else if constexpr (std::is_same_v<T, EndSessionRequest>) {
-          engine->EndSession();
-        } else if constexpr (std::is_same_v<T, StopRequest>) {
-          LOG_F(INFO, "{}: stop requested by the launcher", GetName());
-          engine->Stop();
-        } else if constexpr (std::is_same_v<T, StatsRequest>) {
-          HandleStats(value.gpu_work);
-        }
-      },
-      *request);
-  }
-}
-
-auto PlayerModule::HandlePlay(const std::optional<std::string>& scene) -> void
+auto PlayerModule::HandlePlay(const std::optional<std::string>& scene)
+  -> commands::CommandResult
 {
   if (Host().engine->GetSessionState() != IAsyncEngine::SessionState::kNone
     || remount_) {
-    LOG_F(WARNING, "{}: play ignored: a session is running", GetName());
-    return;
+    return commands::CommandResult::Failure(
+      commands::ExecutionStatus::kError, "a play session is already running");
   }
   next_scene_ = scene.value_or(launch_.scene);
   if (!CanRemount(launch_)) {
     // PAK files are immutable; a launcher recooks loose roots only.
     LOG_F(INFO, "{}: PAK mounts are reused, not remounted", GetName());
-    static_cast<void>(Host().engine->BeginSession());
-    return;
+    if (!Host().engine->BeginSession()) {
+      return commands::CommandResult::Failure(commands::ExecutionStatus::kError,
+        "a play session is already starting");
+    }
+    return commands::CommandResult::Success();
   }
   StartRemount();
+  return commands::CommandResult::Success();
 }
 
 auto PlayerModule::StartRemount() -> void
@@ -557,9 +555,13 @@ auto PlayerModule::FinishRemount() -> void
   if (!remount->failure.empty()) {
     LOG_F(ERROR, "{}: {}", GetName(), remount->failure);
     status_ = remount->failure;
-    events_->Lifecycle(
-      LifecycleState::kSceneFailed, remount->scene, remount->failure);
-    events_->Lifecycle(LifecycleState::kSessionEnded, remount->scene);
+    session_scene_ = remount->scene;
+    Publish(LifecycleState::kSceneFailed, remount->failure);
+    Publish(LifecycleState::kSessionEnded);
+    auto failure = commands::CommandResult::Failure(
+      commands::ExecutionStatus::kError, remount->failure);
+    failure.data = { { "scene", remount->scene } };
+    ResolvePlay(failure);
     return;
   }
   LOG_F(INFO, "{}: remounted the cooked content", GetName());
@@ -576,8 +578,12 @@ auto PlayerModule::FinishLoad() -> void
     LOG_F(ERROR, "{}: {}", GetName(), load->failure);
     status_ = load->failure;
     session_failed_ = true;
-    events_->Lifecycle(LifecycleState::kSceneFailed, session_scene_,
-      load->failure, load->issues);
+    Publish(LifecycleState::kSceneFailed, load->failure, load->issues);
+    auto failure = commands::CommandResult::Failure(
+      commands::ExecutionStatus::kError, load->failure);
+    failure.data = LifecycleData(
+      LifecycleState::kSceneFailed, session_scene_, {}, load->issues);
+    ResolvePlay(failure);
     Host().engine->EndSession();
     return;
   }
@@ -586,15 +592,21 @@ auto PlayerModule::FinishLoad() -> void
   with_height_fog_ = IsHeightFogRequested(*scene_);
   with_local_fog_ = HasEnabledLocalFog(*scene_);
   status_.clear();
-  events_->Lifecycle(
-    LifecycleState::kSceneLoaded, session_scene_, {}, load->issues);
+  Publish(LifecycleState::kSceneLoaded, {}, load->issues);
   for (const auto& diagnostic : load->diagnostics) {
-    events_->Diagnostic(diagnostic);
+    events_->Publish("diagnostic", DiagnosticData(diagnostic));
   }
   const auto camera = scene_->ActiveCamera();
+  const auto camera_name
+    = camera.has_value() ? camera->GetName() : std::string {};
   LOG_F(INFO, "{}: scene '{}' loaded with {} issue(s), viewed through '{}'",
-    GetName(), session_scene_, load->issues.size(),
-    camera.has_value() ? camera->GetName() : std::string {});
+    GetName(), session_scene_, load->issues.size(), camera_name);
+  auto loaded = LifecycleData(
+    LifecycleState::kSceneLoaded, session_scene_, {}, load->issues);
+  loaded["camera"] = camera_name;
+  ResolvePlay(commands::CommandResult::Success(
+    fmt::format("playing {} through '{}'", session_scene_, camera_name),
+    std::move(loaded)));
 }
 
 auto PlayerModule::ReportPauseChanges() -> void
@@ -607,15 +619,31 @@ auto PlayerModule::ReportPauseChanges() -> void
   const auto paused = engine->IsPaused();
   if (paused != was_paused_) {
     was_paused_ = paused;
-    events_->Lifecycle(
-      paused ? LifecycleState::kPaused : LifecycleState::kResumed,
-      session_scene_);
+    Publish(paused ? LifecycleState::kPaused : LifecycleState::kResumed);
   }
 }
 
-auto PlayerModule::HandleStats(const bool gpu_work) -> void
+auto PlayerModule::ResolvePlay(const commands::CommandResult& result) -> void
 {
-  if (!gpu_work) {
+  for (const auto& waiter : std::exchange(play_waiters_, {})) {
+    waiter->result = result;
+    waiter->done.Trigger();
+  }
+}
+
+auto PlayerModule::Publish(const LifecycleState state,
+  const std::string_view message,
+  const std::span<const instantiation::SceneInstantiationIssue> issues) -> void
+{
+  events_->Publish(
+    "lifecycle", LifecycleData(state, session_scene_, message, issues));
+}
+
+auto PlayerModule::UpdateGpuWorkLease() -> void
+{
+  // A remote client subscribed to `gpu_work` holds the timeline lease.
+  const bool wanted = events_->HasInterest("gpu_work");
+  if (!wanted) {
     gpu_work_lease_.Release();
     return;
   }
@@ -625,10 +653,6 @@ auto PlayerModule::HandleStats(const bool gpu_work) -> void
   if (const auto renderer = ResolveRenderer()) {
     gpu_work_lease_ = renderer->GetDiagnosticsService().AcquireGpuTimeline();
     gpu_work_revision_ = 0U;
-  }
-  if (!gpu_work_lease_.IsActive()) {
-    LOG_F(WARNING, "{}: GPU work is unavailable: the renderer does not profile",
-      GetName());
   }
 }
 
@@ -645,7 +669,7 @@ auto PlayerModule::ReportGpuWork() -> void
     = renderer->GetDiagnosticsService().GetLatestGpuWorkSummary();
   if (summary && summary->revision != gpu_work_revision_) {
     gpu_work_revision_ = summary->revision;
-    events_->Send(MakeGpuWorkEvent(*summary));
+    events_->Publish("gpu_work", GpuWorkData(*summary));
   }
 }
 

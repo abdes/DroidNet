@@ -4,21 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
-using oxygen::console::CommandFlags;
+using oxygen::commands::CommandFlags;
+using oxygen::commands::ExecutionStatus;
 using oxygen::console::CompletionKind;
 using oxygen::console::Console;
 using oxygen::console::CVarFlags;
-using oxygen::console::ExecutionStatus;
 
 NOLINT_TEST(ConsoleRegistry, ListSymbolsReturnsAllVisibleSymbols)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   ASSERT_TRUE(console
       .RegisterCVar({
         .name = "sys.val",
@@ -30,17 +31,15 @@ NOLINT_TEST(ConsoleRegistry, ListSymbolsReturnsAllVisibleSymbols)
       })
       .IsValid());
 
-  ASSERT_TRUE(console
-      .RegisterCommand({ .name = "sys.cmd",
+  ASSERT_TRUE(command_registry
+      .Register({ .name = "sys.cmd",
         .help = "Cmd",
         .flags = CommandFlags::kNone,
         .handler =
           [](const auto&, const auto&) {
-            return oxygen::console::ExecutionResult { .status
-              = ExecutionStatus::kOk,
-              .exit_code = 0,
-              .output = {},
-              .error = {} };
+            return oxygen::commands::CommandResult {
+              .status = ExecutionStatus::kOk, .output = {}, .error = {}
+            };
           } })
       .IsValid());
 
@@ -63,7 +62,8 @@ NOLINT_TEST(ConsoleRegistry, ListSymbolsReturnsAllVisibleSymbols)
 
 NOLINT_TEST(ConsoleRegistry, CaptureExecutionRecords)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   EXPECT_EQ(console.Execute("help").status, ExecutionStatus::kOk);
   EXPECT_EQ(console.Execute("unknown.cmd").status, ExecutionStatus::kNotFound);
 
@@ -79,7 +79,8 @@ NOLINT_TEST(ConsoleRegistry, CaptureExecutionRecords)
 
 NOLINT_TEST(ConsoleRegistry, PreventDuplicateRegistrations)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   const auto h1 = console.RegisterCVar({
     .name = "test",
     .help = "Test",

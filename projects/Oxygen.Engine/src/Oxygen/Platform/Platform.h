@@ -75,6 +75,10 @@ namespace platform {
 
     OXGN_PLAT_API auto PollOne() -> size_t;
 
+    //! The engine thread's I/O context; the host loop polls it every
+    //! iteration, so Asio operations awaited through OxCo complete there.
+    [[nodiscard]] auto IoContext() noexcept -> asio::io_context& { return io_; }
+
     auto Stop() -> void override;
 
     [[nodiscard]] auto ActivateAsync(co::TaskStarted<> started)

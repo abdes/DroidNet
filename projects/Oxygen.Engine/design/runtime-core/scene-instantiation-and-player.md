@@ -120,14 +120,14 @@ behaviour are specified in [runtime host and debug UI](runtime-host.md).
 `Oxygen.Player.exe --launch <file>`; the file validates against
 `oxygen.player-launch.schema.json`:
 
-| Field                 | Meaning                                                                                                 |
-| --------------------- | ------------------------------------------------------------------------------------------------------- |
-| `version`             | `1`.                                                                                                    |
-| `mounts`              | Ordered cooked roots or PAK files (a `.pak` file), highest precedence last.                             |
-| `scene`               | Scene virtual path, e.g. `/.cooked/Scenes/Level.oscene`.                                                |
-| `script_source_roots` | Roots for external script sources; enables source reload when non-empty.                                |
-| `window`              | Title, client size, VSync and frame cap (`0` is off, else frames per second); all optional.             |
-| `diagnostics_pipe`    | Optional name of the launcher's named pipe (without the `\\.\pipe\` prefix) for the event stream below. |
+| Field                 | Meaning                                                                                                                                      |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`             | `2`.                                                                                                                                         |
+| `mounts`              | Ordered cooked roots or PAK files (a `.pak` file), highest precedence last.                                                                  |
+| `scene`               | Scene virtual path, e.g. `/.cooked/Scenes/Level.oscene`.                                                                                     |
+| `script_source_roots` | Roots for external script sources; enables source reload when non-empty.                                                                     |
+| `window`              | Title, client size, VSync and frame cap (`0` is off, else frames per second); all optional.                                                  |
+| `control`             | Optional; starts the control server below: `port` (`0`, the default, takes an ephemeral one) and `exit_when_owner_leaves` (default `false`). |
 
 Relative paths are relative to the launch file's folder. A launch file that
 breaks the schema, or names a mount or source root that does not exist,
@@ -152,6 +152,7 @@ outside the editor and override the launch file:
 | `-f`, `--frames <n>`      | Stop after `n` frames.                                                                            |
 | `-c`, `--cvar name=value` | Set a console variable at startup, parsed for its type; repeatable. An unknown name is a warning. |
 | `--verify-hashes`         | Verify cooked content hashes when mounting.                                                       |
+| `--control [port]`        | Start the control server on a loopback port; `0`, the default, takes an ephemeral one.            |
 | graphics tooling, capture | `--debug-layer`, `--aftermath` and the frame capture options of `RuntimeCli`.                     |
 
 `-v <level>` sets the log verbosity. `Examples/Content/play_scene` writes a
@@ -166,45 +167,46 @@ launch file for a cooked example scene and runs the player with it.
 - A scene without an active camera, or a scene that fails to load, shows a
   message in the window and reports a lifecycle failure; the process stays up
   so the user can read it.
-- Input reaches the scene's mapping contexts. Closing the window, a `stop`
-  request on the pipe, or `oxygen.app.request_stop()` ends the process. The
-  toolbar's Stop and an `end_session` request end only the play session
+- Input reaches the scene's mapping contexts. Closing the window,
+  `ngin.quit`, or `oxygen.app.request_stop()` ends the process. The
+  toolbar's Stop and `ngin.session.end` end only the play session
   ([runtime host](runtime-host.md#4-pause-frame-step-and-play-sessions)).
 
-### Event stream
+### Control and events
 
-The launcher creates the pipe and the player connects to it at start. One
-JSON object per line, validated by `oxygen.player-events.schema.json`:
+With `control` in the launch file, or `--control`, the player starts the
+[control server](commands-and-remote-control.md#4-control-server): a
+launcher reads the discovery file of the process it started, connects with
+`rpc.hello` (as owner, when it set `exit_when_owner_leaves`) and runs
+commands as JSON-RPC methods:
 
-| Event        | Payload                                                                                                                                                                  |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `lifecycle`  | `starting`, `session_started`, `scene_loaded`, `scene_failed` (with issues), `paused`, `resumed`, `session_ended`, `stopped`. `stopped` means the process is ending.     |
-| `log`        | Severity (`fatal` to `info`), channel and text: `oxygen.log` output on channel `script`, engine lines on the logging source file's name                                  |
-| `diagnostic` | A [script diagnostic](../scripting/script-diagnostics.md#2-model)                                                                                                        |
-| `gpu_work`   | A [GPU work summary](../vortex/lld/gpu-work-summary.md#41-types), sent while the `stats` request has it on and only when its `revision` changes (at most twice a second) |
+| Command                      | Effect                                                                                                                                                                                                                                                                                                |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ngin.session.begin [scene]` | Remounts the launch mounts and begins a session on `scene` (a scene virtual path; the launch file's scene when omitted); refused while one runs ([runtime host](runtime-host.md#44-session-lifecycle)). Replies with the load outcome: the scene and the camera it is viewed through, or the failure. |
+| `ngin.pause`, `ngin.resume`  | Pause or resume the engine.                                                                                                                                                                                                                                                                           |
+| `ngin.step [frames]`         | Simulates `frames` frames (default 1) and stays paused; replies once they have run.                                                                                                                                                                                                                   |
+| `ngin.session.end`           | Ends the session; the process stays up. Replies once it has ended.                                                                                                                                                                                                                                    |
+| `ngin.quit`                  | Ends the process.                                                                                                                                                                                                                                                                                     |
 
-The launcher sends one request object per line on the same pipe, validated
-by `oxygen.player-requests.schema.json`; an invalid request is logged and
-ignored:
+The toolbar's Play, Pause, Step and Stop run the same commands. The player
+publishes these topics to the event log; their data is validated by
+`oxygen.player-events.schema.json`, and `log` and `command` events come from
+the control server:
 
-| Request       | Effect                                                                                                                                                                                                  |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `play`        | Remounts the launch mounts and begins a session on `scene` (a scene virtual path; the launch file's scene when omitted); ignored while one runs ([runtime host](runtime-host.md#44-session-lifecycle)). |
-| `pause`       | Pauses the engine.                                                                                                                                                                                      |
-| `resume`      | Resumes it.                                                                                                                                                                                             |
-| `step`        | Simulates `frames` frames (default 1) and stays paused.                                                                                                                                                 |
-| `end_session` | Ends the session; the process stays up and reports `session_ended`.                                                                                                                                     |
-| `stop`        | Ends the process.                                                                                                                                                                                       |
-| `stats`       | `gpu_work: true` holds a GPU timeline lease and starts `gpu_work` events; `false` releases it. Off at launch; survives sessions.                                                                        |
+| Topic        | Data                                                                                                                                                                    |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `lifecycle`  | `session_started`, `scene_loaded`, `scene_failed` (with issues), `paused`, `resumed`, `session_ended`, `stopping`. `stopping` means the process is ending.              |
+| `diagnostic` | A [script diagnostic](../scripting/script-diagnostics.md#2-model)                                                                                                       |
+| `gpu_work`   | A [GPU work summary](../vortex/lld/gpu-work-summary.md#41-types), only when its `revision` changes (at most twice a second), while some client subscribes to `gpu_work` |
 
-A `scene_failed` is followed by `session_ended`, so the launcher can send
-`play` again; a `play` whose remount fails reports both too. The reader runs
-on its own thread and hands requests to the engine thread; nothing on the
-pipe thread touches the engine. When the launcher closes the pipe, the
-player stops.
+A `scene_failed` is followed by `session_ended`, so the launcher can play
+again; a play whose remount fails reports both too. While a client
+subscribes to `gpu_work` the player holds a GPU timeline lease, released when
+the last subscriber leaves; the lease survives sessions. When the owner
+disconnects and `exit_when_owner_leaves` is set, the player stops.
 
 Script diagnostics come from the scripting module's handlers (hook errors,
-source reload) and from instantiation: attach problems are sent after
+source reload) and from instantiation: attach problems are published after
 `scene_loaded`, and a script whose compilation fails later is reported when
 it fails (`SceneScriptAttachment`'s late diagnostic handler).
 
@@ -222,11 +224,11 @@ RenderScene behavior is otherwise unchanged.
 
 ## 5. Exit gates
 
-| ID    | Check                                                                                                                                                                                                                           |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| SIP-1 | Instantiation tests for each record family, the starting camera and its first-camera fallback, the starting input contexts and their priorities, a missing asset and an unsupported record.                                     |
-| SIP-2 | RenderScene loads every maintained scene with the same result as before the move.                                                                                                                                               |
-| SIP-3 | The player loads a launch file, applies its window settings, renders through the starting camera with the starting input contexts active, follows a script's camera and context switches, and streams lifecycle and log events. |
-| SIP-4 | A failing script in the player streams its diagnostic; a source edit reloads it while running.                                                                                                                                  |
-| SIP-5 | `end_session` ends the session and leaves the process ready for `play`; `stop` ends the process cleanly; a bad launch file fails with a schema diagnostic.                                                                      |
-| SIP-6 | `stats` with `gpu_work: true` produces schema-valid `gpu_work` events, one per summary revision; `false` stops them and releases the timeline lease; no `gpu_work` event is sent before the first `stats` request.              |
+| ID    | Check                                                                                                                                                                                                                                       |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SIP-1 | Instantiation tests for each record family, the starting camera and its first-camera fallback, the starting input contexts and their priorities, a missing asset and an unsupported record.                                                 |
+| SIP-2 | RenderScene loads every maintained scene with the same result as before the move.                                                                                                                                                           |
+| SIP-3 | The player loads a launch file, applies its window settings, renders through the starting camera with the starting input contexts active, follows a script's camera and context switches, and publishes lifecycle and log events.           |
+| SIP-4 | A failing script in the player publishes its diagnostic; a source edit reloads it while running.                                                                                                                                            |
+| SIP-5 | `ngin.session.end` ends the session and leaves the process ready for `ngin.session.begin`; `ngin.quit` ends the process cleanly; a bad launch file fails with a schema diagnostic.                                                          |
+| SIP-6 | Subscribing to `gpu_work` produces schema-valid `gpu_work` events, one per summary revision; the last unsubscribe or disconnect stops them and releases the timeline lease; no `gpu_work` event is published before the first subscription. |

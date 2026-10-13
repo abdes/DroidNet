@@ -9,15 +9,18 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Host/HostModule.h>
 #include <Oxygen/Player/LaunchFile.h>
+#include <Oxygen/Player/PlayerProtocol.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Vortex/CompositionView.h>
@@ -27,11 +30,15 @@ namespace oxygen::scene {
 class Scene;
 } // namespace oxygen::scene
 
+namespace oxygen::control {
+class EventLog;
+} // namespace oxygen::control
+
 namespace oxygen::player {
 
-class EventStream;
 struct SessionLoad;
 struct Remount;
+struct PlayOutcome;
 
 //! Runs the launch file's scene as play sessions.
 /*!
@@ -42,20 +49,20 @@ struct Remount;
  The one main view renders through the scene's active camera every frame,
  so a script that moves or switches the camera moves the view.
 
- Without a scene (stopped, loading, failed) the window shows why. Requests
- from the launcher are taken at frame start; `play` from the launcher
- remounts the content first, so recooked files are seen. The toolbar's Play
- (`ngin.session.begin`) reuses the mounts.
+ Without a scene (stopped, loading, failed) the window shows why. Play
+ (`ngin.session.begin`, from the toolbar, the console or a remote client)
+ remounts loose cooked roots first, so recooked files are seen, and replies
+ with the load outcome. Lifecycle, script diagnostic and GPU work events go
+ to the host's event log.
 */
 class PlayerModule final : public host::HostModule {
   OXYGEN_TYPED(PlayerModule)
 
 public:
-  //! `host` and `events` must outlive the module. `startup_cvars` names the
-  //! console variables the command line set; unknown names are reported
-  //! once every module is attached.
+  //! `host` must outlive the module. `startup_cvars` names the console
+  //! variables the command line set; unknown names are reported once every
+  //! module is attached.
   PlayerModule(const host::HostContext& host, PlayerLaunch launch,
-    observer_ptr<EventStream> events,
     std::vector<std::string> startup_cvars = {});
   ~PlayerModule() override;
 
@@ -86,8 +93,8 @@ public:
     -> bool override;
   auto OnSessionEnd(observer_ptr<IAsyncEngine> engine) noexcept
     -> void override;
-  auto RegisterConsoleBindings(observer_ptr<console::Console> console) noexcept
-    -> void override;
+  auto RegisterCommands(
+    observer_ptr<commands::CommandRegistry> registry) noexcept -> void override;
 
   auto OnFrameStart(observer_ptr<engine::FrameContext> context)
     -> void override;
@@ -107,9 +114,14 @@ private:
   //! Before the renderer, after input and scripting.
   static constexpr std::uint32_t kPriority = 500U;
 
-  auto HandleRequests() -> void;
-  auto HandlePlay(const std::optional<std::string>& scene) -> void;
-  auto HandleStats(bool gpu_work) -> void;
+  auto HandlePlay(const std::optional<std::string>& scene)
+    -> commands::CommandResult;
+  //! Replies to every Play waiting for the session's load outcome.
+  auto ResolvePlay(const commands::CommandResult& result) -> void;
+  auto Publish(LifecycleState state, std::string_view message = {},
+    std::span<const instantiation::SceneInstantiationIssue> issues = {})
+    -> void;
+  auto UpdateGpuWorkLease() -> void;
   auto StartRemount() -> void;
   auto FinishRemount() -> void;
   auto FinishLoad() -> void;
@@ -121,7 +133,10 @@ private:
   auto DrawStatus() -> void;
 
   PlayerLaunch launch_;
-  observer_ptr<EventStream> events_;
+  observer_ptr<control::EventLog> events_;
+  //! Plays waiting for the load outcome; shared so a waiting command never
+  //! touches the module.
+  std::vector<std::shared_ptr<PlayOutcome>> play_waiters_;
   std::vector<std::string> startup_cvars_;
 
   ViewId main_view_id_ { kInvalidViewId };

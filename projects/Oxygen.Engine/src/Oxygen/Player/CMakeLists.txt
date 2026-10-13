@@ -32,12 +32,8 @@ include(JsonSchemaHelpers)
 add_library(
   oxygen-player-core
   STATIC
-  "EventStream.cpp"
-  "EventStream.h"
   "LaunchFile.cpp"
   "LaunchFile.h"
-  "PipeChannel.cpp"
-  "PipeChannel.h"
   "PlayerModule.cpp"
   "PlayerModule.h"
   "PlayerProtocol.cpp"
@@ -80,8 +76,6 @@ oxygen_embed_json_schemas(
   SCHEMAS
     kPlayerLaunchSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Schemas/oxygen.player-launch.schema.json"
-    kPlayerRequestsSchema
-    "${CMAKE_CURRENT_SOURCE_DIR}/Schemas/oxygen.player-requests.schema.json"
     kPlayerEventsSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Schemas/oxygen.player-events.schema.json"
 )
@@ -143,7 +137,6 @@ if(${META_PROJECT_ID}_INSTALL)
   install(
     FILES
       "${CMAKE_CURRENT_SOURCE_DIR}/Schemas/oxygen.player-launch.schema.json"
-      "${CMAKE_CURRENT_SOURCE_DIR}/Schemas/oxygen.player-requests.schema.json"
       "${CMAKE_CURRENT_SOURCE_DIR}/Schemas/oxygen.player-events.schema.json"
     DESTINATION "${OXYGEN_INSTALL_SCHEMAS}"
     COMPONENT ${META_PROJECT_NAME}_data

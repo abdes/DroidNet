@@ -7,6 +7,7 @@
 #pragma once
 
 #include <chrono>
+#include <string_view>
 
 #include <asio/cancellation_signal.hpp>
 #include <asio/dispatch.hpp>
@@ -52,6 +53,22 @@ static constexpr detail::asio_awaitable_t<asio::executor, true> asio_awaitable;
 */
 static constexpr detail::asio_awaitable_t<asio::executor, false>
   asio_nothrow_awaitable;
+
+//! True when `ec` reports an aborted (cancelled) asio operation.
+/*!
+ Header-only asio gives every module its own error category instance, and
+ `std::error_code` compares categories by address: an operation completed by
+ an `io_context` in another DLL fails `ec == asio::error::operation_aborted`.
+ Compare the value and the category name instead.
+*/
+[[nodiscard]] inline auto IsOperationAborted(
+  const asio::error_code& ec) noexcept -> bool
+{
+  static const auto expected
+    = asio::error_code { asio::error::operation_aborted };
+  return ec.value() == expected.value()
+    && std::string_view { ec.category().name() } == expected.category().name();
+}
 
 // -----------------------------------------------------------------------------
 // Implementation
@@ -159,7 +176,7 @@ namespace detail {
 
     auto await_must_resume() const noexcept -> bool
     {
-      return this->ec_ != asio::error::operation_aborted;
+      return !IsOperationAborted(this->ec_);
     }
 
     // NOLINTEND(*-use-nodiscard)

@@ -23,6 +23,9 @@ class IAsyncEngine;
 namespace console {
   class Console;
 } // namespace console
+namespace commands {
+  class CommandRegistry;
+} // namespace commands
 } // namespace oxygen
 
 namespace oxygen::engine {
@@ -160,6 +163,13 @@ public:
   //! commands/CVars using its own namespace (for example `rndr.*`).
   virtual auto RegisterConsoleBindings(
     observer_ptr<console::Console> /*console*/) noexcept -> void
+  {
+  }
+
+  //! Called once when the module is attached so it can register the commands
+  //! it owns, in its own namespace.
+  virtual auto RegisterCommands(
+    observer_ptr<commands::CommandRegistry> /*commands*/) noexcept -> void
   {
   }
 

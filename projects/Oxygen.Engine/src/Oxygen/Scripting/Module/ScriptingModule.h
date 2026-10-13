@@ -244,6 +244,8 @@ public:
     -> void override;
   OXGN_SCRP_API auto RegisterConsoleBindings(
     observer_ptr<console::Console> console) noexcept -> void override;
+  OXGN_SCRP_API auto RegisterCommands(
+    observer_ptr<commands::CommandRegistry> registry) noexcept -> void override;
   OXGN_SCRP_API auto ApplyConsoleCVars(
     observer_ptr<const console::Console> console) noexcept -> void override;
 

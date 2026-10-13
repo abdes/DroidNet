@@ -78,10 +78,10 @@ The editor reaches the summary two ways:
   (`Oxygen.Editor.Interop/src/EditorModule/EditorModule.cpp`). It publishes the
   latest `GpuWorkSummary` pointer beside it; interop marshals it to a managed
   record and a WinUI panel draws it. The editor never uses ImGui for this.
-- **Out-of-process player.** The editor sends the `stats` request and reads
-  `gpu_work` events from the pipe
-  ([event stream](../../runtime-core/scene-instantiation-and-player.md#event-stream)).
-  The player serializes the summary; Vortex does not know the pipe format.
+- **Out-of-process player.** The editor subscribes to `gpu_work` on the
+  player's control server and reads the events it pushes
+  ([control and events](../../runtime-core/scene-instantiation-and-player.md#control-and-events)).
+  The player serializes the summary; Vortex does not know the event format.
 
 The editor-side work is tracked as a GitHub issue opened when implementation
 reaches it; it is outside the scope of this LLD.
@@ -317,7 +317,7 @@ while the GPU timeline is enabled.
 - **Window.** 500 ms of steady-clock time, measured when frames are consumed.
   A window publishes when it closes, so consumers see at most two updates per
   second. This is the update rate a person can read; it also bounds the
-  event-stream rate.
+  `gpu_work` event rate.
 - **Statistics.** `avg_ms` is the mean over valid frames in the window;
   `max_ms` is the largest single valid frame. An item absent from a frame
   counts as zero for that frame, so averages of intermittent work stay

@@ -101,6 +101,7 @@ target_link_libraries(
     oxygen::clap
     oxygen::config
     oxygen::console
+    oxygen::control
     oxygen::core
     oxygen::engine
     oxygen::graphics-common

@@ -13,6 +13,7 @@
 #include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -27,7 +28,7 @@
 
 namespace oxygen::examples::testing {
 namespace {
-  using Status = console::ExecutionStatus;
+  using Status = commands::ExecutionStatus;
   class PostProcessConsoleTest : public ::testing::Test {
   protected:
     void SetUp() override
@@ -80,14 +81,14 @@ namespace {
       bindings = std::make_unique<internal::PostProcessConsoleBindings>(
         console, settings, [this] { return observer_ptr { renderer.get() }; });
     }
-    auto Execute(const std::string& command) -> console::ExecutionResult
+    auto Execute(const std::string& command) -> commands::CommandResult
     {
       return console.Execute(command,
-        { .source = console::CommandSource::kAutomation,
-          .shipping_build = true,
-          .record_history = false });
+        { .source = commands::CommandSource::kAutomation,
+          .shipping_build = true });
     }
-    console::Console console;
+    oxygen::commands::CommandRegistry command_registry;
+    console::Console console { oxygen::observer_ptr { &command_registry } };
     std::shared_ptr<vortex::testing::FakeGraphics> graphics;
     std::unique_ptr<vortex::Renderer> renderer;
     std::shared_ptr<scene::Scene> world;
@@ -221,12 +222,16 @@ NOLINT_TEST_F(
     Execute("pp.transition.status 11").status, Status::kInvalidArguments);
 }
 
+//! A source whose policy forbids commands is refused before the settings
+//! owner sees the edit.
 NOLINT_TEST_F(
-  PostProcessConsoleTest, RemotePolicyDeniesEditsBeforeOwnerMutation)
+  PostProcessConsoleTest, SourcePolicyDeniesEditsBeforeOwnerMutation)
 {
+  command_registry.SetSourcePolicy(commands::CommandSource::kRemote,
+    commands::CommandRegistry::SourcePolicy { .allow_commands = false });
   const auto before = settings.GetExposureSettings();
   const auto result = console.Execute("pp.exposure " + target + " manual_ev=4",
-    { .source = console::CommandSource::kRemote });
+    { .source = commands::CommandSource::kRemote });
   EXPECT_EQ(result.status, Status::kDenied);
   EXPECT_EQ(settings.GetExposureSettings(), before);
 }
@@ -235,11 +240,11 @@ NOLINT_TEST_F(
   PostProcessConsoleTest, RegistrationConflictRollsBackPartialBindings)
 {
   bindings.reset();
-  const auto existing = console.RegisterCommand({
+  const auto existing = command_registry.Register({
     .name = "pp.camera",
     .help = "Existing owner",
-    .flags = console::CommandFlags::kNone,
-    .handler = [](const auto&, const auto&) -> console::ExecutionResult {
+    .flags = commands::CommandFlags::kNone,
+    .handler = [](const auto&, const auto&) -> commands::CommandResult {
       return { .output = "existing" };
     },
   });

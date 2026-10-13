@@ -25,15 +25,20 @@
 #include <variant>
 #include <vector>
 
+#include <fmt/format.h>
+#include <fmt/ranges.h>
 #include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Console/CVar.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Completion.h>
 #include <Oxygen/Console/Constants.h>
 #include <Oxygen/Console/History.h>
@@ -43,8 +48,28 @@
 
 namespace oxygen::console {
 
+using commands::CommandArgs;
+using commands::CommandContext;
+using commands::CommandDefinition;
+using commands::CommandInvocation;
+using commands::CommandParam;
+using commands::CommandResult;
+using commands::CommandSource;
+using commands::ExecutionStatus;
+using commands::ParamType;
+using commands::ParamValue;
+
 namespace {
   using nlohmann::json;
+
+  constexpr std::string_view kCVarGetCommand = "cvar.get";
+  constexpr std::string_view kCVarSetCommand = "cvar.set";
+  constexpr std::string_view kCVarListCommand = "cvar.list";
+
+  auto Failure(const ExecutionStatus status, std::string error) -> CommandResult
+  {
+    return CommandResult::Failure(status, std::move(error));
+  }
 
   auto TrimWhitespace(const std::string_view value) -> std::string_view
   {
@@ -239,11 +264,10 @@ namespace {
   }
 
   auto NotAllowedResult(const CVarDefinition& definition,
-    const std::string_view text) -> ExecutionResult
+    const std::string_view text) -> CommandResult
   {
     return {
       .status = ExecutionStatus::kInvalidArguments,
-      .exit_code = kExitCodeInvalidArguments,
       .output = {},
       .error = "value '" + std::string(text)
         + "' is not one of: " + JoinAllowedValues(definition),
@@ -256,12 +280,77 @@ namespace {
     return path_finder.CVarsArchivePath().parent_path() / kHistoryFileName;
   }
 
+  //! A `kScalar` argument as the text a console variable parses.
+  auto ScalarText(const ParamValue& value) -> std::string
+  {
+    if (const auto* text = std::get_if<std::string>(&value)) {
+      return *text;
+    }
+    if (const auto* boolean = std::get_if<bool>(&value)) {
+      return *boolean ? "true" : "false";
+    }
+    if (const auto* integer = std::get_if<int64_t>(&value)) {
+      return std::to_string(*integer);
+    }
+    return fmt::format("{}", std::get<double>(value));
+  }
+
+  auto DescribeCVar(const CVarSnapshot& cvar) -> json
+  {
+    auto described = json {
+      { "name", cvar.definition.name },
+      { "type", to_string(CVarTypeOf(cvar.definition.default_value)) },
+      { "value", SerializeCVarValue(cvar.current_value) },
+      { "default", SerializeCVarValue(cvar.definition.default_value) },
+      { "origin", to_string(cvar.current_origin) },
+      { "flags", to_string(cvar.definition.flags) },
+      { "help", cvar.definition.help },
+    };
+    if (cvar.definition.min_value) {
+      described["minimum"] = *cvar.definition.min_value;
+    }
+    if (cvar.definition.max_value) {
+      described["maximum"] = *cvar.definition.max_value;
+    }
+    if (!cvar.definition.allowed_values.empty()) {
+      described["allowed_values"] = cvar.definition.allowed_values;
+    }
+    if (cvar.latched_value) {
+      described["latched"] = SerializeCVarValue(*cvar.latched_value);
+    }
+    if (cvar.restart_value) {
+      described["restart"] = SerializeCVarValue(*cvar.restart_value);
+    }
+    return described;
+  }
+
+  //! The symbol whose use an invocation counts toward completion ranking.
+  auto CompletionToken(const CommandInvocation& invocation) -> std::string_view
+  {
+    if ((invocation.name == kCVarGetCommand
+          || invocation.name == kCVarSetCommand)
+      && invocation.args.Has("name")) {
+      return invocation.args.GetString("name");
+    }
+    return invocation.name;
+  }
+
 } // namespace
 
-Registry::Registry(const size_t history_capacity)
+Registry::Registry(const observer_ptr<commands::CommandRegistry> commands,
+  const size_t history_capacity)
   : history_(history_capacity)
+  , commands_(commands)
 {
+  CHECK_NOTNULL_F(commands_, "the console needs a command registry");
   RegisterBuiltinCommands();
+}
+
+Registry::~Registry()
+{
+  for (const auto handle : builtin_handles_) {
+    commands_->Unregister(handle);
+  }
 }
 
 auto Registry::RegisterCVar(CVarDefinition definition,
@@ -308,43 +397,6 @@ auto Registry::RegisterCVar(CVarDefinition definition,
   return CVarHandle { it->second.id };
 }
 
-auto Registry::RegisterCommand(CommandDefinition definition) -> CommandHandle
-{
-  if (!definition.handler || definition.name.empty() || next_id_ == 0U
-    || commands_.contains(definition.name)) {
-    return {};
-  }
-
-  const auto handle = CommandHandle { .id = next_id_ };
-  auto entry = std::make_shared<CommandEntry>(
-    CommandEntry { .handle = handle, .definition = std::move(definition) });
-  const auto [_, inserted] = commands_.emplace(entry->definition.name, entry);
-  if (!inserted) {
-    return {};
-  }
-  ++next_id_;
-  completion_cycle_.Reset();
-  return handle;
-}
-
-auto Registry::UnregisterCommand(const CommandHandle handle) -> bool
-{
-  if (!handle.IsValid()) {
-    return false;
-  }
-  const auto found
-    = std::ranges::find_if(commands_, [handle](const auto& item) -> bool {
-        return item.second->handle.id == handle.id;
-      });
-  if (found == commands_.end()) {
-    return false;
-  }
-  completion_usage_.erase(found->first);
-  commands_.erase(found);
-  completion_cycle_.Reset();
-  return true;
-}
-
 auto Registry::FindCVar(const std::string_view name) const
   -> observer_ptr<const CVarSnapshot>
 {
@@ -354,18 +406,8 @@ auto Registry::FindCVar(const std::string_view name) const
   return observer_ptr<const CVarSnapshot> {};
 }
 
-auto Registry::FindCommand(const std::string_view name) const
-  -> observer_ptr<const CommandDefinition>
-{
-  if (const auto it = commands_.find(std::string(name));
-    it != commands_.end()) {
-    return make_observer(&it->second->definition);
-  }
-  return observer_ptr<const CommandDefinition> {};
-}
-
-auto Registry::SetCVarFromText(const SetCVarRequest& request,
-  const CommandContext& context) -> ExecutionResult
+auto Registry::SetCVarFromText(
+  const SetCVarRequest& request, const CommandContext& context) -> CommandResult
 {
   if (const auto it = cvars_.find(std::string(request.name));
     it != cvars_.end()) {
@@ -374,7 +416,6 @@ auto Registry::SetCVarFromText(const SetCVarRequest& request,
     if (HasFlag(snapshot.definition.flags, CVarFlags::kReadOnly)) {
       return {
         .status = ExecutionStatus::kDenied,
-        .exit_code = kExitCodeDenied,
         .output = {},
         .error = "cvar is read-only",
       };
@@ -382,7 +423,6 @@ auto Registry::SetCVarFromText(const SetCVarRequest& request,
     if (!IsCVarMutationAllowed(snapshot.definition, context)) {
       return {
         .status = ExecutionStatus::kDenied,
-        .exit_code = kExitCodeDenied,
         .output = {},
         .error = "cvar denied by policy",
       };
@@ -392,7 +432,6 @@ auto Registry::SetCVarFromText(const SetCVarRequest& request,
     if (!TryParseValue(snapshot.current_value, request.text, parsed)) {
       return {
         .status = ExecutionStatus::kInvalidArguments,
-        .exit_code = kExitCodeInvalidArguments,
         .output = {},
         .error = "value parse failed",
       };
@@ -413,7 +452,6 @@ auto Registry::SetCVarFromText(const SetCVarRequest& request,
 
   return {
     .status = ExecutionStatus::kNotFound,
-    .exit_code = kExitCodeNotFound,
     .output = {},
     .error = "cvar not found",
   };
@@ -457,7 +495,7 @@ auto Registry::ApplyLatchedCVars() -> size_t
 }
 
 auto Registry::SaveArchiveCVars(const oxygen::PathFinder& path_finder,
-  const ArchiveSaveMode mode) -> ExecutionResult
+  const ArchiveSaveMode mode) -> CommandResult
 {
   json payload = json::object();
   payload[std::string(kArchiveJsonVersionKey)] = kArchiveJsonVersion1;
@@ -520,7 +558,6 @@ auto Registry::SaveArchiveCVars(const oxygen::PathFinder& path_finder,
       archive_dir.generic_string(), ec.message());
     return {
       .status = ExecutionStatus::kError,
-      .exit_code = kExitCodeGenericError,
       .output = {},
       .error = "unable to create cvar archive directory",
     };
@@ -533,7 +570,6 @@ auto Registry::SaveArchiveCVars(const oxygen::PathFinder& path_finder,
       archive_path.generic_string());
     return {
       .status = ExecutionStatus::kError,
-      .exit_code = kExitCodeGenericError,
       .output = {},
       .error = "unable to open cvar archive file for write",
     };
@@ -544,7 +580,6 @@ auto Registry::SaveArchiveCVars(const oxygen::PathFinder& path_finder,
       archive_path.generic_string());
     return {
       .status = ExecutionStatus::kError,
-      .exit_code = kExitCodeGenericError,
       .output = {},
       .error = "failed to write cvar archive file",
     };
@@ -563,14 +598,13 @@ auto Registry::SaveArchiveCVars(const oxygen::PathFinder& path_finder,
   }
   return {
     .status = ExecutionStatus::kOk,
-    .exit_code = 0,
     .output = "saved cvar archive to " + archive_path.generic_string(),
     .error = {},
   };
 }
 
 auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
-  [[maybe_unused]] const CommandContext& context) -> ExecutionResult
+  [[maybe_unused]] const CommandContext& context) -> CommandResult
 {
   const auto archive_path = path_finder.CVarsArchivePath();
   std::ifstream stream(archive_path);
@@ -580,7 +614,6 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
       archive_path.generic_string());
     return {
       .status = ExecutionStatus::kNotFound,
-      .exit_code = kExitCodeNotFound,
       .output = {},
       .error = "cvar archive file not found",
     };
@@ -595,7 +628,6 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
       archive_path.generic_string(), e.what());
     return {
       .status = ExecutionStatus::kError,
-      .exit_code = kExitCodeGenericError,
       .output = {},
       .error = "cvar archive json parse failed",
     };
@@ -605,7 +637,6 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
       archive_path.generic_string());
     return {
       .status = ExecutionStatus::kError,
-      .exit_code = kExitCodeGenericError,
       .output = {},
       .error = "cvar archive json parse failed",
     };
@@ -618,7 +649,6 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
       archive_path.generic_string());
     return {
       .status = ExecutionStatus::kInvalidArguments,
-      .exit_code = kExitCodeInvalidArguments,
       .output = {},
       .error = "invalid cvar archive schema",
     };
@@ -676,7 +706,6 @@ auto Registry::LoadArchiveCVars(const oxygen::PathFinder& path_finder,
     archive_path.generic_string(), applied);
   return {
     .status = ExecutionStatus::kOk,
-    .exit_code = 0,
     .output = "loaded " + std::to_string(applied) + " cvar override(s) from "
       + archive_path.generic_string(),
     .error = {},
@@ -739,7 +768,7 @@ auto Registry::ApplyCachedPersistedValue(CVarEntry& cvar) -> bool
 }
 
 auto Registry::SaveHistory(const oxygen::PathFinder& path_finder) const
-  -> ExecutionResult
+  -> CommandResult
 {
   json payload = json::object();
   payload[std::string(kHistoryJsonVersionKey)] = kHistoryJsonVersion1;
@@ -756,7 +785,6 @@ auto Registry::SaveHistory(const oxygen::PathFinder& path_finder) const
       history_dir.generic_string(), ec.message());
     return {
       .status = ExecutionStatus::kError,
-      .exit_code = kExitCodeGenericError,
       .output = {},
       .error = "unable to create history directory",
     };
@@ -769,7 +797,6 @@ auto Registry::SaveHistory(const oxygen::PathFinder& path_finder) const
       history_path.generic_string());
     return {
       .status = ExecutionStatus::kError,
-      .exit_code = kExitCodeGenericError,
       .output = {},
       .error = "unable to open history file for write",
     };
@@ -781,7 +808,6 @@ auto Registry::SaveHistory(const oxygen::PathFinder& path_finder) const
       history_path.generic_string());
     return {
       .status = ExecutionStatus::kError,
-      .exit_code = kExitCodeGenericError,
       .output = {},
       .error = "failed to write history file",
     };
@@ -791,14 +817,13 @@ auto Registry::SaveHistory(const oxygen::PathFinder& path_finder) const
     history_path.generic_string(), history_.Entries().size());
   return {
     .status = ExecutionStatus::kOk,
-    .exit_code = 0,
     .output = "saved console history to " + history_path.generic_string(),
     .error = {},
   };
 }
 
 auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
-  -> ExecutionResult
+  -> CommandResult
 {
   const auto history_path = HistoryPathFor(path_finder);
   std::ifstream stream(history_path);
@@ -808,7 +833,6 @@ auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
       history_path.generic_string());
     return {
       .status = ExecutionStatus::kNotFound,
-      .exit_code = kExitCodeNotFound,
       .output = {},
       .error = "console history file not found",
     };
@@ -823,7 +847,6 @@ auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
       history_path.generic_string(), e.what());
     return {
       .status = ExecutionStatus::kError,
-      .exit_code = kExitCodeGenericError,
       .output = {},
       .error = "console history json parse failed",
     };
@@ -834,7 +857,6 @@ auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
       history_path.generic_string());
     return {
       .status = ExecutionStatus::kError,
-      .exit_code = kExitCodeGenericError,
       .output = {},
       .error = "console history json parse failed",
     };
@@ -848,7 +870,6 @@ auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
       history_path.generic_string());
     return {
       .status = ExecutionStatus::kInvalidArguments,
-      .exit_code = kExitCodeInvalidArguments,
       .output = {},
       .error = "invalid console history schema",
     };
@@ -868,7 +889,6 @@ auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
     history_path.generic_string(), loaded, loaded == 1 ? "y" : "ies");
   return {
     .status = ExecutionStatus::kOk,
-    .exit_code = 0,
     .output = "loaded " + std::to_string(loaded) + " history entries from "
       + history_path.generic_string(),
     .error = {},
@@ -877,7 +897,7 @@ auto Registry::LoadHistory(const oxygen::PathFinder& path_finder)
 
 auto Registry::ApplyCommandLineOverrides(
   const std::span<const std::string_view> arguments,
-  const CommandContext& context) -> ExecutionResult
+  const CommandContext& context) -> CommandResult
 {
   size_t applied = 0;
   for (size_t i = 0; i < arguments.size(); ++i) {
@@ -890,7 +910,6 @@ auto Registry::ApplyCommandLineOverrides(
     if (token.empty()) {
       return {
         .status = ExecutionStatus::kInvalidArguments,
-        .exit_code = kExitCodeInvalidArguments,
         .output = {},
         .error = "empty command line cvar override",
       };
@@ -901,7 +920,6 @@ auto Registry::ApplyCommandLineOverrides(
       if (i + 1 >= arguments.size()) {
         return {
           .status = ExecutionStatus::kInvalidArguments,
-          .exit_code = kExitCodeInvalidArguments,
           .output = {},
           .error = "command line override missing value",
         };
@@ -914,7 +932,6 @@ auto Registry::ApplyCommandLineOverrides(
     if (cvar_it == cvars_.end()) {
       return {
         .status = ExecutionStatus::kNotFound,
-        .exit_code = kExitCodeNotFound,
         .output = {},
         .error = "cvar not found",
       };
@@ -924,7 +941,6 @@ auto Registry::ApplyCommandLineOverrides(
     if (HasFlag(cvar.snapshot.definition.flags, CVarFlags::kReadOnly)) {
       return {
         .status = ExecutionStatus::kDenied,
-        .exit_code = kExitCodeDenied,
         .output = {},
         .error = "cvar is read-only",
       };
@@ -932,7 +948,6 @@ auto Registry::ApplyCommandLineOverrides(
     if (!IsCVarMutationAllowed(cvar.snapshot.definition, context)) {
       return {
         .status = ExecutionStatus::kDenied,
-        .exit_code = kExitCodeDenied,
         .output = {},
         .error = "cvar denied by policy",
       };
@@ -942,7 +957,6 @@ auto Registry::ApplyCommandLineOverrides(
     if (!TryParseValue(cvar.snapshot.current_value, assign.value, parsed)) {
       return {
         .status = ExecutionStatus::kInvalidArguments,
-        .exit_code = kExitCodeInvalidArguments,
         .output = {},
         .error = "value parse failed",
       };
@@ -968,7 +982,6 @@ auto Registry::ApplyCommandLineOverrides(
 
   return {
     .status = ExecutionStatus::kOk,
-    .exit_code = 0,
     .output
     = "applied " + std::to_string(applied) + " command line override(s)",
     .error = {},
@@ -980,6 +993,8 @@ auto Registry::SetSourcePolicy(
 {
   switch (source) {
   case CommandSource::kLocalConsole:
+  case CommandSource::kUi:
+  case CommandSource::kKey:
     local_source_policy_ = policy;
     break;
   case CommandSource::kConfigFile:
@@ -994,177 +1009,84 @@ auto Registry::SetSourcePolicy(
   }
 }
 
-auto Registry::SetRemoteAllowlist(std::vector<std::string> allowlist) -> void
+auto Registry::Parse(const std::string_view line) const
+  -> Result<std::vector<CommandInvocation>, CommandResult>
 {
-  remote_allowlist_.clear();
-  for (auto& name : allowlist) {
-    if (!name.empty()) {
-      remote_allowlist_.emplace(std::move(name));
-    }
+  const auto lines = Parser::SplitCommands(line);
+  if (lines.empty()) {
+    return Err(Failure(ExecutionStatus::kError, "empty command"));
   }
-}
-
-auto Registry::ClearRemoteAllowlist() -> void { remote_allowlist_.clear(); }
-
-auto Registry::SetAuditHook(AuditHook hook) -> void
-{
-  audit_hook_ = std::move(hook);
+  auto invocations = std::vector<CommandInvocation> {};
+  for (const auto& command_line : lines) {
+    auto tokens = Parser::Tokenize(command_line);
+    if (tokens.empty()) {
+      return Err(Failure(ExecutionStatus::kError, "empty command"));
+    }
+    if (cvars_.contains(tokens.front())) {
+      // A variable name alone reads it; followed by a value, it sets it.
+      const auto verb = tokens.size() == 1 ? kCVarGetCommand : kCVarSetCommand;
+      tokens.insert(tokens.begin(), std::string(verb));
+    }
+    const auto name = tokens.front();
+    tokens.erase(tokens.begin());
+    auto invocation = commands_->BindText(name, tokens);
+    if (!invocation) {
+      auto failure = std::move(invocation).error();
+      if (failure.status == ExecutionStatus::kNotFound) {
+        failure.error = "unknown command/cvar: " + name;
+      }
+      return Err(std::move(failure));
+    }
+    invocations.push_back(std::move(invocation).value());
+  }
+  return Ok(std::move(invocations));
 }
 
 auto Registry::Execute(
-  const std::string_view line, const CommandContext& context) -> ExecutionResult
+  const std::string_view line, const CommandContext& context) -> CommandResult
 {
-  const auto text = std::string(line);
-  const auto commands = Parser::SplitCommands(text);
-  if (commands.empty()) {
-    return {
-      .status = ExecutionStatus::kError,
-      .exit_code = kExitCodeGenericError,
-      .output = {},
-      .error = "empty command",
-    };
+  if (context.source == CommandSource::kLocalConsole) {
+    RecordHistory(line);
   }
-
-  if (context.record_history) {
-    history_.Push(text);
-  }
-  ExecutionResult last {
-    .status = ExecutionStatus::kOk,
-    .exit_code = 0,
-    .output = {},
-    .error = {},
-  };
-  for (const auto& command_line : commands) {
-    last = ExecuteSingle(command_line, context);
-    if (last.status != ExecutionStatus::kOk) {
-      if (execution_record_capacity_ > 0
-        && execution_records_.size() >= execution_record_capacity_
-        && !execution_records_.empty()) {
-        execution_records_.erase(execution_records_.begin());
+  auto result = CommandResult::Success();
+  auto invocations = Parse(line);
+  if (!invocations) {
+    result = std::move(invocations).error();
+  } else {
+    for (const auto& invocation : invocations.value()) {
+      result = commands_->Execute(invocation, context);
+      if (result.status != ExecutionStatus::kOk) {
+        break;
       }
-      if (execution_record_capacity_ > 0) {
-        execution_records_.push_back(ExecutionRecord {
-          .line = text,
-          .result = last,
-        });
-      }
-      return last;
+      RecordUsage(invocation);
     }
   }
-  if (execution_record_capacity_ > 0
-    && execution_records_.size() >= execution_record_capacity_
-    && !execution_records_.empty()) {
-    execution_records_.erase(execution_records_.begin());
-  }
-  if (execution_record_capacity_ > 0) {
-    execution_records_.push_back(ExecutionRecord {
-      .line = text,
-      .result = last,
-    });
-  }
-  return last;
+  RecordExecution(std::string(line), result);
+  return result;
 }
 
-auto Registry::ExecuteSingle(
-  const std::string_view line, const CommandContext& context) -> ExecutionResult
+auto Registry::RecordHistory(const std::string_view line) -> void
 {
-  const auto emit
-    = [this, line, context](const std::string& subject,
-        const ExecutionResult& result, const bool denied_by_policy) -> void {
-    EmitAudit(AuditEvent {
-      .source = context.source,
-      .line = std::string(line),
-      .subject = subject,
-      .status = result.status,
-      .denied_by_policy = denied_by_policy,
-    });
-  };
+  history_.Push(std::string(line));
+}
 
-  const auto tokens = Parser::Tokenize(line);
-  if (tokens.empty()) {
-    const auto result = ExecutionResult {
-      .status = ExecutionStatus::kError,
-      .exit_code = kExitCodeGenericError,
-      .output = {},
-      .error = "empty command",
-    };
-    emit({}, result, false);
-    return result;
+auto Registry::RecordUsage(const CommandInvocation& invocation) -> void
+{
+  RecordCompletionUsage(CompletionToken(invocation));
+}
+
+auto Registry::RecordExecution(std::string line, CommandResult result) -> void
+{
+  if (execution_record_capacity_ == 0) {
+    return;
   }
-
-  const auto& first = tokens.front();
-
-  if (const auto cvar_it = cvars_.find(first); cvar_it != cvars_.end()) {
-    if (tokens.size() == 1) {
-      RecordCompletionUsage(first);
-      const auto result = ExecutionResult {
-        .status = ExecutionStatus::kOk,
-        .exit_code = 0,
-        .output = cvar_it->second.snapshot.definition.name + " = "
-          + ValueToString(cvar_it->second.snapshot.current_value),
-        .error = {},
-      };
-      emit(first, result, false);
-      return result;
-    }
-
-    std::string new_value = tokens[1];
-    if (std::holds_alternative<std::string>(
-          cvar_it->second.snapshot.current_value)
-      && tokens.size() > 2) {
-      for (size_t i = 2; i < tokens.size(); ++i) {
-        new_value.push_back(' ');
-        new_value.append(tokens[i]);
-      }
-    }
-    const auto result
-      = SetCVarFromText({ .name = first, .text = new_value }, context);
-    if (result.status == ExecutionStatus::kOk) {
-      RecordCompletionUsage(first);
-    }
-    emit(first, result, result.status == ExecutionStatus::kDenied);
-    return result;
+  if (execution_records_.size() >= execution_record_capacity_) {
+    execution_records_.erase(execution_records_.begin());
   }
-
-  if (const auto command_it = commands_.find(first);
-    command_it != commands_.end()) {
-    // Pin the registration, not a copy of its std::function: mutable handler
-    // state must persist, and self-unregistration must not destroy this call.
-    const auto entry = command_it->second;
-    const auto& command = entry->definition;
-    if (!IsCommandAllowed(command, context)) {
-      const auto result = ExecutionResult {
-        .status = ExecutionStatus::kDenied,
-        .exit_code = kExitCodeDenied,
-        .output = {},
-        .error = "command denied by policy",
-      };
-      emit(first, result, true);
-      return result;
-    }
-
-    auto tail = tokens | std::views::drop(1);
-    std::vector<std::string> args(tail.begin(), tail.end());
-
-    const auto result = command.handler(args, context);
-    if (result.status == ExecutionStatus::kOk) {
-      const auto live = commands_.find(first);
-      if (live != commands_.end() && live->second == entry) {
-        RecordCompletionUsage(first);
-      }
-    }
-    emit(first, result, result.status == ExecutionStatus::kDenied);
-    return result;
-  }
-
-  const auto result = ExecutionResult {
-    .status = ExecutionStatus::kNotFound,
-    .exit_code = kExitCodeNotFound,
-    .output = {},
-    .error = "unknown command/cvar: " + first,
-  };
-  emit(first, result, false);
-  return result;
+  execution_records_.push_back(ExecutionRecord {
+    .line = std::move(line),
+    .result = std::move(result),
+  });
 }
 
 auto Registry::Complete(const std::string_view prefix) const
@@ -1172,12 +1094,13 @@ auto Registry::Complete(const std::string_view prefix) const
 {
   std::vector<CompletionCandidate> out;
 
-  for (const auto& [name, command] : commands_) {
-    if (StartsWithCaseInsensitive({ .text = name, .prefix = prefix })) {
+  for (const auto& command : commands_->List()) {
+    if (StartsWithCaseInsensitive(
+          { .text = command->name, .prefix = prefix })) {
       out.push_back({
         .kind = CompletionKind::kCommand,
-        .token = name,
-        .help = command->definition.help,
+        .token = command->name,
+        .help = command->help,
       });
     }
   }
@@ -1228,9 +1151,11 @@ auto Registry::ListSymbols(const bool include_hidden) const
   -> std::vector<ConsoleSymbol>
 {
   std::vector<ConsoleSymbol> out;
-  out.reserve(commands_.size() + cvars_.size());
+  const auto commands = commands_->List();
+  out.reserve(commands.size() + cvars_.size());
 
-  for (const auto& [name, command] : commands_) {
+  for (const auto& command : commands) {
+    const auto& name = command->name;
     const auto usage_it = completion_usage_.find(name);
     const auto usage_frequency
       = usage_it != completion_usage_.end() ? usage_it->second.frequency : 0;
@@ -1240,7 +1165,7 @@ auto Registry::ListSymbols(const bool include_hidden) const
     out.push_back(ConsoleSymbol {
       .kind = CompletionKind::kCommand,
       .token = name,
-      .help = command->definition.help,
+      .help = command->help,
       .usage_frequency = usage_frequency,
       .usage_last_tick = usage_last_tick,
     });
@@ -1309,98 +1234,85 @@ auto Registry::ClearExecutionRecords() -> void { execution_records_.clear(); }
 
 void Registry::RegisterBuiltinCommands()
 {
-  (void)RegisterCommand(CommandDefinition {
+  const auto add = [this](CommandDefinition definition) -> void {
+    const auto handle = commands_->Register(std::move(definition));
+    if (handle.get() != 0U) {
+      builtin_handles_.push_back(handle);
+    }
+  };
+
+  add(CommandDefinition {
     .name = std::string(kBuiltinHelpCommand),
-    .help = "help [name] - show command/cvar help",
-    .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>& args,
-                 const CommandContext&) -> ExecutionResult {
-      if (args.empty()) {
-        const std::string help_text
-          = "usage:\n"
-            "  help [name]                     show help for a command or "
-            "cvar\n"
-            "  list [all|commands|cvars]      list registered symbols\n"
-            "  find <pattern>                 search commands and cvars\n"
-            "  exec <path>                    execute script file line by "
-            "line\n"
-            "tip: run `help <name>` for detailed flags/default/current value";
-        return {
-          .status = ExecutionStatus::kOk,
-          .exit_code = 0,
-          .output = help_text,
-          .error = {},
-        };
+    .label = "Help",
+    .help = "Show help for a command or console variable",
+    .params = {
+      CommandParam {
+        .name = "name",
+        .type = ParamType::kString,
+        .help = "Command or variable; empty shows console usage",
+        .default_value = ParamValue { std::string {} },
+      },
+    },
+    .handler = [this](const CommandArgs& args,
+                 const CommandContext&) -> CommandResult {
+      const auto& name = args.GetString("name");
+      if (name.empty()) {
+        return CommandResult::Success(
+          "usage:\n"
+          "  help [name]                 help for a command or variable\n"
+          "  list [all|commands|cvars]   list commands and variables\n"
+          "  find <pattern>              search commands and variables\n"
+          "  exec <path>                 run a file of console lines\n"
+          "  <cvar> [value]              read or set a variable");
       }
-
-      const auto& name = args.front();
-      if (const auto command = FindCommand(name); command != nullptr) {
-        return {
-          .status = ExecutionStatus::kOk,
-          .exit_code = 0,
-          .output = "command " + command->name
-            + " flags=" + to_string(command->flags) + " : " + command->help,
-          .error = {},
+      if (const auto command = commands_->Find(name); command != nullptr) {
+        auto lines = std::vector<std::string> {
+          fmt::format("command {} ({}) flags={}: {}", command->name,
+            command->label, commands::to_string(command->flags),
+            command->help),
         };
-      }
-
-      if (const auto cvar = FindCVar(name); cvar != nullptr) {
-        if (IsHidden(cvar->definition)) {
-          return {
-            .status = ExecutionStatus::kNotFound,
-            .exit_code = kExitCodeNotFound,
-            .output = {},
-            .error = "name not found",
-          };
+        for (const auto& param : command->params) {
+          lines.push_back(fmt::format("  {} {}{}{}", param.name,
+            commands::to_string(param.type),
+            param.required ? " required" : "",
+            param.help.empty() ? std::string {} : " - " + param.help));
         }
-        return {
-          .status = ExecutionStatus::kOk,
-          .exit_code = 0,
-          .output = "cvar " + cvar->definition.name
-            + " flags=" + to_string(cvar->definition.flags)
-            + " default=" + ValueToString(cvar->definition.default_value)
-            + " current=" + ValueToString(cvar->current_value) + " : "
-            + cvar->definition.help,
-          .error = {},
-        };
+        return CommandResult::Success(fmt::format("{}", fmt::join(lines, "\n")),
+          commands_->Describe(*command, CommandContext {}));
       }
-
-      return {
-        .status = ExecutionStatus::kNotFound,
-        .exit_code = kExitCodeNotFound,
-        .output = {},
-        .error = "name not found",
-      };
+      if (const auto cvar = FindCVar(name);
+        cvar != nullptr && !IsHidden(cvar->definition)) {
+        return CommandResult::Success("cvar " + cvar->definition.name
+          + " flags=" + to_string(cvar->definition.flags)
+          + " default=" + ValueToString(cvar->definition.default_value)
+          + " current=" + ValueToString(cvar->current_value) + " : "
+          + cvar->definition.help);
+      }
+      return Failure(ExecutionStatus::kNotFound, "name not found");
     },
   });
 
-  (void)RegisterCommand(CommandDefinition {
+  add(CommandDefinition {
     .name = std::string(kBuiltinFindCommand),
-    .help = "find <pattern> - search commands and cvars",
-    .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>& args,
-                 const CommandContext&) -> ExecutionResult {
-      if (args.empty()) {
-        return {
-          .status = ExecutionStatus::kInvalidArguments,
-          .exit_code = kExitCodeInvalidArguments,
-          .output = {},
-          .error = "find requires a search pattern",
-        };
-      }
-
-      std::string pattern = args.front();
-      for (size_t i = 1; i < args.size(); ++i) {
-        pattern += ' ';
-        pattern += args[i];
-      }
-
-      std::vector<std::string> matches;
-      for (const auto& [name, command] : commands_) {
-        if (ContainsCaseInsensitive({ .text = name, .needle = pattern })
+    .label = "Find",
+    .help = "Search commands and console variables by name or help text",
+    .params = {
+      CommandParam {
+        .name = "pattern",
+        .type = ParamType::kString,
+        .required = true,
+        .rest_of_line = true,
+      },
+    },
+    .handler = [this](const CommandArgs& args,
+                 const CommandContext&) -> CommandResult {
+      const auto& pattern = args.GetString("pattern");
+      auto matches = std::vector<std::string> {};
+      for (const auto& command : commands_->List()) {
+        if (ContainsCaseInsensitive({ .text = command->name, .needle = pattern })
           || ContainsCaseInsensitive(
-            { .text = command->definition.help, .needle = pattern })) {
-          matches.push_back("cmd  " + name + " - " + command->definition.help);
+            { .text = command->help, .needle = pattern })) {
+          matches.push_back("cmd  " + command->name + " - " + command->help);
         }
       }
       for (const auto& [name, cvar] : cvars_) {
@@ -1414,123 +1326,154 @@ void Registry::RegisterBuiltinCommands()
             "cvar " + name + " - " + cvar.snapshot.definition.help);
         }
       }
-
       if (matches.empty()) {
-        return {
-          .status = ExecutionStatus::kNotFound,
-          .exit_code = kExitCodeNotFound,
-          .output = {},
-          .error = "no matches",
-        };
+        return Failure(ExecutionStatus::kNotFound, "no matches");
       }
-
       std::ranges::sort(matches);
-      std::string output;
-      for (size_t i = 0; i < matches.size(); ++i) {
-        output += matches[i];
-        if (i + 1 < matches.size()) {
-          output += '\n';
-        }
-      }
-
-      return {
-        .status = ExecutionStatus::kOk,
-        .exit_code = 0,
-        .output = std::move(output),
-        .error = {},
-      };
+      return CommandResult::Success(
+        fmt::format("{}", fmt::join(matches, "\n")));
     },
   });
 
-  (void)RegisterCommand(CommandDefinition {
+  add(CommandDefinition {
     .name = std::string(kBuiltinListCommand),
-    .help = "list [all|commands|cvars] - list registered console symbols",
-    .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>& args,
-                 const CommandContext&) -> ExecutionResult {
-      std::string_view mode = kListModeAll;
-      if (!args.empty()) {
-        mode = args.front();
-      }
-
-      const bool include_commands
-        = mode == kListModeAll || mode == kListModeCommands;
-      const bool include_cvars = mode == kListModeAll || mode == kListModeCVars;
-      if (!include_commands && !include_cvars) {
-        return {
-          .status = ExecutionStatus::kInvalidArguments,
-          .exit_code = kExitCodeInvalidArguments,
-          .output = {},
-          .error = "list mode must be all|commands|cvars",
-        };
-      }
-
-      std::vector<std::string> lines;
-      if (include_commands) {
-        for (const auto& [name, command] : commands_) {
-          lines.push_back("cmd  " + name + " - " + command->definition.help);
+    .label = "List",
+    .help = "List commands, console variables, or both",
+    .params = {
+      CommandParam {
+        .name = "mode",
+        .type = ParamType::kEnum,
+        .default_value = ParamValue { std::string(kListModeAll) },
+        .allowed_values = { std::string(kListModeAll),
+          std::string(kListModeCommands), std::string(kListModeCVars) },
+      },
+    },
+    .handler = [this](const CommandArgs& args,
+                 const CommandContext&) -> CommandResult {
+      const auto& mode = args.GetString("mode");
+      auto lines = std::vector<std::string> {};
+      if (mode != kListModeCVars) {
+        for (const auto& command : commands_->List()) {
+          lines.push_back("cmd  " + command->name + " - " + command->help);
         }
       }
-      if (include_cvars) {
+      if (mode != kListModeCommands) {
         for (const auto& [name, cvar] : cvars_) {
-          if (IsHidden(cvar.snapshot.definition)) {
-            continue;
+          if (!IsHidden(cvar.snapshot.definition)) {
+            lines.push_back(
+              "cvar " + name + " - " + cvar.snapshot.definition.help);
           }
-          lines.push_back(
-            "cvar " + name + " - " + cvar.snapshot.definition.help);
         }
       }
-
       std::ranges::sort(lines);
-      std::string output;
-      for (size_t i = 0; i < lines.size(); ++i) {
-        output += lines[i];
-        if (i + 1 < lines.size()) {
-          output += '\n';
-        }
-      }
-
-      return {
-        .status = ExecutionStatus::kOk,
-        .exit_code = 0,
-        .output = std::move(output),
-        .error = {},
-      };
+      return CommandResult::Success(fmt::format("{}", fmt::join(lines, "\n")));
     },
   });
 
-  (void)RegisterCommand(CommandDefinition {
+  add(CommandDefinition {
     .name = std::string(kBuiltinExecCommand),
-    .help = "exec <path> - execute script file line by line",
-    .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>& args,
-                 const CommandContext& context) -> ExecutionResult {
-      if (args.empty()) {
-        return {
-          .status = ExecutionStatus::kInvalidArguments,
-          .exit_code = kExitCodeInvalidArguments,
-          .output = {},
-          .error = "exec requires a file path",
-        };
-      }
+    .label = "Run Script",
+    .help = "Run a file of console lines, one per line",
+    .params = {
+      CommandParam {
+        .name = "path",
+        .type = ParamType::kPath,
+        .required = true,
+        .rest_of_line = true,
+      },
+    },
+    .handler = [this](const CommandArgs& args,
+                 const CommandContext& context) -> CommandResult {
+      return ExecuteScriptFile(args.GetString("path"), context);
+    },
+  });
 
-      std::string path = args.front();
-      for (size_t i = 1; i < args.size(); ++i) {
-        path += ' ';
-        path += args[i];
+  add(CommandDefinition {
+    .name = std::string(kCVarGetCommand),
+    .label = "Get Variable",
+    .help = "Read a console variable",
+    .params = {
+      CommandParam {
+        .name = "name",
+        .type = ParamType::kString,
+        .required = true,
+      },
+    },
+    .handler = [this](const CommandArgs& args,
+                 const CommandContext&) -> CommandResult {
+      const auto cvar = FindCVar(args.GetString("name"));
+      if (cvar == nullptr) {
+        return Failure(ExecutionStatus::kNotFound, "cvar not found");
       }
-      return ExecuteScriptFile(path, context);
+      return CommandResult::Success(
+        cvar->definition.name + " = " + ValueToString(cvar->current_value),
+        DescribeCVar(*cvar));
+    },
+  });
+
+  add(CommandDefinition {
+    .name = std::string(kCVarSetCommand),
+    .label = "Set Variable",
+    .help = "Set a console variable; the value is parsed for its type",
+    .params = {
+      CommandParam {
+        .name = "name",
+        .type = ParamType::kString,
+        .required = true,
+      },
+      CommandParam {
+        .name = "value",
+        .type = ParamType::kScalar,
+        .required = true,
+        .rest_of_line = true,
+      },
+    },
+    .handler = [this](const CommandArgs& args,
+                 const CommandContext& context) -> CommandResult {
+      const auto text = ScalarText(*args.Find("value"));
+      return SetCVarFromText(
+        { .name = args.GetString("name"), .text = text }, context);
+    },
+  });
+
+  add(CommandDefinition {
+    .name = std::string(kCVarListCommand),
+    .label = "List Variables",
+    .help = "List console variables whose name contains the pattern",
+    .params = {
+      CommandParam {
+        .name = "pattern",
+        .type = ParamType::kString,
+        .default_value = ParamValue { std::string {} },
+      },
+    },
+    .handler = [this](const CommandArgs& args,
+                 const CommandContext&) -> CommandResult {
+      const auto& pattern = args.GetString("pattern");
+      auto described = json::array();
+      auto lines = std::vector<std::string> {};
+      for (const auto& [name, cvar] : cvars_) {
+        if (IsHidden(cvar.snapshot.definition)
+          || !ContainsCaseInsensitive({ .text = name, .needle = pattern })) {
+          continue;
+        }
+        described.push_back(DescribeCVar(cvar.snapshot));
+        lines.push_back(
+          name + " = " + ValueToString(cvar.snapshot.current_value));
+      }
+      std::ranges::sort(lines);
+      return CommandResult::Success(
+        fmt::format("{}", fmt::join(lines, "\n")), std::move(described));
     },
   });
 }
 
 auto Registry::ExecuteScriptFile(
-  const std::string_view path, const CommandContext& context) -> ExecutionResult
+  const std::string_view path, const CommandContext& context) -> CommandResult
 {
   if (script_depth_ >= kMaxScriptDepth) {
     return {
       .status = ExecutionStatus::kDenied,
-      .exit_code = kExitCodeDenied,
       .output = {},
       .error = "max script depth exceeded",
     };
@@ -1540,7 +1483,6 @@ auto Registry::ExecuteScriptFile(
   if (!script.is_open()) {
     return {
       .status = ExecutionStatus::kNotFound,
-      .exit_code = kExitCodeNotFound,
       .output = {},
       .error = "script file not found",
     };
@@ -1562,9 +1504,8 @@ auto Registry::ExecuteScriptFile(
   constexpr size_t kLineStart = 1;
   size_t line_number = kLineStart;
   std::string line;
-  ExecutionResult last {
+  CommandResult last {
     .status = ExecutionStatus::kOk,
-    .exit_code = 0,
     .output = {},
     .error = {},
   };
@@ -1700,12 +1641,11 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
   const ApplyValueDisposition disposition) -> ApplyValueResult
 {
   const auto make_result
-    = [&](const ExecutionStatus status, const int exit_code, std::string output,
-        std::string error, const bool applied) -> ApplyValueResult {
+    = [&](const ExecutionStatus status, std::string output, std::string error,
+        const bool applied) -> ApplyValueResult {
     return {
-      .result = ExecutionResult {
+      .result = CommandResult {
         .status = status,
-        .exit_code = exit_code,
         .output = std::move(output),
         .error = std::move(error),
       },
@@ -1749,7 +1689,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
       ? "ignored " + cvar.snapshot.definition.name
         + " due to higher-precedence value"
       : std::string {};
-    return make_result(ExecutionStatus::kOk, 0, output, {}, false);
+    return make_result(ExecutionStatus::kOk, output, {}, false);
   }
 
   if (HasFlag(cvar.snapshot.definition.flags, CVarFlags::kLatched)) {
@@ -1760,7 +1700,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
         ? "latched " + cvar.snapshot.definition.name + " = "
           + ValueToString(*cvar.snapshot.latched_value)
         : std::string {};
-      return make_result(ExecutionStatus::kOk, 0, output, {}, false);
+      return make_result(ExecutionStatus::kOk, output, {}, false);
     }
     const auto had_staged_value = cvar.snapshot.latched_value.has_value();
     const auto previous_staged_value = had_staged_value
@@ -1785,7 +1725,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
       ? "latched " + cvar.snapshot.definition.name + " = "
         + ValueToString(*cvar.snapshot.latched_value)
       : std::string {};
-    return make_result(ExecutionStatus::kOk, 0, output, {}, true);
+    return make_result(ExecutionStatus::kOk, output, {}, true);
   }
 
   if (HasFlag(cvar.snapshot.definition.flags, CVarFlags::kRequiresRestart)) {
@@ -1796,7 +1736,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
         ? "restart required for " + cvar.snapshot.definition.name + " = "
           + ValueToString(*cvar.snapshot.restart_value)
         : std::string {};
-      return make_result(ExecutionStatus::kOk, 0, output, {}, false);
+      return make_result(ExecutionStatus::kOk, output, {}, false);
     }
     const auto previous_staged_value = cvar.snapshot.restart_value.has_value()
       ? ValueToString(*cvar.snapshot.restart_value)
@@ -1820,7 +1760,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
       ? "restart required for " + cvar.snapshot.definition.name + " = "
         + ValueToString(*cvar.snapshot.restart_value)
       : std::string {};
-    return make_result(ExecutionStatus::kOk, 0, output, {}, true);
+    return make_result(ExecutionStatus::kOk, output, {}, true);
   }
 
   if (cvar.snapshot.current_value == stamped_value.value
@@ -1829,7 +1769,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
       ? cvar.snapshot.definition.name + " = "
         + ValueToString(cvar.snapshot.current_value)
       : std::string {};
-    return make_result(ExecutionStatus::kOk, 0, output, {}, false);
+    return make_result(ExecutionStatus::kOk, output, {}, false);
   }
 
   const auto previous_value = cvar.snapshot.current_value;
@@ -1848,7 +1788,7 @@ auto Registry::ApplyStampedValue(CVarEntry& cvar,
     ? cvar.snapshot.definition.name + " = "
       + ValueToString(cvar.snapshot.current_value)
     : std::string {};
-  return make_result(ExecutionStatus::kOk, 0, output, {}, true);
+  return make_result(ExecutionStatus::kOk, output, {}, true);
 }
 
 auto Registry::SourcePolicyFor(const CommandSource source) const
@@ -1856,6 +1796,8 @@ auto Registry::SourcePolicyFor(const CommandSource source) const
 {
   switch (source) {
   case CommandSource::kLocalConsole:
+  case CommandSource::kUi:
+  case CommandSource::kKey:
     return local_source_policy_;
   case CommandSource::kConfigFile:
     return config_source_policy_;
@@ -1865,41 +1807,6 @@ auto Registry::SourcePolicyFor(const CommandSource source) const
     return automation_source_policy_;
   }
   return local_source_policy_;
-}
-
-auto Registry::IsCommandAllowed(
-  const CommandDefinition& command, const CommandContext& context) const -> bool
-{
-  const auto& policy = SourcePolicyFor(context.source);
-  if (!policy.allow_commands) {
-    return false;
-  }
-
-  if (context.shipping_build
-    && (HasFlag(command.flags, CommandFlags::kCheat)
-      || HasFlag(command.flags, CommandFlags::kDevOnly))) {
-    return false;
-  }
-
-  if (!policy.allow_dev_only
-    && HasFlag(command.flags, CommandFlags::kDevOnly)) {
-    return false;
-  }
-  if (!policy.allow_cheat && HasFlag(command.flags, CommandFlags::kCheat)) {
-    return false;
-  }
-
-  if (context.source == CommandSource::kRemote
-    && !HasFlag(command.flags, CommandFlags::kRemoteAllowed)) {
-    return false;
-  }
-
-  if (context.source == CommandSource::kRemote && !remote_allowlist_.empty()
-    && !remote_allowlist_.contains(command.name)) {
-    return false;
-  }
-
-  return true;
 }
 
 auto Registry::IsCVarMutationAllowed(
@@ -1924,13 +1831,6 @@ auto Registry::IsCVarMutationAllowed(
     return false;
   }
   return true;
-}
-
-auto Registry::EmitAudit(const AuditEvent& event) const -> void
-{
-  if (audit_hook_) {
-    audit_hook_(event);
-  }
 }
 
 } // namespace oxygen::console

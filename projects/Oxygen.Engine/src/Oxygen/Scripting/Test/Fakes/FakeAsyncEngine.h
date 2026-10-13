@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
@@ -96,6 +97,11 @@ public:
     return console_;
   }
 
+  auto GetCommands() noexcept -> ::oxygen::commands::CommandRegistry& override
+  {
+    return commands_;
+  }
+
   auto IsRunning() const -> bool override { return running_; }
 
   auto Stop() -> void override { running_ = false; }
@@ -104,6 +110,7 @@ public:
   auto Resume() -> void override { paused_ = false; }
   auto IsPaused() const -> bool override { return paused_; }
   auto Step(std::uint32_t /*frames*/) -> void override { paused_ = true; }
+  auto GetPendingSteps() const -> std::uint32_t override { return 0U; }
   auto BeginSession() -> bool override
   {
     if (session_ != SessionState::kNone) {
@@ -193,7 +200,8 @@ private:
   EngineConfig config_ {};
   std::shared_ptr<const PathFinderConfig> path_finder_config_;
   PathFinder path_finder_;
-  console::Console console_ {};
+  commands::CommandRegistry commands_;
+  console::Console console_ { observer_ptr { &commands_ } };
   FakeScriptCompilationService compilation_service_ {};
   bool running_ { true };
   observer_ptr<content::IAssetLoader> asset_loader_;

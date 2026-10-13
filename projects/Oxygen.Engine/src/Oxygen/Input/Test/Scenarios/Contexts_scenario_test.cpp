@@ -8,7 +8,8 @@
 // context that goes away must end, visibly, and must not stick.
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/ActionValue.h>
@@ -20,8 +21,8 @@
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::observer_ptr;
+using oxygen::commands::ExecutionStatus;
 using oxygen::console::Console;
-using oxygen::console::ExecutionStatus;
 using oxygen::input::ActionTriggerDown;
 using oxygen::input::ActionTriggerPressed;
 using oxygen::input::ActionValueType;
@@ -122,7 +123,8 @@ NOLINT_TEST_F(ContextScenario, RemovedContextCancelsItsActions)
 //! turned back on.
 NOLINT_TEST_F(ContextScenario, DisablingInputCancelsHeldActions)
 {
-  Console console;
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   System().RegisterConsoleBindings(observer_ptr { &console });
 
   oxygen::co::Run(Loop(), [&]() -> oxygen::co::Co<> {

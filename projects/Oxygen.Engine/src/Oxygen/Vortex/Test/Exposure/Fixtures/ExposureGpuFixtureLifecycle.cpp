@@ -20,8 +20,9 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -484,7 +485,8 @@ auto ExposureGpuTest::CheckFogViewRetirement(
       | RendererCapabilityFamily::kLightingData
       | RendererCapabilityFamily::kEnvironmentLighting
       | RendererCapabilityFamily::kFinalOutputComposition);
-  console::Console console;
+  oxygen::commands::CommandRegistry command_registry;
+  console::Console console { oxygen::observer_ptr { &command_registry } };
   renderer_->RegisterConsoleBindings(observer_ptr {
     &console,
   });
@@ -493,7 +495,7 @@ auto ExposureGpuTest::CheckFogViewRetirement(
       .Execute(temporal ? "vtx.volumetric_fog.temporal_reprojection true"
                         : "vtx.volumetric_fog.temporal_reprojection false")
       .status,
-    console::ExecutionStatus::kOk);
+    commands::ExecutionStatus::kOk);
   auto scene = std::make_shared<scene::Scene>("Fog retirement", 4U);
   scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());
   auto& fog = scene->GetEnvironment()->AddSystem<scene::environment::Fog>();

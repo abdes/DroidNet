@@ -46,6 +46,10 @@ namespace oxygen::console {
 class Console;
 } // namespace oxygen::console
 
+namespace oxygen::commands {
+class CommandRegistry;
+} // namespace oxygen::commands
+
 namespace oxygen::content {
 
 //! Identifies one eviction or script-reload subscription; zero means none.

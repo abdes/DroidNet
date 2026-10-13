@@ -10,8 +10,9 @@
 #include "Fakes/Graphics.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Queues.h>
@@ -26,8 +27,8 @@ namespace {
 
 using oxygen::Graphics;
 using oxygen::RendererConfig;
+using oxygen::commands::ExecutionStatus;
 using oxygen::console::Console;
-using oxygen::console::ExecutionStatus;
 using oxygen::graphics::QueueRole;
 using oxygen::vortex::CapabilitySet;
 using oxygen::vortex::kPhase1DefaultRuntimeCapabilityFamilies;
@@ -198,7 +199,8 @@ NOLINT_TEST_F(RendererCapabilityBindingTest, OcclusionConsoleCVarDefaultsOn)
 {
   const auto renderer = MakeRenderer(RendererCapabilityFamily::kScenePreparation
     | RendererCapabilityFamily::kDeferredShading);
-  auto console = Console {};
+  auto commands = oxygen::commands::CommandRegistry {};
+  auto console = Console { oxygen::observer_ptr { &commands } };
   renderer->RegisterConsoleBindings(oxygen::observer_ptr {
     &console,
   });

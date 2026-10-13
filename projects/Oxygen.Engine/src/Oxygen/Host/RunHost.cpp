@@ -17,6 +17,8 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Control/CommandDispatcher.h>
+#include <Oxygen/Control/ControlServer.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
@@ -73,7 +75,8 @@ namespace {
   }
 
   auto AsyncMain(HostContext& host, const RegisterModules& register_modules,
-    const std::string& application) -> co::Co<int>
+    const std::string& application,
+    const std::optional<control::ControlServerConfig>& control) -> co::Co<int>
   {
     OXCO_WITH_NURSERY(n)
     {
@@ -91,16 +94,38 @@ namespace {
       co_await n.Start(&AsyncEngine::ActivateAsync, std::ref(*host.engine));
       host.engine->Run();
 
+      // Commands run in the host's nursery, so jobs outlive module teardown.
+      host.commands = std::make_unique<control::CommandDispatcher>(
+        observer_ptr<IAsyncEngine> { host.engine.get() },
+        observer_ptr { host.events.get() });
+      co_await n.Start(
+        &control::CommandDispatcher::ActivateAsync, std::ref(*host.commands));
+      RegisterRequiredModule(*host.engine,
+        std::make_unique<control::CommandDispatchModule>(
+          observer_ptr { host.commands.get() }));
+
       RegisterHostModules(host);
       if (register_modules) {
         register_modules(*host.engine, host);
       }
 
+      if (control) {
+        host.control_server = std::make_unique<control::ControlServer>(
+          observer_ptr<IAsyncEngine> { host.engine.get() },
+          observer_ptr { host.commands.get() },
+          observer_ptr { host.events.get() },
+          host.platform->Async().IoContext(), *control);
+        co_await n.Start(&control::ControlServer::ActivateAsync,
+          std::ref(*host.control_server));
+        host.control_server->Run();
+      }
+
       n.Start([&host, &application] -> co::Co<> {
         co_await host.platform->Windows().LastWindowClosed();
-        LOG_F(
-          INFO, "{}: last window closed -> stopping the engine", application);
-        host.engine->Stop();
+        LOG_F(INFO, "{}: last window closed -> ngin.quit", application);
+        // Closing the window is an interaction like any other: a command.
+        host.commands->PostLine("ngin.quit",
+          commands::CommandContext { .source = commands::CommandSource::kUi });
       });
 
       co_await host.engine->Completed();
@@ -185,7 +210,8 @@ auto RunHost(HostConfig config, const RegisterModules& register_modules) -> int
     host.engine = std::make_shared<AsyncEngine>(host.platform, host.gfx_weak,
       config.engine, std::move(config.startup_cvars));
 
-    exit_code = co::Run(host, AsyncMain(host, register_modules, application));
+    exit_code = co::Run(
+      host, AsyncMain(host, register_modules, application, config.control));
   } catch (const std::exception& ex) {
     LOG_F(ERROR, "{}: {}", application, ex.what());
     exit_code = EXIT_FAILURE;

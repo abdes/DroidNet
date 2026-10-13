@@ -17,8 +17,8 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -172,7 +172,7 @@ auto ExposureLightingGpuTest::SetUp() -> void
     &fixture_console,
   });
   ASSERT_EQ(fixture_console.Execute("vtx.occlusion.enable false").status,
-    console::ExecutionStatus::kOk);
+    commands::ExecutionStatus::kOk);
   scene = std::make_shared<scene::Scene>(
     "Lighting producer domain", initial_scene_capacity);
   scene->SetEnvironment(std::make_unique<scene::SceneEnvironment>());

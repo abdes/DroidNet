@@ -13,8 +13,9 @@
 
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/CVar.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Console/StartupPlan.h>
 #include <Oxygen/Testing/GTest.h>
@@ -22,17 +23,18 @@
 
 namespace {
 
+using oxygen::commands::ExecutionStatus;
 using oxygen::console::Console;
 using oxygen::console::CVarDefinition;
 using oxygen::console::CVarFlags;
 using oxygen::console::CVarValue;
 using oxygen::console::CVarValueOrigin;
-using oxygen::console::ExecutionStatus;
 using oxygen::testing::ScopedLogCapture;
 
 NOLINT_TEST(ConsoleCVar, HandlesAllSupportedTypes)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
 
   // Bool
   ASSERT_TRUE(console
@@ -105,7 +107,8 @@ NOLINT_TEST(ConsoleCVar, HandlesAllSupportedTypes)
 
 NOLINT_TEST(ConsoleCVar, RejectsInvalidTypeAndClampsBounds)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
 
   const int64_t default_lights = 4;
   const double min_lights = 1.0;
@@ -150,7 +153,8 @@ NOLINT_TEST(ConsoleCVar, RejectsInvalidTypeAndClampsBounds)
 //! variable's type when it registers, and unparsable text is ignored.
 NOLINT_TEST(ConsoleCVar, TextStartupValuesAreParsedForTheType)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   oxygen::console::ConsoleStartupPlan plan;
   plan.Set("r.enabled", std::string_view { "true" });
   plan.Set("r.count", std::string_view { "7" });
@@ -184,7 +188,8 @@ NOLINT_TEST(ConsoleCVar, TextStartupValuesAreParsedForTheType)
 
 NOLINT_TEST(ConsoleCVar, StringWithAllowedValuesRejectsOthers)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   oxygen::console::ConsoleStartupPlan plan;
   plan.Set("view.mode", std::string_view { "bogus" });
   console.ApplyStartupPlan(plan);
@@ -223,7 +228,8 @@ NOLINT_TEST(ConsoleCVar, StringWithAllowedValuesRejectsOthers)
 
 NOLINT_TEST(ConsoleCVar, ReadOnlyCVarsCannotBeModified)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   ASSERT_TRUE(console
       .RegisterCVar({
         .name = "sys.version",
@@ -244,7 +250,8 @@ NOLINT_TEST(ConsoleCVar, ReadOnlyCVarsCannotBeModified)
 
 NOLINT_TEST(ConsoleCVar, LatchedCVarsUpdateOnApply)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   ASSERT_TRUE(console
       .RegisterCVar({
         .name = "r.latched",
@@ -279,7 +286,8 @@ NOLINT_TEST(ConsoleCVar, LogsAppliedAndIgnoredChangesAtInfo)
   loguru::g_global_verbosity = loguru::Verbosity_INFO;
 
   ScopedLogCapture capture("console_cvar_info_logs", loguru::Verbosity_INFO);
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   ASSERT_TRUE(console
       .RegisterCVar({
         .name = "r.trace",

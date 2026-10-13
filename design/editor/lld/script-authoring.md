@@ -218,9 +218,10 @@ Save and reopen keep slot identity, order, execution order and overrides.
 The player is an external process that stays running between sessions
 ([runtime host](../../../projects/Oxygen.Engine/design/runtime-core/runtime-host.md#45-who-holds-control-after-stop)).
 The scene document toolbar has one split button: the main part starts Play
-(Restart while a session runs: `end_session`, then `play`) and its dropdown
-holds the play session settings and **Close player**, which sends `stop`.
-Stop sits beside it while a session runs and sends `end_session`.
+(Restart while a session runs: `ngin.session.end`, then
+`ngin.session.begin`) and its dropdown holds the play session settings and
+**Close player**, which runs `ngin.quit`.
+Stop sits beside it while a session runs and runs `ngin.session.end`.
 
 | Setting     | Default    | Effect                                                                                          |
 | ----------- | ---------- | ----------------------------------------------------------------------------------------------- |
@@ -243,17 +244,22 @@ data and are never cooked.
 4. No player connected: write the launch file to the project's local
    (ignored) state folder (project cooked mounts in order, the scene, the
    project's authoring roots as script source roots, the session settings and
-   a pipe name) and start `Oxygen.Player.exe` from the installed SDK. A player
-   connected: send `play` with the scene; the player remounts the cooked
-   content first, so the cook from step 2 is always seen.
-5. Stream events: clear Output and Problems on `session_started`; `log` to
-   the Output panel, `diagnostic` to Problems, `lifecycle` (`session_started`,
-   `paused`, `resumed`, `session_ended`) to the toolbar state, and an
-   operation result on failure.
-6. Stop sends `end_session`; the player stays up for the next Play. Closing
-   the project or the editor sends `stop` and waits briefly before ending the
-   process. A closed pipe means the player exited; the next Play launches a
-   new one.
+   a `control` block with `exit_when_owner_leaves`), start `Oxygen.Player.exe`
+   from the installed SDK, read the discovery file of that process and
+   connect to its
+   [control server](../../../projects/Oxygen.Engine/design/runtime-core/commands-and-remote-control.md#4-control-server)
+   as owner. A player connected: run `ngin.session.begin` with the scene; the
+   player remounts the cooked content first, so the cook from step 2 is
+   always seen.
+5. Subscribe to `lifecycle`, `log` and `diagnostic`: clear Output and
+   Problems on `session_started`; `log` to the Output panel, `diagnostic` to
+   Problems, `lifecycle` (`session_started`, `paused`, `resumed`,
+   `session_ended`) to the toolbar state, and an operation result when
+   `ngin.session.begin` replies with a failure.
+6. Stop runs `ngin.session.end`; the player stays up for the next Play.
+   Closing the project or the editor runs `ngin.quit` and waits briefly
+   before ending the process. A closed connection means the player exited;
+   the next Play launches a new one.
 
 One session at a time. Saving a script while playing reloads it in the player
 without a cook; scene edits apply on the next Play.

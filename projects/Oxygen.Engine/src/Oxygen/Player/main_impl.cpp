@@ -6,7 +6,6 @@
 
 #include <Windows.h> // IWYU pragma: keep
 
-#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
@@ -34,15 +33,14 @@
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Config/RendererConfig.h>
+#include <Oxygen/Control/ControlServer.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Host/HostConfig.h>
 #include <Oxygen/Host/RunHost.h>
 #include <Oxygen/Host/RuntimeCli.h>
-#include <Oxygen/Player/EventStream.h>
 #include <Oxygen/Player/LaunchFile.h>
-#include <Oxygen/Player/PipeChannel.h>
 #include <Oxygen/Player/PlayerModule.h>
 #include <Oxygen/Player/PlayerProtocol.h>
 #include <Oxygen/SceneSync/SceneObserverSyncModule.h>
@@ -64,18 +62,16 @@ using oxygen::clap::CommandBuilder;
 using oxygen::clap::Option;
 using oxygen::clap::Options;
 using oxygen::graphics::QueueRole;
-using namespace std::chrono_literals;
 
 namespace {
-
-//! How long the player waits for the launcher to accept the pipe.
-constexpr auto kPipeConnectTimeout = 10s;
 
 //! Engine settings the command line adds to the launch file.
 struct EngineCli {
   //! `NAME=VALUE` console variable assignments, applied at startup.
   std::vector<std::string> cvars;
   bool verify_hashes { false };
+  //! Control server port; negative leaves the server off, 0 is ephemeral.
+  int control_port { -1 };
 };
 
 auto MakeEngineOptions(EngineCli& engine) -> std::shared_ptr<Options>
@@ -102,6 +98,16 @@ auto MakeEngineOptions(EngineCli& engine) -> std::shared_ptr<Options>
       .UserFriendlyName("enabled")
       .StoreTo(&engine.verify_hashes)
       .Build());
+  options->Add(Option::WithKey("control")
+      .About("Start the JSON-RPC control server on a loopback port (0 picks "
+             "one); clients find it in the discovery file")
+      .Long("control")
+      .WithValue<int>()
+      .DefaultValue(-1)
+      .ImplicitValue(0)
+      .UserFriendlyName("port")
+      .StoreTo(&engine.control_port)
+      .Build());
   return options;
 }
 
@@ -112,6 +118,15 @@ auto MakeEngineOptions(EngineCli& engine) -> std::shared_ptr<Options>
 auto ApplyEngineCli(const EngineCli& engine, host::HostConfig& config) -> void
 {
   config.engine.asset_loader.verify_content_hashes = engine.verify_hashes;
+  if (engine.control_port >= 0) {
+    // The command line's port wins; the launch file's owner rule stays.
+    auto control
+      = config.control.value_or(oxygen::control::ControlServerConfig {
+        .application = "Oxygen.Player",
+      });
+    control.port = static_cast<uint16_t>(engine.control_port);
+    config.control = std::move(control);
+  }
   for (const auto& assignment : engine.cvars) {
     const auto separator = assignment.find('=');
     if (separator == std::string::npos || separator == 0U) {
@@ -211,14 +226,20 @@ auto MakeHostConfig(const player::PlayerLaunch& launch,
   config.startup_cvars.Set(
     "ngin.target_fps", static_cast<std::int64_t>(runtime.target_fps));
   config.startup_cvars.Set("gfx.vsync", runtime.vsync);
+  if (launch.control.has_value()) {
+    config.control = oxygen::control::ControlServerConfig {
+      .port = launch.control->port,
+      .application = "Oxygen.Player",
+      .exit_when_owner_leaves = launch.control->exit_when_owner_leaves,
+    };
+  }
   // Explicit assignments come last, so they win.
   ApplyEngineCli(engine, config);
   return config;
 }
 
 auto RegisterModules(AsyncEngine& engine, host::HostContext& context,
-  player::PlayerLaunch launch, player::EventStream& events,
-  std::vector<std::string> cvar_names) -> void
+  player::PlayerLaunch launch, std::vector<std::string> cvar_names) -> void
 {
   host::RegisterRequiredModule(engine,
     std::make_unique<oxygen::scenesync::SceneObserverSyncModule>(
@@ -227,8 +248,8 @@ auto RegisterModules(AsyncEngine& engine, host::HostContext& context,
     std::make_unique<oxygen::scripting::ScriptingModule>(
       oxygen::engine::kScriptingModulePriority));
   host::RegisterRequiredModule(engine,
-    std::make_unique<player::PlayerModule>(context, std::move(launch),
-      oxygen::observer_ptr { &events }, std::move(cvar_names)));
+    std::make_unique<player::PlayerModule>(
+      context, std::move(launch), std::move(cvar_names)));
 
   constexpr auto kCapabilities
     = vortex::RendererCapabilityFamily::kScenePreparation
@@ -259,25 +280,12 @@ auto Run(const oxygen::clap::CommandLineContext& context,
     launch.window.width = size.width;
     launch.window.height = size.height;
   }
-  auto channel = std::unique_ptr<player::PipeChannel> {};
-  if (launch.diagnostics_pipe.has_value()) {
-    channel = player::PipeChannel::Connect(
-      *launch.diagnostics_pipe, kPipeConnectTimeout);
-  }
-  auto events = player::EventStream(std::move(channel));
-  events.StartLogCapture();
-  events.Lifecycle(player::LifecycleState::kStarting, launch.scene);
-
   auto config = MakeHostConfig(launch, context, runtime, engine_cli);
-  const auto exit_code = host::RunHost(std::move(config),
+  return host::RunHost(std::move(config),
     [&](AsyncEngine& engine, host::HostContext& host_context) -> void {
       RegisterModules(
-        engine, host_context, std::move(launch), events, CVarNames(engine_cli));
+        engine, host_context, std::move(launch), CVarNames(engine_cli));
     });
-
-  events.Lifecycle(player::LifecycleState::kStopped);
-  events.StopLogCapture();
-  return exit_code;
 }
 
 } // namespace

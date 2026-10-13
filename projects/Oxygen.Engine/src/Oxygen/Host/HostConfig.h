@@ -16,6 +16,9 @@
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/Console/StartupPlan.h>
+#include <Oxygen/Control/CommandDispatcher.h>
+#include <Oxygen/Control/ControlServer.h>
+#include <Oxygen/Control/EventLog.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 
@@ -52,6 +55,8 @@ struct HostConfig {
   HostWindowConfig window;
   graphics::BackendType backend { graphics::BackendType::kDirect3D12 };
   console::ConsoleStartupPlan startup_cvars;
+  //! Starts the JSON-RPC control server when set.
+  std::optional<control::ControlServerConfig> control;
 };
 
 //! Runtime state shared by the host and the modules it registers.
@@ -72,6 +77,15 @@ struct HostContext {
 
   //! Registered by `RunHost` before any application module.
   observer_ptr<engine::InputSystem> input_system;
+
+  //! Events for remote clients; modules publish their own topics here.
+  std::unique_ptr<control::EventLog> events
+    = std::make_unique<control::EventLog>();
+  //! Runs every command invocation; created and activated by `RunHost`
+  //! before any application module is registered.
+  std::unique_ptr<control::CommandDispatcher> commands;
+  //! The control server, when `HostConfig::control` asks for one.
+  std::unique_ptr<control::ControlServer> control_server;
 
   //! Runs background tasks on the engine thread until the engine completes;
   //! tasks still running then are cancelled. Set before any application

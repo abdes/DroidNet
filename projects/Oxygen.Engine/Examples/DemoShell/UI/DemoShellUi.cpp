@@ -51,6 +51,8 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/AsyncEngine.h>
@@ -285,6 +287,9 @@ struct DemoShellUi::Impl {
   {
     DCHECK_NOTNULL_F(panel_registry, "expecting valid PanelRegistry");
     DCHECK_NOTNULL_F(ui_settings_service, "expecting valid UiSettingsService");
+    if (engine) {
+      console_host.RegisterCommands(engine->GetCommands());
+    }
 
     // Create Camera VM and Panel
     if (panel_config.camera_controls && camera_settings && camera_rig) {
@@ -532,7 +537,13 @@ auto DemoShellUi::Draw(observer_ptr<engine::FrameContext> fc) -> void
   ImGui::SetCurrentContext(imgui_context);
 
   const auto& io = ImGui::GetIO();
-  impl_->console_host.Draw(impl_->engine->GetConsole(), imgui_context);
+  // DemoShell has no command dispatcher: console lines run synchronously.
+  auto& console = impl_->engine->GetConsole();
+  impl_->console_host.Draw(console, imgui_context,
+    [&console](std::string line, const commands::CommandSource source) -> void {
+      static_cast<void>(
+        console.Execute(line, commands::CommandContext { .source = source }));
+    });
   impl_->PersistConsoleUiSettingsToStorage();
 
   if (!io.WantCaptureMouse && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {

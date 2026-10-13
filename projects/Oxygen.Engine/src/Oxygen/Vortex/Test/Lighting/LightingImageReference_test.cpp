@@ -40,7 +40,7 @@
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -1018,14 +1018,14 @@ namespace {
       SCOPED_TRACE(forward);
       std::vector<float> culled_off;
       ASSERT_EQ(fixture_console.Execute("vtx.occlusion.enable false").status,
-        console::ExecutionStatus::kOk);
+        commands::ExecutionStatus::kOk);
       ASSERT_NO_FATAL_FAILURE(RenderVisibility(forward, culled_off));
       std::vector<float> culled_on;
       ASSERT_EQ(fixture_console.Execute("vtx.occlusion.enable true").status,
-        console::ExecutionStatus::kOk);
+        commands::ExecutionStatus::kOk);
       ASSERT_NO_FATAL_FAILURE(RenderVisibility(forward, culled_on));
       ASSERT_EQ(fixture_console.Execute("vtx.occlusion.enable false").status,
-        console::ExecutionStatus::kOk);
+        commands::ExecutionStatus::kOk);
       const auto shadowed = std::ranges::count_if(
         culled_off, [](const float v) -> bool { return v < 0.5F; });
       EXPECT_GT(shadowed, 0);

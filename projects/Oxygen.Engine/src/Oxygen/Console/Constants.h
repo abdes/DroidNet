@@ -15,11 +15,6 @@ namespace oxygen::console {
 inline constexpr size_t kDefaultHistoryCapacity = 1024;
 inline constexpr size_t kMinHistoryCapacity = 1;
 
-inline constexpr int kExitCodeGenericError = 1;
-inline constexpr int kExitCodeInvalidArguments = 2;
-inline constexpr int kExitCodeDenied = 13;
-inline constexpr int kExitCodeNotFound = 127;
-
 inline constexpr char kCommandChainSeparator = ';';
 inline constexpr size_t kCompletionCycleStartIndex = 0;
 

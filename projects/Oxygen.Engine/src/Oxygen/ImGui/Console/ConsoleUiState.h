@@ -9,15 +9,21 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <string>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/ImGui/api_export.h>
 
 namespace oxygen::imgui::consoleui {
+
+//! Runs a console line as commands; the owner decides when (a host posts it
+//! to the engine's command dispatcher).
+using LineRunner
+  = std::function<void(std::string line, commands::CommandSource source)>;
 
 enum class LogSeverity : uint8_t {
   kInfo,
@@ -29,7 +35,7 @@ enum class LogSeverity : uint8_t {
 struct ConsoleLogEntry final {
   uint64_t sequence { 0 };
   std::string command;
-  oxygen::console::ExecutionResult result;
+  oxygen::commands::CommandResult result;
   LogSeverity severity { LogSeverity::kInfo };
 };
 
@@ -93,8 +99,8 @@ public:
   OXGN_IMGUI_API auto SetSeverityEnabled(
     LogSeverity severity, bool enabled) noexcept -> void;
 
-  OXGN_IMGUI_API auto AppendLogEntry(std::string command,
-    const oxygen::console::ExecutionResult& result) -> void;
+  OXGN_IMGUI_API auto AppendLogEntry(
+    std::string command, const oxygen::commands::CommandResult& result) -> void;
   OXGN_IMGUI_NDAPI auto LogEntries() const
     -> const std::vector<ConsoleLogEntry>&;
   OXGN_IMGUI_API auto ClearLogEntries() -> void;
@@ -105,7 +111,7 @@ public:
 
 private:
   OXGN_IMGUI_NDAPI static auto SeverityFromResult(
-    const oxygen::console::ExecutionResult& result) noexcept -> LogSeverity;
+    const oxygen::commands::CommandResult& result) noexcept -> LogSeverity;
   OXGN_IMGUI_NDAPI static auto SeverityIndex(LogSeverity severity) noexcept
     -> size_t;
 

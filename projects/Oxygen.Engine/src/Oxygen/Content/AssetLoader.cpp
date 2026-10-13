@@ -40,9 +40,11 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Base/TypeList.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Console/CVar.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/ContentLoadScope.h>
@@ -783,9 +785,8 @@ auto AssetLoader::UpdateTelemetrySummaryCVar() -> void
       + stats.physics_resources.at(cache_hits));
   (void)console_->SetCVarFromText({ .name = kCVarLastStats, .text = summary },
     {
-      .source = console::CommandSource::kAutomation,
+      .source = commands::CommandSource::kAutomation,
       .shipping_build = false,
-      .record_history = false,
     });
 }
 
@@ -1683,38 +1684,46 @@ auto AssetLoader::RegisterConsoleBindings(
     .min_value = std::nullopt,
     .max_value = std::nullopt,
   });
+}
 
-  (void)console->RegisterCommand(console::CommandDefinition {
+auto AssetLoader::RegisterCommands(
+  const observer_ptr<commands::CommandRegistry> registry) noexcept -> void
+{
+  if (registry == nullptr) {
+    return;
+  }
+  static_cast<void>(registry->Register(commands::CommandDefinition {
     .name = std::string(kCommandTrimCache),
+    .label = "Trim Asset Cache",
     .help = "Trim AssetLoader in-memory cache",
-    .flags = console::CommandFlags::kDevOnly,
-    .handler = [this](const std::vector<std::string>&,
-                 const console::CommandContext&) -> console::ExecutionResult {
+    .flags = commands::CommandFlags::kDevOnly,
+    .handler = [this](const commands::CommandArgs&,
+                 const commands::CommandContext&) -> commands::CommandResult {
       TrimCache();
-      return console::ExecutionResult {
-        .status = console::ExecutionStatus::kOk,
-        .exit_code = 0,
+      return commands::CommandResult {
+        .status = commands::ExecutionStatus::kOk,
         .output = "AssetLoader cache trimmed",
         .error = {},
       };
     },
-  });
-  (void)console->RegisterCommand(console::CommandDefinition {
+  }));
+  static_cast<void>(registry->Register(commands::CommandDefinition {
     .name = std::string(kCommandDumpStats),
-    .help = "Dump AssetLoader telemetry [scope]",
-    .flags = console::CommandFlags::kDevOnly,
-    .handler = [this](const std::vector<std::string>& args,
-                 const console::CommandContext&) -> console::ExecutionResult {
-      if (args.size() > 1) {
-        return console::ExecutionResult {
-          .status = console::ExecutionStatus::kInvalidArguments,
-          .exit_code = 2,
-          .output = {},
-          .error = "usage: cntt.dump_stats [scope]",
-        };
-      }
-
-      const auto scope = args.empty() ? std::string("all") : args.at(0);
+    .label = "Dump Asset Telemetry",
+    .help = "Log AssetLoader telemetry for a scope",
+    .params = {
+      commands::CommandParam {
+        .name = "scope",
+        .type = commands::ParamType::kEnum,
+        .default_value = commands::ParamValue { std::string { "all" } },
+        .allowed_values = { "all", "asset", "resource", "pressure", "trim",
+          "eviction", "cache", "inflight" },
+      },
+    },
+    .flags = commands::CommandFlags::kDevOnly,
+    .handler = [this](const commands::CommandArgs& args,
+                 const commands::CommandContext&) -> commands::CommandResult {
+      const auto& scope = args.GetString("scope");
       const auto stats = GetTelemetryStats();
       LOG_SCOPE_F(INFO, "AssetLoader Telemetry (%s)", scope.c_str());
       auto log_kv = [](const std::string_view key, const auto& value) -> void {
@@ -1809,38 +1818,29 @@ auto AssetLoader::RegisterConsoleBindings(
           + stats.buffer_resources.at(TypedLoadMetric::kRequests)
           + stats.script_resources.at(TypedLoadMetric::kRequests)
           + stats.physics_resources.at(TypedLoadMetric::kRequests));
-      return console::ExecutionResult {
-        .status = console::ExecutionStatus::kOk,
-        .exit_code = 0,
+      return commands::CommandResult {
+        .status = commands::ExecutionStatus::kOk,
         .output = output,
         .error = {},
       };
     },
-  });
-  (void)console->RegisterCommand(console::CommandDefinition {
+  }));
+  static_cast<void>(registry->Register(commands::CommandDefinition {
     .name = std::string(kCommandResetStats),
+    .label = "Reset Asset Telemetry",
     .help = "Reset AssetLoader telemetry counters",
-    .flags = console::CommandFlags::kDevOnly,
-    .handler = [this](const std::vector<std::string>& args,
-                 const console::CommandContext&) -> console::ExecutionResult {
-      if (!args.empty()) {
-        return console::ExecutionResult {
-          .status = console::ExecutionStatus::kInvalidArguments,
-          .exit_code = 2,
-          .output = {},
-          .error = "usage: cntt.reset_stats",
-        };
-      }
+    .flags = commands::CommandFlags::kDevOnly,
+    .handler = [this](const commands::CommandArgs&,
+                 const commands::CommandContext&) -> commands::CommandResult {
       ResetTelemetryStats();
       UpdateTelemetrySummaryCVar();
-      return console::ExecutionResult {
-        .status = console::ExecutionStatus::kOk,
-        .exit_code = 0,
+      return commands::CommandResult {
+        .status = commands::ExecutionStatus::kOk,
         .output = "AssetLoader telemetry reset",
         .error = {},
       };
     },
-  });
+  }));
 }
 
 auto AssetLoader::ApplyConsoleCVars(const console::Console& console) -> void

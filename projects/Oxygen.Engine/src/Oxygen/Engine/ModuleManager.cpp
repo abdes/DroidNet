@@ -343,6 +343,7 @@ auto ModuleManager::RegisterModule(
 
   if (engine_ != nullptr) {
     module->RegisterConsoleBindings(observer_ptr { &engine_->GetConsole() });
+    module->RegisterCommands(observer_ptr { &engine_->GetCommands() });
   }
 
   // Insert module and rebuild caches before notifying subscribers

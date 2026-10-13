@@ -12,7 +12,7 @@
 #include "LightBench/LightBenchSettings.h"
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 
 namespace oxygen::console {
 class Console;
@@ -37,7 +37,7 @@ private:
   auto Unregister() -> void;
   console::Console& console_;
   Actions actions_;
-  std::array<console::CommandHandle, 3> handles_ {};
+  std::array<commands::CommandHandle, 3> handles_ {};
 };
 
 } // namespace oxygen::examples::light_bench

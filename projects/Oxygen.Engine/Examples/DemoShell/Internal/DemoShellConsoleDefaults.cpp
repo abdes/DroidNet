@@ -9,7 +9,7 @@
 #include "DemoShell/Internal/DemoShellConsoleDefaults.h"
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Console/Console.h>
 
 namespace oxygen::examples::internal {

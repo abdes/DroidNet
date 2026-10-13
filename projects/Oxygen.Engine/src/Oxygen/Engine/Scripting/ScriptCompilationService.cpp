@@ -42,9 +42,10 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Console/CVar.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Core/EngineTag.h>
@@ -636,11 +637,20 @@ auto ScriptCompilationService::RegisterConsoleBindings(
     .default_value = true,
     .flags = console::CVarFlags::kArchive,
   });
+}
 
-  (void)console->RegisterCommand(console::CommandDefinition {
+auto ScriptCompilationService::RegisterCommands(
+  const observer_ptr<commands::CommandRegistry> registry) -> void
+{
+  if (registry == nullptr) {
+    return;
+  }
+  static_cast<void>(registry->Register(commands::CommandDefinition {
     .name = "scripting.stats",
+    .label = "Scripting Statistics",
     .help = "Print scripting compilation and cache statistics",
-    .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
+    .handler = [this](const commands::CommandArgs&,
+                 const commands::CommandContext&) -> commands::CommandResult {
       const auto counters = GetCounters();
       LOG_F(INFO, "Scripting Statistics:");
       LOG_F(INFO, "  L1 Hits: {}", counters.l1_hits);
@@ -655,22 +665,24 @@ auto ScriptCompilationService::RegisterConsoleBindings(
             / counters.compile_latency_samples);
       LOG_F(INFO, "  Max Latency: {} us", counters.compile_latency_max_us);
       return {
-        .status = console::ExecutionStatus::kOk,
+        .status = commands::ExecutionStatus::kOk,
       };
     },
-  });
+  }));
 
-  (void)console->RegisterCommand(console::CommandDefinition {
+  static_cast<void>(registry->Register(commands::CommandDefinition {
     .name = "scripting.flush_cache",
+    .label = "Flush Script Cache",
     .help = "Manually trigger a flush of the persistent bytecode cache",
-    .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
+    .handler = [this](const commands::CommandArgs&,
+                 const commands::CommandContext&) -> commands::CommandResult {
       FlushPersistentCache();
       return {
-        .status = console::ExecutionStatus::kOk,
+        .status = commands::ExecutionStatus::kOk,
         .output = "Script cache flushed",
       };
     },
-  });
+  }));
 }
 
 auto ScriptCompilationService::ApplyConsoleCVars(

@@ -4,20 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
+using oxygen::commands::ExecutionStatus;
 using oxygen::console::Console;
-using oxygen::console::ExecutionStatus;
 
 NOLINT_TEST(ConsoleHistory, RecordsExecutedLines)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   EXPECT_EQ(console.Execute("help").status, ExecutionStatus::kOk);
   EXPECT_EQ(console.Execute("list commands").status, ExecutionStatus::kOk);
 
@@ -29,7 +30,8 @@ NOLINT_TEST(ConsoleHistory, RecordsExecutedLines)
 
 NOLINT_TEST(ConsoleHistory, DoesNotRecordDuplicateConsecutiveLines)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   EXPECT_EQ(console.Execute("help").status, ExecutionStatus::kOk);
   EXPECT_EQ(console.Execute("help").status, ExecutionStatus::kOk);
 
@@ -38,16 +40,16 @@ NOLINT_TEST(ConsoleHistory, DoesNotRecordDuplicateConsecutiveLines)
   EXPECT_EQ(entries[0], "help");
 }
 
-NOLINT_TEST(ConsoleHistory, CanSkipHistoryRecordingPerContext)
+//! Only lines typed in the console are history.
+NOLINT_TEST(ConsoleHistory, RecordsOnlyLocalConsoleLines)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   EXPECT_EQ(console.Execute("help").status, ExecutionStatus::kOk);
   EXPECT_EQ(console
               .Execute("list commands",
-                oxygen::console::CommandContext {
-                  .source = oxygen::console::CommandSource::kAutomation,
-                  .shipping_build = false,
-                  .record_history = false,
+                oxygen::commands::CommandContext {
+                  .source = oxygen::commands::CommandSource::kAutomation,
                 })
               .status,
     ExecutionStatus::kOk);
@@ -61,20 +63,21 @@ NOLINT_TEST(ConsoleHistory, RespectsCapacity)
 {
   // Minimum capacity is enforced as 32 in History.cpp
   constexpr size_t kHistoryCapacity = 32;
-  Console console { kHistoryCapacity };
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry },
+    kHistoryCapacity };
 
   // Register commands so they don't fail with kNotFound
   constexpr int kTotalCommands = 40;
   for (int i = 0; i < kTotalCommands; ++i) {
-    ASSERT_TRUE(console
-        .RegisterCommand({ .name = "cmd" + std::to_string(i),
+    ASSERT_TRUE(command_registry
+        .Register({ .name = "cmd" + std::to_string(i),
           .help = "dummy",
-          .flags = oxygen::console::CommandFlags::kNone,
+          .flags = oxygen::commands::CommandFlags::kNone,
           .handler =
             [](const auto&, const auto&) {
-              return oxygen::console::ExecutionResult { .status
-                = oxygen::console::ExecutionStatus::kOk,
-                .exit_code = 0,
+              return oxygen::commands::CommandResult { .status
+                = oxygen::commands::ExecutionStatus::kOk,
                 .output = {},
                 .error = {} };
             } })
@@ -105,29 +108,28 @@ NOLINT_TEST(ConsoleHistory, PersistsAcrossSessions)
   oxygen::PathFinder path_finder { config, temp_root };
 
   {
-    Console writer {};
-    ASSERT_TRUE(writer
-        .RegisterCommand({ .name = "cmd1",
+    oxygen::commands::CommandRegistry writer_commands;
+    Console writer { oxygen::observer_ptr { &writer_commands } };
+    ASSERT_TRUE(writer_commands
+        .Register({ .name = "cmd1",
           .help = "dummy",
-          .flags = oxygen::console::CommandFlags::kNone,
+          .flags = oxygen::commands::CommandFlags::kNone,
           .handler =
             [](const auto&, const auto&) {
-              return oxygen::console::ExecutionResult { .status
-                = oxygen::console::ExecutionStatus::kOk,
-                .exit_code = 0,
+              return oxygen::commands::CommandResult { .status
+                = oxygen::commands::ExecutionStatus::kOk,
                 .output = {},
                 .error = {} };
             } })
         .IsValid());
-    ASSERT_TRUE(writer
-        .RegisterCommand({ .name = "cmd2",
+    ASSERT_TRUE(writer_commands
+        .Register({ .name = "cmd2",
           .help = "dummy",
-          .flags = oxygen::console::CommandFlags::kNone,
+          .flags = oxygen::commands::CommandFlags::kNone,
           .handler =
             [](const auto&, const auto&) {
-              return oxygen::console::ExecutionResult { .status
-                = oxygen::console::ExecutionStatus::kOk,
-                .exit_code = 0,
+              return oxygen::commands::CommandResult { .status
+                = oxygen::commands::ExecutionStatus::kOk,
                 .output = {},
                 .error = {} };
             } })
@@ -139,7 +141,8 @@ NOLINT_TEST(ConsoleHistory, PersistsAcrossSessions)
   }
 
   {
-    Console reader {};
+    oxygen::commands::CommandRegistry reader_commands;
+    Console reader { oxygen::observer_ptr { &reader_commands } };
     EXPECT_EQ(reader.LoadHistory(path_finder).status, ExecutionStatus::kOk);
     const auto& entries = reader.GetHistory().Entries();
     ASSERT_EQ(entries.size(), 2);

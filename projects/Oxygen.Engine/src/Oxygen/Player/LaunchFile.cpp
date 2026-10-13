@@ -123,8 +123,11 @@ auto ParseLaunchFile(const std::string_view text,
   if (const auto it = document.find("window"); it != document.end()) {
     ReadWindow(*it, launch.window);
   }
-  if (const auto it = document.find("diagnostics_pipe"); it != document.end()) {
-    launch.diagnostics_pipe = it->get<std::string>();
+  if (const auto it = document.find("control"); it != document.end()) {
+    launch.control = LaunchControl {
+      .port = it->value("port", std::uint16_t { 0U }),
+      .exit_when_owner_leaves = it->value("exit_when_owner_leaves", false),
+    };
   }
   return launch;
 }

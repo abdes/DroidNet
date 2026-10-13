@@ -14,7 +14,9 @@
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
@@ -25,11 +27,10 @@ namespace oxygen::scripting::bindings {
 namespace {
   constexpr std::string_view kConsoleLuaLogCommand = "__oxgn_lua_log";
   constexpr size_t kConsoleLogCommandOverheadBytes = 6;
-  constexpr console::CommandContext kLuaConsoleContext {
-    .source = console::CommandSource::kAutomation,
-    .shipping_build = false,
-    .record_history = false,
-  };
+  auto LuaConsoleContext() -> commands::CommandContext
+  {
+    return { .source = commands::CommandSource::kAutomation };
+  }
 
   enum class LuaLogLevel : uint8_t {
     kTrace,
@@ -52,45 +53,42 @@ namespace {
     return escaped;
   }
 
-  auto EnsureLuaLogCommandRegistered(console::Console& console_service) -> void
+  auto EnsureLuaLogCommandRegistered(commands::CommandRegistry& registry)
+    -> void
   {
-    // Console registration is expected to be idempotent.
-    (void)console_service.RegisterCommand(console::CommandDefinition {
+    if (registry.Find(kConsoleLuaLogCommand) != nullptr) {
+      return;
+    }
+    static_cast<void>(registry.Register(commands::CommandDefinition {
       .name = std::string(kConsoleLuaLogCommand),
-      .help = "internal lua log sink",
-      .flags = console::CommandFlags::kNone,
-      .handler = [](const std::vector<std::string>& args,
-                   const console::CommandContext&) -> console::ExecutionResult {
-        if (args.size() < 2) {
-          return {
-            .status = console::ExecutionStatus::kInvalidArguments,
-            .exit_code = 2,
-            .output = {},
-            .error = "usage: __oxgn_lua_log <level> <message>",
-          };
-        }
-
-        std::string message = args[1];
-        for (size_t i = 2; i < args.size(); ++i) {
-          message.push_back(' ');
-          message.append(args[i]);
-        }
-
-        return {
-          .status = console::ExecutionStatus::kOk,
-          .exit_code = 0,
-          .output = "[lua." + args[0] + "] " + message,
-          .error = {},
-        };
+      .label = "Script Log",
+      .help = "Internal sink that echoes oxygen.log output to the console",
+      .params = {
+        commands::CommandParam {
+          .name = "level",
+          .type = commands::ParamType::kString,
+          .required = true,
+        },
+        commands::CommandParam {
+          .name = "message",
+          .type = commands::ParamType::kString,
+          .required = true,
+          .rest_of_line = true,
+        },
       },
-    });
+      .handler = [](const commands::CommandArgs& args,
+                   const commands::CommandContext&) -> commands::CommandResult {
+        return commands::CommandResult::Success("[lua."
+          + args.GetString("level") + "] " + args.GetString("message"));
+      },
+    }));
   }
 
   auto DispatchToConsole(IAsyncEngine& engine, std::string_view level,
     std::string_view message) -> void
   {
     auto& console_service = engine.GetConsole();
-    EnsureLuaLogCommandRegistered(console_service);
+    EnsureLuaLogCommandRegistered(engine.GetCommands());
 
     std::string line;
     line.reserve(kConsoleLuaLogCommand.size() + level.size() + message.size()
@@ -101,7 +99,7 @@ namespace {
     line.append(" \"");
     line.append(EscapeConsoleQuotedArg(message));
     line.push_back('"');
-    (void)console_service.Execute(line, kLuaConsoleContext);
+    (void)console_service.Execute(line, LuaConsoleContext());
   }
 
   auto EmitEngineLog(LuaLogLevel level, std::string_view message,

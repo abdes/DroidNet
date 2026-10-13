@@ -6,6 +6,7 @@
 
 #include "DemoShell/Internal/DemoShellConsoleDefaults.h"
 
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Testing/GTest.h>
@@ -19,7 +20,8 @@ using oxygen::console::CVarValueOrigin;
 
 NOLINT_TEST(DemoShellConsoleDefaults, EnablesGpuTimestampCaptureWhenRegistered)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   ASSERT_TRUE(console
       .RegisterCVar(CVarDefinition {
         .name = "rndr.gpu_timestamps",
@@ -42,7 +44,8 @@ NOLINT_TEST(DemoShellConsoleDefaults, EnablesGpuTimestampCaptureWhenRegistered)
 
 NOLINT_TEST(DemoShellConsoleDefaults, IgnoresMissingGpuTimestampCVars)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
 
   internal::ApplyDemoShellConsoleDefaults(console);
 
@@ -51,7 +54,8 @@ NOLINT_TEST(DemoShellConsoleDefaults, IgnoresMissingGpuTimestampCVars)
 
 NOLINT_TEST(DemoShellConsoleDefaults, DoesNotOverrideHigherPrecedenceValue)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   ASSERT_TRUE(console
       .RegisterCVar(CVarDefinition {
         .name = "rndr.gpu_timestamps",
@@ -67,7 +71,7 @@ NOLINT_TEST(DemoShellConsoleDefaults, DoesNotOverrideHigherPrecedenceValue)
   startup_plan.Set("rndr.gpu_timestamps", true);
   console.ApplyStartupPlan(startup_plan);
   ASSERT_EQ(console.Execute("rndr.gpu_timestamps false").status,
-    oxygen::console::ExecutionStatus::kOk);
+    oxygen::commands::ExecutionStatus::kOk);
 
   internal::ApplyDemoShellConsoleDefaults(console);
 

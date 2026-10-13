@@ -1,6 +1,9 @@
 # Oxygen Console
 
-`Oxygen.Console` provides runtime CVars, command execution, history, completion, and persistence for engine and module settings.
+`Oxygen.Console` provides runtime CVars and a text front end over
+[`Oxygen.Commands`](../Commands/README.md): parsing, history, completion and
+persistence for engine and module settings. It does not store commands; it
+binds console lines to commands in the command registry it is given.
 
 This module is UI-agnostic by design. It does not depend on ImGui or editor code.
 
@@ -8,7 +11,7 @@ This module is UI-agnostic by design. It does not depend on ImGui or editor code
 
 - Deterministic runtime configuration at engine-defined sync points.
 - Pluggable registration from multiple engine modules.
-- Strong policy control by command source (`local`, `cfg`, `remote`, `automation`).
+- CVar policy by command source (`local_console`, `config`, `remote`, `automation`, `ui`, `key`).
 - Safe persistence for archived CVars and command history.
 - Good UX primitives (history, completion, built-ins) without forcing a UI framework.
 
@@ -20,14 +23,21 @@ Key operations:
 
 - `RegisterCVar(...)`
 - `ApplyStartupPlan(...)`
-- `RegisterCommand(...)`
-- `Execute(line, context)`
+- `Parse(line)`: bind a whole line (commands separated by `;`) to
+  invocations, or return the first error without running anything
+- `Execute(line, context)`: parse and run a line synchronously (startup,
+  `exec`, configuration); an asynchronous command returns `kPending`, because
+  only a dispatcher can run it
+- `RecordHistory(line)`, `RecordExecution(line, result)`: used by a
+  dispatcher that runs lines itself
 - `Complete(prefix)` and completion cycling helpers
 - `ApplyLatchedCVars()`
 - `SaveArchiveCVars(path_finder, mode)` / `LoadArchiveCVars(path_finder, context)`
 - `SaveHistory(path_finder)` / `LoadHistory(path_finder)`
 - `ApplyCommandLineOverrides(args, context)`
-- `SetSourcePolicy(...)`, `SetRemoteAllowlist(...)`, `SetAuditHook(...)`
+- `SetSourcePolicy(...)`: CVar mutation, `DevOnly` and `Cheat` allowance per
+  source
+- `Commands()`: the command registry the console runs lines through
 
 ## CVar Model
 
@@ -84,41 +94,27 @@ Handle type:
 
 - `CVarHandle` is a strong named type (not a raw integer).
 
-## Command Model
+## Commands
 
-Command metadata (`CommandDefinition`):
-
-- `name`
-- `help`
-- `flags`
-- `handler(args, context) -> ExecutionResult`
-
-Command flags:
-
-- `kDevOnly`
-- `kCheat`
-- `kRemoteAllowed`
-
-Execution result contract:
-
-- `status` (`kOk`, `kNotFound`, `kInvalidArguments`, `kDenied`, `kError`)
-- `exit_code`
-- `output`
-- `error`
-
-## Built-in Commands
-
-Built-ins registered by `Registry`:
+Commands, their parameters, results and command policy belong to
+[`Oxygen.Commands`](../Commands/README.md). The console registers its
+built-ins into the command registry it is given and unregisters them when it
+is destroyed:
 
 - `help [name]`
 - `find <pattern>`
 - `list [all|commands|cvars]`
 - `exec <path>`
+- `cvar.get <name>`, `cvar.set <name> <value>`, `cvar.list [pattern]`
 
-Also supported:
+Line syntax:
 
-- command chaining with `;`
-- quoted tokens and escapes via parser
+- `name args...`: positional arguments in the command's parameter order, or
+  `param=value` for any parameter
+- `name value` for a CVar is shorthand for `cvar.set name value`
+- commands chained with `;` run in order and stop at the first failure; the
+  whole line is bound before any of it runs
+- quoted tokens and escapes via the parser
 
 ## Completion and History
 
@@ -130,7 +126,8 @@ Completion:
 
 History:
 
-- In-memory bounded history with adjacent dedupe behavior.
+- In-memory bounded history with adjacent dedupe behavior; only lines typed
+  in the console (`local_console`) are recorded.
 - JSON persistence support via `SaveHistory`/`LoadHistory`.
 - Execution record buffer for UI/log adapters.
 
@@ -167,32 +164,17 @@ Runtime logging:
 - `WARNING` for expected non-fatal missing-file cases.
 - `ERROR` for filesystem/parse/schema failures.
 
-## Source Policy and Security
+## Source Policy
 
-Policies are configured per command source:
-
-- `kLocalConsole`
-- `kConfigFile`
-- `kRemote`
-- `kAutomation`
-
-Each source policy controls:
-
-- command execution allowance
-- CVar mutation allowance
-- `DevOnly` allowance
-- `Cheat` allowance
-
-Remote hardening:
-
-- remote allowlist for permitted subjects
-- optional audit hook (`AuditEvent`) for telemetry/compliance pipelines
+Each command source has a CVar policy: whether it may set CVars, and whether
+`DevOnly` and `Cheat` CVars are allowed. Command policy and the audit hook
+are per source in the command registry.
 
 ## Engine Integration Pattern
 
 Recommended orchestration (already used by `AsyncEngine`):
 
-1. Register engine-owned CVars/commands.
+1. Register engine-owned CVars and commands.
 2. Apply `ConsoleStartupPlan`.
 3. Load persisted archive preferences.
 4. Register service/module console bindings.
@@ -201,7 +183,8 @@ Recommended orchestration (already used by `AsyncEngine`):
 
 Inversion-of-control pattern for modules:
 
-- Each module registers its own commands/CVars in `RegisterConsoleBindings(...)`.
+- Each module registers its CVars in `RegisterConsoleBindings(...)` and its
+  commands in `RegisterCommands(...)`.
 - Each module maps CVar values to runtime state in `ApplyConsoleCVars(...)`.
 - Engine orchestrates timing; modules own semantics.
 
@@ -211,18 +194,21 @@ Keep module layering clean:
 
 - `Oxygen.Console`: no UI dependency.
 - `Oxygen.ImGui`: UI widgets/panels for console and palette.
-- Demo/app shell: hotkeys, layout, persistence of panel geometry.
+- Host: posts console and palette lines to the command dispatcher
+  (`Oxygen.Control`), and owns layout and persistence of panel geometry.
 
 This keeps runtime console functionality usable in non-ImGui and non-editor builds.
 
 ## Minimal Example
 
 ```cpp
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
 
 using namespace oxygen::console;
 
-Console console {};
+oxygen::commands::CommandRegistry commands {};
+Console console { oxygen::observer_ptr { &commands } };
 
 (void)console.RegisterCVar(CVarDefinition {
   .name = "ngin.target_fps",
@@ -242,21 +228,7 @@ ConsoleStartupPlan startup_plan {};
 startup_plan.Set("ngin.target_fps", int64_t { 30 });
 console.ApplyStartupPlan(startup_plan);
 
-(void)console.RegisterCommand(CommandDefinition {
-  .name = "ngin.ping",
-  .help = "Health check command",
-  .flags = CommandFlags::kNone,
-  .handler = [](const std::vector<std::string>&, const CommandContext&) {
-    return ExecutionResult {
-      .status = ExecutionStatus::kOk,
-      .exit_code = 0,
-      .output = "pong",
-      .error = {},
-    };
-  },
-});
-
-const auto result = console.Execute("ngin.ping");
+const auto result = console.Execute("ngin.target_fps 60");
 ```
 
 ## Testing
@@ -265,7 +237,7 @@ Tests live under `src/Oxygen/Console/Test` and cover:
 
 - parser behavior and edge cases
 - CVar conversion, bounds, and policy gating
-- command execution and built-ins
+- line binding, execution and built-ins
 - completion and history behavior
 - persistence round-trips
 

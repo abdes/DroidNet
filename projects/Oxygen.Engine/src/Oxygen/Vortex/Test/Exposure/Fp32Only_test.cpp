@@ -8,7 +8,7 @@
 #include <limits>
 #include <utility>
 
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/GeometryIndices.h>
@@ -333,7 +333,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   ASSERT_EQ(
     fixture_console.Execute("vtx.volumetric_fog.temporal_reprojection true")
       .status,
-    console::ExecutionStatus::kOk);
+    commands::ExecutionStatus::kOk);
   probe->prepare = [](RenderContext& ctx) -> void {
     ctx.current_view.with_atmosphere = true;
     ctx.current_view.with_height_fog = true;

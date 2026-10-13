@@ -8,7 +8,7 @@
   "required": ["version", "mounts", "scene"],
   "properties": {
     "version": {
-      "const": 1
+      "const": 2
     },
     "mounts": {
       "description": "Cooked content, highest precedence last: a file ending in .pak is a PAK file, anything else a loose cooked root.",
@@ -62,10 +62,22 @@
         }
       }
     },
-    "diagnostics_pipe": {
-      "description": "Name of a named pipe the launcher listens on (without the \\\\.\\pipe\\ prefix). The player connects to it and streams events.",
-      "type": "string",
-      "pattern": "^[A-Za-z0-9._-]{1,200}$"
+    "control": {
+      "description": "Start the JSON-RPC control server; clients find its port and token in the discovery file.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "port": {
+          "description": "Loopback TCP port; 0 takes an ephemeral one.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "exit_when_owner_leaves": {
+          "description": "Stop when the client that connected as owner disconnects, or when no owner connects within ten seconds.",
+          "type": "boolean"
+        }
+      }
     }
   }
 }

@@ -12,7 +12,8 @@
 #include "./AssetLoader_test.h"
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -51,20 +52,23 @@ NOLINT_TEST_F(AssetLoaderBasicTest, MissingPakLeavesMountsUnchanged)
 
 NOLINT_TEST_F(AssetLoaderBasicTest, ConsoleTelemetryBindingsExpectedToRoundTrip)
 {
-  oxygen::console::Console console;
+  oxygen::commands::CommandRegistry command_registry;
+  oxygen::console::Console console { oxygen::observer_ptr {
+    &command_registry } };
   asset_loader_->RegisterConsoleBindings(oxygen::observer_ptr { &console });
+  asset_loader_->RegisterCommands(oxygen::observer_ptr { &command_registry });
 
   const auto disable = console.Execute("cntt.telemetry_enabled 0");
-  EXPECT_EQ(disable.status, oxygen::console::ExecutionStatus::kOk);
+  EXPECT_EQ(disable.status, oxygen::commands::ExecutionStatus::kOk);
   asset_loader_->ApplyConsoleCVars(console);
   EXPECT_FALSE(asset_loader_->IsTelemetryEnabled());
 
   const auto dump = console.Execute("cntt.dump_stats");
-  EXPECT_EQ(dump.status, oxygen::console::ExecutionStatus::kOk);
+  EXPECT_EQ(dump.status, oxygen::commands::ExecutionStatus::kOk);
   EXPECT_FALSE(dump.output.empty());
 
   const auto reset = console.Execute("cntt.reset_stats");
-  EXPECT_EQ(reset.status, oxygen::console::ExecutionStatus::kOk);
+  EXPECT_EQ(reset.status, oxygen::commands::ExecutionStatus::kOk);
 
   std::string last_stats;
   EXPECT_TRUE(

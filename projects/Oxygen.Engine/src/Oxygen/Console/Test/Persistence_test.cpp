@@ -9,16 +9,17 @@
 
 #include <nlohmann/json.hpp>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
 using nlohmann::json;
 using oxygen::PathFinder;
+using oxygen::commands::ExecutionStatus;
 using oxygen::console::ArchiveSaveMode;
 using oxygen::console::Console;
 using oxygen::console::ConsoleStartupPlan;
@@ -26,7 +27,6 @@ using oxygen::console::CVarDefinition;
 using oxygen::console::CVarFlags;
 using oxygen::console::CVarRegistrationOptions;
 using oxygen::console::CVarValueOrigin;
-using oxygen::console::ExecutionStatus;
 using oxygen::console::StampedCVarValue;
 
 struct TestEnvironment {
@@ -135,7 +135,8 @@ NOLINT_TEST(ConsolePersistence, PersistedPreferenceBeatsAppDefault)
   auto env = MakeTestEnvironment("persisted_preference_beats_app_default");
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   RegisterArchivedInt(console, "r.quality", 1, CVarRegistrationOptions {
     .initial = StampedCVarValue {
       .value = int64_t { 5 },
@@ -157,7 +158,8 @@ NOLINT_TEST(
   auto env = MakeTestEnvironment("startup_explicit_beats_persisted");
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   RegisterArchivedInt(console, "r.quality", 1);
   auto startup_plan = ConsoleStartupPlan {};
   startup_plan.Set("r.quality", int64_t { 7 });
@@ -176,7 +178,8 @@ NOLINT_TEST(ConsolePersistence, AutomaticSaveDoesNotPromoteStartupOnlyOverride)
   auto env = MakeTestEnvironment("automatic_save_does_not_promote_startup");
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   RegisterArchivedInt(console, "r.quality", 1);
   auto startup_plan = ConsoleStartupPlan {};
   startup_plan.Set("r.quality", int64_t { 7 });
@@ -196,7 +199,8 @@ NOLINT_TEST(ConsolePersistence, RuntimeExplicitOverwritesArchiveOnAutomaticSave)
   auto env = MakeTestEnvironment("runtime_explicit_overwrites_archive");
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   RegisterArchivedInt(console, "r.quality", 1);
   ASSERT_EQ(
     console.LoadArchiveCVars(env.path_finder).status, ExecutionStatus::kOk);
@@ -218,7 +222,8 @@ NOLINT_TEST(ConsolePersistence, ExplicitSavePromotesCurrentLiveValue)
   auto env = MakeTestEnvironment("explicit_save_promotes_live_value");
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   RegisterArchivedInt(console, "r.quality", 1);
   auto startup_plan = ConsoleStartupPlan {};
   startup_plan.Set("r.quality", int64_t { 7 });
@@ -239,7 +244,8 @@ NOLINT_TEST(
   auto env = MakeTestEnvironment("late_registration_persisted_preference");
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   ASSERT_EQ(
     console.LoadArchiveCVars(env.path_finder).status, ExecutionStatus::kOk);
   RegisterArchivedInt(console, "r.quality", 1);
@@ -256,7 +262,8 @@ NOLINT_TEST(
   auto env = MakeTestEnvironment("late_registration_startup_explicit");
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   auto startup_plan = ConsoleStartupPlan {};
   startup_plan.Set("r.quality", int64_t { 7 });
   console.ApplyStartupPlan(startup_plan);
@@ -272,7 +279,8 @@ NOLINT_TEST(
 
 NOLINT_TEST(ConsolePersistence, CommandLineOverridesUseStartupExplicitOrigin)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   RegisterArchivedInt(console, "r.quality", 1);
 
   const std::vector<std::string_view> args { "+r.quality=4" };
@@ -290,7 +298,8 @@ NOLINT_TEST(ConsolePersistence, ExplicitSaveDoesNotPromoteAppForcedValue)
   auto env = MakeTestEnvironment("explicit_save_does_not_promote_app_forced");
   WriteArchivedInt(env.path_finder, "r.quality", 2);
 
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   ASSERT_EQ(
     console.LoadArchiveCVars(env.path_finder).status, ExecutionStatus::kOk);
   RegisterArchivedInt(console, "r.quality", 1, CVarRegistrationOptions {

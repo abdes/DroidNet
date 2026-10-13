@@ -38,6 +38,10 @@ namespace oxygen::console {
 class Console;
 } // namespace oxygen::console
 
+namespace oxygen::commands {
+class CommandRegistry;
+} // namespace oxygen::commands
+
 namespace oxygen::engine {
 class EngineModule;
 } // namespace oxygen::engine
@@ -75,6 +79,10 @@ public:
   [[nodiscard]] virtual auto GetConsole() const noexcept
     -> const ::oxygen::console::Console& = 0;
 
+  //! Every command, from the engine, its services and its modules.
+  [[nodiscard]] virtual auto GetCommands() noexcept
+    -> ::oxygen::commands::CommandRegistry& = 0;
+
   [[nodiscard]] virtual auto IsRunning() const -> bool = 0;
   virtual auto Stop() -> void = 0;
 
@@ -96,6 +104,9 @@ public:
   [[nodiscard]] virtual auto IsPaused() const -> bool = 0;
   //! Pause if running, simulate `frames` frames, then stay paused.
   virtual auto Step(std::uint32_t frames) -> void = 0;
+  //! Frame steps requested or applied and not yet started; 0 once every
+  //! step has begun or `Resume` or a session change cancelled them.
+  [[nodiscard]] virtual auto GetPendingSteps() const -> std::uint32_t = 0;
 
   //! Request a play session; false when one runs or is already requested.
   virtual auto BeginSession() -> bool = 0;

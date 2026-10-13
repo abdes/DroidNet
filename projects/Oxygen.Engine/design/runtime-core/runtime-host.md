@@ -19,21 +19,22 @@ Summary:
   ([§4](#4-pause-frame-step-and-play-sessions)). Ending a session tears down
   everything the session created and leaves the engine running, idle and
   ready for the next session, so control returns to whoever started it: the
-  player's own toolbar, the editor through the pipe, or later an in-process
+  player's own toolbar, the editor through the control server, or later an in-process
   editor game mode.
 - The debug UI is small and shared by the player and DemoShell: a UE-style
   toolbar with view mode, show flags and stats, Play/Pause/Step/Stop at the
   top centre, and the mandatory console and command palette
   ([§5](#5-runtime-debug-ui)). View mode and show flags apply to the main
   game view only.
-- `Oxygen.Player` is the host, the toolbar, the launch file and the event
-  stream; nothing else ([§7](#7-oxygenplayer-composition)).
+- `Oxygen.Player` is the host, the toolbar, the launch file and its
+  lifecycle events; nothing else ([§7](#7-oxygenplayer-composition)).
 - Delivery order: ImGui moves out of Vortex into an `Oxygen.ImGui` module →
   `Oxygen.Host` → `Oxygen.Player` → VortexBasic without
   DemoShell → commands and remote control → DemoShell → the other examples
   ([§9](#9-delivery-order-and-exit-gates)).
 
-The player's launch file, event stream and scene start state stay in
+The player's launch file, its commands and events, and scene start state
+stay in
 [scene instantiation and player](scene-instantiation-and-player.md).
 
 ## Review (Fable, 2026-10-12)
@@ -86,15 +87,14 @@ Every `file:line` in [§1](#1-findings) and every file named in
 - [§5.2](#52-main-view-console-variables): `lit` clears the view overrides
   so DemoShell's renderer-global mode still applies; the toolbar shows the
   effective mode.
-- [§7](#7-oxygenplayer-composition): request handling off the engine
-  thread; gaps a shipped player still has.
+- [§7](#7-oxygenplayer-composition): gaps a shipped player still has.
 - [§9](#9-delivery-order-and-exit-gates): gates that catch the regressions
   the design is exposed to (late loader callbacks, leaks across sessions,
   stale content, held keys across resume).
 - [§11](#11-open-problems-for-review): P-1 to P-5 answered.
-- [Scene doc](scene-instantiation-and-player.md#event-stream): the event
-  stream now lists the session requests and lifecycle values this document
-  relies on; SIP-5 separates `end_session` from `stop`.
+- [Scene doc](scene-instantiation-and-player.md#control-and-events): lists
+  the session commands and lifecycle values this document relies on; SIP-5
+  separates `ngin.session.end` from `ngin.quit`.
 
 **Recommended differently from [§10](#10-owner-decisions)**
 
@@ -118,7 +118,7 @@ Every `file:line` in [§1](#1-findings) and every file named in
 - `SimulationClock::StepFixed()` and `EngineModule::TicksWhenPaused()`:
   approved, both now. The `runs_when_paused` script slot flag stays
   deferred.
-- Remount policy: always remount on `play` from the editor
+- Remount policy: always remount on `ngin.session.begin` from the editor
   ([P-4](#p-4-recooked-content-in-a-warm-player)).
 - Warm player: approved; the editor LLD is updated
   ([P-5](#p-5-editor-flow-with-a-warm-player)).
@@ -154,13 +154,14 @@ Paths are relative to `projects/Oxygen.Engine` unless they start with
 
 | Home                                   | Contents                                                                                                                                                                                                    | Depends on                                                 |
 | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Engine (`AsyncEngine`, `EngineModule`) | Pause, frame step, play sessions; session hooks and the tick-when-paused opt-in on modules; their console commands                                                                                          | as today                                                   |
+| Engine (`AsyncEngine`, `EngineModule`) | Pause, frame step, play sessions; session hooks and the tick-when-paused opt-in on modules; the command registry                                                                                            | as today                                                   |
+| `Oxygen.Control` (R1)                  | Command dispatcher and the run-state commands, event log, control server ([commands and remote control](commands-and-remote-control.md))                                                                    | Commands, Console, Engine                                  |
 | Core (`SimulationClock`)               | `StepFixed()` ([§4.3](#43-pause-and-step-semantics))                                                                                                                                                        | as today                                                   |
 | Scripting, Input                       | Their session-scoped state, cleared at session end                                                                                                                                                          | as today                                                   |
 | Vortex                                 | View-mode catalog; GPU work summary and bucket catalog; surface layer sources                                                                                                                               | as today, without ImGui                                    |
 | `Oxygen.Host` (new)                    | Startup and shutdown, host window, view publisher, scene stage, host module base, runtime command-line options, viewport toolbar and its main-view console variables, ImGui layer adapter, GPU work overlay | Platform, Engine, Graphics, Loader, Vortex, Console, ImGui |
 | `Oxygen.ImGui`                         | ImGui module (context, window binding, frame lifecycle, style and fonts); generic widgets: dropdown menu, toolbar button, play controls, stats overlay, GPU work chart, console host                        | as today (no Vortex)                                       |
-| `Oxygen.Player` (new)                  | Launch file, event stream, player module, failure and "Stopped" message                                                                                                                                     | Host, SceneInstantiation, Scripting, Input                 |
+| `Oxygen.Player` (new)                  | Launch file, player module and its events, failure and "Stopped" message                                                                                                                                    | Host, Control, SceneInstantiation, Scripting, Input        |
 | DemoShell                              | Unchanged showcase code: panels, settings service and settings file, scene picker and content loader, environment editor and presets, skybox, preview sun, fallback camera, UI tests                        | Host, ImGui                                                |
 
 Rejected: putting the toolbar binding in `Oxygen.ImGui`. It needs the
@@ -256,10 +257,11 @@ The shared entry point (logging setup, type registry, the call to the
 application's `MainImpl`) is the static library `oxygen::host-main`
 (`Host/Main.cpp`); the player and every example link it.
 
-Threading: everything in `Oxygen.Host` runs on the engine thread. A host
-that receives requests from another thread (the player's pipe reader) puts
-them on a thread-safe queue and drains it in its `OnFrameStart`; it never
-calls the engine, the console or the input system from that thread.
+Threading: everything in `Oxygen.Host` runs on the engine thread. Remote
+requests arrive there too: the control server's coroutines run on the
+platform's `io_context`, which the host loop polls on the engine thread, and
+commands run at frame start through the dispatcher. Events may be published
+from any thread into the thread-safe event log.
 
 `src/Oxygen/EditorInterface/EngineRunner.cpp` keeps its own copy: the editor
 host is not changed ([§10](#10-owner-decisions)).
@@ -413,6 +415,8 @@ auto Resume() -> void;
 [[nodiscard]] auto IsPaused() const -> bool;
 //! Pauses if running, then simulates `frames` frames and stays paused.
 auto Step(uint32_t frames) -> void; // ngin.step defaults to 1
+//! Steps requested and not yet started; 0 once all began or were cancelled.
+[[nodiscard]] auto GetPendingSteps() const -> uint32_t;
 
 // Play sessions.
 //! Requests a session; returns false if one exists or is pending.
@@ -433,11 +437,12 @@ and `IsPaused()` report applied state, never a pending request. `Resume`
 cancels remaining stepped frames. `EndSession` with no session is a no-op;
 `EndSession` before a requested session began withdraws the request.
 
-Console commands registered by `AsyncEngine`: `ngin.pause`,
-`ngin.resume`, `ngin.step [frames]`, `ngin.session.end`, following the
-existing `ngin.*` names (`AsyncEngine.cpp:85-90`). Starting a session
-needs content, so `ngin.session.begin` is registered by the host that knows
-what to instantiate (the player).
+The commands `ngin.pause`, `ngin.resume`, `ngin.step [frames]` and
+`ngin.session.end` are registered by the command dispatcher, which replies
+once their effect is known
+([commands and remote control §3.4](commands-and-remote-control.md#34-dispatch-and-jobs)).
+Starting a session needs content, so `ngin.session.begin` is registered by
+the host that knows what to instantiate (the player).
 
 ### 4.3 Pause and step semantics
 
@@ -610,8 +615,8 @@ changes the hooks above.
 
 - **Player standalone**: shows "Stopped"; Play begins a new session.
 - **Player launched by the editor**: emits `session_ended` and keeps running.
-  The editor may send `play` to begin a new session, or `stop` to end the
-  process. This replaces relaunching the player for every Play; the
+  The editor may run `ngin.session.begin` to begin a new session, or
+  `ngin.quit` to end the process. This replaces relaunching the player for every Play; the
   editor-side change belongs to the
   [script authoring LLD](../../../../design/editor/lld/script-authoring.md#8-play)
   and is listed in [P-5](#p-5-editor-flow-with-a-warm-player).
@@ -820,12 +825,12 @@ session, and with the toolbar hidden.
 
 ## 7. `Oxygen.Player` composition
 
-| Part                                                                                                                                                                                                                                                                                                                                                                                  | Size estimate |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| Launch file read and schema validation (embedded schema, `oxygen_embed_json_schemas`)                                                                                                                                                                                                                                                                                                 | ~150 lines    |
-| Event stream: named-pipe client, line writer, request reader on its own thread feeding a queue the module drains in `OnFrameStart`; log capture through `loguru::add_callback`; script diagnostics through `ScriptingModule::AddDiagnosticHandler` (`ScriptingModule.h:288`) and `ToJson`. Requests and lifecycle values: [scene doc](scene-instantiation-and-player.md#event-stream) | ~300 lines    |
-| `PlayerModule : HostModule`: mounts in launch order; registers `ngin.session.begin`; on session begin loads the scene by `AssetKey::FromVirtualPath`, instantiates through `SceneStage` and `oxygen::instantiation::Instantiate` in its own nursery; one main view through `Scene::ActiveCamera()`; toolbar; failure and "Stopped" messages                                           | ~500 lines    |
-| `main`: the command line in the [scene doc](scene-instantiation-and-player.md#command-line), then `RunHost`                                                                                                                                                                                                                                                                           | ~80 lines     |
+| Part                                                                                                                                                                                                                                                                                                                                        | Size estimate |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| Launch file read and schema validation (embedded schema, `oxygen_embed_json_schemas`)                                                                                                                                                                                                                                                       | ~150 lines    |
+| Events: lifecycle, script diagnostics through `ScriptingModule::AddDiagnosticHandler` and `ToJson`, and GPU work while subscribed, published to the host's event log; commands and lifecycle values: [scene doc](scene-instantiation-and-player.md#control-and-events)                                                                      | ~300 lines    |
+| `PlayerModule : HostModule`: mounts in launch order; registers `ngin.session.begin`; on session begin loads the scene by `AssetKey::FromVirtualPath`, instantiates through `SceneStage` and `oxygen::instantiation::Instantiate` in its own nursery; one main view through `Scene::ActiveCamera()`; toolbar; failure and "Stopped" messages | ~500 lines    |
+| `main`: the command line in the [scene doc](scene-instantiation-and-player.md#command-line), then `RunHost`                                                                                                                                                                                                                                 | ~80 lines     |
 
 The player begins a session as soon as the engine runs. Modules: input,
 scene observer sync, scripting, the player module and the Vortex renderer
@@ -838,7 +843,7 @@ survive sessions; the Lua state does not ([§4.4](#44-session-lifecycle)).
 
 Not in the player: DemoShell panels, free or orbit cameras, environment or
 post-process editing, scene picker, persisted settings, log or problems
-windows (the editor shows those from the event stream; standalone, the log
+windows (the editor shows those from the control server's events; standalone, the log
 goes to the console output), UI tests (its ImGui use is the toolbar and the
 console, which are tested in `Oxygen.ImGui` and `Oxygen.Host`).
 
@@ -962,17 +967,19 @@ already guarantees. Gate: the ASan run in P1.
 
 ### P-4 Recooked content in a warm player
 
-Known: after Stop the mounts stay. If the editor recooks and sends `play`,
+Known: after Stop the mounts stay. If the editor recooks and plays again,
 the player must see the new cooked files. The loader can prepare a
 replacement mount set off-thread, wait for in-flight reads and commit it
 atomically, detaching the old sources' cache entries
 (`IAssetLoader.h:382-403`).
 
-Answer: when `play` comes from the editor, the player always remounts the
+Answer: on `ngin.session.begin`, the player always remounts the
 launch mounts between sessions with `PrepareLooseCookedRootsAsync`,
 `WaitForPendingLoadsAsync` and `CommitPreparedMounts`, with no session
-running and no instantiation in flight. Standalone Play from the toolbar
-reuses the mounts. Cost: the swap detaches the old cache entries, so the
+running and no instantiation in flight. The toolbar's Play runs the same
+command, so it remounts too
+([commands and remote control §7](commands-and-remote-control.md#7-oxygenplayer)).
+Cost: the swap detaches the old cache entries, so the
 next session reloads assets from disk, which for V0.1 scenes is small next
 to instantiation. Alternative: a `remount` flag the editor sets only after
 a cook that changed outputs; it saves that reload and adds a stale-content
@@ -982,23 +989,25 @@ failure whenever the editor's change detection is wrong. Owner decision 2026-10-
 
 The [script authoring LLD](../../../../design/editor/lld/script-authoring.md#8-play)
 launches a new player for every Play and ends it on Stop. With sessions,
-Stop sends `end_session` and Play sends `play` to the running player,
+Stop runs `ngin.session.end` and Play runs `ngin.session.begin` in the running player,
 launching only when none runs. The owner approved this on 2026-10-12 and the
 LLD carries the edits below.
 
 Answer: adopt the warm player; it removes a process launch, mounts and
 pipeline warm-up from every Play. The LLD edits, once approved:
 
-- "Play button": Restart sends `end_session` then `play`; Stop sends
-  `end_session`; the dropdown gains "Close player" (sends `stop`).
+- "Play button": Restart runs `ngin.session.end` then
+  `ngin.session.begin`; Stop runs `ngin.session.end`; the dropdown gains
+  "Close player" (runs `ngin.quit`).
 - "Flow" step 4: write the launch file and start the player only when
-  none is connected; otherwise send `play`.
+  none is connected; otherwise run `ngin.session.begin`.
 - "Flow" step 5: clear Output and Problems on `session_started`; drive
   the toolbar from `session_started`, `paused`, `resumed` and
   `session_ended`.
-- "Flow" step 6: Stop sends `end_session`; closing the project or the
-  editor sends `stop` and waits briefly before ending the process; a
-  closed pipe means the player died, and the next Play launches a new one.
+- "Flow" step 6: Stop runs `ngin.session.end`; closing the project or the
+  editor runs `ngin.quit` and waits briefly before ending the process; a
+  closed connection means the player died, and the next Play launches a new
+  one.
 - Session settings (window size, VSync, frame cap) apply to the next
   launch only; a change while a player runs shows "applies after Close
   player".

@@ -41,9 +41,7 @@ private:
 
 //! The launch file schema.
 [[nodiscard]] auto LaunchSchema() -> const SchemaCheck&;
-//! The request schema.
-[[nodiscard]] auto RequestSchema() -> const SchemaCheck&;
-//! The event schema.
+//! The schema of the events the player publishes (`{topic, data}`).
 [[nodiscard]] auto EventSchema() -> const SchemaCheck&;
 
 } // namespace oxygen::player

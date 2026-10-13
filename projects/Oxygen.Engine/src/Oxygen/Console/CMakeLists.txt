@@ -11,7 +11,7 @@
 asap_module_declare(
   MODULE_NAME "Oxygen.Console"
   DESCRIPTION
-    "Runtime CVars, console command registry, execution, history, and completion."
+    "Runtime CVars and the console text front end over commands: parsing, history, and completion."
 )
 asap_push_module("${META_MODULE_NAME}")
 
@@ -50,7 +50,6 @@ set_target_properties(
 set(
   OXYGEN_CONSOLE_HEADERS
   "api_export.h"
-  "Command.h"
   "Completion.h"
   "Constants.h"
   "Console.h"
@@ -62,7 +61,6 @@ set(
 )
 set(
   OXYGEN_CONSOLE_PRIVATE_SOURCES
-  "Command.cpp"
   "Completion.cpp"
   "Console.cpp"
   "CVar.cpp"
@@ -98,6 +96,7 @@ target_link_libraries(
   ${META_MODULE_TARGET}
   PUBLIC
     oxygen::base
+    oxygen::commands
     oxygen::config
     nlohmann_json::nlohmann_json
 )
@@ -120,7 +119,8 @@ if(OXYGEN_BUILD_DOCS AND OXYGEN_WITH_DOXYGEN)
     VERSION ${META_VERSION}
     TITLE "\"Console\""
     BRIEF "\"Oxygen runtime command and CVar console\""
-    INPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}"
+    INPUT_PATH
+      "${CMAKE_CURRENT_SOURCE_DIR}"
   )
 endif()
 

@@ -12,7 +12,7 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 
 namespace oxygen::console {
 class Console;
@@ -39,7 +39,7 @@ public:
 
 private:
   using Arguments = std::vector<std::string>;
-  using Result = console::ExecutionResult;
+  using Result = commands::CommandResult;
   auto Unregister() -> void;
   [[nodiscard]] auto HasTarget(const Arguments& args) const -> bool;
   [[nodiscard]] auto Accepted() const -> Result;
@@ -55,7 +55,7 @@ private:
   console::Console& console_;
   ui::PostProcessSettingsService& settings_;
   RendererResolver renderer_;
-  std::vector<console::CommandHandle> handles_;
+  std::vector<commands::CommandHandle> handles_;
 };
 
 } // namespace oxygen::examples::internal

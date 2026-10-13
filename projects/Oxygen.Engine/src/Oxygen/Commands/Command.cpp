@@ -4,35 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Console/Command.h>
+#include <string>
 
-namespace oxygen::console {
+#include <Oxygen/Commands/Command.h>
+
+namespace oxygen::commands {
 
 auto to_string(const CommandFlags value) -> std::string
 {
   if (value == CommandFlags::kNone) {
     return "None";
   }
-
-  std::string result;
-  bool first = true;
+  auto result = std::string {};
   auto checked = CommandFlags::kNone;
-
-  const auto append = [&](const CommandFlags flag, const char* name) {
+  const auto append = [&](const CommandFlags flag, const char* name) -> void {
     if ((value & flag) == flag) {
-      if (!first) {
+      if (!result.empty()) {
         result += "|";
       }
       result += name;
-      first = false;
       checked |= flag;
     }
   };
-
   append(CommandFlags::kDevOnly, "DevOnly");
   append(CommandFlags::kCheat, "Cheat");
-  append(CommandFlags::kRemoteAllowed, "RemoteAllowed");
-
   return checked == value ? result : "__NotSupported__";
 }
 
@@ -40,13 +35,17 @@ auto to_string(const CommandSource value) -> const char*
 {
   switch (value) {
   case CommandSource::kLocalConsole:
-    return "LocalConsole";
+    return "local_console";
   case CommandSource::kConfigFile:
-    return "ConfigFile";
+    return "config";
   case CommandSource::kRemote:
-    return "Remote";
+    return "remote";
   case CommandSource::kAutomation:
-    return "Automation";
+    return "automation";
+  case CommandSource::kUi:
+    return "ui";
+  case CommandSource::kKey:
+    return "key";
   }
   return "__NotSupported__";
 }
@@ -62,10 +61,16 @@ auto to_string(const ExecutionStatus value) -> const char*
     return "InvalidArguments";
   case ExecutionStatus::kDenied:
     return "Denied";
+  case ExecutionStatus::kDisabled:
+    return "Disabled";
   case ExecutionStatus::kError:
     return "Error";
+  case ExecutionStatus::kCancelled:
+    return "Cancelled";
+  case ExecutionStatus::kPending:
+    return "Pending";
   }
   return "__NotSupported__";
 }
 
-} // namespace oxygen::console
+} // namespace oxygen::commands

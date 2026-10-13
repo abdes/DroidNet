@@ -22,7 +22,6 @@
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Config/PlatformConfig.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/PhaseRegistry.h>
@@ -459,6 +458,43 @@ NOLINT_TEST_F(RunStateTest, ResumeCancelsPendingSteps)
   }
 }
 
+//! The pending step count includes a request before it applies, drops by one
+//! per step frame begun, and reads zero at once when Resume cancels.
+NOLINT_TEST_F(RunStateTest, PendingStepsCountDownAndCancel)
+{
+  // Arrange
+  auto pending = std::map<uint64_t, std::uint32_t> {};
+  auto after_request = std::map<uint64_t, std::uint32_t> {};
+  static_cast<void>(AddProbe({
+    .name = "probe",
+    .on_frame_start = [&](IAsyncEngine& engine, const uint64_t frame) -> void {
+      pending[frame] = engine.GetPendingSteps();
+      if (frame == 1U) {
+        engine.Pause();
+      }
+      if (frame == 2U) {
+        engine.Step(2U);
+        after_request[frame] = engine.GetPendingSteps();
+      }
+      if (frame == 5U) {
+        engine.Step(3U);
+        engine.Resume();
+        after_request[frame] = engine.GetPendingSteps();
+      }
+    },
+  }));
+
+  // Act
+  Run(6U);
+
+  // Assert
+  EXPECT_EQ(after_request[2U], 2U);
+  EXPECT_EQ(pending[3U], 1U);
+  EXPECT_EQ(pending[4U], 0U);
+  EXPECT_EQ(after_request[5U], 0U);
+  EXPECT_EQ(pending[6U], 0U);
+}
+
 //! The frame's time scale follows the simulation clock.
 NOLINT_TEST_F(RunStateTest, TimeScaleFollowsClock)
 {
@@ -604,39 +640,6 @@ NOLINT_TEST_F(RunStateTest, SessionResetsPause)
   EXPECT_EQ((*states)[8U], SessionState::kNone);
   EXPECT_FALSE(probe.Frame(8U).is_paused);
   EXPECT_FALSE(Engine().IsPaused());
-}
-
-//! The console commands are the same requests.
-NOLINT_TEST_F(RunStateTest, ConsoleCommandsPauseAndStep)
-{
-  // Arrange
-  auto& probe = AddProbe({
-    .name = "probe",
-    .on_frame_start
-    = [this](IAsyncEngine& /*engine*/, const uint64_t frame) -> void {
-      auto& console = Engine().GetConsole();
-      if (frame == 1U) {
-        EXPECT_EQ(console.Execute("ngin.pause").status,
-          oxygen::console::ExecutionStatus::kOk);
-      }
-      if (frame == 3U) {
-        EXPECT_EQ(console.Execute("ngin.step 0").status,
-          oxygen::console::ExecutionStatus::kInvalidArguments);
-        EXPECT_EQ(console.Execute("ngin.step 2").status,
-          oxygen::console::ExecutionStatus::kOk);
-      }
-    },
-  });
-
-  // Act
-  Run(7U);
-
-  // Assert
-  EXPECT_TRUE(probe.Frame(2U).is_paused);
-  EXPECT_EQ(probe.Frame(4U).fixed_runs, 1U);
-  EXPECT_EQ(probe.Frame(5U).fixed_runs, 1U);
-  EXPECT_TRUE(probe.Frame(6U).is_paused);
-  EXPECT_EQ(probe.Frame(6U).fixed_runs, 0U);
 }
 
 } // namespace

@@ -12,7 +12,6 @@ gtest_program(
   "${META_MODULE_NAME}.Tests"
   SOURCES
     "LaunchFile_test.cpp"
-    "PipeChannel_test.cpp"
     "PlayerProtocol_test.cpp"
   DEPS
     oxygen-player-core

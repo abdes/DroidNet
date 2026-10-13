@@ -71,12 +71,6 @@ auto LaunchSchema() -> const SchemaCheck&
   return check;
 }
 
-auto RequestSchema() -> const SchemaCheck&
-{
-  static const auto check = SchemaCheck { kPlayerRequestsSchema };
-  return check;
-}
-
 auto EventSchema() -> const SchemaCheck&
 {
   static const auto check = SchemaCheck { kPlayerEventsSchema };

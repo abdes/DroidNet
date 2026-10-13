@@ -17,8 +17,9 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/CVar.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
@@ -114,18 +115,21 @@ namespace {
     return value;
   }
 
-  auto Run(console::Console& console, const std::string& line) -> void
+  using imgui::consoleui::LineRunner;
+
+  //! Every toolbar interaction is a command line posted to the dispatcher;
+  //! failures appear in the console.
+  auto Run(const LineRunner& run, std::string line,
+    const commands::CommandSource source = commands::CommandSource::kUi) -> void
   {
-    if (const auto result = console.Execute(line);
-      result.status != console::ExecutionStatus::kOk) {
-      LOG_F(WARNING, "toolbar command '{}' failed: {}", line, result.error);
-    }
+    run(std::move(line), source);
   }
 
-  auto SetBool(console::Console& console, const std::string_view cvar,
-    const bool value) -> void
+  auto SetBool(const LineRunner& run, const std::string_view cvar,
+    const bool value,
+    const commands::CommandSource source = commands::CommandSource::kUi) -> void
   {
-    Run(console, fmt::format("{} {}", cvar, value ? "true" : "false"));
+    Run(run, fmt::format("{} {}", cvar, value ? "true" : "false"), source);
   }
 
   auto ShortcutFor(const std::string_view mode) -> std::string_view
@@ -139,8 +143,8 @@ namespace {
   }
 
   //! The common modes as radio items, then one submenu per debug family.
-  auto BuildViewModeItems(console::Console& console,
-    const std::string_view current) -> std::vector<MenuItem>
+  auto BuildViewModeItems(const LineRunner& run, const std::string_view current)
+    -> std::vector<MenuItem>
   {
     std::vector<MenuItem> items;
     items.push_back(MenuItem {
@@ -157,8 +161,8 @@ namespace {
           mode.supported ? mode.description : mode.unsupported_reason),
         .checked = mode.canonical_name == current,
         .enabled = mode.supported,
-        .action = [&console, name = std::string(mode.canonical_name)] -> void {
-          Run(console, fmt::format("{} {}", kViewModeCVar, name));
+        .action = [&run, name = std::string(mode.canonical_name)] -> void {
+          Run(run, fmt::format("{} {}", kViewModeCVar, name));
         },
       };
       if (mode.IsCommon()) {
@@ -180,7 +184,8 @@ namespace {
     return items;
   }
 
-  auto BuildShowItems(console::Console& console) -> std::vector<MenuItem>
+  auto BuildShowItems(console::Console& console, const LineRunner& run)
+    -> std::vector<MenuItem>
   {
     std::vector<MenuItem> items;
     for (const auto& flag : kShowFlags) {
@@ -189,8 +194,8 @@ namespace {
         .kind = MenuItem::Kind::kCheck,
         .label = std::string(flag.label),
         .checked = shown,
-        .action = [&console, cvar = flag.cvar, shown] -> void {
-          SetBool(console, cvar, !shown);
+        .action = [&run, cvar = flag.cvar, shown] -> void {
+          SetBool(run, cvar, !shown);
         },
       });
     }
@@ -211,8 +216,8 @@ namespace {
         .label = std::string(advanced.label),
         .tooltip = std::string(advanced.cvar),
         .checked = enabled,
-        .action = [&console, cvar = advanced.cvar, enabled] -> void {
-          SetBool(console, cvar, !enabled);
+        .action = [&run, cvar = advanced.cvar, enabled] -> void {
+          SetBool(run, cvar, !enabled);
         },
       });
     }
@@ -222,16 +227,17 @@ namespace {
       .kind = MenuItem::Kind::kAction,
       .label = "Use Defaults",
       .tooltip = "Show every feature in the main view",
-      .action = [&console] -> void {
+      .action = [&run] -> void {
         for (const auto& flag : kShowFlags) {
-          SetBool(console, flag.cvar, true);
+          SetBool(run, flag.cvar, true);
         }
       },
     });
     return items;
   }
 
-  auto BuildStatsItems(console::Console& console) -> std::vector<MenuItem>
+  auto BuildStatsItems(console::Console& console, const LineRunner& run)
+    -> std::vector<MenuItem>
   {
     std::vector<MenuItem> items;
     for (const auto& stats : kStatsCVars) {
@@ -240,8 +246,8 @@ namespace {
         .kind = MenuItem::Kind::kCheck,
         .label = std::string(stats.label),
         .checked = shown,
-        .action = [&console, cvar = stats.cvar, shown] -> void {
-          SetBool(console, cvar, !shown);
+        .action = [&run, cvar = stats.cvar, shown] -> void {
+          SetBool(run, cvar, !shown);
         },
       });
     }
@@ -251,9 +257,8 @@ namespace {
       .label = "GPU Work",
       .tooltip = std::string(kGpuWorkCVar),
       .checked = gpu_work,
-      .action = [&console, gpu_work] -> void {
-        SetBool(console, kGpuWorkCVar, !gpu_work);
-      },
+      .action
+      = [&run, gpu_work] -> void { SetBool(run, kGpuWorkCVar, !gpu_work); },
     });
     return items;
   }
@@ -280,22 +285,23 @@ namespace {
     return std::string(mode->display_name);
   }
 
-  auto HandleShortcuts(console::Console& console) -> void
+  auto HandleShortcuts(console::Console& console, const LineRunner& run) -> void
   {
     const auto& io = ImGui::GetIO();
     if (io.WantTextInput) {
       return;
     }
     if (ImGui::IsKeyPressed(ImGuiKey_F1, false)) {
-      SetBool(
-        console, kUiVisibleCVar, !ReadBool(console, kUiVisibleCVar, true));
+      SetBool(run, kUiVisibleCVar, !ReadBool(console, kUiVisibleCVar, true),
+        commands::CommandSource::kKey);
     }
     if (!io.KeyAlt) {
       return;
     }
     for (const auto& shortcut : kViewModeShortcuts) {
       if (ImGui::IsKeyPressed(shortcut.key, false)) {
-        Run(console, fmt::format("{} {}", kViewModeCVar, shortcut.mode));
+        Run(run, fmt::format("{} {}", kViewModeCVar, shortcut.mode),
+          commands::CommandSource::kKey);
       }
     }
   }
@@ -305,7 +311,7 @@ namespace {
   {
     return imgui::PlayControlsState {
       .sessions_available
-      = console.FindCommand(kSessionBeginCommand) != nullptr,
+      = console.Commands()->Find(kSessionBeginCommand) != nullptr,
       .session_running
       = engine.GetSessionState() != IAsyncEngine::SessionState::kNone,
       .paused = engine.IsPaused(),
@@ -313,23 +319,23 @@ namespace {
   }
 
   auto RunPlayAction(const imgui::PlayAction action,
-    const imgui::PlayControlsState& state, console::Console& console) -> void
+    const imgui::PlayControlsState& state, const LineRunner& run) -> void
   {
     switch (action) {
     case imgui::PlayAction::kNone:
       return;
     case imgui::PlayAction::kPlay:
-      Run(console,
-        std::string(state.paused ? "ngin.resume" : kSessionBeginCommand));
+      Run(
+        run, std::string(state.paused ? "ngin.resume" : kSessionBeginCommand));
       return;
     case imgui::PlayAction::kPause:
-      Run(console, "ngin.pause");
+      Run(run, "ngin.pause");
       return;
     case imgui::PlayAction::kStep:
-      Run(console, "ngin.step");
+      Run(run, "ngin.step");
       return;
     case imgui::PlayAction::kStop:
-      Run(console, "ngin.session.end");
+      Run(run, "ngin.session.end");
       return;
     }
   }
@@ -365,10 +371,10 @@ auto ViewportToolbar::Draw(IAsyncEngine& engine,
   const engine::FrameContext& context,
   const observer_ptr<vortex::Renderer> renderer,
   const std::optional<ViewId> main_view,
-  imgui::consoleui::ConsoleUiState& console_ui) -> void
+  imgui::consoleui::ConsoleUiState& console_ui, const LineRunner& run) -> void
 {
   auto& console = engine.GetConsole();
-  HandleShortcuts(console);
+  HandleShortcuts(console, run);
   const auto stats_config = imgui::StatsOverlayConfig {
     .show_fps = ReadBool(console, kStatsCVars[0].cvar, false),
     .show_frame_timing_detail = ReadBool(console, kStatsCVars[2].cvar, false),
@@ -381,7 +387,7 @@ auto ViewportToolbar::Draw(IAsyncEngine& engine,
     gpu_work_overlay_.Draw(renderer, false, main_view, {}, 0.0F);
     return;
   }
-  DrawStrip(engine, renderer, console_ui);
+  DrawStrip(engine, renderer, console_ui, run);
   stats_overlay_.Draw(context, stats_config, strip_height_);
   gpu_work_overlay_.Draw(renderer, ReadBool(console, kGpuWorkCVar, false),
     main_view, context.GetBudgetStats().gpu_budget, strip_height_);
@@ -394,7 +400,7 @@ auto ViewportToolbar::ReleaseGpuTimeline() noexcept -> void
 
 auto ViewportToolbar::DrawStrip(IAsyncEngine& engine,
   const observer_ptr<const vortex::Renderer> renderer,
-  imgui::consoleui::ConsoleUiState& console_ui) -> void
+  imgui::consoleui::ConsoleUiState& console_ui, const LineRunner& run) -> void
 {
   auto& console = engine.GetConsole();
   const auto* viewport = ImGui::GetMainViewport();
@@ -421,7 +427,7 @@ auto ViewportToolbar::DrawStrip(IAsyncEngine& engine,
 
   std::string view_mode { kDefaultViewMode };
   (void)console.TryGetCVarValue<std::string>(kViewModeCVar, view_mode);
-  const auto view_items = BuildViewModeItems(console, view_mode);
+  const auto view_items = BuildViewModeItems(run, view_mode);
   const auto view_label = ViewModeLabel(view_mode, renderer);
   (void)imgui::DropdownMenu("view-mode",
     {
@@ -432,20 +438,20 @@ auto ViewportToolbar::DrawStrip(IAsyncEngine& engine,
     view_items, view_mode_menu_, true);
 
   ImGui::SameLine();
-  const auto show_items = BuildShowItems(console);
+  const auto show_items = BuildShowItems(console, run);
   (void)imgui::DropdownMenu("show",
     { .icon = ICON_FA_EYE, .label = {}, .tooltip = "Show" }, show_items,
     show_menu_);
 
   ImGui::SameLine();
-  const auto stats_items = BuildStatsItems(console);
+  const auto stats_items = BuildStatsItems(console, run);
   (void)imgui::DropdownMenu("stats",
     { .icon = ICON_FA_STOPWATCH, .label = {}, .tooltip = "Stats" }, stats_items,
     stats_menu_);
 
   ImGui::SameLine();
   const auto play_state = PlayStateOf(engine, console);
-  RunPlayAction(imgui::PlayControls(play_state), play_state, console);
+  RunPlayAction(imgui::PlayControls(play_state), play_state, run);
 
   ImGui::SameLine();
   const float console_width
@@ -460,7 +466,7 @@ auto ViewportToolbar::DrawStrip(IAsyncEngine& engine,
           .active = console_ui.IsConsoleVisible(),
           .dropdown_arrow = false,
         })) {
-    console_ui.ToggleConsole();
+    Run(run, "ui.console");
   }
   ImGui::End();
 }

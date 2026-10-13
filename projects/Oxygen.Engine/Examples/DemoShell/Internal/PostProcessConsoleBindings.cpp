@@ -25,9 +25,12 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Console/Constants.h>
+#include <Oxygen/Console/Parser.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Vortex/CompositionView.h>
@@ -37,23 +40,21 @@
 
 namespace oxygen::examples::internal {
 namespace {
-  using Result = console::ExecutionResult;
+  using Result = commands::CommandResult;
   using scene::ExposureSettings;
   using Handle = vortex::CompositionView::ViewStateHandle;
 
   auto Invalid(std::string message) -> Result
   {
     return {
-      .status = console::ExecutionStatus::kInvalidArguments,
-      .exit_code = console::kExitCodeInvalidArguments,
+      .status = commands::ExecutionStatus::kInvalidArguments,
       .error = std::move(message),
     };
   }
   auto Error(std::string message) -> Result
   {
     return {
-      .status = console::ExecutionStatus::kError,
-      .exit_code = console::kExitCodeGenericError,
+      .status = commands::ExecutionStatus::kError,
       .error = std::move(message),
     };
   }
@@ -228,13 +229,25 @@ PostProcessConsoleBindings::PostProcessConsoleBindings(
     }
   });
   for (const auto& binding : bindings) {
-    const auto handle = console_.RegisterCommand({
+    // The pp.* grammars are free-form; each takes its argument text whole and
+    // parses it with its own rules.
+    const auto handle = console_.Commands()->Register({
       .name = binding.name,
+      .label = binding.name,
       .help = binding.help,
-      .flags = console::CommandFlags::kNone,
-      .handler = [this, execute = binding.execute](const Arguments& args,
-                   const console::CommandContext&) -> Result {
-        return (this->*execute)(args);
+      .params = {
+        commands::CommandParam {
+          .name = "arguments",
+          .type = commands::ParamType::kString,
+          .default_value = commands::ParamValue { std::string {} },
+          .rest_of_line = true,
+        },
+      },
+      .handler = [this, execute = binding.execute](
+                   const commands::CommandArgs& args,
+                   const commands::CommandContext&) -> Result {
+        return (this->*execute)(
+          console::Parser::Tokenize(args.GetString("arguments")));
       },
     });
     if (!handle.IsValid()) {
@@ -250,7 +263,7 @@ PostProcessConsoleBindings::~PostProcessConsoleBindings() { Unregister(); }
 auto PostProcessConsoleBindings::Unregister() -> void
 {
   for (const auto handle : handles_) {
-    console_.UnregisterCommand(handle);
+    console_.Commands()->Unregister(handle);
   }
   handles_.clear();
 }

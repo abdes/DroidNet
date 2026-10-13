@@ -7,13 +7,13 @@
 #include <string>
 #include <string_view>
 
-#include <Oxygen/Testing/GTest.h>
-
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Test/Mocks/MockGraphics.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
@@ -137,13 +137,16 @@ NOLINT_TEST(GraphicsCaptureConsoleTest, StatusCommandPrintsSummaryAndRawState)
   CaptureConsoleGraphics graphics {
     oxygen::observer_ptr<oxygen::graphics::FrameCaptureController>(&controller)
   };
-  oxygen::console::Console console;
+  oxygen::commands::CommandRegistry command_registry;
+  oxygen::console::Console console { oxygen::observer_ptr {
+    &command_registry } };
 
   graphics.RegisterConsoleBindings(
     oxygen::observer_ptr<oxygen::console::Console>(&console));
+  graphics.RegisterCommands(oxygen::observer_ptr { &command_registry });
   const auto result = console.Execute("gfx.capture.status");
 
-  EXPECT_EQ(result.status, oxygen::console::ExecutionStatus::kOk);
+  EXPECT_EQ(result.status, oxygen::commands::ExecutionStatus::kOk);
   EXPECT_THAT(result.output, ::testing::HasSubstr("provider: PIX"));
   EXPECT_THAT(result.output, ::testing::HasSubstr("available: no"));
   EXPECT_THAT(result.output, ::testing::HasSubstr("capturing: no"));

@@ -15,13 +15,14 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/CVar.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Completion.h>
 #include <Oxygen/Console/Constants.h>
 #include <Oxygen/Console/History.h>
@@ -34,6 +35,14 @@ class PathFinder;
 
 namespace oxygen::console {
 
+//! Console variables, and the console's text front end over commands.
+/*!
+ The registry owns console variables (registration, latching, persistence,
+ startup values) and turns console lines into command invocations. Commands
+ themselves live in a `commands::CommandRegistry`; this registry adds the
+ console built-ins (`help`, `find`, `list`, `exec`, `cvar.*`) to it and
+ removes them again when destroyed.
+*/
 class Registry final {
 public:
   struct SetCVarRequest {
@@ -41,81 +50,84 @@ public:
     std::string_view text;
   };
 
+  //! Which sources may change console variables.
   struct SourcePolicy {
-    bool allow_commands { true };
     bool allow_cvars { true };
     bool allow_dev_only { true };
     bool allow_cheat { true };
   };
 
-  struct AuditEvent {
-    CommandSource source { CommandSource::kLocalConsole };
-    std::string line;
-    std::string subject;
-    ExecutionStatus status { ExecutionStatus::kOk };
-    bool denied_by_policy { false };
-  };
-
   struct ExecutionRecord {
     std::string line;
-    ExecutionResult result;
+    commands::CommandResult result;
   };
 
-  using AuditHook = std::function<void(const AuditEvent&)>;
-
   OXGN_CONS_API explicit Registry(
+    observer_ptr<commands::CommandRegistry> commands,
     size_t history_capacity = kDefaultHistoryCapacity);
-  ~Registry() = default;
+  OXGN_CONS_API ~Registry();
 
   OXYGEN_MAKE_NON_COPYABLE(Registry)
   OXYGEN_MAKE_NON_MOVABLE(Registry)
 
   OXGN_CONS_NDAPI auto RegisterCVar(CVarDefinition definition,
     const CVarRegistrationOptions& options = {}) -> CVarHandle;
-  OXGN_CONS_NDAPI auto RegisterCommand(CommandDefinition definition)
-    -> CommandHandle;
-  //! A callback may retire its own registration; its current call stays alive.
-  OXGN_CONS_API auto UnregisterCommand(CommandHandle handle) -> bool;
-
   OXGN_CONS_NDAPI auto FindCVar(std::string_view name) const
     -> observer_ptr<const CVarSnapshot>;
-  OXGN_CONS_NDAPI auto FindCommand(std::string_view name) const
-    -> observer_ptr<const CommandDefinition>;
+  OXGN_CONS_NDAPI auto Commands() const noexcept
+    -> observer_ptr<commands::CommandRegistry>
+  {
+    return commands_;
+  }
 
   OXGN_CONS_NDAPI auto SetCVarFromText(const SetCVarRequest& request,
-    const CommandContext& context = {}) -> ExecutionResult;
+    const commands::CommandContext& context = {}) -> commands::CommandResult;
   OXGN_CONS_API auto ApplyStartupPlan(const ConsoleStartupPlan& startup_plan)
     -> void;
   OXGN_CONS_NDAPI auto ApplyLatchedCVars() -> size_t;
   OXGN_CONS_NDAPI auto SaveArchiveCVars(const oxygen::PathFinder& path_finder,
-    ArchiveSaveMode mode = ArchiveSaveMode::kAutomatic) -> ExecutionResult;
+    ArchiveSaveMode mode = ArchiveSaveMode::kAutomatic)
+    -> commands::CommandResult;
   OXGN_CONS_NDAPI auto LoadArchiveCVars(const oxygen::PathFinder& path_finder,
-    const CommandContext& context = CommandContext {
-      .source = CommandSource::kConfigFile,
+    const commands::CommandContext& context = commands::CommandContext {
+      .source = commands::CommandSource::kConfigFile,
       .shipping_build = false,
-    }) -> ExecutionResult;
+    }) -> commands::CommandResult;
   OXGN_CONS_NDAPI auto ApplyCommandLineOverrides(
     std::span<const std::string_view> arguments,
-    const CommandContext& context = CommandContext {
-      .source = CommandSource::kAutomation,
+    const commands::CommandContext& context = commands::CommandContext {
+      .source = commands::CommandSource::kAutomation,
       .shipping_build = false,
-    }) -> ExecutionResult;
+    }) -> commands::CommandResult;
   OXGN_CONS_NDAPI auto SaveHistory(const oxygen::PathFinder& path_finder) const
-    -> ExecutionResult;
+    -> commands::CommandResult;
   OXGN_CONS_NDAPI auto LoadHistory(const oxygen::PathFinder& path_finder)
-    -> ExecutionResult;
+    -> commands::CommandResult;
   OXGN_CONS_NDAPI auto ListSymbols(bool include_hidden = false) const
     -> std::vector<ConsoleSymbol>;
 
   OXGN_CONS_API auto SetSourcePolicy(
-    CommandSource source, const SourcePolicy& policy) -> void;
-  OXGN_CONS_API auto SetRemoteAllowlist(std::vector<std::string> allowlist)
-    -> void;
-  OXGN_CONS_API auto ClearRemoteAllowlist() -> void;
-  OXGN_CONS_API auto SetAuditHook(AuditHook hook) -> void;
+    commands::CommandSource source, const SourcePolicy& policy) -> void;
 
+  //! Parse a console line (commands separated by `;`) into invocations; a
+  //! variable name alone reads it (`cvar.get`), followed by a value sets it
+  //! (`cvar.set`).
+  OXGN_CONS_NDAPI auto Parse(std::string_view line) const
+    -> Result<std::vector<commands::CommandInvocation>,
+      commands::CommandResult>;
+  //! Run a console line synchronously; an asynchronous command in it returns
+  //! `kPending` (a command dispatcher runs those).
   OXGN_CONS_NDAPI auto Execute(std::string_view line,
-    const CommandContext& context = {}) -> ExecutionResult;
+    const commands::CommandContext& context = {}) -> commands::CommandResult;
+  //! Record a line typed in the console, for history and completion ranking.
+  OXGN_CONS_API auto RecordHistory(std::string_view line) -> void;
+  //! Record the outcome of a line, for console output.
+  OXGN_CONS_API auto RecordExecution(
+    std::string line, commands::CommandResult result) -> void;
+  //! Record a command of a line that ran successfully, for completion
+  //! ranking.
+  OXGN_CONS_API auto RecordUsage(const commands::CommandInvocation& invocation)
+    -> void;
   OXGN_CONS_NDAPI auto Complete(std::string_view prefix) const
     -> std::vector<CompletionCandidate>;
   OXGN_CONS_NDAPI auto BeginCompletionCycle(std::string_view prefix)
@@ -152,22 +164,17 @@ private:
   };
 
   struct ApplyValueResult {
-    ExecutionResult result;
+    commands::CommandResult result;
     bool applied { false };
   };
 
   void RegisterBuiltinCommands();
-  OXGN_CONS_NDAPI auto ExecuteSingle(
-    std::string_view line, const CommandContext& context) -> ExecutionResult;
-  OXGN_CONS_NDAPI auto ExecuteScriptFile(
-    std::string_view path, const CommandContext& context) -> ExecutionResult;
-  OXGN_CONS_NDAPI auto IsCommandAllowed(const CommandDefinition& command,
-    const CommandContext& context) const -> bool;
+  OXGN_CONS_NDAPI auto ExecuteScriptFile(std::string_view path,
+    const commands::CommandContext& context) -> commands::CommandResult;
   OXGN_CONS_NDAPI auto IsCVarMutationAllowed(const CVarDefinition& definition,
-    const CommandContext& context) const -> bool;
-  OXGN_CONS_NDAPI auto SourcePolicyFor(CommandSource source) const
+    const commands::CommandContext& context) const -> bool;
+  OXGN_CONS_NDAPI auto SourcePolicyFor(commands::CommandSource source) const
     -> const SourcePolicy&;
-  OXGN_CONS_API auto EmitAudit(const AuditEvent& event) const -> void;
 
   [[nodiscard]] static auto TryParseValue(
     const CVarValue& hint, std::string_view text, CVarValue& out_value) -> bool;
@@ -189,24 +196,17 @@ private:
   uint32_t script_depth_ { 0 };
   CompletionCycle completion_cycle_;
   std::unordered_map<std::string, CompletionUsage> completion_usage_;
-  std::unordered_set<std::string> remote_allowlist_;
-  AuditHook audit_hook_;
+  observer_ptr<commands::CommandRegistry> commands_;
+  std::vector<commands::CommandHandle> builtin_handles_;
 
   SourcePolicy local_source_policy_ {};
   SourcePolicy config_source_policy_ {
-    .allow_commands = true,
     .allow_cvars = true,
     .allow_dev_only = true,
     .allow_cheat = false,
   };
-  SourcePolicy remote_source_policy_ {
-    .allow_commands = true,
-    .allow_cvars = false,
-    .allow_dev_only = false,
-    .allow_cheat = false,
-  };
+  SourcePolicy remote_source_policy_ {};
   SourcePolicy automation_source_policy_ {
-    .allow_commands = true,
     .allow_cvars = true,
     .allow_dev_only = true,
     .allow_cheat = false,
@@ -215,11 +215,6 @@ private:
   std::unordered_map<std::string, CVarEntry> cvars_;
   std::unordered_map<std::string, StampedCVarValue> startup_cvar_values_;
   std::unordered_map<std::string, CVarValue> persisted_cvar_values_;
-  struct CommandEntry {
-    CommandHandle handle;
-    CommandDefinition definition;
-  };
-  std::unordered_map<std::string, std::shared_ptr<CommandEntry>> commands_;
   size_t execution_record_capacity_ { kDefaultExecutionRecordCapacity };
   std::vector<ExecutionRecord> execution_records_;
 };

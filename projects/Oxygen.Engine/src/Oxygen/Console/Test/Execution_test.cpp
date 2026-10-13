@@ -7,23 +7,24 @@
 #include <filesystem>
 #include <fstream>
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
-using oxygen::console::CommandContext;
-using oxygen::console::CommandDefinition;
-using oxygen::console::CommandFlags;
+using oxygen::commands::CommandContext;
+using oxygen::commands::CommandDefinition;
+using oxygen::commands::CommandFlags;
+using oxygen::commands::CommandResult;
+using oxygen::commands::ExecutionStatus;
 using oxygen::console::Console;
 using oxygen::console::CVarFlags;
-using oxygen::console::ExecutionResult;
-using oxygen::console::ExecutionStatus;
 
 NOLINT_TEST(ConsoleExecution, SupportsCommandChaining)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   bool was_called = false;
 
   ASSERT_TRUE(console
@@ -37,18 +38,17 @@ NOLINT_TEST(ConsoleExecution, SupportsCommandChaining)
       })
       .IsValid());
 
-  ASSERT_TRUE(console
-      .RegisterCommand({
+  ASSERT_TRUE(command_registry
+      .Register({
         .name = "sys.mark",
         .help = "Mark command",
         .flags = CommandFlags::kNone,
-        .handler = [&was_called](const std::vector<std::string>&,
-                     const CommandContext&) -> ExecutionResult {
+        .handler = [&was_called](const oxygen::commands::CommandArgs&,
+                     const CommandContext&) -> CommandResult {
           was_called = true;
-          return ExecutionResult { .status = ExecutionStatus::kOk,
-            .exit_code = 0,
-            .output = {},
-            .error = {} };
+          return CommandResult {
+            .status = ExecutionStatus::kOk, .output = {}, .error = {}
+          };
         },
       })
       .IsValid());
@@ -61,7 +61,8 @@ NOLINT_TEST(ConsoleExecution, SupportsCommandChaining)
 
 NOLINT_TEST(ConsoleExecution, SupportsScriptExecution)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   ASSERT_TRUE(console
       .RegisterCVar({
         .name = "r.exposure",
@@ -95,45 +96,61 @@ NOLINT_TEST(ConsoleExecution, SupportsScriptExecution)
 
 NOLINT_TEST(ConsoleExecution, HandlesExecutionErrorsInChains)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   int call_count = 0;
-  ASSERT_TRUE(console
-      .RegisterCommand({
+  ASSERT_TRUE(command_registry
+      .Register({
         .name = "cmd.inc",
         .help = "Increment",
         .flags = CommandFlags::kNone,
-        .handler = [&call_count](const std::vector<std::string>&,
-                     const CommandContext&) -> ExecutionResult {
+        .handler = [&call_count](const oxygen::commands::CommandArgs&,
+                     const CommandContext&) -> CommandResult {
           call_count++;
-          return ExecutionResult { .status = ExecutionStatus::kOk,
-            .exit_code = 0,
-            .output = {},
-            .error = {} };
+          return CommandResult {
+            .status = ExecutionStatus::kOk, .output = {}, .error = {}
+          };
         },
       })
       .IsValid());
 
-  // Chain should stop at the first error
-  const auto result = console.Execute("cmd.inc; unknown.cmd; cmd.inc");
-  EXPECT_EQ(result.status, ExecutionStatus::kNotFound);
+  ASSERT_TRUE(command_registry
+      .Register({
+        .name = "cmd.fail",
+        .help = "Fails",
+        .handler = [](const oxygen::commands::CommandArgs&,
+                     const CommandContext&) -> CommandResult {
+          return CommandResult::Failure(ExecutionStatus::kError, "failed");
+        },
+      })
+      .IsValid());
+
+  // The whole line is checked before anything runs: a typo runs nothing.
+  const auto unknown = console.Execute("cmd.inc; unknown.cmd; cmd.inc");
+  EXPECT_EQ(unknown.status, ExecutionStatus::kNotFound);
+  EXPECT_EQ(call_count, 0);
+
+  // A command that fails while running stops the rest of the line.
+  const auto failed = console.Execute("cmd.inc; cmd.fail; cmd.inc");
+  EXPECT_EQ(failed.status, ExecutionStatus::kError);
   EXPECT_EQ(call_count, 1);
 }
 
 NOLINT_TEST(ConsoleExecution, ProvidesBuiltinHelpFindAndList)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
 
-  ASSERT_TRUE(console
-      .RegisterCommand({
+  ASSERT_TRUE(command_registry
+      .Register({
         .name = "sys.custom",
         .help = "Custom command help",
         .flags = CommandFlags::kNone,
-        .handler = [](const std::vector<std::string>&,
-                     const CommandContext&) -> ExecutionResult {
-          return ExecutionResult { .status = ExecutionStatus::kOk,
-            .exit_code = 0,
-            .output = {},
-            .error = {} };
+        .handler = [](const oxygen::commands::CommandArgs&,
+                     const CommandContext&) -> CommandResult {
+          return CommandResult {
+            .status = ExecutionStatus::kOk, .output = {}, .error = {}
+          };
         },
       })
       .IsValid());

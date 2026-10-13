@@ -58,13 +58,13 @@ protected:
 NOLINT_TEST_F(LaunchFileTest, ReadsEveryFieldAndResolvesRelativePaths)
 {
   const auto launch = Parse(R"({
-    "version": 1,
+    "version": 2,
     "mounts": ["base.pak", "cooked"],
     "scene": "/.cooked/Scenes/Level.oscene",
     "script_source_roots": ["scripts"],
     "window": { "title": "Level", "width": 1600, "height": 900,
                 "vsync": false, "frame_cap": 60 },
-    "diagnostics_pipe": "oxygen-player-1"
+    "control": { "port": 4711, "exit_when_owner_leaves": true }
   })");
 
   ASSERT_EQ(launch.mounts.size(), 2U);
@@ -81,14 +81,16 @@ NOLINT_TEST_F(LaunchFileTest, ReadsEveryFieldAndResolvesRelativePaths)
   EXPECT_EQ(launch.window.height, 900U);
   EXPECT_FALSE(launch.window.vsync);
   EXPECT_EQ(launch.window.frame_cap, 60U);
-  EXPECT_EQ(launch.diagnostics_pipe, "oxygen-player-1");
+  ASSERT_TRUE(launch.control.has_value());
+  EXPECT_EQ(launch.control->port, 4711U);
+  EXPECT_TRUE(launch.control->exit_when_owner_leaves);
   EXPECT_FALSE(CanRemount(launch));
 }
 
 NOLINT_TEST_F(LaunchFileTest, OptionalFieldsTakeTheirDefaults)
 {
   const auto launch = Parse(R"({
-    "version": 1, "mounts": ["cooked"], "scene": "/Scenes/A.oscene"
+    "version": 2, "mounts": ["cooked"], "scene": "/Scenes/A.oscene"
   })");
 
   EXPECT_TRUE(launch.script_source_roots.empty());
@@ -97,14 +99,14 @@ NOLINT_TEST_F(LaunchFileTest, OptionalFieldsTakeTheirDefaults)
   EXPECT_EQ(launch.window.height, 720U);
   EXPECT_TRUE(launch.window.vsync);
   EXPECT_EQ(launch.window.frame_cap, 0U);
-  EXPECT_FALSE(launch.diagnostics_pipe.has_value());
+  EXPECT_FALSE(launch.control.has_value());
   EXPECT_TRUE(CanRemount(launch));
 }
 
 NOLINT_TEST_F(LaunchFileTest, ReadLaunchFileResolvesAgainstItsFolder)
 {
   std::ofstream(root_ / "launch.json") << R"({
-    "version": 1, "mounts": ["cooked"], "scene": "/Scenes/A.oscene"
+    "version": 2, "mounts": ["cooked"], "scene": "/Scenes/A.oscene"
   })";
 
   const auto launch = ReadLaunchFile(root_ / "launch.json");
@@ -116,26 +118,26 @@ NOLINT_TEST_F(LaunchFileTest, ReadLaunchFileResolvesAgainstItsFolder)
 NOLINT_TEST_F(LaunchFileTest, SchemaViolationsNameTheSchemaAndTheValue)
 {
   const auto missing_scene
-    = ErrorOf(R"({ "version": 1, "mounts": ["cooked"] })");
+    = ErrorOf(R"({ "version": 2, "mounts": ["cooked"] })");
   EXPECT_NE(
     missing_scene.find("oxygen.player-launch.schema.json"), std::string::npos);
   EXPECT_NE(missing_scene.find("scene"), std::string::npos);
 
-  const auto bad_width = ErrorOf(R"({ "version": 1, "mounts": ["cooked"],
+  const auto bad_width = ErrorOf(R"({ "version": 2, "mounts": ["cooked"],
     "scene": "/A.oscene", "window": { "width": "wide" } })");
   EXPECT_NE(bad_width.find("/window/width"), std::string::npos);
 
-  const auto unknown = ErrorOf(R"({ "version": 1, "mounts": ["cooked"],
+  const auto unknown = ErrorOf(R"({ "version": 2, "mounts": ["cooked"],
     "scene": "/A.oscene", "fullscreen": true })");
   EXPECT_NE(unknown.find("fullscreen"), std::string::npos);
 
-  EXPECT_FALSE(ErrorOf(R"({ "version": 2, "mounts": ["cooked"],
-    "scene": "/A.oscene" })")
-      .empty());
-  EXPECT_FALSE(ErrorOf(R"({ "version": 1, "mounts": [],
-    "scene": "/A.oscene" })")
-      .empty());
   EXPECT_FALSE(ErrorOf(R"({ "version": 1, "mounts": ["cooked"],
+    "scene": "/A.oscene" })")
+      .empty());
+  EXPECT_FALSE(ErrorOf(R"({ "version": 2, "mounts": [],
+    "scene": "/A.oscene" })")
+      .empty());
+  EXPECT_FALSE(ErrorOf(R"({ "version": 2, "mounts": ["cooked"],
     "scene": "A.oscene" })")
       .empty());
 }
@@ -147,15 +149,15 @@ NOLINT_TEST_F(LaunchFileTest, InvalidJsonIsReported)
 
 NOLINT_TEST_F(LaunchFileTest, MissingContentIsReported)
 {
-  EXPECT_NE(ErrorOf(R"({ "version": 1, "mounts": ["absent"],
+  EXPECT_NE(ErrorOf(R"({ "version": 2, "mounts": ["absent"],
     "scene": "/A.oscene" })")
               .find("absent"),
     std::string::npos);
-  EXPECT_NE(ErrorOf(R"({ "version": 1, "mounts": ["absent.pak"],
+  EXPECT_NE(ErrorOf(R"({ "version": 2, "mounts": ["absent.pak"],
     "scene": "/A.oscene" })")
               .find("absent.pak"),
     std::string::npos);
-  EXPECT_NE(ErrorOf(R"({ "version": 1, "mounts": ["cooked"],
+  EXPECT_NE(ErrorOf(R"({ "version": 2, "mounts": ["cooked"],
     "scene": "/A.oscene", "script_source_roots": ["nowhere"] })")
               .find("nowhere"),
     std::string::npos);

@@ -14,7 +14,7 @@
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -154,10 +154,10 @@ auto ExposureAllocationScenario::SetUp() -> void
       .Execute(temporal_ ? "vtx.volumetric_fog.temporal_reprojection true"
                          : "vtx.volumetric_fog.temporal_reprojection false")
       .status,
-    console::ExecutionStatus::kOk);
+    commands::ExecutionStatus::kOk);
   ASSERT_EQ(
     fixture_.fixture_console.Execute("vtx.volumetric_fog.jitter false").status,
-    console::ExecutionStatus::kOk);
+    commands::ExecutionStatus::kOk);
   fixture_.probe->prepare = [](RenderContext& context) -> void {
     context.current_view.with_atmosphere = true;
     context.current_view.with_height_fog = true;

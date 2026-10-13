@@ -4,56 +4,54 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
-using oxygen::console::CommandContext;
-using oxygen::console::CommandDefinition;
-using oxygen::console::CommandFlags;
-using oxygen::console::CommandSource;
+using oxygen::commands::CommandContext;
+using oxygen::commands::CommandDefinition;
+using oxygen::commands::CommandFlags;
+using oxygen::commands::CommandResult;
+using oxygen::commands::CommandSource;
+using oxygen::commands::ExecutionStatus;
 using oxygen::console::Console;
 using oxygen::console::CVarDefinition;
 using oxygen::console::CVarFlags;
 using oxygen::console::CVarValueOrigin;
-using oxygen::console::ExecutionResult;
-using oxygen::console::ExecutionStatus;
-using oxygen::console::Registry;
 
 NOLINT_TEST(ConsolePolicy, EnforcesShippingBuildRestrictions)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
 
   // DevOnly Command
-  ASSERT_TRUE(console
-      .RegisterCommand({
+  ASSERT_TRUE(command_registry
+      .Register({
         .name = "sys.dev_cmd",
         .help = "Dev cmd",
         .flags = CommandFlags::kDevOnly,
-        .handler = [](const std::vector<std::string>&,
-                     const CommandContext&) -> ExecutionResult {
-          return ExecutionResult { .status = ExecutionStatus::kOk,
-            .exit_code = 0,
-            .output = {},
-            .error = {} };
+        .handler = [](const oxygen::commands::CommandArgs&,
+                     const CommandContext&) -> CommandResult {
+          return CommandResult {
+            .status = ExecutionStatus::kOk, .output = {}, .error = {}
+          };
         },
       })
       .IsValid());
 
   // Regular Command
-  ASSERT_TRUE(console
-      .RegisterCommand({
+  ASSERT_TRUE(command_registry
+      .Register({
         .name = "sys.normal_cmd",
         .help = "Normal cmd",
         .flags = CommandFlags::kNone,
-        .handler = [](const std::vector<std::string>&,
-                     const CommandContext&) -> ExecutionResult {
-          return ExecutionResult { .status = ExecutionStatus::kOk,
-            .exit_code = 0,
-            .output = {},
-            .error = {} };
+        .handler = [](const oxygen::commands::CommandArgs&,
+                     const CommandContext&) -> CommandResult {
+          return CommandResult {
+            .status = ExecutionStatus::kOk, .output = {}, .error = {}
+          };
         },
       })
       .IsValid());
@@ -87,76 +85,10 @@ NOLINT_TEST(ConsolePolicy, EnforcesShippingBuildRestrictions)
     ExecutionStatus::kOk);
 }
 
-NOLINT_TEST(ConsolePolicy, EnforcesRemoteAllowlist)
-{
-  Console console {};
-  ASSERT_TRUE(console
-      .RegisterCommand({
-        .name = "net.ping",
-        .help = "Ping",
-        .flags = CommandFlags::kRemoteAllowed,
-        .handler = [](const std::vector<std::string>&,
-                     const CommandContext&) -> ExecutionResult {
-          return ExecutionResult { .status = ExecutionStatus::kOk,
-            .exit_code = 0,
-            .output = {},
-            .error = {} };
-        },
-      })
-      .IsValid());
-  ASSERT_TRUE(console
-      .RegisterCommand({
-        .name = "net.dangerous",
-        .help = "Dangerous",
-        .flags = CommandFlags::kRemoteAllowed,
-        .handler = [](const std::vector<std::string>&,
-                     const CommandContext&) -> ExecutionResult {
-          return ExecutionResult { .status = ExecutionStatus::kOk,
-            .exit_code = 0,
-            .output = {},
-            .error = {} };
-        },
-      })
-      .IsValid());
-
-  console.SetRemoteAllowlist({ "net.ping" });
-
-  // Allowed because it is in the allowlist
-  EXPECT_EQ(console
-              .Execute("net.ping",
-                { .source = CommandSource::kRemote, .shipping_build = false })
-              .status,
-    ExecutionStatus::kOk);
-  // Blocked because it is not in the allowlist even though it has the flag
-  EXPECT_EQ(console
-              .Execute("net.dangerous",
-                { .source = CommandSource::kRemote, .shipping_build = false })
-              .status,
-    ExecutionStatus::kDenied);
-  // Local still allowed
-  EXPECT_EQ(
-    console
-      .Execute("net.dangerous",
-        { .source = CommandSource::kLocalConsole, .shipping_build = false })
-      .status,
-    ExecutionStatus::kOk);
-}
-
-NOLINT_TEST(ConsolePolicy, EmitsAuditHooks)
-{
-  Console console {};
-  std::vector<Registry::AuditEvent> events;
-  console.SetAuditHook(
-    [&events](const Registry::AuditEvent& event) { events.push_back(event); });
-
-  EXPECT_EQ(console.Execute("help").status, ExecutionStatus::kOk);
-  ASSERT_FALSE(events.empty());
-  EXPECT_EQ(events.back().subject, "help");
-}
-
 NOLINT_TEST(ConsolePolicy, AppliesSourcePolicyMatrix)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   ASSERT_TRUE(console
       .RegisterCVar({
         .name = "sys.val",
@@ -171,7 +103,6 @@ NOLINT_TEST(ConsolePolicy, AppliesSourcePolicyMatrix)
   // Disable CVars for Automation
   console.SetSourcePolicy(CommandSource::kAutomation,
     {
-      .allow_commands = true,
       .allow_cvars = false,
       .allow_dev_only = true,
       .allow_cheat = true,
@@ -193,7 +124,8 @@ NOLINT_TEST(ConsolePolicy, AppliesSourcePolicyMatrix)
 
 NOLINT_TEST(ConsolePolicy, SupportsRequiresRestart)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   ASSERT_TRUE(console
       .RegisterCVar({
         .name = "gfx.backend",

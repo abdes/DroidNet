@@ -6,13 +6,17 @@
 
 #include <cstdlib>
 
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Console/Console.h>
 
 auto main(int /*argc*/, char** /*argv*/) -> int
 {
   namespace c = oxygen::console;
 
-  c::Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  c::Console console { oxygen::observer_ptr { &command_registry } };
 
   const auto cvar_ok = console.RegisterCVar(c::CVarDefinition {
     .name = "r.vsync",
@@ -23,39 +27,38 @@ auto main(int /*argc*/, char** /*argv*/) -> int
     .max_value = 1.0,
   });
 
-  const auto command_ok = console.RegisterCommand(c::CommandDefinition {
-    .name = "echo",
-    .help = "Echo args",
-    .flags = c::CommandFlags::kNone,
-    .handler = [](const std::vector<std::string>& args,
-                 const c::CommandContext&) -> c::ExecutionResult {
-      std::string text;
-      for (size_t i = 0; i < args.size(); ++i) {
-        if (i != 0) {
-          text.push_back(' ');
-        }
-        text += args[i];
-      }
-      return {
-        .status = c::ExecutionStatus::kOk,
-        .exit_code = 0,
-        .output = text,
-        .error = {},
-      };
-    },
-  });
+  const auto command_ok
+    = command_registry.Register(oxygen::commands::CommandDefinition {
+      .name = "echo",
+      .label = "Echo",
+      .help = "Echo text",
+      .params = {
+        oxygen::commands::CommandParam {
+          .name = "text",
+          .type = oxygen::commands::ParamType::kString,
+          .required = true,
+          .rest_of_line = true,
+        },
+      },
+      .handler = [](const oxygen::commands::CommandArgs& args,
+                   const oxygen::commands::CommandContext&)
+        -> oxygen::commands::CommandResult {
+        return oxygen::commands::CommandResult::Success(
+          args.GetString("text"));
+      },
+    });
 
   if (!cvar_ok.IsValid() || !command_ok.IsValid()) {
     return EXIT_FAILURE;
   }
 
   const auto set_result = console.Execute("r.vsync 0");
-  if (set_result.status != c::ExecutionStatus::kOk) {
+  if (set_result.status != oxygen::commands::ExecutionStatus::kOk) {
     return EXIT_FAILURE;
   }
 
   const auto command_result = console.Execute("echo hello oxygen");
-  if (command_result.status != c::ExecutionStatus::kOk
+  if (command_result.status != oxygen::commands::ExecutionStatus::kOk
     || command_result.output != "hello oxygen") {
     return EXIT_FAILURE;
   }

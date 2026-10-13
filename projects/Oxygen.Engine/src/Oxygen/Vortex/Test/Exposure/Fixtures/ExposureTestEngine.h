@@ -33,12 +33,15 @@ public:
   MOCK_METHOD(console::Console&, GetConsole, (), (noexcept, override));
   MOCK_METHOD(
     const console::Console&, GetConsole, (), (const, noexcept, override));
+  MOCK_METHOD(
+    commands::CommandRegistry&, GetCommands, (), (noexcept, override));
   MOCK_METHOD(bool, IsRunning, (), (const, override));
   MOCK_METHOD(void, Stop, (), (override));
   MOCK_METHOD(void, Pause, (), (override));
   MOCK_METHOD(void, Resume, (), (override));
   MOCK_METHOD(bool, IsPaused, (), (const, override));
   MOCK_METHOD(void, Step, (std::uint32_t), (override));
+  MOCK_METHOD(std::uint32_t, GetPendingSteps, (), (const, override));
   MOCK_METHOD(bool, BeginSession, (), (override));
   MOCK_METHOD(void, EndSession, (), (override));
   MOCK_METHOD(SessionState, GetSessionState, (), (const, override));

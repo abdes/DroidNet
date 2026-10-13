@@ -26,12 +26,12 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Console/CVar.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Console/StartupPlan.h>
 #include <Oxygen/Content/AssetLoader.h>
@@ -83,17 +83,17 @@ using engine::internal::EngineTagFactory;
 using TimingConfig = TimingConfig;
 
 namespace {
+  using oxygen::commands::CommandContext;
+  using oxygen::commands::CommandDefinition;
+  using oxygen::commands::CommandFlags;
+  using oxygen::commands::CommandResult;
+  using oxygen::commands::CommandSource;
+  using oxygen::commands::ExecutionStatus;
   using oxygen::console::ArchiveSaveMode;
-  using oxygen::console::CommandContext;
-  using oxygen::console::CommandDefinition;
-  using oxygen::console::CommandFlags;
-  using oxygen::console::CommandSource;
   using oxygen::console::CVarDefinition;
   using oxygen::console::CVarFlags;
   using oxygen::console::CVarRegistrationOptions;
   using oxygen::console::CVarValueOrigin;
-  using oxygen::console::ExecutionResult;
-  using oxygen::console::ExecutionStatus;
 
   constexpr std::string_view kCVarEngineTargetFps = "ngin.target_fps";
   constexpr std::string_view kCVarGraphicsVsync = "gfx.vsync";
@@ -151,6 +151,7 @@ AsyncEngine::AsyncEngine(std::shared_ptr<Platform> platform,
   : config_(std::move(config))
   , platform_(std::move(platform))
   , gfx_weak_(std::move(graphics))
+  , console_(observer_ptr { &commands_ })
   , path_finder_config_(
       std::make_shared<const PathFinderConfig>(config_.path_finder_config))
   , path_finder_(path_finder_config_, std::filesystem::current_path())
@@ -325,6 +326,16 @@ auto AsyncEngine::Step(const std::uint32_t frames) -> void
   std::scoped_lock lock(run_state_mutex_);
   run_state_requests_.pause = true;
   run_state_requests_.step_frames += frames;
+}
+
+auto AsyncEngine::GetPendingSteps() const -> std::uint32_t
+{
+  std::scoped_lock lock(run_state_mutex_);
+  // A cancel or session change waiting to apply drops the applied steps.
+  const bool dropped = run_state_requests_.cancel_steps
+    || run_state_requests_.end_session || run_state_requests_.begin_session;
+  const auto applied = dropped ? 0U : steps_remaining_.load();
+  return applied + run_state_requests_.step_frames;
 }
 
 auto AsyncEngine::BeginSession() -> bool
@@ -526,6 +537,11 @@ auto AsyncEngine::GetConsole() noexcept -> console::Console&
 auto AsyncEngine::GetConsole() const noexcept -> const console::Console&
 {
   return console_;
+}
+
+auto AsyncEngine::GetCommands() noexcept -> commands::CommandRegistry&
+{
+  return commands_;
 }
 
 auto AsyncEngine::NextFrame() -> bool
@@ -910,122 +926,68 @@ auto AsyncEngine::RegisterEngineConsoleBindings() -> void
     },
   });
 
-  (void)console_.RegisterCommand(CommandDefinition {
+  const auto add = [this](commands::CommandDefinition definition) -> void {
+    static_cast<void>(commands_.Register(std::move(definition)));
+  };
+  add(commands::CommandDefinition {
     .name = "ngin.cvars.save",
-    .help = "Save archived CVars to the configured cvars archive path",
-    .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>&,
-                 const CommandContext&) -> ExecutionResult {
+    .label = "Save Variables",
+    .help = "Save archived console variables to the archive path",
+    .handler = [this](const commands::CommandArgs&,
+                 const commands::CommandContext&) -> commands::CommandResult {
       return console_.SaveArchiveCVars(
         path_finder_, ArchiveSaveMode::kExplicit);
     },
   });
-
-  (void)console_.RegisterCommand(CommandDefinition {
+  add(commands::CommandDefinition {
     .name = "ngin.cvars.load",
-    .help = "Load archived CVars from the configured cvars archive path",
-    .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>&,
-                 const CommandContext&) -> ExecutionResult {
-      const auto result
+    .label = "Load Variables",
+    .help = "Load archived console variables from the archive path",
+    .handler = [this](const commands::CommandArgs&,
+                 const commands::CommandContext&) -> commands::CommandResult {
+      auto result
         = console_.LoadArchiveCVars(path_finder_, MakeConfigFileContext());
-      if (result.status == ExecutionStatus::kOk) {
+      if (result.status == commands::ExecutionStatus::kOk) {
         ApplyAllConsoleCVars();
       }
       return result;
     },
   });
-
-  (void)console_.RegisterCommand(CommandDefinition {
+  add(commands::CommandDefinition {
     .name = "ngin.console.history.save",
-    .help = "Save console command history",
-    .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>&, const CommandContext&)
-      -> ExecutionResult { return console_.SaveHistory(path_finder_); },
+    .label = "Save Console History",
+    .help = "Save the console history",
+    .handler = [this](const commands::CommandArgs&,
+                 const commands::CommandContext&) -> commands::CommandResult {
+      return console_.SaveHistory(path_finder_);
+    },
   });
-
-  (void)console_.RegisterCommand(CommandDefinition {
+  add(commands::CommandDefinition {
     .name = "ngin.console.history.load",
-    .help = "Load console command history",
-    .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>&, const CommandContext&)
-      -> ExecutionResult { return console_.LoadHistory(path_finder_); },
-  });
-
-  RegisterRunStateConsoleCommands();
-}
-
-auto AsyncEngine::RegisterRunStateConsoleCommands() -> void
-{
-  (void)console_.RegisterCommand(CommandDefinition {
-    .name = "ngin.pause",
-    .help = "Pause simulation from the next frame; rendering continues",
-    .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>&,
-                 const CommandContext&) -> ExecutionResult {
-      Pause();
-      return { .status = ExecutionStatus::kOk };
-    },
-  });
-
-  (void)console_.RegisterCommand(CommandDefinition {
-    .name = "ngin.resume",
-    .help = "Resume simulation and cancel pending frame steps",
-    .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>&,
-                 const CommandContext&) -> ExecutionResult {
-      Resume();
-      return { .status = ExecutionStatus::kOk };
-    },
-  });
-
-  (void)console_.RegisterCommand(CommandDefinition {
-    .name = "ngin.step",
-    .help = "Pause, then simulate [frames] frames (default 1)",
-    .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>& args,
-                 const CommandContext&) -> ExecutionResult {
-      std::uint32_t frames = 1U;
-      if (!args.empty()) {
-        const auto& text = args.front();
-        const auto* const end = std::to_address(text.end());
-        const auto parsed
-          = std::from_chars(std::to_address(text.begin()), end, frames);
-        if (parsed.ec != std::errc {} || parsed.ptr != end || frames == 0U) {
-          return {
-            .status = ExecutionStatus::kInvalidArguments,
-            .error = "ngin.step expects a positive frame count",
-          };
-        }
-      }
-      Step(frames);
-      return { .status = ExecutionStatus::kOk };
-    },
-  });
-
-  (void)console_.RegisterCommand(CommandDefinition {
-    .name = "ngin.session.end",
-    .help = "End the running play session at the next frame start",
-    .flags = CommandFlags::kNone,
-    .handler = [this](const std::vector<std::string>&,
-                 const CommandContext&) -> ExecutionResult {
-      EndSession();
-      return { .status = ExecutionStatus::kOk };
+    .label = "Load Console History",
+    .help = "Load the console history",
+    .handler = [this](const commands::CommandArgs&,
+                 const commands::CommandContext&) -> commands::CommandResult {
+      return console_.LoadHistory(path_finder_);
     },
   });
 }
 
 auto AsyncEngine::RegisterServiceConsoleBindings() -> void
 {
+  const auto commands = observer_ptr { &commands_ };
   if (auto gfx = gfx_weak_.lock()) {
     gfx->RegisterConsoleBindings(observer_ptr { &console_ });
+    gfx->RegisterCommands(commands);
   }
   if (asset_loader_) {
     asset_loader_->RegisterConsoleBindings(observer_ptr { &console_ });
+    asset_loader_->RegisterCommands(commands);
   }
   if (script_compilation_service_) {
     script_compilation_service_->RegisterConsoleBindings(
       observer_ptr { &console_ });
+    script_compilation_service_->RegisterCommands(commands);
   }
 }
 

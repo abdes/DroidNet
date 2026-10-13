@@ -34,6 +34,9 @@ namespace oxygen {
 namespace console {
   class Console;
 } // namespace console
+namespace commands {
+  class CommandRegistry;
+} // namespace commands
 
 class Platform;
 namespace platform {
@@ -174,6 +177,8 @@ public:
   OXGN_GFX_NDAPI virtual auto IsVSyncEnabled() const noexcept -> bool;
   OXGN_GFX_API auto RegisterConsoleBindings(
     observer_ptr<console::Console> console) noexcept -> void;
+  OXGN_GFX_API auto RegisterCommands(
+    observer_ptr<commands::CommandRegistry> registry) noexcept -> void;
   OXGN_GFX_API auto ApplyConsoleCVars(const console::Console& console) -> void;
 
   //=== Global & pooled objects ===-----------------------------------------//

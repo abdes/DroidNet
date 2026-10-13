@@ -66,7 +66,8 @@ namespace {
 } // namespace
 
 auto ConsolePanel::Draw(oxygen::console::Console& console,
-  ConsoleUiState& state, ImGuiContext* imgui_context) -> void
+  ConsoleUiState& state, ImGuiContext* imgui_context, const LineRunner& run)
+  -> void
 {
   if (imgui_context == nullptr) {
     return;
@@ -150,11 +151,11 @@ auto ConsolePanel::Draw(oxygen::console::Console& console,
       const auto popup_id = "cmd_ctx##" + std::to_string(entry.sequence);
       const bool selected = ImGui::Selectable(command_id.c_str(), false);
       if (selected && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-        RunCommand(console, state, entry.command);
+        RunCommand(state, entry.command, run);
       }
       if (ImGui::BeginPopupContextItem(popup_id.c_str())) {
         if (ImGui::MenuItem("Run")) {
-          RunCommand(console, state, entry.command);
+          RunCommand(state, entry.command, run);
         }
         if (ImGui::MenuItem("Copy Command")) {
           ImGui::SetClipboardText(entry.command.c_str());
@@ -217,7 +218,7 @@ auto ConsolePanel::Draw(oxygen::console::Console& console,
   }
   if (ImGui::IsItemFocused() && input_line.empty()
     && ImGui::IsKeyPressed(ImGuiKey_GraveAccent, false)) {
-    state.SetConsoleVisible(false);
+    run("ui.console close", commands::CommandSource::kKey);
     ImGui::End();
     return;
   }
@@ -225,7 +226,7 @@ auto ConsolePanel::Draw(oxygen::console::Console& console,
     state.SetConsoleInput(input_line);
   }
   if (execute) {
-    RunCommand(console, state, input_line);
+    RunCommand(state, input_line, run);
   } else {
     state.SetConsoleInput(input_line);
   }
@@ -321,15 +322,15 @@ auto ConsolePanel::ConsoleInputCallback(ImGuiInputTextCallbackData* data) -> int
   return 0;
 }
 
-auto ConsolePanel::RunCommand(oxygen::console::Console& console,
-  ConsoleUiState& state, const std::string& line) -> void
+auto ConsolePanel::RunCommand(
+  ConsoleUiState& state, const std::string& line, const LineRunner& run) -> void
 {
   if (line.empty()) {
     return;
   }
 
-  const auto result = console.Execute(line);
-  (void)result;
+  // The result reaches the log through the console's execution records.
+  run(line, commands::CommandSource::kLocalConsole);
   state.SetConsoleInput({});
   state.ClearCompletion();
   state.ResetHistoryNavigation();

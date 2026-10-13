@@ -248,7 +248,8 @@ if(OXYGEN_BUILD_DOCS AND OXYGEN_WITH_DOXYGEN)
     VERSION ${META_VERSION}
     TITLE "\"Profiling\""
     BRIEF "\"Unified profiling infrastructure for Oxygen\""
-    INPUT_PATH "${CMAKE_CURRENT_SOURCE_DIR}"
+    INPUT_PATH
+      "${CMAKE_CURRENT_SOURCE_DIR}"
   )
 endif()
 

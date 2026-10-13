@@ -101,6 +101,7 @@ auto HostModule::OnShutdown() noexcept -> void
 {
   try {
     toolbar_.ReleaseGpuTimeline();
+    console_host_.UnregisterCommands();
     publisher_.Shutdown();
     stage_.Clear();
     views_ = {};
@@ -108,6 +109,25 @@ auto HostModule::OnShutdown() noexcept -> void
     LOG_F(ERROR, "{}: shutdown failed: {}", GetName(), ex.what());
   } catch (...) {
     LOG_F(ERROR, "{}: shutdown failed with an unknown exception", GetName());
+  }
+}
+
+auto HostModule::RegisterCommands(
+  const observer_ptr<commands::CommandRegistry> registry) noexcept -> void
+{
+  try {
+    console_host_.RegisterCommands(*registry);
+  } catch (const std::exception& ex) {
+    LOG_F(ERROR, "{}: command registration failed: {}", GetName(), ex.what());
+  }
+}
+
+auto HostModule::PostLine(
+  std::string line, const commands::CommandSource source) const -> void
+{
+  if (host_.commands) {
+    host_.commands->PostLine(
+      std::move(line), commands::CommandContext { .source = source });
   }
 }
 
@@ -176,9 +196,13 @@ auto HostModule::OnGuiUpdate(const observer_ptr<engine::FrameContext> context)
     co_return;
   }
   ImGui::SetCurrentContext(imgui_context);
+  const auto run
+    = [this](std::string line, const commands::CommandSource source) -> void {
+    PostLine(std::move(line), source);
+  };
   toolbar_.Draw(*host_.engine, *context, ResolveRenderer(), views_.main,
-    console_host_.State());
-  console_host_.Draw(host_.engine->GetConsole(), imgui_context);
+    console_host_.State(), run);
+  console_host_.Draw(host_.engine->GetConsole(), imgui_context, run);
   co_return;
 }
 

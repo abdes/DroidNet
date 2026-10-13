@@ -32,8 +32,9 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/CVar.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -505,32 +506,43 @@ auto ScriptingModule::RegisterConsoleBindings(
     .min_value = static_cast<double>(kMinInputBridgeLogVerbosity),
     .max_value = static_cast<double>(kMaxInputBridgeLogVerbosity),
   });
+}
 
-  (void)console->RegisterCommand(console::CommandDefinition {
+auto ScriptingModule::RegisterCommands(
+  const observer_ptr<commands::CommandRegistry> registry) noexcept -> void
+{
+  if (registry == nullptr) {
+    return;
+  }
+  static_cast<void>(registry->Register(commands::CommandDefinition {
     .name = "scripting.reload_all",
+    .label = "Reload All Scripts",
     .help = "Recompile every script of the scene from its source",
-    .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
+    .handler = [this](const commands::CommandArgs&,
+                 const commands::CommandContext&) -> commands::CommandResult {
       if (!attached_ || !source_reload_) {
         return {
-          .status = console::ExecutionStatus::kError,
+          .status = commands::ExecutionStatus::kError,
           .error = "Engine not attached",
         };
       }
       const auto submitted = source_reload_->ReloadAll(observed_scene_.lock());
       return {
-        .status = console::ExecutionStatus::kOk,
+        .status = commands::ExecutionStatus::kOk,
         .output = fmt::format("Recompiling {} script(s)...", submitted),
       };
     },
-  });
+  }));
 
-  (void)console->RegisterCommand(console::CommandDefinition {
+  static_cast<void>(registry->Register(commands::CommandDefinition {
     .name = "scripting.list_roots",
+    .label = "List Script Roots",
     .help = "List all registered script source roots",
-    .handler = [this](const auto&, const auto&) -> console::ExecutionResult {
+    .handler = [this](const commands::CommandArgs&,
+                 const commands::CommandContext&) -> commands::CommandResult {
       if (!attached_) {
         return {
-          .status = console::ExecutionStatus::kError,
+          .status = commands::ExecutionStatus::kError,
           .error = "Engine not attached",
         };
       }
@@ -542,11 +554,11 @@ auto ScriptingModule::RegisterConsoleBindings(
           std::filesystem::exists(root) ? "active" : "missing");
       }
       return {
-        .status = console::ExecutionStatus::kOk,
+        .status = commands::ExecutionStatus::kOk,
         .output = output,
       };
     },
-  });
+  }));
 }
 
 auto ScriptingModule::ApplyConsoleCVars(

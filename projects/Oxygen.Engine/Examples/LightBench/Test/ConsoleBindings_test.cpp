@@ -10,6 +10,7 @@
 
 #include "LightBench/LightBenchConsoleBindings.h"
 
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -17,11 +18,12 @@ namespace oxygen::examples::light_bench::testing {
 
 NOLINT_TEST(LightBenchConsole, ValidatesArgumentsDispatchesAndRetiresCommands)
 {
-  console::Console console;
+  oxygen::commands::CommandRegistry command_registry;
+  console::Console console { oxygen::observer_ptr { &command_registry } };
   std::optional<LightBenchPreset> pending;
   unsigned resets = 0;
-  const auto context = console::CommandContext {
-    .source = console::CommandSource::kAutomation,
+  const auto context = commands::CommandContext {
+    .source = commands::CommandSource::kAutomation,
     .shipping_build = true,
   };
   {
@@ -36,36 +38,37 @@ NOLINT_TEST(LightBenchConsole, ValidatesArgumentsDispatchesAndRetiresCommands)
                 .output.find("outdoor-daylight"),
       std::string::npos);
     EXPECT_EQ(console.Execute("lightbench.preset invalid", context).status,
-      console::ExecutionStatus::kInvalidArguments);
+      commands::ExecutionStatus::kInvalidArguments);
     EXPECT_FALSE(pending);
     const auto queued = console.Execute("lightbench.preset indoor", context);
-    EXPECT_EQ(queued.status, console::ExecutionStatus::kOk);
+    EXPECT_EQ(queued.status, commands::ExecutionStatus::kOk);
     EXPECT_TRUE(queued.output.starts_with("queued"));
     EXPECT_EQ(pending, LightBenchPreset::kIndoor);
     EXPECT_EQ(
       console.Execute("lightbench.preset", context).output, "owner snapshot");
     EXPECT_EQ(console.Execute("lightbench.reset extra", context).status,
-      console::ExecutionStatus::kInvalidArguments);
+      commands::ExecutionStatus::kInvalidArguments);
     EXPECT_EQ(resets, 0U);
     EXPECT_EQ(console.Execute("lightbench.reset", context).status,
-      console::ExecutionStatus::kOk);
+      commands::ExecutionStatus::kOk);
     EXPECT_EQ(resets, 1U);
     // Applying a queued preset and resetting the real scene are covered by
     // console_preset_and_settings in the in-app Test Engine suite.
   }
   EXPECT_TRUE(console.Complete("lightbench.").empty());
   EXPECT_EQ(console.Execute("lightbench.reset", context).status,
-    console::ExecutionStatus::kNotFound);
+    commands::ExecutionStatus::kNotFound);
 }
 
 NOLINT_TEST(LightBenchConsole, FailedRegistrationRollsBackOnlyItsOwnCommands)
 {
-  console::Console console;
-  const auto existing = console.RegisterCommand({
+  oxygen::commands::CommandRegistry command_registry;
+  console::Console console { oxygen::observer_ptr { &command_registry } };
+  const auto existing = command_registry.Register({
     .name = "lightbench.reset",
     .help = "Existing owner",
-    .flags = console::CommandFlags::kNone,
-    .handler = [](const auto&, const auto&) -> console::ExecutionResult {
+    .flags = commands::CommandFlags::kNone,
+    .handler = [](const auto&, const auto&) -> commands::CommandResult {
       return { .output = "existing" };
     },
   });
@@ -82,7 +85,7 @@ NOLINT_TEST(LightBenchConsole, FailedRegistrationRollsBackOnlyItsOwnCommands)
   EXPECT_EQ(console.Complete("lightbench.").size(), 1U);
   EXPECT_EQ(console.Execute("lightbench.reset").output, "existing");
   EXPECT_EQ(console.Execute("lightbench.presets").status,
-    console::ExecutionStatus::kNotFound);
+    commands::ExecutionStatus::kNotFound);
 }
 
 } // namespace oxygen::examples::light_bench::testing

@@ -24,7 +24,8 @@ public:
   OXYGEN_DEFAULT_MOVABLE(CommandPalette)
 
   OXGN_IMGUI_API auto Draw(oxygen::console::Console& console,
-    ConsoleUiState& state, ImGuiContext* imgui_context) -> void;
+    ConsoleUiState& state, ImGuiContext* imgui_context, const LineRunner& run)
+    -> void;
 };
 
 } // namespace oxygen::imgui::consoleui

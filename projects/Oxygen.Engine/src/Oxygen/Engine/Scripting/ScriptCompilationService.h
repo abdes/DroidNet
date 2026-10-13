@@ -21,6 +21,10 @@
 #include <Oxygen/OxCo/Shared.h>
 #include <Oxygen/OxCo/ThreadPool.h>
 
+namespace oxygen::commands {
+class CommandRegistry;
+} // namespace oxygen::commands
+
 namespace oxygen::console {
 class Console;
 }
@@ -99,6 +103,8 @@ public:
 
   OXGN_NGIN_API auto RegisterConsoleBindings(
     observer_ptr<console::Console> console) -> void;
+  OXGN_NGIN_API auto RegisterCommands(
+    observer_ptr<commands::CommandRegistry> registry) -> void;
   OXGN_NGIN_API auto ApplyConsoleCVars(const console::Console& console) -> void;
 
 private:

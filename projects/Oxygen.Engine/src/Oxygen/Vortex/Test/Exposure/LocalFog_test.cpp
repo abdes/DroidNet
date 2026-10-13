@@ -20,8 +20,9 @@
 #include <glm/gtc/matrix_access.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -517,12 +518,13 @@ NOLINT_TEST_F(ExposureGpuTest, AuthoredLocalFogPreservesRadiometryThroughUpload)
     kPhase1DefaultRuntimeCapabilityFamilies
       | RendererCapabilityFamily::kEnvironmentLighting);
   pass_ = std::make_unique<postprocess::ExposurePass>(*renderer_);
-  console::Console console;
+  oxygen::commands::CommandRegistry command_registry;
+  console::Console console { oxygen::observer_ptr { &command_registry } };
   renderer_->RegisterConsoleBindings(observer_ptr {
     &console,
   });
   ASSERT_EQ(console.Execute("vtx.local_fog.global_start_distance_m 0").status,
-    console::ExecutionStatus::kOk);
+    commands::ExecutionStatus::kOk);
   auto fog_scene
     = std::make_shared<scene::Scene>("Local fog radiometric domain", 8U);
   auto node = fog_scene->CreateNode("Authored local fog");

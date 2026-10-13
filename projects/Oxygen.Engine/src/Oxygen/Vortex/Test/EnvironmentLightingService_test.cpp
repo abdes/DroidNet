@@ -38,8 +38,9 @@
 #include <glm/gtc/constants.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/RendererConfig.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Types.h>
@@ -2404,28 +2405,30 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   AerialPerspectiveLutCvarsDriveRuntimeVolumeControls)
 {
-  oxygen::console::Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  oxygen::console::Console console { oxygen::observer_ptr {
+    &command_registry } };
   renderer_->RegisterConsoleBindings(oxygen::observer_ptr {
     &console,
   });
   EXPECT_EQ(
     console.Execute("vtx.sky_atmosphere.aerial_perspective_lut.width 16")
       .status,
-    oxygen::console::ExecutionStatus::kOk);
+    oxygen::commands::ExecutionStatus::kOk);
   EXPECT_EQ(console
               .Execute("vtx.sky_atmosphere.aerial_perspective_lut."
                        "depth_resolution 8")
               .status,
-    oxygen::console::ExecutionStatus::kOk);
+    oxygen::commands::ExecutionStatus::kOk);
   EXPECT_EQ(
     console.Execute("vtx.sky_atmosphere.aerial_perspective_lut.depth_km 64")
       .status,
-    oxygen::console::ExecutionStatus::kOk);
+    oxygen::commands::ExecutionStatus::kOk);
   EXPECT_EQ(console
               .Execute("vtx.sky_atmosphere.aerial_perspective_lut."
                        "sample_count_max_per_slice 6")
               .status,
-    oxygen::console::ExecutionStatus::kOk);
+    oxygen::commands::ExecutionStatus::kOk);
 
   auto service = EnvironmentLightingService(*renderer_);
   service.OnFrameStart(
@@ -4167,12 +4170,14 @@ NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
 NOLINT_TEST_F(EnvironmentLightingServiceBehaviorTest,
   LocalFogStage14HonorsUeShapedPerViewInstanceCapOfOne)
 {
-  oxygen::console::Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  oxygen::console::Console console { oxygen::observer_ptr {
+    &command_registry } };
   renderer_->RegisterConsoleBindings(oxygen::observer_ptr {
     &console,
   });
   EXPECT_EQ(console.Execute("vtx.local_fog.tile_max_instance_count 1").status,
-    oxygen::console::ExecutionStatus::kOk);
+    oxygen::commands::ExecutionStatus::kOk);
 
   auto service = EnvironmentLightingService(*renderer_);
   service.OnFrameStart(

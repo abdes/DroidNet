@@ -12,6 +12,7 @@
 #include <optional>
 #include <vector>
 
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
@@ -98,7 +99,8 @@ protected:
   bool persistent_surface_state = true;
   float frame_delta_seconds = 0;
   DepthPrePassMode depth_mode = DepthPrePassMode::kOpaqueAndMasked;
-  console::Console fixture_console;
+  commands::CommandRegistry fixture_commands;
+  console::Console fixture_console { observer_ptr { &fixture_commands } };
 };
 
 } // namespace oxygen::vortex::testing::exposure

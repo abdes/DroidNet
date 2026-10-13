@@ -309,6 +309,8 @@ public:
     -> std::vector<IAssetLoader::MountedSourceEntry> override;
   OXGN_CNTT_API auto RegisterConsoleBindings(
     observer_ptr<console::Console> console) noexcept -> void override;
+  OXGN_CNTT_API auto RegisterCommands(
+    observer_ptr<commands::CommandRegistry> registry) noexcept -> void;
   OXGN_CNTT_API auto ApplyConsoleCVars(const console::Console& console)
     -> void override;
   [[nodiscard]] OXGN_CNTT_NDAPI auto GetTelemetryStats() const

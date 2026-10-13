@@ -13,8 +13,10 @@
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/CVar.h>
-#include <Oxygen/Console/Command.h>
 #include <Oxygen/Console/Completion.h>
 #include <Oxygen/Console/Constants.h>
 #include <Oxygen/Console/Registry.h>
@@ -30,6 +32,7 @@ namespace oxygen::console {
 class Console final {
 public:
   OXGN_CONS_API explicit Console(
+    observer_ptr<commands::CommandRegistry> commands,
     size_t history_capacity = kDefaultHistoryCapacity);
   ~Console() = default;
 
@@ -39,15 +42,22 @@ public:
   OXGN_CONS_NDAPI auto RegisterCVar(CVarDefinition definition,
     const CVarRegistrationOptions& options = {}) -> CVarHandle;
   OXGN_CONS_NDAPI auto SetCVarFromText(const Registry::SetCVarRequest& request,
-    const CommandContext& context = {}) -> ExecutionResult;
+    const commands::CommandContext& context = {}) -> commands::CommandResult;
   OXGN_CONS_API auto ApplyStartupPlan(const ConsoleStartupPlan& startup_plan)
     -> void;
-  OXGN_CONS_NDAPI auto RegisterCommand(CommandDefinition definition)
-    -> CommandHandle;
-  //! Remove a registration issued by this console; stale handles are harmless.
-  OXGN_CONS_API auto UnregisterCommand(CommandHandle handle) -> bool;
+  //! Run a console line synchronously; an asynchronous command in it returns
+  //! `kPending`.
   OXGN_CONS_NDAPI auto Execute(std::string_view line,
-    const CommandContext& context = {}) -> ExecutionResult;
+    const commands::CommandContext& context = {}) -> commands::CommandResult;
+  //! A console line as invocations, for a command dispatcher.
+  OXGN_CONS_NDAPI auto Parse(std::string_view line) const
+    -> Result<std::vector<commands::CommandInvocation>,
+      commands::CommandResult>;
+  OXGN_CONS_API auto RecordHistory(std::string_view line) -> void;
+  OXGN_CONS_API auto RecordExecution(
+    std::string line, commands::CommandResult result) -> void;
+  OXGN_CONS_API auto RecordUsage(const commands::CommandInvocation& invocation)
+    -> void;
   OXGN_CONS_NDAPI auto Complete(std::string_view prefix) const
     -> std::vector<CompletionCandidate>;
   OXGN_CONS_NDAPI auto BeginCompletionCycle(std::string_view prefix)
@@ -60,31 +70,28 @@ public:
     -> observer_ptr<const CompletionCandidate>;
   OXGN_CONS_NDAPI auto ApplyLatchedCVars() -> size_t;
   OXGN_CONS_NDAPI auto SaveArchiveCVars(const oxygen::PathFinder& path_finder,
-    ArchiveSaveMode mode = ArchiveSaveMode::kAutomatic) -> ExecutionResult;
+    ArchiveSaveMode mode = ArchiveSaveMode::kAutomatic)
+    -> commands::CommandResult;
   OXGN_CONS_NDAPI auto LoadArchiveCVars(const oxygen::PathFinder& path_finder,
-    const CommandContext& context = CommandContext {
-      .source = CommandSource::kConfigFile,
+    const commands::CommandContext& context = commands::CommandContext {
+      .source = commands::CommandSource::kConfigFile,
       .shipping_build = false,
-    }) -> ExecutionResult;
+    }) -> commands::CommandResult;
   OXGN_CONS_NDAPI auto ApplyCommandLineOverrides(
     std::span<const std::string_view> arguments,
-    const CommandContext& context = CommandContext {
-      .source = CommandSource::kAutomation,
+    const commands::CommandContext& context = commands::CommandContext {
+      .source = commands::CommandSource::kAutomation,
       .shipping_build = false,
-    }) -> ExecutionResult;
+    }) -> commands::CommandResult;
   OXGN_CONS_NDAPI auto SaveHistory(const oxygen::PathFinder& path_finder) const
-    -> ExecutionResult;
+    -> commands::CommandResult;
   OXGN_CONS_NDAPI auto LoadHistory(const oxygen::PathFinder& path_finder)
-    -> ExecutionResult;
+    -> commands::CommandResult;
   OXGN_CONS_NDAPI auto ListSymbols(bool include_hidden = false) const
     -> std::vector<ConsoleSymbol>;
 
-  OXGN_CONS_API auto SetSourcePolicy(
-    CommandSource source, const Registry::SourcePolicy& policy) -> void;
-  OXGN_CONS_API auto SetRemoteAllowlist(std::vector<std::string> allowlist)
-    -> void;
-  OXGN_CONS_API auto ClearRemoteAllowlist() -> void;
-  OXGN_CONS_API auto SetAuditHook(Registry::AuditHook hook) -> void;
+  OXGN_CONS_API auto SetSourcePolicy(commands::CommandSource source,
+    const Registry::SourcePolicy& policy) -> void;
 
   OXGN_CONS_NDAPI auto GetHistory() const -> const History&;
   OXGN_CONS_NDAPI auto GetExecutionRecords() const
@@ -92,8 +99,9 @@ public:
   OXGN_CONS_API auto ClearExecutionRecords() -> void;
   OXGN_CONS_NDAPI auto FindCVar(std::string_view name) const
     -> observer_ptr<const CVarSnapshot>;
-  OXGN_CONS_NDAPI auto FindCommand(std::string_view name) const
-    -> observer_ptr<const CommandDefinition>;
+  //! The command registry this console runs lines through.
+  OXGN_CONS_NDAPI auto Commands() const noexcept
+    -> observer_ptr<commands::CommandRegistry>;
 
   template <typename TValue>
   [[nodiscard]] auto TryGetCVarValue(

@@ -19,7 +19,7 @@
 #include <glm/ext/vector_uint3.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -379,9 +379,9 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   ASSERT_EQ(
     fixture_console.Execute("vtx.volumetric_fog.temporal_reprojection false")
       .status,
-    console::ExecutionStatus::kOk);
+    commands::ExecutionStatus::kOk);
   ASSERT_EQ(fixture_console.Execute("vtx.volumetric_fog.jitter false").status,
-    console::ExecutionStatus::kOk);
+    commands::ExecutionStatus::kOk);
   probe->prepare = [](RenderContext& ctx) -> void {
     ctx.current_view.with_atmosphere = true;
     ctx.current_view.with_height_fog = true;
@@ -493,7 +493,7 @@ NOLINT_TEST_F(ExposureLightingGpuTest,
   for (const auto& change : changes) {
     SCOPED_TRACE(change.command);
     ASSERT_EQ(fixture_console.Execute(change.command).status,
-      console::ExecutionStatus::kOk);
+      commands::ExecutionStatus::kOk);
     // The first view must reject its stale certificate before a second view
     // can refresh the shared cache and conceal a stale-layout selection.
     for (const auto id : {

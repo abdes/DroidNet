@@ -4,49 +4,48 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
-using oxygen::console::CommandContext;
-using oxygen::console::CommandDefinition;
-using oxygen::console::CommandFlags;
+using oxygen::commands::CommandContext;
+using oxygen::commands::CommandDefinition;
+using oxygen::commands::CommandFlags;
+using oxygen::commands::CommandResult;
+using oxygen::commands::ExecutionStatus;
 using oxygen::console::Console;
-using oxygen::console::ExecutionResult;
-using oxygen::console::ExecutionStatus;
 
 NOLINT_TEST(ConsoleCompletion, RanksByFrequencyAndRecency)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
 
-  ASSERT_TRUE(console
-      .RegisterCommand(CommandDefinition {
+  ASSERT_TRUE(command_registry
+      .Register(CommandDefinition {
         .name = "r.reset",
         .help = "Reset",
         .flags = CommandFlags::kNone,
-        .handler = [](const std::vector<std::string>&,
-                     const CommandContext&) -> ExecutionResult {
-          return ExecutionResult { .status = ExecutionStatus::kOk,
-            .exit_code = 0,
-            .output = {},
-            .error = {} };
+        .handler = [](const oxygen::commands::CommandArgs&,
+                     const CommandContext&) -> CommandResult {
+          return CommandResult {
+            .status = ExecutionStatus::kOk, .output = {}, .error = {}
+          };
         },
       })
       .IsValid());
 
-  ASSERT_TRUE(console
-      .RegisterCommand(CommandDefinition {
+  ASSERT_TRUE(command_registry
+      .Register(CommandDefinition {
         .name = "r.reload",
         .help = "Reload",
         .flags = CommandFlags::kNone,
-        .handler = [](const std::vector<std::string>&,
-                     const CommandContext&) -> ExecutionResult {
-          return ExecutionResult { .status = ExecutionStatus::kOk,
-            .exit_code = 0,
-            .output = {},
-            .error = {} };
+        .handler = [](const oxygen::commands::CommandArgs&,
+                     const CommandContext&) -> CommandResult {
+          return CommandResult {
+            .status = ExecutionStatus::kOk, .output = {}, .error = {}
+          };
         },
       })
       .IsValid());
@@ -63,18 +62,18 @@ NOLINT_TEST(ConsoleCompletion, RanksByFrequencyAndRecency)
 
 NOLINT_TEST(ConsoleCompletion, IsCaseInsensitive)
 {
-  Console console {};
-  ASSERT_TRUE(console
-      .RegisterCommand(CommandDefinition {
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
+  ASSERT_TRUE(command_registry
+      .Register(CommandDefinition {
         .name = "sys.Exit",
         .help = "Exit",
         .flags = CommandFlags::kNone,
-        .handler = [](const std::vector<std::string>&,
-                     const CommandContext&) -> ExecutionResult {
-          return ExecutionResult { .status = ExecutionStatus::kOk,
-            .exit_code = 0,
-            .output = {},
-            .error = {} };
+        .handler = [](const oxygen::commands::CommandArgs&,
+                     const CommandContext&) -> CommandResult {
+          return CommandResult {
+            .status = ExecutionStatus::kOk, .output = {}, .error = {}
+          };
         },
       })
       .IsValid());
@@ -90,32 +89,31 @@ NOLINT_TEST(ConsoleCompletion, IsCaseInsensitive)
 
 NOLINT_TEST(ConsoleCompletion, SupportsCyclingState)
 {
-  Console console {};
-  ASSERT_TRUE(console
-      .RegisterCommand(CommandDefinition {
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
+  ASSERT_TRUE(command_registry
+      .Register(CommandDefinition {
         .name = "gfx.reload",
         .help = "Reload",
         .flags = CommandFlags::kNone,
-        .handler = [](const std::vector<std::string>&,
-                     const CommandContext&) -> ExecutionResult {
-          return ExecutionResult { .status = ExecutionStatus::kOk,
-            .exit_code = 0,
-            .output = {},
-            .error = {} };
+        .handler = [](const oxygen::commands::CommandArgs&,
+                     const CommandContext&) -> CommandResult {
+          return CommandResult {
+            .status = ExecutionStatus::kOk, .output = {}, .error = {}
+          };
         },
       })
       .IsValid());
-  ASSERT_TRUE(console
-      .RegisterCommand(CommandDefinition {
+  ASSERT_TRUE(command_registry
+      .Register(CommandDefinition {
         .name = "gfx.reset",
         .help = "Reset",
         .flags = CommandFlags::kNone,
-        .handler = [](const std::vector<std::string>&,
-                     const CommandContext&) -> ExecutionResult {
-          return ExecutionResult { .status = ExecutionStatus::kOk,
-            .exit_code = 0,
-            .output = {},
-            .error = {} };
+        .handler = [](const oxygen::commands::CommandArgs&,
+                     const CommandContext&) -> CommandResult {
+          return CommandResult {
+            .status = ExecutionStatus::kOk, .output = {}, .error = {}
+          };
         },
       })
       .IsValid());

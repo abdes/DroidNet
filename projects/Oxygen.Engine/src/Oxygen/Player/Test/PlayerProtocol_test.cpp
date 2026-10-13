@@ -5,13 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include <string>
-#include <variant>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Player/EventStream.h>
 #include <Oxygen/Player/PlayerProtocol.h>
 #include <Oxygen/Player/SchemaCheck.h>
 #include <Oxygen/SceneInstantiation/SceneInstantiation.h>
@@ -22,38 +20,27 @@
 namespace {
 
 using nlohmann::json;
-using oxygen::player::ClassifyLogLine;
-using oxygen::player::EndSessionRequest;
+using oxygen::player::DiagnosticData;
 using oxygen::player::EventSchema;
+using oxygen::player::GpuWorkData;
+using oxygen::player::LifecycleData;
 using oxygen::player::LifecycleState;
-using oxygen::player::LogSeverity;
-using oxygen::player::MakeDiagnosticEvent;
-using oxygen::player::MakeGpuWorkEvent;
-using oxygen::player::MakeLifecycleEvent;
-using oxygen::player::MakeLogEvent;
-using oxygen::player::ParseRequest;
-using oxygen::player::PauseRequest;
-using oxygen::player::PlayRequest;
-using oxygen::player::ResumeRequest;
-using oxygen::player::StatsRequest;
-using oxygen::player::StepRequest;
-using oxygen::player::StopRequest;
 
-//! Parses an event line, checks it is one line and valid against the event
+//! Checks event data is valid for its topic against the player's event
 //! schema, and returns it.
-auto CheckEvent(const std::string& line) -> json
+auto CheckEvent(const std::string& topic, const json& data) -> json
 {
-  EXPECT_EQ(line.find('\n'), std::string::npos);
-  auto event = json::parse(line);
+  const auto event = json { { "topic", topic }, { "data", data } };
   const auto errors = EventSchema().Validate(event);
-  EXPECT_TRUE(errors.empty()) << line << "\n" << errors.front();
-  return event;
+  EXPECT_TRUE(errors.empty()) << event.dump() << "\n"
+                              << (errors.empty() ? "" : errors.front());
+  return data;
 }
 
 NOLINT_TEST(PlayerProtocolTest, LifecycleEventsMatchTheSchema)
 {
-  const auto started = CheckEvent(
-    MakeLifecycleEvent(LifecycleState::kSessionStarted, "/Scenes/A.oscene"));
+  const auto started = CheckEvent("lifecycle",
+    LifecycleData(LifecycleState::kSessionStarted, "/Scenes/A.oscene"));
   EXPECT_EQ(started["state"], "session_started");
   EXPECT_EQ(started["scene"], "/Scenes/A.oscene");
   EXPECT_FALSE(started.contains("issues"));
@@ -67,29 +54,19 @@ NOLINT_TEST(PlayerProtocolTest, LifecycleEventsMatchTheSchema)
           .node_index = std::nullopt,
           .message = "no starting camera" },
       };
-  const auto failed
-    = CheckEvent(MakeLifecycleEvent(LifecycleState::kSceneFailed,
-      "/Scenes/A.oscene", "the scene has no camera", issues));
+  const auto failed = CheckEvent("lifecycle",
+    LifecycleData(LifecycleState::kSceneFailed, "/Scenes/A.oscene",
+      "the scene has no camera", issues));
   EXPECT_EQ(failed["message"], "the scene has no camera");
   ASSERT_EQ(failed["issues"].size(), 2U);
   EXPECT_EQ(failed["issues"][0]["node_index"], 3);
   EXPECT_FALSE(failed["issues"][1].contains("node_index"));
 
-  for (const auto state :
-    { LifecycleState::kStarting, LifecycleState::kSceneLoaded,
-      LifecycleState::kPaused, LifecycleState::kResumed,
-      LifecycleState::kSessionEnded, LifecycleState::kStopped }) {
-    static_cast<void>(CheckEvent(MakeLifecycleEvent(state)));
+  for (const auto state : { LifecycleState::kSceneLoaded,
+         LifecycleState::kPaused, LifecycleState::kResumed,
+         LifecycleState::kSessionEnded, LifecycleState::kStopping }) {
+    static_cast<void>(CheckEvent("lifecycle", LifecycleData(state)));
   }
-}
-
-NOLINT_TEST(PlayerProtocolTest, LogEventsMatchTheSchemaAndKeepLineBreaks)
-{
-  const auto event = CheckEvent(
-    MakeLogEvent(LogSeverity::kWarning, "script", "first\nsecond \"quoted\""));
-  EXPECT_EQ(event["severity"], "warning");
-  EXPECT_EQ(event["channel"], "script");
-  EXPECT_EQ(event["text"], "first\nsecond \"quoted\"");
 }
 
 NOLINT_TEST(PlayerProtocolTest, DiagnosticEventsCarryTheDiagnosticJson)
@@ -106,9 +83,9 @@ NOLINT_TEST(PlayerProtocolTest, DiagnosticEventsCarryTheDiagnosticJson)
       .hook = "compile" },
   };
 
-  const auto event = CheckEvent(MakeDiagnosticEvent(diagnostic));
+  const auto data = CheckEvent("diagnostic", DiagnosticData(diagnostic));
 
-  EXPECT_EQ(event["diagnostic"]["message"], "unexpected symbol");
+  EXPECT_EQ(data["message"], "unexpected symbol");
 }
 
 NOLINT_TEST(PlayerProtocolTest, GpuWorkEventsMirrorTheSummary)
@@ -138,69 +115,14 @@ NOLINT_TEST(PlayerProtocolTest, GpuWorkEventsMirrorTheSummary)
   });
   summary.frame_gpu_history_ms = { 5.0F, 6.0F };
 
-  const auto event = CheckEvent(MakeGpuWorkEvent(summary));
+  const auto out = CheckEvent("gpu_work", GpuWorkData(summary));
 
-  const auto& out = event["summary"];
   EXPECT_EQ(
     out["schema_version"], oxygen::vortex::GpuWorkSummary::kSchemaVersion);
   EXPECT_EQ(out["revision"], 7);
   EXPECT_EQ(out["views"][0]["groups"][0]["bucket"], "base_pass");
   EXPECT_EQ(out["frame_work"][0]["bucket"], "background");
   EXPECT_EQ(out["frame_gpu_history_ms"].size(), 2U);
-}
-
-NOLINT_TEST(PlayerProtocolTest, ParsesEveryRequest)
-{
-  const auto play = ParseRequest(R"({"request":"play"})");
-  ASSERT_TRUE(play.has_value());
-  EXPECT_FALSE(std::get<PlayRequest>(*play).scene.has_value());
-
-  const auto play_scene
-    = ParseRequest(R"({"request":"play","scene":"/Scenes/B.oscene"})");
-  ASSERT_TRUE(play_scene.has_value());
-  EXPECT_EQ(std::get<PlayRequest>(*play_scene).scene, "/Scenes/B.oscene");
-
-  EXPECT_TRUE(std::holds_alternative<PauseRequest>(
-    ParseRequest(R"({"request":"pause"})").value()));
-  EXPECT_TRUE(std::holds_alternative<ResumeRequest>(
-    ParseRequest(R"({"request":"resume"})").value()));
-  EXPECT_EQ(
-    std::get<StepRequest>(ParseRequest(R"({"request":"step"})").value()).frames,
-    1U);
-  EXPECT_EQ(std::get<StepRequest>(
-              ParseRequest(R"({"request":"step","frames":4})").value())
-              .frames,
-    4U);
-  EXPECT_TRUE(std::holds_alternative<EndSessionRequest>(
-    ParseRequest(R"({"request":"end_session"})").value()));
-  EXPECT_TRUE(std::holds_alternative<StopRequest>(
-    ParseRequest(R"({"request":"stop"})").value()));
-  EXPECT_TRUE(std::get<StatsRequest>(
-    ParseRequest(R"({"request":"stats","gpu_work":true})").value())
-      .gpu_work);
-}
-
-NOLINT_TEST(PlayerProtocolTest, RejectsMalformedRequests)
-{
-  EXPECT_FALSE(ParseRequest("play").has_value());
-  EXPECT_FALSE(ParseRequest(R"({"request":"jump"})").has_value());
-  EXPECT_FALSE(ParseRequest(R"({"request":"stats"})").has_value());
-  EXPECT_FALSE(ParseRequest(R"({"request":"step","frames":0})").has_value());
-  EXPECT_FALSE(ParseRequest(R"({"request":"pause","frames":2})").has_value());
-  EXPECT_FALSE(ParseRequest(R"({"request":"play","scene":"B"})").has_value());
-}
-
-NOLINT_TEST(PlayerProtocolTest, ScriptLogLinesUseTheScriptChannel)
-{
-  const auto script = ClassifyLogLine(
-    "H:/Oxygen/Scripting/LogBindings.cpp", "[lua.info] hello world");
-  EXPECT_EQ(script.channel, "script");
-  EXPECT_EQ(script.text, "hello world");
-
-  const auto engine = ClassifyLogLine(
-    "H:\\Oxygen\\Content\\AssetLoader.cpp", "mounted '/cooked'");
-  EXPECT_EQ(engine.channel, "AssetLoader");
-  EXPECT_EQ(engine.text, "mounted '/cooked'");
 }
 
 } // namespace

@@ -10,7 +10,8 @@
 #include <optional>
 #include <string>
 
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Host/MainViewOptions.h>
@@ -23,8 +24,8 @@ namespace {
 
 using oxygen::View;
 using oxygen::ViewId;
+using oxygen::commands::ExecutionStatus;
 using oxygen::console::Console;
-using oxygen::console::ExecutionStatus;
 using oxygen::host::MainViewOptions;
 using oxygen::host::ShowFlag;
 using oxygen::vortex::CompositionView;
@@ -69,7 +70,8 @@ protected:
   }
 
 private:
-  Console console_;
+  oxygen::commands::CommandRegistry commands_;
+  Console console_ { oxygen::observer_ptr { &commands_ } };
 };
 
 //! Defaults leave a view exactly as it was built.

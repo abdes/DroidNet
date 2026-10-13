@@ -18,7 +18,7 @@
 #include <imgui_te_context.h>
 #include <imgui_te_engine.h>
 
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/ResourceKey.h>
@@ -313,7 +313,7 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
   test->UserData = this;
   struct ConsoleState {
     std::string initial_target;
-    console::ExecutionResult last;
+    commands::CommandResult last;
   };
   test->SetVarsDataType<ConsoleState>();
   test->GuiFunc = [](ImGuiTestContext* ctx) -> void {
@@ -340,19 +340,19 @@ auto MainModule::RegisterUiTests(ImGuiTestEngine* engine) -> void
       ctx->Yield(3);
     };
     run("pp.exposure " + state.initial_target + " mode=manual manual_ev=9.25");
-    IM_CHECK(state.last.status == console::ExecutionStatus::kOk);
+    IM_CHECK(state.last.status == commands::ExecutionStatus::kOk);
     IM_CHECK_EQ(app.CaptureCurrentSettings().exposure.manual_ev, 9.25F);
     const auto before = EncodeSettings(app.CaptureCurrentSettings());
     IM_CHECK(before.has_value());
     run("pp.exposure " + state.initial_target
       + " manual_ev=4 min_ev=12 max_ev=2");
-    IM_CHECK(state.last.status == console::ExecutionStatus::kInvalidArguments);
+    IM_CHECK(state.last.status == commands::ExecutionStatus::kInvalidArguments);
     IM_CHECK(*EncodeSettings(app.CaptureCurrentSettings()) == *before);
     run("lightbench.preset indoor");
     IM_CHECK(state.last.output.starts_with("queued"));
     IM_CHECK(app.active_preset_ == LightBenchPreset::kIndoor);
     run("pp.exposure " + state.initial_target + " manual_ev=3");
-    IM_CHECK(state.last.status == console::ExecutionStatus::kInvalidArguments);
+    IM_CHECK(state.last.status == commands::ExecutionStatus::kInvalidArguments);
     run("pp.targets");
     const auto current
       = state.last.output.substr(0, state.last.output.find(' '));

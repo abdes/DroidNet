@@ -18,7 +18,7 @@
 #include <stdlib.h> // NOLINT(modernize-deprecated-headers)
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Console/Command.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/MaterialDomain.h>
@@ -285,13 +285,13 @@ auto ExposureBaselineScenario::ConfigureScene() -> void
       .Execute(temporal ? "vtx.volumetric_fog.temporal_reprojection true"
                         : "vtx.volumetric_fog.temporal_reprojection false")
       .status,
-    console::ExecutionStatus::kOk);
+    commands::ExecutionStatus::kOk);
   ASSERT_EQ(
     fixture_.fixture_console.Execute("vtx.volumetric_fog.jitter false").status,
-    console::ExecutionStatus::kOk);
+    commands::ExecutionStatus::kOk);
   for (const auto* command : quality_commands) {
     ASSERT_EQ(fixture_.fixture_console.Execute(command).status,
-      console::ExecutionStatus::kOk)
+      commands::ExecutionStatus::kOk)
       << command;
   }
   fixture_.probe->prepare = [](RenderContext& context) -> void {

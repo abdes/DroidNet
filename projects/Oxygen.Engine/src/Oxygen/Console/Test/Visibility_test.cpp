@@ -4,19 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Testing/GTest.h>
 
 namespace {
 
+using oxygen::commands::ExecutionStatus;
 using oxygen::console::Console;
 using oxygen::console::CVarFlags;
-using oxygen::console::ExecutionStatus;
 
 NOLINT_TEST(ConsoleVisibility, FiltersHiddenCVarsFromPublicListings)
 {
-  Console console {};
+  oxygen::commands::CommandRegistry command_registry;
+  Console console { oxygen::observer_ptr { &command_registry } };
   ASSERT_TRUE(console
       .RegisterCVar({
         .name = "sys.visible",

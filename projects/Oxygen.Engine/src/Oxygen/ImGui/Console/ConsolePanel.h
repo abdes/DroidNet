@@ -25,13 +25,14 @@ public:
   OXYGEN_DEFAULT_MOVABLE(ConsolePanel)
 
   OXGN_IMGUI_API auto Draw(oxygen::console::Console& console,
-    ConsoleUiState& state, ImGuiContext* imgui_context) -> void;
+    ConsoleUiState& state, ImGuiContext* imgui_context, const LineRunner& run)
+    -> void;
 
 private:
   OXGN_IMGUI_API static auto ConsoleInputCallback(
     ImGuiInputTextCallbackData* data) -> int;
-  OXGN_IMGUI_API static auto RunCommand(oxygen::console::Console& console,
-    ConsoleUiState& state, const std::string& line) -> void;
+  OXGN_IMGUI_API static auto RunCommand(ConsoleUiState& state,
+    const std::string& line, const LineRunner& run) -> void;
 };
 
 } // namespace oxygen::imgui::consoleui
