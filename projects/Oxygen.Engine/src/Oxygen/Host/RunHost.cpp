@@ -202,9 +202,10 @@ auto RunHost(HostConfig config, const RegisterModules& register_modules) -> int
   }
 
   // The first instance of an application owns its saved state; a later one
-  // runs without saving rather than overwrite the owner's changes on exit.
+  // starts from it but does not save, rather than overwrite the owner's
+  // changes on exit.
   auto persistence_lock = std::unique_ptr<PersistenceLock> {};
-  if (config.engine.persist_console_state) {
+  if (config.engine.save_console_state) {
     const auto folder = PathFinder(std::make_shared<const PathFinderConfig>(
                                      config.engine.path_finder_config),
       std::filesystem::current_path())
@@ -215,10 +216,11 @@ auto RunHost(HostConfig config, const RegisterModules& register_modules) -> int
     persistence_lock = std::make_unique<PersistenceLock>(folder);
     host.owns_persistence = persistence_lock->IsOwner();
     if (!host.owns_persistence) {
-      config.engine.persist_console_state = false;
+      config.engine.save_console_state = false;
       LOG_F(WARNING,
         "{}: another instance owns the saved state in '{}'; this instance "
-        "will not save its settings, console variables or history",
+        "uses it but will not save its settings, console variables or "
+        "history",
         application, folder.string());
     }
   }

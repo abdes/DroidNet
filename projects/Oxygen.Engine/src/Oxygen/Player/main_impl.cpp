@@ -190,7 +190,8 @@ auto MakeHostConfig(const player::PlayerLaunch& launch,
   config.engine.application = { .name = "Oxygen Player", .version = 1U };
   config.engine.enable_asset_loader = true;
   // The launch file is the whole input: nothing persists between launches.
-  config.engine.persist_console_state = false;
+  config.engine.load_console_state = false;
+  config.engine.save_console_state = false;
   config.engine.scripting.enable_hot_reload
     = !launch.script_source_roots.empty();
   config.engine.path_finder_config

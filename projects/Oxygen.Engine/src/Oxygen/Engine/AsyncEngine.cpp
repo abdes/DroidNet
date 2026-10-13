@@ -992,7 +992,7 @@ auto AsyncEngine::RegisterServiceConsoleBindings() -> void
 
 auto AsyncEngine::LoadPersistedConsoleCVars() -> void
 {
-  if (!config_.persist_console_state) {
+  if (!config_.load_console_state) {
     return;
   }
   const auto result
@@ -1006,7 +1006,7 @@ auto AsyncEngine::LoadPersistedConsoleCVars() -> void
 
 auto AsyncEngine::SavePersistedConsoleCVars() -> void
 {
-  if (!config_.persist_console_state) {
+  if (!config_.save_console_state) {
     return;
   }
   const auto result
@@ -1020,7 +1020,7 @@ auto AsyncEngine::SavePersistedConsoleCVars() -> void
 
 auto AsyncEngine::LoadPersistedConsoleHistory() -> void
 {
-  if (!config_.persist_console_state) {
+  if (!config_.load_console_state) {
     return;
   }
   const auto result = console_.LoadHistory(path_finder_);
@@ -1033,7 +1033,7 @@ auto AsyncEngine::LoadPersistedConsoleHistory() -> void
 
 auto AsyncEngine::SavePersistedConsoleHistory() const -> void
 {
-  if (!config_.persist_console_state) {
+  if (!config_.save_console_state) {
     return;
   }
   const auto result = console_.SaveHistory(path_finder_);

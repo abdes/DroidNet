@@ -135,7 +135,8 @@ ends the process with an error naming the file, the value and the rule.
 
 No setting persists between launches; the launch file is the whole input:
 the player neither loads nor saves archived console variables or console
-history (`EngineConfig::persist_console_state`).
+history (`EngineConfig::load_console_state` and `save_console_state` are
+both off).
 
 ### Command line
 

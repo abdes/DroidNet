@@ -362,8 +362,9 @@ folder (`%LOCALAPPDATA%\Oxygen\control\<pid>.json` on Windows,
   of processes that no longer run when it starts, and a client that finds
   one deletes it.
 - Instances of one application share its saved state (console variables,
-  history, settings). The first to start owns it; a later one runs without
-  saving and logs a warning, so it cannot overwrite the owner's changes.
+  history, settings). The first to start owns it; a later one starts from
+  the saved state but does not save, and logs a warning, so it cannot
+  overwrite the owner's changes.
 
 ### 4.3 Connection lifetime and ownership
 

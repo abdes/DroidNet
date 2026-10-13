@@ -94,9 +94,11 @@ struct EngineConfig {
   //! When true, AsyncEngine will construct the shared AssetLoader service.
   bool enable_asset_loader { false }; //!< Default false for test suites.
 
-  //! When false, the engine neither loads nor saves the archived console
-  //! variables and the console history, so no setting outlives the process.
-  bool persist_console_state { true };
+  //! Load the archived console variables and the console history at startup.
+  bool load_console_state { true };
+
+  //! Save the archived console variables and the console history at shutdown.
+  bool save_console_state { true };
 
   //! Configuration for the AssetLoader service when enabled.
   struct AssetLoaderServiceConfig {
