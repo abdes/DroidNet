@@ -24,6 +24,7 @@ Behavior:
 
 Exit codes: 0 success, non-zero on error or if any individual copy failed.
 """
+
 from __future__ import annotations
 
 import argparse

@@ -27,9 +27,7 @@ class TestCopyHelper(unittest.TestCase):
             dst_dir = tmp / "out"
             dst_dir.mkdir()
             # src has timestamp immediately before token
-            self.write_file(
-                src, b"/* Generated: 2025-08-28 08:22:07 */int x;\n"
-            )
+            self.write_file(src, b"/* Generated: 2025-08-28 08:22:07 */int x;\n")
             self.write_file(
                 dst_dir / "a.h", b"/* Generated: 2025-08-28 09:33:44 */int x;\n"
             )

@@ -94,7 +94,9 @@ def records_under_prefix(action_records, prefix):
 
 
 def count_work_records(records, name):
-    return sum(1 for record in records if record.name == name and is_work_action(record.flags))
+    return sum(
+        1 for record in records if record.name == name and is_work_action(record.flags)
+    )
 
 
 def format_bool(value):
@@ -185,20 +187,30 @@ def append_order_check(report, label, earlier_records, later_records):
     return ordered
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     action_records = collect_action_records(controller)
     stage9_scopes = records_with_name(action_records, STAGE9_SCOPE_NAME)
     forward_scopes = records_with_name(action_records, FORWARD_SCOPE_NAME)
     deferred_scopes = records_with_name(action_records, DEFERRED_SCOPE_NAME)
-    preview_composite_scopes = records_with_name(action_records, PREVIEW_COMPOSITE_SCOPE)
-    capture_composite_scopes = records_with_name(action_records, CAPTURE_COMPOSITE_SCOPE)
+    preview_composite_scopes = records_with_name(
+        action_records, PREVIEW_COMPOSITE_SCOPE
+    )
+    capture_composite_scopes = records_with_name(
+        action_records, CAPTURE_COMPOSITE_SCOPE
+    )
 
     stage9_records = records_under_prefix(action_records, STAGE9_SCOPE_NAME)
     forward_records = records_under_prefix(action_records, FORWARD_SCOPE_NAME)
     deferred_records = records_under_prefix(action_records, DEFERRED_SCOPE_NAME)
-    preview_composite_records = records_under_prefix(action_records, PREVIEW_COMPOSITE_SCOPE)
-    capture_composite_records = records_under_prefix(action_records, CAPTURE_COMPOSITE_SCOPE)
+    preview_composite_records = records_under_prefix(
+        action_records, PREVIEW_COMPOSITE_SCOPE
+    )
+    capture_composite_records = records_under_prefix(
+        action_records, CAPTURE_COMPOSITE_SCOPE
+    )
 
     stage9_draw_count = count_work_records(stage9_records, DRAW_NAME)
     forward_draw_count = count_work_records(forward_records, DRAW_NAME)
@@ -211,10 +223,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     ) + count_work_records(capture_composite_records, COPY_NAME)
 
     forward_before_capture_composite = append_order_check(
-        report, "forward_before_capture_composite", forward_scopes, capture_composite_scopes
+        report,
+        "forward_before_capture_composite",
+        forward_scopes,
+        capture_composite_scopes,
     )
     deferred_before_preview_composite = append_order_check(
-        report, "deferred_before_preview_composite", deferred_scopes, preview_composite_scopes
+        report,
+        "deferred_before_preview_composite",
+        deferred_scopes,
+        preview_composite_scopes,
     )
 
     has_deferred_preview = len(deferred_scopes) >= 1 and deferred_draw_count >= 1
@@ -247,11 +265,15 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(f"has_preview_composite={format_bool(has_preview_composite)}")
     report.append(f"has_capture_composite={format_bool(has_capture_composite)}")
     report.append(f"preview_texture_found={format_bool(preview_texture['found'])}")
-    report.append(f"preview_texture_rgb_nonzero={format_bool(preview_texture['rgb_nonzero'])}")
+    report.append(
+        f"preview_texture_rgb_nonzero={format_bool(preview_texture['rgb_nonzero'])}"
+    )
     report.append(f"preview_texture_min={preview_texture['min']}")
     report.append(f"preview_texture_max={preview_texture['max']}")
     report.append(f"capture_texture_found={format_bool(capture_texture['found'])}")
-    report.append(f"capture_texture_rgb_nonzero={format_bool(capture_texture['rgb_nonzero'])}")
+    report.append(
+        f"capture_texture_rgb_nonzero={format_bool(capture_texture['rgb_nonzero'])}"
+    )
     report.append(f"capture_texture_min={capture_texture['min']}")
     report.append(f"capture_texture_max={capture_texture['max']}")
 

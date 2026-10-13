@@ -49,7 +49,7 @@ See [qualification](validation.md) and [migration review](README.md).
 ## LightBench test migration review
 
 Reviewed and qualified 2026-09-25. Developer instructions live in
-[the test README](../../../../../Examples/LightBench/Test/README.md); this record owns
+[the test README](../../../../../Examples/LightBench/test/README.md); this record owns
 the migration history and evidence.
 
 | Previous check                               | Current ownership                                                                                                                                                                                                                                                                                                                   |

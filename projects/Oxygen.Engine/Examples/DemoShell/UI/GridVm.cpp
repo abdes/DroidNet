@@ -4,11 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "DemoShell/Services/GridSettingsService.h"
 #include "DemoShell/UI/GridVm.h"
 
 #include <Oxygen/Base/Logging.h>
-
-#include "DemoShell/Services/GridSettingsService.h"
 
 namespace oxygen::examples::ui {
 

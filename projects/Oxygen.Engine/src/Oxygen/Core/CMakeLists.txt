@@ -214,8 +214,8 @@ endif()
 # Tests
 # ------------------------------------------------------------------------------
 
-if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Test")
-  add_subdirectory("Test")
+if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test")
+  add_subdirectory("test")
 endif()
 
 # ==============================================================================

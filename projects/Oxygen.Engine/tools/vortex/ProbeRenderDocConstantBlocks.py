@@ -64,7 +64,9 @@ from renderdoc_ui_analysis import (  # noqa: E402
 REPORT_SUFFIX = "_constant_blocks_probe.txt"
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     actions = collect_action_records(controller)
     resources = resource_id_to_name(controller)
@@ -77,24 +79,37 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         raise RuntimeError("No stage9 draw event 59")
     controller.SetFrameEvent(draw.event_id, True)
     state = controller.GetPipelineState()
-    for stage_name, stage in [("vs", rd.ShaderStage.Vertex), ("ps", rd.ShaderStage.Pixel)]:
+    for stage_name, stage in [
+        ("vs", rd.ShaderStage.Vertex),
+        ("ps", rd.ShaderStage.Pixel),
+    ]:
         blocks = state.GetConstantBlocks(stage)
         report.append("{}_block_count={}".format(stage_name, len(blocks)))
         for index, block in enumerate(blocks):
-            report.append("{}_block_{}_type={}".format(stage_name, index, type(block).__name__))
+            report.append(
+                "{}_block_{}_type={}".format(stage_name, index, type(block).__name__)
+            )
             report.append("{}_block_{}_repr={}".format(stage_name, index, repr(block)))
-            report.append("{}_block_{}_methods={}".format(stage_name, index, ",".join(sorted(dir(block)))))
+            report.append(
+                "{}_block_{}_methods={}".format(
+                    stage_name, index, ",".join(sorted(dir(block)))
+                )
+            )
             descriptor = block.descriptor
             report.append(
                 "{}_block_{}_resource={}".format(
-                    stage_name, index, resources.get(str(descriptor.resource), str(descriptor.resource))
+                    stage_name,
+                    index,
+                    resources.get(str(descriptor.resource), str(descriptor.resource)),
                 )
             )
             report.append(
                 "{}_block_{}_bind={}".format(stage_name, index, block.access.index)
             )
             report.append(
-                "{}_block_{}_array={}".format(stage_name, index, block.access.arrayElement)
+                "{}_block_{}_array={}".format(
+                    stage_name, index, block.access.arrayElement
+                )
             )
 
 

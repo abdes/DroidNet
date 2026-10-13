@@ -7,9 +7,7 @@ import re
 from pathlib import Path
 
 
-SHADOW_DRAW_RECORDS_PATTERN = re.compile(
-    r"conventional shadow draw records=(\d+)"
-)
+SHADOW_DRAW_RECORDS_PATTERN = re.compile(r"conventional shadow draw records=(\d+)")
 PREPARED_SHADOW_BOUNDS_PATTERN = re.compile(
     r"prepared shadow bounds collected=(\d+) retained=(\d+) cast_items=(\d+) "
     r"receive_items=(\d+) visible_items=(\d+)"
@@ -149,9 +147,7 @@ def main() -> int:
     current_shader_ms = parse_float(
         current_shader, "authoritative_scope_gpu_duration_ms"
     )
-    baseline_hzb_ms = parse_float(
-        baseline_hzb, "authoritative_scope_gpu_duration_ms"
-    )
+    baseline_hzb_ms = parse_float(baseline_hzb, "authoritative_scope_gpu_duration_ms")
     current_hzb_ms = parse_float(current_hzb, "authoritative_scope_gpu_duration_ms")
     baseline_receiver_ms = parse_float(
         baseline_receiver_timing, "authoritative_scope_gpu_duration_ms"
@@ -172,12 +168,8 @@ def main() -> int:
     current_shader_work = parse_int(current_shader, "work_event_count")
     baseline_hzb_work = parse_int(baseline_hzb, "work_event_count")
     current_hzb_work = parse_int(current_hzb, "work_event_count")
-    baseline_receiver_work = parse_int(
-        baseline_receiver_timing, "work_event_count"
-    )
-    current_receiver_work = parse_int(
-        current_receiver_timing, "work_event_count"
-    )
+    baseline_receiver_work = parse_int(baseline_receiver_timing, "work_event_count")
+    current_receiver_work = parse_int(current_receiver_timing, "work_event_count")
     current_mask_work = parse_int(current_mask_timing, "work_event_count")
     current_culling_work = parse_int(current_culling_timing, "work_event_count")
 
@@ -227,9 +219,7 @@ def main() -> int:
     current_benchmark_shadow_draw_record_count = parse_last_shadow_draw_record_count(
         current_benchmark_log
     )
-    baseline_prepared_bounds = parse_last_prepared_shadow_bounds(
-        baseline_benchmark_log
-    )
+    baseline_prepared_bounds = parse_last_prepared_shadow_bounds(baseline_benchmark_log)
     current_prepared_bounds = parse_last_prepared_shadow_bounds(current_benchmark_log)
     baseline_directional_summary = parse_last_directional_summary(
         baseline_benchmark_log
@@ -240,19 +230,28 @@ def main() -> int:
         summary_line("comparison_profile", "conventional_shadow_csm4"),
         summary_line("baseline_stem", baseline_stem),
         summary_line("current_stem", current_stem),
-        summary_line("baseline_shadow_draw_record_count", baseline_shadow_draw_record_count),
+        summary_line(
+            "baseline_shadow_draw_record_count", baseline_shadow_draw_record_count
+        ),
         summary_line(
             "current_benchmark_shadow_draw_record_count",
             current_benchmark_shadow_draw_record_count,
         ),
-        summary_line("current_input_draw_record_count", current_input_draw_record_count),
+        summary_line(
+            "current_input_draw_record_count", current_input_draw_record_count
+        ),
         summary_line(
             "input_draw_record_count_matches_benchmark",
-            str(current_input_draw_record_count == current_benchmark_shadow_draw_record_count).lower(),
+            str(
+                current_input_draw_record_count
+                == current_benchmark_shadow_draw_record_count
+            ).lower(),
         ),
         summary_line(
             "input_draw_record_count_matches_locked_baseline",
-            str(current_input_draw_record_count == baseline_shadow_draw_record_count).lower(),
+            str(
+                current_input_draw_record_count == baseline_shadow_draw_record_count
+            ).lower(),
         ),
         summary_line("baseline_job_count", baseline_job_count),
         summary_line("baseline_sampled_job_count", baseline_sampled_job_count),
@@ -260,7 +259,9 @@ def main() -> int:
         summary_line("current_partition_count", current_partition_count),
         summary_line("current_valid_job_count", current_valid_job_count),
         summary_line("current_sampled_job_count", current_sampled_job_count),
-        summary_line("current_total_emitted_draw_count", current_total_emitted_draw_count),
+        summary_line(
+            "current_total_emitted_draw_count", current_total_emitted_draw_count
+        ),
         summary_line(
             "current_total_rejected_draw_count", current_total_rejected_draw_count
         ),
@@ -299,12 +300,8 @@ def main() -> int:
             current_full_input_eligibility_job_count,
         ),
         summary_line("current_rejected_job_count", current_rejected_job_count),
-        summary_line(
-            "baseline_shadow_gpu_duration_ms", f"{baseline_shadow_ms:.6f}"
-        ),
-        summary_line(
-            "current_shadow_gpu_duration_ms", f"{current_shadow_ms:.6f}"
-        ),
+        summary_line("baseline_shadow_gpu_duration_ms", f"{baseline_shadow_ms:.6f}"),
+        summary_line("current_shadow_gpu_duration_ms", f"{current_shadow_ms:.6f}"),
         summary_line(
             "shadow_gpu_duration_delta_ms",
             f"{current_shadow_ms - baseline_shadow_ms:.6f}",
@@ -319,12 +316,8 @@ def main() -> int:
             "shadow_work_event_match",
             str(baseline_shadow_work == current_shadow_work).lower(),
         ),
-        summary_line(
-            "baseline_shader_gpu_duration_ms", f"{baseline_shader_ms:.6f}"
-        ),
-        summary_line(
-            "current_shader_gpu_duration_ms", f"{current_shader_ms:.6f}"
-        ),
+        summary_line("baseline_shader_gpu_duration_ms", f"{baseline_shader_ms:.6f}"),
+        summary_line("current_shader_gpu_duration_ms", f"{current_shader_ms:.6f}"),
         summary_line(
             "shader_gpu_duration_delta_ms",
             f"{current_shader_ms - baseline_shader_ms:.6f}",
@@ -339,12 +332,8 @@ def main() -> int:
             "shader_work_event_match",
             str(baseline_shader_work == current_shader_work).lower(),
         ),
-        summary_line(
-            "baseline_screen_hzb_gpu_duration_ms", f"{baseline_hzb_ms:.6f}"
-        ),
-        summary_line(
-            "current_screen_hzb_gpu_duration_ms", f"{current_hzb_ms:.6f}"
-        ),
+        summary_line("baseline_screen_hzb_gpu_duration_ms", f"{baseline_hzb_ms:.6f}"),
+        summary_line("current_screen_hzb_gpu_duration_ms", f"{current_hzb_ms:.6f}"),
         summary_line(
             "screen_hzb_gpu_duration_delta_ms",
             f"{current_hzb_ms - baseline_hzb_ms:.6f}",
@@ -385,18 +374,12 @@ def main() -> int:
             "receiver_analysis_work_event_match",
             str(baseline_receiver_work == current_receiver_work).lower(),
         ),
-        summary_line(
-            "current_receiver_mask_gpu_duration_ms", f"{current_mask_ms:.6f}"
-        ),
-        summary_line(
-            "current_receiver_mask_work_event_count", current_mask_work
-        ),
+        summary_line("current_receiver_mask_gpu_duration_ms", f"{current_mask_ms:.6f}"),
+        summary_line("current_receiver_mask_work_event_count", current_mask_work),
         summary_line(
             "current_caster_culling_gpu_duration_ms", f"{current_culling_ms:.6f}"
         ),
-        summary_line(
-            "current_caster_culling_work_event_count", current_culling_work
-        ),
+        summary_line("current_caster_culling_work_event_count", current_culling_work),
         summary_line(
             "baseline_aux_shadow_path_gpu_duration_ms", f"{baseline_aux_ms:.6f}"
         ),

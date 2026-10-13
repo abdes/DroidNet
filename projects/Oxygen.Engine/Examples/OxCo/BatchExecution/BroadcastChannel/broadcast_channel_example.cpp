@@ -12,14 +12,14 @@
 #include <string>
 #include <vector>
 
+#include "OxCo/BatchExecution/Common.h"
+
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/EventLoop.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Yield.h>
-
-#include "OxCo/BatchExecution/Common.h"
 
 using namespace oxygen::co;
 using namespace oxygen::co::detail::channel;

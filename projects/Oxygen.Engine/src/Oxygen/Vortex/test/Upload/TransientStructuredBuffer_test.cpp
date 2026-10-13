@@ -1,0 +1,633 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <span>
+#include <utility>
+
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
+#include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
+#include <Oxygen/Vortex/Upload/UploaderTag.h>
+#include <Oxygen/Vortex/test/Fixtures/RingBufferStagingFixture.h>
+
+using oxygen::vortex::upload::TransientStructuredBuffer;
+
+namespace oxygen::vortex::upload {
+
+using oxygen::frame::SlotCount;
+
+class TransientStructuredBufferTest : public testing::RingBufferStagingFixture {
+protected:
+  void SetUp() override
+  {
+    testing::RingBufferStagingFixture::SetUp();
+    // Create a simple ring buffer staging provider for tests
+    auto provider = MakeRingBuffer(
+      SlotCount {
+        1,
+      },
+      256U);
+    ASSERT_NE(provider, nullptr);
+  }
+};
+
+NOLINT_TEST_F(
+  TransientStructuredBufferTest, AllocateBeforeFrameStartReturnsInvalidRequest)
+{
+  // Arrange: create transient buffer but do not start a frame slot
+  TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
+
+  // Act
+  auto r = transient_buffer.Allocate(1);
+
+  // Assert: allocation without a valid frame slot is an invalid request
+  ASSERT_FALSE(r.has_value());
+  EXPECT_EQ(r.error(),
+    oxygen::vortex::upload::make_error_code(
+      oxygen::vortex::upload::UploadError::kInvalidRequest));
+}
+
+// Note: earlier tests covered allocate+reset behaviour together with mapped
+// pointer persistence and reset idempotency. Removing the redundant test to
+// keep the suite concise while preserving coverage.
+
+NOLINT_TEST_F(TransientStructuredBufferTest,
+  MultipleAllocationsInSameSlotReturnValidAllocations)
+{
+  // Arrange
+  TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
+
+  // Activate frame slot
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
+  // Act: first allocation
+  auto alloc1_result = transient_buffer.Allocate(10);
+
+  // Assert: first allocation succeeded and provides a valid allocation
+  ASSERT_TRUE(alloc1_result.has_value())
+    << "First Allocate failed: " << alloc1_result.error().message();
+  const auto alloc1 = *alloc1_result;
+  EXPECT_NE(alloc1.srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(alloc1.mapped_ptr, nullptr);
+
+  // Act: second allocation in same slot
+  auto alloc2_result = transient_buffer.Allocate(20);
+
+  // Assert: second allocation succeeded and provides a valid allocation
+  ASSERT_TRUE(alloc2_result.has_value())
+    << "Second Allocate failed: " << alloc2_result.error().message();
+  const auto alloc2 = *alloc2_result;
+  EXPECT_NE(alloc2.srv, kInvalidShaderVisibleIndex);
+  EXPECT_NE(alloc2.mapped_ptr, nullptr);
+  // Both allocations should have been created within the current frame
+  EXPECT_EQ(alloc1.sequence,
+    (frame::SequenceNumber {
+      1,
+    }));
+  EXPECT_EQ(alloc2.sequence,
+    (frame::SequenceNumber {
+      1,
+    }));
+  EXPECT_EQ(alloc1.slot,
+    (frame::Slot {
+      0,
+    }));
+  EXPECT_EQ(alloc2.slot,
+    (frame::Slot {
+      0,
+    }));
+}
+
+//! Ensures mapped pointers are stride-aligned even when the staging provider
+//! only guarantees a smaller power-of-two alignment.
+NOLINT_TEST_F(TransientStructuredBufferTest,
+  StrideAlignmentAdjustsMappedPointerWhenOffsetsMisaligned)
+{
+  // Arrange: small alignment to reproduce cross-stride misalignment.
+  auto provider = MakeRingBuffer(
+    SlotCount {
+      1,
+    },
+    16U);
+  SetStagingProvider(provider);
+  ASSERT_NE(provider, nullptr);
+
+  // Two transient buffers share the same ring but use different strides.
+  TransientStructuredBuffer a(GfxPtr(), Staging(), 16);
+  TransientStructuredBuffer b(GfxPtr(), Staging(), 48);
+
+  const auto seq = frame::SequenceNumber {
+    1,
+  };
+  const auto slot = frame::Slot {
+    0,
+  };
+  a.OnFrameStart(seq, slot);
+  b.OnFrameStart(seq, slot);
+
+  // Act
+  auto a_alloc = a.Allocate(1);
+  ASSERT_TRUE(a_alloc.has_value());
+  auto b_alloc = b.Allocate(1);
+  ASSERT_TRUE(b_alloc.has_value());
+
+  // Assert
+  auto* a_ptr = static_cast<std::byte*>(a_alloc->mapped_ptr);
+  auto* b_ptr = static_cast<std::byte*>(b_alloc->mapped_ptr);
+  ASSERT_NE(a_ptr, nullptr);
+  ASSERT_NE(b_ptr, nullptr);
+
+  // First allocation consumes 32 bytes in the ring due to over-allocation and
+  // 16-byte ring alignment. The second allocation would start at byte offset
+  // 32, which is not aligned to 48. The transient buffer must shift the mapped
+  // pointer forward to the next 48-byte boundary.
+  const auto delta = static_cast<std::uint64_t>(b_ptr - a_ptr);
+  EXPECT_EQ(delta, 48U);
+}
+
+NOLINT_TEST_F(TransientStructuredBufferTest, AllocateZeroIsNoOpSuccess)
+{
+  // Arrange
+  TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
+
+  // Activate frame slot
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
+  // Act
+  auto alloc_result_zero = transient_buffer.Allocate(0);
+
+  // Assert: Allocate(0) should be a no-op success and produce an empty/invalid
+  // transient allocation carrying the current sequence and slot
+  ASSERT_TRUE(alloc_result_zero.has_value())
+    << "Allocate(0) returned error: " << alloc_result_zero.error().message();
+  const auto alloc0 = *alloc_result_zero;
+  EXPECT_EQ(alloc0.srv, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(alloc0.mapped_ptr, nullptr);
+  EXPECT_EQ(alloc0.sequence,
+    (frame::SequenceNumber {
+      1,
+    }));
+  EXPECT_EQ(alloc0.slot,
+    (frame::Slot {
+      0,
+    }));
+}
+
+NOLINT_TEST_F(TransientStructuredBufferTest,
+  AllocateWhenCreateBufferThrowsReturnsStagingAllocFailed)
+{
+  // Arrange: force underlying CreateBuffer to throw so staging allocation fails
+  Gfx().SetThrowOnCreateBuffer(true);
+
+  // Recreate uploader/provider after changing gfx behaviour
+  auto& uploader = Uploader();
+  auto provider = uploader.CreateRingBufferStaging(
+    SlotCount {
+      1,
+    },
+    256U, 0.5F);
+  SetStagingProvider(provider);
+  ASSERT_NE(provider, nullptr);
+
+  // Arrange: construct transient buffer
+  TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
+
+  // Activate frame slot so allocator will attempt staging allocation
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
+
+  // Act
+  auto alloc_result_fail = transient_buffer.Allocate(10);
+
+  // Assert: should propagate staging allocation failure
+  ASSERT_FALSE(alloc_result_fail.has_value());
+  EXPECT_EQ(alloc_result_fail.error(),
+    oxygen::vortex::upload::make_error_code(
+      oxygen::vortex::upload::UploadError::kStagingAllocFailed));
+}
+
+// Ensure that failing to map the staging buffer surface is handled correctly
+NOLINT_TEST_F(
+  TransientStructuredBufferTest, AllocateWhenMapFailsReturnsStagingMapFailed)
+{
+  // Arrange: force underlying Map() to fail
+  Gfx().SetFailMap(true);
+
+  // Recreate uploader/provider after changing gfx behaviour
+  auto& uploader = Uploader();
+  auto provider = uploader.CreateRingBufferStaging(
+    SlotCount {
+      1,
+    },
+    256U, 0.5F);
+  SetStagingProvider(provider);
+  ASSERT_NE(provider, nullptr);
+
+  TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
+
+  // Activate frame slot
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
+  // Act
+  auto alloc_result = transient_buffer.Allocate(10);
+
+  // Assert: mapping error should propagate
+  ASSERT_FALSE(alloc_result.has_value());
+  EXPECT_EQ(alloc_result.error(),
+    oxygen::vortex::upload::make_error_code(
+      oxygen::vortex::upload::UploadError::kStagingMapFailed));
+}
+
+// Confirm mapped pointer is valid for writes until Reset() is called
+NOLINT_TEST_F(
+  TransientStructuredBufferTest, MappedPointerWritesPersistUntilSlotReset)
+{
+  // Arrange
+  TransientStructuredBuffer transient_buffer(
+    GfxPtr(), Staging(), 8); // 8-byte stride
+
+  // Activate frame slot
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
+  // Act
+  auto alloc_result = transient_buffer.Allocate(4);
+
+  // Assert: successful allocation and valid mapped pointer
+  ASSERT_TRUE(alloc_result.has_value())
+    << "Allocate failed: " << alloc_result.error().message();
+
+  const auto alloc = *alloc_result;
+  auto* mapped = static_cast<uint64_t*>(alloc.mapped_ptr);
+  ASSERT_NE(mapped, nullptr);
+
+  // Arrange/Act: write pattern to first and last element
+  const auto elements = std::span {
+    mapped,
+    4U,
+  };
+  elements.front() = 0xAABBCCDDEEFF0011ULL;
+  elements.back() = 0x1122334455667788ULL;
+
+  // Assert: reads reflect writes while allocation is active
+  EXPECT_EQ(elements.front(), 0xAABBCCDDEEFF0011ULL);
+  EXPECT_EQ(elements.back(), 0x1122334455667788ULL);
+
+  // Act: starting the next frame resets the slot
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      2,
+    },
+    frame::Slot {
+      0,
+    });
+
+  // Assert: allocation for previous sequence should now be considered invalid
+  EXPECT_FALSE(alloc.IsValid(frame::SequenceNumber {
+    2,
+  }));
+}
+
+NOLINT_TEST_F(TransientStructuredBufferTest, AllocationTryWriteObjectCopiesPod)
+{
+  struct Payload {
+    std::uint32_t a {
+      0U,
+    };
+    std::uint32_t b {
+      0U,
+    };
+  };
+
+  TransientStructuredBuffer transient_buffer(
+    GfxPtr(), Staging(), static_cast<std::uint32_t>(sizeof(Payload)));
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
+
+  auto alloc_result = transient_buffer.Allocate(1);
+  ASSERT_TRUE(alloc_result.has_value());
+
+  const Payload expected {
+    .a = 0xAABBCCDDU,
+    .b = 0x11223344U,
+  };
+  EXPECT_TRUE(alloc_result->TryWriteObject(expected));
+
+  const auto* payload = static_cast<const Payload*>(alloc_result->mapped_ptr);
+  ASSERT_NE(payload, nullptr);
+  EXPECT_EQ(payload->a, expected.a);
+  EXPECT_EQ(payload->b, expected.b);
+}
+
+NOLINT_TEST_F(TransientStructuredBufferTest,
+  AllocationTryWriteRangeRejectsWritesLargerThanAllocation)
+{
+  TransientStructuredBuffer transient_buffer(
+    GfxPtr(), Staging(), static_cast<std::uint32_t>(sizeof(std::uint32_t)));
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
+
+  auto alloc_result = transient_buffer.Allocate(2);
+  ASSERT_TRUE(alloc_result.has_value());
+
+  const std::array<std::uint32_t, 3> values {
+    1U,
+    2U,
+    3U,
+  };
+  EXPECT_FALSE(alloc_result->TryWriteRange(std::span<const std::uint32_t> {
+    values.data(),
+    values.size(),
+  }));
+}
+
+// Reset can be called multiple times and leaves object in cleared state
+NOLINT_TEST_F(
+  TransientStructuredBufferTest, ResetIsIdempotentAndLeavesObjectCleared)
+{
+  // Arrange
+  TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
+
+  // Activate frame slot
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
+  // Act: allocate then advance frame twice to emulate reset -> idempotent
+  auto initial_alloc = transient_buffer.Allocate(2);
+  ASSERT_TRUE(initial_alloc.has_value());
+
+  // Idempotency: starting the next frame twice should be safe and should
+  // retire previous allocations for the slot.
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      2,
+    },
+    frame::Slot {
+      0,
+    });
+  EXPECT_NO_THROW(transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      3,
+    },
+    frame::Slot {
+      0,
+    }));
+
+  // After the slot reset, the earlier allocation must no longer be valid.
+  EXPECT_FALSE(initial_alloc->IsValid(frame::SequenceNumber {
+    3,
+  }));
+
+  // Ensure a new allocation for the new frame succeeds.
+  auto new_alloc = transient_buffer.Allocate(1);
+  ASSERT_TRUE(new_alloc.has_value());
+}
+
+// After Reset, Allocate must re-create binding and mapped pointer
+NOLINT_TEST_F(
+  TransientStructuredBufferTest, AllocateAfterResetRecreatesValidAllocation)
+{
+  // Arrange
+  TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 64);
+
+  // Activate frame slot
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      1,
+    },
+    frame::Slot {
+      0,
+    });
+  // Act: initial allocation
+  auto r1 = transient_buffer.Allocate(4);
+  ASSERT_TRUE(r1.has_value())
+    << "Initial allocate failed: " << r1.error().message();
+  const auto a1 = *r1;
+  EXPECT_NE(a1.srv, kInvalidShaderVisibleIndex);
+
+  // Act: reset then allocate again
+  // Reset the slot by moving to the next frame
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      2,
+    },
+    frame::Slot {
+      0,
+    });
+  // Need to re-activate slot for new frame
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      2,
+    },
+    frame::Slot {
+      0,
+    });
+  auto r2 = transient_buffer.Allocate(4);
+
+  // Assert: second allocation succeeds and provides valid mapping
+  ASSERT_TRUE(r2.has_value()) << "Re-allocate failed: " << r2.error().message();
+  const auto a2 = *r2;
+  EXPECT_NE(a2.srv, kInvalidShaderVisibleIndex);
+
+  // Re-allocate after starting a new frame slot must succeed and return a
+  // valid mapped pointer
+  ASSERT_TRUE(r2.has_value()) << "Re-allocate failed: " << r2.error().message();
+  EXPECT_NE((*r2).mapped_ptr, nullptr);
+}
+
+NOLINT_TEST_F(
+  TransientStructuredBufferTest, MultipleAllocationsPersistUntilFrameReset)
+{
+  TransientStructuredBuffer transient_buffer(GfxPtr(), Staging(), 16);
+
+  // Activate slot for this frame
+  const auto seq = frame::SequenceNumber {
+    1,
+  };
+  transient_buffer.OnFrameStart(seq,
+    frame::Slot {
+      0,
+    });
+
+  auto a1 = transient_buffer.Allocate(2);
+  ASSERT_TRUE(a1.has_value());
+  auto a2 = transient_buffer.Allocate(3);
+  ASSERT_TRUE(a2.has_value());
+
+  // Both allocations were created in this frame and should report valid
+  EXPECT_TRUE(a1->IsValid(seq));
+  EXPECT_TRUE(a2->IsValid(seq));
+
+  // After moving to next frame the slot is reset, and new allocations should
+  // not match the old sequence
+  transient_buffer.OnFrameStart(
+    frame::SequenceNumber {
+      2,
+    },
+    frame::Slot {
+      0,
+    });
+
+  EXPECT_FALSE(a1->IsValid(frame::SequenceNumber {
+    2,
+  }));
+  EXPECT_FALSE(a2->IsValid(frame::SequenceNumber {
+    2,
+  }));
+}
+
+NOLINT_TEST_F(TransientStructuredBufferTest,
+  RepeatedFrameStartKeepsPreviouslyPublishedViewsAlive)
+{
+  constexpr auto kStride = 16U;
+  auto transient = TransientStructuredBuffer(GfxPtr(), Staging(), kStride);
+  const auto sequence = frame::SequenceNumber { 0U };
+  const auto slot = frame::Slot { 0U };
+  transient.OnFrameStart(sequence, slot);
+  const auto first = transient.Allocate(1U);
+  ASSERT_TRUE(first.has_value());
+  const auto* buffer = transient.GetActiveBuffer();
+  ASSERT_NE(buffer, nullptr);
+  auto view = graphics::BufferViewDescription {};
+  view.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
+  view.visibility = graphics::DescriptorVisibility::kShaderVisible;
+  view.range = { 0U, kStride };
+  view.stride = kStride;
+  auto& registry = Gfx().GetResourceRegistry();
+  ASSERT_EQ(registry.FindShaderVisibleIndex(*buffer, view), first->srv);
+
+  // Offscreen execution and restoration of the main view start the same frame
+  // again before its queued GPU readers have necessarily executed.
+  transient.OnFrameStart(sequence, slot);
+  EXPECT_EQ(transient.GetActiveBuffer(), buffer);
+  EXPECT_EQ(registry.FindShaderVisibleIndex(*buffer, view), first->srv);
+  const auto second = transient.Allocate(1U);
+  ASSERT_TRUE(second.has_value());
+  EXPECT_NE(second->srv, first->srv);
+  EXPECT_EQ(registry.FindShaderVisibleIndex(*buffer, view), first->srv);
+
+  // Normal frame-slot reuse still retires the previous frame's descriptors.
+  transient.OnFrameStart(frame::SequenceNumber { 1U }, slot);
+  EXPECT_EQ(transient.GetActiveBuffer(), nullptr);
+  EXPECT_FALSE(registry.FindShaderVisibleIndex(*buffer, view).has_value());
+}
+
+//! Two buffers sharing one ring must never share a descriptor: a slot recycled
+//! by the provider hands out the same ranges again, so stale views must be
+//! released at frame start, before the other buffer allocates the same range.
+NOLINT_TEST_F(TransientStructuredBufferTest,
+  RecycledSlotRangesNeverShareADescriptorBetweenBuffers)
+{
+  constexpr auto kStride = 16U;
+  auto first = TransientStructuredBuffer(GfxPtr(), Staging(), kStride);
+  auto second = TransientStructuredBuffer(GfxPtr(), Staging(), kStride);
+  const auto slot = frame::Slot { 0U };
+  const auto tag = oxygen::vortex::internal::RendererTagFactory::Get();
+
+  // Frame 1: the first buffer publishes range [0, 16) of the only partition.
+  Staging().OnFrameStart(internal::UploaderTagFactory::Get(), slot);
+  Staging().NotifyFrameStart(tag, frame::SequenceNumber { 1U }, slot);
+  first.OnFrameStart(frame::SequenceNumber { 1U }, slot);
+  const auto stale = first.Allocate(1U);
+  ASSERT_TRUE(stale.has_value());
+
+  // Frame 2 recycles the partition. The second buffer starts first and gets
+  // the same range; the first buffer starts lazily and allocates afterwards.
+  Staging().OnFrameStart(internal::UploaderTagFactory::Get(), slot);
+  Staging().NotifyFrameStart(tag, frame::SequenceNumber { 2U }, slot);
+  second.OnFrameStart(frame::SequenceNumber { 2U }, slot);
+  const auto reader = second.Allocate(1U);
+  ASSERT_TRUE(reader.has_value()) << reader.error().message();
+  first.OnFrameStart(frame::SequenceNumber { 2U }, slot);
+  const auto writer = first.Allocate(1U);
+  ASSERT_TRUE(writer.has_value()) << writer.error().message();
+
+  // The reader still owns a view of its own range; the writer's descriptor
+  // is a different one and does not alias it.
+  EXPECT_NE(reader->srv, writer->srv);
+  const auto* buffer = second.GetActiveBuffer();
+  ASSERT_NE(buffer, nullptr);
+  auto view = graphics::BufferViewDescription {};
+  view.view_type = graphics::ResourceViewType::kStructuredBuffer_SRV;
+  view.visibility = graphics::DescriptorVisibility::kShaderVisible;
+  view.range = { 0U, kStride };
+  view.stride = kStride;
+  EXPECT_EQ(Gfx().GetResourceRegistry().FindShaderVisibleIndex(*buffer, view),
+    reader->srv);
+}
+
+//! A buffer moved after construction keeps receiving frame starts, so its
+//! recycled views are still released before other buffers allocate.
+NOLINT_TEST_F(
+  TransientStructuredBufferTest, MovedBufferStillReleasesAtFrameStart)
+{
+  constexpr auto kStride = 16U;
+  auto original = TransientStructuredBuffer(GfxPtr(), Staging(), kStride);
+  auto moved = TransientStructuredBuffer(std::move(original));
+  auto other = TransientStructuredBuffer(GfxPtr(), Staging(), kStride);
+  const auto slot = frame::Slot { 0U };
+  const auto tag = oxygen::vortex::internal::RendererTagFactory::Get();
+
+  Staging().OnFrameStart(internal::UploaderTagFactory::Get(), slot);
+  Staging().NotifyFrameStart(tag, frame::SequenceNumber { 1U }, slot);
+  moved.OnFrameStart(frame::SequenceNumber { 1U }, slot);
+  ASSERT_TRUE(moved.Allocate(1U).has_value());
+
+  Staging().OnFrameStart(internal::UploaderTagFactory::Get(), slot);
+  Staging().NotifyFrameStart(tag, frame::SequenceNumber { 2U }, slot);
+  other.OnFrameStart(frame::SequenceNumber { 2U }, slot);
+  EXPECT_TRUE(other.Allocate(1U).has_value());
+}
+
+} // namespace oxygen::vortex::upload

@@ -67,9 +67,7 @@ REPORT_SUFFIX = "_environment_static_data_probe.txt"
 ENVIRONMENT_STATIC_DATA_BYTE_SIZE = 672
 ENVIRONMENT_STATIC_DATA_U32_COUNT = ENVIRONMENT_STATIC_DATA_BYTE_SIZE // 4
 VOLUMETRIC_FOG_U32_OFFSET = 128 // 4
-VOLUMETRIC_FOG_INTEGRATED_LIGHT_SCATTERING_SRV_U32 = (
-    VOLUMETRIC_FOG_U32_OFFSET + 12
-)
+VOLUMETRIC_FOG_INTEGRATED_LIGHT_SCATTERING_SRV_U32 = VOLUMETRIC_FOG_U32_OFFSET + 12
 VOLUMETRIC_FOG_FLAGS_U32 = VOLUMETRIC_FOG_U32_OFFSET + 13
 VOLUMETRIC_FOG_GRID_WIDTH_U32 = VOLUMETRIC_FOG_U32_OFFSET + 14
 VOLUMETRIC_FOG_GRID_HEIGHT_U32 = VOLUMETRIC_FOG_U32_OFFSET + 15
@@ -80,7 +78,9 @@ GPU_VOLUMETRIC_FOG_FLAG_INTEGRATED_SCATTERING_VALID = 1 << 1
 INVALID_BINDLESS_INDEX = 0xFFFFFFFF
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     actions = collect_action_records(controller)
     resources = resource_id_to_name(controller)
@@ -127,8 +127,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(f"byte_size={byte_size}")
     report.append(f"u32_count={len(blob) // 4}")
 
-    values_u32 = struct.unpack("<{}I".format(len(blob) // 4), blob[: (len(blob) // 4) * 4])
-    values_f32 = struct.unpack("<{}f".format(len(blob) // 4), blob[: (len(blob) // 4) * 4])
+    values_u32 = struct.unpack(
+        "<{}I".format(len(blob) // 4), blob[: (len(blob) // 4) * 4]
+    )
+    values_f32 = struct.unpack(
+        "<{}f".format(len(blob) // 4), blob[: (len(blob) // 4) * 4]
+    )
     integrated_srv = (
         values_u32[VOLUMETRIC_FOG_INTEGRATED_LIGHT_SCATTERING_SRV_U32]
         if len(values_u32) > VOLUMETRIC_FOG_INTEGRATED_LIGHT_SCATTERING_SRV_U32
@@ -182,9 +186,13 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             grid_z_params[2],
         )
     )
-    report.append(f"volumetric_fog_integrated_light_scattering_srv_valid={str(integrated_srv_valid).lower()}")
+    report.append(
+        f"volumetric_fog_integrated_light_scattering_srv_valid={str(integrated_srv_valid).lower()}"
+    )
     report.append(f"volumetric_fog_enabled_flag={str(volumetric_enabled).lower()}")
-    report.append(f"volumetric_fog_integrated_scattering_valid_flag={str(integrated_flag_valid).lower()}")
+    report.append(
+        f"volumetric_fog_integrated_scattering_valid_flag={str(integrated_flag_valid).lower()}"
+    )
     report.append(f"volumetric_fog_grid_valid={str(grid_valid).lower()}")
     report.append(f"volumetric_fog_grid_z_valid={str(grid_z_valid).lower()}")
     for index, value in enumerate(values_u32):

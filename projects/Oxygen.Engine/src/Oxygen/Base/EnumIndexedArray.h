@@ -7,13 +7,12 @@
 #pragma once
 
 #include <array>
+#include <compare>
 #include <concepts>
 #include <cstdlib>
 #include <ranges>
-#include <type_traits>
-
-#include <compare>
 #include <stdexcept>
+#include <type_traits>
 
 #include <Oxygen/Base/NoStd.h>
 

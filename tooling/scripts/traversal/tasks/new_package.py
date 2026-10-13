@@ -17,14 +17,18 @@ from ..task_registry import TraversalContext, task
 def new_package(project: Path, context: TraversalContext) -> None:
     manifest = project.parent / "Package.appxmanifest"
     if not manifest.exists():
-        context.logger.debug("Skipping project without Package.appxmanifest: %s", project)
+        context.logger.debug(
+            "Skipping project without Package.appxmanifest: %s", project
+        )
         return
 
     params = context.forwarded_arguments
 
     certificate_value = params.get("packagecertificatekeyfile")
     if not certificate_value or certificate_value is True:
-        raise ValueError("New-Package requires --PackageCertificateKeyFile <path> to be provided")
+        raise ValueError(
+            "New-Package requires --PackageCertificateKeyFile <path> to be provided"
+        )
 
     certificate_path = Path(str(certificate_value)).expanduser()
     if not certificate_path.is_absolute():
@@ -60,7 +64,14 @@ def new_package(project: Path, context: TraversalContext) -> None:
         "AppxPackageDir": package_dir_with_sep,
     }
 
-    cmd = [str(visual_studio_tool("msbuild")), str(project), "/nologo", "/m", "/restore", f"/v:{verbosity}"]
+    cmd = [
+        str(visual_studio_tool("msbuild")),
+        str(project),
+        "/nologo",
+        "/m",
+        "/restore",
+        f"/v:{verbosity}",
+    ]
     for key, value in properties.items():
         cmd.append(f"-property:{key}={value}")
 
@@ -75,4 +86,6 @@ def new_package(project: Path, context: TraversalContext) -> None:
 
     result = subprocess.run(cmd, check=False)
     if result.returncode != 0:
-        raise RuntimeError(f"MSBuild failed with exit code {result.returncode} for {project}")
+        raise RuntimeError(
+            f"MSBuild failed with exit code {result.returncode} for {project}"
+        )

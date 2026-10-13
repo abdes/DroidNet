@@ -10,14 +10,13 @@
 #include <cmath>
 #include <stdexcept>
 
-#include <Oxygen/Core/Lighting/LightPhotometry.h>
-
 #include <glm/common.hpp>
 #include <glm/exponential.hpp>
 #include <glm/geometric.hpp>
 #include <glm/trigonometric.hpp>
 #include <glm/vec3.hpp>
 
+#include <Oxygen/Core/Lighting/LightPhotometry.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
@@ -175,10 +174,12 @@ inline auto BuildAtmosphereLightModel(
     resolved.DirectionToLightWs(), engine::atmos::kDefaultSunDirection);
   model.angular_size_radians = resolved.Light().GetAngularSizeRadians();
   const auto illuminance = oxygen::lighting::ResolveDirectionalIlluminanceRgb(
-    resolved.Light().GetIntensityLux(), {
-      .color_rgb = resolved.Light().Common().color_rgb,
-      .exposure_compensation_ev = resolved.Light().Common().exposure_compensation_ev });
-  if (!illuminance) throw std::invalid_argument("Invalid atmosphere light photometry");
+    resolved.Light().GetIntensityLux(),
+    { .color_rgb = resolved.Light().Common().color_rgb,
+      .exposure_compensation_ev
+      = resolved.Light().Common().exposure_compensation_ev });
+  if (!illuminance)
+    throw std::invalid_argument("Invalid atmosphere light photometry");
   model.illuminance_rgb_lux = *illuminance;
   model.disk_luminance_scale_rgb
     = resolved.Light().GetAtmosphereDiskLuminanceScale();

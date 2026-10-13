@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FinalArchivePack.h>
-
 #include <array>
 #include <stdexcept>
 #include <unordered_map>
@@ -16,6 +14,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/ShaderLibraryIO.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FinalArchivePack.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 

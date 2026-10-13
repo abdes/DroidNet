@@ -1,4 +1,5 @@
 """Intersect existing exposure-owner QPC intervals with ETW scheduled time."""
+
 from __future__ import annotations
 
 import argparse
@@ -63,9 +64,10 @@ def schedule(rows, thread):
 
 def distribution(values):
     values = sorted(values)
-    return {name: values[max(0, math.ceil(len(values) * fraction) - 1)]
-            for name, fraction in [("p50", .50), ("p95", .95),
-                                   ("p99", .99), ("max", 1)]}
+    return {
+        name: values[max(0, math.ceil(len(values) * fraction) - 1)]
+        for name, fraction in [("p50", 0.50), ("p95", 0.95), ("p99", 0.99), ("max", 1)]
+    }
 
 
 def analyze(manifest_path, schedule_path, metadata_path, output_path):
@@ -92,12 +94,16 @@ def analyze(manifest_path, schedule_path, metadata_path, output_path):
     for row in rows:
         assert int(row["thread_id"]) == owner["thread_id"]
         start, end = int(row["start_qpc"]), int(row["end_qpc"])
-        assert running[0][0] <= start <= end <= running[-1][1], "Incomplete scheduler coverage"
+        assert running[0][0] <= start <= end <= running[-1][1], (
+            "Incomplete scheduler coverage"
+        )
         frames[int(row["frame_seq"])][row["kind"]].append((start, end))
         labels[row["label"]] += 1
         if row["kind"] == "detail":
             details[row["label"]][int(row["frame_seq"])].append((start, end))
-    assert sorted(frames) == list(range(manifest["first_frame_seq"], manifest["last_frame_seq"] + 1))
+    assert sorted(frames) == list(
+        range(manifest["first_frame_seq"], manifest["last_frame_seq"] + 1)
+    )
     assert len(frames) == manifest["sample_count"]
     samples = []
     factor = 1000 / owner["qpc_frequency"]
@@ -107,23 +113,49 @@ def analyze(manifest_path, schedule_path, metadata_path, output_path):
         active = intersection(exposure, running, running_ends)
         blocked = intersection(exposure, waiting, waiting_ends)
         assert active + blocked <= elapsed
-        samples.append({"frame_seq": frame, "active_ms": active * factor,
-                        "elapsed_ms": elapsed * factor, "blocked_ms": blocked * factor,
-                        "descheduled_ms": (elapsed - active - blocked) * factor,
-                        "fence_wait_ms": sum(b - a for a, b in merge(spans["fence_wait"])) * factor})
-    metrics = {key: distribution([row[key] for row in samples]) for key in samples[0] if key != "frame_seq"}
+        samples.append(
+            {
+                "frame_seq": frame,
+                "active_ms": active * factor,
+                "elapsed_ms": elapsed * factor,
+                "blocked_ms": blocked * factor,
+                "descheduled_ms": (elapsed - active - blocked) * factor,
+                "fence_wait_ms": sum(b - a for a, b in merge(spans["fence_wait"]))
+                * factor,
+            }
+        )
+    metrics = {
+        key: distribution([row[key] for row in samples])
+        for key in samples[0]
+        if key != "frame_seq"
+    }
     nested = {}
     for label, detail_frames in details.items():
-        values = [intersection(merge(detail_frames[frame]), running, running_ends) * factor
-                  for frame in sorted(frames)]
-        nested[label] = {"active_ms": distribution(values), "total_active_ms": sum(values)}
-    limits = (.1, .2) if manifest["view_count"] == 1 else (.15, .3)
-    result = {"case": manifest["workload"], "width": manifest["width"],
-              "samples": len(samples), "metrics_ms": metrics, "scope_counts": labels,
-              "nested": nested, "total_active_ms": sum(row["active_ms"] for row in samples),
-              "cpu_1080_pass": None if manifest["width"] != 1920 else
-                  metrics["active_ms"]["p95"] <= limits[0] and metrics["active_ms"]["p99"] <= limits[1],
-              "inputs": [reference(p) for p in [manifest_path, source, schedule_path, metadata_path]]}
+        values = [
+            intersection(merge(detail_frames[frame]), running, running_ends) * factor
+            for frame in sorted(frames)
+        ]
+        nested[label] = {
+            "active_ms": distribution(values),
+            "total_active_ms": sum(values),
+        }
+    limits = (0.1, 0.2) if manifest["view_count"] == 1 else (0.15, 0.3)
+    result = {
+        "case": manifest["workload"],
+        "width": manifest["width"],
+        "samples": len(samples),
+        "metrics_ms": metrics,
+        "scope_counts": labels,
+        "nested": nested,
+        "total_active_ms": sum(row["active_ms"] for row in samples),
+        "cpu_1080_pass": None
+        if manifest["width"] != 1920
+        else metrics["active_ms"]["p95"] <= limits[0]
+        and metrics["active_ms"]["p99"] <= limits[1],
+        "inputs": [
+            reference(p) for p in [manifest_path, source, schedule_path, metadata_path]
+        ],
+    }
     if output_path.exists():
         raise FileExistsError(output_path)
     samples_path = output_path.with_suffix(".frames.csv")

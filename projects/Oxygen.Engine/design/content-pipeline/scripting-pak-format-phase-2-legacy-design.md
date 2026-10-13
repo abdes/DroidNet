@@ -1251,9 +1251,9 @@ enum class FileKind : uint16_t {
 
 | File                                           | Changes                                                                                                                                                      |
 | :--------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/Oxygen/Data/Test/PakFormat_test.cpp`      | `static_assert` tests for all new struct sizes. Round-trip Serio tests for `ScriptingComponentRecord`, `ScriptSlotRecord`, `ScriptParam`, `ScriptParamList`. |
+| `src/Oxygen/Data/test/PakFormat_test.cpp`      | `static_assert` tests for all new struct sizes. Round-trip Serio tests for `ScriptingComponentRecord`, `ScriptSlotRecord`, `ScriptParam`, `ScriptParamList`. |
 | `src/Oxygen/Content/Tools/PakGen/tests/`       | Add **Binary Regression Tests** ensuring the emitted PAK contains a strictly all-zero descriptor at index 0 for scripting resource tables.                   |
-| `src/Oxygen/Content/Test/SceneLoader_test.cpp` | Test loading a scene with `kScripting` component. Test validation rejection for bad slot ranges.                                                             |
+| `src/Oxygen/Content/test/SceneLoader_test.cpp` | Test loading a scene with `kScripting` component. Test validation rejection for bad slot ranges.                                                             |
 
 ---
 

@@ -5,7 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Vortex/Benchmarks/ExposureAllocationScenario.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
 
 namespace oxygen::vortex::testing::exposure {
 

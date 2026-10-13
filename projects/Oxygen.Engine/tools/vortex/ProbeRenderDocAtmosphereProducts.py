@@ -73,14 +73,18 @@ def sample_texture(controller, resource, subresource, width, height):
     del width
     del height
     rd = renderdoc_module()
-    min_value, max_value = controller.GetMinMax(resource, subresource, rd.CompType.Typeless)
+    min_value, max_value = controller.GetMinMax(
+        resource, subresource, rd.CompType.Typeless
+    )
     return {
         "min": float4_values(min_value),
         "max": float4_values(max_value),
     }
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     action_records = collect_action_records(controller)
     resource_names = resource_id_to_name(controller)
@@ -93,13 +97,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
 
     interesting_textures = []
     for resource_id, name in resource_names.items():
-        if any(token in name for token in (
-            "AtmosphereTransmittanceLut",
-            "AtmosphereMultiScatteringLut",
-            "AtmosphereSkyViewLut",
-            "AtmosphereCameraAerialPerspective",
-            "DistantSkyLightLut",
-        )):
+        if any(
+            token in name
+            for token in (
+                "AtmosphereTransmittanceLut",
+                "AtmosphereMultiScatteringLut",
+                "AtmosphereSkyViewLut",
+                "AtmosphereCameraAerialPerspective",
+                "DistantSkyLightLut",
+            )
+        ):
             interesting_textures.append((resource_id, name))
 
     interesting_textures.sort(key=lambda item: item[1])
@@ -120,7 +127,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     for label, scope_name in targets.items():
         target_event = None
         for record in action_records:
-            if scope_name in record.path and record.name == "ID3D12GraphicsCommandList::Dispatch()":
+            if (
+                scope_name in record.path
+                and record.name == "ID3D12GraphicsCommandList::Dispatch()"
+            ):
                 target_event = record.event_id
                 break
         report.append(f"{label}_event={(target_event or '')}")

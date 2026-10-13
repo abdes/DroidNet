@@ -62,7 +62,9 @@ from renderdoc_ui_analysis import (  # noqa: E402
 REPORT_SUFFIX = "_renderdoc_api_inspect.txt"
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     report.append("capture_path={}".format(capture_path))
     report.append("report_path={}".format(report_path))
@@ -84,10 +86,24 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
                     method_name, repr(getattr(method, "__doc__", None))
                 )
             )
-    report.append("renderdoc_Subresource_doc={}".format(repr(getattr(rd.Subresource, "__doc__", None))))
-    report.append("renderdoc_CompType_doc={}".format(repr(getattr(rd.CompType, "__doc__", None))))
-    report.append("renderdoc_TextureSave_doc={}".format(repr(getattr(rd.TextureSave, "__doc__", None))))
-    report.append("renderdoc_ResourceId_doc={}".format(repr(getattr(rd.ResourceId, "__doc__", None))))
+    report.append(
+        "renderdoc_Subresource_doc={}".format(
+            repr(getattr(rd.Subresource, "__doc__", None))
+        )
+    )
+    report.append(
+        "renderdoc_CompType_doc={}".format(repr(getattr(rd.CompType, "__doc__", None)))
+    )
+    report.append(
+        "renderdoc_TextureSave_doc={}".format(
+            repr(getattr(rd.TextureSave, "__doc__", None))
+        )
+    )
+    report.append(
+        "renderdoc_ResourceId_doc={}".format(
+            repr(getattr(rd.ResourceId, "__doc__", None))
+        )
+    )
     sub = rd.Subresource()
     report.append("renderdoc_Subresource_methods={}".format(",".join(sorted(dir(sub)))))
     report.append("renderdoc_Subresource_repr={}".format(repr(sub)))
@@ -105,11 +121,17 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             report.append("output_target_count={}".format(len(outputs)))
             if outputs:
                 report.append("output_target_type={}".format(type(outputs[0]).__name__))
-                report.append("output_target_methods={}".format(",".join(sorted(dir(outputs[0])))))
                 report.append(
-                    "output_target_repr={}".format(repr(outputs[0]))
+                    "output_target_methods={}".format(",".join(sorted(dir(outputs[0]))))
                 )
-                for method_name in ["resource", "firstMip", "firstSlice", "numMip", "numSlice"]:
+                report.append("output_target_repr={}".format(repr(outputs[0])))
+                for method_name in [
+                    "resource",
+                    "firstMip",
+                    "firstSlice",
+                    "numMip",
+                    "numSlice",
+                ]:
                     report.append(
                         "output_target_attr_{}={}".format(
                             method_name, repr(getattr(outputs[0], method_name, None))

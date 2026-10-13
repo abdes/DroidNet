@@ -39,7 +39,9 @@ def parse_forwarded_arguments(tokens: List[str]) -> Tuple[Dict[str, object], Lis
     return arguments, extras
 
 
-def _extract_option(token: str, tokens: List[str], index: int) -> Tuple[Optional[str], object, int]:
+def _extract_option(
+    token: str, tokens: List[str], index: int
+) -> Tuple[Optional[str], object, int]:
     token = token.lstrip("-")
     name: str
     value: object = True

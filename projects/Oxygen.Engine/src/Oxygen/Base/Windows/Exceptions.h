@@ -9,12 +9,12 @@
 #include <Oxygen/Base/Platforms.h>
 #if defined(OXYGEN_WINDOWS)
 
+#  include <windows.h>
+
 #  include <exception>
 #  include <optional>
 #  include <string>
 #  include <system_error>
-
-#  include <windows.h>
 
 #  include <Oxygen/Base/api_export.h>
 

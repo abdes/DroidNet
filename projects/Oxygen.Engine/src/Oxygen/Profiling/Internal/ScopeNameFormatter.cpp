@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Profiling/Internal/ScopeNameFormatter.h>
-
 #include <Oxygen/Profiling/ProfileScope.h>
 
 namespace oxygen::profiling::internal {

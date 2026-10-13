@@ -90,7 +90,8 @@ protected:
 
 private:
   friend class SceneNode;
-  // Commit only authored values; composition dependencies retain their identity.
+  // Commit only authored values; composition dependencies retain their
+  // identity.
   void CopyPropertiesFrom(const PointLight& candidate) noexcept
   {
     common_ = candidate.common_;
@@ -106,7 +107,6 @@ private:
   //! Variation: Small changes affect the falloff volume; determines shader
   //! culling.
   float range_ = kDefaultRange;
-
 
   //! Radius of the emission sphere in world units.
   //! Scale: linear (meters).

@@ -84,7 +84,7 @@ An include pattern cannot restore a Git-ignored file.
 
 ```powershell
 codemod rename --from OldSymbol --to NewSymbol `
-  --include 'src/Oxygen/Base/**' --exclude '**/Test/**' --dry-run
+  --include 'src/Oxygen/Base/**' --exclude '**/test/**' --dry-run
 ```
 
 An explicit `--root` is never widened. An ancestor `.clangd` can still supply its

@@ -52,13 +52,20 @@ SCRIPT_DIR = resolve_script_dir()
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from renderdoc_ui_analysis import ReportWriter, collect_action_records, format_flags, run_ui_script  # noqa: E402
+from renderdoc_ui_analysis import (
+    ReportWriter,
+    collect_action_records,
+    format_flags,
+    run_ui_script,
+)  # noqa: E402
 
 
 REPORT_SUFFIX = "_actions_dump.txt"
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     report.append("capture_path={}".format(capture_path))
     report.append("report_path={}".format(report_path))
     for record in collect_action_records(controller):

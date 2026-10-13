@@ -6,11 +6,11 @@
 
 #pragma once
 
+#include <Jolt/Jolt.h> // Must always be first (keep separate)
+
 #include <cstdint>
 #include <mutex>
 #include <unordered_map>
-
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
 
 #include <Jolt/Core/Reference.h>
 #include <Jolt/Physics/Constraints/TwoBodyConstraint.h>

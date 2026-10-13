@@ -16,8 +16,11 @@ import struct
 def rounded(value, half=False):
     if half:
         value = max(F(0), min(F(65504), value))
-    result = F(struct.unpack("<e" if half else "<f",
-                             struct.pack("<e" if half else "<f", float(value)))[0])
+    result = F(
+        struct.unpack(
+            "<e" if half else "<f", struct.pack("<e" if half else "<f", float(value))
+        )[0]
+    )
     return F(0) if not half and abs(result) < F(2) ** -126 else result
 
 
@@ -29,7 +32,9 @@ def arithmetic_parameters(half):
 
 
 def inverse(value, relative, absolute):
-    return max(F(0), (value - absolute) / (1 + relative)), (value + absolute) / (1 - relative)
+    return max(F(0), (value - absolute) / (1 + relative)), (value + absolute) / (
+        1 - relative
+    )
 
 
 def coefficients(bound, gradients, shape, half):
@@ -37,14 +42,19 @@ def coefficients(bound, gradients, shape, half):
     if not half and not r and not a:
         return (F(0), F(0)), (F(0), F(0))
     diameter = sum(g for g, n in zip(gradients, shape) if n > 1)
-    displacement = sum(g * (F(6, 5 * 256) + F(8, 2**23) * (n + F(1, 2)))
-                       for g, n in zip(gradients, shape) if n > 1)
+    displacement = sum(
+        g * (F(6, 5 * 256) + F(8, 2**23) * (n + F(1, 2)))
+        for g, n in zip(gradients, shape)
+        if n > 1
+    )
     q, eta = arithmetic_parameters(half)
     qr, etar = arithmetic_parameters(False)
     observed_r = r + (1 + r) * (q + eta)
     reference_r = qr + etar
     reference_a = etar * (diameter + 1)
-    observed_a = (1 + q) * (a + (1 + r) * displacement) + eta * (1 + a + (1 + r) * (diameter + displacement))
+    observed_a = (1 + q) * (a + (1 + r) * displacement) + eta * (
+        1 + a + (1 + r) * (diameter + displacement)
+    )
     relative = (observed_r + reference_r) / (1 - reference_r)
     absolute = observed_a + (1 + relative) * reference_a
     return (relative, absolute), (r, a + (1 + r) * (2 * diameter + 2 * F(2) ** -126))
@@ -68,15 +78,20 @@ def gradients(values, shape):
         for axis in range(3):
             other = list(xyz)
             other[axis] += 1
-            result[axis] = max(result[axis], abs(at(values, shape, xyz) - at(values, shape, other)))
+            result[axis] = max(
+                result[axis], abs(at(values, shape, xyz) - at(values, shape, other))
+            )
     return result
 
 
 def address(uv, n, upward):
     scaled = rounded(rounded(uv * n) - F(1, 2))
     floor = (scaled * 256).__floor__()
-    choices = [F(i, 256) for i in (floor, floor + 1)
-               if abs(F(i, 256) - scaled) <= F(3, 5 * 256)]
+    choices = [
+        F(i, 256)
+        for i in (floor, floor + 1)
+        if abs(F(i, 256) - scaled) <= F(3, 5 * 256)
+    ]
     return max(choices) if upward else min(choices)
 
 
@@ -104,19 +119,25 @@ def main():
     parser = ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    rng = random.Random(0x524f3435)
+    rng = random.Random(0x524F3435)
     checks = 0
     constant_checks = 0
     native_regression = {
-        "observed": F(0.5419921875), "reference": F(0.5417330265045166),
+        "observed": F(0.5419921875),
+        "reference": F(0.5417330265045166),
         "store_only_allowance": F(0.00019880134481466832),
     }
-    assert abs(native_regression["observed"] - native_regression["reference"]) > native_regression["store_only_allowance"]
+    assert (
+        abs(native_regression["observed"] - native_regression["reference"])
+        > native_regression["store_only_allowance"]
+    )
     for shape in ((1, 1, 1), (1, 1, 32), (3, 4, 1), (3, 2, 3)):
         count = shape[0] * shape[1] * shape[2]
         for case in range(128):
             scale = F(2) ** rng.choice((-24, -14, -4, 0, 4, 12))
-            source = [rounded(scale * F(rng.randrange(1025), 1024)) for _ in range(count)]
+            source = [
+                rounded(scale * F(rng.randrange(1025), 1024)) for _ in range(count)
+            ]
             if case % 16 == 0:
                 source = [scale] * count
             coordinates = [F(rng.randrange(-32, 1057), 1024) for _ in range(3)]
@@ -130,22 +151,38 @@ def main():
                 a = max([F(0)] + [abs(o - s) - r * s for o, s in zip(observed, source)])
                 grad = gradients(source, shape)
                 for upper, reverse in product((False, True), repeat=2):
-                    sample = filtered(observed, shape, coordinates, half, upper, reverse)
-                    reference = filtered(source, shape, coordinates, False, not upper, not reverse)
+                    sample = filtered(
+                        observed, shape, coordinates, half, upper, reverse
+                    )
+                    reference = filtered(
+                        source, shape, coordinates, False, not upper, not reverse
+                    )
                     # The zero-error FP32 shortcut relies on identical sampling
                     # execution, unlike the deliberately differing model above.
                     if not half and r == 0 and a == 0:
                         reference = sample
                     low, high = intervals(sample, (r, a), grad, shape, half)
                     if not low <= reference <= high:
-                        raise AssertionError((shape, case, half, float(low), float(reference), float(high)))
+                        raise AssertionError(
+                            (
+                                shape,
+                                case,
+                                half,
+                                float(low),
+                                float(reference),
+                                float(high),
+                            )
+                        )
                     checks += 1
                     constant_checks += case % 16 == 0
-    report = {"verdict": "pass", "rational_filter_checks": checks,
-              "constant_field_checks": constant_checks,
-              "formats": ["FP16", "FP32 with retained error"],
-              "scope": "positive weighted expansions, legal fixed address choices, hull intersection; not native qualification",
-              "old_store_only_regression_reproduced": True}
+    report = {
+        "verdict": "pass",
+        "rational_filter_checks": checks,
+        "constant_field_checks": constant_checks,
+        "formats": ["FP16", "FP32 with retained error"],
+        "scope": "positive weighted expansions, legal fixed address choices, hull intersection; not native qualification",
+        "old_store_only_regression_reproduced": True,
+    }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report))

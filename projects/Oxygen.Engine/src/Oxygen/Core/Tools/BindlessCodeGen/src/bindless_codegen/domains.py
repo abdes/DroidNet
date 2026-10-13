@@ -148,9 +148,7 @@ def render_hlsl_abi(domains: List[Dict[str, Any]]) -> str:
         if comment:
             lines.append(f"// {comment}")
             lines.append("")
-        lines.append(
-            f"static const uint K_{tag}_SHADER_INDEX_BASE = {int(base)};"
-        )
+        lines.append(f"static const uint K_{tag}_SHADER_INDEX_BASE = {int(base)};")
         if cap is not None:
             lines.append(f"static const uint K_{tag}_CAPACITY = {int(cap)};")
         lines.append("")
@@ -170,12 +168,8 @@ def render_hlsl_abi(domains: List[Dict[str, Any]]) -> str:
         )
         lines.append("")
         for tag in tags:
-            lines.append(
-                f"#define BX_DOMAIN_{tag}_BASE K_{tag}_SHADER_INDEX_BASE"
-            )
-            lines.append(
-                f"#define BX_DOMAIN_{tag}_CAPACITY K_{tag}_CAPACITY"
-            )
+            lines.append(f"#define BX_DOMAIN_{tag}_BASE K_{tag}_SHADER_INDEX_BASE")
+            lines.append(f"#define BX_DOMAIN_{tag}_CAPACITY K_{tag}_CAPACITY")
             lines.append(
                 f"#define BX_IN_{tag}(IDX)  BX_IsInDomain((IDX), BX_DOMAIN_{tag}_BASE, BX_DOMAIN_{tag}_CAPACITY)"
             )
@@ -220,9 +214,7 @@ def validate_abi_domains(
         base = int(domain.get("shader_index_base", 0))
         capacity = int(domain.get("capacity", 0))
         if capacity <= 0:
-            raise ValueError(
-                f"ABI domain '{domain_id}' capacity must be > 0"
-            )
+            raise ValueError(f"ABI domain '{domain_id}' capacity must be > 0")
         intervals_by_space.setdefault(index_space, []).append(
             (base, base + capacity, domain_id)
         )
@@ -242,8 +234,7 @@ def validate_abi_domains(
             )
 
         invalid_view_types = sorted(
-            {str(view_type) for view_type in view_types}
-            - allowed_view_types
+            {str(view_type) for view_type in view_types} - allowed_view_types
         )
         if invalid_view_types:
             raise ValueError(

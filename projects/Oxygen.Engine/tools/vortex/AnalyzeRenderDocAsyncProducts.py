@@ -42,9 +42,7 @@ def resolve_script_dir():
         if (candidate / "renderdoc_ui_analysis.py").exists():
             return candidate
 
-    raise RuntimeError(
-        "Unable to locate tools/shadows from the RenderDoc script path."
-    )
+    raise RuntimeError("Unable to locate tools/shadows from the RenderDoc script path.")
 
 
 if "pyrenderdoc" in globals():
@@ -79,7 +77,9 @@ STAGE12_SCOPE_NAME = "Vortex.Stage12.DeferredLighting"
 STAGE12_DIRECTIONAL_SCOPE_NAME = "Vortex.Stage12.DirectionalLight"
 STAGE12_SPOT_SCOPE_NAME = "Vortex.Stage12.SpotLight"
 ATMOSPHERE_SKY_VIEW_SCOPE_NAME = "Vortex.Environment.AtmosphereSkyViewLut"
-ATMOSPHERE_CAMERA_AERIAL_SCOPE_NAME = "Vortex.Environment.AtmosphereCameraAerialPerspective"
+ATMOSPHERE_CAMERA_AERIAL_SCOPE_NAME = (
+    "Vortex.Environment.AtmosphereCameraAerialPerspective"
+)
 STAGE15_SKY_SCOPE_NAME = "Vortex.Stage15.Sky"
 STAGE15_ATMOSPHERE_SCOPE_NAME = "Vortex.Stage15.Atmosphere"
 STAGE15_FOG_SCOPE_NAME = "Vortex.Stage15.Fog"
@@ -96,9 +96,7 @@ def records_with_name(action_records, name):
 
 
 def records_with_name_prefix(action_records, prefix):
-    return [
-        record for record in action_records if record.name.startswith(prefix)
-    ]
+    return [record for record in action_records if record.name.startswith(prefix)]
 
 
 def records_with_name_prefixes(action_records, prefixes):
@@ -111,9 +109,7 @@ def records_with_name_prefixes(action_records, prefixes):
 def records_under_prefix(action_records, prefix):
     prefix_with_sep = prefix + " > "
     return [
-        record
-        for record in action_records
-        if record.path.startswith(prefix_with_sep)
+        record for record in action_records if record.path.startswith(prefix_with_sep)
     ]
 
 
@@ -231,17 +227,9 @@ def probe_positions(width, height):
     positions = {}
 
     for row in range(y_steps):
-        y = (
-            0
-            if y_steps == 1
-            else int(round((max_y * row) / float(y_steps - 1)))
-        )
+        y = 0 if y_steps == 1 else int(round((max_y * row) / float(y_steps - 1)))
         for col in range(x_steps):
-            x = (
-                0
-                if x_steps == 1
-                else int(round((max_x * col) / float(x_steps - 1)))
-            )
+            x = 0 if x_steps == 1 else int(round((max_x * col) / float(x_steps - 1)))
             positions["r{}_c{}".format(row, col)] = (x, y)
 
     return positions
@@ -261,14 +249,10 @@ def sample_descriptor(
     width, height = resource_dims(texture_desc, descriptor)
     center_x = max(0, min(width - 1, width // 2))
     center_y = max(0, min(height - 1, height // 2))
-    center = controller.PickPixel(
-        resource_id, center_x, center_y, sub, type_cast
-    )
+    center = controller.PickPixel(resource_id, center_x, center_y, sub, type_cast)
     center_values = float4_values(center)
     probes = {}
-    for probe_name, (probe_x, probe_y) in probe_positions(
-        width, height
-    ).items():
+    for probe_name, (probe_x, probe_y) in probe_positions(width, height).items():
         probe_value = controller.PickPixel(
             resource_id, probe_x, probe_y, sub, type_cast
         )
@@ -329,8 +313,7 @@ def find_last_draw_between(action_records, start_event_id, end_event_id):
     matches = [
         record
         for record in action_records
-        if record.name == DRAW_NAME
-        and start_event_id < record.event_id < end_event_id
+        if record.name == DRAW_NAME and start_event_id < record.event_id < end_event_id
     ]
     if not matches:
         return None
@@ -361,9 +344,7 @@ def resolve_stage22_tonemap_record(
     )
 
 
-def resolve_stage22_visibility(
-    sampled_tonemap_output_nonzero, final_present_nonzero
-):
+def resolve_stage22_visibility(sampled_tonemap_output_nonzero, final_present_nonzero):
     return {
         "stage22_tonemap_output_nonzero": bool(sampled_tonemap_output_nonzero),
         "final_present_nonzero": bool(final_present_nonzero),
@@ -380,29 +361,21 @@ def append_texture_sample(report, prefix, sample):
         return
     report.append("{}_present=true".format(prefix))
     report.append("{}_name={}".format(prefix, sample["name"]))
-    report.append(
-        "{}_dims={}x{}".format(prefix, sample["width"], sample["height"])
-    )
+    report.append("{}_dims={}x{}".format(prefix, sample["width"], sample["height"]))
     report.append("{}_mip={}".format(prefix, sample["mip"]))
     report.append("{}_slice={}".format(prefix, sample["slice"]))
     report.append("{}_min={}".format(prefix, format_values(sample["min"])))
     report.append("{}_max={}".format(prefix, format_values(sample["max"])))
-    report.append(
-        "{}_center={}".format(prefix, format_values(sample["center"]))
-    )
+    report.append("{}_center={}".format(prefix, format_values(sample["center"])))
     for probe_name in sorted(sample["probes"].keys()):
         report.append(
             "{}_probe_{}={}".format(
                 prefix, probe_name, format_values(sample["probes"][probe_name])
             )
         )
+    report.append("{}_sample_nonzero={}".format(prefix, str(sample["nonzero"]).lower()))
     report.append(
-        "{}_sample_nonzero={}".format(prefix, str(sample["nonzero"]).lower())
-    )
-    report.append(
-        "{}_sample_rgb_nonzero={}".format(
-            prefix, str(sample["rgb_nonzero"]).lower()
-        )
+        "{}_sample_rgb_nonzero={}".format(prefix, str(sample["rgb_nonzero"]).lower())
     )
 
 
@@ -466,9 +439,7 @@ def evaluate_stage15_far_background_mask(
             foreground_probe_count += 1
             foreground_delta_max = max(foreground_delta_max, delta)
 
-    visit(
-        depth_sample["center"], stage12_sample["center"], sky_sample["center"]
-    )
+    visit(depth_sample["center"], stage12_sample["center"], sky_sample["center"])
     for probe_name in stage12_sample["probes"].keys():
         visit(
             depth_sample["probes"][probe_name],
@@ -504,9 +475,7 @@ def evaluate_stage15_sky_quality(depth_sample, sky_sample, epsilon=1.0e-3):
 
     maybe_add(depth_sample["center"], sky_sample["center"])
     for probe_name in sky_sample["probes"].keys():
-        maybe_add(
-            depth_sample["probes"][probe_name], sky_sample["probes"][probe_name]
-        )
+        maybe_add(depth_sample["probes"][probe_name], sky_sample["probes"][probe_name])
 
     if not background_luminances:
         return {
@@ -577,11 +546,7 @@ def dense_grid_delta(
     controller.SetFrameEvent(event_id_a, True)
     values_a = []
     for row in range(grid_y):
-        y = (
-            0
-            if grid_y == 1
-            else int(round(((height - 1) * row) / float(grid_y - 1)))
-        )
+        y = 0 if grid_y == 1 else int(round(((height - 1) * row) / float(grid_y - 1)))
         for col in range(grid_x):
             x = (
                 0
@@ -604,11 +569,7 @@ def dense_grid_delta(
     max_delta = 0.0
     index = 0
     for row in range(grid_y):
-        y = (
-            0
-            if grid_y == 1
-            else int(round(((height - 1) * row) / float(grid_y - 1)))
-        )
+        y = 0 if grid_y == 1 else int(round(((height - 1) * row) / float(grid_y - 1)))
         for col in range(grid_x):
             x = (
                 0
@@ -643,11 +604,7 @@ def dense_grid_clip_fraction(
     clipped_count = 0
     total_count = 0
     for row in range(grid_y):
-        y = (
-            0
-            if grid_y == 1
-            else int(round(((height - 1) * row) / float(grid_y - 1)))
-        )
+        y = 0 if grid_y == 1 else int(round(((height - 1) * row) / float(grid_y - 1)))
         for col in range(grid_x):
             x = (
                 0
@@ -697,10 +654,18 @@ def build_report(
     resource_names = resource_id_to_name(controller)
     texture_descs = texture_desc_map(controller)
 
-    atmosphere_sky_view_scopes = records_with_name(action_records, ATMOSPHERE_SKY_VIEW_SCOPE_NAME)
-    atmosphere_sky_view_records = records_under_prefix(action_records, ATMOSPHERE_SKY_VIEW_SCOPE_NAME)
-    atmosphere_camera_aerial_scopes = records_with_name(action_records, ATMOSPHERE_CAMERA_AERIAL_SCOPE_NAME)
-    atmosphere_camera_aerial_records = records_under_prefix(action_records, ATMOSPHERE_CAMERA_AERIAL_SCOPE_NAME)
+    atmosphere_sky_view_scopes = records_with_name(
+        action_records, ATMOSPHERE_SKY_VIEW_SCOPE_NAME
+    )
+    atmosphere_sky_view_records = records_under_prefix(
+        action_records, ATMOSPHERE_SKY_VIEW_SCOPE_NAME
+    )
+    atmosphere_camera_aerial_scopes = records_with_name(
+        action_records, ATMOSPHERE_CAMERA_AERIAL_SCOPE_NAME
+    )
+    atmosphere_camera_aerial_records = records_under_prefix(
+        action_records, ATMOSPHERE_CAMERA_AERIAL_SCOPE_NAME
+    )
 
     stage3_records = records_under_prefix(action_records, STAGE3_SCOPE_NAME)
     stage8_records = records_under_prefix(action_records, STAGE8_SCOPE_NAME)
@@ -711,9 +676,7 @@ def build_report(
     stage12_spot_records = records_under_prefix(
         action_records, STAGE12_SCOPE_NAME + " > " + STAGE12_SPOT_SCOPE_NAME
     )
-    stage15_sky_records = records_under_prefix(
-        action_records, STAGE15_SKY_SCOPE_NAME
-    )
+    stage15_sky_records = records_under_prefix(action_records, STAGE15_SKY_SCOPE_NAME)
     stage15_atmosphere_records = records_under_prefix(
         action_records, STAGE15_ATMOSPHERE_SCOPE_NAME
     )
@@ -721,9 +684,7 @@ def build_report(
         records_with_name(action_records, STAGE15_ATMOSPHERE_SCOPE_NAME),
         stage15_atmosphere_records,
     )
-    stage15_fog_records = records_under_prefix(
-        action_records, STAGE15_FOG_SCOPE_NAME
-    )
+    stage15_fog_records = records_under_prefix(action_records, STAGE15_FOG_SCOPE_NAME)
     stage22_tonemap_records = records_under_prefix(
         action_records, STAGE22_TONEMAP_SCOPE_NAME
     )
@@ -735,9 +696,7 @@ def build_report(
     )
     compositing_records = []
     for scope in compositing_scopes:
-        compositing_records.extend(
-            records_under_prefix(action_records, scope.name)
-        )
+        compositing_records.extend(records_under_prefix(action_records, scope.name))
     imgui_overlay_blend_records = []
     for scope in imgui_overlay_blend_scopes:
         imgui_overlay_blend_records.extend(
@@ -749,18 +708,12 @@ def build_report(
     stage12_directional_last_draw = find_last_named_record(
         stage12_directional_records, DRAW_NAME
     )
-    stage12_spot_last_draw = find_last_named_record(
-        stage12_spot_records, DRAW_NAME
-    )
-    stage15_sky_last_draw = find_last_named_record(
-        stage15_sky_records, DRAW_NAME
-    )
+    stage12_spot_last_draw = find_last_named_record(stage12_spot_records, DRAW_NAME)
+    stage15_sky_last_draw = find_last_named_record(stage15_sky_records, DRAW_NAME)
     stage15_atmosphere_last_draw = find_last_named_record(
         stage15_atmosphere_records, DRAW_NAME
     )
-    stage15_fog_last_draw = find_last_named_record(
-        stage15_fog_records, DRAW_NAME
-    )
+    stage15_fog_last_draw = find_last_named_record(stage15_fog_records, DRAW_NAME)
     stage22_tonemap_last_draw = find_last_named_record(
         stage22_tonemap_records, DRAW_NAME
     )
@@ -772,10 +725,7 @@ def build_report(
         imgui_overlay_blend_records, DRAW_NAME
     )
     compositing_last_action = find_last_work_record(compositing_records)
-    final_present_action = (
-        imgui_overlay_blend_draw
-        or compositing_last_action
-    )
+    final_present_action = imgui_overlay_blend_draw or compositing_last_action
 
     required = [
         ("stage3", stage3_last_draw),
@@ -791,9 +741,7 @@ def build_report(
     missing = [name for name, record in required if record is None]
     if missing:
         raise RuntimeError(
-            "Required Async events were not found: {}".format(
-                ", ".join(missing)
-            )
+            "Required Async events were not found: {}".format(", ".join(missing))
         )
 
     stage22_tonemap_last_draw = resolve_stage22_tonemap_record(
@@ -803,9 +751,7 @@ def build_report(
         compositing_last_action,
     )
     if stage22_tonemap_last_draw is None:
-        raise RuntimeError(
-            "Required Async events were not found: stage22_tonemap"
-        )
+        raise RuntimeError("Required Async events were not found: stage22_tonemap")
 
     stage3 = analyze_draw_event(
         controller, rd, resource_names, texture_descs, stage3_last_draw.event_id
@@ -871,9 +817,7 @@ def build_report(
     )
 
     stage3_depth_ok = stage3["depth"] is not None and stage3["depth"]["nonzero"]
-    stage8_shadow_depth_ok = (
-        stage8["depth"] is not None and stage8["depth"]["nonzero"]
-    )
+    stage8_shadow_depth_ok = stage8["depth"] is not None and stage8["depth"]["nonzero"]
     stage12_directional_scene_color = find_output_sample(
         stage12_directional, "SceneColor"
     )
@@ -883,8 +827,7 @@ def build_report(
         and stage12_directional_scene_color["rgb_nonzero"]
     )
     stage12_spot_scene_color_nonzero = (
-        stage12_spot_scene_color is not None
-        and stage12_spot_scene_color["rgb_nonzero"]
+        stage12_spot_scene_color is not None and stage12_spot_scene_color["rgb_nonzero"]
     )
 
     stage15_sky_scene_color = find_output_sample(stage15_sky, "SceneColor")
@@ -908,9 +851,7 @@ def build_report(
         ),
     )
     stage15_atmosphere_scene_color_delta = max(
-        max_sample_delta(
-            stage15_sky_scene_color, stage15_atmosphere_scene_color
-        ),
+        max_sample_delta(stage15_sky_scene_color, stage15_atmosphere_scene_color),
         dense_grid_delta(
             controller,
             rd,
@@ -921,9 +862,7 @@ def build_report(
         ),
     )
     stage15_fog_scene_color_delta = max(
-        max_sample_delta(
-            stage15_atmosphere_scene_color, stage15_fog_scene_color
-        ),
+        max_sample_delta(stage15_atmosphere_scene_color, stage15_fog_scene_color),
         dense_grid_delta(
             controller,
             rd,
@@ -941,11 +880,24 @@ def build_report(
     stage15_fog_scene_color_changed = stage15_fog_scene_color_delta > 1.0e-5
     atmosphere_sky_view_scope_count_match = len(atmosphere_sky_view_scopes) == 1
     atmosphere_sky_view_dispatch_count_match = (
-        len(records_with_name(atmosphere_sky_view_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+        len(
+            records_with_name(
+                atmosphere_sky_view_records, "ID3D12GraphicsCommandList::Dispatch()"
+            )
+        )
+        == 1
     )
-    atmosphere_camera_aerial_scope_count_match = len(atmosphere_camera_aerial_scopes) == 1
+    atmosphere_camera_aerial_scope_count_match = (
+        len(atmosphere_camera_aerial_scopes) == 1
+    )
     atmosphere_camera_aerial_dispatch_count_match = (
-        len(records_with_name(atmosphere_camera_aerial_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+        len(
+            records_with_name(
+                atmosphere_camera_aerial_records,
+                "ID3D12GraphicsCommandList::Dispatch()",
+            )
+        )
+        == 1
     )
     atmosphere_camera_aerial_usage = bound_named_resources(
         controller,
@@ -1013,13 +965,9 @@ def build_report(
     )
 
     final_present = (
-        final_present_state["outputs"][0]
-        if final_present_state["outputs"]
-        else None
+        final_present_state["outputs"][0] if final_present_state["outputs"] else None
     )
-    final_present_nonzero = (
-        final_present is not None and final_present["rgb_nonzero"]
-    )
+    final_present_nonzero = final_present is not None and final_present["rgb_nonzero"]
     tonemap_output = (
         stage22_tonemap["outputs"][0] if stage22_tonemap["outputs"] else None
     )
@@ -1029,9 +977,7 @@ def build_report(
     stage22_visibility = resolve_stage22_visibility(
         sampled_tonemap_output_nonzero, final_present_nonzero
     )
-    tonemap_output_nonzero = stage22_visibility[
-        "stage22_tonemap_output_nonzero"
-    ]
+    tonemap_output_nonzero = stage22_visibility["stage22_tonemap_output_nonzero"]
     tonemap_clipping_ratio = dense_grid_clip_fraction(
         controller, rd, stage22_tonemap_last_draw.event_id, tonemap_output
     )
@@ -1072,9 +1018,7 @@ def build_report(
         )
     )
     report.append(
-        "stage12_spot_last_draw_event={}".format(
-            stage12_spot_last_draw.event_id
-        )
+        "stage12_spot_last_draw_event={}".format(stage12_spot_last_draw.event_id)
     )
     report.append(
         "stage15_sky_last_draw_event={}".format(stage15_sky_last_draw.event_id)
@@ -1088,28 +1032,18 @@ def build_report(
         "stage15_fog_last_draw_event={}".format(stage15_fog_last_draw.event_id)
     )
     report.append(
-        "stage22_tonemap_last_draw_event={}".format(
-            stage22_tonemap_last_draw.event_id
-        )
+        "stage22_tonemap_last_draw_event={}".format(stage22_tonemap_last_draw.event_id)
     )
-    report.append(
-        "compositing_last_event={}".format(compositing_last_action.event_id)
-    )
+    report.append("compositing_last_event={}".format(compositing_last_action.event_id))
     report.append(
         "compositing_copy_event={}".format(
             compositing_copy_record.event_id if compositing_copy_record else ""
         )
     )
+    report.append("final_present_event={}".format(final_present_action.event_id))
+    report.append("stage3_scene_depth_nonzero={}".format(str(stage3_depth_ok).lower()))
     report.append(
-        "final_present_event={}".format(final_present_action.event_id)
-    )
-    report.append(
-        "stage3_scene_depth_nonzero={}".format(str(stage3_depth_ok).lower())
-    )
-    report.append(
-        "stage8_shadow_depth_nonzero={}".format(
-            str(stage8_shadow_depth_ok).lower()
-        )
+        "stage8_shadow_depth_nonzero={}".format(str(stage8_shadow_depth_ok).lower())
     )
     report.append(
         "stage12_directional_scene_color_nonzero={}".format(
@@ -1122,9 +1056,7 @@ def build_report(
         )
     )
     report.append(
-        "stage15_sky_scene_color_delta_max={:.6f}".format(
-            stage15_sky_scene_color_delta
-        )
+        "stage15_sky_scene_color_delta_max={:.6f}".format(stage15_sky_scene_color_delta)
     )
     report.append(
         "stage15_atmosphere_scene_color_delta_max={:.6f}".format(
@@ -1132,9 +1064,7 @@ def build_report(
         )
     )
     report.append(
-        "stage15_fog_scene_color_delta_max={:.6f}".format(
-            stage15_fog_scene_color_delta
-        )
+        "stage15_fog_scene_color_delta_max={:.6f}".format(stage15_fog_scene_color_delta)
     )
     report.append(
         "stage15_sky_scene_color_changed={}".format(
@@ -1178,7 +1108,9 @@ def build_report(
     )
     report.append(
         "atmosphere_camera_aerial_resource_name={}".format(
-            atmosphere_camera_aerial_usage[0]["name"] if atmosphere_camera_aerial_usage else ""
+            atmosphere_camera_aerial_usage[0]["name"]
+            if atmosphere_camera_aerial_usage
+            else ""
         )
     )
     report.append(
@@ -1272,23 +1204,17 @@ def build_report(
         )
     )
     report.append(
-        "stage15_sky_quality_ok={}".format(
-            str(stage15_sky_quality["valid"]).lower()
-        )
+        "stage15_sky_quality_ok={}".format(str(stage15_sky_quality["valid"]).lower())
     )
     report.append(
-        "stage22_tonemap_output_nonzero={}".format(
-            str(tonemap_output_nonzero).lower()
-        )
+        "stage22_tonemap_output_nonzero={}".format(str(tonemap_output_nonzero).lower())
     )
     report.append(
         "stage22_sampled_tonemap_output_nonzero={}".format(
             str(sampled_tonemap_output_nonzero).lower()
         )
     )
-    report.append(
-        "final_present_nonzero={}".format(str(final_present_nonzero).lower())
-    )
+    report.append("final_present_nonzero={}".format(str(final_present_nonzero).lower()))
     report.append(
         "stage22_exposure_clipping_ratio={:.6f}".format(tonemap_clipping_ratio)
     )
@@ -1298,9 +1224,7 @@ def build_report(
         )
     )
     report.append(
-        "final_present_vs_tonemap_delta_max={:.6f}".format(
-            overlay_or_composition_delta
-        )
+        "final_present_vs_tonemap_delta_max={:.6f}".format(overlay_or_composition_delta)
     )
     report.append(
         "final_present_vs_tonemap_changed={}".format(
@@ -1313,13 +1237,9 @@ def build_report(
         )
     )
     report.append("exported_color_path={}".format(color_export_path))
-    report.append(
-        "exported_color_exists={}".format(str(color_exported).lower())
-    )
+    report.append("exported_color_exists={}".format(str(color_exported).lower()))
     report.append("exported_depth_path={}".format(depth_export_path))
-    report.append(
-        "exported_depth_exists={}".format(str(depth_exported).lower())
-    )
+    report.append("exported_depth_exists={}".format(str(depth_exported).lower()))
 
     overall = (
         stage3_depth_ok
@@ -1361,18 +1281,12 @@ def build_report(
         "stage12_directional_scene_color",
         stage12_directional_scene_color,
     )
-    append_texture_sample(
-        report, "stage12_spot_scene_color", stage12_spot_scene_color
-    )
-    append_texture_sample(
-        report, "stage15_sky_scene_color", stage15_sky_scene_color
-    )
+    append_texture_sample(report, "stage12_spot_scene_color", stage12_spot_scene_color)
+    append_texture_sample(report, "stage15_sky_scene_color", stage15_sky_scene_color)
     append_texture_sample(
         report, "stage15_atmosphere_scene_color", stage15_atmosphere_scene_color
     )
-    append_texture_sample(
-        report, "stage15_fog_scene_color", stage15_fog_scene_color
-    )
+    append_texture_sample(report, "stage15_fog_scene_color", stage15_fog_scene_color)
     append_texture_sample(report, "stage22_tonemap_output", tonemap_output)
     append_texture_sample(report, "final_present", final_present)
 

@@ -8,6 +8,8 @@
 #include <array>
 #include <string>
 
+#include "TexturedCube/UI/MaterialsSandboxPanel.h"
+#include "TexturedCube/UI/MaterialsSandboxVm.h"
 #include <fmt/format.h>
 #include <imgui.h>
 
@@ -15,9 +17,6 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/Styles/IconsFontAwesome.h>
-
-#include "TexturedCube/UI/MaterialsSandboxPanel.h"
-#include "TexturedCube/UI/MaterialsSandboxVm.h"
 
 namespace {
 

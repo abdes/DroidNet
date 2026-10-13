@@ -1,11 +1,12 @@
 // File: bc7enc.c - Richard Geldreich, Jr. 3/31/2020 - MIT license or public
 // domain (see end of file) Currently supports modes 1, 6 for RGB blocks, and
 // modes 5, 6, 7 for RGBA blocks.
-#include "bc7enc.h"
 #include <algorithm>
 #include <assert.h>
 #include <limits.h>
 #include <math.h>
+
+#include "bc7enc.h"
 
 // Helpers
 static inline int32_t clampi(int32_t value, int32_t low, int32_t high)

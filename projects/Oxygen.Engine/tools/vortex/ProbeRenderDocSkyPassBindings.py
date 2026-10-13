@@ -86,14 +86,19 @@ def append_descriptor_fields(report, prefix, descriptor):
         report.append(f"{prefix}_{field}={safe_getattr(descriptor, field, None)}")
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     actions = collect_action_records(controller)
     resources = resource_id_to_name(controller)
 
     target = None
     for record in actions:
-        if "Vortex.Stage15.Sky" in record.path and record.name == "ID3D12GraphicsCommandList::DrawInstanced()":
+        if (
+            "Vortex.Stage15.Sky" in record.path
+            and record.name == "ID3D12GraphicsCommandList::DrawInstanced()"
+        ):
             target = record
             break
     if target is None:
@@ -107,7 +112,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(f"pixel_constant_block_count={len(blocks)}")
     for index, block in enumerate(blocks):
         descriptor = block.descriptor
-        report.append(f"cb_{index}_resource={describe_descriptor(resources, descriptor)}")
+        report.append(
+            f"cb_{index}_resource={describe_descriptor(resources, descriptor)}"
+        )
         report.append(f"cb_{index}_bind={block.access.index}")
         report.append(f"cb_{index}_array={block.access.arrayElement}")
         report.append(f"cb_{index}_descriptor_repr={repr(descriptor)}")
@@ -116,7 +123,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     readonly = state.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
     report.append(f"pixel_ro_count={len(readonly)}")
     for index, descriptor in enumerate(readonly):
-        report.append(f"ro_{index}_resource={describe_descriptor(resources, descriptor.descriptor)}")
+        report.append(
+            f"ro_{index}_resource={describe_descriptor(resources, descriptor.descriptor)}"
+        )
         report.append(f"ro_{index}_bind={descriptor.access.index}")
         report.append(f"ro_{index}_array={descriptor.access.arrayElement}")
         report.append(f"ro_{index}_descriptor_repr={repr(descriptor.descriptor)}")
@@ -125,7 +134,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     outputs = state.GetOutputTargets()
     report.append(f"output_count={len(outputs)}")
     for index, descriptor in enumerate(outputs):
-        report.append(f"output_{index}_resource={describe_descriptor(resources, descriptor)}")
+        report.append(
+            f"output_{index}_resource={describe_descriptor(resources, descriptor)}"
+        )
 
 
 def main():

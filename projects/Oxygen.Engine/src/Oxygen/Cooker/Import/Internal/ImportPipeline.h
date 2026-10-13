@@ -9,10 +9,9 @@
 #include <concepts>
 #include <string_view>
 
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
-
-#include <Oxygen/Composition/Typed.h>
 
 namespace oxygen::content::import {
 

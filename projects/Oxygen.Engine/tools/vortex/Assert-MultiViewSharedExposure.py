@@ -20,7 +20,9 @@ def load_pair(path, frame):
     if len(data["views"]) != 2:
         raise AssertionError("Expected the ordinary main/PiP family")
     # This fixture's full-window main view is larger than its PiP.
-    owner, consumer = sorted(data["views"], key=lambda view: view["width"] * view["height"], reverse=True)
+    owner, consumer = sorted(
+        data["views"], key=lambda view: view["width"] * view["height"], reverse=True
+    )
     for view in (owner, consumer):
         if view["frame"] != frame:
             raise AssertionError(f"Expected GPU frame {frame}, got {view['frame']}")
@@ -28,7 +30,10 @@ def load_pair(path, frame):
         raise AssertionError("Main unexpectedly borrows exposure")
     if not consumer["state_flags"] & 128 or not consumer["frame_flags"] & 2:
         raise AssertionError("PiP did not consume the shared source")
-    if owner["requested_generation"] == 0 or owner["applied_generation"] != owner["requested_generation"]:
+    if (
+        owner["requested_generation"] == 0
+        or owner["applied_generation"] != owner["requested_generation"]
+    ):
         raise AssertionError("Owner remeter was not applied")
     return owner, consumer
 
@@ -48,8 +53,12 @@ def main():
     results = {
         "before_shared_error_ev": close_gain(old_consumer["gain"], before["gain"]),
         "owner_step_error_ev": close_gain(step["gain"], before["gain"] * 2),
-        "same_frame_prior_gain_error_ev": close_gain(lagging_consumer["gain"], before["gain"]),
-        "next_frame_shared_error_ev": close_gain(following_consumer["gain"], step["gain"]),
+        "same_frame_prior_gain_error_ev": close_gain(
+            lagging_consumer["gain"], before["gain"]
+        ),
+        "next_frame_shared_error_ev": close_gain(
+            following_consumer["gain"], step["gain"]
+        ),
         "paused_owner_error_ev": close_gain(after["gain"], step["gain"]),
         "verdict": "pass",
     }

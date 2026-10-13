@@ -3,7 +3,7 @@ default_install_hook_types:
   - commit-msg
 
 # Immutable capture records and saved-scene fixtures retain their recorded bytes.
-exclude: '^projects/Oxygen\.Engine/(design/vortex/milestones/.*/evidence/|Examples/LightBench/Test/Data/)'
+exclude: '^projects/Oxygen\.Engine/(design/vortex/milestones/.*/evidence/|Examples/LightBench/test/Data/)'
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -71,6 +71,12 @@ repos:
         files: '(?i)^projects/Oxygen\.Engine/(src/Oxygen|Examples)/.*\.(c|cc|cpp|cxx|h|hh|hpp|hxx|inc|inl|ipp|tpp|ixx|cppm)$'
         stages: [pre-commit]
         require_serial: true
+      - id: ruff-format
+        name: Python formatting
+        language: system
+        entry: uv run --locked --no-sync --no-active ruff format
+        types_or: [python, jupyter]
+        stages: [pre-commit]
       # Format through stdout: XamlStyler otherwise forces CRLF on Windows.
       - id: xaml-styler
         name: XAML styler

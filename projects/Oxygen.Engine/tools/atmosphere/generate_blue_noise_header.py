@@ -104,7 +104,7 @@ def generate_from_atlas(atlas_path: Path, size: int, slices: int) -> np.ndarray:
         raise ValueError(f"Atlas dimension {h} must be divisible by tile size {size}")
     grid = h // size
     if grid * grid < slices:
-        raise ValueError(f"Atlas has {grid*grid} tiles but need {slices}")
+        raise ValueError(f"Atlas has {grid * grid} tiles but need {slices}")
 
     vol = np.empty((slices, size, size), dtype=np.uint8)
     idx = 0
@@ -112,7 +112,7 @@ def generate_from_atlas(atlas_path: Path, size: int, slices: int) -> np.ndarray:
         for gx in range(grid):
             if idx >= slices:
                 break
-            tile = arr[gy * size:(gy + 1) * size, gx * size:(gx + 1) * size]
+            tile = arr[gy * size : (gy + 1) * size, gx * size : (gx + 1) * size]
             # Normalize each tile then rank-remap for stable R8 usage.
             tmin = float(tile.min())
             tmax = float(tile.max())
@@ -140,7 +140,7 @@ def emit_header(path: Path, vol: np.ndarray) -> None:
     lines: list[str] = [prolog]
     per_line = 16
     for i in range(0, flat.size, per_line):
-        chunk = flat[i:i + per_line]
+        chunk = flat[i : i + per_line]
         text = ", ".join(f"0x{int(v):02x}" for v in chunk)
         lines.append(f"    {text},\n")
     lines.append(HEADER_EPILOG)

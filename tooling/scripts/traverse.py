@@ -46,16 +46,48 @@ Use the explicit MSBuild Pack target for NuGet libraries, not New-Package."""
         description=description,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("tasks", nargs="*", help="Task names to execute (case-insensitive)")
-    parser.add_argument("--start", default=".", help="Traversal start directory (default: current working directory)")
-    parser.add_argument("--exclude-tests", action="store_true", help="Skip directories named 'test' or 'tests'")
-    parser.add_argument("--exclude-samples", action="store_true", help="Skip directories named 'samples'")
-    parser.add_argument("--exclude", dest="exclude", help="Regex to filter out project names")
-    parser.add_argument("--dry-run", action="store_true", help="Preview actions without executing commands")
-    parser.add_argument("--color", dest="color", action="store_true", default=None, help="Force rich-colored output")
-    parser.add_argument("--no-color", dest="color", action="store_false", help="Disable colored output")
-    parser.add_argument("--list-tasks", action="store_true", help="List available tasks and exit")
-    parser.add_argument("--debug", action="store_true", help="Enable verbose debug logging")
+    parser.add_argument(
+        "tasks", nargs="*", help="Task names to execute (case-insensitive)"
+    )
+    parser.add_argument(
+        "--start",
+        default=".",
+        help="Traversal start directory (default: current working directory)",
+    )
+    parser.add_argument(
+        "--exclude-tests",
+        action="store_true",
+        help="Skip directories named 'test' or 'tests'",
+    )
+    parser.add_argument(
+        "--exclude-samples",
+        action="store_true",
+        help="Skip directories named 'samples'",
+    )
+    parser.add_argument(
+        "--exclude", dest="exclude", help="Regex to filter out project names"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview actions without executing commands",
+    )
+    parser.add_argument(
+        "--color",
+        dest="color",
+        action="store_true",
+        default=None,
+        help="Force rich-colored output",
+    )
+    parser.add_argument(
+        "--no-color", dest="color", action="store_false", help="Disable colored output"
+    )
+    parser.add_argument(
+        "--list-tasks", action="store_true", help="List available tasks and exit"
+    )
+    parser.add_argument(
+        "--debug", action="store_true", help="Enable verbose debug logging"
+    )
     return parser
 
 
@@ -70,7 +102,9 @@ def configure_console(color_flag: Optional[bool]) -> Console:
 def configure_logging(console: Console, debug: bool) -> logging.Logger:
     level = logging.DEBUG if debug else logging.INFO
     handler = RichHandler(console=console, show_time=False, show_path=False)
-    logging.basicConfig(level=level, format="%(message)s", handlers=[handler], force=True)
+    logging.basicConfig(
+        level=level, format="%(message)s", handlers=[handler], force=True
+    )
     return logging.getLogger("traverse")
 
 
@@ -164,7 +198,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
     if not result.success:
-        console.print(f"[red]Traversal completed with {len(result.failures)} failure(s).[/]")
+        console.print(
+            f"[red]Traversal completed with {len(result.failures)} failure(s).[/]"
+        )
         for failure in result.failures:
             console.print(
                 f"[red]- Task '{failure.task}' failed for {failure.project}: {failure.exception}[/]"

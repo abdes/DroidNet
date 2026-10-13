@@ -20,9 +20,7 @@ def _script_path():
         if candidate.name == "AnalyzeRenderDocToneMapConstants.py":
             return candidate.resolve()
 
-    fallback = (
-        Path.cwd() / "tools" / "flicker" / "AnalyzeRenderDocToneMapConstants.py"
-    )
+    fallback = Path.cwd() / "tools" / "flicker" / "AnalyzeRenderDocToneMapConstants.py"
     if fallback.exists():
         return fallback.resolve()
 

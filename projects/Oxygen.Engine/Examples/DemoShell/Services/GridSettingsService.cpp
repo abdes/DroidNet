@@ -4,16 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DemoShell/Services/GridSettingsService.h"
-
 #include <algorithm>
 #include <cmath>
 
-#include <Oxygen/Vortex/Renderer.h>
-#include <Oxygen/Vortex/Types/GroundGridConfig.h>
-
+#include "DemoShell/Services/GridSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include "DemoShell/UI/CameraRigController.h"
+
+#include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/GroundGridConfig.h>
 
 namespace oxygen::examples {
 

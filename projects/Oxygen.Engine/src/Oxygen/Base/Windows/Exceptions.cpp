@@ -7,8 +7,6 @@
 #include <Oxygen/Base/Platforms.h>
 #if defined(OXYGEN_WINDOWS)
 
-#  include <Oxygen/Base/Windows/Exceptions.h>
-
 #  include <memory>
 #  include <string>
 
@@ -17,6 +15,7 @@
 #  include <Oxygen/Base/Finally.h>
 #  include <Oxygen/Base/Logging.h>
 #  include <Oxygen/Base/StringUtils.h>
+#  include <Oxygen/Base/Windows/Exceptions.h>
 
 using oxygen::string_utils::WideToUtf8;
 using oxygen::windows::WindowsException;

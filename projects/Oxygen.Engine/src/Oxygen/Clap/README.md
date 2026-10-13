@@ -226,7 +226,7 @@ determined by the type of token encountered. The main states are:
 ## Testing and Extending
 
 - **Unit Tests**: The module includes comprehensive scenario-based tests for all
-  parser states, API surfaces, and edge cases. See `Test/` for examples.
+  parser states, API surfaces, and edge cases. See `test/` for examples.
 - **Adding New Features**: Extend the builder classes or parser states as
   needed. Follow the project’s C++20 and documentation conventions.
 - **Custom Value Types**: Implement your own `ValueSemantics` if you need
@@ -264,7 +264,7 @@ A: Implement a custom `ValueSemantics` class and attach it to your option via
 the builder.
 
 **Q: How do I test my CLI?**
-A: Add tests in the `Test/` directory, following the scenario-based, AAA-pattern
+A: Add tests in the `test/` directory, following the scenario-based, AAA-pattern
 required by the project.
 
 ---

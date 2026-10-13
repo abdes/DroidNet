@@ -48,19 +48,23 @@ struct RuntimeOptionBindings {
 inline auto ParseWindowResolution(const std::string_view value)
   -> Extent<std::uint32_t>
 {
-  constexpr auto maximum = static_cast<std::uint32_t>(std::numeric_limits<int>::max());
+  constexpr auto maximum
+    = static_cast<std::uint32_t>(std::numeric_limits<int>::max());
   const auto dimension = [](const std::string_view text) -> std::uint32_t {
     std::uint32_t result {};
-    const auto parsed = std::from_chars(text.data(), text.data() + text.size(), result);
+    const auto parsed
+      = std::from_chars(text.data(), text.data() + text.size(), result);
     if (parsed.ec != std::errc {} || parsed.ptr != text.data() + text.size()
       || result == 0U || result > maximum) {
-      throw std::invalid_argument("--resolution requires WIDTHxHEIGHT with positive pixel dimensions");
+      throw std::invalid_argument(
+        "--resolution requires WIDTHxHEIGHT with positive pixel dimensions");
     }
     return result;
   };
   const auto separator = value.find_first_of("xX");
   if (separator == std::string_view::npos) {
-    throw std::invalid_argument("--resolution requires WIDTHxHEIGHT, for example 1920x1080");
+    throw std::invalid_argument(
+      "--resolution requires WIDTHxHEIGHT, for example 1920x1080");
   }
   return { .width = dimension(value.substr(0, separator)),
     .height = dimension(value.substr(separator + 1U)) };
@@ -70,9 +74,11 @@ inline auto ResolveWindowResolution(const clap::CommandLineContext& context,
   const std::string_view value, const bool headless)
   -> std::optional<Extent<std::uint32_t>>
 {
-  if (!context.ovm.HasOption("resolution")) return std::nullopt;
+  if (!context.ovm.HasOption("resolution"))
+    return std::nullopt;
   if (headless) {
-    throw std::invalid_argument("--resolution selects a window framebuffer and cannot be used with --headless");
+    throw std::invalid_argument("--resolution selects a window framebuffer and "
+                                "cannot be used with --headless");
   }
   return ParseWindowResolution(value);
 }
@@ -143,7 +149,8 @@ inline auto MakeRuntimeOptions(const RuntimeOptionBindings& bindings)
 
   if (bindings.resolution != nullptr) {
     options->Add(clap::Option::WithKey("resolution")
-        .About("Framebuffer resolution in pixels; fullscreen requires an exact display mode")
+        .About("Framebuffer resolution in pixels; fullscreen requires an exact "
+               "display mode")
         .Long("resolution")
         .WithValue<std::string>()
         .UserFriendlyName("WIDTHxHEIGHT")

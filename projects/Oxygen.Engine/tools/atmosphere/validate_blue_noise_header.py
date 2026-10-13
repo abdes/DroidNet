@@ -55,7 +55,10 @@ def parse_header(path: Path) -> ParsedHeader:
 
     arr_text = arr_match.group(1)
     tokens = re.findall(r"0x[0-9a-fA-F]+|\b\d+\b", arr_text)
-    data = np.array([int(t, 16) if t.lower().startswith("0x") else int(t) for t in tokens], dtype=np.uint8)
+    data = np.array(
+        [int(t, 16) if t.lower().startswith("0x") else int(t) for t in tokens],
+        dtype=np.uint8,
+    )
 
     return ParsedHeader(size=size, slices=slices, data_size=data_size, data=data)
 
@@ -157,17 +160,13 @@ def main() -> int:
     if not (45.0 <= std <= 85.0):
         failures.append(f"std out of expected range ({std:.3f})")
     if dominant_fraction > 0.02:
-        failures.append(
-            f"dominant value frequency too high ({dominant_fraction:.6f})"
-        )
+        failures.append(f"dominant value frequency too high ({dominant_fraction:.6f})")
     if int(per_slice_unique.min()) < 180:
         failures.append(
             f"too few unique values in at least one slice (min={int(per_slice_unique.min())})"
         )
     if int(per_slice_row_unique.min()) < int(p.size * 0.8):
-        failures.append(
-            "repeated rows detected (some slices have too few unique rows)"
-        )
+        failures.append("repeated rows detected (some slices have too few unique rows)")
     if int(per_slice_col_unique.min()) < int(p.size * 0.8):
         failures.append(
             "repeated columns detected (some slices have too few unique columns)"

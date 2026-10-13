@@ -11,10 +11,10 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Vortex/Lighting/Types/LightGridResources.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
-#include <Oxygen/Vortex/Test/Support/CpuTimingCapture.h>
-#include <Oxygen/Vortex/Test/Support/LightingWorkloadScene.h>
 #include <Oxygen/Vortex/Types/LightingFrameBindings.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
+#include <Oxygen/Vortex/test/Support/CpuTimingCapture.h>
+#include <Oxygen/Vortex/test/Support/LightingWorkloadScene.h>
 
 namespace oxygen::vortex::testing {
 

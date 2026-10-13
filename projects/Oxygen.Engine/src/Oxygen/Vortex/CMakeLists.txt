@@ -567,7 +567,7 @@ target_link_libraries(
 # ------------------------------------------------------------------------------
 
 if(OXYGEN_BUILD_TESTS)
-  add_subdirectory("Test")
+  add_subdirectory("test")
   # GPU benchmark workloads share the GoogleTest exposure fixtures. Keep that
   # existing opt-in contract; the other modules' CPU benchmarks are independent.
   if(OXYGEN_BUILD_BENCHMARKS)

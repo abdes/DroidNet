@@ -10,9 +10,9 @@
 #include <string_view>
 #include <unordered_map>
 
-#include <Oxygen/Base/ObserverPtr.h>
-
 #include "DemoShell/UI/DemoPanel.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
 
 namespace oxygen::engine {
 class InputSystem;

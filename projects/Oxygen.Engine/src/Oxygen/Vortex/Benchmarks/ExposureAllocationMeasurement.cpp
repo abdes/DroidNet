@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Windows.h>
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -16,9 +18,7 @@
 #include <string>
 #include <vector>
 
-#include <basetsd.h>
 #include <d3d12.h>
-#include <minwindef.h>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
@@ -33,8 +33,8 @@
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Benchmarks/ExposureAllocationScenario.h>
-#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
+#include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
 
 namespace oxygen::vortex::testing::exposure {
 

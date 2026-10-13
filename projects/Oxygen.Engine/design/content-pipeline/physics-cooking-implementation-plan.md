@@ -305,7 +305,7 @@ Acceptance:
 2. P11 `done`:
    - evidence:
      - docs: `design/content-pipeline/pak-v7-physics-format-specification.md`, `design/content-pipeline/physics-cooking-architecture.md`.
-     - implementation/schema/test: `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`, `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`, `src/Oxygen/Cooker/Test/Import/PhysicsJsonSchema_test.cpp`.
+     - implementation/schema/test: `src/Oxygen/Cooker/Import/Internal/Pipelines/PhysicsSidecarImportPipeline.cpp`, `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`, `src/Oxygen/Cooker/test/Import/PhysicsJsonSchema_test.cpp`.
      - canonical header correction: `src/Oxygen/Data/PakFormat_physics.h` (`PhysicsComponentTableDesc` comment corrected to 20 bytes to match `static_assert(sizeof(... ) == 20)`).
    - closure evidence:
      - user-reported external validation: `all green`.
@@ -317,7 +317,7 @@ Acceptance:
        - `Physics/Materials` and `Physics/Shapes` directory mapping hooks
      - `DescriptorDirFor(AssetType::kPhysicsScene)` follows target-scene co-location rules.
      - `PhysicsTableRelPath()` and `PhysicsDataRelPath()` now resolve under `Physics/Resources`.
-     - `src/Oxygen/Cooker/Test/Loose/LooseCookedLayout_test.cpp` expectations updated to canonical `Physics/...` paths.
+     - `src/Oxygen/Cooker/test/Loose/LooseCookedLayout_test.cpp` expectations updated to canonical `Physics/...` paths.
    - closure evidence:
      - physics/scene extension usage in import pipelines and scene-descriptor
        dependency inference now resolves through
@@ -326,7 +326,7 @@ Acceptance:
      - `LooseCookedLayout` now defines explicit physics descriptor extension
        constants and relpath/virtual-path helpers for:
        `*.opmat`, `*.ocshape`, `*.opres`.
-     - `src/Oxygen/Cooker/Test/Loose/LooseCookedLayout_test.cpp` expanded with
+     - `src/Oxygen/Cooker/test/Loose/LooseCookedLayout_test.cpp` expanded with
        assertions for the new physics descriptor file-name/relpath/virtual-path
        helpers.
 4. P2 `done`:
@@ -343,10 +343,10 @@ Acceptance:
      - session/registry wiring: `ImportSession`, `ResourceTableAggregator`, `ResourceTableRegistry`.
    - validation evidence:
      - tests added:
-       - `src/Oxygen/Cooker/Test/Import/PhysicsResourceDescriptorJsonSchema_test.cpp`
-       - `src/Oxygen/Cooker/Test/Import/PhysicsResourceDescriptorImportRequestBuilder_test.cpp`
-       - `src/Oxygen/Cooker/Test/Import/PhysicsResourceDescriptorImportJob_test.cpp`
-       - `src/Oxygen/Cooker/Test/Import/ImportManifest_physics_resource_descriptor_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/PhysicsResourceDescriptorJsonSchema_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/PhysicsResourceDescriptorImportRequestBuilder_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/PhysicsResourceDescriptorImportJob_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/ImportManifest_physics_resource_descriptor_test.cpp`
    - closure evidence:
      - user-reported external validation: `all green`.
 5. P3 `done`:
@@ -360,10 +360,10 @@ Acceptance:
      - output mapping to `PhysicsMaterialAssetDesc` and `.opmat` emission via `AssetEmitter`.
    - validation evidence:
      - tests added:
-       - `src/Oxygen/Cooker/Test/Import/PhysicsMaterialDescriptorJsonSchema_test.cpp`
-       - `src/Oxygen/Cooker/Test/Import/PhysicsMaterialDescriptorImportRequestBuilder_test.cpp`
-       - `src/Oxygen/Cooker/Test/Import/PhysicsMaterialDescriptorImportJob_test.cpp`
-       - `src/Oxygen/Cooker/Test/Import/ImportManifest_physics_material_descriptor_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/PhysicsMaterialDescriptorJsonSchema_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/PhysicsMaterialDescriptorImportRequestBuilder_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/PhysicsMaterialDescriptorImportJob_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/ImportManifest_physics_material_descriptor_test.cpp`
    - closure evidence:
      - user-reported external validation: `all green`.
 6. P4 `done`:
@@ -383,11 +383,11 @@ Acceptance:
        - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
        - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
      - tests:
-       - `src/Oxygen/Cooker/Test/Import/CollisionShapeDescriptorJsonSchema_test.cpp`
-       - `src/Oxygen/Cooker/Test/Import/CollisionShapeDescriptorImportRequestBuilder_test.cpp`
-       - `src/Oxygen/Cooker/Test/Import/CollisionShapeDescriptorImportJob_test.cpp`
-       - `src/Oxygen/Cooker/Test/Import/ImportManifest_collision_shape_descriptor_test.cpp`
-       - `src/Oxygen/Cooker/Test/CMakeLists.txt` target
+       - `src/Oxygen/Cooker/test/Import/CollisionShapeDescriptorJsonSchema_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/CollisionShapeDescriptorImportRequestBuilder_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/CollisionShapeDescriptorImportJob_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/ImportManifest_collision_shape_descriptor_test.cpp`
+       - `src/Oxygen/Cooker/test/CMakeLists.txt` target
          `Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests`
    - closure evidence:
      - user-reported external validation: `all green`.
@@ -413,11 +413,11 @@ Acceptance:
        - sidecar relpath derived by replacing target scene extension only.
    - validation evidence:
      - schema tests updated:
-       - `src/Oxygen/Cooker/Test/Import/PhysicsJsonSchema_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/PhysicsJsonSchema_test.cpp`
          now validates all seven binding families and rejects legacy field names.
      - request/manifest fixture payloads updated to virtual-ref fields:
-       - `src/Oxygen/Cooker/Test/Import/PhysicsImportRequestBuilder_test.cpp`
-       - `src/Oxygen/Cooker/Test/Import/ImportManifest_physics_sidecar_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/PhysicsImportRequestBuilder_test.cpp`
+       - `src/Oxygen/Cooker/test/Import/ImportManifest_physics_sidecar_test.cpp`
      - content fixture updated:
        - `Examples/Content/full-import/showcase_scene.physics-sidecar.json`
    - closure evidence:
@@ -444,13 +444,13 @@ Acceptance:
          - `physics.manifest.dependency_missing_target`
          - `physics.manifest.dependency_cycle`
        - tests added:
-         - `src/Oxygen/Cooker/Test/Import/BatchCommand_physics_dag_test.cpp`
+         - `src/Oxygen/Cooker/test/Import/BatchCommand_physics_dag_test.cpp`
            covering:
            - unresolved inferred physics refs
            - ambiguous inferred producer refs
            - physics dependency cycle diagnostic
            - non-physics cycle diagnostic regression guard
-         - `src/Oxygen/Cooker/Test/CMakeLists.txt` target:
+         - `src/Oxygen/Cooker/test/CMakeLists.txt` target:
            `Oxygen.Cooker.ImportToolBatchDag.Tests`
        - precedence alignment in batch request preparation:
          - CLI cooked-root override now takes highest priority over
@@ -488,9 +488,9 @@ Acceptance:
         ambiguous, and missing-target emissions per job/ref key:
         - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
       - test coverage added/extended:
-        - `src/Oxygen/Cooker/Test/Import/ImportSession_test.cpp`
+        - `src/Oxygen/Cooker/test/Import/ImportSession_test.cpp`
           - `ImportSessionTest.AddDiagnosticDuplicateSuppressed`
-        - `src/Oxygen/Cooker/Test/Import/BatchCommand_physics_dag_test.cpp`
+        - `src/Oxygen/Cooker/test/Import/BatchCommand_physics_dag_test.cpp`
           - duplicate unresolved ref diagnostics are bounded
           - duplicate ambiguous ref diagnostics are bounded
           - duplicate missing explicit dependency diagnostics are bounded
@@ -511,11 +511,11 @@ Acceptance:
     - manifest DAG diagnostics/orchestration coverage:
       - `BatchCommand_physics_dag_test.cpp`
     - scene+physics runtime load integration coverage exists:
-      - `src/Oxygen/Content/Test/AssetLoader_scene_test.cpp`
-      - `src/Oxygen/Content/Test/PhysicsSceneLoader_test.cpp`
+      - `src/Oxygen/Content/test/AssetLoader_scene_test.cpp`
+      - `src/Oxygen/Content/test/PhysicsSceneLoader_test.cpp`
     - pak planner/writer physics inclusion coverage exists:
-      - `src/Oxygen/Cooker/Test/Pak/PakPlanBuilder_test.cpp`
-      - `src/Oxygen/Cooker/Test/Pak/PakWriter_test.cpp`
+      - `src/Oxygen/Cooker/test/Pak/PakPlanBuilder_test.cpp`
+      - `src/Oxygen/Cooker/test/Pak/PakWriter_test.cpp`
     - closure evidence:
     - user-reported validation: `All Green` for full P9 matrix.
 12. P10 `in_progress`:
@@ -558,7 +558,7 @@ Build/test execution in this pass:
      supports world-attached joint parsing/validation (`node_index_b` as `null`/`"world"` -> sentinel).
    - `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-sidecar.schema.json`
      accepts `node_index_b` as index, `null`, or `"world"`.
-   - `src/Oxygen/Cooker/Test/Import/PhysicsJsonSchema_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/PhysicsJsonSchema_test.cpp`
      adds coverage for joint world-attachment forms.
 3. Canonical ABI comment consistency remediation:
    - `src/Oxygen/Data/PakFormat_physics.h`
@@ -586,7 +586,7 @@ Build/test execution in this pass:
    - `PhysicsTableRelPath()` and `PhysicsDataRelPath()` now resolve to
      `Physics/Resources/physics.table` and `Physics/Resources/physics.data`.
 2. Test expectation updates:
-   - `src/Oxygen/Cooker/Test/Loose/LooseCookedLayout_test.cpp` updated to
+   - `src/Oxygen/Cooker/test/Loose/LooseCookedLayout_test.cpp` updated to
      canonical `Physics/...` path assertions.
 3. Additional hardening applied for extension/path consistency:
    - `src/Oxygen/Cooker/Loose/LooseCookedLayout.h`
@@ -598,7 +598,7 @@ Build/test execution in this pass:
      now uses layout extension constants when pairing `.oscene` -> `.opscene`.
    - `src/Oxygen/Cooker/Import/Internal/Jobs/SceneDescriptorImportJob.cpp`
      now uses layout extension constants for descriptor-type inference.
-   - `src/Oxygen/Cooker/Test/Loose/LooseCookedLayout_test.cpp`
+   - `src/Oxygen/Cooker/test/Loose/LooseCookedLayout_test.cpp`
      now covers these new helpers.
 
 ## P2 (done)
@@ -632,10 +632,10 @@ Build/test execution in this pass:
    - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
    - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
 3. Test coverage added:
-   - `src/Oxygen/Cooker/Test/Import/PhysicsResourceDescriptorJsonSchema_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/PhysicsResourceDescriptorImportRequestBuilder_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/PhysicsResourceDescriptorImportJob_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/ImportManifest_physics_resource_descriptor_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/PhysicsResourceDescriptorJsonSchema_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/PhysicsResourceDescriptorImportRequestBuilder_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/PhysicsResourceDescriptorImportJob_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/ImportManifest_physics_resource_descriptor_test.cpp`
 4. Closure evidence:
    - user-reported validation: `All Green`.
 
@@ -664,10 +664,10 @@ Build/test execution in this pass:
    - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
    - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
 3. Test coverage added:
-   - `src/Oxygen/Cooker/Test/Import/PhysicsMaterialDescriptorJsonSchema_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/PhysicsMaterialDescriptorImportRequestBuilder_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/PhysicsMaterialDescriptorImportJob_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/ImportManifest_physics_material_descriptor_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/PhysicsMaterialDescriptorJsonSchema_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/PhysicsMaterialDescriptorImportRequestBuilder_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/PhysicsMaterialDescriptorImportJob_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/ImportManifest_physics_material_descriptor_test.cpp`
 4. Closure evidence:
    - user-reported validation: `All Green`.
 
@@ -697,11 +697,11 @@ Build/test execution in this pass:
    - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
    - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
 3. Test coverage added:
-   - `src/Oxygen/Cooker/Test/Import/CollisionShapeDescriptorJsonSchema_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/CollisionShapeDescriptorImportRequestBuilder_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/CollisionShapeDescriptorImportJob_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/ImportManifest_collision_shape_descriptor_test.cpp`
-   - `src/Oxygen/Cooker/Test/CMakeLists.txt` target:
+   - `src/Oxygen/Cooker/test/Import/CollisionShapeDescriptorJsonSchema_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/CollisionShapeDescriptorImportRequestBuilder_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/CollisionShapeDescriptorImportJob_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/ImportManifest_collision_shape_descriptor_test.cpp`
+   - `src/Oxygen/Cooker/test/CMakeLists.txt` target:
      `Oxygen.Cooker.AsyncImportCollisionShapeDescriptor.Tests`
 4. Closure evidence:
    - user-reported validation: `All Green`.
@@ -733,12 +733,12 @@ Build/test execution in this pass:
    - sidecar emission remains co-located with target scene:
      - `<scene_dir>/<scene_stem>.opscene`.
 4. Test/fixture updates:
-   - `src/Oxygen/Cooker/Test/Import/PhysicsJsonSchema_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/PhysicsJsonSchema_test.cpp`
      - canonical payload now exercises all seven families.
      - explicit rejection test for legacy field names added.
-   - `src/Oxygen/Cooker/Test/Import/PhysicsImportRequestBuilder_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/PhysicsImportRequestBuilder_test.cpp`
      updated to virtual-ref payload fields.
-   - `src/Oxygen/Cooker/Test/Import/ImportManifest_physics_sidecar_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/ImportManifest_physics_sidecar_test.cpp`
      updated inline bindings to virtual-ref payload fields.
    - `Examples/Content/full-import/showcase_scene.physics-sidecar.json`
      migrated to virtual-ref fields.
@@ -769,7 +769,7 @@ Build/test execution in this pass:
    - `physics.manifest.dependency_missing_target`
    - `physics.manifest.dependency_cycle`
 3. Test coverage:
-   - `src/Oxygen/Cooker/Test/Import/BatchCommand_physics_dag_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/BatchCommand_physics_dag_test.cpp`
      - unresolved inferred refs
      - ambiguous inferred producers
      - physics dependency cycle
@@ -824,9 +824,9 @@ Build/test execution in this pass:
        and retains legacy namespace for non-physics-only batches:
      - `input.manifest.job_id_duplicate`
 3. Test coverage added/expanded:
-   - `src/Oxygen/Cooker/Test/Import/ImportSession_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/ImportSession_test.cpp`
      - `ImportSessionTest.AddDiagnosticDuplicateSuppressed`
-   - `src/Oxygen/Cooker/Test/Import/BatchCommand_physics_dag_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/BatchCommand_physics_dag_test.cpp`
      - `PhysicsSidecarDuplicateUnresolvedRefsEmitSingleDependencyUnresolvedDiagnostic`
      - `PhysicsSidecarDuplicateAmbiguousRefsEmitSingleDependencyAmbiguousDiagnostic`
      - `DuplicateMissingDependencyIdEmitsSingleMissingTargetDiagnostic`
@@ -863,11 +863,11 @@ Build/test execution in this pass:
      - `ImportManifest_collision_shape_descriptor_test.cpp`
      - `BatchCommand_physics_dag_test.cpp`
    - scene+physics integration tests:
-     - `src/Oxygen/Content/Test/AssetLoader_scene_test.cpp`
-     - `src/Oxygen/Content/Test/PhysicsSceneLoader_test.cpp`
+     - `src/Oxygen/Content/test/AssetLoader_scene_test.cpp`
+     - `src/Oxygen/Content/test/PhysicsSceneLoader_test.cpp`
    - pak inclusion tests:
-     - `src/Oxygen/Cooker/Test/Pak/PakPlanBuilder_test.cpp`
-     - `src/Oxygen/Cooker/Test/Pak/PakWriter_test.cpp`
+     - `src/Oxygen/Cooker/test/Pak/PakPlanBuilder_test.cpp`
+     - `src/Oxygen/Cooker/test/Pak/PakWriter_test.cpp`
 4. Validation mode:
    - build/test execution is user-run only in this flow.
 5. Closure evidence:
@@ -919,7 +919,7 @@ Build/test execution in this pass:
      - `Examples/Content/physics/park.physics-sidecar.json`
      - `Examples/Content/physics/bin/park_hinge_joint_a.jphbin`
    - regression coverage update:
-     - `src/Oxygen/Content/Test/AssetLoader_scene_test.cpp`
+     - `src/Oxygen/Content/test/AssetLoader_scene_test.cpp`
        now asserts non-zero joint/vehicle `constraint_resource_index` in the
        v7 sidecar load path.
 5. Remaining gate:

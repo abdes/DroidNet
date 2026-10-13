@@ -94,7 +94,9 @@ def resource_dims(texture_desc, descriptor):
     return max(1, width >> mip), max(1, height >> mip)
 
 
-def sample_descriptor(controller, rd, resource_names, texture_descs, descriptor, comp_type):
+def sample_descriptor(
+    controller, rd, resource_names, texture_descs, descriptor, comp_type
+):
     resource_id = safe_getattr(descriptor, "resource")
     if resource_id is None:
         return None
@@ -185,7 +187,9 @@ def append_descriptor_dump(
         )
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     resource_names = resource_id_to_name(controller)
     texture_descs = texture_desc_map(controller)
@@ -206,8 +210,14 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
 
     report.append("analysis_profile=vortex_point_shadow_probe")
     report.append("capture_path={}".format(capture_path))
-    report.append("stage8_draw_events={}".format(",".join(str(r.event_id) for r in stage8_draws)))
-    report.append("stage12_point_draw_events={}".format(",".join(str(r.event_id) for r in point_draws)))
+    report.append(
+        "stage8_draw_events={}".format(",".join(str(r.event_id) for r in stage8_draws))
+    )
+    report.append(
+        "stage12_point_draw_events={}".format(
+            ",".join(str(r.event_id) for r in point_draws)
+        )
+    )
 
     for record in stage8_draws:
         controller.SetFrameEvent(record.event_id, True)
@@ -220,8 +230,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             state.GetDepthTarget(),
             rd.CompType.Depth,
         )
-        report.append("stage8_draw_{}_num_indices={}".format(
-            record.event_id, safe_getattr(record, "numIndices", "")))
+        report.append(
+            "stage8_draw_{}_num_indices={}".format(
+                record.event_id, safe_getattr(record, "numIndices", "")
+            )
+        )
         if depth_sample is None:
             report.append("stage8_draw_{}_depth_present=false".format(record.event_id))
             continue
@@ -252,14 +265,26 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("stage12_point_pixel_readonly_count={}".format(len(pixel_readonly)))
     for index, used_descriptor in enumerate(pixel_readonly):
         append_descriptor_dump(
-            report, controller, rd, resource_names, texture_descs,
-            "stage12_point_pixel_ro_{}".format(index), used_descriptor)
+            report,
+            controller,
+            rd,
+            resource_names,
+            texture_descs,
+            "stage12_point_pixel_ro_{}".format(index),
+            used_descriptor,
+        )
 
     outputs = state.GetOutputTargets()
     report.append("stage12_point_output_count={}".format(len(outputs)))
     for index, descriptor in enumerate(outputs):
         output_sample = sample_descriptor(
-            controller, rd, resource_names, texture_descs, descriptor, rd.CompType.Typeless)
+            controller,
+            rd,
+            resource_names,
+            texture_descs,
+            descriptor,
+            rd.CompType.Typeless,
+        )
         if output_sample is None:
             continue
         report.append(

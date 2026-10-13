@@ -5,7 +5,7 @@ patterns for Lua bindings in `src/Oxygen/Scripting/Bindings`. It is written for
 contributors adding or maintaining bindings and reflects the current Luau C API
 implementation (not sol2).
 
-Companion tests live in `src/Oxygen/Scripting/Test`.
+Companion tests live in `src/Oxygen/Scripting/test`.
 
 ---
 
@@ -497,7 +497,7 @@ For each public function:
 
 ### Step 6 — Write tests
 
-Add or extend a `Bindings_x_test.cpp` in `src/Oxygen/Scripting/Test` covering:
+Add or extend a `Bindings_x_test.cpp` in `src/Oxygen/Scripting/test` covering:
 
 | Test category              | What to verify                                                      |
 | -------------------------- | ------------------------------------------------------------------- |
@@ -544,7 +544,7 @@ Add or extend a `Bindings_x_test.cpp` in `src/Oxygen/Scripting/Test` covering:
 
 ### Tests
 
-`src/Oxygen/Scripting/Test/Bindings_*_test.cpp` — one file per logical binding
+`src/Oxygen/Scripting/test/Bindings_*_test.cpp` — one file per logical binding
 group covering all test categories listed in Section 9.
 
 ---

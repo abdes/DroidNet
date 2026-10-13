@@ -103,11 +103,11 @@ endif()
 # ------------------------------------------------------------------------------
 
 if(OXYGEN_BUILD_TESTS)
-  add_subdirectory("Test")
+  add_subdirectory("test")
 endif()
 
 if(OXYGEN_BUILD_UI_TESTS)
-  target_sources(${META_MODULE_TARGET} PRIVATE "Test/Widgets_ui.cpp")
+  target_sources(${META_MODULE_TARGET} PRIVATE "test/Widgets_ui.cpp")
 endif()
 
 asap_pop_module("${META_MODULE_NAME}")

@@ -64,13 +64,18 @@ from renderdoc_ui_analysis import (  # noqa: E402
 REPORT_SUFFIX = "_texture_probe.txt"
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     resources = resource_id_to_name(controller)
     action_records = collect_action_records(controller)
     target_action = None
     for record in action_records:
-        if record.name == "ID3D12GraphicsCommandList::DrawInstanced()" and "Vortex.Stage9.BasePass" in record.path:
+        if (
+            record.name == "ID3D12GraphicsCommandList::DrawInstanced()"
+            and "Vortex.Stage9.BasePass" in record.path
+        ):
             target_action = record
             break
     if target_action is None:
@@ -88,12 +93,26 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         sub.mip = output.firstMip
         sub.slice = output.firstSlice
         sub.sample = 0
-        min_value, max_value = controller.GetMinMax(output.resource, sub, rd.CompType.Typeless)
-        report.append("output_{}_min_float={}".format(index, list(min_value.floatValue)))
-        report.append("output_{}_max_float={}".format(index, list(max_value.floatValue)))
-        report.append("output_{}_pixelvalue_methods={}".format(index, ",".join(sorted(dir(min_value)))))
-        center = controller.PickPixel(output.resource, 640, 360, sub, rd.CompType.Typeless)
-        report.append("output_{}_center_float={}".format(index, list(center.floatValue)))
+        min_value, max_value = controller.GetMinMax(
+            output.resource, sub, rd.CompType.Typeless
+        )
+        report.append(
+            "output_{}_min_float={}".format(index, list(min_value.floatValue))
+        )
+        report.append(
+            "output_{}_max_float={}".format(index, list(max_value.floatValue))
+        )
+        report.append(
+            "output_{}_pixelvalue_methods={}".format(
+                index, ",".join(sorted(dir(min_value)))
+            )
+        )
+        center = controller.PickPixel(
+            output.resource, 640, 360, sub, rd.CompType.Typeless
+        )
+        report.append(
+            "output_{}_center_float={}".format(index, list(center.floatValue))
+        )
 
 
 def main():

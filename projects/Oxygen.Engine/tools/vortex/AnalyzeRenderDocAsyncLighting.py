@@ -17,7 +17,8 @@ def build_report(controller, report, capture_path, report_path):
     actions = collect_action_records(controller)
     names = resource_id_to_name(controller)
     tone = [
-        action for action in actions
+        action
+        for action in actions
         if action.flags & rd.ActionFlags.Drawcall
         and "Vortex.PostProcess.Tonemap" in action.path
     ]
@@ -43,7 +44,8 @@ def build_report(controller, report, capture_path, report_path):
     report.append("scene_color={}".format(image_path))
 
     composite = [
-        action for action in actions
+        action
+        for action in actions
         if action.flags & rd.ActionFlags.Drawcall
         and "Vortex.CompositingTask[label=Composite Blend Texture" in action.path
     ]
@@ -57,7 +59,8 @@ def build_report(controller, report, capture_path, report_path):
         report.append("presented_color={}".format(presented_path))
 
     spot_draws = [
-        action for action in actions
+        action
+        for action in actions
         if action.flags & rd.ActionFlags.Drawcall
         and "Vortex.Stage12.SpotLight" in action.path
     ]
@@ -71,8 +74,11 @@ def build_report(controller, report, capture_path, report_path):
             minimum, maximum = controller.GetMinMax(
                 texture.resourceId, rd.Subresource(), rd.CompType.Depth
             )
-            report.append("spot_depth_range={},{}".format(
-                minimum.floatValue[0], maximum.floatValue[0]))
+            report.append(
+                "spot_depth_range={},{}".format(
+                    minimum.floatValue[0], maximum.floatValue[0]
+                )
+            )
     report.append("capture={}".format(capture_path))
     report.append("analysis_result=pass")
 

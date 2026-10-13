@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
-
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -15,6 +13,7 @@
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 

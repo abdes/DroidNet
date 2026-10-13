@@ -14,14 +14,13 @@
 #include <string>
 #include <string_view>
 
+#include "AssetDumpHelpers.h"
+#include "AssetDumper.h"
+#include "PrintUtils.h"
 #include <fmt/format.h>
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Data/PakFormat.h>
-
-#include "AssetDumpHelpers.h"
-#include "AssetDumper.h"
-#include "PrintUtils.h"
 
 namespace oxygen::content::pakdump {
 

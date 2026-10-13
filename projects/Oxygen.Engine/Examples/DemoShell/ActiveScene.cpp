@@ -9,12 +9,12 @@
 #include <memory>
 #include <string>
 
+#include "DemoShell/ActiveScene.h"
+#include "DemoShell/Internal/SceneControlBlock.h"
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/Scene.h>
-
-#include "DemoShell/ActiveScene.h"
-#include "DemoShell/Internal/SceneControlBlock.h"
 
 namespace oxygen::examples {
 

@@ -5,10 +5,11 @@
 
 #pragma once
 
-#include "OxCo/BatchExecution/Common/shared_utilities.h"
 #include <iostream>
 #include <optional>
 #include <vector>
+
+#include "OxCo/BatchExecution/Common/shared_utilities.h"
 
 //===----------------------------------------------------------------------===//
 // Forward Declarations

@@ -270,7 +270,9 @@ def build_report(
 
     summary_records = []
     if summary_binding is not None:
-        summary_records = read_summary_records(controller, summary_binding["binding"]["id"])
+        summary_records = read_summary_records(
+            controller, summary_binding["binding"]["id"]
+        )
 
     partition_details = []
     job_totals = []
@@ -398,7 +400,9 @@ def build_report(
     full_input_eligibility_job_count = sum(
         1 for value in job_totals if value == total_input_draw_records
     )
-    rejected_job_count = sum(1 for value in job_totals if value < total_input_draw_records)
+    rejected_job_count = sum(
+        1 for value in job_totals if value < total_input_draw_records
+    )
     aggregate_full_replay_draws = len(job_totals) * total_input_draw_records
     total_rejected_draws = aggregate_full_replay_draws - total_emitted_draws
 
@@ -416,17 +420,15 @@ def build_report(
     report.append(
         "partition_binding_source={}".format(partition_binding["binding_source"])
     )
-    report.append(
-        "partition_binding_event_id={}".format(partition_binding["event_id"])
-    )
+    report.append("partition_binding_event_id={}".format(partition_binding["event_id"]))
     if summary_binding is not None:
-        report.append("summary_binding_name={}".format(summary_binding["binding"]["name"]))
+        report.append(
+            "summary_binding_name={}".format(summary_binding["binding"]["name"])
+        )
         report.append(
             "summary_binding_source={}".format(summary_binding["binding_source"])
         )
-        report.append(
-            "summary_binding_event_id={}".format(summary_binding["event_id"])
-        )
+        report.append("summary_binding_event_id={}".format(summary_binding["event_id"]))
     report.append("job_count={}".format(len(job_totals)))
     report.append("partition_count={}".format(len(partition_details)))
     report.append("valid_job_count={}".format(valid_job_count))
@@ -446,9 +448,7 @@ def build_report(
     )
     report.append(
         "average_eligible_draws_per_job={:.6f}".format(
-            float(total_emitted_draws) / float(len(job_totals))
-            if job_totals
-            else 0.0
+            float(total_emitted_draws) / float(len(job_totals)) if job_totals else 0.0
         )
     )
     report.append(

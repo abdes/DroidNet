@@ -18,7 +18,7 @@
 projects/Oxygen.Engine/design/vortex/milestones/**/evidence/** -text -diff
 
 # Preserve the captured scene input byte-for-byte.
-projects/Oxygen.Engine/Examples/LightBench/Test/Data/auto-full-scene.json -text -diff
+projects/Oxygen.Engine/Examples/LightBench/test/Data/auto-full-scene.json -text -diff
 
 ###############################
 # Git Large File System (LFS) #

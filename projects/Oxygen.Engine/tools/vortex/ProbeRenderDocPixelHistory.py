@@ -65,14 +65,19 @@ from renderdoc_ui_analysis import (  # noqa: E402
 REPORT_SUFFIX = "_pixel_history_probe.txt"
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     actions = collect_action_records(controller)
     resources = resource_id_to_name(controller)
 
     draw = None
     for record in actions:
-        if record.name == "ID3D12GraphicsCommandList::DrawInstanced()" and "Vortex.Stage9.BasePass" in record.path:
+        if (
+            record.name == "ID3D12GraphicsCommandList::DrawInstanced()"
+            and "Vortex.Stage9.BasePass" in record.path
+        ):
             draw = record
             break
     if draw is None:
@@ -95,11 +100,19 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     sub.sample = 0
 
     for x, y in [(640, 360), (640, 500), (640, 250), (400, 400), (900, 400)]:
-        history = controller.PixelHistory(target.resource, x, y, sub, rd.CompType.Typeless)
+        history = controller.PixelHistory(
+            target.resource, x, y, sub, rd.CompType.Typeless
+        )
         report.append("pixel_{}_{}_count={}".format(x, y, len(history)))
         if history:
-            report.append("pixel_{}_{}_first_type={}".format(x, y, type(history[0]).__name__))
-            report.append("pixel_{}_{}_first_methods={}".format(x, y, ",".join(sorted(dir(history[0])))))
+            report.append(
+                "pixel_{}_{}_first_type={}".format(x, y, type(history[0]).__name__)
+            )
+            report.append(
+                "pixel_{}_{}_first_methods={}".format(
+                    x, y, ",".join(sorted(dir(history[0])))
+                )
+            )
             report.append("pixel_{}_{}_first_repr={}".format(x, y, repr(history[0])))
 
 

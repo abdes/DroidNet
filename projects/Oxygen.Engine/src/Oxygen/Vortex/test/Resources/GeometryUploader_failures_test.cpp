@@ -1,0 +1,273 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <cstdint>
+#include <expected>
+#include <memory>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/Vertex.h>
+#include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/RendererTag.h>
+#include <Oxygen/Vortex/Resources/GeometryUploader.h>
+#include <Oxygen/Vortex/ScenePrep/GeometryRef.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
+#include <Oxygen/Vortex/Upload/StagingProvider.h>
+#include <Oxygen/Vortex/Upload/Types.h>
+#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+#include <Oxygen/Vortex/Upload/UploadPolicy.h>
+#include <Oxygen/Vortex/Upload/UploaderTag.h>
+#include <Oxygen/Vortex/test/Fakes/AssetLoader.h>
+#include <Oxygen/Vortex/test/Fakes/Graphics.h>
+#include <Oxygen/Vortex/test/Fixtures/GeometryUploaderTest.h>
+
+namespace {
+
+using oxygen::kInvalidShaderVisibleIndex;
+using oxygen::frame::Slot;
+using oxygen::graphics::SingleQueueStrategy;
+using oxygen::vortex::internal::RendererTagFactory;
+using oxygen::vortex::resources::GeometryUploader;
+using oxygen::vortex::testing::GeometryUploaderTest;
+using oxygen::vortex::testing::MakeGeometryAssetKey;
+using oxygen::vortex::upload::StagingProvider;
+using oxygen::vortex::upload::UploadError;
+
+[[nodiscard]] auto MakeValidTriangleMesh(std::string_view name, bool indexed)
+  -> std::shared_ptr<const oxygen::data::Mesh>
+{
+  const auto vertices = std::vector<oxygen::data::Vertex> {
+    oxygen::data::Vertex {
+      .position = glm::vec3 { 0.0F, 0.0F, 0.0F, },
+      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F, },
+      .texcoord = glm::vec2 { 0.0F, 0.0F, },
+      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F, },
+    },
+    oxygen::data::Vertex {
+      .position = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F, },
+      .texcoord = glm::vec2 { 1.0F, 0.0F, },
+      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F, },
+    },
+    oxygen::data::Vertex {
+      .position = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .normal = glm::vec3 { 0.0F, 0.0F, 1.0F, },
+      .texcoord = glm::vec2 { 0.0F, 1.0F, },
+      .tangent = glm::vec3 { 1.0F, 0.0F, 0.0F, },
+      .bitangent = glm::vec3 { 0.0F, 1.0F, 0.0F, },
+      .color = glm::vec4 { 1.0F, 1.0F, 1.0F, 1.0F, },
+    },
+  };
+
+  const auto indices = std::vector<std::uint32_t> {
+    0U,
+    1U,
+    2U,
+  };
+  auto builder = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, name)
+                   .WithVertices(vertices);
+  if (indexed) {
+    builder.WithIndices(indices);
+  }
+
+  oxygen::data::pak::geometry::MeshViewDesc view_desc {
+    .first_index = 0,
+    // MeshView enforces index_count > 0 even if the mesh has no index buffer.
+    // For non-indexed meshes (no indices provided), keep a non-zero draw range
+    // so MeshView construction succeeds; IndexBufferView will be empty.
+    .index_count = 3U,
+    .first_vertex = 0,
+    .vertex_count = 3U,
+  };
+
+  auto mesh
+    = builder
+        .BeginSubMesh("default", oxygen::data::MaterialAsset::CreateDefault())
+        .WithMeshView(view_desc)
+        .EndSubMesh()
+        .Build();
+
+  return {
+    std::move(mesh),
+  };
+}
+
+//! GetShaderVisibleIndices must return invalid indices while not resident.
+NOLINT_TEST_F(
+  GeometryUploaderTest, NotResidentGetShaderVisibleIndicesReturnsInvalidIndices)
+{
+  // Arrange
+  auto& uploader = GeoUploader();
+  BeginFrame(Slot {
+    0,
+  });
+
+  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto asset_key = MakeGeometryAssetKey("failures_not_resident_indices");
+  const oxygen::vortex::sceneprep::GeometryRef geometry {
+    .asset_key = asset_key,
+    .lod_index = oxygen::data::LodIndex {},
+    .mesh = mesh,
+  };
+
+  const auto handle = uploader.GetOrAllocate(geometry);
+
+  // Act: do not call EnsureFrameResources explicitly.
+  const auto indices = uploader.GetShaderVisibleIndices(handle);
+
+  // Assert
+  EXPECT_EQ(indices.vertex_srv_index, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(indices.index_srv_index, kInvalidShaderVisibleIndex);
+  EXPECT_GT(uploader.GetPendingUploadCount(), 0U);
+}
+
+//=== Failure injection (via failing staging provider) ----------------------//
+
+class AlwaysFailStagingProvider final : public StagingProvider {
+public:
+  explicit AlwaysFailStagingProvider(oxygen::vortex::upload::UploaderTag tag)
+    : StagingProvider(tag)
+  {
+  }
+
+  auto Allocate(oxygen::SizeBytes /*size*/, std::string_view /*debug_name*/)
+    -> std::expected<Allocation, UploadError> override
+  {
+    return std::unexpected(UploadError::kStagingAllocFailed);
+  }
+
+  auto RetireCompleted(oxygen::vortex::upload::UploaderTag /*unused*/,
+    oxygen::vortex::upload::FenceValue /*completed*/) -> void override
+  {
+  }
+};
+
+//! If upload submission fails, indices remain invalid and code does not crash.
+NOLINT_TEST(GeometryUploaderFailuresStandaloneTest,
+  UploadSubmissionFailureIndicesRemainInvalidAndNoCrash)
+{
+  // Arrange
+  auto gfx = std::make_shared<oxygen::vortex::testing::FakeGraphics>();
+  gfx->CreateCommandQueues(SingleQueueStrategy());
+
+  auto upload_coordinator
+    = std::make_unique<oxygen::vortex::upload::UploadCoordinator>(
+      oxygen::observer_ptr {
+        gfx.get(),
+      },
+      oxygen::vortex::upload::DefaultUploadPolicy());
+
+  auto staging = std::make_shared<AlwaysFailStagingProvider>(
+    oxygen::vortex::upload::internal::UploaderTagFactory::Get());
+
+  auto asset_loader
+    = std::make_unique<oxygen::vortex::testing::FakeAssetLoader>();
+
+  auto geo_uploader = std::make_unique<GeometryUploader>(
+    oxygen::observer_ptr {
+      gfx.get(),
+    },
+    oxygen::observer_ptr {
+      upload_coordinator.get(),
+    },
+    oxygen::observer_ptr {
+      staging.get(),
+    },
+    oxygen::observer_ptr {
+      asset_loader.get(),
+    });
+
+  upload_coordinator->OnFrameStart(RendererTagFactory::Get(),
+    Slot {
+      0,
+    });
+  geo_uploader->OnFrameStart(RendererTagFactory::Get(),
+    Slot {
+      0,
+    });
+
+  const auto mesh = MakeValidTriangleMesh("Tri", true);
+
+  const auto asset_key
+    = MakeGeometryAssetKey("failures_submission_failure_indices");
+  const oxygen::vortex::sceneprep::GeometryRef geometry {
+    .asset_key = asset_key,
+    .lod_index = oxygen::data::LodIndex {},
+    .mesh = mesh,
+  };
+
+  const auto handle = geo_uploader->GetOrAllocate(geometry);
+
+  // Act
+  geo_uploader->EnsureFrameResources();
+  const auto indices = geo_uploader->GetShaderVisibleIndices(handle);
+
+  // Assert
+  EXPECT_EQ(indices.vertex_srv_index, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(indices.index_srv_index, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(geo_uploader->GetPendingUploadCount(), 0U);
+}
+
+//! Logical cancellation leaves indices invalid and permits retry.
+NOLINT_TEST_F(
+  GeometryUploaderTest, UploadCompletionFailureIndicesRemainInvalidAndNoCrash)
+{
+  // Arrange
+  auto& uploader = GeoUploader();
+
+  BeginFrame(Slot {
+    0,
+  });
+
+  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto asset_key
+    = MakeGeometryAssetKey("failures_completion_failure_indices");
+  const oxygen::vortex::sceneprep::GeometryRef geometry {
+    .asset_key = asset_key,
+    .lod_index = oxygen::data::LodIndex {},
+    .mesh = mesh,
+  };
+
+  const auto handle = uploader.GetOrAllocate(geometry);
+
+  uploader.EnsureFrameResources();
+  ASSERT_GT(uploader.GetPendingUploadCount(), 0U);
+
+  for (const auto& ticket : uploader.GetPendingUploadTickets()) {
+    ASSERT_TRUE(ticket.Cancel());
+  }
+  uploader.OnFrameStart(RendererTagFactory::Get(),
+    Slot {
+      0,
+    });
+
+  const auto indices_0 = uploader.GetShaderVisibleIndices(handle);
+
+  // Assert: still not resident.
+  EXPECT_EQ(indices_0.vertex_srv_index, kInvalidShaderVisibleIndex);
+  EXPECT_EQ(indices_0.index_srv_index, kInvalidShaderVisibleIndex);
+
+  // Act: Ensure again should retry scheduling.
+  uploader.EnsureFrameResources();
+
+  // Assert: retry did not crash and produced new pending work.
+  EXPECT_GT(uploader.GetPendingUploadCount(), 0U);
+}
+
+} // namespace

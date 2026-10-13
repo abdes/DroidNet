@@ -14,25 +14,23 @@
 #include <string>
 #include <unordered_map>
 
-#include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Data/AssetType.h>
-
-#include <Oxygen/OxCo/Co.h>
-
 #include "AssetDumper.h"
-#include "DumpContext.h"
-#include "PrintUtils.h"
-
 #include "CollisionShapeAssetDumper.h"
 #include "DefaultAssetDumper.h"
+#include "DumpContext.h"
 #include "GeometryAssetDumper.h"
 #include "InputActionAssetDumper.h"
 #include "InputMappingContextAssetDumper.h"
 #include "MaterialAssetDumper.h"
 #include "PhysicsMaterialAssetDumper.h"
 #include "PhysicsSceneAssetDumper.h"
+#include "PrintUtils.h"
 #include "SceneAssetDumper.h"
 #include "ScriptAssetDumper.h"
+
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content {
 class PakFile;

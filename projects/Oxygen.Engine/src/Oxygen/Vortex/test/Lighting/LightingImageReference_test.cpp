@@ -1,0 +1,1578 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <algorithm>
+#include <array>
+#include <bit>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <functional>
+#include <limits>
+#include <memory>
+#include <numbers>
+#include <optional>
+#include <span>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <glm/common.hpp>
+#include <glm/ext/quaternion_trigonometric.hpp>
+#include <glm/ext/vector_float2.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/ext/vector_uint2.hpp>
+#include <glm/geometric.hpp>
+#include <glm/matrix.hpp>
+#include <glm/trigonometric.hpp>
+
+#include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Scene/Types/Flags.h>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/quaternion.hpp>
+
+#include <Oxygen/Base/NamedType.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/GeometryIndices.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/Graphics/Common/FrameCaptureController.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
+#include <Oxygen/Scene/Camera/Orthographic.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/PointLight.h>
+#include <Oxygen/Scene/Light/SpotLight.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Lighting/LightingService.h>
+#include <Oxygen/Vortex/Lighting/Types/ForwardLocalLightRecord.h>
+#include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/Shadows/Passes/Generated.ShadowPassContracts.h>
+#include <Oxygen/Vortex/Shadows/ShadowService.h>
+#include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowFrameData.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
+// ON_CALL names the GetModuleByType mock this header declares.
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/ViewExtension.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestEngine.h> // IWYU pragma: keep
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestTags.h>
+#include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/test/Lighting/Reference/Photometry.h>
+#include <Oxygen/Vortex/test/Lighting/UnculledLightingFixture.h>
+
+namespace oxygen::vortex::testing {
+namespace {
+
+  //! Sets a node's local flag; fails the test when the node has no flags.
+  auto SetNodeFlag(scene::SceneNode& node, const scene::SceneNodeFlags flag,
+    const bool value) -> void
+  {
+    auto flags = node.GetFlags();
+    if (!flags.has_value()) {
+      FAIL() << "Expected the node's flags";
+    }
+    flags->get().SetLocalValue(flag, value);
+  }
+  using FixtureLightIndex
+    = NamedType<std::size_t, struct FixtureLightIndexTag, Comparable>;
+  using Rgb = std::array<double, 3>;
+  using Image = std::vector<exposure::Pixel>;
+
+  class LightingImageReferenceTest : public UnculledLightingGpuTest {
+  protected:
+    static constexpr std::uint32_t kWidth = 96U;
+    static constexpr std::uint32_t kHeight = 64U;
+    static constexpr std::size_t kLightCount = 33U;
+
+    auto SetUp() -> void override
+    {
+      initial_scene_capacity = kLightCount + 2U;
+      UnculledLightingGpuTest::SetUp();
+      view.viewport.width = static_cast<float>(kWidth);
+      view.viewport.height = static_cast<float>(kHeight);
+      auto lens = camera.GetCameraAs<scene::PerspectiveCamera>();
+      if (!lens.has_value()) {
+        FAIL() << "Expected a perspective camera";
+      }
+      lens->get().SetViewport(view.viewport);
+      lens->get().SetAspectRatio(static_cast<float>(kWidth) / kHeight);
+      auto output = CreateRegisteredTexture({
+        .width = kWidth,
+        .height = kHeight,
+        .format = Format::kRGBA32Float,
+        .is_render_target = true,
+        .clear_value = {},
+        .initial_state = graphics::ResourceStates::kCommon,
+      });
+      framebuffer = Backend().CreateFramebuffer(
+        graphics::FramebufferDesc {}.AddColorAttachment(output));
+      ASSERT_NE(framebuffer, nullptr);
+    }
+  };
+
+  NOLINT_TEST_F(
+    LightingImageReferenceTest, OrthographicHighlightsStayUniformAcrossTheImage)
+  {
+    for (unsigned channel = 0; channel < 3U; ++channel) {
+      auto sun
+        = scene->CreateNode("Directional channel " + std::to_string(channel));
+      auto light = std::make_unique<scene::DirectionalLight>();
+      light->Common().casts_shadows = false;
+      constexpr auto kChannelColors = std::array {
+        glm::vec3 { 1.0F, 0.0F, 0.0F },
+        glm::vec3 { 0.0F, 1.0F, 0.0F },
+        glm::vec3 { 0.0F, 0.0F, 1.0F },
+      };
+      light->Common().color_rgb = kChannelColors.at(channel);
+      light->SetIntensityLux(1.0F);
+      ASSERT_TRUE(sun.AttachLight(std::move(light)));
+      sun.GetTransform().SetLocalRotation(
+        glm::quat { 0.70710678F, 0.70710678F, 0, 0 });
+    }
+    unsigned checked_images = 0;
+    for (const bool forward : { false, true }) {
+      for (const auto domain : {
+             data::MaterialDomain::kOpaque,
+             data::MaterialDomain::kMasked,
+             data::MaterialDomain::kAlphaBlended,
+           }) {
+        data::pak::render::MaterialAssetDesc desc {};
+        desc.material_domain = static_cast<std::uint8_t>(domain);
+        desc.flags = data::pak::render::kMaterialFlag_NoTextureSampling
+          | data::pak::render::kMaterialFlag_DoubleSided;
+        if (domain == data::MaterialDomain::kMasked) {
+          desc.flags |= data::pak::render::kMaterialFlag_AlphaTest;
+        }
+        for (auto& value : desc.base_color) {
+          value = 1.0F;
+        }
+        desc.metalness = data::Unorm16 { 1.0F };
+        desc.roughness = data::Unorm16 { 0.25F };
+        desc.ambient_occlusion = data::Unorm16 { 1.0F };
+        desc.normal_scale = 1.0F;
+        desc.uv_scale[0] = desc.uv_scale[1] = 1.0F;
+        mesh_node.GetRenderable().SetMaterialOverride(
+          oxygen::data::LodIndex { 0 }, oxygen::data::SubmeshIndex { 0 },
+          std::make_shared<data::MaterialAsset>(
+            data::AssetKey::FromVirtualPath("/test/Lighting/Orthographic-"
+              + std::to_string(++material_sequence) + ".omat"),
+            desc, std::vector<data::ShaderReference> {}));
+        for (unsigned variant = 0; variant < 4U; ++variant) {
+          SCOPED_TRACE(forward);
+          SCOPED_TRACE(static_cast<int>(domain));
+          SCOPED_TRACE(variant);
+          camera.GetTransform().SetLocalPosition(
+            glm::vec3 { variant == 1U ? 0.3F : 0.0F, 0, 0 });
+          camera.GetTransform().SetLocalRotation(variant == 2U
+              ? glm::quat { 0.99500417F, 0, 0.09983342F, 0 }
+              : glm::quat { 1, 0, 0, 0 });
+          if (variant == 3U) {
+            auto lens = std::make_unique<scene::PerspectiveCamera>();
+            lens->SetViewport(view.viewport);
+            lens->SetAspectRatio(static_cast<float>(kWidth) / kHeight);
+            ASSERT_TRUE(camera.ReplaceCamera(std::move(lens)));
+          } else {
+            auto lens = std::make_unique<scene::OrthographicCamera>();
+            lens->SetExtents(-0.5F, 0.5F, -0.4F, 0.4F, 0.1F, 10.0F);
+            lens->SetViewport(view.viewport);
+            ASSERT_TRUE(camera.ReplaceCamera(std::move(lens)));
+          }
+          ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
+          ASSERT_NE(probe->color, nullptr);
+          const auto pixels = ReadFloatTexture(*probe->color);
+          float minimum = std::numeric_limits<float>::max();
+          float maximum = 0.0F;
+          // Interior rectangle is covered by the plane for every camera pose.
+          for (std::uint32_t y = kHeight / 3U; y < 2U * kHeight / 3U; ++y) {
+            for (std::uint32_t x = kWidth / 3U; x < 2U * kWidth / 3U; ++x) {
+              const auto value = pixels.at((y * kWidth) + x).at(0);
+              ASSERT_TRUE(std::isfinite(value));
+              // Independent colored sources must all reach the shared draw.
+              // Equal material channels and directions give equal RGB response.
+              for (std::size_t channel = 1; channel < 3U; ++channel) {
+                EXPECT_NEAR(pixels.at((y * kWidth) + x).at(channel), value,
+                  (0.005F * value) + 2.0e-5F);
+              }
+              minimum = std::min(minimum, value);
+              maximum = std::max(maximum, value);
+            }
+          }
+          ASSERT_GT(minimum, 0.0F);
+          if (variant == 3U) {
+            EXPECT_GT(maximum - minimum, 0.05F * maximum);
+          } else {
+            EXPECT_LE(maximum - minimum, (0.005F * maximum) + 2.0e-5F);
+          }
+          ++checked_images;
+        }
+      }
+    }
+    RecordProperty("projection_images", checked_images);
+  }
+
+  using FiniteEmitterImageTest = exposure::ExposureLightingGpuTest;
+
+  NOLINT_TEST_F(FiniteEmitterImageTest,
+    LightGatherUsesUpdatedHierarchyAndPreservesUnscaledSpotDirection)
+  {
+    auto parent = scene->CreateNode("Light parent");
+    ASSERT_TRUE(parent.GetTransform().SetLocalPosition({ 1, 2, -5 }));
+    ASSERT_TRUE(parent.GetTransform().SetLocalScale({ 2, 3, 4 }));
+    ASSERT_TRUE(parent.GetTransform().SetLocalRotation(
+      glm::quat { 0.70710678F, 0, 0, 0.70710678F }));
+    auto point_node = scene->CreateChildNode(parent, "Child point");
+    auto spot_node = scene->CreateChildNode(parent, "Child spot");
+    if (!point_node.has_value() || !spot_node.has_value()) {
+      FAIL() << "Expected both child light nodes";
+    }
+    auto& point = *point_node;
+    auto& spot = *spot_node;
+    auto point_light = std::make_unique<scene::PointLight>();
+    point_light->SetRange(50);
+    point_light->Common().casts_shadows = false;
+    auto spot_light = std::make_unique<scene::SpotLight>();
+    spot_light->SetRange(50);
+    spot_light->Common().casts_shadows = false;
+    ASSERT_TRUE(point.AttachLight(std::move(point_light)));
+    ASSERT_TRUE(spot.AttachLight(std::move(spot_light)));
+    for (auto* node : { &point, &spot }) {
+      ASSERT_TRUE(node->GetTransform().SetLocalPosition({ 1, 2, 3 }));
+      ASSERT_TRUE(node->GetTransform().SetLocalRotation(
+        glm::quat { 0.92387953F, 0.38268343F, 0, 0 }));
+    }
+    SetSurface(data::MaterialDomain::kOpaque);
+    auto observed = std::vector<FrameLocalLightSelection> {};
+    probe->inspect = [&](const auto&, const auto&, unsigned) -> auto {
+      const auto* owner
+        = RendererPublicationProbe::GetSceneRenderer(*renderer_);
+      observed
+        = RendererPublicationProbe::GetFrameLightSelection(*owner).local_lights;
+    };
+    for (const unsigned phase : { 0U, 1U, 2U }) {
+      if (phase == 1U) {
+        ASSERT_TRUE(parent.GetTransform().SetLocalPosition({ 2, -3, -4 }));
+      } else if (phase == 2U) {
+        for (auto* node : { &point, &spot }) {
+          ASSERT_NO_FATAL_FAILURE(SetNodeFlag(
+            *node, scene::SceneNodeFlags::kIgnoreParentTransform, true));
+        }
+      }
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 2U));
+      ASSERT_EQ(observed.size(), 2U);
+      constexpr auto kExpectedPositions = std::array {
+        glm::vec3 { -5, 4, 7 },
+        glm::vec3 { -4, -1, 8 },
+        glm::vec3 { 1, 2, 3 },
+      };
+      const auto expected_position = kExpectedPositions.at(phase);
+      const auto expect_near
+        = [](const glm::vec3& actual, const glm::vec3& expected) -> void {
+        constexpr auto kTolerance = 2.0e-5F;
+        EXPECT_NEAR(actual.x, expected.x, kTolerance);
+        EXPECT_NEAR(actual.y, expected.y, kTolerance);
+        EXPECT_NEAR(actual.z, expected.z, kTolerance);
+      };
+      for (const auto& light : observed) {
+        expect_near(light.position, expected_position);
+        if (light.kind == LocalLightKind::kSpot) {
+          expect_near(light.direction,
+            phase == 2U ? glm::vec3 { 0, -0.70710678F, -0.70710678F }
+                        : glm::vec3 { 0.70710678F, 0, -0.70710678F });
+        }
+      }
+    }
+  }
+
+  NOLINT_TEST_F(FiniteEmitterImageTest,
+    MixedPunctualAndFinitePointPipelinesPreserveForwardReference)
+  {
+    auto nodes = std::vector<scene::SceneNode> {};
+    for (unsigned index = 0; index < 4U; ++index) {
+      auto node = scene->CreateNode("Mixed source " + std::to_string(index));
+      auto light = std::make_unique<scene::PointLight>();
+      light->SetRange(3.0F);
+      light->SetLuminousFluxLm(10.0F);
+      light->Common().casts_shadows = false;
+      ASSERT_TRUE(node.AttachLight(std::move(light)));
+      ASSERT_TRUE(node.GetTransform().SetLocalPosition(
+        { 0.25F * static_cast<float>(index), 0.0F,
+          index == 2U ? -1.05F : -0.25F }));
+      nodes.push_back(node);
+    }
+    SetSurface(data::MaterialDomain::kOpaque);
+    auto forward = false;
+    probe->inspect = [&](const auto&, const auto&, unsigned) -> auto {
+      if (forward) {
+        return;
+      }
+      const auto& state
+        = RendererPublicationProbe::GetLightingService(*renderer_)
+            ->GetLastDeferredLightingState();
+      EXPECT_EQ(state.point_light_count, 4U);
+      EXPECT_EQ(state.punctual_point_light_draw_count, 2U);
+      EXPECT_LE(state.pipeline_bind_count, state.directional_draw_count + 2U);
+    };
+    for (const bool reverse : { false, true }) {
+      const auto radii = std::array { 0.0F, 0.5F, 1.0e-6F, 0.0F };
+      for (unsigned index = 0; index < 4U; ++index) {
+        ASSERT_TRUE(nodes.at(index).EditLight<scene::PointLight>(
+          [&](auto& light) -> auto {
+            light.SetSourceRadius(radii.at(reverse ? 3U - index : index));
+          }));
+      }
+      forward = false;
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+      const auto deferred = ReadFloatTexture(*probe->color);
+      forward = true;
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(true, 0.0F, 3U));
+      const auto reference = ReadFloatTexture(*probe->color);
+      ASSERT_EQ(deferred.size(), reference.size());
+      for (std::size_t pixel = 0; pixel < reference.size(); ++pixel) {
+        for (unsigned channel = 0; channel < 3U; ++channel) {
+          EXPECT_GT(reference.at(pixel).at(channel), 0.0F);
+          EXPECT_NEAR(deferred.at(pixel).at(channel),
+            reference.at(pixel).at(channel),
+            (reference.at(pixel).at(channel) * 0.005F) + 2.0e-5F);
+        }
+      }
+    }
+  }
+
+  NOLINT_TEST_F(FiniteEmitterImageTest,
+    CenterSupportAndAnalyticHorizonAgreeAcrossProductionPaths)
+  {
+    auto node = scene->CreateNode("Finite source");
+    unsigned cases = 0;
+    for (unsigned scenario = 0; scenario < 3U; ++scenario) {
+      const auto positions = std::array {
+        glm::vec3 { 0, 0, 0 },
+        glm::vec3 { 1, 0, -1.1F },
+        glm::vec3 { 0.7F, 0, 0 },
+      };
+      node.GetTransform().SetLocalPosition(positions.at(scenario));
+      node.GetTransform().SetLocalRotation(
+        glm::quat { 0.70710678F, 0.70710678F, 0, 0 });
+      std::array<double, 3> deferred {};
+      for (const bool forward : { false, true }) {
+        for (const auto domain : {
+               data::MaterialDomain::kOpaque,
+               data::MaterialDomain::kMasked,
+               data::MaterialDomain::kAlphaBlended,
+             }) {
+          SetSurface(domain);
+          for (const bool finite : { false, true }) {
+            SCOPED_TRACE(scenario);
+            SCOPED_TRACE(forward);
+            SCOPED_TRACE(static_cast<int>(domain));
+            SCOPED_TRACE(finite);
+            if (scenario == 2U) {
+              auto light = std::make_unique<scene::SpotLight>();
+              light->SetRange(3.0F);
+              light->SetInnerConeAngleRadians(0.2F);
+              light->SetOuterConeAngleRadians(0.3F);
+              light->SetSourceRadius(finite ? 0.6F : 0.0F);
+              light->SetLuminousFluxLm(10.0F);
+              light->Common().casts_shadows = false;
+              if (node.GetLightAs<scene::SpotLight>().has_value()) {
+                ASSERT_TRUE(node.ReplaceLight(std::move(light)));
+              } else {
+                node.DetachLight();
+                ASSERT_TRUE(node.AttachLight(std::move(light)));
+              }
+            } else {
+              auto light = std::make_unique<scene::PointLight>();
+              light->SetRange(scenario == 0U ? 0.8F : 2.0F);
+              light->SetSourceRadius(finite ? 0.5F : 0.0F);
+              light->SetLuminousFluxLm(10.0F);
+              light->Common().casts_shadows = false;
+              if (node.GetLightAs<scene::PointLight>().has_value()) {
+                ASSERT_TRUE(node.ReplaceLight(std::move(light)));
+              } else {
+                ASSERT_TRUE(node.AttachLight(std::move(light)));
+              }
+            }
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
+            ASSERT_NE(probe->color, nullptr);
+            const auto pixels = ReadFloatTexture(*probe->color);
+            ASSERT_EQ(pixels.size(), 1U);
+            const auto measured = pixels.at(0).at(0);
+            ASSERT_TRUE(std::isfinite(measured));
+            if (!finite || scenario != 1U) {
+              EXPECT_EQ(measured, 0.0F);
+            } else {
+              EXPECT_GT(measured, 1.0e-6F);
+              auto slot = 0U;
+              if (domain == data::MaterialDomain::kMasked) {
+                slot = 1U;
+              } else if (domain == data::MaterialDomain::kAlphaBlended) {
+                slot = 2U;
+              }
+              if (forward) {
+                EXPECT_NEAR(measured, deferred.at(slot),
+                  (0.02 * deferred.at(slot)) + 2.0e-5);
+              } else {
+                deferred.at(slot) = measured;
+              }
+            }
+            ++cases;
+          }
+        }
+      }
+    }
+    RecordProperty("finite_support_images", cases);
+  }
+
+  class FiniteEmitterShadowImageTest
+    : public exposure::ExposureLightingGpuTest {
+  protected:
+    auto AdditionalCapabilities() const -> CapabilitySet override
+    {
+      return RendererCapabilityFamily::kShadowing;
+    }
+  };
+
+  NOLINT_TEST_F(FiniteEmitterShadowImageTest,
+    ProjectedAndCubeVisibilityReachForwardAndDeferredReceivers)
+  {
+    auto blocker = scene->CreateNode("Off-camera shadow blocker");
+    blocker.GetRenderable().SetGeometry(
+      mesh_node.GetRenderable().GetGeometry());
+    blocker.GetRenderable().SetMaterialOverride(oxygen::data::LodIndex { 0 },
+      oxygen::data::SubmeshIndex { 0 }, MakeEmissiveMaterial(0.0F));
+    blocker.GetTransform().SetLocalScale(glm::vec3 { 0.1F });
+    blocker.GetTransform().SetLocalPosition(glm::vec3 { 0.5F, 0.0F, -0.4F });
+    expected_draws = 2U;
+    auto node = scene->CreateNode("Cube shadow source");
+    node.GetTransform().SetLocalPosition(glm::vec3 { 1, 0, 0 });
+    node.GetTransform().SetLocalRotation(
+      glm::quat { 0.70710678F, 0.70710678F, 0, 0 });
+    unsigned cases = 0;
+    for (const unsigned source_kind : { 0U, 1U, 2U }) {
+      const bool spot = source_kind != 0U;
+      for (const bool forward : { false, true }) {
+        for (const auto domain : {
+               data::MaterialDomain::kOpaque,
+               data::MaterialDomain::kMasked,
+               data::MaterialDomain::kAlphaBlended,
+             }) {
+          SetSurface(domain);
+          float baseline = 0.0F;
+          for (const bool shadowed : { false, true }) {
+            SCOPED_TRACE(spot);
+            SCOPED_TRACE(forward);
+            SCOPED_TRACE(static_cast<int>(domain));
+            SCOPED_TRACE(shadowed);
+            node.DetachLight();
+            if (spot) {
+              auto light = std::make_unique<scene::SpotLight>();
+              light->SetInnerConeAngleRadians(0.25F);
+              light->SetOuterConeAngleRadians(
+                source_kind == 1U ? std::numbers::pi_v<float> / 2.0F : 1.2F);
+              light->SetRange(3.0F);
+              light->SetSourceRadius(0.1F);
+              light->SetLuminousFluxLm(10.0F);
+              light->Common().casts_shadows = shadowed;
+              ASSERT_TRUE(node.AttachLight(std::move(light)));
+            } else {
+              auto light = std::make_unique<scene::PointLight>();
+              light->SetRange(3.0F);
+              light->SetSourceRadius(0.1F);
+              light->SetLuminousFluxLm(10.0F);
+              light->Common().casts_shadows = shadowed;
+              ASSERT_TRUE(node.AttachLight(std::move(light)));
+            }
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
+            const auto pixels = ReadFloatTexture(*probe->color);
+            ASSERT_EQ(pixels.size(), 1U);
+            const auto measured = pixels.at(0).at(0);
+            ASSERT_TRUE(std::isfinite(measured));
+            if (shadowed) {
+              EXPECT_LT(measured, 0.1F * baseline);
+              ASSERT_NO_FATAL_FAILURE(SetNodeFlag(
+                mesh_node, scene::SceneNodeFlags::kReceivesShadows, false));
+              ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 2U));
+              const auto unshadowed
+                = ReadFloatTexture(*probe->color).at(0).at(0);
+              EXPECT_NEAR(unshadowed, baseline, (0.005F * baseline) + 2.0e-5F);
+              ASSERT_NO_FATAL_FAILURE(SetNodeFlag(
+                mesh_node, scene::SceneNodeFlags::kReceivesShadows, true));
+            } else {
+              ASSERT_GT(measured, 1.0e-6F);
+              baseline = measured;
+            }
+            ++cases;
+          }
+        }
+      }
+    }
+    RecordProperty("finite_shadow_images", cases);
+  }
+
+  //! Directional light grazing the fixture receiver (plane z = -1, normal +Z)
+  //! in a 64x64 view; renders shadowed/unshadowed visibility ratios.
+  class GrazingDirectionalShadowTest : public FiniteEmitterShadowImageTest {
+  protected:
+    static constexpr std::uint32_t kSize = 64U;
+
+    auto SetUp() -> void override
+    {
+      FiniteEmitterShadowImageTest::SetUp();
+      view.viewport.width = static_cast<float>(kSize);
+      view.viewport.height = static_cast<float>(kSize);
+      auto lens = camera.GetCameraAs<scene::PerspectiveCamera>();
+      if (!lens.has_value()) {
+        FAIL() << "Expected a perspective camera";
+      }
+      lens->get().SetViewport(view.viewport);
+      lens->get().SetAspectRatio(1.0F);
+      auto output = CreateRegisteredTexture({
+        .width = kSize,
+        .height = kSize,
+        .format = Format::kRGBA32Float,
+        .is_render_target = true,
+        .clear_value = {},
+        .initial_state = graphics::ResourceStates::kCommon,
+      });
+      framebuffer = Backend().CreateFramebuffer(
+        graphics::FramebufferDesc {}.AddColorAttachment(output));
+      ASSERT_NE(framebuffer, nullptr);
+      SetSurface(data::MaterialDomain::kOpaque);
+      sun = scene->CreateNode("Grazing sun");
+      auto directional = std::make_unique<scene::DirectionalLight>();
+      directional->SetIntensityLux(10.0F);
+      directional->SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
+      ASSERT_TRUE(sun.AttachLight(std::move(directional)));
+    }
+
+    //! Light arrives `elevation_deg` above the receiver plane.
+    auto SetSunDirection(const float elevation_deg, const float azimuth_deg)
+      -> void
+    {
+      const float elevation = glm::radians(elevation_deg);
+      const float azimuth = glm::radians(azimuth_deg);
+      const glm::vec3 to_source { std::cos(elevation) * std::cos(azimuth),
+        std::cos(elevation) * std::sin(azimuth), std::sin(elevation) };
+      sun.GetTransform().SetLocalRotation(
+        glm::rotation(space::move::Forward, -to_source));
+    }
+
+    //! Shadowed over unshadowed red radiance per pixel; NaN where nothing
+    //! lit is visible.
+    auto RenderVisibility(const bool forward, std::vector<float>& visibility)
+      -> void
+    {
+      std::vector<exposure::Pixel> lit;
+      for (const bool shadowed : { false, true }) {
+        ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>(
+          [shadowed](
+            auto& light) -> auto { light.Common().casts_shadows = shadowed; }));
+        ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
+        auto pixels = ReadFloatTexture(*probe->color);
+        ASSERT_EQ(pixels.size(), std::size_t { kSize } * kSize);
+        if (!shadowed) {
+          lit = std::move(pixels);
+          continue;
+        }
+        visibility.assign(
+          pixels.size(), std::numeric_limits<float>::quiet_NaN());
+        for (std::size_t i = 0; i < pixels.size(); ++i) {
+          const float reference = lit.at(i).at(0);
+          if (reference > 1.0e-6F) {
+            visibility.at(i) = pixels.at(i).at(0) / reference;
+          }
+        }
+      }
+    }
+
+    //! Places a copy of the receiver triangle, `scale_fraction` of its size,
+    //! with its plane `height_fraction` of the receiver distance above it.
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
+    auto AddBlocker(const float receiver_scale, const float scale_fraction,
+      const float height_fraction) -> void
+    {
+      if (!blocker.IsAlive()) {
+        blocker = scene->CreateNode("Shadow blocker");
+        blocker.GetRenderable().SetGeometry(
+          mesh_node.GetRenderable().GetGeometry());
+        expected_draws = 2U;
+      }
+      const float blocker_scale = scale_fraction * receiver_scale;
+      blocker.GetTransform().SetLocalScale(glm::vec3 { blocker_scale });
+      // The triangle lies at local z = -1.
+      blocker.GetTransform().SetLocalPosition(glm::vec3 { 0.0F, 0.0F,
+        blocker_scale - ((1.0F - height_fraction) * receiver_scale) });
+    }
+
+    scene::SceneNode sun;
+    scene::SceneNode blocker;
+  };
+
+  //! A receiver lit at a grazing angle must not shadow itself. The receiver is
+  //! the only caster, so any shadowing on it is acne.
+  NOLINT_TEST_F(
+    GrazingDirectionalShadowTest, GrazingLightDoesNotShadowItsOwnReceiver)
+  {
+    unsigned cases = 0;
+    // Distance coarsens the cascade texels.
+    for (const float scale : { 1.0F, 10.0F, 40.0F, 100.0F }) {
+      mesh_node.GetTransform().SetLocalScale(glm::vec3 { scale });
+      for (const float elevation_deg :
+        { 1.0F, 2.0F, 3.0F, 4.0F, 7.0F, 12.0F, 25.0F }) {
+        for (const float azimuth_deg : { 0.0F, 17.0F, 33.0F, 52.0F, 71.0F }) {
+          for (const bool forward : { false, true }) {
+            SCOPED_TRACE(scale);
+            SCOPED_TRACE(elevation_deg);
+            SCOPED_TRACE(azimuth_deg);
+            SCOPED_TRACE(forward);
+            SetSunDirection(elevation_deg, azimuth_deg);
+            std::vector<float> visibility;
+            ASSERT_NO_FATAL_FAILURE(RenderVisibility(forward, visibility));
+            const auto covered = std::ranges::count_if(
+              visibility, [](const float v) -> bool { return !std::isnan(v); });
+            const auto darkened = std::ranges::count_if(
+              visibility, [](const float v) -> bool { return v < 0.98F; });
+            ASSERT_GT(covered, kSize * kSize / 4U);
+            EXPECT_EQ(darkened, 0) << darkened << " of " << covered
+                                   << " receiver pixels shadow themselves";
+            ++cases;
+          }
+        }
+      }
+    }
+    RecordProperty("grazing_shadow_images", cases);
+  }
+
+  //! The receiver bias must not hide real occlusion. Both receivers lie
+  //! inside the shadow distance; with the earlier nearest-texel filter and no
+  //! receiver-plane bias they occluded 44 and 63 pixels.
+  //! Reads back a view's GPU receiver fit: its loose and fitted cascades and
+  //! its receiver mask, mirroring `ShadowReceiverFit.hlsli`.
+  class ReceiverFitShadowTest : public GrazingDirectionalShadowTest {
+  protected:
+    static constexpr std::uint32_t kMaskResolution
+      = shadows::kShadowReceiverMaskResolution;
+    static constexpr std::uint32_t kMaskTiles
+      = shadows::kShadowReceiverMaskTiles;
+    static constexpr std::uint32_t kMaskBlock
+      = shadows::kShadowReceiverMaskBlock;
+
+    struct ReceiverFit {
+      std::vector<ShadowCascadeBinding> loose;
+      std::vector<ShadowCascadeBinding> fitted;
+      std::vector<std::uint32_t> mask;
+    };
+
+    auto SetUp() -> void override
+    {
+      GrazingDirectionalShadowTest::SetUp();
+      ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>(
+        [](auto& light) -> auto { light.Common().casts_shadows = true; }));
+    }
+
+    auto ReadReceiverFit() -> std::optional<ReceiverFit>
+    {
+      const auto* shadows = RendererPublicationProbe::GetShadowService(
+        *RendererPublicationProbe::GetSceneRenderer(*renderer_));
+      const auto view_id = ViewId { surface_view_id };
+      const auto data = shadows->InspectShadowData(view_id);
+      const auto inspection = shadows->InspectReceiverFit(view_id);
+      if (data == nullptr || !inspection.has_value()) {
+        return std::nullopt;
+      }
+      const auto count = inspection->cascade_count;
+      const auto records = GetReadbackManager()->ReadBufferNow(
+        *inspection->records, { 0U, count * sizeof(ShadowCascadeBinding) });
+      const auto mask
+        = GetReadbackManager()->ReadBufferNow(*inspection->receiver_mask,
+          { 0U, count * kMaskBlock * sizeof(std::uint32_t) });
+      if (!records.has_value() || !mask.has_value()) {
+        return std::nullopt;
+      }
+      auto fit = ReceiverFit {
+        .loose = data->cascades,
+        .fitted = std::vector<ShadowCascadeBinding>(count),
+        .mask = std::vector<std::uint32_t>(
+          static_cast<std::size_t>(count) * kMaskBlock),
+      };
+      std::memcpy(fit.fitted.data(), records->data(), records->size());
+      std::memcpy(fit.mask.data(), mask->data(), mask->size());
+      return fit;
+    }
+
+    //! The receiver tile `world_position` projects to in `cascade`.
+    static auto MaskTile(const ReceiverFit& fit, const std::size_t cascade,
+      const glm::vec3& world_position) -> std::uint32_t
+    {
+      const auto clip = fit.fitted.at(cascade).light_view_projection
+        * glm::vec4 { world_position, 1.0F };
+      const auto uv = glm::clamp(
+        glm::vec2 { (clip.x * 0.5F) + 0.5F, 0.5F - (clip.y * 0.5F) }, 0.0F,
+        1.0F);
+      const auto tile
+        = glm::min(glm::uvec2 { uv * static_cast<float>(kMaskResolution) },
+          glm::uvec2 { kMaskResolution - 1U });
+      return fit.mask.at((cascade * kMaskBlock) + kMaskTiles
+        + (tile.y * kMaskResolution) + tile.x);
+    }
+
+    //! Whether a receiver tile lies under the light-space footprint of the box
+    //! `center` +- `extent` in `cascade`, as caster culling tests it.
+    static auto MaskCovers(const ReceiverFit& fit, const std::size_t cascade,
+      const glm::vec3& center, const glm::vec3& extent) -> bool
+    {
+      auto lo = glm::vec2 { std::numeric_limits<float>::max() };
+      auto hi = glm::vec2 { std::numeric_limits<float>::lowest() };
+      for (unsigned corner = 0U; corner < 8U; ++corner) {
+        const auto signs = glm::vec3 { (corner & 1U) != 0U ? 1.0F : -1.0F,
+          (corner & 2U) != 0U ? 1.0F : -1.0F,
+          (corner & 4U) != 0U ? 1.0F : -1.0F };
+        const auto clip = fit.fitted.at(cascade).light_view_projection
+          * glm::vec4 { center + (signs * extent), 1.0F };
+        lo = glm::min(lo, glm::vec2 { clip });
+        hi = glm::max(hi, glm::vec2 { clip });
+      }
+      const auto uv_min
+        = glm::vec2 { (lo.x * 0.5F) + 0.5F, 0.5F - (hi.y * 0.5F) };
+      const auto uv_max
+        = glm::vec2 { (hi.x * 0.5F) + 0.5F, 0.5F - (lo.y * 0.5F) };
+      if (uv_max.x < 0.0F || uv_max.y < 0.0F || uv_min.x > 1.0F
+        || uv_min.y > 1.0F) {
+        return false;
+      }
+      const auto to_tile = [](const glm::vec2 uv) -> glm::uvec2 {
+        return glm::min(glm::uvec2 { glm::clamp(uv, 0.0F, 1.0F)
+                          * static_cast<float>(kMaskResolution) },
+          glm::uvec2 { kMaskResolution - 1U });
+      };
+      const auto tile_lo = to_tile(uv_min);
+      const auto tile_hi = to_tile(uv_max);
+      for (auto y = tile_lo.y; y <= tile_hi.y; ++y) {
+        for (auto x = tile_lo.x; x <= tile_hi.x; ++x) {
+          if (fit.mask.at(
+                (cascade * kMaskBlock) + kMaskTiles + (y * kMaskResolution) + x)
+            != 0U) {
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+  };
+
+  //! The receivers lie at view depth ~1, all in the first cascade. It narrows
+  //! to them in quarter-octave steps, snapped to its texel grid, and marks
+  //! them; cascades without receivers keep their loose bounds and stay empty.
+  NOLINT_TEST_F(ReceiverFitShadowTest, CascadesNarrowToTheVisibleReceivers)
+  {
+    SetSunDirection(60.0F, 0.0F);
+    ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+    const auto fit = ReadReceiverFit();
+    ASSERT_HAS_VALUE(fit);
+    ASSERT_EQ(fit->fitted.size(), fit->loose.size());
+    ASSERT_GE(fit->loose.size(), 2U);
+
+    const auto& loose = fit->loose.front();
+    const auto& fitted = fit->fitted.front();
+    // A narrower cascade: its texel shrinks by a whole number of quarter
+    // octaves, and only its light-space x and y change.
+    const auto ratio = loose.world_texel_size / fitted.world_texel_size;
+    const auto steps = 4.0F * std::log2(ratio);
+    EXPECT_GE(steps, 1.0F - 1.0e-3F);
+    EXPECT_NEAR(steps, std::round(steps), 1.0e-3F);
+    const auto narrow = fitted.light_view_projection
+      * glm::inverse(loose.light_view_projection);
+    EXPECT_NEAR(narrow[0][0], ratio, 1.0e-3F * ratio);
+    EXPECT_NEAR(narrow[1][1], ratio, 1.0e-3F * ratio);
+    EXPECT_NEAR(narrow[2][2], 1.0F, 1.0e-4F);
+    EXPECT_NEAR(narrow[1][0], 0.0F, 1.0e-4F);
+    EXPECT_NEAR(narrow[0][1], 0.0F, 1.0e-4F);
+    EXPECT_NEAR(narrow[3][2], 0.0F, 1.0e-4F);
+    // Its center sits on its own texel grid in world-anchored light space.
+    // The offset comes from a receiver projected through both matrices:
+    // fitted clip = ratio * loose clip + offset.
+    const auto resolution = 1.0F / loose.inverse_resolution.x;
+    const auto fitted_half = 0.5F * fitted.world_texel_size * resolution;
+    const auto probe_point = glm::vec4 { 0.0F, 0.0F, -1.0F, 1.0F };
+    const auto offset = glm::vec2 { fitted.light_view_projection * probe_point }
+      - (ratio * glm::vec2 { loose.light_view_projection * probe_point });
+    const auto center = -offset * fitted_half;
+    const auto anchored
+      = (loose.light_space_origin + center) / fitted.world_texel_size;
+    EXPECT_NEAR(anchored.x, std::round(anchored.x), 2.0e-2F);
+    EXPECT_NEAR(anchored.y, std::round(anchored.y), 2.0e-2F);
+    // The receiver at the view center is inside it and marked.
+    const auto receiver = glm::vec3 { 0.0F, 0.0F, -1.0F };
+    const auto clip
+      = fitted.light_view_projection * glm::vec4 { receiver, 1.0F };
+    EXPECT_LT(std::abs(clip.x), 1.0F);
+    EXPECT_LT(std::abs(clip.y), 1.0F);
+    EXPECT_NE(MaskTile(*fit, 0U, receiver), 0U);
+
+    for (std::size_t cascade = 1U; cascade < fit->loose.size(); ++cascade) {
+      SCOPED_TRACE(cascade);
+      EXPECT_EQ(fit->fitted.at(cascade).light_view_projection,
+        fit->loose.at(cascade).light_view_projection);
+      const auto tiles = std::span(fit->mask).subspan(
+        (cascade * kMaskBlock) + kMaskTiles, kMaskTiles);
+      EXPECT_TRUE(std::ranges::all_of(
+        tiles, [](const std::uint32_t tile) -> bool { return tile == 0U; }));
+    }
+  }
+
+  //! A caster whose shadow lands outside the view is culled by the receiver
+  //! mask and changes nothing in the image; a caster shadowing a visible
+  //! receiver still draws.
+  NOLINT_TEST_F(ReceiverFitShadowTest, CastersWithoutVisibleShadowsAreCulled)
+  {
+    SetSunDirection(60.0F, 0.0F);
+    AddBlocker(1.0F, 0.25F, 0.5F);
+    std::vector<float> without_far;
+    ASSERT_NO_FATAL_FAILURE(RenderVisibility(false, without_far));
+
+    // Same height, well beyond the view's half-width: its shadow, shifted
+    // toward -x by the 60 degree light, still lands outside the view.
+    auto lens = camera.GetCameraAs<scene::PerspectiveCamera>();
+    ASSERT_TRUE(lens.has_value());
+    const auto half_width = std::tan(0.5F * lens->get().GetFieldOfView());
+    const auto near_position = blocker.GetTransform().GetLocalPosition();
+    ASSERT_HAS_VALUE(near_position);
+    const auto far_position
+      = *near_position + glm::vec3 { 4.0F * half_width, 0.0F, 0.0F };
+    auto far_blocker = scene->CreateNode("Far shadow blocker");
+    far_blocker.GetRenderable().SetGeometry(
+      mesh_node.GetRenderable().GetGeometry());
+    far_blocker.GetTransform().SetLocalScale(glm::vec3 { 0.25F });
+    far_blocker.GetTransform().SetLocalPosition(far_position);
+    expected_draws = 3U;
+    std::vector<float> with_far;
+    ASSERT_NO_FATAL_FAILURE(RenderVisibility(false, with_far));
+
+    const auto occluded = std::ranges::count_if(
+      with_far, [](const float v) -> bool { return v < 0.5F; });
+    EXPECT_GT(occluded, kSize * kSize / 128U);
+    ASSERT_EQ(with_far.size(), without_far.size());
+    for (std::size_t i = 0; i < with_far.size(); ++i) {
+      if (!std::isnan(without_far.at(i))) {
+        EXPECT_NEAR(with_far.at(i), without_far.at(i), 1.0e-5F) << i;
+      }
+    }
+
+    const auto fit = ReadReceiverFit();
+    ASSERT_HAS_VALUE(fit);
+    // The blockers are the receiver triangle, [-2, 2] x [-2, 2] at local
+    // z = -1, scaled by 0.25 about their origin.
+    const auto box_extent = glm::vec3 { 0.5F, 0.5F, 0.0F };
+    const auto box_center = [](const glm::vec3& position) -> glm::vec3 {
+      return position + glm::vec3 { 0.0F, 0.0F, -0.25F };
+    };
+    EXPECT_TRUE(MaskCovers(*fit, 0U, box_center(*near_position), box_extent));
+    EXPECT_FALSE(MaskCovers(*fit, 0U, box_center(far_position), box_extent));
+  }
+
+  NOLINT_TEST_F(GrazingDirectionalShadowTest, BlockerStillCastsItsShadow)
+  {
+    SetSunDirection(60.0F, 0.0F);
+    for (const float scale : { 1.0F, 40.0F }) {
+      SCOPED_TRACE(scale);
+      mesh_node.GetTransform().SetLocalScale(glm::vec3 { scale });
+      AddBlocker(scale, 0.25F, 0.5F);
+      std::vector<float> visibility;
+      ASSERT_NO_FATAL_FAILURE(RenderVisibility(false, visibility));
+      const auto occluded = std::ranges::count_if(
+        visibility, [](const float v) -> bool { return v < 0.5F; });
+      EXPECT_GT(occluded, kSize * kSize / 128U);
+    }
+  }
+
+  //! A caster's material world-position offset moves its shadow exactly as a
+  //! transform does: shadow depth positions meshes with the camera passes'
+  //! helper, including the offset, so both views rasterize the same geometry.
+  NOLINT_TEST_F(GrazingDirectionalShadowTest, WorldPositionOffsetMovesShadow)
+  {
+    SetSunDirection(60.0F, 0.0F);
+    AddBlocker(1.0F, 0.25F, 0.5F);
+    const auto rest = blocker.GetTransform().GetLocalPosition();
+    ASSERT_HAS_VALUE(rest);
+    constexpr auto kOffset = glm::vec3 { 0.2F, 0.0F, 0.0F };
+
+    std::vector<float> at_rest;
+    ASSERT_NO_FATAL_FAILURE(RenderVisibility(false, at_rest));
+    blocker.GetTransform().SetLocalPosition(*rest + kOffset);
+    std::vector<float> moved;
+    ASSERT_NO_FATAL_FAILURE(RenderVisibility(false, moved));
+    blocker.GetTransform().SetLocalPosition(*rest);
+
+    auto motion = scenesync::RuntimeMotionProducerModule {};
+    ON_CALL(*owned_test_engine_,
+      GetModuleByType(scenesync::RuntimeMotionProducerModule::ClassTypeId()))
+      .WillByDefault(::testing::Return(
+        std::optional<std::reference_wrapper<engine::EngineModule>> {
+          motion,
+        }));
+    motion.UpsertMaterialMotionInput(observer_ptr<const scene::Scene> {
+                                       scene.get(),
+                                     },
+      scenesync::RuntimeMaterialMotionInputState {
+        .key = scenesync::RuntimeMaterialMotionKey {
+          .node_handle = blocker.GetHandle(),
+          .geometry_asset_key
+          = blocker.GetRenderable().GetGeometry()->GetAssetKey(),
+          .lod_index = data::LodIndex { 0U },
+          .submesh_index = data::SubmeshIndex { 0U },
+        },
+        .resolved_material_asset_key = {},
+        .contract_hash = 1U,
+        .has_runtime_wpo_input = true,
+        .has_runtime_motion_vector_input = false,
+        .capabilities = { .uses_world_position_offset = true,
+          .uses_motion_vector_world_offset = true,
+          .uses_temporal_responsiveness = false,
+          .has_pixel_animation = false, },
+        .wpo_parameter_block0 = { kOffset.x, kOffset.y, kOffset.z, 0.0F },
+        .motion_vector_parameter_block0 = {},
+      });
+    auto publish_frame = engine::FrameContext {};
+    publish_frame.SetScene(observer_ptr { scene.get() });
+    publish_frame.SetCurrentPhase(
+      core::PhaseId::kPublishViews, engine::internal::EngineTagFactory::Get());
+    auto loop = co::testing::TestEventLoop {};
+    co::Run(loop, motion.OnPublishViews(observer_ptr { &publish_frame }));
+    std::vector<float> offset;
+    ASSERT_NO_FATAL_FAILURE(RenderVisibility(false, offset));
+    ON_CALL(*owned_test_engine_, GetModuleByType(::testing::_))
+      .WillByDefault(::testing::Return(std::nullopt));
+
+    const auto differ = [](const std::vector<float>& lhs,
+                          const std::vector<float>& rhs) -> std::ptrdiff_t {
+      constexpr float kTolerance = 0.05F;
+      auto count = std::ptrdiff_t { 0 };
+      for (std::size_t i = 0; i < lhs.size(); ++i) {
+        const bool lhs_lit = !std::isnan(lhs.at(i));
+        const bool rhs_lit = !std::isnan(rhs.at(i));
+        if (lhs_lit != rhs_lit
+          || (lhs_lit && std::abs(lhs.at(i) - rhs.at(i)) > kTolerance)) {
+          ++count;
+        }
+      }
+      return count;
+    };
+    // The offset must move the shadow; allow edge pixels where the two
+    // placements round differently.
+    constexpr auto kEdgePixels = std::ptrdiff_t { kSize * kSize / 512U };
+    ASSERT_GT(differ(at_rest, moved), kEdgePixels);
+    EXPECT_LE(differ(offset, moved), kEdgePixels);
+  }
+
+  //! Occlusion culling changes no shadowed pixel. A small caster sits between
+  //! the blocker and the receiver, hidden behind the blocker from the camera
+  //! and from the sun: camera occlusion culls it from the image, the cascades
+  //! cull it from the shadow maps, and the shadowed image stays bit-identical.
+  NOLINT_TEST_F(GrazingDirectionalShadowTest, OcclusionLeavesShadowsUnchanged)
+  {
+    AddBlocker(1.0F, 0.25F, 0.5F);
+    auto hidden = scene->CreateNode("Hidden caster");
+    hidden.GetRenderable().SetGeometry(mesh_node.GetRenderable().GetGeometry());
+    constexpr float kHiddenScale = 0.05F;
+    constexpr float kHiddenHeight = 0.3F;
+    hidden.GetTransform().SetLocalScale(glm::vec3 { kHiddenScale });
+    // The triangle lies at local z = -1.
+    hidden.GetTransform().SetLocalPosition(
+      glm::vec3 { 0.0F, 0.0F, kHiddenScale - (1.0F - kHiddenHeight) });
+    expected_draws = 3U;
+
+    const auto same_bits = [](const std::vector<float>& lhs,
+                             const std::vector<float>& rhs) -> bool {
+      return std::ranges::equal(
+        lhs, rhs, [](const float a, const float b) -> bool {
+          return std::bit_cast<std::uint32_t>(a)
+            == std::bit_cast<std::uint32_t>(b);
+        });
+    };
+    SetSunDirection(60.0F, 0.0F);
+    for (const bool forward : { false, true }) {
+      SCOPED_TRACE(forward);
+      std::vector<float> culled_off;
+      ASSERT_EQ(fixture_console.Execute("vtx.occlusion.enable false").status,
+        commands::ExecutionStatus::kOk);
+      ASSERT_NO_FATAL_FAILURE(RenderVisibility(forward, culled_off));
+      std::vector<float> culled_on;
+      ASSERT_EQ(fixture_console.Execute("vtx.occlusion.enable true").status,
+        commands::ExecutionStatus::kOk);
+      ASSERT_NO_FATAL_FAILURE(RenderVisibility(forward, culled_on));
+      ASSERT_EQ(fixture_console.Execute("vtx.occlusion.enable false").status,
+        commands::ExecutionStatus::kOk);
+      const auto shadowed = std::ranges::count_if(
+        culled_off, [](const float v) -> bool { return v < 0.5F; });
+      EXPECT_GT(shadowed, 0);
+      EXPECT_TRUE(same_bits(culled_off, culled_on));
+    }
+  }
+
+  //! Contact shadows must not let a receiver shadow itself. Point-sampled
+  //! depth of the receiver's own neighbouring pixels is not an occluder; the
+  //! receiver is the only geometry, so contact-on and contact-off images must
+  //! match across distances, viewing angles and grazing light directions.
+  NOLINT_TEST_F(
+    GrazingDirectionalShadowTest, ContactShadowsDoNotShadowTheirOwnReceiver)
+  {
+    unsigned cases = 0;
+    for (const float view_angle_deg : { 20.0F, 40.0F, 60.0F, 75.0F }) {
+      for (const float distance : { 1.0F, 2.0F, 5.0F, 20.0F }) {
+        for (const float grazing_deg : { 50.0F, 65.0F, 80.0F, 86.0F }) {
+          SCOPED_TRACE(view_angle_deg);
+          SCOPED_TRACE(distance);
+          // Tilt the receiver plane (local z = -1) about X by the view angle
+          // and centre it `distance` in front of the camera.
+          const float tilt = glm::radians(view_angle_deg);
+          const float scale = distance;
+          mesh_node.GetTransform().SetLocalScale(glm::vec3 { scale });
+          mesh_node.GetTransform().SetLocalRotation(
+            glm::angleAxis(tilt, glm::vec3 { 1.0F, 0.0F, 0.0F }));
+          mesh_node.GetTransform().SetLocalPosition(glm::vec3 { 0.0F,
+            -scale * std::sin(tilt), -distance + (scale * std::cos(tilt)) });
+          const glm::vec3 normal { 0.0F, -std::sin(tilt), std::cos(tilt) };
+          // Light 80 degrees from the receiver normal, across the receiver.
+          SCOPED_TRACE(grazing_deg);
+          const float grazing = glm::radians(grazing_deg);
+          const glm::vec3 to_source
+            = glm::normalize((normal * std::cos(grazing))
+              + (glm::vec3 { 1.0F, 0.0F, 0.0F } * std::sin(grazing)));
+          sun.GetTransform().SetLocalRotation(
+            glm::rotation(space::move::Forward, -to_source));
+
+          std::vector<exposure::Pixel> without_contact;
+          for (const bool contact : { false, true }) {
+            ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>(
+              [contact](auto& light) -> auto {
+                light.Common().casts_shadows = true;
+                light.Common().shadow.contact_shadows = contact;
+              }));
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+            auto pixels = ReadFloatTexture(*probe->color);
+            ASSERT_EQ(pixels.size(), std::size_t { kSize } * kSize);
+            if (!contact) {
+              without_contact = std::move(pixels);
+              continue;
+            }
+            unsigned covered = 0;
+            unsigned darkened = 0;
+            for (std::size_t i = 0; i < pixels.size(); ++i) {
+              const float reference = without_contact.at(i).at(0);
+              if (reference <= 1.0e-6F) {
+                continue;
+              }
+              ++covered;
+              darkened += pixels.at(i).at(0) < 0.98F * reference ? 1U : 0U;
+            }
+            ASSERT_GT(covered, kSize * kSize / 8U);
+            EXPECT_EQ(darkened, 0U)
+              << darkened << " of " << covered
+              << " receiver pixels contact-shadow themselves";
+          }
+          ++cases;
+        }
+      }
+    }
+    RecordProperty("contact_self_shadow_images", cases);
+  }
+
+  //! Off the view axis, a receiver seen head-on is still steep to the axis:
+  //! its own point-sampled depth lies up to half a pixel times the sine of
+  //! the normal-to-axis angle off its plane, not the normal-to-eye-ray angle.
+  //! In a wide view, receivers well off-axis and facing the eye must not
+  //! contact-shadow themselves.
+  NOLINT_TEST_F(
+    GrazingDirectionalShadowTest, ContactShadowsSpareOffAxisReceivers)
+  {
+    auto lens = camera.GetCameraAs<scene::PerspectiveCamera>();
+    if (!lens.has_value()) {
+      FAIL() << "Expected a perspective camera";
+    }
+    lens->get().SetFieldOfView(glm::radians(130.0F));
+    unsigned cases = 0;
+    for (const float off_axis_deg : { 35.0F, 55.0F }) {
+      for (const float distance : { 2.0F, 10.0F }) {
+        for (const float grazing_deg : { 65.0F, 80.0F }) {
+          SCOPED_TRACE(off_axis_deg);
+          SCOPED_TRACE(distance);
+          SCOPED_TRACE(grazing_deg);
+          // The receiver plane (local z = -1, normal +Z) faces the camera
+          // along the eye ray `off_axis_deg` from the view axis (-Z).
+          const float off_axis = glm::radians(off_axis_deg);
+          const glm::vec3 eye { std::sin(off_axis), 0.0F, -std::cos(off_axis) };
+          const glm::vec3 normal = -eye;
+          const float scale = 0.3F * distance;
+          mesh_node.GetTransform().SetLocalScale(glm::vec3 { scale });
+          mesh_node.GetTransform().SetLocalRotation(
+            glm::angleAxis(-off_axis, glm::vec3 { 0.0F, 1.0F, 0.0F }));
+          mesh_node.GetTransform().SetLocalPosition(
+            (eye * distance) + (normal * scale));
+          const float grazing = glm::radians(grazing_deg);
+          const glm::vec3 to_source
+            = glm::normalize((normal * std::cos(grazing))
+              + (glm::vec3 { 0.0F, 1.0F, 0.0F } * std::sin(grazing)));
+          sun.GetTransform().SetLocalRotation(
+            glm::rotation(space::move::Forward, -to_source));
+
+          std::vector<exposure::Pixel> without_contact;
+          for (const bool contact : { false, true }) {
+            ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>(
+              [contact](auto& light) -> auto {
+                light.Common().casts_shadows = true;
+                light.Common().shadow.contact_shadows = contact;
+              }));
+            ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+            auto pixels = ReadFloatTexture(*probe->color);
+            ASSERT_EQ(pixels.size(), std::size_t { kSize } * kSize);
+            if (!contact) {
+              without_contact = std::move(pixels);
+              continue;
+            }
+            unsigned covered = 0;
+            unsigned darkened = 0;
+            for (std::size_t i = 0; i < pixels.size(); ++i) {
+              const float reference = without_contact.at(i).at(0);
+              if (reference <= 1.0e-6F) {
+                continue;
+              }
+              ++covered;
+              darkened += pixels.at(i).at(0) < 0.98F * reference ? 1U : 0U;
+            }
+            ASSERT_GT(covered, kSize * kSize / 32U);
+            EXPECT_EQ(darkened, 0U)
+              << darkened << " of " << covered
+              << " receiver pixels contact-shadow themselves";
+          }
+          ++cases;
+        }
+      }
+    }
+    RecordProperty("contact_off_axis_images", cases);
+  }
+
+  //! A thin gap is what contact shadows exist for: a blocker 1 cm above the
+  //! receiver shadows it through the contact trace even with cascades unable
+  //! to resolve the gap.
+  NOLINT_TEST_F(GrazingDirectionalShadowTest, ContactShadowsResolveThinGaps)
+  {
+    // The receiver sits 1 m away, beyond a 0.3 m cascade range, so only the
+    // contact trace can see the 1 cm gap. The sun 5 degrees above the plane
+    // displaces the shadow about 11 cm beside the blocker's own image.
+    mesh_node.GetTransform().SetLocalScale(glm::vec3 { 1.0F });
+    AddBlocker(1.0F, 0.25F, 0.01F);
+    ASSERT_TRUE(sun.EditLight<scene::DirectionalLight>([](auto& light) -> auto {
+      light.CascadedShadows().max_shadow_distance = 0.3F;
+    }));
+    SetSunDirection(5.0F, 0.0F);
+    std::vector<exposure::Pixel> without_contact;
+    for (const bool contact : { false, true }) {
+      ASSERT_TRUE(
+        sun.EditLight<scene::DirectionalLight>([contact](auto& light) -> auto {
+          light.Common().casts_shadows = true;
+          light.Common().shadow.contact_shadows = contact;
+        }));
+      ASSERT_NO_FATAL_FAILURE(RenderSurface(false, 0.0F, 3U));
+      auto pixels = ReadFloatTexture(*probe->color);
+      if (!contact) {
+        without_contact = std::move(pixels);
+        continue;
+      }
+      unsigned darkened = 0;
+      for (std::size_t i = 0; i < pixels.size(); ++i) {
+        darkened
+          += pixels.at(i).at(0) < 0.5F * without_contact.at(i).at(0) ? 1U : 0U;
+      }
+      EXPECT_GT(darkened, kSize * kSize / 64U)
+        << "contact shadows darkened " << darkened << " pixels";
+    }
+  }
+
+  NOLINT_TEST_F(LightingImageReferenceTest, MixedLocalLightsMatchSerialImages)
+  {
+    constexpr std::size_t light_count = kLightCount;
+    constexpr std::size_t pixel_count
+      = static_cast<std::size_t>(kWidth) * kHeight;
+    auto nodes = std::vector<scene::SceneNode> {};
+    nodes.reserve(light_count);
+    auto all = std::vector<FixtureLightIndex> {};
+    all.reserve(light_count);
+    auto active = std::array<bool, light_count> {};
+    auto authored = std::array<ForwardLocalLightRecord, light_count> {};
+    const auto position = [](const FixtureLightIndex light) -> glm::vec3 {
+      const auto index = light.get();
+      const auto row = index / 7U;
+      return {
+        (static_cast<float>(index % 7U) - 3.0F) * 0.25F,
+        (static_cast<float>(row) - 2.0F) * 0.2F,
+        0.0F,
+      };
+    };
+    for (std::size_t index = 0U; index < light_count; ++index) {
+      auto node
+        = scene->CreateNode("Image reference light " + std::to_string(index));
+      node.GetTransform().SetLocalPosition(
+        position(FixtureLightIndex { index }));
+      const auto tint = std::array {
+        glm::vec3 { 0.2F, 0.5F, 1.0F },
+        glm::vec3 { 1.0F, 0.25F, 0.1F },
+        glm::vec3 { 0.1F, 1.0F, 0.4F },
+      }.at(index % 3U);
+      const auto initialize = [&](auto& light) -> void {
+        light.Common().affects_world = false;
+        light.Common().casts_shadows = false;
+        light.Common().color_rgb = tint;
+        light.Common().exposure_compensation_ev
+          = static_cast<float>(index % 3U) - 1.0F;
+        light.SetRange(3.0F + (static_cast<float>(index % 3U) * 0.25F));
+        light.SetLuminousFluxLm(1.0F + (static_cast<float>(index) * 0.1F));
+      };
+      // Resolve directly from the authored recipe, without renderer gathering,
+      // publication, cluster ranges or selection-index buffers.
+      const auto flux = reference::LuminousFluxLumens { 1.0F
+        + (static_cast<float>(index) * 0.1F) };
+      const auto compensation
+        = reference::SourceExposureEv { static_cast<float>(index % 3U) - 1.0F };
+      const auto intensity = index % 2U == 0U
+        ? reference::ResolvePointIntensity(flux, compensation)
+        : reference::ResolveSpotPeakIntensity(flux,
+            {
+              .inner = reference::InnerHalfAngleRadians { 0.2F },
+              .outer = reference::OuterHalfAngleRadians { 1.2F },
+            },
+            compensation);
+      ASSERT_TRUE(intensity.has_value());
+      auto& record = authored.at(index);
+      record.position_ws = position(FixtureLightIndex { index });
+      record.range_m = 3.0F + (static_cast<float>(index % 3U) * 0.25F);
+      record.intensity_rgb_cd = tint * static_cast<float>(intensity->get());
+      record.emitted_direction_ws = { 0.0F, 0.0F, -1.0F };
+      record.kind = static_cast<std::uint32_t>(index % 2U);
+      if (record.kind == 1U) {
+        const auto inner_cosine
+          = static_cast<float>(std::cos(static_cast<double>(0.2F)));
+        record.outer_cone_cosine
+          = static_cast<float>(std::cos(static_cast<double>(1.2F)));
+        record.inverse_cone_cosine_width
+          = 1.0F / (inner_cosine - record.outer_cone_cosine);
+      }
+      if (index % 2U == 0U) {
+        auto light = std::make_unique<scene::PointLight>();
+        initialize(*light);
+        ASSERT_TRUE(node.AttachLight(std::move(light)));
+      } else {
+        auto light = std::make_unique<scene::SpotLight>();
+        initialize(*light);
+        light->SetInnerConeAngleRadians(0.2F);
+        light->SetOuterConeAngleRadians(1.2F);
+        ASSERT_TRUE(node.AttachLight(std::move(light)));
+        node.GetTransform().SetLocalRotation(glm::quat {
+          0.70710678F,
+          0.70710678F,
+          0.0F,
+          0.0F,
+        });
+      }
+      nodes.push_back(node);
+      all.emplace_back(index);
+    }
+    const auto select
+      = [&](const std::span<const FixtureLightIndex> enabled) -> void {
+      auto wanted = std::array<bool, light_count> {};
+      for (const auto index : enabled) {
+        wanted.at(index.get()) = true;
+      }
+      for (std::size_t index = 0U; index < light_count; ++index) {
+        if (active.at(index) == wanted.at(index)) {
+          continue;
+        }
+        // Replace the component so selection membership observes the edit.
+        if (index % 2U == 0U) {
+          const auto current = nodes.at(index).GetLightAs<scene::PointLight>();
+          ASSERT_TRUE(current.has_value());
+          auto replacement
+            = std::make_unique<scene::PointLight>(current->get());
+          replacement->Common().affects_world = wanted.at(index);
+          ASSERT_TRUE(nodes.at(index).ReplaceLight(std::move(replacement)));
+        } else {
+          const auto current = nodes.at(index).GetLightAs<scene::SpotLight>();
+          ASSERT_TRUE(current.has_value());
+          auto replacement = std::make_unique<scene::SpotLight>(current->get());
+          replacement->Common().affects_world = wanted.at(index);
+          ASSERT_TRUE(nodes.at(index).ReplaceLight(std::move(replacement)));
+        }
+        active.at(index) = wanted.at(index);
+      }
+    };
+    double maximum_scaled_error = 0.0;
+    double minimum_single_peak = std::numeric_limits<double>::infinity();
+    std::uint64_t compared_channels = 0U;
+    std::uint64_t permutation_channels = 0U;
+    std::uint64_t unculled_channels = 0U;
+    double maximum_unculled_error = 0.0;
+    bool reversed = false;
+    for (const bool forward : { false, true }) {
+      for (const auto domain : {
+             data::MaterialDomain::kOpaque,
+             data::MaterialDomain::kMasked,
+             data::MaterialDomain::kAlphaBlended,
+           }) {
+        SCOPED_TRACE(forward);
+        SCOPED_TRACE(static_cast<unsigned>(domain));
+        SetSurface(domain);
+        ASSERT_NO_FATAL_FAILURE(select({}));
+        ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 3U));
+        const auto render = [&](Image& image) -> void {
+          ASSERT_NO_FATAL_FAILURE(RenderSurface(forward, 0.0F, 1U));
+          ASSERT_EQ(probe->color->GetDescriptor().format, Format::kRGBA32Float);
+          image = ReadFloatTexture(*probe->color);
+          ASSERT_EQ(image.size(), pixel_count);
+        };
+        auto baseline = Image {};
+        ASSERT_NO_FATAL_FAILURE(render(baseline));
+        auto sum = std::vector<Rgb>(pixel_count);
+        auto strongest = std::vector<Rgb>(pixel_count);
+        double strongest_peak = 0.0;
+        auto strongest_index = FixtureLightIndex { 0U };
+        auto references = std::array<std::vector<Rgb>, 3> {};
+        for (std::size_t index = 0U; index < light_count; ++index) {
+          SCOPED_TRACE(index);
+          const auto one = std::array { FixtureLightIndex { index } };
+          ASSERT_NO_FATAL_FAILURE(select(one));
+          auto image = Image {};
+          ASSERT_NO_FATAL_FAILURE(render(image));
+          double peak = 0.0;
+          for (std::size_t pixel = 0U; pixel < pixel_count; ++pixel) {
+            for (std::size_t channel = 0U; channel < 3U; ++channel) {
+              const auto contribution
+                = static_cast<double>(image.at(pixel).at(channel))
+                - baseline.at(pixel).at(channel);
+              ASSERT_TRUE(std::isfinite(contribution));
+              EXPECT_GE(contribution, -2.0e-5);
+              peak = std::max(peak, contribution);
+              sum.at(pixel).at(channel) += contribution;
+            }
+          }
+          EXPECT_GT(peak, 1.0e-5) << "A light with no visible contribution "
+                                     "cannot qualify this fixture";
+          minimum_single_peak = std::min(minimum_single_peak, peak);
+          if (peak > strongest_peak) {
+            strongest_peak = peak;
+            strongest_index = FixtureLightIndex { index };
+            for (std::size_t pixel = 0U; pixel < pixel_count; ++pixel) {
+              for (std::size_t channel = 0U; channel < 3U; ++channel) {
+                strongest.at(pixel).at(channel)
+                  = static_cast<double>(image.at(pixel).at(channel))
+                  - baseline.at(pixel).at(channel);
+              }
+            }
+          }
+          if (index >= 30U) {
+            references.at(index - 30U) = sum;
+          }
+        }
+        for (std::size_t count = 31U; count <= light_count; ++count) {
+          SCOPED_TRACE(count);
+          ASSERT_NO_FATAL_FAILURE(select(std::span(all).first(count)));
+          auto combined = Image {};
+          auto full_list = std::vector<ForwardLocalLightRecord> {};
+          full_list.reserve(count);
+          for (std::size_t index = 0U; index < count; ++index) {
+            full_list.push_back(
+              authored.at(reversed ? light_count - 1U - index : index));
+          }
+          auto unculled = Image {};
+          bool capture_finished = true;
+          {
+            probe->after_render
+              = [&](const ViewRenderGpuContext& hook) -> void {
+              RecordUnculledReference(hook.recorder,
+                {
+                  .lights = full_list,
+                  .baseline = baseline,
+                  .extent = { kWidth, kHeight },
+                  .forward_shading
+                  = forward || domain == data::MaterialDomain::kAlphaBlended,
+                });
+            };
+            const auto clear_reference
+              = ScopeGuard([&] noexcept -> void { probe->after_render = {}; });
+            // Capture one representative all-lights frame when requested by
+            // the native fixture's existing RenderDoc environment control.
+            const auto capture = forward
+                && domain == data::MaterialDomain::kOpaque
+                && count == light_count
+              ? BeginOptionalCapture()
+              : observer_ptr<graphics::FrameCaptureController> {};
+            const auto finish_capture = ScopeGuard([&] noexcept -> void {
+              try {
+                if (capture) {
+                  capture_finished = capture->EndCapture();
+                }
+              } catch (...) {
+                capture_finished = false;
+              }
+            });
+            ASSERT_NO_FATAL_FAILURE(render(combined));
+          }
+          ASSERT_TRUE(capture_finished);
+          ASSERT_NO_FATAL_FAILURE(ReadUnculledReference(unculled));
+          ASSERT_EQ(unculled.size(), pixel_count);
+          const auto& reference = references.at(count - 31U);
+          unsigned omitted_rejections = 0U;
+          unsigned duplicated_rejections = 0U;
+          for (std::size_t pixel = 0U; pixel < pixel_count; ++pixel) {
+            for (std::size_t channel = 0U; channel < 3U; ++channel) {
+              const auto expected = baseline.at(pixel).at(channel)
+                + reference.at(pixel).at(channel);
+              const auto actual
+                = static_cast<double>(combined.at(pixel).at(channel));
+              ASSERT_TRUE(std::isfinite(actual));
+              const auto tolerance = (0.005 * std::abs(expected)) + 2.0e-5;
+              const auto error = std::abs(actual - expected);
+              EXPECT_LE(error, tolerance)
+                << "pixel=" << pixel << " channel=" << channel;
+              maximum_scaled_error
+                = std::max(maximum_scaled_error, error / tolerance);
+              ++compared_channels;
+              const auto full_expected
+                = static_cast<double>(unculled.at(pixel).at(channel));
+              ASSERT_TRUE(std::isfinite(full_expected));
+              const auto full_tolerance
+                = (0.005 * std::abs(full_expected)) + 2.0e-5;
+              const auto full_error = std::abs(actual - full_expected);
+              EXPECT_LE(full_error, full_tolerance)
+                << "unculled pixel=" << pixel << " channel=" << channel;
+              maximum_unculled_error
+                = std::max(maximum_unculled_error, full_error / full_tolerance);
+              ++unculled_channels;
+              if (count == light_count) {
+                const auto control = strongest.at(pixel).at(channel);
+                const auto omitted = expected - control;
+                const auto duplicated = expected + control;
+                omitted_rejections += std::abs(actual - omitted)
+                    > (0.005 * std::abs(omitted)) + 2.0e-5
+                  ? 1U
+                  : 0U;
+                duplicated_rejections += std::abs(actual - duplicated)
+                    > (0.005 * std::abs(duplicated)) + 2.0e-5
+                  ? 1U
+                  : 0U;
+              }
+            }
+          }
+          if (count == light_count) {
+            EXPECT_GT(omitted_rejections, 0U);
+            EXPECT_GT(duplicated_rejections, 0U);
+            // Deliberately omit a visible source from the renderer, keeping
+            // the independent reference unchanged. A shared selection bug
+            // must not make the two paths agree.
+            auto missing_one = all;
+            std::erase(missing_one, strongest_index);
+            ASSERT_NO_FATAL_FAILURE(select(missing_one));
+            auto omitted_image = Image {};
+            ASSERT_NO_FATAL_FAILURE(render(omitted_image));
+            unsigned rejected_channels = 0U;
+            for (std::size_t pixel = 0U; pixel < pixel_count; ++pixel) {
+              for (std::size_t channel = 0U; channel < 3U; ++channel) {
+                const auto expected
+                  = static_cast<double>(unculled.at(pixel).at(channel));
+                const auto error
+                  = std::abs(omitted_image.at(pixel).at(channel) - expected);
+                rejected_channels
+                  += error > (0.005 * std::abs(expected)) + 2.0e-5 ? 1U : 0U;
+              }
+            }
+            EXPECT_GT(rejected_channels, 0U);
+            ASSERT_NO_FATAL_FAILURE(select(all));
+          }
+        }
+        // Reverse physical light assignments while keeping node identities.
+        // With 33 alternating point/spot records each swapped pair has the
+        // same component type, so this permutes contributions without changing
+        // the supported receiver or shading path.
+        for (std::size_t first = 0U; first < light_count / 2U; ++first) {
+          const auto second = light_count - 1U - first;
+          if (first % 2U == 0U) {
+            const auto a = nodes.at(first).GetLightAs<scene::PointLight>();
+            const auto b = nodes.at(second).GetLightAs<scene::PointLight>();
+            ASSERT_TRUE(a.has_value());
+            ASSERT_TRUE(b.has_value());
+            auto copy_a = std::make_unique<scene::PointLight>(a->get());
+            auto copy_b = std::make_unique<scene::PointLight>(b->get());
+            ASSERT_TRUE(nodes.at(first).ReplaceLight(std::move(copy_b)));
+            ASSERT_TRUE(nodes.at(second).ReplaceLight(std::move(copy_a)));
+          } else {
+            const auto a = nodes.at(first).GetLightAs<scene::SpotLight>();
+            const auto b = nodes.at(second).GetLightAs<scene::SpotLight>();
+            ASSERT_TRUE(a.has_value());
+            ASSERT_TRUE(b.has_value());
+            auto copy_a = std::make_unique<scene::SpotLight>(a->get());
+            auto copy_b = std::make_unique<scene::SpotLight>(b->get());
+            ASSERT_TRUE(nodes.at(first).ReplaceLight(std::move(copy_b)));
+            ASSERT_TRUE(nodes.at(second).ReplaceLight(std::move(copy_a)));
+          }
+          nodes.at(first).GetTransform().SetLocalPosition(
+            position(FixtureLightIndex { reversed ? first : second }));
+          nodes.at(second).GetTransform().SetLocalPosition(
+            position(FixtureLightIndex { reversed ? second : first }));
+        }
+        reversed = !reversed;
+        auto permuted = Image {};
+        ASSERT_NO_FATAL_FAILURE(render(permuted));
+        for (std::size_t pixel = 0U; pixel < pixel_count; ++pixel) {
+          for (std::size_t channel = 0U; channel < 3U; ++channel) {
+            const auto expected = baseline.at(pixel).at(channel)
+              + references.back().at(pixel).at(channel);
+            const auto tolerance = (0.005 * std::abs(expected)) + 2.0e-5;
+            EXPECT_NEAR(permuted.at(pixel).at(channel), expected, tolerance);
+            maximum_scaled_error = std::max(maximum_scaled_error,
+              std::abs(permuted.at(pixel).at(channel) - expected) / tolerance);
+            ++permutation_channels;
+          }
+        }
+        ASSERT_NO_FATAL_FAILURE(select({}));
+        auto cleared = Image {};
+        ASSERT_NO_FATAL_FAILURE(render(cleared));
+        for (std::size_t pixel = 0U; pixel < pixel_count; ++pixel) {
+          for (std::size_t channel = 0U; channel < 3U; ++channel) {
+            EXPECT_NEAR(cleared.at(pixel).at(channel),
+              baseline.at(pixel).at(channel), 2.0e-5);
+          }
+        }
+      }
+    }
+    RecordProperty("compared_channels", compared_channels);
+    RecordProperty("permutation_channels", permutation_channels);
+    RecordProperty("maximum_fraction_of_image_budget", maximum_scaled_error);
+    RecordProperty("minimum_single_light_peak", minimum_single_peak);
+    RecordProperty("unculled_channels", unculled_channels);
+    RecordProperty(
+      "maximum_unculled_fraction_of_image_budget", maximum_unculled_error);
+  }
+} // namespace
+} // namespace oxygen::vortex::testing

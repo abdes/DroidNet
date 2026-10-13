@@ -481,7 +481,7 @@ infrastructure and explicitly reusing existing Oxygen patterns:
   - `HasLight() -> bool`
   - `GetLightAs<T>() -> optional<ref<T>>`
   - Semantics must match Camera behavior (null checks, supported-type checks, and “only one light per node”).
-- [x] Add unit tests mirroring `src/Oxygen/Scene/Test/SceneNode_camera_test.cpp`:
+- [x] Add unit tests mirroring `src/Oxygen/Scene/test/SceneNode_camera_test.cpp`:
   - Attach works for each type
   - Attach fails when a light already exists (including cross-type)
   - Detach removes and returns false when none
@@ -538,7 +538,7 @@ Tasks:
   - Validate each record header (type enum range if known, record byte size non-zero, bounds).
   - Validate system-specific invariants for known types.
 - [x] Add a content/loader test proving “scene assets can carry lights” end-to-end (parse/validate) without requiring editor tooling.
-  - Pattern reference: camera table emission checks in `src/Oxygen/Content/Test/FbxImporter_scene_test.cpp`.
+  - Pattern reference: camera table emission checks in `src/Oxygen/Content/test/FbxImporter_scene_test.cpp`.
 - [x] Add a content/loader test proving “scene assets can carry SceneEnvironment” end-to-end (parse/validate).
   - Include: empty environment block (0 components), and a populated block with multiple system records.
 

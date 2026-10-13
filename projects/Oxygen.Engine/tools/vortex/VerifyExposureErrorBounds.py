@@ -50,22 +50,28 @@ class Bound:
     def convex(self, other, weight):
         if not 0 <= weight <= 1:
             raise ValueError("Interpolation weight must be in [0, 1]")
-        return Bound(max(self.relative, other.relative),
-                     (1 - weight) * self.absolute + weight * other.absolute)
+        return Bound(
+            max(self.relative, other.relative),
+            (1 - weight) * self.absolute + weight * other.absolute,
+        )
 
     def attenuate(self, transmittance, maximum_radiance):
         if maximum_radiance < 0:
             raise ValueError("A justified nonnegative source maximum is required")
         r, a = self.relative, self.absolute
         rt, at = transmittance.relative, transmittance.absolute
-        return Bound((1 + r) * (1 + rt) - 1,
-                     a * (1 + rt) + maximum_radiance * at * (1 + r) + a * at)
+        return Bound(
+            (1 + r) * (1 + rt) - 1,
+            a * (1 + rt) + maximum_radiance * at * (1 + r) + a * at,
+        )
 
     def reference_interval(self, observed):
         if observed < 0 or self.relative >= 1:
             raise ValueError("Inversion requires observed >= 0 and relative < 1")
-        return (max(F(0), (observed - self.absolute) / (1 + self.relative)),
-                (observed + self.absolute) / (1 - self.relative))
+        return (
+            max(F(0), (observed - self.absolute) / (1 + self.relative)),
+            (observed + self.absolute) / (1 - self.relative),
+        )
 
 
 def require(condition, message):
@@ -75,8 +81,12 @@ def require(condition, message):
 
 def check_algebra():
     rng = random.Random(0x45585035)
-    coefficients = [Bound(), Bound(F(1, 2048)), Bound(F(1, 1024), F(1, 2**24)),
-                    Bound(F(1, 100), F(1, 100000))]
+    coefficients = [
+        Bound(),
+        Bound(F(1, 2048)),
+        Bound(F(1, 1024), F(1, 2**24)),
+        Bound(F(1, 100), F(1, 100000)),
+    ]
     cases = 0
     for _ in range(2000):
         x, y = F(rng.randrange(0, 65537), 16), F(rng.randrange(0, 65537), 16)
@@ -90,8 +100,13 @@ def check_algebra():
             require(abs(hx + hy - x - y) <= bx.add(by).error(x + y), "addition")
             require(abs(gain * hx - gain * x) <= bx.scale(gain).error(gain * x), "gain")
             mixed, ref = (1 - w) * hx + w * hy, (1 - w) * x + w * y
-            require(abs(mixed - ref) <= bx.convex(by, w).error(ref), "convex interpolation")
-            require(abs(hx * ht - x * t) <= bx.attenuate(by, x + 1).error(x * t), "transmittance product")
+            require(
+                abs(mixed - ref) <= bx.convex(by, w).error(ref), "convex interpolation"
+            )
+            require(
+                abs(hx * ht - x * t) <= bx.attenuate(by, x + 1).error(x * t),
+                "transmittance product",
+            )
             lo, hi = bx.reference_interval(hx)
             require(lo <= x <= hi, "inverse interval")
             # A monotone quantizer maps a nonnegative interval into the interval
@@ -112,14 +127,32 @@ def amplification_counterexample():
     reference = source * strength
     independently_narrowed_scene = half(reference)
     actual = narrowed_source * strength
-    require(abs(narrowed_source - source) <= image_budget(source, F(1, 4)), "local AP check should pass")
-    require(abs(independently_narrowed_scene - reference) <= image_budget(reference, F(1, 4)), "independent scene check should pass")
-    require(abs(actual - reference) > image_budget(reference), "composed amplification must fail admission")
+    require(
+        abs(narrowed_source - source) <= image_budget(source, F(1, 4)),
+        "local AP check should pass",
+    )
+    require(
+        abs(independently_narrowed_scene - reference)
+        <= image_budget(reference, F(1, 4)),
+        "independent scene check should pass",
+    )
+    require(
+        abs(actual - reference) > image_budget(reference),
+        "composed amplification must fail admission",
+    )
     propagated = Bound(absolute=abs(narrowed_source - source)).scale(strength)
-    require(abs(actual - reference) <= propagated.error(reference), "gain propagation must cover loss")
-    return {"source": float(source), "strength": float(strength),
-            "reference": float(reference), "actual": float(actual),
-            "local_checks_pass": True, "composed_image_pass": False}
+    require(
+        abs(actual - reference) <= propagated.error(reference),
+        "gain propagation must cover loss",
+    )
+    return {
+        "source": float(source),
+        "strength": float(strength),
+        "reference": float(reference),
+        "actual": float(actual),
+        "local_checks_pass": True,
+        "composed_image_pass": False,
+    }
 
 
 def is_dark(luminance, cutoff):
@@ -131,7 +164,10 @@ def classification_counterexample():
     cutoff = F(1, 4096)
     transmittance = F(1, 2) + F(1, 4096) + F(1, 2**22)
     require(is_dark(cutoff, cutoff), "equality must remain dark")
-    require(not is_dark(half(cutoff + F(1, 2**22)), cutoff), "next half value must be non-dark")
+    require(
+        not is_dark(half(cutoff + F(1, 2**22)), cutoff),
+        "next half value must be non-dark",
+    )
 
     # Negative control: the original one-factor construction ends exactly at
     # the cutoff, so it must never be reported as a classification change.
@@ -139,8 +175,13 @@ def classification_counterexample():
     old_reference = old_background * transmittance
     old_composed = half(old_background * half(transmittance))
     require(old_composed == cutoff, "one-factor boundary control")
-    require(all(is_dark(x, cutoff) for x in
-                (old_reference, half(old_reference), old_composed)), "one-factor case is entirely dark")
+    require(
+        all(
+            is_dark(x, cutoff)
+            for x in (old_reference, half(old_reference), old_composed)
+        ),
+        "one-factor case is entirely dark",
+    )
 
     # Two independently stored attenuation factors correspond to AP followed
     # by fog. Their accumulated upward error crosses strictly above the cutoff.
@@ -149,35 +190,60 @@ def classification_counterexample():
     independent = half(reference)
     actual = half(background * half(transmittance) * half(transmittance))
     for label in ("AP", "fog"):
-        require(abs(half(transmittance) - transmittance) <= image_budget(transmittance, F(1, 4)),
-                f"local {label} transmittance check")
-    require(abs(independent - reference) <= image_budget(reference, F(1, 4)), "independent scene image check")
-    require(is_dark(reference, cutoff) == is_dark(independent, cutoff), "independent scene must preserve classification")
-    require(is_dark(reference, cutoff) != is_dark(actual, cutoff), "composition must change classification")
+        require(
+            abs(half(transmittance) - transmittance)
+            <= image_budget(transmittance, F(1, 4)),
+            f"local {label} transmittance check",
+        )
+    require(
+        abs(independent - reference) <= image_budget(reference, F(1, 4)),
+        "independent scene image check",
+    )
+    require(
+        is_dark(reference, cutoff) == is_dark(independent, cutoff),
+        "independent scene must preserve classification",
+    )
+    require(
+        is_dark(reference, cutoff) != is_dark(actual, cutoff),
+        "composition must change classification",
+    )
     local_ev = abs(math.log2(float(independent / reference)))
     require(local_ev < 1 / 1024, "independent scene meter check should pass")
     trans_error = Bound(absolute=abs(half(transmittance) - transmittance))
-    composed_bound = Bound().attenuate(trans_error, background).attenuate(
-        trans_error, background * transmittance)
+    composed_bound = (
+        Bound()
+        .attenuate(trans_error, background)
+        .attenuate(trans_error, background * transmittance)
+    )
     error = composed_bound.error(reference)
     lo, hi = half(max(F(0), reference - error)), half(reference + error)
-    require(lo <= cutoff < hi, "interval must include dark and strictly non-dark values")
-    return {"predicate": "luminance <= dark_cutoff", "attenuation_factors": 2,
-            "dark_cutoff": float(cutoff), "reference": float(reference),
-            "independent_scene_half": float(independent), "composed_half": float(actual),
-            "dark_classifications": {"reference": is_dark(reference, cutoff),
-                                     "independent": is_dark(independent, cutoff),
-                                     "composed": is_dark(actual, cutoff)},
-            "one_factor_negative_control_all_dark": True,
-            "independent_meter_error_ev": local_ev, "local_checks_pass": True,
-            "composed_classification_pass": False}
+    require(
+        lo <= cutoff < hi, "interval must include dark and strictly non-dark values"
+    )
+    return {
+        "predicate": "luminance <= dark_cutoff",
+        "attenuation_factors": 2,
+        "dark_cutoff": float(cutoff),
+        "reference": float(reference),
+        "independent_scene_half": float(independent),
+        "composed_half": float(actual),
+        "dark_classifications": {
+            "reference": is_dark(reference, cutoff),
+            "independent": is_dark(independent, cutoff),
+            "composed": is_dark(actual, cutoff),
+        },
+        "one_factor_negative_control_all_dark": True,
+        "independent_meter_error_ev": local_ev,
+        "local_checks_pass": True,
+        "composed_classification_pass": False,
+    }
 
 
 def temporal_counterexample():
     # Use the production coefficient as its binary32 value and binary32 fresh
     # inputs. Reference recurrence is exact; actual recurrence rounds its blend
     # once to binary32 and then stores binary16.
-    weight = f32(.9)
+    weight = f32(0.9)
     desired_pre_store = 1 + F(1, 2048) + F(1, 2**22)
     actual = reference = F(1)
     bound = F(0)
@@ -190,22 +256,43 @@ def temporal_counterexample():
         next_actual = half(pre)
         local = abs(next_actual - pre)
         require(local <= image_budget(pre, F(1, 4)), "every local store must pass")
-        require(abs(math.log2(float(next_actual / pre))) < 1 / 1024, "local meter margin")
+        require(
+            abs(math.log2(float(next_actual / pre))) < 1 / 1024, "local meter margin"
+        )
         reference = (1 - weight) * fresh + weight * reference
-        require(abs(half(reference) - reference) <= image_budget(reference, F(1, 4)), "independent scene image check")
-        require(abs(math.log2(float(half(reference) / reference))) < 1 / 1024, "independent scene meter check")
+        require(
+            abs(half(reference) - reference) <= image_budget(reference, F(1, 4)),
+            "independent scene image check",
+        )
+        require(
+            abs(math.log2(float(half(reference) / reference))) < 1 / 1024,
+            "independent scene meter check",
+        )
         bound = weight * bound + abs(pre - pre_exact) + local
         actual = next_actual
         require(abs(actual - reference) <= bound, "temporal recurrence bound")
         maximum_local_relative = max(maximum_local_relative, local / pre)
     error = abs(actual - reference)
-    require(error > image_budget(reference), "cumulative error must exceed admission budget")
-    require(abs(math.log2(float(actual / reference))) > 1 / 512, "cumulative meter error must exceed full budget")
-    return {"frames": 64, "history_weight": float(weight), "reference": float(reference),
-            "actual": float(actual), "maximum_local_relative_error": float(maximum_local_relative),
-            "absolute_error": float(error), "propagated_absolute_bound": float(bound),
-            "admission_budget": float(image_budget(reference)), "every_local_store_passes": True,
-            "cumulative_image_admission_pass": False, "cumulative_meter_pass": False}
+    require(
+        error > image_budget(reference), "cumulative error must exceed admission budget"
+    )
+    require(
+        abs(math.log2(float(actual / reference))) > 1 / 512,
+        "cumulative meter error must exceed full budget",
+    )
+    return {
+        "frames": 64,
+        "history_weight": float(weight),
+        "reference": float(reference),
+        "actual": float(actual),
+        "maximum_local_relative_error": float(maximum_local_relative),
+        "absolute_error": float(error),
+        "propagated_absolute_bound": float(bound),
+        "admission_budget": float(image_budget(reference)),
+        "every_local_store_passes": True,
+        "cumulative_image_admission_pass": False,
+        "cumulative_meter_pass": False,
+    }
 
 
 @dataclass(frozen=True)
@@ -243,7 +330,8 @@ def ap_composition_interval(background, inscatter, transmittance):
 def fog_composition_interval(background, height_rgb, height_t, volume_rgb, volume_t):
     # Fog.hlsl followed by the pass's One/InvSrcAlpha RGB blend.
     return volume_rgb.add(height_rgb.multiply(volume_t)).add(
-        background.multiply(height_t.multiply(volume_t)))
+        background.multiply(height_t.multiply(volume_t))
+    )
 
 
 def coverage_interval(destination, transmittance):
@@ -273,8 +361,11 @@ def check_consumer_intervals():
     rng = random.Random(0x41504647)
     checks = 0
     for _ in range(500):
+
         def radiance():
-            a, b = sorted((F(rng.randrange(32769), 1024), F(rng.randrange(32769), 1024)))
+            a, b = sorted(
+                (F(rng.randrange(32769), 1024), F(rng.randrange(32769), 1024))
+            )
             return Interval(a, b)
 
         def unit():
@@ -285,15 +376,23 @@ def check_consumer_intervals():
         t, ht, coverage = unit(), unit(), unit()
         fog = fog_composition_interval(bg, height, ht, scatter, t)
         for x, h, th, v, tv in product(
-                (bg.low, bg.high), (height.low, height.high),
-                (ht.low, ht.high), (scatter.low, scatter.high), (t.low, t.high)):
+            (bg.low, bg.high),
+            (height.low, height.high),
+            (ht.low, ht.high),
+            (scatter.low, scatter.high),
+            (t.low, t.high),
+        ):
             require(fog.contains(v + h * tv + x * th * tv), "fog consumer enclosure")
             checks += 1
         for background_scale in (F(0), F(1)):
             source = bg.multiply(Interval(background_scale, background_scale))
             ap = ap_composition_interval(source, scatter, t)
-            for x, v, tv in product((bg.low, bg.high), (scatter.low, scatter.high), (t.low, t.high)):
-                require(ap.contains(background_scale * x * tv + v), "AP consumer enclosure")
+            for x, v, tv in product(
+                (bg.low, bg.high), (scatter.low, scatter.high), (t.low, t.high)
+            ):
+                require(
+                    ap.contains(background_scale * x * tv + v), "AP consumer enclosure"
+                )
                 checks += 1
         out_coverage = coverage_interval(coverage, t)
         for a, tv in product((coverage.low, coverage.high), (t.low, t.high)):
@@ -303,48 +402,101 @@ def check_consumer_intervals():
     # The removed branch must not suppress inscatter below or at its threshold.
     threshold = f32(1e-5)
     branch_t = Interval(1 - 2 * threshold, F(1))
-    branch = ap_composition_interval(Interval(F(0), F(0)), Interval(F(1), F(2)), branch_t)
-    require(branch == Interval(F(1), F(2)), "inscatter survives across the old threshold")
-    equality = ap_composition_interval(Interval(F(0), F(0)), Interval(F(1), F(2)),
-                                       Interval(1 - threshold, 1 - threshold))
-    require(equality == Interval(F(1), F(2)), "inscatter survives equality at the old threshold")
+    branch = ap_composition_interval(
+        Interval(F(0), F(0)), Interval(F(1), F(2)), branch_t
+    )
+    require(
+        branch == Interval(F(1), F(2)), "inscatter survives across the old threshold"
+    )
+    equality = ap_composition_interval(
+        Interval(F(0), F(0)),
+        Interval(F(1), F(2)),
+        Interval(1 - threshold, 1 - threshold),
+    )
+    require(
+        equality == Interval(F(1), F(2)),
+        "inscatter survives equality at the old threshold",
+    )
 
     rgb = Interval(F(1, 100), F(1, 50))
-    require(meter_normalization_interval(rgb, Interval(F(0), F(0)), F(1))[0] == "unweighted",
-            "zero coverage must skip division")
+    require(
+        meter_normalization_interval(rgb, Interval(F(0), F(0)), F(1))[0]
+        == "unweighted",
+        "zero coverage must skip division",
+    )
     mass_boundary = F(1, 8190)
-    require(meter_normalization_interval(rgb, Interval(F(0), mass_boundary), F(1))[0]
-            == "unstable_weight", "half-up weight boundary must reject")
-    status, normalized = meter_normalization_interval(rgb, Interval(mass_boundary, mass_boundary), F(1))
-    require(status == "weighted" and normalized == Interval(rgb.low / mass_boundary, rgb.high / mass_boundary),
-            "positive weight uses actual coverage")
-    require(meter_normalization_interval(rgb, Interval(F(0), F(1)), F(0))[0] == "unweighted",
-            "zero profile/mask must skip division")
+    require(
+        meter_normalization_interval(rgb, Interval(F(0), mass_boundary), F(1))[0]
+        == "unstable_weight",
+        "half-up weight boundary must reject",
+    )
+    status, normalized = meter_normalization_interval(
+        rgb, Interval(mass_boundary, mass_boundary), F(1)
+    )
+    require(
+        status == "weighted"
+        and normalized == Interval(rgb.low / mass_boundary, rgb.high / mass_boundary),
+        "positive weight uses actual coverage",
+    )
+    require(
+        meter_normalization_interval(rgb, Interval(F(0), F(1)), F(0))[0]
+        == "unweighted",
+        "zero profile/mask must skip division",
+    )
     return checks + 6
 
 
 def deferred_ap_branch_regression():
-    transmittance, inscatter = f32(1 - 2**-16), f32(.01)
+    transmittance, inscatter = f32(1 - 2**-16), f32(0.01)
     narrowed_t, narrowed_rgb = half(transmittance), half(inscatter)
-    require(1 - transmittance > f32(1e-5) and narrowed_t == 1, "half store crosses AP branch")
-    require(abs(narrowed_t - transmittance) <= image_budget(transmittance, F(1, 4)), "local T budget")
-    require(abs(narrowed_rgb - inscatter) <= image_budget(inscatter, F(1, 4)), "local RGB budget")
+    require(
+        1 - transmittance > f32(1e-5) and narrowed_t == 1,
+        "half store crosses AP branch",
+    )
+    require(
+        abs(narrowed_t - transmittance) <= image_budget(transmittance, F(1, 4)),
+        "local T budget",
+    )
+    require(
+        abs(narrowed_rgb - inscatter) <= image_budget(inscatter, F(1, 4)),
+        "local RGB budget",
+    )
     actual, reference = F(0), inscatter
-    require(abs(actual - reference) > image_budget(reference), "branch loss exceeds final image budget")
+    require(
+        abs(actual - reference) > image_budget(reference),
+        "branch loss exceeds final image budget",
+    )
     # A smooth x*T+I model reports only the small RGB rounding error at x=0.
-    require(abs(narrowed_rgb - reference) <= image_budget(reference), "smooth model misses branch loss")
+    require(
+        abs(narrowed_rgb - reference) <= image_budget(reference),
+        "smooth model misses branch loss",
+    )
     # R036 removes that lossy operation. Keep the old failure as a regression,
     # not as an ongoing restriction on the corrected consumer.
-    corrected = ap_composition_interval(Interval(F(0), F(0)),
-        Interval(narrowed_rgb, narrowed_rgb), Interval(narrowed_t, narrowed_t))
-    require(corrected.low == narrowed_rgb and corrected.high == narrowed_rgb,
-            "corrected deferred agrees with forward")
-    require(abs(corrected.low - reference) <= image_budget(reference), "corrected image admission")
-    return {"reference_transmittance": float(transmittance), "half_transmittance": float(narrowed_t),
-            "reference_rgb": float(reference), "legacy_half_deferred_rgb": float(actual),
-            "corrected_half_deferred_rgb": float(corrected.low), "forward_half_rgb": float(narrowed_rgb),
-            "local_checks_pass": True, "legacy_image_admission_pass": False,
-            "corrected_image_admission_pass": True}
+    corrected = ap_composition_interval(
+        Interval(F(0), F(0)),
+        Interval(narrowed_rgb, narrowed_rgb),
+        Interval(narrowed_t, narrowed_t),
+    )
+    require(
+        corrected.low == narrowed_rgb and corrected.high == narrowed_rgb,
+        "corrected deferred agrees with forward",
+    )
+    require(
+        abs(corrected.low - reference) <= image_budget(reference),
+        "corrected image admission",
+    )
+    return {
+        "reference_transmittance": float(transmittance),
+        "half_transmittance": float(narrowed_t),
+        "reference_rgb": float(reference),
+        "legacy_half_deferred_rgb": float(actual),
+        "corrected_half_deferred_rgb": float(corrected.low),
+        "forward_half_rgb": float(narrowed_rgb),
+        "local_checks_pass": True,
+        "legacy_image_admission_pass": False,
+        "corrected_image_admission_pass": True,
+    }
 
 
 def linear_sample(values, shape, coordinate, wrap=False):
@@ -355,11 +507,17 @@ def linear_sample(values, shape, coordinate, wrap=False):
             value = min(F(size - 1), max(F(0), value))
         left = math.floor(value)
         fraction = value - left
-        axes.append(((left % size if wrap else left, 1 - fraction),
-                     ((left + 1) % size if wrap else min(left + 1, size - 1), fraction)))
+        axes.append(
+            (
+                (left % size if wrap else left, 1 - fraction),
+                ((left + 1) % size if wrap else min(left + 1, size - 1), fraction),
+            )
+        )
     result = F(0)
     for x, y, z in product(*axes):
-        result += values[(z[0] * shape[1] + y[0]) * shape[0] + x[0]] * x[1] * y[1] * z[1]
+        result += (
+            values[(z[0] * shape[1] + y[0]) * shape[0] + x[0]] * x[1] * y[1] * z[1]
+        )
     return result
 
 
@@ -374,7 +532,9 @@ def gradient_limits(values, shape, retained=Bound(), wrap=False):
             if shape[axis] > 1 and (coordinate[axis] + 1 < shape[axis] or wrap):
                 index = (z * shape[1] + y) * shape[0] + x
                 boundary = coordinate[axis] + 1 == shape[axis]
-                neighbor = index - (shape[axis] - 1) * stride if boundary else index + stride
+                neighbor = (
+                    index - (shape[axis] - 1) * stride if boundary else index + stride
+                )
                 there = intervals[neighbor]
                 maxima[axis] = max(maxima[axis], here[1] - there[0], there[1] - here[0])
     return maxima
@@ -399,13 +559,15 @@ def filter_test_values(size, pattern, rng):
     if pattern == 4:
         return [f32(index / 17) for index in range(size)]
     if pattern == 5:
-        return [f32(math.ldexp(1 + rng.randrange(1024) / 1024,
-                              rng.randrange(-40, 14))) for _ in range(size)]
+        return [
+            f32(math.ldexp(1 + rng.randrange(1024) / 1024, rng.randrange(-40, 14)))
+            for _ in range(size)
+        ]
     return [f32(rng.randrange(65537) / 17) for _ in range(size)]
 
 
 def check_filter_coordinates(wrap=False):
-    rng = random.Random(0x46494c54)
+    rng = random.Random(0x46494C54)
     storage = Bound(F(1, 2048), F(1, 2**25))
     checks = 0
     for shape in ((1, 1, 1), (3, 4, 1), (3, 4, 2), (2, 2, 2)):
@@ -421,8 +583,10 @@ def check_filter_coordinates(wrap=False):
             for _ in range(12):
                 # Half-step ties admit two legal fixed-point coordinates.
                 # Include clamp edges and crossings of integer cell boundaries.
-                nominal = tuple(F(rng.choice((-1, 0, 255, 256, extent * 256 - 1)), 256)
-                                + F(1, 512) for extent in shape)
+                nominal = tuple(
+                    F(rng.choice((-1, 0, 255, 256, extent * 256 - 1)), 256) + F(1, 512)
+                    for extent in shape
+                )
                 choices = [legal_fixed8_coordinates(value) for value in nominal]
                 first = tuple(values[0] for values in choices)
                 baseline = linear_sample(reference, shape, first, wrap)
@@ -430,14 +594,29 @@ def check_filter_coordinates(wrap=False):
                     reference_at_second = linear_sample(reference, shape, second, wrap)
                     observed = linear_sample(stored, shape, second, wrap)
                     displacement = [abs(a - b) for a, b in zip(first, second)]
-                    coordinate_error = sum(g * d for g, d in zip(exact_gradients, displacement))
-                    enclosed_error = sum(g * d for g, d in zip(enclosed_gradients, displacement))
-                    require(abs(reference_at_second - baseline) <= coordinate_error,
-                            "linear-filter Lipschitz bound across cell/edge boundaries")
-                    require(abs(observed - reference_at_second) <= storage.error(reference_at_second),
-                            "common-weight storage bound")
-                    allowance = storage.error(baseline) + (1 + storage.relative) * enclosed_error
-                    require(abs(observed - baseline) <= allowance, "combined storage/coordinate bound")
+                    coordinate_error = sum(
+                        g * d for g, d in zip(exact_gradients, displacement)
+                    )
+                    enclosed_error = sum(
+                        g * d for g, d in zip(enclosed_gradients, displacement)
+                    )
+                    require(
+                        abs(reference_at_second - baseline) <= coordinate_error,
+                        "linear-filter Lipschitz bound across cell/edge boundaries",
+                    )
+                    require(
+                        abs(observed - reference_at_second)
+                        <= storage.error(reference_at_second),
+                        "common-weight storage bound",
+                    )
+                    allowance = (
+                        storage.error(baseline)
+                        + (1 + storage.relative) * enclosed_error
+                    )
+                    require(
+                        abs(observed - baseline) <= allowance,
+                        "combined storage/coordinate bound",
+                    )
                     checks += 3
     return checks
 
@@ -454,23 +633,38 @@ def filter_coordinate_counterexample():
     require([half(v) for v in values] == values, "no texel store error")
     baseline = linear_sample(values, (2, 1, 1), (positions[0], F(0), F(0)))
     other = linear_sample(values, (2, 1, 1), (positions[1], F(0), F(0)))
-    require(abs(other - baseline) > image_budget(baseline), "coordinate error exceeds image budget")
-    require(is_dark(baseline, F(1, 4096)) and not is_dark(other, F(1, 4096)),
-            "coordinate error changes dark classification")
+    require(
+        abs(other - baseline) > image_budget(baseline),
+        "coordinate error exceeds image budget",
+    )
+    require(
+        is_dark(baseline, F(1, 4096)) and not is_dark(other, F(1, 4096)),
+        "coordinate error changes dark classification",
+    )
     relative = F(1, 1024)
-    retained = linear_sample([F(0), 1 + relative], (2, 1, 1),
-                                   (positions[1], F(0), F(0)))
-    require(abs(retained - baseline) > relative * baseline + (other - baseline),
-            "omitting the relative/displacement cross term must fail")
-    require(abs(retained - baseline) == relative * baseline + (1 + relative) * (other - baseline),
-            "relative/displacement cross term encloses the tight case")
-    return {"texels": [0, 1], "normalized_coordinate": float(uv),
-            "legal_texel_coordinates": [float(p) for p in positions],
-            "filtered_results": [float(baseline), float(other)],
-            "store_error": 0, "texel_checks_alone_suffice": False,
-            "retained_relative_cross_term_required": True,
-            "hardware_observation": False,
-            "scope": "Allowed coordinate-rounding counterexample, not a claim about a measured device"}
+    retained = linear_sample(
+        [F(0), 1 + relative], (2, 1, 1), (positions[1], F(0), F(0))
+    )
+    require(
+        abs(retained - baseline) > relative * baseline + (other - baseline),
+        "omitting the relative/displacement cross term must fail",
+    )
+    require(
+        abs(retained - baseline)
+        == relative * baseline + (1 + relative) * (other - baseline),
+        "relative/displacement cross term encloses the tight case",
+    )
+    return {
+        "texels": [0, 1],
+        "normalized_coordinate": float(uv),
+        "legal_texel_coordinates": [float(p) for p in positions],
+        "filtered_results": [float(baseline), float(other)],
+        "store_error": 0,
+        "texel_checks_alone_suffice": False,
+        "retained_relative_cross_term_required": True,
+        "hardware_observation": False,
+        "scope": "Allowed coordinate-rounding counterexample, not a claim about a measured device",
+    }
 
 
 def bound_operand_ftz_counterexample():
@@ -479,8 +673,12 @@ def bound_operand_ftz_counterexample():
     exact_product = tiny * gain
     # If the tiny input flushes, the previous post-result fallback supplies
     # only the smallest normal. It cannot recover the amplified contribution.
-    require(normal < exact_product, "post-result widening misses amplified operand loss")
-    require(normal * gain >= exact_product, "pre-arithmetic upper operand contains product")
+    require(
+        normal < exact_product, "post-result widening misses amplified operand loss"
+    )
+    require(
+        normal * gain >= exact_product, "pre-arithmetic upper operand contains product"
+    )
     largest_subnormal = normal - tiny
     exact_sum = normal + largest_subnormal
     old_sum_bound = normal + 4 * tiny
@@ -489,26 +687,50 @@ def bound_operand_ftz_counterexample():
     observed = 2 * normal
     exact_difference = observed - largest_subnormal
     old_lower_bound = observed - 8 * tiny
-    require(old_lower_bound > exact_difference, "post-result lower rounding misses a flushed subtrahend")
-    require(observed - normal <= exact_difference, "upper subtrahend preserves lower enclosure")
-    return {"smallest_subnormal": float(tiny), "gain": float(gain),
-            "exact_product": float(exact_product), "old_product_upper": float(normal),
-            "exact_sum": float(exact_sum), "old_sum_upper": float(old_sum_bound),
-            "exact_difference": float(exact_difference), "old_difference_lower": float(old_lower_bound),
-            "hardware_observation": False,
-            "scope": "Required operand handling under FTZ; not a claim that every device flushes this operation"}
+    require(
+        old_lower_bound > exact_difference,
+        "post-result lower rounding misses a flushed subtrahend",
+    )
+    require(
+        observed - normal <= exact_difference,
+        "upper subtrahend preserves lower enclosure",
+    )
+    return {
+        "smallest_subnormal": float(tiny),
+        "gain": float(gain),
+        "exact_product": float(exact_product),
+        "old_product_upper": float(normal),
+        "exact_sum": float(exact_sum),
+        "old_sum_upper": float(old_sum_bound),
+        "exact_difference": float(exact_difference),
+        "old_difference_lower": float(old_lower_bound),
+        "hardware_observation": False,
+        "scope": "Required operand handling under FTZ; not a claim that every device flushes this operation",
+    }
 
 
 def filter_wrap_counterexample():
     values, shape = [F(0), F(1), F(2)], (3, 1, 1)
     first, second = (F(5, 2), F(0), F(0)), (F(5, 2) + F(1, 256), F(0), F(0))
-    difference = abs(linear_sample(values, shape, first, True) - linear_sample(values, shape, second, True))
+    difference = abs(
+        linear_sample(values, shape, first, True)
+        - linear_sample(values, shape, second, True)
+    )
     clamp_gradient = gradient_limits(values, shape)[0]
     wrap_gradient = gradient_limits(values, shape, wrap=True)[0]
-    require(difference > clamp_gradient / 256, "omitting periodic edge underestimates the filter")
-    require(difference == wrap_gradient / 256, "periodic gradient encloses seam variation")
-    return {"texels": [0, 1, 2], "clamp_gradient": float(clamp_gradient),
-            "periodic_gradient": float(wrap_gradient), "sample_difference": float(difference)}
+    require(
+        difference > clamp_gradient / 256,
+        "omitting periodic edge underestimates the filter",
+    )
+    require(
+        difference == wrap_gradient / 256, "periodic gradient encloses seam variation"
+    )
+    return {
+        "texels": [0, 1, 2],
+        "clamp_gradient": float(clamp_gradient),
+        "periodic_gradient": float(wrap_gradient),
+        "sample_difference": float(difference),
+    }
 
 
 def main():
@@ -519,27 +741,41 @@ def main():
     # candidate selector at P=1; the counterexamples do not depend on choosing
     # an arbitrary scale that the renderer would never select.
     require(2 ** math.floor(math.log2(16376 / 8192)) == 1, "candidate scale anchor")
-    report = {"candidate_scale_context": {"maximum_scene_rgb": 8192, "candidate_pre_exposure": 1},
-              "scope": "Exact scalar/componentwise algebra and binary16 counterexamples; not GPU qualification",
-              "algebra_checks": check_algebra(),
-              "consumer_interval_checks": check_consumer_intervals(),
-              "filter_coordinate_checks": check_filter_coordinates() + check_filter_coordinates(True),
-              "counterexamples": {"AP strength": amplification_counterexample(),
-                                  "dark classification": classification_counterexample(),
-                                  "temporal history": temporal_counterexample(),
-                                  "filter coordinate rounding": filter_coordinate_counterexample(),
-                                  "bound operand FTZ": bound_operand_ftz_counterexample(),
-                                  "periodic filter edge": filter_wrap_counterexample()},
-              "regressions": {"removed deferred AP branch": deferred_ap_branch_regression()},
-              "remaining": ["Justify runtime source/consumer bounds and carry certificate lifetimes",
-                            "Implement outward-safe GPU arithmetic, coverage and filtering rules",
-                            "Qualify actual GPU composition and temporal behavior before format switching"],
-              "verdict": "pass"}
+    report = {
+        "candidate_scale_context": {
+            "maximum_scene_rgb": 8192,
+            "candidate_pre_exposure": 1,
+        },
+        "scope": "Exact scalar/componentwise algebra and binary16 counterexamples; not GPU qualification",
+        "algebra_checks": check_algebra(),
+        "consumer_interval_checks": check_consumer_intervals(),
+        "filter_coordinate_checks": check_filter_coordinates()
+        + check_filter_coordinates(True),
+        "counterexamples": {
+            "AP strength": amplification_counterexample(),
+            "dark classification": classification_counterexample(),
+            "temporal history": temporal_counterexample(),
+            "filter coordinate rounding": filter_coordinate_counterexample(),
+            "bound operand FTZ": bound_operand_ftz_counterexample(),
+            "periodic filter edge": filter_wrap_counterexample(),
+        },
+        "regressions": {"removed deferred AP branch": deferred_ap_branch_regression()},
+        "remaining": [
+            "Justify runtime source/consumer bounds and carry certificate lifetimes",
+            "Implement outward-safe GPU arithmetic, coverage and filtering rules",
+            "Qualify actual GPU composition and temporal behavior before format switching",
+        ],
+        "verdict": "pass",
+    }
     args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n")
-    print(f"PASS: {report['algebra_checks']} algebra checks, {report['consumer_interval_checks']} consumer checks, "
-          f"{report['filter_coordinate_checks']} filtering checks "
-          f"and {len(report['counterexamples'])} per-product acceptance counterexamples: {args.output}")
+    args.output.write_text(
+        json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
+    print(
+        f"PASS: {report['algebra_checks']} algebra checks, {report['consumer_interval_checks']} consumer checks, "
+        f"{report['filter_coordinate_checks']} filtering checks "
+        f"and {len(report['counterexamples'])} per-product acceptance counterexamples: {args.output}"
+    )
 
 
 if __name__ == "__main__":

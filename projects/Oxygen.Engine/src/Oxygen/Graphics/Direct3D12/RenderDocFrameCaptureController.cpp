@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <windows.h>
+
 #include <cwctype>
 #include <filesystem>
 #include <mutex>
@@ -11,8 +13,6 @@
 #include <string>
 #include <string_view>
 #include <utility>
-
-#include <windows.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Config/GraphicsConfig.h>

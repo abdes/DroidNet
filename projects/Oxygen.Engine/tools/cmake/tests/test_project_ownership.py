@@ -104,9 +104,7 @@ class OwnershipTests(CommandTestCase):
             'message(FATAL_ERROR "Wrong module closure: ${OXYGEN_ENABLED_MODULES}")\nendif()\n'
         )
         self.configure_policy(
-            "set(OXYGEN_MODULES Input)\n"
-            + MODULE_SELECTION
-            + 'if(NOT OXYGEN_ENABLED_MODULES STREQUAL '
+            "set(OXYGEN_MODULES Input)\n" + MODULE_SELECTION + "if(NOT OXYGEN_ENABLED_MODULES STREQUAL "
             '"Base;Composition;OxCo;Config;Console;Core;Platform;Input")\n'
             'message(FATAL_ERROR "Wrong module closure: ${OXYGEN_ENABLED_MODULES}")\nendif()\n'
         )

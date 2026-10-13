@@ -7,18 +7,16 @@
 #include <algorithm>
 #include <array>
 
-#include <imgui.h>
-
+#include "DemoShell/UI/AxesWidget.h"
+#include "DemoShell/UI/UiSettingsVm.h"
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat3x3.hpp>
 #include <glm/vec3.hpp>
+#include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Constants.h>
-
-#include "DemoShell/UI/AxesWidget.h"
-#include "DemoShell/UI/UiSettingsVm.h"
 
 namespace oxygen::examples::ui {
 

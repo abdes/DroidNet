@@ -48,12 +48,13 @@
 #if LOGURU_USE_FMTLIB
 
 #  include <concepts>
-#  include <fmt/format.h>
 #  include <string>
 #  include <string_view>
 #  include <tuple>
 #  include <type_traits>
 #  include <utility>
+
+#  include <fmt/format.h>
 
 #  include <Oxygen/Base/NoStd.h>
 

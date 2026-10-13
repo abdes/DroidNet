@@ -13,7 +13,6 @@
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
-
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
 

@@ -46,7 +46,7 @@
 
 #ifdef OXYGEN_BUILD_UI_TESTS
 #  include "DemoShell/Services/SettingsService.h"
-#  include "DemoShell/Test/UiTestSession.h"
+#  include "DemoShell/test/UiTestSession.h"
 #endif
 
 namespace oxygen::examples {

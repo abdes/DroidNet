@@ -153,7 +153,7 @@ exercise their owning APIs; loose-storage integration tests use
 `Fixtures/LooseCookedTestWriter.h`. Async tests control suspension with events
 and gates, then assert publication, cancellation and retained lifetimes.
 
-PAK construction and package/load integration belong to `Cooker/Test/Pak` and
+PAK construction and package/load integration belong to `Cooker/test/Pak` and
 use the native `PakBuilder` API. To inspect a failing archive, build
 `Oxygen.Cooker.PakDump` and run `Oxygen.Cooker.PakDump <path-to.pak> --verbose
 --show-data`.

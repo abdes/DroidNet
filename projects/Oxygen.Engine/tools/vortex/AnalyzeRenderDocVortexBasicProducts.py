@@ -42,9 +42,7 @@ def resolve_script_dir():
         if (candidate / "renderdoc_ui_analysis.py").exists():
             return candidate
 
-    raise RuntimeError(
-        "Unable to locate tools/shadows from the RenderDoc script path."
-    )
+    raise RuntimeError("Unable to locate tools/shadows from the RenderDoc script path.")
 
 
 if "pyrenderdoc" in globals():
@@ -79,9 +77,7 @@ def records_with_name(action_records, name):
 def records_under_prefix(action_records, prefix):
     prefix_with_sep = prefix + " > "
     return [
-        record
-        for record in action_records
-        if record.path.startswith(prefix_with_sep)
+        record for record in action_records if record.path.startswith(prefix_with_sep)
     ]
 
 
@@ -95,7 +91,10 @@ def vec_max_abs(values):
 
 def rgb_nonzero(min_values, max_values, epsilon=1.0e-6):
     rgb_delta = [b - a for a, b in zip(min_values[:3], max_values[:3])]
-    return max(abs(v) for v in rgb_delta) > epsilon or max(abs(v) for v in max_values[:3]) > epsilon
+    return (
+        max(abs(v) for v in rgb_delta) > epsilon
+        or max(abs(v) for v in max_values[:3]) > epsilon
+    )
 
 
 def vec_diff(a_values, b_values):
@@ -103,7 +102,10 @@ def vec_diff(a_values, b_values):
 
 
 def is_nonzero_range(min_values, max_values, epsilon=1.0e-6):
-    return vec_max_abs(vec_diff(min_values, max_values)) > epsilon or vec_max_abs(max_values) > epsilon
+    return (
+        vec_max_abs(vec_diff(min_values, max_values)) > epsilon
+        or vec_max_abs(max_values) > epsilon
+    )
 
 
 def make_subresource(rd, descriptor):
@@ -162,7 +164,9 @@ def probe_positions(width, height):
     return positions
 
 
-def sample_descriptor(controller, rd, resource_names, texture_descs, descriptor, type_cast):
+def sample_descriptor(
+    controller, rd, resource_names, texture_descs, descriptor, type_cast
+):
     resource_id = descriptor.resource
     resource_key = str(resource_id)
     name = resource_names.get(resource_key, resource_key)
@@ -178,7 +182,9 @@ def sample_descriptor(controller, rd, resource_names, texture_descs, descriptor,
     center_values = float4_values(center)
     probes = {}
     for probe_name, (probe_x, probe_y) in probe_positions(width, height).items():
-        probe_value = controller.PickPixel(resource_id, probe_x, probe_y, sub, type_cast)
+        probe_value = controller.PickPixel(
+            resource_id, probe_x, probe_y, sub, type_cast
+        )
         probes[probe_name] = float4_values(probe_value)
     return {
         "resource_id": resource_id,
@@ -350,15 +356,16 @@ def find_screen_hzb_resource(
     preferred_matches = [
         match
         for match in fallback_matches
-        if "furthest" in match["name"].lower()
-        or "screenhzb" in match["name"].lower()
+        if "furthest" in match["name"].lower() or "screenhzb" in match["name"].lower()
     ]
     if preferred_matches:
         return preferred_matches[0]
     return fallback_matches[0]
 
 
-def find_texture_with_usage(controller, resource_names, texture_descs, event_id, exclude_ids):
+def find_texture_with_usage(
+    controller, resource_names, texture_descs, event_id, exclude_ids
+):
     candidates = []
     for resource_key, desc in texture_descs.items():
         resource_id = safe_getattr(desc, "resourceId")
@@ -412,7 +419,9 @@ def append_texture_sample(report, prefix, sample):
             )
         )
     report.append("{}_nonzero={}".format(prefix, str(sample["nonzero"]).lower()))
-    report.append("{}_rgb_nonzero={}".format(prefix, str(sample["rgb_nonzero"]).lower()))
+    report.append(
+        "{}_rgb_nonzero={}".format(prefix, str(sample["rgb_nonzero"]).lower())
+    )
 
 
 def find_output_sample(draw_state, name):
@@ -426,7 +435,9 @@ def choose_latest_stage_sample(candidates):
     available = [candidate for candidate in candidates if candidate[0] is not None]
     if not available:
         return None, None, ""
-    last_draw, draw_state, label = max(available, key=lambda candidate: candidate[0].event_id)
+    last_draw, draw_state, label = max(
+        available, key=lambda candidate: candidate[0].event_id
+    )
     return last_draw, draw_state, label
 
 
@@ -436,7 +447,9 @@ def max_sample_delta(a_sample, b_sample):
 
     deltas = []
     for field in ("min", "max", "center"):
-        deltas.extend(abs(value) for value in vec_diff(a_sample[field], b_sample[field]))
+        deltas.extend(
+            abs(value) for value in vec_diff(a_sample[field], b_sample[field])
+        )
     for probe_name in a_sample["probes"].keys():
         deltas.extend(
             abs(value)
@@ -447,7 +460,9 @@ def max_sample_delta(a_sample, b_sample):
     return max(deltas) if deltas else 0.0
 
 
-def far_depth_probe_delta(depth_sample, a_sample, b_sample, far_depth=0.0, epsilon=1.0e-6):
+def far_depth_probe_delta(
+    depth_sample, a_sample, b_sample, far_depth=0.0, epsilon=1.0e-6
+):
     if depth_sample is None or a_sample is None or b_sample is None:
         return 0.0, 0
 
@@ -481,7 +496,9 @@ def make_sample_subresource(rd, sample):
     return sub
 
 
-def dense_grid_delta(controller, rd, event_id_a, sample_a, event_id_b, sample_b, grid_x=32, grid_y=18):
+def dense_grid_delta(
+    controller, rd, event_id_a, sample_a, event_id_b, sample_b, grid_x=32, grid_y=18
+):
     if sample_a is None or sample_b is None:
         return 0.0
 
@@ -495,7 +512,11 @@ def dense_grid_delta(controller, rd, event_id_a, sample_a, event_id_b, sample_b,
     for row in range(grid_y):
         y = 0 if grid_y == 1 else int(round(((height - 1) * row) / float(grid_y - 1)))
         for col in range(grid_x):
-            x = 0 if grid_x == 1 else int(round(((width - 1) * col) / float(grid_x - 1)))
+            x = (
+                0
+                if grid_x == 1
+                else int(round(((width - 1) * col) / float(grid_x - 1)))
+            )
             values_a.append(
                 float4_values(
                     controller.PickPixel(
@@ -510,7 +531,11 @@ def dense_grid_delta(controller, rd, event_id_a, sample_a, event_id_b, sample_b,
     for row in range(grid_y):
         y = 0 if grid_y == 1 else int(round(((height - 1) * row) / float(grid_y - 1)))
         for col in range(grid_x):
-            x = 0 if grid_x == 1 else int(round(((width - 1) * col) / float(grid_x - 1)))
+            x = (
+                0
+                if grid_x == 1
+                else int(round(((width - 1) * col) / float(grid_x - 1)))
+            )
             value_b = float4_values(
                 controller.PickPixel(
                     sample_b["resource_id"], x, y, sub_b, rd.CompType.Typeless
@@ -525,7 +550,9 @@ def dense_grid_delta(controller, rd, event_id_a, sample_a, event_id_b, sample_b,
     return max_delta
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     action_records = collect_action_records(controller)
     resource_records = collect_resource_records_raw(controller)
@@ -541,9 +568,13 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage12_point_name = "Vortex.Stage12.PointLight"
     stage12_directional_name = "Vortex.Stage12.DirectionalLight"
     atmosphere_transmittance_lut_name = "Vortex.Environment.AtmosphereTransmittanceLut"
-    atmosphere_multi_scattering_lut_name = "Vortex.Environment.AtmosphereMultiScatteringLut"
+    atmosphere_multi_scattering_lut_name = (
+        "Vortex.Environment.AtmosphereMultiScatteringLut"
+    )
     atmosphere_sky_view_lut_name = "Vortex.Environment.AtmosphereSkyViewLut"
-    atmosphere_camera_aerial_name = "Vortex.Environment.AtmosphereCameraAerialPerspective"
+    atmosphere_camera_aerial_name = (
+        "Vortex.Environment.AtmosphereCameraAerialPerspective"
+    )
     distant_sky_light_lut_name = "Vortex.Environment.DistantSkyLightLut"
     stage14_local_fog_name = "Vortex.Stage14.LocalFogTiledCulling"
     stage14_volumetric_fog_name = "Vortex.Stage14.VolumetricFog"
@@ -565,20 +596,48 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         else records_under_prefix(action_records, stage9_name)
     )
     stage12_records = records_under_prefix(action_records, stage12_name)
-    spot_records = records_under_prefix(action_records, stage12_name + " > " + stage12_spot_name)
-    point_records = records_under_prefix(action_records, stage12_name + " > " + stage12_point_name)
-    directional_records = records_under_prefix(action_records, stage12_name + " > " + stage12_directional_name)
-    atmosphere_transmittance_lut_scope = records_with_name(action_records, atmosphere_transmittance_lut_name)
-    atmosphere_transmittance_lut_records = records_under_prefix(action_records, atmosphere_transmittance_lut_name)
-    atmosphere_multi_scattering_lut_scope = records_with_name(action_records, atmosphere_multi_scattering_lut_name)
-    atmosphere_multi_scattering_lut_records = records_under_prefix(action_records, atmosphere_multi_scattering_lut_name)
-    atmosphere_sky_view_lut_scope = records_with_name(action_records, atmosphere_sky_view_lut_name)
-    atmosphere_sky_view_lut_records = records_under_prefix(action_records, atmosphere_sky_view_lut_name)
-    atmosphere_camera_aerial_scope = records_with_name(action_records, atmosphere_camera_aerial_name)
-    atmosphere_camera_aerial_records = records_under_prefix(action_records, atmosphere_camera_aerial_name)
-    distant_sky_light_lut_scope = records_with_name(action_records, distant_sky_light_lut_name)
-    distant_sky_light_lut_records = records_under_prefix(action_records, distant_sky_light_lut_name)
-    stage14_local_fog_records = records_under_prefix(action_records, stage14_local_fog_name)
+    spot_records = records_under_prefix(
+        action_records, stage12_name + " > " + stage12_spot_name
+    )
+    point_records = records_under_prefix(
+        action_records, stage12_name + " > " + stage12_point_name
+    )
+    directional_records = records_under_prefix(
+        action_records, stage12_name + " > " + stage12_directional_name
+    )
+    atmosphere_transmittance_lut_scope = records_with_name(
+        action_records, atmosphere_transmittance_lut_name
+    )
+    atmosphere_transmittance_lut_records = records_under_prefix(
+        action_records, atmosphere_transmittance_lut_name
+    )
+    atmosphere_multi_scattering_lut_scope = records_with_name(
+        action_records, atmosphere_multi_scattering_lut_name
+    )
+    atmosphere_multi_scattering_lut_records = records_under_prefix(
+        action_records, atmosphere_multi_scattering_lut_name
+    )
+    atmosphere_sky_view_lut_scope = records_with_name(
+        action_records, atmosphere_sky_view_lut_name
+    )
+    atmosphere_sky_view_lut_records = records_under_prefix(
+        action_records, atmosphere_sky_view_lut_name
+    )
+    atmosphere_camera_aerial_scope = records_with_name(
+        action_records, atmosphere_camera_aerial_name
+    )
+    atmosphere_camera_aerial_records = records_under_prefix(
+        action_records, atmosphere_camera_aerial_name
+    )
+    distant_sky_light_lut_scope = records_with_name(
+        action_records, distant_sky_light_lut_name
+    )
+    distant_sky_light_lut_records = records_under_prefix(
+        action_records, distant_sky_light_lut_name
+    )
+    stage14_local_fog_records = records_under_prefix(
+        action_records, stage14_local_fog_name
+    )
     stage14_volumetric_fog_scope = records_with_name(
         action_records, stage14_volumetric_fog_name
     )
@@ -586,34 +645,45 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         action_records, stage14_volumetric_fog_name
     )
     stage15_sky_records = records_under_prefix(action_records, stage15_sky_name)
-    stage15_atmosphere_records = records_under_prefix(action_records, stage15_atmosphere_name)
+    stage15_atmosphere_records = records_under_prefix(
+        action_records, stage15_atmosphere_name
+    )
     stage15_fog_records = records_under_prefix(action_records, stage15_fog_name)
-    stage15_local_fog_records = records_under_prefix(action_records, stage15_local_fog_name)
+    stage15_local_fog_records = records_under_prefix(
+        action_records, stage15_local_fog_name
+    )
     compositing_records = records_under_prefix(action_records, compositing_name)
     stage5_event_ids = collect_event_ids(stage5_scope, stage5_records)
     stage14_event_ids = collect_event_ids(
-        records_with_name(action_records, stage14_local_fog_name), stage14_local_fog_records
+        records_with_name(action_records, stage14_local_fog_name),
+        stage14_local_fog_records,
     )
     stage14_volumetric_fog_event_ids = collect_event_ids(
         stage14_volumetric_fog_scope, stage14_volumetric_fog_records
     )
     stage15_atmosphere_event_ids = collect_event_ids(
-        records_with_name(action_records, stage15_atmosphere_name), stage15_atmosphere_records
+        records_with_name(action_records, stage15_atmosphere_name),
+        stage15_atmosphere_records,
     )
     stage15_fog_event_ids = collect_event_ids(
         records_with_name(action_records, stage15_fog_name), stage15_fog_records
     )
     stage15_local_fog_event_ids = collect_event_ids(
-        records_with_name(action_records, stage15_local_fog_name), stage15_local_fog_records
+        records_with_name(action_records, stage15_local_fog_name),
+        stage15_local_fog_records,
     )
 
     stage3_last_draw = find_last_named_record(stage3_records, DRAW_NAME)
     stage9_last_draw = find_last_named_record(stage9_records, DRAW_NAME)
     stage12_spot_last_draw = find_last_named_record(spot_records, DRAW_NAME)
     stage12_point_last_draw = find_last_named_record(point_records, DRAW_NAME)
-    stage12_directional_last_draw = find_last_named_record(directional_records, DRAW_NAME)
+    stage12_directional_last_draw = find_last_named_record(
+        directional_records, DRAW_NAME
+    )
     stage15_sky_last_draw = find_last_named_record(stage15_sky_records, DRAW_NAME)
-    stage15_atmosphere_last_draw = find_last_named_record(stage15_atmosphere_records, DRAW_NAME)
+    stage15_atmosphere_last_draw = find_last_named_record(
+        stage15_atmosphere_records, DRAW_NAME
+    )
     stage15_fog_last_draw = find_last_named_record(stage15_fog_records, DRAW_NAME)
     stage15_local_fog_last_draw = find_last_named_record_any(
         stage15_local_fog_records, {DRAW_NAME, LOCAL_FOG_EXECUTE_INDIRECT_NAME}
@@ -632,19 +702,59 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         or stage15_fog_last_draw is None
         or compositing_draw is None
     ):
-        raise RuntimeError("Required VortexBasic stage events were not found in the capture.")
+        raise RuntimeError(
+            "Required VortexBasic stage events were not found in the capture."
+        )
     stage15_local_fog_composed_in_volumetric = stage15_local_fog_last_draw is None
 
-    stage3 = analyze_draw_event(controller, rd, resource_names, texture_descs, stage3_last_draw.event_id)
-    stage9 = analyze_draw_event(controller, rd, resource_names, texture_descs, stage9_last_draw.event_id)
-    stage12_directional = analyze_draw_event(controller, rd, resource_names, texture_descs, stage12_directional_last_draw.event_id)
-    stage12_spot = analyze_draw_event(controller, rd, resource_names, texture_descs, stage12_spot_last_draw.event_id) if stage12_spot_last_draw is not None else {"outputs": [], "depth": None}
-    stage12_point = analyze_draw_event(controller, rd, resource_names, texture_descs, stage12_point_last_draw.event_id) if stage12_point_last_draw is not None else {"outputs": [], "depth": None}
-    stage15_sky = analyze_draw_event(controller, rd, resource_names, texture_descs, stage15_sky_last_draw.event_id)
-    stage15_atmosphere = analyze_draw_event(
-        controller, rd, resource_names, texture_descs, stage15_atmosphere_last_draw.event_id
+    stage3 = analyze_draw_event(
+        controller, rd, resource_names, texture_descs, stage3_last_draw.event_id
     )
-    stage15_fog = analyze_draw_event(controller, rd, resource_names, texture_descs, stage15_fog_last_draw.event_id)
+    stage9 = analyze_draw_event(
+        controller, rd, resource_names, texture_descs, stage9_last_draw.event_id
+    )
+    stage12_directional = analyze_draw_event(
+        controller,
+        rd,
+        resource_names,
+        texture_descs,
+        stage12_directional_last_draw.event_id,
+    )
+    stage12_spot = (
+        analyze_draw_event(
+            controller,
+            rd,
+            resource_names,
+            texture_descs,
+            stage12_spot_last_draw.event_id,
+        )
+        if stage12_spot_last_draw is not None
+        else {"outputs": [], "depth": None}
+    )
+    stage12_point = (
+        analyze_draw_event(
+            controller,
+            rd,
+            resource_names,
+            texture_descs,
+            stage12_point_last_draw.event_id,
+        )
+        if stage12_point_last_draw is not None
+        else {"outputs": [], "depth": None}
+    )
+    stage15_sky = analyze_draw_event(
+        controller, rd, resource_names, texture_descs, stage15_sky_last_draw.event_id
+    )
+    stage15_atmosphere = analyze_draw_event(
+        controller,
+        rd,
+        resource_names,
+        texture_descs,
+        stage15_atmosphere_last_draw.event_id,
+    )
+    stage15_fog = analyze_draw_event(
+        controller, rd, resource_names, texture_descs, stage15_fog_last_draw.event_id
+    )
     stage15_local_fog = (
         analyze_draw_event(
             controller,
@@ -657,10 +767,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         else {"outputs": [], "depth": None}
     )
 
-    compositing = analyze_draw_event(controller, rd, resource_names, texture_descs, compositing_draw.event_id)
+    compositing = analyze_draw_event(
+        controller, rd, resource_names, texture_descs, compositing_draw.event_id
+    )
     final_present = compositing["outputs"][0] if compositing["outputs"] else None
 
-    stage3_depth_ok = stage3["depth"] is not None and stage3["depth"]["name"] == "SceneDepth" and stage3["depth"]["nonzero"]
+    stage3_depth_ok = (
+        stage3["depth"] is not None
+        and stage3["depth"]["name"] == "SceneDepth"
+        and stage3["depth"]["nonzero"]
+    )
     stage9_names = [sample["name"] for sample in stage9["outputs"]]
     stage9_has_expected_targets = stage9_names == [
         "GBufferNormal",
@@ -690,18 +806,26 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         sample["name"] == "SceneColor" and sample["rgb_nonzero"]
         for sample in stage12_directional["outputs"]
     )
-    stage12_final_last_draw, stage12_final_draw_state, stage12_final_label = choose_latest_stage_sample(
-        [
-            (stage12_directional_last_draw, stage12_directional, "directional"),
-            (stage12_point_last_draw, stage12_point, "point"),
-            (stage12_spot_last_draw, stage12_spot, "spot"),
-        ]
+    stage12_final_last_draw, stage12_final_draw_state, stage12_final_label = (
+        choose_latest_stage_sample(
+            [
+                (stage12_directional_last_draw, stage12_directional, "directional"),
+                (stage12_point_last_draw, stage12_point, "point"),
+                (stage12_spot_last_draw, stage12_spot, "spot"),
+            ]
+        )
     )
-    stage12_final_scene_color = find_output_sample(stage12_final_draw_state, "SceneColor")
+    stage12_final_scene_color = find_output_sample(
+        stage12_final_draw_state, "SceneColor"
+    )
     if stage12_final_last_draw is None or stage12_final_scene_color is None:
-        raise RuntimeError("Required VortexBasic final Stage 12 SceneColor output was not found.")
+        raise RuntimeError(
+            "Required VortexBasic final Stage 12 SceneColor output was not found."
+        )
     stage15_sky_scene_color = find_output_sample(stage15_sky, "SceneColor")
-    stage15_atmosphere_scene_color = find_output_sample(stage15_atmosphere, "SceneColor")
+    stage15_atmosphere_scene_color = find_output_sample(
+        stage15_atmosphere, "SceneColor"
+    )
     stage15_fog_scene_color = find_output_sample(stage15_fog, "SceneColor")
     stage15_local_fog_scene_color = find_output_sample(stage15_local_fog, "SceneColor")
     stage15_sky_scene_color_delta = max_sample_delta(
@@ -789,15 +913,21 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     )
     final_present_nonzero = final_present is not None and final_present["rgb_nonzero"]
     stage3_depth_width = stage3["depth"]["width"] if stage3["depth"] is not None else 0
-    stage3_depth_height = stage3["depth"]["height"] if stage3["depth"] is not None else 0
+    stage3_depth_height = (
+        stage3["depth"]["height"] if stage3["depth"] is not None else 0
+    )
     expected_screen_hzb_width = (
         expected_screen_hzb_extent(stage3_depth_width) if stage3_depth_width > 0 else 0
     )
     expected_screen_hzb_height = (
-        expected_screen_hzb_extent(stage3_depth_height) if stage3_depth_height > 0 else 0
+        expected_screen_hzb_extent(stage3_depth_height)
+        if stage3_depth_height > 0
+        else 0
     )
     expected_screen_hzb_mips = (
-        expected_screen_hzb_mip_count(expected_screen_hzb_width, expected_screen_hzb_height)
+        expected_screen_hzb_mip_count(
+            expected_screen_hzb_width, expected_screen_hzb_height
+        )
         if expected_screen_hzb_width > 0 and expected_screen_hzb_height > 0
         else 0
     )
@@ -860,21 +990,50 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         and local_fog_indirect_draw_instance_count > 0
     )
 
-    atmosphere_transmittance_lut_scope_count_match = len(atmosphere_transmittance_lut_scope) == 1
-    atmosphere_transmittance_lut_dispatch_count_match = (
-        len(records_with_name(atmosphere_transmittance_lut_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+    atmosphere_transmittance_lut_scope_count_match = (
+        len(atmosphere_transmittance_lut_scope) == 1
     )
-    atmosphere_multi_scattering_lut_scope_count_match = len(atmosphere_multi_scattering_lut_scope) == 1
+    atmosphere_transmittance_lut_dispatch_count_match = (
+        len(
+            records_with_name(
+                atmosphere_transmittance_lut_records,
+                "ID3D12GraphicsCommandList::Dispatch()",
+            )
+        )
+        == 1
+    )
+    atmosphere_multi_scattering_lut_scope_count_match = (
+        len(atmosphere_multi_scattering_lut_scope) == 1
+    )
     atmosphere_multi_scattering_lut_dispatch_count_match = (
-        len(records_with_name(atmosphere_multi_scattering_lut_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+        len(
+            records_with_name(
+                atmosphere_multi_scattering_lut_records,
+                "ID3D12GraphicsCommandList::Dispatch()",
+            )
+        )
+        == 1
     )
     atmosphere_sky_view_lut_scope_count_match = len(atmosphere_sky_view_lut_scope) == 1
     atmosphere_sky_view_lut_dispatch_count_match = (
-        len(records_with_name(atmosphere_sky_view_lut_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+        len(
+            records_with_name(
+                atmosphere_sky_view_lut_records, "ID3D12GraphicsCommandList::Dispatch()"
+            )
+        )
+        == 1
     )
-    atmosphere_camera_aerial_scope_count_match = len(atmosphere_camera_aerial_scope) == 1
+    atmosphere_camera_aerial_scope_count_match = (
+        len(atmosphere_camera_aerial_scope) == 1
+    )
     atmosphere_camera_aerial_dispatch_count_match = (
-        len(records_with_name(atmosphere_camera_aerial_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+        len(
+            records_with_name(
+                atmosphere_camera_aerial_records,
+                "ID3D12GraphicsCommandList::Dispatch()",
+            )
+        )
+        == 1
     )
     atmosphere_camera_aerial_usage = find_named_resource_usage(
         controller,
@@ -885,11 +1044,21 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     atmosphere_camera_aerial_consumed = len(atmosphere_camera_aerial_usage) > 0
     distant_sky_light_lut_scope_count_match = len(distant_sky_light_lut_scope) == 1
     distant_sky_light_lut_dispatch_count_match = (
-        len(records_with_name(distant_sky_light_lut_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+        len(
+            records_with_name(
+                distant_sky_light_lut_records, "ID3D12GraphicsCommandList::Dispatch()"
+            )
+        )
+        == 1
     )
     stage14_volumetric_fog_scope_count_match = len(stage14_volumetric_fog_scope) == 1
     stage14_volumetric_fog_dispatch_count_match = (
-        len(records_with_name(stage14_volumetric_fog_records, "ID3D12GraphicsCommandList::Dispatch()")) == 1
+        len(
+            records_with_name(
+                stage14_volumetric_fog_records, "ID3D12GraphicsCommandList::Dispatch()"
+            )
+        )
+        == 1
     )
     integrated_light_scattering_written = find_named_resource_usage(
         controller,
@@ -917,16 +1086,36 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("report_path={}".format(report_path))
     report.append("stage3_last_draw_event={}".format(stage3_last_draw.event_id))
     report.append("stage9_last_draw_event={}".format(stage9_last_draw.event_id))
-    report.append("stage12_spot_last_draw_event={}".format(stage12_spot_last_draw.event_id if stage12_spot_last_draw else ""))
-    report.append("stage12_point_last_draw_event={}".format(stage12_point_last_draw.event_id if stage12_point_last_draw else ""))
-    report.append("stage12_directional_last_draw_event={}".format(stage12_directional_last_draw.event_id))
-    report.append("stage12_final_last_draw_event={}".format(stage12_final_last_draw.event_id))
-    report.append("stage12_final_last_draw_label={}".format(stage12_final_label))
-    report.append("stage15_sky_last_draw_event={}".format(stage15_sky_last_draw.event_id))
     report.append(
-        "stage15_atmosphere_last_draw_event={}".format(stage15_atmosphere_last_draw.event_id)
+        "stage12_spot_last_draw_event={}".format(
+            stage12_spot_last_draw.event_id if stage12_spot_last_draw else ""
+        )
     )
-    report.append("stage15_fog_last_draw_event={}".format(stage15_fog_last_draw.event_id))
+    report.append(
+        "stage12_point_last_draw_event={}".format(
+            stage12_point_last_draw.event_id if stage12_point_last_draw else ""
+        )
+    )
+    report.append(
+        "stage12_directional_last_draw_event={}".format(
+            stage12_directional_last_draw.event_id
+        )
+    )
+    report.append(
+        "stage12_final_last_draw_event={}".format(stage12_final_last_draw.event_id)
+    )
+    report.append("stage12_final_last_draw_label={}".format(stage12_final_label))
+    report.append(
+        "stage15_sky_last_draw_event={}".format(stage15_sky_last_draw.event_id)
+    )
+    report.append(
+        "stage15_atmosphere_last_draw_event={}".format(
+            stage15_atmosphere_last_draw.event_id
+        )
+    )
+    report.append(
+        "stage15_fog_last_draw_event={}".format(stage15_fog_last_draw.event_id)
+    )
     report.append(
         "stage15_local_fog_last_draw_event={}".format(
             stage15_local_fog_last_draw.event_id
@@ -988,7 +1177,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     )
     report.append(
         "atmosphere_camera_aerial_resource_name={}".format(
-            atmosphere_camera_aerial_usage[0]["name"] if atmosphere_camera_aerial_usage else ""
+            atmosphere_camera_aerial_usage[0]["name"]
+            if atmosphere_camera_aerial_usage
+            else ""
         )
     )
     report.append(
@@ -1035,12 +1226,34 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             else ""
         )
     )
-    report.append("stage9_has_expected_targets={}".format(str(stage9_has_expected_targets).lower()))
-    report.append("stage9_gbuffer_base_color_nonzero={}".format(str(stage9_gbuffer_nonzero).lower()))
-    report.append("stage9_velocity_nonzero={}".format(str(stage9_velocity_nonzero).lower()))
-    report.append("stage12_spot_scene_color_nonzero={}".format(str(stage12_spot_scene_color_nonzero).lower()))
-    report.append("stage12_point_scene_color_nonzero={}".format(str(stage12_point_scene_color_nonzero).lower()))
-    report.append("stage12_directional_scene_color_nonzero={}".format(str(stage12_directional_scene_color_nonzero).lower()))
+    report.append(
+        "stage9_has_expected_targets={}".format(
+            str(stage9_has_expected_targets).lower()
+        )
+    )
+    report.append(
+        "stage9_gbuffer_base_color_nonzero={}".format(
+            str(stage9_gbuffer_nonzero).lower()
+        )
+    )
+    report.append(
+        "stage9_velocity_nonzero={}".format(str(stage9_velocity_nonzero).lower())
+    )
+    report.append(
+        "stage12_spot_scene_color_nonzero={}".format(
+            str(stage12_spot_scene_color_nonzero).lower()
+        )
+    )
+    report.append(
+        "stage12_point_scene_color_nonzero={}".format(
+            str(stage12_point_scene_color_nonzero).lower()
+        )
+    )
+    report.append(
+        "stage12_directional_scene_color_nonzero={}".format(
+            str(stage12_directional_scene_color_nonzero).lower()
+        )
+    )
     report.append(
         "stage15_sky_scene_color_delta_max={:.6f}".format(stage15_sky_scene_color_delta)
     )
@@ -1124,7 +1337,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         )
     )
     report.append("screen_hzb_published={}".format(str(screen_hzb_published).lower()))
-    report.append("local_fog_hzb_consumed={}".format(str(local_fog_hzb_consumed).lower()))
+    report.append(
+        "local_fog_hzb_consumed={}".format(str(local_fog_hzb_consumed).lower())
+    )
     report.append(
         "local_fog_indirect_draw_valid={}".format(
             str(local_fog_indirect_draw_valid).lower()
@@ -1191,15 +1406,21 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     for index, sample in enumerate(stage12_point["outputs"]):
         append_texture_sample(report, "stage12_point_output_{}".format(index), sample)
     for index, sample in enumerate(stage12_directional["outputs"]):
-        append_texture_sample(report, "stage12_directional_output_{}".format(index), sample)
+        append_texture_sample(
+            report, "stage12_directional_output_{}".format(index), sample
+        )
     for index, sample in enumerate(stage15_sky["outputs"]):
         append_texture_sample(report, "stage15_sky_output_{}".format(index), sample)
     for index, sample in enumerate(stage15_atmosphere["outputs"]):
-        append_texture_sample(report, "stage15_atmosphere_output_{}".format(index), sample)
+        append_texture_sample(
+            report, "stage15_atmosphere_output_{}".format(index), sample
+        )
     for index, sample in enumerate(stage15_fog["outputs"]):
         append_texture_sample(report, "stage15_fog_output_{}".format(index), sample)
     for index, sample in enumerate(stage15_local_fog["outputs"]):
-        append_texture_sample(report, "stage15_local_fog_output_{}".format(index), sample)
+        append_texture_sample(
+            report, "stage15_local_fog_output_{}".format(index), sample
+        )
     append_texture_sample(report, "final_present", final_present)
 
 

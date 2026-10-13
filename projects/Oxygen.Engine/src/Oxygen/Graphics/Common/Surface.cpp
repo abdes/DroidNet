@@ -4,9 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Common/Surface.h>
-
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Platform/Window.h>
 
 using oxygen::graphics::Surface;

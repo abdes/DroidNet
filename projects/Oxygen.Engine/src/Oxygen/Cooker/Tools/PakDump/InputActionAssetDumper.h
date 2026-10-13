@@ -10,12 +10,12 @@
 #include <cstring>
 #include <iostream>
 
-#include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Data/PakFormat.h>
-
 #include "AssetDumpHelpers.h"
 #include "AssetDumper.h"
 #include "PrintUtils.h"
+
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::pakdump {
 

@@ -23,16 +23,12 @@ def check(source: Path, requirements: Path, tests: bool) -> dict:
             workspace = directory
             inputs.extend((manifest, directory / ".python-version"))
             for member in metadata["tool"]["uv"]["workspace"]["members"]:
-                inputs.extend(
-                    p / "pyproject.toml" for p in directory.glob(member)
-                )
+                inputs.extend(p / "pyproject.toml" for p in directory.glob(member))
             break
     if workspace:
         environment = workspace / ".venv"
         if Path(sys.prefix).resolve() != environment.resolve():
-            raise ValueError(
-                f"Python must come from {environment}, not {sys.prefix}"
-            )
+            raise ValueError(f"Python must come from {environment}, not {sys.prefix}")
         subprocess.run(
             [
                 "uv",
@@ -57,9 +53,7 @@ def check(source: Path, requirements: Path, tests: bool) -> dict:
             )
         )
         receipt = json.loads(
-            (Path(sys.prefix) / "oxygen-build-tools.json").read_text(
-                encoding="utf-8"
-            )
+            (Path(sys.prefix) / "oxygen-build-tools.json").read_text(encoding="utf-8")
         )
         if (
             receipt["requirements_sha256"]
@@ -73,16 +67,11 @@ def check(source: Path, requirements: Path, tests: bool) -> dict:
             )
         for relative, digest in receipt["pyprojects"].items():
             inputs.append(source / relative)
-            if (
-                digest
-                != hashlib.sha256((source / relative).read_bytes()).hexdigest()
-            ):
+            if digest != hashlib.sha256((source / relative).read_bytes()).hexdigest():
                 raise ValueError(
                     f"Python tool metadata changed since provisioning: {relative}"
                 )
-        version = (
-            (source / ".python-version").read_text(encoding="utf-8").strip()
-        )
+        version = (source / ".python-version").read_text(encoding="utf-8").strip()
         if version != f"{sys.version_info.major}.{sys.version_info.minor}":
             raise ValueError(
                 f"Exported build tools require Python {version}, not {sys.version.split()[0]}"

@@ -72,7 +72,7 @@ target_link_libraries(
 )
 
 if(OXYGEN_BUILD_TESTS)
-  add_subdirectory("Test")
+  add_subdirectory("test")
 endif()
 
 oxygen_module_install(

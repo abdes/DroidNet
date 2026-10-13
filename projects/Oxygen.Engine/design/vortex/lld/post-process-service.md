@@ -871,7 +871,7 @@ The preserved failure is corrected in the test transport; production queues are
 unchanged. The script does not create extra retry capacity by leaving either
 queue available to polling while its retained counterpart is held externally.
 Reuse the seam in
-[`SceneDelayedStatusCannotAuthorizeStalePrecision`](../../../src/Oxygen/Vortex/Test/Exposure/ScenePrecision_test.cpp).
+[`SceneDelayedStatusCannotAuthorizeStalePrecision`](../../../src/Oxygen/Vortex/test/Exposure/ScenePrecision_test.cpp).
 Public transition definitions are in
 [`Renderer.h`](../../../src/Oxygen/Vortex/Renderer.h); source ownership is in
 [`CompositionView.h`](../../../src/Oxygen/Vortex/CompositionView.h).

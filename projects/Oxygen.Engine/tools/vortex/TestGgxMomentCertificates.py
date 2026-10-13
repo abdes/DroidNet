@@ -22,8 +22,12 @@ class GgxCertificateTests(unittest.TestCase):
     def test_analytic_callback_rejects_square_root_branch_cut(self):
         # For v=1, alpha^2=1/2, u=3+i, the discriminant is -1/4.
         # Point evaluation is finite, but it cannot certify holomorphicity.
-        self.assertTrue(energy_integrand(acb(3, 1), acb(1), acb(0.5), False).is_finite())
-        self.assertFalse(energy_integrand(acb(3, 1), acb(1), acb(0.5), True).is_finite())
+        self.assertTrue(
+            energy_integrand(acb(3, 1), acb(1), acb(0.5), False).is_finite()
+        )
+        self.assertFalse(
+            energy_integrand(acb(3, 1), acb(1), acb(0.5), True).is_finite()
+        )
 
     def test_export_radius_includes_binary64_rounding(self):
         original = acb(arb("0.12345678901234567890123456789 +/- 1e-20"))
@@ -39,7 +43,7 @@ class GgxCertificateTests(unittest.TestCase):
 
     def test_interior_energy_contains_independent_analytic_value(self):
         energy, bias = certify(1.0, 0.5)
-        analytic = 1 - arb(0.5)*arb(3).log()
+        analytic = 1 - arb(0.5) * arb(3).log()
         self.assertTrue(energy.real.contains(analytic))
         export_ball(energy)
         export_ball(bias)

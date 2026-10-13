@@ -86,7 +86,9 @@ def build_report(controller, report, capture_path, report_path):
         )
     )
     report.append("projection_reached={}".format(str(projection_reached).lower()))
-    report.append("directional_mask_present={}".format(str(has_directional_mask).lower()))
+    report.append(
+        "directional_mask_present={}".format(str(has_directional_mask).lower())
+    )
     report.append("shadow_mask_present={}".format(str(has_shadow_mask).lower()))
     report.append(
         "projection_scope_events={}".format(summarize_event_ids(projection_scopes))

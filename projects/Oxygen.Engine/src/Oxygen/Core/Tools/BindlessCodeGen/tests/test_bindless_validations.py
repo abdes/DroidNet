@@ -89,9 +89,9 @@ def test_vulkan_binding_overlap_detection(tmp_path):
 
 def test_missing_backend_domain_realization_rejected(tmp_path):
     doc = create_full_example_document()
-    doc["backends"]["vulkan"]["strategy"]["domain_realizations"] = (
-        doc["backends"]["vulkan"]["strategy"]["domain_realizations"][:-1]
-    )
+    doc["backends"]["vulkan"]["strategy"]["domain_realizations"] = doc["backends"][
+        "vulkan"
+    ]["strategy"]["domain_realizations"][:-1]
 
     path = write_yaml(tmp_path / "missing_vk_domain.yaml", doc)
     with pytest.raises(ValueError, match="missing domain realizations"):

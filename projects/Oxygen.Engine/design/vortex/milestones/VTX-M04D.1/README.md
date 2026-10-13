@@ -164,7 +164,7 @@ Likely touch points:
 | environment product types | `src/Oxygen/Vortex/Environment/Types/*`                                                                 |
 | renderer-facing bindings  | `src/Oxygen/Vortex/Types/EnvironmentFrameBindings.h`, `src/Oxygen/Vortex/Types/EnvironmentStaticData.h` |
 | HLSL mirrors              | `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/Environment/*`                                 |
-| focused tests             | `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`                                            |
+| focused tests             | `src/Oxygen/Vortex/test/EnvironmentLightingService_test.cpp`                                            |
 
 Tests:
 
@@ -210,7 +210,7 @@ Likely touch points:
 | SkyLight model/data      | `src/Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h`, `src/Oxygen/Vortex/Types/EnvironmentStaticData.h`                             |
 | frame bindings           | `src/Oxygen/Vortex/Environment/EnvironmentLightingService.*`, `src/Oxygen/Vortex/Types/EnvironmentFrameBindings.h`                              |
 | HLSL consumers/contracts | `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Contracts/Environment/*`, `src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/*` |
-| focused tests            | `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`                                                                                    |
+| focused tests            | `src/Oxygen/Vortex/test/EnvironmentLightingService_test.cpp`                                                                                    |
 
 Tests:
 
@@ -258,7 +258,7 @@ Likely touch points:
 | renderer stage dispatch/publication | `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp`                                                                                                                                                         |
 | environment service state           | `src/Oxygen/Vortex/Environment/EnvironmentLightingService.*`                                                                                                                                                |
 | local fog state sources             | `src/Oxygen/Vortex/Environment/Internal/LocalFogVolumeState.*`, `src/Oxygen/Vortex/Environment/Passes/LocalFogVolumeTiledCullingPass.*`, `src/Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.*` |
-| focused tests                       | `src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp`, `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`                                                                                    |
+| focused tests                       | `src/Oxygen/Vortex/test/SceneRendererPublication_test.cpp`, `src/Oxygen/Vortex/test/EnvironmentLightingService_test.cpp`                                                                                    |
 
 Tests:
 
@@ -303,8 +303,8 @@ Likely touch points:
 | service publication logic  | `src/Oxygen/Vortex/Environment/EnvironmentLightingService.*`    |
 | view products              | `src/Oxygen/Vortex/Environment/Types/EnvironmentViewProducts.h` |
 | volumetric model seam      | `src/Oxygen/Vortex/Environment/Types/VolumetricFogModel.h`      |
-| fog/local fog tests        | `src/Oxygen/Vortex/Test/EnvironmentLightingService_test.cpp`    |
-| renderer publication tests | `src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp`      |
+| fog/local fog tests        | `src/Oxygen/Vortex/test/EnvironmentLightingService_test.cpp`    |
+| renderer publication tests | `src/Oxygen/Vortex/test/SceneRendererPublication_test.cpp`      |
 
 Per-slice validation:
 

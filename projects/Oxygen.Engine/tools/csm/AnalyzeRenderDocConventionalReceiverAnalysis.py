@@ -194,9 +194,7 @@ def build_report(
     binding = find_analysis_binding(controller, resource_names, analysis_event.event_id)
     if binding is None:
         raise RuntimeError(
-            "No analysis UAV binding found on event {}".format(
-                analysis_event.event_id
-            )
+            "No analysis UAV binding found on event {}".format(analysis_event.event_id)
         )
 
     records = read_analysis_records(controller, binding["id"])
@@ -245,14 +243,10 @@ def build_report(
         )
     )
     report.append(
-        "min_full_depth_ratio={:.6f}".format(
-            min(depth_ratios) if depth_ratios else 0.0
-        )
+        "min_full_depth_ratio={:.6f}".format(min(depth_ratios) if depth_ratios else 0.0)
     )
     report.append(
-        "max_full_depth_ratio={:.6f}".format(
-            max(depth_ratios) if depth_ratios else 0.0
-        )
+        "max_full_depth_ratio={:.6f}".format(max(depth_ratios) if depth_ratios else 0.0)
     )
     report.append(
         "min_first_three_full_area_ratio={:.6f}".format(

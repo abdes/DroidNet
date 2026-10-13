@@ -6,12 +6,11 @@
 
 #pragma once
 
-#include <Oxygen/Base/Macros.h>
-#include <Oxygen/Base/Types/Geometry.h>
-
 #include <cstdint>
 #include <string>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Platform/api_export.h>
 
 namespace oxygen::platform {

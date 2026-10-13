@@ -6,9 +6,10 @@
 
 #include <exception>
 #include <filesystem>
-#include <nlohmann/json.hpp>
 #include <optional>
 #include <string_view>
+
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>

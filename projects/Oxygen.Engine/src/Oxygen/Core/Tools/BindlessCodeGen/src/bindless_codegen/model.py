@@ -171,11 +171,11 @@ def build_model(doc: Dict[str, Any]) -> Model:
     defaults = Defaults(**(doc.get("defaults") or {}))
 
     index_spaces: List[IndexSpace] = []
-    for index_space in ((doc.get("abi") or {}).get("index_spaces") or []):
+    for index_space in (doc.get("abi") or {}).get("index_spaces") or []:
         index_spaces.append(IndexSpace(id=str(index_space.get("id"))))
 
     abi_domains: List[AbiDomain] = []
-    for domain in ((doc.get("abi") or {}).get("domains") or []):
+    for domain in (doc.get("abi") or {}).get("domains") or []:
         abi_domains.append(
             AbiDomain(
                 id=str(domain.get("id")),
@@ -189,7 +189,7 @@ def build_model(doc: Dict[str, Any]) -> Model:
             )
         )
 
-    d3d12_doc = ((doc.get("backends") or {}).get("d3d12") or {})
+    d3d12_doc = (doc.get("backends") or {}).get("d3d12") or {}
     d3d12_strategy = d3d12_doc.get("strategy") or {}
     d3d12_heaps: List[D3D12Heap] = []
     for heap in d3d12_strategy.get("heaps") or []:
@@ -202,9 +202,7 @@ def build_model(doc: Dict[str, Any]) -> Model:
                 base_index=int(heap.get("base_index")),
                 allow_growth=bool(heap.get("allow_growth", False)),
                 growth_factor=_coerce_float(heap.get("growth_factor")),
-                max_growth_iterations=_coerce_int(
-                    heap.get("max_growth_iterations")
-                ),
+                max_growth_iterations=_coerce_int(heap.get("max_growth_iterations")),
                 debug_name=heap.get("debug_name"),
             )
         )
@@ -248,7 +246,7 @@ def build_model(doc: Dict[str, Any]) -> Model:
             )
         )
 
-    vulkan_doc = ((doc.get("backends") or {}).get("vulkan") or {})
+    vulkan_doc = (doc.get("backends") or {}).get("vulkan") or {}
     vulkan_strategy = vulkan_doc.get("strategy") or {}
     vulkan_sets: List[VulkanDescriptorSet] = []
     for descriptor_set in vulkan_strategy.get("descriptor_sets") or []:

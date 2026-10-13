@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Jolt/Jolt.h> // must be first (keep separate)
+
 #include <algorithm>
 #include <cmath>
 #include <deque>
@@ -14,8 +16,6 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
-
-#include <Jolt/Jolt.h> // must be first (keep separate)
 
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Core/JobSystemThreadPool.h>

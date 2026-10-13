@@ -67,13 +67,18 @@ def walk_actions(action, structured, path, out):
         walk_actions(child, structured, current, out)
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     draws = []
     structured = controller.GetStructuredFile()
     for root in controller.GetRootActions():
         walk_actions(root, structured, [], draws)
     for action, path in draws:
-        if "Vortex.Stage3.DepthPrepass" not in path and "Vortex.Stage9.BasePass" not in path:
+        if (
+            "Vortex.Stage3.DepthPrepass" not in path
+            and "Vortex.Stage9.BasePass" not in path
+        ):
             continue
         report.append("path={}".format(path))
         report.append("eventId={}".format(action.eventId))

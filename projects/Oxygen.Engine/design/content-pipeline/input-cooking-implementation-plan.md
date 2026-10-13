@@ -91,13 +91,13 @@ This plan follows `.github/instructions/cpp_coding_style.instructions.md` collab
 
 ### Tests
 
-1. `src/Oxygen/Cooker/Test/Import/*` (new input import tests)
-2. `src/Oxygen/Content/Test/AssetLoader_scene_test.cpp` (remove binding tests)
-3. `src/Oxygen/Content/Test/SceneLoader_test.cpp` (remove `kInputContextBinding` tests)
-4. `src/Oxygen/Content/Test/AssetLoader_lifetime_test.cpp` (remove binding test)
-5. `src/Oxygen/Content/Test/TestData/scene_with_input_context_binding.yaml` (remove)
+1. `src/Oxygen/Cooker/test/Import/*` (new input import tests)
+2. `src/Oxygen/Content/test/AssetLoader_scene_test.cpp` (remove binding tests)
+3. `src/Oxygen/Content/test/SceneLoader_test.cpp` (remove `kInputContextBinding` tests)
+4. `src/Oxygen/Content/test/AssetLoader_lifetime_test.cpp` (remove binding test)
+5. `src/Oxygen/Content/test/TestData/scene_with_input_context_binding.yaml` (remove)
 6. `src/Oxygen/Cooker/Tools/PakGen/tests/test_v6_input_assets.py` (remove binding tests)
-7. `src/Oxygen/Content/Test/*` (new context enumeration/hydration tests)
+7. `src/Oxygen/Content/test/*` (new context enumeration/hydration tests)
 
 ## 4. Phase Plan and Status Ledger
 
@@ -454,7 +454,7 @@ Current:
      - `src/Oxygen/Content/AssetLoader.h/.cpp`
      - `src/Oxygen/Content/InputContextHydration.h`
      - `src/Oxygen/Content/Internal/InputContextHydration.cpp`
-   - Added runtime coverage in `src/Oxygen/Content/Test/AssetLoader_loading_test.cpp`.
+   - Added runtime coverage in `src/Oxygen/Content/test/AssetLoader_loading_test.cpp`.
 6. P6 completed:
    - No `INPT`/`InputContextBinding*` usage remains in `src` and `Examples` code paths.
    - Removed scene binding packing/validation from PakGen:
@@ -475,8 +475,8 @@ Current:
    - Install packaging ships schemas:
      - `cmake/Install.cmake` installs `${PROJECT_SOURCE_DIR}/schemas` under `${OXYGEN_INSTALL_DATA}`.
    - Added schema validation tests:
-     - `src/Oxygen/Cooker/Test/Import/InputJsonSchema_test.cpp`
-     - wired in `src/Oxygen/Cooker/Test/CMakeLists.txt`.
+     - `src/Oxygen/Cooker/test/Import/InputJsonSchema_test.cpp`
+     - wired in `src/Oxygen/Cooker/test/CMakeLists.txt`.
    - Updated user-facing docs:
      - `src/Oxygen/Cooker/Tools/ImportTool/README.md`
      - `design/content-pipeline/input-cooking-architecture.md`

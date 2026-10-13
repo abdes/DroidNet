@@ -1,0 +1,150 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#pragma once
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <ranges>
+#include <span>
+#include <string_view>
+
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/test/Fakes/Graphics.h>
+
+namespace oxygen::vortex::testing {
+
+//! Adjacent draws exercise each sidedness/handedness pair and return to the
+//! first.
+inline auto MakeRasterStateDraws(const PassMaskBit kind)
+  -> std::array<DrawMetadata, 5>
+{
+  auto draws = std::array<DrawMetadata, 5> {};
+  for (std::size_t index = 0U; index < draws.size(); ++index) {
+    auto& draw = draws.at(index);
+    draw.vertex_buffer_index = ShaderVisibleIndex { 1U };
+    draw.vertex_count = (static_cast<std::uint32_t>(index) + 1U) * 3U;
+    draw.instance_count = 1U;
+    draw.material_handle = 1U;
+    draw.flags = PassMask {
+      kind,
+      PassMaskBit::kMainViewVisible,
+    };
+  }
+  draws.at(1).flags.Set(PassMaskBit::kDoubleSided);
+  draws.at(2).flags.Set(PassMaskBit::kDoubleSided);
+  draws.at(2).flags.Set(PassMaskBit::kReverseWinding);
+  draws.at(3).flags.Set(PassMaskBit::kReverseWinding);
+  return draws;
+}
+
+//! Checks the state active at each draw, rather than an unrelated PSO bind.
+inline auto ExpectRasterStateDraws(
+  const std::span<const DrawCommandLog::Event> draws,
+  const std::string_view pipeline_prefix) -> void
+{
+  constexpr auto kCullModes = std::array {
+    graphics::CullMode::kBack,
+    graphics::CullMode::kNone,
+    graphics::CullMode::kNone,
+    graphics::CullMode::kBack,
+    graphics::CullMode::kBack,
+  };
+  constexpr auto kFrontCounterClockwise = std::array {
+    true,
+    true,
+    false,
+    false,
+    true,
+  };
+  auto seen = std::array<std::size_t, 5> {};
+  for (const auto& draw : draws) {
+    if (!std::string_view(draw.pipeline_name).starts_with(pipeline_prefix)) {
+      continue;
+    }
+    ASSERT_GE(draw.vertex_num, 3U);
+    ASSERT_EQ(draw.vertex_num % 3U, 0U);
+    const auto index = static_cast<std::size_t>((draw.vertex_num / 3U) - 1U);
+    ASSERT_LT(index, seen.size());
+    SCOPED_TRACE(index);
+    ++seen.at(index);
+    if (!draw.rasterizer.has_value()) {
+      FAIL() << "Matching draw has no rasterizer state";
+    }
+    EXPECT_EQ(draw.rasterizer->cull_mode, kCullModes.at(index));
+    EXPECT_EQ(draw.rasterizer->front_counter_clockwise,
+      kFrontCounterClockwise.at(index));
+  }
+  for (const auto count : seen) {
+    EXPECT_EQ(count, 1U);
+  }
+}
+
+//! Checks the indirect draws of `MakeRasterStateDraws`.
+/*!
+ Lists cut their candidates wherever the raster state changes and bind one
+ pipeline per cut, so each indirect draw carries one state. Summed over the
+ draws, each state's candidate count matches the draws that use it.
+*/
+inline auto ExpectRasterStateIndirectDraws(
+  const std::span<const IndirectCommandLog::Event> draws,
+  const std::string_view pipeline_prefix) -> void
+{
+  struct ExpectedState {
+    graphics::CullMode cull_mode;
+    bool front_counter_clockwise;
+    std::uint32_t draw_count;
+  };
+  constexpr auto kExpected = std::array {
+    ExpectedState {
+      .cull_mode = graphics::CullMode::kBack,
+      .front_counter_clockwise = true,
+      .draw_count = 2U,
+    },
+    ExpectedState {
+      .cull_mode = graphics::CullMode::kNone,
+      .front_counter_clockwise = true,
+      .draw_count = 1U,
+    },
+    ExpectedState {
+      .cull_mode = graphics::CullMode::kNone,
+      .front_counter_clockwise = false,
+      .draw_count = 1U,
+    },
+    ExpectedState {
+      .cull_mode = graphics::CullMode::kBack,
+      .front_counter_clockwise = false,
+      .draw_count = 1U,
+    },
+  };
+  auto seen = std::array<std::uint32_t, kExpected.size()> {};
+  for (const auto& draw : draws) {
+    if (!std::string_view(draw.pipeline_name).starts_with(pipeline_prefix)) {
+      continue;
+    }
+    if (!draw.rasterizer.has_value()) {
+      FAIL() << "Matching indirect draw has no rasterizer state";
+    }
+    const auto state = std::ranges::find_if(
+      kExpected, [&](const ExpectedState& expected) -> bool {
+        return expected.cull_mode == draw.rasterizer->cull_mode
+          && expected.front_counter_clockwise
+          == draw.rasterizer->front_counter_clockwise;
+      });
+    ASSERT_NE(state, kExpected.end());
+    seen.at(static_cast<std::size_t>(std::distance(kExpected.begin(), state)))
+      += draw.execution_desc.command_count.get();
+  }
+  for (const auto& [expected, count] : std::views::zip(kExpected, seen)) {
+    EXPECT_EQ(count, expected.draw_count);
+  }
+}
+
+} // namespace oxygen::vortex::testing

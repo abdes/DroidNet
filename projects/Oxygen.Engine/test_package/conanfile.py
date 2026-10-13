@@ -1,4 +1,5 @@
 """Exercise Oxygen as an application dependency, outside the engine build."""
+
 import os
 
 from conan import ConanFile
@@ -25,7 +26,10 @@ class OxygenConsumer(ConanFile):
         )
         checker = str(dependency.options.awaitable_state_checker)
         toolchain.variables["OXYGEN_TEST_CHECKER"] = (
-            self.settings.build_type == "Debug" if checker == "auto" else checker == "True")
+            self.settings.build_type == "Debug"
+            if checker == "auto"
+            else checker == "True"
+        )
         toolchain.generate()
         CMakeDeps(self).generate()
 
@@ -39,7 +43,12 @@ class OxygenConsumer(ConanFile):
             executable = os.path.join(self.cpp.build.bindirs[0], "oxygen-consumer")
             self.run(f'"{executable}"', env="conanrun")
             if str(self.dependencies["oxygen"].options.modules) == "full":
-                for tool in ("Oxygen.Cooker.ImportTool", "Oxygen.Cooker.PakTool",
-                             "Oxygen.Cooker.PakDump", "Oxygen.Cooker.Inspector",
-                             "Oxygen.Graphics.Direct3D12.ShaderBake", "Oxygen.Examples.RenderScene"):
-                    self.run(f'{tool} --help', env="conanrun")
+                for tool in (
+                    "Oxygen.Cooker.ImportTool",
+                    "Oxygen.Cooker.PakTool",
+                    "Oxygen.Cooker.PakDump",
+                    "Oxygen.Cooker.Inspector",
+                    "Oxygen.Graphics.Direct3D12.ShaderBake",
+                    "Oxygen.Examples.RenderScene",
+                ):
+                    self.run(f"{tool} --help", env="conanrun")

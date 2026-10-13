@@ -71,9 +71,7 @@ namespace {
     const auto translation
       = glm::translate(glm::mat4 { 1.0F }, selection.position);
     if (spherical_proxy) {
-      return translation
-        * MakeScaleMatrix(
-          glm::vec3 { selection.range });
+      return translation * MakeScaleMatrix(glm::vec3 { selection.range });
     }
 
     const auto outer_cosine = std::clamp(

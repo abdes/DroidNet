@@ -19,13 +19,19 @@ POWERSHELL = shutil.which("pwsh")
 @unittest.skipUnless(CONAN and CMAKE, "Conan and CMake are required")
 class PresetGenerationTests(unittest.TestCase):
     def copy_build_tree_cli(self, root):
-        for relative in ("tools/build-tree.ps1", "tools/cli/BuildSelection.ps1", ".vscode/prepare_clangd.py"):
+        for relative in (
+            "tools/build-tree.ps1",
+            "tools/cli/BuildSelection.ps1",
+            ".vscode/prepare_clangd.py",
+        ):
             target = root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ENGINE / relative, target)
         # These tests mock external programs; environment ownership is exercised
         # by the real workspace integration checks.
-        with (root / "tools/cli/BuildSelection.ps1").open("a", encoding="utf-8") as stream:
+        with (root / "tools/cli/BuildSelection.ps1").open(
+            "a", encoding="utf-8"
+        ) as stream:
             stream.write("\nfunction Get-OxygenPython { return 'python' }\n")
 
     def make_fixture(self, root):
@@ -37,10 +43,14 @@ class PresetGenerationTests(unittest.TestCase):
             "class Fixture(module.OxygenConan):\n"
             "    def requirements(self): pass\n"
             "    def build_requirements(self): pass\n"
-            "    def _prepare_build_python(self): return None\n", encoding="utf-8")
+            "    def _prepare_build_python(self): return None\n",
+            encoding="utf-8",
+        )
         (root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
         (root / "CMakeLists.txt").write_text(
-            "cmake_minimum_required(VERSION 4.2)\nproject(Fixture NONE)\n", encoding="utf-8")
+            "cmake_minimum_required(VERSION 4.2)\nproject(Fixture NONE)\n",
+            encoding="utf-8",
+        )
         shutil.copyfile(ENGINE / "CMakePresets.json", root / "CMakePresets.json")
 
     def test_incompatible_install_preserves_existing_metadata(self):
@@ -48,25 +58,55 @@ class PresetGenerationTests(unittest.TestCase):
             ("Ninja Multi-Config", [], ["-o", "shared=False"]),
             ("Ninja Multi-Config", [], ["-s", "arch=x86"]),
             ("Ninja Multi-Config", [], ["-s", "compiler.version=194"]),
-            ("Ninja Multi-Config", ["-o", "shared=False"], ["-s", "compiler.runtime=static"]),
-            ("Visual Studio 18 2026", [], ["-c", "tools.cmake.cmaketoolchain:generator=Visual Studio 17 2022"]),
+            (
+                "Ninja Multi-Config",
+                ["-o", "shared=False"],
+                ["-s", "compiler.runtime=static"],
+            ),
+            (
+                "Visual Studio 18 2026",
+                [],
+                ["-c", "tools.cmake.cmaketoolchain:generator=Visual Studio 17 2022"],
+            ),
         )
         for generator, initial, changed in scenarios:
-            with self.subTest(changed=changed), tempfile.TemporaryDirectory(prefix="oxygen-identity-") as directory:
+            with (
+                self.subTest(changed=changed),
+                tempfile.TemporaryDirectory(prefix="oxygen-identity-") as directory,
+            ):
                 root = Path(directory)
                 self.make_fixture(root)
                 common = ["-o", "modules=Base"] + initial
                 self.install(root, generator, False, False, "Release", common)
                 self.install(root, generator, False, False, "Debug", common)
-                before = {p.relative_to(root): p.read_bytes() for p in (root / "out").rglob("*") if p.is_file()}
+                before = {
+                    p.relative_to(root): p.read_bytes()
+                    for p in (root / "out").rglob("*")
+                    if p.is_file()
+                }
                 presets = (root / "CMakeUserPresets.json").read_bytes()
                 # deploy() executes before generate(), so both entry points must
                 # reject before the existing toolchain/SDK can be overwritten.
-                result = self.install(root, generator, False, False, "Release", common + changed + [
-                    "--deployer-package=oxygen/0.1.0", f"--deployer-folder={root / 'out/install'}",
-                ], succeeds=False)
+                result = self.install(
+                    root,
+                    generator,
+                    False,
+                    False,
+                    "Release",
+                    common
+                    + changed
+                    + [
+                        "--deployer-package=oxygen/0.1.0",
+                        f"--deployer-folder={root / 'out/install'}",
+                    ],
+                    succeeds=False,
+                )
                 self.assertIn("Incompatible Oxygen build-tree reuse", result.stderr)
-                after = {p.relative_to(root): p.read_bytes() for p in (root / "out").rglob("*") if p.is_file()}
+                after = {
+                    p.relative_to(root): p.read_bytes()
+                    for p in (root / "out").rglob("*")
+                    if p.is_file()
+                }
                 self.assertEqual(before, after)
                 self.assertEqual(presets, (root / "CMakeUserPresets.json").read_bytes())
 
@@ -78,31 +118,51 @@ class PresetGenerationTests(unittest.TestCase):
             folder = root / "out/build-ninja/generators"
             (folder / "oxygen-build-identity.json").unlink()
             before = (folder / "conan_toolchain.cmake").read_bytes()
-            result = self.install(root, "Ninja Multi-Config", False, False, "Release", succeeds=False)
+            result = self.install(
+                root, "Ninja Multi-Config", False, False, "Release", succeeds=False
+            )
             self.assertIn("predates build-identity validation", result.stderr)
             self.assertEqual(before, (folder / "conan_toolchain.cmake").read_bytes())
 
     def test_single_and_multi_config_ninja_coexist(self):
-        with tempfile.TemporaryDirectory(prefix="oxygen-ninja-generators-") as directory:
+        with tempfile.TemporaryDirectory(
+            prefix="oxygen-ninja-generators-"
+        ) as directory:
             root = Path(directory)
             self.make_fixture(root)
             expected = set()
-            for generator, suffix in (("Ninja", "ninja-single"), ("Ninja Multi-Config", "ninja")):
+            for generator, suffix in (
+                ("Ninja", "ninja-single"),
+                ("Ninja Multi-Config", "ninja"),
+            ):
                 for config in ("Debug", "Release"):
                     self.install(root, generator, False, False, config)
                     expected.add(f"conan-{suffix}-{config.lower()}")
                     self.assert_presets(root, expected)
 
     def test_asan_multi_config_presets_generate_only_debug(self):
-        for generator, variant in (("Ninja Multi-Config", "ninja"), ("Visual Studio 18 2026", "vs")):
+        for generator, variant in (
+            ("Ninja Multi-Config", "ninja"),
+            ("Visual Studio 18 2026", "vs"),
+        ):
             for asan in (False, True):
-                with self.subTest(generator=generator, asan=asan), tempfile.TemporaryDirectory(prefix="oxygen-asan-config-") as directory:
+                with (
+                    self.subTest(generator=generator, asan=asan),
+                    tempfile.TemporaryDirectory(
+                        prefix="oxygen-asan-config-"
+                    ) as directory,
+                ):
                     root = Path(directory)
                     self.make_fixture(root)
                     self.install(root, generator, False, asan, "Debug")
                     prefix = "asan-" if asan else ""
-                    presets = root / f"out/build-{prefix}{variant}/generators/CMakePresets.json"
-                    cache = json.loads(presets.read_text())["configurePresets"][0]["cacheVariables"]
+                    presets = (
+                        root
+                        / f"out/build-{prefix}{variant}/generators/CMakePresets.json"
+                    )
+                    cache = json.loads(presets.read_text())["configurePresets"][0][
+                        "cacheVariables"
+                    ]
                     if asan:
                         self.assertEqual(cache["CMAKE_CONFIGURATION_TYPES"], "Debug")
                     else:
@@ -113,12 +173,30 @@ class PresetGenerationTests(unittest.TestCase):
             root = Path(directory)
             self.make_fixture(root)
             self.install(root, "Ninja Multi-Config", False, False, "Debug")
-            before = (root / "out/build-ninja/generators/conan_toolchain.cmake").read_bytes()
-            for changed in (("-o", "tests=False"), ("-o", "modules=Base"),
-                            ("-o", "awaitable_state_checker=True")):
-                result = self.install(root, "Ninja Multi-Config", False, False, "Release", changed, succeeds=False)
+            before = (
+                root / "out/build-ninja/generators/conan_toolchain.cmake"
+            ).read_bytes()
+            for changed in (
+                ("-o", "tests=False"),
+                ("-o", "modules=Base"),
+                ("-o", "awaitable_state_checker=True"),
+            ):
+                result = self.install(
+                    root,
+                    "Ninja Multi-Config",
+                    False,
+                    False,
+                    "Release",
+                    changed,
+                    succeeds=False,
+                )
                 self.assertIn("Incompatible Oxygen build-tree options", result.stderr)
-                self.assertEqual(before, (root / "out/build-ninja/generators/conan_toolchain.cmake").read_bytes())
+                self.assertEqual(
+                    before,
+                    (
+                        root / "out/build-ninja/generators/conan_toolchain.cmake"
+                    ).read_bytes(),
+                )
             self.install(root, "Ninja Multi-Config", False, False, "Release")
 
     def test_ui_mode_cannot_differ_between_configurations(self):
@@ -129,25 +207,52 @@ class PresetGenerationTests(unittest.TestCase):
             self.install(root, "Ninja Multi-Config", False, False, "Debug", options)
             toolchain = root / "out/build-ninja/generators/conan_toolchain.cmake"
             before = toolchain.read_bytes()
-            result = self.install(root, "Ninja Multi-Config", False, False, "Release",
-                                  (*options, "-o", "&:ui_tests=True"), succeeds=False)
+            result = self.install(
+                root,
+                "Ninja Multi-Config",
+                False,
+                False,
+                "Release",
+                (*options, "-o", "&:ui_tests=True"),
+                succeeds=False,
+            )
             self.assertIn("Incompatible Oxygen build-tree options", result.stderr)
             self.assertIn("ui_tests", result.stderr)
             self.assertEqual(before, toolchain.read_bytes())
 
     def test_ide_environment_does_not_override_conan_generator(self):
-        with tempfile.TemporaryDirectory(prefix="oxygen-default-generator-") as directory:
+        with tempfile.TemporaryDirectory(
+            prefix="oxygen-default-generator-"
+        ) as directory:
             root = Path(directory)
             self.make_fixture(root)
             profile = ENGINE / "profiles/windows-msvc.ini"
-            result = subprocess.run([
-                CONAN, "install", str(root), "--no-remote", "--build=never",
-                f"-pr:h={profile}", f"-pr:b={profile}", "-s", "build_type=Release",
-            ], cwd=root, env={**os.environ, "VSCODE_PID": "12345"},
-                capture_output=True, text=True, encoding="utf-8", errors="replace")
+            result = subprocess.run(
+                [
+                    CONAN,
+                    "install",
+                    str(root),
+                    "--no-remote",
+                    "--build=never",
+                    f"-pr:h={profile}",
+                    f"-pr:b={profile}",
+                    "-s",
+                    "build_type=Release",
+                ],
+                cwd=root,
+                env={**os.environ, "VSCODE_PID": "12345"},
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+            )
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            native = json.loads((root / "out/build-vs/generators/CMakePresets.json").read_text())
-            self.assertEqual(native["configurePresets"][0]["generator"], "Visual Studio 18 2026")
+            native = json.loads(
+                (root / "out/build-vs/generators/CMakePresets.json").read_text()
+            )
+            self.assertEqual(
+                native["configurePresets"][0]["generator"], "Visual Studio 18 2026"
+            )
             self.assertFalse((root / "out/build-ninja").exists())
 
     def test_sdk_install_destinations(self):
@@ -162,18 +267,51 @@ class PresetGenerationTests(unittest.TestCase):
                 "set(OXYGEN_PROJECT_SOURCE_DIR ${CMAKE_SOURCE_DIR})\n"
                 "set(OXYGEN_BUILD_FULL_ENGINE FALSE)\nset(CMAKE_INSTALL_LIBDIR lib)\n"
                 f'include("{ENGINE.as_posix()}/cmake/Install.cmake")\n'
-                'install(FILES payload.txt DESTINATION share)\n', encoding="utf-8")
-            for generator, suffix in (("Ninja Multi-Config", "ninja"), ("Visual Studio 18 2026", "vs")):
-                for tracy, asan in ((False, False), (True, False), (False, True), (True, True)):
-                    variant = ("tracy-" if tracy else "") + ("asan-" if asan else "") + suffix
+                "install(FILES payload.txt DESTINATION share)\n",
+                encoding="utf-8",
+            )
+            for generator, suffix in (
+                ("Ninja Multi-Config", "ninja"),
+                ("Visual Studio 18 2026", "vs"),
+            ):
+                for tracy, asan in (
+                    (False, False),
+                    (True, False),
+                    (False, True),
+                    (True, True),
+                ):
+                    variant = (
+                        ("tracy-" if tracy else "") + ("asan-" if asan else "") + suffix
+                    )
                     config = "Debug" if asan else "Release"
                     self.install(root, generator, tracy, asan, config)
-                    self.run_command([CMAKE, "--preset", f"oxygen-{variant}-default"], root)
-                    self.run_command([CMAKE, "--install", str(root / f"out/build-{variant}"), "--config", config], root)
-                    destination = root / "out" / ("install-tracy" if tracy else "install") / ("Asan" if asan else config)
-                    self.assertEqual((destination / "share/payload.txt").read_text(), "SDK payload")
+                    self.run_command(
+                        [CMAKE, "--preset", f"oxygen-{variant}-default"], root
+                    )
+                    self.run_command(
+                        [
+                            CMAKE,
+                            "--install",
+                            str(root / f"out/build-{variant}"),
+                            "--config",
+                            config,
+                        ],
+                        root,
+                    )
+                    destination = (
+                        root
+                        / "out"
+                        / ("install-tracy" if tracy else "install")
+                        / ("Asan" if asan else config)
+                    )
+                    self.assertEqual(
+                        (destination / "share/payload.txt").read_text(), "SDK payload"
+                    )
                     cache = (root / f"out/build-{variant}/CMakeCache.txt").read_text()
-                    self.assertIn(f"CMAKE_INSTALL_PREFIX:PATH={destination.parent.as_posix()}", cache)
+                    self.assertIn(
+                        f"CMAKE_INSTALL_PREFIX:PATH={destination.parent.as_posix()}",
+                        cache,
+                    )
 
     def test_local_narrowing_resets_on_normal_preset_configure(self):
         with tempfile.TemporaryDirectory(prefix="oxygen-policy-") as directory:
@@ -186,7 +324,8 @@ class PresetGenerationTests(unittest.TestCase):
                 "class PolicyFixture(module.OxygenConan):\n"
                 "    def requirements(self):\n        pass\n"
                 "    def build_requirements(self): pass\n"
-                "    def _prepare_build_python(self): return None\n", encoding="utf-8",
+                "    def _prepare_build_python(self): return None\n",
+                encoding="utf-8",
             )
             (root / "VERSION").write_text("0.1.0\n", encoding="utf-8")
             shutil.copyfile(ENGINE / "CMakePresets.json", root / "CMakePresets.json")
@@ -204,20 +343,41 @@ class PresetGenerationTests(unittest.TestCase):
             self.assertEqual(state.read_text(), "OFF")
             self.run_command(configure, root)
             self.assertEqual(state.read_text(), "ON")
-            result = subprocess.run(configure + ["-DBUILD_SHARED_LIBS=OFF"], cwd=root,
-                                    capture_output=True, text=True)
+            result = subprocess.run(
+                configure + ["-DBUILD_SHARED_LIBS=OFF"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+            )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("conflicts with the Conan configuration", result.stderr)
             profile = ENGINE / "profiles/windows-msvc.ini"
-            self.run_command([
-                CONAN, "install", str(root), "--no-remote", "--build=never",
-                f"-pr:h={profile}", f"-pr:b={profile}", "-s", "build_type=Release",
-                "-o", "tests=False", "-c", "tools.cmake.cmaketoolchain:generator=Ninja Multi-Config",
-            ], root)
+            self.run_command(
+                [
+                    CONAN,
+                    "install",
+                    str(root),
+                    "--no-remote",
+                    "--build=never",
+                    f"-pr:h={profile}",
+                    f"-pr:b={profile}",
+                    "-s",
+                    "build_type=Release",
+                    "-o",
+                    "tests=False",
+                    "-c",
+                    "tools.cmake.cmaketoolchain:generator=Ninja Multi-Config",
+                ],
+                root,
+            )
             self.run_command(configure, root)
             self.assertEqual(state.read_text(), "OFF")
-            result = subprocess.run(configure + ["-DOXYGEN_BUILD_TESTS=ON"], cwd=root,
-                                    capture_output=True, text=True)
+            result = subprocess.run(
+                configure + ["-DOXYGEN_BUILD_TESTS=ON"],
+                cwd=root,
+                capture_output=True,
+                text=True,
+            )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("conflicts with the Conan configuration", result.stderr)
 
@@ -238,7 +398,9 @@ class PresetGenerationTests(unittest.TestCase):
             command = [CMAKE, "-S", str(root), "-B", str(build), "-G", "Ninja"]
 
             def configure():
-                result = subprocess.run(command, cwd=root, env=environment, capture_output=True, text=True)
+                result = subprocess.run(
+                    command, cwd=root, env=environment, capture_output=True, text=True
+                )
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 index = sorted((build / ".cmake/api/v1/reply").glob("index-*.json"))[-1]
                 return json.loads(index.read_text(encoding="utf-8"))
@@ -246,59 +408,112 @@ class PresetGenerationTests(unittest.TestCase):
             self.assertNotIn("cache", {obj["kind"] for obj in configure()["objects"]})
             helper = ENGINE / "tools/cli/BuildSelection.ps1"
             check = root / "check.ps1"
-            check.write_text(f". '{helper}'\nif (Test-OxygenFileApiReply '{build}') {{ throw 'Accepted partial reply' }}\n", encoding="utf-8")
+            check.write_text(
+                f". '{helper}'\nif (Test-OxygenFileApiReply '{build}') {{ throw 'Accepted partial reply' }}\n",
+                encoding="utf-8",
+            )
             self.run_command([POWERSHELL, "-NoProfile", "-File", str(check)], root)
 
-            (root / "CMakeLists.txt").write_text(project + query.group() + "\n", encoding="utf-8")
+            (root / "CMakeLists.txt").write_text(
+                project + query.group() + "\n", encoding="utf-8"
+            )
             repaired = configure()
-            self.assertEqual({obj["kind"] for obj in repaired["objects"]}, {"cache", "codemodel", "cmakeFiles", "toolchains"})
-            self.assertTrue(all((build / ".cmake/api/v1/reply" / obj["jsonFile"]).is_file() for obj in repaired["objects"]))
+            self.assertEqual(
+                {obj["kind"] for obj in repaired["objects"]},
+                {"cache", "codemodel", "cmakeFiles", "toolchains"},
+            )
+            self.assertTrue(
+                all(
+                    (build / ".cmake/api/v1/reply" / obj["jsonFile"]).is_file()
+                    for obj in repaired["objects"]
+                )
+            )
             self.assertEqual(list(legacy_query.parent.iterdir()), [legacy_query])
-            check.write_text(f". '{helper}'\nif (-not (Test-OxygenFileApiReply '{build}')) {{ throw 'Rejected complete reply' }}\n", encoding="utf-8")
+            check.write_text(
+                f". '{helper}'\nif (-not (Test-OxygenFileApiReply '{build}')) {{ throw 'Rejected complete reply' }}\n",
+                encoding="utf-8",
+            )
             self.run_command([POWERSHELL, "-NoProfile", "-File", str(check)], root)
 
     def test_preserves_project_defaults(self):
         data = json.loads((ENGINE / "CMakePresets.json").read_text(encoding="utf-8"))
         configure = {p["name"]: p for p in data["configurePresets"]}
-        self.assertEqual(configure["oxygen-configure-defaults"]["cacheVariables"], {
-            "CMAKE_EXPORT_COMPILE_COMMANDS": "ON", "OXYGEN_USE_CCACHE": "ON",
-            "CMAKE_INTERMEDIATE_DIR_STRATEGY": "SHORT",
-        })
-        self.assertEqual(configure["oxygen-windows-defaults"]["cacheVariables"], {"OXYGEN_PHYSICS_BACKEND": "jolt"})
+        self.assertEqual(
+            configure["oxygen-configure-defaults"]["cacheVariables"],
+            {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "OXYGEN_USE_CCACHE": "ON",
+                "CMAKE_INTERMEDIATE_DIR_STRATEGY": "SHORT",
+            },
+        )
+        self.assertEqual(
+            configure["oxygen-windows-defaults"]["cacheVariables"],
+            {"OXYGEN_PHYSICS_BACKEND": "jolt"},
+        )
         self.assertNotIn("installDir", configure["oxygen-posix-defaults"])
-        self.assertEqual(configure["oxygen-posix-defaults"]["environment"]["caexcludepath"], "${sourceDir}/third_party;${sourceDir}/out")
+        self.assertEqual(
+            configure["oxygen-posix-defaults"]["environment"]["caexcludepath"],
+            "${sourceDir}/third_party;${sourceDir}/out",
+        )
         build = data["buildPresets"][0]
         self.assertEqual(build["jobs"], 8)
         self.assertIs(build["verbose"], False)
         tests = {p["name"]: p for p in data["testPresets"]}
-        self.assertEqual(tests["oxygen-test-defaults"]["output"], {"outputOnFailure": True, "verbosity": "default"})
-        self.assertEqual(tests["oxygen-test-debug-defaults"]["inherits"], "oxygen-test-defaults")
-        self.assertEqual(tests["oxygen-test-debug-defaults"]["output"]["verbosity"], "verbose")
+        self.assertEqual(
+            tests["oxygen-test-defaults"]["output"],
+            {"outputOnFailure": True, "verbosity": "default"},
+        )
+        self.assertEqual(
+            tests["oxygen-test-debug-defaults"]["inherits"], "oxygen-test-defaults"
+        )
+        self.assertEqual(
+            tests["oxygen-test-debug-defaults"]["output"]["verbosity"], "verbose"
+        )
 
     @unittest.skipUnless(POWERSHELL, "PowerShell is required")
     def test_removed_deployment_override_is_rejected(self):
-        result = subprocess.run([
-            POWERSHELL, "-NoProfile", "-File", str(ENGINE / "tools/build-tree.ps1"),
-            "-Help", "-DeployerFolder", "unused",
-        ], cwd=ENGINE, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        result = subprocess.run(
+            [
+                POWERSHELL,
+                "-NoProfile",
+                "-File",
+                str(ENGINE / "tools/build-tree.ps1"),
+                "-Help",
+                "-DeployerFolder",
+                "unused",
+            ],
+            cwd=ENGINE,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("DeployerFolder", result.stderr)
 
     @unittest.skipUnless(POWERSHELL, "PowerShell is required")
     def test_build_tree_generation_selection_and_failure_propagation(self):
         for tracy, asan, failing_tool, generator, clean, ui_tests in (
-            (False, False, None, "All", True, None), (True, False, None, "All", True, None),
-            (False, True, None, "All", True, None), (True, True, None, "All", True, None),
-            (False, False, "conan", "All", True, None), (False, False, "ninja", "All", True, None),
+            (False, False, None, "All", True, None),
+            (True, False, None, "All", True, None),
+            (False, True, None, "All", True, None),
+            (True, True, None, "All", True, None),
+            (False, False, "conan", "All", True, None),
+            (False, False, "ninja", "All", True, None),
             (False, False, "python", "All", True, None),
             (True, False, "vs", "All", True, None),
-            (False, False, None, "Ninja", False, None), (True, False, None, "VisualStudio", False, None),
-            (False, True, None, "Ninja", False, None), (False, False, None, "All", False, None),
+            (False, False, None, "Ninja", False, None),
+            (True, False, None, "VisualStudio", False, None),
+            (False, True, None, "Ninja", False, None),
+            (False, False, None, "All", False, None),
             (False, False, None, "Ninja", False, True),
             (False, False, None, "Ninja", False, False),
             (True, False, None, "VisualStudio", False, False),
         ):
-            with self.subTest(tracy=tracy, asan=asan, failure=failing_tool), tempfile.TemporaryDirectory(prefix="oxygen-generate-") as directory:
+            with (
+                self.subTest(tracy=tracy, asan=asan, failure=failing_tool),
+                tempfile.TemporaryDirectory(prefix="oxygen-generate-") as directory,
+            ):
                 root = Path(directory)
                 (root / "tools").mkdir()
                 (root / "caller").mkdir()
@@ -308,7 +523,12 @@ class PresetGenerationTests(unittest.TestCase):
                         folder.mkdir(parents=True)
                         (folder / "sentinel").write_text("keep", encoding="utf-8")
                 self.copy_build_tree_cli(root)
-                (root / "profile.ini").write_text("[conf]\nuser.oxygen:sanitizer=" + ("asan" if asan else "none") + "\n", encoding="utf-8")
+                (root / "profile.ini").write_text(
+                    "[conf]\nuser.oxygen:sanitizer="
+                    + ("asan" if asan else "none")
+                    + "\n",
+                    encoding="utf-8",
+                )
                 wrapper = root / "invoke.ps1"
                 wrapper.write_text(
                     "$global:CallLog = Join-Path $PSScriptRoot 'calls.jsonl'\n"
@@ -316,7 +536,7 @@ class PresetGenerationTests(unittest.TestCase):
                     "function global:conan {\n"
                     "  @{ tool='conan'; cwd=$PWD.Path; arguments=@($args) } | ConvertTo-Json -Compress | Add-Content $global:CallLog\n"
                     "  $global:LASTEXITCODE = if ($global:FailTool -eq 'conan') { 37 } else { 0 }\n"
-                    f"  if ($args[0] -eq 'profile') {{ '{{\"host\":{{\"conf\":{{\"user.oxygen:sanitizer\":\"{'asan' if asan else 'none'}\"}}}}}}' }}\n"
+                    f'  if ($args[0] -eq \'profile\') {{ \'{{"host":{{"conf":{{"user.oxygen:sanitizer":"{"asan" if asan else "none"}"}}}}}}\' }}\n'
                     "}\n"
                     "function global:cmake {\n"
                     "  @{ tool='cmake'; cwd=$PWD.Path; arguments=@($args) } | ConvertTo-Json -Compress | Add-Content $global:CallLog\n"
@@ -335,49 +555,152 @@ class PresetGenerationTests(unittest.TestCase):
                     + f"-Generator {generator} "
                     + ("-Clean " if clean else "")
                     + ("-WithTracy " if tracy else "")
-                    + (f"-UiTests:${str(ui_tests).lower()}" if ui_tests is not None else "")
+                    + (
+                        f"-UiTests:${str(ui_tests).lower()}"
+                        if ui_tests is not None
+                        else ""
+                    )
                     + "\nexit $LASTEXITCODE\n",
                     encoding="utf-8",
                 )
-                result = subprocess.run([POWERSHELL, "-NoProfile", "-File", str(wrapper)], cwd=root / "caller", capture_output=True, text=True, encoding="utf-8", errors="replace")
-                self.assertEqual(result.returncode, 37 if failing_tool else 0, result.stdout + result.stderr)
-                records = [json.loads(line) for line in (root / "calls.jsonl").read_text(encoding="utf-8-sig").splitlines()]
+                result = subprocess.run(
+                    [POWERSHELL, "-NoProfile", "-File", str(wrapper)],
+                    cwd=root / "caller",
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+                self.assertEqual(
+                    result.returncode,
+                    37 if failing_tool else 0,
+                    result.stdout + result.stderr,
+                )
+                records = [
+                    json.loads(line)
+                    for line in (root / "calls.jsonl")
+                    .read_text(encoding="utf-8-sig")
+                    .splitlines()
+                ]
                 self.assertTrue(all(Path(record["cwd"]) == root for record in records))
                 if failing_tool:
                     self.assertNotIn("=== Success ===", result.stdout)
-                    self.assertEqual(records[-1]["tool"], failing_tool if failing_tool in ("conan", "python") else "cmake")
+                    self.assertEqual(
+                        records[-1]["tool"],
+                        failing_tool
+                        if failing_tool in ("conan", "python")
+                        else "cmake",
+                    )
                     continue
-                prefix = "oxygen-" + ("tracy-" if tracy else "") + ("asan-" if asan else "")
-                trees = ["ninja", "vs"] if generator == "All" else ["ninja" if generator == "Ninja" else "vs"]
-                preparations = [record for record in records if record["tool"] == "python"]
+                prefix = (
+                    "oxygen-" + ("tracy-" if tracy else "") + ("asan-" if asan else "")
+                )
+                trees = (
+                    ["ninja", "vs"]
+                    if generator == "All"
+                    else ["ninja" if generator == "Ninja" else "vs"]
+                )
+                preparations = [
+                    record for record in records if record["tool"] == "python"
+                ]
                 self.assertEqual(len(preparations), int("ninja" in trees))
                 if preparations:
-                    variant = ("tracy-" if tracy else "") + ("asan-" if asan else "") + "ninja"
-                    self.assertEqual(preparations[0]["arguments"], [str(root / ".vscode/prepare_clangd.py"),
-                                     "--build-dir", str(root / f"out/build-{variant}")])
+                    variant = (
+                        ("tracy-" if tracy else "")
+                        + ("asan-" if asan else "")
+                        + "ninja"
+                    )
+                    self.assertEqual(
+                        preparations[0]["arguments"],
+                        [
+                            str(root / ".vscode/prepare_clangd.py"),
+                            "--build-dir",
+                            str(root / f"out/build-{variant}"),
+                        ],
+                    )
                     preparation_index = records.index(preparations[0])
                     self.assertEqual(records[preparation_index - 1]["tool"], "cmake")
-                self.assertEqual([record["arguments"] for record in records if record["tool"] == "cmake"],
-                                 [["--preset", prefix + tree + "-default", "-DPython3_EXECUTABLE=python"] for tree in trees])
-                installs = [record for record in records if record["tool"] == "conan" and record["arguments"][0] == "install"]
+                self.assertEqual(
+                    [
+                        record["arguments"]
+                        for record in records
+                        if record["tool"] == "cmake"
+                    ],
+                    [
+                        [
+                            "--preset",
+                            prefix + tree + "-default",
+                            "-DPython3_EXECUTABLE=python",
+                        ]
+                        for tree in trees
+                    ],
+                )
+                installs = [
+                    record
+                    for record in records
+                    if record["tool"] == "conan" and record["arguments"][0] == "install"
+                ]
                 self.assertEqual(len(installs), len(trees) * (1 if asan else 3))
-                self.assertTrue(all(f"&:with_tracy={tracy}" in call["arguments"] for call in installs))
+                self.assertTrue(
+                    all(
+                        f"&:with_tracy={tracy}" in call["arguments"]
+                        for call in installs
+                    )
+                )
                 expected_ui_tests = True if ui_tests is None else ui_tests
-                self.assertTrue(all(f"&:ui_tests={expected_ui_tests}" in call["arguments"] for call in installs))
-                self.assertTrue(all("--build=missing" in call["arguments"] for call in installs))
-                self.assertTrue(all("--deployer-package=oxygen/*" in call["arguments"] for call in installs))
+                self.assertTrue(
+                    all(
+                        f"&:ui_tests={expected_ui_tests}" in call["arguments"]
+                        for call in installs
+                    )
+                )
+                self.assertTrue(
+                    all("--build=missing" in call["arguments"] for call in installs)
+                )
+                self.assertTrue(
+                    all(
+                        "--deployer-package=oxygen/*" in call["arguments"]
+                        for call in installs
+                    )
+                )
                 sdk_root = root / "out" / ("install-tracy" if tracy else "install")
-                self.assertTrue(all(f"--deployer-folder={sdk_root}" in call["arguments"] for call in installs))
-                self.assertTrue(all(not any("will_break_next" in arg for arg in call["arguments"]) for call in installs))
+                self.assertTrue(
+                    all(
+                        f"--deployer-folder={sdk_root}" in call["arguments"]
+                        for call in installs
+                    )
+                )
+                self.assertTrue(
+                    all(
+                        not any("will_break_next" in arg for arg in call["arguments"])
+                        for call in installs
+                    )
+                )
                 for family in ("install", "install-tracy"):
                     for config in ("Debug", "Release", "RelWithDebInfo", "Asan"):
-                        selected = clean and family == sdk_root.name and ((config == "Asan") == asan)
-                        self.assertEqual((root / "out" / family / config / "sentinel").exists(), not selected)
-                self.assertTrue(all(not any("with_asan=" in arg or "user.oxygen:sanitizer=" in arg
-                                            for arg in call["arguments"]) for call in installs))
+                        selected = (
+                            clean
+                            and family == sdk_root.name
+                            and ((config == "Asan") == asan)
+                        )
+                        self.assertEqual(
+                            (root / "out" / family / config / "sentinel").exists(),
+                            not selected,
+                        )
+                self.assertTrue(
+                    all(
+                        not any(
+                            "with_asan=" in arg or "user.oxygen:sanitizer=" in arg
+                            for arg in call["arguments"]
+                        )
+                        for call in installs
+                    )
+                )
 
     def test_build_tree_resolves_an_inherited_asan_profile(self):
-        with tempfile.TemporaryDirectory(prefix="oxygen-inherited-profile-") as directory:
+        with tempfile.TemporaryDirectory(
+            prefix="oxygen-inherited-profile-"
+        ) as directory:
             root = Path(directory)
             (root / "tools").mkdir()
             self.copy_build_tree_cli(root)
@@ -399,13 +722,28 @@ class PresetGenerationTests(unittest.TestCase):
                 "function global:python { $global:LASTEXITCODE = 0 }\n"
                 "function global:python3 { python @args }\n"
                 "& (Join-Path $PSScriptRoot 'tools/build-tree.ps1') generate profile.ini -Generator Ninja\n"
-                "exit $LASTEXITCODE\n", encoding="utf-8",
+                "exit $LASTEXITCODE\n",
+                encoding="utf-8",
             )
-            self.run_command([POWERSHELL, "-NoProfile", "-File", str(root / "invoke.ps1")], root)
-            calls = [json.loads(line) for line in (root / "calls.jsonl").read_text(encoding="utf-8-sig").splitlines()]
+            self.run_command(
+                [POWERSHELL, "-NoProfile", "-File", str(root / "invoke.ps1")], root
+            )
+            calls = [
+                json.loads(line)
+                for line in (root / "calls.jsonl")
+                .read_text(encoding="utf-8-sig")
+                .splitlines()
+            ]
             self.assertEqual(len(calls), 2)
             self.assertIn("build_type=Debug", calls[0]["arguments"])
-            self.assertEqual(calls[1]["arguments"], ["--preset", "oxygen-asan-ninja-default", "-DPython3_EXECUTABLE=python"])
+            self.assertEqual(
+                calls[1]["arguments"],
+                [
+                    "--preset",
+                    "oxygen-asan-ninja-default",
+                    "-DPython3_EXECUTABLE=python",
+                ],
+            )
 
     def test_native_generation_coexists_and_migrates(self):
         with tempfile.TemporaryDirectory(prefix="oxygen-presets-") as directory:
@@ -438,9 +776,18 @@ class PresetGenerationTests(unittest.TestCase):
                 ("Ninja Multi-Config", "ninja"),
                 ("Visual Studio 18 2026", "vs"),
             ):
-                for tracy, asan in ((False, False), (True, False), (False, True), (True, True)):
-                    variant = ("tracy-" if tracy else "") + ("asan-" if asan else "") + suffix
-                    configurations = ("Debug",) if asan else ("Release", "Debug", "RelWithDebInfo")
+                for tracy, asan in (
+                    (False, False),
+                    (True, False),
+                    (False, True),
+                    (True, True),
+                ):
+                    variant = (
+                        ("tracy-" if tracy else "") + ("asan-" if asan else "") + suffix
+                    )
+                    configurations = (
+                        ("Debug",) if asan else ("Release", "Debug", "RelWithDebInfo")
+                    )
                     for config in configurations:
                         self.install(root, generator, tracy, asan, config)
                         expected.add(f"conan-{variant}-{config.lower()}")
@@ -486,19 +833,40 @@ class PresetGenerationTests(unittest.TestCase):
             self.assert_effective_defaults(root)
 
     def install(self, root, generator, tracy, asan, config, extra=(), succeeds=True):
-        profile = ENGINE / "profiles" / ("windows-msvc-asan.ini" if asan else "windows-msvc.ini")
+        profile = (
+            ENGINE
+            / "profiles"
+            / ("windows-msvc-asan.ini" if asan else "windows-msvc.ini")
+        )
         command = [
-            CONAN, "install", str(root), "--no-remote", "--build=never",
-            f"--profile:host={profile}", f"--profile:build={profile}",
-            "-s", f"build_type={config}",
-            "-o", f"with_tracy={tracy}", "-o", f"with_asan={asan}",
-            "-o", "&:tests=True",
-            "-c", f"tools.cmake.cmaketoolchain:generator={generator}",
+            CONAN,
+            "install",
+            str(root),
+            "--no-remote",
+            "--build=never",
+            f"--profile:host={profile}",
+            f"--profile:build={profile}",
+            "-s",
+            f"build_type={config}",
+            "-o",
+            f"with_tracy={tracy}",
+            "-o",
+            f"with_asan={asan}",
+            "-o",
+            "&:tests=True",
+            "-c",
+            f"tools.cmake.cmaketoolchain:generator={generator}",
         ] + list(extra)
         if succeeds:
             return self.run_command(command, root)
-        result = subprocess.run(command, cwd=root, capture_output=True, text=True,
-                                encoding="utf-8", errors="replace")
+        result = subprocess.run(
+            command,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         return result
 
@@ -531,14 +899,18 @@ class PresetGenerationTests(unittest.TestCase):
         self.assertEqual(builds, expected)
         self.assertEqual(tests, expected)
         for section in ("buildPresets", "testPresets"):
-            self.assertEqual({p["name"] for p in user[section]},
-                             {name.replace("conan-", "oxygen-", 1) for name in expected})
+            self.assertEqual(
+                {p["name"] for p in user[section]},
+                {name.replace("conan-", "oxygen-", 1) for name in expected},
+            )
         self.run_command([CMAKE, "--list-presets=all"], root)
 
     def assert_effective_defaults(self, root):
         helper = ENGINE / "tools/cli/BuildSelection.ps1"
         script = root / "effective.ps1"
-        script.write_text(f". '{helper}'\n" + """
+        script.write_text(
+            f". '{helper}'\n"
+            + """
 $graph = Read-OxygenPresetGraph $PSScriptRoot
 @{
     configure = Resolve-OxygenPreset $graph.configurePresets oxygen-ninja-default
@@ -547,22 +919,45 @@ $graph = Read-OxygenPresetGraph $PSScriptRoot
     release = Resolve-OxygenPreset $graph.testPresets oxygen-ninja-release
     candidates = @(Get-OxygenBuildCandidates $PSScriptRoot)
 } | ConvertTo-Json -Depth 20
-""", encoding="utf-8")
-        data = json.loads(self.run_command([POWERSHELL, "-NoProfile", "-File", str(script)], root).stdout)
+""",
+            encoding="utf-8",
+        )
+        data = json.loads(
+            self.run_command(
+                [POWERSHELL, "-NoProfile", "-File", str(script)], root
+            ).stdout
+        )
         self.assertEqual(data["configure"]["cacheVariables"]["OXYGEN_USE_CCACHE"], "ON")
-        self.assertEqual(data["configure"]["cacheVariables"]["CMAKE_EXPORT_COMPILE_COMMANDS"], "ON")
-        self.assertEqual(data["configure"]["cacheVariables"]["OXYGEN_PHYSICS_BACKEND"], "jolt")
+        self.assertEqual(
+            data["configure"]["cacheVariables"]["CMAKE_EXPORT_COMPILE_COMMANDS"], "ON"
+        )
+        self.assertEqual(
+            data["configure"]["cacheVariables"]["OXYGEN_PHYSICS_BACKEND"], "jolt"
+        )
         self.assertEqual(data["build"]["jobs"], 8)
         self.assertIs(data["build"]["verbose"], False)
-        self.assertEqual(data["debug"]["output"], {"outputOnFailure": True, "verbosity": "verbose"})
-        self.assertEqual(data["release"]["output"], {"outputOnFailure": True, "verbosity": "default"})
-        native = json.loads((root / "out/build-ninja/generators/CMakePresets.json").read_text(encoding="utf-8"))
+        self.assertEqual(
+            data["debug"]["output"], {"outputOnFailure": True, "verbosity": "verbose"}
+        )
+        self.assertEqual(
+            data["release"]["output"], {"outputOnFailure": True, "verbosity": "default"}
+        )
+        native = json.loads(
+            (root / "out/build-ninja/generators/CMakePresets.json").read_text(
+                encoding="utf-8"
+            )
+        )
         native_tests = {p["configuration"]: p for p in native["testPresets"]}
         self.assertEqual(data["debug"]["execution"], native_tests["Debug"]["execution"])
         for key, value in native_tests["Release"].get("environment", {}).items():
             self.assertEqual(data["release"]["environment"][key], value)
-        self.assertTrue(all(p["BuildPreset"].startswith("oxygen-") for p in data["candidates"]))
-        self.assertEqual(len({(p["BuildRoot"], p["Config"]) for p in data["candidates"]}), len(data["candidates"]))
+        self.assertTrue(
+            all(p["BuildPreset"].startswith("oxygen-") for p in data["candidates"])
+        )
+        self.assertEqual(
+            len({(p["BuildRoot"], p["Config"]) for p in data["candidates"]}),
+            len(data["candidates"]),
+        )
         # Let CMake itself evaluate configure inheritance, without compiling.
         self.run_command([CMAKE, "--preset", "oxygen-ninja-default"], root)
         cache = (root / "out/build-ninja/CMakeCache.txt").read_text(encoding="utf-8")
@@ -573,14 +968,29 @@ $graph = Read-OxygenPresetGraph $PSScriptRoot
         defaults = json.loads(project.read_text(encoding="utf-8"))
         defaults["buildPresets"][0].update(jobs=5, verbose=True)
         project.write_text(json.dumps(defaults), encoding="utf-8")
-        changed = json.loads(self.run_command([POWERSHELL, "-NoProfile", "-File", str(script)], root).stdout)
+        changed = json.loads(
+            self.run_command(
+                [POWERSHELL, "-NoProfile", "-File", str(script)], root
+            ).stdout
+        )
         self.assertEqual(changed["build"]["jobs"], 5)
         self.assertIs(changed["build"]["verbose"], True)
         self.run_command([CMAKE, "--list-presets=all"], root)
 
     def run_command(self, command, root):
-        result = subprocess.run(command, cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
-        self.assertEqual(result.returncode, 0, " ".join(command) + "\n" + result.stdout + result.stderr)
+        result = subprocess.run(
+            command,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        self.assertEqual(
+            result.returncode,
+            0,
+            " ".join(command) + "\n" + result.stdout + result.stderr,
+        )
         return result
 
 

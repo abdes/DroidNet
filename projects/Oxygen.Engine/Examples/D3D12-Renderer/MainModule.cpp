@@ -6,6 +6,7 @@
 
 #include <random>
 
+#include "D3D12-Renderer/MainModule.h"
 #include <glm/glm.hpp>
 #include <imgui.h>
 
@@ -21,8 +22,6 @@
 #include <Oxygen/ImGui/ImGuiRenderInterface.h>
 #include <Oxygen/Input/ActionTriggers.h>
 #include <Oxygen/Input/Types.h>
-
-#include "D3D12-Renderer/MainModule.h"
 
 using oxygen::Engine;
 using oxygen::graphics::CommandListPtr;

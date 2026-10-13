@@ -35,7 +35,7 @@
 #include <Oxygen/Console/StartupPlan.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #ifdef OXYGEN_BUILD_UI_TESTS
-#  include "DemoShell/Test/UiTestSession.h"
+#  include "DemoShell/test/UiTestSession.h"
 #endif
 
 #include <Oxygen/Base/Logging.h>

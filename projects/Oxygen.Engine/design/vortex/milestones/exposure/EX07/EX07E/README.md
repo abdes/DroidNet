@@ -590,7 +590,7 @@ writer followed by another view's successful retry after discard.
 
 **Files:** ShadowService publication API; SceneRenderer view recording;
 Lighting/Passes/DeferredLightPass; base-pass/translucency attachment validation;
-Vortex/Test/Lighting/ShadowAdmissionGpu_test.cpp; native capture/probe helpers;
+Vortex/test/Lighting/ShadowAdmissionGpu_test.cpp; native capture/probe helpers;
 owning native test fixtures. ToneBoundsProbe.hlsl remains a validation input; the
 lifetime migration changes host-side ownership, not its shader interface.
 

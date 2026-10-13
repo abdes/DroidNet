@@ -74,7 +74,9 @@ def float4_values(pixel_value):
     return [float(v) for v in list(pixel_value.floatValue)[:4]]
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     scope_name = os.environ.get("OXYGEN_RENDERDOC_PASS_NAME", "").strip()
     if not scope_name:
@@ -83,7 +85,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     actions = collect_action_records(controller)
     target = None
     for record in actions:
-        if scope_name in record.path and record.name == "ID3D12GraphicsCommandList::DrawInstanced()":
+        if (
+            scope_name in record.path
+            and record.name == "ID3D12GraphicsCommandList::DrawInstanced()"
+        ):
             target = record
             break
     if target is None:
@@ -96,7 +101,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     scene_color = None
     tex_desc = None
     for descriptor in outputs:
-        if resources.get(str(descriptor.resource), str(descriptor.resource)) == "SceneColor":
+        if (
+            resources.get(str(descriptor.resource), str(descriptor.resource))
+            == "SceneColor"
+        ):
             scene_color = descriptor.resource
             for desc in controller.GetTextures():
                 if safe_getattr(desc, "resourceId") == scene_color:

@@ -37,9 +37,9 @@
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 // Completes the unique_ptr pointee for the out-of-line constructor/destructor.
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
-#include <Oxygen/Vortex/Test/Fixtures/ExposureBenchmarkScene.h>
-#include <Oxygen/Vortex/Test/Support/CpuTimingCapture.h> // IWYU pragma: keep
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestTags.h>
+#include <Oxygen/Vortex/test/Fixtures/ExposureBenchmarkScene.h>
+#include <Oxygen/Vortex/test/Support/CpuTimingCapture.h> // IWYU pragma: keep
 
 namespace oxygen::vortex::testing::exposure {
 

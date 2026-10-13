@@ -4,14 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/ProceduralMeshes.h>
 #include <cmath>
 #include <limits>
 #include <numbers>
 #include <string_view>
 #include <vector>
+
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
 
 /*!
  Creates vertex and index buffers for a cone aligned along the Z axis.

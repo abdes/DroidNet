@@ -78,14 +78,33 @@ def binding_dict(resource_names, descriptor_access):
 
 
 def dump_descriptor(report, prefix, resource_names, descriptor):
-    report.append("{}_resource={}".format(prefix, resource_names.get(str(descriptor.resource), str(descriptor.resource))))
-    report.append("{}_firstMip={}".format(prefix, safe_getattr(descriptor, "firstMip", None)))
-    report.append("{}_firstSlice={}".format(prefix, safe_getattr(descriptor, "firstSlice", None)))
-    report.append("{}_numMips={}".format(prefix, safe_getattr(descriptor, "numMips", None)))
-    report.append("{}_numSlices={}".format(prefix, safe_getattr(descriptor, "numSlices", None)))
-    report.append("{}_format={}".format(prefix, repr(safe_getattr(descriptor, "format", None))))
-    report.append("{}_type={}".format(prefix, repr(safe_getattr(descriptor, "type", None))))
-    report.append("{}_view={}".format(prefix, repr(safe_getattr(descriptor, "view", None))))
+    report.append(
+        "{}_resource={}".format(
+            prefix,
+            resource_names.get(str(descriptor.resource), str(descriptor.resource)),
+        )
+    )
+    report.append(
+        "{}_firstMip={}".format(prefix, safe_getattr(descriptor, "firstMip", None))
+    )
+    report.append(
+        "{}_firstSlice={}".format(prefix, safe_getattr(descriptor, "firstSlice", None))
+    )
+    report.append(
+        "{}_numMips={}".format(prefix, safe_getattr(descriptor, "numMips", None))
+    )
+    report.append(
+        "{}_numSlices={}".format(prefix, safe_getattr(descriptor, "numSlices", None))
+    )
+    report.append(
+        "{}_format={}".format(prefix, repr(safe_getattr(descriptor, "format", None)))
+    )
+    report.append(
+        "{}_type={}".format(prefix, repr(safe_getattr(descriptor, "type", None)))
+    )
+    report.append(
+        "{}_view={}".format(prefix, repr(safe_getattr(descriptor, "view", None)))
+    )
 
 
 def dump_draw_state(controller, report, event_id, label, resource_names):
@@ -96,31 +115,71 @@ def dump_draw_state(controller, report, event_id, label, resource_names):
     scissor = state.GetScissor(0)
     report.append("{}_event={}".format(label, event_id))
     for attr in ["enabled", "x", "y", "width", "height", "minDepth", "maxDepth"]:
-        report.append("{}_viewport_{}={}".format(label, attr, repr(safe_getattr(viewport, attr, None))))
-    for attr in ["enabled", "x", "y", "width", "height", "left", "top", "right", "bottom"]:
-        report.append("{}_scissor_{}={}".format(label, attr, repr(safe_getattr(scissor, attr, None))))
+        report.append(
+            "{}_viewport_{}={}".format(
+                label, attr, repr(safe_getattr(viewport, attr, None))
+            )
+        )
+    for attr in [
+        "enabled",
+        "x",
+        "y",
+        "width",
+        "height",
+        "left",
+        "top",
+        "right",
+        "bottom",
+    ]:
+        report.append(
+            "{}_scissor_{}={}".format(
+                label, attr, repr(safe_getattr(scissor, attr, None))
+            )
+        )
     report.append("{}_topology={}".format(label, repr(state.GetPrimitiveTopology())))
-    report.append("{}_vs={}".format(label, repr(state.GetShader(rd.ShaderStage.Vertex))))
+    report.append(
+        "{}_vs={}".format(label, repr(state.GetShader(rd.ShaderStage.Vertex)))
+    )
     report.append("{}_ps={}".format(label, repr(state.GetShader(rd.ShaderStage.Pixel))))
-    report.append("{}_vs_entry={}".format(label, repr(state.GetShaderEntryPoint(rd.ShaderStage.Vertex))))
-    report.append("{}_ps_entry={}".format(label, repr(state.GetShaderEntryPoint(rd.ShaderStage.Pixel))))
+    report.append(
+        "{}_vs_entry={}".format(
+            label, repr(state.GetShaderEntryPoint(rd.ShaderStage.Vertex))
+        )
+    )
+    report.append(
+        "{}_ps_entry={}".format(
+            label, repr(state.GetShaderEntryPoint(rd.ShaderStage.Pixel))
+        )
+    )
     depth_target = state.GetDepthTarget()
-    dump_descriptor(report, "{}_depth_target".format(label), resource_names, depth_target)
+    dump_descriptor(
+        report, "{}_depth_target".format(label), resource_names, depth_target
+    )
     outputs = state.GetOutputTargets()
     report.append("{}_output_count={}".format(label, len(outputs)))
     for index, output in enumerate(outputs):
-        dump_descriptor(report, "{}_output_{}".format(label, index), resource_names, output)
+        dump_descriptor(
+            report, "{}_output_{}".format(label, index), resource_names, output
+        )
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     actions = collect_action_records(controller)
     resource_names = resource_id_to_name(controller)
     stage3 = []
     stage9 = []
     for record in actions:
-        if record.name == "ID3D12GraphicsCommandList::DrawInstanced()" and "Vortex.Stage3.DepthPrepass" in record.path:
+        if (
+            record.name == "ID3D12GraphicsCommandList::DrawInstanced()"
+            and "Vortex.Stage3.DepthPrepass" in record.path
+        ):
             stage3.append(record.event_id)
-        if record.name == "ID3D12GraphicsCommandList::DrawInstanced()" and "Vortex.Stage9.BasePass" in record.path:
+        if (
+            record.name == "ID3D12GraphicsCommandList::DrawInstanced()"
+            and "Vortex.Stage9.BasePass" in record.path
+        ):
             stage9.append(record.event_id)
     if not stage3 or not stage9:
         raise RuntimeError("Missing stage draw events")

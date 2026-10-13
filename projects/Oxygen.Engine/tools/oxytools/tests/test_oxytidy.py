@@ -328,7 +328,7 @@ class ScopeAndFixTests(Fixture):
         project = self.write("src/a.h", "int a;")
         vendor = self.write("src/vendor/a.h", "int a;")
         system = self.write("system/a.h", "int a;")
-        tests = self.write("src/Module/Test/a.h", "int a;")
+        tests = self.write("src/Module/test/a.h", "int a;")
         scope = self.scope("src")
         self.assertTrue(scope.contains(project))
         self.assertFalse(scope.contains(vendor))
@@ -1468,9 +1468,9 @@ class LLVMTests(Fixture):
     ):
         header = self.write("src/module/a.h", "inline int f(){return 1;}\n")
         self.write(
-            "src/module/Test/a.cpp", '#include "../a.h"\nint main(){return f();}\n'
+            "src/module/test/a.cpp", '#include "../a.h"\nint main(){return f();}\n'
         )
-        self.database(["src/module/Test/a.cpp"])
+        self.database(["src/module/test/a.cpp"])
         code, report = self.invoke("src/module/a.h")
         self.assertEqual(code, 0, report)
         self.assertEqual(report["status"], "no_analysis")
@@ -1799,8 +1799,8 @@ class LLVMTests(Fixture):
         )
         _, report = self.invoke("src/a.h")
         self.assertEqual(report["counts"]["unique_findings"], 0)
-        self.write("src/Test/a.cpp", "int test_function() { return 1; }\n")
-        self.database(["src/a.cpp", "src/Test/a.cpp"])
+        self.write("src/test/a.cpp", "int test_function() { return 1; }\n")
+        self.database(["src/a.cpp", "src/test/a.cpp"])
         code, report = self.invoke("src", "--include-tests", "--list-files")
         self.assertEqual(code, 0, report)
         self.assertEqual(report["selected_count"], 2)

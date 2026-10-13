@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <windows.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -14,7 +16,6 @@
 #include <d3d12shader.h>
 #include <dxcapi.h>
 #include <unknwn.h>
-#include <windows.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Base/Logging.h>

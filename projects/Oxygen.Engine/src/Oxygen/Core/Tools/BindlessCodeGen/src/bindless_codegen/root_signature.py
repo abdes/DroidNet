@@ -30,13 +30,9 @@ def validate_root_signature(
         param_id = str(param.get("id"))
         param_index = int(param.get("index", -1))
         if param_id in ids_seen:
-            raise ValueError(
-                f"D3D12 root_signature has duplicate id '{param_id}'"
-            )
+            raise ValueError(f"D3D12 root_signature has duplicate id '{param_id}'")
         if param_index in indices_seen:
-            raise ValueError(
-                f"D3D12 root_signature has duplicate index {param_index}"
-            )
+            raise ValueError(f"D3D12 root_signature has duplicate index {param_index}")
         ids_seen.add(param_id)
         indices_seen.add(param_index)
 

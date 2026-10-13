@@ -67,11 +67,15 @@ REPORT_SUFFIX = "_save_sky_view_probe.txt"
 OUTPUT_PATH_ENV = "OXYGEN_RENDERDOC_OUTPUT_PATH"
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     output_path = os.environ.get(OUTPUT_PATH_ENV, "").strip()
     if not output_path:
-        raise RuntimeError("Set OXYGEN_RENDERDOC_OUTPUT_PATH to the destination image path.")
+        raise RuntimeError(
+            "Set OXYGEN_RENDERDOC_OUTPUT_PATH to the destination image path."
+        )
 
     resources = resource_id_to_name(controller)
     textures = list(controller.GetTextures())
@@ -84,7 +88,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     actions = collect_action_records(controller)
     target_event = None
     for record in actions:
-        if "Vortex.Environment.AtmosphereSkyViewLut" in record.path and record.name == "ID3D12GraphicsCommandList::Dispatch()":
+        if (
+            "Vortex.Environment.AtmosphereSkyViewLut" in record.path
+            and record.name == "ID3D12GraphicsCommandList::Dispatch()"
+        ):
             target_event = record.event_id
             break
     if target_event is None:
@@ -106,7 +113,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
                 target_name = name
                 break
     if target_desc is None:
-        raise RuntimeError("No 192x104 Vortex.Environment.AtmosphereSkyViewLut texture found.")
+        raise RuntimeError(
+            "No 192x104 Vortex.Environment.AtmosphereSkyViewLut texture found."
+        )
 
     save = rd.TextureSave()
     save.resourceId = target_desc.resourceId
@@ -126,7 +135,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(f"resource_id={target_desc.resourceId}")
     report.append(f"output_path={output_file}")
     report.append(f"saved_exists={output_file.exists()}")
-    report.append(f"saved_size={(output_file.stat().st_size if output_file.exists() else 0)}")
+    report.append(
+        f"saved_size={(output_file.stat().st_size if output_file.exists() else 0)}"
+    )
 
 
 def main():

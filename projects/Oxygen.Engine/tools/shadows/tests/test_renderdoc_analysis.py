@@ -11,7 +11,9 @@ from unittest.mock import patch
 
 
 TOOLS = Path(__file__).resolve().parents[1]
-SPEC = importlib.util.spec_from_file_location("renderdoc_analysis_helpers", TOOLS / "renderdoc_ui_analysis.py")
+SPEC = importlib.util.spec_from_file_location(
+    "renderdoc_analysis_helpers", TOOLS / "renderdoc_ui_analysis.py"
+)
 HELPERS = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(HELPERS)
 
@@ -48,12 +50,20 @@ class ReplayLifetimeTests(unittest.TestCase):
             def Shutdown(self):
                 events.append("capture.shutdown")
 
-        return SimpleNamespace(OpenCaptureFile=Capture, ResultCode=SimpleNamespace(Succeeded=0),
-                               ReplaySupport=SimpleNamespace(Supported=1), ReplayOptions=lambda: None)
+        return SimpleNamespace(
+            OpenCaptureFile=Capture,
+            ResultCode=SimpleNamespace(Succeeded=0),
+            ReplaySupport=SimpleNamespace(Supported=1),
+            ReplayOptions=lambda: None,
+        )
 
     def run_analysis(self, callback, **options):
-        with patch.object(HELPERS, "renderdoc_module", return_value=self.fake_api(**options)):
-            return HELPERS.run_replay_script(self.root / "capture.rdc", self.report, callback)
+        with patch.object(
+            HELPERS, "renderdoc_module", return_value=self.fake_api(**options)
+        ):
+            return HELPERS.run_replay_script(
+                self.root / "capture.rdc", self.report, callback
+            )
 
     def test_success_closes_handles_before_final_success(self):
         def callback(controller, report, *paths):
@@ -61,8 +71,16 @@ class ReplayLifetimeTests(unittest.TestCase):
             report.append("value=42")
 
         self.assertEqual(self.run_analysis(callback), 0)
-        self.assertEqual(self.events, ["capture.open", "controller.open", "analysis",
-                                       "controller.shutdown", "capture.shutdown"])
+        self.assertEqual(
+            self.events,
+            [
+                "capture.open",
+                "controller.open",
+                "analysis",
+                "controller.shutdown",
+                "capture.shutdown",
+            ],
+        )
         self.assertIn("replay_handles_shutdown=true", self.report.read_text())
         self.assertTrue(self.report.read_text().startswith("analysis_result=success\n"))
 
@@ -82,19 +100,29 @@ class ReplayLifetimeTests(unittest.TestCase):
         self.assertIn("analysis_result=exception", self.report.read_text())
 
     def test_open_failure_releases_capture_without_controller(self):
-        self.assertEqual(self.run_analysis(lambda *args: self.fail("must not analyze"), open_status=1), 1)
+        self.assertEqual(
+            self.run_analysis(
+                lambda *args: self.fail("must not analyze"), open_status=1
+            ),
+            1,
+        )
         self.assertEqual(self.events, ["capture.open", "capture.shutdown"])
 
     def test_bootstrap_syntax_error_always_exits_before_ui(self):
         script = self.root / "invalid.py"
         script.write_text("def invalid(:\n", encoding="utf-8")
-        with patch.dict(os.environ, {
-            "OXYGEN_RENDERDOC_AUTOMATION_MODE": "replay",
-            "OXYGEN_RENDERDOC_SCRIPT_PATH": str(script),
-            "OXYGEN_RENDERDOC_REPORT_PATH": str(self.report),
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "OXYGEN_RENDERDOC_AUTOMATION_MODE": "replay",
+                "OXYGEN_RENDERDOC_SCRIPT_PATH": str(script),
+                "OXYGEN_RENDERDOC_REPORT_PATH": str(self.report),
+            },
+        ):
             with self.assertRaises(SystemExit) as raised:
-                runpy.run_path(str(TOOLS / "RenderDocAnalysisBootstrap.py"), run_name="__main__")
+                runpy.run_path(
+                    str(TOOLS / "RenderDocAnalysisBootstrap.py"), run_name="__main__"
+                )
         self.assertEqual(raised.exception.code, 0)
         self.assertIn("SyntaxError", self.report.read_text())
         self.assertIn("analysis_result=exception", self.report.read_text())
@@ -102,13 +130,18 @@ class ReplayLifetimeTests(unittest.TestCase):
     def test_bootstrap_rejects_analyzer_without_shared_completion(self):
         script = self.root / "no-report.py"
         script.write_text("pass\n", encoding="utf-8")
-        with patch.dict(os.environ, {
-            "OXYGEN_RENDERDOC_AUTOMATION_MODE": "replay",
-            "OXYGEN_RENDERDOC_SCRIPT_PATH": str(script),
-            "OXYGEN_RENDERDOC_REPORT_PATH": str(self.report),
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "OXYGEN_RENDERDOC_AUTOMATION_MODE": "replay",
+                "OXYGEN_RENDERDOC_SCRIPT_PATH": str(script),
+                "OXYGEN_RENDERDOC_REPORT_PATH": str(self.report),
+            },
+        ):
             with self.assertRaises(SystemExit):
-                runpy.run_path(str(TOOLS / "RenderDocAnalysisBootstrap.py"), run_name="__main__")
+                runpy.run_path(
+                    str(TOOLS / "RenderDocAnalysisBootstrap.py"), run_name="__main__"
+                )
         self.assertIn("analysis_result=exception", self.report.read_text())
 
 

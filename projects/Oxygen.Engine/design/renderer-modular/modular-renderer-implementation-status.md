@@ -43,7 +43,7 @@ Verified on this branch with evidence:
   `Oxygen.Examples.MultiView.exe -v=0 --fps 0`
   Result: PASS for supervised startup/frame-loop smoke
 - active-surface legacy retirement check:
-  `rg -n "BeginOffscreenFrame\\(|OffscreenFrameSession" src/Oxygen/Renderer src/Oxygen/Renderer/Test -g "*.cpp" -g "*.h"`
+  `rg -n "BeginOffscreenFrame\\(|OffscreenFrameSession" src/Oxygen/Renderer src/Oxygen/Renderer/test -g "*.cpp" -g "*.h"`
   Result: PASS (`0` matches)
 
 ## Accepted Gaps

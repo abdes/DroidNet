@@ -90,7 +90,9 @@ def dump_buffer(report, controller, resources, prefix, descriptor):
     raw = controller.GetBufferData(resource, byte_offset, byte_size)
     blob = bytes(raw)
     u32_count = len(blob) // 4
-    report.append(f"{prefix}_resource_name={resources.get(str(resource), str(resource))}")
+    report.append(
+        f"{prefix}_resource_name={resources.get(str(resource), str(resource))}"
+    )
     report.append(f"{prefix}_byte_offset={byte_offset}")
     report.append(f"{prefix}_byte_size={byte_size}")
     report.append(f"{prefix}_u32_count={u32_count}")
@@ -106,7 +108,9 @@ def dump_buffer(report, controller, resources, prefix, descriptor):
         report.append(f"{prefix}_f32_{index}={value}")
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     del report_path
     rd = renderdoc_module()
     actions = collect_action_records(controller)
@@ -114,7 +118,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
 
     target = None
     for record in actions:
-        if "Vortex.Environment.AtmosphereSkyViewLut" in record.path and record.name == "ID3D12GraphicsCommandList::Dispatch()":
+        if (
+            "Vortex.Environment.AtmosphereSkyViewLut" in record.path
+            and record.name == "ID3D12GraphicsCommandList::Dispatch()"
+        ):
             target = record
             break
     if target is None:
@@ -130,7 +137,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(f"compute_constant_block_count={len(blocks)}")
     for index, block in enumerate(blocks):
         descriptor = block.descriptor
-        report.append(f"cb_{index}_resource={resources.get(str(safe_getattr(descriptor, 'resource')), str(safe_getattr(descriptor, 'resource')))}")
+        report.append(
+            f"cb_{index}_resource={resources.get(str(safe_getattr(descriptor, 'resource')), str(safe_getattr(descriptor, 'resource')))}"
+        )
         report.append(f"cb_{index}_bind={block.access.index}")
         report.append(f"cb_{index}_array={block.access.arrayElement}")
         append_descriptor_fields(report, f"cb_{index}", descriptor)
@@ -140,7 +149,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(f"compute_ro_count={len(readonly)}")
     for index, binding in enumerate(readonly):
         descriptor = binding.descriptor
-        report.append(f"ro_{index}_resource={resources.get(str(safe_getattr(descriptor, 'resource')), str(safe_getattr(descriptor, 'resource')))}")
+        report.append(
+            f"ro_{index}_resource={resources.get(str(safe_getattr(descriptor, 'resource')), str(safe_getattr(descriptor, 'resource')))}"
+        )
         report.append(f"ro_{index}_bind={binding.access.index}")
         report.append(f"ro_{index}_array={binding.access.arrayElement}")
         append_descriptor_fields(report, f"ro_{index}", descriptor)

@@ -27,7 +27,7 @@ in the directory defining a local, non-alias target, after its source/header
 declarations. It groups declared source files, header sets and generated headers
 under `src`, `generated` or `external`, without adding files to compilation.
 Its separate automatic advisory inventory scans `.h`, `.hpp`, `.c` and `.cpp`
-files at configure time. It excludes `Test`, `Benchmarks`, `Examples` and `Tools`
+files at configure time. It excludes `test`, `Benchmarks`, `Examples` and `Tools`
 directory segments and any explicit exclusion patterns (case-insensitive).
 Scripting's existing whole-`Bindings/` exclusion is intentionally retained;
 [issue #17](https://github.com/abdes/DroidNet/issues/17) tracks its review.

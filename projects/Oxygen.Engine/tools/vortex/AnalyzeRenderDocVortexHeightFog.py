@@ -85,7 +85,9 @@ def records_with_name(action_records, name):
 
 def records_under_prefix(action_records, prefix):
     prefix_with_sep = prefix + " > "
-    return [record for record in action_records if record.path.startswith(prefix_with_sep)]
+    return [
+        record for record in action_records if record.path.startswith(prefix_with_sep)
+    ]
 
 
 def find_last_named_record(records, name):
@@ -134,7 +136,9 @@ def resource_dims(texture_desc, descriptor):
     return max(1, width >> mip), max(1, height >> mip)
 
 
-def sample_descriptor(controller, rd, resource_names, texture_descs, descriptor, type_cast):
+def sample_descriptor(
+    controller, rd, resource_names, texture_descs, descriptor, type_cast
+):
     resource_id = descriptor.resource
     resource_key = str(resource_id)
     name = resource_names.get(resource_key, resource_key)
@@ -215,10 +219,16 @@ def dense_grid_delta(controller, rd, event_id_a, sample_a, event_id_b, sample_b)
     for row in range(grid_y):
         y = 0 if grid_y == 1 else int(round(((height - 1) * row) / float(grid_y - 1)))
         for col in range(grid_x):
-            x = 0 if grid_x == 1 else int(round(((width - 1) * col) / float(grid_x - 1)))
+            x = (
+                0
+                if grid_x == 1
+                else int(round(((width - 1) * col) / float(grid_x - 1)))
+            )
             values_a.append(
                 float4_values(
-                    controller.PickPixel(sample_a["resource_id"], x, y, sub_a, rd.CompType.Typeless)
+                    controller.PickPixel(
+                        sample_a["resource_id"], x, y, sub_a, rd.CompType.Typeless
+                    )
                 )
             )
 
@@ -228,9 +238,15 @@ def dense_grid_delta(controller, rd, event_id_a, sample_a, event_id_b, sample_b)
     for row in range(grid_y):
         y = 0 if grid_y == 1 else int(round(((height - 1) * row) / float(grid_y - 1)))
         for col in range(grid_x):
-            x = 0 if grid_x == 1 else int(round(((width - 1) * col) / float(grid_x - 1)))
+            x = (
+                0
+                if grid_x == 1
+                else int(round(((width - 1) * col) / float(grid_x - 1)))
+            )
             value_b = float4_values(
-                controller.PickPixel(sample_b["resource_id"], x, y, sub_b, rd.CompType.Typeless)
+                controller.PickPixel(
+                    sample_b["resource_id"], x, y, sub_b, rd.CompType.Typeless
+                )
             )
             max_delta = max(
                 max_delta,
@@ -260,9 +276,15 @@ def far_depth_delta(controller, rd, event_id_a, color_a, event_id_b, color_b, de
     for row in range(grid_y):
         y = 0 if grid_y == 1 else int(round(((height - 1) * row) / float(grid_y - 1)))
         for col in range(grid_x):
-            x = 0 if grid_x == 1 else int(round(((width - 1) * col) / float(grid_x - 1)))
+            x = (
+                0
+                if grid_x == 1
+                else int(round(((width - 1) * col) / float(grid_x - 1)))
+            )
             depth_value = float4_values(
-                controller.PickPixel(depth["resource_id"], x, y, depth_sub, rd.CompType.Depth)
+                controller.PickPixel(
+                    depth["resource_id"], x, y, depth_sub, rd.CompType.Depth
+                )
             )[0]
             if depth_value <= 1.0e-4 or depth_value >= 0.9999:
                 positions.append((x, y))
@@ -277,7 +299,9 @@ def far_depth_delta(controller, rd, event_id_a, color_a, event_id_b, color_b, de
     for x, y in positions:
         values_a.append(
             float4_values(
-                controller.PickPixel(color_a["resource_id"], x, y, color_sub_a, rd.CompType.Typeless)
+                controller.PickPixel(
+                    color_a["resource_id"], x, y, color_sub_a, rd.CompType.Typeless
+                )
             )
         )
 
@@ -285,9 +309,13 @@ def far_depth_delta(controller, rd, event_id_a, color_a, event_id_b, color_b, de
     controller.SetFrameEvent(event_id_b, True)
     for index, (x, y) in enumerate(positions):
         value_b = float4_values(
-            controller.PickPixel(color_b["resource_id"], x, y, color_sub_b, rd.CompType.Typeless)
+            controller.PickPixel(
+                color_b["resource_id"], x, y, color_sub_b, rd.CompType.Typeless
+            )
         )
-        max_delta = max(max_delta, max(abs(value) for value in vec_diff(values_a[index], value_b)))
+        max_delta = max(
+            max_delta, max(abs(value) for value in vec_diff(values_a[index], value_b))
+        )
 
     return max_delta, len(positions)
 
@@ -340,7 +368,9 @@ def read_stage15_fog_environment_static_data(controller, rd, event_id, resource_
     return None
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     action_records = collect_action_records(controller)
     resource_names = resource_id_to_name(controller)
@@ -409,17 +439,26 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         )
 
     fog_flags = stage15_static_data["flags"] if stage15_static_data else 0
-    cubemap_srv = stage15_static_data["cubemap_srv"] if stage15_static_data else INVALID_BINDLESS_INDEX
-    primary_density = stage15_static_data["primary_density"] if stage15_static_data else 0.0
-    secondary_density = stage15_static_data["secondary_density"] if stage15_static_data else 0.0
+    cubemap_srv = (
+        stage15_static_data["cubemap_srv"]
+        if stage15_static_data
+        else INVALID_BINDLESS_INDEX
+    )
+    primary_density = (
+        stage15_static_data["primary_density"] if stage15_static_data else 0.0
+    )
+    secondary_density = (
+        stage15_static_data["secondary_density"] if stage15_static_data else 0.0
+    )
     max_opacity = stage15_static_data["max_opacity"] if stage15_static_data else 0.0
-    min_transmittance = stage15_static_data["min_transmittance"] if stage15_static_data else 1.0
+    min_transmittance = (
+        stage15_static_data["min_transmittance"] if stage15_static_data else 1.0
+    )
     height_fog_changed = scene_color_delta > 1.0e-5
     far_depth_unchanged = far_sample_count == 0 or far_delta <= 1.0e-5
     cubemap_unusable = (
-        (fog_flags & GPU_FOG_FLAG_CUBEMAP_USABLE) == 0
-        and cubemap_srv == INVALID_BINDLESS_INDEX
-    )
+        fog_flags & GPU_FOG_FLAG_CUBEMAP_USABLE
+    ) == 0 and cubemap_srv == INVALID_BINDLESS_INDEX
 
     report.append("analysis_result=success")
     report.append("analysis_profile=vortex_height_fog")
@@ -427,54 +466,164 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("stage15_fog_scope_count={}".format(len(fog_scope)))
     report.append("stage15_fog_draw_count={}".format(fog_draw_count))
     report.append("stage15_previous_stage={}".format(previous_stage_name))
-    report.append("stage15_previous_event={}".format(previous_draw.event_id if previous_draw else ""))
+    report.append(
+        "stage15_previous_event={}".format(
+            previous_draw.event_id if previous_draw else ""
+        )
+    )
     report.append("stage15_fog_event={}".format(fog_draw.event_id if fog_draw else ""))
     report.append("height_fog_scene_color_delta_max={:.9g}".format(scene_color_delta))
     report.append("height_fog_far_depth_delta_max={:.9g}".format(far_delta))
     report.append("height_fog_far_depth_sample_count={}".format(far_sample_count))
     if previous_scene_color is not None:
-        report.append("stage15_previous_scene_color_center={}".format(format_values(previous_scene_color["center"])))
+        report.append(
+            "stage15_previous_scene_color_center={}".format(
+                format_values(previous_scene_color["center"])
+            )
+        )
     if fog_scene_color is not None:
-        report.append("stage15_fog_scene_color_center={}".format(format_values(fog_scene_color["center"])))
+        report.append(
+            "stage15_fog_scene_color_center={}".format(
+                format_values(fog_scene_color["center"])
+            )
+        )
     if stage15_static_data is not None:
-        report.append("stage15_fog_environment_static_resource={}".format(stage15_static_data["resource_name"]))
-        report.append("stage15_fog_environment_static_byte_size={}".format(stage15_static_data["byte_size"]))
+        report.append(
+            "stage15_fog_environment_static_resource={}".format(
+                stage15_static_data["resource_name"]
+            )
+        )
+        report.append(
+            "stage15_fog_environment_static_byte_size={}".format(
+                stage15_static_data["byte_size"]
+            )
+        )
         report.append("height_fog_flags={}".format(fog_flags))
         report.append("height_fog_model={}".format(stage15_static_data["model"]))
         report.append("height_fog_primary_density={:.9g}".format(primary_density))
-        report.append("height_fog_primary_height_falloff={:.9g}".format(stage15_static_data["primary_height_falloff"]))
-        report.append("height_fog_primary_height_offset_m={:.9g}".format(stage15_static_data["primary_height_offset_m"]))
+        report.append(
+            "height_fog_primary_height_falloff={:.9g}".format(
+                stage15_static_data["primary_height_falloff"]
+            )
+        )
+        report.append(
+            "height_fog_primary_height_offset_m={:.9g}".format(
+                stage15_static_data["primary_height_offset_m"]
+            )
+        )
         report.append("height_fog_secondary_density={:.9g}".format(secondary_density))
-        report.append("height_fog_secondary_height_falloff={:.9g}".format(stage15_static_data["secondary_height_falloff"]))
-        report.append("height_fog_secondary_height_offset_m={:.9g}".format(stage15_static_data["secondary_height_offset_m"]))
-        report.append("height_fog_start_distance_m={:.9g}".format(stage15_static_data["start_distance_m"]))
-        report.append("height_fog_end_distance_m={:.9g}".format(stage15_static_data["end_distance_m"]))
-        report.append("height_fog_cutoff_distance_m={:.9g}".format(stage15_static_data["cutoff_distance_m"]))
+        report.append(
+            "height_fog_secondary_height_falloff={:.9g}".format(
+                stage15_static_data["secondary_height_falloff"]
+            )
+        )
+        report.append(
+            "height_fog_secondary_height_offset_m={:.9g}".format(
+                stage15_static_data["secondary_height_offset_m"]
+            )
+        )
+        report.append(
+            "height_fog_start_distance_m={:.9g}".format(
+                stage15_static_data["start_distance_m"]
+            )
+        )
+        report.append(
+            "height_fog_end_distance_m={:.9g}".format(
+                stage15_static_data["end_distance_m"]
+            )
+        )
+        report.append(
+            "height_fog_cutoff_distance_m={:.9g}".format(
+                stage15_static_data["cutoff_distance_m"]
+            )
+        )
         report.append("height_fog_max_opacity={:.9g}".format(max_opacity))
         report.append("height_fog_min_transmittance={:.9g}".format(min_transmittance))
-        report.append("height_fog_directional_start_distance_m={:.9g}".format(stage15_static_data["directional_start_distance_m"]))
-        report.append("height_fog_directional_exponent={:.9g}".format(stage15_static_data["directional_exponent"]))
-        report.append("height_fog_fog_inscattering_luminance={}".format(format_values(stage15_static_data["fog_inscattering_luminance_rgb"])))
-        report.append("height_fog_directional_inscattering_luminance={}".format(format_values(stage15_static_data["directional_inscattering_luminance_rgb"])))
-        report.append("height_fog_sky_ambient_scale={}".format(format_values(stage15_static_data["sky_atmosphere_ambient_contribution_color_scale_rgb"])))
+        report.append(
+            "height_fog_directional_start_distance_m={:.9g}".format(
+                stage15_static_data["directional_start_distance_m"]
+            )
+        )
+        report.append(
+            "height_fog_directional_exponent={:.9g}".format(
+                stage15_static_data["directional_exponent"]
+            )
+        )
+        report.append(
+            "height_fog_fog_inscattering_luminance={}".format(
+                format_values(stage15_static_data["fog_inscattering_luminance_rgb"])
+            )
+        )
+        report.append(
+            "height_fog_directional_inscattering_luminance={}".format(
+                format_values(
+                    stage15_static_data["directional_inscattering_luminance_rgb"]
+                )
+            )
+        )
+        report.append(
+            "height_fog_sky_ambient_scale={}".format(
+                format_values(
+                    stage15_static_data[
+                        "sky_atmosphere_ambient_contribution_color_scale_rgb"
+                    ]
+                )
+            )
+        )
         report.append("height_fog_cubemap_srv={}".format(cubemap_srv))
-        report.append("height_fog_cubemap_num_mips={:.9g}".format(stage15_static_data["cubemap_num_mips"]))
+        report.append(
+            "height_fog_cubemap_num_mips={:.9g}".format(
+                stage15_static_data["cubemap_num_mips"]
+            )
+        )
 
     append_bool(report, "stage15_fog_scope_present", len(fog_scope) == 1)
     append_bool(report, "stage15_fog_draw_valid", fog_draw_count == 1)
-    append_bool(report, "stage15_fog_environment_static_data_bound", stage15_static_data is not None)
+    append_bool(
+        report,
+        "stage15_fog_environment_static_data_bound",
+        stage15_static_data is not None,
+    )
     append_bool(report, "height_fog_scene_color_changed", height_fog_changed)
     append_bool(report, "height_fog_far_depth_unchanged", far_depth_unchanged)
-    append_bool(report, "height_fog_enabled_flag", (fog_flags & GPU_FOG_FLAG_HEIGHT_FOG_ENABLED) != 0)
-    append_bool(report, "height_fog_fog_enabled_flag", (fog_flags & GPU_FOG_FLAG_ENABLED) != 0)
-    append_bool(report, "height_fog_render_in_main_pass_flag", (fog_flags & GPU_FOG_FLAG_RENDER_IN_MAIN_PASS) != 0)
-    append_bool(report, "height_fog_directional_inscattering_flag", (fog_flags & GPU_FOG_FLAG_DIRECTIONAL_INSCATTERING) != 0)
+    append_bool(
+        report,
+        "height_fog_enabled_flag",
+        (fog_flags & GPU_FOG_FLAG_HEIGHT_FOG_ENABLED) != 0,
+    )
+    append_bool(
+        report, "height_fog_fog_enabled_flag", (fog_flags & GPU_FOG_FLAG_ENABLED) != 0
+    )
+    append_bool(
+        report,
+        "height_fog_render_in_main_pass_flag",
+        (fog_flags & GPU_FOG_FLAG_RENDER_IN_MAIN_PASS) != 0,
+    )
+    append_bool(
+        report,
+        "height_fog_directional_inscattering_flag",
+        (fog_flags & GPU_FOG_FLAG_DIRECTIONAL_INSCATTERING) != 0,
+    )
     append_bool(report, "height_fog_primary_density_positive", primary_density > 0.0)
-    append_bool(report, "height_fog_any_density_positive", primary_density > 0.0 or secondary_density > 0.0)
+    append_bool(
+        report,
+        "height_fog_any_density_positive",
+        primary_density > 0.0 or secondary_density > 0.0,
+    )
     append_bool(report, "height_fog_max_opacity_valid", 0.0 <= max_opacity <= 1.0)
-    append_bool(report, "height_fog_min_transmittance_valid", 0.0 <= min_transmittance <= 1.0)
-    append_bool(report, "height_fog_cubemap_authored_flag", (fog_flags & GPU_FOG_FLAG_CUBEMAP_AUTHORED) != 0)
-    append_bool(report, "height_fog_cubemap_usable_flag", (fog_flags & GPU_FOG_FLAG_CUBEMAP_USABLE) != 0)
+    append_bool(
+        report, "height_fog_min_transmittance_valid", 0.0 <= min_transmittance <= 1.0
+    )
+    append_bool(
+        report,
+        "height_fog_cubemap_authored_flag",
+        (fog_flags & GPU_FOG_FLAG_CUBEMAP_AUTHORED) != 0,
+    )
+    append_bool(
+        report,
+        "height_fog_cubemap_usable_flag",
+        (fog_flags & GPU_FOG_FLAG_CUBEMAP_USABLE) != 0,
+    )
     append_bool(report, "height_fog_cubemap_unusable", cubemap_unusable)
 
 

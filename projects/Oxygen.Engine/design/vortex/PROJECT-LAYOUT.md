@@ -4,6 +4,8 @@
 > **Location:** `src/Oxygen/Vortex/`
 > **CMake target:** `oxygen::vortex`
 
+It refines the engine-wide [project layout](../PROJECT_LAYOUT.md).
+
 This document describes the Vortex module's directory
 structure, file placement rules, and organizational conventions. Every developer
 working on Vortex should read this document before adding files.
@@ -148,7 +150,7 @@ src/Oxygen/Vortex/
 │
 │   ── Tests ──────────────────────────────────────────────────────────────
 │
-└── Test/
+└── test/
     ├── Fakes/
     └── Fixtures/
 ```

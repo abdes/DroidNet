@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <windows.h>
+
 #include <algorithm>
 #include <array>
 #include <bit>
 #include <stdexcept>
 #include <string>
-
-#include <windows.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Loader/Detail/PlatformServices.h>

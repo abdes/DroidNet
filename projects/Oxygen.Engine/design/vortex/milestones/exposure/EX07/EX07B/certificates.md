@@ -76,7 +76,7 @@ all 55 numerical enclosures remain unchanged after that API extension.
 
 ## Results and reproduction
 
-The [generated certificates](../../../../../../src/Oxygen/Vortex/Test/Lighting/Reference/GgxMomentCertificates.json)
+The [generated certificates](../../../../../../src/Oxygen/Vortex/test/Lighting/Reference/GgxMomentCertificates.json)
 cover six roughness values, seven base view cosines and additional samples around
 mu=alpha/2, alpha and 2*alpha. Distinct binary64 values are retained. Each result
 exports a midpoint and an outward-rounded radius, including midpoint conversion

@@ -7,9 +7,7 @@ import re
 from pathlib import Path
 
 
-SHADOW_DRAW_RECORDS_PATTERN = re.compile(
-    r"conventional shadow draw records=(\d+)"
-)
+SHADOW_DRAW_RECORDS_PATTERN = re.compile(r"conventional shadow draw records=(\d+)")
 PREPARED_SHADOW_BOUNDS_PATTERN = re.compile(
     r"prepared shadow bounds collected=(\d+) retained=(\d+) cast_items=(\d+) "
     r"receive_items=(\d+) visible_items=(\d+)"
@@ -146,9 +144,7 @@ def main() -> int:
     current_shader_ms = parse_float(
         current_shader, "authoritative_scope_gpu_duration_ms"
     )
-    baseline_hzb_ms = parse_float(
-        baseline_hzb, "authoritative_scope_gpu_duration_ms"
-    )
+    baseline_hzb_ms = parse_float(baseline_hzb, "authoritative_scope_gpu_duration_ms")
     current_hzb_ms = parse_float(current_hzb, "authoritative_scope_gpu_duration_ms")
     baseline_receiver_ms = parse_float(
         baseline_receiver_timing, "authoritative_scope_gpu_duration_ms"
@@ -204,9 +200,7 @@ def main() -> int:
     current_benchmark_shadow_draw_record_count = parse_last_shadow_draw_record_count(
         current_benchmark_log
     )
-    baseline_prepared_bounds = parse_last_prepared_shadow_bounds(
-        baseline_benchmark_log
-    )
+    baseline_prepared_bounds = parse_last_prepared_shadow_bounds(baseline_benchmark_log)
     current_prepared_bounds = parse_last_prepared_shadow_bounds(current_benchmark_log)
     baseline_directional_summary = parse_last_directional_summary(
         baseline_benchmark_log
@@ -230,7 +224,9 @@ def main() -> int:
         summary_line("comparison_profile", "conventional_shadow_csm5"),
         summary_line("baseline_stem", baseline_stem),
         summary_line("current_stem", current_stem),
-        summary_line("baseline_shadow_draw_record_count", baseline_shadow_draw_record_count),
+        summary_line(
+            "baseline_shadow_draw_record_count", baseline_shadow_draw_record_count
+        ),
         summary_line(
             "current_benchmark_shadow_draw_record_count",
             current_benchmark_shadow_draw_record_count,
@@ -238,8 +234,12 @@ def main() -> int:
         summary_line("baseline_job_count", baseline_job_count),
         summary_line("current_job_count", current_job_count),
         summary_line("current_partition_count", current_partition_count),
-        summary_line("current_total_emitted_draw_count", current_total_emitted_draw_count),
-        summary_line("current_total_rejected_draw_count", current_total_rejected_draw_count),
+        summary_line(
+            "current_total_emitted_draw_count", current_total_emitted_draw_count
+        ),
+        summary_line(
+            "current_total_rejected_draw_count", current_total_rejected_draw_count
+        ),
         summary_line(
             "current_aggregate_rejection_ratio",
             f"{current_aggregate_rejection_ratio:.6f}",
@@ -263,11 +263,15 @@ def main() -> int:
         ),
         summary_line(
             "draw_work_event_count_matches_emitted_draw_count",
-            str(current_draw_work_event_count == current_total_emitted_draw_count).lower(),
+            str(
+                current_draw_work_event_count == current_total_emitted_draw_count
+            ).lower(),
         ),
         summary_line(
             "all_draw_work_events_are_indirect",
-            str(raster_draw_work_event_count == raster_indirect_draw_work_event_count).lower(),
+            str(
+                raster_draw_work_event_count == raster_indirect_draw_work_event_count
+            ).lower(),
         ),
         summary_line(
             "shadow_draw_work_event_reduction_vs_baseline",

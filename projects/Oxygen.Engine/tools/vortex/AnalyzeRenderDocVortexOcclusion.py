@@ -70,7 +70,9 @@ def records_with_name(action_records, name):
 
 def records_under_prefix(action_records, prefix):
     prefix_with_sep = prefix + " > "
-    return [record for record in action_records if record.path.startswith(prefix_with_sep)]
+    return [
+        record for record in action_records if record.path.startswith(prefix_with_sep)
+    ]
 
 
 def count_named_records(action_records, name):
@@ -80,9 +82,13 @@ def count_named_records(action_records, name):
 def append_exact_count_check(report, label, actual, expected):
     report.append("{}_actual={}".format(label, actual))
     report.append("{}_expected={}".format(label, expected))
-    report.append("{}_match={}".format(label, "true" if actual == expected else "false"))
+    report.append(
+        "{}_match={}".format(label, "true" if actual == expected else "false")
+    )
     if actual != expected:
-        raise RuntimeError("{} mismatch: expected {}, got {}".format(label, expected, actual))
+        raise RuntimeError(
+            "{} mismatch: expected {}, got {}".format(label, expected, actual)
+        )
 
 
 def append_less_than_check(report, label, actual, reference):
@@ -91,10 +97,14 @@ def append_less_than_check(report, label, actual, reference):
     report.append("{}_reference={}".format(label, reference))
     report.append("{}_match={}".format(label, "true" if match else "false"))
     if not match:
-        raise RuntimeError("{} mismatch: expected {} < {}".format(label, actual, reference))
+        raise RuntimeError(
+            "{} mismatch: expected {} < {}".format(label, actual, reference)
+        )
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     action_records = collect_action_records(controller)
 
     stage3_scope_name = "Vortex.Stage3.DepthPrepass"
@@ -106,21 +116,31 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
 
     stage3_scope = records_with_name(action_records, stage3_scope_name)
     stage5_hzb_scope = records_with_name(action_records, stage5_hzb_scope_name)
-    stage5_occlusion_scope = records_with_name(action_records, stage5_occlusion_scope_name)
+    stage5_occlusion_scope = records_with_name(
+        action_records, stage5_occlusion_scope_name
+    )
     stage9_scope = records_with_name(action_records, stage9_scope_name)
-    stage20_ground_grid_scope = records_with_name(action_records, stage20_ground_grid_scope_name)
+    stage20_ground_grid_scope = records_with_name(
+        action_records, stage20_ground_grid_scope_name
+    )
 
     stage3_records = records_under_prefix(action_records, stage3_scope_name)
-    stage5_occlusion_records = records_under_prefix(action_records, stage5_occlusion_scope_name)
+    stage5_occlusion_records = records_under_prefix(
+        action_records, stage5_occlusion_scope_name
+    )
     stage9_main_records = records_under_prefix(
         action_records, stage9_scope_name + " > " + stage9_main_scope_name
     )
-    stage9_records = stage9_main_records if stage9_main_records else records_under_prefix(
-        action_records, stage9_scope_name
+    stage9_records = (
+        stage9_main_records
+        if stage9_main_records
+        else records_under_prefix(action_records, stage9_scope_name)
     )
 
     stage3_draw_count = count_named_records(stage3_records, DRAW_NAME)
-    stage5_occlusion_dispatch_count = count_named_records(stage5_occlusion_records, DISPATCH_NAME)
+    stage5_occlusion_dispatch_count = count_named_records(
+        stage5_occlusion_records, DISPATCH_NAME
+    )
     stage9_draw_count = count_named_records(stage9_records, DRAW_NAME)
 
     report.append("analysis_profile=vortex_occlusion_runtime_capture")
@@ -129,13 +149,26 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("total_actions={}".format(len(action_records)))
 
     append_exact_count_check(report, "stage3_scope_count", len(stage3_scope), 1)
-    append_exact_count_check(report, "stage5_screen_hzb_scope_count", len(stage5_hzb_scope), 1)
-    append_exact_count_check(report, "stage5_occlusion_scope_count", len(stage5_occlusion_scope), 1)
-    append_exact_count_check(report, "stage5_occlusion_dispatch_count", stage5_occlusion_dispatch_count, 1)
+    append_exact_count_check(
+        report, "stage5_screen_hzb_scope_count", len(stage5_hzb_scope), 1
+    )
+    append_exact_count_check(
+        report, "stage5_occlusion_scope_count", len(stage5_occlusion_scope), 1
+    )
+    append_exact_count_check(
+        report, "stage5_occlusion_dispatch_count", stage5_occlusion_dispatch_count, 1
+    )
     append_exact_count_check(report, "stage9_scope_count", len(stage9_scope), 1)
-    append_exact_count_check(report, "stage20_ground_grid_scope_count", len(stage20_ground_grid_scope), 0)
+    append_exact_count_check(
+        report, "stage20_ground_grid_scope_count", len(stage20_ground_grid_scope), 0
+    )
     append_exact_count_check(report, "stage3_draw_count", stage3_draw_count, 3)
-    append_less_than_check(report, "stage9_draw_count_less_than_stage3", stage9_draw_count, stage3_draw_count)
+    append_less_than_check(
+        report,
+        "stage9_draw_count_less_than_stage3",
+        stage9_draw_count,
+        stage3_draw_count,
+    )
     append_exact_count_check(report, "stage9_draw_count", stage9_draw_count, 2)
 
 

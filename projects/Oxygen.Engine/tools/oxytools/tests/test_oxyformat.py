@@ -77,7 +77,7 @@ class SelectionTests(Fixture):
 
     def test_tests_included_vendor_generated_and_non_cpp_excluded(self):
         source = self.write("src/a.cpp", "int x;\n")
-        test = self.write("src/Test/a_test.cpp", "int x;\n")
+        test = self.write("src/test/a_test.cpp", "int x;\n")
         example = self.write("Examples/a.h", "int x;\n")
         self.write("src/vendor/a.cpp", "int x;\n")
         self.write("src/generated/a.cpp", "int x;\n")
@@ -331,7 +331,7 @@ class LLVMTests(Fixture):
         self.assertEqual(path.read_bytes(), b"int  x;\n")
 
     def test_all_includes_tests_and_obeys_exclusions_without_build_tree(self):
-        test = self.write("src/Test/a.cpp", "int  x;\n")
+        test = self.write("src/test/a.cpp", "int  x;\n")
         vendor = self.write("src/vendor/a.cpp", "int  x;\n")
         self.write("Examples/a.h", "int x;\n")
         code, _, error = self.invoke("--all", "--fix")

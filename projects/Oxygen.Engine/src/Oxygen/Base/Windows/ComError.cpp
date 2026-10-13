@@ -7,6 +7,8 @@
 #include <Oxygen/Base/Platforms.h>
 #if defined(OXYGEN_WINDOWS)
 
+#  include <Windows.h>
+
 #  include <exception>
 #  include <memory>
 #  include <span>
@@ -15,12 +17,10 @@
 #  include <type_traits>
 
 #  include <WTypesbase.h>
-#  include <Windows.h>
 #  include <comdef.h>
+#  include <fmt/format.h>
 #  include <oaidl.h>
 #  include <oleauto.h>
-
-#  include <fmt/format.h>
 
 #  include <Oxygen/Base/Logging.h>
 #  include <Oxygen/Base/Windows/ComError.h>

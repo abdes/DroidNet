@@ -171,7 +171,7 @@ target_link_libraries(${META_MODULE_TARGET} PUBLIC fmt::fmt-header-only)
 # ------------------------------------------------------------------------------
 
 if(OXYGEN_BUILD_TESTS)
-  add_subdirectory("Test")
+  add_subdirectory("test")
 endif()
 
 # ------------------------------------------------------------------------------

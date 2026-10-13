@@ -9,11 +9,11 @@
 #include <memory>
 #include <string>
 
+#include "FrameCaptureCli.h"
+
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
-
-#include "FrameCaptureCli.h"
 
 namespace oxygen::examples::cli {
 

@@ -29,7 +29,7 @@ def create_minimal_valid_document() -> Dict[str, Any]:
                     "shader_access_class": "buffer_srv",
                     "view_types": ["StructuredBuffer_SRV"],
                 }
-            ]
+            ],
         },
         "backends": {
             "d3d12": {
@@ -74,9 +74,7 @@ def create_minimal_valid_document() -> Dict[str, Any]:
             },
             "vulkan": {
                 "strategy": {
-                    "descriptor_sets": [
-                        {"id": "bindless_main", "set": 0}
-                    ],
+                    "descriptor_sets": [{"id": "bindless_main", "set": 0}],
                     "bindings": [
                         {
                             "id": "buffers_binding",
@@ -224,9 +222,7 @@ def create_full_example_document() -> Dict[str, Any]:
     }
     doc["backends"]["vulkan"] = {
         "strategy": {
-            "descriptor_sets": [
-                {"id": "bindless_main", "set": 0}
-            ],
+            "descriptor_sets": [{"id": "bindless_main", "set": 0}],
             "bindings": [
                 {
                     "id": "buffers_binding",

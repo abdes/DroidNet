@@ -245,7 +245,7 @@ secondary dimensions are half the main. Controlled cameras retain aspect 1/FOV
 1 radian; mixed cameras use aspect 16:9/FOV 45 degrees. Caller outputs are FP32.
 The indoor fixture enables the shadowing capability; the other two do not.
 
-[`PopulateMixedExposureBenchmarkScene`](../../../../../src/Oxygen/Vortex/Test/Fixtures/ExposureBenchmarkScene.h)
+[`PopulateMixedExposureBenchmarkScene`](../../../../../src/Oxygen/Vortex/test/Fixtures/ExposureBenchmarkScene.h)
 owns procedural asset identities, five opaque/emissive/masked/translucent/ground
 surfaces, lights and nonzero atmosphere/fog. I01/I02 add the existing enclosure.
 [`ExposureBaselineRendering.cpp`](../../../../../src/Oxygen/Vortex/Benchmarks/ExposureBaselineRendering.cpp)

@@ -67,6 +67,4 @@ def test_proof_step_propagates_native_exit_code():
     result = run_powershell(command)
 
     assert result.returncode != 0
-    assert "synthetic step failed with exit code 7" in (
-        result.stderr + result.stdout
-    )
+    assert "synthetic step failed with exit code 7" in (result.stderr + result.stdout)

@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Vortex/Renderer.h>
-
 #include "DemoShell/Services/LightCullingSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Vortex/Renderer.h>
 
 namespace oxygen::examples {
 

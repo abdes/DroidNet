@@ -460,7 +460,7 @@ shader including these production contracts, and Graphics-owned readback:
 - Build and run Debug/Release on native D3D12, check shader catalog/reflection
   dependencies, and show a deliberately changed lane/offset makes the test fail.
 
-Use owning `Vortex/Test` and existing Graphics offscreen/readback fixtures;
+Use owning `Vortex/test` and existing Graphics offscreen/readback fixtures;
 timing remains in a separate `Benchmarks` executable. No new command is advertised
 until its target exists. These tests are obligations, not current passing evidence.
 

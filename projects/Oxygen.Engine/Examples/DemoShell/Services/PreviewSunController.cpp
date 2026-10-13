@@ -4,16 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DemoShell/Services/PreviewSunController.h"
-
 #include <algorithm>
 #include <vector>
+
+#include "DemoShell/Services/DefaultSceneLighting.h"
+#include "DemoShell/Services/PreviewSunController.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
-
-#include "DemoShell/Services/DefaultSceneLighting.h"
 
 namespace oxygen::examples {
 namespace {
@@ -43,11 +42,13 @@ namespace {
   {
     const auto& light = node.GetLightAs<scene::DirectionalLight>()->get();
     if (!light.Common().affects_world
-      || light.GetAtmosphereLightSlot() != scene::AtmosphereLightSlot::kPrimary) {
+      || light.GetAtmosphereLightSlot()
+        != scene::AtmosphereLightSlot::kPrimary) {
       CHECK_F(node.EditLight<scene::DirectionalLight>([](auto& candidate) {
         candidate.Common().affects_world = true;
         candidate.SetAtmosphereLightSlot(scene::AtmosphereLightSlot::kPrimary);
-      }), "Failed to assign preview atmosphere light");
+      }),
+        "Failed to assign preview atmosphere light");
       scene.SyncObservers();
     }
   }
@@ -72,7 +73,8 @@ auto PreviewSunController::InspectSources(scene::Scene& scene) const
       && light.GetAtmosphereLightSlot() != scene::AtmosphereLightSlot::kNone) {
       result.authored_sun = node;
     }
-    if (light.GetAtmosphereLightSlot() != scene::AtmosphereLightSlot::kNone) continue;
+    if (light.GetAtmosphereLightSlot() != scene::AtmosphereLightSlot::kNone)
+      continue;
     if (!first_directional.IsAlive()) {
       first_directional = node;
     }
@@ -135,8 +137,10 @@ auto PreviewSunController::Update(scene::Scene& scene, const bool enabled,
     auto directionals = CollectDirectionals(scene);
     std::erase_if(directionals, [preferred_node_name](auto node) {
       return node.GetName() != preferred_node_name
-        || node.template GetLightAs<scene::DirectionalLight>()->get()
-             .GetAtmosphereLightSlot() != scene::AtmosphereLightSlot::kNone;
+        || node.template GetLightAs<scene::DirectionalLight>()
+             ->get()
+             .GetAtmosphereLightSlot()
+        != scene::AtmosphereLightSlot::kNone;
     });
     if (directionals.size() != 1U) {
       status_ = PreviewSunStatus::kSourceUnavailable;
@@ -193,7 +197,8 @@ auto PreviewSunController::Reset() noexcept -> void
   status_ = PreviewSunStatus::kDisabled;
 }
 
-auto PreviewSunController::ReleaseSun(scene::Scene& scene, bool synchronize) -> void
+auto PreviewSunController::ReleaseSun(scene::Scene& scene, bool synchronize)
+  -> void
 {
   if (sun_.IsAlive()) {
     if (injected_) {
@@ -203,11 +208,13 @@ auto PreviewSunController::ReleaseSun(scene::Scene& scene, bool synchronize) -> 
     } else if (const auto light = sun_.GetLightAs<scene::DirectionalLight>();
       light.has_value() && authored_state_.has_value()) {
       const auto authored = *authored_state_;
-      static_cast<void>(sun_.EditLight<scene::DirectionalLight>([authored](auto& directional) {
-        directional.Common().affects_world = authored.affects_world;
-        directional.SetAtmosphereLightSlot(authored.atmosphere_slot);
-      }));
-      if (synchronize) scene.SyncObservers();
+      static_cast<void>(
+        sun_.EditLight<scene::DirectionalLight>([authored](auto& directional) {
+          directional.Common().affects_world = authored.affects_world;
+          directional.SetAtmosphereLightSlot(authored.atmosphere_slot);
+        }));
+      if (synchronize)
+        scene.SyncObservers();
     }
   }
   sun_ = {};

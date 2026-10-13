@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Jolt/Jolt.h> // Must always be first (keep separate)
+
 #include <algorithm>
 #include <cmath>
 #include <ranges>
-
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
 
 #include <Jolt/Math/DMat44.h>
 #include <Jolt/Physics/Body/BodyFilter.h>

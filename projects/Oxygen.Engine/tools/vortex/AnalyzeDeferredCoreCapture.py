@@ -621,7 +621,9 @@ def main() -> int:
     report_path = Path(args.report).resolve()
 
     try:
-        manifest = parse_manifest(json.loads(input_path.read_text(encoding="utf-8-sig")))
+        manifest = parse_manifest(
+            json.loads(input_path.read_text(encoding="utf-8-sig"))
+        )
         lines = analyze(manifest)
         lines.insert(2, f"manifest_path={input_path}")
         lines.insert(3, f"report_path={report_path}")

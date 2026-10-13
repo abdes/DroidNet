@@ -9,14 +9,14 @@
 #include <atomic>
 #include <cstdint>
 
+#include "DemoShell/Services/DomainService.h"
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/CompositionView.h>
-
-#include "DemoShell/Services/DomainService.h"
 
 namespace oxygen::vortex {
 class Renderer;

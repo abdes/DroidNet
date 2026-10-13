@@ -6,10 +6,10 @@
 
 #pragma once
 
+#include "DemoShell/Runtime/MainViewContract.h"
+
 #include <Oxygen/Vortex/RenderMode.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
-
-#include "DemoShell/Runtime/MainViewContract.h"
 
 namespace oxygen::engine {
 using ShaderDebugMode = vortex::ShaderDebugMode;

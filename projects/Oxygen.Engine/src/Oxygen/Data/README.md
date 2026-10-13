@@ -199,7 +199,7 @@ Follow rules in `.github/instructions/unit_tests.instructions.md`:
 - Include `#include <Oxygen/Testing/GTest.h>` (wrapper) only.
 - Use scenario-based names: `MeshBuilderErrorTest_WithVerticesAfterBuffers_Throws`.
 - Use AAA structure with comments (Arrange / Act / Assert) & blank lines.
-- Place tests in `src/Oxygen/Data/Test` – add file to `Test/CMakeLists.txt` if
+- Place tests in `src/Oxygen/Data/test` – add file to `Test/CMakeLists.txt` if
   not using existing GTest macro (or extend `m_gtest_program` list).
 - For death tests use `EXPECT_DEATH` and keep regex minimal.
 - Use provided matchers (`SizeIs`, `AllOf`, etc.) and helper macros (`NOLINT_TEST`, `NOLINT_TEST_F`).

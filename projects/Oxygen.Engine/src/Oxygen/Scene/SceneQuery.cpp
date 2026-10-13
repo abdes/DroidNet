@@ -8,12 +8,11 @@
 #include <string_view>
 #include <vector>
 
-#include <Oxygen/Scene/SceneQuery.h>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Detail/PathMatcher.h>
 #include <Oxygen/Scene/Detail/PathParser.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Scene/SceneQuery.h>
 
 using oxygen::scene::ConstVisitedNode;
 using oxygen::scene::QueryResult;

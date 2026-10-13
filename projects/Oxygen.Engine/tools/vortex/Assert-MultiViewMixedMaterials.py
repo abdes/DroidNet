@@ -22,34 +22,60 @@ def check(report):
         base = floats("base_scene")
         before, after = floats("before_translucency"), floats("after_translucency")
         changes = np.max(np.abs(after - before), axis=2)
-        affected = int(np.count_nonzero(changes > .005 * np.max(np.abs(before), axis=2) + 2e-5))
+        affected = int(
+            np.count_nonzero(changes > 0.005 * np.max(np.abs(before), axis=2) + 2e-5)
+        )
         if affected < 32:
-            raise AssertionError(f"Missing visible translucent contribution: {view['target_name']}")
+            raise AssertionError(
+                f"Missing visible translucent contribution: {view['target_name']}"
+            )
         row = {"target": view["target_name"], "translucent_pixels": affected}
         if view["shading_path"] == "deferred":
-            colors = np.fromfile(evidence["base_color"], dtype=np.uint8).reshape(height, width, 4)
-            coverage = np.fromfile(evidence["masked_coverage"], dtype=np.uint8).reshape(height, width, 4)
-            for label, rgb in (("opaque", [.2, .7, .3]), ("masked", [.9, .4, .4])):
+            colors = np.fromfile(evidence["base_color"], dtype=np.uint8).reshape(
+                height, width, 4
+            )
+            coverage = np.fromfile(evidence["masked_coverage"], dtype=np.uint8).reshape(
+                height, width, 4
+            )
+            for label, rgb in (
+                ("opaque", [0.2, 0.7, 0.3]),
+                ("masked", [0.9, 0.4, 0.4]),
+            ):
                 linear = np.array(rgb)
-                encoded = np.rint((1.055 * linear ** (1 / 2.4) - .055) * 255)
-                mask = np.max(np.abs(colors[..., :3].astype(float) - encoded), axis=2) <= 1
+                encoded = np.rint((1.055 * linear ** (1 / 2.4) - 0.055) * 255)
+                mask = (
+                    np.max(np.abs(colors[..., :3].astype(float) - encoded), axis=2) <= 1
+                )
                 if np.count_nonzero(mask) < 32:
                     raise AssertionError(f"Missing {label} base-color coverage")
                 row[label + "_pixels"] = int(np.count_nonzero(mask))
                 if label == "masked":
-                    if not np.all(coverage[mask, 0] == 255) or not np.all(np.abs(coverage[mask, 1].astype(int) - 204) <= 1):
-                        raise AssertionError("Masked material did not execute the alpha-test path")
+                    if not np.all(coverage[mask, 0] == 255) or not np.all(
+                        np.abs(coverage[mask, 1].astype(int) - 204) <= 1
+                    ):
+                        raise AssertionError(
+                            "Masked material did not execute the alpha-test path"
+                        )
             # Cooked material factors preserve the float32 source product.
-            expected = np.array([.7, .65, .5], dtype=np.float32) * np.float32(4096)
-            emitted = np.all(np.abs(base - expected) <= .005 * expected + 2e-5, axis=2)
+            expected = np.array([0.7, 0.65, 0.5], dtype=np.float32) * np.float32(4096)
+            emitted = np.all(np.abs(base - expected) <= 0.005 * expected + 2e-5, axis=2)
             row["emissive_pixels"] = int(np.count_nonzero(emitted))
             if row["emissive_pixels"] < 32:
-                raise AssertionError("Missing scene-referred emissive base-pass contribution")
+                raise AssertionError(
+                    "Missing scene-referred emissive base-pass contribution"
+                )
         else:
             # Lighting is already accumulated in forward base-pass output.
-            green = (base[..., 1] > 1.2 * base[..., 0]) & (base[..., 1] > 1.2 * base[..., 2])
-            red = (base[..., 0] > 1.2 * base[..., 1]) & (base[..., 0] > 1.2 * base[..., 2])
-            row.update(opaque_green_pixels=int(np.count_nonzero(green)), masked_red_pixels=int(np.count_nonzero(red)))
+            green = (base[..., 1] > 1.2 * base[..., 0]) & (
+                base[..., 1] > 1.2 * base[..., 2]
+            )
+            red = (base[..., 0] > 1.2 * base[..., 1]) & (
+                base[..., 0] > 1.2 * base[..., 2]
+            )
+            row.update(
+                opaque_green_pixels=int(np.count_nonzero(green)),
+                masked_red_pixels=int(np.count_nonzero(red)),
+            )
             if min(row["opaque_green_pixels"], row["masked_red_pixels"]) < 32:
                 raise AssertionError("Forward base pass lost a colored material")
         results.append(row)

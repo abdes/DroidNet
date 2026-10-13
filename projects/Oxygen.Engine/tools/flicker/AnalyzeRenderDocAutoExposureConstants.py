@@ -21,10 +21,7 @@ def _script_path():
             return candidate.resolve()
 
     fallback = (
-        Path.cwd()
-        / "tools"
-        / "flicker"
-        / "AnalyzeRenderDocAutoExposureConstants.py"
+        Path.cwd() / "tools" / "flicker" / "AnalyzeRenderDocAutoExposureConstants.py"
     )
     if fallback.exists():
         return fallback.resolve()

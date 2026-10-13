@@ -31,16 +31,23 @@ def main():
             ):
                 path = os.environ.get(variable)
                 if path:
-                    output = streams.enter_context(open(path, "w", encoding="utf-8", buffering=1))
+                    output = streams.enter_context(
+                        open(path, "w", encoding="utf-8", buffering=1)
+                    )
                     streams.enter_context(redirect(output))
             runpy.run_path(str(script), run_name="__main__")
         lines = report_path.read_text(encoding="utf-8").splitlines()
         if "execution_mode=replay" not in lines:
-            raise RuntimeError("Analyzer did not finish through the shared replay entry point")
+            raise RuntimeError(
+                "Analyzer did not finish through the shared replay entry point"
+            )
     except BaseException:
         import traceback
 
-        failure = "analysis_result=exception\nexecution_mode=replay\nbootstrap_exception:\n" + traceback.format_exc()
+        failure = (
+            "analysis_result=exception\nexecution_mode=replay\nbootstrap_exception:\n"
+            + traceback.format_exc()
+        )
         if report_path is not None:
             try:
                 report_path.parent.mkdir(parents=True, exist_ok=True)

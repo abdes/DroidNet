@@ -234,11 +234,11 @@ if(OXYGEN_BUILD_UI_TESTS)
   target_sources(
     ${META_MODULE_TARGET}
     PRIVATE
-      "Test/UiTestSession.cpp"
-      "Test/RuntimeSmoke.cpp"
-      "Test/UiTestSession.h"
-      "Test/UiTestAssets.cpp"
-      "Test/UiTestAssets.h"
+      "test/UiTestSession.cpp"
+      "test/RuntimeSmoke.cpp"
+      "test/UiTestSession.h"
+      "test/UiTestAssets.cpp"
+      "test/UiTestAssets.h"
   )
   target_link_libraries(
     ${META_MODULE_TARGET}
@@ -250,8 +250,8 @@ endif()
 
 arrange_target_files_for_ide(${META_MODULE_TARGET})
 
-if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/Test")
-  add_subdirectory("Test")
+if(OXYGEN_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/test")
+  add_subdirectory("test")
 endif()
 
 # ------------------------------------------------------------------------------

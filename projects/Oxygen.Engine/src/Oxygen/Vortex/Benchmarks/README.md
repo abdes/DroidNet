@@ -43,7 +43,7 @@ all eight cases retain their `DISABLED_` prefix and require explicit selection.
 - `*_bench.cpp` files register the workloads.
 - `ExposureBaseline*` and `ExposureBenchmarkFixture.*` own the baseline recipes,
   rendering, events and results.
-- `Test/Support/CpuTimingCapture.*` owns the shared bounded CPU observer. The
+- `test/Support/CpuTimingCapture.*` owns the shared bounded CPU observer. The
   `oxygen::vortex-test-support` module compiles it once per configuration;
   both correctness tests and benchmarks depend on this test infrastructure.
   Production targets do not link it.

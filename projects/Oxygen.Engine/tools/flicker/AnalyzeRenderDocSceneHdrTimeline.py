@@ -20,9 +20,7 @@ def _script_path():
         if candidate.name == "AnalyzeRenderDocSceneHdrTimeline.py":
             return candidate.resolve()
 
-    fallback = (
-        Path.cwd() / "tools" / "flicker" / "AnalyzeRenderDocSceneHdrTimeline.py"
-    )
+    fallback = Path.cwd() / "tools" / "flicker" / "AnalyzeRenderDocSceneHdrTimeline.py"
     if fallback.exists():
         return fallback.resolve()
 

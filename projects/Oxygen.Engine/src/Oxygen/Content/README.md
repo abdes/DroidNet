@@ -147,7 +147,7 @@ This checklist is mandatory for Content runtime refactors and is intended to be 
   - exact files touched,
   - targeted tests executed (`ctest -R ...`), and
   - observed pass/fail outcome.
-- Any API surface change in `Internal/*.h` MUST include or update tests in `src/Oxygen/Content/Test` covering both nominal and failure-path behavior.
+- Any API surface change in `Internal/*.h` MUST include or update tests in `src/Oxygen/Content/test` covering both nominal and failure-path behavior.
 - No RTTI-based branching (`dynamic_cast`, `typeid`) is allowed in runtime content code; use Oxygen typed interfaces/contracts.
 - Regressions in mount/source persistence, scene catalog enumeration, cache trim semantics, or dependency release order block task closure.
 
@@ -338,7 +338,7 @@ Analyzes and inspects PAK file contents.
 - `Empty.yaml` → `Empty.pak`: Empty PAK validation
 - `ComplexGeometry.yaml` → `ComplexGeometry.pak`: Multi-resource test with buffers and textures
 
-All test files are located in `src/Oxygen/Content/Test/TestData/`.
+All test files are located in `src/Oxygen/Content/test/TestData/`.
 
 ## Asset Architecture Design
 

@@ -33,20 +33,29 @@ def prepare(source, output, scenes):
         if path.suffix == ".json":
             obj = json.loads(data)
             if path.name == "import-manifest.json":
-                obj["jobs"] = [job for job in obj["jobs"] if job.get("id") not in excluded_jobs]
+                obj["jobs"] = [
+                    job for job in obj["jobs"] if job.get("id") not in excluded_jobs
+                ]
 
             def visit(value):
                 if isinstance(value, dict):
                     for key, child in value.items():
                         if key == "$schema" and isinstance(child, str):
                             if not child.startswith(("http:", "https:")):
-                                value[key] = Path(os.path.relpath(output.parent / "schemas" / Path(child).name, target.parent)).as_posix()
+                                value[key] = Path(
+                                    os.path.relpath(
+                                        output.parent / "schemas" / Path(child).name,
+                                        target.parent,
+                                    )
+                                ).as_posix()
                             continue
                         visit(child)
                 elif isinstance(value, list):
                     for child in value:
                         visit(child)
-                elif isinstance(value, str) and not value.startswith(("/", "asset:", "http:" , "https:")):
+                elif isinstance(value, str) and not value.startswith(
+                    ("/", "asset:", "http:", "https:")
+                ):
                     candidate = path.parent / value
                     if candidate.is_file():
                         copy_input(candidate)
@@ -57,13 +66,27 @@ def prepare(source, output, scenes):
 
     for scene in scenes:
         copy_input(source / "scenes" / scene / "import-manifest.json")
-    for name in ("images/showcase/Sky.hdr", "README.md", "ASSET_CREDITS.md",
-                 "showcase-assets.json", "cook_scenes.ps1", "cook_scenes.cmd",
-                 "pak_content.ps1", "pak_content.cmd", "import_models.ps1", "import_models.cmd",
-                 "play_scene.ps1", "play_scene.cmd",
-                 "import-sources.schema.json", "import-sources.example.json"):
+    for name in (
+        "images/showcase/Sky.hdr",
+        "README.md",
+        "ASSET_CREDITS.md",
+        "showcase-assets.json",
+        "cook_scenes.ps1",
+        "cook_scenes.cmd",
+        "pak_content.ps1",
+        "pak_content.cmd",
+        "import_models.ps1",
+        "import_models.cmd",
+        "play_scene.ps1",
+        "play_scene.cmd",
+        "import-sources.schema.json",
+        "import-sources.example.json",
+    ):
         copy_input(source / name)
-    write_changed(output.parent / "inputs.txt", ("\n".join(p.as_posix() for p in sorted(visited)) + "\n").encode())
+    write_changed(
+        output.parent / "inputs.txt",
+        ("\n".join(p.as_posix() for p in sorted(visited)) + "\n").encode(),
+    )
 
 
 if __name__ == "__main__":

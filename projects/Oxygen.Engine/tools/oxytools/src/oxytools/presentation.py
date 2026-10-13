@@ -31,7 +31,8 @@ def outcome(console: Console, label: str, details: list[str], style: str) -> Non
 
 
 def failure(console: Console, label: str, message: str, detail: str = "") -> None:
-    console.print(Text(label, style="bold red"))
+    # Unwrapped when redirected, so a failing path stays on its label's line.
+    console.print(Text(label, style="bold red"), soft_wrap=not console.is_terminal)
     for line in message.splitlines():
         console.print(Text("  " + line), soft_wrap=not console.is_terminal)
     if detail:

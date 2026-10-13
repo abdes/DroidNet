@@ -16,6 +16,7 @@
 
 #ifdef _WIN32
 #  include <Windows.h> // IWYU pragma: keep
+
 #  include <errhandlingapi.h>
 #  include <winbase.h>
 #endif

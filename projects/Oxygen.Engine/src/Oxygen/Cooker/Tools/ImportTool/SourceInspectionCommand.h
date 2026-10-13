@@ -6,8 +6,9 @@
 
 #pragma once
 
-#include <Oxygen/Cooker/Tools/ImportTool/ImportCommand.h>
 #include <string>
+
+#include <Oxygen/Cooker/Tools/ImportTool/ImportCommand.h>
 
 namespace oxygen::content::import::tool {
 

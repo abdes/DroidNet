@@ -202,7 +202,7 @@ Primary files/areas:
 - `src/Oxygen/Vortex/Internal/ViewLifecycleService.*`
 - `src/Oxygen/Vortex/Internal/PreviousViewHistoryCache.*`
 - `src/Oxygen/Vortex/PostProcess/Passes/ExposurePass.*`
-- focused tests under `src/Oxygen/Vortex/Test/`
+- focused tests under `src/Oxygen/Vortex/test/`
 
 `CompositionView.h` is listed in B1 because `ViewStateHandle` is
 producer-owned. If implementation proves the handle can live entirely on
@@ -246,7 +246,7 @@ Primary files/areas:
 - `src/Oxygen/Vortex/Internal/FrameViewPacket.*`
 - `src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.*`
 - `src/Oxygen/Vortex/Internal/ViewLifecycleService.*`
-- focused tests under `src/Oxygen/Vortex/Test/`
+- focused tests under `src/Oxygen/Vortex/test/`
 
 Required behavior:
 
@@ -289,8 +289,8 @@ Primary files/areas:
 - `src/Oxygen/Vortex/Renderer.*`
 - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.*`
 - `src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.*`
-- `src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp`
-- `src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp`
+- `src/Oxygen/Vortex/test/SceneRendererPublication_test.cpp`
+- `src/Oxygen/Vortex/test/SceneRendererDeferredCore_test.cpp`
 
 Required behavior:
 
@@ -322,9 +322,9 @@ Primary files/areas:
 - new scene-texture pool/lease owner under `src/Oxygen/Vortex/SceneRenderer/`
   or `src/Oxygen/Vortex/SceneRenderer/Internal/`
 - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.*`
-- `src/Oxygen/Vortex/Test/SceneTextures_test.cpp`
-- `src/Oxygen/Vortex/Test/SceneRendererShell_test.cpp`
-- `src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp`
+- `src/Oxygen/Vortex/test/SceneTextures_test.cpp`
+- `src/Oxygen/Vortex/test/SceneRendererShell_test.cpp`
+- `src/Oxygen/Vortex/test/SceneRendererPublication_test.cpp`
 
 Required behavior:
 
@@ -360,8 +360,8 @@ Primary files/areas:
 - `src/Oxygen/Vortex/Renderer.*`
 - `src/Oxygen/Vortex/RendererCompositionQueue*`
 - `src/Oxygen/Vortex/Internal/FrameViewPacket.*`
-- `src/Oxygen/Vortex/Test/Internal/CompositionPlanner_test.cpp`
-- `src/Oxygen/Vortex/Test/RendererCompositionQueue_test.cpp`
+- `src/Oxygen/Vortex/test/Internal/CompositionPlanner_test.cpp`
+- `src/Oxygen/Vortex/test/RendererCompositionQueue_test.cpp`
 - `Examples/MultiView/*` only if used by the proof scenario
 
 Required behavior:
@@ -399,7 +399,7 @@ Primary files/areas:
 - `src/Oxygen/Vortex/SceneRenderer/Internal/FramePlanBuilder.*`
 - `src/Oxygen/Vortex/SceneRenderer/SceneRenderer.*`
 - `src/Oxygen/Vortex/Internal/CompositionPlanner.*`
-- new or existing auxiliary dependency graph unit under `src/Oxygen/Vortex/Test/`
+- new or existing auxiliary dependency graph unit under `src/Oxygen/Vortex/test/`
 - validation harness/tooling as needed
 
 UE5.7 references to cite in slice commit/status evidence:

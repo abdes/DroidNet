@@ -6,83 +6,148 @@ import struct
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "shadows"))
-from renderdoc_ui_analysis import collect_action_records, renderdoc_module, run_ui_script
+from renderdoc_ui_analysis import (
+    collect_action_records,
+    renderdoc_module,
+    run_ui_script,
+)
 
 
 def build_report(controller, report, capture_path, report_path):
     rd = renderdoc_module()
     checked = 0
     for draw in collect_action_records(controller):
-        if not draw.flags & rd.ActionFlags.Drawcall or "Vortex.Stage9.BasePass.Forward" not in draw.path:
+        if (
+            not draw.flags & rd.ActionFlags.Drawcall
+            or "Vortex.Stage9.BasePass.Forward" not in draw.path
+        ):
             continue
         controller.SetFrameEvent(draw.event_id, True)
         pipeline = controller.GetPipelineState()
         used = pipeline.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
-        by_slot = {int(x.access.arrayElement): x.descriptor for x in used
-                   if x.access.index == rd.DescriptorAccess.NoShaderBinding}
-        headers = [x.descriptor for x in used if x.descriptor.elementByteSize == x.descriptor.byteSize == 96]
+        by_slot = {
+            int(x.access.arrayElement): x.descriptor
+            for x in used
+            if x.access.index == rd.DescriptorAccess.NoShaderBinding
+        }
+        headers = [
+            x.descriptor
+            for x in used
+            if x.descriptor.elementByteSize == x.descriptor.byteSize == 96
+        ]
         if not headers:
             continue
         header = headers[0]
-        words = struct.unpack("<24I", bytes(controller.GetBufferData(header.resource, header.byteOffset, 96)))
+        words = struct.unpack(
+            "<24I",
+            bytes(controller.GetBufferData(header.resource, header.byteOffset, 96)),
+        )
         if words[4] != 3 or words[0] not in by_slot:
             raise RuntimeError("Forward publication lost directional sources")
         descriptor = by_slot[words[0]]
         if descriptor.elementByteSize != 64 or descriptor.byteSize != 192:
             raise RuntimeError("Incorrect forward directional stride/count")
-        records = bytes(controller.GetBufferData(descriptor.resource, descriptor.byteOffset, 192))
-        slots = [struct.unpack_from("<I",records,index*64+12)[0] for index in range(3)]
-        indices = [struct.unpack_from("<I",records,index*64+48)[0] for index in range(3)]
-        if set(slots) != {0,1,0xFFFFFFFF} or indices != [0,1,2]:
+        records = bytes(
+            controller.GetBufferData(descriptor.resource, descriptor.byteOffset, 192)
+        )
+        slots = [
+            struct.unpack_from("<I", records, index * 64 + 12)[0] for index in range(3)
+        ]
+        indices = [
+            struct.unpack_from("<I", records, index * 64 + 48)[0] for index in range(3)
+        ]
+        if set(slots) != {0, 1, 0xFFFFFFFF} or indices != [0, 1, 2]:
             raise RuntimeError("Incorrect source/atmosphere identity")
         references = by_slot[words[8]]
-        data = bytes(controller.GetBufferData(references.resource,references.byteOffset,48))
+        data = bytes(
+            controller.GetBufferData(references.resource, references.byteOffset, 48)
+        )
         families = []
-        for index,reference in enumerate(struct.iter_unpack("<4I",data)):
-            if reference[2] != index: raise RuntimeError("Shadow reference source mismatch")
+        for index, reference in enumerate(struct.iter_unpack("<4I", data)):
+            if reference[2] != index:
+                raise RuntimeError("Shadow reference source mismatch")
             if slots[index] == 0xFFFFFFFF:
-                if reference[0] != 0: raise RuntimeError("The unassigned fill must be unshadowed in this recipe")
+                if reference[0] != 0:
+                    raise RuntimeError(
+                        "The unassigned fill must be unshadowed in this recipe"
+                    )
             else:
-                if reference[0] != 1: raise RuntimeError("Missing directional family reference")
+                if reference[0] != 1:
+                    raise RuntimeError("Missing directional family reference")
                 families.append(reference[1])
-        if sorted(families) != [0,1]: raise RuntimeError("Shadow families were derived from unfiltered source indices")
+        if sorted(families) != [0, 1]:
+            raise RuntimeError(
+                "Shadow families were derived from unfiltered source indices"
+            )
         if words[5] != 0:
             metadata = by_slot.get(words[11])
-            if metadata is None or metadata.elementByteSize != 64 or metadata.byteSize != 64:
+            if (
+                metadata is None
+                or metadata.elementByteSize != 64
+                or metadata.byteSize != 64
+            ):
                 raise RuntimeError("Missing canonical grid metadata")
-            grid = bytes(controller.GetBufferData(metadata.resource, metadata.byteOffset, 64))
+            grid = bytes(
+                controller.GetBufferData(metadata.resource, metadata.byteOffset, 64)
+            )
             dimensions = struct.unpack_from("<3I", grid, 0)
             parameters = struct.unpack_from("<3f", grid, 32)
             far_depth, near_depth = struct.unpack_from("<2f", grid, 44)
             projection = struct.unpack_from("<I", grid, 52)[0]
             if projection == 0:
+
                 def f32(value):
                     return struct.unpack("<f", struct.pack("<f", value))[0]
+
                 scale = f32(4.05)
-                expected = (f32(far_depth - near_depth), f32(math.pow(2.0, dimensions[2] / scale) - 1), scale)
+                expected = (
+                    f32(far_depth - near_depth),
+                    f32(math.pow(2.0, dimensions[2] / scale) - 1),
+                    scale,
+                )
                 if parameters != expected:
-                    raise RuntimeError(f"Stale perspective grid encoding: {parameters} != {expected}")
+                    raise RuntimeError(
+                        f"Stale perspective grid encoding: {parameters} != {expected}"
+                    )
                 near_slice = 0
-                far_slice = min(dimensions[2] - 1, int(math.log2(1 + parameters[1]) * parameters[2]))
+                far_slice = min(
+                    dimensions[2] - 1, int(math.log2(1 + parameters[1]) * parameters[2])
+                )
                 if far_slice != dimensions[2] - 1:
                     raise RuntimeError("Published far plane is not in the last cell")
-                report.append(f"grid_event={draw.event_id} near={near_depth} far={far_depth} parameters={parameters} endpoint_slices={near_slice},{far_slice}")
+                report.append(
+                    f"grid_event={draw.event_id} near={near_depth} far={far_depth} parameters={parameters} endpoint_slices={near_slice},{far_slice}"
+                )
             elif projection == 1:
                 if parameters != (0.0, 0.0, 0.0):
-                    raise RuntimeError("Orthographic grid must not carry perspective parameters")
+                    raise RuntimeError(
+                        "Orthographic grid must not carry perspective parameters"
+                    )
             else:
                 raise RuntimeError("Unknown grid projection")
         target = pipeline.GetOutputTargets()[0].resource
         texture = next(t for t in controller.GetTextures() if t.resourceId == target)
-        radiance = controller.PickPixel(target,texture.width//2,texture.height//2,rd.Subresource(),rd.CompType.Float).floatValue
-        if not all(math.isfinite(v) for v in radiance): raise RuntimeError("Nonfinite forward output")
-        report.append(f"event={draw.event_id} directional_count=3 atmosphere_slots={slots} selection_indices={indices} family_indices={families}")
+        radiance = controller.PickPixel(
+            target,
+            texture.width // 2,
+            texture.height // 2,
+            rd.Subresource(),
+            rd.CompType.Float,
+        ).floatValue
+        if not all(math.isfinite(v) for v in radiance):
+            raise RuntimeError("Nonfinite forward output")
+        report.append(
+            f"event={draw.event_id} directional_count=3 atmosphere_slots={slots} selection_indices={indices} family_indices={families}"
+        )
         checked += 1
-    if checked == 0: raise RuntimeError("No forward fragment consumed the directional array")
+    if checked == 0:
+        raise RuntimeError("No forward fragment consumed the directional array")
     report.append(f"forward_draws_checked={checked}")
     report.append("directional_array_forward_verdict=pass")
-    report.append("scope=forward records, shadow references and live grid metadata; physical BRDF parity remains open")
+    report.append(
+        "scope=forward records, shadow references and live grid metadata; physical BRDF parity remains open"
+    )
 
 
 if __name__ == "__main__":
-    run_ui_script("_directional_array_forward.txt",build_report)
+    run_ui_script("_directional_array_forward.txt", build_report)

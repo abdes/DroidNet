@@ -468,10 +468,10 @@ Initial entries:
    - `src/Oxygen/Cooker/Import/ImportManifest.cpp`
    - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
    - `src/Oxygen/Cooker/CMakeLists.txt`
-   - `src/Oxygen/Cooker/Test/Import/TextureDescriptorJsonSchema_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/TextureDescriptorImportRequestBuilder_test.cpp`
-   - `src/Oxygen/Cooker/Test/Import/ImportManifest_texture_descriptor_test.cpp`
-   - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+   - `src/Oxygen/Cooker/test/Import/TextureDescriptorJsonSchema_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/TextureDescriptorImportRequestBuilder_test.cpp`
+   - `src/Oxygen/Cooker/test/Import/ImportManifest_texture_descriptor_test.cpp`
+   - `src/Oxygen/Cooker/test/CMakeLists.txt`
    - `src/Oxygen/Cooker/Tools/ImportTool/README.md`
 10. Tests run: none (per current no-build execution policy)
 11. Result: texture-descriptor ingress implemented through existing texture request/job path with schema-first validation and manifest integration
@@ -493,11 +493,11 @@ Initial entries:
     - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
     - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
     - `src/Oxygen/Cooker/Tools/ImportTool/README.md`
-    - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorJsonSchema_test.cpp`
-    - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportRequestBuilder_test.cpp`
-    - `src/Oxygen/Cooker/Test/Import/ImportManifest_material_descriptor_test.cpp`
-    - `src/Oxygen/Cooker/Test/Import/AsyncImportService_test.cpp`
-    - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+    - `src/Oxygen/Cooker/test/Import/MaterialDescriptorJsonSchema_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/MaterialDescriptorImportRequestBuilder_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/ImportManifest_material_descriptor_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/AsyncImportService_test.cpp`
+    - `src/Oxygen/Cooker/test/CMakeLists.txt`
 16. Tests run: none (per current no-build execution policy)
 17. Result: material-descriptor domain integrated through schema-first request build, dedicated async job routing, manifest/job-type/tool reporting support, and focused test coverage additions
 18. Remaining delta to phase exit gate:
@@ -517,8 +517,8 @@ Initial entries:
 25. Date: 2026-03-02
 26. Phase: P4
 27. Files changed:
-    - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportJob_test.cpp`
-    - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+    - `src/Oxygen/Cooker/test/Import/MaterialDescriptorImportJob_test.cpp`
+    - `src/Oxygen/Cooker/test/CMakeLists.txt`
 28. Tests run: none (per current no-build execution policy)
 29. Result: added dedicated material-descriptor import fixture/tests that cover hashed `.otex` virtual-path resolution, emitted `.omat` verification, and missing-descriptor diagnostics.
 30. Remaining delta to phase exit gate:
@@ -596,10 +596,10 @@ Initial entries:
     - `src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json`
     - `src/Oxygen/Cooker/Import/ImportRequest.h`
     - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
-    - `src/Oxygen/Cooker/Test/Import/BufferContainerImportRequestBuilder_test.cpp`
-    - `src/Oxygen/Cooker/Test/Import/ImportManifest_buffer_container_test.cpp`
-    - `src/Oxygen/Cooker/Test/Import/BufferContainerImportJob_test.cpp`
-    - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+    - `src/Oxygen/Cooker/test/Import/BufferContainerImportRequestBuilder_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/ImportManifest_buffer_container_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/BufferContainerImportJob_test.cpp`
+    - `src/Oxygen/Cooker/test/CMakeLists.txt`
     - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
 64. Tests run:
     - external execution (user confirmation): `BufferContainerImportJobTest.SuccessfulJobEmitsExpectedArtifacts` passed
@@ -645,10 +645,10 @@ Initial entries:
     - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
     - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
     - `src/Oxygen/Cooker/CMakeLists.txt`
-    - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorJsonSchema_test.cpp`
-    - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportRequestBuilder_test.cpp`
-    - `src/Oxygen/Cooker/Test/Import/ImportManifest_geometry_descriptor_test.cpp`
-    - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+    - `src/Oxygen/Cooker/test/Import/GeometryDescriptorJsonSchema_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/GeometryDescriptorImportRequestBuilder_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/ImportManifest_geometry_descriptor_test.cpp`
+    - `src/Oxygen/Cooker/test/CMakeLists.txt`
     - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
 82. Tests run: none (per current no-build execution policy)
 83. Result: geometry-descriptor is now first-class at ingress/routing level (schema embedding, manifest defaults/job type, request-builder, ImportRequest payload, async service routing, import-tool job typing) with initial job shell and focused schema/request/manifest tests added.
@@ -667,12 +667,12 @@ Initial entries:
     - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
     - `src/Oxygen/Cooker/Import/AsyncImportService.cpp`
     - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
-    - `src/Oxygen/Cooker/Test/Import/AsyncImportService_test.cpp`
-    - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportRequestBuilder_test.cpp`
-    - `src/Oxygen/Cooker/Test/Import/ImportManifest_material_descriptor_test.cpp`
-    - `src/Oxygen/Cooker/Test/Import/MaterialDescriptorImportJob_test.cpp`
-    - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportRequestBuilder_test.cpp`
-    - `src/Oxygen/Cooker/Test/Import/ImportManifest_geometry_descriptor_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/AsyncImportService_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/MaterialDescriptorImportRequestBuilder_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/ImportManifest_material_descriptor_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/MaterialDescriptorImportJob_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/GeometryDescriptorImportRequestBuilder_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/ImportManifest_geometry_descriptor_test.cpp`
     - `design/content-pipeline/material-cooking-architecture.md`
     - `design/content-pipeline/buffer-cooking-architecture.md`
     - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
@@ -688,9 +688,9 @@ Initial entries:
     - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
     - `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.cpp`
     - `src/Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.cpp`
-    - `src/Oxygen/Cooker/Test/Import/GeometryPipeline_test.cpp`
-    - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportJob_test.cpp`
-    - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+    - `src/Oxygen/Cooker/test/Import/GeometryPipeline_test.cpp`
+    - `src/Oxygen/Cooker/test/Import/GeometryDescriptorImportJob_test.cpp`
+    - `src/Oxygen/Cooker/test/CMakeLists.txt`
     - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
 94. Tests run: none (no-build policy active)
 95. Result: completed geometry-descriptor job execution hardening and expanded coverage with dedicated job tests for standard, pre-cooked `.obuf` references, procedural descriptors, skinned descriptors, failure diagnostics, and dedupe conflict invariant; aligned skinned descriptor serialization/finalization to avoid duplicated skinned payload writes and keep descriptor layout loader-compatible.
@@ -712,7 +712,7 @@ Initial entries:
 105. Files changed:
      - `src/Oxygen/Cooker/Import/Internal/Jobs/BufferImportSubmitter.cpp`
      - `src/Oxygen/Cooker/Import/Internal/Jobs/GeometryDescriptorImportJob.cpp`
-     - `src/Oxygen/Cooker/Test/Import/GeometryDescriptorImportJob_test.cpp`
+     - `src/Oxygen/Cooker/test/Import/GeometryDescriptorImportJob_test.cpp`
      - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
 106. Tests run: none (no-build policy active)
 107. Result: closed remaining P3 implementation gaps with deterministic mounted-root `.obuf` resolution rules, canonical cross-job dedupe sidecar constraints, and expanded geometry job coverage for mounted-root resolution, ambiguity diagnostics, unmounted virtual paths, and cross-job dedupe conflicts.
@@ -755,12 +755,12 @@ Initial entries:
      - `src/Oxygen/Cooker/Tools/ImportTool/BatchCommand.cpp`
      - `src/Oxygen/Cooker/Tools/ImportTool/README.md`
      - `src/Oxygen/Cooker/CMakeLists.txt`
-     - `src/Oxygen/Cooker/Test/Import/SceneDescriptorJsonSchema_test.cpp`
-     - `src/Oxygen/Cooker/Test/Import/SceneDescriptorImportRequestBuilder_test.cpp`
-     - `src/Oxygen/Cooker/Test/Import/ImportManifest_scene_descriptor_test.cpp`
-     - `src/Oxygen/Cooker/Test/Import/SceneDescriptorImportJob_test.cpp`
-     - `src/Oxygen/Cooker/Test/Import/AsyncImportService_test.cpp`
-     - `src/Oxygen/Cooker/Test/CMakeLists.txt`
+     - `src/Oxygen/Cooker/test/Import/SceneDescriptorJsonSchema_test.cpp`
+     - `src/Oxygen/Cooker/test/Import/SceneDescriptorImportRequestBuilder_test.cpp`
+     - `src/Oxygen/Cooker/test/Import/ImportManifest_scene_descriptor_test.cpp`
+     - `src/Oxygen/Cooker/test/Import/SceneDescriptorImportJob_test.cpp`
+     - `src/Oxygen/Cooker/test/Import/AsyncImportService_test.cpp`
+     - `src/Oxygen/Cooker/test/CMakeLists.txt`
      - `design/content-pipeline/pakgen-supersession-implementation-plan.md`
 118. Tests run: none (no-build policy active)
 119. Result: scene-descriptor domain is now first-class across schema generation, request building, manifest defaults/job wiring, async job routing, batch report classification, job execution (`.oscene` emission with deterministic mounted reference resolution), and focused schema/request/manifest/job/routing test coverage.

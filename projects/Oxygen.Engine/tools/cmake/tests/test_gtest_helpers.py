@@ -54,15 +54,15 @@ TEST_SOURCES = (
 
 EXPECTED_GROUPS = {
     "Area.Functional.Tests": {
-        "Module/Test/main.cpp": "src",
-        "Module/Test/Import/Support.h": "src\\Import",
-        "Module/Test/Import/Emitters/Asset_test.cpp": "src\\Import\\Emitters",
-        "Module/Test/Import/Emitters/Platform_test.cpp": "src\\Import\\Emitters",
+        "Module/test/main.cpp": "src",
+        "Module/test/Import/Support.h": "src\\Import",
+        "Module/test/Import/Emitters/Asset_test.cpp": "src\\Import\\Emitters",
+        "Module/test/Import/Emitters/Platform_test.cpp": "src\\Import\\Emitters",
         "Module/Internal/Shared.cpp": "external",
     },
     "Module.Import.Tests": {
-        "Module/Test/Import/Module_test.cpp": "src\\Import",
-        "Module/Test/Import/Platform_test.cpp": "src\\Import",
+        "Module/test/Import/Module_test.cpp": "src\\Import",
+        "Module/test/Import/Platform_test.cpp": "src\\Import",
     },
 }
 
@@ -72,13 +72,13 @@ class GTestHelperTests(ProjectTestCase):
     def setUp(self) -> None:
         super().setUp()
         for path in TEST_SOURCES:
-            self.write(f"Module/Test/{path}")
+            self.write(f"Module/test/{path}")
         self.write("Module/Internal/Shared.cpp")
-        self.write("Module/Test/CMakeLists.txt", TEST_DIR)
+        self.write("Module/test/CMakeLists.txt", TEST_DIR)
         self.project(
             "add_library(GTest::gtest INTERFACE IMPORTED)\n"
             "add_library(oxygen::testing INTERFACE IMPORTED)\n"
-            "add_library(module INTERFACE)\n" + include("GTestHelpers.cmake") + "add_subdirectory(Module/Test)\n",
+            "add_library(module INTERFACE)\n" + include("GTestHelpers.cmake") + "add_subdirectory(Module/test)\n",
             language="CXX",
         )
 

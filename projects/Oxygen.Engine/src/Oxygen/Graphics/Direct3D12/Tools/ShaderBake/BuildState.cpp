@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
-
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
@@ -15,6 +13,8 @@
 #include <type_traits>
 
 #include <nlohmann/json.hpp>
+
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 

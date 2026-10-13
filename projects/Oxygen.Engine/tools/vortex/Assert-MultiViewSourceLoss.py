@@ -30,16 +30,22 @@ def continuity_image_error(before, after, key):
     with Image.open(before[key]) as left, Image.open(after[key]) as right:
         if left.size != right.size:
             raise AssertionError("PiP image extent changed during source loss")
-        error = max(hi for _, hi in ImageChops.difference(
-            left.convert("RGB"), right.convert("RGB")).getextrema())
+        error = max(
+            hi
+            for _, hi in ImageChops.difference(
+                left.convert("RGB"), right.convert("RGB")
+            ).getextrema()
+        )
         if error > 1:
             raise AssertionError(f"Source loss changed {key} by {error} codes")
         return error
 
 
 def trajectory(initial, view, log_path):
-    entries = re.findall(r"Vortex\.MultiView\.SourceLoss frame=(\d+) delta_seconds=([0-9.eE+\-]+)",
-        log_path.read_text(encoding="utf-8"))
+    entries = re.findall(
+        r"Vortex\.MultiView\.SourceLoss frame=(\d+) delta_seconds=([0-9.eE+\-]+)",
+        log_path.read_text(encoding="utf-8"),
+    )
     deltas = {}
     for frame, delta in entries:
         frame, delta = int(frame), float(delta)
@@ -62,21 +68,36 @@ def trajectory(initial, view, log_path):
         raise AssertionError("Invalid independent luminance")
     target = 0.72 / view["raw_luminance"]
     gain_error(view["target_gain"], target)
-    expected = 2 ** float(hybrid_trajectory(
-        math.log2(initial), math.log2(target), elapsed, 3, 1, 1.5))
+    expected = 2 ** float(
+        hybrid_trajectory(math.log2(initial), math.log2(target), elapsed, 3, 1, 1.5)
+    )
     if not initial < view["gain"] <= target * 2 ** (1 / 512):
-        raise AssertionError("Expected a continuous move toward the brighter independent target")
+        raise AssertionError(
+            "Expected a continuous move toward the brighter independent target"
+        )
     crossing_time = max(0, abs(math.log2(target / initial)) - 1.5)
     if view["frame"] == 52 and elapsed <= crossing_time:
         raise AssertionError("Later sample did not exercise the exponential branch")
-    return {"elapsed_game_seconds": elapsed, "crossing_time_seconds": crossing_time,
-            "expected_gain": expected,
-            "actual_gain": view["gain"], "error_ev": gain_error(view["gain"], expected)}
+    return {
+        "elapsed_game_seconds": elapsed,
+        "crossing_time_seconds": crossing_time,
+        "expected_gain": expected,
+        "actual_gain": view["gain"],
+        "error_ev": gain_error(view["gain"], expected),
+    }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for name in ("before", "continuity", "first", "first-log", "later", "later-log", "output"):
+    for name in (
+        "before",
+        "continuity",
+        "first",
+        "first-log",
+        "later",
+        "later-log",
+        "output",
+    ):
         parser.add_argument(f"--{name}", type=Path, required=True)
     args = parser.parse_args()
     before = load_view(args.before, 43, 2)
@@ -84,7 +105,9 @@ def main():
     first = load_view(args.first, 47, 1)
     later = load_view(args.later, 52, 1)
     extent = (before["width"], before["height"])
-    if any((view["width"], view["height"]) != extent for view in (continuity, first, later)):
+    if any(
+        (view["width"], view["height"]) != extent for view in (continuity, first, later)
+    ):
         raise AssertionError("Source-loss reports must follow the same PiP extent")
     if not before["state_flags"] & 128 or not before["frame_flags"] & 2:
         raise AssertionError("PiP did not start as a borrowing view")
@@ -94,8 +117,12 @@ def main():
         raise AssertionError("The surviving PiP has no scene signal")
     results = {
         "continuity_error_ev": gain_error(continuity["gain"], before["gain"]),
-        "continuity_mapped_error_codes": continuity_image_error(before, continuity, "image"),
-        "continuity_precomposition_error_codes": continuity_image_error(before, continuity, "precomposition_image"),
+        "continuity_mapped_error_codes": continuity_image_error(
+            before, continuity, "image"
+        ),
+        "continuity_precomposition_error_codes": continuity_image_error(
+            before, continuity, "precomposition_image"
+        ),
         "first_independent_frame": trajectory(before["gain"], first, args.first_log),
         "later_independent_frame": trajectory(before["gain"], later, args.later_log),
         "verdict": "pass",

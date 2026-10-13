@@ -21,17 +21,12 @@ def _script_path():
             return candidate.resolve()
 
     fallback = (
-        Path.cwd()
-        / "tools"
-        / "flicker"
-        / "AnalyzeRenderDocAutoExposureDeepDive.py"
+        Path.cwd() / "tools" / "flicker" / "AnalyzeRenderDocAutoExposureDeepDive.py"
     )
     if fallback.exists():
         return fallback.resolve()
 
-    raise RuntimeError(
-        "Unable to resolve AnalyzeRenderDocAutoExposureDeepDive.py"
-    )
+    raise RuntimeError("Unable to resolve AnalyzeRenderDocAutoExposureDeepDive.py")
 
 
 def main() -> int:

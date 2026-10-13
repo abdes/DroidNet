@@ -161,8 +161,8 @@ Required work:
 Likely touch points:
 
 - `tools/vortex/*`
-- `src/Oxygen/Vortex/Test/Link_test.cpp`
-- `src/Oxygen/Vortex/Test/CMakeLists.txt`
+- `src/Oxygen/Vortex/test/Link_test.cpp`
+- `src/Oxygen/Vortex/test/CMakeLists.txt`
 
 [Checks](validation.md#b-legacy-seam-inventory-and-static-guard--checks).
 

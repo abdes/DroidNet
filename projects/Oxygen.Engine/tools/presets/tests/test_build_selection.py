@@ -21,30 +21,59 @@ class BuildSelectionTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         folder = self.root / "tools/cli"
         folder.mkdir(parents=True)
-        for name in ("BuildSelection.ps1", "oxy-targets.ps1", "oxybuild.ps1", "oxyrun.ps1"):
+        for name in (
+            "BuildSelection.ps1",
+            "oxy-targets.ps1",
+            "oxybuild.ps1",
+            "oxyrun.ps1",
+        ):
             shutil.copyfile(ENGINE / "tools/cli" / name, folder / name)
-        self.data = {"version": 9, "configurePresets": [], "buildPresets": [], "testPresets": []}
+        self.data = {
+            "version": 9,
+            "configurePresets": [],
+            "buildPresets": [],
+            "testPresets": [],
+        }
 
     def tree(self, variant, configs=("Debug", "Release"), exists=True, disabled=False):
         root = self.root / "out" / ("build-" + variant)
         if exists:
             root.mkdir(parents=True)
         configure = "conan-" + variant + "-default"
-        self.data["configurePresets"].append({
-            "name": configure, "generator": "Ninja Multi-Config" if variant.endswith("ninja") else "Visual Studio 18 2026",
-            "binaryDir": "${sourceDir}/out/build-" + variant,
-            "cacheVariables": {"OXYGEN_WITH_ASAN": "ON" if "asan" in variant else "OFF", "OXYGEN_WITH_TRACY": "ON" if "tracy" in variant else "OFF"},
-        })
+        self.data["configurePresets"].append(
+            {
+                "name": configure,
+                "generator": "Ninja Multi-Config"
+                if variant.endswith("ninja")
+                else "Visual Studio 18 2026",
+                "binaryDir": "${sourceDir}/out/build-" + variant,
+                "cacheVariables": {
+                    "OXYGEN_WITH_ASAN": "ON" if "asan" in variant else "OFF",
+                    "OXYGEN_WITH_TRACY": "ON" if "tracy" in variant else "OFF",
+                },
+            }
+        )
         for config in configs:
-            preset = {"name": "conan-" + variant + "-" + config.lower(), "configurePreset": configure, "configuration": config}
+            preset = {
+                "name": "conan-" + variant + "-" + config.lower(),
+                "configurePreset": configure,
+                "configuration": config,
+            }
             if disabled:
                 preset["condition"] = False
             self.data["buildPresets"].append(preset)
-            self.data["testPresets"].append({**preset, "environment": {"OXYGEN_SELECTED_RUNTIME": variant + "-" + config}})
+            self.data["testPresets"].append(
+                {
+                    **preset,
+                    "environment": {"OXYGEN_SELECTED_RUNTIME": variant + "-" + config},
+                }
+            )
         return root
 
     def save(self):
-        (self.root / "CMakePresets.json").write_text(json.dumps(self.data), encoding="utf-8")
+        (self.root / "CMakePresets.json").write_text(
+            json.dumps(self.data), encoding="utf-8"
+        )
 
     def command(self, body, expect=0):
         self.save()
@@ -54,7 +83,14 @@ class BuildSelectionTests(unittest.TestCase):
             ". (Join-Path $PSScriptRoot 'tools/cli/BuildSelection.ps1')\n" + body,
             encoding="utf-8",
         )
-        result = subprocess.run([PWSH, "-NoProfile", "-File", str(path)], cwd=self.root.parent, capture_output=True, text=True, encoding="utf-8", errors="replace")
+        result = subprocess.run(
+            [PWSH, "-NoProfile", "-File", str(path)],
+            cwd=self.root.parent,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         self.assertEqual(result.returncode, expect, result.stdout + result.stderr)
         return result.stdout
 
@@ -76,7 +112,16 @@ catch { if ($_.Exception.Message -notlike 'No available preset*') { throw } }
 try { Resolve-OxygenBuildSelection -BuildTree absent; throw 'Switched explicit tree' }
 catch { if ($_.Exception.Message -notlike 'No available preset*') { throw } }
 """)
-        self.assertEqual(json.loads(output), ["conan-ninja-release", "conan-ninja-debug", "conan-tracy-ninja-release", "conan-vs-debug", "conan-asan-ninja-debug"])
+        self.assertEqual(
+            json.loads(output),
+            [
+                "conan-ninja-release",
+                "conan-ninja-debug",
+                "conan-tracy-ninja-release",
+                "conan-vs-debug",
+                "conan-asan-ninja-debug",
+            ],
+        )
 
     @unittest.skipUnless(os.name == "nt", "Windows build host policy")
     def test_windows_compiler_host_policy(self):
@@ -141,8 +186,17 @@ catch { if ($_.Exception.Message -notlike 'Oxygen requires Hostx64*') { throw } 
                         f"& (Join-Path $PSScriptRoot 'tools/cli/{name}') {flag}\n",
                         encoding="utf-8",
                     )
-                    result = subprocess.run([PWSH, "-NoProfile", "-File", str(path)], cwd=self.root.parent, capture_output=True, text=True, encoding="utf-8", errors="replace")
-                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    result = subprocess.run(
+                        [PWSH, "-NoProfile", "-File", str(path)],
+                        cwd=self.root.parent,
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                    )
+                    self.assertEqual(
+                        result.returncode, 0, result.stdout + result.stderr
+                    )
                     self.assertIn("-ListBuilds", result.stdout)
                     self.assertIn("-Preset", result.stdout)
 
@@ -162,8 +216,14 @@ function global:cmake {
 $null = Invoke-BuildForTarget probe $selection
 $null = Invoke-BuildForTarget probe $selection
 """)
-        calls = [json.loads(line) for line in (self.root / "calls.jsonl").read_text().splitlines()]
-        self.assertEqual(calls, [["--build", "--preset", "conan-ninja-release", "--target", "probe"]] * 2)
+        calls = [
+            json.loads(line)
+            for line in (self.root / "calls.jsonl").read_text().splitlines()
+        ]
+        self.assertEqual(
+            calls,
+            [["--build", "--preset", "conan-ninja-release", "--target", "probe"]] * 2,
+        )
 
     def test_ambiguous_target_cancels_on_empty_input_or_eof(self):
         root = self.tree("ninja")
@@ -174,11 +234,28 @@ $null = Invoke-BuildForTarget probe $selection
             filename = f"target-{name}.json"
             (reply / filename).write_text(json.dumps({"name": name}), encoding="utf-8")
             targets.append({"name": name, "jsonFile": filename})
-        (reply / "model.json").write_text(json.dumps({"configurations": [{"name": "Debug", "targets": targets}]}), encoding="utf-8")
-        (reply / "index-001.json").write_text(json.dumps({"objects": [{"kind": "codemodel", "version": {"major": 2}, "jsonFile": "model.json"}]}), encoding="utf-8")
+        (reply / "model.json").write_text(
+            json.dumps({"configurations": [{"name": "Debug", "targets": targets}]}),
+            encoding="utf-8",
+        )
+        (reply / "index-001.json").write_text(
+            json.dumps(
+                {
+                    "objects": [
+                        {
+                            "kind": "codemodel",
+                            "version": {"major": 2},
+                            "jsonFile": "model.json",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
         for response in ("$null", "''"):
             with self.subTest(response=response):
-                self.command("""
+                self.command(
+                    """
 . (Join-Path $PSScriptRoot 'tools/cli/oxy-targets.ps1')
 $script:prompts = 0
 function global:Read-Host {
@@ -189,7 +266,8 @@ function global:Read-Host {
 $result = Resolve-TargetName Probe (Join-Path $PSScriptRoot 'out/build-ninja')
 if ($null -ne $result) { throw 'Cancellation selected a build target' }
 if ($script:prompts -ne 1) { throw 'Did not exercise ambiguous selection' }
-""".replace("RESPONSE", response))
+""".replace("RESPONSE", response)
+                )
 
     def test_unconfigured_tree_requires_explicit_setup(self):
         self.tree("ninja")
@@ -210,14 +288,19 @@ catch {
         build = self.tree("ninja")
         cmakelists = self.root / "CMakeLists.txt"
         project = (
-            'cmake_minimum_required(VERSION 4.2)\nproject(Regeneration NONE)\n'
+            "cmake_minimum_required(VERSION 4.2)\nproject(Regeneration NONE)\n"
             'file(WRITE "${CMAKE_BINARY_DIR}/configured.txt" "before")\n'
             'add_custom_target(probe COMMAND "${CMAKE_COMMAND}" -E true)\n'
         )
         cmakelists.write_text(project, encoding="utf-8")
-        configured = subprocess.run(["cmake", "-S", str(self.root), "-B", str(build), "-G", "Ninja"],
-                                    capture_output=True, text=True)
-        self.assertEqual(configured.returncode, 0, configured.stdout + configured.stderr)
+        configured = subprocess.run(
+            ["cmake", "-S", str(self.root), "-B", str(build), "-G", "Ninja"],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(
+            configured.returncode, 0, configured.stdout + configured.stderr
+        )
         cmakelists.write_text(project.replace('"before"', '"after"'), encoding="utf-8")
         # Make ordering deterministic even on filesystems with coarse timestamps.
         os.utime(build / "build.ninja", (1, 1))
@@ -242,7 +325,10 @@ $null = Invoke-BuildForTarget probe $selection
         self.tree("vs", disabled=True)
         tracy = self.tree("tracy-ninja")
         asan = self.tree("asan-vs", ("Debug",))
-        for root, config, files in ((tracy, "Release", ["Importer.exe"]), (asan, "Debug", ["Importer.exe", "Inspector.exe"])):
+        for root, config, files in (
+            (tracy, "Release", ["Importer.exe"]),
+            (asan, "Debug", ["Importer.exe", "Inspector.exe"]),
+        ):
             folder = root / "bin" / config
             folder.mkdir(parents=True)
             for name in files:
@@ -255,30 +341,68 @@ $null = Invoke-BuildForTarget probe $selection
 try { Resolve-OxygenBuildSelection -Preset conan-tracy-ninja-release -RequiredExecutables Importer.exe,Inspector.exe; throw 'Mixed tool families' }
 catch { if ($_.Exception.Message -notlike 'No available preset*') { throw } }
 """)
-        self.assertEqual(json.loads(output), ["conan-tracy-ninja-release", "conan-asan-vs-debug"])
+        self.assertEqual(
+            json.loads(output), ["conan-tracy-ninja-release", "conan-asan-vs-debug"]
+        )
 
     def test_configuration_precedes_instrumentation_and_generator(self):
         self.tree("ninja", ("Debug",))
         self.tree("tracy-vs", ("Release",))
-        self.assertEqual(self.command("(Resolve-OxygenBuildSelection).BuildPreset").strip(), "conan-tracy-vs-release")
+        self.assertEqual(
+            self.command("(Resolve-OxygenBuildSelection).BuildPreset").strip(),
+            "conan-tracy-vs-release",
+        )
 
     def artifact(self, root, configs, available):
-        (root / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
+        (root / "CMakeCache.txt").write_text(
+            "CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8"
+        )
         reply = root / ".cmake/api/v1/reply"
         reply.mkdir(parents=True)
         model = {"configurations": []}
         for config in configs:
             target_file = f"target-App-{config}.json"
-            model["configurations"].append({"name": config, "targets": [{"name": "App", "jsonFile": target_file}]})
+            model["configurations"].append(
+                {"name": config, "targets": [{"name": "App", "jsonFile": target_file}]}
+            )
             artifact = root / "bin" / config / "app.cmd"
             if config in available:
                 artifact.parent.mkdir(parents=True)
-                artifact.write_bytes(b'@echo off\r\necho RUNTIME=%OXYGEN_SELECTED_RUNTIME%\r\necho ARG=%~1\r\nexit /b 23\r\n')
-            (reply / target_file).write_text(json.dumps({"name": "App", "type": "EXECUTABLE", "artifacts": [{"path": artifact.relative_to(root).as_posix()}]}), encoding="utf-8")
+                artifact.write_bytes(
+                    b"@echo off\r\necho RUNTIME=%OXYGEN_SELECTED_RUNTIME%\r\necho ARG=%~1\r\nexit /b 23\r\n"
+                )
+            (reply / target_file).write_text(
+                json.dumps(
+                    {
+                        "name": "App",
+                        "type": "EXECUTABLE",
+                        "artifacts": [{"path": artifact.relative_to(root).as_posix()}],
+                    }
+                ),
+                encoding="utf-8",
+            )
         (reply / "model.json").write_text(json.dumps(model), encoding="utf-8")
-        (reply / "index-002.json").write_text(json.dumps({"objects": [{"kind": "codemodel", "version": {"major": 2}, "jsonFile": "model.json"}]}), encoding="utf-8")
+        (reply / "index-002.json").write_text(
+            json.dumps(
+                {
+                    "objects": [
+                        {
+                            "kind": "codemodel",
+                            "version": {"major": 2},
+                            "jsonFile": "model.json",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
         # A stale target file must never authorize the wrong configuration.
-        (reply / "target-App-Release-stale.json").write_text(json.dumps({"type": "EXECUTABLE", "artifacts": [{"path": "bin/Debug/app.cmd"}]}), encoding="utf-8")
+        (reply / "target-App-Release-stale.json").write_text(
+            json.dumps(
+                {"type": "EXECUTABLE", "artifacts": [{"path": "bin/Debug/app.cmd"}]}
+            ),
+            encoding="utf-8",
+        )
 
     def test_no_build_runs_available_configuration_and_restores_environment(self):
         root = self.tree("ninja")
@@ -299,10 +423,13 @@ exit 0
     def test_argument_separator_preserves_child_help(self):
         root = self.tree("ninja", ("Release",))
         self.artifact(root, ("Release",), ("Release",))
-        output = self.command("""
+        output = self.command(
+            """
 & (Join-Path $PSScriptRoot 'tools/cli/oxyrun.ps1') App -NoBuild -- -h
 exit $LASTEXITCODE
-""", expect=23)
+""",
+            expect=23,
+        )
         self.assertIn("ARG=-h", output)
 
     def test_dry_run_is_read_only(self):
@@ -315,15 +442,20 @@ exit $LASTEXITCODE
 """)
         self.assertIn("conan-ninja-release", output)
         self.assertIn("a; b", output)
-        self.assertEqual(before, sorted(p.relative_to(root) for p in root.rglob("*") if p.is_file()))
+        self.assertEqual(
+            before, sorted(p.relative_to(root) for p in root.rglob("*") if p.is_file())
+        )
 
     def test_explicit_missing_artifact_does_not_run_debug(self):
         root = self.tree("ninja")
         self.artifact(root, ("Debug", "Release"), ("Debug",))
-        result = self.command("""
+        result = self.command(
+            """
 & (Join-Path $PSScriptRoot 'tools/cli/oxyrun.ps1') App -NoBuild -Config Release
 exit $LASTEXITCODE
-""", expect=1)
+""",
+            expect=1,
+        )
         self.assertNotIn("RUNTIME=", result)
 
     def test_vs_without_file_api_uses_only_unique_matching_config_output(self):
@@ -336,7 +468,9 @@ exit $LASTEXITCODE
 $choice = Resolve-OxygenBuildSelection -Preset conan-vs-release
 Get-OxygenExecutableArtifact $choice.BuildRoot oxygen-examples-scene $choice.Config
 """)
-        self.assertEqual(Path(output.strip()), root / "bin/Release/Oxygen.Examples.Scene.exe")
+        self.assertEqual(
+            Path(output.strip()), root / "bin/Release/Oxygen.Examples.Scene.exe"
+        )
         (root / "bin/Release/Oxygen-Examples-Scene.exe").touch()
         output = self.command("""
 $choice = Resolve-OxygenBuildSelection -Preset conan-vs-release
@@ -347,7 +481,8 @@ if ($null -ne (Get-OxygenExecutableArtifact $choice.BuildRoot oxygen-examples-sc
     def test_build_failure_preserves_exit_code_and_never_runs(self):
         root = self.tree("ninja")
         self.artifact(root, ("Debug", "Release"), ("Release",))
-        output = self.command("""
+        output = self.command(
+            """
 $global:NativeCMake = (Get-Command cmake -CommandType Application | Select-Object -First 1).Source
 function global:cmake {
     if ($args -contains '--list-presets=build') { & $global:NativeCMake @args; return }
@@ -356,7 +491,9 @@ function global:cmake {
 }
 & (Join-Path $PSScriptRoot 'tools/cli/oxyrun.ps1') App
 exit $LASTEXITCODE
-""", expect=19)
+""",
+            expect=19,
+        )
         self.assertIn("SIMULATED BUILD FAILURE", output)
         self.assertNotIn("RUNTIME=", output)
 
@@ -365,13 +502,23 @@ exit $LASTEXITCODE
         leaf = self.data["configurePresets"][0]
         leaf["binaryDir"] = "${fileDir}/out/build-ninja"
         leaf["inherits"] = "base"
-        self.data["configurePresets"].append({
-            "name": "base", "hidden": True,
-            "environment": {"OXYGEN_TEST_PREFIX": "${sourceDir}/runtime"},
-        })
-        self.data["testPresets"][0]["environment"]["OXYGEN_TEST_EXPANDED"] = "$env{OXYGEN_TEST_PREFIX}/bin"
-        output = self.command("(Resolve-OxygenBuildSelection).RuntimeEnvironment | ConvertTo-Json -Compress")
-        self.assertEqual(json.loads(output)["OXYGEN_TEST_EXPANDED"].replace("\\", "/"), str(self.root).replace("\\", "/") + "/runtime/bin")
+        self.data["configurePresets"].append(
+            {
+                "name": "base",
+                "hidden": True,
+                "environment": {"OXYGEN_TEST_PREFIX": "${sourceDir}/runtime"},
+            }
+        )
+        self.data["testPresets"][0]["environment"]["OXYGEN_TEST_EXPANDED"] = (
+            "$env{OXYGEN_TEST_PREFIX}/bin"
+        )
+        output = self.command(
+            "(Resolve-OxygenBuildSelection).RuntimeEnvironment | ConvertTo-Json -Compress"
+        )
+        self.assertEqual(
+            json.loads(output)["OXYGEN_TEST_EXPANDED"].replace("\\", "/"),
+            str(self.root).replace("\\", "/") + "/runtime/bin",
+        )
 
     def test_explicit_custom_cache_and_foreign_checkout(self):
         self.tree("ninja")
@@ -381,19 +528,26 @@ exit $LASTEXITCODE
             f"CMAKE_HOME_DIRECTORY:INTERNAL={self.root}\nCMAKE_CONFIGURATION_TYPES:STRING=Debug;Release\nCMAKE_GENERATOR:INTERNAL=Ninja Multi-Config\n",
             encoding="utf-8",
         )
-        output = self.command("(Resolve-OxygenBuildSelection -BuildTree './out/custom').Config")
+        output = self.command(
+            "(Resolve-OxygenBuildSelection -BuildTree './out/custom').Config"
+        )
         self.assertEqual(output.strip(), "Release")
-        (custom / "CMakeCache.txt").write_text("CMAKE_HOME_DIRECTORY:INTERNAL=C:/another-checkout\nCMAKE_BUILD_TYPE:STRING=Debug\n", encoding="utf-8")
+        (custom / "CMakeCache.txt").write_text(
+            "CMAKE_HOME_DIRECTORY:INTERNAL=C:/another-checkout\nCMAKE_BUILD_TYPE:STRING=Debug\n",
+            encoding="utf-8",
+        )
         self.command("Resolve-OxygenBuildSelection -BuildTree custom", expect=1)
 
     def fake_tool(self, folder, name, exit_code=0):
         folder.mkdir(parents=True, exist_ok=True)
         path = folder / (name + ".cmd")
-        path.write_bytes((
-            "@echo off\r\necho RUNTIME=%OXYGEN_SELECTED_RUNTIME%\r\n"
-            "echo ARG1=%~1\r\necho ARG2=%~2\r\necho ARG3=%~3\r\necho ARG4=%~4\r\n"
-            f"exit /b {exit_code}\r\n"
-        ).encode())
+        path.write_bytes(
+            (
+                "@echo off\r\necho RUNTIME=%OXYGEN_SELECTED_RUNTIME%\r\n"
+                "echo ARG1=%~1\r\necho ARG2=%~2\r\necho ARG3=%~3\r\necho ARG4=%~4\r\n"
+                f"exit /b {exit_code}\r\n"
+            ).encode()
+        )
         return path
 
     def copy_workflow(self, name):
@@ -414,19 +568,27 @@ function global:cmake {
 
     def test_cook_workflow_builds_importer_then_uses_shared_resolution(self):
         tree = self.tree("ninja")
-        (tree / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
+        (tree / "CMakeCache.txt").write_text(
+            "CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8"
+        )
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.ImportTool")
         self.copy_workflow("Examples/Content/cook_scenes.ps1")
         scene = self.root / "Examples/Content/scenes/fixture"
         scene.mkdir(parents=True)
         (scene / "import-manifest.json").write_text("{}", encoding="utf-8")
-        output = self.command(self.RECORDING_CMAKE + """
+        output = self.command(
+            self.RECORDING_CMAKE
+            + """
 & (Join-Path $PSScriptRoot 'Examples/Content/cook_scenes.ps1') -Scene fixture -NoTUI
 exit $LASTEXITCODE
-""")
+"""
+        )
         # The selected tree builds the importer first, so a stale one is
         # rebuilt before it cooks anything.
-        self.assertIn("BUILD --build --preset conan-ninja-release --target oxygen-cooker-importtool", output)
+        self.assertIn(
+            "BUILD --build --preset conan-ninja-release --target oxygen-cooker-importtool",
+            output,
+        )
         self.assertIn("conan-ninja-release", output)
         self.assertIn("RUNTIME=ninja-Release", output)
         self.assertIn("ARG1=--no-tui", output)
@@ -465,7 +627,9 @@ $tools.Paths.Values | Sort-Object
 
     def test_reimport_build_failure_preserves_existing_content(self):
         tree = self.tree("ninja")
-        (tree / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
+        (tree / "CMakeCache.txt").write_text(
+            "CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8"
+        )
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.ImportTool")
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.Inspector")
         self.copy_workflow("Examples/Content/import_models.ps1")
@@ -476,22 +640,32 @@ $tools.Paths.Values | Sort-Object
         (cooked / "keep.bin").write_bytes(b"previous generation")
         model = self.root / "original.gltf"
         model.write_text("{}", encoding="utf-8")
-        (folder / "sources.json").write_text(json.dumps({"version": 1, "sources": [{"source": str(model), "name": "fixture"}]}), encoding="utf-8")
-        output = self.command("""
+        (folder / "sources.json").write_text(
+            json.dumps(
+                {"version": 1, "sources": [{"source": str(model), "name": "fixture"}]}
+            ),
+            encoding="utf-8",
+        )
+        output = self.command(
+            """
 $global:realCmake = (Get-Command cmake -CommandType Application).Source
 function global:cmake {
     if ($args[0] -eq '--build') { Write-Host 'BUILD_FAILED'; $global:LASTEXITCODE = 17; return }
     & $global:realCmake @args
 }
 & (Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1') (Join-Path $PSScriptRoot 'Examples/Content/sources.json')
-""", expect=1)
+""",
+            expect=1,
+        )
         self.assertIn("BUILD_FAILED", output)
         self.assertNotIn("ARG1=", output)
         self.assertEqual((cooked / "keep.bin").read_bytes(), b"previous generation")
 
     def test_build_tools_creates_missing_release_executables_before_resolution(self):
         tree = self.tree("ninja")
-        (tree / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
+        (tree / "CMakeCache.txt").write_text(
+            "CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8"
+        )
         self.fake_tool(tree / "bin/Debug", "Oxygen.Cooker.ImportTool")
         self.fake_tool(tree / "bin/Debug", "Oxygen.Cooker.Inspector")
         output = self.command("""
@@ -519,16 +693,23 @@ Invoke-OxygenTool -Context $tools -Target oxygen-cooker-importtool
 
     def retained_record(self):
         self.copy_workflow("Examples/Content/import_models.ps1")
-        self.copy_workflow("src/Oxygen/Cooker/Import/Schemas/oxygen.retained-model-import.schema.json")
+        self.copy_workflow(
+            "src/Oxygen/Cooker/Import/Schemas/oxygen.retained-model-import.schema.json"
+        )
         record = self.root / "Examples/Content/imports/model.import.json"
         record.parent.mkdir(parents=True)
-        record.write_text(json.dumps({
-            "schema_version": 1,
-            "content_root": "..",
-            "recipe": {"jobs": [{"type": "gltf", "source": "original.gltf"}]},
-            "material_slot_provenance": {},
-            "published_generation": None,
-        }), encoding="utf-8")
+        record.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "content_root": "..",
+                    "recipe": {"jobs": [{"type": "gltf", "source": "original.gltf"}]},
+                    "material_slot_provenance": {},
+                    "published_generation": None,
+                }
+            ),
+            encoding="utf-8",
+        )
         return record
 
     def test_retained_record_preflight_needs_no_tools_and_preserves_record(self):
@@ -551,10 +732,13 @@ $script = Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1'
         importer = self.fake_tool(directory, "Oxygen.Cooker.ImportTool", 23)
         importer.write_bytes(b"@echo off\r\necho ARGS=%*\r\nexit /b 23\r\n")
         self.fake_tool(directory, "Oxygen.Cooker.Inspector")
-        output = self.command("""
+        output = self.command(
+            """
 function global:cmake { throw 'Unexpected build invocation' }
 & (Join-Path $PSScriptRoot 'Examples/Content/import_models.ps1') -Record (Join-Path $PSScriptRoot 'Examples/Content/imports/model.import.json') -ToolPath (Join-Path $PSScriptRoot 'bin/Release/Oxygen.Cooker.ImportTool.cmd')
-""", expect=1)
+""",
+            expect=1,
+        )
         self.assertIn("--record", output)
         self.assertNotIn("--recipe", output)
         self.assertNotIn("Unexpected build invocation", output)
@@ -562,21 +746,34 @@ function global:cmake { throw 'Unexpected build invocation' }
 
     def test_packaging_propagates_shared_tool_failure(self):
         tree = self.tree("ninja")
-        (tree / "CMakeCache.txt").write_text("CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8")
+        (tree / "CMakeCache.txt").write_text(
+            "CMAKE_BUILD_TYPE:STRING=Release\n", encoding="utf-8"
+        )
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.PakTool", 29)
         self.copy_workflow("Examples/Content/pak_content.ps1")
         (self.root / "Examples/Content/.cooked/main").mkdir(parents=True)
-        output = self.command(self.RECORDING_CMAKE + """
+        output = self.command(
+            self.RECORDING_CMAKE
+            + """
 & (Join-Path $PSScriptRoot 'Examples/Content/pak_content.ps1')
 exit $LASTEXITCODE
-""", expect=29)
-        self.assertIn("BUILD --build --preset conan-ninja-release --target oxygen-cooker-paktool", output)
+""",
+            expect=29,
+        )
+        self.assertIn(
+            "BUILD --build --preset conan-ninja-release --target oxygen-cooker-paktool",
+            output,
+        )
         self.assertIn("RUNTIME=ninja-Release", output)
         self.assertIn("ARG1=build", output)
         self.assertNotIn("Published artifacts:", output)
 
     def test_cooker_callers_have_no_private_launch_paths(self):
-        for relative in ("Examples/Content/cook_scenes.ps1", "Examples/Content/pak_content.ps1", "Examples/Content/import_models.ps1"):
+        for relative in (
+            "Examples/Content/cook_scenes.ps1",
+            "Examples/Content/pak_content.ps1",
+            "Examples/Content/import_models.ps1",
+        ):
             text = (ENGINE / relative).read_text(encoding="utf-8")
             # Source checkouts build their tools so they are never stale.
             self.assertIn("Build-OxygenExecutables", text)
@@ -587,7 +784,13 @@ exit $LASTEXITCODE
             self.assertNotIn("Invoke-NativeLogged", text)
 
     def test_all_example_scripts_have_dependency_free_help(self):
-        scripts = sorted(p for p in (ENGINE / "Examples").rglob("*") if p.is_file() and p.suffix.lower() in (".ps1", ".py") and ".cooked" not in p.parts)
+        scripts = sorted(
+            p
+            for p in (ENGINE / "Examples").rglob("*")
+            if p.is_file()
+            and p.suffix.lower() in (".ps1", ".py")
+            and ".cooked" not in p.parts
+        )
         self.assertTrue(scripts)
         for source in scripts:
             if source.suffix == ".ps1":
@@ -601,15 +804,41 @@ exit $LASTEXITCODE
                             f"& '{target}' {flag}\n",
                             encoding="utf-8",
                         )
-                        result = subprocess.run([PWSH, "-NoProfile", "-NonInteractive", "-File", str(wrapper)], cwd=self.root.parent, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
-                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        result = subprocess.run(
+                            [
+                                PWSH,
+                                "-NoProfile",
+                                "-NonInteractive",
+                                "-File",
+                                str(wrapper),
+                            ],
+                            cwd=self.root.parent,
+                            capture_output=True,
+                            text=True,
+                            encoding="utf-8",
+                            errors="replace",
+                            timeout=15,
+                        )
+                        self.assertEqual(
+                            result.returncode, 0, result.stdout + result.stderr
+                        )
                         self.assertIn("-Help", result.stdout)
             else:
                 for flag in ("--help", "-h"):
                     with self.subTest(script=source.name, flag=flag):
                         # Help must work without importing optional third-party modules.
-                        result = subprocess.run([sys.executable, "-I", str(source), flag], cwd=self.root, capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=15)
-                        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                        result = subprocess.run(
+                            [sys.executable, "-I", str(source), flag],
+                            cwd=self.root,
+                            capture_output=True,
+                            text=True,
+                            encoding="utf-8",
+                            errors="replace",
+                            timeout=15,
+                        )
+                        self.assertEqual(
+                            result.returncode, 0, result.stdout + result.stderr
+                        )
                         self.assertIn("--help", result.stdout)
         self.assertFalse((self.root / "Examples/Content/pak").exists())
         self.assertFalse((self.root / "out").exists())
@@ -618,7 +847,7 @@ exit $LASTEXITCODE
         caller = self.root / "caller"
         caller.mkdir()
         (caller / "cooked").mkdir()
-        (caller / "Pak.cmd").write_bytes(b'@echo off\r\necho TOOL-RAN\r\nexit /b 0\r\n')
+        (caller / "Pak.cmd").write_bytes(b"@echo off\r\necho TOOL-RAN\r\nexit /b 0\r\n")
         self.copy_workflow("Examples/Content/pak_content.ps1")
         output = self.command("""
 Push-Location (Join-Path $PSScriptRoot 'caller')
@@ -636,8 +865,10 @@ try {
 
     def test_migrated_tool_scripts_have_dependency_free_help(self):
         scripts = [
-            "tools/cli/BuildSelection.ps1", "tools/build-tree.ps1",
-            "tools/RunVsmTests.ps1", "tools/run-test-exes.ps1",
+            "tools/cli/BuildSelection.ps1",
+            "tools/build-tree.ps1",
+            "tools/RunVsmTests.ps1",
+            "tools/run-test-exes.ps1",
             "tools/csm/Run-ConventionalShadowBaseline.ps1",
             "tools/vortex/Run-AsyncRuntimeValidation.ps1",
             "tools/vortex/Run-DeferredCoreFrame10Capture.ps1",
@@ -652,10 +883,25 @@ try {
             target = self.copy_workflow(relative)
             for flag in ("-Help", "-h"):
                 with self.subTest(script=relative, flag=flag):
-                    result = subprocess.run([PWSH, "-NoProfile", "-NonInteractive", "-File", str(target), flag],
-                                            cwd=self.root.parent, capture_output=True, text=True,
-                                            encoding="utf-8", errors="replace", timeout=15)
-                    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                    result = subprocess.run(
+                        [
+                            PWSH,
+                            "-NoProfile",
+                            "-NonInteractive",
+                            "-File",
+                            str(target),
+                            flag,
+                        ],
+                        cwd=self.root.parent,
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                        timeout=15,
+                    )
+                    self.assertEqual(
+                        result.returncode, 0, result.stdout + result.stderr
+                    )
                     self.assertIn("-Help", result.stdout)
         self.assertFalse((self.root / "out").exists())
 

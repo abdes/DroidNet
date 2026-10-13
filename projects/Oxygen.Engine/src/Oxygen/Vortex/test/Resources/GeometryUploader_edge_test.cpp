@@ -1,0 +1,110 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <unordered_set>
+#include <vector>
+
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/ScenePrep/GeometryRef.h>
+#include <Oxygen/Vortex/ScenePrep/Handles.h>
+#include <Oxygen/Vortex/test/Fixtures/GeometryUploaderTest.h>
+
+namespace {
+
+using oxygen::frame::Slot;
+using oxygen::vortex::testing::GeometryUploaderTest;
+using oxygen::vortex::testing::MakeGeometryAssetKey;
+
+class GeometryUploaderEdgeTest : public GeometryUploaderTest { };
+
+//! Many unique identities should grow internal tables without invalidating
+//! previously returned handles.
+NOLINT_TEST_F(
+  GeometryUploaderEdgeTest, ManyGeometriesGrowsInternalTablesHandlesRemainValid)
+{
+  // Arrange
+  auto& uploader = GeoUploader();
+  BeginFrame(Slot {
+    0,
+  });
+
+  const auto mesh = MakeValidTriangleMesh("Tri", true);
+
+  constexpr std::size_t kCount = 256;
+  std::vector<oxygen::vortex::sceneprep::GeometryHandle> handles;
+  handles.reserve(kCount);
+
+  // Act
+  for (std::size_t i = 0; i < kCount; ++i) {
+    auto key_bytes
+      = std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
+
+    key_bytes.at(0) = static_cast<std::uint8_t>(i & 0xFFU);
+    key_bytes.at(1) = static_cast<std::uint8_t>((i >> 8) & 0xFFU);
+
+    const auto key = oxygen::data::AssetKey::FromBytes(key_bytes);
+
+    const oxygen::vortex::sceneprep::GeometryRef geometry {
+      .asset_key = key,
+      .lod_index = oxygen::data::LodIndex {},
+      .mesh = mesh,
+    };
+
+    handles.push_back(uploader.GetOrAllocate(geometry));
+  }
+
+  // Assert
+  std::unordered_set<std::uint64_t> unique;
+  unique.reserve(kCount);
+
+  for (const auto h : handles) {
+    EXPECT_NE(h, oxygen::vortex::sceneprep::kInvalidGeometryHandle);
+    EXPECT_TRUE(uploader.IsHandleValid(h));
+    unique.insert(h.ToPacked().get());
+  }
+
+  EXPECT_EQ(unique.size(), kCount);
+}
+
+//! Repeated EnsureFrameResources calls must not continuously append tickets.
+NOLINT_TEST_F(GeometryUploaderEdgeTest, RepeatedEnsureNoUnboundedTicketGrowth)
+{
+  // Arrange
+  auto& uploader = GeoUploader();
+
+  BeginFrame(Slot {
+    0,
+  });
+  const auto mesh = MakeValidTriangleMesh("Tri", true);
+  const auto asset_key = MakeGeometryAssetKey("edge_repeated_ensure");
+  const oxygen::vortex::sceneprep::GeometryRef geometry {
+    .asset_key = asset_key,
+    .lod_index = oxygen::data::LodIndex {},
+    .mesh = mesh,
+  };
+
+  (void)uploader.GetOrAllocate(geometry);
+
+  // Act
+  uploader.EnsureFrameResources();
+  const auto pending_0 = uploader.GetPendingUploadCount();
+  uploader.EnsureFrameResources();
+  const auto pending_1 = uploader.GetPendingUploadCount();
+  uploader.EnsureFrameResources();
+  const auto pending_2 = uploader.GetPendingUploadCount();
+
+  // Assert
+  EXPECT_GT(pending_0, 0U);
+  EXPECT_EQ(pending_1, pending_0);
+  EXPECT_EQ(pending_2, pending_0);
+}
+
+} // namespace

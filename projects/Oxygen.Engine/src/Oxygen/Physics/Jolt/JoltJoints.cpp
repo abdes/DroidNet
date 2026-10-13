@@ -4,15 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Jolt/Jolt.h> // Must always be first (keep separate)
+
+#include <array>
 #include <limits>
 #include <span>
 #include <sstream>
 #include <string>
 #include <unordered_set>
-
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
-
-#include <array>
 
 #include <Jolt/Core/RTTI.h>
 #include <Jolt/Core/StreamWrapper.h>

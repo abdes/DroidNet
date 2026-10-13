@@ -36,10 +36,16 @@ def split_commands(commands, configurations, multi_config):
         r"(?:^|/)(?:CMakeFiles/[^/]+\.dir|\.o/[0-9a-fA-F]+)/([^/]+)/"
     )
     for command in commands:
-        if not isinstance(command, dict) or not all(
-            isinstance(command.get(key), str) for key in ("file", "directory")
-        ) or not (isinstance(command.get("command"), str)
-                  or isinstance(command.get("arguments"), list)):
+        if (
+            not isinstance(command, dict)
+            or not all(
+                isinstance(command.get(key), str) for key in ("file", "directory")
+            )
+            or not (
+                isinstance(command.get("command"), str)
+                or isinstance(command.get("arguments"), list)
+            )
+        ):
             raise ValueError("Invalid compilation database entry")
         if multi_config:
             output = command.get("output", "")
@@ -76,15 +82,26 @@ def prepare(build_directory):
     cache = read_cache(build / "CMakeCache.txt")
     generator = cache.get("CMAKE_GENERATOR")
     if generator not in ("Ninja", "Ninja Multi-Config"):
-        raise ValueError("VS Code/clangd requires a Ninja build tree; VS trees belong to Visual Studio")
+        raise ValueError(
+            "VS Code/clangd requires a Ninja build tree; VS trees belong to Visual Studio"
+        )
     multi = generator == "Ninja Multi-Config"
-    configs = (cache.get("CMAKE_CONFIGURATION_TYPES", "").split(";") if multi
-               else [cache.get("CMAKE_BUILD_TYPE", "")])
-    if not configs or any(not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.+-]*", c) for c in configs):
-        raise ValueError("Select explicit, valid CMake configurations before preparing clangd")
+    configs = (
+        cache.get("CMAKE_CONFIGURATION_TYPES", "").split(";")
+        if multi
+        else [cache.get("CMAKE_BUILD_TYPE", "")]
+    )
+    if not configs or any(
+        not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.+-]*", c) for c in configs
+    ):
+        raise ValueError(
+            "Select explicit, valid CMake configurations before preparing clangd"
+        )
     commands = json.loads((build / "compile_commands.json").read_text(encoding="utf-8"))
     if not isinstance(commands, list) or not commands:
-        raise ValueError("CMake produced no compilation commands; configure a compiled target first")
+        raise ValueError(
+            "CMake produced no compilation commands; configure a compiled target first"
+        )
     databases = split_commands(commands, configs, multi)
     # Validate the entire input before publishing any configuration.
     for config, entries in databases.items():
@@ -100,7 +117,9 @@ def main():
         counts = prepare(args.build_dir)
     except (OSError, ValueError) as error:
         parser.exit(1, f"Clangd database preparation failed: {error}\n")
-    print("Prepared clangd databases: " + ", ".join(f"{k}={v}" for k, v in counts.items()))
+    print(
+        "Prepared clangd databases: " + ", ".join(f"{k}={v}" for k, v in counts.items())
+    )
 
 
 if __name__ == "__main__":

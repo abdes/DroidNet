@@ -18,19 +18,38 @@ REQUIRED_PROBES = {
 
 REQUIRED_QUALIFICATIONS = {
     "EnergyTextureMatchesFilteringAndReportsReferenceError": (
-        "energy_queries", 54, ["maximum_energy_error", "maximum_bias_error"]),
+        "energy_queries",
+        54,
+        ["maximum_energy_error", "maximum_bias_error"],
+    ),
     "AnalyticEmitterReportsIndependentGeometryDeviation": (
-        "finite_emitter_cases", 96, ["maximum_finite_emitter_reference_deviation_scale"]),
+        "finite_emitter_cases",
+        96,
+        ["maximum_finite_emitter_reference_deviation_scale"],
+    ),
     "ViewDependentCompensationReportsReciprocityDeviation": (
-        "reciprocity_queries", 1800, ["maximum_reciprocity_deviation_scale"]),
+        "reciprocity_queries",
+        1800,
+        ["maximum_reciprocity_deviation_scale"],
+    ),
     "IntegratedGpuLobesReportEnergyAndIndirectError": (
-        "integrated_material_cases", 90,
-        ["maximum_furnace_error", "maximum_indirect_error", "maximum_refinement_change"]),
+        "integrated_material_cases",
+        90,
+        [
+            "maximum_furnace_error",
+            "maximum_indirect_error",
+            "maximum_refinement_change",
+        ],
+    ),
 }
 
 
 def validate_case(case, count):
-    if case.get("status") != "RUN" or case.get("result") != "COMPLETED" or case.get("failures"):
+    if (
+        case.get("status") != "RUN"
+        or case.get("result") != "COMPLETED"
+        or case.get("failures")
+    ):
         raise ValueError("measurement did not complete successfully")
     if int(case.get("lighting_model_revision", -1)) != 2:
         raise ValueError("measurement is not for production model 2")
@@ -49,21 +68,32 @@ def validate_case(case, count):
 
 def validate(document):
     if any(document.get(field) != 0 for field in ("failures", "errors", "disabled")):
-        raise ValueError("native results contain missing/nonzero failures, errors or disabled tests")
-    cases = [case for suite in document.get("testsuites", [])
-             if suite.get("name") == "LightingGpuAbiTest"
-             for case in suite.get("testsuite", [])]
+        raise ValueError(
+            "native results contain missing/nonzero failures, errors or disabled tests"
+        )
+    cases = [
+        case
+        for suite in document.get("testsuites", [])
+        if suite.get("name") == "LightingGpuAbiTest"
+        for case in suite.get("testsuite", [])
+    ]
+
     def find(name):
         matches = [case for case in cases if case.get("name") == name]
         if len(matches) != 1:
             raise ValueError(f"{name}: exactly one completed measurement is required")
         return matches[0]
+
     for name, count in REQUIRED_PROBES.items():
         validate_case(find(name), count)
     for name, (count_field, count, metrics) in REQUIRED_QUALIFICATIONS.items():
         case = find(name)
-        if (case.get("status") != "RUN" or case.get("result") != "COMPLETED"
-                or case.get("failures") or int(case.get("lighting_model_revision", -1)) != 2):
+        if (
+            case.get("status") != "RUN"
+            or case.get("result") != "COMPLETED"
+            or case.get("failures")
+            or int(case.get("lighting_model_revision", -1)) != 2
+        ):
             raise ValueError(f"{name}: measurement did not complete for model 2")
         if int(case.get(count_field, -1)) != count:
             raise ValueError(f"{name}: incomplete matrix")
@@ -76,8 +106,10 @@ def validate(document):
     if not isinstance(measurements, list) or len(measurements) != 288:
         raise ValueError("finite-emitter per-case comparison is incomplete")
     for row in measurements:
-        if any(not math.isfinite(float(row.get(key, "nan"))) or float(row[key]) < 0
-               for key in ("reference", "measured")):
+        if any(
+            not math.isfinite(float(row.get(key, "nan"))) or float(row[key]) < 0
+            for key in ("reference", "measured")
+        ):
             raise ValueError("invalid finite-emitter sample")
 
 
@@ -89,7 +121,9 @@ def main():
         validate(json.loads(args.results.read_text(encoding="utf-8")))
     except (OSError, ValueError, TypeError, KeyError) as error:
         parser.exit(1, f"{error}\n")
-    print("Model-2 lighting measurements complete; quality/performance acceptance belongs to the user.")
+    print(
+        "Model-2 lighting measurements complete; quality/performance acceptance belongs to the user."
+    )
 
 
 if __name__ == "__main__":

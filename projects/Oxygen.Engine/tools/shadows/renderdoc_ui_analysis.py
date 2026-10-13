@@ -341,7 +341,9 @@ def format_flags(flags):
 
 def matching_pass_name(path_parts):
     for path_part in reversed(path_parts):
-        exact_matches = [pass_name for pass_name in KNOWN_PASS_NAMES if pass_name == path_part]
+        exact_matches = [
+            pass_name for pass_name in KNOWN_PASS_NAMES if pass_name == path_part
+        ]
         if exact_matches:
             return max(exact_matches, key=len)
 
@@ -438,7 +440,10 @@ def run_replay_script(capture_path, report_path, analysis_callback):
         if capture.LocalReplaySupport() != rd.ReplaySupport.Supported:
             raise RuntimeError("Capture does not support local replay")
         status, controller = capture.OpenCapture(rd.ReplayOptions(), None)
-        if getattr(status, "code", status) != rd.ResultCode.Succeeded or controller is None:
+        if (
+            getattr(status, "code", status) != rd.ResultCode.Succeeded
+            or controller is None
+        ):
             raise RuntimeError("Could not create replay controller: {}".format(status))
         analysis_callback(controller, report, capture_path, report_path)
     except BaseException:
@@ -449,15 +454,20 @@ def run_replay_script(capture_path, report_path, analysis_callback):
                 try:
                     handle.Shutdown()
                 except BaseException:
-                    failures.append("{} shutdown failed:\n{}".format(label, traceback.format_exc()))
+                    failures.append(
+                        "{} shutdown failed:\n{}".format(label, traceback.format_exc())
+                    )
     if failures:
-        write_report(report_path, [
-            "analysis_result=exception",
-            "execution_mode=replay",
-            "requested_capture_path={}".format(capture_path),
-            "exception_traceback:",
-            "\n".join(failures),
-        ])
+        write_report(
+            report_path,
+            [
+                "analysis_result=exception",
+                "execution_mode=replay",
+                "requested_capture_path={}".format(capture_path),
+                "exception_traceback:",
+                "\n".join(failures),
+            ],
+        )
         return 1
     report.append("execution_mode=replay")
     report.append("replay_handles_shutdown=true")
@@ -488,7 +498,9 @@ def run_ui_script(report_suffix, analysis_callback):
 
         capture_context.Replay().BlockInvoke(replay_callback)
         if callback_error["value"] is not None:
-            raise RuntimeError("Replay callback failed:\n{}".format(callback_error["value"]))
+            raise RuntimeError(
+                "Replay callback failed:\n{}".format(callback_error["value"])
+            )
         if not callback_completed["value"]:
             raise RuntimeError("Replay callback did not execute")
         report.flush()
@@ -498,7 +510,9 @@ def run_ui_script(report_suffix, analysis_callback):
             [
                 "analysis_result=exception",
                 "requested_capture_path={}".format(
-                    requested_capture_path if requested_capture_path else "<ui_loaded_capture>"
+                    requested_capture_path
+                    if requested_capture_path
+                    else "<ui_loaded_capture>"
                 ),
                 "report_path={}".format(report_path),
                 "",

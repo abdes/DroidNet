@@ -234,10 +234,10 @@ Docs:
 
 Tests and analysis:
 
-- `src/Oxygen/Renderer/Test/CMakeLists.txt`
-- `src/Oxygen/Renderer/Test/LightCullingConfig_test.cpp` (new)
-- `src/Oxygen/Renderer/Test/LightCullingPassContract_test.cpp` (new)
-- `src/Oxygen/Renderer/Test/LightCullingPassMembership_test.cpp` (new)
+- `src/Oxygen/Renderer/test/CMakeLists.txt`
+- `src/Oxygen/Renderer/test/LightCullingConfig_test.cpp` (new)
+- `src/Oxygen/Renderer/test/LightCullingPassContract_test.cpp` (new)
+- `src/Oxygen/Renderer/test/LightCullingPassMembership_test.cpp` (new)
 - `Examples/RenderScene/README.md`
 - `Examples/RenderScene/AnalyzeRenderDocLightCulling.py` (new)
 

@@ -76,7 +76,8 @@ public:
     outer_cone_angle_radians_ = outer_cone_angle_radians;
   }
 
-  //! Sets both authored angles on a detached candidate; attachment validates the pair.
+  //! Sets both authored angles on a detached candidate; attachment validates
+  //! the pair.
   auto SetConeAnglesRadians(float inner, float outer) noexcept -> void
   {
     inner_cone_angle_radians_ = inner;
@@ -126,7 +127,8 @@ protected:
 
 private:
   friend class SceneNode;
-  // Commit only authored values; composition dependencies retain their identity.
+  // Commit only authored values; composition dependencies retain their
+  // identity.
   void CopyPropertiesFrom(const SpotLight& candidate) noexcept
   {
     common_ = candidate.common_;
@@ -148,7 +150,6 @@ private:
   //! Variation: Small changes affect the falloff volume; determines shader
   //! culling.
   float range_ = kDefaultRange;
-
 
   //! Angle of the inner cone where attenuation starts.
   //! Scale: radians. Must be <= outer angle.

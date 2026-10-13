@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <exception>
+
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>

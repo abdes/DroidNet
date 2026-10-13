@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "D3D12-Renderer/MainModule.h"
-
 #include <memory>
+
+#include "D3D12-Renderer/MainModule.h"
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Logging.h>

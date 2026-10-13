@@ -199,7 +199,7 @@ endif()
 # ------------------------------------------------------------------------------
 
 if(OXYGEN_BUILD_TESTS)
-  add_subdirectory("Test")
+  add_subdirectory("test")
 endif()
 if(OXYGEN_BUILD_BENCHMARKS)
   add_subdirectory("Benchmarks")

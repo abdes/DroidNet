@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Jolt/Jolt.h> // Must always be first (keep separate)
+
 #include <limits>
 #include <type_traits>
 #include <vector>
-
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
 
 #include <Jolt/Physics/Body/Body.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>

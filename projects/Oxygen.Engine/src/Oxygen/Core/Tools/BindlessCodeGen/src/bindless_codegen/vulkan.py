@@ -58,13 +58,9 @@ def _normalize_domain_realizations(
             continue
         domain = realization.get("domain")
         if not domain:
-            raise ValueError(
-                "Vulkan domain_realization missing required 'domain'"
-            )
+            raise ValueError("Vulkan domain_realization missing required 'domain'")
         if domain in realizations:
-            raise ValueError(
-                f"Duplicate Vulkan domain realization for '{domain}'"
-            )
+            raise ValueError(f"Duplicate Vulkan domain realization for '{domain}'")
         realizations[str(domain)] = realization
     return realizations
 
@@ -77,9 +73,7 @@ def _validate_bindings(
     for set_id, descriptor_set in descriptor_sets.items():
         set_index = int(descriptor_set.get("set", -1))
         if set_index in set_indices:
-            raise ValueError(
-                f"Duplicate Vulkan descriptor set index {set_index}"
-            )
+            raise ValueError(f"Duplicate Vulkan descriptor set index {set_index}")
         set_indices.add(set_index)
 
     used_slots: set[Tuple[str, int]] = set()
@@ -93,8 +87,7 @@ def _validate_bindings(
         slot = (set_id, int(binding.get("binding", -1)))
         if slot in used_slots:
             raise ValueError(
-                f"Duplicate Vulkan binding slot set='{set_id}' "
-                f"binding={slot[1]}"
+                f"Duplicate Vulkan binding slot set='{set_id}' binding={slot[1]}"
             )
         used_slots.add(slot)
 
@@ -115,8 +108,7 @@ def _validate_domain_realizations(
         domain = domains_by_id.get(domain_id)
         if domain is None:
             raise ValueError(
-                f"Vulkan domain realization references unknown ABI domain "
-                f"'{domain_id}'"
+                f"Vulkan domain realization references unknown ABI domain '{domain_id}'"
             )
 
         binding_id = str(realization.get("binding"))
@@ -129,9 +121,7 @@ def _validate_domain_realizations(
 
         descriptor_type = str(binding.get("descriptor_type"))
         access_class = str(domain.get("shader_access_class"))
-        allowed_access_classes = _DESCRIPTOR_TYPE_TO_ACCESS_CLASSES[
-            descriptor_type
-        ]
+        allowed_access_classes = _DESCRIPTOR_TYPE_TO_ACCESS_CLASSES[descriptor_type]
         if access_class not in allowed_access_classes:
             raise ValueError(
                 f"Vulkan domain realization for '{domain_id}' uses binding "
@@ -144,9 +134,7 @@ def _validate_domain_realizations(
         array_element_end = array_element_base + capacity
 
         descriptor_count = binding.get("descriptor_count")
-        if descriptor_count is not None and array_element_end > int(
-            descriptor_count
-        ):
+        if descriptor_count is not None and array_element_end > int(descriptor_count):
             raise ValueError(
                 f"Vulkan domain realization for '{domain_id}' exceeds binding "
                 f"'{binding_id}' descriptor_count: "
@@ -178,9 +166,7 @@ def _validate_pipeline_layout(
     for entry in pipeline_layout:
         entry_id = str(entry.get("id"))
         if entry_id in ids_seen:
-            raise ValueError(
-                f"Duplicate Vulkan pipeline_layout id '{entry_id}'"
-            )
+            raise ValueError(f"Duplicate Vulkan pipeline_layout id '{entry_id}'")
         ids_seen.add(entry_id)
 
         if entry.get("type") == "descriptor_set":
@@ -197,13 +183,9 @@ def validate_vulkan_backend(
     domains_by_id: Dict[str, Dict[str, Any]],
 ) -> Dict[str, Any]:
     strategy = backend_doc.get("strategy") or {}
-    descriptor_sets = _normalize_descriptor_sets(
-        strategy.get("descriptor_sets")
-    )
+    descriptor_sets = _normalize_descriptor_sets(strategy.get("descriptor_sets"))
     bindings = _normalize_bindings(strategy.get("bindings"))
-    realizations = _normalize_domain_realizations(
-        strategy.get("domain_realizations")
-    )
+    realizations = _normalize_domain_realizations(strategy.get("domain_realizations"))
 
     _validate_bindings(descriptor_sets, bindings)
     _validate_domain_realizations(domains_by_id, bindings, realizations)
@@ -224,9 +206,7 @@ def build_vulkan_strategy_json(
     return {
         "descriptor_sets": list(strategy_doc.get("descriptor_sets") or []),
         "bindings": list(strategy_doc.get("bindings") or []),
-        "domain_realizations": list(
-            strategy_doc.get("domain_realizations") or []
-        ),
+        "domain_realizations": list(strategy_doc.get("domain_realizations") or []),
     }
 
 
@@ -258,9 +238,7 @@ def render_cpp_pipeline_layout(
             f"{int(descriptor_set.get('set', 0))}U "
             "},"
         )
-    descriptor_set_enums.append(
-        f"  kCount = {len(descriptor_sets)},"
-    )
+    descriptor_set_enums.append(f"  kCount = {len(descriptor_sets)},")
 
     descriptor_type_names: List[str] = []
     for binding in bindings:
@@ -271,9 +249,7 @@ def render_cpp_pipeline_layout(
         f"  k{domains_mod._pascal_from_identifier(name)} = {idx},"
         for idx, name in enumerate(descriptor_type_names)
     ]
-    descriptor_type_enums.append(
-        f"  kCount = {len(descriptor_type_names)},"
-    )
+    descriptor_type_enums.append(f"  kCount = {len(descriptor_type_names)},")
     descriptor_type_expr = {
         name: f"DescriptorType::k{domains_mod._pascal_from_identifier(name)}"
         for name in descriptor_type_names
@@ -350,16 +326,13 @@ def render_cpp_pipeline_layout(
 
     return {
         "descriptor_set_enums": "\n".join(descriptor_set_enums),
-        "descriptor_set_entries": "\n".join(descriptor_set_entries)
-        or "  // none",
+        "descriptor_set_entries": "\n".join(descriptor_set_entries) or "  // none",
         "binding_enums": "\n".join(binding_enums),
         "binding_entries": "\n".join(binding_entries) or "  // none",
         "descriptor_type_enums": "\n".join(descriptor_type_enums),
-        "domain_binding_entries": "\n".join(domain_binding_entries)
-        or "  // none",
+        "domain_binding_entries": "\n".join(domain_binding_entries) or "  // none",
         "layout_entry_enums": "\n".join(layout_entry_enums),
-        "layout_entry_entries": "\n".join(layout_entry_entries)
-        or "  // none",
+        "layout_entry_entries": "\n".join(layout_entry_entries) or "  // none",
         "descriptor_set_count": str(len(descriptor_sets)),
         "binding_count": str(len(bindings)),
         "domain_binding_count": str(len(domain_realizations)),

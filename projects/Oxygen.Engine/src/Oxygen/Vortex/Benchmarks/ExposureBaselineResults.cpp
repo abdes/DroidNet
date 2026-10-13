@@ -22,9 +22,9 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Benchmarks/ExposureBaselineScenario.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
-#include <Oxygen/Vortex/Test/Support/CpuTimingCapture.h>
 #include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>
+#include <Oxygen/Vortex/test/Support/CpuTimingCapture.h>
 
 namespace oxygen::vortex::testing::exposure {
 

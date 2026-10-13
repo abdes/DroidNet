@@ -156,7 +156,7 @@ def normalize_doc(doc: Dict[str, Any]) -> Dict[str, Any]:
             param["visibility"] = _normalize_visibility(param.get("visibility"))
 
     vulkan = backends.get("vulkan") or {}
-    for binding in ((vulkan.get("strategy") or {}).get("bindings", []) or []):
+    for binding in (vulkan.get("strategy") or {}).get("bindings", []) or []:
         descriptor_type = binding.get("descriptor_type")
         if isinstance(descriptor_type, str):
             binding["descriptor_type"] = descriptor_type.upper()
@@ -193,14 +193,8 @@ def validate_against_schema(
     except Exception as e:  # pragma: no cover - formatted below
         if ValidationError is not None and isinstance(e, ValidationError):  # type: ignore[arg-type]
             path_attr = getattr(e, "path", None)
-            path = (
-                "->".join([str(p) for p in path_attr])
-                if path_attr
-                else "(root)"
-            )
+            path = "->".join([str(p) for p in path_attr]) if path_attr else "(root)"
             msg = getattr(e, "message", str(e))
-            raise ValueError(
-                f"Spec.yaml validation failed at {path}: {msg}"
-            ) from e
+            raise ValueError(f"Spec.yaml validation failed at {path}: {msg}") from e
         raise RuntimeError(f"Failed to load/validate schema at {p}: {e}") from e
     return True

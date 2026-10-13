@@ -6,13 +6,13 @@
 
 #pragma once
 
+#include <Jolt/Jolt.h> // Must always be first (keep separate)
+
 #include <cmath>
 #include <sstream>
 #include <string>
 #include <type_traits>
 #include <variant>
-
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
 
 #include <Jolt/Core/StreamWrapper.h>
 #include <Jolt/Physics/Body/BodyActivationListener.h>

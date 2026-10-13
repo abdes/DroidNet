@@ -156,7 +156,7 @@ target_link_libraries(
 
 if(NOT OXYGEN_BUILD_FULL_ENGINE)
   if(OXYGEN_BUILD_TESTS)
-    add_subdirectory("Test")
+    add_subdirectory("test")
   endif()
   oxygen_module_install(
     EXPORT ${META_MODULE_NAMESPACE}
@@ -227,7 +227,7 @@ target_link_libraries(
 # ------------------------------------------------------------------------------
 
 if(OXYGEN_BUILD_TESTS)
-  add_subdirectory("Test")
+  add_subdirectory("test")
 endif()
 
 # ==============================================================================

@@ -26,7 +26,7 @@
 #  include <Oxygen/Data/MaterialDomain.h>
 #  include <Oxygen/OxCo/Co.h>
 #  include <Oxygen/OxCo/Run.h>
-#  include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#  include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
 #  include <Oxygen/Scene/Camera/Perspective.h>
 #  include <Oxygen/Scene/Environment/Fog.h>
 #  include <Oxygen/Scene/Environment/SceneEnvironment.h>
@@ -35,7 +35,7 @@
 #  include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #  include <Oxygen/Vortex/RenderContext.h>
 #  include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
-#  include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
+#  include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestTags.h>
 #endif
 
 #include <Oxygen/Graphics/Common/Framebuffer.h>

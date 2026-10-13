@@ -153,7 +153,7 @@ Files:
 - `src/Oxygen/PhysicsModule/PhaseContracts.md`
 - `Examples/DemoShell/Services/SceneLoaderService.cpp`
 - `Examples/DemoShell/Services/SceneLoaderService.h` (or new helper file)
-- `src/Oxygen/PhysicsModule/Test/` or dedicated service tests
+- `src/Oxygen/PhysicsModule/test/` or dedicated service tests
 
 Steps:
 
@@ -183,7 +183,7 @@ Files:
 
 - `Examples/DemoShell/Services/SceneLoaderService.cpp`
 - `src/Oxygen/PhysicsModule/ScenePhysics.cpp` (optional centralization helper)
-- Tests to add in `src/Oxygen/PhysicsModule/Test/` and/or DemoShell tests
+- Tests to add in `src/Oxygen/PhysicsModule/test/` and/or DemoShell tests
 
 Steps:
 
@@ -213,7 +213,7 @@ Files:
 - `src/Oxygen/PhysicsModule/PhysicsModule.cpp`
 - `src/Oxygen/Physics/AggregateMappingModel.md`
 - `Examples/DemoShell/Services/SceneLoaderService.cpp`
-- `src/Oxygen/PhysicsModule/Test/PhysicsModule_sync_test.cpp`
+- `src/Oxygen/PhysicsModule/test/PhysicsModule_sync_test.cpp`
 
 Steps:
 
@@ -344,7 +344,7 @@ Files:
 
 - `src/Oxygen/Scripting/Bindings/Packs/Physics/PhysicsVehicleBindings.cpp`
 - `src/Oxygen/Scripting/Bindings/Packs/Physics/design.md`
-- `src/Oxygen/Scripting/Test/Bindings_physics_vehicle_test.cpp`
+- `src/Oxygen/Scripting/test/Bindings_physics_vehicle_test.cpp`
 - `src/Oxygen/PhysicsModule/PhaseContracts.md`
 
 Steps:
@@ -440,8 +440,8 @@ Files:
 - `src/Oxygen/Cooker/Import/Schemas/oxygen.physics-resource-descriptor.schema.json`
 - `src/Oxygen/Cooker/Import/Internal/Jobs/PhysicsResourceDescriptorImportJob.cpp`
 - `src/Oxygen/Cooker/Import/Internal/Jobs/PhysicsResourceDescriptorImportJob.h`
-- `src/Oxygen/Cooker/Test/Import/PhysicsResourceDescriptorJsonSchema_test.cpp`
-- `src/Oxygen/Cooker/Test/Import/PhysicsResourceDescriptorImportJob_test.cpp`
+- `src/Oxygen/Cooker/test/Import/PhysicsResourceDescriptorJsonSchema_test.cpp`
+- `src/Oxygen/Cooker/test/Import/PhysicsResourceDescriptorImportJob_test.cpp`
 - `design/content-pipeline/physics-cooking-architecture.md`
 - `Examples/Content/scenes/physics_domains/park_soft_body_settings_a.physics-resource.json`
 
@@ -535,9 +535,9 @@ Files:
 - `src/Oxygen/Scripting/Bindings/Packs/Physics/PhysicsVehicleBindings.cpp`
 - `src/Oxygen/Scripting/Bindings/Packs/Physics/PhysicsSoftBodyBindings.cpp`
 - `src/Oxygen/Scripting/Bindings/Packs/Physics/design.md`
-- `src/Oxygen/Scripting/Test/Bindings_physics_vehicle_test.cpp`
-- `src/Oxygen/Scripting/Test/Bindings_physics_soft_body_test.cpp`
-- `src/Oxygen/Scripting/Test/Bindings_physics_surface_test.cpp`
+- `src/Oxygen/Scripting/test/Bindings_physics_vehicle_test.cpp`
+- `src/Oxygen/Scripting/test/Bindings_physics_soft_body_test.cpp`
+- `src/Oxygen/Scripting/test/Bindings_physics_surface_test.cpp`
 
 Steps:
 
@@ -570,7 +570,7 @@ Problem:
 Files:
 
 - DemoShell/service tests (or equivalent integration harness)
-- `src/Oxygen/PhysicsModule/Test/` + `src/Oxygen/Scripting/Test/`
+- `src/Oxygen/PhysicsModule/test/` + `src/Oxygen/Scripting/test/`
 
 Steps:
 

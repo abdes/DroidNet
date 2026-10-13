@@ -8,10 +8,10 @@
 
 #include <cstdint>
 
-#include <Oxygen/Core/api_export.h>
-#include <Oxygen/Base/Result.h>
-
 #include <glm/ext/vector_float3.hpp>
+
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Core/api_export.h>
 
 namespace oxygen::lighting {
 

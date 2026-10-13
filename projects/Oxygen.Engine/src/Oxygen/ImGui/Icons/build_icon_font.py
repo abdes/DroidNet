@@ -7,6 +7,7 @@ Requires FontForge with Python bindings:
 Example:
   python build_icon_font.py --output OxygenIcons.ttf --font-name OxygenIcons
 """
+
 from __future__ import annotations
 
 import argparse
@@ -95,9 +96,7 @@ def _generate_header(
         lines.append(
             f"inline constexpr char32_t {codepoint_ident} = 0x{codepoint:04X};"
         )
-        lines.append(
-            f"inline constexpr std::string_view {ident} = " f'"{utf8_literal}";'
-        )
+        lines.append(f'inline constexpr std::string_view {ident} = "{utf8_literal}";')
 
     lines.append("")
     lines.append(f"}} // namespace {header_namespace}")
@@ -216,15 +215,11 @@ def _cleanup_glyph(glyph: "fontforge.glyph") -> None:
             continue
 
 
-def _generate_font(
-    font: "fontforge.font", output_file: Path, no_hints: bool
-) -> None:
+def _generate_font(font: "fontforge.font", output_file: Path, no_hints: bool) -> None:
     output_file.parent.mkdir(parents=True, exist_ok=True)
     if no_hints:
         try:
-            font.generate(
-                str(output_file), flags=("omit-instructions", "no-hints")
-            )
+            font.generate(str(output_file), flags=("omit-instructions", "no-hints"))
             return
         except Exception:
             try:
@@ -341,9 +336,7 @@ def build_font(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Build a TTF icon font from SVGs."
-    )
+    parser = argparse.ArgumentParser(description="Build a TTF icon font from SVGs.")
     parser.add_argument(
         "--input-dir",
         type=Path,

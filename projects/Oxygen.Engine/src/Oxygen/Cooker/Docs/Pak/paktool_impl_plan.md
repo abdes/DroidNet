@@ -302,9 +302,9 @@ Evidence:
 - Added report schema:
   `src/Oxygen/Cooker/Tools/PakTool/Schemas/oxygen.pak-build-report.schema.json`
 - Added schema validation tests:
-  `src/Oxygen/Cooker/Tools/PakTool/Test/PakBuildReportJsonSchema_test.cpp`
+  `src/Oxygen/Cooker/Tools/PakTool/test/PakBuildReportJsonSchema_test.cpp`
 - Added test target wiring:
-  `src/Oxygen/Cooker/Tools/PakTool/Test/CMakeLists.txt`
+  `src/Oxygen/Cooker/Tools/PakTool/test/CMakeLists.txt`
 - Validation executed:
   - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakBuildReportSchema.Tests --config Debug -- /m:6`
   - `out/build-vs/bin/Debug/Oxygen.Cooker.PakBuildReportSchema.Tests.exe`
@@ -345,9 +345,9 @@ Evidence:
   `src/Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h`
   `src/Oxygen/Cooker/Tools/PakTool/ArtifactPublication.cpp`
 - Added publication tests:
-  `src/Oxygen/Cooker/Tools/PakTool/Test/PakToolArtifactPublication_test.cpp`
+  `src/Oxygen/Cooker/Tools/PakTool/test/PakToolArtifactPublication_test.cpp`
 - Added test target wiring:
-  `src/Oxygen/Cooker/Tools/PakTool/Test/CMakeLists.txt`
+  `src/Oxygen/Cooker/Tools/PakTool/test/CMakeLists.txt`
 - Validation executed:
   - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakToolPublication.Tests --config Debug -- /m:6`
   - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolPublication.Tests.exe`
@@ -381,9 +381,9 @@ Evidence:
   `src/Oxygen/Cooker/Tools/PakTool/BuildReportJson.h`
   `src/Oxygen/Cooker/Tools/PakTool/BuildReportJson.cpp`
 - Added report writer tests:
-  `src/Oxygen/Cooker/Tools/PakTool/Test/PakToolBuildReportJson_test.cpp`
+  `src/Oxygen/Cooker/Tools/PakTool/test/PakToolBuildReportJson_test.cpp`
 - Added test target wiring:
-  `src/Oxygen/Cooker/Tools/PakTool/Test/CMakeLists.txt`
+  `src/Oxygen/Cooker/Tools/PakTool/test/CMakeLists.txt`
 - Validation executed:
   - `cmake --build 'out/build-vs' --target Oxygen.Cooker.PakToolReport.Tests --config Debug -- /m:6`
   - `out/build-vs/bin/Debug/Oxygen.Cooker.PakToolReport.Tests.exe`
@@ -429,7 +429,7 @@ Implementation notes:
   `Oxygen.Cooker.PakTool` target itself via `oxygen_embed_json_schemas(...)`.
 - The tool-local report schema is installed from the tool module, not from the
   pak domain module.
-- `PakTool` tests now live under `src/Oxygen/Cooker/Tools/PakTool/Test` and
+- `PakTool` tests now live under `src/Oxygen/Cooker/Tools/PakTool/test` and
   are declared from the tool module instead of the pak-domain test tree.
 - The emitted report `$schema` reference now points at the canonical Oxygen
   schema identifier rather than a source-tree-relative path.
@@ -484,7 +484,7 @@ Implementation notes:
   - full-build manifest opt-in
   - patch-only base catalog and compatibility relaxation flags
 - Added dedicated parser coverage in
-  `src/Oxygen/Cooker/Tools/PakTool/Test/PakToolCli_test.cpp` for:
+  `src/Oxygen/Cooker/Tools/PakTool/test/PakToolCli_test.cpp` for:
   - full-build parsing with repeatable sources and shared flags
   - patch parsing with repeatable base catalogs and relaxation flags
   - missing required option rejection
@@ -607,7 +607,7 @@ Implementation notes:
   - suppresses authoritative final catalog/manifest outputs on build failure
   - emits the optional diagnostics report after publication outcome is known
 - Integrated end-to-end coverage now lives in:
-  - `src/Oxygen/Cooker/Tools/PakTool/Test/PakToolCommandExecution_test.cpp`
+  - `src/Oxygen/Cooker/Tools/PakTool/test/PakToolCommandExecution_test.cpp`
 
 Validation:
 
@@ -679,7 +679,7 @@ Implementation notes:
 - `--quiet` now suppresses non-error output and `--no-color` removes ANSI
   color sequences from the tool-local message surface.
 - Added app-level process-contract coverage in:
-  - `src/Oxygen/Cooker/Tools/PakTool/Test/PakToolApp_test.cpp`
+  - `src/Oxygen/Cooker/Tools/PakTool/test/PakToolApp_test.cpp`
 
 Validation:
 

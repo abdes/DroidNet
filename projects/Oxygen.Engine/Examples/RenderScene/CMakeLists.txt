@@ -35,7 +35,7 @@ add_executable(
 )
 
 if(OXYGEN_BUILD_UI_TESTS)
-  target_sources(${META_MODULE_TARGET} PRIVATE "Test/Widgets_ui.cpp")
+  target_sources(${META_MODULE_TARGET} PRIVATE "test/Widgets_ui.cpp")
 endif()
 
 set_target_properties(

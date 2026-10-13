@@ -30,16 +30,27 @@ def compare_images(reference, actual, *, composite=False):
 
 def compare_view(reference, actual):
     if (reference["width"], reference["height"], reference["frame"]) != (
-        actual["width"], actual["height"], actual["frame"]
+        actual["width"],
+        actual["height"],
+        actual["frame"],
     ):
         raise AssertionError("Views do not share extent and captured frame")
     for view in (reference, actual):
-        values = (view["gain"], view["target_gain"], view["pre_exposure"], view["raw_luminance"], view["raw_ev"])
+        values = (
+            view["gain"],
+            view["target_gain"],
+            view["pre_exposure"],
+            view["raw_luminance"],
+            view["raw_ev"],
+        )
         if not all(math.isfinite(value) for value in values) or min(values[:4]) <= 0:
             raise AssertionError("Invalid exposure or metering values")
         if abs(math.log2(view["gain"] / view["target_gain"])) > 1 / 512:
             raise AssertionError("Paused remeter has not reached its target")
-        if view["requested_generation"] == 0 or view["requested_generation"] != view["applied_generation"]:
+        if (
+            view["requested_generation"] == 0
+            or view["requested_generation"] != view["applied_generation"]
+        ):
             raise AssertionError("Proof remeter did not complete")
         if view["state_flags"] & (16 | 128) or not view["state_flags"] & 4:
             raise AssertionError("Expected independent ordinary metering")
@@ -74,10 +85,20 @@ def main():
     args = parser.parse_args()
     load = lambda path: json.loads(path.read_text(encoding="utf-8"))
     family, main_view, pip_view, reordered = (
-        load(args.family), load(args.main), load(args.pip), load(args.reordered)
+        load(args.family),
+        load(args.main),
+        load(args.pip),
+        load(args.reordered),
     )
-    if [len(item["views"]) for item in (family, main_view, pip_view, reordered)] != [2, 1, 1, 2]:
-        raise AssertionError("Expected a two-view family, two isolated views and reordered family")
+    if [len(item["views"]) for item in (family, main_view, pip_view, reordered)] != [
+        2,
+        1,
+        1,
+        2,
+    ]:
+        raise AssertionError(
+            "Expected a two-view family, two isolated views and reordered family"
+        )
     by_extent = lambda item: {(v["width"], v["height"]): v for v in item["views"]}
     expected = by_extent(family)
     changed_order = by_extent(reordered)
@@ -94,7 +115,9 @@ def main():
         view = item["views"][0]
         extent = (view["width"], view["height"])
         results[f"isolated_{label}"] = compare_view(expected[extent], view)
-        results[f"reordered_{label}"] = compare_view(expected[extent], changed_order[extent])
+        results[f"reordered_{label}"] = compare_view(
+            expected[extent], changed_order[extent]
+        )
     results["reordered_composite_max_error_codes"] = compare_images(
         family["composite_image"], reordered["composite_image"], composite=True
     )

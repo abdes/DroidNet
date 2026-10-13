@@ -19,10 +19,10 @@
 #include <Oxygen/Vortex/Benchmarks/ManyLightBaseline.h>
 #include <Oxygen/Vortex/Lighting/Types/ClusterLightRange.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
-#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
-#include <Oxygen/Vortex/Test/Support/D3D12MemoryCapture.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestGraphics.h>
+#include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/test/Support/D3D12MemoryCapture.h>
 
 namespace oxygen::vortex::testing {
 

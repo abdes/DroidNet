@@ -7,12 +7,12 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
-#include <Oxygen/Base/Result.h>
 #include <limits>
 #include <numbers>
 
 #include <glm/ext/vector_float3.hpp>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Lighting/LightPhotometry.h>
 
 namespace oxygen::lighting {

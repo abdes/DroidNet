@@ -88,12 +88,20 @@ class TraversalRunner:
                 log.debug("Invoking task '%s'", task.name)
                 try:
                     task.run(project, context)
-                except Exception as exc:  # pragma: no cover - task failures logged and collected
+                except (
+                    Exception
+                ) as exc:  # pragma: no cover - task failures logged and collected
                     if context.logger.isEnabledFor(logging.DEBUG):
-                        context.logger.exception("Task '%s' failed for %s", task.name, project)
+                        context.logger.exception(
+                            "Task '%s' failed for %s", task.name, project
+                        )
                     else:
-                        context.logger.error("Task '%s' failed for %s: %s", task.name, project, exc)
-                    failures.append(TaskFailure(project=project, task=task.name, exception=exc))
+                        context.logger.error(
+                            "Task '%s' failed for %s: %s", task.name, project, exc
+                        )
+                    failures.append(
+                        TaskFailure(project=project, task=task.name, exception=exc)
+                    )
         log.debug("Processed %d project(s)", project_count)
         return TraversalResult(projects_processed=project_count, failures=failures)
 
@@ -124,7 +132,9 @@ class TraversalRunner:
                 try:
                     children = sorted(current.iterdir(), reverse=True)
                 except PermissionError:
-                    log.warning("Skipping directory due to permission error: %s", current)
+                    log.warning(
+                        "Skipping directory due to permission error: %s", current
+                    )
                     continue
 
                 stack.extend(children)
@@ -139,5 +149,6 @@ class TraversalRunner:
 
     def available_tasks(self) -> Iterable[TaskInvocation]:
         return self._registry.tasks()
+
 
 __all__ = ["TraversalRunner", "TraversalConfig", "TraversalResult", "TaskFailure"]

@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DemoShell/Services/EnvironmentSceneSnapshot.h"
-
 #include <algorithm>
 #include <optional>
 #include <utility>
 #include <vector>
+
+#include "DemoShell/Services/EnvironmentSceneSnapshot.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Environment/Fog.h>

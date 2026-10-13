@@ -31,7 +31,9 @@ def load_bmp(path: Path) -> np.ndarray:
     height_abs = abs(height)
     channels = bpp // 8
     stride = ((width_abs * channels + 3) // 4) * 4
-    raw = np.frombuffer(data, dtype=np.uint8, count=stride * height_abs, offset=pixel_offset)
+    raw = np.frombuffer(
+        data, dtype=np.uint8, count=stride * height_abs, offset=pixel_offset
+    )
     rows = raw.reshape(height_abs, stride)[:, : width_abs * channels]
     pixels = rows.reshape(height_abs, width_abs, channels)
     rgb = pixels[:, :, :3][:, :, ::-1]
@@ -70,7 +72,9 @@ def parse_crop(value: str) -> tuple[int, int, int, int]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Compare BMP captures with numpy-only tooling")
+    parser = argparse.ArgumentParser(
+        description="Compare BMP captures with numpy-only tooling"
+    )
     parser.add_argument("before", type=Path, help="Reference BMP path")
     parser.add_argument("after", type=Path, nargs="?", help="Candidate BMP path")
     parser.add_argument("--crop", type=parse_crop, help="Crop rectangle x,y,w,h")
@@ -79,22 +83,24 @@ def main() -> int:
 
     before = crop_image(load_bmp(args.before), args.crop)
     before_counts = dominant_counts(before, args.margin)
-    print(f"{args.before.name}: total={before_counts['total']} red={before_counts['red']} green={before_counts['green']} blue={before_counts['blue']}")
+    print(
+        f"{args.before.name}: total={before_counts['total']} red={before_counts['red']} green={before_counts['green']} blue={before_counts['blue']}"
+    )
 
     if args.after is None:
         return 0
 
     after = crop_image(load_bmp(args.after), args.crop)
     if before.shape != after.shape:
-        raise ValueError(
-            f"image shape mismatch: {before.shape} vs {after.shape}"
-        )
+        raise ValueError(f"image shape mismatch: {before.shape} vs {after.shape}")
 
     after_counts = dominant_counts(after, args.margin)
     diff = np.abs(after.astype(np.int16) - before.astype(np.int16))
     changed = np.count_nonzero(np.any(diff != 0, axis=2))
     mean_abs_diff = float(diff.mean())
-    print(f"{args.after.name}: total={after_counts['total']} red={after_counts['red']} green={after_counts['green']} blue={after_counts['blue']}")
+    print(
+        f"{args.after.name}: total={after_counts['total']} red={after_counts['red']} green={after_counts['green']} blue={after_counts['blue']}"
+    )
     print(
         "delta:"
         f" red={after_counts['red'] - before_counts['red']}"

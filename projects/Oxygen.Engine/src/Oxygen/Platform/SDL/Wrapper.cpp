@@ -97,8 +97,8 @@ auto oxygen::platform::sdl::SetWindowFramebufferExtent(SDL_Window* window,
 {
   constexpr auto maximum
     = static_cast<uint32_t>(std::numeric_limits<int>::max());
-  if (extent.width == 0U || extent.height == 0U
-    || extent.width > maximum || extent.height > maximum) {
+  if (extent.width == 0U || extent.height == 0U || extent.width > maximum
+    || extent.height > maximum) {
     throw std::invalid_argument(
       "Framebuffer dimensions must be positive SDL pixel sizes");
   }
@@ -117,7 +117,8 @@ auto oxygen::platform::sdl::SetWindowFramebufferExtent(SDL_Window* window,
       const auto height
         = std::llround(static_cast<double>(mode->h) * mode->pixel_density);
       if (width == extent.width && height == extent.height
-        && (selected == nullptr || mode->refresh_rate > selected->refresh_rate)) {
+        && (selected == nullptr
+          || mode->refresh_rate > selected->refresh_rate)) {
         selected = mode;
       }
     }

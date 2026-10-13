@@ -1,12 +1,13 @@
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE.
 // SPDX-License-Identifier: BSD-3-Clause
 
+#include <Windows.h>
+
 #include <source_location>
 #include <stdexcept>
 #include <string>
 
 #include "RenderScene/RuntimePaths.h"
-#include <Windows.h>
 
 namespace oxygen::examples::render_scene {
 

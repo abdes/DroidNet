@@ -32,7 +32,7 @@
       "request": "launch",
       "program": "${workspaceFolder}/out/build/bin/Debug/Oxygen.Content.DumpPakFile.exe",
       "args": [
-        "src/Oxygen/Content/Test/TestData/Simple.pak",
+        "src/Oxygen/Content/test/TestData/Simple.pak",
         "--verbose"
       ],
       "stopAtEntry": true,

@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
-
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -21,6 +19,7 @@
 
 #include <Oxygen/Graphics/Common/ShaderLibraryIO.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 #include <Oxygen/Serio/MemoryStream.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {

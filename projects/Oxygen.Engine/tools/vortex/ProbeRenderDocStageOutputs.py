@@ -107,7 +107,9 @@ def find_output_sample(controller, resource_names, texture_descs, record):
     return None
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     resource_names = resource_id_to_name(controller)
     texture_descs = {
         str(safe_getattr(desc, "resourceId")): desc
@@ -121,8 +123,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         "stage12_point": "Vortex.Stage12.PointLight",
         "stage15_sky": "Vortex.Stage15.Sky",
         "debug_basecolor": "Vortex.DebugVisualization.BaseColor",
-        "debug_directional_shadow_mask":
-            "Vortex.DebugVisualization.DirectionalShadowMask",
+        "debug_directional_shadow_mask": "Vortex.DebugVisualization.DirectionalShadowMask",
     }
 
     for label, scope_name in targets.items():

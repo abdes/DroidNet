@@ -84,7 +84,9 @@ def records_with_name(action_records, name):
 
 def records_under_prefix(action_records, prefix):
     prefix_with_sep = prefix + " > "
-    return [record for record in action_records if record.path.startswith(prefix_with_sep)]
+    return [
+        record for record in action_records if record.path.startswith(prefix_with_sep)
+    ]
 
 
 def find_last_named_record(records, name):
@@ -157,7 +159,9 @@ def resource_dims(texture_desc, descriptor):
     return max(1, width >> mip), max(1, height >> mip)
 
 
-def sample_descriptor(controller, rd, resource_names, texture_descs, descriptor, type_cast):
+def sample_descriptor(
+    controller, rd, resource_names, texture_descs, descriptor, type_cast
+):
     resource_id = descriptor.resource
     resource_key = str(resource_id)
     texture_desc = texture_descs.get(resource_key)
@@ -234,7 +238,11 @@ def dense_grid_delta(controller, rd, event_id_a, sample_a, event_id_b, sample_b)
     for row in range(grid_y):
         y = 0 if grid_y == 1 else int(round(((height - 1) * row) / float(grid_y - 1)))
         for col in range(grid_x):
-            x = 0 if grid_x == 1 else int(round(((width - 1) * col) / float(grid_x - 1)))
+            x = (
+                0
+                if grid_x == 1
+                else int(round(((width - 1) * col) / float(grid_x - 1)))
+            )
             values_a.append(
                 float4_values(
                     controller.PickPixel(
@@ -249,13 +257,20 @@ def dense_grid_delta(controller, rd, event_id_a, sample_a, event_id_b, sample_b)
     for row in range(grid_y):
         y = 0 if grid_y == 1 else int(round(((height - 1) * row) / float(grid_y - 1)))
         for col in range(grid_x):
-            x = 0 if grid_x == 1 else int(round(((width - 1) * col) / float(grid_x - 1)))
+            x = (
+                0
+                if grid_x == 1
+                else int(round(((width - 1) * col) / float(grid_x - 1)))
+            )
             value_b = float4_values(
                 controller.PickPixel(
                     sample_b["resource_id"], x, y, sub_b, rd.CompType.Typeless
                 )
             )
-            max_delta = max(max_delta, max(abs(value) for value in vec_diff(values_a[index], value_b)))
+            max_delta = max(
+                max_delta,
+                max(abs(value) for value in vec_diff(values_a[index], value_b)),
+            )
             index += 1
 
     return max_delta
@@ -317,9 +332,10 @@ def sample_volume(controller, rd, texture_descs, resource_id):
                 probe_count += 1
                 probe_sum = [probe_sum[i] + value[i] for i in range(4)]
 
-    rgb_nonzero = max(abs(value) for value in all_max[:3]) > 1.0e-6 or max(
-        abs(all_max[index] - all_min[index]) for index in range(3)
-    ) > 1.0e-6
+    rgb_nonzero = (
+        max(abs(value) for value in all_max[:3]) > 1.0e-6
+        or max(abs(all_max[index] - all_min[index]) for index in range(3)) > 1.0e-6
+    )
     alpha_valid = all_min[3] >= -1.0e-5 and all_max[3] <= 1.0 + 1.0e-5
     transmittance_varies = (all_max[3] - all_min[3]) > 1.0e-6
     return {
@@ -339,7 +355,9 @@ def sample_volume(controller, rd, texture_descs, resource_id):
     }
 
 
-def bound_named_resources(controller, rd, resource_names, event_id, shader_stage, read_write, *tokens):
+def bound_named_resources(
+    controller, rd, resource_names, event_id, shader_stage, read_write, *tokens
+):
     controller.SetFrameEvent(event_id, True)
     state = controller.GetPipelineState()
     descriptors = (
@@ -386,7 +404,9 @@ def read_stage15_buffer_by_size(controller, rd, event_id, resource_names, byte_s
     return None
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     action_records = collect_action_records(controller)
     resource_records = collect_resource_records_raw(controller)
@@ -501,8 +521,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     main_pass_factor = view_data["f32"][63] if view_data is not None else 0.0
     volume_depth_resolution = view_data["f32"][64] if view_data is not None else 0.0
     volume_depth_resolution_inv = view_data["f32"][65] if view_data is not None else 0.0
-    volume_depth_slice_length_km = view_data["f32"][66] if view_data is not None else 0.0
-    volume_depth_slice_length_inv = view_data["f32"][67] if view_data is not None else 0.0
+    volume_depth_slice_length_km = (
+        view_data["f32"][66] if view_data is not None else 0.0
+    )
+    volume_depth_slice_length_inv = (
+        view_data["f32"][67] if view_data is not None else 0.0
+    )
     static_camera_srv = (
         static_data["u32"][SKY_ATMOSPHERE_CAMERA_VOLUME_SRV_U32]
         if static_data is not None
@@ -521,54 +545,144 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("camera_aerial_scope_count={}".format(len(camera_scope)))
     report.append("camera_aerial_dispatch_count={}".format(len(camera_dispatches)))
     report.append("stage15_atmosphere_scope_count={}".format(len(atmosphere_scope)))
-    report.append("stage15_atmosphere_draw_count={}".format(len(records_with_name(atmosphere_records, DRAW_NAME))))
+    report.append(
+        "stage15_atmosphere_draw_count={}".format(
+            len(records_with_name(atmosphere_records, DRAW_NAME))
+        )
+    )
     report.append("stage15_sky_event={}".format(sky_draw.event_id if sky_draw else ""))
-    report.append("stage15_atmosphere_event={}".format(atmosphere_draw.event_id if atmosphere_draw else ""))
-    report.append("camera_aerial_written_resource={}".format(camera_written[0]["name"] if camera_written else ""))
-    report.append("camera_aerial_consumed_resource={}".format(camera_consumed[0]["name"] if camera_consumed else ""))
-    report.append("camera_aerial_volume_dims={}x{}x{}".format(volume["width"], volume["height"], volume["depth"]))
+    report.append(
+        "stage15_atmosphere_event={}".format(
+            atmosphere_draw.event_id if atmosphere_draw else ""
+        )
+    )
+    report.append(
+        "camera_aerial_written_resource={}".format(
+            camera_written[0]["name"] if camera_written else ""
+        )
+    )
+    report.append(
+        "camera_aerial_consumed_resource={}".format(
+            camera_consumed[0]["name"] if camera_consumed else ""
+        )
+    )
+    report.append(
+        "camera_aerial_volume_dims={}x{}x{}".format(
+            volume["width"], volume["height"], volume["depth"]
+        )
+    )
     report.append("camera_aerial_volume_min={}".format(format_values(volume["min"])))
     report.append("camera_aerial_volume_max={}".format(format_values(volume["max"])))
     report.append("camera_aerial_probe_count={}".format(volume["probe_count"]))
     report.append("camera_aerial_probe_rgb_sum={:.9g}".format(volume["probe_rgb_sum"]))
-    report.append("camera_aerial_probe_alpha_min={:.9g}".format(volume["probe_alpha_min"]))
-    report.append("camera_aerial_probe_alpha_max={:.9g}".format(volume["probe_alpha_max"]))
-    report.append("stage15_atmosphere_scene_color_delta_max={:.9g}".format(scene_color_delta))
+    report.append(
+        "camera_aerial_probe_alpha_min={:.9g}".format(volume["probe_alpha_min"])
+    )
+    report.append(
+        "camera_aerial_probe_alpha_max={:.9g}".format(volume["probe_alpha_max"])
+    )
+    report.append(
+        "stage15_atmosphere_scene_color_delta_max={:.9g}".format(scene_color_delta)
+    )
     if sky_scene_color is not None:
-        report.append("stage15_sky_scene_color_center={}".format(format_values(sky_scene_color["center"])))
+        report.append(
+            "stage15_sky_scene_color_center={}".format(
+                format_values(sky_scene_color["center"])
+            )
+        )
     if atmosphere_scene_color is not None:
-        report.append("stage15_atmosphere_scene_color_center={}".format(format_values(atmosphere_scene_color["center"])))
-    report.append("stage15_environment_view_resource={}".format(view_data["resource_name"] if view_data else ""))
-    report.append("stage15_environment_view_byte_size={}".format(view_data["byte_size"] if view_data else 0))
-    report.append("aerial_perspective_distance_scale={:.9g}".format(aerial_distance_scale))
+        report.append(
+            "stage15_atmosphere_scene_color_center={}".format(
+                format_values(atmosphere_scene_color["center"])
+            )
+        )
+    report.append(
+        "stage15_environment_view_resource={}".format(
+            view_data["resource_name"] if view_data else ""
+        )
+    )
+    report.append(
+        "stage15_environment_view_byte_size={}".format(
+            view_data["byte_size"] if view_data else 0
+        )
+    )
+    report.append(
+        "aerial_perspective_distance_scale={:.9g}".format(aerial_distance_scale)
+    )
     report.append("aerial_scattering_strength={:.9g}".format(aerial_strength))
-    report.append("aerial_perspective_start_depth_km={:.9g}".format(aerial_start_depth_km))
+    report.append(
+        "aerial_perspective_start_depth_km={:.9g}".format(aerial_start_depth_km)
+    )
     report.append("aerial_perspective_main_pass_factor={:.9g}".format(main_pass_factor))
-    report.append("camera_aerial_depth_resolution={:.9g}".format(volume_depth_resolution))
-    report.append("camera_aerial_depth_resolution_inv={:.9g}".format(volume_depth_resolution_inv))
-    report.append("camera_aerial_depth_slice_length_km={:.9g}".format(volume_depth_slice_length_km))
-    report.append("camera_aerial_depth_slice_length_inv={:.9g}".format(volume_depth_slice_length_inv))
-    report.append("stage15_environment_static_resource={}".format(static_data["resource_name"] if static_data else ""))
-    report.append("stage15_environment_static_byte_size={}".format(static_data["byte_size"] if static_data else 0))
+    report.append(
+        "camera_aerial_depth_resolution={:.9g}".format(volume_depth_resolution)
+    )
+    report.append(
+        "camera_aerial_depth_resolution_inv={:.9g}".format(volume_depth_resolution_inv)
+    )
+    report.append(
+        "camera_aerial_depth_slice_length_km={:.9g}".format(
+            volume_depth_slice_length_km
+        )
+    )
+    report.append(
+        "camera_aerial_depth_slice_length_inv={:.9g}".format(
+            volume_depth_slice_length_inv
+        )
+    )
+    report.append(
+        "stage15_environment_static_resource={}".format(
+            static_data["resource_name"] if static_data else ""
+        )
+    )
+    report.append(
+        "stage15_environment_static_byte_size={}".format(
+            static_data["byte_size"] if static_data else 0
+        )
+    )
     report.append("static_atmosphere_camera_volume_srv={}".format(static_camera_srv))
 
     append_bool(report, "camera_aerial_scope_present", len(camera_scope) == 1)
     append_bool(report, "camera_aerial_dispatch_valid", len(camera_dispatches) == 1)
-    append_bool(report, "camera_aerial_before_stage15_atmosphere", camera_dispatch is not None and atmosphere_draw is not None and camera_dispatch.event_id < atmosphere_draw.event_id)
+    append_bool(
+        report,
+        "camera_aerial_before_stage15_atmosphere",
+        camera_dispatch is not None
+        and atmosphere_draw is not None
+        and camera_dispatch.event_id < atmosphere_draw.event_id,
+    )
     append_bool(report, "camera_aerial_written", len(camera_written) > 0)
-    append_bool(report, "camera_aerial_consumed_by_atmosphere", len(camera_consumed) > 0)
+    append_bool(
+        report, "camera_aerial_consumed_by_atmosphere", len(camera_consumed) > 0
+    )
     append_bool(report, "camera_aerial_volume_sampled", volume["sampled"])
     append_bool(report, "camera_aerial_volume_rgb_nonzero", volume["rgb_nonzero"])
     append_bool(report, "camera_aerial_volume_alpha_valid", volume["alpha_valid"])
-    append_bool(report, "camera_aerial_volume_transmittance_varies", volume["transmittance_varies"])
+    append_bool(
+        report,
+        "camera_aerial_volume_transmittance_varies",
+        volume["transmittance_varies"],
+    )
     append_bool(report, "stage15_atmosphere_scope_present", len(atmosphere_scope) == 1)
-    append_bool(report, "stage15_atmosphere_draw_valid", len(records_with_name(atmosphere_records, DRAW_NAME)) == 1)
+    append_bool(
+        report,
+        "stage15_atmosphere_draw_valid",
+        len(records_with_name(atmosphere_records, DRAW_NAME)) == 1,
+    )
     append_bool(report, "stage15_environment_view_data_bound", view_data is not None)
-    append_bool(report, "stage15_environment_static_data_bound", static_data is not None)
+    append_bool(
+        report, "stage15_environment_static_data_bound", static_data is not None
+    )
     append_bool(report, "static_atmosphere_enabled", static_atmosphere_enabled)
-    append_bool(report, "static_atmosphere_camera_volume_srv_valid", static_camera_srv != INVALID_BINDLESS_INDEX)
+    append_bool(
+        report,
+        "static_atmosphere_camera_volume_srv_valid",
+        static_camera_srv != INVALID_BINDLESS_INDEX,
+    )
     append_bool(report, "aerial_perspective_main_pass_enabled", main_pass_factor > 0.5)
-    append_bool(report, "aerial_perspective_scene_color_changed", scene_color_delta > 1.0e-5)
+    append_bool(
+        report, "aerial_perspective_scene_color_changed", scene_color_delta > 1.0e-5
+    )
 
 
 def main():

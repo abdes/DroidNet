@@ -95,13 +95,9 @@ def main(argv=None):
         return 0
     # Validate argument combinations
     if not args.out_base and not (args.out_cpp and args.out_hlsl):
-        p.error(
-            "Either --out-base or both --out-cpp and --out-hlsl must be provided"
-        )
+        p.error("Either --out-base or both --out-cpp and --out-hlsl must be provided")
     if args.out_base and (args.out_cpp or args.out_hlsl):
-        p.error(
-            "Use either --out-base or the legacy --out-cpp/--out-hlsl, not both"
-        )
+        p.error("Use either --out-base or the legacy --out-cpp/--out-hlsl, not both")
 
     # Compute verbosity level: base 1, +1 per -v, -1 per -q, clamp [0..3]
     verbosity = max(0, min(3, 1 + int(args.verbose) - int(args.quiet)))

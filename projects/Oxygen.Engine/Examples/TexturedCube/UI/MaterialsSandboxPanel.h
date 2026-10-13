@@ -8,10 +8,10 @@
 
 #include <string_view>
 
-#include <Oxygen/Base/ObserverPtr.h>
-
 #include "DemoShell/UI/DemoPanel.h"
 #include "TexturedCube/UI/MaterialsSandboxVm.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
 
 namespace oxygen::examples::textured_cube::ui {
 

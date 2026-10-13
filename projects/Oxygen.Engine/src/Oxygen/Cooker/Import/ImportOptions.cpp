@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <string>
+
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 
 namespace oxygen::content::import {
 

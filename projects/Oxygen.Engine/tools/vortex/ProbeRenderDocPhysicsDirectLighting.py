@@ -157,7 +157,9 @@ def find_readonly_descriptor(state, rd, resource_names, wanted_name):
 
 
 def pick(controller, resource, x, y, sub, rd):
-    return float4_values(controller.PickPixel(resource, x, y, sub, rd.CompType.Typeless))
+    return float4_values(
+        controller.PickPixel(resource, x, y, sub, rd.CompType.Typeless)
+    )
 
 
 def find_action(action_records, path_token):
@@ -175,14 +177,17 @@ def summarize_resource(controller, rd, report, label, descriptor):
 
     sub = make_subresource(rd, descriptor)
     min_value, max_value = controller.GetMinMax(
-        descriptor.resource, sub, rd.CompType.Typeless)
+        descriptor.resource, sub, rd.CompType.Typeless
+    )
     report.append(f"{label}_present=true")
     report.append(f"{label}_resource={descriptor.resource}")
     report.append(f"{label}_min={float4_values(min_value)}")
     report.append(f"{label}_max={float4_values(max_value)}")
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     resource_names = resource_id_to_name(controller)
     textures = texture_desc_map(controller)
@@ -204,11 +209,17 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     state = controller.GetPipelineState()
 
     scene_color = find_output_descriptor(state, resource_names, "SceneColor")
-    gbuffer_base = find_readonly_descriptor(state, rd, resource_names, "GBufferBaseColor")
-    gbuffer_normal = find_readonly_descriptor(state, rd, resource_names, "GBufferNormal")
+    gbuffer_base = find_readonly_descriptor(
+        state, rd, resource_names, "GBufferBaseColor"
+    )
+    gbuffer_normal = find_readonly_descriptor(
+        state, rd, resource_names, "GBufferNormal"
+    )
     scene_depth = find_readonly_descriptor(state, rd, resource_names, "SceneDepth")
 
-    summarize_resource(controller, rd, report, "scene_color_after_directional", scene_color)
+    summarize_resource(
+        controller, rd, report, "scene_color_after_directional", scene_color
+    )
     summarize_resource(controller, rd, report, "gbuffer_base", gbuffer_base)
     summarize_resource(controller, rd, report, "gbuffer_normal", gbuffer_normal)
     summarize_resource(controller, rd, report, "scene_depth", scene_depth)
@@ -250,7 +261,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         normal_encoded = pick(controller, gbuffer_normal.resource, x, y, normal_sub, rd)
         normal = octa_decode(normal_encoded[:2])
         direct = pick(controller, scene_color.resource, x, y, scene_color_sub, rd)
-        depth = pick(controller, scene_depth.resource, x, y, depth_sub, rd) if scene_depth is not None else [0.0] * 4
+        depth = (
+            pick(controller, scene_depth.resource, x, y, depth_sub, rd)
+            if scene_depth is not None
+            else [0.0] * 4
+        )
         base_delta = max(
             abs(base[0] - 0.44),
             abs(base[1] - 0.47),
@@ -269,7 +284,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(f"floor_candidate_count={floor_candidate_count}")
     report.append(f"zero_direct_floor_count={zero_direct_floor_count}")
     report.append(f"nonzero_direct_floor_count={nonzero_direct_floor_count}")
-    for index, (x, y, is_floor, base, normal, direct, depth) in enumerate(floor_samples):
+    for index, (x, y, is_floor, base, normal, direct, depth) in enumerate(
+        floor_samples
+    ):
         report.append(f"sample_{index}_xy={x},{y}")
         report.append(f"sample_{index}_is_floor={str(is_floor).lower()}")
         report.append(f"sample_{index}_base={base}")
@@ -285,19 +302,23 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     for index, block in enumerate(blocks):
         descriptor = block.descriptor
         report.append(
-            f"pixel_cb_{index}_resource={descriptor_name(resource_names, descriptor)}")
+            f"pixel_cb_{index}_resource={descriptor_name(resource_names, descriptor)}"
+        )
         report.append(
             "pixel_cb_{}_bind={}|byte_size={}|byte_offset={}".format(
                 index,
                 safe_getattr(block.access, "index", ""),
                 int(safe_getattr(descriptor, "byteSize", 0) or 0),
                 int(safe_getattr(descriptor, "byteOffset", 0) or 0),
-            ))
+            )
+        )
         values_u32, values_f32 = dump_u32_f32(controller, descriptor, 48)
         if values_f32:
             report.append(
                 "pixel_cb_{}_f32={}".format(
-                    index, ["{:.9f}".format(v) for v in values_f32]))
+                    index, ["{:.9f}".format(v) for v in values_f32]
+                )
+            )
         if values_u32:
             report.append(f"pixel_cb_{index}_u32={values_u32}")
         if index == 2 and len(values_f32) >= 40:
@@ -307,12 +328,21 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             report.append(f"directional_light_color_intensity={light_color}")
             report.append(f"directional_light_direction={light_direction}")
             report.append(f"directional_light_atmosphere={atmosphere}")
-            for sample_index, (_, _, is_floor, _base, normal, _direct, _depth) in enumerate(floor_samples):
+            for sample_index, (
+                _,
+                _,
+                is_floor,
+                _base,
+                normal,
+                _direct,
+                _depth,
+            ) in enumerate(floor_samples):
                 if is_floor:
                     report.append(
                         "sample_{}_nol={:.9f}".format(
-                            sample_index,
-                            max(vec3_dot(normal, light_direction), 0.0)))
+                            sample_index, max(vec3_dot(normal, light_direction), 0.0)
+                        )
+                    )
 
 
 def main():

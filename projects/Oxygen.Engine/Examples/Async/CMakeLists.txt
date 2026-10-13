@@ -58,7 +58,7 @@ set_target_properties(
 target_compile_features(${META_MODULE_TARGET} PRIVATE cxx_std_23)
 
 if(OXYGEN_BUILD_UI_TESTS)
-  target_sources(${META_MODULE_TARGET} PRIVATE "Test/Lighting_ui.cpp")
+  target_sources(${META_MODULE_TARGET} PRIVATE "test/Lighting_ui.cpp")
 endif()
 
 target_include_directories(

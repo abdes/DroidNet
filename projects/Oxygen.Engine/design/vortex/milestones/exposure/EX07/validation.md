@@ -159,7 +159,7 @@ or nonfinite results must be fixed. Deliberate shading approximations are assess
 through their measured quality, timing and memory together. Do not change inputs,
 shadow settings or image coverage to manufacture an apparent improvement.
 
-Create correctness tests under the owning `Test` directories and opt-in timing
+Create correctness tests under the owning `test` directories and opt-in timing
 workloads under `Vortex/Benchmarks` in their own lighting benchmark executable.
 Reuse current GPU/CPU profiling, fixtures and capture tooling. This precedes EX08:
 it must not depend on its future measurement API, console work or ImGui automation.

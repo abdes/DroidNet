@@ -114,14 +114,10 @@ def build_report(
         record for record in pass_work_records if record.flags & rd.ActionFlags.Clear
     ]
     draw_records = [
-        record
-        for record in pass_work_records
-        if record.flags & rd.ActionFlags.Drawcall
+        record for record in pass_work_records if record.flags & rd.ActionFlags.Drawcall
     ]
     indirect_draw_records = [
-        record
-        for record in draw_records
-        if EXECUTE_INDIRECT_PATH_TOKEN in record.path
+        record for record in draw_records if EXECUTE_INDIRECT_PATH_TOKEN in record.path
     ]
     execute_indirect_path_records = [
         record
@@ -150,7 +146,9 @@ def build_report(
     report.append("job_scope_events={}".format(summarize_event_ids(job_scope_records)))
     report.append("job_scope_count={}".format(len(job_scope_records)))
     report.append("indirect_marker_name={}".format(INDIRECT_MARKER_NAME))
-    report.append("indirect_marker_events={}".format(summarize_event_ids(marker_records)))
+    report.append(
+        "indirect_marker_events={}".format(summarize_event_ids(marker_records))
+    )
     report.append("indirect_marker_event_count={}".format(len(marker_records)))
     report.append(
         "execute_indirect_path_event_count={}".format(

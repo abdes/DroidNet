@@ -36,7 +36,7 @@
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
-#include <Oxygen/OxCo/Test/Utils/TestEventLoop.h>
+#include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
 #include <Oxygen/Profiling/CpuScopeObserver.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Light/PointLight.h>
@@ -49,13 +49,13 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureGpuFixture.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestTags.h>
-#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
-#include <Oxygen/Vortex/Test/Support/CpuTimingCapture.h>
-#include <Oxygen/Vortex/Test/Support/D3D12MemoryCapture.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestGraphics.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestTags.h>
+#include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/test/Support/CpuTimingCapture.h>
+#include <Oxygen/Vortex/test/Support/D3D12MemoryCapture.h>
 
 namespace oxygen::vortex::testing {
 namespace {

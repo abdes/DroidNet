@@ -109,9 +109,7 @@ def _builtin_types() -> dict[str, ScalarType]:
         "uint": ScalarType("uint", "std::uint32_t", "<cstdint>", "uint", 1),
         "int": ScalarType("int", "std::int32_t", "<cstdint>", "int", 1),
         "float": ScalarType("float", "float", "", "float", 1),
-        "uint64_t": ScalarType(
-            "uint64_t", "std::uint64_t", "<cstdint>", "uint64", 1
-        ),
+        "uint64_t": ScalarType("uint64_t", "std::uint64_t", "<cstdint>", "uint64", 1),
         "float4x4": ScalarType(
             "float4x4", "glm::mat4", "<glm/mat4x4.hpp>", "float", 4, 4
         ),
@@ -203,9 +201,7 @@ class Spec:
     source: str
     files: list[ContractFile]
     domain_tags: dict[str, str]
-    structs: dict[str, Struct] = field(
-        default_factory=lambda: dict[str, Struct]()
-    )
+    structs: dict[str, Struct] = field(default_factory=lambda: dict[str, Struct]())
 
 
 # --- Parsing -----------------------------------------------------------------
@@ -248,9 +244,7 @@ def _get_int(
     return value
 
 
-def _check_keys(
-    data: Mapping[str, object], allowed: set[str], where: str
-) -> None:
+def _check_keys(data: Mapping[str, object], allowed: set[str], where: str) -> None:
     unknown = sorted(set(data) - allowed)
     if unknown:
         raise ContractError(f"{where}: unknown keys {unknown}")
@@ -298,9 +292,7 @@ def _parse_constant(raw: object, where: str) -> Constant:
 
 def _parse_field(raw: object, where: str) -> Field:
     data = _require_mapping(raw, where)
-    _check_keys(
-        data, {"name", "type", "count", "slot", "cpp", "default", "doc"}, where
-    )
+    _check_keys(data, {"name", "type", "count", "slot", "cpp", "default", "doc"}, where)
     name = _identifier(_get_str(data, "name", where), where)
     count = _get_int(data, "count", where, 0)
     if count < 0 or count == 1:
@@ -345,9 +337,7 @@ def _parse_struct(raw: object, where: str) -> Struct:
         raise ContractError(f"{where}: 'align' must be 4, 8 or 16")
     register = _get_str(data, "register", where, "")
     if register and (layout is not Layout.CONSTANT or not _REGISTER.match(register)):
-        raise ContractError(
-            f"{where}: 'register' names a b# slot of a constant layout"
-        )
+        raise ContractError(f"{where}: 'register' names a b# slot of a constant layout")
     loader: Loader | None = None
     if "loader" in data:
         if layout is not Layout.STRUCTURED:
@@ -374,9 +364,7 @@ def _parse_struct(raw: object, where: str) -> Struct:
         raise ContractError(f"{where}: duplicate field names")
     return Struct(
         name=name,
-        hlsl_name=_identifier(
-            _get_str(data, "hlsl_name", where, name), where
-        ),
+        hlsl_name=_identifier(_get_str(data, "hlsl_name", where, name), where),
         layout=layout,
         size=_get_int(data, "size", where),
         align=align,
@@ -447,9 +435,7 @@ def domain_tags(bindless: Mapping[str, object]) -> dict[str, str]:
     return tags
 
 
-def parse_spec(
-    document: object, bindless: object, source: str = "<memory>"
-) -> Spec:
+def parse_spec(document: object, bindless: object, source: str = "<memory>") -> Spec:
     """Parse and validate a contract schema against the bindless ABI."""
     data = _require_mapping(document, "contracts")
     _check_keys(data, {"meta", "files"}, "contracts")
@@ -457,9 +443,7 @@ def parse_spec(
         source=source,
         files=[
             _parse_file(item, f"file {index}")
-            for index, item in enumerate(
-                _require_list(data.get("files"), "files")
-            )
+            for index, item in enumerate(_require_list(data.get("files"), "files"))
         ],
         domain_tags=domain_tags(_require_mapping(bindless, "bindless")),
     )
@@ -494,9 +478,7 @@ def _layout_struct(spec: Spec, struct: Struct, where: str) -> None:
                 f"{align} bytes; add explicit padding"
             )
         if struct.layout is Layout.CONSTANT:
-            starts_register = (
-                item.count != 0 or builtin is None or builtin.is_matrix
-            )
+            starts_register = item.count != 0 or builtin is None or builtin.is_matrix
             if starts_register and offset % _CBUFFER_REGISTER_BYTES != 0:
                 raise ContractError(
                     f"{where}: '{item.name}' must start a 16-byte register in "
@@ -569,8 +551,7 @@ def _validate(spec: Spec) -> None:
                 struct.loader.domain not in spec.domain_tags
             ):
                 raise ContractError(
-                    f"{where}: loader reads unknown domain "
-                    f"'{struct.loader.domain}'"
+                    f"{where}: loader reads unknown domain '{struct.loader.domain}'"
                 )
             if struct.register and struct.layout is not Layout.CONSTANT:
                 raise ContractError(f"{where}: only constant layouts bind b#")
@@ -647,11 +628,7 @@ def _cpp_includes(spec: Spec, contract_file: ContractFile) -> list[str]:
         for item in struct.fields:
             nested = spec.structs.get(item.type)
             if nested is not None and nested not in contract_file.structs:
-                owner = next(
-                    other
-                    for other in spec.files
-                    if nested in other.structs
-                )
+                owner = next(other for other in spec.files if nested in other.structs)
                 project.add(f"<{owner.cpp}>")
     lines = [f"#include {include}" for include in sorted(standard)]
     glm = sorted(include for include in project if include.startswith("<glm/"))
@@ -693,18 +670,13 @@ def render_cpp(spec: Spec, contract_file: ContractFile) -> str:
         lines.append("};")
         lines.append("")
         lines.append(f"static_assert(std::is_standard_layout_v<{struct.name}>);")
-        lines.append(
-            f"static_assert(std::is_trivially_copyable_v<{struct.name}>);"
-        )
+        lines.append(f"static_assert(std::is_trivially_copyable_v<{struct.name}>);")
         lines.append(f"static_assert(sizeof({struct.name}) == {struct.size}U);")
         if struct.align > 4:
-            lines.append(
-                f"static_assert(alignof({struct.name}) == {struct.align}U);"
-            )
+            lines.append(f"static_assert(alignof({struct.name}) == {struct.align}U);")
         for item, offset in zip(struct.fields, struct.offsets):
             lines.append(
-                f"static_assert(offsetof({struct.name}, {item.name}) "
-                f"== {offset}U);"
+                f"static_assert(offsetof({struct.name}, {item.name}) == {offset}U);"
             )
         lines.append("")
     lines.append(f"}} // namespace {contract_file.namespace}")
@@ -780,9 +752,7 @@ def _hlsl_invalid(spec: Spec, struct: Struct) -> list[str]:
 def _hlsl_loader(spec: Spec, struct: Struct, loader: Loader) -> list[str]:
     name = struct.hlsl_name
     tag = spec.domain_tags[loader.domain]
-    initial = (
-        f"MakeInvalid{name}()" if _has_slots(spec, struct) else f"({name})0"
-    )
+    initial = f"MakeInvalid{name}()" if _has_slots(spec, struct) else f"({name})0"
     index = ", uint index" if loader.array else ""
     what = "element `index` of" if loader.array else "the record at"
     lines = [
@@ -891,9 +861,7 @@ def _hlsl_bytes_access(spec: Spec, struct: Struct) -> list[str]:
                         f"{load.format(address=address)};"
                     )
             else:
-                lines.append(
-                    f"    value.{item.name} = {load.format(address=offset)};"
-                )
+                lines.append(f"    value.{item.name} = {load.format(address=offset)};")
         lines.extend(["    return value;", "}", ""])
     lines.extend(
         [
@@ -911,16 +879,12 @@ def _hlsl_bytes_access(spec: Spec, struct: Struct) -> list[str]:
                 address = f"{offset} + {index}u * {stride}"
                 lines.append(
                     "    "
-                    + store.format(
-                        address=address, value=f"value.{item.name}[{index}]"
-                    )
+                    + store.format(address=address, value=f"value.{item.name}[{index}]")
                     + ";"
                 )
         else:
             lines.append(
-                "    "
-                + store.format(address=offset, value=f"value.{item.name}")
-                + ";"
+                "    " + store.format(address=offset, value=f"value.{item.name}") + ";"
             )
     lines.append("}")
     return lines
@@ -943,9 +907,7 @@ def render_hlsl(spec: Spec, contract_file: ContractFile) -> str:
         for item in struct.fields:
             nested = spec.structs.get(item.type)
             if nested is not None and nested not in contract_file.structs:
-                owner = next(
-                    other for other in spec.files if nested in other.structs
-                )
+                owner = next(other for other in spec.files if nested in other.structs)
                 includes.append(owner.hlsl)
     lines = [
         _LICENSE,
@@ -1067,9 +1029,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     hlsl_root: Path = args.hlsl_root
     check: bool = args.check
     try:
-        changed = generate(
-            spec_path, bindless_path, cpp_root, hlsl_root, check=check
-        )
+        changed = generate(spec_path, bindless_path, cpp_root, hlsl_root, check=check)
     except ContractError as error:
         print(f"error: {error}", file=sys.stderr)
         return 2

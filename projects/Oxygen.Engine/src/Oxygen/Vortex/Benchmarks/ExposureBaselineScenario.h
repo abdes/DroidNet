@@ -14,8 +14,8 @@
 
 #include <Oxygen/Vortex/Benchmarks/ExposureBenchmarkFixture.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
-#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestGraphics.h>
+#include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
 namespace oxygen::vortex::testing {
 class CpuTimingCapture;
 }

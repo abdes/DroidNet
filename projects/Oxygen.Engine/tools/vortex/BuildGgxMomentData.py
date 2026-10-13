@@ -20,9 +20,15 @@ def encode_manifest(document):
     # Match repository JSON exponent spelling without touching quoted hashes,
     # descriptions or the binary32 values represented by the number tokens.
     tokens = re.compile(r'"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?')
+
     def canonical(match):
         token = match.group(0)
-        return token if token.startswith('"') else re.sub(r'([eE][+-]?)0+(\d+)', r'\1\2', token)
+        return (
+            token
+            if token.startswith('"')
+            else re.sub(r"([eE][+-]?)0+(\d+)", r"\1\2", token)
+        )
+
     return tokens.sub(canonical, json.dumps(document, indent=2)) + "\n"
 
 
@@ -33,53 +39,96 @@ def pack(args):
     report = json.loads(args.report.read_text())
     certificate = json.loads(args.certificate.read_text())
     identity = hashlib.sha256(candidate_bytes).hexdigest()
-    if report["candidate_sha256"] != identity or certificate["candidate_sha256"] != identity:
+    if (
+        report["candidate_sha256"] != identity
+        or certificate["candidate_sha256"] != identity
+    ):
         raise ValueError("Numerical evidence belongs to another candidate")
-    if certificate["stencil_report_sha256"] != hashlib.sha256(args.report.read_bytes()).hexdigest():
+    if (
+        certificate["stencil_report_sha256"]
+        != hashlib.sha256(args.report.read_bytes()).hexdigest()
+    ):
         raise ValueError("Independent certificate belongs to another stencil report")
-    if report["anchor_gate"] != "pass" or report["midpoint_stencil"]["gate"] != "pass" or certificate["gate"] != "pass":
+    if (
+        report["anchor_gate"] != "pass"
+        or report["midpoint_stencil"]["gate"] != "pass"
+        or certificate["gate"] != "pass"
+    ):
         raise ValueError("Moment data has a failed numerical gate")
     if len(certificate["cases"]) < 8:
         raise ValueError("Independent worst-sample certificate is incomplete")
-    payload = b"".join(struct.pack("<2f", *pair)
-                       for pair in table["loss_and_bias"] + table["mean_loss_and_bias"])
-    if len(payload) != size or hashlib.sha256(payload).hexdigest() != table["payload_sha256"]:
+    payload = b"".join(
+        struct.pack("<2f", *pair)
+        for pair in table["loss_and_bias"] + table["mean_loss_and_bias"]
+    )
+    if (
+        len(payload) != size
+        or hashlib.sha256(payload).hexdigest() != table["payload_sha256"]
+    ):
         raise ValueError("Moment payload changed during packaging")
-    manifest = {"schema": 1, "model_revision": 1,
-                "view_nodes": table["view_nodes"], "roughness_nodes": table["roughness_nodes"],
-                "format": "RG32Float", "payload_bytes": size,
-                "payload_sha256": table["payload_sha256"],
-                "generator_sha256": table["generator_sha256"],
-                "packager_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-                "numerical_certificate": {"anchors_and_stencil": report,
-                                          "independent_worst_samples": certificate},
-                "qualification_scope": "Sampled moment-data evidence; native BRDF and continuous-domain qualification are separate"}
+    manifest = {
+        "schema": 1,
+        "model_revision": 1,
+        "view_nodes": table["view_nodes"],
+        "roughness_nodes": table["roughness_nodes"],
+        "format": "RG32Float",
+        "payload_bytes": size,
+        "payload_sha256": table["payload_sha256"],
+        "generator_sha256": table["generator_sha256"],
+        "packager_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "numerical_certificate": {
+            "anchors_and_stencil": report,
+            "independent_worst_samples": certificate,
+        },
+        "qualification_scope": "Sampled moment-data evidence; native BRDF and continuous-domain qualification are separate",
+    }
     args.output.mkdir(parents=True, exist_ok=True)
     (args.output / "GgxModel1.bin").write_bytes(payload)
-    (args.output / "GgxModel1.json").write_text(encode_manifest(manifest), encoding="utf-8", newline="\n")
+    (args.output / "GgxModel1.json").write_text(
+        encode_manifest(manifest), encoding="utf-8", newline="\n"
+    )
 
 
 def embed(args):
     manifest = json.loads(args.manifest.read_text())
     payload = args.payload.read_bytes()
     width, height = manifest["view_nodes"], manifest["roughness_nodes"]
-    if manifest["schema"] != 1 or manifest["model_revision"] != 1 or manifest["format"] != "RG32Float":
+    if (
+        manifest["schema"] != 1
+        or manifest["model_revision"] != 1
+        or manifest["format"] != "RG32Float"
+    ):
         raise ValueError("Unsupported embedded moment model")
-    if len(payload) != (width*height + height)*8 or len(payload) != manifest["payload_bytes"]:
+    if (
+        len(payload) != (width * height + height) * 8
+        or len(payload) != manifest["payload_bytes"]
+    ):
         raise ValueError("Embedded moment payload is incomplete")
     digest = hashlib.sha256(payload).hexdigest()
     if digest != manifest["payload_sha256"]:
         raise ValueError("Embedded moment payload hash mismatch")
     certificate = manifest["numerical_certificate"]
-    if certificate["anchors_and_stencil"]["anchor_gate"] != "pass" or certificate["anchors_and_stencil"]["midpoint_stencil"]["gate"] != "pass" or certificate["independent_worst_samples"]["gate"] != "pass":
+    if (
+        certificate["anchors_and_stencil"]["anchor_gate"] != "pass"
+        or certificate["anchors_and_stencil"]["midpoint_stencil"]["gate"] != "pass"
+        or certificate["independent_worst_samples"]["gate"] != "pass"
+    ):
         raise ValueError("Embedded model lacks its passing numerical evidence")
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", newline="\n") as stream:
-        stream.write("// Generated by tools/vortex/BuildGgxMomentData.py. Do not edit.\n#pragma once\n")
+        stream.write(
+            "// Generated by tools/vortex/BuildGgxMomentData.py. Do not edit.\n#pragma once\n"
+        )
         stream.write("#include <array>\n#include <cstdint>\n")
         stream.write("namespace oxygen::vortex::lighting::internal::generated {\n")
-        stream.write(f"inline constexpr std::uint32_t kModelRevision = 1U;\ninline constexpr std::uint32_t kViewNodes = {width}U;\ninline constexpr std::uint32_t kRoughnessNodes = {height}U;\n")
-        stream.write("inline constexpr std::array<std::uint8_t, 32> kPayloadHash {" + ",".join(f"0x{value:02x}" for value in bytes.fromhex(digest)) + "};\n")
+        stream.write(
+            f"inline constexpr std::uint32_t kModelRevision = 1U;\ninline constexpr std::uint32_t kViewNodes = {width}U;\ninline constexpr std::uint32_t kRoughnessNodes = {height}U;\n"
+        )
+        stream.write(
+            "inline constexpr std::array<std::uint8_t, 32> kPayloadHash {"
+            + ",".join(f"0x{value:02x}" for value in bytes.fromhex(digest))
+            + "};\n"
+        )
         stream.write("alignas(16) inline constexpr std::uint32_t kMomentWords[] = {\n")
         for index, (word,) in enumerate(struct.iter_unpack("<I", payload)):
             stream.write(f"0x{word:08x}U,")

@@ -4,12 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "DemoShell/Services/DefaultSceneLighting.h"
-
 #include <cmath>
 #include <memory>
 #include <string>
 
+#include "DemoShell/Services/DefaultSceneLighting.h"
 #include <glm/common.hpp>
 #include <glm/ext/quaternion_trigonometric.hpp>
 #include <glm/geometric.hpp>

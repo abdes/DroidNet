@@ -6,12 +6,12 @@
 
 #pragma once
 
-#include <Oxygen/OxCo/Detail/GetAwaiter.h>
-#include <Oxygen/OxCo/TaskCancelledException.h>
-
 #include <exception>
 #include <type_traits>
 #include <variant>
+
+#include <Oxygen/OxCo/Detail/GetAwaiter.h>
+#include <Oxygen/OxCo/TaskCancelledException.h>
 
 namespace oxygen::co::detail {
 

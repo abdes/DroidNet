@@ -4,13 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <windows.h>
+
 #include <algorithm>
 
 #include <dxgiformat.h>
-#include <windows.h>
-#include <wrl/client.h>
-
 #include <fmt/format.h>
+#include <wrl/client.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
@@ -77,8 +77,8 @@ auto SwapChain::Present() const -> void
     : 0U;
   {
     const auto* scope_name = sync_interval != 0U ? "D3D12.Present.VSync"
-      : present_flags != 0U ? "D3D12.Present.Tearing"
-                           : "D3D12.Present.Immediate";
+      : present_flags != 0U                      ? "D3D12.Present.Tearing"
+                                                 : "D3D12.Present.Immediate";
     oxygen::profiling::CpuProfileScope present_scope(
       scope_name, oxygen::profiling::ProfileCategory::kSynchronization);
     ThrowOnFailed(swap_chain_->Present(sync_interval, present_flags));
@@ -149,7 +149,8 @@ auto SwapChain::CreateSwapChain() -> void
     auto create_desc = swap_chain_desc;
     HRESULT hr = graphics_->GetFactory()->CreateSwapChainForHwnd(
       command_queue_, // Yes, the command queue, for D3D12
-      window_handle, &create_desc, nullptr, nullptr, factory_output.ReleaseAndGetAddressOf());
+      window_handle, &create_desc, nullptr, nullptr,
+      factory_output.ReleaseAndGetAddressOf());
     if (FAILED(hr) && create_desc.Flags != 0U) {
       LOG_F(WARNING,
         "CreateSwapChainForHwnd failed with flags=0x{:X}; retrying without "
@@ -157,7 +158,8 @@ auto SwapChain::CreateSwapChain() -> void
         create_desc.Flags);
       create_desc.Flags = 0U;
       hr = graphics_->GetFactory()->CreateSwapChainForHwnd(command_queue_,
-        window_handle, &create_desc, nullptr, nullptr, factory_output.ReleaseAndGetAddressOf());
+        window_handle, &create_desc, nullptr, nullptr,
+        factory_output.ReleaseAndGetAddressOf());
     }
     if (FAILED(hr)) {
       LOG_F(ERROR,
@@ -181,7 +183,8 @@ auto SwapChain::CreateSwapChain() -> void
       window_handle, DXGI_MWA_NO_ALT_ENTER));
     Microsoft::WRL::ComPtr<dx::ISwapChain> swap_chain;
     ThrowOnFailed(factory_output.As(&swap_chain),
-      "The engine swap-chain interface is required for native back-buffer tracking");
+      "The engine swap-chain interface is required for native back-buffer "
+      "tracking");
     swap_chain_ = swap_chain.Detach();
     current_back_buffer_index_ = swap_chain_->GetCurrentBackBufferIndex();
   } catch (const std::exception& e) {

@@ -64,9 +64,9 @@ from renderdoc_ui_analysis import (  # noqa: E402
 
 
 REPORT_SUFFIX = "_vortex_static_skylight_report.txt"
-PROOF_MODE = os.environ.get(
-    "VORTEX_STATIC_SKYLIGHT_PROOF_MODE", "ibl-only"
-).strip().lower()
+PROOF_MODE = (
+    os.environ.get("VORTEX_STATIC_SKYLIGHT_PROOF_MODE", "ibl-only").strip().lower()
+)
 
 ENVIRONMENT_STATIC_DATA_BYTE_SIZE = 672
 INVALID_BINDLESS_INDEX = 0xFFFFFFFF
@@ -163,7 +163,9 @@ def append_output_samples(controller, report, rd, output_descriptor):
     report.append(f"scene_color_nonblack_verdict={str(max_luma > 0.001).lower()}")
     report.append(
         "scene_color_error={}".format(
-            "" if max_luma > 0.001 else "IBL-only SceneColor stayed black after static SkyLight draw"
+            ""
+            if max_luma > 0.001
+            else "IBL-only SceneColor stayed black after static SkyLight draw"
         )
     )
 
@@ -192,9 +194,7 @@ def append_pixel_history_samples(
     sampled_count = len(sample_points)
     nonblack_candidates = []
     for x, y in sample_points:
-        pixel_value = controller.PickPixel(
-            resource, x, y, sub, rd.CompType.Typeless
-        )
+        pixel_value = controller.PickPixel(resource, x, y, sub, rd.CompType.Typeless)
         pixel_rgba = float4_values(pixel_value)
         pixel_luma = luminance_rgb(pixel_rgba)
         if pixel_luma > 0.001:
@@ -206,9 +206,7 @@ def append_pixel_history_samples(
     directional_passed_count = 0
     both_history_count = 0
     for x, y, pixel_rgba, pixel_luma in nonblack_candidates[:max_history_samples]:
-        history = controller.PixelHistory(
-            resource, x, y, sub, rd.CompType.Typeless
-        )
+        history = controller.PixelHistory(resource, x, y, sub, rd.CompType.Typeless)
         static_mod = None
         directional_mod = None
         for mod in history:
@@ -220,9 +218,7 @@ def append_pixel_history_samples(
         if static_mod is None:
             report.append(
                 "static_skylight_sample_{:04d}_{:04d}=history:false;"
-                "after={};after_luma:{:.9g}".format(
-                    x, y, pixel_rgba, pixel_luma
-                )
+                "after={};after_luma:{:.9g}".format(x, y, pixel_rgba, pixel_luma)
             )
             continue
 
@@ -275,7 +271,9 @@ def append_pixel_history_samples(
     report.append(f"static_skylight_pixel_history_verdict={str(verdict).lower()}")
     report.append(
         "static_skylight_pixel_history_error={}".format(
-            "" if verdict else "Static SkyLight draw did not leave a non-black sampled pixel"
+            ""
+            if verdict
+            else "Static SkyLight draw did not leave a non-black sampled pixel"
         )
     )
 
@@ -323,7 +321,9 @@ def build_report(controller, report, loaded_capture_path, report_path):
     if point_scopes or spot_scopes:
         raise RuntimeError("Static SkyLight proof unexpectedly executed local lighting")
     if sky_scopes:
-        raise RuntimeError("Static SkyLight proof unexpectedly executed visual sky background")
+        raise RuntimeError(
+            "Static SkyLight proof unexpectedly executed visual sky background"
+        )
 
     static_draw = static_draws[0]
     controller.SetFrameEvent(static_draw.event_id, True)
@@ -339,12 +339,8 @@ def build_report(controller, report, loaded_capture_path, report_path):
     byte_size = int(safe_getattr(env_descriptor, "byteSize", 0) or 0)
     raw = controller.GetBufferData(env_resource, byte_offset, byte_size)
     blob = bytes(raw)
-    values_u32 = struct.unpack(
-        f"<{len(blob) // 4}I", blob[: (len(blob) // 4) * 4]
-    )
-    values_f32 = struct.unpack(
-        f"<{len(blob) // 4}f", blob[: (len(blob) // 4) * 4]
-    )
+    values_u32 = struct.unpack(f"<{len(blob) // 4}I", blob[: (len(blob) // 4) * 4])
+    values_f32 = struct.unpack(f"<{len(blob) // 4}f", blob[: (len(blob) // 4) * 4])
 
     sky_light_enabled = values_u32[SKY_LIGHT_ENABLED_U32]
     sky_light_source = values_u32[SKY_LIGHT_SOURCE_U32]
@@ -370,14 +366,18 @@ def build_report(controller, report, loaded_capture_path, report_path):
         f"sky_light_cubemap_slot_in_textures={str(in_textures_domain(cubemap_slot)).lower()}"
     )
     report.append(f"sky_light_diffuse_sh_slot={diffuse_sh_slot}")
-    report.append(f"sky_light_diffuse_sh_slot_valid={str(diffuse_sh_slot != INVALID_BINDLESS_INDEX).lower()}")
+    report.append(
+        f"sky_light_diffuse_sh_slot_valid={str(diffuse_sh_slot != INVALID_BINDLESS_INDEX).lower()}"
+    )
     report.append(f"sky_light_irradiance_map_slot={irradiance_map_slot}")
     report.append(f"sky_light_prefilter_map_slot={prefilter_map_slot}")
     report.append(f"sky_light_ibl_generation={ibl_generation}")
     report.append(f"sky_light_radiance_scale={radiance_scale:.9g}")
     report.append(f"sky_light_diffuse_intensity={diffuse_intensity:.9g}")
     report.append(f"sky_light_specular_intensity={specular_intensity:.9g}")
-    report.append("sky_light_tint={:.9g},{:.9g},{:.9g}".format(tint[0], tint[1], tint[2]))
+    report.append(
+        "sky_light_tint={:.9g},{:.9g},{:.9g}".format(tint[0], tint[1], tint[2])
+    )
 
     if sky_light_enabled != 1:
         raise RuntimeError("Static SkyLight draw did not receive enabled SkyLight")
@@ -386,7 +386,9 @@ def build_report(controller, report, loaded_capture_path, report_path):
     if radiance_scale <= 0.0 or diffuse_intensity <= 0.0:
         raise RuntimeError("Static SkyLight radiance/diffuse intensity is not positive")
     if prefilter_map_slot != INVALID_BINDLESS_INDEX:
-        raise RuntimeError("M08 static diffuse proof unexpectedly has specular prefilter product")
+        raise RuntimeError(
+            "M08 static diffuse proof unexpectedly has specular prefilter product"
+        )
 
     outputs = state.GetOutputTargets()
     report.append(f"static_skylight_output_count={len(outputs)}")

@@ -6,11 +6,10 @@
 
 #include <algorithm>
 
+#include "Physics/PhysicsDemoPanel.h"
 #include <imgui.h>
 
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
-
-#include "Physics/PhysicsDemoPanel.h"
 
 namespace oxygen::examples::physics_demo {
 

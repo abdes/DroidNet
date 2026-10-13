@@ -4,13 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "DemoShell/UI/GridPanel.h"
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
-
-#include "DemoShell/UI/GridPanel.h"
 
 namespace oxygen::examples::ui {
 

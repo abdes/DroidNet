@@ -76,9 +76,9 @@ This document and the implementation ledger are the final closure record.
    on 2026-10-06. No measurement or numeric budget is claimed. Shader evaluation
    and rendering hot paths must still retain their intended behavior.
 4. **Ordered-layer acceptance evidence — covered by existing native tests.**
-   [`DeterministicPlanningPreservesDeclaredLayerPriority`](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Test/Pak/PakPlanBuilder_test.cpp)
+   [`DeterministicPlanningPreservesDeclaredLayerPriority`](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/test/Pak/PakPlanBuilder_test.cpp)
    verifies that reversing conflicting inputs changes the winner.
-   [`IncrementalPatchRevertsReplacementAndPreservesDeletion`](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Test/Pak/PakPlanBuilder_test.cpp)
+   [`IncrementalPatchRevertsReplacementAndPreservesDeletion`](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/test/Pak/PakPlanBuilder_test.cpp)
    verifies that flattening the ordered layers preserves effective content,
    including a replacement and deletion.
 5. **Closure record — complete.** The approved scope decisions, prior test counts,

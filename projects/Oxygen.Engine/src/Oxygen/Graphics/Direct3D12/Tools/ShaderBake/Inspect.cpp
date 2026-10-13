@@ -16,7 +16,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/ShaderLibraryIO.h>
-
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Inspect.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {

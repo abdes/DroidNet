@@ -27,12 +27,21 @@ def certify_query(index, query, sampled):
     energy, bias = oracle.certify(query["roughness"], query["view_cosine"])
     e_mid, e_radius = oracle.export_ball(energy)
     b_mid, b_radius = oracle.export_ball(bias)
-    return {"selection_index": index, "roughness": query["roughness"],
-            "view_cosine": query["view_cosine"],
-            "E_midpoint": e_mid, "E_radius": e_radius,
-            "B_midpoint": b_mid, "B_radius": b_radius,
-            "energy_distance_bound": math.nextafter(abs(1-sampled[0]-e_mid)+e_radius, math.inf),
-            "bias_distance_bound": math.nextafter(abs(sampled[1]-b_mid)+b_radius, math.inf)}
+    return {
+        "selection_index": index,
+        "roughness": query["roughness"],
+        "view_cosine": query["view_cosine"],
+        "E_midpoint": e_mid,
+        "E_radius": e_radius,
+        "B_midpoint": b_mid,
+        "B_radius": b_radius,
+        "energy_distance_bound": math.nextafter(
+            abs(1 - sampled[0] - e_mid) + e_radius, math.inf
+        ),
+        "bias_distance_bound": math.nextafter(
+            abs(sampled[1] - b_mid) + b_radius, math.inf
+        ),
+    }
 
 
 def main():
@@ -51,36 +60,54 @@ def main():
     stencil = json.loads(args.stencil_report.read_text())
     if stencil["candidate_sha256"] != hashlib.sha256(candidate_bytes).hexdigest():
         parser.error("Stencil report belongs to another candidate")
-    queries = stencil["midpoint_stencil"]["worst_queries"][:args.count]
+    queries = stencil["midpoint_stencil"]["worst_queries"][: args.count]
     if len(queries) != args.count:
         parser.error("Insufficient ranked stencil queries")
     cases = []
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        pending = [pool.submit(certify_query, index, query,
-                               sample_directional(table, query["roughness"], query["view_cosine"]))
-                   for index, query in enumerate(queries)]
+        pending = [
+            pool.submit(
+                certify_query,
+                index,
+                query,
+                sample_directional(table, query["roughness"], query["view_cosine"]),
+            )
+            for index, query in enumerate(queries)
+        ]
         for future in as_completed(pending):
             case = future.result()
             cases.append(case)
-            print(f"certified query {case['selection_index']}: r={case['roughness']} mu={case['view_cosine']}", flush=True)
+            print(
+                f"certified query {case['selection_index']}: r={case['roughness']} mu={case['view_cosine']}",
+                flush=True,
+            )
     cases.sort(key=lambda case: case["selection_index"])
-    maximum = max(max(case["energy_distance_bound"], case["bias_distance_bound"])
-                  for case in cases)
-    report = {"model_revision": 1,
-              "candidate_sha256": hashlib.sha256(candidate_bytes).hexdigest(),
-              "payload_sha256": table["payload_sha256"],
-              "stencil_report_sha256": hashlib.sha256(args.stencil_report.read_bytes()).hexdigest(),
-              "generator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-              "oracle_sha256": hashlib.sha256(Path(oracle.__file__).read_bytes()).hexdigest(),
-              "sampler_sha256": hashlib.sha256(Path(inspector.__file__).read_bytes()).hexdigest(),
-              "python_flint_version": flint.__version__, "flint_version": flint.__FLINT_VERSION__,
-              "working_precision_bits": oracle.PRECISION_BITS,
-              "reference_radius_limit": oracle.RADIUS_LIMIT,
-              "moment_budget": MOMENT_BUDGET,
-              "maximum_distance_bound": maximum,
-              "gate": "pass" if maximum <= MOMENT_BUDGET else "fail",
-              "scope": "Independent pointwise enclosures at the ranked worst stencil queries; not a continuous-domain certificate",
-              "cases": cases}
+    maximum = max(
+        max(case["energy_distance_bound"], case["bias_distance_bound"])
+        for case in cases
+    )
+    report = {
+        "model_revision": 1,
+        "candidate_sha256": hashlib.sha256(candidate_bytes).hexdigest(),
+        "payload_sha256": table["payload_sha256"],
+        "stencil_report_sha256": hashlib.sha256(
+            args.stencil_report.read_bytes()
+        ).hexdigest(),
+        "generator_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "oracle_sha256": hashlib.sha256(Path(oracle.__file__).read_bytes()).hexdigest(),
+        "sampler_sha256": hashlib.sha256(
+            Path(inspector.__file__).read_bytes()
+        ).hexdigest(),
+        "python_flint_version": flint.__version__,
+        "flint_version": flint.__FLINT_VERSION__,
+        "working_precision_bits": oracle.PRECISION_BITS,
+        "reference_radius_limit": oracle.RADIUS_LIMIT,
+        "moment_budget": MOMENT_BUDGET,
+        "maximum_distance_bound": maximum,
+        "gate": "pass" if maximum <= MOMENT_BUDGET else "fail",
+        "scope": "Independent pointwise enclosures at the ranked worst stencil queries; not a continuous-domain certificate",
+        "cases": cases,
+    }
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(f"Independent sample gate {report['gate']}: maximum distance {maximum:.9g}")
     return 0 if report["gate"] == "pass" else 1

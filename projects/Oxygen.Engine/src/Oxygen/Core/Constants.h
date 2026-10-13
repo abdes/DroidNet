@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat3x3.hpp>

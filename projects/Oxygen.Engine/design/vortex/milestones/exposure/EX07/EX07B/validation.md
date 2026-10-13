@@ -32,7 +32,7 @@ physical repairs, scalability and final qualification remain C–F obligations.
 
 ## Independent moment implementation
 
-`src/Oxygen/Vortex/Test/Lighting/Reference/GgxMoments.{h,cpp}` evaluates the
+`src/Oxygen/Vortex/test/Lighting/Reference/GgxMoments.{h,cpp}` evaluates the
 correlated-GGX directional albedo E and Schlick moment B in double precision.
 The separate `Oxygen.Vortex.LightingReference.Tests` target depends on Testing
 and base utilities, without linking Vortex or importing production lighting,
@@ -90,7 +90,7 @@ command use the same target name and test matrix.
 
 The versioned [generator](../../../../../../tools/vortex/GenerateGgxEndpointReference.py)
 uses mpmath 1.3.0 tanh-sinh integration at 60 and 90 decimal digits. Its
-[generated data](../../../../../../src/Oxygen/Vortex/Test/Lighting/Reference/GgxEndpointReference.json)
+[generated data](../../../../../../src/Oxygen/Vortex/test/Lighting/Reference/GgxEndpointReference.json)
 contains normal-view and grazing-view E/B anchors for roughness
 0.045, 0.1, 0.25, 0.5, 0.75 and 1. It records its source hash, model revision,
 precision disagreement and the quadrature's reported error estimates.

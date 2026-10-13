@@ -20,9 +20,7 @@ def _normalize_heaps(raw_heaps: Any) -> Dict[str, Dict[str, Any]]:
             continue
         heap_id = heap.get("id")
         if not heap_id:
-            raise ValueError(
-                "D3D12 heap entry missing required 'id' field"
-            )
+            raise ValueError("D3D12 heap entry missing required 'id' field")
         if heap_id in heaps:
             raise ValueError(f"Duplicate D3D12 heap id '{heap_id}'")
         heaps[str(heap_id)] = heap
@@ -36,9 +34,7 @@ def _normalize_tables(raw_tables: Any) -> Dict[str, Dict[str, Any]]:
             continue
         table_id = table.get("id")
         if not table_id:
-            raise ValueError(
-                "D3D12 table entry missing required 'id' field"
-            )
+            raise ValueError("D3D12 table entry missing required 'id' field")
         if table_id in tables:
             raise ValueError(f"Duplicate D3D12 table id '{table_id}'")
         tables[str(table_id)] = table
@@ -54,13 +50,9 @@ def _normalize_domain_realizations(
             continue
         domain = realization.get("domain")
         if not domain:
-            raise ValueError(
-                "D3D12 domain_realization missing required 'domain' field"
-            )
+            raise ValueError("D3D12 domain_realization missing required 'domain' field")
         if domain in realizations:
-            raise ValueError(
-                f"Duplicate D3D12 domain realization for '{domain}'"
-            )
+            raise ValueError(f"Duplicate D3D12 domain realization for '{domain}'")
         realizations[str(domain)] = realization
     return realizations
 
@@ -80,8 +72,7 @@ def _validate_heap_entries(
             expected_vis = "gpu" if shader_visible else "cpu"
             if heap_vis not in ("gpu", "cpu"):
                 raise ValueError(
-                    f"D3D12 heap '{name}' visibility suffix must be 'gpu' or "
-                    "'cpu'"
+                    f"D3D12 heap '{name}' visibility suffix must be 'gpu' or 'cpu'"
                 )
             if heap_type_from_id != heap_type:
                 raise ValueError(
@@ -96,8 +87,7 @@ def _validate_heap_entries(
 
         if heap_type in ("RTV", "DSV") and shader_visible:
             raise ValueError(
-                f"D3D12 heap '{name}' type '{heap_type}' cannot be "
-                "shader_visible"
+                f"D3D12 heap '{name}' type '{heap_type}' cannot be shader_visible"
             )
         if shader_visible and heap_type not in ("CBV_SRV_UAV", "SAMPLER"):
             raise ValueError(
@@ -151,8 +141,7 @@ def _validate_tables(
         if descriptor_kind == "SAMPLER":
             if heap_type != "SAMPLER":
                 raise ValueError(
-                    f"D3D12 table '{table_id}' kind SAMPLER must use a "
-                    "SAMPLER heap"
+                    f"D3D12 table '{table_id}' kind SAMPLER must use a SAMPLER heap"
                 )
         else:
             if heap_type != "CBV_SRV_UAV":
@@ -170,9 +159,7 @@ def _validate_domain_realizations(
 ) -> None:
     missing = sorted(set(domains_by_id) - set(realizations))
     if missing:
-        raise ValueError(
-            f"D3D12 strategy is missing domain realizations for {missing}"
-        )
+        raise ValueError(f"D3D12 strategy is missing domain realizations for {missing}")
 
     intervals_by_heap: Dict[str, List[Tuple[int, int, str]]] = {}
 
@@ -180,8 +167,7 @@ def _validate_domain_realizations(
         domain = domains_by_id.get(domain_id)
         if domain is None:
             raise ValueError(
-                f"D3D12 domain realization references unknown ABI domain "
-                f"'{domain_id}'"
+                f"D3D12 domain realization references unknown ABI domain '{domain_id}'"
             )
 
         table_id = str(realization.get("table"))
@@ -245,9 +231,7 @@ def validate_d3d12_backend(
     strategy = backend_doc.get("strategy") or {}
     heaps = _normalize_heaps(strategy.get("heaps"))
     tables = _normalize_tables(strategy.get("tables"))
-    realizations = _normalize_domain_realizations(
-        strategy.get("domain_realizations")
-    )
+    realizations = _normalize_domain_realizations(strategy.get("domain_realizations"))
 
     ranges = _validate_heap_entries(heaps)
     _check_global_heap_overlaps(ranges)
@@ -278,9 +262,7 @@ def build_d3d12_strategy_json(heaps: Dict[str, Any]) -> Dict[str, Any]:
             "shader_visible": shader_vis,
             "allow_growth": bool(heap.get("allow_growth", False)),
             "growth_factor": float(heap.get("growth_factor", 0.0)),
-            "max_growth_iterations": int(
-                heap.get("max_growth_iterations", 0)
-            ),
+            "max_growth_iterations": int(heap.get("max_growth_iterations", 0)),
             "base_index": int(heap.get("base_index", 0)),
         }
         debug_name = heap.get("debug_name")

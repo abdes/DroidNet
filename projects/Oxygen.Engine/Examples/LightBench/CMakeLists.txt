@@ -105,22 +105,22 @@ target_link_libraries(
 )
 
 if(OXYGEN_BUILD_UI_TESTS)
-  target_sources(${META_MODULE_TARGET} PRIVATE "Test/Widgets_ui.cpp")
+  target_sources(${META_MODULE_TARGET} PRIVATE "test/Widgets_ui.cpp")
 endif()
 
 if(TARGET oxygen-vortex-exposure-test-support)
   include(GTestHelpers)
   set(
     lightbench_reference_dir
-    "${PROJECT_SOURCE_DIR}/src/Oxygen/Vortex/Test/Lighting/Reference"
+    "${PROJECT_SOURCE_DIR}/src/Oxygen/Vortex/test/Lighting/Reference"
   )
   gtest_program(
     "Oxygen.Examples.LightBench.Tests"
     SOURCES
-      "Test/Reference_test.cpp"
-      "Test/Settings_test.cpp"
-      "Test/SettingsFile_test.cpp"
-      "Test/ConsoleBindings_test.cpp"
+      "test/Reference_test.cpp"
+      "test/Settings_test.cpp"
+      "test/SettingsFile_test.cpp"
+      "test/ConsoleBindings_test.cpp"
       "LightBenchConsoleBindings.cpp"
       "${lightbench_reference_dir}/GgxBrdf.cpp"
       "${lightbench_reference_dir}/GgxMoments.cpp"

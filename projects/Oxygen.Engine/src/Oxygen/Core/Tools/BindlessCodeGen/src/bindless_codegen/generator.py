@@ -116,14 +116,19 @@ def _format_json(value):
     scalar = r'(?:"(?:[^"\\]|\\.)*"|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null)'
     pattern = re.compile(
         r'^(?P<prefix> *(?:"(?:[^"\\]|\\.)*": )?)(?P<array>\[\s*'
-        + scalar + r'(?:\s*,\s*' + scalar + r')*\s*\])(?P<comma>,?)$',
+        + scalar
+        + r"(?:\s*,\s*"
+        + scalar
+        + r")*\s*\])(?P<comma>,?)$",
         re.MULTILINE,
     )
 
     def compact(match):
-        candidate = (match["prefix"]
-                     + json.dumps(json.loads(match["array"]), separators=(", ", ": "))
-                     + match["comma"])
+        candidate = (
+            match["prefix"]
+            + json.dumps(json.loads(match["array"]), separators=(", ", ": "))
+            + match["comma"]
+        )
         if len(candidate) <= 80:
             return candidate
         return match.group()
@@ -284,9 +289,7 @@ def validate_authored_model(doc):
     index_spaces = abi.get("index_spaces", []) or []
     domains = abi.get("domains", []) or []
     domains_mod.validate_abi_domains(index_spaces, domains)
-    domains_mod.validate_static_samplers(
-        abi.get("static_samplers", []) or [], domains
-    )
+    domains_mod.validate_static_samplers(abi.get("static_samplers", []) or [], domains)
     domains_by_id = {str(d.get("id")): d for d in domains}
 
     backends = doc.get("backends", {}) or {}
@@ -400,9 +403,7 @@ def generate(
     # Enforce semantic versioning presence on spec (meta.version)
     meta = doc.get("meta", {}) or {}
     src_ver = meta.get("version")
-    if not isinstance(src_ver, str) or not re.match(
-        r"^\d+\.\d+\.\d+$", src_ver
-    ):
+    if not isinstance(src_ver, str) or not re.match(r"^\d+\.\d+\.\d+$", src_ver):
         raise ValueError(
             "meta.version must be a semantic version string 'major.minor.patch'"
         )
@@ -415,12 +416,10 @@ def generate(
     mdl = model_mod.build_model(doc)
     defaults = doc.get("defaults", {})
     invalid = (
-        mdl.defaults.invalid_index
-        if mdl
-        else defaults.get("invalid_index", 0xFFFFFFFF)
+        mdl.defaults.invalid_index if mdl else defaults.get("invalid_index", 0xFFFFFFFF)
     )
-    domains = ((doc.get("abi") or {}).get("domains") or [])
-    d3d12_backend = ((doc.get("backends") or {}).get("d3d12") or {})
+    domains = (doc.get("abi") or {}).get("domains") or []
+    d3d12_backend = (doc.get("backends") or {}).get("d3d12") or {}
     root_sig = d3d12_backend.get("root_signature", []) or []
     # Determine timestamp string according to strategy
     if ts_strategy == "omit":
@@ -553,14 +552,12 @@ def generate(
         strategy_with_meta.update(d3d12_strategy_json)
         d3d12_strategy_json = strategy_with_meta
 
-    vulkan_backend = ((doc.get("backends") or {}).get("vulkan") or {})
+    vulkan_backend = (doc.get("backends") or {}).get("vulkan") or {}
     vulkan_strategy_doc = vulkan_backend.get("strategy") or {}
     vulkan_strategy_json = {}
     if validated["vulkan"]["bindings"]:
         rep.progress("Building Vulkan strategy JSON")
-        vulkan_strategy_json = vk_mod.build_vulkan_strategy_json(
-            vulkan_strategy_doc
-        )
+        vulkan_strategy_json = vk_mod.build_vulkan_strategy_json(vulkan_strategy_doc)
         strategy_with_meta = {
             "$meta": {
                 "source": src_rel,
@@ -796,9 +793,7 @@ def generate(
                     if _normalize_generated_timestamps(
                         old
                     ) == _normalize_generated_timestamps(content):
-                        rep.debug(
-                            "Preserving existing timestamp for %s", _short(path)
-                        )
+                        rep.debug("Preserving existing timestamp for %s", _short(path))
                         files[path] = old
         except Exception:
             # If anything goes wrong, skip preservation for this file

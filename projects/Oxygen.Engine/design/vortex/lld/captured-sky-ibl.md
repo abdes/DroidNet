@@ -726,7 +726,7 @@ owns acceptance results; historical VTX-M08 captures retain their original scope
 - Local Oxygen `Graphics/Common/Graphics.h:185–188` and
   `Graphics/Common/Internal/Commander.cpp:48–77,117–143`: recorder destruction
   submits immediately by default; deferred same-queue lists retain order.
-  `Graphics/Direct3D12/Test/SubmitOrderedQueueActions_test.cpp` covers submission
+  `Graphics/Direct3D12/test/SubmitOrderedQueueActions_test.cpp` covers submission
   versus completion and ordered queue actions. These existing mechanisms support
   same-frame producer/consumer ordering and retained GPU readers.
 - Local UE 5.7 `ReflectionEnvironmentRealTimeCapture.cpp:415,913–949`:

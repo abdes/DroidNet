@@ -66,11 +66,15 @@ REPORT_SUFFIX = "_save_all_skyview_probe.txt"
 OUTPUT_DIR_ENV = "OXYGEN_RENDERDOC_OUTPUT_DIR"
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     output_dir_value = os.environ.get(OUTPUT_DIR_ENV, "").strip()
     if not output_dir_value:
-        raise RuntimeError("Set OXYGEN_RENDERDOC_OUTPUT_DIR to the destination directory.")
+        raise RuntimeError(
+            "Set OXYGEN_RENDERDOC_OUTPUT_DIR to the destination directory."
+        )
     output_dir = Path(output_dir_value).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -85,7 +89,11 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         name = resources.get(str(resource_id), str(resource_id))
         width = int(safe_getattr(desc, "width", 0) or 0)
         height = int(safe_getattr(desc, "height", 0) or 0)
-        if name == "Vortex.Environment.AtmosphereSkyViewLut" and width == 192 and height == 104:
+        if (
+            name == "Vortex.Environment.AtmosphereSkyViewLut"
+            and width == 192
+            and height == 104
+        ):
             matches.append((resource_id, desc))
 
     report.append(f"match_count={len(matches)}")
@@ -105,7 +113,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         report.append(f"texture_{index}_resource_id={resource_id}")
         report.append(f"texture_{index}_output={output_file}")
         report.append(f"texture_{index}_saved_exists={output_file.exists()}")
-        report.append(f"texture_{index}_saved_size={(output_file.stat().st_size if output_file.exists() else 0)}")
+        report.append(
+            f"texture_{index}_saved_size={(output_file.stat().st_size if output_file.exists() else 0)}"
+        )
 
 
 def main():

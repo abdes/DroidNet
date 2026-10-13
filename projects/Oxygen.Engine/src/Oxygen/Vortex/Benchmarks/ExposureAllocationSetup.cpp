@@ -28,8 +28,8 @@
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
-#include <Oxygen/Vortex/Test/Fixtures/RendererPublicationProbe.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
+#include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
 
 namespace oxygen::vortex::testing::exposure {
 

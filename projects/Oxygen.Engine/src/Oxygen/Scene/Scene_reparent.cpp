@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Scene.h"
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Scene/Detail/Scene_safecall_impl.h>

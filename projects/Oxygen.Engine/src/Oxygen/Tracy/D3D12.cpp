@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Tracy/D3D12.h>
-
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -14,6 +12,8 @@
 
 #include <tracy/Tracy.hpp>
 #include <tracy/TracyD3D12.hpp>
+
+#include <Oxygen/Tracy/D3D12.h>
 
 namespace oxygen::tracy::d3d12 {
 namespace {

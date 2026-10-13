@@ -28,7 +28,7 @@ Validated prerequisites:
 - Live example entry points already include `<Oxygen/Vortex/Renderer.h>` for
   the inspected examples; no source directory named `src/Oxygen/Renderer`
   exists in the current source tree.
-- `src/Oxygen/Vortex/Test/Link_test.cpp` constructs `oxygen::vortex::Renderer`
+- `src/Oxygen/Vortex/test/Link_test.cpp` constructs `oxygen::vortex::Renderer`
   with an empty capability set and exercises frame lifecycle hooks.
 - `src/Oxygen/Vortex/CMakeLists.txt` links `oxygen::imgui` privately. This is
   allowed UI infrastructure, not a forbidden legacy renderer seam.

@@ -203,7 +203,7 @@ target_link_libraries(oxygen-profiling-gpu INTERFACE ${META_MODULE_TARGET})
 # ------------------------------------------------------------------------------
 
 if(OXYGEN_BUILD_TESTS)
-  add_subdirectory("Test")
+  add_subdirectory("test")
 endif()
 
 # ==============================================================================

@@ -73,13 +73,18 @@ def resolve_scope_name(capture_path: Path):
     del capture_path
     configured = os.environ.get("OXYGEN_RENDERDOC_PASS_NAME", "").strip()
     if not configured:
-        raise RuntimeError("Set OXYGEN_RENDERDOC_PASS_NAME to the scope name to inspect.")
+        raise RuntimeError(
+            "Set OXYGEN_RENDERDOC_PASS_NAME to the scope name to inspect."
+        )
     return configured
 
 
 def find_first_draw(scope_name, action_records):
     for record in action_records:
-        if scope_name in record.path and record.name == "ID3D12GraphicsCommandList::DrawInstanced()":
+        if (
+            scope_name in record.path
+            and record.name == "ID3D12GraphicsCommandList::DrawInstanced()"
+        ):
             return record
     return None
 
@@ -95,7 +100,9 @@ def append_descriptor_fields(report, prefix, descriptor):
         report.append(f"{prefix}_{field}={safe_getattr(descriptor, field, None)}")
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     del report_path
     scope_name = resolve_scope_name(capture_path)
     action_records = collect_action_records(controller)

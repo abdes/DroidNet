@@ -35,8 +35,8 @@ def spec_with(
         "files": [
             {
                 "id": "test",
-                "cpp": "Oxygen/Test/Generated.Test.h",
-                "hlsl": "Test/Generated.Test.hlsli",
+                "cpp": "Oxygen/test/Generated.Test.h",
+                "hlsl": "test/Generated.Test.hlsli",
                 "namespace": "oxygen::test",
                 "constants": constants or [],
                 "structs": structs,
@@ -128,7 +128,9 @@ def test_constant_layout_starts_matrices_on_a_register() -> None:
         {"name": "d", "type": "float"},
         {"name": "m", "type": "float4x4"},
     ]
-    spec = parse_spec(spec_with([struct("Constants", "constant", 80, fields)]), BINDLESS)
+    spec = parse_spec(
+        spec_with([struct("Constants", "constant", 80, fields)]), BINDLESS
+    )
     assert spec.structs["Constants"].offsets[-1] == 16
 
     misplaced: list[dict[str, object]] = [
@@ -136,7 +138,9 @@ def test_constant_layout_starts_matrices_on_a_register() -> None:
         {"name": "m", "type": "float4x4"},
     ]
     with pytest.raises(ContractError, match="16-byte register"):
-        parse_spec(spec_with([struct("Constants", "constant", 68, misplaced)]), BINDLESS)
+        parse_spec(
+            spec_with([struct("Constants", "constant", 68, misplaced)]), BINDLESS
+        )
 
 
 def test_slots_name_a_known_domain() -> None:
@@ -231,7 +235,10 @@ def test_byte_records_emit_flattened_offsets_and_accessors() -> None:
     assert "static const uint OUTER_ITEMS_OFFSET = 16u;" in hlsl
     assert "static const uint OUTER_ITEMS_STRIDE = 16u;" in hlsl
     assert "static Outer LoadOuter(ByteAddressBuffer buffer, uint base)" in hlsl
-    assert "static void StoreOuter(RWByteAddressBuffer buffer, uint base, Outer value)" in hlsl
+    assert (
+        "static void StoreOuter(RWByteAddressBuffer buffer, uint base, Outer value)"
+        in hlsl
+    )
 
 
 def test_constant_buffers_bind_their_register() -> None:

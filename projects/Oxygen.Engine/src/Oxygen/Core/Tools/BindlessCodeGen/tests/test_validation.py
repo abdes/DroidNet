@@ -28,11 +28,7 @@ class TestValidationWithActualSchema:
         resolved = generator.find_schema(None, generator.__file__)
         if resolved is not None:
             return Path(resolved)
-        return (
-            Path(__file__).resolve().parents[3]
-            / "Meta"
-            / "Bindless.schema.json"
-        )
+        return Path(__file__).resolve().parents[3] / "Meta" / "Bindless.schema.json"
 
     def test_validate_with_actual_schema_success(self, actual_schema_path):
         if not actual_schema_path.exists():
@@ -146,9 +142,7 @@ class TestValidationEdgeCases:
     def test_validate_corrupted_schema_file(self, tmp_path):
         schema_path = tmp_path / "corrupt.json"
         schema_path.write_text("{ invalid json", encoding="utf-8")
-        with pytest.raises(
-            RuntimeError, match="Failed to load/validate schema"
-        ):
+        with pytest.raises(RuntimeError, match="Failed to load/validate schema"):
             generator.validate_input({"any": "data"}, schema_path)
 
     def test_validate_missing_jsonschema_module(self, monkeypatch, tmp_path):
@@ -156,9 +150,7 @@ class TestValidationEdgeCases:
 
         schema_path = tmp_path / "test.json"
         write_schema(schema_path, {"type": "object"})
-        with pytest.raises(
-            RuntimeError, match="jsonschema.*package is required"
-        ):
+        with pytest.raises(RuntimeError, match="jsonschema.*package is required"):
             generator.validate_input({"any": "data"}, schema_path)
 
 

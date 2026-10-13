@@ -71,7 +71,7 @@ Runtime precedence/tombstones specification is fixed to the following artifacts:
    - [`src/Oxygen/Content/AssetLoader.cpp`](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/AssetLoader.cpp)
    - [`src/Oxygen/Content/VirtualPathResolver.cpp`](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/VirtualPathResolver.cpp)
 6. Conformance tests (authoritative executable spec):
-   - `src/Oxygen/Content/Test/PatchResolution_test.cpp`
+   - `src/Oxygen/Content/test/PatchResolution_test.cpp`
    - existing resolver/loader tests updated to parity assertions.
 
 Module-boundary rule for this runtime helper:
@@ -129,7 +129,7 @@ Minimum contract:
 ### Deliverables
 
 1. Add `Pak/` subtree to cooker target in [`src/Oxygen/Cooker/CMakeLists.txt`](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Cooker/CMakeLists.txt).
-2. Add Pak test groups to [`src/Oxygen/Cooker/Test/CMakeLists.txt`](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Cooker/Test/CMakeLists.txt).
+2. Add Pak test groups to [`src/Oxygen/Cooker/test/CMakeLists.txt`](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Cooker/test/CMakeLists.txt).
 3. Freeze acceptance criteria in this file and `design/content-pipeline/pak-builder-api-specification.md` only.
 4. Document source-key determinism policy ownership at request-construction layer (CLI/tooling producing `PakBuildRequest::source_key`) and bind it to explicit test coverage:
    - deterministic derivation stability for identical normalized inputs,
@@ -410,11 +410,11 @@ Optional only if proven necessary and approved:
 6. `src/Oxygen/Content/Internal/ContentSourceRegistry.h/.cpp` (tombstone registration/storage)
 7. `src/Oxygen/Content/Docs/patch_resolution_contract.md`
 
-## Build/Test Wiring
+## Build/test Wiring
 
 1. [`src/Oxygen/Cooker/CMakeLists.txt`](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Cooker/CMakeLists.txt)
-2. [`src/Oxygen/Cooker/Test/CMakeLists.txt`](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Cooker/Test/CMakeLists.txt)
-3. [`src/Oxygen/Content/Test/CMakeLists.txt`](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/Test/CMakeLists.txt)
+2. [`src/Oxygen/Cooker/test/CMakeLists.txt`](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Cooker/test/CMakeLists.txt)
+3. [`src/Oxygen/Content/test/CMakeLists.txt`](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Content/test/CMakeLists.txt)
 4. [`src/Oxygen/Data/CMakeLists.txt`](/F:/projects/DroidNet/projects/Oxygen.Engine/src/Oxygen/Data/CMakeLists.txt)
 
 ## New/Changed (Data, shared models only)

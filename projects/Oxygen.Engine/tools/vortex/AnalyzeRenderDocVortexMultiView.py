@@ -88,11 +88,15 @@ def records_with_name_prefix(action_records, prefix):
 
 def records_under_prefix(action_records, prefix):
     prefix_with_sep = prefix + " > "
-    return [record for record in action_records if record.path.startswith(prefix_with_sep)]
+    return [
+        record for record in action_records if record.path.startswith(prefix_with_sep)
+    ]
 
 
 def count_work_records(records, name):
-    return sum(1 for record in records if record.name == name and is_work_action(record.flags))
+    return sum(
+        1 for record in records if record.name == name and is_work_action(record.flags)
+    )
 
 
 def format_bool(value):
@@ -154,7 +158,9 @@ def append_interleaved_order_check(report, label, earlier_records, later_records
     return ordered
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     action_records = collect_action_records(controller)
     stage3_scopes = records_with_name(action_records, STAGE3_SCOPE_NAME)
     stage9_scopes = records_with_name(action_records, STAGE9_SCOPE_NAME)
@@ -162,8 +168,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     for name in STAGE12_SCOPE_NAMES:
         stage12_scopes.extend(records_with_name(action_records, name))
     stage22_scopes = records_with_name(action_records, STAGE22_SCOPE_NAME)
-    compositing_scopes = records_with_name_prefix(action_records, COMPOSITING_SCOPE_PREFIX)
-    aux_consume_scopes = records_with_name_prefix(action_records, AUX_CONSUME_SCOPE_PREFIX)
+    compositing_scopes = records_with_name_prefix(
+        action_records, COMPOSITING_SCOPE_PREFIX
+    )
+    aux_consume_scopes = records_with_name_prefix(
+        action_records, AUX_CONSUME_SCOPE_PREFIX
+    )
 
     stage3_records = records_under_prefix(action_records, STAGE3_SCOPE_NAME)
     stage9_records = records_under_prefix(action_records, STAGE9_SCOPE_NAME)
@@ -179,12 +189,18 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
 
     stage3_view_count_match = len(stage3_scopes) >= EXPECTED_PROOF_SCENE_PASS_VIEW_COUNT
     stage9_view_count_match = len(stage9_scopes) >= EXPECTED_PROOF_VIEW_COUNT
-    stage12_view_count_match = len(stage12_scopes) >= EXPECTED_PROOF_SCENE_PASS_VIEW_COUNT
-    composition_view_count_match = len(unique_composited_view_ids) >= EXPECTED_PROOF_VIEW_COUNT
-    distinct_composition_outputs = len(composited_view_ids) == len(unique_composited_view_ids)
-    composition_work_count = count_work_records(compositing_records, DRAW_NAME) + count_work_records(
-        compositing_records, COPY_NAME
+    stage12_view_count_match = (
+        len(stage12_scopes) >= EXPECTED_PROOF_SCENE_PASS_VIEW_COUNT
     )
+    composition_view_count_match = (
+        len(unique_composited_view_ids) >= EXPECTED_PROOF_VIEW_COUNT
+    )
+    distinct_composition_outputs = len(composited_view_ids) == len(
+        unique_composited_view_ids
+    )
+    composition_work_count = count_work_records(
+        compositing_records, DRAW_NAME
+    ) + count_work_records(compositing_records, COPY_NAME)
     aux_consume_work_count = count_work_records(aux_consume_records, COPY_NAME)
     aux_consume_scope_match = len(aux_consume_scopes) >= 1
     aux_consume_work_match = aux_consume_work_count >= 1
@@ -205,9 +221,13 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(f"stage12_view_count_match={format_bool(stage12_view_count_match)}")
     report.append(f"stage22_scope_count={len(stage22_scopes)}")
     report.append(f"composition_scope_count={len(compositing_scopes)}")
-    report.append(f"composition_view_count_match={format_bool(composition_view_count_match)}")
+    report.append(
+        f"composition_view_count_match={format_bool(composition_view_count_match)}"
+    )
     report.append(f"composition_view_ids={','.join(unique_composited_view_ids)}")
-    report.append(f"distinct_composition_outputs={format_bool(distinct_composition_outputs)}")
+    report.append(
+        f"distinct_composition_outputs={format_bool(distinct_composition_outputs)}"
+    )
     report.append(f"composition_work_count={composition_work_count}")
     report.append(f"aux_consume_scope_count={len(aux_consume_scopes)}")
     report.append(f"aux_consume_scope_match={format_bool(aux_consume_scope_match)}")

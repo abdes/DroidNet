@@ -4,12 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Tracy/Cpu.h>
-
 #include <cstring>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+
+#include <Oxygen/Tracy/Cpu.h>
 
 extern "C" {
 #include <tracy/TracyC.h>

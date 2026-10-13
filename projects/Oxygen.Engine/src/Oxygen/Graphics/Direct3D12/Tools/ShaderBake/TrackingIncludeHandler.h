@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <windows.h>
+
 #include <atomic>
 #include <filesystem>
 #include <optional>
@@ -14,10 +16,8 @@
 #include <unordered_set>
 #include <vector>
 
-#include <unknwn.h>
-#include <windows.h>
-
 #include <dxcapi.h>
+#include <unknwn.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>

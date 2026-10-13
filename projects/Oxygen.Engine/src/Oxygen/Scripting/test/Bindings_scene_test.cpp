@@ -1,0 +1,1160 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include "ScriptingModule_test_fixture.h"
+#include <gtest/gtest.h>
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Span.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Vertex.h>
+#include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
+#include <Oxygen/Scene/Camera/Perspective.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scripting/Module/ScriptingModule.h>
+
+using oxygen::base::CheckedAt;
+
+namespace oxygen::scripting::test {
+class SceneBindingsTest : public ScriptingModuleTest { };
+
+namespace {
+
+  using oxygen::co::testing::TestEventLoop;
+
+  auto RunSceneMutationPhase(
+    ScriptingModule& module, observer_ptr<engine::FrameContext> context) -> void
+  {
+    TestEventLoop loop;
+    oxygen::co::Run(loop, module.OnSceneMutation(context));
+  }
+
+  auto ExpectMeshBuffers(const data::GeometryAsset& geometry,
+    const std::pair<std::vector<data::Vertex>, std::vector<uint32_t>>& expected)
+    -> void
+  {
+    const auto& mesh = geometry.MeshAt(oxygen::data::LodIndex {});
+    ASSERT_NE(mesh, nullptr);
+    const auto vertices = mesh->Vertices();
+    ASSERT_EQ(vertices.size(), expected.first.size());
+    for (size_t index = 0; index < vertices.size(); ++index) {
+      EXPECT_TRUE(data::StrictlyEqual(
+        CheckedAt(vertices, index), expected.first.at(index)))
+        << "vertex " << index;
+    }
+    const auto indices = mesh->IndexBuffer().AsU32();
+    ASSERT_EQ(indices.size(), expected.second.size());
+    for (size_t index = 0; index < indices.size(); ++index) {
+      EXPECT_EQ(CheckedAt(indices, index), expected.second.at(index))
+        << "index " << index;
+    }
+  }
+
+} // namespace
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationProceduralRoutesMatchAllCanonicalNativeMeshBuffers)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local assets = oxygen.assets
+  local kinds = {
+    cube = "Cube", subdivided_cube = "SubdividedCube", sphere = "Sphere",
+    capsule = "Capsule", icosphere = "IcoSphere", plane = "Plane",
+    cylinder = "Cylinder", cone = "Cone", torus = "Torus", quad = "Quad",
+    arrow_gizmo = "ArrowGizmo",
+  }
+  for kind, native in pairs(kinds) do
+    local geometries = {
+      assets.create_procedural_geometry(kind),
+      assets.create_procedural_geometry(kind, nil),
+      assets.create_procedural_geometry(kind, {}),
+      kind,
+      "proc/" .. kind,
+    }
+    for variant = 1, 5 do
+      local node = oxygen.scene.create_node(native .. "_" .. variant, nil)
+      if geometries[variant] == nil or not node:renderable_set_geometry(geometries[variant]) then
+        error("canonical procedural route failed: " .. native .. "_" .. variant)
+      end
+    end
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "canonical_procedural_routes" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "canonical_procedural_routes", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  ASSERT_FALSE(context.HasErrors());
+  const auto roots = scene->GetRootNodes();
+  ASSERT_EQ(roots.size(), 55U);
+  for (auto node : roots) {
+    const auto name = node.GetName();
+    SCOPED_TRACE(name);
+    const auto generator = name.substr(0, name.find('_'));
+    const auto expected
+      = data::GenerateMeshBuffers(generator + "/LuaParity", {});
+    if (!expected.has_value()) {
+      FAIL() << "Expected expected to contain a value";
+    }
+    const auto geometry = node.GetRenderable().GetGeometry();
+    ASSERT_NE(geometry, nullptr);
+    ExpectMeshBuffers(*geometry, *expected);
+  }
+}
+
+NOLINT_TEST_F(
+  SceneBindingsTest, OnSceneMutationProceduralNamedOptionsReachNativeFactories)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local requests = {
+    { "Capsule", "capsule", { hemisphere_segments = 4, radial_segments = 12, height = 4, radius = 0.75 } },
+    { "IcoSphere", "icosphere", { subdivision_level = 0 } },
+    { "SubdividedCube", "subdivided_cube", { segments = 3 } },
+    { "Torus", "torus", { major_segments = 12 } },
+  }
+  for _, request in ipairs(requests) do
+    local geometry = oxygen.assets.create_procedural_geometry(request[2], request[3])
+    local node = oxygen.scene.create_node(request[1], nil)
+    if geometry == nil or not node:renderable_set_geometry(geometry) then
+      error("named procedural options failed: " .. request[1])
+    end
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "procedural_named_options" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "procedural_named_options", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  ASSERT_FALSE(context.HasErrors());
+  const auto roots = scene->GetRootNodes();
+  ASSERT_EQ(roots.size(), 4U);
+  for (auto node : roots) {
+    const auto name = node.GetName();
+    SCOPED_TRACE(name);
+    const auto geometry = node.GetRenderable().GetGeometry();
+    ASSERT_NE(geometry, nullptr);
+    constexpr int kSegments = 12;
+    constexpr float kCapsuleRadius = 0.75F;
+    const auto expected
+      = [&] -> std::optional<
+              std::pair<std::vector<data::Vertex>, std::vector<uint32_t>>> {
+      if (name == "Capsule") {
+        return data::MakeCapsuleMeshAsset(4, kSegments, 4.0F, kCapsuleRadius);
+      }
+      if (name == "IcoSphere") {
+        return data::MakeIcoSphereMeshAsset(0);
+      }
+      if (name == "SubdividedCube") {
+        return data::MakeSubdividedCubeMeshAsset(3);
+      }
+      return data::MakeTorusMeshAsset(kSegments);
+    }();
+    if (!expected.has_value()) {
+      FAIL() << "Expected expected to contain a value";
+    }
+    ExpectMeshBuffers(*geometry, *expected);
+  }
+}
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationUnknownGeometryTokensReturnFalseAndRetainGeometry)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local node = oxygen.scene.create_node("GeometryRejection", nil)
+  if node:renderable_set_geometry("proc/unknown") ~= false or node:has_renderable() then
+    error("unknown token fabricated geometry")
+  end
+  if not node:renderable_set_geometry("capsule") then error("capsule failed") end
+  for _, token in ipairs({ "", "proc/unknown", "geo://cube_v1", "sphere2", "proc/sphere2" }) do
+    local ok, result = pcall(function() return node:renderable_set_geometry(token) end)
+    if not ok or result ~= false then error("unknown geometry token did not return false") end
+    if node:renderable_get_geometry() ~= "proc/capsule" then
+      error("failed geometry assignment replaced the previous capsule")
+    end
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "unknown_geometry_rejection" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+  auto scene = std::make_shared<scene::Scene>(
+    "unknown_geometry_rejection", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  ASSERT_FALSE(context.HasErrors());
+}
+
+NOLINT_TEST_F(
+  SceneBindingsTest, ExecuteScriptSceneBindingsExposeV1SceneModuleSurface)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+local scene = oxygen.scene
+if type(scene) ~= "table" then
+  error("expected oxygen.scene table")
+end
+local expected = {
+  "create_node", "destroy_node", "destroy_hierarchy", "reparent", "root_nodes",
+  "find_one", "find_many", "count", "exists", "query",
+  "has_environment", "get_environment", "ensure_environment", "clear_environment"
+}
+for i = 1, #expected do
+  local key = expected[i]
+  if type(scene[key]) ~= "function" then
+    error("expected scene." .. key .. " function")
+  end
+end
+
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_bindings_v1_surface" },
+  });
+
+  EXPECT_TRUE(result.ok) << result.message;
+}
+
+NOLINT_TEST_F(
+  SceneBindingsTest, ExecuteScriptSceneBindingsDoNotExportLegacySceneNames)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+local scene = oxygen.scene
+
+local function assert_legacy_removed(key)
+  local ok, value = pcall(function()
+    return scene[key]
+  end)
+  if ok then
+    if value ~= nil then
+      error("legacy scene." .. key .. " must be absent")
+    end
+    return
+  end
+  if type(value) ~= "string" or string.find(value, "removed in v1", 1, true) == nil then
+    error("legacy scene." .. key .. " unexpected error shape")
+  end
+end
+
+assert_legacy_removed("find")
+assert_legacy_removed("find_path")
+assert_legacy_removed("create")
+assert_legacy_removed("current")
+assert_legacy_removed("get_param")
+assert_legacy_removed("current_node")
+assert_legacy_removed("param")
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_bindings_legacy_absence" },
+  });
+
+  EXPECT_TRUE(result.ok) << result.message;
+}
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneEnvironmentBindingsSupportSystemRoundtrip)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local scene = oxygen.scene
+  local env = scene.ensure_environment()
+  if env == nil then error("missing env") end
+
+  local fog = env:ensure_fog()
+  fog:set_model("exponential_height")
+  if fog:get_model() ~= "exponential_height" then error("fog model") end
+  fog:set_max_opacity(0.5)
+  if math.abs(fog:get_max_opacity() - 0.5) > 0.0001 then error("fog opacity") end
+
+  local sky_light = env:ensure_sky_light()
+  sky_light:set({ source = "captured_scene", intensity_mul = 1.25, illuminance_lux = 12000 })
+  local sl = sky_light:get()
+  if sl.source ~= "captured_scene" then error("sky_light source") end
+  if math.abs(sl.intensity_mul - 1.25) > 0.0001 then error("sky_light intensity") end
+  if math.abs(sl.illuminance_lux - 12000) > 0.01 then error("sky_light illuminance") end
+
+  local sky_sphere = env:ensure_sky_sphere()
+  sky_sphere:set({ source = "solid_color", illuminance_lux = 15000 })
+  local ss = sky_sphere:get()
+  if math.abs(ss.illuminance_lux - 15000) > 0.01 then error("sky_sphere illuminance") end
+
+  local sky = env:ensure_sky_atmosphere()
+  sky:set({ planet_radius_meters = 7000000.0 })
+  local sa = sky:get()
+  if math.abs(sa.planet_radius_meters - 7000000.0) > 0.0001 then error("sky_atmosphere radius") end
+
+  local clouds = env:ensure_clouds()
+  clouds:set({ coverage = 0.42 })
+  local c = clouds:get()
+  if math.abs(c.coverage - 0.42) > 0.0001 then error("cloud coverage") end
+
+  local pp = env:ensure_post_process()
+  pp:set({ tone_mapper = "reinhard", exposure_mode = "manual", manual_exposure_ev = 8.0 })
+  local p = pp:get()
+  if p.tone_mapper ~= "reinhard" then error("tone mapper") end
+  if p.exposure_mode ~= "manual" then error("exposure mode") end
+  local settings = {
+    auto_exposure_low_percentile = 0.2,
+    auto_exposure_high_percentile = 0.8,
+    auto_exposure_min_log_luminance = -10,
+    auto_exposure_log_luminance_range = 20,
+    auto_exposure_target_luminance = 0.25,
+    auto_exposure_spot_meter_radius = 0.35,
+    auto_exposure_black_influence = 0.4,
+    auto_exposure_transition_distance_ev = 2.5,
+    auto_exposure_metering_mask = "9007199254740993",
+    auto_exposure_compensation_curve = {
+      {metered_ev = -4, compensation_ev = 1},
+      {metered_ev = 12, compensation_ev = -0.5},
+    },
+    display_gamma = 2.4,
+  }
+  assert(pp:set(settings))
+  p = pp:get()
+  for name, value in pairs(settings) do
+    if type(value) == "number" then
+      assert(math.abs(p[name] - value) < 0.0001, name)
+    end
+  end
+  assert(p.auto_exposure_metering_mask == "9007199254740993")
+  assert(#p.auto_exposure_compensation_curve == 2)
+  assert(p.auto_exposure_compensation_curve[2].compensation_ev == -0.5)
+  assert(pp:set(p), "complete snapshot roundtrip")
+  for _, invalid in ipairs({
+    {tone_mapper = "unknown", manual_exposure_ev = 10},
+    {exposure_mode = "unknown", manual_exposure_ev = 10},
+    {exposure_enabled = 1, manual_exposure_ev = 10},
+    {auto_exposure_low_percentile = 0.9, manual_exposure_ev = 10},
+    {auto_exposure_black_influence = 2, manual_exposure_ev = 10},
+    {auto_exposure_transition_distance_ev = 0, manual_exposure_ev = 10},
+    {auto_exposure_compensation_curve = {{metered_ev = 1, compensation_ev = 0}, {metered_ev = 1, compensation_ev = 1}}},
+    {auto_exposure_compensation_curve = {false}},
+    {auto_exposure_metering_mask = "18446744073709551616"},
+    {auto_exposure_metering_mask = 123},
+    {exposure_key = "12.5"},
+  }) do
+    local ok, reason = pp:set(invalid)
+    assert(not ok and type(reason) == "string")
+    assert(pp:get().manual_exposure_ev == 8, "invalid edit must be atomic")
+    assert(pp:get().auto_exposure_metering_mask == "9007199254740993")
+  end
+  assert(pp:set({auto_exposure_metering_mask = "0", auto_exposure_compensation_curve = {}}))
+  assert(pp:get().auto_exposure_metering_mask == "0")
+  assert(#pp:get().auto_exposure_compensation_curve == 0)
+
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_environment_roundtrip" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  if (context.HasErrors()) {
+    const auto errors = context.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+}
+
+NOLINT_TEST_F(SceneBindingsTest, OnSceneMutationSceneNodeScriptingBindingsWork)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local scene = oxygen.scene
+  local node = scene.create_node("ScriptHost", nil)
+  if node == nil then error("node create failed") end
+  if not node:attach_scripting() then error("attach_scripting failed") end
+  if not node:has_scripting() then error("has_scripting false") end
+
+  if node:scripting_slots_count() ~= 0 then error("slots initial mismatch") end
+  if not node:scripting_add_slot("scripts/test_runtime_slot.luau") then
+    error("scripting_add_slot failed")
+  end
+  if node:scripting_slots_count() ~= 1 then error("slots add mismatch") end
+
+  local slots = node:scripting_slots()
+  if #slots ~= 1 then error("slots view mismatch") end
+  local slot = slots[1]
+  if slot == nil then error("slot ref missing") end
+
+  if not node:scripting_set_param(slot, "speed", 12.5) then
+    error("set_param speed failed")
+  end
+  if not node:scripting_set_param(slot, "enabled", true) then
+    error("set_param enabled failed")
+  end
+  local speed = node:scripting_get_param(slot, "speed")
+  if type(speed) ~= "number" then error("speed type mismatch") end
+  if math.abs(speed - 12.5) > 0.0001 then error("speed value mismatch") end
+  local enabled = node:scripting_get_param(slot, "enabled")
+  if enabled ~= true then error("enabled value mismatch") end
+
+  if not node:scripting_remove_slot(slot) then error("remove slot failed") end
+  if node:scripting_slots_count() ~= 0 then error("slots remove mismatch") end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_node_scripting_roundtrip" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  const auto errors = context.GetErrors();
+  EXPECT_FALSE(context.HasErrors())
+    << (errors.empty() ? std::string("unknown scripting error")
+                       : errors.front().message);
+}
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneNodeScriptingRejectsTamperedSlotReference)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local scene = oxygen.scene
+  local node = scene.create_node("ScriptHostStale", nil)
+  if node == nil then error("node create failed") end
+  if not node:attach_scripting() then error("attach_scripting failed") end
+
+  if not node:scripting_add_slot("scripts/slot_a.luau") then
+    error("add slot a failed")
+  end
+  local slots_a = node:scripting_slots()
+  local slot = slots_a[1]
+  if slot == nil then error("missing slot") end
+
+  local tampered = { index = slot.index, __slot_ptr = nil }
+  if node:scripting_set_param(tampered, "x", 1.0) then
+    error("tampered slot unexpectedly accepted")
+  end
+  if node:scripting_get_param(tampered, "x") ~= nil then
+    error("tampered slot get should return nil")
+  end
+  local params = node:scripting_params(tampered)
+  if type(params) ~= "table" or #params ~= 0 then
+    error("tampered slot params should be empty table")
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_node_scripting_tampered_slot" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  if (context.HasErrors()) {
+    const auto errors = context.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+}
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneRenderableBindingsGeometryMaterialMarshallingWorks)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local scene = oxygen.scene
+  local node = scene.create_node("RenderableHost", nil)
+  if node == nil then error("node create failed") end
+
+  if not node:renderable_set_geometry("proc/cube") then
+    error("set geometry failed")
+  end
+  if not node:has_renderable() then error("has_renderable false") end
+
+  local geometry = node:renderable_get_geometry()
+  if geometry ~= "proc/cube" then error("geometry token mismatch") end
+
+  if not node:renderable_set_material_override(1, 1, "mat://override_v1") then
+    error("set material override failed")
+  end
+
+  local resolved_override = node:renderable_resolve_submesh_material(1, 1)
+  if resolved_override ~= "mat://override_v1" then
+    error("resolve override mismatch")
+  end
+
+  if not node:renderable_clear_material_override(1, 1) then
+    error("clear material override failed")
+  end
+
+  local resolved_default = node:renderable_resolve_submesh_material(1, 1)
+  if resolved_default == nil then error("resolved default material missing") end
+
+  local call_ok_bool, ok_bool = pcall(function()
+    return node:renderable_set_all_submeshes_visible(1)
+  end)
+  if not call_ok_bool then
+    error("set_all_submeshes_visible must not throw on invalid type")
+  end
+  if ok_bool then
+    error("expected boolean type check for set_all_submeshes_visible")
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_renderable_marshalling_roundtrip" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  if (context.HasErrors()) {
+    const auto errors = context.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+}
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneRenderableBindingsAcceptAssetsUserdataHandles)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local assets = oxygen.assets
+  local scene = oxygen.scene
+  local node = scene.create_node("RenderableUserdataHost", nil)
+  if node == nil then error("node create failed") end
+
+  local geometry = assets.create_procedural_geometry("cube")
+  if geometry == nil then error("procedural geometry missing") end
+  if geometry:type_name() ~= "GeometryAsset" then error("unexpected geometry type") end
+  if not node:renderable_set_geometry(geometry) then
+    error("set geometry userdata failed")
+  end
+
+  local got_geometry = node:renderable_get_geometry()
+  if got_geometry == nil then error("get geometry userdata missing") end
+  if got_geometry:type_name() ~= "GeometryAsset" then
+    error("get geometry userdata type mismatch")
+  end
+
+  local material = assets.create_default_material()
+  if material == nil then error("default material missing") end
+  if material:type_name() ~= "MaterialAsset" then error("unexpected material type") end
+  if not node:renderable_set_material_override(1, 1, material) then
+    error("set material userdata failed")
+  end
+
+  local resolved = node:renderable_resolve_submesh_material(1, 1)
+  if resolved == nil then error("resolved material userdata missing") end
+  if resolved:type_name() ~= "MaterialAsset" then
+    error("resolved material userdata type mismatch")
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_renderable_userdata_handles" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  if (context.HasErrors()) {
+    const auto errors = context.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+}
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneRenderableBindingsRejectWrongAssetsUserdataKinds)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local assets = oxygen.assets
+  local scene = oxygen.scene
+  local node = scene.create_node("RenderableWrongUserdataKinds", nil)
+  if node == nil then error("node create failed") end
+
+  local geometry = assets.create_procedural_geometry("cube")
+  local material = assets.create_default_material()
+  if geometry == nil or material == nil then
+    error("procedural assets missing")
+  end
+
+  local ok_set_geometry, result_set_geometry = pcall(function()
+    return node:renderable_set_geometry(material)
+  end)
+  if ok_set_geometry and result_set_geometry ~= false and result_set_geometry ~= nil then
+    error("renderable_set_geometry should reject MaterialAsset userdata deterministically")
+  end
+
+  if not node:renderable_set_geometry(geometry) then
+    error("renderable_set_geometry with GeometryAsset failed")
+  end
+
+  local ok_set_material, result_set_material = pcall(function()
+    return node:renderable_set_material_override(1, 1, geometry)
+  end)
+  if ok_set_material and result_set_material ~= false and result_set_material ~= nil then
+    error("renderable_set_material_override should reject GeometryAsset userdata deterministically")
+  end
+end
+)lua" },
+    .chunk_name
+    = ScriptChunkName { "scene_renderable_userdata_kind_rejection" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  if (context.HasErrors()) {
+    const auto errors = context.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+}
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneQueryUserdataReturnsDeterministicDefaultsAfterSceneExpiry)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+phase = 0
+q = nil
+
+function on_scene_mutation()
+  local scene = oxygen.scene
+  phase = phase + 1
+  if phase == 1 then
+    scene.create_node("QNode", nil)
+    q = scene.query("**")
+    if q == nil then error("query userdata expected") end
+    return
+  end
+
+  if phase == 2 then
+    if q:first() ~= nil then error("expired query first must be nil") end
+    local all = q:all()
+    if type(all) ~= "table" or #all ~= 0 then
+      error("expired query all must be empty table")
+    end
+    if q:count() ~= 0 then error("expired query count must be 0") end
+    if q:any() ~= false then error("expired query any must be false") end
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_query_expiry_defaults" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene_a
+    = std::make_shared<scene::Scene>("scene_a", kDefaultSceneCapacity);
+  engine::FrameContext frame_a;
+  frame_a.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  frame_a.SetScene(observer_ptr<scene::Scene> { scene_a.get() });
+  module.OnFrameStart(observer_ptr<engine::FrameContext> { &frame_a });
+  if (frame_a.HasErrors()) {
+    const auto errors = frame_a.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+
+  scene_a.reset();
+
+  auto scene_b
+    = std::make_shared<scene::Scene>("scene_b", kDefaultSceneCapacity);
+  engine::FrameContext frame_b;
+  frame_b.SetFrameSequenceNumber(frame::SequenceNumber { 2 }, Tag::Get());
+  frame_b.SetScene(observer_ptr<scene::Scene> { scene_b.get() });
+  module.OnFrameStart(observer_ptr<engine::FrameContext> { &frame_b });
+  if (frame_b.HasErrors()) {
+    const auto errors = frame_b.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+}
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneComponentBindingsRejectInvalidArgumentShapes)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local scene = oxygen.scene
+
+  local light_node = scene.create_node("LightHostInvalidArgs", nil)
+  if light_node == nil then error("light node create failed") end
+  if not light_node:attach_directional_light({}) then
+    error("attach directional light failed")
+  end
+  if light_node:light_set_affects_world(1) ~= false then
+    error("light_set_affects_world should reject non-boolean")
+  end
+  assert(light_node:light_update({ intensity_lux = 1234, atmosphere_light_slot = "primary" }))
+  assert(not light_node:light_update({ intensity_lux = 9000, cascade_count = 0 }))
+  assert(light_node:light_get_intensity_lux() == 1234, "failed patch changed intensity")
+  assert(not light_node:light_update({ is_sun_light = true }), "removed sun flag accepted")
+  assert(not light_node:light_update({ decay_exponent = 2 }), "removed attenuation field accepted")
+  local other = scene.create_node("OtherLight", nil)
+  assert(other:attach_directional_light({ atmosphere_light_slot = "secondary" }))
+  assert(not other:light_update({ affects_world = false, atmosphere_light_slot = "primary" }))
+  assert(other:light_get_atmosphere_light_slot() == "secondary", "slot conflict partially applied")
+  assert(other:light_get_affects_world(), "slot conflict changed participation")
+  local spot = scene.create_node("AtomicSpot", nil)
+  assert(spot:attach_spot_light({ inner_cone_angle_radians = 0.2, outer_cone_angle_radians = 0.4 }))
+  assert(not spot:light_set_inner_cone_angle_radians(0.6))
+  assert(spot:light_set_cone_angles_radians(0.6, 0.8))
+  assert(math.abs(spot:light_get_inner_cone_angle_radians() - 0.6) < 0.0001)
+  assert(not spot:light_update({ luminous_flux_lm = 123, range = -1 }))
+  assert(spot:light_get_luminous_flux_lm() ~= 123, "invalid range partially applied")
+
+  local camera_node = scene.create_node("CameraHostInvalidArgs", nil)
+  if camera_node == nil then error("camera node create failed") end
+  if not camera_node:attach_perspective_camera({}) then
+    error("attach camera failed")
+  end
+  if camera_node:camera_set_perspective(1) ~= false then
+    error("camera_set_perspective should require table")
+  end
+  assert(camera_node:camera_get_perspective().aspect_mode == "auto")
+  assert(camera_node:camera_set_perspective({ aspect_mode = "fixed", aspect = 1.5 }))
+  assert(camera_node:camera_get_perspective().aspect_mode == "fixed")
+  assert(not camera_node:camera_set_perspective({ aspect_mode = "invalid", aspect = 2 }))
+  assert(camera_node:camera_get_perspective().aspect == 1.5)
+  assert(camera_node:camera_set_perspective({ aspect_mode = "auto" }))
+  assert(camera_node:camera_get_perspective().aspect == 1.5)
+
+  local script_node = scene.create_node("ScriptHostInvalidArgs", nil)
+  if script_node == nil then error("script node create failed") end
+  if not script_node:attach_scripting() then error("attach_scripting failed") end
+  if not script_node:scripting_add_slot("scripts/invalid_args_slot.luau") then
+    error("add slot failed")
+  end
+  local slot = script_node:scripting_slots()[1]
+  if slot == nil then error("slot ref missing") end
+
+  if script_node:scripting_set_param(slot, "unsupported", { 1, 2, 3, 4, 5 }) ~= false then
+    error("scripting_set_param should reject unsupported table shape")
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_component_invalid_args" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  if (context.HasErrors()) {
+    const auto errors = context.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+}
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneScenarioHierarchyQueryComponentsEnvironment)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local scene = oxygen.scene
+
+  local env = scene.ensure_environment()
+  local fog = env:ensure_fog()
+  fog:set_max_opacity(0.33)
+  if math.abs(fog:get_max_opacity() - 0.33) > 0.0001 then
+    error("fog roundtrip failed")
+  end
+
+  local world = scene.create_node("World", nil)
+  local player = scene.create_node("Player", world)
+  local enemy_a = scene.create_node("Enemy_A", world)
+  local enemy_b = scene.create_node("Enemy_B", world)
+  local light = scene.create_node("FillLight", world)
+  if world == nil or player == nil or enemy_a == nil or enemy_b == nil or light == nil then
+    error("node create failed")
+  end
+
+  if not light:attach_point_light({}) then
+    error("attach point light failed")
+  end
+  if not light:light_set_luminous_flux_lm(2000.0) then
+    error("set luminous flux failed")
+  end
+  if math.abs(light:light_get_luminous_flux_lm() - 2000.0) > 0.0001 then
+    error("light luminous flux mismatch")
+  end
+
+  if not player:renderable_set_geometry("proc/cube") then
+    error("player set geometry failed")
+  end
+  if player:renderable_get_geometry() ~= "proc/cube" then
+    error("player geometry token mismatch")
+  end
+
+  local all = scene.query("**"):all()
+  local enemy_count = 0
+  for i = 1, #all do
+    local name = all[i]:get_name()
+    if string.sub(name, 1, 6) == "Enemy_" then
+      enemy_count = enemy_count + 1
+    end
+  end
+  if enemy_count ~= 2 then
+    error("enemy count mismatch")
+  end
+
+  if not scene.reparent(enemy_a, player, true) then
+    error("reparent failed")
+  end
+  local parent = enemy_a:get_parent()
+  if parent == nil or parent ~= player then
+    error("enemy parent mismatch after reparent")
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_scenario_full_flow" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  if (context.HasErrors()) {
+    const auto errors = context.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+}
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneNodeMetatableExposesRequiredComponentMethods)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local scene = oxygen.scene
+  local node = scene.create_node("MethodSurfaceNode", nil)
+  if node == nil then error("node create failed") end
+
+  local expected = {
+    "attach_perspective_camera", "attach_orthographic_camera", "detach_camera", "has_camera",
+    "attach_directional_light", "attach_point_light", "attach_spot_light", "detach_light", "has_light",
+    "renderable_set_geometry", "renderable_get_geometry", "renderable_set_material_override",
+    "renderable_resolve_submesh_material", "renderable_set_all_submeshes_visible",
+    "attach_scripting", "detach_scripting", "has_scripting", "scripting_slots",
+    "scripting_add_slot", "scripting_remove_slot", "scripting_set_param", "scripting_get_param"
+  }
+
+  for i = 1, #expected do
+    local key = expected[i]
+    if type(node[key]) ~= "function" then
+      error("missing node method: " .. key)
+    end
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_node_method_surface_regression" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+  if (context.HasErrors()) {
+    const auto errors = context.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+}
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneQueryScopeAndClearScopeEdgeBehaviorWorks)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local scene = oxygen.scene
+  local root = scene.create_node("ScopeRoot", nil)
+  local in_scope = scene.create_node("InScopeEnemy", root)
+  local out_scope = scene.create_node("OutScopeEnemy", nil)
+  if root == nil or in_scope == nil or out_scope == nil then
+    error("scope setup failed")
+  end
+
+  local q = scene.query("**")
+  q:scope(root)
+  local scoped = q:all()
+  local found_in_scope = false
+  local found_out_scope = false
+  for i = 1, #scoped do
+    local name = scoped[i]:get_name()
+    if name == "InScopeEnemy" then found_in_scope = true end
+    if name == "OutScopeEnemy" then found_out_scope = true end
+  end
+  if not found_in_scope then error("scoped query missing in-scope node") end
+  if found_out_scope then error("scoped query leaked out-of-scope node") end
+
+  q:clear_scope()
+  if q:count() < 3 then
+    error("clear_scope should restore full-scene query visibility")
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_query_scope_clear_scope_edges" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene = std::make_shared<scene::Scene>(
+    "scene_binding_test", kDefaultSceneCapacity);
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+
+  module.OnFrameStart(observer_ptr<engine::FrameContext> { &context });
+  if (context.HasErrors()) {
+    const auto errors = context.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+}
+
+NOLINT_TEST_F(SceneBindingsTest,
+  OnSceneMutationSceneNodeHandlesFromExpiredSceneFailDeterministically)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+phase = 0
+stale = nil
+
+function on_scene_mutation()
+  local scene = oxygen.scene
+  phase = phase + 1
+  if phase == 1 then
+    stale = scene.create_node("WillExpire", nil)
+    if stale == nil then error("failed to create stale candidate node") end
+    return
+  end
+
+  if phase == 2 then
+    if stale == nil then error("missing stale handle") end
+    if stale:is_alive() ~= false then error("stale node should be dead") end
+    local id = stale:runtime_id()
+    if type(id) ~= "table" then error("stale runtime_id should be table") end
+    if type(id.scene_id) ~= "number" then error("stale runtime_id.scene_id missing") end
+    if type(id.node_index) ~= "number" then error("stale runtime_id.node_index missing") end
+  end
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "scene_stale_node_handle_determinism" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene_a
+    = std::make_shared<scene::Scene>("scene_a", kDefaultSceneCapacity);
+  engine::FrameContext frame_a;
+  frame_a.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  frame_a.SetScene(observer_ptr<scene::Scene> { scene_a.get() });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &frame_a });
+  if (frame_a.HasErrors()) {
+    const auto errors = frame_a.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+
+  scene_a.reset();
+
+  auto scene_b
+    = std::make_shared<scene::Scene>("scene_b", kDefaultSceneCapacity);
+  engine::FrameContext frame_b;
+  frame_b.SetFrameSequenceNumber(frame::SequenceNumber { 2 }, Tag::Get());
+  frame_b.SetScene(observer_ptr<scene::Scene> { scene_b.get() });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &frame_b });
+  if (frame_b.HasErrors()) {
+    const auto errors = frame_b.GetErrors();
+    FAIL() << (errors.empty() ? std::string("unknown scripting error")
+                              : errors.front().message);
+  }
+}
+
+//! Scripts view the scene through any camera node; a node without a camera
+//! is rejected and changes nothing.
+NOLINT_TEST_F(SceneBindingsTest, ActiveCameraSwitchesBetweenCameraNodes)
+{
+  auto module = MakeModule();
+  ASSERT_TRUE(AttachModule(module));
+  const auto hook_result = module.ExecuteScript(ScriptExecutionRequest {
+    .source_text = ScriptSourceText { R"lua(
+function on_scene_mutation()
+  local nodes = {}
+  for _, node in ipairs(oxygen.scene.root_nodes()) do
+    nodes[node:get_name()] = node
+  end
+  local scene = oxygen.scene
+  assert(scene.active_camera():get_name() == "First", "initial camera")
+  assert(scene.set_active_camera(nodes.Second), "switch to a camera node")
+  assert(scene.active_camera():get_name() == "Second", "camera switched")
+  assert(not scene.set_active_camera(nodes.Plain), "plain node rejected")
+  assert(scene.active_camera():get_name() == "Second", "camera unchanged")
+end
+)lua" },
+    .chunk_name = ScriptChunkName { "active_camera_switch" },
+  });
+  ASSERT_TRUE(hook_result.ok) << hook_result.message;
+
+  auto scene
+    = std::make_shared<scene::Scene>("active_camera", kDefaultSceneCapacity);
+  auto first = scene->CreateNode("First");
+  auto second = scene->CreateNode("Second");
+  (void)scene->CreateNode("Plain");
+  ASSERT_TRUE(first.AttachCamera(std::make_unique<scene::PerspectiveCamera>()));
+  ASSERT_TRUE(
+    second.AttachCamera(std::make_unique<scene::PerspectiveCamera>()));
+  ASSERT_TRUE(scene->SetActiveCamera(first));
+  engine::FrameContext context;
+  context.SetFrameSequenceNumber(frame::SequenceNumber { 1 }, Tag::Get());
+  context.SetScene(observer_ptr<scene::Scene> { scene.get() });
+  RunSceneMutationPhase(
+    module, observer_ptr<engine::FrameContext> { &context });
+
+  EXPECT_FALSE(context.HasErrors());
+  const auto active = scene->ActiveCamera();
+  ASSERT_TRUE(active.has_value());
+  // NOLINTNEXTLINE(bugprone-unchecked-optional-access) - asserted above
+  EXPECT_EQ(active.value().GetName(), "Second");
+}
+
+} // namespace oxygen::scripting::test

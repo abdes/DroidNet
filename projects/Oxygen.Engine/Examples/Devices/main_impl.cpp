@@ -10,6 +10,8 @@
 #include <span>
 #include <string>
 
+#include "Common/DemoCli.h"
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
@@ -18,8 +20,6 @@
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DeviceManager.h>
-
-#include "Common/DemoCli.h"
 
 using oxygen::graphics::d3d12::DeviceManager;
 using oxygen::graphics::d3d12::DeviceManagerDesc;

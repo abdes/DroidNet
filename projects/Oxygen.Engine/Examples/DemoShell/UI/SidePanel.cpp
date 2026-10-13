@@ -8,12 +8,11 @@
 #include <cctype>
 #include <string>
 
+#include "DemoShell/Services/SettingsService.h"
+#include "DemoShell/UI/SidePanel.h"
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
-
-#include "DemoShell/Services/SettingsService.h"
-#include "DemoShell/UI/SidePanel.h"
 
 namespace oxygen::examples::ui {
 

@@ -289,12 +289,20 @@ def append_tonemap_pixel_samples(
 
     if tonemap_constants is not None:
         offset = int(safe_getattr(tonemap_constants, "byteOffset", 0) or 0)
-        data = bytes(controller.GetBufferData(
-            tonemap_constants.resource, offset, min(32, int(safe_getattr(tonemap_constants, "byteSize", 32) or 32))
-        ))
+        data = bytes(
+            controller.GetBufferData(
+                tonemap_constants.resource,
+                offset,
+                min(32, int(safe_getattr(tonemap_constants, "byteSize", 32) or 32)),
+            )
+        )
         if len(data) >= 32:
-            source_slot, exposure_slot, bloom_slot, tone_mapper = struct.unpack_from("<4I", data, 0)
-            exposure, gamma, bloom_intensity, _pad0 = struct.unpack_from("<4f", data, 16)
+            source_slot, exposure_slot, bloom_slot, tone_mapper = struct.unpack_from(
+                "<4I", data, 0
+            )
+            exposure, gamma, bloom_intensity, _pad0 = struct.unpack_from(
+                "<4f", data, 16
+            )
             report.append(f"stage22_tonemap_source_texture_index={source_slot}")
             report.append(f"stage22_tonemap_exposure_buffer_index={exposure_slot}")
             report.append(f"stage22_tonemap_bloom_texture_index={bloom_slot}")
@@ -330,14 +338,32 @@ def append_tonemap_pixel_samples(
     report.append(f"stage22_tonemap_max={max_rgba}")
     report.append(f"stage22_tonemap_max_luminance={max_luma:.9g}")
 
-    xs = [scene_width // 10, scene_width // 4, scene_width // 2, (scene_width * 3) // 4, (scene_width * 9) // 10]
-    ys = [scene_height // 10, scene_height // 4, scene_height // 2, (scene_height * 3) // 4, (scene_height * 9) // 10]
+    xs = [
+        scene_width // 10,
+        scene_width // 4,
+        scene_width // 2,
+        (scene_width * 3) // 4,
+        (scene_width * 9) // 10,
+    ]
+    ys = [
+        scene_height // 10,
+        scene_height // 4,
+        scene_height // 2,
+        (scene_height * 3) // 4,
+        (scene_height * 9) // 10,
+    ]
     nonblack = 0
     sky_nonblack = 0
     for y in ys:
         for x in xs:
-            tx = min(width - 1, max(0, int(round((x / max(scene_width - 1, 1)) * (width - 1)))))
-            ty = min(height - 1, max(0, int(round((y / max(scene_height - 1, 1)) * (height - 1)))))
+            tx = min(
+                width - 1,
+                max(0, int(round((x / max(scene_width - 1, 1)) * (width - 1)))),
+            )
+            ty = min(
+                height - 1,
+                max(0, int(round((y / max(scene_height - 1, 1)) * (height - 1)))),
+            )
             pixel_value = controller.PickPixel(
                 resource, tx, ty, sub, rd.CompType.Typeless
             )
@@ -357,7 +383,9 @@ def append_tonemap_pixel_samples(
     report.append(f"stage22_tonemap_sky_nonblack_after_count={sky_nonblack}")
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     action_records = collect_action_records(controller)
     resources = resource_id_to_name(controller)
@@ -407,12 +435,8 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     byte_size = int(safe_getattr(env_descriptor, "byteSize", 0) or 0)
     raw = controller.GetBufferData(resource, byte_offset, byte_size)
     blob = bytes(raw)
-    values_u32 = struct.unpack(
-        f"<{len(blob) // 4}I", blob[: (len(blob) // 4) * 4]
-    )
-    values_f32 = struct.unpack(
-        f"<{len(blob) // 4}f", blob[: (len(blob) // 4) * 4]
-    )
+    values_u32 = struct.unpack(f"<{len(blob) // 4}I", blob[: (len(blob) // 4) * 4])
+    values_f32 = struct.unpack(f"<{len(blob) // 4}f", blob[: (len(blob) // 4) * 4])
 
     atmosphere_enabled = values_u32[SKY_ATMOSPHERE_ENABLED_U32]
     sky_sphere_source = values_u32[SKY_SPHERE_SOURCE_U32]
@@ -454,7 +478,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     if not sky_sphere_valid:
         raise RuntimeError("Stage15 sky draw did not receive a valid cubemap SkySphere")
     if atmosphere_enabled != 0:
-        raise RuntimeError("Procedural atmosphere remained enabled for the skybox proof")
+        raise RuntimeError(
+            "Procedural atmosphere remained enabled for the skybox proof"
+        )
 
     outputs = state.GetOutputTargets()
     report.append(f"sky_draw_output_count={len(outputs)}")

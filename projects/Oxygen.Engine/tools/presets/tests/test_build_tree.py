@@ -19,11 +19,17 @@ class BuildTreeTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(prefix="oxygen build tree ")
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
-        for relative in ("tools/build-tree.ps1", "tools/cli/BuildSelection.ps1", ".vscode/prepare_clangd.py"):
+        for relative in (
+            "tools/build-tree.ps1",
+            "tools/cli/BuildSelection.ps1",
+            ".vscode/prepare_clangd.py",
+        ):
             target = self.root / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ENGINE / relative, target)
-        with (self.root / "tools/cli/BuildSelection.ps1").open("a", encoding="utf-8") as stream:
+        with (self.root / "tools/cli/BuildSelection.ps1").open(
+            "a", encoding="utf-8"
+        ) as stream:
             stream.write("\nfunction Get-OxygenPython { return 'python' }\n")
             if os.name == "nt":
                 compiler_folder = self.root / "host/Hostx64/x64"
@@ -36,23 +42,40 @@ class BuildTreeTests(unittest.TestCase):
         self.sdk = self.root / "out/install/Debug"
         self.sdk.mkdir(parents=True)
         (self.sdk / "keep.dll").write_bytes(b"existing SDK binary")
-        (self.root / "CMakePresets.json").write_text(json.dumps({
-            "version": 9,
-            "configurePresets": [{"name": "oxygen-ninja-default", "generator": "Ninja Multi-Config",
-                                  "binaryDir": "${sourceDir}/out/build-ninja"}],
-        }), encoding="utf-8")
+        (self.root / "CMakePresets.json").write_text(
+            json.dumps(
+                {
+                    "version": 9,
+                    "configurePresets": [
+                        {
+                            "name": "oxygen-ninja-default",
+                            "generator": "Ninja Multi-Config",
+                            "binaryDir": "${sourceDir}/out/build-ninja",
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
 
     def run_script(self, body, expected=0):
         script = self.root / "invoke.ps1"
         script.write_text("$ErrorActionPreference = 'Stop'\n" + body, encoding="utf-8")
-        result = subprocess.run([PWSH, "-NoProfile", "-NonInteractive", "-File", str(script)],
-                                cwd=self.root.parent, capture_output=True, text=True,
-                                encoding="utf-8", errors="replace")
+        result = subprocess.run(
+            [PWSH, "-NoProfile", "-NonInteractive", "-File", str(script)],
+            cwd=self.root.parent,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         return result
 
     def mock_tools(self, generator="Ninja Multi-Config", fail=""):
-        return f"$global:Generator = '{generator}'\n$global:FailTool = '{fail}'\n" + """
+        return (
+            f"$global:Generator = '{generator}'\n$global:FailTool = '{fail}'\n"
+            + """
 $global:Calls = Join-Path $PSScriptRoot 'calls.jsonl'
 function global:conan { throw 'Configure must not invoke Conan' }
 function global:Remove-Item { throw 'Configure must not clean output' }
@@ -68,77 +91,128 @@ function global:python {
 }
 function global:python3 { python @args }
 """
+        )
 
     def calls(self):
         path = self.root / "calls.jsonl"
-        return [json.loads(line) for line in path.read_text(encoding="utf-8-sig").splitlines()] if path.exists() else []
+        return (
+            [
+                json.loads(line)
+                for line in path.read_text(encoding="utf-8-sig").splitlines()
+            ]
+            if path.exists()
+            else []
+        )
 
     def test_repeated_configure_never_runs_conan_or_cleans(self):
-        self.run_script(self.mock_tools() + """
+        self.run_script(
+            self.mock_tools()
+            + """
 & "$PSScriptRoot/tools/build-tree.ps1" configure oxygen-ninja-default -Define 'OXYGEN_BUILD_TESTS=OFF','CUSTOM:STRING=a b;c'
 if ($LASTEXITCODE) { exit $LASTEXITCODE }
 & "$PSScriptRoot/tools/build-tree.ps1" configure oxygen-ninja-default
 exit $LASTEXITCODE
-""")
+"""
+        )
         calls = self.calls()
-        self.assertEqual([c["tool"] for c in calls], ["cmake", "python", "cmake", "python"])
-        self.assertEqual(calls[0]["args"], ["--preset", "oxygen-ninja-default", "-DPython3_EXECUTABLE=python",
-                                         "-DOXYGEN_BUILD_TESTS=OFF", "-DCUSTOM:STRING=a b;c"])
-        self.assertEqual(calls[2]["args"], ["--preset", "oxygen-ninja-default", "-DPython3_EXECUTABLE=python"])
+        self.assertEqual(
+            [c["tool"] for c in calls], ["cmake", "python", "cmake", "python"]
+        )
+        self.assertEqual(
+            calls[0]["args"],
+            [
+                "--preset",
+                "oxygen-ninja-default",
+                "-DPython3_EXECUTABLE=python",
+                "-DOXYGEN_BUILD_TESTS=OFF",
+                "-DCUSTOM:STRING=a b;c",
+            ],
+        )
+        self.assertEqual(
+            calls[2]["args"],
+            ["--preset", "oxygen-ninja-default", "-DPython3_EXECUTABLE=python"],
+        )
         self.assertTrue(all(Path(c["cwd"]) == self.root for c in calls))
-        self.assertEqual((self.build / "keep.obj").read_bytes(), b"existing compiled object")
+        self.assertEqual(
+            (self.build / "keep.obj").read_bytes(), b"existing compiled object"
+        )
         self.assertEqual((self.sdk / "keep.dll").read_bytes(), b"existing SDK binary")
 
     def test_configure_failure_propagates_without_preparation(self):
-        self.run_script(self.mock_tools(fail="cmake") + """
+        self.run_script(
+            self.mock_tools(fail="cmake")
+            + """
 & "$PSScriptRoot/tools/build-tree.ps1" configure oxygen-ninja-default
 exit $LASTEXITCODE
-""", expected=37)
+""",
+            expected=37,
+        )
         self.assertEqual([c["tool"] for c in self.calls()], ["cmake"])
 
     @unittest.skipUnless(os.name == "nt", "Windows build host policy")
     def test_cached_hostx86_rejected_before_configure(self):
         (self.build / "CMakeCache.txt").write_text(
-            "CMAKE_CXX_COMPILER:FILEPATH=C:/VS/bin/Hostx86/x64/cl.exe\n", encoding="utf-8",
+            "CMAKE_CXX_COMPILER:FILEPATH=C:/VS/bin/Hostx86/x64/cl.exe\n",
+            encoding="utf-8",
         )
-        result = self.run_script(self.mock_tools() + """
+        result = self.run_script(
+            self.mock_tools()
+            + """
 & "$PSScriptRoot/tools/build-tree.ps1" configure oxygen-ninja-default
 exit $LASTEXITCODE
-""", expected=1)
+""",
+            expected=1,
+        )
         self.assertIn("Oxygen requires Hostx64", result.stdout + result.stderr)
         self.assertEqual(self.calls(), [])
-        self.assertEqual((self.build / "keep.obj").read_bytes(), b"existing compiled object")
+        self.assertEqual(
+            (self.build / "keep.obj").read_bytes(), b"existing compiled object"
+        )
 
     @unittest.skipUnless(os.name == "nt", "Windows build host policy")
     def test_explicit_x64_compiler_can_repair_hostx86_cache(self):
         (self.build / "CMakeCache.txt").write_text(
-            "CMAKE_CXX_COMPILER:FILEPATH=C:/VS/bin/Hostx86/x64/cl.exe\n", encoding="utf-8",
+            "CMAKE_CXX_COMPILER:FILEPATH=C:/VS/bin/Hostx86/x64/cl.exe\n",
+            encoding="utf-8",
         )
-        self.run_script(self.mock_tools() + """
+        self.run_script(
+            self.mock_tools()
+            + """
 & "$PSScriptRoot/tools/build-tree.ps1" configure oxygen-ninja-default -Define 'CMAKE_CXX_COMPILER:FILEPATH=C:/VS/bin/Hostx64/x64/cl.exe'
 exit $LASTEXITCODE
-""")
+"""
+        )
         self.assertEqual([c["tool"] for c in self.calls()], ["cmake", "python"])
 
     def test_preparation_failure_propagates(self):
-        result = self.run_script(self.mock_tools(fail="python") + """
+        result = self.run_script(
+            self.mock_tools(fail="python")
+            + """
 & "$PSScriptRoot/tools/build-tree.ps1" configure oxygen-ninja-default
 exit $LASTEXITCODE
-""", expected=38)
+""",
+            expected=38,
+        )
         self.assertNotIn("=== Success ===", result.stdout)
 
     def test_visual_studio_does_not_prepare_clangd(self):
-        self.run_script(self.mock_tools(generator="Visual Studio 18 2026") + """
+        self.run_script(
+            self.mock_tools(generator="Visual Studio 18 2026")
+            + """
 & "$PSScriptRoot/tools/build-tree.ps1" configure oxygen-ninja-default
 exit $LASTEXITCODE
-""")
+"""
+        )
         self.assertEqual([c["tool"] for c in self.calls()], ["cmake"])
 
     def test_explicitly_disabled_export_is_not_read_as_stale_database(self):
-        result = self.run_script(self.mock_tools() + """
+        result = self.run_script(
+            self.mock_tools()
+            + """
 & "$PSScriptRoot/tools/build-tree.ps1" configure oxygen-ninja-default -Define 'CMAKE_EXPORT_COMPILE_COMMANDS=OFF'
 exit $LASTEXITCODE
-""")
+"""
+        )
         self.assertEqual([c["tool"] for c in self.calls()], ["cmake"])
         self.assertIn("not refreshed", result.stdout)
 
@@ -157,13 +231,19 @@ exit $LASTEXITCODE
             "generate missing/profile.ini -Clean",
         ):
             with self.subTest(arguments=arguments):
-                result = self.run_script(self.mock_tools() + f'& "$PSScriptRoot/tools/build-tree.ps1" {arguments}\nexit $LASTEXITCODE\n', expected=1)
+                result = self.run_script(
+                    self.mock_tools()
+                    + f'& "$PSScriptRoot/tools/build-tree.ps1" {arguments}\nexit $LASTEXITCODE\n',
+                    expected=1,
+                )
                 self.assertNotIn("=== Success ===", result.stdout)
                 self.assertEqual(self.calls(), [])
                 self.assertTrue((self.sdk / "keep.dll").is_file())
 
     def test_named_profile_and_dependency_policy_are_passed_to_conan(self):
-        self.run_script(self.mock_tools() + """
+        self.run_script(
+            self.mock_tools()
+            + """
 function global:conan {
     @{tool='conan'; args=@($args); cwd=$PWD.Path} | ConvertTo-Json -Compress | Add-Content $global:Calls
     $global:LASTEXITCODE = 0
@@ -171,7 +251,8 @@ function global:conan {
 }
 & "$PSScriptRoot/tools/build-tree.ps1" generate named-profile -Generator Ninja -DependencyBuild never
 exit $LASTEXITCODE
-""")
+"""
+        )
         calls = [c for c in self.calls() if c["tool"] == "conan"]
         self.assertEqual(len(calls), 4)
         self.assertTrue(all("--profile:host=named-profile" in c["args"] for c in calls))

@@ -37,7 +37,7 @@ steps, important invariants, and practical tips to build a working backend.
 - Success criteria: the backend compiles, creates a `Graphics` instance, creates
   resources, records commands via `CommandRecorder` with flexible submission
   modes, submits work to `CommandQueue` and presents (for surface-backed
-  surfaces). Unit tests in `Graphics/Common/Test` should pass (where
+  surfaces). Unit tests in `Graphics/Common/test` should pass (where
   backend-specific tests exist).
 
 ## Core classes you must implement
@@ -317,7 +317,7 @@ value API. There is no hidden pending-submission queue or flush-all operation.
   - Test `SubmitDeferredCommandLists()` functionality to ensure batched
     submission works as expected.
   - Create a `Surface` and present a cleared backbuffer.
-- Run unit tests under `Graphics/Common/Test` where applicable and add
+- Run unit tests under `Graphics/Common/test` where applicable and add
   backend-specific tests to validate native views, descriptor copying, barrier
   behavior, and command submission modes.
 - Validate readback misuse explicitly:

@@ -105,7 +105,9 @@ def describe_scene_color(controller, resources, event_id):
     return None
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     del capture_path
     del report_path
     actions = collect_action_records(controller)

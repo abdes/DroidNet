@@ -489,7 +489,7 @@ Initially these are null/no-ops and do nothing.
 ### Step 1.9 — Smoke Test
 
 **Source:** New
-**Target:** `Vortex/Test/Link_test.cpp`
+**Target:** `Vortex/test/Link_test.cpp`
 **Status:** `planned`
 
 Create a minimal test that:

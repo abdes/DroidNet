@@ -4,14 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include "DemoShell/UI/LightCullingDebugPanel.h"
+#include "DemoShell/UI/LightCullingVm.h"
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Vortex/Diagnostics/ShaderDebugModeRegistry.h>
-
-#include "DemoShell/UI/LightCullingDebugPanel.h"
-#include "DemoShell/UI/LightCullingVm.h"
 
 namespace oxygen::examples::ui {
 

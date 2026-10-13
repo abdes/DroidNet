@@ -51,8 +51,7 @@ class ShaderBakeOutputTests(CommandTestCase):
             ignore=lambda directory, names: [
                 name
                 for name in names
-                if not (Path(directory) / name).is_dir()
-                and Path(name).suffix not in (".hlsl", ".hlsli")
+                if not (Path(directory) / name).is_dir() and Path(name).suffix not in (".hlsl", ".hlsli")
             ],
         )
         self.shaders = self.include_root / "Graphics/Direct3D12/Shaders"

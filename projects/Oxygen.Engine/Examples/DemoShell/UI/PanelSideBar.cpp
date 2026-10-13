@@ -10,15 +10,14 @@
 #include <string>
 #include <string_view>
 
+#include "DemoShell/PanelRegistry.h"
+#include "DemoShell/UI/PanelSideBar.h"
+#include "DemoShell/UI/UiSettingsVm.h"
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/ImGui/Styles/Spectrum.h>
-
-#include "DemoShell/PanelRegistry.h"
-#include "DemoShell/UI/PanelSideBar.h"
-#include "DemoShell/UI/UiSettingsVm.h"
 
 namespace oxygen::examples::ui {
 

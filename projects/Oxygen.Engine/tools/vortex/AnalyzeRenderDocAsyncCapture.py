@@ -101,9 +101,7 @@ def records_with_name_prefixes(action_records, prefixes):
 def records_under_prefix(action_records, prefix):
     prefix_with_sep = prefix + " > "
     return [
-        record
-        for record in action_records
-        if record.path.startswith(prefix_with_sep)
+        record for record in action_records if record.path.startswith(prefix_with_sep)
     ]
 
 
@@ -132,7 +130,9 @@ def append_order_check(report, label, ordered_event_ids):
         ordered_event_ids[index] < ordered_event_ids[index + 1]
         for index in range(len(ordered_event_ids) - 1)
     )
-    report.append("{}_event_ids={}".format(label, ",".join(str(v) for v in ordered_event_ids)))
+    report.append(
+        "{}_event_ids={}".format(label, ",".join(str(v) for v in ordered_event_ids))
+    )
     report.append("{}_valid={}".format(label, "true" if is_ordered else "false"))
     if not is_ordered:
         raise RuntimeError(
@@ -151,7 +151,9 @@ def summarize_compositing_activity(compositing_records):
     }
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     action_records = collect_action_records(controller)
 
     stage3_scope = records_with_name(action_records, STAGE3_SCOPE_NAME)
@@ -200,20 +202,30 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     for record in compositing_scope:
         compositing_records.extend(records_under_prefix(action_records, record.name))
 
-    post_compositing_draws = [
-        record
-        for record in action_records
-        if record.event_id > compositing_scope[-1].event_id
-        and record.name == DRAW_NAME
-        and is_work_action(record.flags)
-    ] if compositing_scope else []
-    stage22_fallback_draws = [
-        record
-        for record in action_records
-        if record.name == DRAW_NAME
-        and is_work_action(record.flags)
-        and stage15_fog_scope[0].event_id < record.event_id < compositing_scope[0].event_id
-    ] if stage15_fog_scope and compositing_scope else []
+    post_compositing_draws = (
+        [
+            record
+            for record in action_records
+            if record.event_id > compositing_scope[-1].event_id
+            and record.name == DRAW_NAME
+            and is_work_action(record.flags)
+        ]
+        if compositing_scope
+        else []
+    )
+    stage22_fallback_draws = (
+        [
+            record
+            for record in action_records
+            if record.name == DRAW_NAME
+            and is_work_action(record.flags)
+            and stage15_fog_scope[0].event_id
+            < record.event_id
+            < compositing_scope[0].event_id
+        ]
+        if stage15_fog_scope and compositing_scope
+        else []
+    )
     stage22_anchor_event_id = (
         stage22_tonemap_scope[0].event_id
         if stage22_tonemap_scope
@@ -228,7 +240,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     append_presence_check(report, "stage3_scope", len(stage3_scope))
     append_presence_check(report, "stage8_scope", len(stage8_scope))
     append_presence_check(report, "stage12_scope", len(stage12_scope))
-    append_presence_check(report, "stage12_directional_scope", len(stage12_directional_scope))
+    append_presence_check(
+        report, "stage12_directional_scope", len(stage12_directional_scope)
+    )
     append_presence_check(report, "stage12_spot_scope", len(stage12_spot_scope))
     append_presence_check(report, "stage15_sky_scope", len(stage15_sky_scope))
     append_presence_check(
@@ -241,12 +255,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         )
     )
     append_presence_check(
-        report, "stage22_tonemap_scope", len(stage22_tonemap_scope) or len(stage22_fallback_draws)
+        report,
+        "stage22_tonemap_scope",
+        len(stage22_tonemap_scope) or len(stage22_fallback_draws),
     )
     report.append(
-        "imgui_overlay_runtime_scope_count={}".format(
-            imgui_overlay_runtime_scope_count
-        )
+        "imgui_overlay_runtime_scope_count={}".format(imgui_overlay_runtime_scope_count)
     )
     append_presence_check(
         report, "imgui_overlay_scope", imgui_overlay_runtime_scope_count
@@ -306,9 +320,7 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         )
     )
 
-    report.append(
-        "post_compositing_draw_count={}".format(len(post_compositing_draws))
-    )
+    report.append("post_compositing_draw_count={}".format(len(post_compositing_draws)))
     report.append(
         "post_compositing_draw_present={}".format(
             "true" if len(post_compositing_draws) > 0 else "false"

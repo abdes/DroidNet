@@ -12,7 +12,10 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from AnalyzeRenderDocSceneExposure import map_color, select_scene_source
 from renderdoc_ui_analysis import (
-    collect_action_records, renderdoc_module, resource_id_to_name, run_ui_script,
+    collect_action_records,
+    renderdoc_module,
+    resource_id_to_name,
+    run_ui_script,
 )
 
 
@@ -31,27 +34,39 @@ def save_image(controller, rd, resource, path):
 def pixel_reader(controller, rd, resource, texture, subresource):
     """Read a supported image once instead of submitting one GPU pick per pixel."""
     name = texture.format.Name()
-    layouts = {"R16G16B16A16_FLOAT": ("<4e", 8, 1),
-               "R32G32B32A32_FLOAT": ("<4f", 16, 1),
-               "R8G8B8A8_UNORM": ("<4B", 4, 255)}
+    layouts = {
+        "R16G16B16A16_FLOAT": ("<4e", 8, 1),
+        "R32G32B32A32_FLOAT": ("<4f", 16, 1),
+        "R8G8B8A8_UNORM": ("<4B", 4, 255),
+    }
     if name not in layouts:
-        return lambda x, y: list(controller.PickPixel(
-            resource, x, y, subresource, rd.CompType.Float).floatValue)
+        return lambda x, y: list(
+            controller.PickPixel(
+                resource, x, y, subresource, rd.CompType.Float
+            ).floatValue
+        )
     layout, stride, scale = layouts[name]
     data = bytes(controller.GetTextureData(resource, subresource))
     if len(data) != texture.width * texture.height * stride:
         raise RuntimeError(f"Unexpected texture data extent for {name}")
 
     def read(x, y):
-        return [v / scale for v in struct.unpack_from(
-            layout, data, (y * texture.width + x) * stride)]
+        return [
+            v / scale
+            for v in struct.unpack_from(layout, data, (y * texture.width + x) * stride)
+        ]
 
     # Keep an independent API control for channel order and row layout.
     x, y = texture.width // 2, texture.height // 2
-    control = controller.PickPixel(resource, x, y, subresource, rd.CompType.Float).floatValue
-    if any(not math.isfinite(a) or not math.isfinite(b)
-           or abs(a - b) > max(abs(a), abs(b)) * 1e-7 + 1e-8
-           for a, b in zip(read(x, y), control)):
+    control = controller.PickPixel(
+        resource, x, y, subresource, rd.CompType.Float
+    ).floatValue
+    if any(
+        not math.isfinite(a)
+        or not math.isfinite(b)
+        or abs(a - b) > max(abs(a), abs(b)) * 1e-7 + 1e-8
+        for a, b in zip(read(x, y), control)
+    ):
         raise RuntimeError(f"Texture download disagrees with pixel API for {name}")
     return read
 
@@ -68,8 +83,11 @@ def build_report(controller, report, capture_path, report_path, selected_frames=
     initial_final = controller.GetPipelineState().GetOutputTargets()[0].resource
     composite_image = Path(report_path).with_suffix(".png")
     save_image(controller, rd, initial_final, composite_image)
-    tones = [a for a in actions if a.flags & rd.ActionFlags.Drawcall
-             and "Vortex.PostProcess.Tonemap" in a.path]
+    tones = [
+        a
+        for a in actions
+        if a.flags & rd.ActionFlags.Drawcall and "Vortex.PostProcess.Tonemap" in a.path
+    ]
     if not tones:
         raise RuntimeError("No mapped scene views")
     report.append(f"capture={capture_path}")
@@ -83,30 +101,61 @@ def build_report(controller, report, capture_path, report_path, selected_frames=
         controller.SetFrameEvent(draw.event_id, True)
         pipeline = controller.GetPipelineState()
         raster_scissor = pipeline.GetScissor(0)
-        write_rect = [raster_scissor.x, raster_scissor.y,
-                      raster_scissor.width, raster_scissor.height]
-        reads = [x.descriptor for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Pixel, True)]
+        write_rect = [
+            raster_scissor.x,
+            raster_scissor.y,
+            raster_scissor.width,
+            raster_scissor.height,
+        ]
+        reads = [
+            x.descriptor
+            for x in pipeline.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
+        ]
         constants = [x for x in reads if x.byteSize == 64 and x.elementByteSize == 64]
-        frames = [x for x in reads if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.Frame"]
-        states = [x for x in reads if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.State"]
+        frames = [
+            x
+            for x in reads
+            if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.Frame"
+        ]
+        states = [
+            x
+            for x in reads
+            if names.get(str(x.resource)) == "Vortex.PostProcess.Exposure.State"
+        ]
         if any(len(items) != 1 for items in (constants, frames, states)):
-            raise RuntimeError(f"Ambiguous/missing tonemap inputs at event {draw.event_id}")
-        pc = bytes(controller.GetBufferData(constants[0].resource, constants[0].byteOffset, 64))
+            raise RuntimeError(
+                f"Ambiguous/missing tonemap inputs at event {draw.event_id}"
+            )
+        pc = bytes(
+            controller.GetBufferData(constants[0].resource, constants[0].byteOffset, 64)
+        )
         source = select_scene_source(controller, reads, textures, names, pc)
         mapper = struct.unpack_from("<I", pc, 12)[0]
         gamma, bloom = struct.unpack_from("<2f", pc, 20)
         background_enabled = struct.unpack_from("<I", pc, 44)[0]
         if bloom != 0:
             raise RuntimeError("The independent pixel oracle requires bloom disabled")
-        p, inverse_p, state_slot, flags = struct.unpack("<2f2I", bytes(
-            controller.GetBufferData(frames[0].resource, frames[0].byteOffset, 16)))
-        state = bytes(controller.GetBufferData(states[0].resource, states[0].byteOffset, 80))
+        p, inverse_p, state_slot, flags = struct.unpack(
+            "<2f2I",
+            bytes(
+                controller.GetBufferData(frames[0].resource, frames[0].byteOffset, 16)
+            ),
+        )
+        state = bytes(
+            controller.GetBufferData(states[0].resource, states[0].byteOffset, 80)
+        )
         gain, target_gain = struct.unpack_from("<2f", state)
         latent_gain, latent_target = struct.unpack_from("<2f", state, 8)
-        raw_luminance, raw_ev, state_flags, fallback = struct.unpack_from("<2f2I", state, 16)
+        raw_luminance, raw_ev, state_flags, fallback = struct.unpack_from(
+            "<2f2I", state, 16
+        )
         requested, applied, sequence = struct.unpack_from("<3Q", state, 40)
         settings_revision = struct.unpack_from("<Q", state, 32)[0]
-        if not all(math.isfinite(x) for x in (p, inverse_p, gain)) or p <= 0 or abs(p * inverse_p - 1) > 1e-6:
+        if (
+            not all(math.isfinite(x) for x in (p, inverse_p, gain))
+            or p <= 0
+            or abs(p * inverse_p - 1) > 1e-6
+        ):
             raise RuntimeError(f"Invalid exposure domain at event {draw.event_id}")
         if selected_frames is not None and sequence not in selected_frames:
             continue
@@ -128,76 +177,135 @@ def build_report(controller, report, capture_path, report_path, selected_frames=
         for gy in range(1, 10):
             for gx in range(1, 10):
                 x, y = texture.width * gx // 10, texture.height * gy // 10
-                if not (write_rect[0] <= x < write_rect[0] + write_rect[2]
-                        and write_rect[1] <= y < write_rect[1] + write_rect[3]):
+                if not (
+                    write_rect[0] <= x < write_rect[0] + write_rect[2]
+                    and write_rect[1] <= y < write_rect[1] + write_rect[3]
+                ):
                     continue
                 pixel = read_source(x, y)
                 if not all(math.isfinite(c) for c in pixel):
-                    raise RuntimeError(f"Nonfinite source at event {draw.event_id}, pixel {x},{y}")
+                    raise RuntimeError(
+                        f"Nonfinite source at event {draw.event_id}, pixel {x},{y}"
+                    )
                 if background_enabled and pixel[3] < 1:
                     continue
                 nonzero_scene_probes += int(max(pixel[:3]) > 1e-6)
                 expected = map_color([c * gain / p for c in pixel[:3]], mapper, gamma)
-                dither = (bayer[(x & 3) | ((y & 3) << 2)] / 16 - .5) / 255
+                dither = (bayer[(x & 3) | ((y & 3) << 2)] / 16 - 0.5) / 255
                 expected = [min(1, max(0, c + dither)) for c in expected]
                 actual = read_target(x, y)
                 error = max(abs(c - e) for c, e in zip(actual[:3], expected))
                 if not all(math.isfinite(c) for c in actual) or error > 1 / 255:
-                    raise RuntimeError(f"S/P mismatch at event {draw.event_id}, pixel {x},{y}: {actual} vs {expected}")
+                    raise RuntimeError(
+                        f"S/P mismatch at event {draw.event_id}, pixel {x},{y}: {actual} vs {expected}"
+                    )
                 max_error = max(max_error, error)
                 probes.append({"x": x, "y": y, "scene": pixel, "mapped": actual})
                 checked += 1
         if not checked:
             raise RuntimeError(f"No opaque probes for mapped view {index}")
-        output = Path(report_path).with_name(f"{Path(report_path).stem}-view-{index}.png")
+        output = Path(report_path).with_name(
+            f"{Path(report_path).stem}-view-{index}.png"
+        )
         save_image(controller, rd, target, output)
-        next_tone = tones[index + 1].event_id if index + 1 < len(tones) else actions[-1].event_id + 1
-        writes = [u.eventId for u in controller.GetUsage(target)
-                  if draw.event_id <= u.eventId < next_tone
-                  and str(u.usage).endswith(("ColorTarget", "CopyDst", "ResolveDst"))]
-        precomposition = Path(report_path).with_name(f"{Path(report_path).stem}-precomposition-{index}.png")
+        next_tone = (
+            tones[index + 1].event_id
+            if index + 1 < len(tones)
+            else actions[-1].event_id + 1
+        )
+        writes = [
+            u.eventId
+            for u in controller.GetUsage(target)
+            if draw.event_id <= u.eventId < next_tone
+            and str(u.usage).endswith(("ColorTarget", "CopyDst", "ResolveDst"))
+        ]
+        precomposition = Path(report_path).with_name(
+            f"{Path(report_path).stem}-precomposition-{index}.png"
+        )
         controller.SetFrameEvent(max(writes, default=draw.event_id), True)
         save_image(controller, rd, target, precomposition)
-        view_results.append({
-            "index": index, "event": draw.event_id,
-            "previous_tonemap_event": tones[index - 1].event_id if index else 0,
-            "target_name": names.get(str(target), str(target)),
-            "state_resource": str(states[0].resource),
-            "shading_path": "forward" if any(
-                (tones[index - 1].event_id if index else 0) < a.event_id < draw.event_id
-                and "Vortex.Stage9.BasePass.Forward" in a.path for a in actions
-            ) else "deferred" if any(
-                (tones[index - 1].event_id if index else 0) < a.event_id < draw.event_id
-                and "Vortex.Stage12.DeferredLighting" in a.path for a in actions
-            ) else "diagnostic",
-            "debug_visualizations": [a.path for a in actions
-                if a.flags & rd.ActionFlags.Drawcall
-                and (tones[index - 1].event_id if index else 0) < a.event_id < draw.event_id
-                and "Vortex.DebugVisualization." in a.path],
-            "width": texture.width, "height": texture.height,
-            "write_rectangle": write_rect,
-            "frame": sequence, "gain": gain, "target_gain": target_gain,
-            "latent_gain": latent_gain, "latent_target": latent_target,
-            "settings_revision": settings_revision,
-            "pre_exposure": p, "raw_luminance": raw_luminance, "raw_ev": raw_ev,
-            "state_flags": state_flags, "frame_flags": flags,
-            "fallback_reason": fallback,
-            "requested_generation": requested, "applied_generation": applied,
-            "image": str(output), "precomposition_image": str(precomposition),
-            "probes": probes,
-        })
-        report.append(f"view={index} event={draw.event_id} extent={texture.width}x{texture.height} P={p} S={gain} targetS={target_gain} rawL={raw_luminance} rawEV={raw_ev} state_flags={state_flags} fallback={fallback} flags={flags} state_slot={state_slot} target={target} opaque_probes={checked} nonzero_scene_probes={nonzero_scene_probes} max_error={max_error} image={output}")
-    composites = [a for a in actions if a.flags & rd.ActionFlags.Drawcall
-                  and "Vortex.CompositingTask" in a.path]
+        view_results.append(
+            {
+                "index": index,
+                "event": draw.event_id,
+                "previous_tonemap_event": tones[index - 1].event_id if index else 0,
+                "target_name": names.get(str(target), str(target)),
+                "state_resource": str(states[0].resource),
+                "shading_path": "forward"
+                if any(
+                    (tones[index - 1].event_id if index else 0)
+                    < a.event_id
+                    < draw.event_id
+                    and "Vortex.Stage9.BasePass.Forward" in a.path
+                    for a in actions
+                )
+                else "deferred"
+                if any(
+                    (tones[index - 1].event_id if index else 0)
+                    < a.event_id
+                    < draw.event_id
+                    and "Vortex.Stage12.DeferredLighting" in a.path
+                    for a in actions
+                )
+                else "diagnostic",
+                "debug_visualizations": [
+                    a.path
+                    for a in actions
+                    if a.flags & rd.ActionFlags.Drawcall
+                    and (tones[index - 1].event_id if index else 0)
+                    < a.event_id
+                    < draw.event_id
+                    and "Vortex.DebugVisualization." in a.path
+                ],
+                "width": texture.width,
+                "height": texture.height,
+                "write_rectangle": write_rect,
+                "frame": sequence,
+                "gain": gain,
+                "target_gain": target_gain,
+                "latent_gain": latent_gain,
+                "latent_target": latent_target,
+                "settings_revision": settings_revision,
+                "pre_exposure": p,
+                "raw_luminance": raw_luminance,
+                "raw_ev": raw_ev,
+                "state_flags": state_flags,
+                "frame_flags": flags,
+                "fallback_reason": fallback,
+                "requested_generation": requested,
+                "applied_generation": applied,
+                "image": str(output),
+                "precomposition_image": str(precomposition),
+                "probes": probes,
+            }
+        )
+        report.append(
+            f"view={index} event={draw.event_id} extent={texture.width}x{texture.height} P={p} S={gain} targetS={target_gain} rawL={raw_luminance} rawEV={raw_ev} state_flags={state_flags} fallback={fallback} flags={flags} state_slot={state_slot} target={target} opaque_probes={checked} nonzero_scene_probes={nonzero_scene_probes} max_error={max_error} image={output}"
+        )
+    composites = [
+        a
+        for a in actions
+        if a.flags & rd.ActionFlags.Drawcall and "Vortex.CompositingTask" in a.path
+    ]
     if not composites:
         raise RuntimeError("No final composition draw")
     report.append(f"composite_image={composite_image}")
-    Path(report_path).with_suffix(".json").write_text(json.dumps({
-        "capture": str(capture_path), "composite_image": str(composite_image),
-        "views": view_results,
-    }, indent=2) + "\n", encoding="utf-8")
+    Path(report_path).with_suffix(".json").write_text(
+        json.dumps(
+            {
+                "capture": str(capture_path),
+                "composite_image": str(composite_image),
+                "views": view_results,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     report.append("per_view_tonemap_verdict=pass")
-    report.append("scope=captured per-view S/P only; temporal, standalone/family equivalence and visual inspection are separate gates")
+    report.append(
+        "scope=captured per-view S/P only; temporal, standalone/family equivalence and visual inspection are separate gates"
+    )
 
 
 if __name__ == "__main__":

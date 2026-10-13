@@ -4,10 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Profiling/CpuProfileScope.h>
-
 #include <cstring>
 
+#include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/Internal/CpuProfileCoordinator.h>
 
 namespace oxygen::profiling {

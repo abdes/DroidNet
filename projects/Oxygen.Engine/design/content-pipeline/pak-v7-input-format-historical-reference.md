@@ -364,9 +364,9 @@ Required changes:
 1. `src/Oxygen/Content/Tools/PakGen/tests/test_input_records_generation.py`
 2. `src/Oxygen/Content/Tools/PakGen/tests/test_plan_snapshot_input.py`
 3. `src/Oxygen/Content/Tools/PakGen/tests/test_pakdump_input_output.py`
-4. `src/Oxygen/Content/Test/SceneInputBindingsLoader_test.cpp`
-5. `src/Oxygen/Content/Test/AssetLoader_input_deps_test.cpp`
-6. `src/Oxygen/Content/Tools/Inspector/Test/InspectorInputDescriptors_test.cpp`
+4. `src/Oxygen/Content/test/SceneInputBindingsLoader_test.cpp`
+5. `src/Oxygen/Content/test/AssetLoader_input_deps_test.cpp`
+6. `src/Oxygen/Content/Tools/Inspector/test/InspectorInputDescriptors_test.cpp`
 
 ## Phase 1: data format
 

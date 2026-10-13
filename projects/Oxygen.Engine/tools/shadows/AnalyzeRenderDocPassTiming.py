@@ -59,9 +59,7 @@ PASS_NAME = get_required_env(PASS_NAME_ENV, "RenderDoc pass name")
 def gpu_duration_lookup(controller):
     rd = renderdoc_module()
     counter_results = controller.FetchCounters([rd.GPUCounter.EventGPUDuration])
-    return dict(
-        (result.eventId, result.value.d * 1000.0) for result in counter_results
-    )
+    return dict((result.eventId, result.value.d * 1000.0) for result in counter_results)
 
 
 def build_report(controller, report, capture_path, report_path):

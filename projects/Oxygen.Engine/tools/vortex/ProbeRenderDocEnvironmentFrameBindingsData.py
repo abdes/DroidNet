@@ -66,14 +66,19 @@ from renderdoc_ui_analysis import (  # noqa: E402
 REPORT_SUFFIX = "_environment_frame_bindings_data_probe.txt"
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     actions = collect_action_records(controller)
     resources = resource_id_to_name(controller)
 
     target = None
     for record in actions:
-        if "Vortex.Stage15.Sky" in record.path and record.name == "ID3D12GraphicsCommandList::DrawInstanced()":
+        if (
+            "Vortex.Stage15.Sky" in record.path
+            and record.name == "ID3D12GraphicsCommandList::DrawInstanced()"
+        ):
             target = record
             break
     if target is None:
@@ -83,16 +88,23 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     state = controller.GetPipelineState()
     readonly = state.GetReadOnlyResources(rd.ShaderStage.Pixel, True)
 
-    by_slot = {int(binding.access.arrayElement): binding.descriptor
-               for binding in readonly
-               if binding.access.index == rd.DescriptorAccess.NoShaderBinding}
-    constants = [block.descriptor for block in state.GetConstantBlocks(rd.ShaderStage.Pixel)
-                 if block.access.index != rd.DescriptorAccess.NoShaderBinding
-                 and block.descriptor.byteSize == 256]
+    by_slot = {
+        int(binding.access.arrayElement): binding.descriptor
+        for binding in readonly
+        if binding.access.index == rd.DescriptorAccess.NoShaderBinding
+    }
+    constants = [
+        block.descriptor
+        for block in state.GetConstantBlocks(rd.ShaderStage.Pixel)
+        if block.access.index != rd.DescriptorAccess.NoShaderBinding
+        and block.descriptor.byteSize == 256
+    ]
     if len(constants) != 1:
         raise RuntimeError("Could not locate the view root CBV")
     constant = constants[0]
-    constant_bytes = bytes(controller.GetBufferData(constant.resource, constant.byteOffset, 256))
+    constant_bytes = bytes(
+        controller.GetBufferData(constant.resource, constant.byteOffset, 256)
+    )
     root_slot = struct.unpack_from("<I", constant_bytes, 224)[0]
     root = by_slot.get(root_slot)
     if root is None or root.elementByteSize != 64:
@@ -100,8 +112,14 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     root_bytes = bytes(controller.GetBufferData(root.resource, root.byteOffset, 64))
     environment_slot = struct.unpack_from("<I", root_bytes, 8)[0]
     descriptor = by_slot.get(environment_slot)
-    if descriptor is None or descriptor.elementByteSize != 112 or descriptor.byteSize != 112:
-        raise RuntimeError("Could not locate the routed 112-byte EnvironmentFrameBindings buffer")
+    if (
+        descriptor is None
+        or descriptor.elementByteSize != 112
+        or descriptor.byteSize != 112
+    ):
+        raise RuntimeError(
+            "Could not locate the routed 112-byte EnvironmentFrameBindings buffer"
+        )
 
     resource = safe_getattr(descriptor, "resource")
     byte_offset = int(safe_getattr(descriptor, "byteOffset", 0) or 0)
@@ -115,8 +133,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(f"byte_size={byte_size}")
     report.append(f"u32_count={len(blob) // 4}")
 
-    values_u32 = struct.unpack("<{}I".format(len(blob) // 4), blob[: (len(blob) // 4) * 4])
-    values_f32 = struct.unpack("<{}f".format(len(blob) // 4), blob[: (len(blob) // 4) * 4])
+    values_u32 = struct.unpack(
+        "<{}I".format(len(blob) // 4), blob[: (len(blob) // 4) * 4]
+    )
+    values_f32 = struct.unpack(
+        "<{}f".format(len(blob) // 4), blob[: (len(blob) // 4) * 4]
+    )
     for index, value in enumerate(values_u32):
         report.append(f"u32_{index}={value}")
     for index, value in enumerate(values_f32):

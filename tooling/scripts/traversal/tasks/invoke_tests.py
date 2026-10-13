@@ -1,4 +1,5 @@
 """Run already-built tests using the runner selected by the project."""
+
 from __future__ import annotations
 import subprocess
 from pathlib import Path
@@ -6,25 +7,45 @@ from ...msbuild import query_msbuild_properties, visual_studio_tool
 from ..task_registry import TraversalContext, task
 from ..tfm import discover_target_frameworks
 
-@task("Invoke-Tests", aliases=["invoke-tests", "tests"],
-      description="Run built managed, WinUI and native tests; forward runner arguments after --.")
+
+@task(
+    "Invoke-Tests",
+    aliases=["invoke-tests", "tests"],
+    description="Run built managed, WinUI and native tests; forward runner arguments after --.",
+)
 def invoke_tests(project: Path, context: TraversalContext) -> None:
     if not project.stem.endswith((".Tests", ".NativeTests")):
         return
     options = context.forwarded_arguments
     unknown = set(options) - {"configuration", "framework", "timeout", "c", "f"}
     if unknown:
-        raise ValueError(f"Unknown test options: {', '.join(sorted(unknown))}; runner arguments go after --")
+        raise ValueError(
+            f"Unknown test options: {', '.join(sorted(unknown))}; runner arguments go after --"
+        )
     configuration = str(options.get("configuration", options.get("c", "Debug")))
     selected = options.get("framework", options.get("f"))
-    frameworks = [str(selected)] if selected else discover_target_frameworks(project, configuration=configuration)
+    frameworks = (
+        [str(selected)]
+        if selected
+        else discover_target_frameworks(project, configuration=configuration)
+    )
     timeout = float(str(options.get("timeout", 300)))
     if timeout <= 0:
         raise ValueError("--timeout must be greater than zero")
     for framework in frameworks:
         values, _ = query_msbuild_properties(
-            project, ["IsTestProject", "IsTestApplication", "TargetPath", "TargetDir", "TargetName", "EnableMSTestRunner",
-                      "RunSettingsFilePath"], configuration=configuration, target_framework=framework,
+            project,
+            [
+                "IsTestProject",
+                "IsTestApplication",
+                "TargetPath",
+                "TargetDir",
+                "TargetName",
+                "EnableMSTestRunner",
+                "RunSettingsFilePath",
+            ],
+            configuration=configuration,
+            target_framework=framework,
         )
         native = project.suffix.lower() == ".vcxproj"
         test_property = "IsTestProject" if native else "IsTestApplication"
@@ -38,22 +59,32 @@ def invoke_tests(project: Path, context: TraversalContext) -> None:
             args.extend(context.extra_arguments)
         else:
             if values["EnableMSTestRunner"].lower() != "true":
-                raise RuntimeError(f"Managed test project must enable the MSTest SDK runner: {project}")
+                raise RuntimeError(
+                    f"Managed test project must enable the MSTest SDK runner: {project}"
+                )
             executable = Path(values["TargetDir"]) / (values["TargetName"] + ".exe")
             args = [str(executable), *context.extra_arguments]
         context.logger.info("Invoke-Tests: %s", subprocess.list2cmdline(args))
         if context.dry_run:
             continue
         if not executable.is_file():
-            raise FileNotFoundError(f"Build {project.name} ({configuration}, {framework}) before running tests: {executable}")
+            raise FileNotFoundError(
+                f"Build {project.name} ({configuration}, {framework}) before running tests: {executable}"
+            )
         # The traversal runner collects exceptions and returns failure.
-        with subprocess.Popen(args, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP) as process:
+        with subprocess.Popen(
+            args, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+        ) as process:
             try:
                 code = process.wait(timeout=timeout)
             except subprocess.TimeoutExpired:
                 # Tests can own native workers or UI processes. Stop the entire owned tree.
-                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+                subprocess.run(
+                    ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                )
                 process.wait()
                 raise
             if code:

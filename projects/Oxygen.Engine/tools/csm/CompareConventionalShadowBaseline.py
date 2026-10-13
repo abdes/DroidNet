@@ -54,12 +54,8 @@ def main() -> int:
     current_stem = Path(args.current_stem)
     output_path = Path(args.output)
 
-    baseline_shadow = load_report(
-        baseline_stem.with_suffix(".shadow_timing.txt")
-    )
-    baseline_shader = load_report(
-        baseline_stem.with_suffix(".shader_timing.txt")
-    )
+    baseline_shadow = load_report(baseline_stem.with_suffix(".shadow_timing.txt"))
+    baseline_shader = load_report(baseline_stem.with_suffix(".shader_timing.txt"))
     current_shadow = load_report(current_stem.with_suffix(".shadow_timing.txt"))
     current_shader = load_report(current_stem.with_suffix(".shader_timing.txt"))
     current_receiver_timing = load_report(
@@ -106,7 +102,9 @@ def main() -> int:
     shader_delta_pct = (
         (shader_delta / baseline_shader_ms) * 100.0 if baseline_shader_ms > 0.0 else 0.0
     )
-    near_cascade_tightened = min_first_three_ratio > 0.0 and min_first_three_ratio < 0.95
+    near_cascade_tightened = (
+        min_first_three_ratio > 0.0 and min_first_three_ratio < 0.95
+    )
     structural_shadow_match = baseline_shadow_work == current_shadow_work
     structural_shader_match = baseline_shader_work == current_shader_work
 
@@ -138,7 +136,9 @@ def main() -> int:
         ),
         summary_line("current_min_full_area_ratio", f"{min_full_area_ratio:.6f}"),
         summary_line("current_min_full_depth_ratio", f"{min_full_depth_ratio:.6f}"),
-        summary_line("near_cascade_tightened_vs_full_rect", str(near_cascade_tightened).lower()),
+        summary_line(
+            "near_cascade_tightened_vs_full_rect", str(near_cascade_tightened).lower()
+        ),
     ]
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

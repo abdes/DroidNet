@@ -126,7 +126,7 @@ arrange_target_files_for_ide(${META_MODULE_TARGET} EXCLUDE_PATTERNS ".*")
 # ------------------------------------------------------------------------------
 
 if(OXYGEN_BUILD_TESTS)
-  add_subdirectory("Test")
+  add_subdirectory("test")
 endif()
 
 # ------------------------------------------------------------------------------

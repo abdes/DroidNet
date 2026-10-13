@@ -6,10 +6,10 @@
 
 #pragma once
 
-#include <Oxygen/Base/ObserverPtr.h>
-
 #include "DemoShell/UI/DemoPanel.h"
 #include "DemoShell/UI/GridVm.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
 
 namespace oxygen::examples::ui {
 

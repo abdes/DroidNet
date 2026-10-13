@@ -10,6 +10,8 @@
 #include <filesystem>
 #include <memory>
 
+#include "DemoShell/Services/SkyboxService.h"
+#include "TexturedCube/TextureLoadingService.h"
 #include <glm/glm.hpp>
 
 #include <Oxygen/Base/Macros.h>
@@ -19,9 +21,6 @@
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
-
-#include "DemoShell/Services/SkyboxService.h"
-#include "TexturedCube/TextureLoadingService.h"
 
 namespace oxygen::examples::textured_cube {
 

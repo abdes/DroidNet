@@ -8,7 +8,9 @@ from ..msbuild import query_msbuild_properties
 __all__ = ["discover_target_frameworks"]
 
 
-def discover_target_frameworks(project: Path, *, configuration: str | None = None) -> List[str]:
+def discover_target_frameworks(
+    project: Path, *, configuration: str | None = None
+) -> List[str]:
     """Return the evaluated target frameworks for the project.
 
     The function requests both ``TargetFrameworks`` (multi-targeting) and
@@ -18,14 +20,16 @@ def discover_target_frameworks(project: Path, *, configuration: str | None = Non
     """
 
     properties = ["TargetFrameworks", "TargetFramework"]
-    values, completed = query_msbuild_properties(project, properties, configuration=configuration)
+    values, completed = query_msbuild_properties(
+        project, properties, configuration=configuration
+    )
 
     target_frameworks: List[str] = []
     multi = values.get("TargetFrameworks")
     if multi:
-        target_frameworks.extend([
-            part.strip() for part in multi.split(";") if part.strip()
-        ])
+        target_frameworks.extend(
+            [part.strip() for part in multi.split(";") if part.strip()]
+        )
 
     single = values.get("TargetFramework")
     if single:

@@ -4,9 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Profiling/ProfileScope.h>
-
 #include <Oxygen/Profiling/Internal/ScopeNameFormatter.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 
 namespace oxygen::profiling {
 

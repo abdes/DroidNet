@@ -4,9 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Cooker/Import/Internal/WorkPayloadStore.h>
-
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/Internal/WorkPayloadStore.h>
 
 namespace oxygen::content::import::detail {
 

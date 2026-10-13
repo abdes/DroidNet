@@ -233,7 +233,7 @@ const auto result = console.Execute("ngin.target_fps 60");
 
 ## Testing
 
-Tests live under `src/Oxygen/Console/Test` and cover:
+Tests live under `src/Oxygen/Console/test` and cover:
 
 - parser behavior and edge cases
 - CVar conversion, bounds, and policy gating

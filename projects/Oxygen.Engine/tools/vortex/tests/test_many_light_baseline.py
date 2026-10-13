@@ -10,7 +10,9 @@ import numpy as np
 
 
 def load(name):
-    spec = importlib.util.spec_from_file_location(name, Path(__file__).resolve().parents[1] / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(
+        name, Path(__file__).resolve().parents[1] / f"{name}.py"
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -29,8 +31,23 @@ class BaselineAdmissionTest(unittest.TestCase):
             if changed and index == 1:
                 image[0, 1, 0] = 0
             image.tofile(path / "frame.rgba32f")
-            (path / "manifest.json").write_text(json.dumps({"complete": complete, "images": [{
-                "file": "frame.rgba32f", "phase": 0, "view": 0, "width": 2, "height": 1, "pre_exposure": 1}]}))
+            (path / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "complete": complete,
+                        "images": [
+                            {
+                                "file": "frame.rgba32f",
+                                "phase": 0,
+                                "view": 0,
+                                "width": 2,
+                                "height": 1,
+                                "pre_exposure": 1,
+                            }
+                        ],
+                    }
+                )
+            )
         return paths
 
     def test_identical_images_pass(self):

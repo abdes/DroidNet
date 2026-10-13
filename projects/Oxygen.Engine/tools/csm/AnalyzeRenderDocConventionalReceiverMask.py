@@ -219,7 +219,9 @@ def build_report(
     dispatch_records = [
         record for record in work_records if record.flags & rd.ActionFlags.Dispatch
     ]
-    copy_records = [record for record in work_records if record.flags & rd.ActionFlags.Copy]
+    copy_records = [
+        record for record in work_records if record.flags & rd.ActionFlags.Copy
+    ]
 
     if len(dispatch_records) not in (4, 5):
         raise RuntimeError(
@@ -252,13 +254,9 @@ def build_report(
     if base_mask_binding is None:
         raise RuntimeError("No base-mask binding found for {}".format(PASS_NAME))
     if hierarchy_mask_binding is None:
-        raise RuntimeError(
-            "No hierarchy-mask binding found for {}".format(PASS_NAME)
-        )
+        raise RuntimeError("No hierarchy-mask binding found for {}".format(PASS_NAME))
 
-    summary_records = read_summary_records(
-        controller, summary_binding["binding"]["id"]
-    )
+    summary_records = read_summary_records(controller, summary_binding["binding"]["id"])
     base_mask = read_uint32_buffer(controller, base_mask_binding["binding"]["id"])
     hierarchy_mask = read_uint32_buffer(
         controller, hierarchy_mask_binding["binding"]["id"]
@@ -315,8 +313,7 @@ def build_report(
             record["base_tile_resolution"] * record["base_tile_resolution"]
         )
         hierarchy_tiles_per_job = (
-            record["hierarchy_tile_resolution"]
-            * record["hierarchy_tile_resolution"]
+            record["hierarchy_tile_resolution"] * record["hierarchy_tile_resolution"]
         )
 
         base_slice = base_mask[base_offset : base_offset + base_tiles_per_job]
@@ -419,9 +416,7 @@ def build_report(
     report.append("copy_event_count={}".format(len(copy_records)))
     report.append("dispatch_event_count={}".format(len(dispatch_records)))
     report.append(
-        "finalize_dispatch_present={}".format(
-            str(finalize_event is not None).lower()
-        )
+        "finalize_dispatch_present={}".format(str(finalize_event is not None).lower())
     )
     report.append("copy_events={}".format(summarize_event_ids(copy_records)))
     report.append("clear_event_id={}".format(clear_event.event_id))
@@ -461,21 +456,15 @@ def build_report(
         )
     )
     report.append("summary_binding_name={}".format(summary_binding["binding"]["name"]))
-    report.append(
-        "summary_binding_source={}".format(summary_binding["binding_source"])
-    )
-    report.append(
-        "summary_binding_event_id={}".format(summary_binding["event_id"])
-    )
+    report.append("summary_binding_source={}".format(summary_binding["binding_source"]))
+    report.append("summary_binding_event_id={}".format(summary_binding["event_id"]))
     report.append(
         "base_mask_binding_name={}".format(base_mask_binding["binding"]["name"])
     )
     report.append(
         "base_mask_binding_source={}".format(base_mask_binding["binding_source"])
     )
-    report.append(
-        "base_mask_binding_event_id={}".format(base_mask_binding["event_id"])
-    )
+    report.append("base_mask_binding_event_id={}".format(base_mask_binding["event_id"]))
     report.append(
         "hierarchy_mask_binding_name={}".format(
             hierarchy_mask_binding["binding"]["name"]
@@ -487,9 +476,7 @@ def build_report(
         )
     )
     report.append(
-        "hierarchy_mask_binding_event_id={}".format(
-            hierarchy_mask_binding["event_id"]
-        )
+        "hierarchy_mask_binding_event_id={}".format(hierarchy_mask_binding["event_id"])
     )
     report.append("job_count={}".format(len(summary_records)))
     report.append("valid_job_count={}".format(valid_job_count))
@@ -512,9 +499,7 @@ def build_report(
         )
     )
     report.append(
-        "total_full_hierarchy_tile_count={}".format(
-            total_full_hierarchy_tile_count
-        )
+        "total_full_hierarchy_tile_count={}".format(total_full_hierarchy_tile_count)
     )
     report.append(
         "aggregate_hierarchy_occupied_tile_ratio={:.6f}".format(
@@ -530,9 +515,7 @@ def build_report(
         )
     )
     report.append(
-        "total_sampled_job_full_tile_count={}".format(
-            total_sampled_job_full_tile_count
-        )
+        "total_sampled_job_full_tile_count={}".format(total_sampled_job_full_tile_count)
     )
     report.append(
         "sampled_aggregate_occupied_tile_ratio={:.6f}".format(
@@ -572,16 +555,12 @@ def build_report(
     )
     report.append(
         "min_sampled_hierarchy_occupied_tile_ratio={:.6f}".format(
-            min(sampled_hierarchy_tile_ratios)
-            if sampled_hierarchy_tile_ratios
-            else 0.0
+            min(sampled_hierarchy_tile_ratios) if sampled_hierarchy_tile_ratios else 0.0
         )
     )
     report.append(
         "max_sampled_hierarchy_occupied_tile_ratio={:.6f}".format(
-            max(sampled_hierarchy_tile_ratios)
-            if sampled_hierarchy_tile_ratios
-            else 0.0
+            max(sampled_hierarchy_tile_ratios) if sampled_hierarchy_tile_ratios else 0.0
         )
     )
     report.append("max_dilation_tile_radius={}".format(max_dilation_tile_radius))

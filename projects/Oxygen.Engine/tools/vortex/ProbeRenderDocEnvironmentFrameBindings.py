@@ -88,7 +88,9 @@ def append_descriptor_fields(report, prefix, descriptor):
         report.append(f"{prefix}_{field}={safe_getattr(descriptor, field, None)}")
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     del capture_path
     del report_path
     rd = renderdoc_module()
@@ -97,7 +99,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
 
     target = None
     for record in actions:
-        if "Vortex.Stage15.Sky" in record.path and record.name == "ID3D12GraphicsCommandList::DrawInstanced()":
+        if (
+            "Vortex.Stage15.Sky" in record.path
+            and record.name == "ID3D12GraphicsCommandList::DrawInstanced()"
+        ):
             target = record
             break
     if target is None:
@@ -128,7 +133,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     outputs = state.GetOutputTargets()
     report.append(f"output_count={len(outputs)}")
     for index, descriptor in enumerate(outputs):
-        report.append(f"output_{index}_resource={describe_resource(resources, descriptor)}")
+        report.append(
+            f"output_{index}_resource={describe_resource(resources, descriptor)}"
+        )
         append_descriptor_fields(report, f"output_{index}", descriptor)
 
 

@@ -6,10 +6,10 @@
 
 #pragma once
 
+#include "DemoShell/PanelRegistry.h"
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
-
-#include "DemoShell/PanelRegistry.h"
 
 namespace oxygen::examples::ui {
 

@@ -233,7 +233,7 @@ Source of truth:
 
 - `src/Oxygen/Nexus/TimelineGatedSlotReuse.h`
 - `src/Oxygen/Nexus/TimelineGatedSlotReuse.cpp`
-- `src/Oxygen/Nexus/Test/TimelineGatedSlotReuse_test.cpp`
+- `src/Oxygen/Nexus/test/TimelineGatedSlotReuse_test.cpp`
 
 How it works:
 
@@ -384,8 +384,8 @@ Atomicity guarantees:
 
 Source of truth for integration usage:
 
-- `src/Oxygen/Nexus/Test/TimelineGatedSlotReuse_test.cpp`
-- `src/Oxygen/Nexus/Test/FrameDrivenSlotReuse_test.cpp`
+- `src/Oxygen/Nexus/test/TimelineGatedSlotReuse_test.cpp`
+- `src/Oxygen/Nexus/test/FrameDrivenSlotReuse_test.cpp`
 - `src/Oxygen/Nexus/TimelineGatedSlotReuse.h`
 - `src/Oxygen/Nexus/FrameDrivenSlotReuse.h`
 
@@ -404,7 +404,7 @@ Current test approach is fully CPU-side and deterministic, using injected
 callbacks and fakes (no real GPU submission).
 
 - Shared test fakes:
-  - `src/Oxygen/Nexus/Test/NexusMocks.h`
+  - `src/Oxygen/Nexus/test/NexusMocks.h`
   - `AllocateBackend` and `FreeBackend` simulate slot allocation/reclaim paths.
   - `FakeCommandQueue` simulates queue timeline APIs
     (`Signal`, `QueueSignalCommand`, `GetCompletedValue`).
@@ -415,8 +415,8 @@ callbacks and fakes (no real GPU submission).
     stale-handle rejection, double-release protection, and concurrent release
     behavior.
   - Source tests:
-    - `src/Oxygen/Nexus/Test/FrameDrivenSlotReuse_test.cpp`
-    - `src/Oxygen/Nexus/Test/FrameDrivenIndexReuse_test.cpp`
+    - `src/Oxygen/Nexus/test/FrameDrivenSlotReuse_test.cpp`
+    - `src/Oxygen/Nexus/test/FrameDrivenIndexReuse_test.cpp`
 - Strategy B (`TimelineGatedSlotReuse`):
   - Tests enqueue with explicit queue/fence and drive reclaim by advancing fake
     queue completion then calling `Process()` / `ProcessFor(...)`.
@@ -424,13 +424,13 @@ callbacks and fakes (no real GPU submission).
     rejection, invalid-handle behavior, batch handling, queue-expiry behavior,
     and high-cardinality bucket draining.
   - Source tests:
-    - `src/Oxygen/Nexus/Test/TimelineGatedSlotReuse_test.cpp`
+    - `src/Oxygen/Nexus/test/TimelineGatedSlotReuse_test.cpp`
 - Utility coverage:
   - `GenerationTracker` and `DomainIndexMapper` include dedicated correctness
     and concurrency tests.
   - Source tests:
-    - `src/Oxygen/Nexus/Test/GenerationTracker_test.cpp`
-    - `src/Oxygen/Nexus/Test/DomainIndexMapper_test.cpp`
+    - `src/Oxygen/Nexus/test/GenerationTracker_test.cpp`
+    - `src/Oxygen/Nexus/test/DomainIndexMapper_test.cpp`
 
 ---
 

@@ -106,9 +106,7 @@ def build_report(controller, report, capture_path, report_path):
     report.append("pass_name={}".format(PASS_NAME))
     report.append("scope_events={}".format(summarize_event_ids(scope_records)))
     report.append("work_events={}".format(summarize_event_ids(work_records)))
-    report.append(
-        "directional_mask_writer_count={}".format(len(directional_writers))
-    )
+    report.append("directional_mask_writer_count={}".format(len(directional_writers)))
     report.append("shadow_mask_writer_count={}".format(len(shadow_writers)))
     report.blank()
     report.append("directional_mask_writers:")

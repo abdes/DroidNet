@@ -22,8 +22,8 @@
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Vortex/PostProcess/Passes/TonemapPass.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureLightingFixture.h>
-#include <Oxygen/Vortex/Test/Exposure/Fixtures/ExposureTestGraphics.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestGraphics.h>
 
 namespace oxygen::vortex::testing::exposure {
 

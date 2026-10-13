@@ -73,11 +73,15 @@ def float4_values(pixel_value):
 def resolve_scope_name():
     configured = os.environ.get("OXYGEN_RENDERDOC_PASS_NAME", "").strip()
     if not configured:
-        raise RuntimeError("Set OXYGEN_RENDERDOC_PASS_NAME to the scope name to inspect.")
+        raise RuntimeError(
+            "Set OXYGEN_RENDERDOC_PASS_NAME to the scope name to inspect."
+        )
     return configured
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     del capture_path
     del report_path
     rd = renderdoc_module()

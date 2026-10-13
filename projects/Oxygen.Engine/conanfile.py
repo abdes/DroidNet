@@ -124,8 +124,19 @@ class OxygenConan(ConanFile):
 
     @staticmethod
     def _module_closure(selection):
-        names = ("Base", "Composition", "OxCo", "Serio", "TextWrap", "Clap",
-                 "Config", "Console", "Core", "Platform", "Input")
+        names = (
+            "Base",
+            "Composition",
+            "OxCo",
+            "Serio",
+            "TextWrap",
+            "Clap",
+            "Config",
+            "Console",
+            "Core",
+            "Platform",
+            "Input",
+        )
         # Direct module dependencies, listed in reverse dependency order so one
         # pass yields the closure (mirrors cmake/ModuleSelection.cmake).
         dependencies = (
@@ -142,7 +153,8 @@ class OxygenConan(ConanFile):
         if invalid:
             raise ConanInvalidConfiguration(
                 f"Invalid modules selection: {sorted(invalid)}. Use 'full' or "
-                f"comma-separated module names: {', '.join(names)}.")
+                f"comma-separated module names: {', '.join(names)}."
+            )
         requested.add("Base")
         for module, required in dependencies:
             if module in requested:
@@ -159,27 +171,33 @@ class OxygenConan(ConanFile):
 
     @staticmethod
     def _checker_enabled(value, build_type):
-        return str(build_type) == "Debug" if str(value) == "auto" else str(value) == "True"
+        return (
+            str(build_type) == "Debug" if str(value) == "auto" else str(value) == "True"
+        )
 
     def package_id(self):
         modules = self._module_closure(self.info.options.modules)
         self.info.options.modules = ",".join(modules) if modules else "full"
         self.info.options.awaitable_state_checker = self._checker_enabled(
-            self.info.options.awaitable_state_checker, self.info.settings.build_type)
+            self.info.options.awaitable_state_checker, self.info.settings.build_type
+        )
 
     def set_version(self):
-        assert (
-            self.recipe_folder is not None
-        ), "recipe_folder must be set before set_version()"
+        assert self.recipe_folder is not None, (
+            "recipe_folder must be set before set_version()"
+        )
         version = self._read_product_version()
         if self.version is not None and str(self.version) != version:
-            raise ConanInvalidConfiguration("The package version must match Oxygen's VERSION file.")
+            raise ConanInvalidConfiguration(
+                "The package version must match Oxygen's VERSION file."
+            )
         self.version = version
 
     def _read_product_version(self):
         version = load(self, Path(self.recipe_folder) / "VERSION").strip()
-        if (not re.fullmatch(r"(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})", version)
-                or any(int(part) > 255 for part in version.split("."))):
+        if not re.fullmatch(
+            r"(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})\.(0|[1-9][0-9]{0,2})", version
+        ) or any(int(part) > 255 for part in version.split(".")):
             raise ConanInvalidConfiguration(
                 f"Invalid version '{version}'; expected major.minor.patch, "
                 "with canonical decimal components in 0..255."
@@ -193,15 +211,24 @@ class OxygenConan(ConanFile):
         capsule = root / "oxygen-source.json"
         if capsule.is_file():
             data = json.loads(capsule.read_text(encoding="utf-8"))
-            valid = (isinstance(data, dict) and set(data) == {"schema", "version", "commit", "dirty"}
-                     and type(data["schema"]) in (int, float) and data["schema"] == 1 and data["version"] == version)
+            valid = (
+                isinstance(data, dict)
+                and set(data) == {"schema", "version", "commit", "dirty"}
+                and type(data["schema"]) in (int, float)
+                and data["schema"] == 1
+                and data["version"] == version
+            )
             if valid:
                 commit, dirty = data["commit"], data["dirty"]
-                valid = ((commit is None and dirty is None)
-                         or (isinstance(commit, str) and re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit)
-                             and type(dirty) is bool))
+                valid = (commit is None and dirty is None) or (
+                    isinstance(commit, str)
+                    and re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit)
+                    and type(dirty) is bool
+                )
             if not valid:
-                raise ConanInvalidConfiguration(f"Invalid or mismatched source provenance: {capsule}")
+                raise ConanInvalidConfiguration(
+                    f"Invalid or mismatched source provenance: {capsule}"
+                )
             return {"schema": 1, "version": version, "commit": commit, "dirty": dirty}
 
         unknown = {"schema": 1, "version": version, "commit": None, "dirty": None}
@@ -209,7 +236,11 @@ class OxygenConan(ConanFile):
         def git(*arguments):
             result = subprocess.run(
                 ["git", "--no-optional-locks", "-C", str(root), *arguments],
-                capture_output=True, text=True, encoding="utf-8", errors="replace", check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=True,
             )
             return result.stdout.strip()
 
@@ -222,36 +253,59 @@ class OxygenConan(ConanFile):
             commit = git("log", "-1", "--format=%H", "--", *scope)
             if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit):
                 return unknown
-            dirty = bool(git("status", "--porcelain=v1", "--untracked-files=all", "--", *scope))
+            dirty = bool(
+                git("status", "--porcelain=v1", "--untracked-files=all", "--", *scope)
+            )
         except (OSError, subprocess.CalledProcessError):
             return unknown
         return {"schema": 1, "version": version, "commit": commit, "dirty": dirty}
 
     def export(self):
         # Export freezes the source identity; local install/generate never does.
-        save(self, Path(self.export_folder) / "oxygen-source.json",
-             json.dumps(self._source_provenance(), indent=2) + "\n")
+        save(
+            self,
+            Path(self.export_folder) / "oxygen-source.json",
+            json.dumps(self._source_provenance(), indent=2) + "\n",
+        )
 
     def export_sources(self):
-        copy(self, "oxygen-source.json", src=self.export_folder, dst=self.export_sources_folder)
+        copy(
+            self,
+            "oxygen-source.json",
+            src=self.export_folder,
+            dst=self.export_sources_folder,
+        )
         workspace = self._python_workspace(Path(self.recipe_folder))
         if workspace:
             copy(self, ".python-version", src=workspace, dst=self.export_sources_folder)
             # Freeze only Oxygen's Python build-tool closure into the source
             # export. Cache builds must not reach back into the monorepo.
             destination = Path(self.export_sources_folder) / "cmake" / "python"
-            common = ["uv", "export", "--project", str(workspace), "--locked",
-                      "--no-python-downloads", "--no-default-groups", "--no-emit-workspace",
-                      "--no-header", "--no-annotate"]
+            common = [
+                "uv",
+                "export",
+                "--project",
+                str(workspace),
+                "--locked",
+                "--no-python-downloads",
+                "--no-default-groups",
+                "--no-emit-workspace",
+                "--no-header",
+                "--no-annotate",
+            ]
             tools = ["--package", "bindless-codegen"]
             for name, selection in (
                 ("build-backends.txt", ["--only-group", "build-tools"]),
                 ("build-requirements.txt", tools),
                 ("test-requirements.txt", tools + ["--extra", "test"]),
             ):
-                result = subprocess.run(common + selection, capture_output=True, text=True, encoding="utf-8")
+                result = subprocess.run(
+                    common + selection, capture_output=True, text=True, encoding="utf-8"
+                )
                 if result.returncode:
-                    raise ConanInvalidConfiguration(f"Cannot export Python lock: {result.stderr.strip()}")
+                    raise ConanInvalidConfiguration(
+                        f"Cannot export Python lock: {result.stderr.strip()}"
+                    )
                 save(self, str(destination / name), result.stdout)
 
     @staticmethod
@@ -270,43 +324,117 @@ class OxygenConan(ConanFile):
         workspace = self._python_workspace(source)
         uv = shutil.which("uv")
         if (workspace or self._full_engine) and not uv:
-            raise ConanInvalidConfiguration("uv is required to provision Oxygen's Python build tools.")
+            raise ConanInvalidConfiguration(
+                "uv is required to provision Oxygen's Python build tools."
+            )
         if workspace:
             environment = workspace / ".venv"
-            self.output.info("Synchronizing the repository Python environment from uv.lock")
-            subprocess.run([uv, "sync", "--project", str(workspace), "--locked",
-                            "--no-python-downloads", "--no-active"], check=True,
-                           env={**os.environ, "UV_PROJECT_ENVIRONMENT": str(environment)})
+            self.output.info(
+                "Synchronizing the repository Python environment from uv.lock"
+            )
+            subprocess.run(
+                [
+                    uv,
+                    "sync",
+                    "--project",
+                    str(workspace),
+                    "--locked",
+                    "--no-python-downloads",
+                    "--no-active",
+                ],
+                check=True,
+                env={**os.environ, "UV_PROJECT_ENVIRONMENT": str(environment)},
+            )
             lockfile = workspace / "uv.lock"
         elif self._full_engine:
             # One private environment for this independently exported source
             # build, not one per configuration in a developer checkout.
             environment = Path(self.build_folder) / ".venv"
-            interpreter = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-            name = "test-requirements.txt" if self.options.tests else "build-requirements.txt"
+            interpreter = environment / (
+                "Scripts/python.exe" if os.name == "nt" else "bin/python"
+            )
+            name = (
+                "test-requirements.txt"
+                if self.options.tests
+                else "build-requirements.txt"
+            )
             lockfile = source / "cmake" / "python" / name
             if not lockfile.is_file():
-                raise ConanInvalidConfiguration(f"Missing exported Python requirements: {lockfile}")
+                raise ConanInvalidConfiguration(
+                    f"Missing exported Python requirements: {lockfile}"
+                )
             if not interpreter.is_file():
                 version_file = source / ".python-version"
                 if not version_file.is_file():
-                    raise ConanInvalidConfiguration(f"Missing exported Python version request: {version_file}")
-                subprocess.run([uv, "venv", "--python", version_file.read_text(encoding="utf-8").strip(), "--no-python-downloads",
-                                str(environment)], check=True)
+                    raise ConanInvalidConfiguration(
+                        f"Missing exported Python version request: {version_file}"
+                    )
+                subprocess.run(
+                    [
+                        uv,
+                        "venv",
+                        "--python",
+                        version_file.read_text(encoding="utf-8").strip(),
+                        "--no-python-downloads",
+                        str(environment),
+                    ],
+                    check=True,
+                )
             backends = lockfile.with_name("build-backends.txt")
-            subprocess.run([uv, "pip", "sync", "--python", str(interpreter), "--require-hashes",
-                            str(lockfile), str(backends)], check=True)
-            subprocess.run([uv, "pip", "install", "--python", str(interpreter),
-                            "--no-deps", "--no-build-isolation", "--editable",
-                            str(source / "src/Oxygen/Core/Tools/BindlessCodeGen")], check=True)
-            save(self, str(environment / "oxygen-build-tools.json"), json.dumps({
-                "requirements_sha256": hashlib.sha256(lockfile.read_bytes() + backends.read_bytes()).hexdigest(),
-                "pyprojects": {str(p.relative_to(source)): hashlib.sha256(p.read_bytes()).hexdigest()
-                               for p in (source / "src/Oxygen/Core/Tools/BindlessCodeGen/pyproject.toml",)},
-            }, indent=2) + "\n")
+            subprocess.run(
+                [
+                    uv,
+                    "pip",
+                    "sync",
+                    "--python",
+                    str(interpreter),
+                    "--require-hashes",
+                    str(lockfile),
+                    str(backends),
+                ],
+                check=True,
+            )
+            subprocess.run(
+                [
+                    uv,
+                    "pip",
+                    "install",
+                    "--python",
+                    str(interpreter),
+                    "--no-deps",
+                    "--no-build-isolation",
+                    "--editable",
+                    str(source / "src/Oxygen/Core/Tools/BindlessCodeGen"),
+                ],
+                check=True,
+            )
+            save(
+                self,
+                str(environment / "oxygen-build-tools.json"),
+                json.dumps(
+                    {
+                        "requirements_sha256": hashlib.sha256(
+                            lockfile.read_bytes() + backends.read_bytes()
+                        ).hexdigest(),
+                        "pyprojects": {
+                            str(p.relative_to(source)): hashlib.sha256(
+                                p.read_bytes()
+                            ).hexdigest()
+                            for p in (
+                                source
+                                / "src/Oxygen/Core/Tools/BindlessCodeGen/pyproject.toml",
+                            )
+                        },
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
         else:
             return None
-        interpreter = environment / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+        interpreter = environment / (
+            "Scripts/python.exe" if os.name == "nt" else "bin/python"
+        )
         return interpreter.as_posix(), lockfile.as_posix()
 
     def requirements(self):
@@ -328,7 +456,9 @@ class OxygenConan(ConanFile):
         if self.options.tests:
             self.test_requires("gtest/master")
             self._test_deps.add("gtest")
-        if self.options.benchmarks and (self._full_engine or {"OxCo", "Composition"}.intersection(self._modules)):
+        if self.options.benchmarks and (
+            self._full_engine or {"OxCo", "Composition"}.intersection(self._modules)
+        ):
             self.test_requires("benchmark/1.9.4")
             self._test_deps.add("benchmark")
         if not self._full_engine:
@@ -346,7 +476,9 @@ class OxygenConan(ConanFile):
         self.requires("ftxui/6.1.9")
         self.requires("libspng/0.7.4")
         self.requires("luau/0.739", transitive_headers=True, transitive_libs=True)
-        self.requires("joltphysics/5.5.0", transitive_headers=True, transitive_libs=True)
+        self.requires(
+            "joltphysics/5.5.0", transitive_headers=True, transitive_libs=True
+        )
         self.requires("xxhash/0.8.3")
         if self.options.with_tracy:
             self.requires("tracy/0.13.1")
@@ -365,7 +497,9 @@ class OxygenConan(ConanFile):
             # When building shared libs, and compiler is MSVC, we need to set
             # the runtime to dynamic
             if is_msvc(self) and is_msvc_static_runtime(self):
-                raise ConanInvalidConfiguration("Shared Oxygen libraries require the dynamic MSVC runtime.")
+                raise ConanInvalidConfiguration(
+                    "Shared Oxygen libraries require the dynamic MSVC runtime."
+                )
 
         if self.options.tests:
             self.options["gtest"].shared = False
@@ -381,9 +515,15 @@ class OxygenConan(ConanFile):
                 self.options["tracy"].shared = bool(self.options.shared)
 
     def validate(self):
-        if self.options.ui_tests and (not self._full_engine or not self.options.examples):
-            raise ConanInvalidConfiguration("UI tests require the full engine and demo applications")
-        if self._full_engine and (self.settings.os != "Windows" or self.settings.arch != "x86_64"):
+        if self.options.ui_tests and (
+            not self._full_engine or not self.options.examples
+        ):
+            raise ConanInvalidConfiguration(
+                "UI tests require the full engine and demo applications"
+            )
+        if self._full_engine and (
+            self.settings.os != "Windows" or self.settings.arch != "x86_64"
+        ):
             raise ConanInvalidConfiguration(
                 "Oxygen's full-engine build requires Windows x64."
             )
@@ -396,19 +536,31 @@ class OxygenConan(ConanFile):
                 "(Conan compiler=msvc, compiler.version>=195)."
             )
         if self._full_engine and cross_building(self):
-            raise ConanInvalidConfiguration("Full-engine builds require a native Windows x64 build machine.")
+            raise ConanInvalidConfiguration(
+                "Full-engine builds require a native Windows x64 build machine."
+            )
         check_min_cppstd(self, 23)
 
         identity = self.conf.get("user.oxygen:sanitizer", default="none")
         if not self._with_asan and identity != "none":
-            raise ConanInvalidConfiguration("The ASan dependency profile requires oxygen/*:with_asan=True.")
+            raise ConanInvalidConfiguration(
+                "The ASan dependency profile requires oxygen/*:with_asan=True."
+            )
 
         if self._with_asan:
-            identity_confs = self.conf.get("tools.info.package_id:confs", default=[], check_type=list)
+            identity_confs = self.conf.get(
+                "tools.info.package_id:confs", default=[], check_type=list
+            )
             cflags = self.conf.get("tools.build:cflags", default=[], check_type=list)
-            cxxflags = self.conf.get("tools.build:cxxflags", default=[], check_type=list)
-            if (identity != "asan" or "user.oxygen:sanitizer" not in identity_confs
-                    or "-fsanitize=address" not in cflags or "-fsanitize=address" not in cxxflags):
+            cxxflags = self.conf.get(
+                "tools.build:cxxflags", default=[], check_type=list
+            )
+            if (
+                identity != "asan"
+                or "user.oxygen:sanitizer" not in identity_confs
+                or "-fsanitize=address" not in cflags
+                or "-fsanitize=address" not in cxxflags
+            ):
                 raise ConanInvalidConfiguration(
                     "ASan requires the ASan host profile, including its dependency "
                     "binary-identity configuration; with_asan alone is insufficient."
@@ -425,7 +577,8 @@ class OxygenConan(ConanFile):
             raise ConanInvalidConfiguration(
                 "Full-engine Conan packages require shared=True: RenderScene loads "
                 "its graphics backends as DLLs. Static packages require an explicit "
-                "reusable-module selection.")
+                "reusable-module selection."
+            )
 
     @property
     def _cmake_generator(self):
@@ -434,8 +587,11 @@ class OxygenConan(ConanFile):
 
     @property
     def _install_root(self):
-        return Path(self.recipe_folder) / "out" / (
-            "install-tracy" if self.options.with_tracy else "install")
+        return (
+            Path(self.recipe_folder)
+            / "out"
+            / ("install-tracy" if self.options.with_tracy else "install")
+        )
 
     @property
     def _with_asan(self):
@@ -471,14 +627,28 @@ class OxygenConan(ConanFile):
         # These vary normally between Debug and Release in one multi-config tree.
         settings.pop("build_type", None)
         settings.pop("compiler.runtime_type", None)
-        identity = {"generator": self._cmake_generator, "settings": settings,
-                    "shared": bool(self.options.shared),
-                    "asan": self._with_asan, "tracy": bool(self.options.with_tracy),
-                    "fPIC": str(self.options.get_safe("fPIC"))}
+        identity = {
+            "generator": self._cmake_generator,
+            "settings": settings,
+            "shared": bool(self.options.shared),
+            "asan": self._with_asan,
+            "tracy": bool(self.options.with_tracy),
+            "fPIC": str(self.options.get_safe("fPIC")),
+        }
         # These become one set of configure-time choices, even when dependency
         # binaries are installed separately for each build configuration.
-        choices = {name: str(self.options.get_safe(name)) for name in (
-            "awaitable_state_checker", "ui_tests", "tools", "examples", "tests", "benchmarks", "docs")}
+        choices = {
+            name: str(self.options.get_safe(name))
+            for name in (
+                "awaitable_state_checker",
+                "ui_tests",
+                "tools",
+                "examples",
+                "tests",
+                "benchmarks",
+                "docs",
+            )
+        }
         choices["modules"] = ";".join(self._modules)
         configurations = {}
         configuration = str(self.settings.build_type)
@@ -487,29 +657,43 @@ class OxygenConan(ConanFile):
             f"Regenerate the selected build tree '{self.build_folder}' consistently "
             "(build-tree.ps1 generate <profile> -Clean for the selected family/generator, "
             "or remove that build tree and "
-            "repeat its Conan installs). Other build trees need not be removed.")
+            "repeat its Conan installs). Other build trees need not be removed."
+        )
         if path.exists():
             previous = json.loads(path.read_text(encoding="utf-8"))
-            differences = [f"{key}: {previous.get(key)!r} -> {value!r}"
-                           for key, value in identity.items() if previous.get(key) != value]
+            differences = [
+                f"{key}: {previous.get(key)!r} -> {value!r}"
+                for key, value in identity.items()
+                if previous.get(key) != value
+            ]
             if differences:
                 raise ConanInvalidConfiguration(
-                    "Incompatible Oxygen build-tree reuse: " + "; ".join(differences)
-                    + ". " + remedy)
+                    "Incompatible Oxygen build-tree reuse: "
+                    + "; ".join(differences)
+                    + ". "
+                    + remedy
+                )
             configurations = previous.get("configurations", {})
             for other, other_choices in configurations.items():
                 if other == configuration:
                     continue
-                changed = [name for name, value in choices.items()
-                           if other_choices.get(name) != value]
+                changed = [
+                    name
+                    for name, value in choices.items()
+                    if other_choices.get(name) != value
+                ]
                 if changed:
                     raise ConanInvalidConfiguration(
                         f"Incompatible Oxygen build-tree options for {configuration} and {other}: "
-                        + ", ".join(changed) + ". " + remedy)
+                        + ", ".join(changed)
+                        + ". "
+                        + remedy
+                    )
         elif (path.parent / "conan_toolchain.cmake").exists():
             raise ConanInvalidConfiguration(
                 "This existing Oxygen tree predates build-identity validation; "
-                "its compatibility cannot be verified. " + remedy)
+                "its compatibility cannot be verified. " + remedy
+            )
         configurations[configuration] = choices
         identity["configurations"] = configurations
         return path, identity
@@ -536,7 +720,9 @@ class OxygenConan(ConanFile):
         expectations = dict(tc.cache_variables)
         package_build = bool(self.package_folder)
         modules = ";".join(self._modules)
-        checker = {"auto": "AUTO", "True": "ON", "False": "OFF"}[str(self.options.awaitable_state_checker)]
+        checker = {"auto": "AUTO", "True": "ON", "False": "OFF"}[
+            str(self.options.awaitable_state_checker)
+        ]
         tc.cache_variables["OXYGEN_MODULES"] = modules
         tc.cache_variables["OXYGEN_AWAITER_STATE_CHECKER"] = checker
         tc.cache_variables["CMAKE_INTERMEDIATE_DIR_STRATEGY"] = "SHORT"
@@ -552,8 +738,14 @@ class OxygenConan(ConanFile):
             tc.variables["OXYGEN_PYTHON_LOCKFILE"] = python[1]
         dxc_tool_dirs = dxc_runtime_dirs = ""
         if "dxc" in self.dependencies.host:
-            dxc_tool_dirs = ";".join(Path(p).as_posix() for p in self.dependencies.build["dxc"].cpp_info.bindirs)
-            dxc_runtime_dirs = ";".join(Path(p).as_posix() for p in self.dependencies.host["dxc"].cpp_info.bindirs)
+            dxc_tool_dirs = ";".join(
+                Path(p).as_posix()
+                for p in self.dependencies.build["dxc"].cpp_info.bindirs
+            )
+            dxc_runtime_dirs = ";".join(
+                Path(p).as_posix()
+                for p in self.dependencies.host["dxc"].cpp_info.bindirs
+            )
 
         class OxygenOptionsBlock:
             # Graph facts must not be cached: every configure reads the current
@@ -570,9 +762,14 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
 """
 
             def context(self):
-                return {"options": expectations, "package_build": package_build,
-                        "dxc_tool_dirs": dxc_tool_dirs, "dxc_runtime_dirs": dxc_runtime_dirs,
-                        "modules": modules, "checker": checker}
+                return {
+                    "options": expectations,
+                    "package_build": package_build,
+                    "dxc_tool_dirs": dxc_tool_dirs,
+                    "dxc_runtime_dirs": dxc_runtime_dirs,
+                    "modules": modules,
+                    "checker": checker,
+                }
 
         tc.blocks["oxygen_options"] = OxygenOptionsBlock
         # Set OXYGEN_CONAN_DEPLOY_DIR to the base install directory.
@@ -581,7 +778,8 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
         if not package_build:
             tc.variables["OXYGEN_CONAN_DEPLOY_DIR"] = self._install_root.as_posix()
             tc.variables["OXYGEN_SDK_DEPENDENCY_DIR"] = (
-                Path(self.generators_folder) / "oxygen-sdk").as_posix()
+                Path(self.generators_folder) / "oxygen-sdk"
+            ).as_posix()
 
         self._reset_legacy_presets(tc.presets_prefix)
         tc.generate()
@@ -597,7 +795,8 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
     def _sdk_runtime_file(path):
         """Runtime DLLs and their matching development symbols, not build tools."""
         return path.suffix.lower() == ".dll" or (
-            path.suffix.lower() == ".pdb" and path.with_suffix(".dll").is_file())
+            path.suffix.lower() == ".pdb" and path.with_suffix(".dll").is_file()
+        )
 
     def _sdk_payload(self):
         """Select public headers, declared libraries and runtime payloads only."""
@@ -622,11 +821,15 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
                         relative = source.relative_to(folder)
                     except ValueError:
                         continue  # Platform SDK paths remain platform-owned.
-                    if relative == Path('.'):
-                        raise ConanInvalidConfiguration(f"SDK needs an explicit {kind} for {name}")
+                    if relative == Path("."):
+                        raise ConanInvalidConfiguration(
+                            f"SDK needs an explicit {kind} for {name}"
+                        )
                     directories.append((source, relative, kind == "bindirs"))
             if (folder / "licenses").is_dir():
-                directories.append((folder / "licenses", Path("share/oxygen/licenses") / name, False))
+                directories.append(
+                    (folder / "licenses", Path("share/oxygen/licenses") / name, False)
+                )
             for lib in info.libs:
                 candidates = set()
                 for raw in info.libdirs:
@@ -638,28 +841,53 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
                     # cpp_info.libs supplies logical link names, not every
                     # archive that happens to have been packaged upstream.
                     stems = {str(lib).casefold(), ("lib" + str(lib)).casefold()}
-                    for item in directory.rglob('*'):
-                        if item.is_file() and (item.stem.casefold() in stems
-                                               and item.suffix.lower() in ('.lib', '.a', '.so', '.dylib')):
+                    for item in directory.rglob("*"):
+                        if item.is_file() and (
+                            item.stem.casefold() in stems
+                            and item.suffix.lower() in (".lib", ".a", ".so", ".dylib")
+                        ):
                             candidates.add(item)
                 if not candidates:
-                    raise ConanInvalidConfiguration(f"SDK cannot locate declared library {name}:{lib}")
+                    raise ConanInvalidConfiguration(
+                        f"SDK cannot locate declared library {name}:{lib}"
+                    )
                 for item in sorted(candidates):
                     previous = libraries.get(item.name.casefold())
-                    if previous and previous != item and previous.read_bytes() != item.read_bytes():
-                        raise ConanInvalidConfiguration(f"Declared SDK library collision: {previous} and {item}")
+                    if (
+                        previous
+                        and previous != item
+                        and previous.read_bytes() != item.read_bytes()
+                    ):
+                        raise ConanInvalidConfiguration(
+                            f"Declared SDK library collision: {previous} and {item}"
+                        )
                     libraries[item.name.casefold()] = item
         # Validate the flattened payload before deploy() can overwrite anything.
         destinations = {}
         for source, relative, runtime in directories:
             for artifact in source.rglob("*"):
-                if not artifact.is_file() or (runtime and not self._sdk_runtime_file(artifact)):
+                if not artifact.is_file() or (
+                    runtime and not self._sdk_runtime_file(artifact)
+                ):
                     continue
-                destination = (Path("bin") / artifact.name if runtime
-                               else relative / artifact.relative_to(source)).as_posix().casefold()
+                destination = (
+                    (
+                        Path("bin") / artifact.name
+                        if runtime
+                        else relative / artifact.relative_to(source)
+                    )
+                    .as_posix()
+                    .casefold()
+                )
                 existing = destinations.get(destination)
-                if existing and existing != artifact and existing.read_bytes() != artifact.read_bytes():
-                    raise ConanInvalidConfiguration(f"SDK file collision: {destination}")
+                if (
+                    existing
+                    and existing != artifact
+                    and existing.read_bytes() != artifact.read_bytes()
+                ):
+                    raise ConanInvalidConfiguration(
+                        f"SDK file collision: {destination}"
+                    )
                 destinations[destination] = artifact
         return packages, directories, list(libraries.values())
 
@@ -667,136 +895,242 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
     def _sdk_rebase_binary_paths(text, artifacts, roots, destination_variable):
         """Point SDK imports at flattened binaries without changing cache paths."""
         for artifact in artifacts:
-            target_path = '${' + destination_variable + '}/' + artifact.name
+            target_path = "${" + destination_variable + "}/" + artifact.name
             text = text.replace(artifact.as_posix(), target_path)
             for folder in roots:
                 if artifact.is_relative_to(folder):
                     relative = artifact.relative_to(folder).as_posix()
-                    text = re.sub(r'\$\{[^}]*PACKAGE_FOLDER[^}]*\}/' + re.escape(relative),
-                                  lambda _: target_path, text)
+                    text = re.sub(
+                        r"\$\{[^}]*PACKAGE_FOLDER[^}]*\}/" + re.escape(relative),
+                        lambda _: target_path,
+                        text,
+                    )
         return text
 
     def _generate_sdk_dependencies(self):
         """Install declared artifacts and rebase Conan's generated target metadata."""
         config = str(self.settings.build_type)
         packages, directories, libraries = self._sdk_payload()
-        identity = "\n".join(f"{name}:{dep.ref}:{dep.package_folder}" for name, dep in sorted(packages.items()))
+        identity = "\n".join(
+            f"{name}:{dep.ref}:{dep.package_folder}"
+            for name, dep in sorted(packages.items())
+        )
         root = Path(self.generators_folder) / "oxygen-sdk"
         output = root / config / hashlib.sha256(identity.encode()).hexdigest()[:16]
         output.mkdir(parents=True, exist_ok=True)
 
         def quote(value):
-            return '[==[' + str(value).replace('\\', '/') + ']==]'
+            return "[==[" + str(value).replace("\\", "/") + "]==]"
 
         rules = ["# Generated from Oxygen's resolved Conan host graph."]
         for source, relative, runtime in directories:
             component = "Oxygen_runtime" if runtime else "Oxygen_dev"
             if not runtime:
-                rules.append(f'install(DIRECTORY {quote(source.as_posix() + "/")} DESTINATION {quote(relative)} COMPONENT {component} CONFIGURATIONS {config})')
-            for artifact in source.rglob('*'):
-                if not artifact.is_file() or (runtime and not self._sdk_runtime_file(artifact)):
+                rules.append(
+                    f"install(DIRECTORY {quote(source.as_posix() + '/')} DESTINATION {quote(relative)} COMPONENT {component} CONFIGURATIONS {config})"
+                )
+            for artifact in source.rglob("*"):
+                if not artifact.is_file() or (
+                    runtime and not self._sdk_runtime_file(artifact)
+                ):
                     continue
                 if runtime:
-                    artifact_component = "Oxygen_dev" if artifact.suffix.lower() == ".pdb" else "Oxygen_runtime"
-                    rules.append(f'install(FILES {quote(artifact)} DESTINATION "${{OXYGEN_INSTALL_BIN}}" COMPONENT {artifact_component} CONFIGURATIONS {config})')
+                    artifact_component = (
+                        "Oxygen_dev"
+                        if artifact.suffix.lower() == ".pdb"
+                        else "Oxygen_runtime"
+                    )
+                    rules.append(
+                        f'install(FILES {quote(artifact)} DESTINATION "${{OXYGEN_INSTALL_BIN}}" COMPONENT {artifact_component} CONFIGURATIONS {config})'
+                    )
         for library in libraries:
-            rules.append(f'install(FILES {quote(library)} DESTINATION "${{OXYGEN_INSTALL_LIB}}" COMPONENT Oxygen_dev CONFIGURATIONS {config})')
+            rules.append(
+                f'install(FILES {quote(library)} DESTINATION "${{OXYGEN_INSTALL_LIB}}" COMPONENT Oxygen_dev CONFIGURATIONS {config})'
+            )
 
-        names = [dep.cpp_info.get_property("cmake_file_name") or name for name, dep in sorted(packages.items())]
+        names = [
+            dep.cpp_info.get_property("cmake_file_name") or name
+            for name, dep in sorted(packages.items())
+        ]
         roots = [Path(dep.package_folder) for dep in packages.values()]
-        runtime_files = sorted({artifact for source, _, runtime in directories if runtime
-                                for artifact in source.rglob('*')
-                                if artifact.is_file() and self._sdk_runtime_file(artifact)})
-        metadata = {name: {"files": [], "targets": set(), "requires": set()} for name in names}
+        runtime_files = sorted(
+            {
+                artifact
+                for source, _, runtime in directories
+                if runtime
+                for artifact in source.rglob("*")
+                if artifact.is_file() and self._sdk_runtime_file(artifact)
+            }
+        )
+        metadata = {
+            name: {"files": [], "targets": set(), "requires": set()} for name in names
+        }
         common_files = []
-        for source in Path(self.generators_folder).glob('*.cmake'):
+        for source in Path(self.generators_folder).glob("*.cmake"):
             lower = source.name.lower()
-            if lower != 'cmakedeps_macros.cmake' and not any(
-                    lower.startswith(n.lower() + suffix) for n in names
-                    for suffix in ('-', 'config', 'targets')):
+            if lower != "cmakedeps_macros.cmake" and not any(
+                lower.startswith(n.lower() + suffix)
+                for n in names
+                for suffix in ("-", "config", "targets")
+            ):
                 continue
-            suffix_config = re.search(r'-(debug|release|relwithdebinfo|minsizerel)(?:-|\.)', lower)
+            suffix_config = re.search(
+                r"-(debug|release|relwithdebinfo|minsizerel)(?:-|\.)", lower
+            )
             if suffix_config and suffix_config.group(1) != config.lower():
                 continue
-            text = source.read_text(encoding='utf-8')
-            text = self._sdk_rebase_binary_paths(text, libraries, roots, '_OXYGEN_SDK_LIBRARY_DIR')
-            text = self._sdk_rebase_binary_paths(text, runtime_files, roots, '_OXYGEN_SDK_RUNTIME_DIR')
+            text = source.read_text(encoding="utf-8")
+            text = self._sdk_rebase_binary_paths(
+                text, libraries, roots, "_OXYGEN_SDK_LIBRARY_DIR"
+            )
+            text = self._sdk_rebase_binary_paths(
+                text, runtime_files, roots, "_OXYGEN_SDK_RUNTIME_DIR"
+            )
             for folder in sorted(roots, key=lambda item: len(str(item)), reverse=True):
-                text = text.replace(folder.as_posix(), '${_OXYGEN_SDK_PREFIX}')
+                text = text.replace(folder.as_posix(), "${_OXYGEN_SDK_PREFIX}")
             # CMakeDeps resolves logical libraries through these variables;
             # CMakeConfigDeps instead supplies explicit imported locations above.
             text = re.sub(
-                r'(set\(\s*[^\s()]+_LIB_DIRS_[A-Z0-9_]+)\s+([^\n)]*)\)',
-                lambda match: match.group(1) + ' "${_OXYGEN_SDK_LIBRARY_DIR}")'
-                if 'PACKAGE_FOLDER' in match.group(2) or '_OXYGEN_SDK_PREFIX' in match.group(2)
-                else match.group(0), text)
+                r"(set\(\s*[^\s()]+_LIB_DIRS_[A-Z0-9_]+)\s+([^\n)]*)\)",
+                lambda match: (
+                    match.group(1) + ' "${_OXYGEN_SDK_LIBRARY_DIR}")'
+                    if "PACKAGE_FOLDER" in match.group(2)
+                    or "_OXYGEN_SDK_PREFIX" in match.group(2)
+                    else match.group(0)
+                ),
+                text,
+            )
             text = re.sub(
-                r'(set\(\s*[^\s()]+_BIN_DIRS_[A-Z0-9_]+)\s+([^\n)]*)\)',
-                lambda match: match.group(1) + ' "${_OXYGEN_SDK_RUNTIME_DIR}")'
-                if 'PACKAGE_FOLDER' in match.group(2) or '_OXYGEN_SDK_PREFIX' in match.group(2)
-                else match.group(0), text)
-            text = text.replace('${CMAKE_CURRENT_LIST_DIR}/cmakedeps_macros.cmake',
-                                '${CMAKE_CURRENT_LIST_DIR}/../Oxygen/cmakedeps_macros.cmake')
-            text = ('include("${CMAKE_CURRENT_LIST_DIR}/../Oxygen/OxygenSDKPaths.cmake")\n'
-                    + text)
+                r"(set\(\s*[^\s()]+_BIN_DIRS_[A-Z0-9_]+)\s+([^\n)]*)\)",
+                lambda match: (
+                    match.group(1) + ' "${_OXYGEN_SDK_RUNTIME_DIR}")'
+                    if "PACKAGE_FOLDER" in match.group(2)
+                    or "_OXYGEN_SDK_PREFIX" in match.group(2)
+                    else match.group(0)
+                ),
+                text,
+            )
+            text = text.replace(
+                "${CMAKE_CURRENT_LIST_DIR}/cmakedeps_macros.cmake",
+                "${CMAKE_CURRENT_LIST_DIR}/../Oxygen/cmakedeps_macros.cmake",
+            )
+            text = (
+                'include("${CMAKE_CURRENT_LIST_DIR}/../Oxygen/OxygenSDKPaths.cmake")\n'
+                + text
+            )
             target = output / source.name
             save(self, target, text)
-            owner = next((name for name in names if any(
-                lower.startswith(name.lower() + suffix) for suffix in ('-', 'config', 'targets'))), None)
+            owner = next(
+                (
+                    name
+                    for name in names
+                    if any(
+                        lower.startswith(name.lower() + suffix)
+                        for suffix in ("-", "config", "targets")
+                    )
+                ),
+                None,
+            )
             if owner:
                 metadata[owner]["files"].append(target)
-                metadata[owner]["targets"].update(re.findall(r'add_library\(\s*([^\s)]+)', text))
-                metadata[owner]["requires"].update(re.findall(r'find_dependency\(\s*([A-Za-z0-9_.-]+)', text))
+                metadata[owner]["targets"].update(
+                    re.findall(r"add_library\(\s*([^\s)]+)", text)
+                )
+                metadata[owner]["requires"].update(
+                    re.findall(r"find_dependency\(\s*([A-Za-z0-9_.-]+)", text)
+                )
                 # CMakeDeps declares component targets and dependency package
                 # names in data variables instead of literal add/find calls.
                 for values in re.findall(
-                        r'(?:set\(\s*\S+_COMPONENT_NAMES|list\(\s*APPEND\s+\S+_COMPONENT_NAMES)\s+([^)]*)\)', text):
+                    r"(?:set\(\s*\S+_COMPONENT_NAMES|list\(\s*APPEND\s+\S+_COMPONENT_NAMES)\s+([^)]*)\)",
+                    text,
+                ):
                     metadata[owner]["targets"].update(
-                        token.strip('"') for token in values.split()
-                        if '::' in token and '$' not in token)
+                        token.strip('"')
+                        for token in values.split()
+                        if "::" in token and "$" not in token
+                    )
                 for values in re.findall(
-                        r'(?:set\(\s*\S+_FIND_DEPENDENCY_NAMES|list\(\s*APPEND\s+\S+_FIND_DEPENDENCY_NAMES)\s+([^)]*)\)', text):
-                    metadata[owner]["requires"].update(token.strip('"') for token in values.split())
+                    r"(?:set\(\s*\S+_FIND_DEPENDENCY_NAMES|list\(\s*APPEND\s+\S+_FIND_DEPENDENCY_NAMES)\s+([^)]*)\)",
+                    text,
+                ):
+                    metadata[owner]["requires"].update(
+                        token.strip('"') for token in values.split()
+                    )
             else:
                 common_files.append(target)
         # Only metadata referenced by the exported Oxygen interfaces belongs to
         # the SDK. Selection happens while defining install rules, not by copying
         # every package and deleting files afterwards.
-        rules += ['set(_sdk_needed)', 'set(_sdk_links "")',
-                  'get_property(_sdk_targets GLOBAL PROPERTY OXYGEN_INSTALLED_TARGETS)',
-                  'foreach(_target IN LISTS _sdk_targets)',
-                  '  get_target_property(_links "${_target}" INTERFACE_LINK_LIBRARIES)',
-                  '  string(APPEND _sdk_links ";${_links}")', 'endforeach()']
+        rules += [
+            "set(_sdk_needed)",
+            'set(_sdk_links "")',
+            "get_property(_sdk_targets GLOBAL PROPERTY OXYGEN_INSTALLED_TARGETS)",
+            "foreach(_target IN LISTS _sdk_targets)",
+            '  get_target_property(_links "${_target}" INTERFACE_LINK_LIBRARIES)',
+            '  string(APPEND _sdk_links ";${_links}")',
+            "endforeach()",
+        ]
         for name, entry in metadata.items():
-            for target in sorted(target for target in entry["targets"] if "$" not in target):
-                rules += [f'string(FIND "${{_sdk_links}}" {quote(target)} _position)',
-                          f'if(NOT _position EQUAL -1)\n  list(APPEND _sdk_needed {quote(name)})\nendif()']
-        rules += ['list(REMOVE_DUPLICATES _sdk_needed)', 'set(_sdk_changed TRUE)', 'while(_sdk_changed)',
-                  '  set(_sdk_before "${_sdk_needed}")']
+            for target in sorted(
+                target for target in entry["targets"] if "$" not in target
+            ):
+                rules += [
+                    f'string(FIND "${{_sdk_links}}" {quote(target)} _position)',
+                    f"if(NOT _position EQUAL -1)\n  list(APPEND _sdk_needed {quote(name)})\nendif()",
+                ]
+        rules += [
+            "list(REMOVE_DUPLICATES _sdk_needed)",
+            "set(_sdk_changed TRUE)",
+            "while(_sdk_changed)",
+            '  set(_sdk_before "${_sdk_needed}")',
+        ]
         for name, entry in metadata.items():
             children = sorted(entry["requires"].intersection(metadata))
             if children:
-                rules += [f'  if({quote(name)} IN_LIST _sdk_needed)',
-                          '    list(APPEND _sdk_needed ' + ' '.join(quote(c) for c in children) + ')', '  endif()']
-        rules += ['  list(REMOVE_DUPLICATES _sdk_needed)',
-                  '  if(_sdk_before STREQUAL _sdk_needed)\n    set(_sdk_changed FALSE)\n  endif()', 'endwhile()',
-                  'set(_sdk_registry "include(CMakeFindDependencyMacro)\\n")']
+                rules += [
+                    f"  if({quote(name)} IN_LIST _sdk_needed)",
+                    "    list(APPEND _sdk_needed "
+                    + " ".join(quote(c) for c in children)
+                    + ")",
+                    "  endif()",
+                ]
+        rules += [
+            "  list(REMOVE_DUPLICATES _sdk_needed)",
+            "  if(_sdk_before STREQUAL _sdk_needed)\n    set(_sdk_changed FALSE)\n  endif()",
+            "endwhile()",
+            'set(_sdk_registry "include(CMakeFindDependencyMacro)\\n")',
+        ]
         for name, entry in metadata.items():
             # Explicit local package dirs prevent fallback to a producer cache.
             statement = f'set({name}_DIR "${{CMAKE_CURRENT_LIST_DIR}}/../{name}")\n'
-            rules += [f'if({quote(name)} IN_LIST _sdk_needed)',
-                      '  string(APPEND _sdk_registry ' + quote(statement) + ')', 'endif()']
+            rules += [
+                f"if({quote(name)} IN_LIST _sdk_needed)",
+                "  string(APPEND _sdk_registry " + quote(statement) + ")",
+                "endif()",
+            ]
         for name, entry in metadata.items():
-            rules += [f'if({quote(name)} IN_LIST _sdk_needed)',
-                      '  install(FILES ' + ' '.join(quote(p) for p in entry["files"])
-                      + f' DESTINATION "${{OXYGEN_INSTALL_LIB}}/cmake/{name}" COMPONENT Oxygen_dev CONFIGURATIONS {config})',
-                      '  string(APPEND _sdk_registry ' + quote(f'find_dependency({name} CONFIG REQUIRED)\n') + ')', 'endif()']
-        selected = '${PROJECT_BINARY_DIR}/sdk-metadata/' + config + '/OxygenDependencies.cmake'
-        rules += [f'file(CONFIGURE OUTPUT "{selected}" CONTENT "${{_sdk_registry}}" @ONLY)',
-                  f'install(FILES "{selected}" ' + ' '.join(quote(p) for p in common_files)
-                  + f' DESTINATION "${{OXYGEN_INSTALL_CMAKE}}" COMPONENT Oxygen_dev CONFIGURATIONS {config})',
-                  f'message(STATUS "Oxygen SDK dependency metadata ({config}): ${{_sdk_needed}}")']
-        save(self, root / f'install-{config}.cmake', '\n'.join(rules) + '\n')
+            rules += [
+                f"if({quote(name)} IN_LIST _sdk_needed)",
+                "  install(FILES "
+                + " ".join(quote(p) for p in entry["files"])
+                + f' DESTINATION "${{OXYGEN_INSTALL_LIB}}/cmake/{name}" COMPONENT Oxygen_dev CONFIGURATIONS {config})',
+                "  string(APPEND _sdk_registry "
+                + quote(f"find_dependency({name} CONFIG REQUIRED)\n")
+                + ")",
+                "endif()",
+            ]
+        selected = (
+            "${PROJECT_BINARY_DIR}/sdk-metadata/" + config + "/OxygenDependencies.cmake"
+        )
+        rules += [
+            f'file(CONFIGURE OUTPUT "{selected}" CONTENT "${{_sdk_registry}}" @ONLY)',
+            f'install(FILES "{selected}" '
+            + " ".join(quote(p) for p in common_files)
+            + f' DESTINATION "${{OXYGEN_INSTALL_CMAKE}}" COMPONENT Oxygen_dev CONFIGURATIONS {config})',
+            f'message(STATUS "Oxygen SDK dependency metadata ({config}): ${{_sdk_needed}}")',
+        ]
+        save(self, root / f"install-{config}.cmake", "\n".join(rules) + "\n")
 
     def _generate_project_presets(self):
         """Derive project presets only for installed trees and configurations.
@@ -829,10 +1163,21 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
             "Macos": "oxygen-posix-defaults",
         }.get(str(self.settings.os), "oxygen-configure-defaults")
         includes = {current}
-        includes.update(candidate for p in previous.get("include", [])
-                        if (candidate := (path.parent / p).resolve()).is_relative_to(workspace_output))
-        data = {"version": 9, "vendor": {owner: {"platforms": {}}}, "include": [],
-                "configurePresets": [], "buildPresets": [], "testPresets": []}
+        includes.update(
+            candidate
+            for p in previous.get("include", [])
+            if (candidate := (path.parent / p).resolve()).is_relative_to(
+                workspace_output
+            )
+        )
+        data = {
+            "version": 9,
+            "vendor": {owner: {"platforms": {}}},
+            "include": [],
+            "configurePresets": [],
+            "buildPresets": [],
+            "testPresets": [],
+        }
         for included in sorted(includes):
             if not included.is_file():
                 continue
@@ -842,35 +1187,54 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
             data["include"].append(included.as_posix())
             configure = native["configurePresets"][0]
             name = configure["name"]
-            defaults = platform_defaults if included == current else platforms.get(name, platform_defaults)
+            defaults = (
+                platform_defaults
+                if included == current
+                else platforms.get(name, platform_defaults)
+            )
             data["vendor"][owner]["platforms"][name] = defaults
             project_name = name.replace("conan-", "oxygen-", 1)
-            data["configurePresets"].append({
-                "name": project_name, "inherits": [defaults, name],
-                "displayName": project_name.removeprefix("oxygen-").removesuffix("-default"),
-            })
+            data["configurePresets"].append(
+                {
+                    "name": project_name,
+                    "inherits": [defaults, name],
+                    "displayName": project_name.removeprefix("oxygen-").removesuffix(
+                        "-default"
+                    ),
+                }
+            )
             for section in ("buildPresets", "testPresets"):
                 for preset in native.get(section, []):
                     parents = [preset["name"]]
                     if section == "buildPresets":
                         parents.insert(0, "oxygen-build-defaults")
                     elif preset.get("configuration") in ("Debug", "Release"):
-                        parents.insert(0, "oxygen-test-debug-defaults" if preset["configuration"] == "Debug"
-                                       else "oxygen-test-defaults")
-                    data[section].append({
-                        "name": preset["name"].replace("conan-", "oxygen-", 1),
-                        "inherits": parents, "configurePreset": project_name,
-                    })
+                        parents.insert(
+                            0,
+                            "oxygen-test-debug-defaults"
+                            if preset["configuration"] == "Debug"
+                            else "oxygen-test-defaults",
+                        )
+                    data[section].append(
+                        {
+                            "name": preset["name"].replace("conan-", "oxygen-", 1),
+                            "inherits": parents,
+                            "configurePreset": project_name,
+                        }
+                    )
         for section in ("configurePresets", "buildPresets", "testPresets"):
             names = set()
             for preset in data[section]:
                 if preset["name"] in names:
                     raise ConanInvalidConfiguration(
                         f"Duplicate {section} name '{preset['name']}'; "
-                        f"leaving {path} unchanged.")
+                        f"leaving {path} unchanged."
+                    )
                 names.add(preset["name"])
         temporary = path.with_suffix(".json.tmp")
-        temporary.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n")
+        temporary.write_text(
+            json.dumps(data, indent=2) + "\n", encoding="utf-8", newline="\n"
+        )
         temporary.replace(path)
 
     def _reset_legacy_presets(self, prefix):
@@ -887,21 +1251,26 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
         data = json.loads(path.read_text(encoding="utf-8"))
         if "conan" not in data.get("vendor", {}):
             return  # Conan reports the ownership error without overwriting it.
-        presets = (p for section in ("configurePresets", "buildPresets", "testPresets")
-                   for p in data.get(section, []))
-        if (data.get("include")
-                or any(not p["name"].startswith(prefix + "-") or "inherits" in p for p in presets)):
+        presets = (
+            p
+            for section in ("configurePresets", "buildPresets", "testPresets")
+            for p in data.get(section, [])
+        )
+        if data.get("include") or any(
+            not p["name"].startswith(prefix + "-") or "inherits" in p for p in presets
+        ):
             path.unlink()
             self.output.info(f"Regenerating legacy presets with prefix '{prefix}'")
 
     def layout(self):
-        cmake_layout(self, generator=self._cmake_generator,
-                     build_folder=f"out/build-{self._build_variant}")
+        cmake_layout(
+            self,
+            generator=self._cmake_generator,
+            build_folder=f"out/build-{self._build_variant}",
+        )
 
         # Ensure generated headers are available to the build
-        self.cpp.build.includedirs.append(
-            os.path.join(self.folders.build, "include")
-        )
+        self.cpp.build.includedirs.append(os.path.join(self.folders.build, "include"))
 
     def _set_cmake_defs(self, defs):
         defs["OXYGEN_BUILD_TOOLS"] = bool(self.options.tools)
@@ -928,8 +1297,12 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
         cmake = CMake(self)
         cmake.install()
         self._package_component_metadata()
-        copy(self, "oxygen-source.json", src=self.source_folder,
-             dst=str(Path(self.package_folder) / "share" / "oxygen"))
+        copy(
+            self,
+            "oxygen-source.json",
+            src=self.source_folder,
+            dst=str(Path(self.package_folder) / "share" / "oxygen"),
+        )
 
     def _package_component_metadata(self):
         """Read the built targets, not a second handwritten engine dependency graph."""
@@ -938,15 +1311,29 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
         names = json.loads((metadata / "targets.json").read_text(encoding="utf-8"))
         reply = build / ".cmake/api/v1/reply"
         index = json.loads(max(reply.glob("index-*.json")).read_text(encoding="utf-8"))
-        model_file = next(item["jsonFile"] for item in index["objects"] if item["kind"] == "codemodel")
+        model_file = next(
+            item["jsonFile"] for item in index["objects"] if item["kind"] == "codemodel"
+        )
         model = json.loads((reply / model_file).read_text(encoding="utf-8"))
         if model["version"]["minor"] < 9:
-            raise ConanInvalidConfiguration("Component metadata requires CMake's codemodel 2.9 or newer.")
-        config = next(item for item in model["configurations"] if item["name"] == str(self.settings.build_type))
+            raise ConanInvalidConfiguration(
+                "Component metadata requires CMake's codemodel 2.9 or newer."
+            )
+        config = next(
+            item
+            for item in model["configurations"]
+            if item["name"] == str(self.settings.build_type)
+        )
         entries = config["targets"] + config.get("abstractTargets", [])
-        targets = {item["id"]: json.loads((reply / item["jsonFile"]).read_text(encoding="utf-8"))
-                   for item in entries}
-        by_name = {item["name"]: item for item in targets.values() if item["name"] in names}
+        targets = {
+            item["id"]: json.loads(
+                (reply / item["jsonFile"]).read_text(encoding="utf-8")
+            )
+            for item in entries
+        }
+        by_name = {
+            item["name"]: item for item in targets.values() if item["name"] in names
+        }
 
         # CMakeConfigDeps may consume upstream native configs. Map their target
         # definitions back to the owning Conan package when no explicit target
@@ -959,10 +1346,17 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
                 continue
             package = dependency.ref.name
             package_roots[package] = Path(dependency.package_folder).resolve()
-            package_names[package] = dependency.cpp_info.get_property("cmake_file_name") or package
-            infos = [(package, dependency.cpp_info), *dependency.cpp_info.components.items()]
+            package_names[package] = (
+                dependency.cpp_info.get_property("cmake_file_name") or package
+            )
+            infos = [
+                (package, dependency.cpp_info),
+                *dependency.cpp_info.components.items(),
+            ]
             for component, info in infos:
-                target = info.get_property("cmake_target_name") or f"{package}::{component}"
+                target = (
+                    info.get_property("cmake_target_name") or f"{package}::{component}"
+                )
                 external_targets[target] = f"{package}::{component}"
                 for alias in info.get_property("cmake_target_aliases") or []:
                     external_targets[alias] = f"{package}::{component}"
@@ -978,7 +1372,9 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
                 for package, root in package_roots.items():
                     if path.resolve().is_relative_to(root):
                         return f"{package}::{package}"
-            raise ConanInvalidConfiguration(f"No Conan owner for exported CMake target {target['name']}.")
+            raise ConanInvalidConfiguration(
+                f"No Conan owner for exported CMake target {target['name']}."
+            )
 
         result = {}
         needed_packages = set()
@@ -988,7 +1384,11 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
 
             def values(property_name):
                 file = directory / f"{target_name}.{property_name}"
-                return file.read_text(encoding="utf-8").splitlines() if file.is_file() else []
+                return (
+                    file.read_text(encoding="utf-8").splitlines()
+                    if file.is_file()
+                    else []
+                )
 
             component = {
                 "libs": values("LIBRARY_NAME"),
@@ -997,10 +1397,13 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
                 "cxxflags": values("COMPILE_OPTIONS-CXX"),
                 "sharedlinkflags": values("LINK_OPTIONS"),
                 "exelinkflags": values("LINK_OPTIONS"),
-                "requires": [], "system_libs": [],
+                "requires": [],
+                "system_libs": [],
             }
             # Include compile-only edges as well as link-only static edges.
-            edges = target.get("interfaceLinkLibraries", []) + target.get("interfaceCompileDependencies", [])
+            edges = target.get("interfaceLinkLibraries", []) + target.get(
+                "interfaceCompileDependencies", []
+            )
             for edge in edges:
                 if "id" in edge:
                     dependency = targets[edge["id"]]
@@ -1014,16 +1417,27 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
                 else:
                     library = edge["fragment"]
                     if not re.fullmatch(r"[A-Za-z0-9_.+-]+", library):
-                        raise ConanInvalidConfiguration(f"Unsupported public library fragment for {target_name}: {library}")
+                        raise ConanInvalidConfiguration(
+                            f"Unsupported public library fragment for {target_name}: {library}"
+                        )
                     if library not in component["system_libs"]:
                         component["system_libs"].append(library)
             result[component_name] = component
 
-        save(self, Path(self.package_folder) / "share/oxygen/conan-components.json",
-             json.dumps(result, indent=2) + "\n")
+        save(
+            self,
+            Path(self.package_folder) / "share/oxygen/conan-components.json",
+            json.dumps(result, indent=2) + "\n",
+        )
         registry = "include(CMakeFindDependencyMacro)\n" + "".join(
-            f"find_dependency({package_names[name]} CONFIG REQUIRED)\n" for name in sorted(needed_packages))
-        save(self, Path(self.package_folder) / "lib/cmake/Oxygen/OxygenDependencies.cmake", registry)
+            f"find_dependency({package_names[name]} CONFIG REQUIRED)\n"
+            for name in sorted(needed_packages)
+        )
+        save(
+            self,
+            Path(self.package_folder) / "lib/cmake/Oxygen/OxygenDependencies.cmake",
+            registry,
+        )
 
     def package_info(self):
         self._require_package_linkage()
@@ -1033,16 +1447,24 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
         self.cpp_info.set_property("cmake_file_name", "Oxygen")
         self.cpp_info.set_property("cmake_find_mode", "none")
         self.cpp_info.builddirs = ["lib/cmake/Oxygen"]
-        metadata = json.loads(load(self, Path(self.package_folder) / "share/oxygen/conan-components.json"))
-        public_dependencies = {requirement.split("::", 1)[0]
-                               for data in metadata.values() for requirement in data["requires"]
-                               if "::" in requirement}
+        metadata = json.loads(
+            load(self, Path(self.package_folder) / "share/oxygen/conan-components.json")
+        )
+        public_dependencies = {
+            requirement.split("::", 1)[0]
+            for data in metadata.values()
+            for requirement in data["requires"]
+            if "::" in requirement
+        }
         # Implementation-only and executable-only dependencies remain in the
         # host/runtime graph without becoming consumers' link requirements.
-        self.cpp_info.ignored_requires = [dep.ref.name
-                                          for requirement, dep in self.dependencies.host.items()
-                                          if requirement.direct and not requirement.test
-                                          and dep.ref.name not in public_dependencies]
+        self.cpp_info.ignored_requires = [
+            dep.ref.name
+            for requirement, dep in self.dependencies.host.items()
+            if requirement.direct
+            and not requirement.test
+            and dep.ref.name not in public_dependencies
+        ]
         for name, data in metadata.items():
             component = self.cpp_info.components[name]
             component.set_property("cmake_target_name", f"oxygen::{name}")
@@ -1065,8 +1487,20 @@ set(OXYGEN_DXC_RUNTIME_BINDIRS [==[{{ dxc_runtime_dirs }}]==])
             if runtime:
                 for artifact in source.rglob("*"):
                     if artifact.is_file() and self._sdk_runtime_file(artifact):
-                        copy(self, artifact.name, src=artifact.parent, dst=target / "bin", keep_path=False)
+                        copy(
+                            self,
+                            artifact.name,
+                            src=artifact.parent,
+                            dst=target / "bin",
+                            keep_path=False,
+                        )
             else:
                 copy(self, "*", src=source, dst=target / relative)
         for library in libraries:
-            copy(self, library.name, src=library.parent, dst=target / "lib", keep_path=False)
+            copy(
+                self,
+                library.name,
+                src=library.parent,
+                dst=target / "lib",
+                keep_path=False,
+            )

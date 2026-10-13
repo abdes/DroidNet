@@ -14,10 +14,10 @@
 #include <type_traits>
 #include <typeinfo>
 
-#include <Oxygen/Clap/Detail/ParseValue.h>
-
-#include <Oxygen/Clap/ValueSemantics.h>
 #include <magic_enum/magic_enum.hpp>
+
+#include <Oxygen/Clap/Detail/ParseValue.h>
+#include <Oxygen/Clap/ValueSemantics.h>
 
 namespace oxygen::clap {
 

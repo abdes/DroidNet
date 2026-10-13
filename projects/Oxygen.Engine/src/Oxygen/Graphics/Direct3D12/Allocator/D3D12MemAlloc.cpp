@@ -20,15 +20,15 @@
 // THE SOFTWARE.
 //
 
-#include "D3D12MemAlloc.h"
-
 #include <algorithm>
-#include <combaseapi.h>
 #include <cstdint>
 #include <cstdlib>
-#include <malloc.h> // for _aligned_malloc, _aligned_free
 #include <mutex>
 #include <utility>
+
+#include "D3D12MemAlloc.h"
+#include <combaseapi.h>
+#include <malloc.h> // for _aligned_malloc, _aligned_free
 #ifndef _WIN32
 #  include <shared_mutex>
 #endif

@@ -76,7 +76,9 @@ def records_with_name(action_records, name):
 
 def records_under_prefix(action_records, prefix):
     prefix_with_sep = prefix + " > "
-    return [record for record in action_records if record.path.startswith(prefix_with_sep)]
+    return [
+        record for record in action_records if record.path.startswith(prefix_with_sep)
+    ]
 
 
 def count_named_records(action_records, name):
@@ -107,9 +109,13 @@ def last_draw_before(action_records, event_id):
 def append_exact_count_check(report, label, actual, expected):
     report.append("{}_actual={}".format(label, actual))
     report.append("{}_expected={}".format(label, expected))
-    report.append("{}_match={}".format(label, "true" if actual == expected else "false"))
+    report.append(
+        "{}_match={}".format(label, "true" if actual == expected else "false")
+    )
     if actual != expected:
-        raise RuntimeError("{} mismatch: expected {}, got {}".format(label, expected, actual))
+        raise RuntimeError(
+            "{} mismatch: expected {}, got {}".format(label, expected, actual)
+        )
 
 
 def append_bool_check(report, label, value, details=""):
@@ -170,7 +176,9 @@ def resolve_scene_color_output(controller, rd, event_id, resource_names, texture
     resource_id = safe_getattr(fallback, "resource")
     texture_desc = texture_descs.get(str(resource_id))
     if resource_id is None or texture_desc is None:
-        raise RuntimeError("Unable to resolve output texture at event {}".format(event_id))
+        raise RuntimeError(
+            "Unable to resolve output texture at event {}".format(event_id)
+        )
 
     sub = make_subresource(rd, fallback)
     width, height = output_dimensions(texture_desc, fallback)
@@ -208,10 +216,20 @@ def sample_output_grid(controller, rd, event_id, sample):
     rgb_sum = [0.0, 0.0, 0.0]
     total = 0
     for row in range(PIXEL_GRID_Y):
-        y = 0 if PIXEL_GRID_Y == 1 else int(round(((height - 1) * row) / float(PIXEL_GRID_Y - 1)))
+        y = (
+            0
+            if PIXEL_GRID_Y == 1
+            else int(round(((height - 1) * row) / float(PIXEL_GRID_Y - 1)))
+        )
         for col in range(PIXEL_GRID_X):
-            x = 0 if PIXEL_GRID_X == 1 else int(round(((width - 1) * col) / float(PIXEL_GRID_X - 1)))
-            values = float4_values(controller.PickPixel(resource_id, x, y, sub, rd.CompType.Typeless))
+            x = (
+                0
+                if PIXEL_GRID_X == 1
+                else int(round(((width - 1) * col) / float(PIXEL_GRID_X - 1)))
+            )
+            values = float4_values(
+                controller.PickPixel(resource_id, x, y, sub, rd.CompType.Typeless)
+            )
             counts[classify_translucent_color(values)] += 1
             rgb_sum[0] += values[0]
             rgb_sum[1] += values[1]
@@ -220,7 +238,9 @@ def sample_output_grid(controller, rd, event_id, sample):
     return {"counts": counts, "rgb_sum": rgb_sum, "total": total}
 
 
-def sample_grid_delta(controller, rd, before_event, before_sample, after_event, after_sample):
+def sample_grid_delta(
+    controller, rd, before_event, before_sample, after_event, after_sample
+):
     if before_sample["resource_id"] != after_sample["resource_id"]:
         return 0.0
 
@@ -233,28 +253,52 @@ def sample_grid_delta(controller, rd, before_event, before_sample, after_event, 
     before_values = []
     controller.SetFrameEvent(before_event, True)
     for row in range(PIXEL_GRID_Y):
-        y = 0 if PIXEL_GRID_Y == 1 else int(round(((height - 1) * row) / float(PIXEL_GRID_Y - 1)))
+        y = (
+            0
+            if PIXEL_GRID_Y == 1
+            else int(round(((height - 1) * row) / float(PIXEL_GRID_Y - 1)))
+        )
         for col in range(PIXEL_GRID_X):
-            x = 0 if PIXEL_GRID_X == 1 else int(round(((width - 1) * col) / float(PIXEL_GRID_X - 1)))
+            x = (
+                0
+                if PIXEL_GRID_X == 1
+                else int(round(((width - 1) * col) / float(PIXEL_GRID_X - 1)))
+            )
             before_values.append(
-                float4_values(controller.PickPixel(resource_id, x, y, before_sub, rd.CompType.Typeless))
+                float4_values(
+                    controller.PickPixel(
+                        resource_id, x, y, before_sub, rd.CompType.Typeless
+                    )
+                )
             )
 
     max_delta = 0.0
     controller.SetFrameEvent(after_event, True)
     for index, row in enumerate(range(PIXEL_GRID_Y)):
-        y = 0 if PIXEL_GRID_Y == 1 else int(round(((height - 1) * row) / float(PIXEL_GRID_Y - 1)))
+        y = (
+            0
+            if PIXEL_GRID_Y == 1
+            else int(round(((height - 1) * row) / float(PIXEL_GRID_Y - 1)))
+        )
         for col in range(PIXEL_GRID_X):
-            x = 0 if PIXEL_GRID_X == 1 else int(round(((width - 1) * col) / float(PIXEL_GRID_X - 1)))
+            x = (
+                0
+                if PIXEL_GRID_X == 1
+                else int(round(((width - 1) * col) / float(PIXEL_GRID_X - 1)))
+            )
             after_values = float4_values(
                 controller.PickPixel(resource_id, x, y, after_sub, rd.CompType.Typeless)
             )
             before = before_values[index * PIXEL_GRID_X + col]
-            max_delta = max(max_delta, max(abs(after_values[i] - before[i]) for i in range(3)))
+            max_delta = max(
+                max_delta, max(abs(after_values[i] - before[i]) for i in range(3))
+            )
     return max_delta
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     action_records = collect_action_records(controller)
     resource_names = resource_id_to_name(controller)
@@ -272,14 +316,18 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     stage12_scope = records_with_name(action_records, stage12_scope_name)
     stage15_scope = records_with_name(action_records, stage15_scope_name)
     stage18_scope = records_with_name(action_records, stage18_scope_name)
-    stage20_ground_grid_scope = records_with_name(action_records, stage20_ground_grid_scope_name)
+    stage20_ground_grid_scope = records_with_name(
+        action_records, stage20_ground_grid_scope_name
+    )
     stage21_scope = records_with_name(action_records, stage21_scope_name)
 
     stage9_main_records = records_under_prefix(
         action_records, stage9_scope_name + " > " + stage9_main_scope_name
     )
     stage9_records = (
-        stage9_main_records if stage9_main_records else records_under_prefix(action_records, stage9_scope_name)
+        stage9_main_records
+        if stage9_main_records
+        else records_under_prefix(action_records, stage9_scope_name)
     )
     stage18_records = records_under_prefix(action_records, stage18_scope_name)
 
@@ -311,7 +359,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     append_exact_count_check(report, "stage18_scope_count", len(stage18_scope), 1)
     append_exact_count_check(report, "stage18_draw_count", stage18_draw_count, 2)
     append_exact_count_check(report, "stage9_draw_count", stage9_draw_count, 2)
-    append_exact_count_check(report, "stage20_ground_grid_scope_count", len(stage20_ground_grid_scope), 0)
+    append_exact_count_check(
+        report, "stage20_ground_grid_scope_count", len(stage20_ground_grid_scope), 0
+    )
     append_bool_check(report, "stage18_after_post_opaque", stage18_after_post_opaque)
     append_bool_check(report, "stage18_before_resolve", stage18_before_resolve)
     append_bool_check(report, "stage18_before_event_resolved", before_stage18_event > 0)
@@ -322,21 +372,36 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     after_sample = resolve_scene_color_output(
         controller, rd, stage18_last_event, resource_names, texture_descs
     )
-    before_grid = sample_output_grid(controller, rd, before_stage18_event, before_sample)
+    before_grid = sample_output_grid(
+        controller, rd, before_stage18_event, before_sample
+    )
     after_grid = sample_output_grid(controller, rd, stage18_last_event, after_sample)
     max_rgb_delta = sample_grid_delta(
-        controller, rd, before_stage18_event, before_sample, stage18_last_event, after_sample
+        controller,
+        rd,
+        before_stage18_event,
+        before_sample,
+        stage18_last_event,
+        after_sample,
     )
 
     report.append("stage18_output_resource={}".format(after_sample["name"]))
-    report.append("stage18_output_dims={}x{}".format(after_sample["width"], after_sample["height"]))
+    report.append(
+        "stage18_output_dims={}x{}".format(
+            after_sample["width"], after_sample["height"]
+        )
+    )
     report.append("stage18_output_min={}".format(format_values(after_sample["min"])))
     report.append("stage18_output_max={}".format(format_values(after_sample["max"])))
     report.append("stage18_pixel_grid={}x{}".format(PIXEL_GRID_X, PIXEL_GRID_Y))
     report.append("stage18_before_cyan_pixels={}".format(before_grid["counts"]["cyan"]))
-    report.append("stage18_before_magenta_pixels={}".format(before_grid["counts"]["magenta"]))
+    report.append(
+        "stage18_before_magenta_pixels={}".format(before_grid["counts"]["magenta"])
+    )
     report.append("stage18_after_cyan_pixels={}".format(after_grid["counts"]["cyan"]))
-    report.append("stage18_after_magenta_pixels={}".format(after_grid["counts"]["magenta"]))
+    report.append(
+        "stage18_after_magenta_pixels={}".format(after_grid["counts"]["magenta"])
+    )
     report.append("stage18_max_rgb_delta={:.9g}".format(max_rgb_delta))
 
     append_bool_check(

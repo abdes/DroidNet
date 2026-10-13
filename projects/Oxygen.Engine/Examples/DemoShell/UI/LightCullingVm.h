@@ -9,9 +9,9 @@
 #include <cstdint>
 #include <mutex>
 
-#include <Oxygen/Base/ObserverPtr.h>
-
 #include "DemoShell/Runtime/RendererUiTypes.h"
+
+#include <Oxygen/Base/ObserverPtr.h>
 
 namespace oxygen::examples {
 class LightCullingSettingsService;

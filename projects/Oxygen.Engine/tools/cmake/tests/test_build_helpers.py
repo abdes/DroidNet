@@ -143,7 +143,7 @@ asap_pop_module("${META_MODULE_NAME}")
             "platform.h",
             "space dir/header.h",
             "Bindings/ignored.cpp",
-            "Test/ignored.cpp",
+            "test/ignored.cpp",
             "Tools/ignored.cpp",
             "Benchmarks/ignored.cpp",
             "Examples/ignored.cpp",

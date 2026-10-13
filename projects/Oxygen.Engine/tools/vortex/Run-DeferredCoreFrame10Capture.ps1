@@ -171,8 +171,8 @@ $tidyTargets = @(
   'src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassModule.cpp',
   'src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.h',
   'src/Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.cpp',
-  'src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp',
-  'src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp'
+  'src/Oxygen/Vortex/test/SceneRendererDeferredCore_test.cpp',
+  'src/Oxygen/Vortex/test/SceneRendererPublication_test.cpp'
 )
 
 $tidyArguments = @(
@@ -235,8 +235,8 @@ $manifest = [ordered]@{
     deferred_light_common = 'src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightingCommon.hlsli'
     deferred_light_point = 'src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightPoint.hlsl'
     deferred_light_spot = 'src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Lighting/DeferredLightSpot.hlsl'
-    deferred_core_tests = 'src/Oxygen/Vortex/Test/SceneRendererDeferredCore_test.cpp'
-    publication_tests = 'src/Oxygen/Vortex/Test/SceneRendererPublication_test.cpp'
+    deferred_core_tests = 'src/Oxygen/Vortex/test/SceneRendererDeferredCore_test.cpp'
+    publication_tests = 'src/Oxygen/Vortex/test/SceneRendererPublication_test.cpp'
     validation_doc = '.planning/workstreams/vortex/phases/03-deferred-core/03-VALIDATION.md'
     phase_plan = 'design/vortex/PLAN.md'
     implementation_status = 'design/vortex/IMPLEMENTATION-STATUS.md'

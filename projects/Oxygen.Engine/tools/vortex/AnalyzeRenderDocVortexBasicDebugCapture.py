@@ -43,9 +43,7 @@ def resolve_script_dir():
         if (candidate / "renderdoc_ui_analysis.py").exists():
             return candidate
 
-    raise RuntimeError(
-        "Unable to locate tools/shadows from the RenderDoc script path."
-    )
+    raise RuntimeError("Unable to locate tools/shadows from the RenderDoc script path.")
 
 
 if "pyrenderdoc" in globals():
@@ -131,9 +129,7 @@ def records_with_name(action_records, name):
 def records_under_prefix(action_records, prefix):
     prefix_with_sep = prefix + " > "
     return [
-        record
-        for record in action_records
-        if record.path.startswith(prefix_with_sep)
+        record for record in action_records if record.path.startswith(prefix_with_sep)
     ]
 
 
@@ -147,9 +143,10 @@ def vec_max_abs(values):
 
 def rgb_nonzero(min_values, max_values, epsilon=1.0e-6):
     rgb_delta = [b - a for a, b in zip(min_values[:3], max_values[:3])]
-    return max(abs(v) for v in rgb_delta) > epsilon or max(
-        abs(v) for v in max_values[:3]
-    ) > epsilon
+    return (
+        max(abs(v) for v in rgb_delta) > epsilon
+        or max(abs(v) for v in max_values[:3]) > epsilon
+    )
 
 
 def vec_diff(a_values, b_values):
@@ -157,15 +154,15 @@ def vec_diff(a_values, b_values):
 
 
 def is_nonzero_range(min_values, max_values, epsilon=1.0e-6):
-    return vec_max_abs(vec_diff(min_values, max_values)) > epsilon or vec_max_abs(
-        max_values
-    ) > epsilon
+    return (
+        vec_max_abs(vec_diff(min_values, max_values)) > epsilon
+        or vec_max_abs(max_values) > epsilon
+    )
 
 
 def is_grayscale(values, epsilon=1.0e-4):
     return (
-        abs(values[0] - values[1]) <= epsilon
-        and abs(values[1] - values[2]) <= epsilon
+        abs(values[0] - values[1]) <= epsilon and abs(values[1] - values[2]) <= epsilon
     )
 
 
@@ -196,7 +193,9 @@ def resource_dims(texture_desc, descriptor):
     return width, height
 
 
-def sample_descriptor(controller, rd, resource_names, texture_descs, descriptor, type_cast):
+def sample_descriptor(
+    controller, rd, resource_names, texture_descs, descriptor, type_cast
+):
     resource_id = descriptor.resource
     resource_key = str(resource_id)
     name = resource_names.get(resource_key, resource_key)
@@ -270,13 +269,13 @@ def append_texture_sample(report, prefix, sample):
         "{}_rgb_nonzero={}".format(prefix, str(sample["rgb_nonzero"]).lower())
     )
     report.append(
-        "{}_center_grayscale={}".format(
-            prefix, str(sample["center_grayscale"]).lower()
-        )
+        "{}_center_grayscale={}".format(prefix, str(sample["center_grayscale"]).lower())
     )
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     action_records = collect_action_records(controller)
     resource_names = resource_id_to_name(controller)
@@ -294,7 +293,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     compositing_scope = records_with_name(action_records, compositing_name)
 
     if len(stage9_scope) != 1:
-        raise RuntimeError("Expected one Stage 9 scope, found {}".format(len(stage9_scope)))
+        raise RuntimeError(
+            "Expected one Stage 9 scope, found {}".format(len(stage9_scope))
+        )
     if len(debug_scope) != 1:
         raise RuntimeError(
             "Expected one debug scope '{}' , found {}".format(
@@ -335,7 +336,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         controller, rd, resource_names, texture_descs, compositing_last_draw.event_id
     )
     debug_output = debug_draw["outputs"][0] if debug_draw["outputs"] else None
-    final_present = compositing_draw["outputs"][0] if compositing_draw["outputs"] else None
+    final_present = (
+        compositing_draw["outputs"][0] if compositing_draw["outputs"] else None
+    )
 
     debug_scope_count_match = len(debug_scope) == 1
     debug_draw_count_match = (
@@ -346,9 +349,13 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         len([record for record in compositing_records if record.name == DRAW_NAME]) == 1
     )
     phase_order_match = (
-        stage9_scope[0].event_id < debug_scope[0].event_id < compositing_scope[0].event_id
+        stage9_scope[0].event_id
+        < debug_scope[0].event_id
+        < compositing_scope[0].event_id
     )
-    debug_output_name_match = debug_output is not None and debug_output["name"] == "SceneColor"
+    debug_output_name_match = (
+        debug_output is not None and debug_output["name"] == "SceneColor"
+    )
     debug_output_nonzero = debug_output is not None and debug_output["rgb_nonzero"]
     debug_output_grayscale_match = (
         debug_output is not None
@@ -373,17 +380,27 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("report_path={}".format(report_path))
     report.append("expected_mode={}".format(expected_mode["label"]))
     report.append("debug_scope_name={}".format(expected_mode["scope_name"]))
-    report.append("stage9_scope_count_match={}".format(str(len(stage9_scope) == 1).lower()))
-    report.append("debug_scope_count_match={}".format(str(debug_scope_count_match).lower()))
-    report.append("debug_draw_count_match={}".format(str(debug_draw_count_match).lower()))
-    report.append("stage12_scope_count_match={}".format(str(stage12_scope_count_match).lower()))
+    report.append(
+        "stage9_scope_count_match={}".format(str(len(stage9_scope) == 1).lower())
+    )
+    report.append(
+        "debug_scope_count_match={}".format(str(debug_scope_count_match).lower())
+    )
+    report.append(
+        "debug_draw_count_match={}".format(str(debug_draw_count_match).lower())
+    )
+    report.append(
+        "stage12_scope_count_match={}".format(str(stage12_scope_count_match).lower())
+    )
     report.append(
         "compositing_draw_count_match={}".format(
             str(compositing_draw_count_match).lower()
         )
     )
     report.append("phase_order_match={}".format(str(phase_order_match).lower()))
-    report.append("debug_output_name_match={}".format(str(debug_output_name_match).lower()))
+    report.append(
+        "debug_output_name_match={}".format(str(debug_output_name_match).lower())
+    )
     report.append("debug_output_nonzero={}".format(str(debug_output_nonzero).lower()))
     report.append(
         "debug_output_grayscale_match={}".format(

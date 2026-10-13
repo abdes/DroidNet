@@ -1,0 +1,616 @@
+//===----------------------------------------------------------------------===//
+// Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+// copy at https://opensource.org/licenses/BSD-3-Clause.
+// SPDX-License-Identifier: BSD-3-Clause
+//===----------------------------------------------------------------------===//
+
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstring>
+#include <memory>
+#include <span>
+#include <utility>
+#include <vector>
+
+#include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Upload/Errors.h>
+#include <Oxygen/Vortex/Upload/Types.h>
+#include <Oxygen/Vortex/Upload/UploadCoordinator.h>
+#include <Oxygen/Vortex/test/Fixtures/UploadCoordinatorTest.h>
+
+namespace {
+
+using oxygen::SizeBytes;
+using oxygen::graphics::BufferDesc;
+using oxygen::graphics::BufferMemory;
+using oxygen::graphics::BufferUsage;
+using oxygen::graphics::QueueKey;
+using oxygen::vortex::upload::UploadBufferDesc;
+using oxygen::vortex::upload::UploadDataView;
+using oxygen::vortex::upload::UploadKind;
+using oxygen::vortex::upload::UploadRequest;
+using oxygen::vortex::upload::testing::UploadCoordinatorTest;
+namespace frame = oxygen::frame;
+
+//! Happy-path buffer upload: CopyBuffer and queue signal are recorded and
+//! ticket completes after retire.
+NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_MockedPath_Completes)
+{
+  // Arrange
+  // Destination buffer (vertex usage to trigger VB state transition branch)
+  BufferDesc dst_desc {
+    .size_bytes = 1024,
+    .usage = BufferUsage::kVertex,
+    .memory = BufferMemory::kDeviceLocal,
+  };
+  auto dst = GfxPtr()->CreateBuffer(dst_desc);
+
+  std::array<std::byte, 64> data {};
+  for (size_t i = 0; i < data.size(); ++i) {
+    data.at(i) = static_cast<std::byte>(i);
+  }
+
+  UploadRequest req {
+    .kind = UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "BufUpload",
+    .desc = UploadBufferDesc {
+      .dst = dst,
+      .size_bytes = 64,
+      .dst_offset = 128,
+    },
+    .subresources = {},
+    .data = UploadDataView { .bytes
+      = std::span<const std::byte>(data.data(), data.size()), },
+  };
+
+  auto& uploader = Uploader();
+
+  // Act
+  auto ticket_result = uploader.Submit(req, Staging());
+  ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
+  const auto ticket = ticket_result.value();
+
+  // Assert copy call captured
+  const auto& log = GfxPtr()->buffer_log_;
+  ASSERT_TRUE(log.copy_called);
+  EXPECT_EQ(log.copy_dst, dst.get());
+  EXPECT_EQ(log.copy_dst_offset, 128U);
+  ASSERT_NE(log.copy_src, nullptr);
+  EXPECT_EQ(log.copy_src_offset, 0U);
+  EXPECT_EQ(log.copy_size, 64U);
+
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
+
+  // Ticket completion
+  EXPECT_TRUE(ticket.TryGetResult().has_value());
+  auto res = ticket.TryGetResult();
+  if (!res.has_value()) {
+    FAIL() << "Expected completed upload result";
+  }
+  EXPECT_EQ(res->bytes_uploaded, 64U);
+
+  // Cleanup: process deferred releases to avoid reclaimer warnings
+  GfxPtr()->Flush();
+}
+
+//! Producer path: UploadRequest holds a producer instead of a byte view; the
+//! producer fills the mapped staging span. CopyBuffer and ticket completion are
+//! validated.
+NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Completes)
+{
+  BufferDesc dst_desc {
+    .size_bytes = 512,
+    .usage = BufferUsage::kVertex,
+    .memory = BufferMemory::kDeviceLocal,
+  };
+  auto dst = GfxPtr()->CreateBuffer(dst_desc);
+
+  constexpr size_t size = 128;
+  bool producer_ran = false;
+  oxygen::vortex::upload::UploadProducer producer
+    = [&producer_ran](std::span<std::byte> out) -> bool {
+    producer_ran = true;
+    std::size_t index = 0;
+    for (auto& value : out) {
+      value = static_cast<std::byte>(index & 0xFFU);
+      ++index;
+    }
+    return true;
+  };
+
+  UploadRequest req {
+    .kind = UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "BufUploadProducer",
+    .desc = UploadBufferDesc {
+      .dst = dst,
+      .size_bytes = size,
+      .dst_offset = 64,
+    },
+    .subresources = {},
+    .data = std::move(producer),
+  };
+
+  auto& uploader = Uploader();
+
+  // Act
+  auto ticket_result = uploader.Submit(req, Staging());
+  ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
+  const auto ticket = ticket_result.value();
+
+  // Assert
+  EXPECT_TRUE(producer_ran);
+  const auto& log = GfxPtr()->buffer_log_;
+  ASSERT_TRUE(log.copy_called);
+  EXPECT_EQ(log.copy_dst, dst.get());
+  EXPECT_EQ(log.copy_dst_offset, 64U);
+  ASSERT_NE(log.copy_src, nullptr);
+  EXPECT_EQ(log.copy_src_offset % 256U, 0U); // staging base alignment
+  EXPECT_EQ(log.copy_size, size);
+
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
+
+  EXPECT_TRUE(ticket.TryGetResult().has_value());
+  auto res = ticket.TryGetResult();
+  if (!res.has_value()) {
+    FAIL() << "Expected completed upload result";
+  }
+  ASSERT_TRUE(res->success);
+  EXPECT_EQ(res->bytes_uploaded, size);
+
+  GfxPtr()->Flush();
+}
+
+//! SubmitMany coalesces consecutive buffer uploads into one staging allocation
+//! and records two CopyBuffer commands with aligned source offsets.
+NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_CoalescesAndCompletes)
+{
+  BufferDesc dest_desc {
+    .size_bytes = 2048,
+    .usage = BufferUsage::kVertex,
+    .memory = BufferMemory::kDeviceLocal,
+  };
+  auto dst_a = GfxPtr()->CreateBuffer(dest_desc);
+  auto dst_b = GfxPtr()->CreateBuffer(dest_desc);
+
+  std::array<std::byte, 64> data_a {};
+  for (size_t i = 0; i < data_a.size(); ++i) {
+    data_a.at(i) = static_cast<std::byte>(i);
+  }
+  std::array<std::byte, 80> data_b {};
+  for (auto& i : data_b) {
+    i = static_cast<std::byte>(0xAA);
+  }
+
+  UploadRequest ra {
+    .kind = UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "A",
+    .desc
+    = UploadBufferDesc {
+      .dst = dst_a,
+      .size_bytes = 64,
+      .dst_offset = 0,
+    },
+    .subresources = {},
+    .data = UploadDataView {
+      .bytes = std::span<const std::byte>(data_a.data(), data_a.size()), },
+  };
+
+  UploadRequest rb { .kind = UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "B",
+    .desc
+    = UploadBufferDesc {
+      .dst = dst_b,
+      .size_bytes = 80,
+      .dst_offset = 256,
+    },
+    .subresources = {},
+    .data = UploadDataView {
+      .bytes = std::span<const std::byte>(data_b.data(), data_b.size()), }, };
+
+  auto& uploader = Uploader();
+
+  // Act
+  std::vector<UploadRequest> upload_requests;
+  upload_requests.emplace_back(std::move(ra));
+  upload_requests.emplace_back(std::move(rb));
+  auto tickets_result
+    = uploader.SubmitMany(std::span<const UploadRequest>(
+                            upload_requests.data(), upload_requests.size()),
+      Staging());
+  ASSERT_TRUE(tickets_result.has_value()) << "SubmitMany failed";
+  const auto& tickets = tickets_result.value();
+
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
+
+  // Assert: two tickets, both complete with expected byte counts
+  ASSERT_EQ(tickets.size(), 2U);
+  for (const auto& t : tickets) {
+    EXPECT_TRUE(t.TryGetResult().has_value());
+  }
+  auto res_a = tickets.at(0).TryGetResult();
+  auto res_b = tickets.at(1).TryGetResult();
+  if (!res_a.has_value()) {
+    FAIL() << "Expected completed upload result";
+  }
+  EXPECT_EQ(res_a->bytes_uploaded, 64U);
+  if (!res_b.has_value()) {
+    FAIL() << "Expected completed upload result";
+  }
+  EXPECT_EQ(res_b->bytes_uploaded, 80U);
+
+  // Assert: two copy events recorded with alignment between src offsets
+  const auto& log = GfxPtr()->buffer_log_;
+  ASSERT_GE(log.copies.size(), 2U);
+  const auto& e0 = log.copies.at(0);
+  const auto& e1 = log.copies.at(1);
+  EXPECT_EQ(e0.dst, dst_a.get());
+  EXPECT_EQ(e0.dst_offset, 0U);
+  EXPECT_EQ(e0.size, 64U);
+  EXPECT_EQ(e1.dst, dst_b.get());
+  EXPECT_EQ(e1.dst_offset, 256U);
+  EXPECT_EQ(e1.size, 80U);
+
+  // Cleanup
+  GfxPtr()->Flush();
+}
+
+//! SubmitMany coalescing with producers: two producer-backed requests are
+//! packed into one staging allocation; ensure both producers run and CopyBuffer
+//! events reflect aligned src offsets.
+NOLINT_TEST_F(
+  UploadCoordinatorTest, BufferSubmitMany_Producers_CoalescesAndCompletes)
+{
+  BufferDesc dest_desc {
+    .size_bytes = 2048,
+    .usage = BufferUsage::kVertex,
+    .memory = BufferMemory::kDeviceLocal,
+  };
+  auto dst_a = GfxPtr()->CreateBuffer(dest_desc);
+  auto dst_b = GfxPtr()->CreateBuffer(dest_desc);
+
+  bool prod_a_ran = false;
+  bool prod_b_ran = false;
+  constexpr size_t size_a = 96;
+  constexpr size_t size_b = 128;
+  oxygen::vortex::upload::UploadProducer pa
+    = [&prod_a_ran](std::span<std::byte> out) -> bool {
+    prod_a_ran = true;
+    std::memset(out.data(), 0x11, out.size());
+    return true;
+  };
+  oxygen::vortex::upload::UploadProducer pb
+    = [&prod_b_ran](std::span<std::byte> out) -> bool {
+    prod_b_ran = true;
+    std::memset(out.data(), 0x22, out.size());
+    return true;
+  };
+
+  UploadRequest ra {
+    .kind = UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "A-prod",
+    .desc
+    = UploadBufferDesc {
+      .dst = dst_a,
+      .size_bytes = size_a,
+      .dst_offset = 0,
+    },
+    .subresources = {},
+    .data = std::move(pa),
+  };
+  UploadRequest rb {
+    .kind = UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "B-prod",
+    .desc = UploadBufferDesc {
+      .dst = dst_b,
+      .size_bytes = size_b,
+      .dst_offset = 256,
+    },
+    .subresources = {},
+    .data = std::move(pb),
+  };
+
+  auto& uploader = Uploader();
+
+  // Act
+  std::vector<UploadRequest> upload_requests;
+  upload_requests.emplace_back(std::move(ra));
+  upload_requests.emplace_back(std::move(rb));
+  auto tickets_result
+    = uploader.SubmitMany(std::span<const UploadRequest>(
+                            upload_requests.data(), upload_requests.size()),
+      Staging());
+  ASSERT_TRUE(tickets_result.has_value()) << "SubmitMany failed";
+  const auto& tickets = tickets_result.value();
+
+  // Assert producers ran
+  EXPECT_TRUE(prod_a_ran);
+  EXPECT_TRUE(prod_b_ran);
+
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
+
+  // Assert tickets complete
+  ASSERT_EQ(tickets.size(), 2U);
+  EXPECT_TRUE(tickets.at(0).TryGetResult().has_value());
+  EXPECT_TRUE(tickets.at(1).TryGetResult().has_value());
+  auto res_a = tickets.at(0).TryGetResult();
+  auto res_b = tickets.at(1).TryGetResult();
+  if (!res_a.has_value()) {
+    FAIL() << "Expected completed upload result";
+  }
+  EXPECT_TRUE(res_a->bytes_uploaded == size_a);
+  if (!res_b.has_value()) {
+    FAIL() << "Expected completed upload result";
+  }
+  EXPECT_EQ(res_b->bytes_uploaded, size_b);
+
+  // Assert copy log: two events, aligned src offsets
+  const auto& log = GfxPtr()->buffer_log_;
+  ASSERT_GE(log.copies.size(), 2U);
+  const auto& e0 = log.copies.at(0);
+  const auto& e1 = log.copies.at(1);
+  EXPECT_EQ(e0.dst, dst_a.get());
+  EXPECT_EQ(e0.dst_offset, 0U);
+  EXPECT_EQ(e0.size, size_a);
+  EXPECT_EQ(e1.dst, dst_b.get());
+  EXPECT_EQ(e1.dst_offset, 256U);
+  EXPECT_EQ(e1.size, size_b);
+  EXPECT_EQ(e0.src_offset % 256U, 0U);
+
+  GfxPtr()->Flush();
+}
+
+//! Producer returns false: coordinator reports failure and records no copy.
+NOLINT_TEST_F(UploadCoordinatorTest, BufferUpload_WithProducer_Fails_NoCopy)
+{
+  BufferDesc dst_desc2 {
+    .size_bytes = 1024,
+    .usage = BufferUsage::kVertex,
+    .memory = BufferMemory::kDeviceLocal,
+  };
+  auto dst = GfxPtr()->CreateBuffer(dst_desc2);
+
+  bool prod_ran = false;
+  oxygen::vortex::upload::UploadProducer prod
+    = [&prod_ran](std::span<std::byte>) -> bool {
+    prod_ran = true;
+    return false; // fail
+  };
+
+  UploadRequest req {
+    .kind = UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "FailProd",
+    .desc = UploadBufferDesc {
+      .dst = dst,
+      .size_bytes = 64,
+      .dst_offset = 0,
+    },
+    .subresources = {},
+    .data = std::move(prod),
+  };
+
+  auto& uploader = Uploader();
+
+  auto ticket_result = uploader.Submit(req, Staging());
+  ASSERT_TRUE(ticket_result.has_value()) << "Submit failed";
+  const auto ticket = ticket_result.value();
+
+  EXPECT_TRUE(prod_ran);
+  const auto& log = GfxPtr()->buffer_log_;
+  EXPECT_FALSE(log.copy_called);
+
+  // Simulate frame advance to complete fences (even for failed uploads)
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
+
+  EXPECT_TRUE(ticket.TryGetResult().has_value());
+  auto res = ticket.TryGetResult();
+  if (!res.has_value()) {
+    FAIL() << "Expected completed upload result";
+  }
+  EXPECT_FALSE(res->success);
+  EXPECT_EQ(res->error, oxygen::vortex::upload::UploadError::kProducerFailed);
+  EXPECT_EQ(res->bytes_uploaded, 0U);
+
+  GfxPtr()->Flush();
+}
+
+//! Batch: first producer ok, second fails. With default filler enabled, both
+//! copies are recorded and both tickets succeed.
+NOLINT_TEST_F(
+  UploadCoordinatorTest, BufferSubmitMany_ProducerSecondFails_FilledAndOk)
+{
+  BufferDesc dest_desc {
+    .size_bytes = 2048,
+    .usage = BufferUsage::kVertex,
+    .memory = BufferMemory::kDeviceLocal,
+  };
+  auto dst_a = GfxPtr()->CreateBuffer(dest_desc);
+  auto dst_b = GfxPtr()->CreateBuffer(dest_desc);
+
+  bool prod_a_ran = false;
+  bool prod_b_ran = false;
+  oxygen::vortex::upload::UploadProducer pa
+    = [&prod_a_ran](std::span<std::byte> out) -> bool {
+    prod_a_ran = true;
+    std::memset(out.data(), 0x33, out.size());
+    return true;
+  };
+  oxygen::vortex::upload::UploadProducer pb
+    = [&prod_b_ran](std::span<std::byte>) -> bool {
+    prod_b_ran = true;
+    return false;
+  };
+
+  UploadRequest ra {
+    .kind = UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "A-prod-ok",
+    .desc = UploadBufferDesc {
+      .dst = dst_a,
+      .size_bytes = 64,
+      .dst_offset = 0,
+    },
+    .subresources = {},
+    .data = std::move(pa), };
+  UploadRequest rb {
+    .kind = UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "B-prod-fail",
+    .desc = UploadBufferDesc {
+      .dst = dst_b,
+      .size_bytes = 64,
+      .dst_offset = 0,
+    },
+    .subresources = {},
+    .data = std::move(pb),
+  };
+
+  auto& uploader = Uploader();
+
+  std::vector<UploadRequest> upload_requests;
+  upload_requests.emplace_back(std::move(ra));
+  upload_requests.emplace_back(std::move(rb));
+  auto tickets_result
+    = uploader.SubmitMany(std::span<const UploadRequest>(
+                            upload_requests.data(), upload_requests.size()),
+      Staging());
+  ASSERT_TRUE(tickets_result.has_value()) << "SubmitMany failed";
+  const auto& tickets = tickets_result.value();
+
+  EXPECT_TRUE(prod_a_ran);
+  EXPECT_TRUE(prod_b_ran);
+
+  // Copy log should contain two copies (filler path for the failed producer)
+  const auto& log = GfxPtr()->buffer_log_;
+  ASSERT_EQ(log.copies.size(), 2U);
+  EXPECT_EQ(log.copies.at(0).dst, dst_a.get());
+  EXPECT_EQ(log.copies.at(1).dst, dst_b.get());
+
+  // Simulate frame advance to complete fences
+  SimulateFrameStart(frame::Slot {
+    1,
+  });
+
+  ASSERT_EQ(tickets.size(), 2U);
+  EXPECT_TRUE(tickets.at(0).TryGetResult().has_value());
+  EXPECT_TRUE(tickets.at(1).TryGetResult().has_value());
+  auto r0 = tickets.at(0).TryGetResult();
+  auto r1 = tickets.at(1).TryGetResult();
+  if (!r0.has_value()) {
+    FAIL() << "Expected completed upload result";
+  }
+  ASSERT_TRUE(r0->success);
+  if (!r1.has_value()) {
+    FAIL() << "Expected completed upload result";
+  }
+  ASSERT_TRUE(r1->success);
+  GfxPtr()->Flush();
+}
+
+//! Coalescing: two contiguous regions targeting the same destination merge
+//! into a single CopyBuffer when both dst and src offsets are contiguous.
+NOLINT_TEST_F(UploadCoordinatorTest, BufferSubmitMany_SameDst_Merges)
+{
+
+  oxygen::graphics::BufferDesc dest_desc {
+    .size_bytes = 4096,
+    .usage = oxygen::graphics::BufferUsage::kVertex,
+    .memory = oxygen::graphics::BufferMemory::kDeviceLocal,
+  };
+  auto dst = GfxPtr()->CreateBuffer(dest_desc);
+
+  // Two requests targeting the same dst; dst offsets contiguous and sizes
+  // aligned so planner can assign contiguous src offsets.
+  std::array<std::byte, 256> data_a {};
+  std::array<std::byte, 128> data_b {};
+  std::ranges::fill(data_a,
+    std::byte {
+      0xAB,
+    });
+  std::ranges::fill(data_b,
+    std::byte {
+      0xCD,
+    });
+
+  oxygen::vortex::upload::UploadRequest ra {
+    .kind = oxygen::vortex::upload::UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "A_same",
+    .desc = oxygen::vortex::upload::UploadBufferDesc {
+      .dst = dst,
+  .size_bytes = 256,
+      .dst_offset = 0,
+    },
+    .subresources = {},
+    .data = oxygen::vortex::upload::UploadDataView {
+      .bytes = std::span<const std::byte>(data_a.data(), data_a.size()), },
+  };
+
+  oxygen::vortex::upload::UploadRequest rb {
+    .kind = oxygen::vortex::upload::UploadKind::kBuffer,
+    .priority = {},
+    .debug_name = "B_same",
+    .desc = oxygen::vortex::upload::UploadBufferDesc {
+      .dst = dst,
+  .size_bytes = 128,
+  .dst_offset = 256, // contiguous with first
+    },
+    .subresources = {},
+    .data = oxygen::vortex::upload::UploadDataView {
+      .bytes = std::span<const std::byte>(data_b.data(), data_b.size()), },
+  };
+
+  auto& uploader = Uploader();
+  std::vector<oxygen::vortex::upload::UploadRequest> reqs;
+  reqs.emplace_back(std::move(ra));
+  reqs.emplace_back(std::move(rb));
+
+  auto tickets_result = uploader.SubmitMany(
+    std::span<const oxygen::vortex::upload::UploadRequest>(
+      reqs.data(), reqs.size()),
+    Staging());
+  ASSERT_TRUE(tickets_result.has_value());
+
+  // Expect a single CopyBuffer due to merge
+  const auto& log = GfxPtr()->buffer_log_;
+  ASSERT_GE(log.copies.size(), 1U);
+  // Depending on batching, there should be exactly 1 for same destination
+  // contiguous regions; assert last two entries share the dst and form a
+  // single merged size.
+  // Our mock logs each CopyBuffer call; we expect 1 here.
+  ASSERT_EQ(log.copies.size(), 1U);
+  const auto& e = log.copies.at(0);
+  EXPECT_EQ(e.dst, dst.get());
+  EXPECT_EQ(e.dst_offset, 0U);
+  EXPECT_EQ(e.size, 384U); // 256 + 128 merged
+
+  GfxPtr()->Flush();
+}
+
+} // namespace

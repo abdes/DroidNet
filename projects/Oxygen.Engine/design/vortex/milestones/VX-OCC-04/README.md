@@ -124,12 +124,12 @@ Design: [geometry §9.5](../../../content-pipeline/geometry-cooking-architecture
   - `Cooker/Tools/PakDump/GeometryAssetDumper.h`
   - `Cooker/Tools/Inspector/GeometryMetadata.cpp`
 - [x] **Fixtures that write descriptors.**
-  - `Cooker/Test/Fixtures/DescriptorFixtures.h`
-  - `Cooker/Test/Import/{PhysicsPhase3Closure,SceneDescriptorImportJob,InspectorGeometryMetadata}_test.cpp`
-  - `Content/Test/{GeometryLoader,AssetLoader_generation}_test.cpp`
-  - `Vortex/Test/ScenePrep/ScenePrepHelpers.h`
-  - `Vortex/Test/Fixtures/GeometryUploaderTest.cpp`
-  - `SceneSync/Test/RuntimeMotionProducerModule_test.cpp`
+  - `Cooker/test/Fixtures/DescriptorFixtures.h`
+  - `Cooker/test/Import/{PhysicsPhase3Closure,SceneDescriptorImportJob,InspectorGeometryMetadata}_test.cpp`
+  - `Content/test/{GeometryLoader,AssetLoader_generation}_test.cpp`
+  - `Vortex/test/ScenePrep/ScenePrepHelpers.h`
+  - `Vortex/test/Fixtures/GeometryUploaderTest.cpp`
+  - `SceneSync/test/RuntimeMotionProducerModule_test.cpp`
   - All pass unchanged: their zero view bounds lie inside their submesh
     bounds.
 - [x] **New tests.**
@@ -176,7 +176,7 @@ Design: [hzb.md §4](../../lld/hzb.md#4-build-algorithm),
       them only if they are missing.
 - [x] **New GPU target.** Create `Oxygen.Vortex.Occlusion.Tests`
       (`gtest_program(... GPU ...)`, deps `oxygen-vortex-exposure-test-support`)
-      in `Vortex/Test/CMakeLists.txt`.
+      in `Vortex/test/CMakeLists.txt`.
 - [x] **New GPU tests.** [hzb.md §9.1](../../lld/hzb.md#91-unit--integration-proof)
       items 6–7:
   - a single foreground pixel reaches every mip, for 1920 x 1080 and

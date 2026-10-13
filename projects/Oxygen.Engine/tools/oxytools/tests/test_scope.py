@@ -76,7 +76,7 @@ class IndexedScopeTests(Fixture):
     def test_directory_selection_still_excludes_vendor_and_tests(self):
         normal = self.write("src/module/a.cpp", "")
         vendor = self.write("src/vendor/a.cpp", "")
-        test = self.write("src/module/Test/a.cpp", "")
+        test = self.write("src/module/test/a.cpp", "")
         scope = self.scope("src")
         for contains in (scope.contains, scope.discovery_contains):
             self.assertTrue(contains(normal))

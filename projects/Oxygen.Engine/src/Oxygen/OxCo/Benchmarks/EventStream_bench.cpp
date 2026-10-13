@@ -8,9 +8,9 @@
 #include <chrono>
 #include <random>
 
+#include "../test/Utils/TestEventLoop.h"
 #include <benchmark/benchmark.h>
 
-#include "../Test/Utils/TestEventLoop.h"
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Channel.h>

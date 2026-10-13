@@ -70,9 +70,7 @@ REPORT_SUFFIX = "_local_fog_state_probe.txt"
 def records_under_prefix(action_records, prefix):
     prefix_with_sep = prefix + " > "
     return [
-        record
-        for record in action_records
-        if record.path.startswith(prefix_with_sep)
+        record for record in action_records if record.path.startswith(prefix_with_sep)
     ]
 
 
@@ -122,11 +120,11 @@ def append_stage_resources(report, controller, rd, resource_names, event_id, pre
             name = resource_names.get(str(resource_id), str(resource_id))
             if "LocalFog" not in name and byte_size not in (48, 56, 64):
                 continue
+            report.append("{}_{}_ro_{}_name={}".format(prefix, stage_name, index, name))
             report.append(
-                "{}_{}_ro_{}_name={}".format(prefix, stage_name, index, name)
-            )
-            report.append(
-                "{}_{}_ro_{}_byte_offset={}".format(prefix, stage_name, index, byte_offset)
+                "{}_{}_ro_{}_byte_offset={}".format(
+                    prefix, stage_name, index, byte_offset
+                )
             )
             report.append(
                 "{}_{}_ro_{}_byte_size={}".format(prefix, stage_name, index, byte_size)
@@ -145,7 +143,9 @@ def append_stage_resources(report, controller, rd, resource_names, event_id, pre
             index += 1
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     action_records = collect_action_records(controller)
     resource_records = collect_resource_records_raw(controller)
@@ -155,7 +155,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         action_records, "Vortex.Stage14.LocalFogTiledCulling"
     )
     stage15_records = records_under_prefix(action_records, "Vortex.Stage15.LocalFog")
-    stage14_dispatch = find_first_name(stage14_records, "ID3D12GraphicsCommandList::Dispatch()")
+    stage14_dispatch = find_first_name(
+        stage14_records, "ID3D12GraphicsCommandList::Dispatch()"
+    )
     stage15_draw = find_last_name_any(
         stage15_records,
         {
@@ -167,8 +169,16 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("analysis_profile=vortexbasic_local_fog_probe")
     report.append("capture_path={}".format(capture_path))
     report.append("report_path={}".format(report_path))
-    report.append("stage14_dispatch_event={}".format(stage14_dispatch.event_id if stage14_dispatch else 0))
-    report.append("stage15_local_fog_event={}".format(stage15_draw.event_id if stage15_draw else 0))
+    report.append(
+        "stage14_dispatch_event={}".format(
+            stage14_dispatch.event_id if stage14_dispatch else 0
+        )
+    )
+    report.append(
+        "stage15_local_fog_event={}".format(
+            stage15_draw.event_id if stage15_draw else 0
+        )
+    )
 
     local_fog_resources = []
     for resource in resource_records:
@@ -188,15 +198,21 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             continue
         if name.endswith("LocalFogTileDrawArgs"):
             values = read_u32_buffer(controller, resource_id, 16)
-            report.append("tile_draw_args_values={}".format(",".join(str(v) for v in values)))
+            report.append(
+                "tile_draw_args_values={}".format(",".join(str(v) for v in values))
+            )
             if len(values) >= 2:
                 report.append("tile_draw_instance_count={}".format(values[1]))
         elif name.endswith("LocalFogTileDrawCount"):
             values = read_u32_buffer(controller, resource_id, 4)
-            report.append("tile_draw_count_values={}".format(",".join(str(v) for v in values)))
+            report.append(
+                "tile_draw_count_values={}".format(",".join(str(v) for v in values))
+            )
         elif name.endswith("LocalFogOccupiedTiles"):
             values = read_u32_buffer(controller, resource_id, 16)
-            report.append("occupied_tile_values={}".format(",".join(str(v) for v in values)))
+            report.append(
+                "occupied_tile_values={}".format(",".join(str(v) for v in values))
+            )
 
     if stage14_dispatch is not None:
         append_stage_resources(

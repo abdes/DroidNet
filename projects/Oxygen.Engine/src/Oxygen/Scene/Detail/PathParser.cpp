@@ -4,11 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Scene/Detail/PathParser.h>
-
 #include <iomanip>
 #include <sstream>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Scene/Detail/PathParser.h>
 
 using oxygen::scene::detail::query::ParsedPath;
 

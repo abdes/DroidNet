@@ -8,11 +8,11 @@
 
 #include <memory>
 
+#include "DemoShell/UI/CameraControlPanel.h"
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Time/Types.h>
-
-#include "DemoShell/UI/CameraControlPanel.h"
 
 namespace oxygen::engine {
 class InputSystem;

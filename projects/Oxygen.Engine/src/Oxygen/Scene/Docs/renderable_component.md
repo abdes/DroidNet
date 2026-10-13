@@ -307,7 +307,7 @@ Edge considerations
 
 ## 12) Testing Strategy
 
-Unit tests (Scene/Test)
+Unit tests (Scene/test)
 
 - Renderable attach/detach/clone.
 - LOD selection correctness + hysteresis with camera movement.

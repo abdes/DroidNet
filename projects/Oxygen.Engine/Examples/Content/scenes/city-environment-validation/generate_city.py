@@ -40,10 +40,18 @@ MATERIALS = {
     "MatCityLimestone": dict(base_color=[0.62, 0.60, 0.55], roughness=0.65),
     "MatCityBrickRed": dict(base_color=[0.33, 0.15, 0.10], roughness=0.85),
     "MatCityBrickBuff": dict(base_color=[0.50, 0.40, 0.28], roughness=0.85),
-    "MatCityGlassBlue": dict(base_color=[0.10, 0.13, 0.17], metalness=0.5, roughness=0.12),
-    "MatCityGlassTeal": dict(base_color=[0.08, 0.12, 0.12], metalness=0.5, roughness=0.14),
-    "MatCityGlassBronze": dict(base_color=[0.14, 0.11, 0.08], metalness=0.5, roughness=0.14),
-    "MatCityMetalPanel": dict(base_color=[0.55, 0.56, 0.58], metalness=0.8, roughness=0.35),
+    "MatCityGlassBlue": dict(
+        base_color=[0.10, 0.13, 0.17], metalness=0.5, roughness=0.12
+    ),
+    "MatCityGlassTeal": dict(
+        base_color=[0.08, 0.12, 0.12], metalness=0.5, roughness=0.14
+    ),
+    "MatCityGlassBronze": dict(
+        base_color=[0.14, 0.11, 0.08], metalness=0.5, roughness=0.14
+    ),
+    "MatCityMetalPanel": dict(
+        base_color=[0.55, 0.56, 0.58], metalness=0.8, roughness=0.35
+    ),
     "MatCitySlateDark": dict(base_color=[0.10, 0.10, 0.11], roughness=0.6),
     "MatCityRoofGravel": dict(base_color=[0.20, 0.20, 0.19], roughness=0.95),
     "MatCityGrass": dict(base_color=[0.07, 0.13, 0.05], roughness=0.95),
@@ -58,14 +66,20 @@ MATERIALS = {
 GEOMETRIES = {
     "GeoCityCube": ("Cube", None, ([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5])),
     "GeoCityCylinder": (
-        "Cylinder", {"segments": 32, "height": 1.0, "radius": 0.5},
-        ([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5])),
+        "Cylinder",
+        {"segments": 32, "height": 1.0, "radius": 0.5},
+        ([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]),
+    ),
     "GeoCityCone": (
-        "Cone", {"segments": 24, "height": 1.0, "radius": 0.5},
-        ([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5])),
+        "Cone",
+        {"segments": 24, "height": 1.0, "radius": 0.5},
+        ([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]),
+    ),
     "GeoCitySphere": (
-        "IcoSphere", {"subdivision_level": 2},
-        ([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5])),
+        "IcoSphere",
+        {"subdivision_level": 2},
+        ([-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]),
+    ),
 }
 
 FLAGS_STATIC = {
@@ -110,8 +124,9 @@ class SceneBuilder:
         self.nodes: list[dict] = []
         self.renderables: list[dict] = []
 
-    def node(self, name: str, translation, scale=(1, 1, 1), rotation=(0, 0, 0, 1),
-             flags=None) -> int:
+    def node(
+        self, name: str, translation, scale=(1, 1, 1), rotation=(0, 0, 0, 1), flags=None
+    ) -> int:
         entry = {
             "name": name,
             "flags": dict(flags or FLAGS_STATIC),
@@ -126,8 +141,15 @@ class SceneBuilder:
         self.nodes.append(entry)
         return len(self.nodes) - 1
 
-    def mesh(self, name: str, geometry: str, material: str, translation, scale,
-             rotation=(0, 0, 0, 1)) -> int:
+    def mesh(
+        self,
+        name: str,
+        geometry: str,
+        material: str,
+        translation,
+        scale,
+        rotation=(0, 0, 0, 1),
+    ) -> int:
         index = self.node(name, translation, scale, rotation)
         renderable = {
             "node": index,
@@ -135,31 +157,59 @@ class SceneBuilder:
             "visible": True,
         }
         if material != DEFAULT_MATERIAL:
-            renderable["material_overrides"] = [{
-                "slot_id": SLOT_ID,
-                "material_ref": f"/.cooked/Materials/{material}.omat",
-                "layout_revision": LAYOUT_REVISION,
-            }]
+            renderable["material_overrides"] = [
+                {
+                    "slot_id": SLOT_ID,
+                    "material_ref": f"/.cooked/Materials/{material}.omat",
+                    "layout_revision": LAYOUT_REVISION,
+                }
+            ]
         self.renderables.append(renderable)
         return index
 
     def box(self, name: str, material: str, b: Box, z0: float, z1: float) -> int:
-        return self.mesh(name, "GeoCityCube", material,
-                         (b.cx, b.cy, 0.5 * (z0 + z1)), (b.w, b.d, z1 - z0))
+        return self.mesh(
+            name,
+            "GeoCityCube",
+            material,
+            (b.cx, b.cy, 0.5 * (z0 + z1)),
+            (b.w, b.d, z1 - z0),
+        )
 
-    def cylinder(self, name: str, material: str, x: float, y: float, radius: float,
-                 z0: float, z1: float, geometry: str = "GeoCityCylinder") -> int:
-        return self.mesh(name, geometry, material, (x, y, 0.5 * (z0 + z1)),
-                         (2 * radius, 2 * radius, z1 - z0))
+    def cylinder(
+        self,
+        name: str,
+        material: str,
+        x: float,
+        y: float,
+        radius: float,
+        z0: float,
+        z1: float,
+        geometry: str = "GeoCityCylinder",
+    ) -> int:
+        return self.mesh(
+            name,
+            geometry,
+            material,
+            (x, y, 0.5 * (z0 + z1)),
+            (2 * radius, 2 * radius, z1 - z0),
+        )
 
-    def tree(self, name: str, x: float, y: float, rng: random.Random, base: float) -> None:
+    def tree(
+        self, name: str, x: float, y: float, rng: random.Random, base: float
+    ) -> None:
         height = rng.uniform(9.0, 15.0)
         canopy = rng.uniform(3.2, 4.8)
-        self.cylinder(f"{name}_Trunk", "MatCityBark", x, y, 0.25, base,
-                      base + 0.55 * height)
-        self.mesh(f"{name}_Canopy", "GeoCitySphere", "MatCityTreeCanopy",
-                  (x, y, base + height - canopy),
-                  (2 * canopy, 2 * canopy, 2.2 * canopy))
+        self.cylinder(
+            f"{name}_Trunk", "MatCityBark", x, y, 0.25, base, base + 0.55 * height
+        )
+        self.mesh(
+            f"{name}_Canopy",
+            "GeoCitySphere",
+            "MatCityTreeCanopy",
+            (x, y, base + height - canopy),
+            (2 * canopy, 2 * canopy, 2.2 * canopy),
+        )
 
 
 # --- City layout ---------------------------------------------------------------
@@ -198,54 +248,119 @@ def split_lots(b: Box, rng: random.Random, count: int) -> list[Box]:
     cut_x = b.x0 + b.w * rng.uniform(0.44, 0.56)
     cut_y = b.y0 + b.d * rng.uniform(0.44, 0.56)
     return [
-        Box(b.x0, b.y0, cut_x, cut_y), Box(cut_x, b.y0, b.x1, cut_y),
-        Box(b.x0, cut_y, cut_x, b.y1), Box(cut_x, cut_y, b.x1, b.y1),
+        Box(b.x0, b.y0, cut_x, cut_y),
+        Box(cut_x, b.y0, b.x1, cut_y),
+        Box(b.x0, cut_y, cut_x, b.y1),
+        Box(cut_x, cut_y, b.x1, b.y1),
     ]
 
 
-def core_tower(s: SceneBuilder, name: str, lot: Box, rng: random.Random,
-               height: float, landmark: str | None) -> None:
+def core_tower(
+    s: SceneBuilder,
+    name: str,
+    lot: Box,
+    rng: random.Random,
+    height: float,
+    landmark: str | None,
+) -> None:
     podium_h = rng.uniform(10.0, 22.0)
     podium = lot.inset(3.0)
-    s.box(f"{name}_Podium", rng.choice(["MatCityLimestone", "MatCityConcreteCool"]),
-          podium, 0.0, KERB + podium_h)
-    cladding = rng.choice(["MatCityGlassBlue", "MatCityGlassTeal", "MatCityGlassBronze",
-                           "MatCityMetalPanel"])
+    s.box(
+        f"{name}_Podium",
+        rng.choice(["MatCityLimestone", "MatCityConcreteCool"]),
+        podium,
+        0.0,
+        KERB + podium_h,
+    )
+    cladding = rng.choice(
+        [
+            "MatCityGlassBlue",
+            "MatCityGlassTeal",
+            "MatCityGlassBronze",
+            "MatCityMetalPanel",
+        ]
+    )
     fx, fy = rng.uniform(0.45, 0.62), rng.uniform(0.5, 0.7)
     tw, td = podium.w * fx, podium.d * fy
-    tower = Box(podium.cx - tw / 2, podium.cy - td / 2, podium.cx + tw / 2, podium.cy + td / 2)
+    tower = Box(
+        podium.cx - tw / 2, podium.cy - td / 2, podium.cx + tw / 2, podium.cy + td / 2
+    )
     base = KERB + podium_h
     if landmark == "round":
         radius = 0.5 * min(tw, td)
-        s.cylinder(f"{name}_Tower", cladding, tower.cx, tower.cy, radius, base - 1, height)
-        s.cylinder(f"{name}_Crown", "MatCityMetalPanel", tower.cx, tower.cy, radius * 0.7,
-                   height - 1, height + 12)
+        s.cylinder(
+            f"{name}_Tower", cladding, tower.cx, tower.cy, radius, base - 1, height
+        )
+        s.cylinder(
+            f"{name}_Crown",
+            "MatCityMetalPanel",
+            tower.cx,
+            tower.cy,
+            radius * 0.7,
+            height - 1,
+            height + 12,
+        )
         return
     setback = height * rng.uniform(0.72, 0.85)
     s.box(f"{name}_Tower", cladding, tower, base - 1, setback)
     upper = tower.inset(min(tw, td) * 0.12)
     s.box(f"{name}_Upper", cladding, upper, setback - 1, height)
-    s.box(f"{name}_Plant", "MatCitySlateDark", upper.inset(min(upper.w, upper.d) * 0.2),
-          height - 1, height + 6)
+    s.box(
+        f"{name}_Plant",
+        "MatCitySlateDark",
+        upper.inset(min(upper.w, upper.d) * 0.2),
+        height - 1,
+        height + 6,
+    )
     if landmark == "spire":
-        s.cylinder(f"{name}_Spire", "MatCityMetalPanel", upper.cx, upper.cy, 4.0,
-                   height + 5, height + 70, geometry="GeoCityCone")
+        s.cylinder(
+            f"{name}_Spire",
+            "MatCityMetalPanel",
+            upper.cx,
+            upper.cy,
+            4.0,
+            height + 5,
+            height + 70,
+            geometry="GeoCityCone",
+        )
 
 
-def office(s: SceneBuilder, name: str, lot: Box, rng: random.Random, height: float) -> None:
+def office(
+    s: SceneBuilder, name: str, lot: Box, rng: random.Random, height: float
+) -> None:
     body = lot.inset(rng.uniform(2.0, 4.0))
-    material = rng.choice(["MatCityConcreteWarm", "MatCityConcreteCool", "MatCityLimestone",
-                           "MatCityGlassBlue", "MatCityBrickBuff", "MatCityGlassBronze"])
+    material = rng.choice(
+        [
+            "MatCityConcreteWarm",
+            "MatCityConcreteCool",
+            "MatCityLimestone",
+            "MatCityGlassBlue",
+            "MatCityBrickBuff",
+            "MatCityGlassBronze",
+        ]
+    )
     if height > 55.0 and rng.random() < 0.4:
         step = height * rng.uniform(0.6, 0.75)
         s.box(f"{name}_Base", material, body, 0.0, step)
-        s.box(f"{name}_Top", material, body.inset(min(body.w, body.d) * 0.15), step - 1, height)
+        s.box(
+            f"{name}_Top",
+            material,
+            body.inset(min(body.w, body.d) * 0.15),
+            step - 1,
+            height,
+        )
         top = body.inset(min(body.w, body.d) * 0.15)
     else:
         s.box(f"{name}_Body", material, body, 0.0, height)
         top = body
     plant = top.inset(min(top.w, top.d) * rng.uniform(0.25, 0.35))
-    s.box(f"{name}_Plant", "MatCityRoofGravel", plant, height - 0.5, height + rng.uniform(3.0, 5.0))
+    s.box(
+        f"{name}_Plant",
+        "MatCityRoofGravel",
+        plant,
+        height - 0.5,
+        height + rng.uniform(3.0, 5.0),
+    )
 
 
 def residential_block(s: SceneBuilder, name: str, b: Box, rng: random.Random) -> None:
@@ -265,19 +380,45 @@ def residential_block(s: SceneBuilder, name: str, b: Box, rng: random.Random) ->
             parts = [Box(bar.x0, bar.y0, cut, bar.y1), Box(cut, bar.y0, bar.x1, bar.y1)]
         for m, part in enumerate(parts):
             height = rng.choice([15.0, 18.0, 21.0, 24.0, 27.0])
-            material = rng.choice(["MatCityBrickRed", "MatCityBrickBuff", "MatCityConcreteWarm",
-                                   "MatCityLimestone"])
+            material = rng.choice(
+                [
+                    "MatCityBrickRed",
+                    "MatCityBrickBuff",
+                    "MatCityConcreteWarm",
+                    "MatCityLimestone",
+                ]
+            )
             s.box(f"{name}_Bar{k}{m}", material, part, 0.0, height)
             if rng.random() < 0.12:
                 x = part.cx + rng.uniform(-0.25, 0.25) * part.w
-                s.cylinder(f"{name}_Tank{k}{m}", "MatCityWoodTank", x, part.cy, 2.2,
-                           height, height + 5.0)
-                s.cylinder(f"{name}_TankRoof{k}{m}", "MatCitySlateDark", x, part.cy, 2.4,
-                           height + 5.0, height + 6.5, geometry="GeoCityCone")
+                s.cylinder(
+                    f"{name}_Tank{k}{m}",
+                    "MatCityWoodTank",
+                    x,
+                    part.cy,
+                    2.2,
+                    height,
+                    height + 5.0,
+                )
+                s.cylinder(
+                    f"{name}_TankRoof{k}{m}",
+                    "MatCitySlateDark",
+                    x,
+                    part.cy,
+                    2.4,
+                    height + 5.0,
+                    height + 6.5,
+                    geometry="GeoCityCone",
+                )
     court = b.inset(2.0 + depth)
     s.box(f"{name}_Courtyard", "MatCityGrass", court, KERB - 0.1, KERB + 0.02)
-    s.tree(f"{name}_CourtTree", court.cx + rng.uniform(-8, 8), court.cy + rng.uniform(-5, 5),
-           rng, KERB)
+    s.tree(
+        f"{name}_CourtTree",
+        court.cx + rng.uniform(-8, 8),
+        court.cy + rng.uniform(-5, 5),
+        rng,
+        KERB,
+    )
 
 
 def build() -> SceneBuilder:
@@ -287,26 +428,54 @@ def build() -> SceneBuilder:
 
     # Ground: open land, the asphalt street network and the river channel.
     s.box("Land_9000m", "MatCityGrass", Box(-4500, -3000, 4500, 6000), -2.0, -0.05)
-    city = Box(block_box(COLUMNS[0], 0).x0 - AVENUE, RIVER.y1,
-               block_box(COLUMNS[-1], 0).x1 + AVENUE, block_box(0, ROWS[-1]).y1 + STREET)
+    city = Box(
+        block_box(COLUMNS[0], 0).x0 - AVENUE,
+        RIVER.y1,
+        block_box(COLUMNS[-1], 0).x1 + AVENUE,
+        block_box(0, ROWS[-1]).y1 + STREET,
+    )
     s.box("Streets_Asphalt", "MatCityAsphalt", city, -1.0, 0.0)
     s.box("River_Water", "MatCityWater", RIVER, WATER_Z - 4.0, WATER_Z)
-    s.box("River_NorthQuay", "MatCityConcreteCool",
-          Box(RIVER.x0, RIVER.y1 - 2.0, RIVER.x1, RIVER.y1), WATER_Z - 4.0, 0.3)
-    s.box("River_SouthQuay", "MatCityConcreteCool",
-          Box(RIVER.x0, RIVER.y0, RIVER.x1, RIVER.y0 + 2.0), WATER_Z - 4.0, 0.3)
+    s.box(
+        "River_NorthQuay",
+        "MatCityConcreteCool",
+        Box(RIVER.x0, RIVER.y1 - 2.0, RIVER.x1, RIVER.y1),
+        WATER_Z - 4.0,
+        0.3,
+    )
+    s.box(
+        "River_SouthQuay",
+        "MatCityConcreteCool",
+        Box(RIVER.x0, RIVER.y0, RIVER.x1, RIVER.y0 + 2.0),
+        WATER_Z - 4.0,
+        0.3,
+    )
     south_bank = Box(-2400, -700, 2400, RIVER.y0)
     s.box("SouthBank_Promenade", "MatCityPavement", south_bank, -1.0, KERB)
     for x in BRIDGE_XS:
         deck = Box(x - 14.0, RIVER.y0 - 6.0, x + 14.0, RIVER.y1 + 6.0)
         s.box(f"Bridge_{int(x)}_Deck", "MatCityConcreteCool", deck, 0.0, 1.6)
         for side in (-1, 1):
-            s.box(f"Bridge_{int(x)}_Parapet{side}", "MatCityLimestone",
-                  Box(deck.x0 if side < 0 else deck.x1 - 0.6, deck.y0,
-                      deck.x0 + 0.6 if side < 0 else deck.x1, deck.y1), 1.6, 2.7)
+            s.box(
+                f"Bridge_{int(x)}_Parapet{side}",
+                "MatCityLimestone",
+                Box(
+                    deck.x0 if side < 0 else deck.x1 - 0.6,
+                    deck.y0,
+                    deck.x0 + 0.6 if side < 0 else deck.x1,
+                    deck.y1,
+                ),
+                1.6,
+                2.7,
+            )
         for y in (RIVER.cy - 40.0, RIVER.cy + 40.0):
-            s.box(f"Bridge_{int(x)}_Pier{int(y)}", "MatCityConcreteCool",
-                  Box(x - 10.0, y - 3.0, x + 10.0, y + 3.0), WATER_Z - 4.0, 0.2)
+            s.box(
+                f"Bridge_{int(x)}_Pier{int(y)}",
+                "MatCityConcreteCool",
+                Box(x - 10.0, y - 3.0, x + 10.0, y + 3.0),
+                WATER_Z - 4.0,
+                0.2,
+            )
     for k, x in enumerate(range(-1500, 1501, 30)):
         if any(abs(x - bx) < 20 for bx in BRIDGE_XS):
             continue
@@ -324,8 +493,13 @@ def build() -> SceneBuilder:
             s.box(f"{tag}_Pavement", "MatCityPavement", b, -1.0, KERB)
             if (i, j) in PLAZA:
                 for t in range(6):
-                    s.tree(f"{tag}_PlazaTree{t}", b.x0 + 20 + t * 22, b.cy + rng.uniform(-30, 30),
-                           rng, KERB)
+                    s.tree(
+                        f"{tag}_PlazaTree{t}",
+                        b.x0 + 20 + t * 22,
+                        b.cy + rng.uniform(-30, 30),
+                        rng,
+                        KERB,
+                    )
                 continue
             distance = downtown_distance(b)
             if distance < 420.0:
@@ -333,7 +507,9 @@ def build() -> SceneBuilder:
                 for n, lot in enumerate(lots):
                     landmark = landmarks.get((i, j)) if n == 0 else None
                     if landmark:
-                        height = {"spire": 300.0, "round": 250.0, "plain": 210.0}[landmark]
+                        height = {"spire": 300.0, "round": 250.0, "plain": 210.0}[
+                            landmark
+                        ]
                     else:
                         height = rng.uniform(95.0, 170.0) * (1.0 - distance / 900.0)
                         height = max(height, 70.0)
@@ -342,20 +518,33 @@ def build() -> SceneBuilder:
                 lots = split_lots(b.inset(3.0), rng, rng.choice([2, 2, 4]))
                 for n, lot in enumerate(lots):
                     scale = 1.0 - (distance - 420.0) / 900.0
-                    office(s, f"{tag}_L{n}", lot, rng, rng.uniform(32.0, 88.0) * scale + 12.0)
+                    office(
+                        s,
+                        f"{tag}_L{n}",
+                        lot,
+                        rng,
+                        rng.uniform(32.0, 88.0) * scale + 12.0,
+                    )
             else:
                 residential_block(s, tag, b, rng)
 
     # Park: pond, paths and trees between the lawn blocks.
     park_blocks = [block_box(i, j) for i, j in PARK]
-    park = Box(min(p.x0 for p in park_blocks), min(p.y0 for p in park_blocks),
-               max(p.x1 for p in park_blocks), max(p.y1 for p in park_blocks))
+    park = Box(
+        min(p.x0 for p in park_blocks),
+        min(p.y0 for p in park_blocks),
+        max(p.x1 for p in park_blocks),
+        max(p.y1 for p in park_blocks),
+    )
     s.box("Park_LawnJoin", "MatCityGrass", park, -1.0, KERB - 0.05)
     pond = Box(park.cx - 70, park.cy - 35, park.cx + 50, park.cy + 30)
     s.box("Park_Pond", "MatCityWater", pond, -1.0, KERB + 0.02)
     for t in range(70):
         while True:
-            x, y = rng.uniform(park.x0 + 8, park.x1 - 8), rng.uniform(park.y0 + 8, park.y1 - 8)
+            x, y = (
+                rng.uniform(park.x0 + 8, park.x1 - 8),
+                rng.uniform(park.y0 + 8, park.y1 - 8),
+            )
             if not (pond.x0 - 6 < x < pond.x1 + 6 and pond.y0 - 6 < y < pond.y1 + 6):
                 break
         s.tree(f"Park_Tree{t}", x, y, rng, KERB)
@@ -363,8 +552,13 @@ def build() -> SceneBuilder:
     # Boulevard: tree rows on both kerbs of the avenue east of column 0.
     for k, y in enumerate(range(int(RIVER.y1) + 30, int(block_box(0, 9).y1), 26)):
         for side in (-1, 1):
-            s.tree(f"Boulevard_Tree{k}{'W' if side < 0 else 'E'}",
-                   BOULEVARD_X + side * (AVENUE / 2 - 2.5), y + rng.uniform(-2, 2), rng, 0.0)
+            s.tree(
+                f"Boulevard_Tree{k}{'W' if side < 0 else 'E'}",
+                BOULEVARD_X + side * (AVENUE / 2 - 2.5),
+                y + rng.uniform(-2, 2),
+                rng,
+                0.0,
+            )
     return s
 
 
@@ -394,22 +588,46 @@ def _normalize(v):
 
 
 def _cross(a, b):
-    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    return [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
 
 
 def _matrix_to_quaternion(m):
     trace = m[0][0] + m[1][1] + m[2][2]
     if trace > 0:
         s = math.sqrt(trace + 1.0) * 2
-        return [(m[2][1] - m[1][2]) / s, (m[0][2] - m[2][0]) / s, (m[1][0] - m[0][1]) / s, 0.25 * s]
+        return [
+            (m[2][1] - m[1][2]) / s,
+            (m[0][2] - m[2][0]) / s,
+            (m[1][0] - m[0][1]) / s,
+            0.25 * s,
+        ]
     if m[0][0] > m[1][1] and m[0][0] > m[2][2]:
         s = math.sqrt(1.0 + m[0][0] - m[1][1] - m[2][2]) * 2
-        return [0.25 * s, (m[0][1] + m[1][0]) / s, (m[0][2] + m[2][0]) / s, (m[2][1] - m[1][2]) / s]
+        return [
+            0.25 * s,
+            (m[0][1] + m[1][0]) / s,
+            (m[0][2] + m[2][0]) / s,
+            (m[2][1] - m[1][2]) / s,
+        ]
     if m[1][1] > m[2][2]:
         s = math.sqrt(1.0 + m[1][1] - m[0][0] - m[2][2]) * 2
-        return [(m[0][1] + m[1][0]) / s, 0.25 * s, (m[1][2] + m[2][1]) / s, (m[0][2] - m[2][0]) / s]
+        return [
+            (m[0][1] + m[1][0]) / s,
+            0.25 * s,
+            (m[1][2] + m[2][1]) / s,
+            (m[0][2] - m[2][0]) / s,
+        ]
     s = math.sqrt(1.0 + m[2][2] - m[0][0] - m[1][1]) * 2
-    return [(m[0][2] + m[2][0]) / s, (m[1][2] + m[2][1]) / s, 0.25 * s, (m[1][0] - m[0][1]) / s]
+    return [
+        (m[0][2] + m[2][0]) / s,
+        (m[1][2] + m[2][1]) / s,
+        0.25 * s,
+        (m[1][0] - m[0][1]) / s,
+    ]
 
 
 def _rotation_between(a, b):
@@ -519,62 +737,86 @@ def environment() -> dict:
 
 def scene_document() -> dict:
     s = build()
-    camera = s.node("MainCamera", CAMERA_POSITION,
-                    rotation=look_rotation([t - p for t, p in zip(CAMERA_TARGET, CAMERA_POSITION)]),
-                    flags={"visible": "shown", "casts_shadows": "on", "receives_shadows": "on"})
+    camera = s.node(
+        "MainCamera",
+        CAMERA_POSITION,
+        rotation=look_rotation([t - p for t, p in zip(CAMERA_TARGET, CAMERA_POSITION)]),
+        flags={"visible": "shown", "casts_shadows": "on", "receives_shadows": "on"},
+    )
     el, az = math.radians(SUN_ELEVATION_DEG), math.radians(SUN_AZIMUTH_DEG)
     to_sun = [math.cos(el) * math.cos(az), math.cos(el) * math.sin(az), math.sin(el)]
-    sun = s.node("SunFoggyMorning", [3000.0 * c for c in to_sun],
-                 rotation=light_rotation(to_sun),
-                 flags={"visible": "shown", "casts_shadows": "on", "receives_shadows": "on"})
-    mist = s.node("RiverMist_LocalFog", (0.0, RIVER.cy, 12.0), scale=(5000.0, 260.0, 40.0),
-                  flags={"visible": "shown", "casts_shadows": "on", "receives_shadows": "on"})
+    sun = s.node(
+        "SunFoggyMorning",
+        [3000.0 * c for c in to_sun],
+        rotation=light_rotation(to_sun),
+        flags={"visible": "shown", "casts_shadows": "on", "receives_shadows": "on"},
+    )
+    mist = s.node(
+        "RiverMist_LocalFog",
+        (0.0, RIVER.cy, 12.0),
+        scale=(5000.0, 260.0, 40.0),
+        flags={"visible": "shown", "casts_shadows": "on", "receives_shadows": "on"},
+    )
     return {
         "version": 13,
         "name": SCENE_NAME,
         "nodes": s.nodes,
         "renderables": s.renderables,
-        "cameras": {"perspective": [{
-            "node": camera,
-            "fov_y": math.radians(55.0),
-            "aspect_mode": "fixed",
-            "aspect_ratio": 16.0 / 9.0,
-            "near_plane": 0.2,
-            "far_plane": 8000.0,
-        }]},
-        "lights": {"directional": [{
-            "node": sun,
-            "common": {
-                "affects_world": True,
-                "color_rgb": [1.0, 0.9, 0.78],
-                "casts_shadows": True,
-                "shadow": {"bias": 0.125, "normal_bias": 0.02, "contact_shadows": True,
-                           "resolution_hint": 1},
-            },
-            "angular_size_radians": 0.00951,
-            "atmosphere_light_slot": 1,
-            "cascade_count": 4,
-            "split_mode": 1,
-            "max_shadow_distance": 2400.0,
-            "cascade_distances": [120.0, 400.0, 1100.0, 2400.0],
-            "distribution_exponent": 2.0,
-            "transition_fraction": 0.12,
-            "distance_fadeout_fraction": 0.1,
-            "intensity_lux": 25000.0,
-        }]},
+        "cameras": {
+            "perspective": [
+                {
+                    "node": camera,
+                    "fov_y": math.radians(55.0),
+                    "aspect_mode": "fixed",
+                    "aspect_ratio": 16.0 / 9.0,
+                    "near_plane": 0.2,
+                    "far_plane": 8000.0,
+                }
+            ]
+        },
+        "lights": {
+            "directional": [
+                {
+                    "node": sun,
+                    "common": {
+                        "affects_world": True,
+                        "color_rgb": [1.0, 0.9, 0.78],
+                        "casts_shadows": True,
+                        "shadow": {
+                            "bias": 0.125,
+                            "normal_bias": 0.02,
+                            "contact_shadows": True,
+                            "resolution_hint": 1,
+                        },
+                    },
+                    "angular_size_radians": 0.00951,
+                    "atmosphere_light_slot": 1,
+                    "cascade_count": 4,
+                    "split_mode": 1,
+                    "max_shadow_distance": 2400.0,
+                    "cascade_distances": [120.0, 400.0, 1100.0, 2400.0],
+                    "distribution_exponent": 2.0,
+                    "transition_fraction": 0.12,
+                    "distance_fadeout_fraction": 0.1,
+                    "intensity_lux": 25000.0,
+                }
+            ]
+        },
         "environment": environment(),
-        "local_fog_volumes": [{
-            "node": mist,
-            "enabled": True,
-            "radial_fog_extinction": 0.0,
-            "height_fog_extinction": 0.02,
-            "height_fog_falloff": 0.08,
-            "height_fog_offset": -3.0,
-            "fog_phase_g": 0.5,
-            "fog_albedo": [0.95, 0.95, 0.95],
-            "fog_emissive": [0.0, 0.0, 0.0],
-            "sort_priority": 1,
-        }],
+        "local_fog_volumes": [
+            {
+                "node": mist,
+                "enabled": True,
+                "radial_fog_extinction": 0.0,
+                "height_fog_extinction": 0.02,
+                "height_fog_falloff": 0.08,
+                "height_fog_offset": -3.0,
+                "fog_phase_g": 0.5,
+                "fog_albedo": [0.95, 0.95, 0.95],
+                "fog_emissive": [0.0, 0.0, 0.0],
+                "sort_priority": 1,
+            }
+        ],
         "references": {
             "materials": [f"/.cooked/Materials/{m}.omat" for m in MATERIALS],
         },
@@ -603,42 +845,71 @@ def geometry_document(name: str, generator: str, params: dict | None, bounds) ->
     return {
         "name": name,
         "bounds": {"min": lo, "max": hi},
-        "lods": [{
-            "name": f"{name}_lod0",
-            "mesh_type": "procedural",
-            "bounds": {"min": lo, "max": hi},
-            "procedural": procedural,
-            "submeshes": [{
-                "name": f"{name}_surface",
-                "slot_id": SLOT_ID,
-                "material_ref": f"/.cooked/Materials/{DEFAULT_MATERIAL}.omat",
-                "views": [{"view_ref": "__all__"}],
-            }],
-        }],
+        "lods": [
+            {
+                "name": f"{name}_lod0",
+                "mesh_type": "procedural",
+                "bounds": {"min": lo, "max": hi},
+                "procedural": procedural,
+                "submeshes": [
+                    {
+                        "name": f"{name}_surface",
+                        "slot_id": SLOT_ID,
+                        "material_ref": f"/.cooked/Materials/{DEFAULT_MATERIAL}.omat",
+                        "views": [{"view_ref": "__all__"}],
+                    }
+                ],
+            }
+        ],
     }
 
 
 def manifest_document() -> dict:
     jobs = []
     for name in MATERIALS:
-        jobs.append({"id": f"material.{name}", "type": "material-descriptor",
-                     "source": f"./{name}.material.json", "name": name,
-                     "content_hashing": True})
+        jobs.append(
+            {
+                "id": f"material.{name}",
+                "type": "material-descriptor",
+                "source": f"./{name}.material.json",
+                "name": name,
+                "content_hashing": True,
+            }
+        )
     for name in GEOMETRIES:
-        jobs.append({"id": f"geometry.{name}", "type": "geometry-descriptor",
-                     "source": f"./{name}.geometry.json", "name": name,
-                     "content_hashing": True,
-                     "depends_on": [f"material.{DEFAULT_MATERIAL}"]})
-    jobs.append({"id": f"scene.{SCENE_NAME}", "type": "scene-descriptor",
-                 "source": f"./{SCENE_NAME}.scene.json", "name": SCENE_NAME,
-                 "content_hashing": True,
-                 "depends_on": [f"geometry.{g}" for g in GEOMETRIES]
-                 + [f"material.{m}" for m in MATERIALS]})
-    return {"version": 1, "max_in_flight_jobs": 1, "output": "../../.cooked/main", "jobs": jobs}
+        jobs.append(
+            {
+                "id": f"geometry.{name}",
+                "type": "geometry-descriptor",
+                "source": f"./{name}.geometry.json",
+                "name": name,
+                "content_hashing": True,
+                "depends_on": [f"material.{DEFAULT_MATERIAL}"],
+            }
+        )
+    jobs.append(
+        {
+            "id": f"scene.{SCENE_NAME}",
+            "type": "scene-descriptor",
+            "source": f"./{SCENE_NAME}.scene.json",
+            "name": SCENE_NAME,
+            "content_hashing": True,
+            "depends_on": [f"geometry.{g}" for g in GEOMETRIES]
+            + [f"material.{m}" for m in MATERIALS],
+        }
+    )
+    return {
+        "version": 1,
+        "max_in_flight_jobs": 1,
+        "output": "../../.cooked/main",
+        "jobs": jobs,
+    }
 
 
 def write_json(path: Path, document: dict) -> None:
-    path.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8", newline="\n")
+    path.write_text(
+        json.dumps(document, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
 
 
 def main() -> None:
@@ -652,8 +923,10 @@ def main() -> None:
     for name, params in MATERIALS.items():
         write_json(HERE / f"{name}.material.json", material_document(name, params))
     for name, (generator, params, bounds) in GEOMETRIES.items():
-        write_json(HERE / f"{name}.geometry.json",
-                   geometry_document(name, generator, params, bounds))
+        write_json(
+            HERE / f"{name}.geometry.json",
+            geometry_document(name, generator, params, bounds),
+        )
     scene = scene_document()
     write_json(HERE / f"{SCENE_NAME}.scene.json", scene)
     write_json(HERE / "import-manifest.json", manifest_document())

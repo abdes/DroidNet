@@ -6,10 +6,7 @@
   "view_mapping": "sqrt",
   "minimum_roughness": 0.045,
   "format": "RG32Float",
-  "channels": [
-    "directional_albedo",
-    "schlick_moment"
-  ],
+  "channels": ["directional_albedo", "schlick_moment"],
   "payload_bytes": 8192,
   "payload_sha256": "2f0b4f988af82a69bf650a593d764d09f427ac4241f3ce8bfeecf40628aaae2e",
   "reference_sha256": "b3224a671f44b196302e83d0421d2cad1a5ae14ba457f776e914c656900c45d6",

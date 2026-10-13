@@ -10,14 +10,13 @@
 #include <utility>
 #include <vector>
 
+#include "DemoShell/UI/CameraRigController.h"
+#include "InputSystem/InputDebugPanel.h"
 #include <imgui.h>
 
 #include <Oxygen/ImGui/Icons/IconsOxygenIcons.h>
 #include <Oxygen/Input/Action.h>
 #include <Oxygen/Input/InputSystem.h>
-
-#include "DemoShell/UI/CameraRigController.h"
-#include "InputSystem/InputDebugPanel.h"
 
 namespace {
 

@@ -105,7 +105,9 @@ def records_under_prefix(action_records, prefix):
 
 
 def count_work_records(records, name):
-    return sum(1 for record in records if record.name == name and is_work_action(record.flags))
+    return sum(
+        1 for record in records if record.name == name and is_work_action(record.flags)
+    )
 
 
 def format_bool(value):
@@ -170,18 +172,26 @@ def collect_nested_records(action_records, scopes):
     return records
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     action_records = collect_action_records(controller)
 
     stage3_scopes = records_with_name(action_records, STAGE3_SCOPE_NAME)
     stage8_scopes = records_with_name(action_records, STAGE8_SCOPE_NAME)
     stage9_scopes = collect_named_records(action_records, STAGE9_SCOPE_NAMES)
     stage12_scopes = collect_named_records(action_records, STAGE12_SCOPE_NAMES)
-    stage14_volumetric_scopes = records_with_name(action_records, STAGE14_VOLUMETRIC_SCOPE)
-    stage14_local_fog_scopes = records_with_name(action_records, STAGE14_LOCAL_FOG_SCOPE)
+    stage14_volumetric_scopes = records_with_name(
+        action_records, STAGE14_VOLUMETRIC_SCOPE
+    )
+    stage14_local_fog_scopes = records_with_name(
+        action_records, STAGE14_LOCAL_FOG_SCOPE
+    )
     stage15_scopes = records_with_name(action_records, STAGE15_SCOPE_NAME)
     stage22_scopes = records_with_name(action_records, STAGE22_TONEMAP_SCOPE_NAME)
-    compositing_scopes = records_with_name_prefix(action_records, COMPOSITING_SCOPE_PREFIX)
+    compositing_scopes = records_with_name_prefix(
+        action_records, COMPOSITING_SCOPE_PREFIX
+    )
 
     stage3_records = collect_nested_records(action_records, stage3_scopes)
     stage8_records = collect_nested_records(action_records, stage8_scopes)
@@ -232,7 +242,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     shadow_products_present = len(stage8_scopes) >= 1 and stage8_draw_count >= 1
     depth_products_present = len(stage3_scopes) >= 1 and stage3_draw_count >= 1
     no_volumetric_overrun = len(stage14_volumetric_scopes) <= 1
-    stage22_scene_lighting_only = len(stage22_scopes) == EXPECTED_SCENE_LIGHTING_VARIANTS
+    stage22_scene_lighting_only = (
+        len(stage22_scopes) == EXPECTED_SCENE_LIGHTING_VARIANTS
+    )
 
     stage3_before_stage9 = append_interleaved_order_check(
         report, "stage3_before_stage9", stage3_scopes, stage9_scopes
@@ -261,9 +273,13 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(f"stage12_scope_count={len(stage12_scopes)}")
     report.append(f"stage12_draw_count={stage12_draw_count}")
     report.append(f"stage14_volumetric_scope_count={len(stage14_volumetric_scopes)}")
-    report.append(f"stage14_volumetric_dispatch_count={stage14_volumetric_dispatch_count}")
+    report.append(
+        f"stage14_volumetric_dispatch_count={stage14_volumetric_dispatch_count}"
+    )
     report.append(f"stage14_local_fog_scope_count={len(stage14_local_fog_scopes)}")
-    report.append(f"stage14_local_fog_dispatch_count={stage14_local_fog_dispatch_count}")
+    report.append(
+        f"stage14_local_fog_dispatch_count={stage14_local_fog_dispatch_count}"
+    )
     report.append(f"stage15_scope_count={len(stage15_scopes)}")
     report.append(f"stage15_draw_count={stage15_draw_count}")
     report.append(f"stage22_scope_count={len(stage22_scopes)}")
@@ -271,8 +287,12 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append(f"composition_scope_count={len(compositing_scopes)}")
     report.append(f"composition_work_count={composition_work_count}")
     report.append(f"composition_view_ids={','.join(unique_composited_view_ids)}")
-    report.append(f"composition_view_count_match={format_bool(composition_view_count_match)}")
-    report.append(f"distinct_composition_outputs={format_bool(distinct_composition_outputs)}")
+    report.append(
+        f"composition_view_count_match={format_bool(composition_view_count_match)}"
+    )
+    report.append(
+        f"distinct_composition_outputs={format_bool(distinct_composition_outputs)}"
+    )
     report.append(f"depth_products_present={format_bool(depth_products_present)}")
     report.append(f"shadow_products_present={format_bool(shadow_products_present)}")
     report.append(
@@ -284,7 +304,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         f"{format_bool(reduced_variants_omitted_scene_lighting)}"
     )
     report.append(f"no_volumetric_overrun={format_bool(no_volumetric_overrun)}")
-    report.append(f"stage22_scene_lighting_only={format_bool(stage22_scene_lighting_only)}")
+    report.append(
+        f"stage22_scene_lighting_only={format_bool(stage22_scene_lighting_only)}"
+    )
 
     overall = (
         composition_view_count_match

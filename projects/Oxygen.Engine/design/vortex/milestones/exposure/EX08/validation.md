@@ -110,7 +110,7 @@ algorithm, tolerance or renderer policy was changed in response to the image.
 ### Saved-scene Auto diagnosis (native Release)
 
 A focused test loads the user's exact authored settings from
-`Examples/LightBench/Test/Data/auto-full-scene.json`, including the moved camera,
+`Examples/LightBench/test/Data/auto-full-scene.json`, including the moved camera,
 Full geometry, 1000-lux directional, point/spot lights, Auto/Average, None and
 zero compensation. It uses a 320x256 (5:4) scene viewport approximating the
 supplied image's scene area; this is not a pixel-identical window reproduction.

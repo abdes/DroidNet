@@ -1025,7 +1025,7 @@ lua_pop(state, 1)  ← physics
 
 ## 13. Testing Strategy
 
-Add/extend `src/Oxygen/Scripting/Test/Bindings_physics_test.cpp` covering:
+Add/extend `src/Oxygen/Scripting/test/Bindings_physics_test.cpp` covering:
 
 | Category                   | What to verify                                                                                  |
 | -------------------------- | ----------------------------------------------------------------------------------------------- |

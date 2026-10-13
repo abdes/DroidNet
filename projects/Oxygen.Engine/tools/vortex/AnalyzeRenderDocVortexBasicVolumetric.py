@@ -74,9 +74,7 @@ DISTANT_SKY_LIGHT_LUT_TOKEN = "vortex.environment.distantskylightlut"
 ENVIRONMENT_STATIC_DATA_BYTE_SIZE = 672
 ENVIRONMENT_STATIC_DATA_U32_COUNT = ENVIRONMENT_STATIC_DATA_BYTE_SIZE // 4
 VOLUMETRIC_FOG_U32_OFFSET = 128 // 4
-VOLUMETRIC_FOG_INTEGRATED_LIGHT_SCATTERING_SRV_U32 = (
-    VOLUMETRIC_FOG_U32_OFFSET + 12
-)
+VOLUMETRIC_FOG_INTEGRATED_LIGHT_SCATTERING_SRV_U32 = VOLUMETRIC_FOG_U32_OFFSET + 12
 VOLUMETRIC_FOG_FLAGS_U32 = VOLUMETRIC_FOG_U32_OFFSET + 13
 VOLUMETRIC_FOG_GRID_WIDTH_U32 = VOLUMETRIC_FOG_U32_OFFSET + 14
 VOLUMETRIC_FOG_GRID_HEIGHT_U32 = VOLUMETRIC_FOG_U32_OFFSET + 15
@@ -93,7 +91,9 @@ def records_with_name(action_records, name):
 
 def records_under_prefix(action_records, prefix):
     prefix_with_sep = prefix + " > "
-    return [record for record in action_records if record.path.startswith(prefix_with_sep)]
+    return [
+        record for record in action_records if record.path.startswith(prefix_with_sep)
+    ]
 
 
 def float4_values(pixel_value):
@@ -184,20 +184,29 @@ def sample_integrated_volume(controller, rd, texture_descs, resource_id):
         sub.slice = int(slice_index)
         sub.sample = 0
         for row in range(probe_rows):
-            y = 0 if probe_rows == 1 else int(round(((height - 1) * row) / float(probe_rows - 1)))
+            y = (
+                0
+                if probe_rows == 1
+                else int(round(((height - 1) * row) / float(probe_rows - 1)))
+            )
             for col in range(probe_columns):
-                x = 0 if probe_columns == 1 else int(round(((width - 1) * col) / float(probe_columns - 1)))
-                value = float4_values(controller.PickPixel(
-                    resource_id, x, y, sub, rd.CompType.Typeless
-                ))
+                x = (
+                    0
+                    if probe_columns == 1
+                    else int(round(((width - 1) * col) / float(probe_columns - 1)))
+                )
+                value = float4_values(
+                    controller.PickPixel(resource_id, x, y, sub, rd.CompType.Typeless)
+                )
                 probe_count += 1
                 probe_sum = [probe_sum[i] + value[i] for i in range(4)]
                 probe_min = [min(probe_min[i], value[i]) for i in range(4)]
                 probe_max = [max(probe_max[i], value[i]) for i in range(4)]
 
-    rgb_nonzero = max(abs(value) for value in all_max[:3]) > 1.0e-6 or max(
-        abs(all_max[index] - all_min[index]) for index in range(3)
-    ) > 1.0e-6
+    rgb_nonzero = (
+        max(abs(value) for value in all_max[:3]) > 1.0e-6
+        or max(abs(all_max[index] - all_min[index]) for index in range(3)) > 1.0e-6
+    )
     alpha_valid = all_min[3] >= -1.0e-5 and all_max[3] <= 1.0 + 1.0e-5
     if probe_count == 0:
         probe_min = [0.0, 0.0, 0.0, 0.0]
@@ -254,7 +263,9 @@ def find_named_resource_usage(controller, resource_records, event_ids, *tokens):
     return matches
 
 
-def bound_named_resources(controller, rd, resource_names, event_id, shader_stage, read_write, *tokens):
+def bound_named_resources(
+    controller, rd, resource_names, event_id, shader_stage, read_write, *tokens
+):
     controller.SetFrameEvent(event_id, True)
     state = controller.GetPipelineState()
     if read_write:
@@ -362,7 +373,9 @@ def read_float4_buffer(controller, resource_id, resource_names):
     }
 
 
-def build_report(controller, report: ReportWriter, capture_path: Path, report_path: Path):
+def build_report(
+    controller, report: ReportWriter, capture_path: Path, report_path: Path
+):
     rd = renderdoc_module()
     action_records = collect_action_records(controller)
     resource_records = collect_resource_records_raw(controller)
@@ -377,14 +390,18 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     volumetric_event_ids = collect_event_ids(volumetric_scope, volumetric_records)
     fog_event_ids = collect_event_ids(fog_scope, fog_records)
 
-    volumetric_dispatch_count = len(records_with_name(volumetric_records, DISPATCH_NAME))
+    volumetric_dispatch_count = len(
+        records_with_name(volumetric_records, DISPATCH_NAME)
+    )
     fog_draw_count = len(records_with_name(fog_records, DRAW_NAME))
     volumetric_dispatch = (
         records_with_name(volumetric_records, DISPATCH_NAME)[0]
         if volumetric_dispatch_count > 0
         else None
     )
-    fog_draw = records_with_name(fog_records, DRAW_NAME)[0] if fog_draw_count > 0 else None
+    fog_draw = (
+        records_with_name(fog_records, DRAW_NAME)[0] if fog_draw_count > 0 else None
+    )
     volumetric_scope_present = len(volumetric_scope) == 1
     volumetric_dispatch_valid = volumetric_dispatch_count == 1
     fog_scope_present = len(fog_scope) == 1
@@ -450,28 +467,32 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         )
     integrated_light_scattering_written = len(written) > 0
     integrated_light_scattering_consumed_by_fog = len(consumed) > 0
-    integrated_volume = sample_integrated_volume(
-        controller,
-        rd,
-        texture_descs,
-        written[0]["resource_id"] if written else None,
-    ) if written else {
-        "sampled": False,
-        "width": 0,
-        "height": 0,
-        "depth": 0,
-        "slices": [],
-        "min": [0.0, 0.0, 0.0, 0.0],
-        "max": [0.0, 0.0, 0.0, 0.0],
-        "probe_count": 0,
-        "probe_min": [0.0, 0.0, 0.0, 0.0],
-        "probe_max": [0.0, 0.0, 0.0, 0.0],
-        "probe_avg": [0.0, 0.0, 0.0, 0.0],
-        "probe_rgb_sum": 0.0,
-        "probe_rgb_max": 0.0,
-        "rgb_nonzero": False,
-        "alpha_valid": False,
-    }
+    integrated_volume = (
+        sample_integrated_volume(
+            controller,
+            rd,
+            texture_descs,
+            written[0]["resource_id"] if written else None,
+        )
+        if written
+        else {
+            "sampled": False,
+            "width": 0,
+            "height": 0,
+            "depth": 0,
+            "slices": [],
+            "min": [0.0, 0.0, 0.0, 0.0],
+            "max": [0.0, 0.0, 0.0, 0.0],
+            "probe_count": 0,
+            "probe_min": [0.0, 0.0, 0.0, 0.0],
+            "probe_max": [0.0, 0.0, 0.0, 0.0],
+            "probe_avg": [0.0, 0.0, 0.0, 0.0],
+            "probe_rgb_sum": 0.0,
+            "probe_rgb_max": 0.0,
+            "rgb_nonzero": False,
+            "alpha_valid": False,
+        }
+    )
     stage15_static_data = (
         read_stage15_fog_environment_static_data(
             controller,
@@ -511,7 +532,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         stage15_grid_width > 0 and stage15_grid_height > 0 and stage15_grid_depth > 0
     )
     stage15_grid_z_params = (
-        stage15_static_data["grid_z_params"] if stage15_static_data_bound else (0.0, 0.0, 0.0)
+        stage15_static_data["grid_z_params"]
+        if stage15_static_data_bound
+        else (0.0, 0.0, 0.0)
     )
     stage15_grid_z_valid = (
         stage15_grid_z_params[0] > 0.0
@@ -535,7 +558,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
     report.append("report_path={}".format(report_path))
     report.append("total_actions={}".format(len(action_records)))
     report.append("stage14_volumetric_fog_scope_count={}".format(len(volumetric_scope)))
-    report.append("stage14_volumetric_fog_dispatch_count={}".format(volumetric_dispatch_count))
+    report.append(
+        "stage14_volumetric_fog_dispatch_count={}".format(volumetric_dispatch_count)
+    )
     report.append("stage15_fog_scope_count={}".format(len(fog_scope)))
     report.append("stage15_fog_draw_count={}".format(fog_draw_count))
     report.append(
@@ -680,12 +705,20 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         )
     )
 
-    append_bool(report, "stage14_volumetric_fog_scope_present", volumetric_scope_present)
-    append_bool(report, "stage14_volumetric_fog_dispatch_valid", volumetric_dispatch_valid)
+    append_bool(
+        report, "stage14_volumetric_fog_scope_present", volumetric_scope_present
+    )
+    append_bool(
+        report, "stage14_volumetric_fog_dispatch_valid", volumetric_dispatch_valid
+    )
     append_bool(report, "stage15_fog_scope_present", fog_scope_present)
     append_bool(report, "stage15_fog_draw_valid", fog_draw_valid)
     append_bool(report, "volumetric_fog_before_stage15_fog", volumetric_before_fog)
-    append_bool(report, "integrated_light_scattering_written", integrated_light_scattering_written)
+    append_bool(
+        report,
+        "integrated_light_scattering_written",
+        integrated_light_scattering_written,
+    )
     append_bool(
         report,
         "integrated_light_scattering_volume_sampled",
@@ -753,7 +786,10 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
         [
             record
             for record in action_records
-            if any(token in "{} {}".format(record.name, record.path).lower() for token in interesting_tokens)
+            if any(
+                token in "{} {}".format(record.name, record.path).lower()
+                for token in interesting_tokens
+            )
         ][:80],
         start=1,
     ):
@@ -766,7 +802,9 @@ def build_report(controller, report: ReportWriter, capture_path: Path, report_pa
             )
         )
 
-    for resource_key, name in sorted(resource_names.items(), key=lambda item: str(item[1])):
+    for resource_key, name in sorted(
+        resource_names.items(), key=lambda item: str(item[1])
+    ):
         if INTEGRATED_LIGHT_SCATTERING_TOKEN in str(name).lower():
             report.append("resource_{}={}".format(resource_key, name))
 

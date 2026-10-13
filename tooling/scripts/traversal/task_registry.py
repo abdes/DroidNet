@@ -11,6 +11,7 @@ from rich.console import Console
 
 log = logging.getLogger(__name__)
 
+
 @dataclass(slots=True)
 class TaskInvocation:
     name: str
@@ -32,7 +33,9 @@ class TraversalContext:
     forwarded_arguments: Mapping[str, object] = field(default_factory=dict)
     forwarded_tokens: List[str] = field(default_factory=list)
     extra_arguments: List[str] = field(default_factory=list)
-    logger: logging.Logger = field(default_factory=lambda: logging.getLogger("traversal"))
+    logger: logging.Logger = field(
+        default_factory=lambda: logging.getLogger("traversal")
+    )
     active_task: Optional[str] = None
 
 
@@ -43,7 +46,14 @@ class TaskRegistry:
         self._tasks: Dict[str, TaskInvocation] = {}
         self._aliases: Dict[str, str] = {}
 
-    def register(self, name: str, func: Callable[[Path, TraversalContext], None], *, aliases: Iterable[str] | None = None, description: str = "") -> None:
+    def register(
+        self,
+        name: str,
+        func: Callable[[Path, TraversalContext], None],
+        *,
+        aliases: Iterable[str] | None = None,
+        description: str = "",
+    ) -> None:
         key = name.lower()
         if key in self._tasks:
             raise ValueError(f"Task '{name}' already registered")
@@ -67,7 +77,9 @@ class TaskRegistry:
         import tooling.scripts.traversal.tasks  # noqa: F401
 
     def load_plugins(self) -> None:
-        for entry_point in importlib.metadata.entry_points().select(group=self.ENTRYPOINT_GROUP):
+        for entry_point in importlib.metadata.entry_points().select(
+            group=self.ENTRYPOINT_GROUP
+        ):
             try:
                 entry_point.load()
                 log.debug("Loaded task plugin '%s'", entry_point.name)
@@ -83,14 +95,22 @@ class TaskRegistry:
                 continue
             module_name = f"{module_path.parent.name}.{module_path.stem}"
             try:
-                importlib.import_module(f"tooling.scripts.traversal.tasks.{module_path.stem}")
+                importlib.import_module(
+                    f"tooling.scripts.traversal.tasks.{module_path.stem}"
+                )
                 log.debug("Imported local task module '%s'", module_name)
             except Exception as exc:  # pragma: no cover
                 log.error("Failed to import task module '%s': %s", module_name, exc)
 
 
-def task(name: str, *, aliases: Iterable[str] | None = None, description: str = "") -> Callable[[Callable[[Path, TraversalContext], None]], Callable[[Path, TraversalContext], None]]:
-    def decorator(func: Callable[[Path, TraversalContext], None]) -> Callable[[Path, TraversalContext], None]:
+def task(
+    name: str, *, aliases: Iterable[str] | None = None, description: str = ""
+) -> Callable[
+    [Callable[[Path, TraversalContext], None]], Callable[[Path, TraversalContext], None]
+]:
+    def decorator(
+        func: Callable[[Path, TraversalContext], None],
+    ) -> Callable[[Path, TraversalContext], None]:
         registry = get_global_registry()
         registry.register(name, func, aliases=aliases, description=description)
         return func
