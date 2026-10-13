@@ -121,6 +121,64 @@ public sealed partial class DynamicTreeBasicTests : VisualUserInterfaceTests, ID
             _ = selectedItems[1].Should().BeSameAs(secondChild);
         });
 
+    /// <summary>Renaming a row below the viewport scrolls it into view before the editor opens over its label.</summary>
+    /// <returns>A task that completes when the test has run.</returns>
+    [TestMethod]
+    public Task InlineRename_OfRowBelowViewport_OpensEditorOverTheVisibleRow_Async() => EnqueueAsync(
+        async () =>
+        {
+            using var vm = new TestViewModel();
+            var root = new TestItemAdapter(
+                new TestTreeItem { Label = "R", Children = [.. Enumerable.Range(1, 60).Select(static index => new TestTreeItem { Label = $"C{index}" })] },
+                isRoot: true);
+            await vm.InitializeAsync(root).ConfigureAwait(true);
+            await vm.ExpandItemAsync(root).ConfigureAwait(true);
+            var testTree = new TestableDynamicTree { ViewModel = vm, Height = 200 };
+            await LoadTestContentAsync(testTree).ConfigureAwait(true);
+
+            var last = vm.ShownItems.Last();
+            _ = (await testTree.BeginRenameAsync(last).ConfigureAwait(true)).Should().BeTrue();
+            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+
+            var row = testTree.FindDescendant<TreeItemControl>(control => ReferenceEquals(control.ItemAdapter, last))!;
+            var popup = row.FindDescendant<Popup>(candidate => string.Equals(candidate.Name, TreeItemControl.InPlaceRenamePart, StringComparison.Ordinal))!;
+            var edit = ((StackPanel)popup.Child).Children.OfType<TextBox>().Single();
+            var editTop = edit.TransformToVisual(testTree).TransformPoint(default).Y;
+            _ = popup.IsOpen.Should().BeTrue();
+            _ = editTop.Should().BeInRange(0, testTree.ActualHeight - edit.ActualHeight, "the editor opens over the row once it is visible");
+        });
+
+    /// <summary>A row inserted below the viewport and renamed at once, as New Folder does, opens its editor over the
+    /// visible row.</summary>
+    /// <returns>A task that completes when the test has run.</returns>
+    [TestMethod]
+    public Task InlineRename_OfRowJustInsertedBelowViewport_OpensEditorOverTheVisibleRow_Async() => EnqueueAsync(
+        async () =>
+        {
+            using var vm = new TestViewModel();
+            var root = new TestItemAdapter(
+                new TestTreeItem { Label = "R", Children = [.. Enumerable.Range(1, 60).Select(static index => new TestTreeItem { Label = $"C{index}" })] },
+                isRoot: true);
+            await vm.InitializeAsync(root).ConfigureAwait(true);
+            await vm.ExpandItemAsync(root).ConfigureAwait(true);
+            var testTree = new TestableDynamicTree { ViewModel = vm, Height = 200 };
+            await LoadTestContentAsync(testTree).ConfigureAwait(true);
+
+            var added = new TestItemAdapter(new TestTreeItem { Label = "New folder" });
+            await vm.InsertItemAsync(added, root, (await root.Children.ConfigureAwait(true)).Count).ConfigureAwait(true);
+            _ = (await testTree.BeginRenameAsync(added).ConfigureAwait(true)).Should().BeTrue();
+            _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+
+            var row = testTree.FindDescendant<TreeItemControl>(control => ReferenceEquals(control.ItemAdapter, added))!;
+            var popup = row.FindDescendant<Popup>(candidate => string.Equals(candidate.Name, TreeItemControl.InPlaceRenamePart, StringComparison.Ordinal))!;
+            var edit = ((StackPanel)popup.Child).Children.OfType<TextBox>().Single();
+            var rowTop = row.TransformToVisual(testTree).TransformPoint(default).Y;
+            var editTop = edit.TransformToVisual(testTree).TransformPoint(default).Y;
+            _ = popup.IsOpen.Should().BeTrue();
+            _ = rowTop.Should().BeInRange(0, testTree.ActualHeight - row.ActualHeight, "the new row is scrolled into view");
+            _ = editTop.Should().BeApproximately(rowTop, row.ActualHeight, "the editor opens over the new row");
+        });
+
     [TestMethod]
     public Task InlineRename_UsesAsyncOwnerAndKeepsDraftWhenRejected_Async() => EnqueueAsync(
         async () =>

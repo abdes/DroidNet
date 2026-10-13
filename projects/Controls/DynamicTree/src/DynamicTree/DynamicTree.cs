@@ -153,9 +153,18 @@ public partial class DynamicTree : Control
             return false;
         }
 
-        // Ensure the element is brought into view and has focus before starting rename.
+        // The rename popup anchors to the row's label when it opens, so the row must already be in its final,
+        // visible position: scroll without animation and let layout settle first. Otherwise a row below the
+        // viewport opens its editor at the row's old position, clamped to the edge of the pane.
+        // An element the repeater just created has no position until it is arranged; bring it into view only then.
+        element.UpdateLayout();
+        element.StartBringIntoView(new BringIntoViewOptions { AnimationDesired = false });
+        await this.WaitForLayoutAsync().ConfigureAwait(true);
+
+        // Ensure the element has focus before starting rename.
         await this.FocusRealizedItemAsync(item, FocusState.Programmatic).ConfigureAwait(true);
 
+        element = this.itemsRepeater.TryGetElement(index) ?? element;
         var treeItem = (element as FrameworkElement)?.FindName(TreeItemPart) as DynamicTreeItem;
         return treeItem is not null && ReferenceEquals(treeItem.ItemAdapter, item) && treeItem.BeginRename();
     }
@@ -877,6 +886,18 @@ public partial class DynamicTree : Control
         {
             this.focusOperationPending = false;
         }
+    }
+
+    // Completes after the dispatcher has run the pending layout pass: low-priority work runs after layout.
+    private Task WaitForLayoutAsync()
+    {
+        var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (this.DispatcherQueue?.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, settled.SetResult) != true)
+        {
+            settled.SetResult();
+        }
+
+        return settled.Task;
     }
 
     private async Task FocusRealizedItemAsync(ITreeItem item, FocusState focusState)
