@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <ostream>
+
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Graphics/Common/NativeObject.h>
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Headless/CommandContext.h>
 #include <Oxygen/Graphics/Headless/Commands/ResourceBarrierCommand.h>
 

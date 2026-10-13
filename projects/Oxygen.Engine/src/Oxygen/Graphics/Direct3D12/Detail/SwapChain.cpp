@@ -4,9 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <windows.h>
+#include <windows.h> // IWYU pragma: keep
 
 #include <algorithm>
+#include <cstdint>
+#include <exception>
+#include <functional>
+#include <memory>
+#include <stdexcept>
 
 #include <dxgiformat.h>
 #include <fmt/format.h>
@@ -14,10 +19,20 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
+#include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/SwapChain.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
+#include <Oxygen/Graphics/Direct3D12/Texture.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 
 namespace {
 

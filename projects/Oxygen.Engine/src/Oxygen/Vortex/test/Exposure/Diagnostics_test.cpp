@@ -14,7 +14,6 @@
 #include <utility>
 
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>

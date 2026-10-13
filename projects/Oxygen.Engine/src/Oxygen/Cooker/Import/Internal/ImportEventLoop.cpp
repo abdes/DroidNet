@@ -4,7 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
+#include <thread>
+
 #include "ImportEventLoop.h"
+#include <asio/executor_work_guard.hpp>
+#include <asio/io_context.hpp>
 
 #include <Oxygen/Base/Logging.h>
 

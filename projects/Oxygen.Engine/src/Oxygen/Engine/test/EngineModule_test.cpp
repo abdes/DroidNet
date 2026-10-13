@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {

@@ -4,13 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "./BaseCompositionTest.h"
+#include <gtest/gtest.h>
 
+#include <Oxygen/Base/TypeList.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/Object.h>
+#include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Composition/TypedObject.h>
 
 using oxygen::TypeId;
 

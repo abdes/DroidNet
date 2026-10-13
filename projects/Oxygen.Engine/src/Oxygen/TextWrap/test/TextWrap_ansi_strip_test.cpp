@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstring>
-
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/TextWrap/TextWrap.h>
 

@@ -4,16 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/BuiltinGeometry.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -62,20 +65,64 @@ NOLINT_TEST(
 {
   using Buffers
     = std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>>;
-  const auto factories
-    = std::vector<std::pair<std::string_view, std::function<Buffers()>>> {
-        { "Cube", [] { return MakeCubeMeshAsset(); } },
-        { "SubdividedCube", [] { return MakeSubdividedCubeMeshAsset(); } },
-        { "Sphere", [] { return MakeSphereMeshAsset(); } },
-        { "Capsule", [] { return MakeCapsuleMeshAsset(); } },
-        { "IcoSphere", [] { return MakeIcoSphereMeshAsset(); } },
-        { "Plane", [] { return MakePlaneMeshAsset(); } },
-        { "Cylinder", [] { return MakeCylinderMeshAsset(); } },
-        { "Cone", [] { return MakeConeMeshAsset(); } },
-        { "Torus", [] { return MakeTorusMeshAsset(); } },
-        { "Quad", [] { return MakeQuadMeshAsset(); } },
-        { "ArrowGizmo", [] { return MakeArrowGizmoMeshAsset(); } },
-      };
+  const auto factories = std::vector<
+    std::pair<std::string_view, std::function<Buffers()>>> {
+    { "Cube",
+      []
+      -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
+        return MakeCubeMeshAsset();
+      } },
+    { "SubdividedCube",
+      []
+      -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
+        return MakeSubdividedCubeMeshAsset();
+      } },
+    { "Sphere",
+      []
+      -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
+        return MakeSphereMeshAsset();
+      } },
+    { "Capsule",
+      []
+      -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
+        return MakeCapsuleMeshAsset();
+      } },
+    { "IcoSphere",
+      []
+      -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
+        return MakeIcoSphereMeshAsset();
+      } },
+    { "Plane",
+      []
+      -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
+        return MakePlaneMeshAsset();
+      } },
+    { "Cylinder",
+      []
+      -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
+        return MakeCylinderMeshAsset();
+      } },
+    { "Cone",
+      []
+      -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
+        return MakeConeMeshAsset();
+      } },
+    { "Torus",
+      []
+      -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
+        return MakeTorusMeshAsset();
+      } },
+    { "Quad",
+      []
+      -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
+        return MakeQuadMeshAsset();
+      } },
+    { "ArrowGizmo",
+      []
+      -> std::optional<std::pair<std::vector<Vertex>, std::vector<uint32_t>>> {
+        return MakeArrowGizmoMeshAsset();
+      } },
+  };
   for (const auto& [name, factory] : factories) {
     SCOPED_TRACE(name);
     const auto direct = factory();

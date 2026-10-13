@@ -6,6 +6,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Frame.h>

@@ -6,15 +6,15 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <limits>
+#include <memory>
 #include <string>
-#include <type_traits>
-#include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Detail/FixedDescriptorSegment.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>

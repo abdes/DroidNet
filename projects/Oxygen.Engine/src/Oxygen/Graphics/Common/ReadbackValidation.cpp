@@ -4,8 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <expected>
+
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Graphics/Common/ReadbackErrors.h>
+#include <Oxygen/Graphics/Common/ReadbackTypes.h>
 #include <Oxygen/Graphics/Common/ReadbackValidation.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 
 using oxygen::graphics::detail::FormatInfo;
 using oxygen::graphics::detail::GetFormatInfo;

@@ -65,7 +65,7 @@
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
-#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/Generated.DrawContracts.h>
 #include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/ViewExtension.h>

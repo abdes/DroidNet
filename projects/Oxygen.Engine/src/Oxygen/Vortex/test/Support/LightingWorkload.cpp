@@ -6,10 +6,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <numbers>
 #include <stdexcept>
 #include <tuple>
+#include <vector>
 
 #include <Oxygen/Vortex/test/Support/LightingWorkload.h>
 

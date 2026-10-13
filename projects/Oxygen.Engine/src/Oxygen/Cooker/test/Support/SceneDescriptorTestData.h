@@ -9,7 +9,6 @@
 #include <string_view>
 
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Data/PakFormat_world.h>
 

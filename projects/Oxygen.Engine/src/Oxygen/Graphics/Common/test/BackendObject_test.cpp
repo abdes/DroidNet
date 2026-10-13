@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <future>
+#include <memory>
+#include <stdexcept>
 #include <thread>
 
 #include <Oxygen/Graphics/Common/BackendLifetime.h>

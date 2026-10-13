@@ -5,13 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <iostream>
+#include <cstddef>
+#include <iterator>
 #include <limits>
 #include <numeric>
 #include <optional>
-#include <ranges>
 #include <regex>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/TextWrap/Internal/Tokenizer.h>
 #include <Oxygen/TextWrap/TextWrap.h>

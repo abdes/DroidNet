@@ -4,14 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <chrono>
+#include <functional>
 #include <utility>
+#include <vector>
 
-#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Headless/Command.h>
 #include <Oxygen/Graphics/Headless/CommandQueue.h>
 #include <Oxygen/Graphics/Headless/Internal/CommandExecutor.h>
+#include <Oxygen/Graphics/Headless/Internal/SerialExecutor.h>
 
 namespace oxygen::graphics::headless::internal {
 

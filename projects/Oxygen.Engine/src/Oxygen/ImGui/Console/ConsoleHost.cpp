@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <imgui.h>
 

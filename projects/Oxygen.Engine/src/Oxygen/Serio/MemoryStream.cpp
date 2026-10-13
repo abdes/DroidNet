@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <limits>
+#include <new>
 #include <span>
 #include <system_error>
 

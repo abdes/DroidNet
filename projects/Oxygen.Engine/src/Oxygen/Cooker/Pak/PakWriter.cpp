@@ -12,6 +12,7 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <ios>
 #include <limits>
 #include <memory>
 #include <optional>
@@ -22,13 +23,18 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Cooker/Pak/PakBuildPhase.h>
+#include <Oxygen/Cooker/Pak/PakBuildReport.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakMeasureStore.h>
+#include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Cooker/Pak/PakStreamingCrc32.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -79,7 +85,7 @@ auto AddDiagnostic(WriterState& state,
 auto HasWriterErrors(const WriterState& state) -> bool
 {
   return std::ranges::any_of(
-    state.output.diagnostics, [](const pak::PakDiagnostic& diagnostic) {
+    state.output.diagnostics, [](const pak::PakDiagnostic& diagnostic) -> bool {
       return diagnostic.severity == pak::PakDiagnosticSeverity::kError;
     });
 }
@@ -186,7 +192,7 @@ auto FindRegion(const std::span<const pak::PakRegionPlan> regions,
   const std::string_view region_name) -> std::optional<pak::PakRegionPlan>
 {
   const auto it = std::ranges::find_if(
-    regions, [region_name](const pak::PakRegionPlan& region) {
+    regions, [region_name](const pak::PakRegionPlan& region) -> bool {
       return region.region_name == region_name;
     });
   if (it == regions.end()) {
@@ -199,7 +205,7 @@ auto FindTable(const std::span<const pak::PakTablePlan> tables,
   const std::string_view table_name) -> std::optional<pak::PakTablePlan>
 {
   const auto it = std::ranges::find_if(
-    tables, [table_name](const pak::PakTablePlan& table) {
+    tables, [table_name](const pak::PakTablePlan& table) -> bool {
       return table.table_name == table_name;
     });
   if (it == tables.end()) {
@@ -226,7 +232,7 @@ auto BuildResourceIndexMap(
   }
   for (auto& [_, kind_resources] : by_kind) {
     std::ranges::sort(
-      kind_resources, [&resources](const size_t lhs, const size_t rhs) {
+      kind_resources, [&resources](const size_t lhs, const size_t rhs) -> bool {
         return resources[lhs].resource_index < resources[rhs].resource_index;
       });
   }
@@ -462,7 +468,7 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
       header.content_version = header_plan.content_version;
       const auto source_key = data::as_bytes(header_plan.source_key);
       std::ranges::transform(source_key, std::begin(header.source_identity),
-        [](const auto byte) { return std::to_integer<uint8_t>(byte); });
+        [](const auto byte) -> auto { return std::to_integer<uint8_t>(byte); });
       const auto header_bytes = std::as_bytes(std::span(&header, size_t { 1 }));
       (void)WriteRawBytes(state, header_bytes, "pak.write.stream_write_failed",
         "Failed to write PakHeader bytes.", "header");
@@ -497,7 +503,7 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
         }
       }
       std::ranges::sort(region_resource_indices,
-        [&resources](const size_t lhs, const size_t rhs) {
+        [&resources](const size_t lhs, const size_t rhs) -> bool {
           return resources[lhs].offset < resources[rhs].offset;
         });
 

@@ -27,10 +27,10 @@
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
-#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Camera/Perspective.h>

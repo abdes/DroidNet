@@ -4,14 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
+#include <cstdint>
 #include <limits>
 #include <numbers>
-#include <string_view>
+#include <optional>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Vertex.h>
 
 /*!
  Creates vertex and index buffers for a UV sphere of radius 0.5, centred at

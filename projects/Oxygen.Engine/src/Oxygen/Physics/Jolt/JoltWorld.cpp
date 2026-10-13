@@ -4,26 +4,37 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Jolt/Jolt.h> // must be first (keep separate)
+#include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <limits>
+#include <memory>
 #include <mutex>
+#include <span>
 #include <unordered_map>
 #include <unordered_set>
-#include <utility>
 #include <vector>
 
+#include <Jolt/Core/Core.h>
 #include <Jolt/Core/Factory.h>
 #include <Jolt/Core/JobSystemThreadPool.h>
 #include <Jolt/Core/Memory.h>
 #include <Jolt/Core/TempAllocator.h>
+#include <Jolt/Math/Quat.h>
+#include <Jolt/Math/Real.h>
 #include <Jolt/Physics/Body/BodyManager.h>
 #include <Jolt/Physics/Body/BodyType.h>
+#include <Jolt/Physics/Collision/BroadPhase/BroadPhaseLayer.h>
 #include <Jolt/Physics/Collision/ContactListener.h>
+#include <Jolt/Physics/Collision/ObjectLayer.h>
+#include <Jolt/Physics/Collision/Shape/SubShapeIDPair.h>
+#include <Jolt/Physics/Constraints/Constraint.h>
 #include <Jolt/Physics/EPhysicsUpdateError.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/SoftBody/SoftBodyContactListener.h>
@@ -32,8 +43,18 @@
 #include <Jolt/RegisterTypes.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/CollisionFilter.h>
+#include <Oxygen/Physics/CollisionLayers.h>
+#include <Oxygen/Physics/Events/PhysicsEvents.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
+#include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/System/IWorldApi.h>
+#include <Oxygen/Physics/World/WorldDesc.h>
 
 namespace {
 

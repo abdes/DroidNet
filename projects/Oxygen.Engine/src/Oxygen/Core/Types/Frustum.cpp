@@ -6,8 +6,11 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
-#include <ranges>
+
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/geometric.hpp>
+#include <glm/matrix.hpp>
 
 #include <Oxygen/Core/Types/Frustum.h>
 
@@ -46,12 +49,12 @@ auto Frustum::FromViewProj(const glm::mat4& vp, bool reverse_z) -> Frustum
   const float clip_near = reverse_z ? 1.0F : 0.0F;
   const float clip_far = reverse_z ? 0.0F : 1.0F;
 
-  const auto Unproject
-    = [&inv_vp](const float x, const float y, const float z) noexcept {
-        const auto clip = glm::vec4(x, y, z, 1.0F);
-        const auto world = inv_vp * clip;
-        return glm::vec3(world) / world.w;
-      };
+  const auto Unproject = [&inv_vp](const float x, const float y,
+                           const float z) noexcept -> glm::vec3 {
+    const auto clip = glm::vec4(x, y, z, 1.0F);
+    const auto world = inv_vp * clip;
+    return glm::vec3(world) / world.w;
+  };
 
   const auto ntl = Unproject(-1.0F, 1.0F, clip_near);
   const auto ntr = Unproject(1.0F, 1.0F, clip_near);
@@ -98,7 +101,7 @@ auto Frustum::IntersectsSphere(const glm::vec3& center, float radius) const
   -> bool
 {
   // Sphere intersects frustum if it's not completely behind any plane.
-  return std::ranges::all_of(planes, [&](const Plane& p) {
+  return std::ranges::all_of(planes, [&](const Plane& p) -> bool {
     const float dist = glm::dot(p.normal, center) + p.d;
     return dist >= -radius;
   });

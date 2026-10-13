@@ -6,11 +6,18 @@
 
 #include <algorithm>
 #include <array>
+#include <cstddef>
+#include <string>
 #include <string_view>
 
 #include <imgui.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Console/Completion.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/ImGui/Console/ConsolePanel.h>
+#include <Oxygen/ImGui/Console/ConsoleUiState.h>
 
 namespace oxygen::imgui::consoleui {
 

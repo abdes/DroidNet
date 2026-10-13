@@ -358,9 +358,10 @@ auto TextureImportJob::LoadSource(ImportSession& session)
 
   std::chrono::microseconds io_duration { 0 };
   std::chrono::microseconds decode_duration { 0 };
-  const auto AddDuration = [](std::chrono::microseconds& total,
-                             const std::chrono::steady_clock::time_point start,
-                             const std::chrono::steady_clock::time_point end) {
+  const auto AddDuration
+    = [](std::chrono::microseconds& total,
+        const std::chrono::steady_clock::time_point start,
+        const std::chrono::steady_clock::time_point end) -> void {
     total += std::chrono::duration_cast<std::chrono::microseconds>(end - start);
   };
   const auto StampDurations = [&](TextureSource& target) -> TextureSource&& {

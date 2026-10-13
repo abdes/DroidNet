@@ -4,7 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <limits>
 #include <optional>
+#include <stdexcept>
+#include <tuple>
+#include <utility>
+
+#include "gtest/gtest.h"
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Clap/Detail/ParseValue.h>

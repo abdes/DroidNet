@@ -6,9 +6,16 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cstring>
+#include <memory>
 #include <mutex>
+#include <optional>
+#include <span>
+#include <string>
 #include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
@@ -42,13 +49,15 @@ constexpr auto kDefinitions = std::array<BuiltinGeometryDefinition, 11> { {
   { "ArrowGizmo", Category::kInternal },
 } };
 
-constexpr auto kNames = [] {
+constexpr auto kNames = []->std::array<std::string_view, kDefinitions.size()>
+{
   auto names = std::array<std::string_view, kDefinitions.size()> {};
   for (auto index = std::size_t { 0 }; index < kDefinitions.size(); ++index) {
     names[index] = kDefinitions[index].name;
   }
   return names;
-}();
+}
+();
 
 constexpr auto AsciiLower(const char value) noexcept -> char
 {
@@ -61,7 +70,7 @@ auto EqualsName(std::string_view first, std::string_view second) noexcept
 {
   return first.size() == second.size()
     && std::equal(first.begin(), first.end(), second.begin(),
-      [](const char lhs, const char rhs) {
+      [](const char lhs, const char rhs) -> bool {
         return AsciiLower(lhs) == AsciiLower(rhs);
       });
 }

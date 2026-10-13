@@ -52,7 +52,7 @@ auto LooseCookedIndexImpl::GetFileInventory() const
       .kind = std::nullopt,
     });
   }
-  const auto append_file = [&](const auto kind, const FileInfo& file) {
+  const auto append_file = [&](const auto kind, const FileInfo& file) -> auto {
     files.push_back({
       .relative_path = std::string(
         std::string_view(string_storage_).substr(file.relpath_offset).data()),
@@ -144,7 +144,7 @@ auto LooseCookedIndexImpl::ValidateContent(
     return;
   }
   const auto& first = issues.front();
-  const auto reason = [&] {
+  const auto reason = [&] -> const char* {
     switch (first.reason) {
     case lc::IntegrityFailure::kMissing:
       return "Missing loose cooked file: ";

@@ -7,6 +7,7 @@
 #include <array>
 #include <memory>
 #include <stdexcept>
+#include <string>
 
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>

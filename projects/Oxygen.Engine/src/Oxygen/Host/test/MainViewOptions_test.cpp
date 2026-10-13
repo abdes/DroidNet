@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>

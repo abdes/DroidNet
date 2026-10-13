@@ -19,6 +19,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
@@ -33,6 +34,7 @@
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Environment/EnvironmentLightingService.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLightState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>

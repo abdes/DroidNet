@@ -4,19 +4,25 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <mutex>
+#include <optional>
 #include <stdexcept>
 #include <unordered_map>
+#include <utility>
 
 #include <Oxygen/Content/Internal/IContentSource.h>
-#include <Oxygen/Data/PakFormatSerioLoaders.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_physics.h>
 
 namespace oxygen::content::internal {
 
 auto IContentSource::FindPhysicsResource(const data::AssetKey& key) const
   -> std::optional<data::pak::core::ResourceIndexT>
 {
-  std::call_once(physics_index_once_, [this] {
+  std::call_once(physics_index_once_, [this] -> void {
     const auto* table = GetPhysicsTable();
     if (!table) {
       return;

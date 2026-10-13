@@ -5,10 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <bit>
+#include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <numbers>
+#include <span>
 #include <string>
-#include <type_traits>
 
 #include <Oxygen/Base/Endian.h>
 #include <Oxygen/Base/Types/Geometry.h>
@@ -112,7 +114,7 @@ NOLINT_TEST(ByteSwapTest, ByteSwap_UnsupportedTypesAreIllFormed)
   struct alignas(1) ThreeBytes {
     uint8_t bytes[3];
   };
-  struct alignas(1) FourByteNonTriviallyCopyable {
+  struct FourByteNonTriviallyCopyable {
     FourByteNonTriviallyCopyable() = default;
     FourByteNonTriviallyCopyable(const FourByteNonTriviallyCopyable&) { }
     uint32_t x { 0 };

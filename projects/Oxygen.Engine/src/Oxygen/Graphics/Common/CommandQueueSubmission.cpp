@@ -4,11 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <mutex>
+#include <optional>
+#include <unordered_map>
+
+#include <Oxygen/Graphics/Common/BackendLifetime.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Submission.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #if defined(OXYGEN_WITH_TRACY)
 #  include <Oxygen/Profiling/CpuProfileScope.h>
 #endif
 
-#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cassert>

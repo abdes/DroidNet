@@ -65,6 +65,7 @@
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/Types/Generated.DrawContracts.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>
 // Completes the traversal returned by Scene::Traverse().
 #include <Oxygen/Scene/SceneTraversal.h> // IWYU pragma: keep
@@ -90,7 +91,6 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyMeshProcessor.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyModule.h>
 #include <Oxygen/Vortex/ShaderDebugMode.h>
-#include <Oxygen/Vortex/Types/DrawMetadata.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>

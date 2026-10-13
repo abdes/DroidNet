@@ -2,11 +2,15 @@
 // Focused tests for TimelineGatedSlotReuse under DomainToken semantics
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <memory>
 #include <span>
+#include <utility>
 
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Nexus/TimelineGatedSlotReuse.h>
+#include <Oxygen/Nexus/Types/Domain.h>
 #include <Oxygen/Nexus/test/NexusMocks.h>
 #include <Oxygen/Testing/GTest.h>
 

@@ -5,6 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <span>
 #include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
@@ -14,7 +18,10 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Common/ShaderLibraryIO.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FinalArchivePack.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 

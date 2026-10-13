@@ -4,15 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cstdint>
 #include <stdexcept>
+#include <vector>
 
 #include <d3d12.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/TextureReadback.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 
 using oxygen::graphics::detail::FormatInfo;
 using oxygen::graphics::detail::GetFormatInfo;

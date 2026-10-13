@@ -14,7 +14,6 @@
 #include <unordered_set>
 
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/test/Support/LightingWorkload.h>

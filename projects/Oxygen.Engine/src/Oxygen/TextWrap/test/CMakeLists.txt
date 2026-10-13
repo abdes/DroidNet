@@ -39,7 +39,7 @@ m_gtest_program(
     "TextWrap_basic_test.cpp"
     "TextWrap_edge_test.cpp"
     "TextWrap_indent_test.cpp"
-    "TextWrap_basic_test.cpp"
+    "TextWrap_trim_test.cpp"
     "TextWrap_ansi_strip_test.cpp"
 )
 

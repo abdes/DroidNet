@@ -8,6 +8,7 @@
 #include <chrono>
 
 #include <Oxygen/Core/Time/NetworkClock.h>
+#include <Oxygen/Core/Time/Types.h>
 
 using namespace std::chrono;
 

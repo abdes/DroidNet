@@ -4,8 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <iomanip>
+#include <ios>
+#include <optional>
 #include <sstream>
+#include <string_view>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Detail/PathParser.h>

@@ -15,7 +15,7 @@
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/BasePass/BasePassMeshProcessor.h>
 #include <Oxygen/Vortex/Types/AcceptedDrawView.h>
-#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/Generated.DrawContracts.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 
 namespace oxygen::vortex {

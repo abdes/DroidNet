@@ -4,10 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <array>
+#include <chrono>
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <string_view>
 #include <system_error>
-#include <utility>
 #include <vector>
 
 #include <Oxygen/Cooker/Tools/PakTool/ArtifactPublication.h>

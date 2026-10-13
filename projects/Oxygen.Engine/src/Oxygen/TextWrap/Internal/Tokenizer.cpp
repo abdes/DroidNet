@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
+#include <cctype>
+#include <string>
 #include <utility>
+#include <variant>
 
 #include <Oxygen/Base/StateMachine.h>
 #include <Oxygen/TextWrap/Internal/Tokenizer.h>

@@ -141,7 +141,10 @@ public:
    no watched object, i.e. the value which would be returned by get() before the
    call.
   */
-  constexpr T* release() noexcept { return std::exchange(ptr_, nullptr); }
+  constexpr auto release() noexcept -> T*
+  {
+    return std::exchange(ptr_, nullptr);
+  }
 
   //! Swap with another observer_ptr
   constexpr void swap(observer_ptr& other) noexcept
@@ -150,20 +153,20 @@ public:
   }
 
   //! Compare with another observer_ptr
-  constexpr bool operator==(const observer_ptr& other) const noexcept
+  constexpr auto operator==(const observer_ptr& other) const noexcept -> bool
   {
     return ptr_ == other.ptr_;
   }
 
   //! Three-way comparison with another observer_ptr
-  constexpr std::strong_ordering operator<=>(
-    const observer_ptr& other) const noexcept
+  constexpr auto operator<=>(const observer_ptr& other) const noexcept
+    -> std::strong_ordering
   {
     return ptr_ <=> other.ptr_;
   }
 
   //! Compare with nullptr
-  constexpr bool operator==(std::nullptr_t) const noexcept
+  constexpr auto operator==(std::nullptr_t) const noexcept -> bool
   {
     return ptr_ == nullptr;
   }
@@ -183,7 +186,7 @@ constexpr void swap(observer_ptr<T>& a, observer_ptr<T>& b) noexcept
 //! Helper to create an observer_ptr from a raw pointer
 template <typename T>
   requires oxygen::ObservableType<T>
-constexpr observer_ptr<T> make_observer(T* p) noexcept
+constexpr auto make_observer(T* p) noexcept -> observer_ptr<T>
 {
   return observer_ptr<T>(p);
 }

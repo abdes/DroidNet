@@ -4,6 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <stdexcept>
+
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Common/test/Fakes/FakeResource.h>
 #include <Oxygen/Testing/GTest.h>
 

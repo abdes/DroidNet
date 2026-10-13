@@ -4,9 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <memory>
+#include <string_view>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Types/Geometry.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Headless/Surface.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
 

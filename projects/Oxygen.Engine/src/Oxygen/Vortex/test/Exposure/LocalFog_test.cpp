@@ -56,6 +56,7 @@
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/Generated.SceneTextureBindings.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
 #include <Oxygen/Vortex/Types/Generated.ViewContracts.h>

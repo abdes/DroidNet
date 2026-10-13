@@ -4,13 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <utility>
+#include <algorithm>
+#include <cstdint>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
 using oxygen::graphics::Texture;
 using oxygen::graphics::TextureSlice;

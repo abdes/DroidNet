@@ -24,6 +24,7 @@
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/Internal/ContentBindingBundle.h>
+#include <Oxygen/Content/Internal/ContentIdentity.h>
 #include <Oxygen/Content/Internal/ContentPublication.h>
 #include <Oxygen/Content/Internal/ContentReleaseQueue.h>
 #include <Oxygen/Content/OperationCancelledException.h>
@@ -93,7 +94,8 @@ NOLINT_TEST(ContentReleaseQueueTest, OffThreadDropDefersPayloadAndCacheRelease)
   Cache cache;
   auto queue = std::make_shared<ContentReleaseQueue>();
   auto value = queue->Own(cache, std::make_shared<TrackedValue>(destroyed));
-  std::jthread worker([owned = std::move(value)]() mutable { owned.reset(); });
+  std::jthread worker(
+    [owned = std::move(value)]() mutable -> void { owned.reset(); });
   worker.join();
   EXPECT_EQ(destroyed.load(), 0U);
   EXPECT_TRUE(queue->HasPending());
@@ -158,7 +160,8 @@ NOLINT_TEST(ContentReleaseQueueTest, LateDropDoesNotRetainOrAccessClosedQueue)
   EXPECT_EQ(queue->Drain(cache, kDrainAll), 0U);
   queue.reset();
   EXPECT_TRUE(observed.expired());
-  std::jthread worker([owned = std::move(value)]() mutable { owned.reset(); });
+  std::jthread worker(
+    [owned = std::move(value)]() mutable -> void { owned.reset(); });
   worker.join();
   EXPECT_EQ(destroyed.load(), 1U);
 }
@@ -272,10 +275,11 @@ NOLINT_TEST(ContentReleaseQueueTest, CloseRacesWithConcurrentReturns)
         values.push_back(
           queue->Own(cache, std::make_shared<TrackedValue>(destroyed)));
       }
-      workers.emplace_back([&start, owned = std::move(values)]() mutable {
-        start.arrive_and_wait();
-        owned.clear();
-      });
+      workers.emplace_back(
+        [&start, owned = std::move(values)]() mutable -> void {
+          start.arrive_and_wait();
+          owned.clear();
+        });
     }
     start.arrive_and_wait();
     queue->Close();

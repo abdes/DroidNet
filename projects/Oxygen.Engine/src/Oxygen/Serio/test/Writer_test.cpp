@@ -4,16 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
-#include <limits>
 #include <numbers>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <vector>
 
 #include "Mocks/MockStream.h"
+#include "gtest/gtest.h"
 
+#include <Oxygen/Base/Endian.h>
+#include <Oxygen/Serio/Stream.h>
 #include <Oxygen/Serio/Writer.h>
 #include <Oxygen/Testing/GTest.h>
 

@@ -11,7 +11,7 @@
 #include <string_view>
 
 #include "RequestSnapshot.h"
-#include <nlohmann/json_fwd.hpp>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>

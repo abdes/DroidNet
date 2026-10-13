@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <limits>
 #include <optional>
 #include <span>
 #include <string>
@@ -30,7 +31,10 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/OxCo/Co.h>
@@ -211,7 +215,8 @@ auto GeometryPipeline::FinalizeDescriptor(
   }
 
   AssetReferenceBuilder references;
-  const auto bind_buffer = [&references](const ResourceIndexT index) {
+  const auto bind_buffer =
+    [&references](const ResourceIndexT index) -> data::ResourceReferenceIndex {
     return index == data::pak::core::kNoResourceIndex
       ? data::kNoResourceReference
       : references.AddResource(data::ResourceKind::kBuffer, index);

@@ -1,16 +1,21 @@
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <random>
+#include <string>
 #include <vector>
 
 #include <benchmark/benchmark.h>
+#include <glm/ext/vector_float3.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 
 namespace oxygen::scene {
 

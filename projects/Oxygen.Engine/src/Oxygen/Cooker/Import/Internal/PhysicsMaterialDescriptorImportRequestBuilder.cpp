@@ -34,7 +34,7 @@ namespace {
 
   auto GetPhysicsMaterialDescriptorValidator() -> json_validator&
   {
-    static auto validator = []() {
+    static auto validator = []() -> json_validator {
       auto out = json_validator {};
       out.set_root_schema(json::parse(kPhysicsMaterialDescriptorSchema));
       return out;
@@ -62,7 +62,7 @@ namespace {
     return ValidateJsonSchemaWithDiagnostics(
       GetPhysicsMaterialDescriptorValidator(), descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) {
+        const std::string& object_path) -> void {
         error_stream << "ERROR [" << code << "]: " << message;
         if (!object_path.empty()) {
           error_stream << " (" << object_path << ")";

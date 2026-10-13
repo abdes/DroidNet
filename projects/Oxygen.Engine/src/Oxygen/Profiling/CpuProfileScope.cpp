@@ -5,9 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstring>
+#include <source_location>
+#include <string>
+#include <string_view>
+#include <utility>
 
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/Internal/CpuProfileCoordinator.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 
 namespace oxygen::profiling {
 

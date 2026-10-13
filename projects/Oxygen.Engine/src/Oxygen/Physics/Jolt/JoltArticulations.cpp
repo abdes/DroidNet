@@ -4,7 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <mutex>
+#include <span>
+
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
+#include <Oxygen/Physics/Articulation/ArticulationDesc.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Jolt/JoltArticulations.h>
+#include <Oxygen/Physics/Jolt/JoltWorld.h>
+#include <Oxygen/Physics/PhysicsError.h>
 
 namespace {
 

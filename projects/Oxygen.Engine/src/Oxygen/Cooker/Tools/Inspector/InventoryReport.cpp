@@ -80,7 +80,7 @@ auto RunInventoryReport(const InventoryReportOptions& options) -> int
     }
     auto issues = json::array();
     for (const auto& failure : failures) {
-      const auto reason = [&] {
+      const auto reason = [&] -> const char* {
         switch (failure.reason) {
         case lc::IntegrityFailure::kMissing:
           return "missing";
@@ -100,7 +100,7 @@ auto RunInventoryReport(const InventoryReportOptions& options) -> int
       issues.push_back(
         { { "relative_path", failure.relative_path }, { "reason", reason } });
     }
-    const auto hex = [](const base::Sha256Digest& digest) {
+    const auto hex = [](const base::Sha256Digest& digest) -> std::string {
       return fmt::format("{:02x}", fmt::join(digest, ""));
     };
     auto files = json::array();

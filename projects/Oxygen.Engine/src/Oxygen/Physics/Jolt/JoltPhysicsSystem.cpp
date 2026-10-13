@@ -5,6 +5,18 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Physics/Jolt/JoltPhysicsSystem.h>
+#include <Oxygen/Physics/System/IAggregateApi.h>
+#include <Oxygen/Physics/System/IAreaApi.h>
+#include <Oxygen/Physics/System/IArticulationApi.h>
+#include <Oxygen/Physics/System/IBodyApi.h>
+#include <Oxygen/Physics/System/ICharacterApi.h>
+#include <Oxygen/Physics/System/IEventApi.h>
+#include <Oxygen/Physics/System/IJointApi.h>
+#include <Oxygen/Physics/System/IQueryApi.h>
+#include <Oxygen/Physics/System/IShapeApi.h>
+#include <Oxygen/Physics/System/ISoftBodyApi.h>
+#include <Oxygen/Physics/System/IVehicleApi.h>
+#include <Oxygen/Physics/System/IWorldApi.h>
 
 oxygen::physics::jolt::JoltPhysicsSystem::JoltPhysicsSystem()
   : aggregates_(world_)

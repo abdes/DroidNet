@@ -4,10 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <iostream>
+#include <memory>
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;

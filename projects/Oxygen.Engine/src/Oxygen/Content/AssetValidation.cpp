@@ -4,7 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <span>
 #include <stdexcept>
 
 #include <Oxygen/Base/ObserverPtr.h>
@@ -18,6 +21,9 @@
 #include <Oxygen/Content/Loaders/PhysicsSceneLoader.h>
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Serio/MemoryStream.h>

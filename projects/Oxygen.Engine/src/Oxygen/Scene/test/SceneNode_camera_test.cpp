@@ -4,8 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "./SceneNode_test.h"
+#include <memory>
+#include <utility>
 
+#include "./SceneNode_test.h"
+#include <gtest/gtest.h>
+
+#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/SceneNode.h>

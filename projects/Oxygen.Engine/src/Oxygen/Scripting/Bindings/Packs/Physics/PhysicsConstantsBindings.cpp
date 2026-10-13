@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <initializer_list>
+#include <utility>
+
 #include <lua.h>
 
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>

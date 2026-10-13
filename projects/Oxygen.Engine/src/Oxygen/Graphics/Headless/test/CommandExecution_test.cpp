@@ -4,17 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
 #include <memory>
+#include <vector>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
-#include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Queues.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Headless/Graphics.h>
 #include <Oxygen/Testing/GTest.h>

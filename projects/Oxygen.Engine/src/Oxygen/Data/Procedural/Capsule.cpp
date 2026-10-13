@@ -5,9 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <numbers>
+#include <optional>
+#include <utility>
+#include <vector>
 
+#include <glm/ext/vector_double3.hpp>
+#include <glm/geometric.hpp>
+
+#include <Oxygen/Data/ProceduralMeshDefaults.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Vertex.h>
 
 /*!
  Generates a capsule centred at the origin, with its long axis along Z.

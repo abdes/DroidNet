@@ -4,11 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <windows.h> // IWYU pragma: keep
+
 #include <array>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <combaseapi.h>
@@ -20,7 +24,6 @@
 #include <dxgiformat.h>
 #include <nlohmann/json.hpp>
 #include <winerror.h>
-#include <winnt.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Base/ScopeGuard.h>
@@ -30,10 +33,15 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
 #include <Oxygen/Vortex/Shadows/Internal/LocalShadowRequest.h>
+#include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
 #include <Oxygen/Vortex/test/Lighting/LightingGpuAbiFixture.h>
 
 namespace oxygen::vortex::testing {

@@ -42,6 +42,7 @@
 #include <Oxygen/Vortex/PostProcess/PostProcessService.h>
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/Renderer.h>
+#include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestGraphics.h>

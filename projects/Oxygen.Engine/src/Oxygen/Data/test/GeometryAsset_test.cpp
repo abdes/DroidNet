@@ -5,7 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 // Standard library
+#include <cstddef>
+#include <cstdint>
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Core/Constants.h>

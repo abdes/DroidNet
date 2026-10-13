@@ -4,16 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
+#include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 
+#include <cstdint>
+#include <ios>
 #include <sstream>
 #include <vector>
 
 #include <Jolt/Core/StreamWrapper.h>
+#include <Jolt/Physics/Constraints/Constraint.h>
 #include <Jolt/Physics/Constraints/FixedConstraint.h>
 
 #include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Joint/JointDesc.h>
+#include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/System/IPhysicsSystem.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 #include <Oxygen/Physics/test/Jolt/Jolt_test_fixture.h>
 #include <Oxygen/Testing/GTest.h>

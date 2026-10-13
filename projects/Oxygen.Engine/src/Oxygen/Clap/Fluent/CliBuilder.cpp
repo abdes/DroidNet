@@ -6,14 +6,18 @@
 
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <utility>
 
 #include <fmt/format.h>
 
+#include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CliBuilder.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/OptionBuilder.h>
 #include <Oxygen/Clap/Fluent/OptionValueBuilder.h>
+#include <Oxygen/Clap/Option.h>
 
 auto oxygen::clap::CliBuilder::Version(std::string version) -> CliBuilder&
 {

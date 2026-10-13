@@ -11,9 +11,11 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPlanner.h>
 

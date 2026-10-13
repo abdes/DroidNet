@@ -51,6 +51,7 @@ m_gtest_program(
     "ModuleManager_helpers.h"
     "ModuleManager_test.cpp"
     "ModuleManager_error_test.cpp"
+    "ModuleManager_shutdown_test.cpp"
     "ModuleManager_subscribe_test.cpp"
     "AsyncEngine_api_test.cpp"
 )

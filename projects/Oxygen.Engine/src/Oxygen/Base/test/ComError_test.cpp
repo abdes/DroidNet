@@ -4,11 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <system_error>
+
+#include "gtest/gtest.h"
+#include <combaseapi.h>
+#include <oaidl.h>
+#include <objbase.h>
+#include <oleauto.h>
+
 #include <Oxygen/Base/Platforms.h>
 
 #if defined(OXYGEN_WINDOWS)
 
-#  include <windows.h>
+#  include <windows.h> // IWYU pragma: keep
 
 #  include <atlcomcli.h>
 

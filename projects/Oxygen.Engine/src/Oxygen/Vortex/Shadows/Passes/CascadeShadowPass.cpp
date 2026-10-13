@@ -9,12 +9,14 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <stdexcept>
 #include <unordered_set>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/RendererConfig.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Vortex/Renderer.h>

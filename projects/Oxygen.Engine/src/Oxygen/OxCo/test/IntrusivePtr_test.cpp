@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <utility>
+
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Detail/IntrusivePtr.h>
 #include <Oxygen/Testing/GTest.h>
 

@@ -13,6 +13,8 @@
 #include <span>
 #include <vector>
 
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Environment/Internal/IblBrdfLookup.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>

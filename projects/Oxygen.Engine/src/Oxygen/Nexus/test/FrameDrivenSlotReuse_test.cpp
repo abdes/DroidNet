@@ -2,12 +2,16 @@
 // Focused tests for FrameDrivenSlotReuse under DomainToken semantics
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <thread>
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Nexus/FrameDrivenSlotReuse.h>
+#include <Oxygen/Nexus/Types/Domain.h>
 #include <Oxygen/Nexus/test/NexusMocks.h>
 #include <Oxygen/Testing/GTest.h>
 

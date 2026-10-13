@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
+#include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 
 #include <cmath>
 #include <sstream>

@@ -23,7 +23,6 @@
 #include <minwindef.h>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
@@ -42,7 +41,6 @@
 #include <Oxygen/Host/RuntimeCli.h>
 #include <Oxygen/Player/LaunchFile.h>
 #include <Oxygen/Player/PlayerModule.h>
-#include <Oxygen/Player/PlayerProtocol.h>
 #include <Oxygen/SceneSync/SceneObserverSyncModule.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Vortex/Renderer.h>

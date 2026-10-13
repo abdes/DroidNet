@@ -4,7 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <any>
+#include <cstddef>
+#include <memory>
+#include <string>
 #include <utility>
+
+#include <fmt/color.h>
 
 #include <Oxygen/Clap/CliTheme.h>
 #include <Oxygen/Clap/CommandLineContext.h>
@@ -12,6 +18,8 @@
 #include <Oxygen/Clap/Internal/StyledWrap.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Clap/OptionValuesMap.h>
+#include <Oxygen/Clap/ValueSemantics.h>
+#include <Oxygen/TextWrap/TextWrap.h>
 
 namespace oxygen::clap {
 

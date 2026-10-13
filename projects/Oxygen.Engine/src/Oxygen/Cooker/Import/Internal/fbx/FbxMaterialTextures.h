@@ -75,13 +75,13 @@ struct FbxMaterialTextures final {
     -> bool
   {
     return std::ranges::any_of(
-      Slots(), [&](const auto& slot) { return slot.Recognizes(map); });
+      Slots(), [&](const auto& slot) -> auto { return slot.Recognizes(map); });
   }
 
   [[nodiscard]] auto Any() const noexcept -> bool
   {
-    return std::ranges::any_of(
-      Slots(), [](const auto& slot) { return slot.Texture() != nullptr; });
+    return std::ranges::any_of(Slots(),
+      [](const auto& slot) -> auto { return slot.Texture() != nullptr; });
   }
 };
 

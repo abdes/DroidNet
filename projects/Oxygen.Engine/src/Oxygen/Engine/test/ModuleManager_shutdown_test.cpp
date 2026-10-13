@@ -5,7 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <atomic>
+#include <memory>
+#include <utility>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/Engine/test/ModuleManager_helpers.h>
 #include <Oxygen/Testing/GTest.h>

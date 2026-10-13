@@ -8,17 +8,25 @@
 #include <cstdlib>
 #include <memory>
 #include <optional>
+#include <stdlib.h>
+#include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
+#include <fmt/color.h>
+
+#include <Oxygen/Clap/Command.h>
+#include <Oxygen/TextWrap/TextWrap.h>
+
 #if defined(_WIN32)
-#  include <windows.h>
+#  include <windows.h> // IWYU pragma: keep
 #else
 #  include <sys/ioctl.h>
 #  include <unistd.h>
 #endif
 
 #include <fmt/format.h>
-#include <fmt/printf.h>
 #include <fmt/ranges.h>
 
 #include <Oxygen/Base/Logging.h>
@@ -206,8 +214,8 @@ auto Cli::Parse(const int argc, const char** argv) -> CommandLineContext
 auto Cli::PrintDefaultCommand(
   const CommandLineContext& context, const unsigned int width) const -> void
 {
-  const auto default_command = std::ranges::find_if(
-    commands_, [](const auto& command) { return command->IsDefault(); });
+  const auto default_command = std::ranges::find_if(commands_,
+    [](const auto& command) -> auto { return command->IsDefault(); });
   if (default_command != commands_.end()) {
     (*default_command)->Print(context, width);
   }
@@ -303,7 +311,7 @@ auto Cli::HandleHelpCommand(const CommandLineContext& context) const -> void
       }
 
       auto command = std::ranges::find_if(
-        commands_, [&command_path](const Command::Ptr& cmd) {
+        commands_, [&command_path](const Command::Ptr& cmd) -> bool {
           return cmd->Path() == command_path;
         });
       if (command != commands_.end()) {

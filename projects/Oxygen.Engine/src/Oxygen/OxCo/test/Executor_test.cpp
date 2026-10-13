@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <iostream>
+
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/OxCo/EventLoop.h>
 #include <Oxygen/OxCo/Executor.h>
 #include <Oxygen/Testing/GTest.h>

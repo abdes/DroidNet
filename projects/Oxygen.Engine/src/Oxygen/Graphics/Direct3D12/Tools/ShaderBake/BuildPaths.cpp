@@ -4,7 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
 #include <fstream>
+#include <ios>
+#include <span>
+#include <stdexcept>
+#include <string>
+#include <string_view>
 #include <system_error>
 
 #include <fmt/format.h>

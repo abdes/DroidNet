@@ -75,7 +75,7 @@ public:
 
   // Constexpr runtime-checked overload (keeps previous runtime behaviour). This
   // is selected by existing call sites that pass an Enum at runtime.
-  [[nodiscard]] constexpr static EnumAsIndex Checked(Enum id) noexcept
+  [[nodiscard]] constexpr static auto Checked(Enum id) noexcept -> EnumAsIndex
   {
     return EnumAsIndex(id);
   }
@@ -83,7 +83,7 @@ public:
   //! Consteval template overload for compile-time use. Call as
   //! `EnumAsIndex<MyEnum>::Checked<MyEnum::kFirst>()` to get a compile-time
   //! validated index without invoking the runtime-checking public ctor.
-  template <Enum V> consteval static EnumAsIndex Checked()
+  template <Enum V> consteval static auto Checked() -> EnumAsIndex
   {
     static_assert(nostd::to_underlying(V) < nostd::to_underlying(Enum::kCount),
       "EnumAsIndex out of range");
@@ -109,33 +109,34 @@ public:
     return value_ < static_cast<RawIndexType>(Enum::kCount);
   }
 
-  static constexpr EnumAsIndex begin() noexcept
+  static constexpr auto begin() noexcept -> EnumAsIndex
   {
     return EnumAsIndex(static_cast<std::size_t>(Enum::kFirst), 0);
   }
 
   //! One-past-end sentinel to support idiomatic loops: for (EnumAsIndex<E>
   //! p{E::kFirst}; p < EnumAsIndex<E>::End(); ++p)
-  static constexpr EnumAsIndex end() noexcept
+  static constexpr auto end() noexcept -> EnumAsIndex
   {
     return EnumAsIndex(static_cast<std::size_t>(Enum::kCount), 0);
   }
 
   // Explicit three-way compare (portable across toolchains).
-  constexpr std::strong_ordering operator<=>(EnumAsIndex other) const noexcept
+  constexpr auto operator<=>(EnumAsIndex other) const noexcept
+    -> std::strong_ordering
   {
     return value_ <=> other.value_;
   }
 
   // Pre-increment
-  constexpr EnumAsIndex& operator++() noexcept
+  constexpr auto operator++() noexcept -> EnumAsIndex&
   {
     value_ = CheckedFromValueAndOffset(value_, 1);
     return *this;
   }
 
   // Post-increment
-  constexpr EnumAsIndex operator++(int) noexcept
+  constexpr auto operator++(int) noexcept -> EnumAsIndex
   {
     EnumAsIndex tmp = *this;
     ++(*this);
@@ -143,27 +144,27 @@ public:
   }
 
   // Pre-decrement
-  constexpr EnumAsIndex& operator--() noexcept
+  constexpr auto operator--() noexcept -> EnumAsIndex&
   {
     value_ = CheckedFromValueAndOffset(value_, -1);
     return *this;
   }
 
   // Post-decrement
-  constexpr EnumAsIndex operator--(int) noexcept
+  constexpr auto operator--(int) noexcept -> EnumAsIndex
   {
     EnumAsIndex tmp = *this;
     --(*this);
     return tmp;
   }
 
-  constexpr auto& operator+=(std::ptrdiff_t off) noexcept
+  constexpr auto operator+=(std::ptrdiff_t off) noexcept -> auto&
   {
     value_ = CheckedFromValueAndOffset(value_, off);
     return *this;
   }
 
-  constexpr auto& operator-=(std::ptrdiff_t off) noexcept
+  constexpr auto operator-=(std::ptrdiff_t off) noexcept -> auto&
   {
     value_ = CheckedFromValueAndOffset(value_, -off);
     return *this;
@@ -203,8 +204,8 @@ private:
   // Helper to validate a raw signed value and cast to the RawIndexType. This
   // centralizes the consteval vs runtime handling so we don't duplicate the
   // same branches in every operator implementation.
-  static constexpr RawIndexType CheckedFromValueAndOffset(
-    RawIndexType value, std::ptrdiff_t off) noexcept
+  static constexpr auto CheckedFromValueAndOffset(
+    RawIndexType value, std::ptrdiff_t off) noexcept -> RawIndexType
   {
     const auto raw = static_cast<std::ptrdiff_t>(value) + off;
     if (!std::is_constant_evaluated()) {
@@ -223,8 +224,8 @@ template <EnumWithCount E> EnumAsIndex(E) -> EnumAsIndex<E>;
 //! Namespace-visible equality for EnumAsIndex templates. Placed at namespace
 //! scope so ADL/lookup finds it in contexts where std::equal_to is used.
 template <EnumWithCount E>
-constexpr bool operator==(
-  EnumAsIndex<E> const& a, EnumAsIndex<E> const& b) noexcept
+constexpr auto operator==(
+  EnumAsIndex<E> const& a, EnumAsIndex<E> const& b) noexcept -> bool
 {
   return a.get() == b.get();
 }
@@ -254,80 +255,82 @@ public:
   constexpr EnumAsIndexIterator() noexcept = default;
   constexpr EnumAsIndexIterator(EnumAsIndexIterator const&) noexcept = default;
   constexpr EnumAsIndexIterator(EnumAsIndexIterator&&) noexcept = default;
-  constexpr EnumAsIndexIterator& operator=(EnumAsIndexIterator const&) noexcept
-    = default;
-  constexpr EnumAsIndexIterator& operator=(EnumAsIndexIterator&&) noexcept
-    = default;
+  constexpr auto operator=(EnumAsIndexIterator const&) noexcept
+    -> EnumAsIndexIterator& = default;
+  constexpr auto operator=(EnumAsIndexIterator&&) noexcept
+    -> EnumAsIndexIterator& = default;
   constexpr explicit EnumAsIndexIterator(std::size_t raw) noexcept
     : raw_(raw)
   {
   }
 
-  constexpr reference operator*() const noexcept
+  constexpr auto operator*() const noexcept -> reference
   {
     return EnumAsIndex<Enum>::Checked(static_cast<Enum>(raw_));
   }
 
-  constexpr EnumAsIndexIterator& operator++() noexcept
+  constexpr auto operator++() noexcept -> EnumAsIndexIterator&
   {
     ++raw_;
     return *this;
   }
-  constexpr EnumAsIndexIterator operator++(int) noexcept
+  constexpr auto operator++(int) noexcept -> EnumAsIndexIterator
   {
     auto tmp = *this;
     ++*this;
     return tmp;
   }
-  constexpr EnumAsIndexIterator& operator--() noexcept
+  constexpr auto operator--() noexcept -> EnumAsIndexIterator&
   {
     --raw_;
     return *this;
   }
-  constexpr EnumAsIndexIterator operator--(int) noexcept
+  constexpr auto operator--(int) noexcept -> EnumAsIndexIterator
   {
     auto tmp = *this;
     --*this;
     return tmp;
   }
 
-  constexpr EnumAsIndexIterator& operator+=(difference_type off) noexcept
+  constexpr auto operator+=(difference_type off) noexcept
+    -> EnumAsIndexIterator&
   {
     raw_ = static_cast<std::size_t>(static_cast<difference_type>(raw_) + off);
     return *this;
   }
-  constexpr EnumAsIndexIterator& operator-=(difference_type off) noexcept
+  constexpr auto operator-=(difference_type off) noexcept
+    -> EnumAsIndexIterator&
   {
     raw_ = static_cast<std::size_t>(static_cast<difference_type>(raw_) - off);
     return *this;
   }
 
-  friend constexpr EnumAsIndexIterator operator+(
-    EnumAsIndexIterator it, difference_type off) noexcept
+  friend constexpr auto operator+(
+    EnumAsIndexIterator it, difference_type off) noexcept -> EnumAsIndexIterator
   {
     it += off;
     return it;
   }
-  friend constexpr EnumAsIndexIterator operator-(
-    EnumAsIndexIterator it, difference_type off) noexcept
+  friend constexpr auto operator-(
+    EnumAsIndexIterator it, difference_type off) noexcept -> EnumAsIndexIterator
   {
     it -= off;
     return it;
   }
-  friend constexpr difference_type operator-(
-    EnumAsIndexIterator a, EnumAsIndexIterator b) noexcept
+  friend constexpr auto operator-(
+    EnumAsIndexIterator a, EnumAsIndexIterator b) noexcept -> difference_type
   {
     return static_cast<difference_type>(a.raw_)
       - static_cast<difference_type>(b.raw_);
   }
 
-  constexpr std::strong_ordering operator<=>(
-    EnumAsIndexIterator other) const noexcept
+  constexpr auto operator<=>(EnumAsIndexIterator other) const noexcept
+    -> std::strong_ordering
   {
     return raw_ <=> other.raw_;
   }
-  friend constexpr bool operator==(
-    EnumAsIndexIterator a, EnumAsIndexIterator b) noexcept
+  friend constexpr auto operator==(
+    EnumAsIndexIterator a, EnumAsIndexIterator b) noexcept -> bool
   {
     return a.raw_ == b.raw_;
   }
@@ -362,30 +365,31 @@ public:
   constexpr EnumAsIndexView() = default;
   constexpr EnumAsIndexView(EnumAsIndexView const&) noexcept = default;
   constexpr EnumAsIndexView(EnumAsIndexView&&) noexcept = default;
-  constexpr EnumAsIndexView& operator=(EnumAsIndexView const&) noexcept
-    = default;
-  constexpr EnumAsIndexView& operator=(EnumAsIndexView&&) noexcept = default;
-  constexpr iterator begin() noexcept
+  constexpr auto operator=(EnumAsIndexView const&) noexcept
+    -> EnumAsIndexView& = default;
+  constexpr auto operator=(EnumAsIndexView&&) noexcept
+    -> EnumAsIndexView& = default;
+  constexpr auto begin() noexcept -> iterator
   {
     return iterator(static_cast<std::size_t>(Enum::kFirst));
   }
-  constexpr iterator end() noexcept
+  constexpr auto end() noexcept -> iterator
   {
     return iterator(static_cast<std::size_t>(Enum::kCount));
   }
-  constexpr iterator begin() const noexcept
+  constexpr auto begin() const noexcept -> iterator
   {
     return iterator(static_cast<std::size_t>(Enum::kFirst));
   }
-  constexpr iterator end() const noexcept
+  constexpr auto end() const noexcept -> iterator
   {
     return iterator(static_cast<std::size_t>(Enum::kCount));
   }
-  constexpr std::size_t size() const noexcept
+  constexpr auto size() const noexcept -> std::size_t
   {
     return static_cast<std::size_t>(Enum::kCount);
   }
-  constexpr bool empty() const noexcept { return size() == 0; }
+  constexpr auto empty() const noexcept -> bool { return size() == 0; }
 };
 
 } // namespace oxygen
@@ -409,7 +413,8 @@ inline constexpr auto enum_as_index = oxygen::EnumAsIndexView<Enum> {};
 //! Provide std::hash specialization for EnumAsIndex so it can be used in hashed
 //! containers. This is a template so any EnumAsIndex<Enum> is hashable.
 template <typename Enum> struct std::hash<oxygen::EnumAsIndex<Enum>> {
-  constexpr std::size_t operator()(oxygen::EnumAsIndex<Enum> idx) const noexcept
+  constexpr auto operator()(oxygen::EnumAsIndex<Enum> idx) const noexcept
+    -> std::size_t
   {
     return static_cast<std::size_t>(idx.get());
   }
@@ -457,18 +462,18 @@ template <EnumWithCount Enum, typename T> struct EnumIndexedArray {
   std::array<T, std::ranges::size(enum_as_index<Enum>)> data;
 
   // Index with enum (use underlying_type for portability)
-  constexpr T& operator[](Enum e) noexcept
+  constexpr auto operator[](Enum e) noexcept -> T&
   {
     return data[static_cast<std::size_t>(nostd::to_underlying(e))];
   }
-  constexpr T const& operator[](Enum e) const noexcept
+  constexpr auto operator[](Enum e) const noexcept -> T const&
   {
     return data[static_cast<std::size_t>(nostd::to_underlying(e))];
   }
 
   // Index with numeric index
-  constexpr T& operator[](std::size_t i) noexcept { return data[i]; }
-  constexpr T const& operator[](std::size_t i) const noexcept
+  constexpr auto operator[](std::size_t i) noexcept -> T& { return data[i]; }
+  constexpr auto operator[](std::size_t i) const noexcept -> T const&
   {
     return data[i];
   }
@@ -476,7 +481,7 @@ template <EnumWithCount Enum, typename T> struct EnumIndexedArray {
   // Checked accessors that match std::array::at(): throw std::out_of_range on
   // invalid index. Provide overloads for numeric indices, enum values and the
   // EnumAsIndex wrapper as well as named-index types exposing `get()`.
-  constexpr T& at(std::size_t i)
+  constexpr auto at(std::size_t i) -> T&
   {
     if (i >= data.size()) {
       throw std::out_of_range("EnumIndexedArray::at: index out of range");
@@ -484,7 +489,7 @@ template <EnumWithCount Enum, typename T> struct EnumIndexedArray {
     return data[i];
   }
 
-  constexpr T const& at(std::size_t i) const
+  constexpr auto at(std::size_t i) const -> T const&
   {
     if (i >= data.size()) {
       throw std::out_of_range("EnumIndexedArray::at: index out of range");
@@ -492,17 +497,17 @@ template <EnumWithCount Enum, typename T> struct EnumIndexedArray {
     return data[i];
   }
 
-  constexpr T& at(Enum e)
+  constexpr auto at(Enum e) -> T&
   {
     return at(static_cast<std::size_t>(nostd::to_underlying(e)));
   }
 
-  constexpr T const& at(Enum e) const
+  constexpr auto at(Enum e) const -> T const&
   {
     return at(static_cast<std::size_t>(nostd::to_underlying(e)));
   }
 
-  constexpr T& at(EnumAsIndex<Enum> idx)
+  constexpr auto at(EnumAsIndex<Enum> idx) -> T&
   {
     auto i = idx.get();
     if (i >= data.size()) {
@@ -511,7 +516,7 @@ template <EnumWithCount Enum, typename T> struct EnumIndexedArray {
     return data[i];
   }
 
-  constexpr T const& at(EnumAsIndex<Enum> idx) const
+  constexpr auto at(EnumAsIndex<Enum> idx) const -> T const&
   {
     auto i = idx.get();
     if (i >= data.size()) {
@@ -521,7 +526,7 @@ template <EnumWithCount Enum, typename T> struct EnumIndexedArray {
   }
 
   template <typename NamedIndex>
-  constexpr T& at(NamedIndex idx)
+  constexpr auto at(NamedIndex idx) -> T&
     requires requires(NamedIndex n) {
       { n.get() } -> std::convertible_to<std::size_t>;
     }
@@ -530,7 +535,7 @@ template <EnumWithCount Enum, typename T> struct EnumIndexedArray {
   }
 
   template <typename NamedIndex>
-  constexpr T const& at(NamedIndex idx) const
+  constexpr auto at(NamedIndex idx) const -> T const&
     requires requires(NamedIndex n) {
       { n.get() } -> std::convertible_to<std::size_t>;
     }
@@ -540,12 +545,12 @@ template <EnumWithCount Enum, typename T> struct EnumIndexedArray {
 
   // Support a named index wrapper with `get()` accessor (see PhaseIndex below)
   template <typename NamedIndex>
-  constexpr T& operator[](NamedIndex idx) noexcept
+  constexpr auto operator[](NamedIndex idx) noexcept -> T&
   {
     return data[idx.get()];
   }
   template <typename NamedIndex>
-  constexpr T const& operator[](NamedIndex idx) const noexcept
+  constexpr auto operator[](NamedIndex idx) const noexcept -> T const&
   {
     return data[idx.get()];
   }
@@ -555,7 +560,7 @@ template <EnumWithCount Enum, typename T> struct EnumIndexedArray {
   // This is a no-op in release builds but helps catch sentinel misuse during
   // development. This overload is generic for any EnumAsIndex matching the
   // array's Enum template parameter.
-  constexpr T& operator[](EnumAsIndex<Enum> idx) noexcept
+  constexpr auto operator[](EnumAsIndex<Enum> idx) noexcept -> T&
   {
     const auto i = idx.get();
     if (i >= data.size()) {
@@ -563,7 +568,7 @@ template <EnumWithCount Enum, typename T> struct EnumIndexedArray {
     }
     return data[i];
   }
-  constexpr T const& operator[](EnumAsIndex<Enum> idx) const noexcept
+  constexpr auto operator[](EnumAsIndex<Enum> idx) const noexcept -> T const&
   {
     const auto i = idx.get();
     if (i >= data.size()) {

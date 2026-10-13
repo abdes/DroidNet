@@ -4,13 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <limits>
+#include <memory>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Resource.h>
+#include <Oxygen/Base/ResourceHandle.h>
+#include <Oxygen/Base/TypeList.h>
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/ComponentPool.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -369,7 +377,7 @@ NOLINT_TEST_F(ComponentPoolBasicTest, DefragmentWithComparison_OrdersComponents)
   EXPECT_GT(swaps_performed, 0);
   std::size_t count = 0;
   int prev_x = (std::numeric_limits<int>::min)();
-  pool_->ForEach([&](const TestTransformComponent& component) {
+  pool_->ForEach([&](const TestTransformComponent& component) -> void {
     if (count > 0) {
       EXPECT_LE(prev_x, component.GetX());
     }
@@ -396,16 +404,17 @@ NOLINT_TEST_F(
   pool_->Deallocate(handles[1]); // Delete y=10
 
   // Act - custom comparison by Y coordinate
-  auto swaps_performed = pool_->Defragment(
-    [](const TestTransformComponent& a, const TestTransformComponent& b) {
-      return a.GetY() < b.GetY(); // "Ascending" comparison
-    });
+  auto swaps_performed
+    = pool_->Defragment([](const TestTransformComponent& a,
+                          const TestTransformComponent& b) -> bool {
+        return a.GetY() < b.GetY(); // "Ascending" comparison
+      });
 
   // Assert - ascending order by the provided comparison
   EXPECT_GT(swaps_performed, 0);
   std::size_t count = 0;
   int prev_y = (std::numeric_limits<int>::min)();
-  pool_->ForEach([&](const TestTransformComponent& component) {
+  pool_->ForEach([&](const TestTransformComponent& component) -> void {
     if (count == 0) {
       EXPECT_EQ(component.GetY(), 5); // Smallest first
     } else if (count == 1) {
@@ -435,7 +444,7 @@ NOLINT_TEST_F(ComponentPoolThreadingTest, ConcurrentAllocations_ThreadSafe)
 
   // Act - allocate from multiple threads
   for (std::size_t t = 0; t < thread_count; ++t) {
-    threads.emplace_back([this, t, &thread_handles]() {
+    threads.emplace_back([this, t, &thread_handles]() -> void {
       for (std::size_t i = 0; i < allocations_per_thread; ++i) {
         auto mass = static_cast<double>(t * 1000 + i);
         thread_handles[t].push_back(physics_pool_->Allocate(mass));
@@ -504,7 +513,7 @@ TEST_F(ComponentPoolThreadingTest, ConcurrentReadWrite_ThreadSafe)
 
   // Reader threads
   for (int t = 0; t < 2; ++t) {
-    threads.emplace_back([&]() {
+    threads.emplace_back([&]() -> void {
       while (!stop_flag.load()) {
         for (const auto& handle : handles) {
           if (auto* component = transform_pool_->Get(handle)) {
@@ -519,7 +528,7 @@ TEST_F(ComponentPoolThreadingTest, ConcurrentReadWrite_ThreadSafe)
 
   // Writer threads
   for (int t = 0; t < 2; ++t) {
-    threads.emplace_back([&]() {
+    threads.emplace_back([&]() -> void {
       int counter = 0;
       while (!stop_flag.load()) {
         for (const auto& handle : handles) {
@@ -565,7 +574,7 @@ NOLINT_TEST_F(ComponentPoolComplexTest, GrowthBeyondCapacity_HandledCorrectly)
 
   // Verify all components are accessible
   std::size_t verified_count = 0;
-  small_pool_->ForEach([&](const TestRenderComponent& component) {
+  small_pool_->ForEach([&](const TestRenderComponent& component) -> void {
     EXPECT_EQ(
       component.GetName(), "component_" + std::to_string(verified_count));
     ++verified_count;
@@ -586,7 +595,7 @@ NOLINT_TEST_F(ComponentPoolComplexTest, DenseAccess_LargeDataset_PerformsWell)
 
   // Verify data integrity in dense access
   std::size_t verified_count = 0;
-  large_pool_->ForEach([&](const TestTransformComponent& component) {
+  large_pool_->ForEach([&](const TestTransformComponent& component) -> void {
     // Components were created with pattern: x=i, y=i*2, z=i*3
     auto x = component.GetX();
     auto expected_y = x * 2;

@@ -4,8 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <span>
+#include <vector>
+
+#include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/Format.h>
 
 namespace oxygen::content::import {
 

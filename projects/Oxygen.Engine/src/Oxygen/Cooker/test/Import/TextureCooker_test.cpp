@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>

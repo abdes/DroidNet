@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -28,6 +29,7 @@
 #include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialSlotId.h>

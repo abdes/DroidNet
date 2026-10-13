@@ -4,21 +4,38 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <optional>
+#include <string_view>
+#include <system_error>
 #include <thread>
+#include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Config/EngineConfig.h>
+#include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Config/PlatformConfig.h>
+#include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/Scripting/ScriptHotReloadService.h>
+#include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/OxCo/EventLoop.h>
-#include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>

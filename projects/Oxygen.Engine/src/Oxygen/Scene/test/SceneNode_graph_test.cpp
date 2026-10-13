@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "./SceneNode_test.h"
+#include <gtest/gtest.h>
 
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>

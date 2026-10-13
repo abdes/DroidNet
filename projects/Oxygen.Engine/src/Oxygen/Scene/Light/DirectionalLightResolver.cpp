@@ -4,22 +4,30 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <array>
+#include <cstdint>
+#include <functional>
+#include <optional>
+#include <span>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/vector_float3.hpp>
 #include <glm/geometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
-#include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/SceneTraversal.h> // IWYU pragma: keep
+#include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 
 namespace oxygen::scene {
 

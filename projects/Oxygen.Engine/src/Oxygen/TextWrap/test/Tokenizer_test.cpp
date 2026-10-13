@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <type_traits>
+#include <tuple>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/TextWrap/Internal/Tokenizer.h>

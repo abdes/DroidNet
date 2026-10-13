@@ -6,10 +6,18 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
+#include <memory>
+#include <mutex>
 #include <stdexcept>
+#include <string_view>
+#include <unordered_map>
 #include <utility>
+#include <vector>
 
+#include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/Internal/CommandListPool.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 
 namespace oxygen::graphics::internal {
 struct CommandPoolState {

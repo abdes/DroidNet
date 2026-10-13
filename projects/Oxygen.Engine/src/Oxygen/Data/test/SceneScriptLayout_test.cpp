@@ -72,7 +72,7 @@ protected:
   auto Bytes() const -> std::vector<std::byte>
   {
     std::vector<std::byte> result;
-    const auto append = [&result](const auto& value) {
+    const auto append = [&result](const auto& value) -> auto {
       const auto bytes = std::as_bytes(std::span(&value, 1U));
       result.insert(result.end(), bytes.begin(), bytes.end());
     };

@@ -4,6 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
+#include <optional>
+#include <string>
+#include <utility>
+
+#include <fmt/format.h>
+#include <glm/geometric.hpp>
+#include <glm/gtc/quaternion.hpp>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Core/Constants.h>

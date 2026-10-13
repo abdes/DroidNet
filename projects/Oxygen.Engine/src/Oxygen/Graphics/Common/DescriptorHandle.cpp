@@ -5,9 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/NoStd.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
 using oxygen::graphics::DescriptorAllocationHandle;
 using oxygen::graphics::DescriptorAllocationKind;

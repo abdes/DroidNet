@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/Environment/Internal/FogRenderer.h>
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
 

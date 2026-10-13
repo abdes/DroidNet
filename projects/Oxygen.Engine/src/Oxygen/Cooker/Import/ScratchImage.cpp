@@ -7,8 +7,15 @@
 #include <algorithm>
 #include <bit>
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <span>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 
 namespace oxygen::content::import {
 

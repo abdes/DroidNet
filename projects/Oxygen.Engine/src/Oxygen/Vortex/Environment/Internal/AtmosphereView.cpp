@@ -7,14 +7,19 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <numbers>
 
 #include <glm/geometric.hpp>
 
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Atmosphere.h>
+#include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereView.h>
+#include <Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h>
+#include <Oxygen/Vortex/Environment/Types/AtmosphereModel.h>
+#include <Oxygen/Vortex/Types/EnvironmentViewData.h>
 
 namespace oxygen::vortex::environment::internal {
 namespace {

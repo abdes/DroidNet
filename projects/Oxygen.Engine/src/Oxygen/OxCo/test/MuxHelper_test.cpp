@@ -4,6 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <coroutine>
+#include <exception>
+#include <iostream>
+#include <stdexcept>
+#include <utility>
+
 #include "Utils/MockAwaitable.h"
 #include "Utils/MockMux.h"
 #include <gmock/gmock.h>

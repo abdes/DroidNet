@@ -7,13 +7,24 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstddef>
+#include <cstdint>
 #include <string>
+#include <string_view>
+#include <type_traits>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include <fmt/format.h>
 #include <imgui.h>
 
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Completion.h>
+#include <Oxygen/Console/Console.h>
 #include <Oxygen/ImGui/Console/CommandPalette.h>
+#include <Oxygen/ImGui/Console/ConsoleUiState.h>
 
 // NOLINTBEGIN(cppcoreguidelines-pro-type-vararg) - ImGui
 

@@ -7,6 +7,7 @@
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Scripting/Resolver/EmbeddedSourceResolver.h>
 #include <Oxygen/Scripting/Resolver/ScriptSourceResolver.h>
 

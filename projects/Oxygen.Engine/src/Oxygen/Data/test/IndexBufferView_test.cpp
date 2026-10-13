@@ -5,8 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 // Standard library
-#include <cstddef>
 #include <cstdint>
+#include <span>
 #include <vector>
 
 // GTest

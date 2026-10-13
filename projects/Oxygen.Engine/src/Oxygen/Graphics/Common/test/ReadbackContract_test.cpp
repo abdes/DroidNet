@@ -5,7 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
+#include <expected>
 #include <memory>
+#include <optional>
+#include <span>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Core/Types/ByteUnits.h>
@@ -13,8 +18,12 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/ReadbackErrors.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
+#include <Oxygen/Graphics/Common/ReadbackTypes.h>
 #include <Oxygen/Graphics/Common/ReadbackValidation.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {

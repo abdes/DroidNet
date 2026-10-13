@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Engine/InputHandler.h>
+#include <Oxygen/Platform/Types.h>
 #include <Oxygen/Testing/GTest.h>
 
 class MyInputHandler final : public oxygen::engine::InputHandler {

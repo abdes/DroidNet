@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <memory>
@@ -28,7 +29,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
-#include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/SceneTraversal.h> // IWYU pragma: keep
 #include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/Types/Traversal.h>

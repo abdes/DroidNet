@@ -8,8 +8,11 @@
 #include <atomic>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <system_error>
 
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/TrackingIncludeHandler.h>

@@ -318,11 +318,11 @@ namespace {
         context.AddFile(buffer.source_path);
       }
       const auto buffer_ref
-        = [&](const std::string& path, const std::string& location) {
-            if (!local.contains(path)) {
-              context.Reference(path, Kind::kBuffer, location);
-            }
-          };
+        = [&](const std::string& path, const std::string& location) -> void {
+        if (!local.contains(path)) {
+          context.Reference(path, Kind::kBuffer, location);
+        }
+      };
       for (size_t i = 0; i < source->lods.size(); ++i) {
         const auto& lod = source->lods.at(i);
         const auto location = "lods[" + std::to_string(i) + "]";
@@ -529,9 +529,10 @@ namespace {
       co_await snapshot.Verify();
       report.observations = snapshot.Observations();
       report.complete = prepared && !stop.stop_requested()
-        && std::ranges::none_of(report.diagnostics, [](const auto& item) {
-             return item.severity == ImportSeverity::kError;
-           });
+        && std::ranges::none_of(
+          report.diagnostics, [](const auto& item) -> auto {
+            return item.severity == ImportSeverity::kError;
+          });
     } catch (const std::exception& error) {
       AddError(report, "analysis.source_changed", error.what());
     }
@@ -575,8 +576,10 @@ namespace detail {
     auto report = ImportSourceAnalysis {};
     report.producer_version = oxygen::version::Version();
     auto canceled = std::make_shared<co::Event>();
-    const auto cancel_callback = std::stop_callback(stop_token,
-      [&loop, canceled] { loop.Post([canceled] { canceled->Trigger(); }); });
+    const auto cancel_callback
+      = std::stop_callback(stop_token, [&loop, canceled] -> void {
+          loop.Post([canceled] -> void { canceled->Trigger(); });
+        });
     static_cast<void>(co::Run(loop,
       co::AnyOf(AnalyzeBatch(manifest, reader, pool, report, stop_token,
                   std::move(captured_inputs)),
@@ -602,16 +605,17 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
   using nlohmann::json;
   auto serialized_jobs = json::array();
   const auto logical
-    = [](const std::vector<ImportLogicalDependency>& dependencies) {
-        auto array = json::array();
-        for (const auto& dependency : dependencies) {
-          array.push_back({ { "virtual_path", dependency.virtual_path },
-            { "kind", KindName(dependency.kind) },
-            { "object_path", dependency.object_path },
-            { "required", dependency.required } });
-        }
-        return array;
-      };
+    = [](const std::vector<ImportLogicalDependency>& dependencies)
+    -> nlohmann::json {
+    auto array = json::array();
+    for (const auto& dependency : dependencies) {
+      array.push_back({ { "virtual_path", dependency.virtual_path },
+        { "kind", KindName(dependency.kind) },
+        { "object_path", dependency.object_path },
+        { "required", dependency.required } });
+    }
+    return array;
+  };
   for (const auto& job : jobs) {
     auto files = json::array();
     for (const auto& file : job.files) {
@@ -632,7 +636,7 @@ auto ImportSourceAnalysis::ToJson() const -> std::string
       }
       auto metadata
         = observation.metadata
-            .transform([](const FileInfo& info) {
+            .transform([](const FileInfo& info) -> json {
               const auto timestamp
                 = std::chrono::clock_cast<std::chrono::system_clock>(
                   info.last_modified);

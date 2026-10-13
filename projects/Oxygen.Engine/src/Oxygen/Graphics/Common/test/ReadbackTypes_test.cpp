@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <string>
+
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/ReadbackErrors.h>
 #include <Oxygen/Graphics/Common/ReadbackTypes.h>

@@ -8,7 +8,6 @@
 #include <utility>
 
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Direct3D12/MemoryStatistics.h>

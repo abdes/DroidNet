@@ -4,6 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
+#include <cstddef>
+#include <functional>
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
 

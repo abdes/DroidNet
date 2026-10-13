@@ -10,6 +10,10 @@
 #include <cstring>
 #include <vector>
 
+#include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceAccessMode.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>

@@ -5,24 +5,42 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstdint>
 #include <cstring>
+#include <expected>
+#include <memory>
+#include <stdexcept>
 #include <thread>
+#include <utility>
 
 #include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
+#include <Oxygen/Graphics/Common/BackendLifetime.h>
+#include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Internal/SubmissionFaultTestAccess.h>
 #include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/ReadbackErrors.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
+#include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Submission.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Loader/GraphicsBackendLoader.h>
 #include <Oxygen/Testing/GTest.h>
 

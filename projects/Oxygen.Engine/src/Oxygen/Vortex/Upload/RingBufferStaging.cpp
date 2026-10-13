@@ -25,6 +25,7 @@
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Types/FenceValue.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/RingBufferStaging.h>
 #include <Oxygen/Vortex/Upload/Types.h>

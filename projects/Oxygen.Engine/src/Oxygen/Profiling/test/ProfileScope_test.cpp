@@ -5,7 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <stdexcept>
+#include <string>
 #include <thread>
+#include <vector>
 
 #include <gtest/gtest.h>
 

@@ -4,10 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <memory>
+#include <stdexcept>
+#include <vector>
+
 #include "./TestSceneFactory.h"
 #include <fmt/format.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/trigonometric.hpp>
 
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Testing/GTest.h>

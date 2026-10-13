@@ -12,7 +12,7 @@
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Types/AcceptedDrawView.h>
-#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/Generated.DrawContracts.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 
 namespace {

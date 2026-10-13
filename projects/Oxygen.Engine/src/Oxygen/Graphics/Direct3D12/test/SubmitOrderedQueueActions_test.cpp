@@ -4,6 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <utility>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
 #include <Oxygen/Graphics/Direct3D12/test/Fixtures/OffscreenTestFixture.h>

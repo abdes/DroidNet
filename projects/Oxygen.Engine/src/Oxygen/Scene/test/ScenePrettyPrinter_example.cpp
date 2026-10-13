@@ -10,15 +10,18 @@
 //! configurable command-line options to test all features of the modern
 //! C++20 template-based pretty printing system.
 
+#include <exception>
 #include <fstream>
 #include <iostream>
+#include <iterator>
+#include <memory>
 #include <string>
 #include <string_view>
 
 #include <fmt/format.h>
 
 #ifdef _WIN32
-#  include <windows.h>
+#  include <windows.h> // IWYU pragma: keep
 
 #  include <fcntl.h>
 #  include <io.h>

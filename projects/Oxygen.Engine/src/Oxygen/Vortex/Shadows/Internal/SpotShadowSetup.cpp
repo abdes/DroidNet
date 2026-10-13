@@ -6,9 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
-#include <ranges>
 #include <span>
 #include <vector>
 
@@ -21,6 +19,7 @@
 #include <Oxygen/Core/Types/ViewHelpers.h>
 #include <Oxygen/Vortex/Shadows/Internal/ConventionalShadowTargetAllocator.h>
 #include <Oxygen/Vortex/Shadows/Internal/LocalShadowProjection.h>
+#include <Oxygen/Vortex/Shadows/Internal/ShadowEligibility.h>
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
 #include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>

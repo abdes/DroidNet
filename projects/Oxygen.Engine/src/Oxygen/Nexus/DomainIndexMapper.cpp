@@ -2,11 +2,17 @@
 // DomainIndexMapper implementation
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <initializer_list>
+#include <memory>
+#include <optional>
 #include <unordered_map>
 
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Nexus/DomainIndexMapper.h>
+#include <Oxygen/Nexus/Types/Domain.h>
 
 using oxygen::nexus::DomainIndexMapper;
 using oxygen::nexus::DomainKey;

@@ -6,7 +6,8 @@
 
 #pragma once
 
-#include <windows.h>
+#include <windows.h> // IWYU pragma: keep
+#include <unknwn.h> // IWYU pragma: keep (dxcapi.h needs IUnknown, which lean windows.h omits)
 
 #include <atomic>
 #include <filesystem>
@@ -17,7 +18,6 @@
 #include <vector>
 
 #include <dxcapi.h>
-#include <unknwn.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>

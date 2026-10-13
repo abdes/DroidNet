@@ -92,8 +92,10 @@ public:
   [[nodiscard]] auto FindShortOption(const std::string& name) const
     -> std::optional<std::shared_ptr<Option>>
   {
-    const auto result = std::ranges::find_if(options_,
-      [&name](const Option::Ptr& option) { return option->Short() == name; });
+    const auto result = std::ranges::find_if(
+      options_, [&name](const Option::Ptr& option) -> bool {
+        return option->Short() == name;
+      });
     if (result == options_.cend()) {
       return {};
     }
@@ -103,8 +105,10 @@ public:
   [[nodiscard]] auto FindLongOption(const std::string& name) const
     -> std::optional<std::shared_ptr<Option>>
   {
-    const auto result = std::ranges::find_if(options_,
-      [&name](const Option::Ptr& option) { return option->Long() == name; });
+    const auto result = std::ranges::find_if(
+      options_, [&name](const Option::Ptr& option) -> bool {
+        return option->Long() == name;
+      });
     if (result == options_.cend()) {
       return {};
     }

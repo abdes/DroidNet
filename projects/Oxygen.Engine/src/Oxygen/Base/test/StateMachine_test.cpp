@@ -5,10 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <any>
-#include <exception>
+#include <memory>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>
+#include <variant>
+#include <vector>
+
+#include "gtest/gtest.h"
 
 #include <Oxygen/Base/StateMachine.h>
 #include <Oxygen/Testing/GTest.h>

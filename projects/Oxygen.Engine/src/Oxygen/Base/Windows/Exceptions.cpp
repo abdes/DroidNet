@@ -4,16 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
+
 #include <Oxygen/Base/Platforms.h>
 #if defined(OXYGEN_WINDOWS)
 
-#  include <memory>
 #  include <string>
 
 #  include <fmt/format.h>
 
 #  include <Oxygen/Base/Finally.h>
-#  include <Oxygen/Base/Logging.h>
 #  include <Oxygen/Base/StringUtils.h>
 #  include <Oxygen/Base/Windows/Exceptions.h>
 
@@ -39,7 +39,7 @@ auto GetErrorMessage(const DWORD error_code) -> std::string
     }
 
     // Ensure buffer is freed when we exit this scope
-    auto cleanup = oxygen::Finally([buffer]() {
+    auto cleanup = oxygen::Finally([buffer]() -> void {
       if (buffer) {
         LocalFree(buffer);
       }

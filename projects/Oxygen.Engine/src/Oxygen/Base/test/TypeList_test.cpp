@@ -4,7 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Base/ResourceHandle.h>
+#include <cstddef>
+#include <tuple>
+#include <type_traits>
+
 #include <Oxygen/Base/TypeList.h>
 #include <Oxygen/Testing/GTest.h>
 

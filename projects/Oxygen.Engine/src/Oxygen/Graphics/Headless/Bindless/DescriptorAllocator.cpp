@@ -4,6 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+#include <stdexcept>
+#include <utility>
+
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Detail/DescriptorSegment.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Headless/Bindless/AllocationStrategy.h>
 #include <Oxygen/Graphics/Headless/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Headless/Bindless/DescriptorSegment.h>

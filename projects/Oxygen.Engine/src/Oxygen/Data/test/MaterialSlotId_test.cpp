@@ -5,9 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
 #include <string_view>
 #include <type_traits>
 #include <unordered_set>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/MaterialSlotId.h>
@@ -65,12 +68,12 @@ NOLINT_TEST(MaterialSlotIdTest, NilIsAnUnsetSentinelAndOrderingUsesAllBytes)
     = MaterialSlotId::FromString("00000000-0000-0000-0000-000000000000");
   ASSERT_TRUE(nil.has_value());
   EXPECT_TRUE(nil.value().IsNil());
-  constexpr auto first = [] {
+  constexpr auto first = [] -> MaterialSlotId {
     MaterialSlotId::ByteArray bytes {};
     bytes.front() = 1;
     return MaterialSlotId::FromBytes(bytes);
   }();
-  constexpr auto second = [] {
+  constexpr auto second = [] -> MaterialSlotId {
     MaterialSlotId::ByteArray bytes {};
     bytes.front() = 1;
     bytes.back() = 1;

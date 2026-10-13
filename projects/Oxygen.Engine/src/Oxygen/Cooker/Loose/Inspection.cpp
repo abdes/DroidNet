@@ -104,7 +104,7 @@ auto Inspection::LoadFromFile(const std::filesystem::path& index_path) -> void
     }
   }
   std::ranges::sort(
-    impl_->files, [](const FileEntry& left, const FileEntry& right) {
+    impl_->files, [](const FileEntry& left, const FileEntry& right) -> bool {
       return std::tie(left.kind, left.relpath)
         < std::tie(right.kind, right.relpath);
     });

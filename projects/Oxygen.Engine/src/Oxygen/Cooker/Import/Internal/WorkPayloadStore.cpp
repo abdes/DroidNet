@@ -4,7 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPlanner.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
+#include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/WorkPayloadStore.h>
 
 namespace oxygen::content::import::detail {

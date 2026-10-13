@@ -4,18 +4,31 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cstddef>
+#include <exception>
+#include <functional>
+#include <memory>
+#include <optional>
 #include <stdexcept>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include "./TestSceneFactory.h"
 #include "./TestSceneFactory_schema.h"
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/trigonometric.hpp>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Scene/Types/Flags.h>
 
 using nlohmann::json;
 using nlohmann::json_schema::json_validator;

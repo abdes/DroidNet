@@ -5,8 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <compare>
+#include <functional>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Testing/GTest.h>

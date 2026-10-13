@@ -4,13 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
+
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ResourceTable.h>
+#include <Oxygen/Core/SafeCall.h>
 #include <Oxygen/Scene/Detail/Scene_safecall_impl.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 // =============================================================================
 // Scene Validator Implementations

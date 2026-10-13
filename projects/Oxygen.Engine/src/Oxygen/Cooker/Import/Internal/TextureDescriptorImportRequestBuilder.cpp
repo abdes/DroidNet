@@ -52,7 +52,7 @@ namespace {
 
   auto GetTextureDescriptorValidator() -> json_validator&
   {
-    static auto validator = []() {
+    static auto validator = []() -> json_validator {
       auto out = json_validator {};
       out.set_root_schema(json::parse(kTextureDescriptorSchema));
       return out;
@@ -77,7 +77,7 @@ namespace {
     return ValidateJsonSchemaWithDiagnostics(GetTextureDescriptorValidator(),
       descriptor_doc, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& object_path) {
+        const std::string& object_path) -> void {
         diagnostics.push_back(ImportDiagnostic {
           .severity = ImportSeverity::kError,
           .code = std::string(code),

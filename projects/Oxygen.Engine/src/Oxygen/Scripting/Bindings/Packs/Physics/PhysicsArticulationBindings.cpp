@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <span>
 #include <vector>
 
 #include <lua.h>
@@ -13,6 +15,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
 #include <Oxygen/Physics/Articulation/ArticulationDesc.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/PhysicsError.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>

@@ -4,8 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstdint>
-
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
 #include <Oxygen/Vortex/Environment/Types/EnvironmentProbeBindings.h>

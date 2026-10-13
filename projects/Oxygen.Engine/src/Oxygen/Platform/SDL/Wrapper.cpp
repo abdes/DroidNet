@@ -5,12 +5,18 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <concepts>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <memory>
 #include <span>
 #include <stdexcept>
 
-#include <SDL3/SDL.h>
+#include <SDL3/SDL_error.h>
+#include <SDL3/SDL_properties.h>
+#include <SDL3/SDL_stdinc.h>
+#include <SDL3/SDL_video.h>
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>

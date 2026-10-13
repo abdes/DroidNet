@@ -16,6 +16,7 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>

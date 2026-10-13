@@ -7,8 +7,10 @@
 #include <cstring>
 #include <functional>
 #include <string_view>
+#include <variant>
 
 #include "ScriptingModule_test_fixture.h"
+#include <gtest/gtest.h>
 #include <lua.h>
 #include <lualib.h>
 

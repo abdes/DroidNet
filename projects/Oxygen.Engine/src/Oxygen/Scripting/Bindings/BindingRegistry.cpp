@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <span>
+
 #include <lua.h>
 
 #include <Oxygen/Scripting/Bindings/BindingRegistry.h>

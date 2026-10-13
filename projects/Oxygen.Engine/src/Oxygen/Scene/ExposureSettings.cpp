@@ -7,9 +7,13 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <initializer_list>
 #include <limits>
+#include <optional>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Types/PostProcess.h>

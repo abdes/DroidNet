@@ -5,35 +5,31 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
-#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <type_traits>
+#include <utility>
 #include <vector>
+
+#include <Oxygen/Config/PathFinderConfig.h>
 
 #if defined(_MSC_VER)
 #  include <crtdbg.h>
 #endif
 
-#include <windows.h>
+#include <windows.h> // IWYU pragma: keep
 
-#include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/StringUtils.h>
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
-#include <Oxygen/Config/PathFinder.h>
-#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Bake.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DxcShaderCompiler.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Inspect.h>
 

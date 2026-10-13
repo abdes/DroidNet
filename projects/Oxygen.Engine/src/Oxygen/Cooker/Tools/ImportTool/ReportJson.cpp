@@ -4,16 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <chrono>
 #include <ctime>
 #include <iomanip>
+#include <optional>
 #include <ranges>
+#include <ratio>
 #include <sstream>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include <fmt/format.h>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ReportJson.h>
 
 namespace oxygen::content::import::tool {
@@ -198,7 +209,7 @@ auto BuildDiagnosticsJson(const std::vector<ImportDiagnostic>& diagnostics)
   -> ordered_json
 {
   ordered_json entries = ordered_json::array();
-  std::ranges::for_each(diagnostics, [&](const ImportDiagnostic& diag) {
+  std::ranges::for_each(diagnostics, [&](const ImportDiagnostic& diag) -> void {
     ordered_json entry = ordered_json::object();
     entry["severity"] = std::string(SeverityToString(diag.severity));
     entry["code"] = diag.code;

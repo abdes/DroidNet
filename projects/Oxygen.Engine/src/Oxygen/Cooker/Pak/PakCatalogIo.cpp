@@ -9,22 +9,30 @@
 #include <cstddef>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
-#include <ranges>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Pak/Internal/PakCatalog_schema.h>
 #include <Oxygen/Cooker/Pak/PakCatalogIo.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormatVersions.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::pak {
 
@@ -187,9 +195,8 @@ namespace {
   {
     auto entries = std::vector<data::PakCatalogEntry>(catalog.entries);
     std::ranges::sort(entries,
-      [](const data::PakCatalogEntry& lhs, const data::PakCatalogEntry& rhs) {
-        return lhs.asset_key < rhs.asset_key;
-      });
+      [](const data::PakCatalogEntry& lhs, const data::PakCatalogEntry& rhs)
+        -> bool { return lhs.asset_key < rhs.asset_key; });
 
     auto root = ordered_json::object();
     root["schema_version"] = kSchemaVersion;
@@ -289,9 +296,8 @@ namespace {
     }
 
     std::ranges::sort(entries,
-      [](const data::PakCatalogEntry& lhs, const data::PakCatalogEntry& rhs) {
-        return lhs.asset_key < rhs.asset_key;
-      });
+      [](const data::PakCatalogEntry& lhs, const data::PakCatalogEntry& rhs)
+        -> bool { return lhs.asset_key < rhs.asset_key; });
 
     auto catalog = data::PakCatalog {
       .source_key = source_key.value(),

@@ -4,13 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <span>
+#include <vector>
+
 #include "Scene.h"
+#include <glm/ext/quaternion_common.hpp>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Detail/Scene_safecall_impl.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 using oxygen::scene::Scene;
 using oxygen::scene::detail::TransformComponent;

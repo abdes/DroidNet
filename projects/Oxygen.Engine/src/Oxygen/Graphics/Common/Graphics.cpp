@@ -20,6 +20,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/ObjectMetadata.h>

@@ -4,14 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <chrono>
+#include <cstdint>
 #include <future>
 #include <limits>
 #include <optional>
 
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/ReadbackErrors.h>
 #include <Oxygen/Graphics/Common/ReadbackTracker.h>
+#include <Oxygen/Graphics/Common/Types/FenceValue.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::SizeBytes;

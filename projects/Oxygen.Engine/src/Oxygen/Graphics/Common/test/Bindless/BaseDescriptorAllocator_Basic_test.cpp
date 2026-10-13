@@ -11,16 +11,21 @@
  * and release functionality.
  */
 
+#include <map>
 #include <memory>
-#include <vector>
+#include <stdexcept>
+#include <utility>
 
 #include "./BaseDescriptorAllocatorTest.h"
 #include "./Mocks/MockDescriptorAllocator.h"
 #include "./Mocks/MockDescriptorSegment.h"
 #include "./Mocks/TestDescriptorHandle.h"
 
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Detail/DescriptorSegment.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Testing/GTest.h>

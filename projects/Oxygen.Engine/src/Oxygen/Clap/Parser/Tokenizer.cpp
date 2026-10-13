@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <functional>
+#include <ostream>
+#include <string>
 #include <utility>
 
 #include <magic_enum/magic_enum.hpp>

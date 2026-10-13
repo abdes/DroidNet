@@ -15,10 +15,17 @@
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/ReadbackErrors.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/ReadbackTypes.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/test/Fixtures/ReadbackTestFixture.h>

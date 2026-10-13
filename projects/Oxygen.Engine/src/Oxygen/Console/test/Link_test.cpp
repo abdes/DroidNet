@@ -4,11 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <cstdlib>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Commands/Params.h>
+#include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
 
 auto main(int /*argc*/, char** /*argv*/) -> int

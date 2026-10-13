@@ -4,11 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <iostream>
+#include <memory>
+
 #include "./SimpleEventLoop.h"
 
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneTraversalAsync.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::co::Co;

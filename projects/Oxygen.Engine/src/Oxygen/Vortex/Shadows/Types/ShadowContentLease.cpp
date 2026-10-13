@@ -3,13 +3,24 @@
 // copy at <https://opensource.org/licenses/BSD-3-Clause>.
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
+#include <cstdint>
+#include <expected>
+#include <memory>
 #include <mutex>
+#include <new>
+#include <span>
 #include <stdexcept>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Vortex/Shadows/Internal/SharedShadowMap.h>
 #include <Oxygen/Vortex/Shadows/Types/ShadowContentLease.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowUseError.h>
 
 namespace oxygen::vortex {
 using shadows::internal::ShadowReadCapability;

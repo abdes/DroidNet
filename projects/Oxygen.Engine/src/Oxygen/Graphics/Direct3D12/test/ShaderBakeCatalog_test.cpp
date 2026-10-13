@@ -4,9 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <initializer_list>
-#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>

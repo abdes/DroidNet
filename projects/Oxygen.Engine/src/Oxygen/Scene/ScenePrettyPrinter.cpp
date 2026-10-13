@@ -4,19 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <iostream>
-#include <ranges>
+#include <memory>
+#include <span>
 #include <sstream>
+#include <string>
+#include <utility>
 #include <vector>
-
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/ScenePrettyPrinter.h>
 #include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 
 namespace oxygen::scene {
 

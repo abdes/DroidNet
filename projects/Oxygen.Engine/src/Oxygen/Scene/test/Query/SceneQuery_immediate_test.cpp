@@ -5,12 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
 #include <deque>
+#include <iterator>
 #include <list>
+#include <optional>
+#include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "SceneQueryTestBase.h"
 
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::scene::ConstVisitedNode;

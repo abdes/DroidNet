@@ -4,14 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
+#include <stdexcept>
+#include <tuple>
+
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
-#include <gmock/gmock.h>
 
 #include <Oxygen/OxCo/Algorithms.h>
-#include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
+#include <Oxygen/OxCo/SuspendForever.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace std::chrono_literals;

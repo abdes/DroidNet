@@ -4,7 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+
 #include "TestHelpers.h"
+#include "gtest/gtest.h"
+#include <gtest/gtest.h>
+
+#include <Oxygen/Clap/Command.h>
+#include <Oxygen/Clap/CommandLineContext.h>
+#include <Oxygen/Clap/OptionValuesMap.h>
+#include <Oxygen/Clap/Parser/Context.h>
+#include <Oxygen/Clap/Parser/States.h>
+#include <Oxygen/Clap/Parser/Tokenizer.h>
 
 namespace oxygen::clap::parser::detail {
 namespace {

@@ -5,9 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
+#include <exception>
+#include <span>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Graphics/Direct3D12/TimestampQueryBackend.h>

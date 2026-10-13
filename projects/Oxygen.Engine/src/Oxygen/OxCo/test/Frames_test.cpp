@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <coroutine>
+#include <cstdint>
 
+#include <Oxygen/OxCo/Coroutine.h>
+#include <Oxygen/OxCo/Detail/CoRoutineFrame.h>
 #include <Oxygen/OxCo/Detail/ProxyFrame.h>
 #include <Oxygen/OxCo/Detail/TaskFrame.h>
 #include <Oxygen/Testing/GTest.h>

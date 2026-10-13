@@ -5,15 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <coroutine>
+#include <stdexcept>
 
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
-#include <gmock/gmock.h>
 
 #include <Oxygen/Base/Unreachable.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Coroutine.h>
 #include <Oxygen/OxCo/Detail/Sequence.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Run.h>

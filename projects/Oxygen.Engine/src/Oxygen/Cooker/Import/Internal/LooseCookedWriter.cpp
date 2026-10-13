@@ -26,8 +26,6 @@
 #include <utility>
 #include <vector>
 
-#include <fmt/format.h>
-
 #include <Oxygen/Base/Endian.h>
 #include <Oxygen/Base/Filesystem.h>
 #include <Oxygen/Base/Logging.h>
@@ -40,6 +38,7 @@
 #include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -724,16 +723,17 @@ struct LooseCookedWriter::Impl final {
 private:
   [[nodiscard]] auto HasFileKind_(const FileKind kind) const -> bool
   {
-    return std::ranges::any_of(
-      files_, [kind](const auto& item) { return item.second.kind == kind; });
+    return std::ranges::any_of(files_,
+      [kind](const auto& item) -> auto { return item.second.kind == kind; });
   }
 
   auto StoreFile_(StoredFile file, const std::string_view context) -> bool
   {
     const auto existing = file.kind == FileKind::kAuxiliary
       ? files_.find(file.relpath)
-      : std::ranges::find_if(files_,
-          [&](const auto& item) { return item.second.kind == file.kind; });
+      : std::ranges::find_if(files_, [&](const auto& item) -> auto {
+          return item.second.kind == file.kind;
+        });
     if (existing != files_.end()) {
       if (!HandleFileCollision_(file.kind, existing->second, file, context)) {
         return false;

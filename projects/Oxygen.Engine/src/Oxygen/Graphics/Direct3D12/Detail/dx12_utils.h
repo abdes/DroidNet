@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <windows.h> // IWYU pragma: keep
+
 #include <cassert>
 #include <limits>
 #include <string>
@@ -13,7 +15,6 @@
 
 #include <d3d12.h>
 #include <d3dcommon.h>
-#include <minwindef.h>
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Windows/ComError.h>

@@ -4,10 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <functional>
 #include <stdexcept>
 
 #include <gtest/gtest.h>
 
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 
 using oxygen::TypeId;

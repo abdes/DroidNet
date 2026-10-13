@@ -8,12 +8,15 @@
 #include <exception>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/SceneQuery.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneQueryBindings.h>

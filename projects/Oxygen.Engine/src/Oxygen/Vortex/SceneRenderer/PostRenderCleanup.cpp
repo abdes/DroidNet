@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>

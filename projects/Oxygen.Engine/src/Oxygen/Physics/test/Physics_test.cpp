@@ -6,21 +6,26 @@
 
 #include <array>
 #include <cmath>
+#include <cstdint>
+#include <memory>
 #include <vector>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
-#include <Oxygen/Physics/Area/AreaDesc.h>
 #include <Oxygen/Physics/Articulation/ArticulationDesc.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Character/CharacterController.h>
 #include <Oxygen/Physics/Events/PhysicsEvents.h>
-#include <Oxygen/Physics/Joint/JointDesc.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Physics.h>
+#include <Oxygen/Physics/PhysicsError.h>
 #include <Oxygen/Physics/Query/Overlap.h>
 #include <Oxygen/Physics/Query/Raycast.h>
 #include <Oxygen/Physics/Query/Sweep.h>
+#include <Oxygen/Physics/Shape.h>
 #include <Oxygen/Physics/Shape/ShapeDesc.h>
 #include <Oxygen/Physics/SoftBody/SoftBodyDesc.h>
+#include <Oxygen/Physics/System/IPhysicsSystem.h>
 #include <Oxygen/Physics/Vehicle/VehicleDesc.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 #include <Oxygen/Physics/test/TestBlobBuilders.h>

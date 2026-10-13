@@ -4,25 +4,45 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
+#include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 
+#include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <mutex>
+#include <span>
 #include <type_traits>
+#include <unordered_map>
+#include <utility>
+#include <variant>
 #include <vector>
 
+#include <Jolt/Math/Quat.h>
+#include <Jolt/Math/Vec3.h>
 #include <Jolt/Physics/Body/Body.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
+#include <Jolt/Physics/Body/MotionQuality.h>
+#include <Jolt/Physics/Body/MotionType.h>
+#include <Jolt/Physics/Collision/ObjectLayer.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
+#include <Jolt/Physics/Constraints/Constraint.h>
 #include <Jolt/Physics/Constraints/TwoBodyConstraint.h>
+#include <Jolt/Physics/EActivation.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/Vehicle/VehicleConstraint.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltBodies.h>
 #include <Oxygen/Physics/Jolt/JoltShapes.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
+#include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/Shape.h>
 
 oxygen::physics::jolt::JoltBodies::JoltBodies(
   JoltWorld& world, JoltShapes& shapes)

@@ -5,7 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/SceneSync/SceneObserverSyncModule.h>
 

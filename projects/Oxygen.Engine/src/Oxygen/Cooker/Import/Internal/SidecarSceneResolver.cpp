@@ -4,9 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <optional>
+#include <span>
+#include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Content/VirtualPathResolver.h>
@@ -15,7 +21,14 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/SidecarSceneResolver.h>
+#include <Oxygen/Cooker/Loose/Inspection.h>
+#include <Oxygen/Cooker/Loose/Types.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import::detail {
 

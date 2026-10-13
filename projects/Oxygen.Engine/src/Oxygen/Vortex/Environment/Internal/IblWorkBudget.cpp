@@ -7,9 +7,14 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <span>
 #include <string_view>
 
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/IblWorkBudget.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 
 namespace oxygen::vortex::environment::internal {
 namespace {

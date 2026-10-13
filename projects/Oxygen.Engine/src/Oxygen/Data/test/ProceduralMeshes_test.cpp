@@ -6,11 +6,17 @@
 
 // Standard library
 #include <cstddef>
+#include <cstdint>
 #include <optional>
-#include <unordered_set>
+#include <utility>
 #include <vector>
 
+#include <glm/common.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/geometric.hpp>
+
 // GTest
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project

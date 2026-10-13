@@ -12,9 +12,11 @@
 #include <memory>
 #include <numbers>
 #include <span>
+#include <string>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/TextureType.h>
@@ -23,6 +25,7 @@
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Environment/Fog.h>

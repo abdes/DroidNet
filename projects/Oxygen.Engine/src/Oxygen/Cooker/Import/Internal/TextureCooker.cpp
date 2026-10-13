@@ -5,22 +5,38 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <limits>
 #include <optional>
-#include <ranges>
+#include <span>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include <glm/gtc/packing.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/Internal/ImageDecode.h>
 #include <Oxygen/Cooker/Import/Internal/ImageProcessing.h>
 #include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/bc7/Bc7Encoder.h>
+#include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Cooker/Import/TextureImportDesc.h>
+#include <Oxygen/Cooker/Import/TextureImportError.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
 
 namespace oxygen::content::import {

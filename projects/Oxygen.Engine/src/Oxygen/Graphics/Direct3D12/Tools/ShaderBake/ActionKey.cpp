@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <windows.h>
+#include <windows.h> // IWYU pragma: keep
 
 #include <cstddef>
 #include <cstdint>

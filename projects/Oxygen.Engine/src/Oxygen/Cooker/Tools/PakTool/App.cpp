@@ -6,13 +6,20 @@
 
 #include <chrono>
 #include <cstddef>
+#include <exception>
 #include <iomanip>
 #include <ios>
 #include <iostream>
 #include <optional>
+#include <ratio>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
+
+#include "ArtifactPublication.h"
+#include "PakToolOptions.h"
+#include "RequestPreparation.h"
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Cli.h>
@@ -20,9 +27,11 @@
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Tools/PakTool/App.h>
 #include <Oxygen/Cooker/Tools/PakTool/CliBuilder.h>
 #include <Oxygen/Cooker/Tools/PakTool/CommandExecution.h>
+#include <Oxygen/Data/CookedSource.h>
 
 namespace oxygen::content::pak::tool {
 

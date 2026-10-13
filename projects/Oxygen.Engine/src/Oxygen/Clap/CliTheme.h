@@ -22,7 +22,7 @@ struct CliTheme {
   fmt::text_style example;
   fmt::text_style reset;
 
-  static const CliTheme& Plain()
+  static auto Plain() -> const CliTheme&
   {
     static const CliTheme theme = {
       .section_header = fmt::text_style(),
@@ -37,7 +37,7 @@ struct CliTheme {
     return theme;
   }
 
-  static const CliTheme& Dark()
+  static auto Dark() -> const CliTheme&
   {
     static const CliTheme theme = {
       .section_header = fmt::fg(fmt::color::cyan) | fmt::emphasis::bold,
@@ -52,7 +52,7 @@ struct CliTheme {
     return theme;
   }
 
-  static const CliTheme& Light()
+  static auto Light() -> const CliTheme&
   {
     static const CliTheme theme = {
       .section_header = fmt::fg(fmt::color::blue) | fmt::emphasis::bold,

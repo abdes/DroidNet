@@ -4,10 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "TestHelpers.h"
+#include <any>
 
 #include <Oxygen/Base/Compilers.h>
-#include <Oxygen/Clap/Option.h>
+#include <Oxygen/Clap/OptionValue.h>
+#include <Oxygen/Testing/GTest.h>
 
 using testing::Eq;
 using testing::IsFalse;

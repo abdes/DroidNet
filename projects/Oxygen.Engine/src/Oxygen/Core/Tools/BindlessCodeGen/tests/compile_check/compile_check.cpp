@@ -4,8 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <cstddef>
-#include <type_traits>
+#include <cstdint>
+#include <tuple>
 
 #include "Generated.BindlessAbi.h"
 #include "Generated.Meta.h"

@@ -7,20 +7,29 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <filesystem>
 #include <fstream>
 #include <ios>
+#include <iterator>
 #include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
 
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/ShaderLibraryIO.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 #include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 

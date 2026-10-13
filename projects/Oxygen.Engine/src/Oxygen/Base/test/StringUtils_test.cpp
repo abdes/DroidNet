@@ -5,12 +5,18 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <string>
+#include <string_view>
 #include <variant>
 
 #include <gmock/gmock-matchers.h>
 
 #include <Oxygen/Base/Platforms.h>
 #include <Oxygen/Base/StringUtils.h>
+#include <Oxygen/Base/Windows/Exceptions.h>
 #include <Oxygen/Testing/GTest.h>
 
 #if defined(OXYGEN_WINDOWS)
@@ -128,7 +134,7 @@ NOLINT_TEST_P(ToUtf8Test, ConvertsValidWideStringToUtf8String)
 
   std::string expected;
   std::visit(
-    [&](auto&& arg) {
+    [&](auto&& arg) -> auto {
       expected = std::string(reinterpret_cast<const char*>(arg));
     },
     expected_output);

@@ -5,6 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #include <cctype>
+#include <cstddef>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Console/Constants.h>
 #include <Oxygen/Console/Parser.h>

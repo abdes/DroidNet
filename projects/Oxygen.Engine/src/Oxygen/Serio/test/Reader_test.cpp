@@ -4,9 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "Mocks/MockStream.h"
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
+#include <system_error>
+#include <vector>
 
+#include "Mocks/MockStream.h"
+#include "gtest/gtest.h"
+
+#include <Oxygen/Base/Endian.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Stream.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::ByteSwap;

@@ -134,5 +134,5 @@ void bc7enc_compress_block_init();
 // 6, and by default opaque blocks will use either modes 1 or 6. Returns true if
 // the block had any pixels with alpha < 255, otherwise it return false. (This
 // is not an error code - a block is always encoded.)
-bool bc7enc_compress_block(void* pBlock, const void* pPixelsRGBA,
-  const bc7enc_compress_block_params* pComp_params);
+auto bc7enc_compress_block(void* pBlock, const void* pPixelsRGBA,
+  const bc7enc_compress_block_params* pComp_params) -> bool;

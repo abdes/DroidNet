@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
@@ -14,11 +15,14 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <limits>
 #include <optional>
 #include <span>
+#include <stop_token>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -26,13 +30,16 @@
 
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/AssetReferenceBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Emitters/AssetEmitter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSession.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/InputImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
@@ -43,6 +50,8 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Input/ActionValue.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -145,7 +154,7 @@ namespace {
 
   auto PrimaryInputSchemaValidator() -> nlohmann::json_schema::json_validator&
   {
-    thread_local auto validator = [] {
+    thread_local auto validator = [] -> nlohmann::json_schema::json_validator {
       auto out = nlohmann::json_schema::json_validator {};
       out.set_root_schema(json::parse(kInputSchema));
       return out;
@@ -156,7 +165,7 @@ namespace {
   auto StandaloneInputActionSchemaValidator()
     -> nlohmann::json_schema::json_validator&
   {
-    thread_local auto validator = [] {
+    thread_local auto validator = [] -> nlohmann::json_schema::json_validator {
       auto out = nlohmann::json_schema::json_validator {};
       out.set_root_schema(json::parse(kInputActionSchema));
       return out;
@@ -201,7 +210,7 @@ namespace {
         "Schema validation (oxygen.input.schema.json) reported ",
         kMaxSchemaDiagnostics,
         [&](const std::string_view code, std::string message,
-          std::string object_path) {
+          std::string object_path) -> void {
           AddDiagnostic(session, request, ImportSeverity::kError,
             std::string(code), std::move(message), std::move(object_path));
         });
@@ -212,7 +221,7 @@ namespace {
         "Schema validation (oxygen.input-action.schema.json) reported ",
         kMaxSchemaDiagnostics,
         [&](const std::string_view code, std::string message,
-          std::string object_path) {
+          std::string object_path) -> void {
           AddDiagnostic(session, request, ImportSeverity::kError,
             std::string(code), std::move(message), std::move(object_path));
         });
@@ -704,7 +713,8 @@ namespace {
 
     auto local_action_types = std::unordered_map<std::string, uint8_t> {};
 
-    const auto parse_action = [&](const json& node, const std::string& path) {
+    const auto parse_action
+      = [&](const json& node, const std::string& path) -> bool {
       auto action = DeclaredAction {};
       action.name = node.at("name").get<std::string>();
       const auto parsed_type
@@ -759,41 +769,40 @@ namespace {
 
     const auto parse_trigger_aux_array
       = [&](const json& node, const std::string& path,
-          std::vector<TriggerAuxSource>& trigger_aux) {
-          bool ok = true;
-          for (size_t i = 0; i < node.size(); ++i) {
-            const auto& entry = node[i];
-            const auto entry_path = path + "[" + std::to_string(i) + "]";
-            bool entry_ok = true;
-            auto aux = TriggerAuxSource {};
-            aux.action_name = entry.at("action").get<std::string>();
+          std::vector<TriggerAuxSource>& trigger_aux) -> bool {
+      bool ok = true;
+      for (size_t i = 0; i < node.size(); ++i) {
+        const auto& entry = node[i];
+        const auto entry_path = path + "[" + std::to_string(i) + "]";
+        bool entry_ok = true;
+        auto aux = TriggerAuxSource {};
+        aux.action_name = entry.at("action").get<std::string>();
 
-            if (entry.contains("completion_states")) {
-              aux.completion_states
-                = entry.at("completion_states").get<uint32_t>();
-            }
+        if (entry.contains("completion_states")) {
+          aux.completion_states = entry.at("completion_states").get<uint32_t>();
+        }
 
-            if (entry.contains("time_to_complete")) {
-              const auto seconds = entry.at("time_to_complete").get<float>();
-              if (!SecondsToNanoseconds(seconds, aux.time_to_complete_ns)) {
-                AddDiagnostic(session, request, ImportSeverity::kError,
-                  "input.context.trigger_invalid",
-                  "'time_to_complete' exceeds supported range",
-                  entry_path + ".time_to_complete");
-                ok = false;
-                entry_ok = false;
-              }
-            }
-
-            if (entry_ok) {
-              trigger_aux.push_back(std::move(aux));
-            }
+        if (entry.contains("time_to_complete")) {
+          const auto seconds = entry.at("time_to_complete").get<float>();
+          if (!SecondsToNanoseconds(seconds, aux.time_to_complete_ns)) {
+            AddDiagnostic(session, request, ImportSeverity::kError,
+              "input.context.trigger_invalid",
+              "'time_to_complete' exceeds supported range",
+              entry_path + ".time_to_complete");
+            ok = false;
+            entry_ok = false;
           }
-          return ok;
-        };
+        }
+
+        if (entry_ok) {
+          trigger_aux.push_back(std::move(aux));
+        }
+      }
+      return ok;
+    };
 
     const auto parse_trigger = [&](const json& node, const std::string& path,
-                                 TriggerSource& out_trigger) {
+                                 TriggerSource& out_trigger) -> bool {
       const auto parsed_type
         = ParseTriggerType(node.at("type").get<std::string>());
       if (!parsed_type.has_value()) {
@@ -859,7 +868,7 @@ namespace {
     };
 
     const auto parse_mapping = [&](const json& node, const std::string& path,
-                                 MappingSource& out_mapping) {
+                                 MappingSource& out_mapping) -> bool {
       out_mapping.action_name = node.at("action").get<std::string>();
       const auto authored_slot_name = node.at("slot").get<std::string>();
       const auto canonical_slot_name
@@ -922,7 +931,7 @@ namespace {
     };
 
     const auto parse_context = [&](const json& node, const std::string& path,
-                                 ContextSource& out_context) {
+                                 ContextSource& out_context) -> bool {
       out_context.name = node.at("name").get<std::string>();
       if (node.contains("priority")) {
         out_context.default_priority = node.at("priority").get<int32_t>();

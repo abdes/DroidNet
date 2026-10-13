@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <exception>
+#include <cstdint>
 
 #include <Oxygen/Base/StateMachine.h>
 #include <Oxygen/Testing/GTest.h>

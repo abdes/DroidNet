@@ -278,8 +278,8 @@ auto ValidateStaticSource(const ufbx_scene& source,
     const auto path = "/Materials/" + std::to_string(index);
     const auto& pbr = material->pbr;
     const auto mapped = adapters::FbxMaterialTextures::From(*material);
-    const auto validate_maps = [&](const auto& maps,
-                                 const std::string_view group) {
+    const auto validate_maps
+      = [&](const auto& maps, const std::string_view group) -> auto {
       for (const auto& [slot_index, map] :
         std::views::enumerate(std::span(maps))) {
         if (adapters::FbxTextureSlot::Active(map) && !mapped.Supports(map)) {

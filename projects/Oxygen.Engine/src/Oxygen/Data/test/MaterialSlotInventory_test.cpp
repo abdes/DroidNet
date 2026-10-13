@@ -9,9 +9,14 @@
 #include <cstdint>
 #include <iterator>
 #include <limits>
+#include <string>
 #include <string_view>
 
+#include <fmt/base.h>
+
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/GeometryIndices.h>
+#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MaterialSlotInventory.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -163,27 +168,27 @@ NOLINT_TEST(MaterialSlotInventoryTest, EveryLayoutIdentityFieldAffectsRevision)
   };
   const std::array cases {
     Mutation { "default key",
-      [](auto& value) {
+      [](auto& value) -> auto {
         value.slots.front().bindings.front().default_material_key = MaterialA();
       } },
     Mutation { "LOD",
-      [](auto& value) {
+      [](auto& value) -> auto {
         value.slots.front().bindings.front().lod_index
           = oxygen::data::LodIndex { 2U };
       } },
     Mutation { "submesh",
-      [](auto& value) {
+      [](auto& value) -> auto {
         value.slots.front().bindings.back().submesh_index
           = oxygen::data::SubmeshIndex { 3U };
       } },
     Mutation { "slot ID",
-      [](auto& value) {
+      [](auto& value) -> auto {
         value.slots.front().slot_id
           = MaterialSlotId::FromString("11223344-5566-7788-99aa-bbccddeeff00")
               .value();
       } },
     Mutation { "surface owner",
-      [](auto& value) {
+      [](auto& value) -> auto {
         value.slots.back().bindings.push_back(
           value.slots.front().bindings.back());
         value.slots.front().bindings.pop_back();
@@ -227,24 +232,24 @@ NOLINT_TEST(MaterialSlotInventoryTest, RejectsInvalidSlotOwnershipBeforeHashing)
   };
   const std::array cases {
     InvalidCase { "nil ID",
-      [](auto& value) { value.slots.front().slot_id = {}; },
+      [](auto& value) -> auto { value.slots.front().slot_id = {}; },
       ErrorCode::kNilSlotId },
     InvalidCase { "duplicate ID",
-      [](auto& value) {
+      [](auto& value) -> auto {
         value.slots.front().slot_id = value.slots.back().slot_id;
       },
       ErrorCode::kDuplicateSlotId },
     InvalidCase { "unbound slot",
-      [](auto& value) { value.slots.front().bindings.clear(); },
+      [](auto& value) -> auto { value.slots.front().bindings.clear(); },
       ErrorCode::kEmptySlotBindings },
     InvalidCase { "duplicate within slot",
-      [](auto& value) {
+      [](auto& value) -> auto {
         value.slots.front().bindings.push_back(
           value.slots.front().bindings.front());
       },
       ErrorCode::kDuplicateBinding },
     InvalidCase { "duplicate across slots",
-      [](auto& value) {
+      [](auto& value) -> auto {
         value.slots.front().bindings.push_back(
           value.slots.back().bindings.front());
       },

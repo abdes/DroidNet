@@ -4,10 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <optional>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Character/CharacterController.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/Query/Raycast.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/PhysicsModule/ScenePhysics.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::physics {
 

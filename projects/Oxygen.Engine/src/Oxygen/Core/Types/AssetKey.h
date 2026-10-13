@@ -72,10 +72,10 @@ public:
   [[nodiscard]] constexpr auto begin() const noexcept { return bytes_.begin(); }
   [[nodiscard]] constexpr auto end() const noexcept { return bytes_.end(); }
 
-  [[nodiscard]] friend constexpr std::strong_ordering operator<=>(
-    const AssetKey&, const AssetKey&) noexcept = default;
-  [[nodiscard]] friend constexpr bool operator==(
-    const AssetKey&, const AssetKey&) noexcept = default;
+  [[nodiscard]] friend constexpr auto operator<=>(const AssetKey&,
+    const AssetKey&) noexcept -> std::strong_ordering = default;
+  [[nodiscard]] friend constexpr auto operator==(
+    const AssetKey&, const AssetKey&) noexcept -> bool = default;
 
 private:
   constexpr explicit AssetKey(const ByteArray& bytes) noexcept

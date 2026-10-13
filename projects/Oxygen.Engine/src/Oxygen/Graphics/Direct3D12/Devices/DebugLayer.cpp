@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <windows.h> // IWYU pragma: keep
+
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -23,10 +25,7 @@
 #include <dxgidebug.h>
 #include <errhandlingapi.h>
 #include <fmt/format.h>
-#include <libloaderapi.h>
-#include <minwindef.h>
 #include <strsafe.h>
-#include <winnt.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Base/Logging.h>

@@ -443,8 +443,8 @@ namespace {
 NOLINT_TEST(StaticVectorDeathTest, CountConstructorExceedsCapacity)
 {
 #if !defined(NDEBUG)
-  EXPECT_DEATH(
-    ([] { StaticVector<int, 2> vec(3, 42); })(), "count exceeds maximum size");
+  EXPECT_DEATH(([] -> void { StaticVector<int, 2> vec(3, 42); })(),
+    "count exceeds maximum size");
 #endif
 }
 
@@ -456,8 +456,8 @@ NOLINT_TEST(StaticVectorDeathTest, CountConstructorExceedsCapacity)
 NOLINT_TEST(StaticVectorDeathTest, ExplicitCountConstructorExceedsCapacity)
 {
 #if !defined(NDEBUG)
-  EXPECT_DEATH(
-    ([] { StaticVector<int, 2> vec(3); })(), "count exceeds maximum size");
+  EXPECT_DEATH(([] -> void { StaticVector<int, 2> vec(3); })(),
+    "count exceeds maximum size");
 #endif
 }
 
@@ -507,7 +507,8 @@ NOLINT_TEST(StaticVectorDeathTest, RangeConstructorExceedsCapacity)
 {
 #if !defined(NDEBUG)
   std::array arr = { 1, 2, 3, 4, 5, 6, 7 };
-  EXPECT_DEATH(([&] { StaticVector<int, 5> vec2(arr.begin(), arr.end()); })(),
+  EXPECT_DEATH(
+    ([&] -> void { StaticVector<int, 5> vec2(arr.begin(), arr.end()); })(),
     "range constructor input exceeds maximum size");
 #endif
 }
@@ -521,7 +522,8 @@ NOLINT_TEST(StaticVectorDeathTest, RangeConstructorExceedsCapacity)
 NOLINT_TEST(StaticVectorDeathTest, InitializerListConstructorExceedsCapacity)
 {
 #if !defined(NDEBUG)
-  EXPECT_DEATH(([] { StaticVector<int, 3> vec2 = { 1, 2, 3, 4, 5 }; })(),
+  EXPECT_DEATH(
+    ([] -> void { StaticVector<int, 3> vec2 = { 1, 2, 3, 4, 5 }; })(),
     "initializer list size exceeds maximum size");
 #endif
 }

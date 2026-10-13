@@ -4,12 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <climits>
+#include <cstddef>
+#include <cstdint>
+#include <ios>
+#include <limits>
+#include <optional>
 #include <ranges>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
 #include <variant>
+#include <vector>
 
 #include <d3d12.h>
 #include <wrl/client.h> // For Microsoft::WRL::ComPtr
@@ -21,9 +30,11 @@
 #include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/PipelineStateCache.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 

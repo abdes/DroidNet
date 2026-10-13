@@ -4,6 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
+#include <functional>
+#include <future>
+#include <memory>
+#include <mutex>
+#include <stdexcept>
 #include <utility>
 
 #include <Oxygen/Graphics/Headless/Internal/SerialExecutor.h>

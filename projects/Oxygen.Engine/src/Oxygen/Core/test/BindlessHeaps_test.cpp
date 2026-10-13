@@ -4,7 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Core/Bindless/Generated.Strategy.D3D12.h>
 #include <Oxygen/Testing/GTest.h>

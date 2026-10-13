@@ -72,6 +72,7 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Vortex/Types/EnvironmentViewData.h>
+#include <Oxygen/Vortex/Upload/TransientConstantBuffer.h>
 // Completes the traversal returned by Scene::Traverse().
 #include <Oxygen/Scene/SceneTraversal.h> // IWYU pragma: keep
 #include <Oxygen/Scene/Types/Traversal.h>

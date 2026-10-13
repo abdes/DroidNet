@@ -4,15 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
+#include <Oxygen/Console/StartupPlan.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {

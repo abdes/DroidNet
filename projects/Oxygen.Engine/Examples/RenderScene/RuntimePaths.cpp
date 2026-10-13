@@ -1,7 +1,7 @@
 // Distributed under the 3-Clause BSD License. See accompanying file LICENSE.
 // SPDX-License-Identifier: BSD-3-Clause
 
-#include <Windows.h>
+#include <Windows.h> // IWYU pragma: keep
 
 #include <source_location>
 #include <stdexcept>

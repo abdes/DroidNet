@@ -5,14 +5,18 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstddef>
+#include <cstdint>
+#include <span>
 #include <stdexcept>
 #include <vector>
 
 #include "Fixtures/LoaderTestFixtures.h"
 #include "Utils/PakUtils.h"
 
-#include <Oxygen/Content/LoaderFunctions.h>
+#include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/TextureLoader.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Testing/GTest.h>

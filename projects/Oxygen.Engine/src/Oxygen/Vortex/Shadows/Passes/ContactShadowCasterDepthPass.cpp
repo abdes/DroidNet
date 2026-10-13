@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
-#include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
@@ -19,7 +18,6 @@
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/TextureType.h>

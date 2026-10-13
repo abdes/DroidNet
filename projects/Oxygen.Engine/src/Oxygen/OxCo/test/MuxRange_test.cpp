@@ -6,6 +6,8 @@
 
 #include <chrono>
 #include <ranges>
+#include <utility>
+#include <vector>
 
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"

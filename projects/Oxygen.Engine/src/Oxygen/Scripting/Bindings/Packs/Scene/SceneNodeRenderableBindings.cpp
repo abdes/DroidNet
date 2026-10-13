@@ -4,9 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -19,10 +23,14 @@
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Scene/Types/RenderablePolicies.h>

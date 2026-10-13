@@ -31,6 +31,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/StringUtils.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -340,8 +341,10 @@ namespace {
   [[nodiscard]] auto HasAnyAssignedTextures(
     const MaterialTextureBindings& textures) -> bool
   {
-    return std::ranges::any_of(MaterialSource::TextureSlots(),
-      [&](const auto& slot) { return (textures.*slot.binding).assigned; });
+    return std::ranges::any_of(
+      MaterialSource::TextureSlots(), [&](const auto& slot) -> auto {
+        return (textures.*slot.binding).assigned;
+      });
   }
 
   auto AssignTextureReferences(const MaterialTextureBindings& textures,
@@ -349,7 +352,9 @@ namespace {
     data::pak::render::MaterialAssetDesc& desc,
     AssetReferenceBuilder& references) -> void
   {
-    const auto bind = [&references](const MaterialTextureBinding& texture) {
+    const auto bind =
+      [&references](
+        const MaterialTextureBinding& texture) -> data::ResourceReferenceIndex {
       return texture.assigned
         ? references.AddResource(
             data::ResourceKind::kTexture, ResourceIndexT { texture.index })

@@ -4,13 +4,25 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <concepts>
+#include <cstdint>
+#include <memory>
 #include <type_traits>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/Internal/IMutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationDispatcher.h>
+#include <Oxygen/Scene/Internal/MutationTraits.h>
+#include <Oxygen/Scene/Internal/MutationTypes.h>
+#include <Oxygen/Scene/Internal/ScriptSlotMutationProcessor.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Scripting/ScriptingComponent.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Scene/Types/ScriptSlotIndex.h>
 
 namespace oxygen::scene::internal {
 

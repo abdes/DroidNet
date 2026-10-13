@@ -4,30 +4,43 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
+#include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <ios>
+#include <mutex>
 #include <span>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include <Jolt/Core/Reference.h>
 #include <Jolt/Core/StreamWrapper.h>
+#include <Jolt/Math/Float3.h>
 #include <Jolt/Physics/Body/Body.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Body/BodyLock.h>
+#include <Jolt/Physics/Collision/ObjectLayer.h>
 #include <Jolt/Physics/EActivation.h>
 #include <Jolt/Physics/SoftBody/SoftBodyCreationSettings.h>
 #include <Jolt/Physics/SoftBody/SoftBodyMotionProperties.h>
 #include <Jolt/Physics/SoftBody/SoftBodySharedSettings.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltSoftBodies.h>
+#include <Oxygen/Physics/Jolt/JoltWorld.h>
+#include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/SoftBody/SoftBodyDesc.h>
 
 namespace {
 

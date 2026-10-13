@@ -54,7 +54,7 @@ NOLINT_TEST(AnyCacheBudgetTest, PublicationOwnsUsageBeforeEvictionCallbacks)
 {
   AnyCache<int, oxygen::LruEviction<int>> cache(1);
   ASSERT_TRUE(cache.Store(1, std::make_shared<MockValue>(1)));
-  auto scope = cache.OnEviction([&](const auto& retired) {
+  auto scope = cache.OnEviction([&](const auto& retired) -> auto {
     EXPECT_EQ(retired.entry.GetKey(), 1);
     EXPECT_EQ(cache.GetCheckoutCount(2), 2U);
     EXPECT_FALSE(cache.Remove(2));
@@ -74,7 +74,7 @@ NOLINT_TEST(
 {
   AnyCache<int, oxygen::LruEviction<int>> cache(1);
   ASSERT_TRUE(cache.Store(1, std::make_shared<MockValue>(1)));
-  auto scope = cache.OnEviction([&](const auto& retired) {
+  auto scope = cache.OnEviction([&](const auto& retired) -> auto {
     if (retired.entry.GetKey() == 1) {
       cache.Clear();
       ASSERT_TRUE(cache.Store(2, std::make_shared<MockValue>(2)));
@@ -95,8 +95,9 @@ NOLINT_TEST(AnyCacheBudgetTest, ThrowingCallbackDoesNotLeakUndeliveredUsage)
 {
   AnyCache<int, oxygen::LruEviction<int>> cache(1);
   ASSERT_TRUE(cache.Store(1, std::make_shared<MockValue>(1)));
-  auto scope = cache.OnEviction(
-    [](const auto&) { throw std::runtime_error("notification failed"); });
+  auto scope = cache.OnEviction([](const auto&) -> auto {
+    throw std::runtime_error("notification failed");
+  });
   EXPECT_THROW(
     static_cast<void>(cache.StoreAndAcquire(
       2, std::make_shared<MockValue>(1), oxygen::CheckoutOwner::kExternal)),
@@ -112,10 +113,10 @@ NOLINT_TEST(AnyCacheBudgetTest, CallbackReplacementDoesNotDestroyActiveCallable)
   ASSERT_TRUE(cache.Store(2, std::make_shared<MockValue>(1)));
   std::optional<Cache::EvictionNotificationScope> nested;
   int calls = 0;
-  auto scope = cache.OnEviction([&](const auto&) {
+  auto scope = cache.OnEviction([&](const auto&) -> auto {
     ++calls;
     if (!nested) {
-      nested.emplace(cache.OnEviction([](const auto&) { }));
+      nested.emplace(cache.OnEviction([](const auto&) -> auto { }));
     }
   });
   cache.Clear();
@@ -145,7 +146,7 @@ NOLINT_TEST(AnyCacheBudgetTest, FailedRetryStillDeliversCommittedRetirements)
   ASSERT_TRUE(cache.Store(1, std::make_shared<MockValue>(1)));
   cache.GetPolicy().admissions_before_failure = 1U;
   int retired_count = 0;
-  auto scope = cache.OnEviction([&](const auto& retired) {
+  auto scope = cache.OnEviction([&](const auto& retired) -> auto {
     EXPECT_EQ(retired.entry.GetKey(), 1);
     EXPECT_EQ(cache.Size(), 0U);
     ++retired_count;
@@ -235,7 +236,7 @@ NOLINT_TEST(AnyCacheBudgetTest, SetBudgetEvictionTriggersEvictionCallback)
 
   std::vector<int> evicted_keys;
   {
-    auto scope = cache.OnEviction([&evicted_keys](const auto& retired) {
+    auto scope = cache.OnEviction([&evicted_keys](const auto& retired) -> auto {
       const auto& key = retired.entry.GetKey();
       evicted_keys.push_back(key);
     });

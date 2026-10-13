@@ -4,7 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <iostream>
+#include <span>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Cooker/Tools/PakTool/App.h>

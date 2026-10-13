@@ -16,7 +16,6 @@
 #  include <vector>
 
 #  include <nlohmann/json.hpp>
-#  include <nlohmann/json_fwd.hpp>
 
 #  include <Oxygen/Base/Logging.h>
 #  include <Oxygen/Base/ObserverPtr.h>

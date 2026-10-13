@@ -45,7 +45,7 @@
 #include <Oxygen/Vortex/ScenePrep/ScenePrepState.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/InitViews/InitViewsModule.h>
-#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/Generated.DrawContracts.h>
 #include <Oxygen/Vortex/Types/VelocityPublications.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 

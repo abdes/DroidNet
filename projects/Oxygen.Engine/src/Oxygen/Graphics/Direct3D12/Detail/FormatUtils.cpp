@@ -5,6 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
 
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/FormatUtils.h>

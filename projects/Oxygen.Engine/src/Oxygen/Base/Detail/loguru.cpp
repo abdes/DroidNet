@@ -135,7 +135,7 @@
 #    ifndef NOMINMAX
 #      define NOMINMAX
 #    endif
-#    include <windows.h>
+#    include <windows.h> // IWYU pragma: keep
 #  endif
 
 #  ifndef LOGURU_PTLS_NAMES

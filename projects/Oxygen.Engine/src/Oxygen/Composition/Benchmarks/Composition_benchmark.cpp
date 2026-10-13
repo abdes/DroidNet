@@ -3,14 +3,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <memory>
 #include <numeric>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <benchmark/benchmark.h>
 
+#include <Oxygen/Base/TypeList.h>
 #include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/ComponentPool.h>
 #include <Oxygen/Composition/ComponentPoolRegistry.h>
 #include <Oxygen/Composition/Composition.h>
@@ -225,7 +230,7 @@ BENCHMARK_F(CompositionBenchmark, RandomAccessLocalComponents)(
     comps.push_back(std::move(comp));
   }
   for (auto _ : state) {
-    random_access_loop([&](size_t idx) {
+    random_access_loop([&](size_t idx) -> void {
       auto& comp = *comps[idx];
       auto& a = comp.GetComponent<LocalComponentA>();
       auto& b = comp.GetComponent<LocalComponentB>();
@@ -287,7 +292,7 @@ BENCHMARK_F(CompositionBenchmark, RandomAccessPooledComponents)(
     comps.push_back(std::move(comp));
   }
   for (auto _ : state) {
-    random_access_loop([&](size_t idx) {
+    random_access_loop([&](size_t idx) -> void {
       auto& comp = *comps[idx];
       auto& a = comp.GetComponent<PooledComponentA>();
       auto& b = comp.GetComponent<PooledComponentB>();
@@ -349,7 +354,7 @@ BENCHMARK_F(CompositionBenchmark, RandomAccessHybridComponents)(
     comps.push_back(std::move(comp));
   }
   for (auto _ : state) {
-    random_access_loop([&](size_t idx) {
+    random_access_loop([&](size_t idx) -> void {
       auto& comp = *comps[idx];
       auto& la = comp.GetComponent<LocalComponentA>();
       auto& lb = comp.GetComponent<LocalComponentB>();
@@ -432,7 +437,7 @@ BENCHMARK_F(CompositionBenchmark, PoolDirectIteration)(benchmark::State& state)
   for (auto _ : state) {
     // Iterate over all pooled components of type A
     size_t idxA = 0;
-    poolA.ForEach([&](const PooledComponentA& a) {
+    poolA.ForEach([&](const PooledComponentA& a) -> void {
       benchmark::DoNotOptimize(a.value);
       benchmark::DoNotOptimize(a.name);
       if (a.value != static_cast<int>(idxA) + 100)
@@ -440,7 +445,7 @@ BENCHMARK_F(CompositionBenchmark, PoolDirectIteration)(benchmark::State& state)
       ++idxA;
     });
     size_t idxB = 0;
-    poolB.ForEach([&](const PooledComponentB& b) {
+    poolB.ForEach([&](const PooledComponentB& b) -> void {
       benchmark::DoNotOptimize(b.x);
       benchmark::DoNotOptimize(b.desc);
       if (b.x != idxB * 2.0)
@@ -492,7 +497,7 @@ BENCHMARK_F(CompositionBenchmark, FragmentedPoolDirectIteration)(
     = oxygen::ComponentPoolRegistry::GetComponentPool<PooledComponentB>();
   for (auto _ : state) {
     size_t idxA = 0;
-    poolA.ForEach([&](const PooledComponentA& a) {
+    poolA.ForEach([&](const PooledComponentA& a) -> void {
       benchmark::DoNotOptimize(a.value);
       benchmark::DoNotOptimize(a.name);
       if (a.value != static_cast<int>(idxA) + 100)
@@ -500,7 +505,7 @@ BENCHMARK_F(CompositionBenchmark, FragmentedPoolDirectIteration)(
       ++idxA;
     });
     size_t idxB = 0;
-    poolB.ForEach([&](const PooledComponentB& b) {
+    poolB.ForEach([&](const PooledComponentB& b) -> void {
       benchmark::DoNotOptimize(b.x);
       benchmark::DoNotOptimize(b.desc);
       if (b.x != idxB * 2.0)

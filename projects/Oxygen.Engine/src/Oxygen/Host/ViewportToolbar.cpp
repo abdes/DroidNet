@@ -15,13 +15,13 @@
 #include <fmt/format.h>
 #include <imgui.h>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Host/GpuWorkOverlay.h>
 #include <Oxygen/Host/MainViewOptions.h>

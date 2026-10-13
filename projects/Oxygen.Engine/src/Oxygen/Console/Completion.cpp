@@ -4,9 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <string_view>
 #include <utility>
+#include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Console/Completion.h>
+#include <Oxygen/Console/Constants.h>
 
 namespace oxygen::console {
 

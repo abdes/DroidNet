@@ -17,6 +17,7 @@
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <nlohmann/json-schema.hpp>
+#include <nlohmann/json.hpp>
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Filesystem.h>

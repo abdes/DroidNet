@@ -5,11 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 #include <functional>
+#include <string>
+#include <vector>
 
 #include "./BaseCompositionTest.h"
 
+#include <Oxygen/Base/TypeList.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/Object.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::TypeId;

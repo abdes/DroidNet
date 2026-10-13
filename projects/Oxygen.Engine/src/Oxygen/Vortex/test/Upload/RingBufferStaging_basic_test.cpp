@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <utility>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/ByteUnits.h>
@@ -13,6 +14,8 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Upload/Errors.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>

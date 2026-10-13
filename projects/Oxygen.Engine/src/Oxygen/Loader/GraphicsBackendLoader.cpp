@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <limits>
@@ -12,7 +13,9 @@
 #include <mutex>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
+#include <utility>
 
 #include <fmt/format.h>
 
@@ -21,6 +24,8 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ReturnAddress.h>
 #include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Config/PathFinderConfig.h>
+#include <Oxygen/Graphics/Common/BackendLifetime.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/BackendObject.h>
 #include <Oxygen/Graphics/Common/Forward.h>

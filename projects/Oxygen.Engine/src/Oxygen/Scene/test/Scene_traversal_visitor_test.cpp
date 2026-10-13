@@ -4,16 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <iostream>
-#include <memory>
 #include <string>
 #include <vector>
 
 #include "./Scene_traversal_test.h"
 
 #include <Oxygen/Scene/Scene.h>
-#include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::scene::TraversalOrder;

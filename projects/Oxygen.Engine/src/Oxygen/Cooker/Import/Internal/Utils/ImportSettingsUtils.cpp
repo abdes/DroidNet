@@ -4,9 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <optional>
+#include <ostream>
+#include <string_view>
+
+#include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
+#include <Oxygen/Cooker/Import/TextureImportDesc.h>
 #include <Oxygen/Cooker/Import/TextureImportPresets.h>
+#include <Oxygen/Cooker/Import/TextureImportSettings.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 
 namespace oxygen::content::import::internal {
 

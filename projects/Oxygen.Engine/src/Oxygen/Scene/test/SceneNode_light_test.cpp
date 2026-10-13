@@ -5,10 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 #include <limits>
+#include <memory>
+#include <utility>
 
 #include "./SceneNode_test.h"
+#include <gtest/gtest.h>
 
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/LightValidation.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Scene/SceneNode.h>

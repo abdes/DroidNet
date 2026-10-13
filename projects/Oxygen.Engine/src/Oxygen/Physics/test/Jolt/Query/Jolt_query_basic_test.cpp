@@ -5,8 +5,8 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstdint>
 
-#include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Query/Overlap.h>
 #include <Oxygen/Physics/Query/Raycast.h>
 #include <Oxygen/Physics/Query/Sweep.h>

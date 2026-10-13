@@ -698,7 +698,7 @@ public:
   auto GetViews() const noexcept
   {
     return std::ranges::views::transform(
-      views_, [](const auto& pair) { return std::cref(pair.second); });
+      views_, [](const auto& pair) -> auto { return std::cref(pair.second); });
   }
 
   // Register a new view and allocate a stable ViewId

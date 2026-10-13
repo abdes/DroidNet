@@ -68,7 +68,7 @@ NOLINT_TEST_F(AnyCacheConcurrentReadTest, ConcurrentPeek_NoDataRaces)
   // Act - launch concurrent peek operations
   threads.reserve(kNumThreads);
   for (int t = 0; t < kNumThreads; ++t) {
-    threads.emplace_back([&, t] {
+    threads.emplace_back([&, t] -> void {
       // Wait for start signal
       while (!start_flag.load(std::memory_order_acquire)) {
         std::this_thread::yield();
@@ -128,7 +128,7 @@ NOLINT_TEST_F(AnyCacheConcurrentReadTest, ConcurrentContains_NoDataRaces)
   // Act - launch concurrent contains operations
   threads.reserve(kNumThreads);
   for (int t = 0; t < kNumThreads; ++t) {
-    threads.emplace_back([&, t] {
+    threads.emplace_back([&, t] -> void {
       while (!start_flag.load(std::memory_order_acquire)) {
         std::this_thread::yield();
       }
@@ -179,7 +179,7 @@ NOLINT_TEST_F(AnyCacheConcurrentReadTest, ConcurrentGetTypeId_NoDataRaces)
   // Act
   threads.reserve(kNumThreads);
   for (int t = 0; t < kNumThreads; ++t) {
-    threads.emplace_back([&, t] {
+    threads.emplace_back([&, t] -> void {
       while (!start_flag.load(std::memory_order_acquire)) {
         std::this_thread::yield();
       }
@@ -253,7 +253,7 @@ NOLINT_TEST_F(
   // Act - each thread works on different items to minimize contention
   threads.reserve(kNumThreads);
   for (int t = 0; t < kNumThreads; ++t) {
-    threads.emplace_back([&, t] {
+    threads.emplace_back([&, t] -> void {
       while (!start_flag.load(std::memory_order_acquire)) {
         std::this_thread::yield();
       }
@@ -323,7 +323,7 @@ NOLINT_TEST_F(
   // Act - all threads compete for the same few items
   threads.reserve(kNumThreads);
   for (int t = 0; t < kNumThreads; ++t) {
-    threads.emplace_back([&, t] {
+    threads.emplace_back([&, t] -> void {
       while (!start_flag.load(std::memory_order_acquire)) {
         std::this_thread::yield();
       }
@@ -374,7 +374,7 @@ NOLINT_TEST_F(AnyCacheConcurrentCheckoutTest, ConcurrentTouch_ThreadSafe)
   // Act
   threads.reserve(kNumThreads);
   for (int t = 0; t < kNumThreads; ++t) {
-    threads.emplace_back([&, t] {
+    threads.emplace_back([&, t] -> void {
       while (!start_flag.load(std::memory_order_acquire)) {
         std::this_thread::yield();
       }
@@ -461,7 +461,7 @@ NOLINT_TEST_F(
   // Act - launch reader threads
   threads.reserve(kNumReaderThreads);
   for (int t = 0; t < kNumReaderThreads; ++t) {
-    threads.emplace_back([&, t] {
+    threads.emplace_back([&, t] -> void {
       while (!start_flag.load(std::memory_order_acquire)) {
         std::this_thread::yield();
       }
@@ -499,7 +499,7 @@ NOLINT_TEST_F(
 
   // Launch writer threads
   for (int t = 0; t < kNumWriterThreads; ++t) {
-    threads.emplace_back([&, t] {
+    threads.emplace_back([&, t] -> void {
       while (!start_flag.load(std::memory_order_acquire)) {
         std::this_thread::yield();
       }
@@ -615,7 +615,7 @@ NOLINT_TEST_F(
   // Act - launch high-stress threads doing random operations
   threads.reserve(kStressThreads);
   for (int t = 0; t < kStressThreads; ++t) {
-    threads.emplace_back([&, t] {
+    threads.emplace_back([&, t] -> void {
       while (!start_flag.load(std::memory_order_acquire)) {
         std::this_thread::yield();
       }
@@ -715,14 +715,15 @@ NOLINT_TEST_F(AnyCacheConcurrentStressTest, ConcurrentEviction_ThreadSafe)
   std::vector<std::thread> threads;
 
   // Setup eviction callback
-  auto eviction_scope = small_cache.OnEviction([&eviction_count](const auto&) {
-    eviction_count.fetch_add(1, std::memory_order_relaxed);
-  });
+  auto eviction_scope
+    = small_cache.OnEviction([&eviction_count](const auto&) -> auto {
+        eviction_count.fetch_add(1, std::memory_order_relaxed);
+      });
 
   // Act - threads that cause evictions through checkins
   threads.reserve(kEvictionThreadCount);
   for (int t = 0; t < kEvictionThreadCount; ++t) {
-    threads.emplace_back([&, t] {
+    threads.emplace_back([&, t] -> void {
       while (!start_flag.load(std::memory_order_acquire)) {
         std::this_thread::yield();
       }
@@ -780,7 +781,7 @@ NOLINT_TEST_F(AnyCacheConcurrentStressTest, ConcurrentClear_ThreadSafe)
   // Act - some threads clear while others try to access
   threads.reserve(kClearThreadCount);
   for (int t = 0; t < kClearThreadCount; ++t) {
-    threads.emplace_back([&, t] {
+    threads.emplace_back([&, t] -> void {
       while (!start_flag.load(std::memory_order_acquire)) {
         std::this_thread::yield();
       }

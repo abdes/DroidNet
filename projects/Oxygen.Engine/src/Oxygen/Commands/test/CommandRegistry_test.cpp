@@ -7,9 +7,11 @@
 #include <chrono>
 #include <cstdint>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Commands/Command.h>
@@ -139,9 +141,10 @@ NOLINT_TEST(CommandRegistry, PolicyDeniesAndAuditRecords)
   registry.SetSourcePolicy(CommandSource::kRemote,
     CommandRegistry::SourcePolicy { .allow_dev_only = false });
   auto audited = std::vector<CommandRegistry::AuditEvent> {};
-  registry.SetAuditHook([&audited](const CommandRegistry::AuditEvent& event) {
-    audited.push_back(event);
-  });
+  registry.SetAuditHook(
+    [&audited](const CommandRegistry::AuditEvent& event) -> void {
+      audited.push_back(event);
+    });
   const auto invocation
     = registry.BindJson("test.add", json { { "a", 1 }, { "b", 2 } }).value();
 

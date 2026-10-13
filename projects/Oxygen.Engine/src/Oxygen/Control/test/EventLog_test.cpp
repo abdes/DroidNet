@@ -77,7 +77,7 @@ NOLINT_TEST(EventLog, CallsThePublishedHandler)
 {
   EventLog log;
   int calls = 0;
-  log.SetPublishedHandler([&calls] { ++calls; });
+  log.SetPublishedHandler([&calls] -> void { ++calls; });
 
   log.Publish("a", json::object());
   log.Publish("b", json::object());

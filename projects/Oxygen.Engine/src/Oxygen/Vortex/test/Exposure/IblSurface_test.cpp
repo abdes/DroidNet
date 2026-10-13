@@ -15,19 +15,27 @@
 #include <filesystem>
 #include <fstream>
 #include <functional>
+#include <ios>
 #include <memory>
 #include <numbers>
 #include <span>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <glm/geometric.hpp>
 #include <glm/vec3.hpp>
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
@@ -35,6 +43,7 @@
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
@@ -42,6 +51,7 @@
 #include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/Internal/SubmissionFaultTestAccess.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/test/CommandRecordingTestSupport.h>
 #include <Oxygen/Graphics/Common/test/HeapAllocationFailure.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
@@ -53,13 +63,22 @@
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Diagnostics/GpuWorkSummary.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/IblBrdfLookup.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
+#include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
 #include <Oxygen/Vortex/Environment/Types/IblProductMetadata.h>
+#include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
+#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
+#include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
+#include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
+#include <Oxygen/Vortex/ViewExtension.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/test/Fakes/AssetLoader.h>
 #include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>

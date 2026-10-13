@@ -4,7 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <ostream>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
+#include <Oxygen/Graphics/Headless/Command.h>
 #include <Oxygen/Graphics/Headless/Commands/ClearDepthStencilCommand.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
 

@@ -42,7 +42,7 @@ struct TraversalNode {
 /*!
  Enables test TraversalNode to work with concept-based PathMatcher.
 */
-inline [[nodiscard]] auto GetNodeName(const TraversalNode& node) noexcept
+[[nodiscard]] inline auto GetNodeName(const TraversalNode& node) noexcept
   -> std::string_view
 {
   return node.name;
@@ -52,7 +52,7 @@ inline [[nodiscard]] auto GetNodeName(const TraversalNode& node) noexcept
 /*!
  Enables test TraversalNode to work with concept-based PathMatcher.
 */
-inline [[nodiscard]] auto GetDepth(const TraversalNode& node) noexcept
+[[nodiscard]] inline auto GetDepth(const TraversalNode& node) noexcept
   -> std::vector<std::string>::size_type
 {
   return node.depth;

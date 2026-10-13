@@ -5,15 +5,20 @@
 //===----------------------------------------------------------------------===//
 
 #include <iterator>
-#include <ranges>
+#include <stdexcept>
+#include <type_traits>
+#include <variant>
+#include <vector>
 
 #include <Oxygen/Base/AlwaysFalse.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 
 using oxygen::graphics::NativeResource;
 using oxygen::graphics::ResourceStates;

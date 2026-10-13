@@ -19,7 +19,6 @@
 #include <glm/ext/vector_float3.hpp>
 #include <glm/geometric.hpp>
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Core/Lighting/LightPhotometry.h>
 #include <Oxygen/Testing/GTest.h>

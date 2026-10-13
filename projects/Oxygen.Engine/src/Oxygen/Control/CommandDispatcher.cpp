@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <exception>
 #include <memory>
 #include <optional>
 #include <string>
@@ -15,6 +16,7 @@
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>

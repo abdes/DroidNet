@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <compare>
+
 namespace oxygen::co {
 
 //! A unique identifier for an `EventLoop`, used to tell whether

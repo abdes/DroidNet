@@ -5,15 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
-#include <atomic>
+#include <cstddef>
 #include <cstdint>
-#include <type_traits>
+#include <ranges>
+#include <utility>
 #include <vector>
 
 #include "./Mocks/TestFlag.h"
 
 #include <Oxygen/Scene/SceneFlags.h>
-#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/SceneFlagEnum.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::scene::AtomicSceneFlags;

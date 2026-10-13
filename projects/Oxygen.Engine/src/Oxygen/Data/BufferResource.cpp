@@ -7,9 +7,14 @@
 #pragma once
 
 #include <cstdint>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/PakFormat_core.h>
 
 using oxygen::data::BufferResource;
 

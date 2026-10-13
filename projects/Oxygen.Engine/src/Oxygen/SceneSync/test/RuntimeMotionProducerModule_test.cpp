@@ -5,18 +5,30 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
+#include <cstdint>
 #include <cstring>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
 #include <Oxygen/Scene/Scene.h>

@@ -5,12 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <cstddef>
 #include <limits>
 #include <numbers>
+#include <optional>
+#include <string>
 #include <string_view>
 
 #include <Oxygen/Core/Lighting/LightPhotometry.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
+#include <Oxygen/Scene/Light/LightCommon.h>
 #include <Oxygen/Scene/Light/LightValidation.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>

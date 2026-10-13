@@ -4,9 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
 #include <iostream>
 #include <optional>
 #include <stdexcept>
+#include <string>
+
+#include "gtest/gtest.h"
 
 #include <Oxygen/Core/SafeCall.h>
 #include <Oxygen/Testing/GTest.h>
@@ -84,7 +88,8 @@ public:
   template <typename Func> auto SafeCall(Func&& func) noexcept
   {
     return oxygen::SafeCall(
-      *static_cast<Derived*>(this), [](const auto& s) { return s.Validate(); },
+      *static_cast<Derived*>(this),
+      [](const auto& s) -> auto { return s.Validate(); },
       std::forward<Func>(func));
   }
 
@@ -92,7 +97,8 @@ public:
   {
     return oxygen::SafeCall(
       *static_cast<const Derived*>(this),
-      [](const auto& s) { return s.Validate(); }, std::forward<Func>(func));
+      [](const auto& s) -> auto { return s.Validate(); },
+      std::forward<Func>(func));
   }
 
   [[nodiscard]] auto GetValueSafe() const noexcept -> std::optional<int>
@@ -301,7 +307,7 @@ TYPED_TEST(SafeCallValidTest, OperationThrowsException)
     EXPECT_FALSE(*result); // Expect false since operation fails
 
     if constexpr (oxygen::HasLogSafeCallError<TypeParam>) {
-      ExpectLogMessage("Simulated runtime error during increment", [&] {
+      ExpectLogMessage("Simulated runtime error during increment", [&] -> void {
         this->sut_.is_ready = true;
         this->sut_.value = Base::kMaxValue;
         [[maybe_unused]] const auto res
@@ -324,7 +330,7 @@ TYPED_TEST(SafeCallInvalidTest, GetValueWhenNotReady)
   EXPECT_FALSE(result.has_value());
 
   if constexpr (oxygen::HasLogSafeCallError<TypeParam>) {
-    ExpectLogMessage("Error: Component not ready", [&] {
+    ExpectLogMessage("Error: Component not ready", [&] -> void {
       this->sut_.is_ready = false;
       [[maybe_unused]] const auto res = this->sut_.GetValueSafe();
     });
@@ -340,7 +346,7 @@ TYPED_TEST(SafeCallInvalidTest, IncrementValueWhenNotReady)
   EXPECT_EQ(this->sut_.value, 5);
 
   if constexpr (oxygen::HasLogSafeCallError<TypeParam>) {
-    ExpectLogMessage("Error: Component not ready", [&] {
+    ExpectLogMessage("Error: Component not ready", [&] -> void {
       this->sut_.is_ready = false;
       this->sut_.value = 5;
       [[maybe_unused]] const auto res = this->sut_.IncrementValueSafe();
@@ -356,7 +362,7 @@ TYPED_TEST(SafeCallInvalidTest, HasBigValueWhenNotReady)
   EXPECT_FALSE(result);
 
   if constexpr (oxygen::HasLogSafeCallError<TypeParam>) {
-    ExpectLogMessage("Error: Component not ready", [&] {
+    ExpectLogMessage("Error: Component not ready", [&] -> void {
       this->sut_.is_ready = false;
       this->sut_.value = Base::kBigValue + 1;
       [[maybe_unused]] const auto res = this->sut_.HasBigValueSafe();
@@ -373,7 +379,7 @@ TYPED_TEST(SafeCallInvalidTest, GetValueWhenValueOutOfRangeNegative)
   EXPECT_FALSE(result.has_value());
 
   if constexpr (oxygen::HasLogSafeCallError<TypeParam>) {
-    ExpectLogMessage("Error: Value out of range", [&] {
+    ExpectLogMessage("Error: Value out of range", [&] -> void {
       this->sut_.is_ready = true;
       this->sut_.value = Base::kNegativeValue;
       [[maybe_unused]] const auto res = this->sut_.GetValueSafe();
@@ -390,7 +396,7 @@ TYPED_TEST(SafeCallInvalidTest, GetValueWhenValueOutOfRangePositive)
   EXPECT_FALSE(result.has_value());
 
   if constexpr (oxygen::HasLogSafeCallError<TypeParam>) {
-    ExpectLogMessage("Error: Value out of range", [&] {
+    ExpectLogMessage("Error: Value out of range", [&] -> void {
       this->sut_.is_ready = true;
       this->sut_.value = Base::kMaxValue + 1;
       [[maybe_unused]] const auto res = this->sut_.GetValueSafe();
@@ -408,7 +414,7 @@ TYPED_TEST(SafeCallInvalidTest, IncrementValueWhenValueOutOfRange)
   EXPECT_EQ(this->sut_.value, Base::kMaxValue + 1);
 
   if constexpr (oxygen::HasLogSafeCallError<TypeParam>) {
-    ExpectLogMessage("Error: Value out of range", [&] {
+    ExpectLogMessage("Error: Value out of range", [&] -> void {
       this->sut_.is_ready = true;
       this->sut_.value = Base::kMaxValue + 1;
       [[maybe_unused]] const auto res = this->sut_.IncrementValueSafe();
@@ -425,7 +431,7 @@ TYPED_TEST(SafeCallInvalidTest, HasBigValueWhenValueOutOfRange)
   EXPECT_FALSE(result);
 
   if constexpr (oxygen::HasLogSafeCallError<TypeParam>) {
-    ExpectLogMessage("Error: Value out of range", [&] {
+    ExpectLogMessage("Error: Value out of range", [&] -> void {
       this->sut_.is_ready = true;
       this->sut_.value = Base::kMaxValue + 1;
       [[maybe_unused]] const auto res = this->sut_.HasBigValueSafe();

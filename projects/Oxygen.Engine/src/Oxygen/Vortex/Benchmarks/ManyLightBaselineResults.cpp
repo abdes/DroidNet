@@ -5,24 +5,36 @@
 //===----------------------------------------------------------------------===//
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <iomanip>
-#include <limits>
+#include <ios>
 #include <numbers>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/ReadbackManager.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Benchmarks/ManyLightBaseline.h>
 #include <Oxygen/Vortex/Lighting/Types/ClusterLightRange.h>
+#include <Oxygen/Vortex/Lighting/Types/LightGridBuildStatus.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
+#include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
 #include <Oxygen/Vortex/Upload/StagingProvider.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/test/Support/D3D12MemoryCapture.h>
+#include <Oxygen/Vortex/test/Support/LightingWorkload.h>
 
 namespace oxygen::vortex::testing {
 

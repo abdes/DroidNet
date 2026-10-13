@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Commands/Params.h>
 #include <Oxygen/Testing/GTest.h>

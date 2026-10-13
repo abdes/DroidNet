@@ -13,7 +13,6 @@
 #include "LightBench/LightBenchSettings.h"
 #include <glm/gtc/quaternion.hpp>
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/PostProcess.h>

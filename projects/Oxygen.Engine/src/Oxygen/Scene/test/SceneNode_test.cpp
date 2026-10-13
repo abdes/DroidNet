@@ -4,12 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include "./SceneNode_test.h"
+#include <utility>
 
-#include <Oxygen/Composition/ObjectMetadata.h>
+#include "./SceneNode_test.h"
+#include <gtest/gtest.h>
+
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/Flags.h>
 
 using oxygen::scene::SceneFlag;
 using oxygen::scene::SceneNode;

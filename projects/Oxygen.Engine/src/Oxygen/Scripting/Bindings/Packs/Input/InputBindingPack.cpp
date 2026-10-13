@@ -6,8 +6,10 @@
 
 #include <array>
 #include <memory>
+#include <string_view>
 
 #include <Oxygen/Scripting/Bindings/BindingRegistry.h>
+#include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Input/InputBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Input/InputBindings.h>
 

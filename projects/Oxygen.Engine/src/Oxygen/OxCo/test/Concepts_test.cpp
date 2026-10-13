@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <coroutine>
+
 #include <Oxygen/OxCo/Coroutine.h>
 
 namespace {

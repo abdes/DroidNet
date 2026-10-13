@@ -4,21 +4,28 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
+#include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 
 #include <array>
 #include <limits>
 #include <mutex>
+#include <variant>
 
 #include <Jolt/Core/Memory.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/Shape/Shape.h>
+#include <glm/common.hpp>
+#include <glm/ext/quaternion_geometric.hpp>
+#include <glm/ext/quaternion_trigonometric.hpp>
 
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Character/CharacterController.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Query/Raycast.h>
+#include <Oxygen/Physics/Shape.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 #include <Oxygen/Physics/test/Jolt/Jolt_test_fixture.h>
 #include <Oxygen/Testing/GTest.h>

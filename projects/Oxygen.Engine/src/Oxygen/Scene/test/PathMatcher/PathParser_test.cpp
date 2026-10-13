@@ -4,7 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "./Fixtures/PathParserTest.h"
 

@@ -4,12 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <stdexcept>
 #include <variant>
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Nexus/FrameDrivenIndexReuse.h>
+#include <Oxygen/Nexus/IndexReuse.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::graphics::detail::DeferredReclaimer;

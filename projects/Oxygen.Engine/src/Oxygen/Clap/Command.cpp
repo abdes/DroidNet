@@ -4,10 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <memory>
 #include <sstream>
+#include <string>
+#include <utility>
 
+#include <fmt/color.h>
 #include <fmt/format.h>
-#include <fmt/printf.h>
 #include <fmt/ranges.h>
 
 #include <Oxygen/Base/Logging.h>
@@ -16,6 +20,7 @@
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Internal/StyledWrap.h>
+#include <Oxygen/TextWrap/TextWrap.h>
 
 auto oxygen::clap::Command::ProgramName() const -> std::string
 {
@@ -59,7 +64,7 @@ auto oxygen::clap::Command::PrintSynopsis(
 
 auto oxygen::clap::Command::HasHiddenOptionGroups() const -> bool
 {
-  return std::ranges::any_of(groups_, [](const auto& group_entry) {
+  return std::ranges::any_of(groups_, [](const auto& group_entry) -> auto {
     const auto& [group, hidden] = group_entry;
     return hidden && group;
   });

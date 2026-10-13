@@ -4,10 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <glm/gtc/matrix_transform.hpp>
+#include <array>
+#include <functional>
 
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/matrix.hpp>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/ViewHelpers.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 

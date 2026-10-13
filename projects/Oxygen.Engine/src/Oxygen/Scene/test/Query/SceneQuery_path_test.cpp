@@ -5,10 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <iterator>
+#include <optional>
+#include <string>
 #include <vector>
 
 #include "SceneQueryTestBase.h"
 
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::scene::SceneNode;

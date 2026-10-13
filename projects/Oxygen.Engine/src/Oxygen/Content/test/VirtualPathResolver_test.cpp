@@ -15,16 +15,11 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <vector>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Data/PakCatalog.h>
-#include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/PatchManifest.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {

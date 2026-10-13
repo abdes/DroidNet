@@ -5,15 +5,23 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
+#include <functional>
 #include <limits>
+#include <memory>
+#include <mutex>
 #include <stdexcept>
-
-#include <fmt/format.h>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/Internal/QueueManager.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Queues.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 
 namespace oxygen::graphics::internal {
 

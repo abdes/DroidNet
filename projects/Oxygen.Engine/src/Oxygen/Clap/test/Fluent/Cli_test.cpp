@@ -4,13 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <exception>
+#include <cstddef>
+#include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Clap/Cli.h>
 #include <Oxygen/Clap/Command.h>
-#include <Oxygen/Clap/CommandLineContext.h>
+#include <Oxygen/Clap/CommandLineContext.h> // IWYU pragma: keep
 #include <Oxygen/Clap/Fluent/CliBuilder.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Testing/GTest.h>

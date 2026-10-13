@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstring>
+#include <tuple>
 
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/TextWrap/TextWrap.h>

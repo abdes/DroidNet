@@ -4,8 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+#include <string_view>
+
 #include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Physics/Physics.h>
+#include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/System/IPhysicsSystem.h>
 
 #if defined(OXGN_PHYS_BACKEND_JOLT)
 #  include <Oxygen/Physics/Jolt/JoltBackend.h>

@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <stdexcept>
 
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"

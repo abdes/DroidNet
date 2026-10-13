@@ -12,6 +12,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "TestEngine.h"
@@ -23,10 +24,12 @@
 #include <asio/steady_timer.hpp>
 #include <asio/write.hpp>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Control/CommandDispatcher.h>
 #include <Oxygen/Control/ControlServer.h>
 #include <Oxygen/Control/EventLog.h>

@@ -4,8 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <memory>
+#include <optional>
+#include <utility>
+
 #include "SceneQueryTestBase.h"
 
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/SceneQuery.h>
+#include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Scene/test/Helpers/TestSceneFactory.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::scene::testing {

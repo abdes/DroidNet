@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <span>
+#include <string_view>
 #include <utility>
 
 #include <Oxygen/Cooker/Pak/PakPlan.h>

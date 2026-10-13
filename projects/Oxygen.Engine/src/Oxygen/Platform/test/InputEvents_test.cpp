@@ -5,12 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <cstddef>
 #include <memory>
 
 #include "../../OxCo/test/Utils/OxCoTestFixture.h"
 
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Config/PlatformConfig.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/Platform.h>

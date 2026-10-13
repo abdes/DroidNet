@@ -5,6 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "ScriptingModule_test_fixture.h"
+#include <gtest/gtest.h>
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/FrameContext.h>
 
 namespace oxygen::scripting::test {
 

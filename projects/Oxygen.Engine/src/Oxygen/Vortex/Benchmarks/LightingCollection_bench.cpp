@@ -8,43 +8,26 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
-#include <iostream>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <ratio>
 #include <span>
 #include <string>
-#include <utility>
-#include <vector>
 
 #include <glm/ext/vector_float3.hpp>
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/ScopeGuard.h>
-#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/View.h>
-#include <Oxygen/Data/MaterialDomain.h>
-#include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Graphics/Common/Texture.h>
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
 #include <Oxygen/Profiling/CpuScopeObserver.h>
-#include <Oxygen/Scene/Camera/Perspective.h>
-#include <Oxygen/Scene/Light/PointLight.h>
-#include <Oxygen/Scene/Light/SpotLight.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/CompositionView.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
-#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Lighting/LightingService.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
@@ -53,7 +36,6 @@
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestGraphics.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureTestTags.h>
-#include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
 #include <Oxygen/Vortex/test/Support/CpuTimingCapture.h>
 #include <Oxygen/Vortex/test/Support/D3D12MemoryCapture.h>
 

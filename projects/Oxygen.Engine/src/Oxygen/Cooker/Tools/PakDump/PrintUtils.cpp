@@ -4,10 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <string>
 
 #include "PrintUtils.h"
+#include <fmt/base.h>
+#include <fmt/format.h>
 
 namespace PrintUtils {
 

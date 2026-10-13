@@ -4,8 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+
 #include "SceneQueryTestBase.h"
 
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/SceneQuery.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::scene::ConstVisitedNode;

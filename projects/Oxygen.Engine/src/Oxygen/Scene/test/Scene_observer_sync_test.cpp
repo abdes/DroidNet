@@ -4,16 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Scripting/ScriptExecutable.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Scripting/ScriptingComponent.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Scene/Types/ScriptSlotIndex.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {

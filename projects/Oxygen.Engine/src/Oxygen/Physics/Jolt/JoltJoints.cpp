@@ -4,17 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
+#include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 
 #include <array>
+#include <cstdint>
+#include <ios>
 #include <limits>
+#include <mutex>
 #include <span>
 #include <sstream>
 #include <string>
 #include <unordered_set>
 
 #include <Jolt/Core/RTTI.h>
+#include <Jolt/Core/Reference.h>
 #include <Jolt/Core/StreamWrapper.h>
+#include <Jolt/Physics/Body/Body.h>
 #include <Jolt/Physics/Body/BodyLockMulti.h>
 #include <Jolt/Physics/Constraints/Constraint.h>
 #include <Jolt/Physics/Constraints/DistanceConstraint.h>
@@ -22,11 +27,18 @@
 #include <Jolt/Physics/Constraints/HingeConstraint.h>
 #include <Jolt/Physics/Constraints/PointConstraint.h>
 #include <Jolt/Physics/Constraints/SliderConstraint.h>
+#include <Jolt/Physics/Constraints/SpringSettings.h>
+#include <Jolt/Physics/Constraints/TwoBodyConstraint.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Physics/Handles.h>
+#include <Oxygen/Physics/Joint/JointDesc.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltJoints.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
+#include <Oxygen/Physics/PhysicsError.h>
 
 namespace {
 

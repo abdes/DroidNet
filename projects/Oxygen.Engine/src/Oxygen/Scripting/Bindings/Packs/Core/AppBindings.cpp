@@ -5,9 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <lua.h>
-#include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/EngineConfig.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>

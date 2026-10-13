@@ -43,7 +43,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/HistorySlotAllocator.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionConfig.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.h>
-#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/Generated.DrawContracts.h>
 #include <Oxygen/Vortex/test/Fakes/Graphics.h>
 
 namespace {

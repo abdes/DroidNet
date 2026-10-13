@@ -4,9 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <optional>
+#include <utility>
+
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/FrameBuffer.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 
 using oxygen::graphics::CommandRecorder;
 

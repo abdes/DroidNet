@@ -80,7 +80,7 @@ private:
     if (token.empty()) {
       return false;
     }
-    return std::ranges::all_of(token, [](const char ch) {
+    return std::ranges::all_of(token, [](const char ch) -> bool {
       return std::isdigit(static_cast<unsigned char>(ch)) != 0;
     });
   }

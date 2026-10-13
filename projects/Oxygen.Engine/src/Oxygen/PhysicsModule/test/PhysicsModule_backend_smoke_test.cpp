@@ -5,12 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <memory>
+#include <utility>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
+#include <Oxygen/Physics/Body/BodyDesc.h>
 #include <Oxygen/Physics/Physics.h>
+#include <Oxygen/Physics/PhysicsError.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/PhysicsModule/ScenePhysics.h>
 #include <Oxygen/Scene/Scene.h>

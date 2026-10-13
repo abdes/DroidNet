@@ -11,7 +11,6 @@
 #include <string>
 
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Testing/GTest.h>

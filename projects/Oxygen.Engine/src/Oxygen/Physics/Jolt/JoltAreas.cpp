@@ -4,21 +4,31 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
+#include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 
+#include <cstdint>
 #include <limits>
+#include <mutex>
 #include <utility>
 
+#include <Jolt/Core/Reference.h>
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Body/MotionType.h>
+#include <Jolt/Physics/Collision/ObjectLayer.h>
 #include <Jolt/Physics/Collision/Shape/EmptyShape.h>
 #include <Jolt/Physics/Collision/Shape/StaticCompoundShape.h>
+#include <Jolt/Physics/EActivation.h>
 
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Physics/Area/AreaDesc.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltAreas.h>
 #include <Oxygen/Physics/Jolt/JoltShapes.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
+#include <Oxygen/Physics/PhysicsError.h>
 
 oxygen::physics::jolt::JoltAreas::JoltAreas(
   JoltWorld& world, JoltShapes& shapes)

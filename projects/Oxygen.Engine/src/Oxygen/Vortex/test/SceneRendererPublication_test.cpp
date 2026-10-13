@@ -55,6 +55,7 @@
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/DepthPrePassPolicy.h>
+#include <Oxygen/Vortex/SceneRenderer/Generated.SceneTextureBindings.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>

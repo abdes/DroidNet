@@ -4,15 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
 #include <filesystem>
 #include <memory>
-#include <span>
-#include <string_view>
-#include <type_traits>
+#include <utility>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Config/PathFinder.h>
+#include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/ShaderManager.h>
 #include <Oxygen/Graphics/Common/Shaders.h>

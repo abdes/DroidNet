@@ -5,13 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <cstdint>
 #include <limits>
-#include <string_view>
+#include <optional>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Vertex.h>
 
 /*!
  Creates vertex and index buffers for a square grid in the XY plane at z = 0,

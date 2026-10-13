@@ -347,11 +347,11 @@ auto MaterialSource::Validate(const std::string_view source_id,
   std::vector<ImportDiagnostic>& diagnostics) const -> bool
 {
   auto valid = true;
-  const auto error = [&](std::string code, std::string message) {
+  const auto error = [&](std::string code, std::string message) -> void {
     AddError(diagnostics, source_id, std::move(code), std::move(message), name);
     valid = false;
   };
-  if (std::ranges::any_of(inputs.emissive_factor, [](float value) {
+  if (std::ranges::any_of(inputs.emissive_factor, [](float value) -> bool {
         return !std::isfinite(value) || value < 0.0F
           || value > data::pak::render::kMaxMaterialEmissiveFactor;
       })) {

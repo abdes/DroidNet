@@ -40,6 +40,7 @@
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/DrawCullPass.h>
+#include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/Generated.OcclusionContracts.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 

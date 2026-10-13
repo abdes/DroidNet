@@ -15,7 +15,7 @@
 #include <stdexcept>
 
 #include <gtest/gtest-spi.h>
-#include <nlohmann/json_fwd.hpp>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>

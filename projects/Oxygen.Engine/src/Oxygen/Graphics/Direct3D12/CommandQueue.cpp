@@ -4,25 +4,40 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <stdexcept>
 #include <string_view>
+#include <vector>
+
+#include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/Windows/ComError.h>
 #include <Oxygen/Base/Windows/Exceptions.h>
+#include <Oxygen/Graphics/Common/BackendLifetime.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/Internal/QueueSubmission.h>
 #include <Oxygen/Graphics/Common/ObjectRelease.h>
+#include <Oxygen/Graphics/Common/Submission.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Direct3D12/CommandList.h>
 #include <Oxygen/Graphics/Direct3D12/CommandQueue.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/dx12_utils.h>
 #include <Oxygen/Graphics/Direct3D12/Devices/DebugLayer.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
-#include <Oxygen/Tracy/D3D12.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 
 using oxygen::graphics::d3d12::CommandQueue;
 using oxygen::windows::ThrowOnFailed;

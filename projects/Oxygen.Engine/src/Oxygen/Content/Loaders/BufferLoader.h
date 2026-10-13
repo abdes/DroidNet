@@ -33,7 +33,7 @@ inline auto LoadBufferResource(LoaderContext context)
 
   using data::pak::core::BufferResourceDesc;
 
-  auto check_result = [](auto&& result, const char* field) {
+  auto check_result = [](auto&& result, const char* field) -> auto {
     if (!result) {
       LOG_F(
         ERROR, "-failed- on {}: {}", field, result.error().message().c_str());

@@ -247,7 +247,7 @@ public:
                     PooledComponentType::Compare(a, b);
                   }) {
       return Defragment(
-        [](const PooledComponentType& a, const PooledComponentType& b) {
+        [](const PooledComponentType& a, const PooledComponentType& b) -> auto {
           return PooledComponentType::Compare(a, b);
         },
         max_swaps);

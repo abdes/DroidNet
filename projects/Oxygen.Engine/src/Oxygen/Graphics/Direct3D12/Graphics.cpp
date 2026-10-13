@@ -27,7 +27,6 @@
 #include <dxgiformat.h>
 #include <minwindef.h>
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 #include <winerror.h>
 #include <winnt.h>
 #include <wrl/client.h>

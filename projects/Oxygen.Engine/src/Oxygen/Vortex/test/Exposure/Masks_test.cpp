@@ -28,6 +28,7 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/test/Fakes/AssetLoader.h>

@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <Windows.h>
+#include <Windows.h> // IWYU pragma: keep
 
 #include <concepts>
 #include <cstdint>

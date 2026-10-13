@@ -5,8 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <barrier>
+#include <cstdint>
 #include <limits>
+#include <mutex>
+#include <stdexcept>
 #include <thread>
+#include <utility>
 
 #include <Oxygen/Nexus/IndexReuse.h>
 #include <Oxygen/Testing/GTest.h>

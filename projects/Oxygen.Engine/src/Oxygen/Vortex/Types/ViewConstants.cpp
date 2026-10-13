@@ -12,6 +12,7 @@
 #include <glm/vector_relational.hpp>
 
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Vortex/Types/BindlessSlots.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/matrix_decompose.hpp>
 

@@ -13,7 +13,6 @@
 #include <deque>
 #include <exception>
 #include <functional>
-#include <limits>
 #include <memory>
 #include <optional>
 #include <span>
@@ -779,9 +778,10 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
   };
 
   auto progress_state = std::make_shared<ProgressState>();
-  const auto deactivate_progress = ScopeGuard([progress_state] noexcept {
-    progress_state->active.store(false, std::memory_order_release);
-  });
+  const auto deactivate_progress
+    = ScopeGuard([progress_state] noexcept -> void {
+        progress_state->active.store(false, std::memory_order_release);
+      });
   progress_state->item_count = item_count;
   if (progress_.has_value()) {
     progress_state->reporter = std::make_shared<ProgressReporter>(*progress_);

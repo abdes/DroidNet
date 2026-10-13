@@ -4,10 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <windows.h>
+#include <windows.h> // IWYU pragma: keep
+#include <unknwn.h> // IWYU pragma: keep (dxcapi.h needs IUnknown, which lean windows.h omits)
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -15,11 +17,11 @@
 
 #include <d3d12shader.h>
 #include <dxcapi.h>
-#include <unknwn.h>
 #include <wrl/client.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Windows/ComError.h>
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Reflect.h>
 #include <Oxygen/Serio/MemoryStream.h>

@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <windows.h> // IWYU pragma: keep
+
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -19,11 +21,9 @@
 #include <variant>
 #include <vector>
 
-#include <basetsd.h>
 #include <d3d12.h>
 #include <d3dcommon.h>
 #include <dxgiformat.h>
-#include <minwindef.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>

@@ -131,7 +131,7 @@ private:
     const Entry* old_entries = entries_;
     const size_t old_capacity = capacity_;
 
-    auto cleanup = oxygen::Finally([&] { delete[] old_entries; });
+    auto cleanup = oxygen::Finally([&] -> void { delete[] old_entries; });
 
     capacity_ *= 2;
     entries_ = new Entry[capacity_]();

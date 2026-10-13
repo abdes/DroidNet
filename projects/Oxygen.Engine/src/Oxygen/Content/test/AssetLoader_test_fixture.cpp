@@ -6,11 +6,13 @@
 
 #include <chrono>
 #include <filesystem>
+#include <memory>
 #include <string>
 #include <string_view>
 
 #include "./AssetLoader_test.h"
 
+#include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::content::testing::AssetLoaderBasicTest;
@@ -21,7 +23,7 @@ auto AssetLoaderBasicTest::SetUp() -> void
   // when tests run concurrently in separate executables.
   const auto* test_info
     = ::testing::UnitTest::GetInstance()->current_test_info();
-  const auto sanitize = [](std::string_view name) {
+  const auto sanitize = [](std::string_view name) -> std::string {
     std::string sanitized;
     sanitized.reserve(name.size());
     for (const char c : name) {

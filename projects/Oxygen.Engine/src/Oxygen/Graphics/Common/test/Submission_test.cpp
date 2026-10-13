@@ -4,10 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 #include <array>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <optional>
+#include <stdexcept>
 
+#include <Oxygen/Graphics/Common/BackendLifetime.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/Internal/QueueSubmission.h>
+#include <Oxygen/Graphics/Common/RecordingUseBatch.h>
+#include <Oxygen/Graphics/Common/Submission.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/test/HeapAllocationFailure.h>
 #include <Oxygen/Testing/GTest.h>
 

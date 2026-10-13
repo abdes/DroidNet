@@ -15,6 +15,7 @@
 #include <unordered_set>
 
 #include <glm/trigonometric.hpp>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Types/PostProcess.h>

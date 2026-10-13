@@ -12,7 +12,6 @@
 #include <exception>
 #include <filesystem>
 #include <fstream>
-#include <memory>
 #include <optional>
 #include <ranges>
 #include <span>

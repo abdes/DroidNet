@@ -5,10 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <ranges>
+#include <stdexcept>
+#include <string>
 #include <thread>
+#include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include <Oxygen/Composition/TypeSystem.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -51,7 +56,7 @@ NOLINT_TEST_F(TypeSystemTests, ThreadSafety)
 {
   std::vector<std::thread> threads;
   for (int i = 0; i < 10; ++i) {
-    threads.emplace_back([this, i] {
+    threads.emplace_back([this, i] -> void {
       const auto typeName = "test::Type" + std::to_string(i);
       const auto id = registry_.RegisterType(typeName.c_str());
       EXPECT_EQ(id, registry_.GetTypeId(typeName.c_str()));

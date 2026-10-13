@@ -89,7 +89,7 @@ auto ResourceDescriptorEmitter::EmitTextureAtRelPath(
   const auto path = std::filesystem::path(relpath);
   if (path.empty() || path.has_root_path()
     || std::ranges::any_of(
-      path, [](const auto& part) { return part == ".."; })) {
+      path, [](const auto& part) -> auto { return part == ".."; })) {
     throw std::invalid_argument(
       "texture descriptor path must remain within its cooked root");
   }

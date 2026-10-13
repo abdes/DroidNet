@@ -15,6 +15,7 @@
 #include <system_error>
 #include <thread>
 
+#include <nlohmann/json.hpp>
 #include <profileapi.h>
 #include <winnt.h>
 

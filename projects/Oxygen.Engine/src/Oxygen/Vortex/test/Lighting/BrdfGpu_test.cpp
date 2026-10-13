@@ -10,8 +10,6 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
-#include <filesystem>
-#include <fstream>
 #include <limits>
 #include <numbers>
 #include <span>
@@ -20,7 +18,6 @@
 #include <d3d12.h>
 #include <glm/ext/vector_float3.hpp>
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Testing/GTest.h>

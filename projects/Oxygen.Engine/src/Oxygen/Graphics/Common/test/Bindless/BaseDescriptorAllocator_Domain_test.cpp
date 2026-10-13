@@ -5,12 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <utility>
 
 #include "./BaseDescriptorAllocatorTest.h"
 #include "./Mocks/MockDescriptorAllocator.h"
 #include "./Mocks/MockDescriptorSegment.h"
 
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
+#include <Oxygen/Graphics/Common/Detail/DescriptorSegment.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Testing/GTest.h>

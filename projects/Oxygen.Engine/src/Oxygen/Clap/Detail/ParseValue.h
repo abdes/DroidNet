@@ -155,7 +155,7 @@ auto ParseValue(const std::string& input, AssignTo& output) -> bool
 inline auto ToLower(std::string str) -> std::string
 {
   std::ranges::transform(
-    str, std::begin(str), [](const std::string::value_type& element) {
+    str, std::begin(str), [](const std::string::value_type& element) -> char {
       return std::tolower(element, std::locale());
     });
   return str;
@@ -231,7 +231,7 @@ inline auto TryParseSignedInt64NoThrow(
     return std::errc::invalid_argument;
   }
   if (!std::ranges::all_of(
-        digits, [](const char c) { return c >= '0' && c <= '9'; })) {
+        digits, [](const char c) -> bool { return c >= '0' && c <= '9'; })) {
     return std::errc::invalid_argument;
   }
   if (text.front() == '+') {
@@ -580,7 +580,7 @@ auto ParseValue(const std::string& input, AssignTo& output) -> bool
   }
   std::string unit = match[2].str();
   std::transform(unit.begin(), unit.end(), unit.begin(),
-    [](const unsigned char c) { return std::tolower(c); });
+    [](const unsigned char c) -> auto { return std::tolower(c); });
 
   // Convert to seconds as double
   double seconds;

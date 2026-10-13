@@ -4,26 +4,26 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/ShaderManager.h>
 
 // NOTE: ShaderManager is intentionally compilation-free.
 
-#include <algorithm>
 #include <array>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <exception>
 #include <filesystem>
-#include <fstream>
-#include <ios>
-#include <limits>
-#include <optional>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>

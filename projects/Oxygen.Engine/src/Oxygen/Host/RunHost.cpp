@@ -10,6 +10,7 @@
 #include <exception>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -17,6 +18,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Control/CommandDispatcher.h>
 #include <Oxygen/Control/ControlServer.h>
 #include <Oxygen/Core/EngineModule.h>

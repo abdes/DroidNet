@@ -4,6 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <variant>
+
+#include <fmt/format.h>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/StateMachine.h>
 #include <Oxygen/Clap/Parser/Events.h>
@@ -89,13 +93,15 @@ auto oxygen::clap::parser::CmdLineParser::Parse() const -> bool
     // https://en.cppreference.com/w/cpp/utility/variant/visit
     std::visit(
       Overload {
-        [&continue_running](
-          const Continue& /*status*/) noexcept { continue_running = true; },
-        [&continue_running](
-          const Terminate& /*status*/) noexcept { continue_running = false; },
+        [&continue_running](const Continue& /*status*/) noexcept -> void {
+          continue_running = true;
+        },
+        [&continue_running](const Terminate& /*status*/) noexcept -> void {
+          continue_running = false;
+        },
         //  [this, &continue_running, &no_errors, &logger](
         [this, &continue_running, &no_errors](
-          const TerminateWithError& status) {
+          const TerminateWithError& status) -> void {
           LOG_F(ERROR, "{}", status.error_message);
           context_->err << fmt::format(
             "{}: {}", context_->program_name, status.error_message)
@@ -103,7 +109,8 @@ auto oxygen::clap::parser::CmdLineParser::Parse() const -> bool
           continue_running = false;
           no_errors = false;
         },
-        [&continue_running, &reissue](const ReissueEvent& /*status*/) noexcept {
+        [&continue_running, &reissue](
+          const ReissueEvent& /*status*/) noexcept -> void {
           reissue = true;
           continue_running = true;
         },

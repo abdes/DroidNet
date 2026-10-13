@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstddef>
-#include <cstdint>
 #include <memory>
 #include <stdexcept>
 #include <utility>

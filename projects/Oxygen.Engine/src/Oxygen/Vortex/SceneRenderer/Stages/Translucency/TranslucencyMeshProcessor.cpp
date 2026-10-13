@@ -22,7 +22,7 @@
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Translucency/TranslucencyMeshProcessor.h>
 #include <Oxygen/Vortex/Types/AcceptedDrawView.h>
-#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/Generated.DrawContracts.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 
 namespace oxygen::vortex {

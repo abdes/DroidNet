@@ -5,17 +5,22 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <optional>
 #include <span>
 #include <string>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
 #include <Oxygen/Content/Internal/LooseCookedSource.h>
-#include <Oxygen/Content/Internal/PakFileSource.h>
 #include <Oxygen/Content/Internal/SceneCatalogQueryService.h>
+#include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat_core.h>
 
 namespace oxygen::content::internal {
 

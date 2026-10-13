@@ -30,7 +30,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Internal/IndirectListBuilder.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
 #include <Oxygen/Vortex/Types/DrawCullRecord.h>
-#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/Generated.DrawContracts.h>
 #include <Oxygen/Vortex/test/Occlusion/OcclusionGpuTest.h>
 
 namespace {

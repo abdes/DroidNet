@@ -6,8 +6,10 @@
 
 #include <chrono>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Time/PresentationClock.h>
 #include <Oxygen/Core/Time/SimulationClock.h>
+#include <Oxygen/Core/Time/Types.h>
 
 using namespace std::chrono;
 

@@ -15,6 +15,8 @@
 #include <stdlib.h>
 #include <string>
 
+#include <nlohmann/json.hpp>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>

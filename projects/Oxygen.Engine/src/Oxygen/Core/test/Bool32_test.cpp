@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+
 #include <Oxygen/Core/Types/Bool32.h>
 #include <Oxygen/Testing/GTest.h>
 

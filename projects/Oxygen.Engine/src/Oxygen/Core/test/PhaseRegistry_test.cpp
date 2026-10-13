@@ -4,13 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
+#include <array>
 #include <bitset>
 #include <cstddef>
+#include <cstdint>
 #include <set>
 #include <type_traits>
 #include <unordered_set>
 
+#include <Oxygen/Base/EnumIndexedArray.h>
 #include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -77,7 +79,7 @@ NOLINT_TEST(PhaseRegistryExtras, CompileTimeSpecialization)
 // Compile-time Zero-cost dispatch (consteval-built table of function pointers)
 // -----------------------------------------------------------------------------
 
-consteval std::array<int, PhaseIndex::end().get()> BuildPhaseIndexMap()
+consteval auto BuildPhaseIndexMap() -> std::array<int, PhaseIndex::end().get()>
 {
   std::array<int, PhaseIndex::end().get()> m {};
   m.fill(-1);
@@ -90,16 +92,17 @@ consteval std::array<int, PhaseIndex::end().get()> BuildPhaseIndexMap()
 constexpr auto kPhaseIndex = BuildPhaseIndexMap();
 
 using Handler = int (*)();
-static int DefaultHandler() { return -1; }
+static auto DefaultHandler() -> int { return -1; }
 
-template <PhaseId P> static int RunPhaseImpl()
+template <PhaseId P> static auto RunPhaseImpl() -> int
 {
   // Different phases yield different compile-time constants; include a
   // predicate value so the compiler can specialize code per-phase.
   return static_cast<int>(P) + (meta::PhaseCanMutateGameState(P) ? 100 : 0);
 }
 
-consteval std::array<Handler, PhaseIndex::end().get()> BuildHandlerTable()
+consteval auto BuildHandlerTable()
+  -> std::array<Handler, PhaseIndex::end().get()>
 {
   std::array<Handler, PhaseIndex::end().get()> tbl {};
   tbl.fill(&DefaultHandler);
@@ -290,7 +293,7 @@ NOLINT_TEST(PhaseRegistryExtras, UsesCoroutinesCorrectness)
 NOLINT_TEST(PhaseRegistryExtras, ThreadSafetyExpectations)
 {
   // Arrange: helper mapping of expected thread-safety for named phases.
-  auto expect_thread_safe = [](PhaseId id) {
+  auto expect_thread_safe = [](PhaseId id) -> bool {
     switch (id) {
     case PhaseId::kParallelTasks:
     case PhaseId::kRender:

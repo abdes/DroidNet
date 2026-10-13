@@ -4,10 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <optional>
 #include <string>
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Player/PlayerProtocol.h>

@@ -4,8 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <gmock/gmock.h>
+#include <coroutine>
+#include <cstddef>
+#include <exception>
+#include <iostream>
+#include <stdexcept>
+#include <type_traits>
 
+#include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Detail/MuxBase.h>
 #include <Oxygen/Testing/GTest.h>
 

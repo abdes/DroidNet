@@ -21,7 +21,7 @@ struct ViewPort {
   float min_depth { 0.f };
   float max_depth { 1.f };
 
-  [[nodiscard]] bool IsValid() const
+  [[nodiscard]] auto IsValid() const -> bool
   {
     return top_left_x >= 0.0f && top_left_y >= 0.0f && width > 0.0f
       && height > 0.0f && min_depth >= 0.0f && max_depth <= 1.0f

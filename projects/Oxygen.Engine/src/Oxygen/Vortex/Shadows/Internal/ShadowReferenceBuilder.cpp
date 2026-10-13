@@ -13,6 +13,7 @@
 
 #include <glm/ext/vector_float3.hpp>
 
+#include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Vortex/Lighting/Types/LightingPreparationFailure.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowEligibility.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowReferenceBuilder.h>

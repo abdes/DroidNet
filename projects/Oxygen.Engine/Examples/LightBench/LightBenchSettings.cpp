@@ -24,7 +24,6 @@
 #include <glm/gtc/quaternion.hpp>
 #include <nlohmann/json-schema.hpp>
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>

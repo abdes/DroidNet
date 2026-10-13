@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <atomic>
 #include <chrono>
 #include <cstddef>
@@ -14,12 +13,13 @@
 #include <deque>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <memory>
 #include <random>
+#include <stdlib.h>
 #include <string>
 #include <string_view>
 #include <system_error>
-#include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -34,6 +34,7 @@
 #include <asio/write.hpp>
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #if defined(_WIN32)
 #  include <process.h>

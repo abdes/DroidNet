@@ -13,6 +13,7 @@
 #include <mutex>
 #include <optional>
 #include <ranges>
+#include <ratio>
 #include <span>
 #include <string>
 #include <utility>
@@ -22,6 +23,7 @@
 #include <Oxygen/Vortex/Diagnostics/GpuWorkSummary.h>
 #include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkStageTable.h>
 #include <Oxygen/Vortex/Diagnostics/Internal/GpuWorkSummarizer.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 
 namespace oxygen::vortex::internal {
 

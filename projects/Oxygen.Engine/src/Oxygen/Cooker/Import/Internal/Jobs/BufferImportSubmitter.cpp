@@ -137,9 +137,10 @@ namespace {
       sidecar_paths.push_back(it->path());
     }
 
-    std::ranges::sort(sidecar_paths, [](const auto& lhs, const auto& rhs) {
-      return lhs.generic_string() < rhs.generic_string();
-    });
+    std::ranges::sort(
+      sidecar_paths, [](const auto& lhs, const auto& rhs) -> auto {
+        return lhs.generic_string() < rhs.generic_string();
+      });
 
     auto by_index = std::unordered_map<uint32_t, std::string> {};
     for (const auto& path : sidecar_paths) {

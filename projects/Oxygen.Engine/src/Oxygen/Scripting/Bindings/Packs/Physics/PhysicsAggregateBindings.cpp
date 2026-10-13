@@ -5,12 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <span>
 #include <vector>
 
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/PhysicsError.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>

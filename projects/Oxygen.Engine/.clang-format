@@ -143,12 +143,18 @@ IncludeBlocks: Regroup
 IncludeCategories:
   # Jolt initializes its namespace and allocator macros before its leaf headers.
   - Regex: '^[<"]Jolt/Jolt\.h[>"]$'
-    Priority: -4
-    SortPriority: -4
+    Priority: -5
+    SortPriority: -5
     CaseSensitive: true
   # Windows.h initializes SDK architecture macros before Win32 leaf headers.
   - Regex: '^[<"]windows\.h[>"]$'
-    Priority: -3
+    Priority: -4
+    SortPriority: -4
+    CaseSensitive: false
+  # unknwn.h follows Windows.h in its block: dxcapi.h derives from IUnknown,
+  # which lean Windows.h does not declare.
+  - Regex: '^[<"]unknwn\.h[>"]$'
+    Priority: -4
     SortPriority: -3
     CaseSensitive: false
   - Regex: '^<(algorithm|any|array|atomic|barrier|bit|bitset|cassert|cctype|cerrno|cfenv|cfloat|charconv|chrono|cinttypes|ciso646|climits|clocale|cmath|codecvt|compare|complex|concepts|condition_variable|coroutine|csetjmp|csignal|cstdalign|cstdarg|cstdbool|cstddef|cstdint|cstdio|cstdlib|cstring|ctgmath|ctime|cuchar|cwchar|cwctype|deque|exception|execution|expected|filesystem|flat_map|flat_set|format|forward_list|fstream|functional|future|generator|initializer_list|iomanip|ios|iosfwd|iostream|istream|iterator|latch|limits|list|locale|map|mdspan|memory|memory_resource|mutex|new|numbers|numeric|optional|ostream|print|queue|random|ranges|ratio|regex|scoped_allocator|semaphore|set|shared_mutex|source_location|span|spanstream|sstream|stack|stacktrace|stdexcept|stdfloat|stop_token|streambuf|string|string_view|strstream|syncstream|system_error|thread|tuple|type_traits|typeindex|typeinfo|unordered_map|unordered_set|utility|valarray|variant|vector|version|(assert|complex|ctype|errno|fenv|float|inttypes|iso646|limits|locale|math|setjmp|signal|stdalign|stdarg|stdatomic|stdbool|stddef|stdint|stdio|stdlib|stdnoreturn|string|tgmath|threads|time|uchar|wchar|wctype)\.h)>$'

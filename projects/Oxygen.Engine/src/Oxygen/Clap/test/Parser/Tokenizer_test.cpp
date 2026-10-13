@@ -4,6 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <array>
+#include <map>
+#include <span>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -28,7 +36,7 @@ namespace {
     Tokenizer tokenizer { std::span<const std::string>(args) };
 
     std::for_each(tokens.cbegin(), tokens.cend(),
-      [&tokenizer](const Token& expected_token) {
+      [&tokenizer](const Token& expected_token) -> void {
         const auto token = tokenizer.NextToken();
         EXPECT_THAT(token.first, Eq(expected_token.first));
         EXPECT_THAT(token.second, Eq(expected_token.second));

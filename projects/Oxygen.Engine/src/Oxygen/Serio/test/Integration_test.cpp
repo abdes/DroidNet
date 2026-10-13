@@ -5,7 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <span>
+#include <string>
+#include <vector>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>

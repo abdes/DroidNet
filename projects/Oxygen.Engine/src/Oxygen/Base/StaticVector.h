@@ -68,7 +68,7 @@ public:
   {
     assert(count <= MaxElements && "StaticVector: count exceeds maximum size");
     const size_type n = (std::min)(count, MaxElements);
-    ConstructRange(0, n, [&](void* p) { new (p) T(value); });
+    ConstructRange(0, n, [&](void* p) -> auto { new (p) T(value); });
   }
 
   constexpr explicit StaticVector(const size_type count)
@@ -76,7 +76,7 @@ public:
   {
     assert(count <= MaxElements && "StaticVector: count exceeds maximum size");
     const size_type n = (std::min)(count, MaxElements);
-    ConstructRange(0, n, [](void* p) { new (p) T(); });
+    ConstructRange(0, n, [](void* p) -> auto { new (p) T(); });
   }
 
   template <typename InputIt>
@@ -86,7 +86,7 @@ public:
     const auto input_size = static_cast<size_type>(std::distance(first, last));
     const size_type n = (std::min)(input_size, MaxElements);
     auto it = first;
-    ConstructRange(0, n, [&](void* p) { new (p) T(*it++); });
+    ConstructRange(0, n, [&](void* p) -> auto { new (p) T(*it++); });
     assert(input_size <= MaxElements
       && "StaticVector: range constructor input exceeds maximum size");
   }
@@ -97,14 +97,14 @@ public:
       && "StaticVector: initializer list size exceeds maximum size");
     const size_type n = (std::min)(init.size(), MaxElements);
     auto it = init.begin();
-    ConstructRange(0, n, [&](void* p) { new (p) T(*it++); });
+    ConstructRange(0, n, [&](void* p) -> auto { new (p) T(*it++); });
   }
 
   constexpr StaticVector(const StaticVector& other)
   {
     size_type i = 0;
     ConstructRange(
-      0, other.current_size_, [&](void* p) { new (p) T(other[i++]); });
+      0, other.current_size_, [&](void* p) -> auto { new (p) T(other[i++]); });
   }
 
   constexpr StaticVector(StaticVector&& other) noexcept
@@ -112,7 +112,7 @@ public:
   {
     size_type i = 0;
     ConstructRange(0, other.current_size_,
-      [&](void* p) { new (p) T(std::move(other[i++])); });
+      [&](void* p) -> auto { new (p) T(std::move(other[i++])); });
     other.clear();
   }
 
@@ -121,8 +121,8 @@ public:
     if (this != &other) {
       clear();
       size_type i = 0;
-      ConstructRange(
-        0, other.current_size_, [&](void* p) { new (p) T(other[i++]); });
+      ConstructRange(0, other.current_size_,
+        [&](void* p) -> auto { new (p) T(other[i++]); });
     }
     return *this;
   }
@@ -134,7 +134,7 @@ public:
       clear();
       size_type i = 0;
       ConstructRange(0, other.current_size_,
-        [&](void* p) { new (p) T(std::move(other[i++])); });
+        [&](void* p) -> auto { new (p) T(std::move(other[i++])); });
       other.clear();
     }
     return *this;
@@ -147,7 +147,7 @@ public:
       && "StaticVector: initializer list size exceeds maximum size");
     const size_type n = (std::min)(list.size(), MaxElements);
     auto it = list.begin();
-    ConstructRange(0, n, [&](void* p) { new (p) T(*it++); });
+    ConstructRange(0, n, [&](void* p) -> auto { new (p) T(*it++); });
     return *this;
   }
 
@@ -390,7 +390,7 @@ private:
     ConstructAt&& construct_at) -> void
   {
     size_type constructed = from;
-    const auto rollback = [&]() noexcept {
+    const auto rollback = [&]() noexcept -> auto {
       if (constructed < to) {
         DestroyRange(from, constructed);
       }

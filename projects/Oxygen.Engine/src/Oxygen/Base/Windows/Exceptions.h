@@ -9,7 +9,7 @@
 #include <Oxygen/Base/Platforms.h>
 #if defined(OXYGEN_WINDOWS)
 
-#  include <windows.h>
+#  include <windows.h> // IWYU pragma: keep
 
 #  include <exception>
 #  include <optional>

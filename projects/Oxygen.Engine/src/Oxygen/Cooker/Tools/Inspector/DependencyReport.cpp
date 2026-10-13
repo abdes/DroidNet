@@ -4,13 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
+#include <string>
+#include <utility>
 
 #include "DependencyReport.h"
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>

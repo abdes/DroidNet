@@ -4,6 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <utility>
+#include <vector>
+
+#include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PhysicsResource.h>
 
 namespace oxygen::data {

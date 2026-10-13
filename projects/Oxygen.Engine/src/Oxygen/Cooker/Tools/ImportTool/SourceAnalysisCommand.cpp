@@ -101,7 +101,7 @@ auto SourceAnalysisCommand::Run() -> std::expected<void, std::error_code>
   }
   const auto report = manifest->AnalyzeSources({}, captured_inputs);
   const auto destination = std::filesystem::path(report_path_);
-  const auto aliases = [&](const std::filesystem::path& source) {
+  const auto aliases = [&](const std::filesystem::path& source) -> bool {
     if (source.empty()) {
       return false;
     }

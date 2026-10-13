@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "TestEngine.h"
 #include <nlohmann/json.hpp>

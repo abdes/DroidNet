@@ -6,8 +6,10 @@
 
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <limits>
 
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/Camera/CameraExposure.h>
 #include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Testing/GTest.h>

@@ -7,6 +7,7 @@
 #include <optional>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>

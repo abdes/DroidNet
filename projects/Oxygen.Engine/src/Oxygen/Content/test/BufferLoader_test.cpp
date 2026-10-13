@@ -4,11 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
+
 #include "Fixtures/LoaderTestFixtures.h"
 #include "Utils/PakUtils.h"
 
-#include <Oxygen/Content/LoaderFunctions.h>
+#include <Oxygen/Content/LoaderContext.h>
 #include <Oxygen/Content/Loaders/BufferLoader.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Testing/GTest.h>
 

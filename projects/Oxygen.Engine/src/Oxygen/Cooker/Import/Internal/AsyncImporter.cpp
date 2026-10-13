@@ -4,11 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
+#include <cstddef>
+#include <exception>
+#include <utility>
+
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/Internal/AsyncImporter.h>
 #include <Oxygen/Cooker/Import/Internal/ImportJob.h>
+#include <Oxygen/Cooker/Import/Internal/JobEntry.h>
 #include <Oxygen/OxCo/Algorithms.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 
 namespace oxygen::content::import::detail {
 

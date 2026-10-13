@@ -4,9 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <numeric>
 #include <ranges>
+#include <type_traits>
 #include <vector>
 
 #include <Oxygen/Base/EnumIndexedArray.h>
@@ -102,7 +105,7 @@ NOLINT_TEST(EnumIndexedArrayTest, IteratorsAndSize)
 
 //! Named-index wrapper: simulate a strong-type index with get().
 struct MyIndex {
-  std::size_t get() const noexcept { return value; }
+  auto get() const noexcept -> std::size_t { return value; }
   std::size_t value;
 };
 
@@ -166,7 +169,7 @@ NOLINT_TEST(EnumIndexedArrayDeathTest, IndexWithEndTerminates)
   // Act & Assert: evaluate indexing with end() which should trigger assert in
   // debug
   EXPECT_DEATH_IF_SUPPORTED(
-    ([&arr]() { arr[EnumAsIndex<MyEnum>::end()] = 1; }()), "");
+    ([&arr]() -> void { arr[EnumAsIndex<MyEnum>::end()] = 1; }()), "");
 }
 
 //! Constexpr usage: EnumIndexedArray must be usable in compile-time contexts.
@@ -176,7 +179,8 @@ NOLINT_TEST(EnumIndexedArrayConstexprTest, ConstexprUsage)
   enum class MyEnum : std::size_t { kFirst = 0, kSecond, kCount };
 
   // Act / Assert: create a constexpr instance and perform basic operations.
-  constexpr EnumIndexedArray<MyEnum, int> carr = []() constexpr {
+  constexpr EnumIndexedArray<MyEnum, int> carr
+    = []() constexpr -> EnumIndexedArray<MyEnum, int> {
     EnumIndexedArray<MyEnum, int> a {};
     a[MyEnum::kFirst] = 4;
     a[MyEnum::kSecond] = 6;
@@ -246,7 +250,7 @@ NOLINT_TEST(EnumIndexedArrayTest, RangesTransformView)
   arr[MyEnum::kThird] = 3;
 
   // Act: use a transform view to add 1 to each element
-  auto v = arr | std::views::transform([](int x) { return x + 1; });
+  auto v = arr | std::views::transform([](int x) -> int { return x + 1; });
   std::vector<int> collected(v.begin(), v.end());
 
   // Assert
@@ -321,8 +325,8 @@ NOLINT_TEST(EnumIndexedArrayTest, RangesFindIfAlgorithm)
   arr[MyEnum::kThird] = 6;
 
   // Act: find first even value greater than 3
-  auto it
-    = std::ranges::find_if(arr, [](int x) { return x > 3 && (x % 2) == 0; });
+  auto it = std::ranges::find_if(
+    arr, [](int x) -> bool { return x > 3 && (x % 2) == 0; });
 
   // Assert
   ASSERT_NE(it, arr.end());
@@ -339,7 +343,7 @@ enum class CTEnum : std::size_t {
 };
 
 // consteval function that creates and manipulates an EnumIndexedArray
-consteval bool ConstevalEnumIndexedArrayChecks()
+consteval auto ConstevalEnumIndexedArrayChecks() -> bool
 {
   // Create a constexpr EnumIndexedArray and populate it.
   EnumIndexedArray<CTEnum, int> me {};
@@ -371,7 +375,8 @@ static_assert(ConstevalEnumIndexedArrayChecks(),
   "Consteval EnumIndexedArray checks failed");
 
 // Additional static_assert coverage: direct constexpr instance initializer
-constexpr EnumIndexedArray<CTEnum, int> constexprInit = []() constexpr {
+constexpr EnumIndexedArray<CTEnum, int> constexprInit
+  = []() constexpr -> EnumIndexedArray<CTEnum, int> {
   EnumIndexedArray<CTEnum, int> a {};
   a[CTEnum::kFirst] = 1;
   a[CTEnum::kSecond] = 2;

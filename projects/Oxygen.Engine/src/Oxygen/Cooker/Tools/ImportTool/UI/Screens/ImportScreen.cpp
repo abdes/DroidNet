@@ -4,18 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <format>
+#include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
+#include "UI/JobViewModel.h"
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/component_base.hpp>
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/color.hpp>
-#include <ftxui/screen/terminal.hpp>
 
 #include <Oxygen/Cooker/Tools/ImportTool/UI/Screens/ImportScreen.h>
 
@@ -95,7 +98,7 @@ void ImportScreen::Run()
     });
   });
 
-  auto root = ftxui::CatchEvent(renderer, [&](const Event& event) {
+  auto root = ftxui::CatchEvent(renderer, [&](const Event& event) -> bool {
     if (event == Event::Custom) {
       return true;
     }
@@ -108,7 +111,7 @@ void ImportScreen::Run()
     return false;
   });
 
-  std::thread updater([&]() {
+  std::thread updater([&]() -> void {
     while (running.load()) {
       if (provider_) {
         UpdateState(provider_());

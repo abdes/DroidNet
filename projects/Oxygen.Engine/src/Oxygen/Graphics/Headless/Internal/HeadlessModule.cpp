@@ -4,7 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Config/GraphicsConfig.h>
 #include <Oxygen/Graphics/Common/BackendModule.h>
 #include <Oxygen/Graphics/Common/BackendObject.h>
 #include <Oxygen/Graphics/Headless/Graphics.h>

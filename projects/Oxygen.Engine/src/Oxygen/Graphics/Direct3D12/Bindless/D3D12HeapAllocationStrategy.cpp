@@ -4,14 +4,26 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <format>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Core/Bindless/Generated.Strategy.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 
 namespace oxygen::graphics::d3d12 {
 

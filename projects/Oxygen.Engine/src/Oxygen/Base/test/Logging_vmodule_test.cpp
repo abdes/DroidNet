@@ -4,8 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
+#include <cstddef>
+#include <exception>
 #include <memory>
 #include <mutex>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -29,7 +33,7 @@ namespace {
         c->store(loguru::Verbosity_UNSPECIFIED, std::memory_order_relaxed);
       }
     }
-    std::atomic<int>* acquire(const char* path)
+    auto acquire(const char* path) -> std::atomic<int>*
     {
       std::lock_guard<std::mutex> l(m);
       for (size_t i = 0; i < paths.size(); ++i) {
@@ -46,7 +50,7 @@ namespace {
   static SiteRegistry g_site_registry; // lifetime: entire test process
 } // namespace (helpers)
 
-static bool Enabled(const char* path, loguru::Verbosity v)
+static auto Enabled(const char* path, loguru::Verbosity v) -> bool
 {
   auto* cache = g_site_registry.acquire(path);
   return loguru::check_module_fast(cache, v, path);

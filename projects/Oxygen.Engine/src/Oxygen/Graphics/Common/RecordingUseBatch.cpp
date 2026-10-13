@@ -6,10 +6,19 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <stdexcept>
+#include <utility>
 
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Graphics/Common/BackendLifetime.h>
 #include <Oxygen/Graphics/Common/RecordingUseBatch.h>
+#include <Oxygen/Graphics/Common/Registration.h>
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
+#include <Oxygen/Graphics/Common/Submission.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
 
 namespace oxygen::graphics {
 RecordingUseBatch::RecordingUseBatch()

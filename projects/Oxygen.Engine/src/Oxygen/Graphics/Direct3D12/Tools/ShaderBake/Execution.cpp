@@ -5,18 +5,32 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <optional>
+#include <span>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 #include <system_error>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/DirtyAnalysis.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Execution.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FinalArchivePack.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 

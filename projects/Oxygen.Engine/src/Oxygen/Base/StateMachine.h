@@ -149,7 +149,7 @@ public:
   */
   template <typename Event> auto Handle(const Event& event) -> Status
   {
-    auto pass_event_to_state = [this, &event](auto statePtr) noexcept {
+    auto pass_event_to_state = [this, &event](auto statePtr) noexcept -> auto {
       // Throwing exception from event handlers is not recommended but can still
       // be done. We'll try to translate this to a TerminateWithError status
       // anyway.
@@ -473,7 +473,7 @@ template <typename... Actions> struct OneOf {
   {
     return std::visit(
       [&machine, &state, &event](
-        auto& action) { return action.Execute(machine, state, event); },
+        auto& action) -> auto { return action.Execute(machine, state, event); },
       option);
   }
 

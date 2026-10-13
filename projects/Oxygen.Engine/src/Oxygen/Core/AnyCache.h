@@ -826,7 +826,7 @@ private:
 
   auto EnforceBudget(std::vector<RetiredEntry>& retired) -> PolicyBudgetStatus
   {
-    return eviction_.EnforceBudget([&](const KeyType& key) {
+    return eviction_.EnforceBudget([&](const KeyType& key) -> auto {
       const auto found = map_.find(key);
       if (found != map_.end()) {
         // Snapshot construction precedes the policy's destructive step.
@@ -930,7 +930,7 @@ private:
     }
     const auto [position, inserted] = map_.try_emplace(key);
     bool admitted = false;
-    const auto rollback = Finally([&]() noexcept {
+    const auto rollback = Finally([&]() noexcept -> auto {
       if (inserted && !admitted) {
         map_.erase(position);
       }
@@ -938,7 +938,7 @@ private:
     if (!inserted) {
       retired.push_back(SnapshotRetired(position->first, position->second));
       bool replaced = false;
-      const auto discard_failed = Finally([&]() noexcept {
+      const auto discard_failed = Finally([&]() noexcept -> auto {
         if (!replaced) {
           retired.pop_back();
         }
@@ -959,7 +959,7 @@ private:
         }
         {
           const auto restore_budget
-            = Finally([&]() noexcept { eviction_.SetBudget(budget); });
+            = Finally([&]() noexcept -> auto { eviction_.SetBudget(budget); });
           eviction_.SetBudget(budget - static_cast<CostType>(cost));
           static_cast<void>(EnforceBudget(retired));
         }

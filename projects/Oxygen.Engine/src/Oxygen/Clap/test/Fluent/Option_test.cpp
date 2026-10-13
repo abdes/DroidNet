@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <exception>
+#include <stdexcept>
 
 #include <Oxygen/Clap/Fluent/OptionBuilder.h>
 #include <Oxygen/Clap/Option.h>

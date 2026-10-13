@@ -5,8 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <span>
+#include <stdexcept>
 #include <type_traits>
 #include <variant>
 #include <vector>

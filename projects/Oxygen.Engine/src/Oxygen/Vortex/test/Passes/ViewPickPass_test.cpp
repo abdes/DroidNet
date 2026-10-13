@@ -8,12 +8,15 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include <glm/mat4x4.hpp>
 
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Passes/ViewPickPass.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Types/ViewPick.h>
 
 namespace {

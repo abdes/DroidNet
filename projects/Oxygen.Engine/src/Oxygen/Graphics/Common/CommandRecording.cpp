@@ -5,16 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #include <exception>
+#include <memory>
+#include <stdexcept>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Graphics/Common/BackendLifetime.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
+#include <Oxygen/Graphics/Common/Submission.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 
 namespace oxygen::graphics {
 

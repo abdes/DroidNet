@@ -4,7 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <type_traits>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/TextureResource.h>
 
 using oxygen::data::TextureResource;

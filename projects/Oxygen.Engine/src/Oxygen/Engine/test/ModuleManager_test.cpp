@@ -4,9 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
+#include <memory>
+#include <ranges>
+#include <utility>
+#include <vector>
+
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/PhaseRegistry.h>
 #include <Oxygen/Engine/ModuleManager.h>
 #include <Oxygen/Engine/test/ModuleManager_helpers.h>
 #include <Oxygen/OxCo/Co.h>

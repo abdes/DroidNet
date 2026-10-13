@@ -4,12 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <span>
+#include <stdexcept>
 #include <vector>
 
-#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/Loaders/Helpers.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Serio/MemoryStream.h>

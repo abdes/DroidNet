@@ -5,11 +5,20 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <numbers>
-#include <ranges>
+#include <span>
+#include <vector>
 
 #include <Oxygen/Cooker/Import/Internal/ImageProcessing.h>
+#include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Core/Types/ColorSpace.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
 
 namespace oxygen::content::import {
 
@@ -447,7 +456,7 @@ namespace image::mip {
 
       // Helper for 1D resampling
       auto resample_1d = [&](uint32_t src_size, uint32_t dst_size,
-                           auto sample_src, auto write_dst) {
+                           auto sample_src, auto write_dst) -> auto {
         const float scale
           = static_cast<float>(dst_size) / static_cast<float>(src_size);
         const float support_scale = (scale < 1.0F) ? (1.0F / scale) : 1.0F;
@@ -493,7 +502,7 @@ namespace image::mip {
       for (uint32_t y = 0; y < src.height; ++y) {
         resample_1d(
           src.width, temp_width,
-          [&](uint32_t src_x, std::array<float, 4>& out) {
+          [&](uint32_t src_x, std::array<float, 4>& out) -> void {
             size_t offset = 0;
             if (format == Format::kRGBA32Float) {
               offset = static_cast<size_t>(y) * src.row_pitch_bytes
@@ -514,7 +523,7 @@ namespace image::mip {
               }
             }
           },
-          [&](uint32_t dst_x, const std::array<float, 4>& in) {
+          [&](uint32_t dst_x, const std::array<float, 4>& in) -> void {
             const size_t offset
               = (static_cast<size_t>(y) * temp_width + dst_x) * 4;
             float* p = temp_buffer.data() + offset;
@@ -529,7 +538,7 @@ namespace image::mip {
       for (uint32_t x = 0; x < dst_width; ++x) {
         resample_1d(
           temp_height, dst_height,
-          [&](uint32_t src_y, std::array<float, 4>& out) {
+          [&](uint32_t src_y, std::array<float, 4>& out) -> void {
             const size_t offset
               = (static_cast<size_t>(src_y) * temp_width + x) * 4;
             const float* p = temp_buffer.data() + offset;
@@ -537,7 +546,7 @@ namespace image::mip {
               out[c] = p[c];
             }
           },
-          [&](uint32_t dst_y, const std::array<float, 4>& in) {
+          [&](uint32_t dst_y, const std::array<float, 4>& in) -> void {
             if (format == Format::kRGBA32Float) {
               const size_t offset
                 = (static_cast<size_t>(dst_y) * dst_width + x) * 4;

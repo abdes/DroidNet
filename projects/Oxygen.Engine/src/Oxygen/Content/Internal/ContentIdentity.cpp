@@ -38,7 +38,7 @@ auto ContentIdentityHash::operator()(
 {
   auto seed = identity.index();
   std::visit(
-    [&seed](const auto& value) {
+    [&seed](const auto& value) -> auto {
       using T = std::remove_cvref_t<decltype(value)>;
       if constexpr (std::is_same_v<T, AssetIdentity>) {
         HashCombine(seed, value.source);

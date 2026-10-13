@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <string>
+
 #include <Oxygen/Core/Version.h>
 #include <Oxygen/Core/version-info.h>
 

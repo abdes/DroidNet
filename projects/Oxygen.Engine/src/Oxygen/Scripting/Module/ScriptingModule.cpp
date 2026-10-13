@@ -34,6 +34,7 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Commands/Params.h>
 #include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/EngineModule.h>

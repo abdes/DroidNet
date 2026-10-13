@@ -4,11 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <atomic>
+#include <chrono>
+#include <cstddef>
 #include <memory>
+#include <mutex>
+#include <set>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
+#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/Internal/CommandListPool.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/test/HeapAllocationFailure.h>

@@ -5,15 +5,20 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>

@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdint>
 #include <numbers>
+#include <span>
 
 #include <Oxygen/Vortex/Environment/Internal/IblBrdfLookup.h>
 

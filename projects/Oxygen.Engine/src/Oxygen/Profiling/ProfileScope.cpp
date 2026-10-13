@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <string>
+
 #include <Oxygen/Profiling/Internal/ScopeNameFormatter.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 

@@ -4,12 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/Internal/IMutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationDispatcher.h>
+#include <Oxygen/Scene/Internal/MutationTypes.h>
 #include <Oxygen/Scene/Internal/ScriptSlotMutationProcessor.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Scene/Types/ScriptSlotIndex.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {

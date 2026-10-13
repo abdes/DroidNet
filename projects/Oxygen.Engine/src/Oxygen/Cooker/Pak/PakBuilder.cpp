@@ -5,13 +5,21 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <filesystem>
+#include <string>
 #include <string_view>
 #include <utility>
 
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Cooker/Pak/PakBuildPhase.h>
+#include <Oxygen/Cooker/Pak/PakBuildReport.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Pak/PakBuildResult.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/Pak/PakManifestWriter.h>
 #include <Oxygen/Cooker/Pak/PakPlanBuilder.h>
 #include <Oxygen/Cooker/Pak/PakWriter.h>
+#include <Oxygen/Data/SourceKey.h>
 
 namespace {
 namespace data = oxygen::data;

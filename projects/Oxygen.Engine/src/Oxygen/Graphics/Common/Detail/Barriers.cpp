@@ -6,6 +6,8 @@
 
 #include <sstream>
 #include <string>
+#include <type_traits>
+#include <variant>
 
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>

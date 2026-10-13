@@ -4,14 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <array>
-#include <atomic>
 #include <cstdint>
-#include <type_traits>
-#include <vector>
 
 #include <Oxygen/Scene/SceneFlags.h>
-#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/SceneFlagEnum.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::scene::AtomicSceneFlags;

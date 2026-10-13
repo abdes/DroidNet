@@ -4,6 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/quaternion_geometric.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/trigonometric.hpp>
+
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Testing/GTest.h>
 

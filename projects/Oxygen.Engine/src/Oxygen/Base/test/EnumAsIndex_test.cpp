@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <array>
+#include <cstddef>
 #include <functional>
-#include <numeric>
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include <Oxygen/Base/EnumIndexedArray.h>
@@ -56,7 +58,7 @@ NOLINT_TEST(EnumAsIndexHarnessDeathTest, RuntimeOutOfRangeTerminates)
 
   // Act & Assert: death-test must evaluate the expression that terminates.
   EXPECT_DEATH_IF_SUPPORTED(
-    []() { (void)EnumAsIndex { MyEnum::kCount }; }(), "");
+    []() -> void { (void)EnumAsIndex { MyEnum::kCount }; }(), "");
 }
 
 //! Verify braced-init deduction form: EnumAsIndex{MyEnum::kFirst}
@@ -232,7 +234,7 @@ NOLINT_TEST(EnumAsIndexHarnessDeathTest, ArithmeticUnderflowTerminates)
   };
 
   // Act & Assert: moving before kFirst should terminate.
-  EXPECT_DEATH_IF_SUPPORTED(([]() {
+  EXPECT_DEATH_IF_SUPPORTED(([]() -> void {
     auto v = EnumAsIndex<MyEnum>::Checked(MyEnum::kFirst);
     (void)(v - 1);
   }()),
@@ -250,7 +252,7 @@ NOLINT_TEST(EnumAsIndexHarnessDeathTest, ArithmeticOverflowTerminates)
   };
 
   // Act & Assert: moving past end() should terminate.
-  EXPECT_DEATH_IF_SUPPORTED(([]() {
+  EXPECT_DEATH_IF_SUPPORTED(([]() -> void {
     auto v = EnumAsIndex<MyEnum>::end();
     (void)(v + 1);
   }()),
@@ -268,7 +270,7 @@ enum class Color {
   kCount,
 };
 using ColorIndex = EnumAsIndex<Color>;
-constexpr std::string_view ColorToString(ColorIndex color)
+constexpr auto ColorToString(ColorIndex color) -> std::string_view
 {
   switch (color.to_enum()) {
   case Color::kRed:
@@ -337,7 +339,7 @@ NOLINT_TEST(EnumAsIndexConstexprTest, ConstexprLoopSum)
 {
   // Compute sum at compile time using a consteval lambda and
   // EnumAsIndex::Checked
-  constexpr auto sum = []() consteval {
+  constexpr auto sum = []() consteval -> std::size_t {
     std::size_t s = 0;
     for (auto i = oxygen::EnumAsIndex<Color>::begin();
       i < oxygen::EnumAsIndex<Color>::end(); ++i) {
@@ -354,7 +356,7 @@ NOLINT_TEST(EnumAsIndexConstexprTest, ConstexprLoopSum)
 //! indices.
 NOLINT_TEST(EnumAsIndexConstexprTest, ConstexprNameTable)
 {
-  constexpr auto names = []() consteval {
+  constexpr auto names = []() consteval -> std::array<std::string_view, 3> {
     std::array<std::string_view, 3> out {};
     std::size_t idx = 0;
     for (auto i = oxygen::EnumAsIndex<Color>::begin();
@@ -414,14 +416,14 @@ NOLINT_TEST(EnumAsIndexViewTest, AlgorithmIntegration_FindAnyOf)
 {
   // find the first green entry using ranges::find_if
   auto it = std::ranges::find_if(enum_as_index<Color>,
-    [](ColorIndex c) { return c.to_enum() == Color::kGreen; });
+    [](ColorIndex c) -> bool { return c.to_enum() == Color::kGreen; });
 
   EXPECT_NE(it, std::ranges::end(enum_as_index<Color>));
   EXPECT_EQ((*it).to_enum(), Color::kGreen);
 
   // any_of: check if any element is Blue
   bool hasBlue = std::ranges::any_of(enum_as_index<Color>,
-    [](ColorIndex c) { return c.to_enum() == Color::kBlue; });
+    [](ColorIndex c) -> bool { return c.to_enum() == Color::kBlue; });
   EXPECT_TRUE(hasBlue);
 }
 
@@ -429,7 +431,7 @@ NOLINT_TEST(EnumAsIndexViewTest, AlgorithmIntegration_FindAnyOf)
 NOLINT_TEST(EnumAsIndexViewTest, TransformReverseComposition)
 {
   auto out = enum_as_index<Color> | std::views::reverse
-    | std::views::transform([](ColorIndex c) { // to color
+    | std::views::transform([](ColorIndex c) -> std::string { // to color
         return std::string(ColorToString(c));
       })
     | std::ranges::to<std::vector<std::string>>();

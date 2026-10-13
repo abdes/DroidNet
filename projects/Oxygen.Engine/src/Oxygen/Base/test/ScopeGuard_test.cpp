@@ -31,7 +31,7 @@ NOLINT_TEST(ScopeGuardTest, ExecutesFunctionOnScopeExit)
 {
   bool called = false;
   {
-    auto guard = ScopeGuard([&called]() noexcept { called = true; });
+    auto guard = ScopeGuard([&called]() noexcept -> void { called = true; });
     EXPECT_FALSE(called);
   }
   EXPECT_TRUE(called);
@@ -42,7 +42,7 @@ NOLINT_TEST(ScopeGuardTest, ExecutesFunctionWithExceptionSafety)
 {
   bool called = false;
   try {
-    auto guard = ScopeGuard([&called]() noexcept { called = true; });
+    auto guard = ScopeGuard([&called]() noexcept -> void { called = true; });
     throw std::runtime_error("Test exception");
   } catch (const std::runtime_error& ex) {
     // Exception caught
@@ -57,8 +57,8 @@ NOLINT_TEST(ScopeGuardTest, ExecutesFunctionWithMultipleGuards)
   bool called1 = false;
   bool called2 = false;
   {
-    auto guard1 = ScopeGuard([&called1]() noexcept { called1 = true; });
-    auto guard2 = ScopeGuard([&called2]() noexcept { called2 = true; });
+    auto guard1 = ScopeGuard([&called1]() noexcept -> void { called1 = true; });
+    auto guard2 = ScopeGuard([&called2]() noexcept -> void { called2 = true; });
     EXPECT_FALSE(called1);
     EXPECT_FALSE(called2);
   }
@@ -72,7 +72,7 @@ NOLINT_TEST(ScopeGuardTest,
 {
   int i = 0;
   {
-    ScopeGuard guard([&i]() noexcept { Increment(i); });
+    ScopeGuard guard([&i]() noexcept -> void { Increment(i); });
     EXPECT_EQ(i, 0);
   }
   EXPECT_EQ(i, 1);

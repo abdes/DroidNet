@@ -21,8 +21,12 @@
 //
 
 #include <algorithm>
+#include <atomic>
+#include <climits>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <cwchar>
 #include <mutex>
 #include <utility>
 

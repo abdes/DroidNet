@@ -37,6 +37,7 @@
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Core/Types/ResolvedView.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/MaterialDomain.h>
@@ -55,6 +56,7 @@
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
 #include <Oxygen/Scene/Environment/SkyAtmosphere.h>
 #include <Oxygen/Scene/Environment/SkyLight.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Testing/GTest.h>
@@ -65,8 +67,10 @@
 #include <Oxygen/Vortex/Environment/Passes/FogPass.h>
 #include <Oxygen/Vortex/Environment/Passes/LocalFogVolumeComposePass.h>
 #include <Oxygen/Vortex/Environment/Passes/SkyPass.h>
+#include <Oxygen/Vortex/PostProcess/Passes/ExposurePass.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/Generated.SceneTextureBindings.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>

@@ -17,8 +17,8 @@ namespace oxygen {
 // Convert pixel jitter (pixels, +X right, +Y down) into NDC offsets for
 // column-major GLM matrices. Output NDC values are in [-2,2] range scale
 // such that a 1-pixel shift yields ndc = 2/width (per-axis).
-inline glm::vec2 PixelJitterToNdc(
-  const glm::vec2& pixel_jitter_px, const ViewPort& vp)
+inline auto PixelJitterToNdc(
+  const glm::vec2& pixel_jitter_px, const ViewPort& vp) -> glm::vec2
 {
   const float w = std::max(1.0f, static_cast<float>(vp.width));
   const float h = std::max(1.0f, static_cast<float>(vp.height));
@@ -31,8 +31,8 @@ inline glm::vec2 PixelJitterToNdc(
 // Apply a clip-space translation (jitter) to the projection matrix.
 // For GLM column-major matrices, place offsets in column 3 rows 0/1 and
 // left-multiply to apply translation in clip-space: proj' = jitterMat * proj.
-inline glm::mat4 ApplyJitterToProjection(
-  const glm::mat4& proj, const glm::vec2& pixel_jitter_px, const ViewPort& vp)
+inline auto ApplyJitterToProjection(const glm::mat4& proj,
+  const glm::vec2& pixel_jitter_px, const ViewPort& vp) -> glm::mat4
 {
   if (pixel_jitter_px == glm::vec2(0.0f))
     return proj;
@@ -45,8 +45,8 @@ inline glm::mat4 ApplyJitterToProjection(
 
 // Remap projection depth-range between GL [-1,1] and D3D [0,1]. Left-multiply
 // remap matrix: proj_out = remap * proj_in.
-inline glm::mat4 RemapProjectionDepthRange(
-  const glm::mat4& proj, NdcDepthRange from, NdcDepthRange to)
+inline auto RemapProjectionDepthRange(
+  const glm::mat4& proj, NdcDepthRange from, NdcDepthRange to) -> glm::mat4
 {
   if (from == to)
     return proj;
@@ -67,16 +67,17 @@ inline glm::mat4 RemapProjectionDepthRange(
 // Build a right-handed [0,1] reversed-Z perspective projection. GLM's
 // perspectiveRH_ZO is forward-Z, so reversed-Z is obtained by swapping the
 // near/far inputs while preserving the same handedness and clip-space range.
-inline glm::mat4 MakeReversedZPerspectiveProjectionRH_ZO(const float fov_y,
+inline auto MakeReversedZPerspectiveProjectionRH_ZO(const float fov_y,
   const float aspect, const float near_plane, const float far_plane)
+  -> glm::mat4
 {
   return glm::perspectiveRH_ZO(fov_y, aspect, far_plane, near_plane);
 }
 
 // Build a right-handed [0,1] reversed-Z orthographic projection.
-inline glm::mat4 MakeReversedZOrthographicProjectionRH_ZO(const float left,
+inline auto MakeReversedZOrthographicProjectionRH_ZO(const float left,
   const float right, const float bottom, const float top,
-  const float near_plane, const float far_plane)
+  const float near_plane, const float far_plane) -> glm::mat4
 {
   return glm::orthoRH_ZO(left, right, bottom, top, far_plane, near_plane);
 }

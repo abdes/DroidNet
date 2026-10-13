@@ -456,8 +456,8 @@ auto LooseCookedIndexImpl::ReadAssetEntries(IndexLoadContext& context) -> void
     if (!context.unique_file_paths.insert(descriptor_rel).second) {
       throw std::runtime_error("Duplicate content path in loose cooked index");
     }
-    if (std::ranges::all_of(
-          entry.descriptor_sha256, [](uint8_t value) { return value == 0; })) {
+    if (std::ranges::all_of(entry.descriptor_sha256,
+          [](uint8_t value) -> bool { return value == 0; })) {
       throw std::runtime_error(
         "Missing descriptor SHA-256 in loose cooked index");
     }

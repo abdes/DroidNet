@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <limits>
 #include <memory>
@@ -21,7 +22,14 @@
 
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/VirtualPath.h>
+#include <Oxygen/Cooker/Pak/PakBuildPhase.h>
+#include <Oxygen/Cooker/Pak/PakBuildReport.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Pak/PakPlan.h>
+#include <Oxygen/Cooker/Pak/PakPlanPolicy.h>
 #include <Oxygen/Cooker/Pak/PakValidation.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakCatalog.h>
 
 namespace {
@@ -269,7 +277,7 @@ auto CollectRegionBoundsAndRanges(ValidationState& state) -> void
   }
 
   std::ranges::sort(
-    region_ranges, [](const RangeRecord& lhs, const RangeRecord& rhs) {
+    region_ranges, [](const RangeRecord& lhs, const RangeRecord& rhs) -> bool {
       if (lhs.start != rhs.start) {
         return lhs.start < rhs.start;
       }
@@ -577,7 +585,7 @@ auto ValidateSectionBoundsAndOverlaps(ValidationState& state) -> void
   using Phase = pak::PakBuildPhase;
 
   std::ranges::sort(
-    state.ranges, [](const RangeRecord& lhs, const RangeRecord& rhs) {
+    state.ranges, [](const RangeRecord& lhs, const RangeRecord& rhs) -> bool {
       if (lhs.start != rhs.start) {
         return lhs.start < rhs.start;
       }
@@ -664,8 +672,8 @@ auto ValidateDirectoryEntriesAgainstAssets(ValidationState& state) -> void
   using Phase = pak::PakBuildPhase;
 
   for (const auto& entry : state.plan->Directory().entries) {
-    const auto it = std::ranges::find_if(
-      state.plan->Assets(), [&entry](const pak::PakAssetPlacementPlan& asset) {
+    const auto it = std::ranges::find_if(state.plan->Assets(),
+      [&entry](const pak::PakAssetPlacementPlan& asset) -> bool {
         return asset.asset_key == entry.asset_key;
       });
 
@@ -814,7 +822,7 @@ auto ValidatePatchClosureConsistency(ValidationState& state) -> void
     }
 
     const auto resource_it = std::ranges::find_if(state.plan->Resources(),
-      [&closure](const pak::PakResourcePlacementPlan& resource) {
+      [&closure](const pak::PakResourcePlacementPlan& resource) -> bool {
         return resource.resource_kind == closure.resource_kind
           && resource.resource_index == closure.resource_index;
       });
@@ -832,7 +840,7 @@ auto FinalizeValidation(ValidationState& state) -> pak::PakValidation::Result
   using Severity = pak::PakDiagnosticSeverity;
 
   state.output.success = std::ranges::none_of(
-    state.output.diagnostics, [](const pak::PakDiagnostic& diagnostic) {
+    state.output.diagnostics, [](const pak::PakDiagnostic& diagnostic) -> bool {
       return diagnostic.severity == Severity::kError;
     });
   return std::move(state.output);

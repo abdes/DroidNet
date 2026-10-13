@@ -7,12 +7,19 @@
 #include <exception>
 #include <filesystem>
 #include <optional>
+#include <ostream>
+#include <string>
 #include <string_view>
+#include <utility>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/PhysicsImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/PhysicsImportSettings.h>
 
 namespace oxygen::content::import::internal {
 

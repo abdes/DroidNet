@@ -4,10 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
+#include <stdexcept>
+#include <variant>
+
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::Format;

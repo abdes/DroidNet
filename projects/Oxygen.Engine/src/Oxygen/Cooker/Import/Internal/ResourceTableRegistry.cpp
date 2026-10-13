@@ -213,7 +213,7 @@ auto ResourceTableRegistry::EndSession(ImportSessionToken& participation)
       physics = std::move(node.mapped());
     }
   }
-  const auto release_admission = ScopeGuard([&]() noexcept {
+  const auto release_admission = ScopeGuard([&]() noexcept -> void {
     {
       std::scoped_lock lock(mutex_);
       finalizing_.erase(key);

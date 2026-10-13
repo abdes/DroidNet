@@ -5,7 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Hash.h>

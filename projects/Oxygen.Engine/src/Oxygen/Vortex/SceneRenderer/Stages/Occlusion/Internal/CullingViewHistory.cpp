@@ -21,6 +21,7 @@
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Vortex/Internal/StructuredGpuBuffer.h>
 #include <Oxygen/Vortex/PreparedSceneFrame.h>

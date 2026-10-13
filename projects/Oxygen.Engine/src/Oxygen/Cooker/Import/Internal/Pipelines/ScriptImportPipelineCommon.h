@@ -57,7 +57,7 @@ inline auto BuildScriptsDataRelPath(const ImportRequest& request) -> std::string
 inline auto HasParentTraversal(const std::filesystem::path& path) -> bool
 {
   return std::ranges::any_of(
-    path, [](const auto& segment) { return segment == ".."; });
+    path, [](const auto& segment) -> auto { return segment == ".."; });
 }
 
 inline auto TryMakeExternalPathRelativeToRoot(

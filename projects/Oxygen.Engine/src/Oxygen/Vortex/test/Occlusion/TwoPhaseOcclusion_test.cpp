@@ -26,7 +26,9 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Testing/GTest.h>
@@ -42,7 +44,7 @@
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/OcclusionModule.h>
 #include <Oxygen/Vortex/SceneRenderer/Stages/Occlusion/Types/DrawVisibility.h>
 #include <Oxygen/Vortex/Types/DrawCullRecord.h>
-#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/Generated.DrawContracts.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 #include <Oxygen/Vortex/test/Occlusion/OcclusionGpuTest.h>
 

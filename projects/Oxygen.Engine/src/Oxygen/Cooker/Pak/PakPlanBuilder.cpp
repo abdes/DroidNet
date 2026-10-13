@@ -30,7 +30,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/Sha256.h>
-#include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/Types.h>
@@ -43,26 +42,21 @@
 #include <Oxygen/Cooker/Pak/PakPlanPolicy.h>
 #include <Oxygen/Cooker/Pak/PakValidation.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormatSerioLoaders.h>
 #include <Oxygen/Data/PakFormat_audio.h>
 #include <Oxygen/Data/PakFormat_core.h>
-#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_physics.h>
-#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
-#include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/PhysicsSceneAsset.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/FileStream.h>
-#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
-#include <Oxygen/Serio/Writer.h>
 
 namespace {
 namespace pak = oxygen::content::pak;
@@ -1595,8 +1589,9 @@ auto ComputeAssetDependencyDigest(std::vector<pak::PakDiagnostic>& diagnostics,
 {
   AssetDependencyDigest result;
   std::vector<std::pair<uint16_t, oxygen::base::Sha256Digest>> inputs;
-  const auto append_resource = [&](const auto& digests, const auto& positions,
-                                 const uint32_t index, const uint16_t tag) {
+  const auto append_resource
+    = [&](const auto& digests, const auto& positions, const uint32_t index,
+        const uint16_t tag) -> auto {
     if (!AddResourceDigestInput(digests, index, inputs, tag)) {
       AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
         pak::PakBuildPhase::kPlanning, "pak.plan.resource_binding_missing",
@@ -1758,15 +1753,16 @@ auto CollectSourceData(PlanningState& state) -> void
   }
   // Resolve dependencies after every layer is known. Overridden descriptors
   // must neither require their old dependencies nor own output resources.
-  std::erase_if(state.assets, [&](const AggregatedAsset& asset) {
+  std::erase_if(state.assets, [&](const AggregatedAsset& asset) -> bool {
     return state.tombstones.contains(asset.key);
   });
   state.asset_positions.clear();
   for (size_t index = 0; index < state.assets.size(); ++index) {
     state.asset_positions.emplace(state.assets.at(index).key, index);
   }
-  std::erase_if(state.browse_map,
-    [&](const auto& entry) { return state.tombstones.contains(entry.second); });
+  std::erase_if(state.browse_map, [&](const auto& entry) -> auto {
+    return state.tombstones.contains(entry.second);
+  });
   for (auto& asset : state.assets) {
     const auto dependency
       = ComputeAssetDependencyDigest(state.output.diagnostics,
@@ -1785,24 +1781,25 @@ auto CollectSourceData(PlanningState& state) -> void
         *resource.resource_asset_key, resource.source_order);
     }
   }
-  std::erase_if(state.pending_resources, [&](const PendingResource& resource) {
-    if (resource.resource_kind != "physics" || !resource.resource_asset_key
-      || resource.resource_asset_key->IsNil()
-      || physics_winners.at(*resource.resource_asset_key)
-        == resource.source_order) {
-      return false;
-    }
-    if (!resource.dependent_asset_keys.empty()) {
-      AddDiagnostic(state.output.diagnostics,
-        pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
-        "pak.plan.shadowed_physics_binding",
-        "A numeric binding addresses a shadowed keyed physics resource.",
-        resource.descriptor_path);
-    }
-    --state.source_contributions.at(resource.source_order)
-        .table_counts.physics_count;
-    return true;
-  });
+  std::erase_if(
+    state.pending_resources, [&](const PendingResource& resource) -> bool {
+      if (resource.resource_kind != "physics" || !resource.resource_asset_key
+        || resource.resource_asset_key->IsNil()
+        || physics_winners.at(*resource.resource_asset_key)
+          == resource.source_order) {
+        return false;
+      }
+      if (!resource.dependent_asset_keys.empty()) {
+        AddDiagnostic(state.output.diagnostics,
+          pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
+          "pak.plan.shadowed_physics_binding",
+          "A numeric binding addresses a shadowed keyed physics resource.",
+          resource.descriptor_path);
+      }
+      --state.source_contributions.at(resource.source_order)
+          .table_counts.physics_count;
+      return true;
+    });
 }
 
 // Check the original pair before relocation; never repair stale authored input.
@@ -2155,7 +2152,9 @@ auto CollectIncludedSourceOrders(PlanningState& state) -> void
     }
     for (const auto& resource : state.pending_resources) {
       if (std::ranges::any_of(resource.dependent_asset_keys,
-            [&](const data::AssetKey& key) { return emitted.contains(key); })) {
+            [&](const data::AssetKey& key) -> bool {
+              return emitted.contains(key);
+            })) {
         state.included_source_orders.push_back(resource.source_order);
       }
     }

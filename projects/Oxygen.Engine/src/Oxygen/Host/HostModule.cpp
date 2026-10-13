@@ -7,11 +7,14 @@
 #include <cstdint>
 #include <exception>
 #include <memory>
+#include <utility>
 
 #include <imgui.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
+#include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Core/Types/View.h>

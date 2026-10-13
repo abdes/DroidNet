@@ -4,14 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <csignal>
+#include <cstddef>
+#include <memory>
 #include <system_error>
-#include <type_traits>
+#include <thread>
+#include <utility>
 
 #include <asio/signal_set.hpp>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Config/PlatformConfig.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 #include <Oxygen/Platform/Platform.h>
 
 using oxygen::platform::AsyncOps;

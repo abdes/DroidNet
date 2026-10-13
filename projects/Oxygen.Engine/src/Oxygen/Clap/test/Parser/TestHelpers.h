@@ -215,7 +215,8 @@ protected:
   {
     if (!action.template IsA<DoNothing>()
       || token_type == TokenType::kEndOfInput) {
-      std::visit([&action](auto& test_data) { test_data.Check(action); }, data);
+      std::visit(
+        [&action](auto& test_data) -> auto { test_data.Check(action); }, data);
       return false; // do not continue processing tokens
     }
     return true; // continue processing tokens
@@ -225,7 +226,8 @@ protected:
   [[nodiscard]] static auto CheckState(
     const State& state, const ExpectedStateData& data) -> bool
   {
-    std::visit([&state](auto& test_data) { test_data.Check(state); }, data);
+    std::visit(
+      [&state](auto& test_data) -> auto { test_data.Check(state); }, data);
     return true; // continue processing
   }
 };

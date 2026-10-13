@@ -4,9 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <expected>
 #include <filesystem>
 #include <fstream>
+#include <ios>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
 
+#include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>

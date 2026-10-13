@@ -18,7 +18,6 @@
 #include <Oxygen/Core/Types/View.h>
 #include <Oxygen/Data/MaterialDomain.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
-#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Testing/GTest.h>
@@ -29,6 +28,7 @@
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneRenderer.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
 #include <Oxygen/Vortex/test/Fixtures/RendererPublicationProbe.h>
 

@@ -9,17 +9,28 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
+#include <ios>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Content/Loaders/BufferLoader.h>
-#include <Oxygen/Content/Loaders/Helpers.h>
-#include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/PakFile.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
+#include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/Reader.h>
 
 using oxygen::content::PakFile;
 using oxygen::data::AssetKey;
@@ -38,7 +49,7 @@ auto ComputeCrc32Ieee(std::span<const std::byte> bytes, uint32_t state) noexcept
   // in/out, init 0xFFFFFFFF, final XOR 0xFFFFFFFF.
   static constexpr auto kPoly = 0xEDB88320U;
 
-  auto table = []() consteval {
+  auto table = []() consteval -> std::array<uint32_t, 256> {
     std::array<uint32_t, 256> t {};
     for (uint32_t i = 0; i < 256; ++i) {
       uint32_t c = i;
@@ -322,13 +333,13 @@ auto LoadPakCatalog(oxygen::serio::FileStream<>& stream,
       "Missing or invalid embedded PAK catalog; recook content");
   }
   const auto require_before_catalog
-    = [&](const uint64_t offset, const uint64_t length) {
-        if (length != 0U
-          && (offset > footer.catalog_offset
-            || length > footer.catalog_offset - offset)) {
-          throw std::runtime_error("PAK section overlaps the embedded catalog");
-        }
-      };
+    = [&](const uint64_t offset, const uint64_t length) -> void {
+    if (length != 0U
+      && (offset > footer.catalog_offset
+        || length > footer.catalog_offset - offset)) {
+      throw std::runtime_error("PAK section overlaps the embedded catalog");
+    }
+  };
   require_before_catalog(footer.directory_offset, footer.directory_size);
   require_before_catalog(footer.browse_index_offset, footer.browse_index_size);
   for (const auto& region : { footer.texture_region, footer.buffer_region,
@@ -480,7 +491,7 @@ auto LoadBrowseIndex(oxygen::serio::FileStream<>& stream,
     std::string vpath;
     vpath.resize(static_cast<size_t>(len));
     std::ranges::transform(path_bytes, vpath.begin(),
-      [](const std::byte byte) { return std::to_integer<char>(byte); });
+      [](const std::byte byte) -> char { return std::to_integer<char>(byte); });
     if (vpath.empty() || vpath.front() != '/') {
       LOG_F(ERROR, "Browse index virtual path is not canonical (ignoring)");
       return ParsedBrowseIndex {};

@@ -6,8 +6,10 @@
 
 #include <array>
 #include <memory>
+#include <string_view>
 
 #include <Oxygen/Scripting/Bindings/BindingRegistry.h>
+#include <Oxygen/Scripting/Bindings/Contracts/IScriptBindingPack.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsAggregateBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsArticulationBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingPack.h>

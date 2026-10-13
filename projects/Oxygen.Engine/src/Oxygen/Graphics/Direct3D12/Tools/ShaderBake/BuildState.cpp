@@ -5,16 +5,28 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <exception>
+#include <filesystem>
 #include <fstream>
+#include <ios>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <type_traits>
+#include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildState.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/ModuleArtifact.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {
 

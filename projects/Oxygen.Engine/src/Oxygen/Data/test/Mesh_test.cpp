@@ -7,9 +7,14 @@
 // Standard library
 #include <cstdint>
 #include <memory>
+#include <type_traits>
 #include <vector>
 
+#include <glm/ext/vector_float3.hpp>
+
 // GTest
+#include <Oxygen/Data/MeshType.h>
+#include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project

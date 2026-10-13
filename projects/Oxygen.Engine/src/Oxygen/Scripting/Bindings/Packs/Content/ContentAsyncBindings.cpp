@@ -4,11 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+#include <utility>
+
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/IAssetLoader.h>
+#include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Data/BufferResource.h>
+#include <Oxygen/Data/GeometryAsset.h>
+#include <Oxygen/Data/InputActionAsset.h>
+#include <Oxygen/Data/InputMappingContextAsset.h>
+#include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/ScriptAsset.h>
+#include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/Engine/IAsyncEngine.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentAsyncBindings.h>

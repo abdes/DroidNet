@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstring>
+
+#include <crtdbg.h>
 #include <gtest/gtest.h>
 
 #include <Oxygen/Base/Logging.h>

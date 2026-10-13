@@ -14,7 +14,6 @@
 #include <ios>
 #include <optional>
 #include <span>
-#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -26,12 +25,7 @@
 #include <Oxygen/Content/Internal/PatchResolutionPolicy.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Data/PakCatalog.h>
-#include <Oxygen/Data/PakFormat.h>
-#include <Oxygen/Data/PatchManifest.h>
-#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
 #include <Oxygen/Testing/GTest.h>
 

@@ -6,14 +6,21 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <numbers>
+#include <optional>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
 #include <glm/geometric.hpp>
 
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Vertex.h>
 
 namespace {
 
@@ -166,32 +173,44 @@ auto oxygen::data::MakeSubdividedCubeMeshAsset(const unsigned int segments)
 
   EmitFace(
     s, glm::vec3(1.0F, 0.0F, 0.0F),
-    [s](const uint32_t u, const uint32_t v) { return glm::uvec3(s, v, u); },
+    [s](const uint32_t u, const uint32_t v) -> glm::uvec3 {
+      return glm::uvec3(s, v, u);
+    },
     vertex_lut, vertices, indices);
 
   EmitFace(
     s, glm::vec3(-1.0F, 0.0F, 0.0F),
-    [](const uint32_t u, const uint32_t v) { return glm::uvec3(0U, v, u); },
+    [](const uint32_t u, const uint32_t v) -> glm::uvec3 {
+      return glm::uvec3(0U, v, u);
+    },
     vertex_lut, vertices, indices);
 
   EmitFace(
     s, glm::vec3(0.0F, 1.0F, 0.0F),
-    [s](const uint32_t u, const uint32_t v) { return glm::uvec3(u, s, v); },
+    [s](const uint32_t u, const uint32_t v) -> glm::uvec3 {
+      return glm::uvec3(u, s, v);
+    },
     vertex_lut, vertices, indices);
 
   EmitFace(
     s, glm::vec3(0.0F, -1.0F, 0.0F),
-    [](const uint32_t u, const uint32_t v) { return glm::uvec3(u, 0U, v); },
+    [](const uint32_t u, const uint32_t v) -> glm::uvec3 {
+      return glm::uvec3(u, 0U, v);
+    },
     vertex_lut, vertices, indices);
 
   EmitFace(
     s, glm::vec3(0.0F, 0.0F, 1.0F),
-    [s](const uint32_t u, const uint32_t v) { return glm::uvec3(u, v, s); },
+    [s](const uint32_t u, const uint32_t v) -> glm::uvec3 {
+      return glm::uvec3(u, v, s);
+    },
     vertex_lut, vertices, indices);
 
   EmitFace(
     s, glm::vec3(0.0F, 0.0F, -1.0F),
-    [](const uint32_t u, const uint32_t v) { return glm::uvec3(u, v, 0U); },
+    [](const uint32_t u, const uint32_t v) -> glm::uvec3 {
+      return glm::uvec3(u, v, 0U);
+    },
     vertex_lut, vertices, indices);
 
   return std::make_pair(std::move(vertices), std::move(indices));

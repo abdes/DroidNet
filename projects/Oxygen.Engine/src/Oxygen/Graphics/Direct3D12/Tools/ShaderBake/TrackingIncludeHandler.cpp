@@ -4,13 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <windows.h>
+#include <windows.h> // IWYU pragma: keep
+#include <unknwn.h> // IWYU pragma: keep (dxcapi.h needs IUnknown, which lean windows.h omits)
 
 #include <exception>
 #include <filesystem>
+#include <optional>
+#include <span>
+#include <string_view>
 #include <system_error>
+#include <utility>
+
+#include <dxcapi.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/FileFingerprint.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/TrackingIncludeHandler.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {

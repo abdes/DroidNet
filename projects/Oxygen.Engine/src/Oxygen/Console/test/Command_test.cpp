@@ -8,13 +8,16 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Commands/Params.h>
+#include <Oxygen/Console/CVar.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Testing/GTest.h>

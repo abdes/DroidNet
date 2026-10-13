@@ -6,8 +6,12 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <span>
+
+#include <glm/geometric.hpp>
 
 #include <Oxygen/Data/ProceduralMeshes.h>
 #include <Oxygen/Testing/GTest.h>

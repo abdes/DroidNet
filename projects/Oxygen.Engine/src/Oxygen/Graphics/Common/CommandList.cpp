@@ -4,12 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <memory>
+#include <stdexcept>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
+#include <Oxygen/Graphics/Common/AssignedQueueSignal.h>
+#include <Oxygen/Graphics/Common/BackendLifetime.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/Internal/QueueSubmission.h>
+#include <Oxygen/Graphics/Common/Submission.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 
 using oxygen::graphics::CommandList;
 

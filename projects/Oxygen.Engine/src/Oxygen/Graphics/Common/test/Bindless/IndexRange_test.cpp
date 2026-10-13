@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <utility>
+
 #include <Oxygen/Graphics/Common/Types/IndexRange.h>
 #include <Oxygen/Testing/GTest.h>
 

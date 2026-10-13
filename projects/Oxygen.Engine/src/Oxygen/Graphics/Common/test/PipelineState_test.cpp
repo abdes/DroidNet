@@ -4,14 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <functional>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::Format;

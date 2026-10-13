@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <windows.h> // IWYU pragma: keep
+#include <unknwn.h> // IWYU pragma: keep (dxcapi.h needs IUnknown, which lean windows.h omits)
 
 #include <cstddef>
 #include <cstdint>

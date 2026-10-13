@@ -6,7 +6,12 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Console/Constants.h>
 #include <Oxygen/Console/History.h>
 
 namespace oxygen::console {

@@ -30,7 +30,6 @@
 
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Vortex/test/Lighting/Reference/GgxMoments.h>

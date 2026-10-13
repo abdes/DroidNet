@@ -91,7 +91,7 @@ auto PakStreamingCrc32::Finalize() const noexcept -> uint32_t
 auto PakStreamingCrc32::UpdateCrc32Ieee(const std::span<const std::byte> bytes,
   const uint32_t state) noexcept -> uint32_t
 {
-  const auto table = []() consteval {
+  const auto table = []() consteval -> std::array<uint32_t, kLookupTableSize> {
     auto lut = std::array<uint32_t, kLookupTableSize> {};
     for (uint32_t i = 0U; i < kLookupTableSize; ++i) {
       uint32_t c = i;

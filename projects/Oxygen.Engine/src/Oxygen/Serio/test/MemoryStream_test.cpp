@@ -5,8 +5,13 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Serio/MemoryStream.h>
+#include <Oxygen/Serio/Stream.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::serio::MemoryStream;

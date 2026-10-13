@@ -4,14 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
+#include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 
 #include <algorithm>
 #include <cmath>
-#include <ranges>
+#include <cstddef>
+#include <cstdint>
+#include <span>
 
-#include <Jolt/Math/DMat44.h>
+#include <Jolt/Math/Real.h>
+#include <Jolt/Math/Vec3.h>
 #include <Jolt/Physics/Body/BodyFilter.h>
+#include <Jolt/Physics/Body/BodyID.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/CollideShape.h>
@@ -19,12 +23,20 @@
 #include <Jolt/Physics/Collision/NarrowPhaseQuery.h>
 #include <Jolt/Physics/Collision/ObjectLayer.h>
 #include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/Shape/Shape.h>
 #include <Jolt/Physics/Collision/ShapeCast.h>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Physics/CollisionLayers.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltQueries.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
+#include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/Query/Overlap.h>
+#include <Oxygen/Physics/Query/Raycast.h>
+#include <Oxygen/Physics/Query/Sweep.h>
 
 namespace {
 

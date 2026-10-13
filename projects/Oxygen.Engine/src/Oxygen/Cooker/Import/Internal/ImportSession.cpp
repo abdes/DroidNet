@@ -286,7 +286,7 @@ ImportSession::~ImportSession() { DLOG_F(INFO, "Session destroyed"); }
 auto ImportSession::DrainAndRetire() -> co::Co<>
 {
   const auto started = std::chrono::steady_clock::now();
-  const auto timing = ScopeGuard([this, started]() noexcept {
+  const auto timing = ScopeGuard([this, started]() noexcept -> void {
     finalize_duration_ += std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::steady_clock::now() - started);
   });
@@ -611,7 +611,7 @@ auto ImportSession::HasErrors() const noexcept -> bool
 auto ImportSession::Finalize() -> co::Co<ImportReport>
 {
   const auto started = std::chrono::steady_clock::now();
-  const auto timing = ScopeGuard([this, started]() noexcept {
+  const auto timing = ScopeGuard([this, started]() noexcept -> void {
     finalize_duration_ += std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::steady_clock::now() - started);
   });

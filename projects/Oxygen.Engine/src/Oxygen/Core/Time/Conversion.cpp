@@ -7,7 +7,11 @@
 #include <algorithm>
 #include <chrono>
 
+#include <Oxygen/Core/Time/AuditClock.h>
 #include <Oxygen/Core/Time/Conversion.h>
+#include <Oxygen/Core/Time/NetworkClock.h>
+#include <Oxygen/Core/Time/PresentationClock.h>
+#include <Oxygen/Core/Time/Types.h>
 
 using namespace std::chrono;
 

@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Commands/Params.h>
 #ifdef _WIN32
 #  include <Windows.h> // IWYU pragma: keep
 

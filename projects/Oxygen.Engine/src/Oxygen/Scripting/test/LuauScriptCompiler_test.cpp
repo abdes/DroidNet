@@ -4,9 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <string_view>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
 #include <Oxygen/Scripting/Compilers/LuauScriptCompiler.h>
 #include <Oxygen/Testing/GTest.h>
 

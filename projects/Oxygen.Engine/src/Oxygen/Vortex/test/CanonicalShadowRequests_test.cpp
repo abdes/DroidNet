@@ -5,11 +5,19 @@
 //===----------------------------------------------------------------------===//
 #include <algorithm>
 #include <array>
+#include <cstdint>
+#include <vector>
 
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Shadows/Internal/LocalShadowRequest.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowCasterDependencies.h>
+#include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/MaterialShadingConstants.h>
+#include <Oxygen/Vortex/Types/PassMask.h>
+#include <Oxygen/Vortex/Types/ShadowCasterSource.h>
 
 namespace {
 using namespace oxygen;

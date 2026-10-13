@@ -4,14 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cstdint>
 #include <iterator>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <unordered_set>
 #include <vector>
 
 #include <Oxygen/Base/Macros.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Composition/Object.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Core/FrameContext.h>

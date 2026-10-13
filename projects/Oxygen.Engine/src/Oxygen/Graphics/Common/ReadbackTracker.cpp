@@ -6,10 +6,24 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
 #include <limits>
+#include <mutex>
+#include <optional>
+#include <span>
+#include <string_view>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/ByteUnits.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/ReadbackErrors.h>
 #include <Oxygen/Graphics/Common/ReadbackTracker.h>
+#include <Oxygen/Graphics/Common/ReadbackTypes.h>
+#include <Oxygen/Graphics/Common/Types/FenceValue.h>
+#include <Oxygen/OxCo/Value.h>
 
 namespace oxygen::graphics {
 

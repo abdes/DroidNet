@@ -6,9 +6,17 @@
 
 #include <array>
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
+#include <ios>
 #include <optional>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Core/Types/ShaderType.h>

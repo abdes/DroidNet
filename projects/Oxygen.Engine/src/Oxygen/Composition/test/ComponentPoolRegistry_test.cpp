@@ -5,10 +5,16 @@
 //===----------------------------------------------------------------------===//
 
 #include <atomic>
+#include <cstddef>
+#include <memory>
+#include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Base/Resource.h>
+#include <Oxygen/Base/TypeList.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/ComponentPoolRegistry.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -331,7 +337,7 @@ NOLINT_TEST_F(
 
   //! Launch multiple threads accessing the same pool
   for (int i = 0; i < kNumThreads; ++i) {
-    threads.emplace_back([&, i]() {
+    threads.emplace_back([&, i]() -> void {
       auto& pool = oxygen::ComponentPoolRegistry::GetComponentPool<
         TestPhysicsComponent>();
 
@@ -378,7 +384,7 @@ NOLINT_TEST_F(
 
   //! Launch threads accessing different pools
   for (int i = 0; i < kNumThreads; ++i) {
-    threads.emplace_back([&, i]() {
+    threads.emplace_back([&, i]() -> void {
       if (i % 3 == 0) {
         // Transform pool
         auto& pool = oxygen::ComponentPoolRegistry::GetComponentPool<
@@ -431,8 +437,9 @@ NOLINT_TEST_F(
 
   //! Launch threads that all get the registry instance simultaneously
   for (int i = 0; i < kNumThreads; ++i) {
-    threads.emplace_back(
-      [&, i]() { registry_ptrs[i] = &oxygen::ComponentPoolRegistry::Get(); });
+    threads.emplace_back([&, i]() -> void {
+      registry_ptrs[i] = &oxygen::ComponentPoolRegistry::Get();
+    });
   }
 
   // Wait for all threads to complete

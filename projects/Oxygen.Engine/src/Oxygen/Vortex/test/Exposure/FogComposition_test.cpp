@@ -58,6 +58,7 @@
 #include <Oxygen/Vortex/PostProcess/Types/PostProcessConfig.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/SceneRenderer/Generated.SceneTextureBindings.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Types/EnvironmentFrameBindings.h>
 #include <Oxygen/Vortex/Types/EnvironmentStaticData.h>

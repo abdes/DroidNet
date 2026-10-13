@@ -4,12 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <span>
+#include <stdexcept>
+#include <vector>
 
 #include "Fixtures/PhysicsLoaderTestFixtures.h"
 
-#include <Oxygen/Content/LoaderFunctions.h>
 #include <Oxygen/Content/Loaders/PhysicsResourceLoader.h>
+#include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Testing/GTest.h>
 

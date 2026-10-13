@@ -4,7 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <utility>
+
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Nexus/FrameDrivenSlotReuse.h>
+#include <Oxygen/Nexus/Types/Domain.h>
 
 using oxygen::nexus::DomainKey;
 using oxygen::nexus::FrameDrivenSlotReuse;

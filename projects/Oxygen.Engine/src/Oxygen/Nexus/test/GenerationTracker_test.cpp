@@ -2,9 +2,13 @@
 // Tests for GenerationTracker
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
 #include <thread>
 #include <vector>
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Nexus/GenerationTracker.h>
 #include <Oxygen/Testing/GTest.h>
 

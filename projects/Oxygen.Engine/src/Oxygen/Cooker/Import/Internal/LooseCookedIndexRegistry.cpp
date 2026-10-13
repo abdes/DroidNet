@@ -22,10 +22,12 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Semaphore.h>
 
 namespace oxygen::content::import {
 

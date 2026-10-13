@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -17,6 +18,7 @@
 #include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureLightingFixture.h>
 
 namespace oxygen::vortex::testing::exposure {

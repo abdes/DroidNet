@@ -18,6 +18,7 @@
 #include <glm/geometric.hpp>
 
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
 #include <Oxygen/Vortex/Types/LightingIndices.h>

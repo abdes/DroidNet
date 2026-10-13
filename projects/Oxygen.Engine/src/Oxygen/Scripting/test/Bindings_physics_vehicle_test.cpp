@@ -8,14 +8,25 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "ScriptingModule_test_fixture.h"
+#include <gtest/gtest.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/EngineModule.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
+#include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
+#include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Vehicle/VehicleDesc.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/PhysicsModule/test/Fakes/FakePhysicsSystem.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scripting/Module/ScriptingModule.h>
 
 namespace oxygen::scripting::test {
 

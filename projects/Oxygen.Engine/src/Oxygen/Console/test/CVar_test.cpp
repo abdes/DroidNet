@@ -9,10 +9,12 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Console/CVar.h>
@@ -162,7 +164,7 @@ NOLINT_TEST(ConsoleCVar, TextStartupValuesAreParsedForTheType)
   plan.Set("r.broken", std::string_view { "maybe" });
   console.ApplyStartupPlan(plan);
 
-  const auto define = [&console](const char* name, CVarValue value) {
+  const auto define = [&console](const char* name, CVarValue value) -> void {
     ASSERT_TRUE(console
         .RegisterCVar(CVarDefinition {
           .name = name,

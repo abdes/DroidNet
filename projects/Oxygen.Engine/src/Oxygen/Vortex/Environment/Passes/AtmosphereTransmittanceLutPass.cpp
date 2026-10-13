@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <span>
 #include <vector>
 
@@ -32,6 +33,7 @@
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/RendererCapability.h>
+#include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex::environment {
 

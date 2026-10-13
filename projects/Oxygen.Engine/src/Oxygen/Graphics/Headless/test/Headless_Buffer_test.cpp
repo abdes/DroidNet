@@ -4,13 +4,17 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <memory>
+#include <vector>
 
 #include <Oxygen/Core/Types/ByteUnits.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/AllocationBudget.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h> // IWYU pragma: keep
 #include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>
 #include <Oxygen/Graphics/Headless/Texture.h>
 #include <Oxygen/Testing/GTest.h>

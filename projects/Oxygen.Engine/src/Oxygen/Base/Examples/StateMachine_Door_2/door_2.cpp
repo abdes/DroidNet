@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdio>
+#include <exception>
 #include <iostream>
 
 #include <Oxygen/Base/StateMachine.h>

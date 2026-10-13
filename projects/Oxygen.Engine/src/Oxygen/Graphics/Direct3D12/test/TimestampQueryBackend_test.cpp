@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 
 #include <Oxygen/Graphics/Common/TimestampQueryProvider.h>
 #include <Oxygen/Graphics/Direct3D12/test/Fixtures/OffscreenTestFixture.h>

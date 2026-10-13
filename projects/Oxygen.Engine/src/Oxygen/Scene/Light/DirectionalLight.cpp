@@ -4,6 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <functional>
+
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 
 namespace oxygen::scene {

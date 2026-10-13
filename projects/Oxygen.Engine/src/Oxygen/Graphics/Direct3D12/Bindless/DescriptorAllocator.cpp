@@ -6,16 +6,25 @@
 
 #include <algorithm>
 #include <format>
-#include <ranges>
+#include <memory>
+#include <span>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Detail/DescriptorSegment.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorAllocator.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorSegment.h>
 #include <Oxygen/Graphics/Direct3D12/CommandRecorder.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 
 using oxygen::bindless::ShaderVisibleIndex;
 

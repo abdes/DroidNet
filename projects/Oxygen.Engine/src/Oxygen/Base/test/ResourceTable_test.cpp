@@ -5,10 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
 #include <random>
 #include <stdexcept>
 #include <string>
-#include <type_traits>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/ResourceHandle.h>
@@ -531,8 +533,8 @@ NOLINT_TEST(ResourceTableTest, Defragment)
   const auto handle_45 = table.Emplace(45);
   const auto handle_44 = table.Emplace(44);
 
-  const size_t swaps
-    = table.Defragment([](const int& a, const int& b) { return a < b; });
+  const size_t swaps = table.Defragment(
+    [](const int& a, const int& b) -> bool { return a < b; });
 
   // The dense set must be ordered by comp as documented ("ordered before"):
   // ascending. Only the key 44 has to move into the sorted prefix [41, 45].
@@ -562,8 +564,9 @@ protected:
     for (auto index = 1U; index <= kCapacity; index++) {
       handles_.push_back(table_.Emplace(std::to_string(index)));
     }
-    std::ranges::for_each(handles_,
-      [this](const auto& handle) { EXPECT_TRUE(table_.Contains(handle)); });
+    std::ranges::for_each(handles_, [this](const auto& handle) -> auto {
+      EXPECT_TRUE(table_.Contains(handle));
+    });
   }
 
   ResourceTable<std::string> table_;
@@ -627,7 +630,7 @@ NOLINT_TEST(ResourceTableTest, RandomInsertEraseAndDefragment)
 
   // Defragment the table
   table.Defragment(
-    [](const Item& a, const Item& b) { return a.value < b.value; });
+    [](const Item& a, const Item& b) -> bool { return a.value < b.value; });
 
   // The documented order is ascending by the comparison function.
   EXPECT_TRUE(std::ranges::is_sorted(table.Items(), {}, &Item::value));

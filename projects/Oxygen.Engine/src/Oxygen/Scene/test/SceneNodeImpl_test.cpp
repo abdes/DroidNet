@@ -14,6 +14,9 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/SceneNodeImpl.h>
+#include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::ObjectMetadata;

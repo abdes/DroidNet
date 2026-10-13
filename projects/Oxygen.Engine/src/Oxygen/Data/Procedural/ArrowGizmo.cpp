@@ -4,13 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cmath>
+#include <cstdint>
 #include <numbers>
-#include <string_view>
+#include <optional>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialAsset.h>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/geometric.hpp>
+
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Vertex.h>
 
 /*!
  Creates vertex and index buffers for an arrow used in editor-axis and debug

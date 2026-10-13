@@ -7,9 +7,20 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <mutex>
+#include <span>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/Types/FenceValue.h>
 #include <Oxygen/Nexus/TimelineGatedSlotReuse.h>
+#include <Oxygen/Nexus/Types/Domain.h>
 
 using oxygen::nexus::TimelineGatedSlotReuse;
 

@@ -4,7 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+
 #include <Oxygen/EditorInterface/Api.h>
+#include <Oxygen/EditorInterface/EngineContext.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen::engine::interop;

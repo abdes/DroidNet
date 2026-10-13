@@ -18,6 +18,8 @@
 #include <utility>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include <Oxygen/Cooker/Pak/PakBuildPhase.h>
 #include <Oxygen/Cooker/Pak/PakBuildReport.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>

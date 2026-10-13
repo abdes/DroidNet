@@ -44,6 +44,7 @@
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereLutCache.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Passes/AtmosphereCameraAerialPerspectivePass.h>
+#include <Oxygen/Vortex/Environment/Passes/Generated.AtmosphereContracts.h>
 #include <Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h>
 #include <Oxygen/Vortex/Internal/BindlessRootBindings.h>
 #include <Oxygen/Vortex/Internal/RetainedTexturePool.h>

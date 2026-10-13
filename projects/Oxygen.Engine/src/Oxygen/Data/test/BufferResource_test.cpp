@@ -6,9 +6,13 @@
 
 // Standard library
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 // GTest
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project

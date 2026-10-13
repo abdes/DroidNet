@@ -5,11 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <exception>
+#include <memory>
+#include <stdexcept>
+#include <utility>
 
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/OptionBuilder.h>
-#include <Oxygen/Clap/Fluent/PositionalOptionBuilder.h>
+#include <Oxygen/Clap/Fluent/PositionalOptionBuilder.h> // IWYU pragma: keep
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Testing/GTest.h>
 

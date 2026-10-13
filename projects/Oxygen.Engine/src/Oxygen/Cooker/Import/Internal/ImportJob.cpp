@@ -337,7 +337,7 @@ auto ImportJob::MainAsync() -> co::Co<>
 auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
 {
   const auto started = std::chrono::steady_clock::now();
-  const auto completion = ScopeGuard([this]() noexcept {
+  const auto completion = ScopeGuard([this]() noexcept -> void {
     completed_.Trigger();
     Stop();
   });
@@ -347,7 +347,7 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
   bool execution_completed = false;
   std::exception_ptr execution_failure;
   std::exception_ptr drain_failure;
-  const auto fail = [&](const std::string_view message) {
+  const auto fail = [&](const std::string_view message) -> void {
     report.success = false;
     report.cooked_root
       = request_.cooked_root.value_or(request_.source_path.parent_path());
@@ -383,7 +383,7 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
   }
   producer_nursery_ = nullptr;
   pipelines_.clear();
-  const auto capture_session_timing = [&]() noexcept {
+  const auto capture_session_timing = [&]() noexcept -> void {
     if (!execution_completed && session_) {
       fallback_telemetry.io_duration = session_->IoDuration();
       fallback_telemetry.source_load_duration = session_->SourceLoadDuration();
@@ -409,21 +409,21 @@ auto ImportJob::RunOwnedSessionToCompletion() -> co::Co<>
   // Diagnostics may allocate. Teardown must finish even when the original
   // failure was allocation failure in table/index finalization.
   const auto describe_failure
-    = [&](const std::exception_ptr& failure) noexcept {
-        report.success = false;
-        try {
-          try {
-            std::rethrow_exception(failure);
-          } catch (const std::exception& error) {
-            fail(error.what());
-          } catch (...) {
-            fail("Unknown import exception");
-          }
-        } catch (...) {
-          // A minimal failed report still carries completion during memory
-          // exhaustion.
-        }
-      };
+    = [&](const std::exception_ptr& failure) noexcept -> void {
+    report.success = false;
+    try {
+      try {
+        std::rethrow_exception(failure);
+      } catch (const std::exception& error) {
+        fail(error.what());
+      } catch (...) {
+        fail("Unknown import exception");
+      }
+    } catch (...) {
+      // A minimal failed report still carries completion during memory
+      // exhaustion.
+    }
+  };
   if (execution_failure && !IsStopped()) {
     describe_failure(execution_failure);
   } else if (!execution_completed) {

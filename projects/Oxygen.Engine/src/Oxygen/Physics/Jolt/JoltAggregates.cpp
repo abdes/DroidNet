@@ -4,11 +4,19 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
+#include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
+
+#include <cstddef>
+#include <mutex>
+#include <span>
 
 #include <Jolt/Physics/PhysicsSystem.h>
 
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Jolt/JoltAggregates.h>
+#include <Oxygen/Physics/Jolt/JoltWorld.h>
+#include <Oxygen/Physics/PhysicsError.h>
 
 namespace {
 

@@ -9,6 +9,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>
+#include <Oxygen/Graphics/Headless/Command.h>
 #include <Oxygen/Graphics/Headless/Commands/CopyBufferCommand.h>
 
 namespace oxygen::graphics::headless {

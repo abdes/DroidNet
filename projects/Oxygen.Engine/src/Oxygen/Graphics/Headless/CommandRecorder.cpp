@@ -4,18 +4,25 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <stdexcept>
-#include <unordered_map>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <span>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
-#include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
+#include <Oxygen/Graphics/Common/Framebuffer.h>
 #include <Oxygen/Graphics/Common/NativeObject.h>
-#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Graphics/Common/Texture.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
+#include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Headless/Buffer.h>
 #include <Oxygen/Graphics/Headless/Command.h>
 #include <Oxygen/Graphics/Headless/CommandList.h>
-#include <Oxygen/Graphics/Headless/CommandQueue.h>
 #include <Oxygen/Graphics/Headless/CommandRecorder.h>
 #include <Oxygen/Graphics/Headless/Commands/BufferToTextureCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/ClearDepthStencilCommand.h>
@@ -23,7 +30,6 @@
 #include <Oxygen/Graphics/Headless/Commands/CopyBufferCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/ResourceBarrierCommand.h>
 #include <Oxygen/Graphics/Headless/Commands/TextureToBufferCommand.h>
-#include <Oxygen/Graphics/Headless/api_export.h>
 
 namespace oxygen::graphics::headless {
 // Out-of-line destructor to ensure vtable emission in this translation unit.

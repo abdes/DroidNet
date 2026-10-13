@@ -98,9 +98,10 @@ namespace {
   //! Lower-case an ASCII string in-place and return it.
   auto ToLowerAscii(std::string value) -> std::string
   {
-    std::ranges::transform(value, value.begin(), [](const unsigned char ch) {
-      return static_cast<char>(std::tolower(ch));
-    });
+    std::ranges::transform(
+      value, value.begin(), [](const unsigned char ch) -> char {
+        return static_cast<char>(std::tolower(ch));
+      });
     return value;
   }
 } // namespace

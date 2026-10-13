@@ -19,7 +19,7 @@ struct Scissors {
   int32_t right { 0 };
   int32_t bottom { 0 };
 
-  [[nodiscard]] bool IsValid() const
+  [[nodiscard]] auto IsValid() const -> bool
   {
     return left <= right && top <= bottom;
     // Individual components can be negative if the coordinate system allows,

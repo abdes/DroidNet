@@ -6,8 +6,10 @@
 
 #include <cassert>
 #include <cstddef>
+#include <cstdint>
 
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/Format.h>
 
 namespace oxygen::graphics::detail {
 

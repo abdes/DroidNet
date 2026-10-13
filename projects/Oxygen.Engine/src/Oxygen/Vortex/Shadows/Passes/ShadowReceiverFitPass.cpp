@@ -41,6 +41,7 @@
 #include <Oxygen/Vortex/Shadows/Passes/Generated.ShadowPassContracts.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowReceiverFitPass.h>
 #include <Oxygen/Vortex/Shadows/Types/Generated.ShadowContracts.h>
+#include <Oxygen/Vortex/Shadows/Types/ShadowReceiverView.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>
 
 namespace oxygen::vortex::shadows {

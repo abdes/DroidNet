@@ -4,8 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <utility>
+
 #include <lua.h>
-#include <lualib.h>
 
 #include <Oxygen/Content/IAssetLoader.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentBindingsCommon.h>

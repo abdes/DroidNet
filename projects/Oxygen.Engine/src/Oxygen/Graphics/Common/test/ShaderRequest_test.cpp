@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <string>
 
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Testing/GTest.h>
 

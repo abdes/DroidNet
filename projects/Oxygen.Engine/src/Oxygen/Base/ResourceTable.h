@@ -376,14 +376,15 @@ template <typename URef>
   requires std::is_same_v<std::remove_cvref_t<URef>, T>
 auto ResourceTable<T>::Insert(URef&& item) -> ResourceHandle
 {
-  return InsertImpl([&] { items_.push_back(std::forward<URef>(item)); });
+  return InsertImpl(
+    [&] -> void { items_.push_back(std::forward<URef>(item)); });
 }
 
 template <typename T>
 template <typename... Params>
 auto ResourceTable<T>::Emplace(Params&&... args) -> ResourceHandle
 {
-  return InsertImpl([&] {
+  return InsertImpl([&] -> void {
     // Use perfect forwarding to construct the item in place
     items_.emplace_back(std::forward<Params>(args)...);
   });
@@ -573,7 +574,8 @@ auto ResourceTable<T>::Defragment(Compare comp, const size_t max_swaps)
 
   // Insertion sort over the dense arrays; `i` walks backwards and may reach -1.
   using SignedIndex = std::ptrdiff_t;
-  const auto at = [](const SignedIndex k) { return static_cast<size_t>(k); };
+  const auto at
+    = [](const SignedIndex k) -> size_t { return static_cast<size_t>(k); };
   size_t index = 1;
   for (; index < items_.size() && (max_swaps == 0 || swaps < max_swaps);
     ++index) {

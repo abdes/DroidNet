@@ -9,7 +9,7 @@
 
 #include <string>
 
-#include <nlohmann/json_fwd.hpp>
+#include <nlohmann/json.hpp>
 
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Testing/GTest.h>

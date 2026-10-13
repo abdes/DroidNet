@@ -5,9 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 #if defined(OXGN_PHYS_BACKEND_JOLT)
-#  include <Jolt/Jolt.h> // Must always be first (keep separate)
+#  include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 #endif
 
+#include <cstdint>
+#include <ios>
 #include <limits>
 #include <mutex>
 #include <sstream>
@@ -17,10 +19,14 @@
 
 #if defined(OXGN_PHYS_BACKEND_JOLT)
 #  include <Jolt/Core/Memory.h>
+#  include <Jolt/Core/Reference.h>
 #  include <Jolt/Core/StreamWrapper.h>
 #  include <Jolt/Physics/SoftBody/SoftBodySharedSettings.h>
 #endif
 
+#include <Oxygen/Physics/CollisionLayers.h>
+#include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/SoftBody/SoftBodyDesc.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 #include <Oxygen/Physics/test/Jolt/Jolt_test_fixture.h>
 #include <Oxygen/Physics/test/TestBlobBuilders.h>

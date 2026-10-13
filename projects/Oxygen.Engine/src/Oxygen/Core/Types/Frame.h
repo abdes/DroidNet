@@ -66,7 +66,7 @@ public:
 
   // Construct from an explicit value; enforce value >= 1.
   explicit constexpr FrameSlotCount(uint32_t v)
-    : Base { [](uint32_t v) {
+    : Base { [](uint32_t v) -> uint32_t {
       if (v >= 1u)
         return v;
       throw std::invalid_argument("FrameSlotCount must be >= 1");
@@ -75,7 +75,7 @@ public:
   }
 
   // Allow implicit conversion from Base where safe via explicit factory.
-  static constexpr FrameSlotCount FromUnderlying(uint32_t v)
+  static constexpr auto FromUnderlying(uint32_t v) -> FrameSlotCount
   {
     return FrameSlotCount { v };
   }

@@ -169,7 +169,7 @@ NOLINT_TEST_F(AnyCacheBasicTest, NotificationScopeSurvivesCacheDestruction)
   ASSERT_TRUE(cache->Store(1, std::make_shared<CachedNumber>(1)));
   ASSERT_TRUE(cache->Store(2, std::make_shared<CachedNumber>(2)));
   unsigned int calls = 0;
-  auto scope = cache->OnEviction([&](const auto&) {
+  auto scope = cache->OnEviction([&](const auto&) -> auto {
     ++calls;
     cache.reset();
   });
@@ -287,7 +287,7 @@ NOLINT_TEST_F(
   const auto stamp = original->ticket.Entry();
   EXPECT_TRUE(cache_.Release(std::move(original->ticket)));
   unsigned int calls = 0;
-  auto scope = cache_.OnEviction([&](const auto& retired) {
+  auto scope = cache_.OnEviction([&](const auto& retired) -> auto {
     ++calls;
     EXPECT_EQ(retired.entry, stamp);
     EXPECT_EQ(std::static_pointer_cast<CachedNumber>(retired.value)->value, 1);
@@ -307,7 +307,7 @@ NOLINT_TEST_F(AnyCacheBasicTest, ClearRetiresLeasedItemsAndNotifiesOutsideLock)
     FAIL() << "Expected initial publication";
   }
   std::vector<int> retired_keys;
-  auto scope = cache_.OnEviction([&](const auto& retired) {
+  auto scope = cache_.OnEviction([&](const auto& retired) -> auto {
     retired_keys.push_back(retired.entry.GetKey());
     EXPECT_EQ(cache_.Size(), 0U);
   });
@@ -321,9 +321,9 @@ NOLINT_TEST_F(AnyCacheBasicTest, NotificationScopesRestorePreviousRegistration)
 {
   unsigned int outer_calls = 0;
   unsigned int inner_calls = 0;
-  auto outer = cache_.OnEviction([&](const auto&) { ++outer_calls; });
+  auto outer = cache_.OnEviction([&](const auto&) -> auto { ++outer_calls; });
   {
-    auto inner = cache_.OnEviction([&](const auto&) { ++inner_calls; });
+    auto inner = cache_.OnEviction([&](const auto&) -> auto { ++inner_calls; });
     ASSERT_TRUE(cache_.Store(1, std::make_shared<CachedNumber>(1)));
     EXPECT_TRUE(cache_.Remove(1));
   }
@@ -378,7 +378,7 @@ NOLINT_TEST_F(AnyCacheBasicTest, ReleaseHonorsImmediateEvictionPolicies)
   }
   const auto stamp = acquired->ticket.Entry();
   unsigned int calls = 0;
-  auto scope = cache.OnEviction([&](const auto& retired) {
+  auto scope = cache.OnEviction([&](const auto& retired) -> auto {
     ++calls;
     EXPECT_EQ(retired.entry, stamp);
     EXPECT_FALSE(cache.Contains(1));

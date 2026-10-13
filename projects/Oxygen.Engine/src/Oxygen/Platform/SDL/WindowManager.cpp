@@ -4,9 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <exception>
+#include <memory>
+#include <stdexcept>
+
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_stdinc.h>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Platform/Detail/Window_ManagerInterface.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/SDL/Wrapper.h>
+#include <Oxygen/Platform/Types.h>
 #include <Oxygen/Platform/Window.h>
 
 using oxygen::platform::WindowManager;

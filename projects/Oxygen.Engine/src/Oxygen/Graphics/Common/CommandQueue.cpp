@@ -4,11 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <limits>
+#include <cstdint>
+#include <mutex>
+#include <optional>
+#include <span>
+#include <string_view>
 
-#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 
 using oxygen::graphics::CommandQueue;
 

@@ -5,10 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <tuple>
 
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
-#include <gmock/gmock.h>
 
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Co.h>

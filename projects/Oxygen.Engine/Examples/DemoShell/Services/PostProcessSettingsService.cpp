@@ -20,7 +20,6 @@
 #include "DemoShell/Services/PostProcessSettingsService.h"
 #include "DemoShell/Services/SettingsService.h"
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>

@@ -4,9 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <stdexcept>
+#include <vector>
 
 #include <Oxygen/Graphics/Common/Constants.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/Converters.h>
 
 namespace oxygen::graphics::d3d12::detail {

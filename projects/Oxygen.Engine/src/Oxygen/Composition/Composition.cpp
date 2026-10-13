@@ -4,17 +4,32 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cstddef>
+#include <exception>
 #include <iostream>
+#include <memory>
+#include <mutex>
 #include <queue>
 #include <ranges>
+#include <shared_mutex>
+#include <span>
+#include <string>
+#include <string_view>
+#include <type_traits>
+#include <unordered_map>
 #include <utility> // std::as_const
+#include <vector>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ResourceHandle.h>
+#include <Oxygen/Composition/Component.h>
 #include <Oxygen/Composition/Composition.h>
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Composition/TypeSystem.h>
+#include <Oxygen/Composition/Typed.h>
 
 using oxygen::Component;
 using oxygen::Composition;
@@ -75,7 +90,7 @@ auto Composition::TopologicallySortedPooledEntries() -> std::vector<TypeId>
   std::unordered_map<TypeId, size_t> in_degree;
   std::unordered_map<TypeId, std::vector<TypeId>> graph;
 
-  auto add_dependencies = [&](const auto& comp, const TypeId type_id) {
+  auto add_dependencies = [&](const auto& comp, const TypeId type_id) -> auto {
     if (comp && comp->HasDependencies()) {
       for (auto dep : comp->Dependencies()) {
         graph[type_id].push_back(dep);
@@ -139,8 +154,10 @@ auto Composition::DestroyComponents() noexcept -> void
         pooled_components_.erase(pooled_it);
         continue;
       }
-      auto local_it = std::ranges::find_if(local_components_,
-        [type_id](const auto& comp) { return comp->GetTypeId() == type_id; });
+      auto local_it = std::ranges::find_if(
+        local_components_, [type_id](const auto& comp) -> auto {
+          return comp->GetTypeId() == type_id;
+        });
       DCHECK_NE_F(local_it, local_components_.end());
       if (local_it->use_count() == 1) {
         DLOG_SCOPE_F(2, "Destroy Component");
@@ -241,7 +258,7 @@ auto Composition::EnsureDependencies(const TypeId comp_id,
   for (TypeId dep : dependencies) {
     const bool found = pooled_components_.contains(dep)
       || std::ranges::any_of(local_components_,
-        [&](const auto& c) { return c && c->GetTypeId() == dep; });
+        [&](const auto& c) -> auto { return c && c->GetTypeId() == dep; });
     if (!found) {
       // Build a helpful diagnostic message with type ids and pretty names
       std::string dep_name;
@@ -268,7 +285,7 @@ auto Composition::EnsureDependencies(const TypeId comp_id,
 auto Composition::HasLocalComponentImpl(TypeId id) const -> bool
 {
   return std::ranges::any_of(local_components_,
-    [id](const auto& comp) { return comp->GetTypeId() == id; });
+    [id](const auto& comp) -> auto { return comp->GetTypeId() == id; });
 }
 auto Composition::HasPooledComponentImpl(const TypeId id) const -> bool
 {
@@ -302,8 +319,10 @@ auto Composition::GetComponentImpl(TypeId type_id) const -> const Component&
     }
     return *ptr;
   }
-  const auto it = std::ranges::find_if(local_components_,
-    [type_id](const auto& comp) { return comp->GetTypeId() == type_id; });
+  const auto it = std::ranges::find_if(
+    local_components_, [type_id](const auto& comp) -> auto {
+      return comp->GetTypeId() == type_id;
+    });
   if (it == local_components_.end()) {
     // Provide richer diagnostics (similar to EnsureDependencies) so callers
     // can identify which component lookup failed. This is especially helpful
@@ -370,7 +389,7 @@ auto Composition::DeepCopyComponentsFrom(const Composition& other) -> void
   DeepCopyLocalComponentsFrom(other);
   DeepCopyPooledComponentsFrom(other);
 
-  auto update_dependencies = [this](auto& container, auto get_comp) {
+  auto update_dependencies = [this](auto& container, auto get_comp) -> auto {
     for (const auto& entry : container) {
       if (auto* comp = get_comp(entry); comp && comp->HasDependencies()) {
         comp->UpdateDependencies([this](const TypeId id) -> Component& {
@@ -380,11 +399,11 @@ auto Composition::DeepCopyComponentsFrom(const Composition& other) -> void
       }
     }
   };
-  update_dependencies(local_components_, [](const auto& sp) {
+  update_dependencies(local_components_, [](const auto& sp) -> auto {
     // local components are stored as shared_ptr
     return sp.get();
   });
-  update_dependencies(pooled_components_, [](const auto& pe) {
+  update_dependencies(pooled_components_, [](const auto& pe) -> auto {
     // pooled components are stored as PooledEntry
     return pe.second->GetComponent();
   });

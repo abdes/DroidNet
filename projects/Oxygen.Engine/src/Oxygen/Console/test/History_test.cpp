@@ -4,6 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <filesystem>
+#include <string>
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
 #include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Config/PathFinderConfig.h>
@@ -74,13 +80,12 @@ NOLINT_TEST(ConsoleHistory, RespectsCapacity)
         .Register({ .name = "cmd" + std::to_string(i),
           .help = "dummy",
           .flags = oxygen::commands::CommandFlags::kNone,
-          .handler =
-            [](const auto&, const auto&) {
-              return oxygen::commands::CommandResult { .status
-                = oxygen::commands::ExecutionStatus::kOk,
-                .output = {},
-                .error = {} };
-            } })
+          .handler = [](const auto&, const auto&) -> auto {
+            return oxygen::commands::CommandResult { .status
+              = oxygen::commands::ExecutionStatus::kOk,
+              .output = {},
+              .error = {} };
+          } })
         .IsValid());
   }
 
@@ -114,25 +119,23 @@ NOLINT_TEST(ConsoleHistory, PersistsAcrossSessions)
         .Register({ .name = "cmd1",
           .help = "dummy",
           .flags = oxygen::commands::CommandFlags::kNone,
-          .handler =
-            [](const auto&, const auto&) {
-              return oxygen::commands::CommandResult { .status
-                = oxygen::commands::ExecutionStatus::kOk,
-                .output = {},
-                .error = {} };
-            } })
+          .handler = [](const auto&, const auto&) -> auto {
+            return oxygen::commands::CommandResult { .status
+              = oxygen::commands::ExecutionStatus::kOk,
+              .output = {},
+              .error = {} };
+          } })
         .IsValid());
     ASSERT_TRUE(writer_commands
         .Register({ .name = "cmd2",
           .help = "dummy",
           .flags = oxygen::commands::CommandFlags::kNone,
-          .handler =
-            [](const auto&, const auto&) {
-              return oxygen::commands::CommandResult { .status
-                = oxygen::commands::ExecutionStatus::kOk,
-                .output = {},
-                .error = {} };
-            } })
+          .handler = [](const auto&, const auto&) -> auto {
+            return oxygen::commands::CommandResult { .status
+              = oxygen::commands::ExecutionStatus::kOk,
+              .output = {},
+              .error = {} };
+          } })
         .IsValid());
 
     EXPECT_EQ(writer.Execute("cmd1").status, ExecutionStatus::kOk);

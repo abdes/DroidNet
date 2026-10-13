@@ -3,8 +3,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <type_traits>
+#include <utility>
 
 #include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Engine/ModuleEvent.h>
 #include <Oxygen/Testing/GTest.h>
 
 using namespace oxygen;

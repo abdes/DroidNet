@@ -4,9 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
+#include <functional>
+#include <stdexcept>
+
 #include "Utils/OxCoTestFixture.h"
 #include "Utils/TestEventLoop.h"
 
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/Awaitables.h>
 #include <Oxygen/OxCo/Co.h>

@@ -4,8 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
+#include <mutex>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Headless/Bindless/DescriptorSegment.h>
 
 namespace oxygen::graphics::headless::bindless {

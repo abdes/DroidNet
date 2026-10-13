@@ -4,24 +4,34 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <exception>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <queue>
 #include <utility>
 #include <vector>
 
+#include <xstring>
+
+#include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/OxCo/Algorithms.h>
 #include <Oxygen/OxCo/BroadcastChannel.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/EventLoop.h>
-#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/Yield.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/SceneQuery.h>
 #include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/SceneTraversalAsync.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 
 using oxygen::scene::AsyncSceneTraversal;
 using oxygen::scene::BatchResult;

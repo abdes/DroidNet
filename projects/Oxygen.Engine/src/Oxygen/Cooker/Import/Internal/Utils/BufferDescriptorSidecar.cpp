@@ -11,17 +11,23 @@
 #include <cstring>
 #include <exception>
 #include <limits>
-#include <ranges>
+#include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormat_core.h>
 
 namespace oxygen::content::import::internal {
 
@@ -433,10 +439,10 @@ auto ParseBufferDescriptorSidecar(const std::span<const std::byte> bytes,
     });
   }
 
-  const auto has_implicit_all
-    = std::ranges::any_of(out.views, [](const BufferDescriptorView& view) {
-        return view.name == kImplicitBufferViewName;
-      });
+  const auto has_implicit_all = std::ranges::any_of(
+    out.views, [](const BufferDescriptorView& view) -> bool {
+      return view.name == kImplicitBufferViewName;
+    });
   if (!has_implicit_all) {
     error_message = "Buffer descriptor is missing required '__all__' view";
     return false;

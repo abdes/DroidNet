@@ -4,18 +4,24 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <windows.h>
+#include <windows.h> // IWYU pragma: keep
 
+#include <algorithm>
+#include <cstdint>
 #include <cwctype>
 #include <filesystem>
+#include <memory>
 #include <mutex>
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Config/GraphicsConfig.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Graphics/Common/FrameCaptureController.h>
 #include <Oxygen/Graphics/Common/Surface.h>
 #include <Oxygen/Graphics/Direct3D12/Graphics.h>

@@ -10,7 +10,7 @@
 
 #if defined(OXYGEN_WINDOWS)
 // clang-format off
-#  include <windows.h>
+#  include <windows.h> // IWYU pragma: keep
 #  include <psapi.h>
 #  include <array>
 #  include <span>
@@ -181,7 +181,7 @@ auto GetTrulySingleInstance(std::string_view type_name) -> InstanceT&
 )";
     // NOLINTBEGIN(cppcoreguidelines-owning-memory)
     instance = new InstanceT();
-    std::atexit([]() { delete instance; });
+    std::atexit([]() -> auto { delete instance; });
     // NOLINTEND(cppcoreguidelines-owning-memory)
   }
   return *instance;

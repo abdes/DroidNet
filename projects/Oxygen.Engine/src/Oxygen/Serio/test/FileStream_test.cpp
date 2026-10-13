@@ -4,10 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstring>
+#include <filesystem>
 #include <fstream>
+#include <ios>
+#include <iosfwd>
+#include <limits>
+#include <memory>
 #include <random>
+#include <string>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/Stream.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::serio::BackingStream;

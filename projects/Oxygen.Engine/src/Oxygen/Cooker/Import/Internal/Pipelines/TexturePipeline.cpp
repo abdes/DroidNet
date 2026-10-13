@@ -6,21 +6,43 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <functional>
 #include <iterator>
+#include <memory>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <utility>
+#include <variant>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/TextureCooker.h>
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
+#include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Cooker/Import/TextureImportDesc.h>
 #include <Oxygen/Cooker/Import/TextureImportError.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TexturePackingPolicy.h>
+#include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content::import {
 
@@ -1136,7 +1158,7 @@ auto TexturePipeline::Worker() -> co::Co<>
     if (item.on_started) {
       item.on_started();
     }
-    auto NotifyFinished = [&item]() {
+    auto NotifyFinished = [&item]() -> void {
       if (item.on_finished) {
         item.on_finished();
       }

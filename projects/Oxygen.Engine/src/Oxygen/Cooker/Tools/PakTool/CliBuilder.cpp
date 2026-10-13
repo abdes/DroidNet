@@ -82,7 +82,7 @@ namespace {
         .WithValue<std::filesystem::path>()
         .UserFriendlyName("DIR")
         .Repeatable()
-        .CallOnEachValue([&options](const std::filesystem::path& path) {
+        .CallOnEachValue([&options](const std::filesystem::path& path) -> void {
           options.sources.push_back(data::CookedSource {
             .kind = data::CookedSourceKind::kLooseCooked,
             .path = path,
@@ -97,7 +97,7 @@ namespace {
         .WithValue<std::filesystem::path>()
         .UserFriendlyName("DIR")
         .Repeatable()
-        .CallOnEachValue([&options](const std::filesystem::path& path) {
+        .CallOnEachValue([&options](const std::filesystem::path& path) -> void {
           options.script_source_roots.push_back(path);
         })
         .Build());
@@ -108,7 +108,7 @@ namespace {
         .WithValue<std::filesystem::path>()
         .UserFriendlyName("PATH")
         .Repeatable()
-        .CallOnEachValue([&options](const std::filesystem::path& path) {
+        .CallOnEachValue([&options](const std::filesystem::path& path) -> void {
           options.sources.push_back(data::CookedSource {
             .kind = data::CookedSourceKind::kPak,
             .path = path,
@@ -219,7 +219,7 @@ namespace {
         .WithValue<std::filesystem::path>()
         .UserFriendlyName("PATH")
         .Repeatable()
-        .CallOnEachValue([&options](const std::filesystem::path& path) {
+        .CallOnEachValue([&options](const std::filesystem::path& path) -> void {
           options.base_paks.push_back(path);
         })
         .Build());

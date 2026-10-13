@@ -5,9 +5,10 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <bit>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -20,25 +21,29 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "AssetDumpers.h"
 #include "DumpContext.h"
 #include "PakFileDumper.h"
 #include "PrintUtils.h"
+#include <fmt/base.h>
 #include <fmt/format.h>
 
-#include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -552,7 +557,7 @@ public:
     Register("physics", std::make_unique<PhysicsResourceTableDumper>());
   }
 
-  const ResourceTableDumper& Get(const std::string& type) const
+  auto Get(const std::string& type) const -> const ResourceTableDumper&
   {
     auto it = dumpers_.find(type);
     if (it != dumpers_.end()) {

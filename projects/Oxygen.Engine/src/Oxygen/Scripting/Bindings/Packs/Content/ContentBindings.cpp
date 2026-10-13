@@ -5,7 +5,6 @@
 //===----------------------------------------------------------------------===//
 
 #include <lua.h>
-#include <lualib.h>
 
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Content/ContentAsyncBindings.h>

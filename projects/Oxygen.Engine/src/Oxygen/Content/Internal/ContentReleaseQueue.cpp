@@ -22,7 +22,7 @@ auto ContentReleaseQueue::MakeOwner(Cache& cache,
   std::shared_ptr<const void> value, std::optional<Cache::UsageTicket> usage)
   -> std::shared_ptr<Record>
 {
-  const auto rollback = Finally([&]() noexcept {
+  const auto rollback = Finally([&]() noexcept -> void {
     if (usage && usage->IsActive()) {
       static_cast<void>(cache.Release(std::move(*usage)));
     }
@@ -109,7 +109,7 @@ auto ContentReleaseQueue::Drain(Cache& cache, const std::size_t limit)
     return 0U;
   }
   draining_ = true;
-  const auto reset = Finally([&]() noexcept { draining_ = false; });
+  const auto reset = Finally([&]() noexcept -> void { draining_ = false; });
   std::size_t processed = 0;
   while (processed < limit) {
     auto record = Pop();

@@ -17,6 +17,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Buffer.h>

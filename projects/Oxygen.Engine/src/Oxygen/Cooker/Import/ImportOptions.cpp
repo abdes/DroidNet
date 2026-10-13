@@ -33,7 +33,7 @@ auto to_string(ImportContentFlags value) -> std::string
   }
 
   std::string result;
-  auto add_flag = [&](ImportContentFlags flag, const char* name) {
+  auto add_flag = [&](ImportContentFlags flag, const char* name) -> void {
     if ((value & flag) != ImportContentFlags::kNone) {
       if (!result.empty()) {
         result += "|";

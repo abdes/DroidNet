@@ -4,6 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/ImGui/Console/ConsoleUiState.h>
 
 namespace oxygen::imgui::consoleui {

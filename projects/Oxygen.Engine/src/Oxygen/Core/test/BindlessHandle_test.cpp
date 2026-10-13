@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <functional>
 #include <limits>
+#include <string>
 #include <type_traits>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -679,7 +681,8 @@ NOLINT_TEST_F(LoggingTests, BindlessHeapIndex_LoggingIntegration_ProducesOutput)
   BindlessHeapIndex handle { 123u };
 
   // Act
-  auto output = CaptureStderr([&] { LOG_F(INFO, "Handle: {}", handle); });
+  auto output
+    = CaptureStderr([&] -> void { LOG_F(INFO, "Handle: {}", handle); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Handle:"));
@@ -696,7 +699,7 @@ NOLINT_TEST_F(LoggingTests, BindlessItemCount_LoggingIntegration_ProducesOutput)
   BindlessItemCount count { 456u };
 
   // Act
-  auto output = CaptureStderr([&] { LOG_F(INFO, "Count: {}", count); });
+  auto output = CaptureStderr([&] -> void { LOG_F(INFO, "Count: {}", count); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Count:"));
@@ -714,7 +717,8 @@ NOLINT_TEST_F(
   BindlessHeapCapacity capacity { 789u };
 
   // Act
-  auto output = CaptureStderr([&] { LOG_F(INFO, "Capacity: {}", capacity); });
+  auto output
+    = CaptureStderr([&] -> void { LOG_F(INFO, "Capacity: {}", capacity); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Capacity:"));
@@ -735,7 +739,8 @@ NOLINT_TEST_F(LoggingTests,
     Generation { 7u } };
 
   // Act
-  auto output = CaptureStderr([&] { LOG_F(INFO, "Versioned: {}", versioned); });
+  auto output
+    = CaptureStderr([&] -> void { LOG_F(INFO, "Versioned: {}", versioned); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Versioned:"));
@@ -753,7 +758,7 @@ NOLINT_TEST_F(LoggingTests, Generation_LoggingIntegration_ProducesOutput)
 
   // Act
   auto output
-    = CaptureStderr([&] { LOG_F(INFO, "Generation: {}", generation); });
+    = CaptureStderr([&] -> void { LOG_F(INFO, "Generation: {}", generation); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Generation:"));
@@ -771,7 +776,8 @@ NOLINT_TEST_F(
   auto invalid = oxygen::kInvalidBindlessHeapIndex;
 
   // Act
-  auto output = CaptureStderr([&] { LOG_F(INFO, "Invalid: {}", invalid); });
+  auto output
+    = CaptureStderr([&] -> void { LOG_F(INFO, "Invalid: {}", invalid); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Invalid:"));
@@ -789,8 +795,8 @@ NOLINT_TEST_F(LoggingTests,
   VersionedBindlessHandle invalid {}; // Default construction creates invalid
 
   // Act
-  auto output
-    = CaptureStderr([&] { LOG_F(INFO, "Invalid versioned: {}", invalid); });
+  auto output = CaptureStderr(
+    [&] -> void { LOG_F(INFO, "Invalid versioned: {}", invalid); });
 
   // Assert
   EXPECT_THAT(output, HasSubstr("Invalid versioned:"));
@@ -819,7 +825,7 @@ NOLINT_TEST_F(
     Generation { 2u } };
 
   // Act
-  auto output = CaptureStderr([&] {
+  auto output = CaptureStderr([&] -> void {
     LOG_F(INFO, "Handle: {}, Count: {}, Capacity: {}, Versioned: {}", handle,
       count, capacity, versioned);
   });
@@ -849,7 +855,7 @@ NOLINT_TEST_F(LoggingTests, EdgeCaseValues_LoggingIntegration_HandlesExtremes)
   };
 
   // Act
-  auto output = CaptureStderr([&] {
+  auto output = CaptureStderr([&] -> void {
     LOG_F(INFO, "Zero: {}, Max: {}, MaxVersioned: {}", zero, max_handle,
       max_versioned);
   });
@@ -875,7 +881,7 @@ NOLINT_TEST_F(LoggingTests, NamespaceAliases_LoggingIntegration_WorkCorrectly)
   oxygen::bindless::Capacity capacity { 200u };
 
   // Act
-  auto output = CaptureStderr([&] {
+  auto output = CaptureStderr([&] -> void {
     LOG_F(INFO, "Alias Handle: {}, Count: {}, Capacity: {}", handle, count,
       capacity);
   });

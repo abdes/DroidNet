@@ -7,19 +7,52 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <memory>
+#include <optional>
+#include <string_view>
+#include <utility>
 #include <vector>
 
+#include <glm/ext/quaternion_common.hpp>
+#include <glm/ext/quaternion_geometric.hpp>
 #include <glm/geometric.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/ResourceHandle.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
-#include <Oxygen/Engine/AsyncEngine.h>
+#include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/Engine/IAsyncEngine.h> // IWYU pragma: keep
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
+#include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Events/PhysicsEvents.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Physics.h>
+#include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/System/IAggregateApi.h>
+#include <Oxygen/Physics/System/IArticulationApi.h>
+#include <Oxygen/Physics/System/IBodyApi.h>
+#include <Oxygen/Physics/System/ICharacterApi.h>
+#include <Oxygen/Physics/System/IEventApi.h>
+#include <Oxygen/Physics/System/IJointApi.h>
+#include <Oxygen/Physics/System/IPhysicsSystem.h>
+#include <Oxygen/Physics/System/IQueryApi.h>
+#include <Oxygen/Physics/System/IShapeApi.h>
+#include <Oxygen/Physics/System/ISoftBodyApi.h>
+#include <Oxygen/Physics/System/IVehicleApi.h>
+#include <Oxygen/Physics/System/IWorldApi.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 
 namespace oxygen::physics {
 namespace {

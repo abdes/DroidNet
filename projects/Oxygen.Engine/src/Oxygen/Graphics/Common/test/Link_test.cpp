@@ -6,6 +6,7 @@
 
 #include <iostream>
 
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 
 using oxygen::ShaderType;

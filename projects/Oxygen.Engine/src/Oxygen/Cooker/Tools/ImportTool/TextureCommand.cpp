@@ -4,15 +4,25 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <iostream>
+#include <cstddef>
+#include <cstdint>
+#include <expected>
+#include <memory>
+#include <optional>
 #include <sstream>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/Macros.h>
+#include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
 #include <Oxygen/Cooker/Import/Internal/TextureImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/Tools/ImportTool/ImportRunner.h>
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/Tools/ImportTool/TextureCommand.h>
@@ -253,7 +263,7 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                    .Long("source")
                    .WithValue<std::string>()
                    .Repeatable()
-                   .CallOnEachValue([this](const std::string& val) {
+                   .CallOnEachValue([this](const std::string& val) -> void {
                      if (auto mapping = ParseSourceMapping(val)) {
                        options_.sources.push_back(std::move(*mapping));
                      }

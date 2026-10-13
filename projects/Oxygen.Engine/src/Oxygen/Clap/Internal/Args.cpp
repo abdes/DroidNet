@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <span>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
@@ -33,7 +36,7 @@ struct oxygen::clap::detail::Arguments::ArgumentsImpl {
 oxygen::clap::detail::Arguments::Arguments(int argc, const char** argv)
   : impl_(new ArgumentsImpl(argc, argv),
       // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
-      [](const ArgumentsImpl* impl) { delete impl; })
+      [](const ArgumentsImpl* impl) -> void { delete impl; })
 {
 }
 

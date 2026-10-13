@@ -6,25 +6,33 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
 #include <filesystem>
 #include <fstream>
+#include <ios>
 #include <optional>
-#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Cooker/Pak/PakBuildPhase.h>
+#include <Oxygen/Cooker/Pak/PakBuildReport.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakManifestWriter.h>
+#include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/PatchManifest.h>
 #include <Oxygen/Data/SourceKey.h>
 
 namespace {
@@ -61,7 +69,7 @@ auto HasManifestErrors(const std::vector<pak::PakDiagnostic>& diagnostics)
   -> bool
 {
   return std::ranges::any_of(
-    diagnostics, [](const pak::PakDiagnostic& diagnostic) {
+    diagnostics, [](const pak::PakDiagnostic& diagnostic) -> bool {
       return diagnostic.severity == pak::PakDiagnosticSeverity::kError;
     });
 }
@@ -118,7 +126,7 @@ auto ValidatePatchSetDisjointness(const data::PatchManifest& manifest,
 
   const auto intersection_with = [](const auto& lhs, const auto& rhs) -> bool {
     return std::ranges::any_of(
-      lhs, [&rhs](const auto& key) { return rhs.contains(key); });
+      lhs, [&rhs](const auto& key) -> auto { return rhs.contains(key); });
   };
 
   if (intersection_with(created_keys, replaced_keys)

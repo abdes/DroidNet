@@ -4,9 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <limits>
+#include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 
+#include <cstdint>
+#include <limits>
+#include <mutex>
+
+#include <Jolt/Core/Reference.h>
+#include <Jolt/Physics/Collision/Shape/Shape.h>
+
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Physics/Handles.h>
+#include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltShapes.h>
+#include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/Shape/ShapeDesc.h>
 
 auto oxygen::physics::jolt::JoltShapes::CreateShape(
   const shape::ShapeDesc& desc) -> PhysicsResult<ShapeId>

@@ -5,10 +5,18 @@
 //===----------------------------------------------------------------------===//
 
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
 #include <string_view>
+#include <utility>
+#include <vector>
+
+#include <glm/ext/vector_double3.hpp>
+#include <glm/geometric.hpp>
 
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {

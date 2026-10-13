@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <ostream>
+
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Graphics/Headless/api_export.h>
 

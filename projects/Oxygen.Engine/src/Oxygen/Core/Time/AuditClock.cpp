@@ -7,6 +7,7 @@
 #include <chrono>
 
 #include <Oxygen/Core/Time/AuditClock.h>
+#include <Oxygen/Core/Time/Types.h>
 
 using namespace std::chrono;
 

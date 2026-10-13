@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <chrono>
+
 #include <Oxygen/Core/Time/NetworkClock.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
 #include <Oxygen/Testing/GTest.h>

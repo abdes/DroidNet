@@ -5,8 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <string>
+#include <vector>
 
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
+#include <Oxygen/Engine/Scripting/ScriptBytecodeBlob.h>
+#include <Oxygen/Engine/Scripting/ScriptSourceBlob.h>
+#include <Oxygen/Scripting/IScriptSourceResolver.h>
 #include <Oxygen/Scripting/Resolver/EmbeddedSourceResolver.h>
 
 namespace oxygen::scripting {

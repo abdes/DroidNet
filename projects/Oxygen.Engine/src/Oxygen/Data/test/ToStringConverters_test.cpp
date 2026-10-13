@@ -5,6 +5,11 @@
 //===----------------------------------------------------------------------===//
 
 // GTest wrapper
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+
+#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project

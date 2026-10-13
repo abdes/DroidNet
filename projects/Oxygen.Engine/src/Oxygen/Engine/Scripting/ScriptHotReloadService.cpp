@@ -4,15 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
 #include <chrono>
 #include <filesystem>
 #include <string>
+#include <system_error>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Config/PathFinder.h>
 #include <Oxygen/Engine/AsyncEngine.h>
 #include <Oxygen/Engine/Scripting/ScriptHotReloadService.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/Platform/Platform.h>
 
 namespace oxygen::scripting {

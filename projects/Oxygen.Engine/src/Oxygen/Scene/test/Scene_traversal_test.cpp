@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
 #include <iostream>
 #include <memory>
 #include <string>
@@ -16,7 +15,9 @@
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::scene::AcceptAllFilter;

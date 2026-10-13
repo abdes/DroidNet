@@ -5,25 +5,36 @@
 //===----------------------------------------------------------------------===//
 #include <array>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <numbers>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/PostProcess.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/ShaderReference.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
 #include <Oxygen/Scene/Environment/SceneEnvironment.h>
+#include <Oxygen/Scene/ExposureSettings.h>
 #include <Oxygen/Scene/Light/PointLight.h>
 #include <Oxygen/Scene/Light/SpotLight.h>
+#include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Vortex/test/Support/LightingWorkload.h>
 #include <Oxygen/Vortex/test/Support/LightingWorkloadScene.h>
 
 namespace oxygen::vortex::testing {

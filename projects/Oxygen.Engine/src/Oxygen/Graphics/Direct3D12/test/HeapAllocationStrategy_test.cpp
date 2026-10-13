@@ -5,14 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cctype>
+#include <cstdint>
 #include <map>
-#include <ranges>
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
-#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>

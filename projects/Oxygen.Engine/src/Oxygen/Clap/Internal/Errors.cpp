@@ -6,8 +6,13 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
+#include <cstring>
 #include <numeric>
+#include <optional>
+#include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <fmt/format.h>
@@ -15,6 +20,7 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Internal/Errors.h>
+#include <Oxygen/Clap/Parser/Context.h>
 
 namespace {
 void AppendOptionalMessage(std::string& description, const char* message)
@@ -29,8 +35,10 @@ void AppendOptionalMessage(std::string& description, const char* message)
 auto ToLower(std::string_view text) -> std::string
 {
   std::string lowered(text.begin(), text.end());
-  std::ranges::transform(lowered, lowered.begin(),
-    [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+  std::ranges::transform(
+    lowered, lowered.begin(), [](unsigned char ch) -> char {
+      return static_cast<char>(std::tolower(ch));
+    });
   return lowered;
 }
 
@@ -133,19 +141,20 @@ auto OptionSuggestions(
   }
   std::vector<std::pair<std::string, std::string>> candidates;
   const auto add_option
-    = [&candidates](const oxygen::clap::parser::detail::OptionPtr& option) {
-        if (!option) {
-          return;
-        }
-        if (!option->Short().empty()) {
-          const auto display = "-" + option->Short();
-          candidates.emplace_back(display, option->Short());
-        }
-        if (!option->Long().empty()) {
-          const auto display = "--" + option->Long();
-          candidates.emplace_back(display, option->Long());
-        }
-      };
+    = [&candidates](
+        const oxygen::clap::parser::detail::OptionPtr& option) -> void {
+    if (!option) {
+      return;
+    }
+    if (!option->Short().empty()) {
+      const auto display = "-" + option->Short();
+      candidates.emplace_back(display, option->Short());
+    }
+    if (!option->Long().empty()) {
+      const auto display = "--" + option->Long();
+      candidates.emplace_back(display, option->Long());
+    }
+  };
 
   if (context->active_command) {
     for (const auto& option : context->active_command->CommandOptions()) {
@@ -203,7 +212,7 @@ auto oxygen::clap::parser::detail::MissingCommand(
 {
   auto supported_commands
     = std::accumulate(context->commands.cbegin(), context->commands.cend(),
-      std::vector<std::string>(), [](auto dest, const auto& command) {
+      std::vector<std::string>(), [](auto dest, const auto& command) -> auto {
         dest.push_back("'" + command->PathAsString() + "'");
         return dest;
       });

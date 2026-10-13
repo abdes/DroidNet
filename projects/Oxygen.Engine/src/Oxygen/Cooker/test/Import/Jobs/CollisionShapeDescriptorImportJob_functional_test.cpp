@@ -17,7 +17,8 @@
 #include <string_view>
 #include <vector>
 
-#include <nlohmann/json.hpp>
+#include <nlohmann/json.hpp> // IWYU pragma: keep
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>

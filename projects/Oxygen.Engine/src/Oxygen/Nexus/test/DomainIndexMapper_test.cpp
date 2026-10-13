@@ -2,11 +2,13 @@
 // Tests for DomainIndexMapper with generated DomainToken semantics
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
 #include <thread>
 #include <vector>
 
 #include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Nexus/DomainIndexMapper.h>
+#include <Oxygen/Nexus/Types/Domain.h>
 #include <Oxygen/Nexus/test/NexusMocks.h>
 #include <Oxygen/Testing/GTest.h>
 

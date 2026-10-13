@@ -4,19 +4,28 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <algorithm>
-#include <string_view>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <shared_mutex>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ShaderReference.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/SceneSync/RuntimeMotionProducerModule.h>
 
 namespace oxygen::scenesync {

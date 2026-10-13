@@ -10,17 +10,24 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <lua.h>
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Data/AssetReferences.h>
+#include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/ScriptAsset.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Scripting/ScriptingComponent.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeComponentBindings.h>

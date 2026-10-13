@@ -178,7 +178,7 @@ namespace {
     if (!publication.value) {
       return {};
     }
-    return WithResourceType(publication.type, [&]<typename T>() {
+    return WithResourceType(publication.type, [&]<typename T>() -> auto {
       return ContentAcquisition { .publication = publication,
         .owner = publication.Acquire<T>(cache, releases, owner) };
     });
@@ -365,13 +365,13 @@ namespace {
     InFlightOperationTable::OperationId operation_id, DecodeFn decode_fn)
     -> co::Co<SharedContentResult>
   {
-    const auto erase = Finally([&]() noexcept {
+    const auto erase = Finally([&]() noexcept -> auto {
       in_flight_ops->Erase(resource_type, key.get(), operation_id);
     });
     if (!access.IsReadable()) {
       co_return SharedContentResult {};
     }
-    auto cached = WithResourceType(resource_type, [&]<typename T>() {
+    auto cached = WithResourceType(resource_type, [&]<typename T>() -> auto {
       return SharedContentResult::FromCache<T>(*cache, *releases, key.get());
     });
     if (cached) {
@@ -396,8 +396,8 @@ namespace {
     if (!access.IsReadable()) {
       co_return SharedContentResult {};
     }
-    const auto publish = [&]() {
-      return WithResourceType(resource_type, [&]<typename T>() {
+    const auto publish = [&]() -> auto {
+      return WithResourceType(resource_type, [&]<typename T>() -> auto {
         return SharedContentResult::Publish(
           *cache, *releases, key.get(), std::static_pointer_cast<T>(decoded));
       });
@@ -444,7 +444,7 @@ namespace {
     if (callbacks.on_resource_request) {
       callbacks.on_resource_request(resource_type);
     }
-    auto cached = WithResourceType(resource_type, [&]<typename T>() {
+    auto cached = WithResourceType(resource_type, [&]<typename T>() -> auto {
       return ContentAcquisition::FromCache<T>(
         cache, *releases, key.get(), owner);
     });

@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/TextureReadback.h>
 #include <Oxygen/Graphics/Direct3D12/test/Mocks/MockDevice.h>
 #include <Oxygen/Testing/GTest.h>

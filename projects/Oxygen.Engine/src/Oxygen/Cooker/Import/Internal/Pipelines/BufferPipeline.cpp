@@ -5,12 +5,26 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <optional>
 #include <span>
+#include <stop_token>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportReport.h>
+#include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/BufferPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/OxCo/Nursery.h>
+#include <Oxygen/OxCo/ThreadPool.h>
 
 namespace oxygen::content::import {
 
@@ -225,7 +239,7 @@ auto BufferPipeline::ComputeContentHash(WorkItem& item)
   const std::string source_id = item.source_id;
   const auto content_hash = co_await thread_pool_.Run(
     [bytes, stop_token = item.stop_token, source_id](
-      co::ThreadPool::CancelToken canceled) noexcept {
+      co::ThreadPool::CancelToken canceled) noexcept -> uint64_t {
       if (IsStopRequested(stop_token) || canceled) {
         return uint64_t { 0 };
       }

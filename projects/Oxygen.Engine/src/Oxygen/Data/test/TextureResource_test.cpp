@@ -8,9 +8,14 @@
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 // GTest
+#include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/TextureType.h>
+#include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project

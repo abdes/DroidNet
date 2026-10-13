@@ -7,6 +7,7 @@
 #include <array>
 #include <charconv>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <iterator>
 #include <limits>
@@ -19,7 +20,9 @@
 #include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Content/ResourceKey.h>
+#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Scene/Environment/Fog.h>
 #include <Oxygen/Scene/Environment/PostProcessVolume.h>
@@ -29,6 +32,7 @@
 #include <Oxygen/Scene/Environment/SkySphere.h>
 #include <Oxygen/Scene/Environment/VolumetricClouds.h>
 #include <Oxygen/Scene/ExposureSettings.h>
+#include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneEnvironmentBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Scene/SceneNodeBindings.h>
 

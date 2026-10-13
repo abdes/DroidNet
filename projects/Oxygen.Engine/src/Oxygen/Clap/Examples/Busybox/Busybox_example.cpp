@@ -5,7 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
 #include <iostream>
+#include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -13,8 +15,11 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Clap/Cli.h>
+#include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
+#include <Oxygen/Clap/Option.h>
+#include <Oxygen/Clap/OptionValuesMap.h>
 
 using oxygen::clap::Cli;
 using oxygen::clap::CliBuilder;
@@ -52,7 +57,7 @@ auto FindApplet(const std::vector<AppletInfo>& applets, std::string_view name)
   -> const AppletInfo*
 {
   const auto match = std::find_if(applets.begin(), applets.end(),
-    [name](const AppletInfo& applet) { return applet.name == name; });
+    [name](const AppletInfo& applet) -> bool { return applet.name == name; });
   if (match == applets.end()) {
     return nullptr;
   }
@@ -227,9 +232,10 @@ auto main(int argc, char** argv) -> int
               .About("Use PATTERN for matching.")
               .WithValue<std::string>()
               .Repeatable()
-              .CallOnEachValue([&grep_patterns](const std::string& value) {
-                grep_patterns.push_back(value);
-              })
+              .CallOnEachValue(
+                [&grep_patterns](const std::string& value) -> void {
+                  grep_patterns.push_back(value);
+                })
               .Build())
           .WithPositionalArguments(
             Option::Positional("PATTERN")
@@ -237,9 +243,10 @@ auto main(int argc, char** argv) -> int
               .About("Search pattern.")
               .Required()
               .WithValue<std::string>()
-              .CallOnEachValue([&grep_patterns](const std::string& value) {
-                grep_patterns.push_back(value);
-              })
+              .CallOnEachValue(
+                [&grep_patterns](const std::string& value) -> void {
+                  grep_patterns.push_back(value);
+                })
               .Build(),
             Option::Rest()
               .UserFriendlyName("FILES")

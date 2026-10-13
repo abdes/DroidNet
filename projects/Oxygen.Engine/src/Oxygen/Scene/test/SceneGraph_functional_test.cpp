@@ -4,10 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <memory>
 #include <string>
-#include <unordered_set>
+#include <utility>
 #include <vector>
+
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/trigonometric.hpp>
 
 #include <Oxygen/Composition/ObjectMetadata.h>
 #include <Oxygen/Core/Constants.h>
@@ -15,6 +19,8 @@
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneFlags.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/Flags.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::ObjectMetadata;

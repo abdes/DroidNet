@@ -4,10 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <glm/ext/matrix_float3x3.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/quaternion_geometric.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/ext/vector_float4.hpp>
+#include <glm/geometric.hpp>
+
+#include <Oxygen/Core/Transforms/IsFinite.h>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <cmath>
 
-#include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
 

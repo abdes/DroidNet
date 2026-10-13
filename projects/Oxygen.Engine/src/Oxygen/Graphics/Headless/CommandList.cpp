@@ -4,7 +4,18 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <deque>
+#include <memory>
+#include <optional>
+#include <stdexcept>
+#include <string_view>
+#include <utility>
+
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Graphics/Common/CommandList.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Headless/Command.h>
 #include <Oxygen/Graphics/Headless/CommandList.h>
 
 using oxygen::graphics::headless::CommandList;

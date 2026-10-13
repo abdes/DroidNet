@@ -6,8 +6,10 @@
 
 #include <array>
 #include <chrono>
+#include <cstddef>
 #include <iostream>
 #include <random>
+#include <string>
 
 #include <Oxygen/Base/Unreachable.h>
 #include <Oxygen/TextWrap/TextWrap.h>

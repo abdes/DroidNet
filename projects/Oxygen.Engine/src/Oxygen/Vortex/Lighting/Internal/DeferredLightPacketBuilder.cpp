@@ -17,13 +17,12 @@
 #include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Profiling/CpuProfileScope.h>
 #include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Vortex/Lighting/Internal/DeferredLightPacketBuilder.h>
 #include <Oxygen/Vortex/Lighting/Internal/LightEvaluationRecords.h>
-#include <Oxygen/Vortex/Lighting/Types/DirectionalLightForwardData.h>
 #include <Oxygen/Vortex/Types/FrameLightSelection.h>
 
 namespace oxygen::vortex::lighting::internal {

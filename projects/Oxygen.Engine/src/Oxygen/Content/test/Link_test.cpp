@@ -5,14 +5,18 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdlib>
+#include <memory>
 #include <tuple>
 
+#include <Oxygen/Base/TypeList.h>
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Content/AssetLoader.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/ResourceTypeList.h>
 #include <Oxygen/Core/EngineTag.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/OxCo/Co.h>
 
 class DummyAsset : public oxygen::Object {
   OXYGEN_TYPED(DummyAsset)

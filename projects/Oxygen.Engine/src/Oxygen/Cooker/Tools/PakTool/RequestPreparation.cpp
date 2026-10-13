@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <exception>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -150,7 +151,7 @@ namespace {
     auto key = path.lexically_normal().generic_string();
 #ifdef _WIN32
     std::transform(
-      key.begin(), key.end(), key.begin(), [](const unsigned char ch) {
+      key.begin(), key.end(), key.begin(), [](const unsigned char ch) -> char {
         return static_cast<char>(std::tolower(ch));
       });
 #endif

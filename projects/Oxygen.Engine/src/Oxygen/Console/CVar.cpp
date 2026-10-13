@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <string>
+
 #include <Oxygen/Console/CVar.h>
 
 namespace oxygen::console {
@@ -50,7 +52,7 @@ auto to_string(const CVarFlags value) -> std::string
   bool first = true;
   auto checked = CVarFlags::kNone;
 
-  const auto append = [&](const CVarFlags flag, const char* name) {
+  const auto append = [&](const CVarFlags flag, const char* name) -> void {
     if ((value & flag) == flag) {
       if (!first) {
         result += "|";

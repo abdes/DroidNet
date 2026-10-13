@@ -7,7 +7,10 @@
 #include <algorithm>
 #include <vector>
 
+#include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
+#include <Oxygen/Physics/Articulation/ArticulationDesc.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 #include <Oxygen/Physics/test/Jolt/Jolt_test_fixture.h>
 #include <Oxygen/Testing/GTest.h>

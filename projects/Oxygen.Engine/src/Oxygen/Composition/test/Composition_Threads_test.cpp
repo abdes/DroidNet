@@ -10,8 +10,12 @@
 
 #include "./BaseCompositionTest.h"
 
+#include <Oxygen/Base/Resource.h>
+#include <Oxygen/Base/TypeList.h>
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/ComponentMacros.h>
 #include <Oxygen/Composition/Composition.h>
-#include <Oxygen/Composition/Object.h>
+#include <Oxygen/Composition/Typed.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::TypeId;
@@ -93,7 +97,7 @@ NOLINT_TEST_F(ThreadSafetyTest, ConcurrentPooledAddRemove)
 
   // Arrange: Launch threads for add/remove
   for (int i = 0; i < THREADS; ++i) {
-    threads.emplace_back([&, i] {
+    threads.emplace_back([&, i] -> void {
       ++ready;
       while (!start) { }
       // Act: Each thread adds/removes pooled or non-pooled
@@ -147,7 +151,7 @@ NOLINT_TEST_F(ThreadSafetyTest, ConcurrentHybridAccess)
 
   // Act: Launch threads for concurrent access
   for (int i = 0; i < THREADS; ++i) {
-    threads.emplace_back([&, i] {
+    threads.emplace_back([&, i] -> void {
       ++ready;
       while (!start) { }
       for (int j = 0; j < 100; ++j) {

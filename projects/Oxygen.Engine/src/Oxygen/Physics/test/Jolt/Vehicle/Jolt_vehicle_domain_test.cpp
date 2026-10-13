@@ -7,7 +7,10 @@
 #include <array>
 #include <cmath>
 
+#include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Shape.h>
+#include <Oxygen/Physics/Vehicle/VehicleDesc.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 #include <Oxygen/Physics/test/Jolt/Jolt_test_fixture.h>
 #include <Oxygen/Physics/test/TestBlobBuilders.h>

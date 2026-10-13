@@ -12,7 +12,6 @@
 #include <limits>
 
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Testing/GTest.h>
 #include <Oxygen/Vortex/test/Lighting/Reference/GgxMoments.h>

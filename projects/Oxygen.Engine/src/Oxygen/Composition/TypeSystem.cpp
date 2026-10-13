@@ -4,13 +4,22 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstring>
+#include <functional>
 #include <mutex>
+#include <shared_mutex>
+#include <stdexcept>
+#include <string.h>
+#include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/Internal/FastIntMap.h>
 #include <Oxygen/Composition/Internal/GetTrulySingleInstance.h>
 #include <Oxygen/Composition/TypeSystem.h>
+#include <Oxygen/Composition/Typed.h>
 
 namespace {
 auto GetTypeNameHash(const char* const name)

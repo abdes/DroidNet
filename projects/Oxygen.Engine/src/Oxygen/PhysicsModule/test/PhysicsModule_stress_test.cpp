@@ -4,9 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <memory>
 #include <vector>
 
 #include "PhysicsModule_test_fixture.h"
+#include <gtest/gtest.h>
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Character/CharacterController.h>
+#include <Oxygen/Physics/Events/PhysicsEvents.h>
+#include <Oxygen/PhysicsModule/PhysicsModule.h>
+#include <Oxygen/PhysicsModule/ScenePhysics.h>
+#include <Oxygen/Scene/SceneNode.h>
 
 namespace oxygen::physics::test {
 namespace {

@@ -4,6 +4,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <utility>
+
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -21,7 +23,7 @@ NOLINT_TEST(FinallyTest, WhenScopeExits_ThenLambdaIsExecuted)
   constexpr int test_value = 42;
   int i = 0;
   {
-    auto f = Finally([&] { i = test_value; });
+    auto f = Finally([&] -> void { i = test_value; });
     EXPECT_EQ(i, 0);
   }
   EXPECT_EQ(i, test_value);
@@ -32,7 +34,7 @@ NOLINT_TEST(FinallyTest, WhenMoved_ThenLambdaIsExecutedOnlyOnce)
 {
   int i = 0;
   {
-    auto _1 = Finally([&] { f(i); });
+    auto _1 = Finally([&] -> void { f(i); });
     {
       auto _2 = std::move(_1);
       EXPECT_TRUE(i == 0);
@@ -55,7 +57,7 @@ NOLINT_TEST(
 {
   int i = 0;
   {
-    const auto const_lvalue_lambda = [&] { f(i); };
+    const auto const_lvalue_lambda = [&] -> void { f(i); };
     auto _ = Finally(const_lvalue_lambda);
     EXPECT_TRUE(i == 0);
   }
@@ -68,7 +70,7 @@ NOLINT_TEST(
 {
   int i = 0;
   {
-    auto mutable_lvalue_lambda = [&] { f(i); };
+    auto mutable_lvalue_lambda = [&] -> void { f(i); };
     auto _ = Finally(mutable_lvalue_lambda);
     EXPECT_TRUE(i == 0);
   }
@@ -81,7 +83,7 @@ NOLINT_TEST(
 {
   int i = 0;
   {
-    auto _ = Finally([&i] { f(i); });
+    auto _ = Finally([&i] -> void { f(i); });
     EXPECT_TRUE(i == 0);
   }
   EXPECT_TRUE(i == 1);

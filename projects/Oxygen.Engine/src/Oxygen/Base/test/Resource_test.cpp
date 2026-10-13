@@ -4,7 +4,11 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <utility>
+
 #include <Oxygen/Base/Resource.h>
+#include <Oxygen/Base/ResourceHandle.h>
+#include <Oxygen/Base/TypeList.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::Resource;

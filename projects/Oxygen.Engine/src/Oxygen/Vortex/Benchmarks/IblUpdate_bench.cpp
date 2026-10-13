@@ -26,7 +26,6 @@
 #include <glm/geometric.hpp>
 #include <minwindef.h>
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 #include <processenv.h>
 #include <winerror.h>
 #include <winreg.h>

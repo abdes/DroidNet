@@ -5,13 +5,15 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <string>
+#include <utility>
 
-#include <glm/gtc/quaternion.hpp>
-
-#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Light/DirectionalLightResolver.h>
+#include <Oxygen/Scene/Light/LightValidation.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/Flags.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {

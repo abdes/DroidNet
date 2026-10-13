@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <span>
@@ -15,7 +16,6 @@
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Core/Bindless/Generated.BindlessAbi.h>
 #include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Transforms/IsFinite.h>
 #include <Oxygen/Core/Types/Frame.h>

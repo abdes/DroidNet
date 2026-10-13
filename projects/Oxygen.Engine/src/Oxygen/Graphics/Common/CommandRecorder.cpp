@@ -5,20 +5,35 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
 #include <exception>
 #include <memory>
+#include <source_location>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
-#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Core/Types/Scissors.h>
+#include <Oxygen/Graphics/Common/AssignedQueueSignal.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Detail/ResourceStateTracker.h>
+#include <Oxygen/Graphics/Common/RecordingUseBatch.h>
+#include <Oxygen/Graphics/Common/Registration.h>
+#include <Oxygen/Graphics/Common/Submission.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
+#include <Oxygen/Graphics/Common/Types/ClearFlags.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 
 using oxygen::graphics::Buffer;
 using oxygen::graphics::CommandRecorder;

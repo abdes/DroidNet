@@ -4,9 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <SDL3/SDL.h>
+#include <chrono>
+#include <cstdint>
+#include <memory>
+#include <utility>
 
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_keycode.h>
+#include <SDL3/SDL_mouse.h>
+
+#include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Core/Time/Types.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Platform/Input.h>
+#include <Oxygen/Platform/InputEvent.h>
 #include <Oxygen/Platform/Platform.h>
 #include <Oxygen/Platform/SDL/Wrapper.h>
 

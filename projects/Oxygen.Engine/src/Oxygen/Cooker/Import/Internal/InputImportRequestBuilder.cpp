@@ -6,9 +6,16 @@
 
 #include <algorithm>
 #include <filesystem>
-#include <string_view>
+#include <optional>
+#include <ostream>
+#include <string>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Cooker/Import/ImportOptions.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/InputImportRequestBuilder.h>
+#include <Oxygen/Cooker/Import/InputImportSettings.h>
 
 namespace oxygen::content::import::internal {
 
@@ -16,14 +23,18 @@ namespace {
 
   auto TrimInPlace(std::string& value) -> void
   {
-    const auto not_space = [](const unsigned char ch) {
+    const auto not_space = [](const unsigned char ch) -> bool {
       return ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r';
     };
 
-    const auto first = std::find_if(value.begin(), value.end(),
-      [&](const char ch) { return not_space(static_cast<unsigned char>(ch)); });
-    const auto last = std::find_if(value.rbegin(), value.rend(),
-      [&](char ch) { return not_space(static_cast<unsigned char>(ch)); });
+    const auto first
+      = std::find_if(value.begin(), value.end(), [&](const char ch) -> bool {
+          return not_space(static_cast<unsigned char>(ch));
+        });
+    const auto last
+      = std::find_if(value.rbegin(), value.rend(), [&](char ch) -> bool {
+          return not_space(static_cast<unsigned char>(ch));
+        });
 
     if (first == value.end()) {
       value.clear();
@@ -80,8 +91,9 @@ auto BuildInputImportRequest(const InputImportSettings& settings,
   for (auto& dep : depends_on) {
     TrimInPlace(dep);
   }
-  depends_on.erase(std::remove_if(depends_on.begin(), depends_on.end(),
-                     [](const std::string& dep) { return dep.empty(); }),
+  depends_on.erase(
+    std::remove_if(depends_on.begin(), depends_on.end(),
+      [](const std::string& dep) -> bool { return dep.empty(); }),
     depends_on.end());
 
   if (!job_id.empty()) {

@@ -22,7 +22,6 @@
 #include <glm/geometric.hpp>
 #include <gtest/gtest.h>
 #include <nlohmann/json.hpp>
-#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>

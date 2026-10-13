@@ -5,13 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 #include <memory>
+#include <optional>
+#include <utility>
 
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Detail/BaseDescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Detail/DescriptorSegment.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Common/test/Bindless/Mocks/MockDescriptorSegment.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/D3D12HeapAllocationStrategy.h>
+#include <Oxygen/Graphics/Direct3D12/Detail/Types.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::graphics::DescriptorAllocationHandle;

@@ -14,7 +14,6 @@
 #include <latch>
 #include <string_view>
 #include <utility>
-#include <vector>
 
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>

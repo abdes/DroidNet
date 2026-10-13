@@ -4,6 +4,16 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
+#include <memory>
+
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/vector_float4.hpp>
+
+#include <Oxygen/Composition/Component.h>
+#include <Oxygen/Composition/Typed.h>
+#include <Oxygen/Core/Types/CameraAspectMode.h>
+#include <Oxygen/Core/Types/ViewPort.h>
 #include <Oxygen/Scene/Camera/Orthographic.h>
 #include <Oxygen/Scene/Detail/TransformComponent.h>
 #include <Oxygen/Testing/GTest.h>

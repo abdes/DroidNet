@@ -6,11 +6,18 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Hash.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Vortex/Internal/MeshRasterState.h>
+#include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/Shadows/Internal/ShadowCasterDependencies.h>
+#include <Oxygen/Vortex/Types/ShadowCasterSource.h>
 
 namespace oxygen::vortex::shadows::internal {
 

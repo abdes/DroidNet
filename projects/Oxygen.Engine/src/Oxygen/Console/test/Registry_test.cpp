@@ -4,7 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
+#include <optional>
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Commands/Command.h>
 #include <Oxygen/Commands/CommandRegistry.h>
+#include <Oxygen/Console/CVar.h>
+#include <Oxygen/Console/Completion.h>
 #include <Oxygen/Console/Console.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -35,12 +43,11 @@ NOLINT_TEST(ConsoleRegistry, ListSymbolsReturnsAllVisibleSymbols)
       .Register({ .name = "sys.cmd",
         .help = "Cmd",
         .flags = CommandFlags::kNone,
-        .handler =
-          [](const auto&, const auto&) {
-            return oxygen::commands::CommandResult {
-              .status = ExecutionStatus::kOk, .output = {}, .error = {}
-            };
-          } })
+        .handler = [](const auto&, const auto&) -> auto {
+          return oxygen::commands::CommandResult {
+            .status = ExecutionStatus::kOk, .output = {}, .error = {}
+          };
+        } })
       .IsValid());
 
   const auto symbols = console.ListSymbols(false);

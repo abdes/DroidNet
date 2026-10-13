@@ -10,9 +10,11 @@
 
 #include <glm/ext/vector_uint2.hpp>
 
+#include <Oxygen/Core/Bindless/Types.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/SceneRenderer/Generated.SceneTextureBindings.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
 #include <Oxygen/Vortex/Types/Generated.ViewContracts.h>
 #include <Oxygen/Vortex/test/Fakes/Graphics.h>

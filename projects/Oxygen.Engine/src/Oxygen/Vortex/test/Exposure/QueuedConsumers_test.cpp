@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Windows.h>
+#include <Windows.h> // IWYU pragma: keep
 
 #include <algorithm>
 #include <array>

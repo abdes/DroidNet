@@ -5,13 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Scissors.h>
 #include <Oxygen/Core/Types/ViewPort.h>
@@ -21,10 +25,12 @@
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
+#include <Oxygen/Graphics/Common/PipelineState.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
 #include <Oxygen/Graphics/Common/Types/Color.h>
 #include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Profiling/ProfileScope.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {

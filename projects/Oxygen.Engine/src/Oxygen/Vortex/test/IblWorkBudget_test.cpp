@@ -5,10 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstdint>
 #include <memory>
 
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Testing/GTest.h>
+#include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/IblWorkBudget.h>
+#include <Oxygen/Vortex/Internal/GpuTimelineProfiler.h>
 
 namespace {
 using oxygen::vortex::environment::internal::IblGpuDispatch;

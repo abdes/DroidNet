@@ -3,13 +3,15 @@
 // modes 5, 6, 7 for RGBA blocks.
 #include <algorithm>
 #include <assert.h>
+#include <cstdint>
+#include <cstring>
 #include <limits.h>
 #include <math.h>
 
 #include "bc7enc.h"
 
 // Helpers
-static inline int32_t clampi(int32_t value, int32_t low, int32_t high)
+static inline auto clampi(int32_t value, int32_t low, int32_t high) -> int32_t
 {
   if (value < low)
     value = low;
@@ -17,7 +19,7 @@ static inline int32_t clampi(int32_t value, int32_t low, int32_t high)
     value = high;
   return value;
 }
-static inline float clampf(float value, float low, float high)
+static inline auto clampf(float value, float low, float high) -> float
 {
   if (value < low)
     value = low;
@@ -25,35 +27,50 @@ static inline float clampf(float value, float low, float high)
     value = high;
   return value;
 }
-static inline float saturate(float value) { return clampf(value, 0, 1.0f); }
-static inline uint8_t minimumub(uint8_t a, uint8_t b)
+static inline auto saturate(float value) -> float
+{
+  return clampf(value, 0, 1.0f);
+}
+static inline auto minimumub(uint8_t a, uint8_t b) -> uint8_t
 {
   return (a < b) ? a : b;
 }
-static inline int32_t minimumi(int32_t a, int32_t b) { return (a < b) ? a : b; }
-static inline uint32_t minimumu(uint32_t a, uint32_t b)
+static inline auto minimumi(int32_t a, int32_t b) -> int32_t
 {
   return (a < b) ? a : b;
 }
-static inline float minimumf(float a, float b) { return (a < b) ? a : b; }
-static inline uint8_t maximumub(uint8_t a, uint8_t b)
+static inline auto minimumu(uint32_t a, uint32_t b) -> uint32_t
+{
+  return (a < b) ? a : b;
+}
+static inline auto minimumf(float a, float b) -> float
+{
+  return (a < b) ? a : b;
+}
+static inline auto maximumub(uint8_t a, uint8_t b) -> uint8_t
 {
   return (a > b) ? a : b;
 }
-static inline uint32_t maximumu(uint32_t a, uint32_t b)
+static inline auto maximumu(uint32_t a, uint32_t b) -> uint32_t
 {
   return (a > b) ? a : b;
 }
-static inline int32_t maximumi(int32_t a, int32_t b) { return (a > b) ? a : b; }
-static inline float maximumf(float a, float b) { return (a > b) ? a : b; }
-static inline int squarei(int i) { return i * i; }
-static inline float squaref(float i) { return i * i; }
-template <typename T0, typename T1> inline T0 lerp(T0 a, T0 b, T1 c)
+static inline auto maximumi(int32_t a, int32_t b) -> int32_t
+{
+  return (a > b) ? a : b;
+}
+static inline auto maximumf(float a, float b) -> float
+{
+  return (a > b) ? a : b;
+}
+static inline auto squarei(int i) -> int { return i * i; }
+static inline auto squaref(float i) -> float { return i * i; }
+template <typename T0, typename T1> inline auto lerp(T0 a, T0 b, T1 c) -> T0
 {
   return a + (b - a) * c;
 }
 
-static inline int32_t iabs32(int32_t v)
+static inline auto iabs32(int32_t v) -> int32_t
 {
   uint32_t msk = v >> 31;
   return (v ^ msk) - msk;
@@ -81,8 +98,8 @@ struct vec4F {
   float m_c[4];
 };
 
-static inline color_rgba* color_quad_u8_set_clamped(
-  color_rgba* pRes, int32_t r, int32_t g, int32_t b, int32_t a)
+static inline auto color_quad_u8_set_clamped(
+  color_rgba* pRes, int32_t r, int32_t g, int32_t b, int32_t a) -> color_rgba*
 {
   pRes->m_c[0] = (uint8_t)clampi(r, 0, 255);
   pRes->m_c[1] = (uint8_t)clampi(g, 0, 255);
@@ -90,8 +107,8 @@ static inline color_rgba* color_quad_u8_set_clamped(
   pRes->m_c[3] = (uint8_t)clampi(a, 0, 255);
   return pRes;
 }
-static inline color_rgba* color_quad_u8_set(
-  color_rgba* pRes, int32_t r, int32_t g, int32_t b, int32_t a)
+static inline auto color_quad_u8_set(
+  color_rgba* pRes, int32_t r, int32_t g, int32_t b, int32_t a) -> color_rgba*
 {
   assert((uint32_t)(r | g | b | a) <= 255);
   pRes->m_c[0] = (uint8_t)r;
@@ -100,13 +117,13 @@ static inline color_rgba* color_quad_u8_set(
   pRes->m_c[3] = (uint8_t)a;
   return pRes;
 }
-static inline bool color_quad_u8_notequals(
-  const color_rgba* pLHS, const color_rgba* pRHS)
+static inline auto color_quad_u8_notequals(
+  const color_rgba* pLHS, const color_rgba* pRHS) -> bool
 {
   return (pLHS->m_c[0] != pRHS->m_c[0]) || (pLHS->m_c[1] != pRHS->m_c[1])
     || (pLHS->m_c[2] != pRHS->m_c[2]) || (pLHS->m_c[3] != pRHS->m_c[3]);
 }
-static inline vec4F* vec4F_set_scalar(vec4F* pV, float x)
+static inline auto vec4F_set_scalar(vec4F* pV, float x) -> vec4F*
 {
   pV->m_c[0] = x;
   pV->m_c[1] = x;
@@ -114,7 +131,8 @@ static inline vec4F* vec4F_set_scalar(vec4F* pV, float x)
   pV->m_c[3] = x;
   return pV;
 }
-static inline vec4F* vec4F_set(vec4F* pV, float x, float y, float z, float w)
+static inline auto vec4F_set(vec4F* pV, float x, float y, float z, float w)
+  -> vec4F*
 {
   pV->m_c[0] = x;
   pV->m_c[1] = y;
@@ -122,7 +140,7 @@ static inline vec4F* vec4F_set(vec4F* pV, float x, float y, float z, float w)
   pV->m_c[3] = w;
   return pV;
 }
-static inline vec4F* vec4F_saturate_in_place(vec4F* pV)
+static inline auto vec4F_saturate_in_place(vec4F* pV) -> vec4F*
 {
   pV->m_c[0] = saturate(pV->m_c[0]);
   pV->m_c[1] = saturate(pV->m_c[1]);
@@ -130,7 +148,7 @@ static inline vec4F* vec4F_saturate_in_place(vec4F* pV)
   pV->m_c[3] = saturate(pV->m_c[3]);
   return pV;
 }
-static inline vec4F vec4F_saturate(const vec4F* pV)
+static inline auto vec4F_saturate(const vec4F* pV) -> vec4F
 {
   vec4F res;
   res.m_c[0] = saturate(pV->m_c[0]);
@@ -139,39 +157,39 @@ static inline vec4F vec4F_saturate(const vec4F* pV)
   res.m_c[3] = saturate(pV->m_c[3]);
   return res;
 }
-static inline vec4F vec4F_from_color(const color_rgba* pC)
+static inline auto vec4F_from_color(const color_rgba* pC) -> vec4F
 {
   vec4F res;
   vec4F_set(&res, pC->m_c[0], pC->m_c[1], pC->m_c[2], pC->m_c[3]);
   return res;
 }
-static inline vec4F vec4F_add(const vec4F* pLHS, const vec4F* pRHS)
+static inline auto vec4F_add(const vec4F* pLHS, const vec4F* pRHS) -> vec4F
 {
   vec4F res;
   vec4F_set(&res, pLHS->m_c[0] + pRHS->m_c[0], pLHS->m_c[1] + pRHS->m_c[1],
     pLHS->m_c[2] + pRHS->m_c[2], pLHS->m_c[3] + pRHS->m_c[3]);
   return res;
 }
-static inline vec4F vec4F_sub(const vec4F* pLHS, const vec4F* pRHS)
+static inline auto vec4F_sub(const vec4F* pLHS, const vec4F* pRHS) -> vec4F
 {
   vec4F res;
   vec4F_set(&res, pLHS->m_c[0] - pRHS->m_c[0], pLHS->m_c[1] - pRHS->m_c[1],
     pLHS->m_c[2] - pRHS->m_c[2], pLHS->m_c[3] - pRHS->m_c[3]);
   return res;
 }
-static inline float vec4F_dot(const vec4F* pLHS, const vec4F* pRHS)
+static inline auto vec4F_dot(const vec4F* pLHS, const vec4F* pRHS) -> float
 {
   return pLHS->m_c[0] * pRHS->m_c[0] + pLHS->m_c[1] * pRHS->m_c[1]
     + pLHS->m_c[2] * pRHS->m_c[2] + pLHS->m_c[3] * pRHS->m_c[3];
 }
-static inline vec4F vec4F_mul(const vec4F* pLHS, float s)
+static inline auto vec4F_mul(const vec4F* pLHS, float s) -> vec4F
 {
   vec4F res;
   vec4F_set(&res, pLHS->m_c[0] * s, pLHS->m_c[1] * s, pLHS->m_c[2] * s,
     pLHS->m_c[3] * s);
   return res;
 }
-static inline vec4F* vec4F_normalize_in_place(vec4F* pV)
+static inline auto vec4F_normalize_in_place(vec4F* pV) -> vec4F*
 {
   float s = pV->m_c[0] * pV->m_c[0] + pV->m_c[1] * pV->m_c[1]
     + pV->m_c[2] * pV->m_c[2] + pV->m_c[3] * pV->m_c[3];
@@ -1300,12 +1318,12 @@ static const uint8_t g_bc7_table_anchor_index_second_subset[64] = { 15, 15, 15,
 static const uint8_t g_bc7_num_subsets[8] = { 3, 2, 3, 2, 1, 1, 1, 2 };
 static const uint8_t g_bc7_partition_bits[8] = { 4, 6, 6, 6, 0, 0, 0, 6 };
 static const uint8_t g_bc7_color_index_bitcount[8] = { 3, 3, 2, 2, 2, 2, 4, 2 };
-static int get_bc7_color_index_size(int mode, int index_selection_bit)
+static auto get_bc7_color_index_size(int mode, int index_selection_bit) -> int
 {
   return g_bc7_color_index_bitcount[mode] + index_selection_bit;
 }
 static uint8_t g_bc7_alpha_index_bitcount[8] = { 0, 0, 0, 0, 3, 2, 4, 2 };
-static int get_bc7_alpha_index_size(int mode, int index_selection_bit)
+static auto get_bc7_alpha_index_size(int mode, int index_selection_bit) -> int
 {
   return g_bc7_alpha_index_bitcount[mode] - index_selection_bit;
 }
@@ -1315,7 +1333,7 @@ static const uint8_t g_bc7_mode_has_shared_p_bits[8]
 static const uint8_t g_bc7_color_precision_table[8]
   = { 4, 6, 5, 7, 5, 7, 7, 5 };
 static const int8_t g_bc7_alpha_precision_table[8] = { 0, 0, 0, 0, 6, 8, 7, 5 };
-static bool get_bc7_mode_has_seperate_alpha_selectors(int mode)
+static auto get_bc7_mode_has_seperate_alpha_selectors(int mode) -> bool
 {
   return (mode == 4) || (mode == 5);
 }
@@ -1703,8 +1721,8 @@ struct color_cell_compressor_results {
   uint8_t* m_pSelectors_temp;
 };
 
-static inline color_rgba scale_color(
-  const color_rgba* pC, const color_cell_compressor_params* pParams)
+static inline auto scale_color(const color_rgba* pC,
+  const color_cell_compressor_params* pParams) -> color_rgba
 {
   color_rgba results;
 
@@ -1721,8 +1739,8 @@ static inline color_rgba scale_color(
   return results;
 }
 
-static inline uint64_t compute_color_distance_rgb(const color_rgba* pE1,
-  const color_rgba* pE2, bool perceptual, const uint32_t weights[4])
+static inline auto compute_color_distance_rgb(const color_rgba* pE1,
+  const color_rgba* pE2, bool perceptual, const uint32_t weights[4]) -> uint64_t
 {
   int dr, dg, db;
 
@@ -1746,18 +1764,17 @@ static inline uint64_t compute_color_distance_rgb(const color_rgba* pE1,
     + weights[2] * (uint32_t)(db * db);
 }
 
-static inline uint64_t compute_color_distance_rgba(const color_rgba* pE1,
-  const color_rgba* pE2, bool perceptual, const uint32_t weights[4])
+static inline auto compute_color_distance_rgba(const color_rgba* pE1,
+  const color_rgba* pE2, bool perceptual, const uint32_t weights[4]) -> uint64_t
 {
   int da = (int)pE1->m_c[3] - (int)pE2->m_c[3];
   return compute_color_distance_rgb(pE1, pE2, perceptual, weights)
     + (weights[3] * (uint32_t)(da * da));
 }
 
-static uint64_t pack_mode1_to_one_color(
-  const color_cell_compressor_params* pParams,
+static auto pack_mode1_to_one_color(const color_cell_compressor_params* pParams,
   color_cell_compressor_results* pResults, uint32_t r, uint32_t g, uint32_t b,
-  uint8_t* pSelectors)
+  uint8_t* pSelectors) -> uint64_t
 {
   uint32_t best_err = UINT_MAX;
   uint32_t best_p = 0;
@@ -1814,11 +1831,10 @@ static uint64_t pack_mode1_to_one_color(
   return total_err;
 }
 
-static uint64_t pack_mode7_to_one_color(
-  const color_cell_compressor_params* pParams,
+static auto pack_mode7_to_one_color(const color_cell_compressor_params* pParams,
   color_cell_compressor_results* pResults, uint32_t r, uint32_t g, uint32_t b,
   uint32_t a, uint8_t* pSelectors, uint32_t num_pixels,
-  const color_rgba* pPixels)
+  const color_rgba* pPixels) -> uint64_t
 {
   uint32_t best_err = UINT_MAX;
   uint32_t best_p = 0;
@@ -1887,11 +1903,10 @@ static uint64_t pack_mode7_to_one_color(
   return total_err;
 }
 
-static uint64_t evaluate_solution(const color_rgba* pLow,
-  const color_rgba* pHigh, const uint32_t pbits[2],
-  const color_cell_compressor_params* pParams,
+static auto evaluate_solution(const color_rgba* pLow, const color_rgba* pHigh,
+  const uint32_t pbits[2], const color_cell_compressor_params* pParams,
   color_cell_compressor_results* pResults,
-  const bc7enc_compress_block_params* pComp_params)
+  const bc7enc_compress_block_params* pComp_params) -> uint64_t
 {
   color_rgba quantMinColor = *pLow;
   color_rgba quantMaxColor = *pHigh;
@@ -2104,10 +2119,10 @@ static void fixDegenerateEndpoints(uint32_t mode, color_rgba* pTrialMinColor,
   }
 }
 
-static uint64_t find_optimal_solution(uint32_t mode, vec4F xl, vec4F xh,
+static auto find_optimal_solution(uint32_t mode, vec4F xl, vec4F xh,
   const color_cell_compressor_params* pParams,
   color_cell_compressor_results* pResults,
-  const bc7enc_compress_block_params* pComp_params)
+  const bc7enc_compress_block_params* pComp_params) -> uint64_t
 {
   vec4F_saturate_in_place(&xl);
   vec4F_saturate_in_place(&xh);
@@ -2338,10 +2353,10 @@ static uint64_t find_optimal_solution(uint32_t mode, vec4F xl, vec4F xh,
   return pResults->m_best_overall_err;
 }
 
-static uint64_t color_cell_compression(uint32_t mode,
+static auto color_cell_compression(uint32_t mode,
   const color_cell_compressor_params* pParams,
   color_cell_compressor_results* pResults,
-  const bc7enc_compress_block_params* pComp_params)
+  const bc7enc_compress_block_params* pComp_params) -> uint64_t
 {
   assert((mode == 6) || (mode == 7) || (!pParams->m_has_alpha));
 
@@ -2723,9 +2738,9 @@ static uint64_t color_cell_compression(uint32_t mode,
   return pResults->m_best_overall_err;
 }
 
-static uint64_t color_cell_compression_est_mode1(uint32_t num_pixels,
+static auto color_cell_compression_est_mode1(uint32_t num_pixels,
   const color_rgba* pPixels, bool perceptual, uint32_t pweights[4],
-  uint64_t best_err_so_far)
+  uint64_t best_err_so_far) -> uint64_t
 {
   // Find RGB bounds as an approximation of the block's principle axis
   uint32_t lr = 255, lg = 255, lb = 255;
@@ -2875,9 +2890,9 @@ static uint64_t color_cell_compression_est_mode1(uint32_t num_pixels,
   return total_err;
 }
 
-static uint64_t color_cell_compression_est_mode7(uint32_t num_pixels,
+static auto color_cell_compression_est_mode7(uint32_t num_pixels,
   const color_rgba* pPixels, bool perceptual, uint32_t pweights[4],
-  uint64_t best_err_so_far)
+  uint64_t best_err_so_far) -> uint64_t
 {
   // Find RGB bounds as an approximation of the block's principle axis
   uint32_t lr = 255, lg = 255, lb = 255, la = 255;
@@ -3049,9 +3064,9 @@ static const uint32_t g_partition_predictors[35] = { UINT32_MAX, UINT32_MAX,
 
 // Estimate the partition used by modes 1/7. This scans through each partition
 // and computes an approximate error for each.
-static uint32_t estimate_partition(const color_rgba* pPixels,
+static auto estimate_partition(const color_rgba* pPixels,
   const bc7enc_compress_block_params* pComp_params, uint32_t pweights[4],
-  uint32_t mode)
+  uint32_t mode) -> uint32_t
 {
   const uint32_t total_partitions
     = minimumu(pComp_params->m_max_partitions, BC7ENC_MAX_PARTITIONS);
@@ -3724,8 +3739,8 @@ static void handle_opaque_block(void* pBlock, const color_rgba* pPixels,
   encode_bc7_block(pBlock, &opt_results);
 }
 
-bool bc7enc_compress_block(void* pBlock, const void* pPixelsRGBA,
-  const bc7enc_compress_block_params* pComp_params)
+auto bc7enc_compress_block(void* pBlock, const void* pPixelsRGBA,
+  const bc7enc_compress_block_params* pComp_params) -> bool
 {
   assert(g_bc7_mode_1_optimal_endpoints[255][0].m_hi != 0);
 
@@ -3789,8 +3804,8 @@ static const uint8_t g_tdefl_large_dist_extra[128]
       13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13,
       13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13 };
 
-static inline uint32_t compute_match_cost_estimate(
-  uint32_t dist, uint32_t match_len_in_bytes)
+static inline auto compute_match_cost_estimate(
+  uint32_t dist, uint32_t match_len_in_bytes) -> uint32_t
 {
   assert(match_len_in_bytes <= 258);
 
@@ -3833,23 +3848,26 @@ public:
     m_total2 += val * val;
   }
 
-  tracked_stat& operator+=(uint32_t val)
+  auto operator+=(uint32_t val) -> tracked_stat&
   {
     update(val);
     return *this;
   }
 
-  uint32_t get_number_of_values() { return m_num; }
-  uint64_t get_total() const { return m_total; }
-  uint64_t get_total2() const { return m_total2; }
+  auto get_number_of_values() -> uint32_t { return m_num; }
+  auto get_total() const -> uint64_t { return m_total; }
+  auto get_total2() const -> uint64_t { return m_total2; }
 
-  float get_average() const { return m_num ? (float)m_total / m_num : 0.0f; };
-  float get_std_dev() const
+  auto get_average() const -> float
+  {
+    return m_num ? (float)m_total / m_num : 0.0f;
+  };
+  auto get_std_dev() const -> float
   {
     return m_num ? sqrtf((float)(m_num * m_total2 - m_total * m_total)) / m_num
                  : 0.0f;
   }
-  float get_variance() const
+  auto get_variance() const -> float
   {
     float s = get_std_dev();
     return s * s;
@@ -3861,7 +3879,7 @@ private:
   uint64_t m_total2;
 };
 
-static inline float compute_block_max_std_dev(const color_rgba* pPixels)
+static inline auto compute_block_max_std_dev(const color_rgba* pPixels) -> float
 {
   tracked_stat r_stats, g_stats, b_stats, a_stats;
 
@@ -3881,7 +3899,7 @@ static inline float compute_block_max_std_dev(const color_rgba* pPixels)
 struct bc7_block {
   uint8_t m_bytes[16];
 
-  uint32_t get_mode() const
+  auto get_mode() const -> uint32_t
   {
     uint32_t bc7_mode = 0;
     while (((m_bytes[0] & (1 << bc7_mode)) == 0) && (bc7_mode < 8))

@@ -5,9 +5,17 @@
 //===----------------------------------------------------------------------===//
 
 #include <exception>
+#include <filesystem>
+#include <stop_token>
+#include <string>
+#include <utility>
 
 #include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
+#include <Oxygen/Cooker/Import/ImportDiagnostics.h>
+#include <Oxygen/Cooker/Import/ImportRequest.h>
+#include <Oxygen/Cooker/Import/Internal/AdapterTypes.h>
 #include <Oxygen/Cooker/Import/Internal/fbx/FbxAdapter.h>
 #include <Oxygen/Cooker/Import/Internal/gltf/GltfAdapter.h>
 #include <Oxygen/Cooker/Import/SceneSourceInspection.h>

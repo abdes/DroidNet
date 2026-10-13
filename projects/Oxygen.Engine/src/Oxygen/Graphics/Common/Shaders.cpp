@@ -6,14 +6,19 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <functional>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include <Oxygen/Base/Hash.h>
+#include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 
 namespace oxygen::graphics {

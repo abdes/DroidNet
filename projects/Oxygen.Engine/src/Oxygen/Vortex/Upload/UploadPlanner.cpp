@@ -17,8 +17,6 @@
 #include <variant>
 #include <vector>
 
-#include <fmt/format.h>
-
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Graphics/Common/Buffer.h>

@@ -54,7 +54,7 @@
 #include <Oxygen/Vortex/PreparedSceneFrame.h>
 #include <Oxygen/Vortex/RendererCapability.h>
 #include <Oxygen/Vortex/SceneRenderer/ShadingMode.h>
-#include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/Generated.DrawContracts.h>
 #include <Oxygen/Vortex/Types/Generated.ExposureContracts.h>
 #include <Oxygen/Vortex/ViewExtension.h>
 #include <Oxygen/Vortex/test/Exposure/Fixtures/ExposureGpuFixture.h>

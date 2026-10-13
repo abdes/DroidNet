@@ -4,12 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <stdexcept>
+
 #include "./Mocks/MockDescriptorHeap.h"
 #include "./Mocks/MockDevice.h"
 #include <d3d12.h>
 
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/DescriptorHandle.h>
 #include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Direct3D12/Bindless/DescriptorSegment.h>

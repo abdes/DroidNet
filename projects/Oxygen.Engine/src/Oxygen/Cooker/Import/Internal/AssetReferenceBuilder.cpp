@@ -4,8 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <span>
 #include <stdexcept>
 #include <utility>
 #include <vector>

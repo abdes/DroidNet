@@ -5,22 +5,30 @@
 //===----------------------------------------------------------------------===//
 
 #if defined(OXGN_PHYS_BACKEND_JOLT)
-#  include <Jolt/Jolt.h> // Must always be first (keep separate)
+#  include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 #endif
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <ios>
 #include <limits>
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #if defined(OXGN_PHYS_BACKEND_JOLT)
 #  include <Jolt/Core/Memory.h>
+#  include <Jolt/Core/Reference.h>
 #  include <Jolt/Core/StreamWrapper.h>
 #  include <Jolt/Physics/SoftBody/SoftBodySharedSettings.h>
 #  include <Jolt/Physics/Vehicle/TrackedVehicleController.h>
 #  include <Jolt/Physics/Vehicle/VehicleConstraint.h>
+#  include <Jolt/Physics/Vehicle/VehicleDifferential.h>
+#  include <Jolt/Physics/Vehicle/VehicleTrack.h>
+#  include <Jolt/Physics/Vehicle/Wheel.h>
 #  include <Jolt/Physics/Vehicle/WheeledVehicleController.h>
 
 #  include <Oxygen/Core/Constants.h>

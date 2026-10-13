@@ -4,7 +4,5 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Oxygen/Testing/GTest.h>
-
 namespace oxygen::physics::test {
 } // namespace oxygen::physics::test

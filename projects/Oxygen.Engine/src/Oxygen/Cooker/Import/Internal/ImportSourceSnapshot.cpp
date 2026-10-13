@@ -111,7 +111,7 @@ auto ImportSourceSnapshot::RecordPreparation(
   for (const auto& input : inputs) {
     const auto path = NormalizePath(input.path);
     BeginRead(path);
-    auto release = ScopeGuard([this]() noexcept { EndRead(); });
+    auto release = ScopeGuard([this]() noexcept -> void { EndRead(); });
     if (!RecordObservation(path,
           Observation { .exists = input.exists,
             .metadata = input.metadata,
@@ -552,7 +552,7 @@ auto ImportSourceSnapshot::Verify() -> co::Co<>
     }
     verifying_ = true;
   }
-  const auto finish = ScopeGuard([this] noexcept {
+  const auto finish = ScopeGuard([this] noexcept -> void {
     const std::scoped_lock lock(mutex_);
     verifying_ = false;
   });

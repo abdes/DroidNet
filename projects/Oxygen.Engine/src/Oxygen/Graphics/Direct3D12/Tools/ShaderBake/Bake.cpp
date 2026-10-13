@@ -4,9 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
-#include <stdexcept>
-#include <string_view>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
@@ -15,6 +15,7 @@
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Bake.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/CompileProfile.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Execution.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/RequestCompilation.h>
 

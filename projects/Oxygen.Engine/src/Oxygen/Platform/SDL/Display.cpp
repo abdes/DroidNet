@@ -4,9 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <string>
+
+#include <SDL3/SDL_rect.h>
+#include <SDL3/SDL_video.h>
 #include <fmt/format.h>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/NoStd.h>
+#include <Oxygen/Base/Types/Geometry.h>
 #include <Oxygen/Platform/Display.h>
 #include <Oxygen/Platform/SDL/Wrapper.h>
 

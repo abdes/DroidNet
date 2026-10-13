@@ -4,8 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <span>
+
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Physics/Events/PhysicsEvents.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Jolt/JoltEvents.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
+#include <Oxygen/Physics/PhysicsError.h>
 
 oxygen::physics::jolt::JoltEvents::JoltEvents(JoltWorld& world)
   : world_(&world)

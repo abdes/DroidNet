@@ -19,10 +19,12 @@
 #include <string_view>
 #include <unordered_set>
 #include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Finally.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Content/Internal/ContentSourceRegistry.h>
+#include <Oxygen/Content/Internal/ContentSourceView.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/SourceKey.h>
@@ -486,7 +488,7 @@ auto ContentSourceRegistry::PruneExpiredSources()
   for (auto bucket = source_key_to_ids_.begin();
     bucket != source_key_to_ids_.end();) {
     std::erase_if(bucket->second,
-      [&expired](const auto id) { return expired.contains(id); });
+      [&expired](const auto id) -> auto { return expired.contains(id); });
     if (bucket->second.empty()) {
       bucket = source_key_to_ids_.erase(bucket);
     } else {

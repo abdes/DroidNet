@@ -4,12 +4,25 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <memory>
+#include <mutex>
+#include <optional>
 #include <stdexcept>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Graphics/Common/Internal/QueueSubmission.h>
+#include <Oxygen/Graphics/Common/Submission.h>
+#include <Oxygen/Graphics/Common/SubmissionCallback.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Headless/CommandList.h>
 #include <Oxygen/Graphics/Headless/CommandQueue.h>
 #include <Oxygen/Graphics/Headless/Internal/CommandExecutor.h>

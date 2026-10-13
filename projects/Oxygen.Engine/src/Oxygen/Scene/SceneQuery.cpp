@@ -5,14 +5,24 @@
 //===----------------------------------------------------------------------===//
 
 #include <cstdlib>
+#include <exception>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <span>
 #include <string_view>
+#include <utility>
 #include <vector>
 
+#include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Scene/Detail/PathMatcher.h>
 #include <Oxygen/Scene/Detail/PathParser.h>
+#include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
 #include <Oxygen/Scene/SceneQuery.h>
+#include <Oxygen/Scene/SceneTraversal.h>
+#include <Oxygen/Scene/Types/Traversal.h>
 
 using oxygen::scene::ConstVisitedNode;
 using oxygen::scene::QueryResult;

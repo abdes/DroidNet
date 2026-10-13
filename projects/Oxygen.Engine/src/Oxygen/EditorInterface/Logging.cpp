@@ -6,9 +6,12 @@
 
 #include <exception>
 #include <source_location>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #if defined(_WIN32)
-#  include <Windows.h>
+#  include <Windows.h> // IWYU pragma: keep
 #else
 #  include <unistd.h>
 #endif

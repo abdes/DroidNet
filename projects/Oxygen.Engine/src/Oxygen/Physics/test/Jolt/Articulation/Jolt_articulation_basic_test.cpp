@@ -4,7 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Physics/Articulation/ArticulationDesc.h>
 #include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/World/WorldDesc.h>
 #include <Oxygen/Physics/test/Jolt/Jolt_test_fixture.h>
 #include <Oxygen/Testing/GTest.h>

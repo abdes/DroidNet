@@ -9,8 +9,8 @@
 namespace oxygen {
 
 template <typename T, template <typename> class crtp_type> struct Crtp {
-  constexpr T& underlying() noexcept { return static_cast<T&>(*this); }
-  constexpr T const& underlying() const noexcept
+  constexpr auto underlying() noexcept -> T& { return static_cast<T&>(*this); }
+  constexpr auto underlying() const noexcept -> T const&
   {
     return static_cast<T const&>(*this);
   }

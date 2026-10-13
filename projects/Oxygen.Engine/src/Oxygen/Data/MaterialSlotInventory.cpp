@@ -7,11 +7,19 @@
 #include <algorithm>
 #include <iterator>
 #include <map>
+#include <optional>
 #include <set>
+#include <span>
+#include <string>
 #include <utility>
+#include <vector>
 
-#include <fmt/format.h>
+#include <fmt/base.h>
 
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Base/Sha256.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MaterialSlotInventory.h>
 
 namespace oxygen::data {
@@ -49,8 +57,8 @@ auto WriteCanonicalMaterialSlotLayout(const std::span<const MaterialSlot> slots)
   for (const auto& slot : slots) {
     ordered_slots.push_back(&slot);
   }
-  std::ranges::sort(
-    ordered_slots, {}, [](const MaterialSlot* slot) { return slot->slot_id; });
+  std::ranges::sort(ordered_slots, {},
+    [](const MaterialSlot* slot) -> MaterialSlotId { return slot->slot_id; });
 
   std::string record;
   fmt::format_to(std::back_inserter(record),

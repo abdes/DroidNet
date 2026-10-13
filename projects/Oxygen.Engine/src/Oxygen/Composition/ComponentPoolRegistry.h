@@ -111,11 +111,11 @@ private:
       auto* pool_ptr = pool.get();
       pools_.emplace(resource_type,
         PoolEntry(std::unique_ptr<void, void (*)(void*)>(pool.release(),
-                    [](void* ptr) {
+                    [](void* ptr) -> auto {
                       delete static_cast<ComponentPool<PooledComponentType>*>(
                         ptr);
                     }),
-          [](void* ptr) {
+          [](void* ptr) -> auto {
             static_cast<ComponentPool<PooledComponentType>*>(ptr)->ForceClear();
           }));
       return *pool_ptr;

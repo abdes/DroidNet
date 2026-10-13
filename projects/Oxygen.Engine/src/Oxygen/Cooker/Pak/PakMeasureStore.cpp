@@ -8,17 +8,20 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <ios>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <span>
+#include <system_error>
 #include <vector>
 
 #include <Oxygen/Cooker/Pak/PakMeasureStore.h>
+#include <Oxygen/Cooker/Pak/PakPlan.h>
 #include <Oxygen/Data/PakFormat_audio.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
-#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/PakFormat_render.h> // IWYU pragma: keep
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -360,52 +363,57 @@ namespace oxygen::content::pak {
 auto MeasureTextureTablePayload(const PakResourceTableSerializationInput& input)
   -> std::optional<uint64_t>
 {
-  return MeasurePayload(
-    [&input](auto& sink) { return EmitTextureTablePayload(input, sink); });
+  return MeasurePayload([&input](auto& sink) -> auto {
+    return EmitTextureTablePayload(input, sink);
+  });
 }
 
 auto StoreTextureTablePayload(const PakResourceTableSerializationInput& input,
   std::vector<std::byte>& out_bytes) -> bool
 {
   return StorePayload(
-    [&input](auto& sink) { return EmitTextureTablePayload(input, sink); },
+    [&input](
+      auto& sink) -> auto { return EmitTextureTablePayload(input, sink); },
     out_bytes);
 }
 
 auto MeasureBufferTablePayload(const PakResourceTableSerializationInput& input)
   -> std::optional<uint64_t>
 {
-  return MeasurePayload(
-    [&input](auto& sink) { return EmitBufferTablePayload(input, sink); });
+  return MeasurePayload([&input](auto& sink) -> auto {
+    return EmitBufferTablePayload(input, sink);
+  });
 }
 
 auto StoreBufferTablePayload(const PakResourceTableSerializationInput& input,
   std::vector<std::byte>& out_bytes) -> bool
 {
   return StorePayload(
-    [&input](auto& sink) { return EmitBufferTablePayload(input, sink); },
+    [&input](
+      auto& sink) -> auto { return EmitBufferTablePayload(input, sink); },
     out_bytes);
 }
 
 auto MeasureAudioTablePayload(const PakResourceTableSerializationInput& input)
   -> std::optional<uint64_t>
 {
-  return MeasurePayload(
-    [&input](auto& sink) { return EmitAudioTablePayload(input, sink); });
+  return MeasurePayload([&input](auto& sink) -> auto {
+    return EmitAudioTablePayload(input, sink);
+  });
 }
 
 auto StoreAudioTablePayload(const PakResourceTableSerializationInput& input,
   std::vector<std::byte>& out_bytes) -> bool
 {
   return StorePayload(
-    [&input](auto& sink) { return EmitAudioTablePayload(input, sink); },
+    [&input](auto& sink) -> auto { return EmitAudioTablePayload(input, sink); },
     out_bytes);
 }
 
 auto MeasureScriptResourceTablePayload(
   const PakResourceTableSerializationInput& input) -> std::optional<uint64_t>
 {
-  return MeasurePayload([&input](auto& sink) {
+  return MeasurePayload([&input](auto& sink) -> auto {
     return EmitScriptResourceTablePayload(input, sink);
   });
 }
@@ -415,23 +423,26 @@ auto StoreScriptResourceTablePayload(
   std::vector<std::byte>& out_bytes) -> bool
 {
   return StorePayload(
-    [&input](
-      auto& sink) { return EmitScriptResourceTablePayload(input, sink); },
+    [&input](auto& sink) -> auto {
+      return EmitScriptResourceTablePayload(input, sink);
+    },
     out_bytes);
 }
 
 auto MeasurePhysicsTablePayload(const PakResourceTableSerializationInput& input)
   -> std::optional<uint64_t>
 {
-  return MeasurePayload(
-    [&input](auto& sink) { return EmitPhysicsTablePayload(input, sink); });
+  return MeasurePayload([&input](auto& sink) -> auto {
+    return EmitPhysicsTablePayload(input, sink);
+  });
 }
 
 auto StorePhysicsTablePayload(const PakResourceTableSerializationInput& input,
   std::vector<std::byte>& out_bytes) -> bool
 {
   return StorePayload(
-    [&input](auto& sink) { return EmitPhysicsTablePayload(input, sink); },
+    [&input](
+      auto& sink) -> auto { return EmitPhysicsTablePayload(input, sink); },
     out_bytes);
 }
 
@@ -439,8 +450,9 @@ auto MeasureAssetDirectoryPayload(
   const std::span<const PakAssetDirectoryEntryPlan> entries)
   -> std::optional<uint64_t>
 {
-  return MeasurePayload(
-    [entries](auto& sink) { return EmitAssetDirectoryPayload(entries, sink); });
+  return MeasurePayload([entries](auto& sink) -> auto {
+    return EmitAssetDirectoryPayload(entries, sink);
+  });
 }
 
 auto StoreAssetDirectoryPayload(
@@ -448,22 +460,25 @@ auto StoreAssetDirectoryPayload(
   std::vector<std::byte>& out_bytes) -> bool
 {
   return StorePayload(
-    [entries](auto& sink) { return EmitAssetDirectoryPayload(entries, sink); },
+    [entries](
+      auto& sink) -> auto { return EmitAssetDirectoryPayload(entries, sink); },
     out_bytes);
 }
 
 auto MeasureBrowseIndexPayload(
   const std::span<const PakBrowseEntryPlan> entries) -> std::optional<uint64_t>
 {
-  return MeasurePayload(
-    [entries](auto& sink) { return EmitBrowseIndexPayload(entries, sink); });
+  return MeasurePayload([entries](auto& sink) -> auto {
+    return EmitBrowseIndexPayload(entries, sink);
+  });
 }
 
 auto StoreBrowseIndexPayload(const std::span<const PakBrowseEntryPlan> entries,
   std::vector<std::byte>& out_bytes) -> bool
 {
   return StorePayload(
-    [entries](auto& sink) { return EmitBrowseIndexPayload(entries, sink); },
+    [entries](
+      auto& sink) -> auto { return EmitBrowseIndexPayload(entries, sink); },
     out_bytes);
 }
 

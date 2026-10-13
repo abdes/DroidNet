@@ -4,9 +4,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
 #include <utility>
 
+#include <Oxygen/Graphics/Common/BackendLifetime.h>
+#include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
+#include <Oxygen/Graphics/Common/CommandRecording.h>
 #include <Oxygen/Graphics/Common/Internal/Commander.h>
 
 namespace oxygen::graphics::internal {

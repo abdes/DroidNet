@@ -7,8 +7,20 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <utility>
+#include <vector>
 
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/MaterialAsset.h>
+#include <Oxygen/Data/MaterialDomain.h>
+#include <Oxygen/Data/PakFormat_render.h>
+#include <Oxygen/Data/ShaderReference.h>
 
 using oxygen::data::MaterialAsset;
 namespace {

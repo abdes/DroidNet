@@ -363,16 +363,16 @@ namespace bindless {
 // compute the hash from the underlying numeric value.
 namespace std {
 template <> struct hash<::oxygen::BindlessHeapIndex> {
-  [[nodiscard]] size_t operator()(
-    const ::oxygen::BindlessHeapIndex& v) const noexcept
+  [[nodiscard]] auto operator()(
+    const ::oxygen::BindlessHeapIndex& v) const noexcept -> size_t
   {
     return std::hash<uint32_t> {}(v.get());
   }
 };
 
 template <> struct hash<::oxygen::ShaderVisibleIndex> {
-  [[nodiscard]] size_t operator()(
-    const ::oxygen::ShaderVisibleIndex& v) const noexcept
+  [[nodiscard]] auto operator()(
+    const ::oxygen::ShaderVisibleIndex& v) const noexcept -> size_t
   {
     return std::hash<uint32_t> {}(v.get());
   }

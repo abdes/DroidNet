@@ -7,32 +7,46 @@
 #include <algorithm>
 #include <bit>
 #include <chrono>
-#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <new>
 #include <numbers>
 #include <optional>
+#include <ratio>
 #include <string>
 #include <unordered_map>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/Format.h>
+#include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Vortex/Diagnostics/DiagnosticsService.h>
+#include <Oxygen/Vortex/Diagnostics/DiagnosticsTypes.h>
 #include <Oxygen/Vortex/Environment/Internal/AtmosphereState.h>
 #include <Oxygen/Vortex/Environment/Internal/CapturedSkySource.h>
+#include <Oxygen/Vortex/Environment/Internal/IblGpuProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/IblGpuValidation.h>
 #include <Oxygen/Vortex/Environment/Internal/IblProcessor.h>
 #include <Oxygen/Vortex/Environment/Internal/IblWorkBudget.h>
 #include <Oxygen/Vortex/Environment/Passes/IblProbePass.h>
+#include <Oxygen/Vortex/Environment/Types/EnvironmentProbeState.h>
+#include <Oxygen/Vortex/Environment/Types/IblCaptureLease.h>
+#include <Oxygen/Vortex/Environment/Types/SkyLightEnvironmentModel.h>
+#include <Oxygen/Vortex/Environment/Types/StaticSkyLightProducts.h>
 #include <Oxygen/Vortex/Internal/GpuTimelineAccess.h>
 #include <Oxygen/Vortex/RenderContext.h>
 #include <Oxygen/Vortex/Renderer.h>
 #include <Oxygen/Vortex/Resources/CubeIlluminance.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
+#include <Oxygen/Vortex/Types/EnvironmentStaticData.h>
+#include <Oxygen/Vortex/Types/SkyLightRuntimeState.h>
 
 namespace oxygen::vortex::environment::internal {
 

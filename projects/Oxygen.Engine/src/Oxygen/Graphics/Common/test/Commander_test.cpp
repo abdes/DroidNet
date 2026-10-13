@@ -7,15 +7,21 @@
 #include <array>
 #include <chrono>
 #include <memory>
-#include <thread>
+#include <optional>
+#include <span>
+#include <stdexcept>
+#include <string_view>
+#include <utility>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Composition/Object.h>
-#include <Oxygen/Core/Types/Frame.h>
+#include <Oxygen/Composition/TypedObject.h>
 #include <Oxygen/Graphics/Common/Buffer.h>
 #include <Oxygen/Graphics/Common/CommandList.h>
 #include <Oxygen/Graphics/Common/CommandQueue.h>
 #include <Oxygen/Graphics/Common/CommandRecorder.h>
 #include <Oxygen/Graphics/Common/CommandRecording.h>
+#include <Oxygen/Graphics/Common/Concepts.h>
 #include <Oxygen/Graphics/Common/Detail/Barriers.h>
 #include <Oxygen/Graphics/Common/Detail/DeferredReclaimer.h>
 #include <Oxygen/Graphics/Common/Framebuffer.h>
@@ -27,9 +33,10 @@
 #include <Oxygen/Graphics/Common/ResourceRegistry.h>
 #include <Oxygen/Graphics/Common/Texture.h>
 #include <Oxygen/Graphics/Common/Types/ClearFlags.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
+#include <Oxygen/Graphics/Common/Types/ResourceStates.h>
 #include <Oxygen/Graphics/Common/test/Fakes/FakeResource.h>
 #include <Oxygen/Testing/GTest.h>
-#include <Oxygen/Testing/ScopedLogCapture.h>
 
 //=== External Dependencies ===-----------------------------------------------//
 

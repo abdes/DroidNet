@@ -31,7 +31,7 @@ namespace {
 
   auto GetBufferEntryValidator() -> json_validator&
   {
-    static auto validator = []() {
+    static auto validator = []() -> json_validator {
       auto out = json_validator {};
       const auto root_schema = json::parse(kBufferContainerSchema);
       auto item_schema = json {
@@ -74,7 +74,7 @@ namespace {
     return internal::ValidateJsonSchemaWithDiagnostics(
       GetBufferEntryValidator(), chunk, config,
       [&](const std::string_view code, const std::string& message,
-        const std::string& chunk_object_path) {
+        const std::string& chunk_object_path) -> void {
         auto full_object_path = std::string(object_path);
         if (!chunk_object_path.empty()) {
           full_object_path += chunk_object_path.front() == '/'

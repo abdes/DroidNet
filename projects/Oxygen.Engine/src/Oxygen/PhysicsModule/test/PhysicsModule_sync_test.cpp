@@ -6,11 +6,31 @@
 
 #include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <span>
+#include <vector>
 
 #include "PhysicsModule_test_fixture.h"
+#include <glm/ext/quaternion_trigonometric.hpp>
 #include <glm/gtc/constants.hpp>
-#include <glm/gtc/quaternion.hpp>
+#include <gtest/gtest.h>
+
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/Constants.h>
+#include <Oxygen/Core/PhaseRegistry.h>
+#include <Oxygen/OxCo/Co.h>
+#include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
+#include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Character/CharacterController.h>
+#include <Oxygen/Physics/Events/PhysicsEvents.h>
+#include <Oxygen/Physics/Handles.h>
+#include <Oxygen/Physics/SoftBody/SoftBodyDesc.h>
+#include <Oxygen/Physics/System/IWorldApi.h>
+#include <Oxygen/Physics/Vehicle/VehicleDesc.h>
+#include <Oxygen/PhysicsModule/PhysicsModule.h>
+#include <Oxygen/PhysicsModule/ScenePhysics.h>
 
 namespace oxygen::physics::test {
 namespace {

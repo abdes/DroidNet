@@ -7,9 +7,14 @@
 #include <string>
 
 #include "ScriptingModule_test_fixture.h"
+#include <gtest/gtest.h>
 
+#include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Core/FrameContext.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/test/Utils/TestEventLoop.h>
+#include <Oxygen/Scripting/Module/ScriptingModule.h>
 
 namespace oxygen::scripting::test {
 

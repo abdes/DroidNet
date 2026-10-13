@@ -137,7 +137,7 @@ NOLINT_TEST_F(InputLoadersTest,
   constexpr size_t kTriggerSize = sizeof(InputTriggerRecord);
   constexpr size_t kAuxSize = sizeof(InputTriggerAuxRecord);
 
-  const auto make_asset_key = [](const std::uint8_t seed) {
+  const auto make_asset_key = [](const std::uint8_t seed) -> AssetKey {
     auto bytes = std::array<std::uint8_t, AssetKey::kSizeBytes> {};
     bytes.at(0) = seed;
     return AssetKey::FromBytes(bytes);

@@ -402,17 +402,18 @@ auto FrameContext::GetErrors() const noexcept -> std::vector<FrameError>
 auto FrameContext::ClearErrorsFromSource(TypeId source_type_id) noexcept -> void
 {
   std::unique_lock lock { error_mutex_ };
-  std::erase_if(frame_errors_, [source_type_id](const FrameError& error) {
-    return error.source_type_id == source_type_id;
-  });
+  std::erase_if(
+    frame_errors_, [source_type_id](const FrameError& error) -> bool {
+      return error.source_type_id == source_type_id;
+    });
 }
 
 auto FrameContext::ClearErrorsFromSource(TypeId source_type_id,
   const std::optional<std::string>& source_key) noexcept -> void
 {
   std::unique_lock lock { error_mutex_ };
-  std::erase_if(
-    frame_errors_, [source_type_id, &source_key](const FrameError& error) {
+  std::erase_if(frame_errors_,
+    [source_type_id, &source_key](const FrameError& error) -> bool {
       return error.source_type_id == source_type_id
         && error.source_key == source_key;
     });

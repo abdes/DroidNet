@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
 #include <exception>
 #include <filesystem>
 #include <iostream>
@@ -13,6 +14,7 @@
 
 #include "DumpContext.h"
 #include "PakFileDumper.h"
+#include <asio/io_context.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
@@ -30,10 +32,11 @@
 #include <Oxygen/Content/Loaders/TextureLoader.h>
 #include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Core/EngineTag.h>
+#include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Nursery.h>
 #include <Oxygen/OxCo/Run.h>
 #include <Oxygen/OxCo/ThreadPool.h>
-#include <Oxygen/OxCo/asio.h>
+#include <Oxygen/OxCo/asio.h> // IWYU pragma: keep
 
 namespace oxygen::engine::internal {
 struct EngineTagFactory {

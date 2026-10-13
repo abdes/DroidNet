@@ -6,10 +6,16 @@
 
 #pragma once
 
+#include <cstdint>
+#include <memory>
+#include <string_view>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/EditorInterface/Api.h>
+#include <Oxygen/EditorInterface/EngineContext.h>
 #include <Oxygen/Graphics/Common/Graphics.h>
 #include <Oxygen/Graphics/Common/Surface.h>
+#include <Oxygen/Graphics/Common/Types/QueueRole.h>
 #include <Oxygen/Graphics/Direct3D12/Detail/CompositionSurface.h>
 #include <Oxygen/Scene/Scene.h>
 

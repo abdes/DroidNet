@@ -9,8 +9,6 @@
 // https://github.com/joboccara/NamedType
 
 #include <array>
-#include <cmath>
-#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -23,7 +21,7 @@
 
 // Usage examples
 
-template <typename T> decltype(auto) tee(T&& value)
+template <typename T> auto tee(T&& value) -> decltype(auto)
 {
   std::cout << value << '\n';
   return std::forward<T>(value);
@@ -31,7 +29,7 @@ template <typename T> decltype(auto) tee(T&& value)
 
 using Meter = oxygen::NamedType<unsigned long long, struct MeterParameter,
   oxygen::Addable, oxygen::Comparable>;
-constexpr Meter operator""_meter(unsigned long long value)
+constexpr auto operator""_meter(unsigned long long value) -> Meter
 {
   return Meter(value);
 }
@@ -46,8 +44,8 @@ public:
     , height_(height.get())
   {
   }
-  Meter getWidth() const { return width_; }
-  Meter getHeight() const { return height_; }
+  auto getWidth() const -> Meter { return width_; }
+  auto getHeight() const -> Meter { return height_; }
 
 private:
   Meter width_;
@@ -86,7 +84,7 @@ NOLINT_TEST_F(NamedTypeBasicTest, PassingStrongReference)
 NOLINT_TEST_F(NamedTypeBasicTest, RefFromUnderlying)
 {
   using StrongInt = oxygen::NamedType<int, struct StrongIntTag>;
-  auto addOne = [](StrongInt::ref si) { ++(si.get()); };
+  auto addOne = [](StrongInt::ref si) -> void { ++(si.get()); };
 
   int i = 42;
   addOne(StrongInt::ref(i));
@@ -97,7 +95,7 @@ NOLINT_TEST_F(NamedTypeBasicTest, RefFromUnderlying)
 NOLINT_TEST_F(NamedTypeBasicTest, ImplicitConversionToRef)
 {
   using StrongInt = oxygen::NamedType<int, struct StrongIntTag>;
-  auto addOne = [](StrongInt::ref si) { ++(si.get()); };
+  auto addOne = [](StrongInt::ref si) -> void { ++(si.get()); };
 
   StrongInt i(42);
   addOne(i);
@@ -112,7 +110,7 @@ NOLINT_TEST_F(NamedTypeBasicTest, ImplicitConversionToRef)
 NOLINT_TEST_F(NamedTypeBasicTest, RefConversionOnLvaluesOnly)
 {
   using StrongInt = oxygen::NamedType<int, struct StrongIntTag>;
-  auto read = [](StrongInt::ref si) { return si.get(); };
+  auto read = [](StrongInt::ref si) -> int { return si.get(); };
 
   StrongInt si(7);
   EXPECT_EQ(7, read(si));
@@ -238,7 +236,7 @@ template <typename Function>
 using Comparator = oxygen::NamedType<Function, struct ComparatorParameter>;
 
 template <typename Function>
-std::string performAction(Comparator<Function> comp)
+auto performAction(Comparator<Function> comp) -> std::string
 {
   return comp.get()();
 }
@@ -247,8 +245,8 @@ std::string performAction(Comparator<Function> comp)
 NOLINT_TEST_F(NamedTypeBasicTest, StrongGenericType)
 {
   EXPECT_EQ(std::string("compare"),
-    performAction(
-      oxygen::MakeNamed<Comparator>([]() { return std::string("compare"); })));
+    performAction(oxygen::MakeNamed<Comparator>(
+      []() -> std::string { return std::string("compare"); })));
 }
 
 //! Addable skill supports + and unary +.
@@ -856,7 +854,8 @@ struct testFunctionCallable_A {
   // ensures that passing the argument to a function doesn't make a copy
   testFunctionCallable_A(testFunctionCallable_A const&) = delete;
   testFunctionCallable_A(testFunctionCallable_A&&) = default;
-  testFunctionCallable_A& operator+=(testFunctionCallable_A const& other)
+  auto operator+=(testFunctionCallable_A const& other)
+    -> testFunctionCallable_A&
   {
     x += other.x;
     return *this;
@@ -864,14 +863,14 @@ struct testFunctionCallable_A {
   int x;
 };
 
-testFunctionCallable_A operator+(
-  testFunctionCallable_A const& a1, testFunctionCallable_A const& a2)
+auto operator+(testFunctionCallable_A const& a1,
+  testFunctionCallable_A const& a2) -> testFunctionCallable_A
 {
   return testFunctionCallable_A(a1.x + a2.x);
 }
 
-bool operator==(
-  testFunctionCallable_A const& a1, testFunctionCallable_A const& a2)
+auto operator==(
+  testFunctionCallable_A const& a1, testFunctionCallable_A const& a2) -> bool
 {
   return a1.x == a2.x;
 }
@@ -880,7 +879,7 @@ bool operator==(
 NOLINT_TEST_F(NamedTypeSkillsTest, FunctionCallable)
 {
   using A = testFunctionCallable_A;
-  auto functionTakingA = [](A const& a) { return a.x; };
+  auto functionTakingA = [](A const& a) -> int { return a.x; };
 
   using StrongA
     = oxygen::NamedType<A, struct StrongATag, oxygen::FunctionCallable>;
@@ -899,8 +898,8 @@ struct testFunctionCallable_B {
   // ensures that passing the argument to a function doesn't make a copy
   testFunctionCallable_B(testFunctionCallable_B const&) = delete;
   testFunctionCallable_B(testFunctionCallable_B&&) = default;
-  constexpr testFunctionCallable_B& operator+=(
-    testFunctionCallable_B const& other)
+  constexpr auto operator+=(testFunctionCallable_B const& other)
+    -> testFunctionCallable_B&
   {
     x += other.x;
     return *this;
@@ -908,19 +907,22 @@ struct testFunctionCallable_B {
   int x;
 };
 
-constexpr testFunctionCallable_B operator+(
-  testFunctionCallable_B const& a1, testFunctionCallable_B const& a2)
+constexpr auto operator+(testFunctionCallable_B const& a1,
+  testFunctionCallable_B const& a2) -> testFunctionCallable_B
 {
   return testFunctionCallable_B(a1.x + a2.x);
 }
 
-constexpr bool operator==(
-  testFunctionCallable_B const& a1, testFunctionCallable_B const& a2)
+constexpr auto operator==(
+  testFunctionCallable_B const& a1, testFunctionCallable_B const& a2) -> bool
 {
   return a1.x == a2.x;
 }
 
-constexpr int functionTakingB(testFunctionCallable_B const& b) { return b.x; }
+constexpr auto functionTakingB(testFunctionCallable_B const& b) -> int
+{
+  return b.x;
+}
 
 //! FunctionCallable is constexpr-enabled.
 NOLINT_TEST_F(NamedTypeSkillsTest, FunctionCallableConstexpr)
@@ -952,8 +954,8 @@ NOLINT_TEST_F(NamedTypeSkillsTest, MethodCallable)
     A(A const&) = delete; // ensures that invoking a method doesn't make a copy
     A(A&&) = default;
 
-    int method() { return x; }
-    int constMethod() const { return x; }
+    auto method() -> int { return x; }
+    auto constMethod() const -> int { return x; }
 
   private:
     int x;
@@ -979,8 +981,8 @@ NOLINT_TEST_F(NamedTypeSkillsTest, MethodCallableConstexpr)
     A(A const&) = delete; // ensures that invoking a method doesn't make a copy
     A(A&&) = default;
 
-    constexpr int method() { return x; }
-    constexpr int constMethod() const { return x; }
+    constexpr auto method() -> int { return x; }
+    constexpr auto constMethod() const -> int { return x; }
 
   private:
     int x;
@@ -1008,14 +1010,14 @@ NOLINT_TEST_F(NamedTypeSkillsTest, Callable)
                           // make a copy
     A(A&&) = default;
 
-    int method() { return x; }
-    int constMethod() const { return x; }
+    auto method() -> int { return x; }
+    auto constMethod() const -> int { return x; }
 
   private:
     int x;
   };
 
-  auto functionTakingA = [](A const& a) { return a.constMethod(); };
+  auto functionTakingA = [](A const& a) -> int { return a.constMethod(); };
 
   using StrongA = oxygen::NamedType<A, struct StrongATag, oxygen::Callable>;
   StrongA strongA(A(42));
@@ -1034,7 +1036,7 @@ NOLINT_TEST_F(NamedTypeNamedArgsTest, NamedArguments)
   static const LastName::argument lastName;
   auto getFullName
     = [](FirstName const& firstName_, LastName const& lastName_) //
-  {
+    -> std::string {
     return firstName_.get() + lastName_.get(); //
   };
 
@@ -1051,7 +1053,7 @@ NOLINT_TEST_F(NamedTypeNamedArgsTest, NamedArgumentsAnyOrder)
   static const LastName::argument lastName;
 
   auto getFullName = oxygen::MakeNamedArgFunction<FirstName, LastName>(
-    [](FirstName const& firstName_, LastName const& lastName_) {
+    [](FirstName const& firstName_, LastName const& lastName_) -> std::string {
       return firstName_.get() + lastName_.get();
     });
 
@@ -1089,7 +1091,7 @@ NOLINT_TEST_F(NamedTypeNamedArgsTest, NamedArgFunctionCopiesTheCallable)
   EXPECT_EQ(any_order(AnyHeight { 10 }, AnyWidth { 20 }), "T:20x10");
 
   // ...and the adapter must stay valid when the source goes out of scope.
-  auto detached = [] {
+  auto detached = [] -> auto {
     Joiner local { "L" };
     return oxygen::MakeNamedArgFunction<AnyWidth, AnyHeight>(local);
   }();
@@ -1101,7 +1103,9 @@ NOLINT_TEST_F(NamedTypeNamedArgsTest, NamedArgumentsWithBracketConstructor)
 {
   using Numbers = oxygen::NamedType<std::vector<int>, struct NumbersTag>;
   static const Numbers::argument numbers;
-  auto getNumbers = [](Numbers const& numbers_) { return numbers_.get(); };
+  auto getNumbers = [](Numbers const& numbers_) -> std::vector<int> {
+    return numbers_.get();
+  };
 
   auto vec = getNumbers(numbers = { 1, 2, 3 });
   EXPECT_EQ(std::vector<int>({ 1, 2, 3 }), vec);
@@ -1216,8 +1220,9 @@ NOLINT_TEST_F(NamedTypeSkillsTest, Dereferencable)
   }
 
   {
-    auto functionReturningStrongInt = []() { return StrongInt { 28 }; };
-    auto functionTakingInt = [](int value) { return value; };
+    auto functionReturningStrongInt
+      = []() -> StrongInt { return StrongInt { 28 }; };
+    auto functionTakingInt = [](int value) -> int { return value; };
 
     int value = functionTakingInt(*functionReturningStrongInt());
     EXPECT_EQ(28, value);
@@ -1252,7 +1257,7 @@ NOLINT_TEST_F(NamedTypeSkillsTest, PreIncrementableConstexpr)
   using StrongInt
     = oxygen::NamedType<int, struct StrongIntTag, oxygen::PreIncrementable>;
   static_assert(
-    [] {
+    [] -> int {
       StrongInt value { 1 };
       return (++value).get();
     }()
@@ -1279,7 +1284,7 @@ NOLINT_TEST_F(NamedTypeSkillsTest, PostIncrementableConstexpr)
   using StrongInt
     = oxygen::NamedType<int, struct StrongIntTag, oxygen::PostIncrementable>;
   static_assert(
-    [] {
+    [] -> int {
       StrongInt value { 1 };
       return (value++).get();
     }()
@@ -1304,7 +1309,7 @@ NOLINT_TEST_F(NamedTypeSkillsTest, PreDecrementableConstexpr)
   using StrongInt
     = oxygen::NamedType<int, struct StrongIntTag, oxygen::PreDecrementable>;
   static_assert(
-    [] {
+    [] -> int {
       StrongInt value { 1 };
       return (--value).get();
     }()
@@ -1329,7 +1334,7 @@ NOLINT_TEST_F(NamedTypeSkillsTest, PostDecrementableConstexpr)
   using StrongInt
     = oxygen::NamedType<int, struct StrongIntTag, oxygen::PostDecrementable>;
   static_assert(
-    [] {
+    [] -> int {
       StrongInt value { 1 };
       return (value--).get();
     }()

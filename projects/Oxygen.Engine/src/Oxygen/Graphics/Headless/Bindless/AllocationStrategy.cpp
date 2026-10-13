@@ -5,8 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <array>
+#include <cstdint>
+#include <stdexcept>
+#include <string>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Bindless/Types.h>
+#include <Oxygen/Graphics/Common/DescriptorAllocator.h>
+#include <Oxygen/Graphics/Common/Types/DescriptorVisibility.h>
 #include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 #include <Oxygen/Graphics/Headless/Bindless/AllocationStrategy.h>
 

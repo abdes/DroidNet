@@ -4,17 +4,21 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <utility>
+
+#include <wtypes.h>
+
 #include <Oxygen/Base/Platforms.h>
+#include <Oxygen/Base/StringUtils.h>
 #if defined(OXYGEN_WINDOWS)
 
-#  include <Windows.h>
+#  include <Windows.h> // IWYU pragma: keep
 
 #  include <exception>
 #  include <memory>
 #  include <span>
 #  include <string>
 #  include <system_error>
-#  include <type_traits>
 
 #  include <WTypesbase.h>
 #  include <comdef.h>

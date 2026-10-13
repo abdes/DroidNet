@@ -32,6 +32,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Cooker/Import/FileError.h>
+#include <Oxygen/Cooker/Import/FileInfo.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/WindowsFileReader.h>

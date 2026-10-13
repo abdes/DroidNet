@@ -5,7 +5,9 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cmath>
+#include <cstddef>
 #include <expected>
 #include <limits>
 #include <numbers>

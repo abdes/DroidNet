@@ -6,6 +6,8 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstddef>
+#include <cstdlib>
 #include <format>
 #include <functional>
 #include <iomanip>
@@ -13,17 +15,22 @@
 #include <memory>
 #include <numbers>
 #include <optional>
+#include <string>
 #include <thread>
 #include <vector>
 
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm/ext/matrix_float4x4.hpp>
+#include <glm/ext/quaternion_float.hpp>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/geometric.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/trigonometric.hpp>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Composition/TypeSystem.h>
 #include <Oxygen/Scene/Scene.h>
 #include <Oxygen/Scene/SceneNode.h>
+#include <Oxygen/Scene/Types/Flags.h>
 
 using oxygen::scene::Scene;
 using oxygen::scene::SceneNode;

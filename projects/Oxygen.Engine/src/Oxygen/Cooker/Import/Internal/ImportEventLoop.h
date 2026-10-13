@@ -132,7 +132,7 @@ public:
   void Post(content::import::ImportEventLoop& loop, void (*fn)(void*),
     void* arg) noexcept
   {
-    loop.Post([fn, arg]() { fn(arg); });
+    loop.Post([fn, arg]() -> void { fn(arg); });
   }
 };
 

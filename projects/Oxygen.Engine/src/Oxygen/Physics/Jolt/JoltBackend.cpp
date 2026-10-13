@@ -4,8 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <memory>
+#include <string_view>
+
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Physics/Jolt/JoltBackend.h>
 #include <Oxygen/Physics/Jolt/JoltPhysicsSystem.h>
+#include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/System/IPhysicsSystem.h>
 
 auto oxygen::physics::jolt::GetBackendName() noexcept -> std::string_view
 {

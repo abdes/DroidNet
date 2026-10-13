@@ -4,7 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
+#include <cstddef>
 #include <span>
+#include <string_view>
 
 #include <Oxygen/Data/ShaderReference.h>
 

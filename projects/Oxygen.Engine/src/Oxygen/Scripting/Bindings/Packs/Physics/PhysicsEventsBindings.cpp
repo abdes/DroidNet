@@ -4,13 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <optional>
+
 #include <lua.h>
-#include <lualib.h>
 
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Core/FrameContext.h>
 #include <Oxygen/Physics/Events/PhysicsEvents.h>
 #include <Oxygen/PhysicsModule/PhysicsModule.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scripting/Bindings/LuaBindingCommon.h>
 #include <Oxygen/Scripting/Bindings/Packs/Core/EventsBindings.h>
 #include <Oxygen/Scripting/Bindings/Packs/Physics/PhysicsBindingsCommon.h>

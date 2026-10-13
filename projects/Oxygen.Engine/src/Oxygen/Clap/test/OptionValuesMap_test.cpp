@@ -4,6 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <any>
+
+#include <Oxygen/Clap/OptionValue.h>
 #include <Oxygen/Clap/OptionValuesMap.h>
 #include <Oxygen/Testing/GTest.h>
 

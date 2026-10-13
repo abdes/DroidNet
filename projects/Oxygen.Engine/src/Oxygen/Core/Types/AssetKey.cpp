@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 #include <span>
 #include <string>
 #include <string_view>
@@ -14,6 +15,7 @@
 
 #include <xxhash.h>
 
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 
 namespace oxygen::data {

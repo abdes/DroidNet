@@ -4,39 +4,50 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
+#include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 
 #include <algorithm>
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
+#include <ios>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <span>
 #include <sstream>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include <Jolt/Core/RTTI.h>
+#include <Jolt/Core/Reference.h>
 #include <Jolt/Core/StreamWrapper.h>
 #include <Jolt/Physics/Body/Body.h>
 #include <Jolt/Physics/Body/BodyFilter.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
 #include <Jolt/Physics/Body/BodyLock.h>
-#include <Jolt/Physics/Collision/ObjectLayer.h>
 #include <Jolt/Physics/Constraints/Constraint.h>
 #include <Jolt/Physics/PhysicsSystem.h>
 #include <Jolt/Physics/Vehicle/TrackedVehicleController.h>
 #include <Jolt/Physics/Vehicle/VehicleCollisionTester.h>
 #include <Jolt/Physics/Vehicle/VehicleConstraint.h>
+#include <Jolt/Physics/Vehicle/Wheel.h>
 #include <Jolt/Physics/Vehicle/WheeledVehicleController.h>
+#include <glm/ext/quaternion_common.hpp>
 #include <glm/geometric.hpp>
-#include <glm/gtc/quaternion.hpp>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Core/Constants.h>
+#include <Oxygen/Physics/Aggregate/AggregateAuthority.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltVehicles.h>
+#include <Oxygen/Physics/Jolt/JoltWorld.h>
+#include <Oxygen/Physics/PhysicsError.h>
+#include <Oxygen/Physics/Vehicle/VehicleDesc.h>
 
 namespace {
 

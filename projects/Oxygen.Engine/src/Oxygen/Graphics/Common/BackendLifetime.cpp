@@ -4,7 +4,10 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <atomic>
 #include <cassert>
+#include <cstdint>
+#include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <utility>

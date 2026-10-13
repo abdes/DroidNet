@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <array>
 #include <bit>
-#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -20,7 +19,6 @@
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Core/Bindless/Generated.RootSignature.D3D12.h>
 #include <Oxygen/Core/Bindless/Types.h>
-#include <Oxygen/Core/Constants.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Core/Types/Frame.h>
 #include <Oxygen/Core/Types/ShaderType.h>

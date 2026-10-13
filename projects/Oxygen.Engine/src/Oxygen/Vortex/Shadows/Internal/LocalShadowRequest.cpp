@@ -5,7 +5,8 @@
 //===----------------------------------------------------------------------===//
 #include <algorithm>
 #include <cmath>
-#include <functional>
+#include <cstddef>
+#include <cstdint>
 
 #include <glm/gtc/matrix_access.hpp>
 
@@ -15,6 +16,9 @@
 #include <Oxygen/Vortex/Shadows/Internal/LocalShadowRequest.h>
 #include <Oxygen/Vortex/Shadows/Internal/PointShadowSetup.h>
 #include <Oxygen/Vortex/Shadows/Internal/SpotShadowSetup.h>
+#include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>
+#include <Oxygen/Vortex/Types/FrameLightSelection.h>
+#include <Oxygen/Vortex/Types/LightingIndices.h>
 
 namespace oxygen::vortex::shadows::internal {
 auto LocalShadowContentKey::operator==(const LocalShadowContentKey& other) const

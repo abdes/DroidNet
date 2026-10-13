@@ -7,12 +7,22 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <execution>
 #include <mutex>
 #include <numeric>
+#include <span>
+#include <stop_token>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Cooker/Import/Internal/bc7/Bc7Encoder.h>
 #include <Oxygen/Cooker/Import/Internal/bc7/bc7enc.h>
+#include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Cooker/Import/TextureImportTypes.h>
+#include <Oxygen/Core/Types/Format.h>
 
 namespace oxygen::content::import::bc7 {
 
@@ -189,7 +199,7 @@ auto EncodeSurface(const ImageView& source, const Bc7EncoderParams& params)
   std::vector<uint32_t> block_rows(blocks_y);
   std::iota(block_rows.begin(), block_rows.end(), 0U);
   std::for_each(std::execution::par, block_rows.begin(), block_rows.end(),
-    [&](const uint32_t by) {
+    [&](const uint32_t by) -> void {
       std::array<std::byte, 64> block_pixels {};
 
       for (uint32_t bx = 0; bx < blocks_x; ++bx) {
@@ -273,7 +283,7 @@ auto EncodeTexture(const ScratchImage& source, const Bc7EncoderParams& params)
       std::vector<uint32_t> block_rows(blocks_y);
       std::iota(block_rows.begin(), block_rows.end(), 0U);
       std::for_each(std::execution::par, block_rows.begin(), block_rows.end(),
-        [&](const uint32_t by) {
+        [&](const uint32_t by) -> void {
           std::array<std::byte, 64> block_pixels {};
 
           for (uint32_t bx = 0; bx < blocks_x; ++bx) {
@@ -384,7 +394,7 @@ auto EncodeTexture(const ScratchImage& source, const Bc7EncoderParams& params,
       std::vector<uint32_t> block_rows(blocks_y);
       std::iota(block_rows.begin(), block_rows.end(), 0U);
       std::for_each(std::execution::par, block_rows.begin(), block_rows.end(),
-        [&](const uint32_t by) {
+        [&](const uint32_t by) -> void {
           if (stop_token.stop_requested()) {
             return;
           }

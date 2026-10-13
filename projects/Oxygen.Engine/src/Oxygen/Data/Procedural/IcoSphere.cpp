@@ -5,16 +5,20 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
-#include <array>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <numbers>
+#include <optional>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include <Oxygen/Data/GeometryAsset.h>
+#include <glm/ext/vector_float3.hpp>
+#include <glm/geometric.hpp>
+
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/Vertex.h>
 
 namespace {
 

@@ -4,11 +4,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdlib>
+#include <iostream>
 #include <memory>
 
+#include <Oxygen/Clap/Cli.h>
+#include <Oxygen/Clap/Command.h>
+#include <Oxygen/Clap/CommandLineContext.h> // IWYU pragma: keep
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
-#include <Oxygen/Clap/Parser/Parser.h>
 
 using namespace oxygen::clap;
 

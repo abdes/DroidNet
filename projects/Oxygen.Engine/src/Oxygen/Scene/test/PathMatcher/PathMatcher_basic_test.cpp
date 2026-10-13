@@ -7,6 +7,7 @@
 #include "./Fixtures/PathMatcherTest.h"
 
 #include <Oxygen/Scene/Detail/PathMatcher.h>
+#include <Oxygen/Scene/Detail/PathParser.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::scene::detail::query::CaseInsensitiveMatcher;

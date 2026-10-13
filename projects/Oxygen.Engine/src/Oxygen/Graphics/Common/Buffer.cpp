@@ -4,8 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
+#include <stdexcept>
+
 #include <Oxygen/Graphics/Common/Buffer.h>
-#include <Oxygen/Graphics/Common/DescriptorAllocationHandle.h>
+#include <Oxygen/Graphics/Common/NativeObject.h>
+#include <Oxygen/Graphics/Common/Types/ResourceViewType.h>
 
 using oxygen::graphics::Buffer;
 using oxygen::graphics::BufferViewDescription;

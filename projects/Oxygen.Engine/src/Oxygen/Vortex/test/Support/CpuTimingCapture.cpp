@@ -14,6 +14,8 @@
 #include <stdexcept>
 #include <string_view>
 
+#include <nlohmann/json.hpp>
+
 // Initializes Windows SDK architecture and prerequisite types for API headers.
 #include <Windows.h> // IWYU pragma: keep
 

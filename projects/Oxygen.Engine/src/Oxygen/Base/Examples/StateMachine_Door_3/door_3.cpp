@@ -4,7 +4,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <cstdio>
+#include <exception>
 #include <iostream>
 
 #include <Oxygen/Base/StateMachine.h>

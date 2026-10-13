@@ -5,17 +5,19 @@
 //===----------------------------------------------------------------------===//
 
 // Standard library
-#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <memory>
+#include <type_traits>
+#include <utility>
 #include <vector>
 
 // Third-party (math)
+#include <glm/ext/vector_float3.hpp>
 #include <glm/geometric.hpp>
-#include <glm/glm.hpp>
 
 // GTest
+#include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project

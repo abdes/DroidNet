@@ -5,9 +5,12 @@
 //===----------------------------------------------------------------------===//
 
 #include <chrono>
+#include <cstdint>
 
 #include <Oxygen/Core/Time/Conversion.h>
 #include <Oxygen/Core/Time/PhysicalClock.h>
+#include <Oxygen/Core/Time/PresentationClock.h>
+#include <Oxygen/Core/Time/Types.h>
 #include <Oxygen/Engine/TimeManager.h>
 #include <Oxygen/Testing/GTest.h>
 

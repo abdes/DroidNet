@@ -4,16 +4,20 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstdint>
 #include <memory>
 #include <utility>
 #include <vector>
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scene/Camera/Perspective.h>
 #include <Oxygen/Scene/Internal/IMutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationCollector.h>
 #include <Oxygen/Scene/Internal/MutationDispatcher.h>
+#include <Oxygen/Scene/Internal/MutationTypes.h>
 #include <Oxygen/Scene/Light/DirectionalLight.h>
 #include <Oxygen/Scene/Scene.h>
+#include <Oxygen/Scene/Types/NodeHandle.h>
 #include <Oxygen/Scene/test/Helpers/SceneMutationTestSupport.h>
 #include <Oxygen/Testing/GTest.h>
 

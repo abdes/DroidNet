@@ -11,6 +11,8 @@
 
 #include <Oxygen/Composition/Object.h>
 #include <Oxygen/Content/Internal/ContentBindingBundle.h>
+#include <Oxygen/Content/Internal/ContentIdentity.h>
+#include <Oxygen/Content/Internal/PhysicsBindings.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>

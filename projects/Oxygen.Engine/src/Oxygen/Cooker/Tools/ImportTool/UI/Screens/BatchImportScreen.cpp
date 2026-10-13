@@ -6,9 +6,12 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <chrono>
+#include <cstddef>
 #include <filesystem>
 #include <format>
+#include <mutex>
 #include <numeric>
 #include <string>
 #include <string_view>
@@ -17,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "UI/BatchViewModel.h"
 #include <ftxui/component/component.hpp>
 #include <ftxui/component/component_base.hpp>
 #include <ftxui/component/screen_interactive.hpp>
@@ -155,12 +159,13 @@ namespace {
       order.emplace_back(index, fractions[index]);
     }
 
-    std::sort(order.begin(), order.end(), [](const auto& lhs, const auto& rhs) {
-      if (lhs.second == rhs.second) {
-        return lhs.first < rhs.first;
-      }
-      return lhs.second > rhs.second;
-    });
+    std::sort(
+      order.begin(), order.end(), [](const auto& lhs, const auto& rhs) -> auto {
+        if (lhs.second == rhs.second) {
+          return lhs.first < rhs.first;
+        }
+        return lhs.second > rhs.second;
+      });
 
     for (int i = 0; i < remaining; ++i) {
       const size_t index = order[static_cast<size_t>(i) % order.size()].first;
@@ -493,7 +498,7 @@ void BatchImportScreen::Run()
     });
   });
 
-  auto root = ftxui::CatchEvent(renderer, [&](const Event& event) {
+  auto root = ftxui::CatchEvent(renderer, [&](const Event& event) -> bool {
     if (event == Event::Custom) {
       return true;
     }
@@ -509,7 +514,7 @@ void BatchImportScreen::Run()
     return false;
   });
 
-  std::thread updater([&]() {
+  std::thread updater([&]() -> void {
     while (running.load()) {
       if (provider_) {
         UpdateState(provider_());

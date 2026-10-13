@@ -15,6 +15,9 @@
 #include <string_view>
 #include <system_error>
 
+#include <fmt/base.h>
+
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Uuid.h>
 
 namespace {
@@ -67,13 +70,13 @@ constexpr auto HasCanonicalHyphens(const std::string_view str) noexcept -> bool
   constexpr auto kHyphenPositions
     = std::array<std::size_t, 4> { 8U, 13U, 18U, 23U };
   return std::ranges::all_of(kHyphenPositions,
-    [str](const auto position) { return str[position] == '-'; });
+    [str](const auto position) -> auto { return str[position] == '-'; });
 }
 
 constexpr auto HasOnlyLowercaseHexDigits(const std::string_view str) noexcept
   -> bool
 {
-  return std::ranges::all_of(str, [](const char c) noexcept {
+  return std::ranges::all_of(str, [](const char c) noexcept -> bool {
     return c == '-' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
   });
 }

@@ -21,6 +21,9 @@
 #include <unordered_set>
 #include <vector>
 
+#include <fmt/format.h>
+
+#include <Oxygen/Base/Result.h>
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -394,7 +397,7 @@ NOLINT_TEST_F(UuidV7Test, GenerateIsUniqueAcrossThreads)
   // Act
   for (auto worker_index = std::size_t { 0U }; worker_index < kThreadCount;
     ++worker_index) {
-    workers.emplace_back([&all, &all_mutex]() {
+    workers.emplace_back([&all, &all_mutex]() -> void {
       auto local = std::vector<Uuid> {};
       local.reserve(kUuidsPerThread);
       for (auto i = std::size_t { 0U }; i < kUuidsPerThread; ++i) {

@@ -5,9 +5,14 @@
 //===----------------------------------------------------------------------===//
 
 #include <exception>
+#include <memory>
+#include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <utility>
 
 #include <Oxygen/OxCo/Detail/Result.h>
+#include <Oxygen/OxCo/TaskCancelledException.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::co::TaskCancelledException;

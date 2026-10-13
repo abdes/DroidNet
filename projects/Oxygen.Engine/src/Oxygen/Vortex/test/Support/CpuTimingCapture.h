@@ -12,7 +12,7 @@
 #include <filesystem>
 #include <vector>
 
-#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/NamedType.h>
 #include <Oxygen/Core/Types/Frame.h>

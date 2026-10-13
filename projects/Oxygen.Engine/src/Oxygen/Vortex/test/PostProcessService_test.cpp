@@ -45,6 +45,7 @@
 #include <Oxygen/Vortex/RendererTag.h>
 #include <Oxygen/Vortex/Resources/TextureBinder.h>
 #include <Oxygen/Vortex/SceneRenderer/SceneTextures.h>
+#include <Oxygen/Vortex/Types/ExposureSettingsStatus.h>
 #include <Oxygen/Vortex/Types/ExposureTransition.h>
 #include <Oxygen/Vortex/Upload/UploadCoordinator.h>
 #include <Oxygen/Vortex/test/Fakes/AssetLoader.h>

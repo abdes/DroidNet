@@ -4,16 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <Jolt/Jolt.h> // Must always be first (keep separate)
+#include <Jolt/Jolt.h> // IWYU pragma: keep (must always be first)
 
+#include <cstdint>
 #include <limits>
+#include <mutex>
+#include <optional>
 
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyInterface.h>
+#include <Jolt/Physics/Body/MotionQuality.h>
+#include <Jolt/Physics/Body/MotionType.h>
+#include <Jolt/Physics/EActivation.h>
 
+#include <Oxygen/Base/Result.h>
+#include <Oxygen/Physics/Body/BodyDesc.h>
+#include <Oxygen/Physics/Character/CharacterController.h>
+#include <Oxygen/Physics/Handles.h>
 #include <Oxygen/Physics/Jolt/Converters.h>
 #include <Oxygen/Physics/Jolt/JoltCharacters.h>
 #include <Oxygen/Physics/Jolt/JoltWorld.h>
+#include <Oxygen/Physics/PhysicsError.h>
 
 oxygen::physics::jolt::JoltCharacters::JoltCharacters(JoltWorld& world)
   : world_(&world)

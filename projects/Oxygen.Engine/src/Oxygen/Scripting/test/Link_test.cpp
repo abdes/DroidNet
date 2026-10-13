@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Scripting/Module/ScriptingModule.h>
 #include <Oxygen/Scripting/test/Fakes/FakeAsyncEngine.h>
 

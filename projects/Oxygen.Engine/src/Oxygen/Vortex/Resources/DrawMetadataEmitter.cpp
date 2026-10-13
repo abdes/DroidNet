@@ -47,6 +47,7 @@
 #include <Oxygen/Vortex/ScenePrep/RenderItemData.h>
 #include <Oxygen/Vortex/Types/DrawCullRecord.h>
 #include <Oxygen/Vortex/Types/DrawMetadata.h>
+#include <Oxygen/Vortex/Types/Generated.DrawContracts.h>
 #include <Oxygen/Vortex/Types/PassMask.h>
 #include <Oxygen/Vortex/Types/ShadowCasterSource.h>
 #include <Oxygen/Vortex/Upload/TransientStructuredBuffer.h>

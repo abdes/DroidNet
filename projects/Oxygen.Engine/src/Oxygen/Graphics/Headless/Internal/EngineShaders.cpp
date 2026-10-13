@@ -6,9 +6,13 @@
 
 #include <array>
 #include <cstdint>
+#include <memory>
+#include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Logging.h>
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Graphics/Common/ShaderByteCode.h>
 #include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Headless/Internal/EngineShaders.h>
 

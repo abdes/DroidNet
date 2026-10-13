@@ -4,6 +4,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
+#include <type_traits>
+#include <utility>
+#include <vector>
+
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ScriptResource.h>

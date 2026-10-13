@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <memory_resource>
 #include <optional>
 #include <stdexcept>
@@ -203,7 +204,7 @@ auto ContentIdentityRegistry::EraseSources(
   }
   for (auto entry = identities_.begin(); entry != identities_.end();) {
     const auto source = std::visit(
-      [](const auto& identity) {
+      [](const auto& identity) -> auto {
         if constexpr (requires { identity.source; }) {
           return identity.source;
         } else {

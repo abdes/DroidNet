@@ -10,6 +10,7 @@
 #include <exception>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -36,6 +37,7 @@
 #include <Oxygen/Vortex/Shadows/Internal/SharedShadowMap.h>
 #include <Oxygen/Vortex/Shadows/Passes/CascadeShadowPass.h>
 #include <Oxygen/Vortex/Shadows/Passes/ContactShadowCasterDepthPass.h>
+#include <Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.h>
 #include <Oxygen/Vortex/Shadows/Passes/ShadowReceiverFitPass.h>
 #include <Oxygen/Vortex/Shadows/ShadowService.h>
 #include <Oxygen/Vortex/Shadows/Types/FrameShadowInputs.h>

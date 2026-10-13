@@ -4,15 +4,27 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <cstddef>
+#include <cstdint>
+#include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iomanip>
+#include <ios>
+#include <span>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
+#include <Oxygen/Core/Types/ShaderType.h>
+#include <Oxygen/Graphics/Common/Shaders.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/BuildPaths.h>
+#include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Catalog.h>
 #include <Oxygen/Graphics/Direct3D12/Tools/ShaderBake/Manifest.h>
 
 namespace oxygen::graphics::d3d12::tools::shader_bake {

@@ -6,11 +6,15 @@
 
 #include <array>
 #include <atomic>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
+#include <ios>
 #include <stdexcept>
+#include <string>
 #include <string_view>
+#include <system_error>
 
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Graphics/Direct3D12/Shaders/ShaderCatalogBuilder.h>
