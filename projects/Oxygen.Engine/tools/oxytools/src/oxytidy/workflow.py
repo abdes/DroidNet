@@ -307,6 +307,7 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
         configuration=args.configuration,
         coverage_gaps=[],
         unreached_headers=[],
+        unbuilt_sources=[],
         header_discovery_complete=False,
         discovery_scope=[str(path) for path in scope.discovery_roots],
         selected=[],
@@ -440,12 +441,18 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
             if path_key(path) not in covered:
                 summary["unreached_headers"].append(str(path))
         elif path_key(path) not in context_sources:
-            summary["coverage_gaps"].append(
-                {
-                    "file": str(path),
-                    "reason": "No matching compile command",
-                }
-            )
+            if scope.names_file(path):
+                summary["coverage_gaps"].append(
+                    {
+                        "file": str(path),
+                        "reason": "No matching compile command",
+                    }
+                )
+            else:
+                # The compilation database lists what this build tree builds.
+                # A source found by walking a directory that it does not list
+                # belongs to a target this configuration does not enable.
+                summary["unbuilt_sources"].append(str(path))
     prepared.sort(key=lambda item: (path_key(item.context.file), item.context.identity))
     summary["selected"].sort(key=lambda item: (path_key(item["file"]), item["context"]))
     summary["selected_count"] = len(prepared)
@@ -453,7 +460,7 @@ def run(args, root: Path, runner: Runner, run_dir: Path, summary: dict) -> int:
         [
             (
                 "Selection",
-                f"{len(prepared)} contexts; {len(summary['unreached_headers'])} unreached headers; {len(summary['coverage_gaps'])} analysis gaps",
+                f"{len(prepared)} contexts; {len(summary['unreached_headers'])} unreached headers; {len(summary['unbuilt_sources'])} unbuilt sources; {len(summary['coverage_gaps'])} analysis gaps",
             )
         ]
     )

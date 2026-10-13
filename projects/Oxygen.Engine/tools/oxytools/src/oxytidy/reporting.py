@@ -447,6 +447,20 @@ class Reporter:
                 else "yellow"
             )
             outcome(self.console, labels[status], details, style)
+        unbuilt = summary.get("unbuilt_sources", [])
+        if unbuilt:
+            self.section(
+                "Sources not built in this configuration",
+                [
+                    ("Skipped", f"{len(unbuilt)} source file(s)"),
+                    (
+                        "Reason",
+                        "no compile command in the build tree; analysis and fixes "
+                        "proceed without them (name a file explicitly to require it)",
+                    ),
+                ],
+            )
+            self.rows([("Source", Path(path)) for path in unbuilt])
         headers = summary.get("unreached_headers", [])
         if headers:
             reason = (

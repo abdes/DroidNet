@@ -95,6 +95,10 @@ class Scope(Ownership):
     def contains(self, path: Path) -> bool:
         return self._contains(path.resolve())
 
+    def names_file(self, path: Path) -> bool:
+        """Whether the caller named this file itself instead of a directory."""
+        return path.resolve() in self._index.files
+
     def _contains(self, resolved: Path) -> bool:
         return self._index.contains(resolved) and self._eligible(resolved)
 

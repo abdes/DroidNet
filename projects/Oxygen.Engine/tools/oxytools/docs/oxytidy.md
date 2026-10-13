@@ -239,6 +239,14 @@ applied. Discovery failures make header reachability uncertain and remain actual
 tool failures. Missing compile commands for explicitly scoped source files also
 remain failures.
 
+A source file found by walking a directory scope that has no compile command is
+not a failure: the compilation database lists what this build tree builds, so
+the file belongs to a target this configuration does not enable (for example an
+optional Tracy library). Such files are listed under "Sources not built in this
+configuration" and recorded as `unbuilt_sources` in `summary.json`. They do not
+change the exit policy or block fixes to analyzed code. Naming the file on the
+command line makes its missing compile command a failure again.
+
 Selecting an excluded file fails. `--max-files` remains a diagnostic cap:
 omitted analysis contexts make the run incomplete and prevent autofix.
 

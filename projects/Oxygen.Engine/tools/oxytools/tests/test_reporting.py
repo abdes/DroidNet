@@ -156,6 +156,26 @@ class ReportingTests(unittest.TestCase):
                     self.assertIn("20 project header", output)
                     self.assertNotIn("further headers", output)
 
+    def test_every_unbuilt_source_is_shown_in_every_output_mode(self):
+        sources = [self.root / f"src/unbuilt_{i:02}.cpp" for i in range(12)]
+        for summary_only in (False, True):
+            with self.subTest(summary_only=summary_only):
+                stream = io.StringIO()
+                reporter = Reporter(
+                    Console(file=stream, width=120, force_terminal=False)
+                )
+                summary = self.summary()
+                summary.pop("error")
+                summary.update(status="clean", unbuilt_sources=list(map(str, sources)))
+                summary["options"].update(summary_only=summary_only)
+                reporter.start(summary)
+                reporter.finish(summary)
+                output = stream.getvalue()
+                for source in sources:
+                    self.assertIn(source.name, output)
+                self.assertIn("12 source file", output)
+                self.assertIn("not built in this configuration", output)
+
     def test_workflow_prints_every_analysis_gap(self):
         gaps = [
             {

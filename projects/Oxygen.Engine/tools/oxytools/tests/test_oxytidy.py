@@ -1467,6 +1467,27 @@ class LLVMTests(Fixture):
             "No matching compile command", report["coverage_gaps"][0]["reason"]
         )
 
+    def test_directory_scope_skips_sources_the_build_tree_does_not_build(self):
+        self.source_pair()
+        unbuilt = self.write("src/unconfigured.cpp", "int x;\n")
+        code, report = self.invoke("src")
+        self.assertEqual(code, 0, report)
+        self.assertEqual(report["coverage_gaps"], [])
+        self.assertEqual(report["unbuilt_sources"], [str(unbuilt)])
+        self.assertEqual(report["selected_count"], 1)
+
+    def test_directory_scope_applies_fixes_despite_unbuilt_sources(self):
+        header = self.write("src/a.h", "inline int f() { return 1; }\n")
+        self.write("src/a.cpp", '#include "a.h"\nint main() { return f(); }\n')
+        self.database(["src/a.cpp"])
+        self.write("src/unconfigured.cpp", "int x;\n")
+        code, report = self.invoke(
+            "src", "--fix", "--checks=-*,modernize-use-trailing-return-type"
+        )
+        self.assertEqual(code, 0, report)
+        self.assertEqual(report["status"], "clean")
+        self.assertIn("auto f() -> int", header.read_text())
+
     def test_scope_without_test_consumers_reports_module_gap_until_tests_are_included(
         self,
     ):
