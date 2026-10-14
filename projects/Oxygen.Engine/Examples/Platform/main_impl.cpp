@@ -4,14 +4,14 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <array>
 #include <chrono>
 #include <cstdlib>
 #include <exception>
 #include <functional>
 #include <memory>
 #include <span>
-#include <string>
-#include <vector>
+#include <string_view>
 
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_keycode.h>
@@ -59,40 +59,46 @@ private:
   static inline bool running_ { false };
 };
 
+//! Keyboard controls help, shared by the on-screen overlay and the console.
+constexpr std::array<std::string_view, 10> kHelpLines {
+  "Oxygen Platform Example - Keyboard Controls",
+  "",
+  "Arrow Keys: Move window position by 10px",
+  "X: Maximize  |  M: Minimize  |  R: Restore",
+  "F: Enter Fullscreen  |  G: Exit Fullscreen",
+  "Q: Request Close  |  A: Request Close (rejected)",
+  "Z: Force Close  |  Y: Confirm close prompt",
+  "H: Toggle this help overlay",
+  "",
+  "Press any key to test the controls...",
+};
+
+//! Log the keyboard controls help to the console.
+void PrintHelpToLog()
+{
+  LOG_F(INFO, "=== HELP - Keyboard Controls ===");
+  for (size_t i = 1; i < kHelpLines.size(); ++i) {
+    if (!kHelpLines[i].empty()) {
+      LOG_F(INFO, "{}", kHelpLines[i]);
+    }
+  }
+  LOG_F(INFO, "================================");
+}
+
 //! Simple help text renderer using Windows GDI APIs
 class HelpRenderer {
 private:
-#ifdef _WIN32
-  HWND hwnd_ = nullptr;
-#endif
-  std::vector<std::string> help_lines_;
+  void* native_window_handle_ = nullptr;
   bool show_help_ = false;
 
 public:
   explicit HelpRenderer(void* native_window_handle)
-    : hwnd_(static_cast<HWND>(native_window_handle))
+    : native_window_handle_(native_window_handle)
   {
-#ifdef _WIN32
-
-    if (!hwnd_) {
+    if (!native_window_handle_) {
       LOG_F(ERROR, "Invalid native window handle");
       return;
     }
-#endif
-
-    // Initialize help text lines
-    help_lines_ = {
-      "Oxygen Platform Example - Keyboard Controls",
-      "",
-      "Arrow Keys: Move window position by 10px",
-      "X: Maximize  |  M: Minimize  |  R: Restore",
-      "F: Enter Fullscreen  |  G: Exit Fullscreen",
-      "Q: Request Close  |  A: Request Close (rejected)",
-      "Z: Force Close  |  Y: Confirm close prompt",
-      "H: Toggle this help overlay",
-      "",
-      "Press any key to test the controls...",
-    };
 
     LOG_F(INFO, "Help renderer created successfully");
   }
@@ -102,16 +108,11 @@ public:
   OXYGEN_MAKE_NON_COPYABLE(HelpRenderer)
   OXYGEN_MAKE_NON_MOVABLE(HelpRenderer)
 
-  void ToggleHelp()
-  {
-    show_help_ = !show_help_;
-    if (show_help_) {
-      DrawHelp();
-    } else {
-      ClearHelp();
-    }
-    LOG_F(INFO, "Help overlay: {}", show_help_ ? "ON" : "OFF");
-  }
+  //! Show the overlay unless it is already showing.
+  void ShowHelp() { SetVisible(true); }
+
+  //! Show or hide the help overlay on the window.
+  void ToggleHelp() { SetVisible(!show_help_); }
 
   void OnWindowResize()
   {
@@ -122,24 +123,45 @@ public:
     }
   }
 
-  [[nodiscard]] auto IsShowingHelp() const -> bool { return show_help_; }
-
 private:
-  void DrawHelp()
-  {
 #ifdef _WIN32
-    if (!hwnd_) {
+  [[nodiscard]] auto Window() const -> HWND
+  {
+    return static_cast<HWND>(native_window_handle_);
+  }
+#endif
+
+  void SetVisible(bool visible)
+  {
+    if (visible == show_help_) {
       return;
     }
 
-    HDC hdc = GetDC(hwnd_);
+    show_help_ = visible;
+    if (show_help_) {
+      DrawHelp();
+    } else {
+      ClearHelp();
+    }
+    LOG_F(INFO, "Help overlay: {}", show_help_ ? "ON" : "OFF");
+  }
+
+  void DrawHelp()
+  {
+#ifdef _WIN32
+    const HWND hwnd = Window();
+    if (!hwnd) {
+      return;
+    }
+
+    HDC hdc = GetDC(hwnd);
     if (!hdc) {
       return;
     }
 
     // Get window dimensions
     RECT window_rect;
-    GetClientRect(hwnd_, &window_rect);
+    GetClientRect(hwnd, &window_rect);
 
     // Clear entire window surface with solid black
     HBRUSH black_brush = CreateSolidBrush(RGB(0, 0, 0));
@@ -171,8 +193,8 @@ private:
     const int margin = 30;
     const int line_height = 35;
 
-    for (size_t i = 0; i < help_lines_.size(); ++i) {
-      const auto& line = help_lines_.at(i);
+    for (size_t i = 0; i < kHelpLines.size(); ++i) {
+      const auto line = kHelpLines[i];
       if (line.empty()) {
         continue;
       }
@@ -187,39 +209,40 @@ private:
       }
 
       TextOut(hdc, margin, margin + (static_cast<int>(i) * line_height),
-        line.c_str(), static_cast<int>(line.length()));
+        line.data(), static_cast<int>(line.size()));
     }
 
     // Cleanup
     SelectObject(hdc, old_font);
     DeleteObject(font);
     DeleteObject(black_brush);
-    ReleaseDC(hwnd_, hdc);
+    ReleaseDC(hwnd, hdc);
 #endif
   }
 
   void ClearHelp()
   {
 #ifdef _WIN32
-    if (!hwnd_) {
+    const HWND hwnd = Window();
+    if (!hwnd) {
       return;
     }
 
-    HDC hdc = GetDC(hwnd_);
+    HDC hdc = GetDC(hwnd);
     if (!hdc) {
       return;
     }
 
     // Get window dimensions and fill with black
     RECT window_rect;
-    GetClientRect(hwnd_, &window_rect);
+    GetClientRect(hwnd, &window_rect);
 
     // Force solid black background
     HBRUSH black_brush = CreateSolidBrush(RGB(0, 0, 0));
     FillRect(hdc, &window_rect, black_brush);
 
     DeleteObject(black_brush);
-    ReleaseDC(hwnd_, hdc);
+    ReleaseDC(hwnd, hdc);
 #endif
   }
 };
@@ -316,37 +339,39 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
         try {
           help_renderer
             = std::make_shared<HelpRenderer>(native_handles.window_handle);
-          LOG_F(INFO, "Help renderer initialized successfully");
         } catch (const std::exception& e) {
           LOG_F(ERROR, "Failed to create help renderer: {}", e.what());
         }
-
-        if (show_help_overlay && help_renderer) {
-          help_renderer->ToggleHelp();
-        }
       }
 
-      LOG_F(INFO, "H: Show detailed help ({})",
+      // The help overlay is shown by default; --show-help false hides it.
+      if (help_renderer && show_help_overlay) {
+        help_renderer->ShowHelp();
+      }
+
+      LOG_F(INFO, "H: Toggle detailed help ({})",
         help_renderer ? "On-screen + Console" : "Console only");
     }
 
     n.Start([window_weak, help_renderer] -> oxygen::co::Co<> {
       bool not_destroyed { true };
       while (not_destroyed && !window_weak.expired()) {
-        auto window = window_weak.lock();
+        const auto window = window_weak.lock();
+        if (!window) {
+          break;
+        }
+
         if (const auto [from, to] = co_await window->Events().UntilChanged();
           to == WindowEvent::kDestroyed) {
           LOG_F(INFO, "My window is destroyed");
           not_destroyed = false;
-        } else {
-          if (to == WindowEvent::kExposed) {
-            LOG_F(INFO, "My window is exposed");
-          } else if (to == WindowEvent::kResized) {
-            LOG_F(INFO, "My window is resized");
-            // Always clear and redraw the window on resize
-            if (help_renderer) {
-              help_renderer->OnWindowResize();
-            }
+        } else if (to == WindowEvent::kExposed) {
+          LOG_F(INFO, "My window is exposed");
+        } else if (to == WindowEvent::kResized) {
+          LOG_F(INFO, "My window is resized");
+          // Always clear and redraw the window on resize
+          if (help_renderer) {
+            help_renderer->OnWindowResize();
           }
         }
       }
@@ -354,11 +379,14 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
 
     n.Start([window_weak, platform] -> oxygen::co::Co<> {
       while (!window_weak.expired()) {
-        auto window = window_weak.lock();
+        const auto window = window_weak.lock();
+        if (!window) {
+          break;
+        }
+
         co_await window->CloseRequested();
         DLOG_F(WARNING, "Press 'y' to close the window, you have 3 seconds...");
-        // Wait for the user to press 'y'
-        // 3 seconds to elapse
+        // Wait for the user to press 'y' or for 3 seconds to elapse
         auto [double_close, _] = co_await oxygen::co::AnyOf(
           [&platform] -> oxygen::co::Co<bool> {
             while (true) {
@@ -374,12 +402,12 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
           },
           platform->Async().SleepFor(std::chrono::seconds(3)));
         if (!window_weak.expired()) {
-          if (!double_close) {
-            window_weak.lock()->VoteNotToClose();
-          } else {
-            window_weak.lock()->VoteToClose();
+          if (double_close) {
+            window->VoteToClose();
             break;
           }
+
+          window->VoteNotToClose();
         }
       }
     });
@@ -399,38 +427,32 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
 
           constexpr int translate_by = 10;
 
+          // Restore before moving so arrow keys always reposition the window.
+          const auto move_window = [&window](int dx, int dy) {
+            if (window->Maximized()) {
+              window->Restore();
+            }
+
+            const auto [pos_x, pos_y] = window->Position();
+            window->MoveTo({ .x = pos_x + dx, .y = pos_y + dy });
+          };
+
           switch (sdl_event->key.key) {
           // Arrow keys - Move window position
           case SDLK_LEFT: {
-            if (window->Maximized()) {
-              window->Restore();
-            }
-            const auto [pos_x, pos_y] = window->Position();
-            window->MoveTo({ .x = pos_x - translate_by, .y = pos_y });
+            move_window(-translate_by, 0);
           } break;
 
           case SDLK_RIGHT: {
-            if (window->Maximized()) {
-              window->Restore();
-            }
-            const auto [pos_x, pos_y] = window->Position();
-            window->MoveTo({ .x = pos_x + translate_by, .y = pos_y });
+            move_window(translate_by, 0);
           } break;
 
           case SDLK_UP: {
-            if (window->Maximized()) {
-              window->Restore();
-            }
-            const auto [pos_x, pos_y] = window->Position();
-            window->MoveTo({ .x = pos_x, .y = pos_y - translate_by });
+            move_window(0, -translate_by);
           } break;
 
           case SDLK_DOWN: {
-            if (window->Maximized()) {
-              window->Restore();
-            }
-            const auto [pos_x, pos_y] = window->Position();
-            window->MoveTo({ .x = pos_x, .y = pos_y + translate_by });
+            move_window(0, translate_by);
           } break;
 
           // Window state controls
@@ -499,24 +521,11 @@ auto AsyncMain(std::shared_ptr<oxygen::Platform> platform,
 
           // Help toggle
           case SDLK_H: {
-            LOG_F(INFO, "=== HELP - Keyboard Controls ===");
-            LOG_F(INFO, "Arrow Keys: Move window position by 10 pixels");
-            LOG_F(INFO, "X: Maximize window");
-            LOG_F(INFO, "M: Minimize window");
-            LOG_F(INFO, "R: Restore window to normal state");
-            LOG_F(INFO, "F: Enter fullscreen mode");
-            LOG_F(INFO, "G: Exit fullscreen mode");
-            LOG_F(INFO, "Q: Request window close (can be voted against)");
-            LOG_F(INFO, "A: Request close but auto-reject (demo rejection)");
-            LOG_F(INFO, "Z: Force close (bypasses voting mechanism)");
-            LOG_F(INFO, "Y: Confirm close when prompted");
-            LOG_F(INFO, "H: Show this help text");
-            LOG_F(INFO, "================================");
+            PrintHelpToLog();
 
             // Display help overlay on window if renderer is available
             if (help_renderer) {
               help_renderer->ToggleHelp();
-              LOG_F(INFO, "Help overlay toggled");
             }
           } break;
 
@@ -555,7 +564,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
   using namespace oxygen::clap; // NOLINT
 
   bool start_fullscreen = false;
-  bool show_help_overlay = false;
+  bool show_help_overlay = true;
 
   try {
     const auto window_options = std::make_shared<Options>("Window options");
@@ -569,10 +578,11 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         .StoreTo(&start_fullscreen)
         .Build());
     window_options->Add(Option::WithKey("show-help")
-        .About("Show the on-screen help overlay on startup")
+        .About("Show the on-screen help overlay on startup; set false to "
+               "start with it hidden")
         .Long("show-help")
         .WithValue<bool>()
-        .DefaultValue(false)
+        .DefaultValue(true)
         .UserFriendlyName("show-help")
         .StoreTo(&show_help_overlay)
         .Build());
