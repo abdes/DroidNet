@@ -95,6 +95,10 @@ public partial class DynamicTree : Control
     /// <remarks>The control does not assign domain meaning or display a menu automatically.</remarks>
     public event EventHandler<TreeItemContextRequestedEventArgs>? ItemContextRequested;
 
+    /// <summary>Raised when a drag of tree items starts, after the tree has added its own data.</summary>
+    /// <remarks>Owners add formats that identify the items to drop targets outside the tree.</remarks>
+    public event EventHandler<TreeItemsDragStartingEventArgs>? ItemsDragStarting;
+
     /// <summary>Settles a realized inline rename before another context action changes selection.</summary>
     /// <returns>Whether all realized rename drafts committed successfully.</returns>
     public async Task<bool> SettleRenameAsync()
@@ -1480,6 +1484,10 @@ public partial class DynamicTree : Control
 
         args.Data.RequestedOperation = this.dragIsCopy ? DataPackageOperation.Copy : DataPackageOperation.Move;
         args.Data.SetData("application/vnd.droidnet.dynamictree", this.dragIsCopy ? "copy" : "move");
+        if (this.draggedItems is { Count: > 0 } items)
+        {
+            this.ItemsDragStarting?.Invoke(this, new(items, args.Data));
+        }
     }
 
     private void TreeItem_DragOver(object sender, DragEventArgs args)
