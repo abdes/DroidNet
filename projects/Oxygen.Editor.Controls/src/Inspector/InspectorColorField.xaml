@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.Controls.InspectorColorField"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:local="using:Oxygen.Editor.Controls"
+    x:Name="Root">
+    <!--  Feedback sits below the card, so its wrapping text never decides whether the row stacks.  -->
+    <StackPanel Spacing="{x:Bind DiagnosticSpacing, Mode=OneWay}">
+        <local:PropertyCard
+            x:Name="Card"
+            HorizontalContentAlignment="Stretch"
+            FontSize="{x:Bind FontSize, Mode=OneWay}"
+            IsCompound="True"
+            PropertyName="{x:Bind Label, Mode=OneWay}"
+            Qualifier="{x:Bind Qualifier, Mode=OneWay}"
+            QualifierGroup="{x:Bind QualifierGroup, Mode=OneWay}">
+            <controls:ColorBox
+                x:Name="Editor"
+                Alpha="{x:Bind Alpha, Mode=TwoWay}"
+                AlphaIsIndeterminate="{x:Bind AlphaIsMixed, Mode=OneWay}"
+                AutomationProperties.Name="{x:Bind ChannelAutomationName, Mode=OneWay}"
+                Blue="{x:Bind Blue, Mode=TwoWay}"
+                BlueIsIndeterminate="{x:Bind BlueIsMixed, Mode=OneWay}"
+                ChannelLabelPosition="{x:Bind ChannelLabelPosition, Mode=OneWay}"
+                ColorPicked="OnColorPicked"
+                ComponentMask="{x:Bind ComponentMask, Mode=OneWay}"
+                EditSessionCompleted="OnEditSessionCompleted"
+                EditSessionStarted="OnEditSessionStarted"
+                Encoding="Linear"
+                Green="{x:Bind Green, Mode=TwoWay}"
+                GreenIsIndeterminate="{x:Bind GreenIsMixed, Mode=OneWay}"
+                HasAlpha="{x:Bind HasAlpha, Mode=OneWay}"
+                IsPickerVisible="{x:Bind IsPickerVisible, Mode=OneWay}"
+                PickerAutomationName="{x:Bind PickerAutomationName, Mode=OneWay}"
+                Range="{x:Bind Range, Mode=OneWay}"
+                Red="{x:Bind Red, Mode=TwoWay}"
+                RedIsIndeterminate="{x:Bind RedIsMixed, Mode=OneWay}"
+                Tag="{Binding Tag, ElementName=Root}" />
+        </local:PropertyCard>
+        <TextBlock
+            AutomationProperties.LiveSetting="Polite"
+            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+            Text="{x:Bind ErrorText, Mode=OneWay}"
+            TextWrapping="Wrap"
+            Visibility="{x:Bind ErrorVisibility, Mode=OneWay}" />
+    </StackPanel>
+</UserControl>

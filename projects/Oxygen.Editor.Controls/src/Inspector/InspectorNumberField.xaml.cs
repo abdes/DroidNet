@@ -8,20 +8,26 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace Oxygen.Editor.Controls;
 
-/// <summary>Composes a native numeric caption/editor and its field feedback.</summary>
+/// <summary>Composes a property row around a NumberBox, with its field feedback below the row.</summary>
 public sealed partial class InspectorNumberField : UserControl
 {
     /// <summary>Identifies the field caption.</summary>
     public static readonly DependencyProperty LabelProperty = Register<string>(nameof(Label), string.Empty);
 
-    /// <summary>Identifies the value qualifier.</summary>
+    /// <summary>Identifies the property qualifier.</summary>
     public static readonly DependencyProperty QualifierProperty = Register<string>(nameof(Qualifier), string.Empty);
+
+    /// <summary>Identifies the value's unit.</summary>
+    public static readonly DependencyProperty UnitProperty = Register<string>(nameof(Unit), string.Empty);
+
+    /// <summary>Identifies the name of the rows whose editors end at the same right edge.</summary>
+    public static readonly DependencyProperty QualifierGroupProperty = Register<string>(nameof(QualifierGroup), string.Empty);
 
     /// <summary>Identifies the value prefix.</summary>
     public static readonly DependencyProperty PrefixProperty = Register<string>(nameof(Prefix), string.Empty);
 
     /// <summary>Identifies the numeric value.</summary>
-    public static readonly DependencyProperty NumberValueProperty = Register<float>(nameof(NumberValue), 0f);
+    public static readonly DependencyProperty NumberValueProperty = Register<double>(nameof(NumberValue), 0d);
 
     /// <summary>Identifies mixed-value presentation.</summary>
     public static readonly DependencyProperty IsMixedProperty = Register<bool>(nameof(IsMixed), defaultValue: false);
@@ -34,9 +40,6 @@ public sealed partial class InspectorNumberField : UserControl
 
     /// <summary>Identifies the shared caption width.</summary>
     public static readonly DependencyProperty LabelWidthProperty = Register<double>(nameof(LabelWidth), 124d);
-
-    /// <summary>Identifies the minimum usable numeric editor width.</summary>
-    public static readonly DependencyProperty EditorMinimumWidthProperty = Register<double>(nameof(EditorMinimumWidth), 128d);
 
     /// <summary>Identifies current validation text.</summary>
     public static readonly DependencyProperty ErrorTextProperty = Register<string>(nameof(ErrorText), string.Empty);
@@ -68,19 +71,25 @@ public sealed partial class InspectorNumberField : UserControl
     public event EventHandler<NumberBoxEditSessionEventArgs>? EditSessionCompleted;
 
     /// <summary>Forwards the original validation event, including raw expression text.</summary>
-    public event EventHandler<ValidationEventArgs<float>>? Validate;
+    public event EventHandler<ValidationEventArgs<double>>? Validate;
 
-    /// <summary>Gets or sets the native drag caption.</summary>
+    /// <summary>Gets or sets the property name shown by the row.</summary>
     public string Label { get => (string)this.GetValue(LabelProperty); set => this.SetValue(LabelProperty, value); }
 
-    /// <summary>Gets or sets the numeric unit/annotation.</summary>
+    /// <summary>Gets or sets the optional qualifier of the property, shown by the row after the editor.</summary>
     public string Qualifier { get => (string)this.GetValue(QualifierProperty); set => this.SetValue(QualifierProperty, value); }
 
-    /// <summary>Gets or sets the prefix annotation.</summary>
+    /// <summary>Gets or sets the value's unit, such as m or °, shown by the NumberBox after its value.</summary>
+    public string Unit { get => (string)this.GetValue(UnitProperty); set => this.SetValue(UnitProperty, value); }
+
+    /// <summary>Gets or sets the name of the rows whose editors end at the same right edge; empty for none.</summary>
+    public string QualifierGroup { get => (string)this.GetValue(QualifierGroupProperty); set => this.SetValue(QualifierGroupProperty, value); }
+
+    /// <summary>Gets or sets the value's prefix, such as f/, shown by the NumberBox before its value.</summary>
     public string Prefix { get => (string)this.GetValue(PrefixProperty); set => this.SetValue(PrefixProperty, value); }
 
     /// <summary>Gets or sets the numeric value.</summary>
-    public float NumberValue { get => (float)this.GetValue(NumberValueProperty); set => this.SetValue(NumberValueProperty, value); }
+    public double NumberValue { get => (double)this.GetValue(NumberValueProperty); set => this.SetValue(NumberValueProperty, value); }
 
     /// <summary>Gets or sets a value indicating whether the field has mixed values.</summary>
     public bool IsMixed { get => (bool)this.GetValue(IsMixedProperty); set => this.SetValue(IsMixedProperty, value); }
@@ -93,9 +102,6 @@ public sealed partial class InspectorNumberField : UserControl
 
     /// <summary>Gets or sets the shared label-column width.</summary>
     public double LabelWidth { get => (double)this.GetValue(LabelWidthProperty); set => this.SetValue(LabelWidthProperty, value); }
-
-    /// <summary>Gets or sets minimum usable editor width.</summary>
-    public double EditorMinimumWidth { get => (double)this.GetValue(EditorMinimumWidthProperty); set => this.SetValue(EditorMinimumWidthProperty, value); }
 
     /// <summary>Gets or sets current field validation text.</summary>
     public string ErrorText { get => (string)this.GetValue(ErrorTextProperty); set => this.SetValue(ErrorTextProperty, value); }
@@ -128,6 +134,6 @@ public sealed partial class InspectorNumberField : UserControl
     private void OnEditSessionCompleted(object? sender, NumberBoxEditSessionEventArgs args)
         => this.EditSessionCompleted?.Invoke(this, args);
 
-    private void OnValidate(object? sender, ValidationEventArgs<float> args)
+    private void OnValidate(object? sender, ValidationEventArgs<double> args)
         => this.Validate?.Invoke(this, args);
 }
