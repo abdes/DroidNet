@@ -11,7 +11,6 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Authoring.Materials;
-using Windows.UI;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
 
@@ -212,7 +211,7 @@ public sealed partial class MaterialDocumentServiceTests
         firstEditor.BeginEditSession("Base color", NumberBoxEditInteractionKind.PointerDrag);
         for (var index = 1; index <= 100; index++)
         {
-            firstEditor.SetBaseColor(Color.FromArgb(100, (byte)index, 30, 40));
+            firstEditor.SetBaseColor(new ColorChannels(index / 200d, 0.125, 0.25, 0.5));
         }
 
         firstEditor.EndEditSession(NumberBoxEditCompletionKind.Commit);
@@ -224,10 +223,7 @@ public sealed partial class MaterialDocumentServiceTests
         _ = firstEditor.UndoCommand.CanExecute(parameter: null).Should().BeFalse();
         _ = secondEditor.RoughnessFactor.Should().Be(0.2f);
         await firstEditor.RedoCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
-        _ = firstEditor.BaseColorR.Should().Be(100f / 255);
-        _ = firstEditor.BaseColorG.Should().Be(30f / 255);
-        _ = firstEditor.BaseColorB.Should().Be(40f / 255);
-        _ = firstEditor.BaseColorA.Should().Be(100f / 255);
+        _ = firstEditor.BaseColor.Should().Be(new ColorChannels(0.5, 0.125, 0.25, 0.5), "redo restores the last color of the session");
         _ = firstEditor.CookStatusText.Should().Be("Unsaved changes");
         firstEditor.Deactivate();
         _ = firstEditor.UndoCommand.CanExecute(parameter: null).Should().BeFalse();

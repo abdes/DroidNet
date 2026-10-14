@@ -8,7 +8,6 @@ using DroidNet.Storage.Native;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Testably.Abstractions;
-using Windows.UI;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
 
@@ -56,29 +55,30 @@ public sealed partial class MaterialColorHistoryTests
 
     private static async Task CheckMaterialColorGestureAsync(MaterialEditorViewModel model, int samples, bool cancel)
     {
-        var before = model.BaseColorColor;
+        var before = model.BaseColor;
         model.BeginEditSession("Base color", NumberBoxEditInteractionKind.PointerDrag);
-        var preview = default(Color);
+        var preview = default(ColorChannels);
         for (var sample = 1; sample <= samples; sample++)
         {
-            preview = Color.FromArgb(255, (byte)(48 * sample), 80, 160);
+            // Values a single-precision material stores exactly, so the round trip compares equal.
+            preview = new ColorChannels(0.125 * sample, 0.25, 0.5, 1);
             model.SetBaseColor(preview);
         }
 
-        _ = model.BaseColorColor.Should().NotBe(before);
+        _ = model.BaseColor.Should().NotBe(before);
         _ = model.UndoCommand.CanExecute(parameter: null).Should().BeTrue("Undo can cancel the active material preview");
         model.EndEditSession(cancel ? NumberBoxEditCompletionKind.Cancel : NumberBoxEditCompletionKind.Commit);
-        _ = model.BaseColorColor.Should().Be(cancel ? before : preview);
+        _ = model.BaseColor.Should().Be(cancel ? before : preview);
         _ = model.UndoCommand.CanExecute(parameter: null).Should().Be(!cancel);
         _ = model.IsDirty.Should().Be(!cancel);
         if (!cancel)
         {
             await model.UndoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-            _ = model.BaseColorColor.Should().Be(before);
+            _ = model.BaseColor.Should().Be(before);
             _ = model.IsDirty.Should().BeFalse();
             _ = model.UndoCommand.CanExecute(parameter: null).Should().BeFalse("one edit session must create exactly one history entry");
             await model.RedoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-            _ = model.BaseColorColor.Should().Be(preview);
+            _ = model.BaseColor.Should().Be(preview);
             _ = model.IsDirty.Should().BeTrue();
         }
     }

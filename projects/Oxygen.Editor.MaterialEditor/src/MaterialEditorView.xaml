@@ -254,85 +254,18 @@
                 HeaderIcon="{ui:FontIcon Glyph='&#xE790;'}"
                 IsExpanded="True">
                 <editorcontrols:PropertiesExpander.Items>
-                    <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Base Color">
-                        <Grid ColumnSpacing="8" RowSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <Button
-                                MinWidth="44"
-                                Padding="4"
-                                ToolTipService.ToolTip="Pick base color">
-                                <Button.Flyout>
-                                    <Flyout>
-                                        <ColorPicker
-                                            ColorChanged="BaseColorPicker_ColorChanged"
-                                            IsAlphaEnabled="True"
-                                            IsAlphaSliderVisible="True"
-                                            IsColorChannelTextInputVisible="True"
-                                            IsHexInputVisible="True"
-                                            Loaded="ColorPickerLoaded"
-                                            LostFocus="ColorLostFocus"
-                                            Unloaded="ColorPickerUnloaded"
-                                            Color="{x:Bind ViewModel.BaseColorColor, Mode=OneWay}" />
-                                    </Flyout>
-                                </Button.Flyout>
-                                <Border
-                                    Width="32"
-                                    Height="24"
-                                    Background="{x:Bind ViewModel.BaseColorBrush, Mode=OneWay}"
-                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1"
-                                    CornerRadius="2" />
-                            </Button>
-
-                            <controls:NumberBox
-                                Grid.Column="1"
-                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                Label="R"
-                                LabelPosition="Left"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.BaseColorR, Mode=TwoWay}"
-                                Tag="BaseColorR" />
-                            <controls:NumberBox
-                                Grid.Column="2"
-                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                Label="G"
-                                LabelPosition="Left"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.BaseColorG, Mode=TwoWay}"
-                                Tag="BaseColorG" />
-                            <controls:NumberBox
-                                Grid.Column="3"
-                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                Label="B"
-                                LabelPosition="Left"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.BaseColorB, Mode=TwoWay}"
-                                Tag="BaseColorB" />
-                            <controls:NumberBox
-                                Grid.Column="4"
-                                MinWidth="{StaticResource MaterialEditorScalarMinWidth}"
-                                EditSessionCompleted="NumberEditCompleted"
-                                EditSessionStarted="NumberEditStarted"
-                                Label="A"
-                                LabelPosition="Left"
-                                Mask="~.###"
-                                NumberValue="{x:Bind ViewModel.BaseColorA, Mode=TwoWay}"
-                                Tag="BaseColorA" />
-                        </Grid>
-                    </editorcontrols:PropertyCard>
+                    <editorcontrols:InspectorColorField
+                        Alpha="{x:Bind ViewModel.BaseColorA, Mode=TwoWay}"
+                        Blue="{x:Bind ViewModel.BaseColorB, Mode=TwoWay}"
+                        ColorPicked="OnBaseColorPicked"
+                        EditSessionCompleted="ColorEditCompleted"
+                        EditSessionStarted="ColorEditStarted"
+                        Green="{x:Bind ViewModel.BaseColorG, Mode=TwoWay}"
+                        HasAlpha="True"
+                        Label="Base Color"
+                        PickerAutomationName="Pick base color"
+                        Red="{x:Bind ViewModel.BaseColorR, Mode=TwoWay}"
+                        Tag="BaseColor" />
 
                     <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Surface">
                         <Grid ColumnSpacing="8">

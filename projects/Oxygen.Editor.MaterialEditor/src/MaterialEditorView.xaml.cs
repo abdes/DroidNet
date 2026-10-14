@@ -7,7 +7,6 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Windows.System;
 
 namespace Oxygen.Editor.MaterialEditor;
 
@@ -17,8 +16,7 @@ namespace Oxygen.Editor.MaterialEditor;
 [ViewModel(typeof(MaterialEditorViewModel))]
 public sealed partial class MaterialEditorView
 {
-    private MaterialEditorViewModel? colorOwner;
-    private bool colorGestureActive;
+    private MaterialEditorViewModel? pickOwner;
     private MaterialEditorViewModel? statusOwner;
 
     /// <summary>
@@ -85,15 +83,6 @@ public sealed partial class MaterialEditorView
         }
     }
 
-    private void BaseColorPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args)
-    {
-        if (ReferenceEquals(this.colorOwner, this.ViewModel))
-        {
-            this.BeginColorGesture(NumberBoxEditInteractionKind.PointerDrag);
-            this.colorOwner?.SetBaseColor(args.NewColor);
-        }
-    }
-
     private void NumberEditStarted(object? sender, NumberBoxEditSessionEventArgs args)
     {
         if (sender is FrameworkElement { Tag: string field })
@@ -105,69 +94,46 @@ public sealed partial class MaterialEditorView
     private void NumberEditCompleted(object? sender, NumberBoxEditSessionEventArgs args)
         => this.ViewModel?.CompleteEditSession(args);
 
-    private void ColorPickerLoaded(object sender, RoutedEventArgs args)
+    private void ColorEditStarted(object? sender, ColorBoxEditSessionEventArgs args)
     {
-        this.colorOwner = this.ViewModel;
-        var picker = (ColorPicker)sender;
-        picker.AddHandler(PointerPressedEvent, new PointerEventHandler(this.ColorPressed), handledEventsToo: true);
-        picker.AddHandler(PointerReleasedEvent, new PointerEventHandler(this.ColorReleased), handledEventsToo: true);
-        picker.AddHandler(PointerCaptureLostEvent, new PointerEventHandler(this.ColorCaptureLost), handledEventsToo: true);
-        picker.AddHandler(PointerCanceledEvent, new PointerEventHandler(this.ColorCanceled), handledEventsToo: true);
-        picker.AddHandler(KeyDownEvent, new KeyEventHandler(this.ColorKeyDown), handledEventsToo: true);
-    }
-
-    private void ColorPickerUnloaded(object sender, RoutedEventArgs args)
-    {
-        this.EndColorGesture(NumberBoxEditCompletionKind.Commit);
-        this.colorOwner = null;
-        var picker = (ColorPicker)sender;
-        picker.RemoveHandler(PointerPressedEvent, new PointerEventHandler(this.ColorPressed));
-        picker.RemoveHandler(PointerReleasedEvent, new PointerEventHandler(this.ColorReleased));
-        picker.RemoveHandler(PointerCaptureLostEvent, new PointerEventHandler(this.ColorCaptureLost));
-        picker.RemoveHandler(PointerCanceledEvent, new PointerEventHandler(this.ColorCanceled));
-        picker.RemoveHandler(KeyDownEvent, new KeyEventHandler(this.ColorKeyDown));
-    }
-
-    private void BeginColorGesture(NumberBoxEditInteractionKind interaction)
-    {
-        if (!this.colorGestureActive && this.colorOwner is not null && ReferenceEquals(this.colorOwner, this.ViewModel))
+        if (this.ViewModel is not { } model)
         {
-            this.colorGestureActive = true;
-            this.colorOwner.BeginEditSession("Base color", interaction);
+            return;
+        }
+
+        if (args.Channel is { } channel)
+        {
+            model.BeginEditSession("BaseColor" + ColorBox.ChannelName(channel), args.InteractionKind);
+            return;
+        }
+
+        // A pick belongs to the document it began on; a later document never receives its colors or its end.
+        this.pickOwner = model;
+        model.BeginEditSession("Base color", args.InteractionKind);
+    }
+
+    private void ColorEditCompleted(object? sender, ColorBoxEditSessionEventArgs args)
+    {
+        if (args.Channel is not null)
+        {
+            this.ViewModel?.CompleteEditSession(new NumberBoxEditSessionEventArgs(args.InteractionKind, args.CompletionKind, args.InputText));
+            return;
+        }
+
+        var owner = this.pickOwner;
+        this.pickOwner = null;
+        if (owner is not null && ReferenceEquals(owner, this.ViewModel))
+        {
+            owner.EndEditSession(args.CompletionKind ?? NumberBoxEditCompletionKind.Commit);
         }
     }
 
-    private void EndColorGesture(NumberBoxEditCompletionKind completion)
+    private void OnBaseColorPicked(object? sender, ColorBoxColorPickedEventArgs args)
     {
-        if (this.colorGestureActive)
+        args.Handled = true;
+        if (this.pickOwner is { } owner && ReferenceEquals(owner, this.ViewModel))
         {
-            this.colorGestureActive = false;
-            this.colorOwner?.EndEditSession(completion);
-        }
-    }
-
-    private void ColorPressed(object sender, PointerRoutedEventArgs args) => this.BeginColorGesture(NumberBoxEditInteractionKind.PointerDrag);
-
-    private void ColorReleased(object sender, PointerRoutedEventArgs args) => this.EndColorGesture(NumberBoxEditCompletionKind.Commit);
-
-    // The spectrum releases capture before PointerReleased bubbles here.
-    private void ColorCaptureLost(object sender, PointerRoutedEventArgs args)
-        => this.EndColorGesture(args.Pointer.IsInContact ? NumberBoxEditCompletionKind.Cancel : NumberBoxEditCompletionKind.Commit);
-
-    private void ColorCanceled(object sender, PointerRoutedEventArgs args) => this.EndColorGesture(NumberBoxEditCompletionKind.Cancel);
-
-    private void ColorLostFocus(object sender, RoutedEventArgs args) => this.EndColorGesture(NumberBoxEditCompletionKind.Commit);
-
-    private void ColorKeyDown(object sender, KeyRoutedEventArgs args)
-    {
-        if (args.Key is VirtualKey.Escape or VirtualKey.Enter)
-        {
-            this.EndColorGesture(args.Key == VirtualKey.Escape ? NumberBoxEditCompletionKind.Cancel : NumberBoxEditCompletionKind.Commit);
-            args.Handled = true;
-        }
-        else
-        {
-            this.BeginColorGesture(NumberBoxEditInteractionKind.Text);
+            owner.SetBaseColor(args.Color);
         }
     }
 

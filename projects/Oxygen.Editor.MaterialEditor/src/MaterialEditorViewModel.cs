@@ -18,7 +18,6 @@ using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Windows.ApplicationModel.DataTransfer;
-using Windows.UI;
 using WindowId = Microsoft.UI.WindowId;
 
 namespace Oxygen.Editor.MaterialEditor;
@@ -44,8 +43,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private bool isApplyingBaseColor;
     private bool isClosing;
     private IReadOnlyList<MaterialTextureChoice> availableTextureChoices = [];
-    private float normalScale = 1.0f;
-    private float occlusionStrength = 1.0f;
+    private double normalScale = 1.0;
+    private double occlusionStrength = 1.0;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MaterialEditorViewModel"/> class.
@@ -114,25 +113,12 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// <summary>Gets a value indicating whether the document's authored values have finished loading.</summary>
     public bool IsLoaded => this.document is not null && !this.isLoading;
 
-    /// <summary>
-    /// Gets the color preview brush.
-    /// </summary>
-    public SolidColorBrush BaseColorBrush
-        => new(Color.FromArgb(
-            ToByte(this.BaseColorA),
-            ToByte(this.BaseColorR),
-            ToByte(this.BaseColorG),
-            ToByte(this.BaseColorB)));
+    /// <summary>Gets the linear base color factor: red, green, blue and alpha.</summary>
+    public ColorChannels BaseColor => new(this.BaseColorR, this.BaseColorG, this.BaseColorB, this.BaseColorA);
 
-    /// <summary>
-    /// Gets the current base color as a WinUI color for color-picker integration.
-    /// </summary>
-    public Color BaseColorColor
-        => Color.FromArgb(
-            ToByte(this.BaseColorA),
-            ToByte(this.BaseColorR),
-            ToByte(this.BaseColorG),
-            ToByte(this.BaseColorB));
+    /// <summary>Gets the opaque display preview of the linear base color.</summary>
+    public SolidColorBrush BaseColorBrush
+        => new(ColorPresentation.ToDisplayColor(this.BaseColor with { Alpha = 1 }, ColorEncoding.Linear, ColorRange.Normalized));
 
     [ObservableProperty]
     public partial string DisplayName { get; set; } = "Material";
@@ -144,45 +130,45 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     public partial string MaterialGuidText { get; set; } = string.Empty;
 
     [ObservableProperty]
-    public partial float BaseColorR { get; set; } = 1.0f;
+    public partial double BaseColorR { get; set; } = 1.0;
 
     [ObservableProperty]
-    public partial float BaseColorG { get; set; } = 1.0f;
+    public partial double BaseColorG { get; set; } = 1.0;
 
     [ObservableProperty]
-    public partial float BaseColorB { get; set; } = 1.0f;
+    public partial double BaseColorB { get; set; } = 1.0;
 
     [ObservableProperty]
-    public partial float BaseColorA { get; set; } = 1.0f;
+    public partial double BaseColorA { get; set; } = 1.0;
 
     [ObservableProperty]
-    public partial float MetallicFactor { get; set; }
+    public partial double MetallicFactor { get; set; }
 
     [ObservableProperty]
-    public partial float RoughnessFactor { get; set; } = 0.5f;
+    public partial double RoughnessFactor { get; set; } = 0.5;
 
     /// <summary>Gets or sets the normal-map scale.</summary>
-    public float NormalScale
+    public double NormalScale
     {
         get => this.normalScale;
         set
         {
             if (this.SetProperty(ref this.normalScale, value))
             {
-                this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.NormalScale, value));
+                this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.NormalScale, (float)value));
             }
         }
     }
 
     /// <summary>Gets or sets the occlusion texture strength.</summary>
-    public float OcclusionStrength
+    public double OcclusionStrength
     {
         get => this.occlusionStrength;
         set
         {
             if (this.SetProperty(ref this.occlusionStrength, value))
             {
-                this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.AmbientOcclusion, value));
+                this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.AmbientOcclusion, (float)value));
             }
         }
     }
@@ -191,7 +177,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     public partial string AlphaMode { get; set; } = "Opaque";
 
     [ObservableProperty]
-    public partial float AlphaCutoff { get; set; } = 0.5f;
+    public partial double AlphaCutoff { get; set; } = 0.5;
 
     [ObservableProperty]
     public partial bool DoubleSided { get; set; }
@@ -273,15 +259,12 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     }
 
     /// <summary>
-    /// Applies a picker-selected base color to the scalar descriptor channels.
+    /// Applies a picked base color to the scalar descriptor channels as one edit.
     /// </summary>
-    /// <param name="color">The selected color.</param>
-    public void SetBaseColor(Color color)
+    /// <param name="color">The linear red, green, blue and alpha channels.</param>
+    public void SetBaseColor(ColorChannels color)
     {
-        var r = ToFloat(color.R);
-        var g = ToFloat(color.G);
-        var b = ToFloat(color.B);
-        var a = ToFloat(color.A);
+        var (r, g, b, a) = (color.Red, color.Green, color.Blue, color.Alpha);
         if (NearlyEqual(this.BaseColorR, r)
             && NearlyEqual(this.BaseColorG, g)
             && NearlyEqual(this.BaseColorB, b)
@@ -304,23 +287,16 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
 
         this.OnPropertyChanged(nameof(this.BaseColorBrush));
-        this.OnPropertyChanged(nameof(this.BaseColorColor));
         var edit = new PropertyEdit();
-        edit.Set(MaterialDescriptors.BaseColorR, r);
-        edit.Set(MaterialDescriptors.BaseColorG, g);
-        edit.Set(MaterialDescriptors.BaseColorB, b);
-        edit.Set(MaterialDescriptors.BaseColorA, a);
+        edit.Set(MaterialDescriptors.BaseColorR, (float)r);
+        edit.Set(MaterialDescriptors.BaseColorG, (float)g);
+        edit.Set(MaterialDescriptors.BaseColorB, (float)b);
+        edit.Set(MaterialDescriptors.BaseColorA, (float)a);
         this.ApplyEdit(edit);
     }
 
-    private static byte ToByte(float value)
-        => (byte)Math.Clamp(MathF.Round(value * 255.0f), 0.0f, 255.0f);
-
-    private static float ToFloat(byte value)
-        => value / 255.0f;
-
-    private static bool NearlyEqual(float left, float right)
-        => MathF.Abs(left - right) <= 0.0001f;
+    private static bool NearlyEqual(double left, double right)
+        => Math.Abs(left - right) <= 0.0001;
 
     private static string ToDisplayAlphaMode(MaterialAlphaMode alphaMode)
         => alphaMode switch
@@ -360,21 +336,21 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.assetStatusLifetime.Dispose();
     }
 
-    partial void OnBaseColorRChanged(float value) => this.ApplyColorEdit(PropertyEdit.SingleEdit(MaterialDescriptors.BaseColorR, value));
+    partial void OnBaseColorRChanged(double value) => this.ApplyColorEdit(PropertyEdit.SingleEdit(MaterialDescriptors.BaseColorR, (float)value));
 
-    partial void OnBaseColorGChanged(float value) => this.ApplyColorEdit(PropertyEdit.SingleEdit(MaterialDescriptors.BaseColorG, value));
+    partial void OnBaseColorGChanged(double value) => this.ApplyColorEdit(PropertyEdit.SingleEdit(MaterialDescriptors.BaseColorG, (float)value));
 
-    partial void OnBaseColorBChanged(float value) => this.ApplyColorEdit(PropertyEdit.SingleEdit(MaterialDescriptors.BaseColorB, value));
+    partial void OnBaseColorBChanged(double value) => this.ApplyColorEdit(PropertyEdit.SingleEdit(MaterialDescriptors.BaseColorB, (float)value));
 
-    partial void OnBaseColorAChanged(float value) => this.ApplyColorEdit(PropertyEdit.SingleEdit(MaterialDescriptors.BaseColorA, value));
+    partial void OnBaseColorAChanged(double value) => this.ApplyColorEdit(PropertyEdit.SingleEdit(MaterialDescriptors.BaseColorA, (float)value));
 
-    partial void OnMetallicFactorChanged(float value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.Metalness, value));
+    partial void OnMetallicFactorChanged(double value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.Metalness, (float)value));
 
-    partial void OnRoughnessFactorChanged(float value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, value));
+    partial void OnRoughnessFactorChanged(double value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, (float)value));
 
     partial void OnAlphaModeChanged(string value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.AlphaMode, ToMaterialAlphaMode(value)));
 
-    partial void OnAlphaCutoffChanged(float value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.AlphaCutoff, value));
+    partial void OnAlphaCutoffChanged(double value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.AlphaCutoff, (float)value));
 
     partial void OnDoubleSidedChanged(bool value) => this.ApplyEdit(PropertyEdit.SingleEdit(MaterialDescriptors.DoubleSided, value));
 
@@ -556,7 +532,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
         this.IsDirty = value.IsDirty;
         this.OnPropertyChanged(nameof(this.BaseColorBrush));
-        this.OnPropertyChanged(nameof(this.BaseColorColor));
         this.RefreshHistoryCommands();
     }
 
@@ -568,7 +543,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
 
         this.OnPropertyChanged(nameof(this.BaseColorBrush));
-        this.OnPropertyChanged(nameof(this.BaseColorColor));
         this.ApplyEdit(edit);
     }
 

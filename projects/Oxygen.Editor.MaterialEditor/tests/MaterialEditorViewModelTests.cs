@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Controls;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.MaterialEditor.PropertyPipeline;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Model;
-using Windows.UI;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
 
@@ -113,7 +113,7 @@ public sealed partial class MaterialEditorViewModelTests
     }
 
     /// <summary>
-    /// Verifies the color picker commits all four base-color channels as one property edit.
+    /// Verifies a picked base color commits all four channels as one property edit.
     /// </summary>
     /// <returns>The asynchronous test task.</returns>
     [TestMethod]
@@ -123,7 +123,7 @@ public sealed partial class MaterialEditorViewModelTests
         using var sut = new MaterialEditorViewModel(new MaterialDocumentMetadata(service.Document.MaterialUri), service, Oxygen.Testing.AssetStatusFixture.EmptyProvider, System.Reactive.Concurrency.ImmediateScheduler.Instance);
         await WaitForLoadAsync(sut).ConfigureAwait(false);
 
-        sut.SetBaseColor(Color.FromArgb(128, 64, 128, 255));
+        sut.SetBaseColor(new ColorChannels(0.25, 0.5, 1, 0.75));
         await WaitForEditAsync(service, expectedCount: 1).ConfigureAwait(false);
 
         var edit = service.PropertyEdits.Should().ContainSingle().Which;
@@ -132,10 +132,10 @@ public sealed partial class MaterialEditorViewModelTests
         _ = edit.GetTyped(MaterialDescriptors.BaseColorG, out var g).Should().BeTrue();
         _ = edit.GetTyped(MaterialDescriptors.BaseColorB, out var b).Should().BeTrue();
         _ = edit.GetTyped(MaterialDescriptors.BaseColorA, out var a).Should().BeTrue();
-        _ = r.Should().BeApproximately(64.0f / 255.0f, 0.0001f);
-        _ = g.Should().BeApproximately(128.0f / 255.0f, 0.0001f);
+        _ = r.Should().Be(0.25f);
+        _ = g.Should().Be(0.5f);
         _ = b.Should().Be(1.0f);
-        _ = a.Should().BeApproximately(128.0f / 255.0f, 0.0001f);
+        _ = a.Should().Be(0.75f);
         _ = service.ScalarEditCalls.Should().Be(0);
     }
 
